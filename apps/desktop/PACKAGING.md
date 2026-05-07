@@ -13,13 +13,13 @@ Running `pnpm --filter @covel/desktop dist` after that invokes electron-builder.
 
 ### Required environment variables
 
-| Var | Purpose |
-|---|---|
-| `CSC_LINK` | Path (or https URL) to the Developer ID Application `.p12` bundle |
-| `CSC_KEY_PASSWORD` | Password for the `.p12` |
-| `APPLE_ID` | Apple Developer account email |
+| Var                           | Purpose                                                                                      |
+| ----------------------------- | -------------------------------------------------------------------------------------------- |
+| `CSC_LINK`                    | Path (or https URL) to the Developer ID Application `.p12` bundle                            |
+| `CSC_KEY_PASSWORD`            | Password for the `.p12`                                                                      |
+| `APPLE_ID`                    | Apple Developer account email                                                                |
 | `APPLE_APP_SPECIFIC_PASSWORD` | [App-specific password](https://support.apple.com/en-us/102654) (NOT your Apple ID password) |
-| `APPLE_TEAM_ID` | Developer Team ID (10-character, e.g. `ABCDE12345`) |
+| `APPLE_TEAM_ID`               | Developer Team ID (10-character, e.g. `ABCDE12345`)                                          |
 
 ### Enable notarization
 
@@ -59,10 +59,10 @@ Artifacts land in `release/` as `.dmg` and `.zip` for both `arm64` and `x64`.
 
 ### Required environment variables
 
-| Var | Purpose |
-|---|---|
-| `CSC_LINK` | Path (or https URL) to the `.pfx` code-signing bundle |
-| `CSC_KEY_PASSWORD` | Password for the `.pfx` |
+| Var                        | Purpose                                                                   |
+| -------------------------- | ------------------------------------------------------------------------- |
+| `CSC_LINK`                 | Path (or https URL) to the `.pfx` code-signing bundle                     |
+| `CSC_KEY_PASSWORD`         | Password for the `.pfx`                                                   |
 | `WIN_CSC_TIMESTAMP_SERVER` | Optional RFC 3161 timestamp URL (default `http://timestamp.digicert.com`) |
 
 ### Build
@@ -78,6 +78,7 @@ NSIS installer + portable build land in `release/`.
 ### SmartScreen
 
 Until you have a purchased reputation (or an EV certificate), Windows SmartScreen will warn users on first launch. Options:
+
 1. Purchase an EV code-signing certificate from DigiCert / Sectigo / SSL.com
 2. Accept the "Run anyway" step in the SmartScreen dialog during early adoption
 
@@ -88,10 +89,12 @@ pnpm --filter @covel/desktop dist:linux
 ```
 
 Produces:
+
 - `Covel-<version>.AppImage` (portable, x64 and arm64)
 - `Covel-<version>.deb` (x64)
 
 GPG signing is not currently wired up. If required for distribution:
+
 ```bash
 # After building
 dpkg-sig --sign builder release/*.deb
@@ -109,8 +112,8 @@ still lands on two files:
    unpacked dir survives so `verify-release.mjs` (and any local
    `codesign`) can inspect `Covel.app/Contents/Resources/...`.
 2. **Phase 2** — `node apps/desktop/scripts/cleanup-artifacts.mjs
-   --strip-unpacked`, chained onto the root `build:electron` script
-   *after* `electron-builder` returns. This wipes `mac-arm64/` and the
+--strip-unpacked`, chained onto the root `build:electron` script
+   _after_ `electron-builder` returns. This wipes `mac-arm64/` and the
    `*-unpacked/` siblings so the local user is left with the `.dmg`
    and the `.zip` only. CI does **not** call this script — it runs
    `electron-builder` directly so the unpacked tree persists for the

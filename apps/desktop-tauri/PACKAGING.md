@@ -32,10 +32,10 @@ Each `build:mac:*` script chains three steps: `prepare-sidecar.mjs <target>` →
 
 Build output lands in two places:
 
-| Path | Contents |
-|------|----------|
-| `apps/desktop-tauri/src-tauri/target/<triple>/release/bundle/` | Raw Tauri bundle output (`.app`, `.dmg`, `.deb`, `.AppImage`, `.nsis`). |
-| `release/tauri/<triple>/` | Stage-release copies distributable artefacts here so Electron and Tauri outputs live side-by-side with `release/electron/`. |
+| Path                                                           | Contents                                                                                                                    |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `apps/desktop-tauri/src-tauri/target/<triple>/release/bundle/` | Raw Tauri bundle output (`.app`, `.dmg`, `.deb`, `.AppImage`, `.nsis`).                                                     |
+| `release/tauri/<triple>/`                                      | Stage-release copies distributable artefacts here so Electron and Tauri outputs live side-by-side with `release/electron/`. |
 
 ## macOS
 
@@ -59,14 +59,14 @@ Root `src-tauri/tauri.conf.json` sets `bundle.targets = ["app", "dmg"]` and `bun
 
 Tauri uses its own env vars, **not** the `CSC_*` variables `electron-builder` expects. Set these before running `build:mac:arm64` or `build:mac:x64`:
 
-| Var | Purpose |
-|-----|---------|
-| `APPLE_SIGNING_IDENTITY` | The signing identity string, e.g. `Developer ID Application: Your Name (ABCDE12345)`. `security find-identity -v -p codesigning` lists available identities. |
-| `APPLE_CERTIFICATE` | Base64-encoded `.p12` (alternative to using the keychain directly). |
-| `APPLE_CERTIFICATE_PASSWORD` | Password for `APPLE_CERTIFICATE`. |
-| `APPLE_ID` | Apple Developer account email (for notarization). |
-| `APPLE_PASSWORD` | [App-specific password](https://support.apple.com/en-us/102654), **not** your Apple ID password. |
-| `APPLE_TEAM_ID` | Developer Team ID (e.g. `ABCDE12345`). |
+| Var                          | Purpose                                                                                                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `APPLE_SIGNING_IDENTITY`     | The signing identity string, e.g. `Developer ID Application: Your Name (ABCDE12345)`. `security find-identity -v -p codesigning` lists available identities. |
+| `APPLE_CERTIFICATE`          | Base64-encoded `.p12` (alternative to using the keychain directly).                                                                                          |
+| `APPLE_CERTIFICATE_PASSWORD` | Password for `APPLE_CERTIFICATE`.                                                                                                                            |
+| `APPLE_ID`                   | Apple Developer account email (for notarization).                                                                                                            |
+| `APPLE_PASSWORD`             | [App-specific password](https://support.apple.com/en-us/102654), **not** your Apple ID password.                                                             |
+| `APPLE_TEAM_ID`              | Developer Team ID (e.g. `ABCDE12345`).                                                                                                                       |
 
 Then:
 
@@ -103,10 +103,10 @@ The Windows target is declared in `src-tauri/tauri.windows.conf.json`:
 
 Tauri uses these env vars for signing:
 
-| Var | Purpose |
-|-----|---------|
-| `TAURI_SIGNING_PRIVATE_KEY` | Base64-encoded `.pfx` or PEM code-signing key. |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Password for the key. |
+| Var                                  | Purpose                                        |
+| ------------------------------------ | ---------------------------------------------- |
+| `TAURI_SIGNING_PRIVATE_KEY`          | Base64-encoded `.pfx` or PEM code-signing key. |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Password for the key.                          |
 
 Standard `pnpm --filter @covel/desktop-tauri build` on a Windows host produces an NSIS installer under `src-tauri/target/release/bundle/nsis/`.
 

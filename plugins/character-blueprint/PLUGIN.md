@@ -37,13 +37,18 @@ Manual function runtime for importing a character source record into the session
       "traits": ["disciplined", "observant"]
     },
     "dialogueExamples": [
-      { "user": "I can win quickly.", "character": "Quickly is where errors hide." }
+      {
+        "user": "I can win quickly.",
+        "character": "Quickly is where errors hide."
+      }
     ],
     "scenarioDefaults": {
       "opening": "Lin Yue waits in the rain-slick practice yard."
     },
     "rules": [
-      { "text": "Keep sword advice concrete and grounded in the current scene." }
+      {
+        "text": "Keep sword advice concrete and grounded in the current scene."
+      }
     ]
   },
   "instantiate": true

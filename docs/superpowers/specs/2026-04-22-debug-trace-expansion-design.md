@@ -21,7 +21,7 @@ The `/debug` page cannot show tool calls, LLM prompts/responses, narrative conte
 
 Zero `tool.*`, zero `llm.*`, zero `message.*`, zero `block.*`, zero `state.*`, zero `hook.*`.
 
-The `tool_calls` table *does* have data (`ToolExecutor.recordCall` writes it), but no API route exposes it, so it is invisible to debug tooling.
+The `tool_calls` table _does_ have data (`ToolExecutor.recordCall` writes it), but no API route exposes it, so it is invisible to debug tooling.
 
 ## Goal
 
@@ -41,28 +41,28 @@ Capture runtime internals end-to-end into `trace_events` and push them over the 
 
 11 new event types persisted to `trace_events` and broadcast via SSE.
 
-| Category | `type` | Emit location | Notes |
-|----------|--------|---------------|-------|
-| tool | `tool.calling` | `ToolExecutor.execute` — after args parsed, before execute | Includes `source` / `approvalStatus` |
-| tool | `tool.completed` | `ToolExecutor.execute` — success branch | Includes both `result` (LLM-facing) and `parsedResult` (full object) |
-| tool | `tool.failed` | `ToolExecutor.execute` — all error branches (NOT_FOUND / DENIED / INVALID_ARGS / VALIDATION_ERROR / EXECUTION_ERROR) | One event per failure, carries structured `code` |
-| llm | `llm.calling` | `llm-adapter.generate` / `gateway-llm-adapter.generate` entry | Carries full `messages`, `tools`, slot/model |
-| llm | `llm.responded` | Same — after stream close + toolCall parse | Carries `text`, `toolCalls`, `usage`, `finishReason` |
-| message | `message.completed` | `turn-executor.ts` — runtime finish, after deltas merged | **Deltas are not persisted individually** — only the final concatenated content is stored |
-| block | `block.emitted` | `session-kernel.processRuntimeResult` — after each `ui.render` proposal commits | Payload carries full block |
-| state | `state.patch.applied` | Same — after each `state.patch` proposal commits | Payload carries `packageName` / `summary` / `ops` |
-| hook | `hook.fired` | `hooks/pipeline.ts` — before every hook invocation | One event per hook call across all six lifecycle events |
-| hook | `hook.rewrote` | Same — when hook returns modified proposal/tool input | Optional `diff` field if hook provides one |
-| hook | `hook.aborted` | **Already exists** in `session-kernel.ts` — keep, align field names to new schema | — |
+| Category | `type`                | Emit location                                                                                                        | Notes                                                                                     |
+| -------- | --------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| tool     | `tool.calling`        | `ToolExecutor.execute` — after args parsed, before execute                                                           | Includes `source` / `approvalStatus`                                                      |
+| tool     | `tool.completed`      | `ToolExecutor.execute` — success branch                                                                              | Includes both `result` (LLM-facing) and `parsedResult` (full object)                      |
+| tool     | `tool.failed`         | `ToolExecutor.execute` — all error branches (NOT_FOUND / DENIED / INVALID_ARGS / VALIDATION_ERROR / EXECUTION_ERROR) | One event per failure, carries structured `code`                                          |
+| llm      | `llm.calling`         | `llm-adapter.generate` / `gateway-llm-adapter.generate` entry                                                        | Carries full `messages`, `tools`, slot/model                                              |
+| llm      | `llm.responded`       | Same — after stream close + toolCall parse                                                                           | Carries `text`, `toolCalls`, `usage`, `finishReason`                                      |
+| message  | `message.completed`   | `turn-executor.ts` — runtime finish, after deltas merged                                                             | **Deltas are not persisted individually** — only the final concatenated content is stored |
+| block    | `block.emitted`       | `session-kernel.processRuntimeResult` — after each `ui.render` proposal commits                                      | Payload carries full block                                                                |
+| state    | `state.patch.applied` | Same — after each `state.patch` proposal commits                                                                     | Payload carries `packageName` / `summary` / `ops`                                         |
+| hook     | `hook.fired`          | `hooks/pipeline.ts` — before every hook invocation                                                                   | One event per hook call across all six lifecycle events                                   |
+| hook     | `hook.rewrote`        | Same — when hook returns modified proposal/tool input                                                                | Optional `diff` field if hook provides one                                                |
+| hook     | `hook.aborted`        | **Already exists** in `session-kernel.ts` — keep, align field names to new schema                                    | —                                                                                         |
 
 `runtime.progress` envelope is **not** used. Events are stored flat; frontend already supports both readings (outer `type` or inner `payload.type`) so flat is simpler.
 
 ### Delta strategy (intentional asymmetry)
 
-| Channel | `message.delta` | `message.completed` |
-|---------|:---------------:|:-------------------:|
-| SSE (realtime, existing `narrative.delta`) | yes (per-token) | yes (on finish) |
-| `trace_events` (persisted) | **no** | yes |
+| Channel                                    | `message.delta` | `message.completed` |
+| ------------------------------------------ | :-------------: | :-----------------: |
+| SSE (realtime, existing `narrative.delta`) | yes (per-token) |   yes (on finish)   |
+| `trace_events` (persisted)                 |     **no**      |         yes         |
 
 The realtime typewriter effect in the session UI still works; `trace_events` sees one compact record per runtime output instead of thousands of per-token rows.
 
@@ -183,27 +183,27 @@ Note `message.delta` is **not** in this list — it continues to flow through th
 
 `apps/web/src/routes/debug.tsx` needs about 40 lines of changes. Most of the rich rendering is already written and automatically activates once the events arrive.
 
-| Location | Change |
-|----------|--------|
-| `categorize()` | Add `hook.` prefix → new `hook` category |
-| `CATEGORY_STYLES` | Add `hook` entry with a distinct color (proposed: rose/pink) and icon |
+| Location                   | Change                                                                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `categorize()`             | Add `hook.` prefix → new `hook` category                                                                                                         |
+| `CATEGORY_STYLES`          | Add `hook` entry with a distinct color (proposed: rose/pink) and icon                                                                            |
 | `deriveRuntimesFromTurn()` | Aggregate events by `payload.runtimeId` regardless of envelope type; status still derived from `runtime.started / completed / failed` outer type |
-| `TurnCard` (~557-559) | Remove the `e.type === 'runtime.progress'` filter before calling derive — pass all events |
-| `extractDetail()` switch | No change — all existing cases apply directly |
-| `renderStructuredData()` | No change for llm/tool — already implemented. Optional follow-up: add hook-specific renderer if time permits |
+| `TurnCard` (~557-559)      | Remove the `e.type === 'runtime.progress'` filter before calling derive — pass all events                                                        |
+| `extractDetail()` switch   | No change — all existing cases apply directly                                                                                                    |
+| `renderStructuredData()`   | No change for llm/tool — already implemented. Optional follow-up: add hook-specific renderer if time permits                                     |
 
 Unknown-type events (old frontend meeting new events, or vice versa) already fall back gracefully to the `flow` category — no crashes either direction.
 
 ## Testing
 
-| Layer | Test |
-|-------|------|
-| `packages/runtime/tests/tool-executor.test.ts` | Assert `emitter.emit` is called for `tool.calling` / `tool.completed` / `tool.failed` across success / Zod validation / approval-denied / not-found / JSON-invalid branches; payload shape matches schema |
-| `packages/runtime/tests/llm-adapter.test.ts` | Mock emitter; assert `llm.calling` carries messages/tools/slot, `llm.responded` carries text/toolCalls/usage/finishReason; retry attempts increment |
-| `packages/runtime/tests/session-kernel.test.ts` | `processRuntimeResult` emits `block.emitted` per `ui.render` proposal and `state.patch.applied` per `state.patch` proposal |
-| `packages/runtime/tests/hooks-pipeline.test.ts` | `hook.fired` fires for every invocation; `hook.rewrote` fires on modification; `hook.aborted` unchanged |
-| New `packages/runtime/tests/turn-emitter.test.ts` | `emit()` both persists to store and broadcasts to eventBus; sessionId/turnId/seq injected correctly; failure of one path does not block the other |
-| `scripts/e2e-plugin-verify.ts` | After turns complete, `GET /api/traces/:sid` returns a type-set that is a superset of `{ tool.calling, tool.completed, llm.calling, llm.responded, message.completed, block.emitted, hook.fired }` |
+| Layer                                             | Test                                                                                                                                                                                                      |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/runtime/tests/tool-executor.test.ts`    | Assert `emitter.emit` is called for `tool.calling` / `tool.completed` / `tool.failed` across success / Zod validation / approval-denied / not-found / JSON-invalid branches; payload shape matches schema |
+| `packages/runtime/tests/llm-adapter.test.ts`      | Mock emitter; assert `llm.calling` carries messages/tools/slot, `llm.responded` carries text/toolCalls/usage/finishReason; retry attempts increment                                                       |
+| `packages/runtime/tests/session-kernel.test.ts`   | `processRuntimeResult` emits `block.emitted` per `ui.render` proposal and `state.patch.applied` per `state.patch` proposal                                                                                |
+| `packages/runtime/tests/hooks-pipeline.test.ts`   | `hook.fired` fires for every invocation; `hook.rewrote` fires on modification; `hook.aborted` unchanged                                                                                                   |
+| New `packages/runtime/tests/turn-emitter.test.ts` | `emit()` both persists to store and broadcasts to eventBus; sessionId/turnId/seq injected correctly; failure of one path does not block the other                                                         |
+| `scripts/e2e-plugin-verify.ts`                    | After turns complete, `GET /api/traces/:sid` returns a type-set that is a superset of `{ tool.calling, tool.completed, llm.calling, llm.responded, message.completed, block.emitted, hook.fired }`        |
 
 All backends (`MemoryStore`, `SqliteStore`, `PgStore`, `IdbStore`) already implement `addTraceEvent` and pass `store-contract.ts` — no new contract tests needed for persistence.
 
@@ -219,12 +219,12 @@ All backends (`MemoryStore`, `SqliteStore`, `PgStore`, `IdbStore`) already imple
 
 ## Risks
 
-| Risk | Mitigation |
-|------|-----------|
-| `llm.calling.messages` inflates `trace_events` table (5-20 MB per long turn in PG) | Accepted for now per explicit decision. Future `COVEL_TRACE_TRUNCATE` env switch can opt-in truncation. |
-| High-frequency hooks (e.g. a default no-op PreToolUse) flood the timeline | Observe post-merge; if noisy, promote `hook.fired` to only-when-modified (drop fires that produce no rewrote/aborted). Spec optional follow-up. |
-| Third-party `ToolExecutor` / `LlmAdapter` consumers not passing `emitter` | All emitter parameters are **optional**; absent emitter → no trace, no SSE, no error. Preserves existing behavior. |
-| SSE stream back-pressure with many events | `stream.writeSSE(...).catch(() => {})` is already used for tolerant pushes; new events follow same pattern. Events still persist to DB even if SSE push fails. |
+| Risk                                                                               | Mitigation                                                                                                                                                     |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `llm.calling.messages` inflates `trace_events` table (5-20 MB per long turn in PG) | Accepted for now per explicit decision. Future `COVEL_TRACE_TRUNCATE` env switch can opt-in truncation.                                                        |
+| High-frequency hooks (e.g. a default no-op PreToolUse) flood the timeline          | Observe post-merge; if noisy, promote `hook.fired` to only-when-modified (drop fires that produce no rewrote/aborted). Spec optional follow-up.                |
+| Third-party `ToolExecutor` / `LlmAdapter` consumers not passing `emitter`          | All emitter parameters are **optional**; absent emitter → no trace, no SSE, no error. Preserves existing behavior.                                             |
+| SSE stream back-pressure with many events                                          | `stream.writeSSE(...).catch(() => {})` is already used for tolerant pushes; new events follow same pattern. Events still persist to DB even if SSE push fails. |
 
 ## Open questions
 

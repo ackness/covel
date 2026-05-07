@@ -1,7 +1,8 @@
 geography:
   overview:
     zh-CN: 悬崖与海面之间的港口城市，永恒灰白浓雾笼罩，能见度不超过五十步。
-    en-US: A port city wedged between sea cliffs and the ocean, shrouded in perpetual grey fog that limits visibility to
+    en-US:
+      A port city wedged between sea cliffs and the ocean, shrouded in perpetual grey fog that limits visibility to
       fifty paces.
   regions:
     - name:
@@ -135,7 +136,8 @@ powerSystem:
   type: magic
   description:
     zh-CN: 远古遗物蕴含的不可预测能量，与潮汐周期共振。验潮师可引导并稳定其效果。
-    en-US: Unpredictable energy stored in ancient relics, resonating with tidal cycles. Tide-Readers can channel and
+    en-US:
+      Unpredictable energy stored in ancient relics, resonating with tidal cycles. Tide-Readers can channel and
       stabilize its effects.
   rules:
     - zh-CN: 遗物效果因潮汐相位而异，满潮时最强、退潮时最稳
@@ -231,7 +233,8 @@ economy:
       en-US: Cliff iron
   tradeNotes:
     zh-CN: 遗物交易是雾港经济的核心。合法渠道走验潮师公会鉴定后拍卖，黑市走盐牙会。
-    en-US: The relic trade is Mistport's economic backbone. Legal relics go through Guild appraisal and auction; the black
+    en-US:
+      The relic trade is Mistport's economic backbone. Legal relics go through Guild appraisal and auction; the black
       market runs through the Salt Fangs.
 socialStructure:
   classes:
@@ -279,7 +282,8 @@ mechanics:
   combatStyle: narrative
   skillSystem:
     zh-CN: 以职业技能树为核心：验潮（鉴定/引导遗物）、潜行（雾中行动）、交涉（社交）、格斗。
-    en-US: "Skill trees by vocation: Tide-Reading (appraise/channel relics), Stealth (fog navigation), Diplomacy (social),
+    en-US:
+      "Skill trees by vocation: Tide-Reading (appraise/channel relics), Stealth (fog navigation), Diplomacy (social),
       Combat."
   difficulty: normal
   customRules:
@@ -292,7 +296,8 @@ mechanics:
 startingConditions:
   openingScenario:
     zh-CN: 你刚抵达雾港中港的主栈桥。潮汐钟敲响——一次罕见的深退潮即将发生。码头上有人在招募深潮探险队，也有人在发放封潮令传单。
-    en-US: You step off the ferry onto Mid-Harbor's main pier. The fog is thick today. A deep tide-bell rings — signaling a
+    en-US:
+      You step off the ferry onto Mid-Harbor's main pier. The fog is thick today. A deep tide-bell rings — signaling a
       rare 'deep withdrawal' that will expose deeper ruins than usual. The dock buzzes with expedition recruiters and
       Council officers handing out Seal Tide Decree leaflets.
   openingHook:

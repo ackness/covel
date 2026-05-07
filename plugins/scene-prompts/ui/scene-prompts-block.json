@@ -52,14 +52,38 @@
                 "component": "Row",
                 "props": { "gap": "xs", "align": "center" },
                 "children": [
-                  { "component": "Icon", "props": { "name": { "$state": "/prompt1Icon" }, "size": "xs" } },
-                  { "component": "Badge", "props": { "label": { "$state": "/prompt1Label" }, "color": { "$state": "/prompt1Color" } } }
+                  {
+                    "component": "Icon",
+                    "props": {
+                      "name": { "$state": "/prompt1Icon" },
+                      "size": "xs"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$state": "/prompt1Label" },
+                      "color": { "$state": "/prompt1Color" }
+                    }
+                  }
                 ]
               },
               {
                 "component": "Button",
-                "props": { "label": { "$state": "/prompt1Text" }, "variant": "ghost", "size": "compact" },
-                "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/prompt1Text" }, "selectionGroup": "scene-prompts:1" } } }
+                "props": {
+                  "label": { "$state": "/prompt1Text" },
+                  "variant": "ghost",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "draftMessage",
+                    "params": {
+                      "text": { "$state": "/prompt1Text" },
+                      "selectionGroup": "scene-prompts:1"
+                    }
+                  }
+                }
               }
             ]
           },
@@ -72,14 +96,38 @@
                 "component": "Row",
                 "props": { "gap": "xs", "align": "center" },
                 "children": [
-                  { "component": "Icon", "props": { "name": { "$state": "/prompt2Icon" }, "size": "xs" } },
-                  { "component": "Badge", "props": { "label": { "$state": "/prompt2Label" }, "color": { "$state": "/prompt2Color" } } }
+                  {
+                    "component": "Icon",
+                    "props": {
+                      "name": { "$state": "/prompt2Icon" },
+                      "size": "xs"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$state": "/prompt2Label" },
+                      "color": { "$state": "/prompt2Color" }
+                    }
+                  }
                 ]
               },
               {
                 "component": "Button",
-                "props": { "label": { "$state": "/prompt2Text" }, "variant": "ghost", "size": "compact" },
-                "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/prompt2Text" }, "selectionGroup": "scene-prompts:2" } } }
+                "props": {
+                  "label": { "$state": "/prompt2Text" },
+                  "variant": "ghost",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "draftMessage",
+                    "params": {
+                      "text": { "$state": "/prompt2Text" },
+                      "selectionGroup": "scene-prompts:2"
+                    }
+                  }
+                }
               }
             ]
           },
@@ -92,14 +140,38 @@
                 "component": "Row",
                 "props": { "gap": "xs", "align": "center" },
                 "children": [
-                  { "component": "Icon", "props": { "name": { "$state": "/prompt3Icon" }, "size": "xs" } },
-                  { "component": "Badge", "props": { "label": { "$state": "/prompt3Label" }, "color": { "$state": "/prompt3Color" } } }
+                  {
+                    "component": "Icon",
+                    "props": {
+                      "name": { "$state": "/prompt3Icon" },
+                      "size": "xs"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$state": "/prompt3Label" },
+                      "color": { "$state": "/prompt3Color" }
+                    }
+                  }
                 ]
               },
               {
                 "component": "Button",
-                "props": { "label": { "$state": "/prompt3Text" }, "variant": "ghost", "size": "compact" },
-                "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/prompt3Text" }, "selectionGroup": "scene-prompts:3" } } }
+                "props": {
+                  "label": { "$state": "/prompt3Text" },
+                  "variant": "ghost",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "draftMessage",
+                    "params": {
+                      "text": { "$state": "/prompt3Text" },
+                      "selectionGroup": "scene-prompts:3"
+                    }
+                  }
+                }
               }
             ]
           },
@@ -112,14 +184,38 @@
                 "component": "Row",
                 "props": { "gap": "xs", "align": "center" },
                 "children": [
-                  { "component": "Icon", "props": { "name": { "$state": "/prompt4Icon" }, "size": "xs" } },
-                  { "component": "Badge", "props": { "label": { "$state": "/prompt4Label" }, "color": { "$state": "/prompt4Color" } } }
+                  {
+                    "component": "Icon",
+                    "props": {
+                      "name": { "$state": "/prompt4Icon" },
+                      "size": "xs"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$state": "/prompt4Label" },
+                      "color": { "$state": "/prompt4Color" }
+                    }
+                  }
                 ]
               },
               {
                 "component": "Button",
-                "props": { "label": { "$state": "/prompt4Text" }, "variant": "ghost", "size": "compact" },
-                "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/prompt4Text" }, "selectionGroup": "scene-prompts:4" } } }
+                "props": {
+                  "label": { "$state": "/prompt4Text" },
+                  "variant": "ghost",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "draftMessage",
+                    "params": {
+                      "text": { "$state": "/prompt4Text" },
+                      "selectionGroup": "scene-prompts:4"
+                    }
+                  }
+                }
               }
             ]
           },
@@ -132,14 +228,38 @@
                 "component": "Row",
                 "props": { "gap": "xs", "align": "center" },
                 "children": [
-                  { "component": "Icon", "props": { "name": { "$state": "/prompt5Icon" }, "size": "xs" } },
-                  { "component": "Badge", "props": { "label": { "$state": "/prompt5Label" }, "color": { "$state": "/prompt5Color" } } }
+                  {
+                    "component": "Icon",
+                    "props": {
+                      "name": { "$state": "/prompt5Icon" },
+                      "size": "xs"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$state": "/prompt5Label" },
+                      "color": { "$state": "/prompt5Color" }
+                    }
+                  }
                 ]
               },
               {
                 "component": "Button",
-                "props": { "label": { "$state": "/prompt5Text" }, "variant": "ghost", "size": "compact" },
-                "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/prompt5Text" }, "selectionGroup": "scene-prompts:5" } } }
+                "props": {
+                  "label": { "$state": "/prompt5Text" },
+                  "variant": "ghost",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "draftMessage",
+                    "params": {
+                      "text": { "$state": "/prompt5Text" },
+                      "selectionGroup": "scene-prompts:5"
+                    }
+                  }
+                }
               }
             ]
           },
@@ -152,14 +272,38 @@
                 "component": "Row",
                 "props": { "gap": "xs", "align": "center" },
                 "children": [
-                  { "component": "Icon", "props": { "name": { "$state": "/prompt6Icon" }, "size": "xs" } },
-                  { "component": "Badge", "props": { "label": { "$state": "/prompt6Label" }, "color": { "$state": "/prompt6Color" } } }
+                  {
+                    "component": "Icon",
+                    "props": {
+                      "name": { "$state": "/prompt6Icon" },
+                      "size": "xs"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$state": "/prompt6Label" },
+                      "color": { "$state": "/prompt6Color" }
+                    }
+                  }
                 ]
               },
               {
                 "component": "Button",
-                "props": { "label": { "$state": "/prompt6Text" }, "variant": "ghost", "size": "compact" },
-                "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/prompt6Text" }, "selectionGroup": "scene-prompts:6" } } }
+                "props": {
+                  "label": { "$state": "/prompt6Text" },
+                  "variant": "ghost",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "draftMessage",
+                    "params": {
+                      "text": { "$state": "/prompt6Text" },
+                      "selectionGroup": "scene-prompts:6"
+                    }
+                  }
+                }
               }
             ]
           }
@@ -173,8 +317,21 @@
             "component": "Row",
             "props": { "gap": "sm", "align": "center" },
             "children": [
-              { "component": "Icon", "props": { "name": "pen-line", "size": "xs" } },
-              { "component": "Text", "props": { "content": { "zh": "自定义场景行动", "en": "Custom scene action" }, "weight": "bold", "size": "sm" } }
+              {
+                "component": "Icon",
+                "props": { "name": "pen-line", "size": "xs" }
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": {
+                    "zh": "自定义场景行动",
+                    "en": "Custom scene action"
+                  },
+                  "weight": "bold",
+                  "size": "sm"
+                }
+              }
             ]
           },
           {
@@ -189,8 +346,20 @@
           },
           {
             "component": "Button",
-            "props": { "label": { "zh": "加入待发送区", "en": "Queue" }, "variant": "ghost", "size": "compact" },
-            "on": { "click": { "action": "draftMessage", "params": { "text": { "$bindState": "/customText" }, "selectionGroup": "scene-prompts:custom" } } }
+            "props": {
+              "label": { "zh": "加入待发送区", "en": "Queue" },
+              "variant": "ghost",
+              "size": "compact"
+            },
+            "on": {
+              "click": {
+                "action": "draftMessage",
+                "params": {
+                  "text": { "$bindState": "/customText" },
+                  "selectionGroup": "scene-prompts:custom"
+                }
+              }
+            }
           }
         ]
       }

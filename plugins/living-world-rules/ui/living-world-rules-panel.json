@@ -40,7 +40,10 @@
             "component": "Input",
             "props": {
               "label": { "zh": "规则 ID", "en": "Rule ID" },
-              "placeholder": { "zh": "留空自动生成短 ID", "en": "Leave blank to auto-generate a short ID" },
+              "placeholder": {
+                "zh": "留空自动生成短 ID",
+                "en": "Leave blank to auto-generate a short ID"
+              },
               "value": { "$bindState": "/form/id" }
             }
           },
@@ -76,9 +79,18 @@
               "label": { "zh": "类型", "en": "Kind" },
               "value": { "$bindState": "/form/kind" },
               "options": [
-                { "value": "constant", "label": { "zh": "常驻", "en": "Constant" } },
-                { "value": "triggered", "label": { "zh": "关键词触发", "en": "Triggered" } },
-                { "value": "evolving", "label": { "zh": "可演化", "en": "Evolving" } }
+                {
+                  "value": "constant",
+                  "label": { "zh": "常驻", "en": "Constant" }
+                },
+                {
+                  "value": "triggered",
+                  "label": { "zh": "关键词触发", "en": "Triggered" }
+                },
+                {
+                  "value": "evolving",
+                  "label": { "zh": "可演化", "en": "Evolving" }
+                }
               ]
             }
           },
@@ -88,10 +100,19 @@
               "label": { "zh": "分类", "en": "Category" },
               "value": { "$bindState": "/form/category" },
               "options": [
-                { "value": "", "label": { "zh": "未分类", "en": "Uncategorized" } },
-                { "value": "character", "label": { "zh": "角色", "en": "Character" } },
+                {
+                  "value": "",
+                  "label": { "zh": "未分类", "en": "Uncategorized" }
+                },
+                {
+                  "value": "character",
+                  "label": { "zh": "角色", "en": "Character" }
+                },
                 { "value": "scene", "label": { "zh": "场景", "en": "Scene" } },
-                { "value": "relationship", "label": { "zh": "关系", "en": "Relationship" } },
+                {
+                  "value": "relationship",
+                  "label": { "zh": "关系", "en": "Relationship" }
+                },
                 { "value": "world", "label": { "zh": "世界", "en": "World" } },
                 { "value": "style", "label": { "zh": "风格", "en": "Style" } }
               ]
@@ -104,9 +125,18 @@
               "value": { "$bindState": "/form/budgetClass" },
               "options": [
                 { "value": "", "label": { "zh": "默认", "en": "Default" } },
-                { "value": "sticky", "label": { "zh": "常驻", "en": "Sticky" } },
-                { "value": "flexible", "label": { "zh": "弹性", "en": "Flexible" } },
-                { "value": "droppable", "label": { "zh": "可丢弃", "en": "Droppable" } }
+                {
+                  "value": "sticky",
+                  "label": { "zh": "常驻", "en": "Sticky" }
+                },
+                {
+                  "value": "flexible",
+                  "label": { "zh": "弹性", "en": "Flexible" }
+                },
+                {
+                  "value": "droppable",
+                  "label": { "zh": "可丢弃", "en": "Droppable" }
+                }
               ]
             }
           }
@@ -122,9 +152,18 @@
               "label": { "zh": "注入位置", "en": "Position" },
               "value": { "$bindState": "/form/position" },
               "options": [
-                { "value": "after_plugin", "label": { "zh": "插件后", "en": "After plugin" } },
-                { "value": "before_plugin", "label": { "zh": "插件前", "en": "Before plugin" } },
-                { "value": "at_depth", "label": { "zh": "指定深度", "en": "At depth" } }
+                {
+                  "value": "after_plugin",
+                  "label": { "zh": "插件后", "en": "After plugin" }
+                },
+                {
+                  "value": "before_plugin",
+                  "label": { "zh": "插件前", "en": "Before plugin" }
+                },
+                {
+                  "value": "at_depth",
+                  "label": { "zh": "指定深度", "en": "At depth" }
+                }
               ]
             }
           },
@@ -132,7 +171,10 @@
             "component": "Input",
             "props": {
               "label": { "zh": "深度", "en": "Depth" },
-              "placeholder": { "zh": "位置为指定深度时填写", "en": "Used with at depth" },
+              "placeholder": {
+                "zh": "位置为指定深度时填写",
+                "en": "Used with at depth"
+              },
               "value": { "$bindState": "/form/depth" }
             }
           },
@@ -150,7 +192,10 @@
         "component": "Input",
         "props": {
           "label": { "zh": "关键词", "en": "Keys" },
-          "placeholder": { "zh": "用逗号分隔，用于关键词触发规则", "en": "Comma separated, used by triggered rules" },
+          "placeholder": {
+            "zh": "用逗号分隔，用于关键词触发规则",
+            "en": "Comma separated, used by triggered rules"
+          },
           "value": { "$bindState": "/form/keysText" }
         }
       },

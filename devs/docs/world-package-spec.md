@@ -17,12 +17,12 @@
 
 ### 1.2 术语
 
-| 术语 | 含义 |
-|------|------|
-| **World Package** | 一个目录，包含 `world.yaml` 清单 + `WORLD.*.md` lore 文件 |
-| **Lore** | 自由格式 Markdown，注入 LLM system prompt 作为世界观权威参考 |
-| **Dimensions** | 结构化世界维度数据（JSON/YAML），供插件、UI、Kernel 程序化消费 |
-| **Extract** | 从 lore 文档中由 LLM 自动提取 dimensions 的过程 |
+| 术语              | 含义                                                           |
+| ----------------- | -------------------------------------------------------------- |
+| **World Package** | 一个目录，包含 `world.yaml` 清单 + `WORLD.*.md` lore 文件      |
+| **Lore**          | 自由格式 Markdown，注入 LLM system prompt 作为世界观权威参考   |
+| **Dimensions**    | 结构化世界维度数据（JSON/YAML），供插件、UI、Kernel 程序化消费 |
+| **Extract**       | 从 lore 文档中由 LLM 自动提取 dimensions 的过程                |
 
 ## 2. 目录结构
 
@@ -43,14 +43,15 @@ worlds/                          # monorepo 根目录下，平行于 plugins/
 
 ### 2.1 文件命名约定
 
-| 文件 | 必需 | 说明 |
-|------|------|------|
-| `world.yaml` | 是 | 清单（manifest）+ 内联 dimensions，可选 `worldData` 指向统一数据索引 |
-| `WORLD.md` | 否 | 默认 lore，映射到 `defaultLocale` |
-| `WORLD.{lang}.md` | 否 | 带语言后缀的 lore，`lang` 为 BCP-47 短码 |
-| `data/world.data.yaml` | 否 | v1 统一 world data source 索引；详见 `devs/docs/world-data-filesystem/` |
+| 文件                   | 必需 | 说明                                                                    |
+| ---------------------- | ---- | ----------------------------------------------------------------------- |
+| `world.yaml`           | 是   | 清单（manifest）+ 内联 dimensions，可选 `worldData` 指向统一数据索引    |
+| `WORLD.md`             | 否   | 默认 lore，映射到 `defaultLocale`                                       |
+| `WORLD.{lang}.md`      | 否   | 带语言后缀的 lore，`lang` 为 BCP-47 短码                                |
+| `data/world.data.yaml` | 否   | v1 统一 world data source 索引；详见 `devs/docs/world-data-filesystem/` |
 
 语言后缀映射规则：
+
 - `WORLD.zh.md` → `zh-CN`
 - `WORLD.en.md` → `en-US`
 - `WORLD.md` → `world.yaml` 中的 `defaultLocale`
@@ -58,6 +59,7 @@ worlds/                          # monorepo 根目录下，平行于 plugins/
 ### 2.2 Lore 解析优先级
 
 对于给定 locale `zh-CN`：
+
 1. `WORLD.zh.md` — 精确匹配
 2. `WORLD.md` — 当且仅当 `defaultLocale === "zh-CN"` 时作 fallback
 3. 无 lore — 允许，dimensions-only 世界合法
@@ -66,32 +68,32 @@ worlds/                          # monorepo 根目录下，平行于 plugins/
 
 ```yaml
 # ── 元信息 ──────────────────────────────────────
-schemaVersion: "1.0"              # 必需，当前固定 "1.0"
-id: mistport                      # 必需，唯一标识符，kebab-case
-name:                             # 必需，I18nText
+schemaVersion: "1.0" # 必需，当前固定 "1.0"
+id: mistport # 必需，唯一标识符，kebab-case
+name: # 必需，I18nText
   zh-CN: 雾港・裂潮纪
   en-US: Mistport Chronicles
-version: "0.1.0"                  # 必需，semver
-summary:                          # 必需，I18nText，1-2 句概要
+version: "0.1.0" # 必需，semver
+summary: # 必需，I18nText，1-2 句概要
   zh-CN: 一座被永恒浓雾包裹的港口城市。潮汐带来远古遗物，也带来危险。
   en-US: A fog-shrouded port city where tides reveal ancient relics and dangers.
-defaultLocale: zh-CN              # 必需
-supportedLocales: [zh-CN, en-US]  # 必需，至少包含 defaultLocale
-tags: [dark-fantasy, mystery, exploration]  # 可选，genre/theme 标签
+defaultLocale: zh-CN # 必需
+supportedLocales: [zh-CN, en-US] # 必需，至少包含 defaultLocale
+tags: [dark-fantasy, mystery, exploration] # 可选，genre/theme 标签
 
 # ── 插件依赖 ────────────────────────────────────
-requiredPlugins:                  # 可选
+requiredPlugins: # 可选
   - persona
   - narrator
-recommendedPlugins:               # 可选
+recommendedPlugins: # 可选
   - guide
   - inventory
 
 # ── 统一数据索引 ────────────────────────────────
-worldData: data/world.data.yaml   # 可选，v1 world data source 索引
+worldData: data/world.data.yaml # 可选，v1 world data source 索引
 
 # ── 结构化维度 ──────────────────────────────────
-dimensions:                       # 可选，WorldDimensions；兼容字段
+dimensions: # 可选，WorldDimensions；兼容字段
   geography:
     overview:
       zh-CN: 悬崖与海面之间的港口城市...
@@ -114,14 +116,14 @@ dimensions:                       # 可选，WorldDimensions；兼容字段
               zh-CN: 议会权力中枢
               en-US: Political nerve center
   factions:
-    - id: council                 # id 不做 i18n
+    - id: council # id 不做 i18n
       name:
         zh-CN: 雾港议会
         en-US: Mistport Council
       description:
         zh-CN: 统治上城的政治实体
         en-US: Ruling body of the Upper City
-      type: political             # enum 值不做 i18n
+      type: political # enum 值不做 i18n
       influence: major
       leader:
         zh-CN: 陈议长
@@ -152,7 +154,10 @@ MVP 已实现 world load 摘要和 `world:metadata.*` 投影；session import、
 ```typescript
 export const worldPackageMetaSchema = z.object({
   schemaVersion: z.literal("1.0"),
-  id: z.string().min(1).regex(/^[a-z0-9-]+$/),
+  id: z
+    .string()
+    .min(1)
+    .regex(/^[a-z0-9-]+$/),
   name: i18nTextSchema,
   version: z.string().min(1),
   summary: i18nTextSchema,
@@ -205,12 +210,12 @@ lore: i18nTextSchema.optional(),
 
 lang 到 Locale 映射表（可扩展）：
 
-| 文件后缀 | Locale |
-|---------|--------|
-| `.zh` | `zh-CN` |
-| `.en` | `en-US` |
-| `.ja` | `ja-JP` |
-| `.ko` | `ko-KR` |
+| 文件后缀       | Locale          |
+| -------------- | --------------- |
+| `.zh`          | `zh-CN`         |
+| `.en`          | `en-US`         |
+| `.ja`          | `ja-JP`         |
+| `.ko`          | `ko-KR`         |
 | 无后缀 (`.md`) | `defaultLocale` |
 
 ### 4.3 WorldRecord 输出映射
@@ -239,10 +244,10 @@ export interface WorldRecord {
   name: I18nText;
   description: I18nText;
   lore?: I18nText;
-  locale?: string;          // defaultLocale
+  locale?: string; // defaultLocale
   tags?: string[];
   dimensions?: WorldDimensions;
-  packageId?: string;        // 新增：来源世界包 ID（seed worlds 有，用户创建的无）
+  packageId?: string; // 新增：来源世界包 ID（seed worlds 有，用户创建的无）
   createdAt: string;
   updatedAt?: string;
 }
@@ -251,11 +256,14 @@ export interface WorldRecord {
 ### 5.2 Store 初始化变更
 
 MemoryStore / PgServerStore 的种子逻辑从：
+
 ```typescript
 import { SEED_WORLDS } from "./seed-worlds.js";
 for (const seed of SEED_WORLDS) { ... }
 ```
+
 变为：
+
 ```typescript
 import { loadWorldPackages } from "./world-package-loader.js";
 const seeds = await loadWorldPackages(worldsDir);
@@ -311,6 +319,7 @@ Response (SSE):
 ### 6.5 Skill 集成
 
 Claude Code skill `/world-extract`：
+
 1. 读取指定目录的 WORLD.md
 2. 调用 extract-dimensions 逻辑
 3. 将提取的 dimensions 写入 world.yaml
@@ -318,41 +327,47 @@ Claude Code skill `/world-extract`：
 
 ## 7. 世界创建路径矩阵
 
-| 用户类型 | 输入 | 处理方式 | 接触格式 |
-|---------|------|----------|---------|
-| 小白玩家 | 一句话描述 | `POST /api/ai/generate-world`（现有） | 无 |
-| 创作型玩家 | 写好的世界观文本 | `POST /api/ai/extract-dimensions`（新增） | Markdown |
-| MOD 作者 | `WORLD.md` + `world.yaml` | loader 直接加载 | YAML + Markdown |
-| Agent | `/world-create` skill | 生成全套文件 | YAML（agent 写） |
+| 用户类型   | 输入                      | 处理方式                                  | 接触格式         |
+| ---------- | ------------------------- | ----------------------------------------- | ---------------- |
+| 小白玩家   | 一句话描述                | `POST /api/ai/generate-world`（现有）     | 无               |
+| 创作型玩家 | 写好的世界观文本          | `POST /api/ai/extract-dimensions`（新增） | Markdown         |
+| MOD 作者   | `WORLD.md` + `world.yaml` | loader 直接加载                           | YAML + Markdown  |
+| Agent      | `/world-create` skill     | 生成全套文件                              | YAML（agent 写） |
 
 ## 8. 实施阶段
 
 ### Phase 1: Schema & Types
+
 - 导出 `i18nTextSchema`
 - 新增 `worldPackageMetaSchema`
 - 升级 `worldRecordCreateSchema` 支持 I18nText
 - WorldRecord 增加 `packageId` 字段
 
 ### Phase 2: World Package Loader
+
 - 添加 `yaml` 依赖到 `@covel/server`
 - 实现 `world-package-loader.ts`
 - 单元测试（TDD：先写测试）
 
 ### Phase 3: 世界包文件
+
 - 创建 `worlds/` 目录和 3 个世界包
 - Mistport 中英合并
 - 验证 loader 能正确加载
 
 ### Phase 4: Store 集成
+
 - MemoryStore / PgServerStore 使用 loader
 - 删除旧 `seed-worlds.ts` / `seed-world-dimensions.ts`
 - 回归测试
 
 ### Phase 5: Extract-Dimensions API
+
 - `POST /api/ai/extract-dimensions` 端点
 - 前端"从 lore 提取维度"按钮
 
 ### Phase 6: Skill & 文档
+
 - 更新 `skills/world-authoring/SKILL.md`
 - 创建 `/world-create` 和 `/world-extract` skill
 

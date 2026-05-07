@@ -35,14 +35,14 @@
 
 ### 0.2 与原计划的偏差
 
-| 原计划 | 实际采用 | 原因 |
-|---|---|---|
-| `pg` (node-postgres) 的 `Pool` + `PoolClient` | `postgres.js` 的 `Sql` + `sql.reserve()` | Covel `@covel/store` 已经用 postgres.js,不引入两套驱动。`reserve()` 的语义等价于 `pool.connect()`:占用一条独立连接直到 `release()`,advisory lock 在同一连接上 acquire/release。 |
-| 参数绑定 `pg_try_advisory_lock(${key})`(bigint 直接参数) | `pg_try_advisory_lock(${keyLiteral}::bigint)`(字符串 + 显式 cast) | postgres.js 的 `Serializable` TS 类型不包含 `bigint`(运行时支持但类型不支持)。传 string + `::bigint` cast 是 TS-clean 的方式,且避免 JS `number` 的 2^53 精度陷阱。 |
-| Pool 在 bootstrap 内部构造 | `app.ts` 构造后通过 `sessionLock` 参数注入 bootstrap | 保持 `bootstrapApi` 测试友好:测试直接传 `createInProcessSessionLock()` 即可,不需要 mock PG pool。生产路径 `app.ts` 独立管理 lock 专用连接池,与 data store 的 pool 解耦,避免 lock-holding 连接挤占数据读写的连接配额。 |
-| `withSessionLock` 标记为 deprecated + 旧调用点迁移完后删除 | 保留 deprecated shim,所有 server 内调用点已迁移 | 目前 `apps/server` 所有生产 import 都改成 `c.get('sessionLock').withLock(...)`。shim 只服务于:(a) 未来引入新调用点前的兜底;(b) `apps/desktop/staging/` 镜像(gitignored,构建时从源码再生)里的历史 import。 |
-| turn.ts 迁移既有 `withSessionLock` 调用 | turn.ts 原本就 **没有** 锁,是新加的 | F5 原文把 turn.ts 列为调用点是文档偏差。实际 turn.ts 的 `executeTurn` + `listTurnResults().length` 更新管线和 actions.ts 有同样的并发风险,这次一并补上。 |
-| 手滚 `acquireWithTimeout` 用 `client.query(...)` + `{ rows: [...] }` | 用 postgres.js 模板字面量 + `rows[0]?.locked` | postgres.js 返回值直接是行数组,不是 `QueryResult`。 |
+| 原计划                                                               | 实际采用                                                          | 原因                                                                                                                                                                                                                  |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pg` (node-postgres) 的 `Pool` + `PoolClient`                        | `postgres.js` 的 `Sql` + `sql.reserve()`                          | Covel `@covel/store` 已经用 postgres.js,不引入两套驱动。`reserve()` 的语义等价于 `pool.connect()`:占用一条独立连接直到 `release()`,advisory lock 在同一连接上 acquire/release。                                       |
+| 参数绑定 `pg_try_advisory_lock(${key})`(bigint 直接参数)             | `pg_try_advisory_lock(${keyLiteral}::bigint)`(字符串 + 显式 cast) | postgres.js 的 `Serializable` TS 类型不包含 `bigint`(运行时支持但类型不支持)。传 string + `::bigint` cast 是 TS-clean 的方式,且避免 JS `number` 的 2^53 精度陷阱。                                                    |
+| Pool 在 bootstrap 内部构造                                           | `app.ts` 构造后通过 `sessionLock` 参数注入 bootstrap              | 保持 `bootstrapApi` 测试友好:测试直接传 `createInProcessSessionLock()` 即可,不需要 mock PG pool。生产路径 `app.ts` 独立管理 lock 专用连接池,与 data store 的 pool 解耦,避免 lock-holding 连接挤占数据读写的连接配额。 |
+| `withSessionLock` 标记为 deprecated + 旧调用点迁移完后删除           | 保留 deprecated shim,所有 server 内调用点已迁移                   | 目前 `apps/server` 所有生产 import 都改成 `c.get('sessionLock').withLock(...)`。shim 只服务于:(a) 未来引入新调用点前的兜底;(b) `apps/desktop/staging/` 镜像(gitignored,构建时从源码再生)里的历史 import。             |
+| turn.ts 迁移既有 `withSessionLock` 调用                              | turn.ts 原本就 **没有** 锁,是新加的                               | F5 原文把 turn.ts 列为调用点是文档偏差。实际 turn.ts 的 `executeTurn` + `listTurnResults().length` 更新管线和 actions.ts 有同样的并发风险,这次一并补上。                                                              |
+| 手滚 `acquireWithTimeout` 用 `client.query(...)` + `{ rows: [...] }` | 用 postgres.js 模板字面量 + `rows[0]?.locked`                     | postgres.js 返回值直接是行数组,不是 `QueryResult`。                                                                                                                                                                   |
 
 ### 0.3 验收状态
 
@@ -112,6 +112,7 @@ export async function withSessionLock<T>(
 **证据** · [`docs/reference/api.md:17-19`](../../../docs/reference/api.md), [`docs/reference/api.md:2244-2249`](../../../docs/reference/api.md)
 
 文档明确把 PostgreSQL 标为:
+
 - 生产部署形态
 - 支持多进程 / 多实例的入口
 
@@ -170,8 +171,13 @@ export function createInProcessSessionLock(): SessionLock {
     async withLock<T>(sessionId, fn) {
       const previousTail = locks.get(sessionId) ?? Promise.resolve();
       let release!: () => void;
-      const slot = new Promise<void>((resolve) => { release = resolve; });
-      const chain = previousTail.then(() => slot, () => slot);
+      const slot = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const chain = previousTail.then(
+        () => slot,
+        () => slot,
+      );
       locks.set(sessionId, chain);
       try {
         await previousTail.catch(() => {});
@@ -190,9 +196,9 @@ export function createInProcessSessionLock(): SessionLock {
 新增 `apps/server/src/lib/pg-session-lock.ts`:
 
 ```ts
-import type { Pool, PoolClient } from 'pg';
-import { createHash } from 'node:crypto';
-import type { SessionLock } from './session-lock.js';
+import type { Pool, PoolClient } from "pg";
+import { createHash } from "node:crypto";
+import type { SessionLock } from "./session-lock.js";
 
 /**
  * PG advisory-lock-based session lock. Correct across multiple Node
@@ -205,9 +211,12 @@ import type { SessionLock } from './session-lock.js';
  * connection — advisory locks are session-scoped (PG session, not
  * Covel session). We check out a dedicated client for the duration.
  */
-export function createPgAdvisorySessionLock(pool: Pool, opts: {
-  readonly acquireTimeoutMs?: number;  // default 30_000
-} = {}): SessionLock {
+export function createPgAdvisorySessionLock(
+  pool: Pool,
+  opts: {
+    readonly acquireTimeoutMs?: number; // default 30_000
+  } = {},
+): SessionLock {
   const acquireTimeoutMs = opts.acquireTimeoutMs ?? 30_000;
 
   return {
@@ -223,10 +232,15 @@ export function createPgAdvisorySessionLock(pool: Pool, opts: {
       } finally {
         if (locked) {
           try {
-            await client.query('SELECT pg_advisory_unlock($1)', [key.toString()]);
+            await client.query("SELECT pg_advisory_unlock($1)", [
+              key.toString(),
+            ]);
           } catch (err) {
             // 日志但不抛 — 连接断开会自动释放
-            console.warn(`[pg-session-lock] unlock failed for ${sessionId}:`, err);
+            console.warn(
+              `[pg-session-lock] unlock failed for ${sessionId}:`,
+              err,
+            );
           }
         }
         client.release();
@@ -236,12 +250,12 @@ export function createPgAdvisorySessionLock(pool: Pool, opts: {
 }
 
 function hashSessionId(sessionId: string): bigint {
-  const h = createHash('sha256').update(sessionId).digest();
+  const h = createHash("sha256").update(sessionId).digest();
   // PG advisory lock key 是 signed int8(8 字节 bigint)。
   // SHA-256 的前 8 字节读成 signed bigint,再 mask 到正数域避免负值
   // 奇怪表现(负 bigint 在 pg 驱动里需要额外处理)。
   const raw = h.readBigInt64BE(0);
-  return raw & 0x7FFFFFFFFFFFFFFFn;
+  return raw & 0x7fffffffffffffffn;
 }
 
 async function acquireWithTimeout(
@@ -256,7 +270,7 @@ async function acquireWithTimeout(
   // 但 try + sleep 回退更干净。
   while (true) {
     const res = await client.query<{ locked: boolean }>(
-      'SELECT pg_try_advisory_lock($1) AS locked',
+      "SELECT pg_try_advisory_lock($1) AS locked",
       [key.toString()],
     );
     if (res.rows[0]?.locked) return;
@@ -278,20 +292,22 @@ async function acquireWithTimeout(
 import {
   createInProcessSessionLock,
   type SessionLock,
-} from '../../lib/session-lock.js';
-import { createPgAdvisorySessionLock } from '../../lib/pg-session-lock.js';
+} from "../../lib/session-lock.js";
+import { createPgAdvisorySessionLock } from "../../lib/pg-session-lock.js";
 
 // 在 session-lock 选择点:
 const sessionLock: SessionLock =
-  backend === 'pg' && pgPool
+  backend === "pg" && pgPool
     ? createPgAdvisorySessionLock(pgPool)
     : createInProcessSessionLock();
 
-console.log(`[bootstrap] session lock: ${backend === 'pg' ? 'pg-advisory' : 'in-process'}`);
+console.log(
+  `[bootstrap] session lock: ${backend === "pg" ? "pg-advisory" : "in-process"}`,
+);
 
 // Hono middleware
 app.use(async (c, next) => {
-  c.set('sessionLock', sessionLock);
+  c.set("sessionLock", sessionLock);
   await next();
 });
 ```
@@ -310,7 +326,7 @@ app.use(async (c, next) => {
 每个改成:
 
 ```ts
-const sessionLock = c.get('sessionLock');
+const sessionLock = c.get("sessionLock");
 await sessionLock.withLock(sessionId, async () => {
   // ...
 });
@@ -326,37 +342,37 @@ await sessionLock.withLock(sessionId, async () => {
 // 前置:需要本地 PG (pnpm db:up)
 // skipIf:不在 CI + 没有 DATABASE_URL 时跳过
 
-describe.skipIf(!process.env.DATABASE_URL)('pg-session-lock', () => {
-  it('serializes concurrent withLock() calls on the same sessionId', async () => {
+describe.skipIf(!process.env.DATABASE_URL)("pg-session-lock", () => {
+  it("serializes concurrent withLock() calls on the same sessionId", async () => {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     const lock = createPgAdvisorySessionLock(pool);
 
     const log: string[] = [];
-    const a = lock.withLock('sess-test', async () => {
-      log.push('A-start');
+    const a = lock.withLock("sess-test", async () => {
+      log.push("A-start");
       await new Promise((r) => setTimeout(r, 100));
-      log.push('A-end');
+      log.push("A-end");
     });
-    const b = lock.withLock('sess-test', async () => {
-      log.push('B-start');
-      log.push('B-end');
+    const b = lock.withLock("sess-test", async () => {
+      log.push("B-start");
+      log.push("B-end");
     });
     await Promise.all([a, b]);
 
     // B 必须等 A 完全结束
-    expect(log).toEqual(['A-start', 'A-end', 'B-start', 'B-end']);
+    expect(log).toEqual(["A-start", "A-end", "B-start", "B-end"]);
 
     await pool.end();
   });
 
-  it('does NOT serialize across different sessionIds', async () => {
+  it("does NOT serialize across different sessionIds", async () => {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     const lock = createPgAdvisorySessionLock(pool);
 
     const start = Date.now();
     await Promise.all([
-      lock.withLock('sess-1', () => new Promise((r) => setTimeout(r, 100))),
-      lock.withLock('sess-2', () => new Promise((r) => setTimeout(r, 100))),
+      lock.withLock("sess-1", () => new Promise((r) => setTimeout(r, 100))),
+      lock.withLock("sess-2", () => new Promise((r) => setTimeout(r, 100))),
     ]);
     // 并发执行,总耗时应接近 100ms 而不是 200ms
     expect(Date.now() - start).toBeLessThan(180);
@@ -364,41 +380,43 @@ describe.skipIf(!process.env.DATABASE_URL)('pg-session-lock', () => {
     await pool.end();
   });
 
-  it('releases lock on thrown error', async () => {
+  it("releases lock on thrown error", async () => {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     const lock = createPgAdvisorySessionLock(pool);
 
     await expect(
-      lock.withLock('sess-err', async () => { throw new Error('boom'); })
-    ).rejects.toThrow('boom');
+      lock.withLock("sess-err", async () => {
+        throw new Error("boom");
+      }),
+    ).rejects.toThrow("boom");
 
     // 锁应该已释放 — 再次 acquire 不阻塞
     const t0 = Date.now();
-    await lock.withLock('sess-err', async () => {});
+    await lock.withLock("sess-err", async () => {});
     expect(Date.now() - t0).toBeLessThan(100);
 
     await pool.end();
   });
 
-  it('two separate pools (simulating two pods) serialize', async () => {
+  it("two separate pools (simulating two pods) serialize", async () => {
     const poolA = new Pool({ connectionString: process.env.DATABASE_URL });
     const poolB = new Pool({ connectionString: process.env.DATABASE_URL });
     const lockA = createPgAdvisorySessionLock(poolA);
     const lockB = createPgAdvisorySessionLock(poolB);
 
     const log: string[] = [];
-    const a = lockA.withLock('sess-cross', async () => {
-      log.push('A-start');
+    const a = lockA.withLock("sess-cross", async () => {
+      log.push("A-start");
       await new Promise((r) => setTimeout(r, 100));
-      log.push('A-end');
+      log.push("A-end");
     });
-    const b = lockB.withLock('sess-cross', async () => {
-      log.push('B-start');
-      log.push('B-end');
+    const b = lockB.withLock("sess-cross", async () => {
+      log.push("B-start");
+      log.push("B-end");
     });
     await Promise.all([a, b]);
 
-    expect(log).toEqual(['A-start', 'A-end', 'B-start', 'B-end']);
+    expect(log).toEqual(["A-start", "A-end", "B-start", "B-end"]);
 
     await Promise.all([poolA.end(), poolB.end()]);
   });
@@ -411,14 +429,14 @@ describe.skipIf(!process.env.DATABASE_URL)('pg-session-lock', () => {
 
 ## 4. 风险清单
 
-| 风险 | 缓解 |
-|------|------|
-| **连接池压力**:每个 lock 持有一个 PG 连接直到 fn 完成 | 需要 PG pool max 大于预期的并发 session 数(默认 10);文档里加容量规划指引 |
-| **连接泄漏**:fn 异常或 Node 进程崩溃时 PG 连接没 release | 用 `try/finally` 严格包裹;PG 连接断开会自动释放 advisory lock;pool 本身会回收 |
+| 风险                                                                      | 缓解                                                                           |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **连接池压力**:每个 lock 持有一个 PG 连接直到 fn 完成                     | 需要 PG pool max 大于预期的并发 session 数(默认 10);文档里加容量规划指引       |
+| **连接泄漏**:fn 异常或 Node 进程崩溃时 PG 连接没 release                  | 用 `try/finally` 严格包裹;PG 连接断开会自动释放 advisory lock;pool 本身会回收  |
 | **长时间 fn 阻塞其他 pod**:A pod fn 里有 LLM 调用卡 5 分钟,B pod 等到超时 | 单 turn 预期 < 30s;30s timeout 足够。LLM 超时本身由 plugin 级 `timeoutMs` 控制 |
-| **哈希碰撞**:2^63 空间实际概率 ≈ 0 | 足够;如果担心,改用 two-int4 API(pg_advisory_lock(key1, key2))给 128-bit 空间 |
-| **Redis 替代方案**:Redlock 更成熟 | Covel 架构里没有 Redis,加一个依赖不划算。PG 已在生产链路里 |
-| **开发体验**:dev 默认 Memory,开发者容易忘记测多进程场景 | CI 里跑 pg-session-lock.test.ts 强制验证 |
+| **哈希碰撞**:2^63 空间实际概率 ≈ 0                                        | 足够;如果担心,改用 two-int4 API(pg_advisory_lock(key1, key2))给 128-bit 空间   |
+| **Redis 替代方案**:Redlock 更成熟                                         | Covel 架构里没有 Redis,加一个依赖不划算。PG 已在生产链路里                     |
+| **开发体验**:dev 默认 Memory,开发者容易忘记测多进程场景                   | CI 里跑 pg-session-lock.test.ts 强制验证                                       |
 
 ---
 

@@ -14,115 +14,115 @@ import type { UIRenderPartsInstruction } from "./ui.js";
 // ── Proposal Type Enum ──────────────────────────────────────────
 
 export type ProposalType =
-	| "narrative.append"
-	| "narrative.template"
-	| "state.patch"
-	| "event.emit"
-	| "record.upsert"
-	| "interaction.request"
-	| "ui.render"
-	| "asset.generate"
-	| "plugin.data"
-	| "plugin.data.batch"
-	| "character.upsert"
-	| "working_memory.set"
-	| "lorebook.upsert";
+  | "narrative.append"
+  | "narrative.template"
+  | "state.patch"
+  | "event.emit"
+  | "record.upsert"
+  | "interaction.request"
+  | "ui.render"
+  | "asset.generate"
+  | "plugin.data"
+  | "plugin.data.batch"
+  | "character.upsert"
+  | "working_memory.set"
+  | "lorebook.upsert";
 
 // ── Proposal ────────────────────────────────────────────────────
 
 export interface ProposalSource {
-	readonly pluginId: string;
-	readonly runtimeId: string;
+  readonly pluginId: string;
+  readonly runtimeId: string;
 }
 
 export interface Proposal {
-	readonly id: string;
-	readonly type: ProposalType;
-	readonly source: ProposalSource;
-	readonly turnId: string;
-	readonly sessionId: string;
-	readonly payload: Readonly<Record<string, unknown>>;
-	readonly timestamp: string;
+  readonly id: string;
+  readonly type: ProposalType;
+  readonly source: ProposalSource;
+  readonly turnId: string;
+  readonly sessionId: string;
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly timestamp: string;
 }
 
 // ── Type-specific Payload Interfaces ────────────────────────────
 
 export interface NarrativeAppendPayload {
-	readonly content: string;
-	readonly kind: string; // 'story' | 'plugin' | custom
+  readonly content: string;
+  readonly kind: string; // 'story' | 'plugin' | custom
 }
 
 export interface InteractionRequestPayload {
-	readonly interactionId: string;
-	readonly type: "form" | "choice" | "confirmation";
-	readonly title?: string;
-	readonly data: Readonly<Record<string, unknown>>;
-	readonly narrativeTemplate?: string;
+  readonly interactionId: string;
+  readonly type: "form" | "choice" | "confirmation";
+  readonly title?: string;
+  readonly data: Readonly<Record<string, unknown>>;
+  readonly narrativeTemplate?: string;
 }
 
 export interface StatePatchPayload {
-	readonly table: string;
-	readonly field: string;
-	readonly value: unknown;
-	readonly reason?: string;
+  readonly table: string;
+  readonly field: string;
+  readonly value: unknown;
+  readonly reason?: string;
 }
 
 export interface EventEmitPayload {
-	readonly topic: string;
-	readonly data: Readonly<Record<string, unknown>>;
+  readonly topic: string;
+  readonly data: Readonly<Record<string, unknown>>;
 }
 
 export interface RecordUpsertPayload {
-	readonly recordType: "character" | "quest" | "item" | "location";
-	readonly id: string;
-	readonly data: Readonly<Record<string, unknown>>;
+  readonly recordType: "character" | "quest" | "item" | "location";
+  readonly id: string;
+  readonly data: Readonly<Record<string, unknown>>;
 }
 
 export type UIRenderPayload = UIRenderPartsInstruction;
 
 export interface AssetGeneratePayload {
-	readonly ref: MediaRef;
-	readonly modality: string;
-	readonly meta?: Readonly<Record<string, unknown>>;
+  readonly ref: MediaRef;
+  readonly modality: string;
+  readonly meta?: Readonly<Record<string, unknown>>;
 }
 
 export interface PluginDataPayload {
-	readonly namespace: string;
-	readonly key: string;
-	readonly value: unknown;
+  readonly namespace: string;
+  readonly key: string;
+  readonly value: unknown;
 }
 
 export interface PluginDataBatchPayload {
-	readonly items: readonly PluginDataPayload[];
+  readonly items: readonly PluginDataPayload[];
 }
 
 export interface CharacterUpsertPayload {
-	readonly id: string;
-	readonly name: string;
-	readonly type?: string;
-	readonly description?: string;
-	readonly fields?: unknown;
-	readonly version?: number;
-	readonly createdAt?: string;
-	/**
-	 * Optional plugin-data mirror target. When provided, the commit handler
-	 * mirrors a compact character snapshot into this plugin's
-	 * `characters/<id>` namespace so existing plugin UI panels can update via
-	 * the standard `plugin-data.changed` channel.
-	 */
-	readonly mirrorPluginId?: string;
-	/**
-	 * Additional plugin-data mirror targets for framework panels that aggregate
-	 * characters across multiple character-producing plugins.
-	 */
-	readonly mirrorPluginIds?: readonly string[];
+  readonly id: string;
+  readonly name: string;
+  readonly type?: string;
+  readonly description?: string;
+  readonly fields?: unknown;
+  readonly version?: number;
+  readonly createdAt?: string;
+  /**
+   * Optional plugin-data mirror target. When provided, the commit handler
+   * mirrors a compact character snapshot into this plugin's
+   * `characters/<id>` namespace so existing plugin UI panels can update via
+   * the standard `plugin-data.changed` channel.
+   */
+  readonly mirrorPluginId?: string;
+  /**
+   * Additional plugin-data mirror targets for framework panels that aggregate
+   * characters across multiple character-producing plugins.
+   */
+  readonly mirrorPluginIds?: readonly string[];
 }
 
 export interface WorkingMemorySetPayload {
-	readonly scope: "player" | "story" | "shared";
-	readonly key: string;
-	readonly value: unknown;
-	readonly schemaRef?: string;
+  readonly scope: "player" | "story" | "shared";
+  readonly key: string;
+  readonly value: unknown;
+  readonly schemaRef?: string;
 }
 
 /**
@@ -137,38 +137,38 @@ export interface WorkingMemorySetPayload {
  * kernel can emit lorebook upserts without reaching into store internals.
  */
 export interface LorebookUpsertPayload {
-	readonly entries: readonly LorebookUpsertEntry[];
+  readonly entries: readonly LorebookUpsertEntry[];
 }
 
 export interface LorebookUpsertEntry {
-	/** Stable id; re-using an existing id replaces the previous entry. */
-	readonly id: string;
-	readonly content: string;
-	readonly strategy: "constant" | "selective";
-	readonly position?: string; // defaults to 'after_char_defs'
-	readonly insertionOrder?: number; // defaults to 100
-	readonly enabled?: boolean; // defaults to true
-	readonly keys?: readonly string[];
-	/** Free-form forward-compatible fields (atDepth, budgetCap, …). */
-	readonly extra?: unknown;
+  /** Stable id; re-using an existing id replaces the previous entry. */
+  readonly id: string;
+  readonly content: string;
+  readonly strategy: "constant" | "selective";
+  readonly position?: string; // defaults to 'after_char_defs'
+  readonly insertionOrder?: number; // defaults to 100
+  readonly enabled?: boolean; // defaults to true
+  readonly keys?: readonly string[];
+  /** Free-form forward-compatible fields (atDepth, budgetCap, …). */
+  readonly extra?: unknown;
 }
 
 // ── SessionEvent (emitted to clients after commit) ──────────────
 
 export interface SessionEvent {
-	readonly id: string; // monotonic, supports replay
-	readonly type: string; // event type (e.g. 'narrative.completed')
-	readonly sessionId: string;
-	readonly turnId: string;
-	readonly source: ProposalSource;
-	readonly payload: Readonly<Record<string, unknown>>;
-	readonly timestamp: string;
+  readonly id: string; // monotonic, supports replay
+  readonly type: string; // event type (e.g. 'narrative.completed')
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly source: ProposalSource;
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly timestamp: string;
 }
 
 // ── Commit Result ───────────────────────────────────────────────
 
 export interface CommitResult {
-	readonly committed: boolean;
-	readonly event?: SessionEvent;
-	readonly error?: string;
+  readonly committed: boolean;
+  readonly event?: SessionEvent;
+  readonly error?: string;
 }

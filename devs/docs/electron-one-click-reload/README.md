@@ -36,12 +36,12 @@
 
 只支持 Electron：
 
-| 环境 | 是否展示一键重载 |
-| --- | --- |
-| Electron | 是 |
-| Tauri | 否 |
-| Web dev / 浏览器 | 否 |
-| 远端 self-host / commercial web | 否 |
+| 环境                            | 是否展示一键重载 |
+| ------------------------------- | ---------------- |
+| Electron                        | 是               |
+| Tauri                           | 否               |
+| Web dev / 浏览器                | 否               |
+| 远端 self-host / commercial web | 否               |
 
 ### 本阶段不支持
 
@@ -97,6 +97,7 @@ Restart the local Electron backend and refresh the app. Use this after editing l
    - 当前 `paths.pluginsDirs` 指向的插件目录内容（例如 `~/.covel/plugins/`）
 
    注意：这里的 `paths` 对象是 Electron main 首次启动时 `ensureUserPaths()` 得到的快照；仅重启 sidecar 不会自动重新解析 `config.toml` 中会改变路径拓扑的字段（详见下方 `config.toml:data_root` 注意事项）。
+
 7. Electron main 等待 `/api/health` 成功。
 8. Renderer 执行 `window.location.reload()`。
 9. 前端 boot 重新拉取 `/api/presets`、`/api/packages`、`/api/llm-config` 等。
@@ -108,14 +109,14 @@ Restart the local Electron backend and refresh the app. Use this after editing l
 当前有两个判断函数：
 
 ```ts
-isDesktopApp()
-hasElectronIpc()
+isDesktopApp();
+hasElectronIpc();
 ```
 
 本方案必须使用：
 
 ```ts
-hasElectronIpc()
+hasElectronIpc();
 ```
 
 原因：
@@ -171,7 +172,12 @@ const canReloadBackend = hasElectronIpc();
 ```ts
 async function handleRestart() {
   if (!canReloadBackend) {
-    setToast(t("settings.desktopRestartElectronOnly", "This action is only available in Electron."));
+    setToast(
+      t(
+        "settings.desktopRestartElectronOnly",
+        "This action is only available in Electron.",
+      ),
+    );
     setTimeout(() => setToast(null), 3000);
     return;
   }
@@ -192,21 +198,23 @@ async function handleRestart() {
 将原来的重启按钮改成只在 Electron 下展示：
 
 ```tsx
-{canReloadBackend && (
-  <Button
-    size="sm"
-    variant="outline"
-    onClick={handleRestart}
-    disabled={busy !== null}
-  >
-    {busy === "restart" ? (
-      <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
-    ) : (
-      <RotateCw className="w-3 h-3 mr-1.5" />
-    )}
-    {t("settings.desktopApplyConfigChanges", "Apply config changes")}
-  </Button>
-)}
+{
+  canReloadBackend && (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={handleRestart}
+      disabled={busy !== null}
+    >
+      {busy === "restart" ? (
+        <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+      ) : (
+        <RotateCw className="w-3 h-3 mr-1.5" />
+      )}
+      {t("settings.desktopApplyConfigChanges", "Apply config changes")}
+    </Button>
+  );
+}
 ```
 
 同时将 server 区域说明文案对应 i18n key 调整为“应用配置变更”语义。
@@ -305,23 +313,25 @@ import {
 在 `Open llm.toml` 附近增加：
 
 ```tsx
-{hasElectronIpc() && (
-  <Button
-    size="sm"
-    variant="outline"
-    onClick={() => {
-      void reloadServerAndWait({
-        message: t("reload.reloadingServer", "Restarting backend…"),
-      }).catch((err: unknown) => {
-        console.error("[LlmKeysPane] reload failed", err);
-      });
-    }}
-    className="text-[11px]"
-  >
-    <RotateCw className="w-3 h-3 mr-1.5" />
-    {t("settings.desktopApplyConfigChanges", "Apply config changes")}
-  </Button>
-)}
+{
+  hasElectronIpc() && (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={() => {
+        void reloadServerAndWait({
+          message: t("reload.reloadingServer", "Restarting backend…"),
+        }).catch((err: unknown) => {
+          console.error("[LlmKeysPane] reload failed", err);
+        });
+      }}
+      className="text-[11px]"
+    >
+      <RotateCw className="w-3 h-3 mr-1.5" />
+      {t("settings.desktopApplyConfigChanges", "Apply config changes")}
+    </Button>
+  );
+}
 ```
 
 这个增强是可选项，不影响 MVP。
@@ -345,7 +355,7 @@ export function canReloadBackend(): boolean {
 UI 使用：
 
 ```ts
-canReloadBackend()
+canReloadBackend();
 ```
 
 但这不是必须改动。
@@ -437,12 +447,12 @@ POST /api/config/restart
 
 按方案"必改文件"全部落地，修改 4 个文件：
 
-| 文件 | 改动 |
-| --- | --- |
-| `apps/web/src/settings/DesktopPane.tsx` | `handleRestart()` 入口先用 `hasElectronIpc()` 守卫，非 Electron 弹 toast 提示；重启按钮整体改为 `hasElectronIpc()` 条件渲染；按钮文案 i18n key 从 `desktopRestart` 切换为 `desktopApplyConfigChanges` |
-| `apps/web/src/settings/panes/PackagesPane.tsx` | import 从 `isDesktopApp` 改为 `hasElectronIpc`；插件安装后"需要重启"提示里的按钮判断条件同步切换 |
-| `apps/web/src/i18n/locales/zh-CN.json` | 新增 `desktopApplyConfigChanges`、`desktopRestartElectronOnly`；重写 `desktopRestartHint` 文案强调"调试插件代码 / 提示词 / UI / 模型配置"场景 |
-| `apps/web/src/i18n/locales/en-US.json` | 同上，英文 |
+| 文件                                           | 改动                                                                                                                                                                                                  |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/settings/DesktopPane.tsx`        | `handleRestart()` 入口先用 `hasElectronIpc()` 守卫，非 Electron 弹 toast 提示；重启按钮整体改为 `hasElectronIpc()` 条件渲染；按钮文案 i18n key 从 `desktopRestart` 切换为 `desktopApplyConfigChanges` |
+| `apps/web/src/settings/panes/PackagesPane.tsx` | import 从 `isDesktopApp` 改为 `hasElectronIpc`；插件安装后"需要重启"提示里的按钮判断条件同步切换                                                                                                      |
+| `apps/web/src/i18n/locales/zh-CN.json`         | 新增 `desktopApplyConfigChanges`、`desktopRestartElectronOnly`；重写 `desktopRestartHint` 文案强调"调试插件代码 / 提示词 / UI / 模型配置"场景                                                         |
+| `apps/web/src/i18n/locales/en-US.json`         | 同上，英文                                                                                                                                                                                            |
 
 ### 与原方案的偏差
 

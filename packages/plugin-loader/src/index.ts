@@ -19,30 +19,30 @@ export { getPluginTrustInfo, BUILTIN_PLUGIN_IDS } from "./trust.js";
 
 // ── Plugin LLM Config ────────────────────────────────────────────
 export {
-	loadPluginLlmConfig,
-	parsePluginLlmToml,
+  loadPluginLlmConfig,
+  parsePluginLlmToml,
 } from "./plugin-llm-config.js";
 export type { PluginLlmConfig, PluginLlmSlot } from "./plugin-llm-config.js";
 
 // ── Types ────────────────────────────────────────────────────────
 export type {
-	ParsedPluginMd,
-	ParsedReference,
-	PluginDiscoveryResult,
-	PluginSummary,
-	LoadedRuntime,
-	PluginEntryStatus,
-	PluginRegistryEntry,
-	RegistryChangeEvent,
-	PluginSource,
-	PluginTrustInfo,
-	FunctionHandler,
-	FunctionHandlerContext,
-	PluginRuntimeGateway,
-	PluginRuntimeUtils,
-	AssetProgressInput,
-	ResolvedSlotForPlugin,
-	PluginDataWriter,
-	PluginLogger,
-	FunctionStoreView,
+  ParsedPluginMd,
+  ParsedReference,
+  PluginDiscoveryResult,
+  PluginSummary,
+  LoadedRuntime,
+  PluginEntryStatus,
+  PluginRegistryEntry,
+  RegistryChangeEvent,
+  PluginSource,
+  PluginTrustInfo,
+  FunctionHandler,
+  FunctionHandlerContext,
+  PluginRuntimeGateway,
+  PluginRuntimeUtils,
+  AssetProgressInput,
+  ResolvedSlotForPlugin,
+  PluginDataWriter,
+  PluginLogger,
+  FunctionStoreView,
 } from "./types.js";

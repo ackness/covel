@@ -29,12 +29,12 @@ import path from "node:path";
 import { setupServerLogFile } from "./server-log-tee.js";
 
 interface BootstrapSummary {
-	readonly applied: boolean;
-	readonly home?: string;
-	readonly setVars: readonly string[];
-	readonly loadedKeys: number;
-	readonly skipReason?: string;
-	readonly serverLogFile?: string;
+  readonly applied: boolean;
+  readonly home?: string;
+  readonly setVars: readonly string[];
+  readonly loadedKeys: number;
+  readonly skipReason?: string;
+  readonly serverLogFile?: string;
 }
 
 /**
@@ -50,143 +50,143 @@ interface BootstrapSummary {
  *    the server can write to it.
  */
 function setIfMissing(
-	key: string,
-	candidate: string,
-	applied: string[],
-	mode: "requireExists" | "ensureParent" = "requireExists",
+  key: string,
+  candidate: string,
+  applied: string[],
+  mode: "requireExists" | "ensureParent" = "requireExists",
 ): void {
-	if (process.env[key]) return;
-	if (mode === "requireExists") {
-		if (!fs.existsSync(candidate)) return;
-	} else {
-		fs.mkdirSync(path.dirname(candidate), { recursive: true });
-	}
-	process.env[key] = candidate;
-	applied.push(key);
+  if (process.env[key]) return;
+  if (mode === "requireExists") {
+    if (!fs.existsSync(candidate)) return;
+  } else {
+    fs.mkdirSync(path.dirname(candidate), { recursive: true });
+  }
+  process.env[key] = candidate;
+  applied.push(key);
 }
 
 function loadKeysEnvIntoProcessEnv(filePath: string): number {
-	if (!fs.existsSync(filePath)) return 0;
-	let count = 0;
-	let content: string;
-	try {
-		content = fs.readFileSync(filePath, "utf-8");
-	} catch {
-		return 0;
-	}
-	for (const rawLine of content.split("\n")) {
-		const line = rawLine.trim();
-		if (!line || line.startsWith("#")) continue;
-		const eq = line.indexOf("=");
-		if (eq < 0) continue;
-		const key = line.slice(0, eq).trim();
-		let value = line.slice(eq + 1).trim();
-		if (
-			(value.startsWith('"') && value.endsWith('"')) ||
-			(value.startsWith("'") && value.endsWith("'"))
-		) {
-			value = value.slice(1, -1);
-		}
-		if (!key || process.env[key]) continue;
-		process.env[key] = value;
-		count++;
-	}
-	return count;
+  if (!fs.existsSync(filePath)) return 0;
+  let count = 0;
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, "utf-8");
+  } catch {
+    return 0;
+  }
+  for (const rawLine of content.split("\n")) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    if (eq < 0) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (!key || process.env[key]) continue;
+    process.env[key] = value;
+    count++;
+  }
+  return count;
 }
 
 /** Exported for tests. Production code triggers it via the side-effect call below. */
 export function bootstrap(): BootstrapSummary {
-	if (process.env.NODE_ENV === "production") {
-		return {
-			applied: false,
-			setVars: [],
-			loadedKeys: 0,
-			skipReason: "production",
-		};
-	}
-	if (process.env.COVEL_DESKTOP_REST === "1") {
-		return {
-			applied: false,
-			setVars: [],
-			loadedKeys: 0,
-			skipReason: "desktop-sidecar",
-		};
-	}
+  if (process.env.NODE_ENV === "production") {
+    return {
+      applied: false,
+      setVars: [],
+      loadedKeys: 0,
+      skipReason: "production",
+    };
+  }
+  if (process.env.COVEL_DESKTOP_REST === "1") {
+    return {
+      applied: false,
+      setVars: [],
+      loadedKeys: 0,
+      skipReason: "desktop-sidecar",
+    };
+  }
 
-	const home = process.env.COVEL_HOME ?? path.join(os.homedir(), ".covel");
-	if (!fs.existsSync(home)) {
-		return {
-			applied: false,
-			setVars: [],
-			loadedKeys: 0,
-			skipReason: "no-covel-home",
-		};
-	}
+  const home = process.env.COVEL_HOME ?? path.join(os.homedir(), ".covel");
+  if (!fs.existsSync(home)) {
+    return {
+      applied: false,
+      setVars: [],
+      loadedKeys: 0,
+      skipReason: "no-covel-home",
+    };
+  }
 
-	const applied: string[] = [];
-	setIfMissing("COVEL_USER_PLUGINS_DIR", path.join(home, "plugins"), applied);
-	setIfMissing("COVEL_USER_WORLDS_DIR", path.join(home, "worlds"), applied);
-	setIfMissing("COVEL_LLM_TOML", path.join(home, "llm.toml"), applied);
-	setIfMissing(
-		"SQLITE_PATH",
-		path.join(home, "data", "covel.db"),
-		applied,
-		"ensureParent",
-	);
-	// Mirror the desktop layout: `<home>/data/logs/` collects both the
-	// shell's `desktop.log` and our sidecar `server.log`. We populate
-	// `COVEL_LOGS_DIR` so downstream code can locate it without
-	// re-deriving the path.
-	const logsDir = path.join(home, "data", "logs");
-	setIfMissing("COVEL_LOGS_DIR", logsDir, applied, "ensureParent");
+  const applied: string[] = [];
+  setIfMissing("COVEL_USER_PLUGINS_DIR", path.join(home, "plugins"), applied);
+  setIfMissing("COVEL_USER_WORLDS_DIR", path.join(home, "worlds"), applied);
+  setIfMissing("COVEL_LLM_TOML", path.join(home, "llm.toml"), applied);
+  setIfMissing(
+    "SQLITE_PATH",
+    path.join(home, "data", "covel.db"),
+    applied,
+    "ensureParent",
+  );
+  // Mirror the desktop layout: `<home>/data/logs/` collects both the
+  // shell's `desktop.log` and our sidecar `server.log`. We populate
+  // `COVEL_LOGS_DIR` so downstream code can locate it without
+  // re-deriving the path.
+  const logsDir = path.join(home, "data", "logs");
+  setIfMissing("COVEL_LOGS_DIR", logsDir, applied, "ensureParent");
 
-	const loadedKeys = loadKeysEnvIntoProcessEnv(path.join(home, "keys.env"));
+  const loadedKeys = loadKeysEnvIntoProcessEnv(path.join(home, "keys.env"));
 
-	// Tee stdout/stderr to a NDJSON `server.log` so `pnpm dev:server`
-	// output is durable. `COVEL_SERVER_LOG_FILE` lets users override the
-	// path; setting it to an empty string disables the tee.
-	const explicit = process.env.COVEL_SERVER_LOG_FILE;
-	const serverLogFile =
-		explicit === undefined
-			? path.join(process.env.COVEL_LOGS_DIR ?? logsDir, "server.log")
-			: explicit.length > 0
-				? explicit
-				: null;
-	if (serverLogFile) {
-		setupServerLogFile({
-			filePath: serverLogFile,
-			rotation: {
-				maxSizeMb: Number(process.env.COVEL_LOG_MAX_SIZE_MB) || 10,
-				maxFiles: Number(process.env.COVEL_LOG_MAX_FILES) || 10,
-			},
-		});
-	}
+  // Tee stdout/stderr to a NDJSON `server.log` so `pnpm dev:server`
+  // output is durable. `COVEL_SERVER_LOG_FILE` lets users override the
+  // path; setting it to an empty string disables the tee.
+  const explicit = process.env.COVEL_SERVER_LOG_FILE;
+  const serverLogFile =
+    explicit === undefined
+      ? path.join(process.env.COVEL_LOGS_DIR ?? logsDir, "server.log")
+      : explicit.length > 0
+        ? explicit
+        : null;
+  if (serverLogFile) {
+    setupServerLogFile({
+      filePath: serverLogFile,
+      rotation: {
+        maxSizeMb: Number(process.env.COVEL_LOG_MAX_SIZE_MB) || 10,
+        maxFiles: Number(process.env.COVEL_LOG_MAX_FILES) || 10,
+      },
+    });
+  }
 
-	return {
-		applied: true,
-		home,
-		setVars: applied,
-		loadedKeys,
-		serverLogFile: serverLogFile ?? undefined,
-	};
+  return {
+    applied: true,
+    home,
+    setVars: applied,
+    loadedKeys,
+    serverLogFile: serverLogFile ?? undefined,
+  };
 }
 
 /** Result of the import-time bootstrap call. Exported so tests can inspect it. */
 export const summary = bootstrap();
 if (summary.applied) {
-	const parts = [
-		`home=${summary.home}`,
-		`vars=[${summary.setVars.join(", ") || "—"}]`,
-		`keys=${summary.loadedKeys}`,
-		summary.serverLogFile ? `serverLog=${summary.serverLogFile}` : null,
-	]
-		.filter((p): p is string => p !== null)
-		.join(" ");
-	console.log(`[dev-home-bootstrap] applied ${parts}`);
+  const parts = [
+    `home=${summary.home}`,
+    `vars=[${summary.setVars.join(", ") || "—"}]`,
+    `keys=${summary.loadedKeys}`,
+    summary.serverLogFile ? `serverLog=${summary.serverLogFile}` : null,
+  ]
+    .filter((p): p is string => p !== null)
+    .join(" ");
+  console.log(`[dev-home-bootstrap] applied ${parts}`);
 } else if (
-	summary.skipReason &&
-	summary.skipReason !== "production" &&
-	summary.skipReason !== "desktop-sidecar"
+  summary.skipReason &&
+  summary.skipReason !== "production" &&
+  summary.skipReason !== "desktop-sidecar"
 ) {
-	console.log(`[dev-home-bootstrap] skipped (${summary.skipReason})`);
+  console.log(`[dev-home-bootstrap] skipped (${summary.skipReason})`);
 }

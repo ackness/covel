@@ -18,197 +18,197 @@ const STORE_SUBMITTED_BLOCKS = "submittedBlocks"; // key: sessionId
 const STORE_EXECUTION_STEPS = "executionSteps"; // key: sessionId
 
 type StoreNames =
-	| typeof STORE_STATE_SNAPSHOTS
-	| typeof STORE_WORLD_OVERLAYS
-	| typeof STORE_STATE_PATCHES
-	| typeof STORE_SUBMITTED_BLOCKS
-	| typeof STORE_EXECUTION_STEPS;
+  | typeof STORE_STATE_SNAPSHOTS
+  | typeof STORE_WORLD_OVERLAYS
+  | typeof STORE_STATE_PATCHES
+  | typeof STORE_SUBMITTED_BLOCKS
+  | typeof STORE_EXECUTION_STEPS;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openAppDb(): Promise<IDBDatabase> {
-	if (dbPromise) return dbPromise;
-	dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-		const req = indexedDB.open(DB_NAME, DB_VERSION);
-		req.onupgradeneeded = () => {
-			const db = req.result;
-			if (!db.objectStoreNames.contains(STORE_STATE_SNAPSHOTS)) {
-				db.createObjectStore(STORE_STATE_SNAPSHOTS);
-			}
-			if (!db.objectStoreNames.contains(STORE_WORLD_OVERLAYS)) {
-				db.createObjectStore(STORE_WORLD_OVERLAYS);
-			}
-			if (!db.objectStoreNames.contains(STORE_STATE_PATCHES)) {
-				db.createObjectStore(STORE_STATE_PATCHES);
-			}
-			if (!db.objectStoreNames.contains(STORE_SUBMITTED_BLOCKS)) {
-				db.createObjectStore(STORE_SUBMITTED_BLOCKS);
-			}
-			if (!db.objectStoreNames.contains(STORE_EXECUTION_STEPS)) {
-				db.createObjectStore(STORE_EXECUTION_STEPS);
-			}
-		};
-		req.onsuccess = () => resolve(req.result);
-		req.onerror = () => reject(req.error);
-	});
-	return dbPromise;
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_STATE_SNAPSHOTS)) {
+        db.createObjectStore(STORE_STATE_SNAPSHOTS);
+      }
+      if (!db.objectStoreNames.contains(STORE_WORLD_OVERLAYS)) {
+        db.createObjectStore(STORE_WORLD_OVERLAYS);
+      }
+      if (!db.objectStoreNames.contains(STORE_STATE_PATCHES)) {
+        db.createObjectStore(STORE_STATE_PATCHES);
+      }
+      if (!db.objectStoreNames.contains(STORE_SUBMITTED_BLOCKS)) {
+        db.createObjectStore(STORE_SUBMITTED_BLOCKS);
+      }
+      if (!db.objectStoreNames.contains(STORE_EXECUTION_STEPS)) {
+        db.createObjectStore(STORE_EXECUTION_STEPS);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return dbPromise;
 }
 
 async function idbGet<T>(
-	storeName: StoreNames,
-	key: string,
+  storeName: StoreNames,
+  key: string,
 ): Promise<T | null> {
-	const db = await openAppDb();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(storeName, "readonly");
-		const store = tx.objectStore(storeName);
-		const req = store.get(key);
-		req.onsuccess = () => resolve((req.result as T) ?? null);
-		req.onerror = () => reject(req.error);
-	});
+  const db = await openAppDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readonly");
+    const store = tx.objectStore(storeName);
+    const req = store.get(key);
+    req.onsuccess = () => resolve((req.result as T) ?? null);
+    req.onerror = () => reject(req.error);
+  });
 }
 
 async function idbPut<T>(
-	storeName: StoreNames,
-	key: string,
-	value: T,
+  storeName: StoreNames,
+  key: string,
+  value: T,
 ): Promise<void> {
-	const db = await openAppDb();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(storeName, "readwrite");
-		const store = tx.objectStore(storeName);
-		const req = store.put(value, key);
-		req.onsuccess = () => resolve();
-		req.onerror = () => reject(req.error);
-	});
+  const db = await openAppDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readwrite");
+    const store = tx.objectStore(storeName);
+    const req = store.put(value, key);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
 }
 
 async function idbDelete(storeName: StoreNames, key: string): Promise<void> {
-	const db = await openAppDb();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(storeName, "readwrite");
-		const store = tx.objectStore(storeName);
-		const req = store.delete(key);
-		req.onsuccess = () => resolve();
-		req.onerror = () => reject(req.error);
-	});
+  const db = await openAppDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readwrite");
+    const store = tx.objectStore(storeName);
+    const req = store.delete(key);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
 }
 
 // ── State Snapshots ──────────────────────────────────────────────
 
 export async function getStateSnapshot(
-	sessionId: string,
+  sessionId: string,
 ): Promise<Record<string, unknown> | null> {
-	return idbGet<Record<string, unknown>>(STORE_STATE_SNAPSHOTS, sessionId);
+  return idbGet<Record<string, unknown>>(STORE_STATE_SNAPSHOTS, sessionId);
 }
 
 export async function saveStateSnapshot(
-	sessionId: string,
-	snapshot: Record<string, unknown>,
+  sessionId: string,
+  snapshot: Record<string, unknown>,
 ): Promise<void> {
-	return idbPut(STORE_STATE_SNAPSHOTS, sessionId, snapshot);
+  return idbPut(STORE_STATE_SNAPSHOTS, sessionId, snapshot);
 }
 
 export async function removeStateSnapshot(sessionId: string): Promise<void> {
-	return idbDelete(STORE_STATE_SNAPSHOTS, sessionId);
+  return idbDelete(STORE_STATE_SNAPSHOTS, sessionId);
 }
 
 // ── State Patches ───────────────────────────────────────────────
 
 export async function getStatePatches(
-	sessionId: string,
+  sessionId: string,
 ): Promise<import("./api.js").StatePatchRecord[] | null> {
-	return idbGet<import("./api.js").StatePatchRecord[]>(
-		STORE_STATE_PATCHES,
-		sessionId,
-	);
+  return idbGet<import("./api.js").StatePatchRecord[]>(
+    STORE_STATE_PATCHES,
+    sessionId,
+  );
 }
 
 export async function saveStatePatches(
-	sessionId: string,
-	patches: import("./api.js").StatePatchRecord[],
+  sessionId: string,
+  patches: import("./api.js").StatePatchRecord[],
 ): Promise<void> {
-	return idbPut(STORE_STATE_PATCHES, sessionId, patches);
+  return idbPut(STORE_STATE_PATCHES, sessionId, patches);
 }
 
 export async function removeStatePatches(sessionId: string): Promise<void> {
-	return idbDelete(STORE_STATE_PATCHES, sessionId);
+  return idbDelete(STORE_STATE_PATCHES, sessionId);
 }
 
 // ── World Overlays ───────────────────────────────────────────────
 
 export interface WorldOverlay {
-	lore?: string;
-	updatedAt: string;
+  lore?: string;
+  updatedAt: string;
 }
 
 export async function getWorldOverlay(
-	worldId: string,
+  worldId: string,
 ): Promise<WorldOverlay | null> {
-	return idbGet<WorldOverlay>(STORE_WORLD_OVERLAYS, worldId);
+  return idbGet<WorldOverlay>(STORE_WORLD_OVERLAYS, worldId);
 }
 
 export async function setWorldOverlay(
-	worldId: string,
-	overlay: WorldOverlay,
+  worldId: string,
+  overlay: WorldOverlay,
 ): Promise<void> {
-	return idbPut(STORE_WORLD_OVERLAYS, worldId, overlay);
+  return idbPut(STORE_WORLD_OVERLAYS, worldId, overlay);
 }
 
 export async function removeWorldOverlay(worldId: string): Promise<void> {
-	return idbDelete(STORE_WORLD_OVERLAYS, worldId);
+  return idbDelete(STORE_WORLD_OVERLAYS, worldId);
 }
 
 // ── Submitted Blocks ────────────────────────────────────────────
 
 export interface SubmittedBlocksRecord {
-	/** Ordered list of submitted block IDs (kept for backward compat with old code paths). */
-	ids: string[];
-	/** Form values keyed by blockId — used to repopulate disabled forms after submission. */
-	values: Record<string, Record<string, unknown>>;
+  /** Ordered list of submitted block IDs (kept for backward compat with old code paths). */
+  ids: string[];
+  /** Form values keyed by blockId — used to repopulate disabled forms after submission. */
+  values: Record<string, Record<string, unknown>>;
 }
 
 export async function getSubmittedBlocks(
-	sessionId: string,
+  sessionId: string,
 ): Promise<SubmittedBlocksRecord> {
-	const raw = await idbGet<unknown>(STORE_SUBMITTED_BLOCKS, sessionId);
-	if (!raw) return { ids: [], values: {} };
-	// Legacy shape: plain string[]. Migrate by treating values as empty.
-	if (Array.isArray(raw)) return { ids: raw as string[], values: {} };
-	const obj = raw as Partial<SubmittedBlocksRecord>;
-	return { ids: obj.ids ?? [], values: obj.values ?? {} };
+  const raw = await idbGet<unknown>(STORE_SUBMITTED_BLOCKS, sessionId);
+  if (!raw) return { ids: [], values: {} };
+  // Legacy shape: plain string[]. Migrate by treating values as empty.
+  if (Array.isArray(raw)) return { ids: raw as string[], values: {} };
+  const obj = raw as Partial<SubmittedBlocksRecord>;
+  return { ids: obj.ids ?? [], values: obj.values ?? {} };
 }
 
 export async function saveSubmittedBlocks(
-	sessionId: string,
-	ids: string[],
-	values: Record<string, Record<string, unknown>>,
+  sessionId: string,
+  ids: string[],
+  values: Record<string, Record<string, unknown>>,
 ): Promise<void> {
-	return idbPut<SubmittedBlocksRecord>(STORE_SUBMITTED_BLOCKS, sessionId, {
-		ids,
-		values,
-	});
+  return idbPut<SubmittedBlocksRecord>(STORE_SUBMITTED_BLOCKS, sessionId, {
+    ids,
+    values,
+  });
 }
 
 export async function removeSubmittedBlocks(sessionId: string): Promise<void> {
-	return idbDelete(STORE_SUBMITTED_BLOCKS, sessionId);
+  return idbDelete(STORE_SUBMITTED_BLOCKS, sessionId);
 }
 
 // ── Execution Steps (Timeline) ───────────────────────────────────
 
 export async function getExecutionSteps(sessionId: string): Promise<unknown[]> {
-	return (await idbGet<unknown[]>(STORE_EXECUTION_STEPS, sessionId)) ?? [];
+  return (await idbGet<unknown[]>(STORE_EXECUTION_STEPS, sessionId)) ?? [];
 }
 
 export async function saveExecutionSteps(
-	sessionId: string,
-	steps: unknown[],
+  sessionId: string,
+  steps: unknown[],
 ): Promise<void> {
-	return idbPut(STORE_EXECUTION_STEPS, sessionId, steps);
+  return idbPut(STORE_EXECUTION_STEPS, sessionId, steps);
 }
 
 export async function removeExecutionSteps(sessionId: string): Promise<void> {
-	return idbDelete(STORE_EXECUTION_STEPS, sessionId);
+  return idbDelete(STORE_EXECUTION_STEPS, sessionId);
 }
 
 // ── Migration ────────────────────────────────────────────────────
@@ -222,50 +222,50 @@ const MIGRATED_KEY = "covel:idbMigrated";
  * Idempotent — safe to call on every app boot.
  */
 export async function migrateLocalStorageToIdb(): Promise<void> {
-	if (localStorage.getItem(MIGRATED_KEY) === "1") return;
+  if (localStorage.getItem(MIGRATED_KEY) === "1") return;
 
-	try {
-		const keysToRemove: string[] = [];
+  try {
+    const keysToRemove: string[] = [];
 
-		// Migrate state snapshots
-		for (let i = 0; i < localStorage.length; i++) {
-			const key = localStorage.key(i);
-			if (!key) continue;
-			if (key.startsWith("covel:stateSnapshot:")) {
-				const sessionId = key.slice("covel:stateSnapshot:".length);
-				const raw = localStorage.getItem(key);
-				if (raw) {
-					try {
-						const data = JSON.parse(raw) as Record<string, unknown>;
-						await saveStateSnapshot(sessionId, data);
-						keysToRemove.push(key);
-					} catch {
-						// Skip corrupt entries
-					}
-				}
-			}
-			if (key.startsWith("covel:worldOverlay:")) {
-				const worldId = key.slice("covel:worldOverlay:".length);
-				const raw = localStorage.getItem(key);
-				if (raw) {
-					try {
-						const data = JSON.parse(raw) as WorldOverlay;
-						await setWorldOverlay(worldId, data);
-						keysToRemove.push(key);
-					} catch {
-						// Skip corrupt entries
-					}
-				}
-			}
-		}
+    // Migrate state snapshots
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (key.startsWith("covel:stateSnapshot:")) {
+        const sessionId = key.slice("covel:stateSnapshot:".length);
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          try {
+            const data = JSON.parse(raw) as Record<string, unknown>;
+            await saveStateSnapshot(sessionId, data);
+            keysToRemove.push(key);
+          } catch {
+            // Skip corrupt entries
+          }
+        }
+      }
+      if (key.startsWith("covel:worldOverlay:")) {
+        const worldId = key.slice("covel:worldOverlay:".length);
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          try {
+            const data = JSON.parse(raw) as WorldOverlay;
+            await setWorldOverlay(worldId, data);
+            keysToRemove.push(key);
+          } catch {
+            // Skip corrupt entries
+          }
+        }
+      }
+    }
 
-		// Clean up localStorage after successful migration
-		for (const key of keysToRemove) {
-			localStorage.removeItem(key);
-		}
+    // Clean up localStorage after successful migration
+    for (const key of keysToRemove) {
+      localStorage.removeItem(key);
+    }
 
-		localStorage.setItem(MIGRATED_KEY, "1");
-	} catch {
-		// IDB not available (e.g. private browsing) — keep localStorage fallback
-	}
+    localStorage.setItem(MIGRATED_KEY, "1");
+  } catch {
+    // IDB not available (e.g. private browsing) — keep localStorage fallback
+  }
 }

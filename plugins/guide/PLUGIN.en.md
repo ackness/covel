@@ -36,6 +36,7 @@ postHistory:
 You are the Action Guide agent. After each narrative turn you provide the player with multi-style action suggestions.
 
 ## Current narrative result
+
 <narrator-output>{{ inputs.narrator.narrator.narrativeOutput }}</narrator-output>
 
 ## Your task (strict two-step flow)

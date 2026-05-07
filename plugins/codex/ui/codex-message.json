@@ -9,8 +9,18 @@
         "component": "Row",
         "props": { "gap": "sm" },
         "children": [
-          { "component": "Icon", "props": { "name": "book-open", "size": "sm" } },
-          { "component": "Text", "props": { "content": { "$state": "/title" }, "weight": "bold", "size": "sm" } }
+          {
+            "component": "Icon",
+            "props": { "name": "book-open", "size": "sm" }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": { "$state": "/title" },
+              "weight": "bold",
+              "size": "sm"
+            }
+          }
         ]
       },
       {
@@ -32,11 +42,31 @@
             "props": { "variant": "subtle" },
             "visible": { "$state": "/item1Title" },
             "children": [
-              { "component": "Row", "props": { "gap": "sm" }, "children": [
-                { "component": "Icon", "props": { "name": "map-pin", "size": "xs" } },
-                { "component": "Text", "props": { "content": { "$state": "/item1Title" }, "weight": "bold", "size": "sm" } },
-                { "component": "Badge", "props": { "label": { "$state": "/item1Category" }, "color": "blue" } }
-              ]}
+              {
+                "component": "Row",
+                "props": { "gap": "sm" },
+                "children": [
+                  {
+                    "component": "Icon",
+                    "props": { "name": "map-pin", "size": "xs" }
+                  },
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "$state": "/item1Title" },
+                      "weight": "bold",
+                      "size": "sm"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$state": "/item1Category" },
+                      "color": "blue"
+                    }
+                  }
+                ]
+              }
             ]
           },
           {
@@ -44,11 +74,31 @@
             "props": { "variant": "subtle" },
             "visible": { "$state": "/item2Title" },
             "children": [
-              { "component": "Row", "props": { "gap": "sm" }, "children": [
-                { "component": "Icon", "props": { "name": "map-pin", "size": "xs" } },
-                { "component": "Text", "props": { "content": { "$state": "/item2Title" }, "weight": "bold", "size": "sm" } },
-                { "component": "Badge", "props": { "label": { "$state": "/item2Category" }, "color": "blue" } }
-              ]}
+              {
+                "component": "Row",
+                "props": { "gap": "sm" },
+                "children": [
+                  {
+                    "component": "Icon",
+                    "props": { "name": "map-pin", "size": "xs" }
+                  },
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "$state": "/item2Title" },
+                      "weight": "bold",
+                      "size": "sm"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$state": "/item2Category" },
+                      "color": "blue"
+                    }
+                  }
+                ]
+              }
             ]
           },
           {
@@ -56,11 +106,31 @@
             "props": { "variant": "subtle" },
             "visible": { "$state": "/item3Title" },
             "children": [
-              { "component": "Row", "props": { "gap": "sm" }, "children": [
-                { "component": "Icon", "props": { "name": "map-pin", "size": "xs" } },
-                { "component": "Text", "props": { "content": { "$state": "/item3Title" }, "weight": "bold", "size": "sm" } },
-                { "component": "Badge", "props": { "label": { "$state": "/item3Category" }, "color": "blue" } }
-              ]}
+              {
+                "component": "Row",
+                "props": { "gap": "sm" },
+                "children": [
+                  {
+                    "component": "Icon",
+                    "props": { "name": "map-pin", "size": "xs" }
+                  },
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "$state": "/item3Title" },
+                      "weight": "bold",
+                      "size": "sm"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$state": "/item3Category" },
+                      "color": "blue"
+                    }
+                  }
+                ]
+              }
             ]
           },
           {
@@ -68,11 +138,31 @@
             "props": { "variant": "subtle" },
             "visible": { "$state": "/item4Title" },
             "children": [
-              { "component": "Row", "props": { "gap": "sm" }, "children": [
-                { "component": "Icon", "props": { "name": "map-pin", "size": "xs" } },
-                { "component": "Text", "props": { "content": { "$state": "/item4Title" }, "weight": "bold", "size": "sm" } },
-                { "component": "Badge", "props": { "label": { "$state": "/item4Category" }, "color": "blue" } }
-              ]}
+              {
+                "component": "Row",
+                "props": { "gap": "sm" },
+                "children": [
+                  {
+                    "component": "Icon",
+                    "props": { "name": "map-pin", "size": "xs" }
+                  },
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "$state": "/item4Title" },
+                      "weight": "bold",
+                      "size": "sm"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$state": "/item4Category" },
+                      "color": "blue"
+                    }
+                  }
+                ]
+              }
             ]
           }
         ]

@@ -53,13 +53,13 @@
 
 这条决定把项目过去含糊的"框架图像 wire 边界"问题钉死了：
 
-| 类别 | 框架抽象价值 | 为什么 |
-|---|---|---|
-| **Text LLM wire**（OpenAI Chat / Anthropic Messages / Responses） | 高 | 三家协议虽不同但形状收敛（messages / tool_calls / streaming），框架级 adapter 受益面大 |
-| **Image generation wire**（DashScope async / OpenAI sync / Replicate webhook / fal queue） | 低 | 形状太分散：异步 vs 同步、submit-poll vs 直返、URL vs base64 vs uint8Array、参数命名各异；框架抽象会压缩每个 provider 的能力 |
-| **Storage**（PNG / WAV bytes 落盘） | 高 | 与 wire 无关，PNG 就是 PNG，content-addressable + dedup + 多端策略全是 transport-level 关注点 |
-| **认证 / 网络**（API key、SSRF、retry / backoff、timeout） | 高 | 安全敏感、跨 provider 同质、必须中心化以保证一致性 |
-| **UI**（gallery / regenerate button / status badge） | 高 | 多个图像插件天然需要相同的展示语义 |
+| 类别                                                                                       | 框架抽象价值 | 为什么                                                                                                                       |
+| ------------------------------------------------------------------------------------------ | ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| **Text LLM wire**（OpenAI Chat / Anthropic Messages / Responses）                          | 高           | 三家协议虽不同但形状收敛（messages / tool_calls / streaming），框架级 adapter 受益面大                                       |
+| **Image generation wire**（DashScope async / OpenAI sync / Replicate webhook / fal queue） | 低           | 形状太分散：异步 vs 同步、submit-poll vs 直返、URL vs base64 vs uint8Array、参数命名各异；框架抽象会压缩每个 provider 的能力 |
+| **Storage**（PNG / WAV bytes 落盘）                                                        | 高           | 与 wire 无关，PNG 就是 PNG，content-addressable + dedup + 多端策略全是 transport-level 关注点                                |
+| **认证 / 网络**（API key、SSRF、retry / backoff、timeout）                                 | 高           | 安全敏感、跨 provider 同质、必须中心化以保证一致性                                                                           |
+| **UI**（gallery / regenerate button / status badge）                                       | 高           | 多个图像插件天然需要相同的展示语义                                                                                           |
 
 本 spec 据此校准：
 
@@ -77,17 +77,17 @@
 
 ### 1.1 已有的多模态机制
 
-| 位置 | 现状 | 评价 |
-|---|---|---|
-| `ProposalType.asset.generate` | shared type 已声明，kernel normalizer / commit handler 待接入 | P0-b 需要补 normalizer、commit、trace/SSE、web renderer |
-| `ProposalType.ui.render` + `UIRenderInstruction[]` | shared type 已声明，当前 UI 主路径主要走 `interaction.request` / `ui-spec` block | P2 再做 part status 与细粒度更新 |
-| `OutputKind = 'story' \| 'plugin' \| 'system'` | 输出去向分类 | ✅ 已生效 |
-| `RuntimeManifest.capabilities: string[]` | 能力发现机制 | ✅ 用法已规范化（`narrative` / `world-data-provider` / `image-generation`） |
-| AI provider `capability/` 模块 | 模型能力检测（vision / function call / reasoning） | ⚠️ 只覆盖 LLM，不覆盖图像 / 语音 |
-| `TurnMessage.content: string` + `ui?: UIRenderInstruction[]` | 单一 string + 可选 UI 指令 | ⚠️ 流式 + 多 part 混排时表达不清 |
-| `RuntimeOutput.results[].structured` | 插件结构化输出 | ✅ 但前端按 structured 渲染时缺统一约定 |
-| `Hook`（8 个事件）+ `HookResult<P>` | 生命周期钩子 | ⚠️ 无语义分类，多插件叠加行为靠口口相传 |
-| `tools/builtin/` + `local tools` | 两套代码路径 | ⚠️ 未来接 MCP 时要再写第三套 |
+| 位置                                                         | 现状                                                                             | 评价                                                                        |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `ProposalType.asset.generate`                                | shared type 已声明，kernel normalizer / commit handler 待接入                    | P0-b 需要补 normalizer、commit、trace/SSE、web renderer                     |
+| `ProposalType.ui.render` + `UIRenderInstruction[]`           | shared type 已声明，当前 UI 主路径主要走 `interaction.request` / `ui-spec` block | P2 再做 part status 与细粒度更新                                            |
+| `OutputKind = 'story' \| 'plugin' \| 'system'`               | 输出去向分类                                                                     | ✅ 已生效                                                                   |
+| `RuntimeManifest.capabilities: string[]`                     | 能力发现机制                                                                     | ✅ 用法已规范化（`narrative` / `world-data-provider` / `image-generation`） |
+| AI provider `capability/` 模块                               | 模型能力检测（vision / function call / reasoning）                               | ⚠️ 只覆盖 LLM，不覆盖图像 / 语音                                            |
+| `TurnMessage.content: string` + `ui?: UIRenderInstruction[]` | 单一 string + 可选 UI 指令                                                       | ⚠️ 流式 + 多 part 混排时表达不清                                            |
+| `RuntimeOutput.results[].structured`                         | 插件结构化输出                                                                   | ✅ 但前端按 structured 渲染时缺统一约定                                     |
+| `Hook`（8 个事件）+ `HookResult<P>`                          | 生命周期钩子                                                                     | ⚠️ 无语义分类，多插件叠加行为靠口口相传                                     |
+| `tools/builtin/` + `local tools`                             | 两套代码路径                                                                     | ⚠️ 未来接 MCP 时要再写第三套                                                |
 
 ### 1.2 实际痛点（来自现有插件）
 
@@ -102,11 +102,11 @@
 
 ### 1.3 Proposal 类型现状
 
-| 层级 | 类型 | 当前状态 |
-|---|---|---|
-| Kernel 已接入 | `narrative.append` / `interaction.request` / `state.patch` / `event.emit` / `plugin.data` / `plugin.data.batch` / `working_memory.set` / `lorebook.upsert` | `session-kernel.ts` 已有 normalizer 或 commit handler |
-| Shared type 已声明 | `record.upsert` / `ui.render` / `asset.generate` / `narrative.template` | 类型层存在；kernel 路径需要逐项接入 |
-| P0 目标 | `asset.generate` | 先打通多模态 envelope，payload 收紧为 `{ ref: MediaRef, modality, meta }` |
+| 层级               | 类型                                                                                                                                                       | 当前状态                                                                  |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Kernel 已接入      | `narrative.append` / `interaction.request` / `state.patch` / `event.emit` / `plugin.data` / `plugin.data.batch` / `working_memory.set` / `lorebook.upsert` | `session-kernel.ts` 已有 normalizer 或 commit handler                     |
+| Shared type 已声明 | `record.upsert` / `ui.render` / `asset.generate` / `narrative.template`                                                                                    | 类型层存在；kernel 路径需要逐项接入                                       |
+| P0 目标            | `asset.generate`                                                                                                                                           | 先打通多模态 envelope，payload 收紧为 `{ ref: MediaRef, modality, meta }` |
 
 ### 1.4 现有 Hook 类型清单
 
@@ -126,6 +126,7 @@ TurnStop
 > **当前 14 个 runtime（10 个 `core-*` + 4 个用户态）中，0 个声明了 hook。**
 
 调度完全依赖：
+
 - 优先级 band（0-99 pregame、400-1000 main loop）
 - `upstreamRequired` 声明
 - `trigger.type: event` 事件触发（图像插件用）
@@ -229,12 +230,13 @@ export interface MediaStore {
   put(blob: Uint8Array | Blob, mime: string, meta?: object): Promise<MediaRef>;
   get(ref: MediaRef): Promise<Uint8Array | Blob>;
   exists(id: string): Promise<boolean>;
-  resolveUrl(ref: MediaRef): Promise<string>;  // signed/short-lived
+  resolveUrl(ref: MediaRef): Promise<string>; // signed/short-lived
   delete(id: string, opts?: { force?: boolean }): Promise<void>;
 }
 ```
 
 后端路线：
+
 - P0：`MemoryStore` → in-memory `Map<id, Uint8Array>`
 - P0：`SqliteStore + local-fs` → `media_assets` 表存元数据 + `<covelHome>/media/{ab}/{cd}/<sha256>.bin`
 - P2：`PgStore + S3`、`IdbStore`、Tauri command 适配
@@ -285,6 +287,7 @@ runtime handler `output.assetGenerations[]`  →  normalizeOutput()  →  Propos
 **(f) `ctx.media.ingestUrl(remoteUrl, opts)` 远程拉取 helper**（Codex 评审 #6 修正）
 
 `ctx.utils.fetchWithRetry` 只覆盖 429/5xx 重试。把远程图片（如 DashScope OSS URL）拉进 MediaStore 时还需要：
+
 - SSRF 校验（与 `validateBaseUrl` 同源策略）
 - redirect 后**复验**目标 URL（防止 SSRF 绕过）
 - `content-length` 上限保护（防止超大资源 OOM）
@@ -296,9 +299,9 @@ runtime handler `output.assetGenerations[]`  →  normalizeOutput()  →  Propos
 
 ```typescript
 interface IngestUrlOptions {
-  readonly maxBytes?: number;          // default 50 * 1024 * 1024
-  readonly timeoutMs?: number;         // default 30_000
-  readonly allowedMimes?: string[];    // sniff 后白名单校验
+  readonly maxBytes?: number; // default 50 * 1024 * 1024
+  readonly timeoutMs?: number; // default 30_000
+  readonly allowedMimes?: string[]; // sniff 后白名单校验
   readonly meta?: Record<string, unknown>;
   readonly signal?: AbortSignal;
 }
@@ -320,12 +323,12 @@ DashScope handler 的迁移就用 `ctx.media.ingestUrl(first.url)`，一行替�
 
 设计：
 
-| 组件 | 行为 |
-|---|---|
-| `media_assets` 表 | 加 `owner_session_id` + `owner_plugin_id` 列；`media_refs` 表反向索引哪些 session 引用了哪些 ref（GC 用） |
-| `GET /api/media/:id` | 必须带短期签名 token（如 HMAC-SHA256，5 分钟 TTL，含 `id + sessionId + exp`） |
-| `MediaStore.resolveUrl(ref)` | 服务端按当前 session 颁发签名 URL，不返回裸 `/api/media/:id` |
-| 跨 session 引用 | fork 时复制 `media_refs` 行（见 (h)），让 fork 出去的 session 也持有引用关系 |
+| 组件                         | 行为                                                                                                      |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `media_assets` 表            | 加 `owner_session_id` + `owner_plugin_id` 列；`media_refs` 表反向索引哪些 session 引用了哪些 ref（GC 用） |
+| `GET /api/media/:id`         | 必须带短期签名 token（如 HMAC-SHA256，5 分钟 TTL，含 `id + sessionId + exp`）                             |
+| `MediaStore.resolveUrl(ref)` | 服务端按当前 session 颁发签名 URL，不返回裸 `/api/media/:id`                                              |
+| 跨 session 引用              | fork 时复制 `media_refs` 行（见 (h)），让 fork 出去的 session 也持有引用关系                              |
 
 **(h) Snapshot / fork 媒体可达性**（Codex 评审 #4 修正）
 
@@ -360,21 +363,21 @@ PG+S3 / IdbStore / Tauri 命令路径作为后续后端适配（Phase 2），按
 
 #### 框架其他部分需要适配
 
-| 文件 | 改动 |
-|---|---|
-| `packages/shared/src/types/media.ts`（新） | `MediaRef` 类型 + Zod schema |
-| `packages/store/src/media-store.ts`（新） | `MediaStore` 接口 + Memory + SQLite/local-fs 实现 |
-| `packages/store/src/contract/media-store-contract.ts`（新） | 与现有 store / vector contract 同模式 |
-| `packages/store/src/schema/*` | 新增 `media_assets`（owner / sha256 / size / mime / created_at）+ `media_refs`（sessionId → mediaId 反向索引） |
-| `packages/plugin-loader/src/types.ts` | `FunctionHandlerContext` 加 `media: MediaContext` |
-| `packages/runtime/src/plugin-handler-helpers.ts` | 注入 `ctx.media`（含 `put` / `get` / `resolveUrl` / `ingestUrl`） |
-| `packages/runtime/src/turn-executor.ts` | wire `ctx.media` 到每个 runtime 调用 |
-| `packages/runtime/src/session-kernel.ts` | `normalizeOutput()` 加 `asset.generate` 路径；commit handler 加 `asset.generate` 处理 |
-| `apps/server/src/routes/api/media.ts`（新） | `GET /api/media/:id?token=...` 流式输出（含签名校验） |
-| `apps/server/src/middleware/media-token.ts`（新） | HMAC-SHA256 签名 + 5 分钟 TTL |
-| `apps/web/src/components/Media.tsx`（新） | 通用 `<Media ref={ref}>` / `<Image ref={ref}>` 组件 + IDB blob 缓存 |
-| `packages/runtime/src/snapshot-payload-builder.ts` + `apps/server/src/routes/api/snapshots.ts` | `SnapshotPayload` 加 `mediaRefs`；fork 时复制 `media_refs` 行 |
-| `packages/runtime/src/turn-emitter.ts` | trace 写入按 `asset.generate` 视图输出 `MediaRef` |
+| 文件                                                                                           | 改动                                                                                                           |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `packages/shared/src/types/media.ts`（新）                                                     | `MediaRef` 类型 + Zod schema                                                                                   |
+| `packages/store/src/media-store.ts`（新）                                                      | `MediaStore` 接口 + Memory + SQLite/local-fs 实现                                                              |
+| `packages/store/src/contract/media-store-contract.ts`（新）                                    | 与现有 store / vector contract 同模式                                                                          |
+| `packages/store/src/schema/*`                                                                  | 新增 `media_assets`（owner / sha256 / size / mime / created_at）+ `media_refs`（sessionId → mediaId 反向索引） |
+| `packages/plugin-loader/src/types.ts`                                                          | `FunctionHandlerContext` 加 `media: MediaContext`                                                              |
+| `packages/runtime/src/plugin-handler-helpers.ts`                                               | 注入 `ctx.media`（含 `put` / `get` / `resolveUrl` / `ingestUrl`）                                              |
+| `packages/runtime/src/turn-executor.ts`                                                        | wire `ctx.media` 到每个 runtime 调用                                                                           |
+| `packages/runtime/src/session-kernel.ts`                                                       | `normalizeOutput()` 加 `asset.generate` 路径；commit handler 加 `asset.generate` 处理                          |
+| `apps/server/src/routes/api/media.ts`（新）                                                    | `GET /api/media/:id?token=...` 流式输出（含签名校验）                                                          |
+| `apps/server/src/middleware/media-token.ts`（新）                                              | HMAC-SHA256 签名 + 5 分钟 TTL                                                                                  |
+| `apps/web/src/components/Media.tsx`（新）                                                      | 通用 `<Media ref={ref}>` / `<Image ref={ref}>` 组件 + IDB blob 缓存                                            |
+| `packages/runtime/src/snapshot-payload-builder.ts` + `apps/server/src/routes/api/snapshots.ts` | `SnapshotPayload` 加 `mediaRefs`；fork 时复制 `media_refs` 行                                                  |
+| `packages/runtime/src/turn-emitter.ts`                                                         | trace 写入按 `asset.generate` 视图输出 `MediaRef`                                                              |
 
 #### 旧代码可清理（具体迁移步骤）
 
@@ -485,6 +488,7 @@ DashScope 比 openai 复杂一点——结果可能是远程 OSS URL（24 小时
 #### 当前问题
 
 只针对 `asset.generate` 这一类：
+
 - 持久化到 `runtime_results` 时存 `MediaRef`（紧凑）
 - SSE 推前端时需要带 resolved URL（短期签名）+ UI 状态
 - 转给下一轮 LLM 时需要按 provider 编码（OpenAI `image_url` / Anthropic `image` source / Gemini `inlineData`）
@@ -523,12 +527,12 @@ export function assetGenerateToLLM(
 
 #### 框架其他部分需要适配
 
-| 文件 | 改动 |
-|---|---|
-| `packages/shared/src/proposals/asset-generate.ts`（新） | `assetGenerateToView` / `assetGenerateToLLM` |
-| `packages/runtime/src/session-kernel.ts` / `packages/runtime/src/turn-emitter.ts` | commit / trace / SSE 侧对 `asset.generate` 调 `assetGenerateToView` |
-| `packages/runtime/src/prompt-delta.ts` | 转 LLM 时对 `asset.generate` 调 `assetGenerateToLLM`（先打 stub，等 ai-provider content parts 落地后才实际生效） |
-| `apps/web/src/stores/session-store.tsx` + `apps/web/src/components/asset-render/` | 接收 `AssetGenerateView`，按 `modality` 路由组件 |
+| 文件                                                                              | 改动                                                                                                             |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `packages/shared/src/proposals/asset-generate.ts`（新）                           | `assetGenerateToView` / `assetGenerateToLLM`                                                                     |
+| `packages/runtime/src/session-kernel.ts` / `packages/runtime/src/turn-emitter.ts` | commit / trace / SSE 侧对 `asset.generate` 调 `assetGenerateToView`                                              |
+| `packages/runtime/src/prompt-delta.ts`                                            | 转 LLM 时对 `asset.generate` 调 `assetGenerateToLLM`（先打 stub，等 ai-provider content parts 落地后才实际生效） |
+| `apps/web/src/stores/session-store.tsx` + `apps/web/src/components/asset-render/` | 接收 `AssetGenerateView`，按 `modality` 路由组件                                                                 |
 
 #### 延后项
 
@@ -562,20 +566,20 @@ export function assetGenerateToLLM(
 
 ```typescript
 export type HookSemantic =
-  | 'first'        // 顺序遍历，第一个返回非空就短路（"我们在做选择"）
-  | 'sequential'   // 链式，前者输出 → 后者输入（"我们在做接力 enrich"）
-  | 'parallel'     // Promise.all 并发副作用（"我们在做无副作用的观察"）
-  | 'stream';      // 改字节流（未来给 LLM stream transform 用）
+  | "first" // 顺序遍历，第一个返回非空就短路（"我们在做选择"）
+  | "sequential" // 链式，前者输出 → 后者输入（"我们在做接力 enrich"）
+  | "parallel" // Promise.all 并发副作用（"我们在做无副作用的观察"）
+  | "stream"; // 改字节流（未来给 LLM stream transform 用）
 
 export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
-  TurnStart:        'parallel',     // 副作用观察
-  PreRuntime:       'sequential',   // 接力 enrich context
-  PostRuntime:      'parallel',     // 副作用观察
-  PreToolUse:       'sequential',   // 接力改写参数
-  PostToolUse:      'parallel',     // 副作用记录
-  PreStateCommit:   'sequential',   // 接力修饰 + 任一可 abort 短路（见下方 Codex 评审 #7 注记）
-  PostStateCommit:  'parallel',     // 副作用记录
-  TurnStop:         'parallel',     // 副作用清理
+  TurnStart: "parallel", // 副作用观察
+  PreRuntime: "sequential", // 接力 enrich context
+  PostRuntime: "parallel", // 副作用观察
+  PreToolUse: "sequential", // 接力改写参数
+  PostToolUse: "parallel", // 副作用记录
+  PreStateCommit: "sequential", // 接力修饰 + 任一可 abort 短路（见下方 Codex 评审 #7 注记）
+  PostStateCommit: "parallel", // 副作用记录
+  TurnStop: "parallel", // 副作用清理
 };
 ```
 
@@ -586,6 +590,7 @@ export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
 > 如果未来真出现"首个命中 short-circuit"场景，再开 `StateCommitGuard` 这种语义更窄的新 hook。
 
 `HookPipelineRun.run()` 内部按 semantic 分支：
+
 - `first`：遍历到首个返回非 `continue` 的 handler 即停
 - `sequential`：链式合并 `replace` 进 payload
 - `parallel`：`Promise.allSettled`，只收集错误不影响 payload
@@ -595,13 +600,13 @@ export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
 
 #### 框架其他部分需要适配
 
-| 文件 | 改动 |
-|---|---|
-| `packages/runtime/src/hooks/types.ts` | 新增 `HookSemantic` + `HOOK_SEMANTICS` 表 |
-| `packages/runtime/src/hooks/pipeline.ts` | `run()` 按 semantic 分支实现 |
-| `packages/shared/src/types/plugin.ts` | `HookDeclaration` 加可选 `enforce` 字段 |
-| `docs/reference/plugins.md` | 加 hook 语义表（每个 hook 是 first/seq/par） |
-| `docs/guide/plugin-authoring.md` | 加"hook 组合行为"章节，告诉插件作者三种语义的差别 |
+| 文件                                     | 改动                                              |
+| ---------------------------------------- | ------------------------------------------------- |
+| `packages/runtime/src/hooks/types.ts`    | 新增 `HookSemantic` + `HOOK_SEMANTICS` 表         |
+| `packages/runtime/src/hooks/pipeline.ts` | `run()` 按 semantic 分支实现                      |
+| `packages/shared/src/types/plugin.ts`    | `HookDeclaration` 加可选 `enforce` 字段           |
+| `docs/reference/plugins.md`              | 加 hook 语义表（每个 hook 是 first/seq/par）      |
+| `docs/guide/plugin-authoring.md`         | 加"hook 组合行为"章节，告诉插件作者三种语义的差别 |
 
 #### 旧代码可清理
 
@@ -641,24 +646,27 @@ RPG 一个 turn 的实际推理路径常常是 3-5 层递归：调骰子 → 看
 ```typescript
 interface RuntimeContextView {
   // ... existing fields
-  readonly recursiveCall: (delta: Partial<RuntimeInput>) => Promise<RuntimeResult>;
-  readonly recursionDepth: number;  // current depth, 0 at top
+  readonly recursiveCall: (
+    delta: Partial<RuntimeInput>,
+  ) => Promise<RuntimeResult>;
+  readonly recursionDepth: number; // current depth, 0 at top
 }
 ```
 
 框架内部：
+
 - 维护 `recursionDepth`（默认上限 10，可在 manifest 用 `maxRecursionDepth` 覆盖）
 - 超过上限抛 `MaxRecursionExceeded`
 - trace 自动生成 `recursiveCall` span 嵌套
 
 #### 框架其他部分需要适配
 
-| 文件 | 改动 |
-|---|---|
-| `packages/runtime/src/turn-executor.ts` | 显式记录递归层级，超阈值抛错 |
-| `packages/runtime/src/types.ts` | `RuntimeContextView` 加 `recursiveCall` |
-| `packages/runtime/src/llm-trace-payload.ts` | trace span 嵌套结构 |
-| `apps/web/src/pages/debug/runtime-inspector.tsx` | UI 按嵌套层级渲染 |
+| 文件                                             | 改动                                    |
+| ------------------------------------------------ | --------------------------------------- |
+| `packages/runtime/src/turn-executor.ts`          | 显式记录递归层级，超阈值抛错            |
+| `packages/runtime/src/types.ts`                  | `RuntimeContextView` 加 `recursiveCall` |
+| `packages/runtime/src/llm-trace-payload.ts`      | trace span 嵌套结构                     |
+| `apps/web/src/pages/debug/runtime-inspector.tsx` | UI 按嵌套层级渲染                       |
 
 #### 旧代码可清理
 
@@ -684,19 +692,19 @@ interface RuntimeContextView {
 #### 提议方案
 
 ```typescript
-type UIPartStatus = 'pending' | 'streaming' | 'success' | 'error' | 'paused';
+type UIPartStatus = "pending" | "streaming" | "success" | "error" | "paused";
 
 interface UIRenderPart {
-  readonly id: string;            // stable across re-renders
-  readonly type: string;          // 'text' | 'image' | 'audio' | 'video' | 'card' | …
+  readonly id: string; // stable across re-renders
+  readonly type: string; // 'text' | 'image' | 'audio' | 'video' | 'card' | …
   readonly status: UIPartStatus;
-  readonly content: unknown;      // typed by `type`
+  readonly content: unknown; // typed by `type`
   readonly retry?: { count: number; lastError?: string };
 }
 
 interface UIRenderInstruction {
   readonly parts: readonly UIRenderPart[];
-  readonly layout?: 'stream' | 'split' | 'overlay';
+  readonly layout?: "stream" | "split" | "overlay";
 }
 ```
 
@@ -704,12 +712,12 @@ interface UIRenderInstruction {
 
 #### 框架其他部分需要适配
 
-| 文件 | 改动 |
-|---|---|
-| `packages/shared/src/types/ui.ts` | `UIRenderPart` 类型 |
-| `apps/web/src/components/ui-render/` | 按 `part.type` switch 分发组件 |
+| 文件                                    | 改动                                                           |
+| --------------------------------------- | -------------------------------------------------------------- |
+| `packages/shared/src/types/ui.ts`       | `UIRenderPart` 类型                                            |
+| `apps/web/src/components/ui-render/`    | 按 `part.type` switch 分发组件                                 |
 | `packages/shared/src/types/protocol.ts` | SSE 协议增加 `ui.part.update` 事件（细粒度推送单个 part 状态） |
-| 各 PLUGIN.md `ui.message.json` schema | 升级 schema（兼容旧格式） |
+| 各 PLUGIN.md `ui.message.json` schema   | 升级 schema（兼容旧格式）                                      |
 
 #### 这条改动 unlocks 什么
 
@@ -732,7 +740,7 @@ interface UIRenderInstruction {
 借鉴 Cherry Studio `InMemoryTransport` 模式：
 
 ```typescript
-type ToolTransport = 'in-memory' | 'stdio' | 'http' | 'sse';
+type ToolTransport = "in-memory" | "stdio" | "http" | "sse";
 
 interface ToolClient {
   readonly transport: ToolTransport;
@@ -749,12 +757,12 @@ builtin tools 包成一个 `InMemoryToolClient`，每个声明 local tools 的 p
 
 #### 框架其他部分需要适配
 
-| 文件 | 改动 |
-|---|---|
-| `packages/tools/src/client.ts`（新） | `ToolClient` 接口 |
+| 文件                                           | 改动                                  |
+| ---------------------------------------------- | ------------------------------------- |
+| `packages/tools/src/client.ts`（新）           | `ToolClient` 接口                     |
 | `packages/tools/src/in-memory-client.ts`（新） | builtin / local 工具的 in-memory 实现 |
-| `packages/tools/src/registry.ts` | 重构为 ToolClient registry |
-| `packages/runtime/src/tool-executor.ts` | 只调 `ToolClient.call` |
+| `packages/tools/src/registry.ts`               | 重构为 ToolClient registry            |
+| `packages/runtime/src/tool-executor.ts`        | 只调 `ToolClient.call`                |
 
 #### 这条改动 unlocks 什么
 
@@ -799,6 +807,7 @@ interface AssetGeneratePayload {
 ```
 
 **关键点**：
+
 - **modality 取值开放**——插件可以声明 `'image'`、`'audio'`、`'tile'`，甚至将来的 `'3d-model'` / `'lipsync-track'`，框架侧无需每次扩 enum
 - **强制 ref 字段必须是 MediaRef**——这是 P0-a 的复用，base64 / URL 必须先 put 到 MediaStore
 - **modality 仅作元数据**——框架按 modality 路由到默认 UI 组件（image → gallery、audio → player），模态特定的工具 / Hook / 校验由插件提供
@@ -820,13 +829,13 @@ capabilities:
 
 #### 框架其他部分需要适配
 
-| 文件 | 改动 |
-|---|---|
-| `packages/shared/src/types/proposal.ts` | `AssetGeneratePayload` 收紧为强制 `ref: MediaRef` + `modality: string` |
-| `packages/shared/src/schemas/proposal.ts`（如有） | Zod schema 拒绝 inline base64/blob 字段 |
-| `apps/web/src/components/asset-render/` | 按 `modality` 路由：image→gallery、audio→player、其他→generic-link |
-| `packages/runtime/src/session-kernel.ts` | **运行期** error：插件声明 `capabilities: ['image-generation']` 且完成态输出没 emit `asset.generate`，在插件 `_logs` 写 `image.generate.asset_missing` error；`pluginData.images` 出现旧 `url` / `base64` / `dataUrl` 字段时写 `image.generate.plugin_data_inline_media` error；异步 `pending/queued/running/processing` 中间态跳过缺失资产检查。Codex 评审 #8 指出加载期无法静态判断 emit 行为，必须移到运行期 |
-| `packages/plugin-test-utils/src/contract.ts`（新） | 插件作者写 harness test 时可调 `expectAssetGenerated()` 断言，发布前在 CI 跑 |
+| 文件                                               | 改动                                                                                                                                                                                                                                                                                                                                                                                                            |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/shared/src/types/proposal.ts`            | `AssetGeneratePayload` 收紧为强制 `ref: MediaRef` + `modality: string`                                                                                                                                                                                                                                                                                                                                          |
+| `packages/shared/src/schemas/proposal.ts`（如有）  | Zod schema 拒绝 inline base64/blob 字段                                                                                                                                                                                                                                                                                                                                                                         |
+| `apps/web/src/components/asset-render/`            | 按 `modality` 路由：image→gallery、audio→player、其他→generic-link                                                                                                                                                                                                                                                                                                                                              |
+| `packages/runtime/src/session-kernel.ts`           | **运行期** error：插件声明 `capabilities: ['image-generation']` 且完成态输出没 emit `asset.generate`，在插件 `_logs` 写 `image.generate.asset_missing` error；`pluginData.images` 出现旧 `url` / `base64` / `dataUrl` 字段时写 `image.generate.plugin_data_inline_media` error；异步 `pending/queued/running/processing` 中间态跳过缺失资产检查。Codex 评审 #8 指出加载期无法静态判断 emit 行为，必须移到运行期 |
+| `packages/plugin-test-utils/src/contract.ts`（新） | 插件作者写 harness test 时可调 `expectAssetGenerated()` 断言，发布前在 CI 跑                                                                                                                                                                                                                                                                                                                                    |
 
 #### 现有图像插件迁移清单
 
@@ -839,20 +848,24 @@ capabilities:
 ```js
 return {
   imageId,
-  status: 'done',
+  status: "done",
   ref: primaryRef,
   prompt,
   promptMode,
-  pluginData: [{
-    namespace: IMAGES_NAMESPACE,
-    key: imageId,
-    value: { ...record, ref: primaryRef },  // ref-only record
-  }],
-  assetGenerations: [{
-    ref: primaryRef,
-    modality: 'image',
-    meta: { prompt, model: resolvedModel, provider: slot.provider, imageId },
-  }],
+  pluginData: [
+    {
+      namespace: IMAGES_NAMESPACE,
+      key: imageId,
+      value: { ...record, ref: primaryRef }, // ref-only record
+    },
+  ],
+  assetGenerations: [
+    {
+      ref: primaryRef,
+      modality: "image",
+      meta: { prompt, model: resolvedModel, provider: slot.provider, imageId },
+    },
+  ],
 };
 ```
 
@@ -948,6 +961,7 @@ return {
 - [x] 通用 gallery / jobs preset 提取到 `@covel/shared/json-render-presets`
 
 P2 集成备注：
+
 - PG media contract 需要可用 `DATABASE_URL` 才跑 live PG 用例；本地不可用时自动跳过。
 - S3/R2 后端通过 caller-provided `S3CompatibleMediaClient` 接入签名 URL 与凭证。
 - Web renderer 对 `ui.rendered` / `ui.part.update` 的专门展示仍由后续 UI 集成完善；当前 commit path 和事件/trace 已可用。
@@ -996,19 +1010,19 @@ P2 集成备注：
 
 每阶段都可独立交付、独立 rollback。整体节奏：
 
-| 阶段 | 目标 | 时间 | 依赖 |
-|---|---|---|---|
-| **P0-a** | MediaRef 基础设施可用 | 1 周 | 无 |
-| **P0-b** | `asset.generate` 端到端打通 | 1-2 周 | P0-a |
-| **P0-c** | 两个图像插件迁完 | 1 周 | P0-a + P0-b |
-| **P0-d** | snapshot/fork 收尾 + 端到端回归 | 1 周 | P0-a + P0-b + P0-c |
-| **P1** | Hook 语义、局部 view/LLM helper 收尾、ToolClient 统一 | 2-3 周 | P0 完结 |
-| **P2** | 后端扩展、recursiveCall、ui.render parts | 2-3 周 | P1 |
-| **P3** | 清理 + 强制约束 | 1 周 | P2 |
-| **P4a** | 策略冻结 + 小实现 | 1-2 天 | P3 |
-| **P4b** | Media lifecycle | 1-2 周 | P4a |
-| **P4c** | LLM content lifecycle | 1 周 | P4a |
-| **P4d** | compatibility + observability | 1-2 周 | P4a + P4b |
+| 阶段     | 目标                                                  | 时间   | 依赖               |
+| -------- | ----------------------------------------------------- | ------ | ------------------ |
+| **P0-a** | MediaRef 基础设施可用                                 | 1 周   | 无                 |
+| **P0-b** | `asset.generate` 端到端打通                           | 1-2 周 | P0-a               |
+| **P0-c** | 两个图像插件迁完                                      | 1 周   | P0-a + P0-b        |
+| **P0-d** | snapshot/fork 收尾 + 端到端回归                       | 1 周   | P0-a + P0-b + P0-c |
+| **P1**   | Hook 语义、局部 view/LLM helper 收尾、ToolClient 统一 | 2-3 周 | P0 完结            |
+| **P2**   | 后端扩展、recursiveCall、ui.render parts              | 2-3 周 | P1                 |
+| **P3**   | 清理 + 强制约束                                       | 1 周   | P2                 |
+| **P4a**  | 策略冻结 + 小实现                                     | 1-2 天 | P3                 |
+| **P4b**  | Media lifecycle                                       | 1-2 周 | P4a                |
+| **P4c**  | LLM content lifecycle                                 | 1 周   | P4a                |
+| **P4d**  | compatibility + observability                         | 1-2 周 | P4a + P4b          |
 
 P0-P3 总计 **9-13 周**（之前估的 5-7 周低估了 `asset.generate` 端到端接入和 LLM content parts 设计的工作量）。P4 作为 hardening 阶段按实际风险分批交付。
 
@@ -1016,15 +1030,15 @@ P0-P3 总计 **9-13 周**（之前估的 5-7 周低估了 `asset.generate` 端�
 
 ## 7. 风险 / Tradeoffs
 
-| 风险 | 影响 | 缓解 |
-|---|---|---|
-| 重构面广（6 个 packages） | 短期开发暂停其他 feature | 分 7 阶段（P0-a/b/c/d + P1/P2/P3），每阶段独立 ship；P0-a 可独立启动，P0-b 接在 P0-a 完成后启动 |
-| 已发布插件需要适配 | 用户态图像插件要改 | 改动表面积小（每个 handler ~10 行 diff，已写在 § 5.1）；本地开发数据通过 DB 重置切换到新格式 |
-| Hook 语义改变可能打破现有插件 | 14 个 runtime（10 core-* + 4 用户态） | ✅ **2026-04-26 已扫描，零 hook 声明，零破坏**（附录 C） |
-| `MediaRef` 增加一次性查询开销 | 大对象列表渲染慢 | 加 in-memory LRU cache + signed URL 短期缓存 |
-| 局部 view / LLM helper 心智负担 | 插件作者需要理解 `asset.generate` 的 record/view/LLM 三种形态 | P0 只做 `asset.generate`；等第二、第三种类型出现同类需求后再抽统一 codec |
-| 旧 inline 数据重置成本 | 旧 session 存档和历史图片字节会被清空 | 在本地开发环境直接删除旧 DB，并用当前 schema 重建 |
-| 设计过度抽象 | 类型契约太多反而吓走插件作者 | 文档侧重"快速上手"路径，复杂契约只在边界出现 |
+| 风险                            | 影响                                                          | 缓解                                                                                            |
+| ------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 重构面广（6 个 packages）       | 短期开发暂停其他 feature                                      | 分 7 阶段（P0-a/b/c/d + P1/P2/P3），每阶段独立 ship；P0-a 可独立启动，P0-b 接在 P0-a 完成后启动 |
+| 已发布插件需要适配              | 用户态图像插件要改                                            | 改动表面积小（每个 handler ~10 行 diff，已写在 § 5.1）；本地开发数据通过 DB 重置切换到新格式    |
+| Hook 语义改变可能打破现有插件   | 14 个 runtime（10 core-\* + 4 用户态）                        | ✅ **2026-04-26 已扫描，零 hook 声明，零破坏**（附录 C）                                        |
+| `MediaRef` 增加一次性查询开销   | 大对象列表渲染慢                                              | 加 in-memory LRU cache + signed URL 短期缓存                                                    |
+| 局部 view / LLM helper 心智负担 | 插件作者需要理解 `asset.generate` 的 record/view/LLM 三种形态 | P0 只做 `asset.generate`；等第二、第三种类型出现同类需求后再抽统一 codec                        |
+| 旧 inline 数据重置成本          | 旧 session 存档和历史图片字节会被清空                         | 在本地开发环境直接删除旧 DB，并用当前 schema 重建                                               |
+| 设计过度抽象                    | 类型契约太多反而吓走插件作者                                  | 文档侧重"快速上手"路径，复杂契约只在边界出现                                                    |
 
 ---
 
@@ -1032,11 +1046,11 @@ P0-P3 总计 **9-13 周**（之前估的 5-7 周低估了 `asset.generate` 端�
 
 这份 spec 用来比较三个推进时点的成本：
 
-| 选择 | 后果 |
-|---|---|
-| **延后** | 每加一个新模态插件，重复实现存储 / UI / 重试 / 缓存 / 一致性逻辑。3-4 个插件后开始出现"为什么这个插件的图片无法被另一个插件画廊读取"之类的用户投诉 |
-| **半年后启动** | 已有 5-10 个插件按旧模式写，迁移成本可能是现在的 3 倍 |
-| **现在启动** | 7 阶段共 9-13 周（详见 § 6 迁移计划修订版），从 P0-a 基础设施一直到 P3 强制约束。两个图像插件的 handler 改动量仍小（每个 ~10 行），但 `asset.generate` 端到端接入 kernel 是新增的真实工作量（P0-b 1-2 周） |
+| 选择           | 后果                                                                                                                                                                                                       |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **延后**       | 每加一个新模态插件，重复实现存储 / UI / 重试 / 缓存 / 一致性逻辑。3-4 个插件后开始出现"为什么这个插件的图片无法被另一个插件画廊读取"之类的用户投诉                                                         |
+| **半年后启动** | 已有 5-10 个插件按旧模式写，迁移成本可能是现在的 3 倍                                                                                                                                                      |
+| **现在启动**   | 7 阶段共 9-13 周（详见 § 6 迁移计划修订版），从 P0-a 基础设施一直到 P3 强制约束。两个图像插件的 handler 改动量仍小（每个 ~10 行），但 `asset.generate` 端到端接入 kernel 是新增的真实工作量（P0-b 1-2 周） |
 
 **建议推进 P1/P2 后续能力**：P0-a/b/c/d 已完成 MediaRef 基础设施、`asset.generate` kernel 接入、两个图像插件迁移、旧 DB 重置与 snapshot/fork 收尾。当前图像插件已从 base64 存储切换到 ref 存储。
 
@@ -1047,24 +1061,29 @@ P1/P2（Hook 语义、LLM content parts、ToolClient、recursiveCall、ui.render
 ## 9. 待决问题
 
 **MediaStore / 存储层**
+
 - [x] `MediaStore` 在 Tauri 桌面端采用 Tauri command；大文件后续补 chunk/streaming
 - [x] `MediaStore` 的清理策略（GC、quota、retention）由框架 API 承载，用户手动入口和未来 scheduler 共用 `POST /api/media/cleanup`
 - [x] `ctx.media.ingestUrl()` 默认 `maxBytes` 保持 50 MB，插件调用可显式覆盖
 - [x] HMAC 签名 token 的 TTL 保持 5 分钟，前端按需重新获取
 
 **`asset.generate` 端到端（P0-b）**
+
 - [x] runtime 输出 schema 统一使用 `output.assetGenerations[]`
 - [x] 一个 turn 里同一插件 emit 多个 asset.generate 时，`assetGenerations[]` 数组顺序就是 commit / trace / 展示顺序
 
 **LLM content parts（P1 阻塞 P0-b 完整实现）**
+
 - [x] `TextMessage.content` 的 `string` 路径长期保留，纯文本消息继续使用 string；多模态消息使用 `ContentPart[]`
 - [x] Provider 图片输入优先级：OpenAI Chat/Responses 走 `image_url` / `input_image.image_url`，Anthropic Messages 走 URL source 并预留 Files/base64，Gemini native 后续走 File API / `inlineData`
 
 **Hook**
+
 - [x] Hook 语义改变使用 `hookManifestVersion: 1` 作为 manifest gate
 - [x] `recursiveCall(delta, { reason })` 写入 recursive trace，方便 debug 阅读
 
 **迁移 / 兼容**
+
 - [x] `asset.generate` 接入 kernel commit handler 后，旧 trace（来自 `plugin.data` / `runtime_results` 两条路径）通过 read-time adapter 合成 legacy `asset.generated`
 - [x] 多模态 envelope 使用 `asset.progress` 表达生成中进度，完成态继续落 `asset.generate`
 
@@ -1105,14 +1124,14 @@ packages/tools/src/client.ts                   ← ToolClient 接口
 
 ## 附录 B: 7 个调研项目对本 spec 的贡献
 
-| 项目 | 关键贡献 | 在本 spec 的位置 |
-|---|---|---|
-| **LobeChat** | 三层消息分离（DB/UI/LLM）（RFC 142）；S3 + SHA-256 dedup | § 5.1 + § 5.2 |
-| **LibreChat** | Zod schema 单一真理 + attachments 引用 | § 5.1 |
-| **OpenWebUI** | "Tools 进程内 vs Pipelines 独立 worker"分层；命名混乱反例 | § 5.8 P2 |
-| **Vercel AI SDK** | `parts[]` 类型联合 + Generative UI；tool typed I/O | § 5.5 |
-| **Big-AGI** | `image_ref` 引用而非内嵌；fragment 化流式 | § 5.1 + § 5.5 |
-| **ComfyUI** | typed I/O + 进程隔离 + 反向激励 | § 5.6 + § 5.8 P2 |
+| 项目              | 关键贡献                                                                                                        | 在本 spec 的位置              |
+| ----------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| **LobeChat**      | 三层消息分离（DB/UI/LLM）（RFC 142）；S3 + SHA-256 dedup                                                        | § 5.1 + § 5.2                 |
+| **LibreChat**     | Zod schema 单一真理 + attachments 引用                                                                          | § 5.1                         |
+| **OpenWebUI**     | "Tools 进程内 vs Pipelines 独立 worker"分层；命名混乱反例                                                       | § 5.8 P2                      |
+| **Vercel AI SDK** | `parts[]` 类型联合 + Generative UI；tool typed I/O                                                              | § 5.5                         |
+| **Big-AGI**       | `image_ref` 引用而非内嵌；fragment 化流式                                                                       | § 5.1 + § 5.5                 |
+| **ComfyUI**       | typed I/O + 进程隔离 + 反向激励                                                                                 | § 5.6 + § 5.8 P2              |
 | **Cherry Studio** | PluginEngine 四类钩子语义；`recursiveCall` 深度限制；`InMemoryTransport` 统一工具协议；MessageBlock 独立 status | § 5.3 + § 5.4 + § 5.5 + § 5.6 |
 
 ---
@@ -1121,35 +1140,39 @@ packages/tools/src/client.ts                   ← ToolClient 接口
 
 ### C.1 总览（14 个 runtime）
 
-| 插件 / Runtime | pluginType | runtimeType | priority | hooks | 关键行为 |
-|---|---|---|---|---|---|
-| pregame | core-plugin | function | 10 | 0 | scheduled, maxTriggerCount=1 |
-| world-init/schema-gen | core-plugin | agent | 40 | 0 | 仅首轮，写 plugin-data |
-| char-creator/player-init | core-plugin | agent | 50 | 0 | guard 控制三分支 |
-| npc-graph/rag-retriever | plugin | function | 400 | 0 | 给 narrator 注入 npcContext |
-| narrator | core-plugin | agent | 500 | 0 | 主叙事生成 |
-| guide | plugin | agent | 600 | 0 | 行动建议（并发层） |
-| codex | plugin | agent | 600 | 0 | 知识图鉴（并发层） |
-| char-creator/character-tracker | core-plugin | agent | 600 | 0 | 写 character record（并发层） |
-| npc-graph/extractor | plugin | agent | 600 | 0 | 写 npc-graph nodes/edges（并发层） |
-| memory | core-plugin | manual UI | — | 0 | 三层记忆面板，UI 事件驱动 |
-| dashscope-image-gen/prompt-generator | plugin | agent | — | 0 | manual trigger，生成 prompt + emit event |
-| dashscope-image-gen/image-generator | plugin | function | 610 | 0 | event trigger, execution=background |
-| openai-image-gen/prompt-generator | plugin | agent | — | 0 | 同上，不同 topic |
-| openai-image-gen/image-generator | plugin | function | 610 | 0 | event trigger, execution=background |
+| 插件 / Runtime                       | pluginType  | runtimeType | priority | hooks | 关键行为                                 |
+| ------------------------------------ | ----------- | ----------- | -------- | ----- | ---------------------------------------- |
+| pregame                              | core-plugin | function    | 10       | 0     | scheduled, maxTriggerCount=1             |
+| world-init/schema-gen                | core-plugin | agent       | 40       | 0     | 仅首轮，写 plugin-data                   |
+| char-creator/player-init             | core-plugin | agent       | 50       | 0     | guard 控制三分支                         |
+| npc-graph/rag-retriever              | plugin      | function    | 400      | 0     | 给 narrator 注入 npcContext              |
+| narrator                             | core-plugin | agent       | 500      | 0     | 主叙事生成                               |
+| guide                                | plugin      | agent       | 600      | 0     | 行动建议（并发层）                       |
+| codex                                | plugin      | agent       | 600      | 0     | 知识图鉴（并发层）                       |
+| char-creator/character-tracker       | core-plugin | agent       | 600      | 0     | 写 character record（并发层）            |
+| npc-graph/extractor                  | plugin      | agent       | 600      | 0     | 写 npc-graph nodes/edges（并发层）       |
+| memory                               | core-plugin | manual UI   | —        | 0     | 三层记忆面板，UI 事件驱动                |
+| dashscope-image-gen/prompt-generator | plugin      | agent       | —        | 0     | manual trigger，生成 prompt + emit event |
+| dashscope-image-gen/image-generator  | plugin      | function    | 610      | 0     | event trigger, execution=background      |
+| openai-image-gen/prompt-generator    | plugin      | agent       | —        | 0     | 同上，不同 topic                         |
+| openai-image-gen/image-generator     | plugin      | function    | 610      | 0     | event trigger, execution=background      |
 
 ### C.2 关键发现
 
 #### Finding 1: 全部 0 个 hook 声明 → P1 Hook 低风险
+
 当前调度全靠 priority + `upstreamRequired` + 事件 + guard。Hook 是新概念，可以**直接定义干净的语义体系**。
 
 #### Finding 2: Priority 600 是 de facto 并发层
+
 4 个 runtime（guide / codex / character-tracker / npc-graph/extractor）都依赖 narrator，框架按 scheduler 把它们并发执行。它们写不同的 plugin-data namespace，**目前无冲突**。如果未来引入 hook，`PostRuntime` 标记 `parallel` 是天然契合的。
 
 #### Finding 3: 图像插件用 `event` + `background` 模拟 hook 行为
+
 两个图像插件都是 "agent prompt-generator emit event → function image-generator 监听执行" 的两段式。这本质上是**用事件机制做了 hook 该做的事**——P1 Hook 语义 + P2 `recursiveCall` 可以让这种模式更轻量。
 
 #### Finding 4: 图像插件 base64 入 plugin-data 的历史问题 ✅
+
 P0-c 之前,两个图像插件的 `image-generator` handler 把 base64 直接写到 `plugin-data.images` namespace：
 
 ```js
@@ -1160,8 +1183,9 @@ url: first?.url ?? null,
 
 ```js
 // openai-image-gen/runtimes/image-generator/handler.js:328-330
-const base64 = typeof first.base64 === 'string' ? first.base64 : null;
-const mimeType = typeof first.mediaType === 'string' ? first.mediaType : 'image/png';
+const base64 = typeof first.base64 === "string" ? first.base64 : null;
+const mimeType =
+  typeof first.mediaType === "string" ? first.mediaType : "image/png";
 const dataUrl = base64 ? `data:${mimeType};base64,${base64}` : null;
 ```
 
@@ -1170,36 +1194,39 @@ const dataUrl = base64 ? `data:${mimeType};base64,${base64}` : null;
 > **P3 后现状**：wire 层保持插件自管（dashscope 自己包 wan2.x 异步轮询、openai 用 Vercel AI SDK v6），存储层统一通过 `ctx.media.put()` / `ctx.media.ingestUrl()` 进入 MediaStore，`plugin_data.images` 只存 `MediaRef` 索引。
 
 #### Finding 4b: 框架已有部分原语（d9caf04 引入）✅
+
 新 commit 已经把这些原语放进 `ctx`：
 
-| 原语 | 来源 | 用途 |
-|---|---|---|
+| 原语                                             | 来源                                                | 用途                                                           |
+| ------------------------------------------------ | --------------------------------------------------- | -------------------------------------------------------------- |
 | `gateway.resolveSlot({ presetId, fallbackTag })` | `@covel/ai-provider` 经 `plugin-runtime-gateway.ts` | 拿 `{ provider, baseUrl, apiKey, model, headers }` 走 llm.toml |
-| `ctx.utils.validateBaseUrl(url)` | `@covel/ai-provider/plugin-utils.ts` | SSRF guard（RFC1918 + cloud metadata） |
-| `ctx.utils.fetchWithRetry(url, init)` | 同上 | 指数退避 + Retry-After 处理 |
+| `ctx.utils.validateBaseUrl(url)`                 | `@covel/ai-provider/plugin-utils.ts`                | SSRF guard（RFC1918 + cloud metadata）                         |
+| `ctx.utils.fetchWithRetry(url, init)`            | 同上                                                | 指数退避 + Retry-After 处理                                    |
 
 **P0-a MediaStore 已补齐 L1 Media 原语集**：`ctx.media.put(...)` 与上述三个原语并列，插件拥有完整的 wire / fetch / storage 路径。
 
 #### Finding 5: 全部 UI 是 JSON spec，无 React .tsx
+
 这意味着采用 § 5.5 的 `UIRenderPart` 部分类型化路径**无需迁移自定义 React 组件**——只需升级 json-render 的 schema 即可。
 
 #### Finding 6: 两个图像插件 UI 高度重复
+
 `dashscope-image-gen` 和 `openai-image-gen` 都各自实现了 `gallery.json` / `jobs.json` / `generate-button.json`——**已经是"每个插件重复造一遍 UI"问题的实证**。spec § 1.2 描述的痛点来自当前代码。
 
 ### C.3 Hook 语义建议
 
 基于盘点，建议的 `HOOK_SEMANTICS` 默认值：
 
-| Hook | 语义 | 理由 |
-|---|---|---|
-| `TurnStart` | `parallel` | 副作用观察（日志、metrics 等） |
-| `PreRuntime` | `sequential` | 接力 enrich context（潜在用例：LoreBook、记忆注入） |
-| `PostRuntime` | `parallel` | 副作用记录（trace、analytics） |
-| `PreToolUse` | `sequential` | 接力改写参数（潜在用例：参数审查、注入） |
-| `PostToolUse` | `parallel` | 副作用记录 |
-| `PreStateCommit` | `sequential` | 接力修饰；任一插件可通过返回 `abort` 短路否决（Codex 评审 #7 修订） |
-| `PostStateCommit` | `parallel` | 副作用记录 |
-| `TurnStop` | `parallel` | 副作用清理 |
+| Hook              | 语义         | 理由                                                                |
+| ----------------- | ------------ | ------------------------------------------------------------------- |
+| `TurnStart`       | `parallel`   | 副作用观察（日志、metrics 等）                                      |
+| `PreRuntime`      | `sequential` | 接力 enrich context（潜在用例：LoreBook、记忆注入）                 |
+| `PostRuntime`     | `parallel`   | 副作用记录（trace、analytics）                                      |
+| `PreToolUse`      | `sequential` | 接力改写参数（潜在用例：参数审查、注入）                            |
+| `PostToolUse`     | `parallel`   | 副作用记录                                                          |
+| `PreStateCommit`  | `sequential` | 接力修饰；任一插件可通过返回 `abort` 短路否决（Codex 评审 #7 修订） |
+| `PostStateCommit` | `parallel`   | 副作用记录                                                          |
+| `TurnStop`        | `parallel`   | 副作用清理                                                          |
 
 由于零现存使用，可以直接落地这套默认值，未来如果某个 hook 出现"必须串行修饰"的场景再调整。
 

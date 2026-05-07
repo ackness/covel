@@ -16,10 +16,10 @@ import type { DataStore } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
 
 type Env = {
-	Variables: {
-		store: DataStore;
-		pluginRegistry: PluginRegistry;
-	};
+  Variables: {
+    store: DataStore;
+    pluginRegistry: PluginRegistry;
+  };
 };
 
 export const pluginDataRoutes = new Hono<Env>();
@@ -29,184 +29,184 @@ export const pluginDataRoutes = new Hono<Env>();
  * Returns an error response if validation fails, or null if OK.
  */
 function validatePluginAccess(
-	registry: PluginRegistry,
-	pluginId: string,
-	sessionId: string,
-	requireActive: boolean,
+  registry: PluginRegistry,
+  pluginId: string,
+  sessionId: string,
+  requireActive: boolean,
 ): { error: string; status: 403 | 404 } | null {
-	const entry = registry.get(pluginId);
-	if (!entry) {
-		return { error: `Unknown plugin: ${pluginId}`, status: 404 };
-	}
-	if (requireActive) {
-		const activeRuntimes = registry.getActiveRuntimes(sessionId);
-		const isActive = activeRuntimes.some(
-			(rt) => rt.name === pluginId || rt.name.startsWith(pluginId + "/"),
-		);
-		if (!isActive) {
-			return {
-				error: `Plugin "${pluginId}" is not active in this session`,
-				status: 403,
-			};
-		}
-	}
-	return null;
+  const entry = registry.get(pluginId);
+  if (!entry) {
+    return { error: `Unknown plugin: ${pluginId}`, status: 404 };
+  }
+  if (requireActive) {
+    const activeRuntimes = registry.getActiveRuntimes(sessionId);
+    const isActive = activeRuntimes.some(
+      (rt) => rt.name === pluginId || rt.name.startsWith(pluginId + "/"),
+    );
+    if (!isActive) {
+      return {
+        error: `Plugin "${pluginId}" is not active in this session`,
+        status: 403,
+      };
+    }
+  }
+  return null;
 }
 
 // GET /session/:id/plugin-data/:pluginId/:namespace
 pluginDataRoutes.get("/:id/plugin-data/:pluginId/:namespace", async (c) => {
-	const store = c.get("store");
-	const registry = c.get("pluginRegistry");
-	const sessionId = c.req.param("id");
-	const session = await store.getSession(sessionId);
-	if (!session) return c.json({ error: "Session not found" }, 404);
-	const pluginId = c.req.param("pluginId");
-	const namespace = c.req.param("namespace");
+  const store = c.get("store");
+  const registry = c.get("pluginRegistry");
+  const sessionId = c.req.param("id");
+  const session = await store.getSession(sessionId);
+  if (!session) return c.json({ error: "Session not found" }, 404);
+  const pluginId = c.req.param("pluginId");
+  const namespace = c.req.param("namespace");
 
-	// Read: only require the plugin to be registered (not necessarily active)
-	const accessErr = validatePluginAccess(registry, pluginId, sessionId, false);
-	if (accessErr) return c.json({ error: accessErr.error }, accessErr.status);
+  // Read: only require the plugin to be registered (not necessarily active)
+  const accessErr = validatePluginAccess(registry, pluginId, sessionId, false);
+  if (accessErr) return c.json({ error: accessErr.error }, accessErr.status);
 
-	const records = await store.listPluginData(sessionId, pluginId, namespace);
-	return c.json({
-		items: records.map((r) => ({
-			namespace: r.namespace,
-			key: r.key,
-			value: r.value,
-			updatedAt: r.updatedAt,
-		})),
-	});
+  const records = await store.listPluginData(sessionId, pluginId, namespace);
+  return c.json({
+    items: records.map((r) => ({
+      namespace: r.namespace,
+      key: r.key,
+      value: r.value,
+      updatedAt: r.updatedAt,
+    })),
+  });
 });
 
 // GET /session/:id/plugin-data/:pluginId/:namespace/:key
 pluginDataRoutes.get(
-	"/:id/plugin-data/:pluginId/:namespace/:key",
-	async (c) => {
-		const store = c.get("store");
-		const registry = c.get("pluginRegistry");
-		const sessionId = c.req.param("id");
-		const session = await store.getSession(sessionId);
-		if (!session) return c.json({ error: "Session not found" }, 404);
-		const pluginId = c.req.param("pluginId");
-		const namespace = c.req.param("namespace");
-		const key = c.req.param("key");
+  "/:id/plugin-data/:pluginId/:namespace/:key",
+  async (c) => {
+    const store = c.get("store");
+    const registry = c.get("pluginRegistry");
+    const sessionId = c.req.param("id");
+    const session = await store.getSession(sessionId);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const pluginId = c.req.param("pluginId");
+    const namespace = c.req.param("namespace");
+    const key = c.req.param("key");
 
-		const accessErr = validatePluginAccess(
-			registry,
-			pluginId,
-			sessionId,
-			false,
-		);
-		if (accessErr) return c.json({ error: accessErr.error }, accessErr.status);
+    const accessErr = validatePluginAccess(
+      registry,
+      pluginId,
+      sessionId,
+      false,
+    );
+    if (accessErr) return c.json({ error: accessErr.error }, accessErr.status);
 
-		const record = await store.getPluginData(
-			sessionId,
-			pluginId,
-			namespace,
-			key,
-		);
-		if (!record) {
-			return c.json({ error: "Not found" }, 404);
-		}
-		return c.json({
-			namespace: record.namespace,
-			key: record.key,
-			value: record.value,
-			updatedAt: record.updatedAt,
-		});
-	},
+    const record = await store.getPluginData(
+      sessionId,
+      pluginId,
+      namespace,
+      key,
+    );
+    if (!record) {
+      return c.json({ error: "Not found" }, 404);
+    }
+    return c.json({
+      namespace: record.namespace,
+      key: record.key,
+      value: record.value,
+      updatedAt: record.updatedAt,
+    });
+  },
 );
 
 // PUT /session/:id/plugin-data/:pluginId/:namespace/:key
 pluginDataRoutes.put(
-	"/:id/plugin-data/:pluginId/:namespace/:key",
-	async (c) => {
-		const store = c.get("store");
-		const registry = c.get("pluginRegistry");
-		const sessionId = c.req.param("id");
-		const session = await store.getSession(sessionId);
-		if (!session) return c.json({ error: "Session not found" }, 404);
-		const pluginId = c.req.param("pluginId");
-		const namespace = c.req.param("namespace");
-		const key = c.req.param("key");
+  "/:id/plugin-data/:pluginId/:namespace/:key",
+  async (c) => {
+    const store = c.get("store");
+    const registry = c.get("pluginRegistry");
+    const sessionId = c.req.param("id");
+    const session = await store.getSession(sessionId);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const pluginId = c.req.param("pluginId");
+    const namespace = c.req.param("namespace");
+    const key = c.req.param("key");
 
-		// Write: require the plugin to be active in this session
-		const accessErr = validatePluginAccess(registry, pluginId, sessionId, true);
-		if (accessErr) return c.json({ error: accessErr.error }, accessErr.status);
+    // Write: require the plugin to be active in this session
+    const accessErr = validatePluginAccess(registry, pluginId, sessionId, true);
+    if (accessErr) return c.json({ error: accessErr.error }, accessErr.status);
 
-		const raw = await c.req.json<unknown>();
-		const bodySchema = z.object({ value: z.unknown() });
-		const parsed = bodySchema.safeParse(raw);
-		if (!parsed.success) {
-			return c.json({ error: "Invalid body: value field is required" }, 400);
-		}
-		if (parsed.data.value === undefined) {
-			return c.json({ error: "Invalid body: value field is required" }, 400);
-		}
-		// Guard against oversized payloads (max 64KB serialized)
-		const serialized = JSON.stringify(parsed.data.value);
-		if (serialized.length > 65_536) {
-			return c.json({ error: "Value too large (max 64KB)" }, 413);
-		}
-		const body = parsed.data;
-		const now = new Date().toISOString();
+    const raw = await c.req.json<unknown>();
+    const bodySchema = z.object({ value: z.unknown() });
+    const parsed = bodySchema.safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid body: value field is required" }, 400);
+    }
+    if (parsed.data.value === undefined) {
+      return c.json({ error: "Invalid body: value field is required" }, 400);
+    }
+    // Guard against oversized payloads (max 64KB serialized)
+    const serialized = JSON.stringify(parsed.data.value);
+    if (serialized.length > 65_536) {
+      return c.json({ error: "Value too large (max 64KB)" }, 413);
+    }
+    const body = parsed.data;
+    const now = new Date().toISOString();
 
-		await store.setPluginData({
-			id: crypto.randomUUID(),
-			sessionId,
-			pluginId,
-			namespace,
-			key,
-			value: body.value,
-			createdAt: now,
-			updatedAt: now,
-		});
+    await store.setPluginData({
+      id: crypto.randomUUID(),
+      sessionId,
+      pluginId,
+      namespace,
+      key,
+      value: body.value,
+      createdAt: now,
+      updatedAt: now,
+    });
 
-		return c.json({ success: true, namespace, key });
-	},
+    return c.json({ success: true, namespace, key });
+  },
 );
 
 // DELETE /session/:id/plugin-data/:pluginId/:namespace/:key
 pluginDataRoutes.delete(
-	"/:id/plugin-data/:pluginId/:namespace/:key",
-	async (c) => {
-		const store = c.get("store");
-		const registry = c.get("pluginRegistry");
-		const sessionId = c.req.param("id");
-		const session = await store.getSession(sessionId);
-		if (!session) return c.json({ error: "Session not found" }, 404);
-		const pluginId = c.req.param("pluginId");
-		const namespace = c.req.param("namespace");
-		const key = c.req.param("key");
+  "/:id/plugin-data/:pluginId/:namespace/:key",
+  async (c) => {
+    const store = c.get("store");
+    const registry = c.get("pluginRegistry");
+    const sessionId = c.req.param("id");
+    const session = await store.getSession(sessionId);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const pluginId = c.req.param("pluginId");
+    const namespace = c.req.param("namespace");
+    const key = c.req.param("key");
 
-		// Write: require the plugin to be active in this session
-		const accessErr = validatePluginAccess(registry, pluginId, sessionId, true);
-		if (accessErr) return c.json({ error: accessErr.error }, accessErr.status);
+    // Write: require the plugin to be active in this session
+    const accessErr = validatePluginAccess(registry, pluginId, sessionId, true);
+    if (accessErr) return c.json({ error: accessErr.error }, accessErr.status);
 
-		await store.deletePluginData(sessionId, pluginId, namespace, key);
-		return c.json({ success: true });
-	},
+    await store.deletePluginData(sessionId, pluginId, namespace, key);
+    return c.json({ success: true });
+  },
 );
 
 // GET /session/:id/plugin-data/:pluginId — list all namespaces
 pluginDataRoutes.get("/:id/plugin-data/:pluginId", async (c) => {
-	const store = c.get("store");
-	const registry = c.get("pluginRegistry");
-	const sessionId = c.req.param("id");
-	const session = await store.getSession(sessionId);
-	if (!session) return c.json({ error: "Session not found" }, 404);
-	const pluginId = c.req.param("pluginId");
+  const store = c.get("store");
+  const registry = c.get("pluginRegistry");
+  const sessionId = c.req.param("id");
+  const session = await store.getSession(sessionId);
+  if (!session) return c.json({ error: "Session not found" }, 404);
+  const pluginId = c.req.param("pluginId");
 
-	const accessErr = validatePluginAccess(registry, pluginId, sessionId, false);
-	if (accessErr) return c.json({ error: accessErr.error }, accessErr.status);
+  const accessErr = validatePluginAccess(registry, pluginId, sessionId, false);
+  if (accessErr) return c.json({ error: accessErr.error }, accessErr.status);
 
-	const records = await store.listPluginData(sessionId, pluginId);
-	return c.json({
-		items: records.map((r) => ({
-			namespace: r.namespace,
-			key: r.key,
-			value: r.value,
-			updatedAt: r.updatedAt,
-		})),
-	});
+  const records = await store.listPluginData(sessionId, pluginId);
+  return c.json({
+    items: records.map((r) => ({
+      namespace: r.namespace,
+      key: r.key,
+      value: r.value,
+      updatedAt: r.updatedAt,
+    })),
+  });
 });

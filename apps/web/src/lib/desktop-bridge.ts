@@ -10,85 +10,85 @@
  */
 
 import {
-	showReloadOverlay,
-	hideReloadOverlay,
+  showReloadOverlay,
+  hideReloadOverlay,
 } from "@/components/reload-overlay.js";
 
 type CleanupFn = () => void;
 
 type DesktopPlatform =
-	| "aix"
-	| "android"
-	| "darwin"
-	| "freebsd"
-	| "haiku"
-	| "linux"
-	| "openbsd"
-	| "sunos"
-	| "win32"
-	| "cygwin"
-	| "netbsd";
+  | "aix"
+  | "android"
+  | "darwin"
+  | "freebsd"
+  | "haiku"
+  | "linux"
+  | "openbsd"
+  | "sunos"
+  | "win32"
+  | "cygwin"
+  | "netbsd";
 
 interface CovelIpcApi {
-	readonly isDesktop: true;
-	readonly platform: DesktopPlatform;
-	readonly appVersion: string;
-	send(channel: string, payload?: unknown): boolean;
-	invoke<T = unknown>(channel: string, payload?: unknown): Promise<T>;
-	on(channel: string, handler: (payload: unknown) => void): () => void;
+  readonly isDesktop: true;
+  readonly platform: DesktopPlatform;
+  readonly appVersion: string;
+  send(channel: string, payload?: unknown): boolean;
+  invoke<T = unknown>(channel: string, payload?: unknown): Promise<T>;
+  on(channel: string, handler: (payload: unknown) => void): () => void;
 }
 
 interface TauriCoreApi {
-	invoke<T = unknown>(
-		command: string,
-		args?: Record<string, unknown>,
-	): Promise<T>;
+  invoke<T = unknown>(
+    command: string,
+    args?: Record<string, unknown>,
+  ): Promise<T>;
 }
 
 interface TauriGlobalApi {
-	readonly core?: TauriCoreApi;
+  readonly core?: TauriCoreApi;
 }
 
 interface ServerStatus {
-	state: "up" | "down" | "degraded" | "restarting";
-	attempts?: number;
-	delay?: number;
+  state: "up" | "down" | "degraded" | "restarting";
+  attempts?: number;
+  delay?: number;
 }
 
 interface DesktopBridgeHandlers {
-	onOpenSettings: () => void;
-	onNewWorld: () => void;
-	onExportChat: () => void;
-	/**
-	 * Fired when the user picks Import Plugin / World from the native menu.
-	 * If not supplied, the bridge falls back to invoking the native picker
-	 * + import flow directly and dispatches a `covel:import:complete`
-	 * CustomEvent so page components can refresh their lists.
-	 */
-	onImportPlugin?: () => void;
-	onImportWorld?: () => void;
-	onServerStatus?: (status: ServerStatus) => void;
+  onOpenSettings: () => void;
+  onNewWorld: () => void;
+  onExportChat: () => void;
+  /**
+   * Fired when the user picks Import Plugin / World from the native menu.
+   * If not supplied, the bridge falls back to invoking the native picker
+   * + import flow directly and dispatches a `covel:import:complete`
+   * CustomEvent so page components can refresh their lists.
+   */
+  onImportPlugin?: () => void;
+  onImportWorld?: () => void;
+  onServerStatus?: (status: ServerStatus) => void;
 }
 
 declare global {
-	interface Window {
-		covelIpc?: CovelIpcApi;
-		__TAURI__?: TauriGlobalApi;
-	}
+  interface Window {
+    covelIpc?: CovelIpcApi;
+    __TAURI__?: TauriGlobalApi;
+  }
 }
 
 export function getCovelIpc(): CovelIpcApi | null {
-	if (typeof window === "undefined") return null;
-	return window.covelIpc ?? null;
+  if (typeof window === "undefined") return null;
+  return window.covelIpc ?? null;
 }
 
 export function getTauriCore(): TauriCoreApi | null {
-	if (typeof window === "undefined") return null;
-	return window.__TAURI__?.core ?? null;
+  if (typeof window === "undefined") return null;
+  return window.__TAURI__?.core ?? null;
 }
 
 export function isTauriApp(): boolean {
-	return getTauriCore() !== null;
+  return getTauriCore() !== null;
 }
 
 // REST-mode desktop capability — set by probeDesktopMode() at app boot.
@@ -105,26 +105,26 @@ let desktopRestToken: string | null = null;
 
 /** Headers to merge into fetches that hit `/api/config/{keys,settings,data-root,open-folder}`. */
 export function getDesktopRestAuthHeaders(): Record<string, string> {
-	return desktopRestToken
-		? { Authorization: `Bearer ${desktopRestToken}` }
-		: {};
+  return desktopRestToken
+    ? { Authorization: `Bearer ${desktopRestToken}` }
+    : {};
 }
 
 export function getDesktopRestToken(): string | null {
-	return desktopRestToken;
+  return desktopRestToken;
 }
 
 async function ensureDesktopRestToken(): Promise<void> {
-	if (desktopRestToken) return;
-	const ipc = getCovelIpc();
-	if (!ipc) return;
-	try {
-		const info = (await ipc.invoke("covel:get-info")) as { restToken?: string };
-		if (info?.restToken) desktopRestToken = info.restToken;
-	} catch {
-		// Token absence is non-fatal — the server-side guard treats missing token
-		// env as "no enforcement", so dev/web flows still work.
-	}
+  if (desktopRestToken) return;
+  const ipc = getCovelIpc();
+  if (!ipc) return;
+  try {
+    const info = (await ipc.invoke("covel:get-info")) as { restToken?: string };
+    if (info?.restToken) desktopRestToken = info.restToken;
+  } catch {
+    // Token absence is non-fatal — the server-side guard treats missing token
+    // env as "no enforcement", so dev/web flows still work.
+  }
 }
 
 /**
@@ -133,19 +133,19 @@ async function ensureDesktopRestToken(): Promise<void> {
  * (it skips the network probe after the first success).
  */
 export async function probeDesktopMode(): Promise<void> {
-	// Always try to seed the desktop REST token first — the IPC bridge has it
-	// even when restDesktopCapable was already true.
-	await ensureDesktopRestToken();
-	if (getCovelIpc() || restDesktopCapable) return;
-	try {
-		const res = await fetch("/api/config/info");
-		if (res.ok) {
-			const info = (await res.json()) as { isDesktop?: boolean };
-			restDesktopCapable = !!info.isDesktop;
-		}
-	} catch {
-		// Non-fatal. Leave restDesktopCapable at false.
-	}
+  // Always try to seed the desktop REST token first — the IPC bridge has it
+  // even when restDesktopCapable was already true.
+  await ensureDesktopRestToken();
+  if (getCovelIpc() || restDesktopCapable) return;
+  try {
+    const res = await fetch("/api/config/info");
+    if (res.ok) {
+      const info = (await res.json()) as { isDesktop?: boolean };
+      restDesktopCapable = !!info.isDesktop;
+    }
+  } catch {
+    // Non-fatal. Leave restDesktopCapable at false.
+  }
 }
 
 /**
@@ -153,170 +153,170 @@ export async function probeDesktopMode(): Promise<void> {
  * available — either via Electron IPC or the server's desktop-REST surface.
  */
 export function isDesktopApp(): boolean {
-	return getCovelIpc() !== null || isTauriApp() || restDesktopCapable;
+  return getCovelIpc() !== null || isTauriApp() || restDesktopCapable;
 }
 
 /** True specifically for the IPC branch (Electron). */
 export function hasElectronIpc(): boolean {
-	return getCovelIpc() !== null;
+  return getCovelIpc() !== null;
 }
 
 const IPC_CHANNELS = {
-	openSettings: "covel:menu:open-settings",
-	newWorld: "covel:menu:new-world",
-	exportChat: "covel:menu:export-chat",
-	importPlugin: "covel:menu:import-plugin",
-	importWorld: "covel:menu:import-world",
-	serverStatus: "covel:server:status",
+  openSettings: "covel:menu:open-settings",
+  newWorld: "covel:menu:new-world",
+  exportChat: "covel:menu:export-chat",
+  importPlugin: "covel:menu:import-plugin",
+  importWorld: "covel:menu:import-world",
+  serverStatus: "covel:server:status",
 } as const;
 
 const LEGACY_EVENTS: Record<string, keyof typeof IPC_CHANNELS> = {
-	"covel:open-settings": "openSettings",
-	"covel:new-world": "newWorld",
-	"covel:export-chat": "exportChat",
+  "covel:open-settings": "openSettings",
+  "covel:new-world": "newWorld",
+  "covel:export-chat": "exportChat",
 };
 
 export function initDesktopBridge(handlers: DesktopBridgeHandlers): CleanupFn {
-	const cleanups: CleanupFn[] = [];
-	const ipc = getCovelIpc();
+  const cleanups: CleanupFn[] = [];
+  const ipc = getCovelIpc();
 
-	// Preferred path: secure contextBridge channels.
-	if (ipc) {
-		cleanups.push(
-			ipc.on(IPC_CHANNELS.openSettings, () => handlers.onOpenSettings()),
-		);
-		cleanups.push(ipc.on(IPC_CHANNELS.newWorld, () => handlers.onNewWorld()));
-		cleanups.push(
-			ipc.on(IPC_CHANNELS.exportChat, () => handlers.onExportChat()),
-		);
-		const defaultImportHandler = (kind: ImportKind) => async () => {
-			try {
-				const result = await pickAndImport(kind);
-				if (result) {
-					window.dispatchEvent(
-						new CustomEvent("covel:import:complete", { detail: result }),
-					);
-				}
-			} catch (err) {
-				console.warn(`[desktop-bridge] import ${kind} failed:`, err);
-			}
-		};
-		cleanups.push(
-			ipc.on(IPC_CHANNELS.importPlugin, () => {
-				if (handlers.onImportPlugin) handlers.onImportPlugin();
-				else void defaultImportHandler("plugin")();
-			}),
-		);
-		cleanups.push(
-			ipc.on(IPC_CHANNELS.importWorld, () => {
-				if (handlers.onImportWorld) handlers.onImportWorld();
-				else void defaultImportHandler("world")();
-			}),
-		);
-		if (handlers.onServerStatus) {
-			cleanups.push(
-				ipc.on(IPC_CHANNELS.serverStatus, (payload) => {
-					handlers.onServerStatus?.(payload as ServerStatus);
-				}),
-			);
-		}
-	}
+  // Preferred path: secure contextBridge channels.
+  if (ipc) {
+    cleanups.push(
+      ipc.on(IPC_CHANNELS.openSettings, () => handlers.onOpenSettings()),
+    );
+    cleanups.push(ipc.on(IPC_CHANNELS.newWorld, () => handlers.onNewWorld()));
+    cleanups.push(
+      ipc.on(IPC_CHANNELS.exportChat, () => handlers.onExportChat()),
+    );
+    const defaultImportHandler = (kind: ImportKind) => async () => {
+      try {
+        const result = await pickAndImport(kind);
+        if (result) {
+          window.dispatchEvent(
+            new CustomEvent("covel:import:complete", { detail: result }),
+          );
+        }
+      } catch (err) {
+        console.warn(`[desktop-bridge] import ${kind} failed:`, err);
+      }
+    };
+    cleanups.push(
+      ipc.on(IPC_CHANNELS.importPlugin, () => {
+        if (handlers.onImportPlugin) handlers.onImportPlugin();
+        else void defaultImportHandler("plugin")();
+      }),
+    );
+    cleanups.push(
+      ipc.on(IPC_CHANNELS.importWorld, () => {
+        if (handlers.onImportWorld) handlers.onImportWorld();
+        else void defaultImportHandler("world")();
+      }),
+    );
+    if (handlers.onServerStatus) {
+      cleanups.push(
+        ipc.on(IPC_CHANNELS.serverStatus, (payload) => {
+          handlers.onServerStatus?.(payload as ServerStatus);
+        }),
+      );
+    }
+  }
 
-	// Legacy CustomEvent fallback (kept one release for backwards compat).
-	const legacyListeners: Array<[string, EventListener]> = [];
-	for (const [eventName, handlerKey] of Object.entries(LEGACY_EVENTS)) {
-		const listener: EventListener = () => {
-			switch (handlerKey) {
-				case "openSettings":
-					handlers.onOpenSettings();
-					break;
-				case "newWorld":
-					handlers.onNewWorld();
-					break;
-				case "exportChat":
-					handlers.onExportChat();
-					break;
-			}
-		};
-		window.addEventListener(eventName, listener);
-		legacyListeners.push([eventName, listener]);
-	}
-	cleanups.push(() => {
-		for (const [event, handler] of legacyListeners) {
-			window.removeEventListener(event, handler);
-		}
-	});
+  // Legacy CustomEvent fallback (kept one release for backwards compat).
+  const legacyListeners: Array<[string, EventListener]> = [];
+  for (const [eventName, handlerKey] of Object.entries(LEGACY_EVENTS)) {
+    const listener: EventListener = () => {
+      switch (handlerKey) {
+        case "openSettings":
+          handlers.onOpenSettings();
+          break;
+        case "newWorld":
+          handlers.onNewWorld();
+          break;
+        case "exportChat":
+          handlers.onExportChat();
+          break;
+      }
+    };
+    window.addEventListener(eventName, listener);
+    legacyListeners.push([eventName, listener]);
+  }
+  cleanups.push(() => {
+    for (const [event, handler] of legacyListeners) {
+      window.removeEventListener(event, handler);
+    }
+  });
 
-	return () => {
-		for (const cleanup of cleanups) cleanup();
-	};
+  return () => {
+    for (const cleanup of cleanups) cleanup();
+  };
 }
 
 async function postOpenFolder(
-	target: "config" | "data" | "logs",
+  target: "config" | "data" | "logs",
 ): Promise<void> {
-	const res = await fetch("/api/config/open-folder", {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			...getDesktopRestAuthHeaders(),
-		},
-		body: JSON.stringify({ target }),
-	});
-	if (!res.ok) {
-		const err = await res.json().catch(() => ({ error: res.statusText }));
-		throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
-	}
+  const res = await fetch("/api/config/open-folder", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...getDesktopRestAuthHeaders(),
+    },
+    body: JSON.stringify({ target }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
 }
 
 export async function openLogsDir(): Promise<void> {
-	const ipc = getCovelIpc();
-	if (ipc) return void ipc.invoke("covel:open-logs-dir");
-	return postOpenFolder("logs");
+  const ipc = getCovelIpc();
+  if (ipc) return void ipc.invoke("covel:open-logs-dir");
+  return postOpenFolder("logs");
 }
 
 export async function openConfigDir(): Promise<void> {
-	const ipc = getCovelIpc();
-	if (ipc) return void ipc.invoke("covel:open-config-dir");
-	return postOpenFolder("config");
+  const ipc = getCovelIpc();
+  if (ipc) return void ipc.invoke("covel:open-config-dir");
+  return postOpenFolder("config");
 }
 
 export async function openDataDir(): Promise<void> {
-	const ipc = getCovelIpc();
-	if (ipc) return void ipc.invoke("covel:open-data-dir");
-	return postOpenFolder("data");
+  const ipc = getCovelIpc();
+  if (ipc) return void ipc.invoke("covel:open-data-dir");
+  return postOpenFolder("data");
 }
 
 /** Open `~/.covel/llm.toml` in the platform default editor. */
 export async function openLlmToml(): Promise<void> {
-	const res = await fetch("/api/config/open-folder", {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			...getDesktopRestAuthHeaders(),
-		},
-		body: JSON.stringify({ target: "llm.toml" }),
-	});
-	if (!res.ok) {
-		const err = await res.json().catch(() => ({ error: res.statusText }));
-		throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
-	}
+  const res = await fetch("/api/config/open-folder", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...getDesktopRestAuthHeaders(),
+    },
+    body: JSON.stringify({ target: "llm.toml" }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
 }
 
 /** Open `~/.covel/keys.env` in the platform default editor. */
 export async function openKeysEnv(): Promise<void> {
-	const res = await fetch("/api/config/open-folder", {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			...getDesktopRestAuthHeaders(),
-		},
-		body: JSON.stringify({ target: "keys.env" }),
-	});
-	if (!res.ok) {
-		const err = await res.json().catch(() => ({ error: res.statusText }));
-		throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
-	}
+  const res = await fetch("/api/config/open-folder", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...getDesktopRestAuthHeaders(),
+    },
+    body: JSON.stringify({ target: "keys.env" }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
 }
 
 /**
@@ -328,38 +328,38 @@ export async function openKeysEnv(): Promise<void> {
  *   UI must present a text input + example path.
  */
 export async function pickDataDir(manualPath?: string): Promise<string | null> {
-	const ipc = getCovelIpc();
-	if (ipc) {
-		const result = await ipc.invoke<{ path: string | null }>(
-			"covel:pick-data-dir",
-		);
-		return result?.path ?? null;
-	}
-	if (!manualPath) return null;
-	const res = await fetch("/api/config/data-root", {
-		method: "PUT",
-		headers: {
-			"Content-Type": "application/json",
-			...getDesktopRestAuthHeaders(),
-		},
-		body: JSON.stringify({ path: manualPath }),
-	});
-	if (!res.ok) {
-		const err = await res.json().catch(() => ({ error: res.statusText }));
-		throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
-	}
-	return manualPath;
+  const ipc = getCovelIpc();
+  if (ipc) {
+    const result = await ipc.invoke<{ path: string | null }>(
+      "covel:pick-data-dir",
+    );
+    return result?.path ?? null;
+  }
+  if (!manualPath) return null;
+  const res = await fetch("/api/config/data-root", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...getDesktopRestAuthHeaders(),
+    },
+    body: JSON.stringify({ path: manualPath }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+  return manualPath;
 }
 
 type RestartResult =
-	| { readonly ok: true; readonly port: number }
-	| { readonly ok: false; readonly port: number; readonly error: string };
+  | { readonly ok: true; readonly port: number }
+  | { readonly ok: false; readonly port: number; readonly error: string };
 
 /** Convenience helper: restart the backend server. */
 export async function restartServer(): Promise<RestartResult | null> {
-	const ipc = getCovelIpc();
-	if (!ipc) return null;
-	return ipc.invoke<RestartResult>("covel:restart-server");
+  const ipc = getCovelIpc();
+  if (!ipc) return null;
+  return ipc.invoke<RestartResult>("covel:restart-server");
 }
 
 /**
@@ -375,26 +375,26 @@ export async function restartServer(): Promise<RestartResult | null> {
  * fall back to instructing the user to refresh manually.
  */
 export async function reloadServerAndWait(opts?: {
-	message?: string;
+  message?: string;
 }): Promise<boolean> {
-	const ipc = getCovelIpc();
-	if (!ipc) return false;
+  const ipc = getCovelIpc();
+  if (!ipc) return false;
 
-	showReloadOverlay(opts?.message);
-	try {
-		const result = await ipc.invoke<RestartResult>("covel:restart-server");
-		if (!result.ok) {
-			hideReloadOverlay();
-			throw new Error(result.error || "Sidecar restart failed");
-		}
-		// Sidecar is healthy again; reload the page so all clients rebuild
-		// cleanly. The overlay stays visible through the navigation.
-		window.location.reload();
-		return true;
-	} catch (err) {
-		hideReloadOverlay();
-		throw err;
-	}
+  showReloadOverlay(opts?.message);
+  try {
+    const result = await ipc.invoke<RestartResult>("covel:restart-server");
+    if (!result.ok) {
+      hideReloadOverlay();
+      throw new Error(result.error || "Sidecar restart failed");
+    }
+    // Sidecar is healthy again; reload the page so all clients rebuild
+    // cleanly. The overlay stays visible through the navigation.
+    window.location.reload();
+    return true;
+  } catch (err) {
+    hideReloadOverlay();
+    throw err;
+  }
 }
 
 /**
@@ -403,52 +403,52 @@ export async function reloadServerAndWait(opts?: {
  * the Electron-only fields (version, platform, serverPort).
  */
 export async function getDesktopInfo(): Promise<{
-	version: string;
-	platform: string;
-	isDev: boolean;
-	covelHome: string;
-	dataRoot: string;
-	logsDir: string;
-	dbPath: string;
-	configTomlPath: string;
-	llmTomlPath: string;
-	keysEnvPath: string;
-	serverPort: number;
+  version: string;
+  platform: string;
+  isDev: boolean;
+  covelHome: string;
+  dataRoot: string;
+  logsDir: string;
+  dbPath: string;
+  configTomlPath: string;
+  llmTomlPath: string;
+  keysEnvPath: string;
+  serverPort: number;
 } | null> {
-	const ipc = getCovelIpc();
-	if (ipc) return ipc.invoke("covel:get-info");
+  const ipc = getCovelIpc();
+  if (ipc) return ipc.invoke("covel:get-info");
 
-	// REST fallback — populate unknowns with placeholders so consumers can
-	// render without null-checks for each field.
-	try {
-		const res = await fetch("/api/config/info");
-		if (!res.ok) return null;
-		const info = (await res.json()) as {
-			isDesktop?: boolean;
-			covelHome?: string | null;
-			dataRoot?: string | null;
-			dbPath?: string | null;
-			logsDir?: string | null;
-			llmTomlPath?: string | null;
-			keysEnvPath?: string | null;
-		};
-		if (!info.isDesktop) return null;
-		return {
-			version: "—",
-			platform: "web",
-			isDev: false,
-			covelHome: info.covelHome ?? "",
-			dataRoot: info.dataRoot ?? "",
-			logsDir: info.logsDir ?? "",
-			dbPath: info.dbPath ?? "",
-			configTomlPath: info.covelHome ? `${info.covelHome}/config.toml` : "",
-			llmTomlPath: info.llmTomlPath ?? "",
-			keysEnvPath: info.keysEnvPath ?? "",
-			serverPort: 0,
-		};
-	} catch {
-		return null;
-	}
+  // REST fallback — populate unknowns with placeholders so consumers can
+  // render without null-checks for each field.
+  try {
+    const res = await fetch("/api/config/info");
+    if (!res.ok) return null;
+    const info = (await res.json()) as {
+      isDesktop?: boolean;
+      covelHome?: string | null;
+      dataRoot?: string | null;
+      dbPath?: string | null;
+      logsDir?: string | null;
+      llmTomlPath?: string | null;
+      keysEnvPath?: string | null;
+    };
+    if (!info.isDesktop) return null;
+    return {
+      version: "—",
+      platform: "web",
+      isDev: false,
+      covelHome: info.covelHome ?? "",
+      dataRoot: info.dataRoot ?? "",
+      logsDir: info.logsDir ?? "",
+      dbPath: info.dbPath ?? "",
+      configTomlPath: info.covelHome ? `${info.covelHome}/config.toml` : "",
+      llmTomlPath: info.llmTomlPath ?? "",
+      keysEnvPath: info.keysEnvPath ?? "",
+      serverPort: 0,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ── Asset import ──────────────────────────────────────────────────
@@ -456,28 +456,28 @@ export async function getDesktopInfo(): Promise<{
 export type ImportKind = "plugin" | "world";
 
 export interface ImportResult {
-	readonly ok: boolean;
-	readonly kind: ImportKind;
-	readonly targetPath?: string;
-	readonly itemName?: string;
-	readonly message?: string;
+  readonly ok: boolean;
+  readonly kind: ImportKind;
+  readonly targetPath?: string;
+  readonly itemName?: string;
+  readonly message?: string;
 }
 
 /** Import an asset from a known filesystem path (drag-drop target). */
 export async function importAssetFromPath(
-	kind: ImportKind,
-	sourcePath: string,
+  kind: ImportKind,
+  sourcePath: string,
 ): Promise<ImportResult | null> {
-	const ipc = getCovelIpc();
-	if (!ipc) return null;
-	return ipc.invoke<ImportResult>(`covel:import:${kind}`, { sourcePath });
+  const ipc = getCovelIpc();
+  if (!ipc) return null;
+  return ipc.invoke<ImportResult>(`covel:import:${kind}`, { sourcePath });
 }
 
 /** Open the native file chooser and import the selected file / folder. */
 export async function pickAndImport(
-	kind: ImportKind,
+  kind: ImportKind,
 ): Promise<ImportResult | null> {
-	const ipc = getCovelIpc();
-	if (!ipc) return null;
-	return ipc.invoke<ImportResult>(`covel:import:pick-${kind}`);
+  const ipc = getCovelIpc();
+  if (!ipc) return null;
+  return ipc.invoke<ImportResult>(`covel:import:pick-${kind}`);
 }

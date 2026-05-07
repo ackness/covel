@@ -31,22 +31,22 @@ import { AssetAudio } from "./AssetAudio.js";
 import { AssetGenericLink } from "./AssetGenericLink.js";
 
 export interface AssetRenderProps {
-	readonly view: AssetGenerateView;
-	readonly sessionId: string;
+  readonly view: AssetGenerateView;
+  readonly sessionId: string;
 }
 
 export function AssetRender({
-	view,
-	sessionId,
+  view,
+  sessionId,
 }: AssetRenderProps): ReactElement {
-	switch (view.modality) {
-		case "image":
-			return <AssetImage view={view} sessionId={sessionId} />;
-		case "audio":
-			return <AssetAudio view={view} sessionId={sessionId} />;
-		default:
-			return <AssetGenericLink view={view} sessionId={sessionId} />;
-	}
+  switch (view.modality) {
+    case "image":
+      return <AssetImage view={view} sessionId={sessionId} />;
+    case "audio":
+      return <AssetAudio view={view} sessionId={sessionId} />;
+    default:
+      return <AssetGenericLink view={view} sessionId={sessionId} />;
+  }
 }
 
 export { AssetImage } from "./AssetImage.js";

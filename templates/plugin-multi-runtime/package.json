@@ -9,6 +9,8 @@
     "preinstall": "npx only-allow pnpm"
   },
   "covel": {
-    "capabilities": ["manual-invoke"]
+    "capabilities": [
+      "manual-invoke"
+    ]
   }
 }

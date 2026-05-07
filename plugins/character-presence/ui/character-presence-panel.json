@@ -40,7 +40,10 @@
             "component": "Input",
             "props": {
               "label": { "zh": "角色 ID", "en": "Character ID" },
-              "placeholder": { "zh": "留空自动生成短 ID", "en": "Leave blank to auto-generate a short ID" },
+              "placeholder": {
+                "zh": "留空自动生成短 ID",
+                "en": "Leave blank to auto-generate a short ID"
+              },
               "value": { "$bindState": "/form/characterId" }
             }
           },

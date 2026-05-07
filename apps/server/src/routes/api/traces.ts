@@ -29,421 +29,421 @@ const LEGACY_DATA_URL_MAX_INLINE_BYTES = 64 * 1024;
 const LEGACY_PLUGIN_DATA_ROW_LIMIT = 200;
 
 type Env = {
-	Variables: {
-		store: DataStore;
-	};
+  Variables: {
+    store: DataStore;
+  };
 };
 
 export const traceRoutes = new Hono<Env>();
 
 // GET /:sessionId — list all trace events for a session
 traceRoutes.get("/:sessionId", async (c) => {
-	const store = c.get("store");
-	const sessionId = c.req.param("sessionId");
+  const store = c.get("store");
+  const sessionId = c.req.param("sessionId");
 
-	const events = await listTraceEventsWithLegacyAssets(store, sessionId);
+  const events = await listTraceEventsWithLegacyAssets(store, sessionId);
 
-	return c.json({
-		sessionId,
-		count: events.length,
-		events: events.map(toApiTraceEvent),
-	});
+  return c.json({
+    sessionId,
+    count: events.length,
+    events: events.map(toApiTraceEvent),
+  });
 });
 
 // GET /:sessionId/turns — trace events grouped by turn
 traceRoutes.get("/:sessionId/turns", async (c) => {
-	const store = c.get("store");
-	const sessionId = c.req.param("sessionId");
+  const store = c.get("store");
+  const sessionId = c.req.param("sessionId");
 
-	const events = await listTraceEventsWithLegacyAssets(store, sessionId);
+  const events = await listTraceEventsWithLegacyAssets(store, sessionId);
 
-	// Group events by turnId
-	const turnMap = new Map<string, TraceEventRecord[]>();
-	for (const evt of events) {
-		const turnId = evt.turnId || "__unknown__";
-		const arr = turnMap.get(turnId);
-		if (arr) {
-			arr.push(evt);
-		} else {
-			turnMap.set(turnId, [evt]);
-		}
-	}
+  // Group events by turnId
+  const turnMap = new Map<string, TraceEventRecord[]>();
+  for (const evt of events) {
+    const turnId = evt.turnId || "__unknown__";
+    const arr = turnMap.get(turnId);
+    if (arr) {
+      arr.push(evt);
+    } else {
+      turnMap.set(turnId, [evt]);
+    }
+  }
 
-	// Build turn summaries sorted by first event timestamp
-	const turns = Array.from(turnMap.entries())
-		.map(([turnId, turnEvents]) => {
-			const sorted = turnEvents.sort((a, b) =>
-				a.createdAt.localeCompare(b.createdAt),
-			);
-			const firstEvt = sorted[0];
-			const lastEvt = sorted[sorted.length - 1];
-			const payload = firstEvt.payload as Record<string, unknown> | null;
-			const flowId = (payload?.flowId as string) ?? "";
-			const traceId = firstEvt.traceId ?? "";
+  // Build turn summaries sorted by first event timestamp
+  const turns = Array.from(turnMap.entries())
+    .map(([turnId, turnEvents]) => {
+      const sorted = turnEvents.sort((a, b) =>
+        a.createdAt.localeCompare(b.createdAt),
+      );
+      const firstEvt = sorted[0];
+      const lastEvt = sorted[sorted.length - 1];
+      const payload = firstEvt.payload as Record<string, unknown> | null;
+      const flowId = (payload?.flowId as string) ?? "";
+      const traceId = firstEvt.traceId ?? "";
 
-			return {
-				turnId,
-				flowId,
-				traceId,
-				startedAt: firstEvt.createdAt,
-				completedAt: lastEvt.createdAt,
-				eventCount: sorted.length,
-				events: sorted.map(toApiTraceEvent),
-			};
-		})
-		.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+      return {
+        turnId,
+        flowId,
+        traceId,
+        startedAt: firstEvt.createdAt,
+        completedAt: lastEvt.createdAt,
+        eventCount: sorted.length,
+        events: sorted.map(toApiTraceEvent),
+      };
+    })
+    .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
 
-	return c.json({
-		sessionId,
-		turnCount: turns.length,
-		turns,
-	});
+  return c.json({
+    sessionId,
+    turnCount: turns.length,
+    turns,
+  });
 });
 
 /**
  * Map a store TraceEventRecord to the shape expected by the frontend API client.
  */
 function toApiTraceEvent(record: TraceEventRecord) {
-	const payload = (record.payload ?? {}) as Record<string, unknown>;
-	return {
-		type: record.type,
-		requestId: (payload.requestId as string) ?? "",
-		traceId: record.traceId ?? "",
-		sessionId: record.sessionId,
-		turnId: record.turnId ?? "",
-		flowId: (payload.flowId as string) ?? "",
-		seq: (payload.seq as number) ?? 0,
-		timestamp: record.createdAt,
-		payload,
-	};
+  const payload = (record.payload ?? {}) as Record<string, unknown>;
+  return {
+    type: record.type,
+    requestId: (payload.requestId as string) ?? "",
+    traceId: record.traceId ?? "",
+    sessionId: record.sessionId,
+    turnId: record.turnId ?? "",
+    flowId: (payload.flowId as string) ?? "",
+    seq: (payload.seq as number) ?? 0,
+    timestamp: record.createdAt,
+    payload,
+  };
 }
 
 async function listTraceEventsWithLegacyAssets(
-	store: DataStore,
-	sessionId: string,
+  store: DataStore,
+  sessionId: string,
 ): Promise<TraceEventRecord[]> {
-	const events = await store.listTraceEvents(sessionId);
-	const legacyAssetEvents = await buildLegacyAssetEvents(
-		store,
-		sessionId,
-		events,
-	);
-	return [...events, ...legacyAssetEvents].sort(compareTraceEvents);
+  const events = await store.listTraceEvents(sessionId);
+  const legacyAssetEvents = await buildLegacyAssetEvents(
+    store,
+    sessionId,
+    events,
+  );
+  return [...events, ...legacyAssetEvents].sort(compareTraceEvents);
 }
 
 function compareTraceEvents(a: TraceEventRecord, b: TraceEventRecord): number {
-	return a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
+  return a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
 }
 
 type LegacyAssetKind = "data-url" | "remote-url";
 
 interface LegacyMediaRef {
-	readonly id: `${typeof LEGACY_MEDIA_REF_PREFIX}${string}`;
-	readonly mime: string;
-	readonly size: number;
-	readonly url?: string;
-	readonly meta?: Readonly<Record<string, unknown>>;
+  readonly id: `${typeof LEGACY_MEDIA_REF_PREFIX}${string}`;
+  readonly mime: string;
+  readonly size: number;
+  readonly url?: string;
+  readonly meta?: Readonly<Record<string, unknown>>;
 }
 
 type TraceAssetRef = MediaRef | LegacyMediaRef;
 
 function isLegacyMediaRef(ref: TraceAssetRef): ref is LegacyMediaRef {
-	return ref.id.startsWith(LEGACY_MEDIA_REF_PREFIX);
+  return ref.id.startsWith(LEGACY_MEDIA_REF_PREFIX);
 }
 
 interface LegacyAssetCandidate {
-	readonly ref: TraceAssetRef;
-	readonly modality: string;
-	readonly pluginId: string;
-	readonly runtimeId: string;
-	readonly turnId: string;
-	readonly createdAt: string;
-	readonly source: string;
-	readonly sourceKey: string;
-	/** Whether the underlying url is a `data:` URL or a remote http(s) URL. */
-	readonly legacyKind: LegacyAssetKind;
-	readonly meta?: Readonly<Record<string, unknown>>;
+  readonly ref: TraceAssetRef;
+  readonly modality: string;
+  readonly pluginId: string;
+  readonly runtimeId: string;
+  readonly turnId: string;
+  readonly createdAt: string;
+  readonly source: string;
+  readonly sourceKey: string;
+  /** Whether the underlying url is a `data:` URL or a remote http(s) URL. */
+  readonly legacyKind: LegacyAssetKind;
+  readonly meta?: Readonly<Record<string, unknown>>;
 }
 
 async function buildLegacyAssetEvents(
-	store: DataStore,
-	sessionId: string,
-	existingEvents: readonly TraceEventRecord[],
+  store: DataStore,
+  sessionId: string,
+  existingEvents: readonly TraceEventRecord[],
 ): Promise<TraceEventRecord[]> {
-	const seen = existingAssetKeys(existingEvents);
-	const candidates: LegacyAssetCandidate[] = [];
+  const seen = existingAssetKeys(existingEvents);
+  const candidates: LegacyAssetCandidate[] = [];
 
-	// Scan all plugin_data namespaces — hard-coding `images` here violates the
-	// framework rule against assuming concrete plugin conventions and silently
-	// drops legacy media sitting under other namespaces (e.g. `gallery`).
-	// `legacyMediaRef` is conservative enough that broadening the scan is
-	// safe; we still cap row count to bound REST payload size.
-	const pluginDataRows = await store.listPluginDataSessionScope(sessionId);
-	const pluginDataScan =
-		pluginDataRows.length > LEGACY_PLUGIN_DATA_ROW_LIMIT
-			? pluginDataRows.slice(0, LEGACY_PLUGIN_DATA_ROW_LIMIT)
-			: pluginDataRows;
-	if (pluginDataRows.length > LEGACY_PLUGIN_DATA_ROW_LIMIT) {
-		// eslint-disable-next-line no-console
-		console.warn(
-			`[traces] legacy plugin_data scan truncated: ${pluginDataRows.length} rows > cap ${LEGACY_PLUGIN_DATA_ROW_LIMIT} (sessionId=${sessionId})`,
-		);
-	}
-	for (const row of pluginDataScan) {
-		candidates.push(
-			...extractLegacyImageCandidates(row.value, {
-				sessionId,
-				pluginId: row.pluginId,
-				runtimeId: row.pluginId,
-				turnId: inferTurnId(row.value) ?? "__legacy__",
-				createdAt: row.updatedAt,
-				source: "plugin_data",
-				sourceKey: `${row.pluginId}/${row.namespace}/${row.key}`,
-				// Heuristic: only an `images` namespace is allowed to default `mime`
-				// to image/png when the row didn't carry one. Other namespaces must
-				// produce an explicit hint or be skipped — preserves `legacyMediaRef`
-				// conservatism for unknown shapes.
-				assumeImage: row.namespace === "images",
-			}),
-		);
-	}
+  // Scan all plugin_data namespaces — hard-coding `images` here violates the
+  // framework rule against assuming concrete plugin conventions and silently
+  // drops legacy media sitting under other namespaces (e.g. `gallery`).
+  // `legacyMediaRef` is conservative enough that broadening the scan is
+  // safe; we still cap row count to bound REST payload size.
+  const pluginDataRows = await store.listPluginDataSessionScope(sessionId);
+  const pluginDataScan =
+    pluginDataRows.length > LEGACY_PLUGIN_DATA_ROW_LIMIT
+      ? pluginDataRows.slice(0, LEGACY_PLUGIN_DATA_ROW_LIMIT)
+      : pluginDataRows;
+  if (pluginDataRows.length > LEGACY_PLUGIN_DATA_ROW_LIMIT) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[traces] legacy plugin_data scan truncated: ${pluginDataRows.length} rows > cap ${LEGACY_PLUGIN_DATA_ROW_LIMIT} (sessionId=${sessionId})`,
+    );
+  }
+  for (const row of pluginDataScan) {
+    candidates.push(
+      ...extractLegacyImageCandidates(row.value, {
+        sessionId,
+        pluginId: row.pluginId,
+        runtimeId: row.pluginId,
+        turnId: inferTurnId(row.value) ?? "__legacy__",
+        createdAt: row.updatedAt,
+        source: "plugin_data",
+        sourceKey: `${row.pluginId}/${row.namespace}/${row.key}`,
+        // Heuristic: only an `images` namespace is allowed to default `mime`
+        // to image/png when the row didn't carry one. Other namespaces must
+        // produce an explicit hint or be skipped — preserves `legacyMediaRef`
+        // conservatism for unknown shapes.
+        assumeImage: row.namespace === "images",
+      }),
+    );
+  }
 
-	const turnResults = await store.listTurnResults(sessionId);
-	for (const turn of turnResults) {
-		const runtimeResults = await store.listRuntimeResults(
-			sessionId,
-			turn.turnId,
-		);
-		for (const result of runtimeResults) {
-			candidates.push(
-				...extractLegacyImageCandidates(result.output, {
-					sessionId,
-					pluginId: result.pluginId,
-					runtimeId: result.runtimeId,
-					turnId: result.turnId,
-					createdAt: result.createdAt,
-					source: "runtime_results",
-					sourceKey: result.id,
-					assumeImage: false,
-				}),
-			);
-		}
-		candidates.push(
-			...extractLegacyImageCandidates(turn.runtimeResults, {
-				sessionId,
-				pluginId: "legacy",
-				runtimeId: "legacy",
-				turnId: turn.turnId,
-				createdAt: turn.createdAt,
-				source: "turn_results",
-				sourceKey: turn.id,
-				assumeImage: false,
-			}),
-		);
-	}
+  const turnResults = await store.listTurnResults(sessionId);
+  for (const turn of turnResults) {
+    const runtimeResults = await store.listRuntimeResults(
+      sessionId,
+      turn.turnId,
+    );
+    for (const result of runtimeResults) {
+      candidates.push(
+        ...extractLegacyImageCandidates(result.output, {
+          sessionId,
+          pluginId: result.pluginId,
+          runtimeId: result.runtimeId,
+          turnId: result.turnId,
+          createdAt: result.createdAt,
+          source: "runtime_results",
+          sourceKey: result.id,
+          assumeImage: false,
+        }),
+      );
+    }
+    candidates.push(
+      ...extractLegacyImageCandidates(turn.runtimeResults, {
+        sessionId,
+        pluginId: "legacy",
+        runtimeId: "legacy",
+        turnId: turn.turnId,
+        createdAt: turn.createdAt,
+        source: "turn_results",
+        sourceKey: turn.id,
+        assumeImage: false,
+      }),
+    );
+  }
 
-	for (const output of await store.listRuntimeOutputs(sessionId)) {
-		candidates.push(
-			...extractLegacyImageCandidates(output.results, {
-				sessionId,
-				pluginId: output.pluginId,
-				runtimeId: output.runtimeId,
-				turnId: output.turnId,
-				createdAt: output.createdAt,
-				source: "runtime_outputs",
-				sourceKey: output.id,
-				assumeImage: false,
-			}),
-		);
-	}
+  for (const output of await store.listRuntimeOutputs(sessionId)) {
+    candidates.push(
+      ...extractLegacyImageCandidates(output.results, {
+        sessionId,
+        pluginId: output.pluginId,
+        runtimeId: output.runtimeId,
+        turnId: output.turnId,
+        createdAt: output.createdAt,
+        source: "runtime_outputs",
+        sourceKey: output.id,
+        assumeImage: false,
+      }),
+    );
+  }
 
-	const events: TraceEventRecord[] = [];
-	for (const candidate of candidates) {
-		const key = `${candidate.turnId}:${candidate.ref.id}`;
-		if (seen.has(key)) continue;
-		seen.add(key);
-		events.push(toLegacyAssetEvent(sessionId, candidate));
-	}
-	return events;
+  const events: TraceEventRecord[] = [];
+  for (const candidate of candidates) {
+    const key = `${candidate.turnId}:${candidate.ref.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    events.push(toLegacyAssetEvent(sessionId, candidate));
+  }
+  return events;
 }
 
 function existingAssetKeys(events: readonly TraceEventRecord[]): Set<string> {
-	const keys = new Set<string>();
-	for (const event of events) {
-		if (event.type !== "asset.generated") continue;
-		const payload = asRecord(event.payload);
-		const asset = asRecord(payload?.asset);
-		const ref = asset ? mediaRefSchema.safeParse(asset.ref) : null;
-		if (ref?.success) {
-			keys.add(`${event.turnId}:${ref.data.id}`);
-		}
-	}
-	return keys;
+  const keys = new Set<string>();
+  for (const event of events) {
+    if (event.type !== "asset.generated") continue;
+    const payload = asRecord(event.payload);
+    const asset = asRecord(payload?.asset);
+    const ref = asset ? mediaRefSchema.safeParse(asset.ref) : null;
+    if (ref?.success) {
+      keys.add(`${event.turnId}:${ref.data.id}`);
+    }
+  }
+  return keys;
 }
 
 function toLegacyAssetEvent(
-	sessionId: string,
-	candidate: LegacyAssetCandidate,
+  sessionId: string,
+  candidate: LegacyAssetCandidate,
 ): TraceEventRecord {
-	const source = {
-		pluginId: candidate.pluginId,
-		runtimeId: candidate.runtimeId,
-	};
-	const asset = {
-		id: `legacy-${hashHex(`${candidate.source}:${candidate.sourceKey}:${candidate.ref.id}`)}`,
-		type: "asset.generate",
-		sessionId,
-		turnId: candidate.turnId,
-		source,
-		ref: candidate.ref,
-		modality: candidate.modality,
-		meta: {
-			...candidate.meta,
-			legacy: true,
-			legacyRef: isLegacyMediaRef(candidate.ref),
-			legacyKind: candidate.legacyKind,
-			legacySource: candidate.source,
-			legacySourceKey: candidate.sourceKey,
-		},
-		createdAt: candidate.createdAt,
-	};
+  const source = {
+    pluginId: candidate.pluginId,
+    runtimeId: candidate.runtimeId,
+  };
+  const asset = {
+    id: `legacy-${hashHex(`${candidate.source}:${candidate.sourceKey}:${candidate.ref.id}`)}`,
+    type: "asset.generate",
+    sessionId,
+    turnId: candidate.turnId,
+    source,
+    ref: candidate.ref,
+    modality: candidate.modality,
+    meta: {
+      ...candidate.meta,
+      legacy: true,
+      legacyRef: isLegacyMediaRef(candidate.ref),
+      legacyKind: candidate.legacyKind,
+      legacySource: candidate.source,
+      legacySourceKey: candidate.sourceKey,
+    },
+    createdAt: candidate.createdAt,
+  };
 
-	return {
-		id: `legacy-trace-${hashHex(`${sessionId}:${candidate.turnId}:${candidate.source}:${candidate.sourceKey}:${candidate.ref.id}`)}`,
-		sessionId,
-		type: "asset.generated",
-		traceId: `legacy-${sessionId}`,
-		turnId: candidate.turnId,
-		payload: {
-			runtimeId: candidate.runtimeId,
-			pluginId: candidate.pluginId,
-			proposalId: asset.id,
-			legacy: true,
-			legacyRef: isLegacyMediaRef(candidate.ref),
-			legacyKind: candidate.legacyKind,
-			legacySource: candidate.source,
-			asset,
-		},
-		createdAt: candidate.createdAt,
-	};
+  return {
+    id: `legacy-trace-${hashHex(`${sessionId}:${candidate.turnId}:${candidate.source}:${candidate.sourceKey}:${candidate.ref.id}`)}`,
+    sessionId,
+    type: "asset.generated",
+    traceId: `legacy-${sessionId}`,
+    turnId: candidate.turnId,
+    payload: {
+      runtimeId: candidate.runtimeId,
+      pluginId: candidate.pluginId,
+      proposalId: asset.id,
+      legacy: true,
+      legacyRef: isLegacyMediaRef(candidate.ref),
+      legacyKind: candidate.legacyKind,
+      legacySource: candidate.source,
+      asset,
+    },
+    createdAt: candidate.createdAt,
+  };
 }
 
 interface LegacyScanContext {
-	readonly sessionId: string;
-	readonly pluginId: string;
-	readonly runtimeId: string;
-	readonly turnId: string;
-	readonly createdAt: string;
-	readonly source: string;
-	readonly sourceKey: string;
-	readonly assumeImage: boolean;
+  readonly sessionId: string;
+  readonly pluginId: string;
+  readonly runtimeId: string;
+  readonly turnId: string;
+  readonly createdAt: string;
+  readonly source: string;
+  readonly sourceKey: string;
+  readonly assumeImage: boolean;
 }
 
 interface LegacyRefHit {
-	readonly ref: TraceAssetRef;
-	readonly legacyKind: LegacyAssetKind;
+  readonly ref: TraceAssetRef;
+  readonly legacyKind: LegacyAssetKind;
 }
 
 function extractLegacyImageCandidates(
-	value: unknown,
-	ctx: LegacyScanContext,
+  value: unknown,
+  ctx: LegacyScanContext,
 ): LegacyAssetCandidate[] {
-	const candidates: LegacyAssetCandidate[] = [];
-	const visit = (node: unknown): void => {
-		if (!node || typeof node !== "object") return;
-		if (Array.isArray(node)) {
-			for (const item of node) visit(item);
-			return;
-		}
+  const candidates: LegacyAssetCandidate[] = [];
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
 
-		const record = node as Record<string, unknown>;
-		const hit = legacyMediaRef(record, ctx.assumeImage);
-		if (hit) {
-			candidates.push({
-				ref: hit.ref,
-				modality:
-					stringField(record, ["modality", "assetType", "kind"]) ?? "image",
-				pluginId: stringField(record, ["pluginId"]) ?? ctx.pluginId,
-				runtimeId: stringField(record, ["runtimeId"]) ?? ctx.runtimeId,
-				turnId: stringField(record, ["turnId"]) ?? ctx.turnId,
-				createdAt:
-					stringField(record, ["createdAt", "updatedAt", "timestamp"]) ??
-					ctx.createdAt,
-				source: ctx.source,
-				sourceKey: ctx.sourceKey,
-				legacyKind: hit.legacyKind,
-				meta: recordField(record, "meta"),
-			});
-			return;
-		}
+    const record = node as Record<string, unknown>;
+    const hit = legacyMediaRef(record, ctx.assumeImage);
+    if (hit) {
+      candidates.push({
+        ref: hit.ref,
+        modality:
+          stringField(record, ["modality", "assetType", "kind"]) ?? "image",
+        pluginId: stringField(record, ["pluginId"]) ?? ctx.pluginId,
+        runtimeId: stringField(record, ["runtimeId"]) ?? ctx.runtimeId,
+        turnId: stringField(record, ["turnId"]) ?? ctx.turnId,
+        createdAt:
+          stringField(record, ["createdAt", "updatedAt", "timestamp"]) ??
+          ctx.createdAt,
+        source: ctx.source,
+        sourceKey: ctx.sourceKey,
+        legacyKind: hit.legacyKind,
+        meta: recordField(record, "meta"),
+      });
+      return;
+    }
 
-		for (const child of Object.values(record)) visit(child);
-	};
-	visit(value);
-	return candidates;
+    for (const child of Object.values(record)) visit(child);
+  };
+  visit(value);
+  return candidates;
 }
 
 function legacyMediaRef(
-	record: Record<string, unknown>,
-	assumeImage: boolean,
+  record: Record<string, unknown>,
+  assumeImage: boolean,
 ): LegacyRefHit | null {
-	// A real ref already passes the strict SHA-id schema — propagate as-is and
-	// tag it as `remote-url` since strict refs are content-addressable and
-	// therefore safe for the media route to resolve.
-	const directRef = mediaRefSchema.safeParse(record.ref);
-	if (directRef.success) {
-		return { ref: directRef.data, legacyKind: "remote-url" };
-	}
+  // A real ref already passes the strict SHA-id schema — propagate as-is and
+  // tag it as `remote-url` since strict refs are content-addressable and
+  // therefore safe for the media route to resolve.
+  const directRef = mediaRefSchema.safeParse(record.ref);
+  if (directRef.success) {
+    return { ref: directRef.data, legacyKind: "remote-url" };
+  }
 
-	const mediaRef = mediaRefSchema.safeParse(record.mediaRef);
-	if (mediaRef.success) {
-		return { ref: mediaRef.data, legacyKind: "remote-url" };
-	}
+  const mediaRef = mediaRefSchema.safeParse(record.mediaRef);
+  if (mediaRef.success) {
+    return { ref: mediaRef.data, legacyKind: "remote-url" };
+  }
 
-	const mime =
-		stringField(record, ["mime", "contentType", "mediaType"]) ?? "image/png";
-	const modality = stringField(record, [
-		"modality",
-		"assetType",
-		"kind",
-		"type",
-	]);
-	const imageLike =
-		assumeImage || mime.startsWith("image/") || modality === "image";
+  const mime =
+    stringField(record, ["mime", "contentType", "mediaType"]) ?? "image/png";
+  const modality = stringField(record, [
+    "modality",
+    "assetType",
+    "kind",
+    "type",
+  ]);
+  const imageLike =
+    assumeImage || mime.startsWith("image/") || modality === "image";
 
-	const dataUrl = stringField(record, ["dataUrl", "dataURI"]);
-	if (dataUrl && dataUrl.startsWith("data:")) {
-		return legacyRefFromDataUrl(
-			dataUrl,
-			mimeFromDataUrl(dataUrl) ?? mime,
-			byteSizeFromDataUrl(dataUrl),
-			record,
-		);
-	}
+  const dataUrl = stringField(record, ["dataUrl", "dataURI"]);
+  if (dataUrl && dataUrl.startsWith("data:")) {
+    return legacyRefFromDataUrl(
+      dataUrl,
+      mimeFromDataUrl(dataUrl) ?? mime,
+      byteSizeFromDataUrl(dataUrl),
+      record,
+    );
+  }
 
-	const base64 = stringField(record, ["base64", "b64"]);
-	if (base64 && imageLike) {
-		const normalized = base64.replace(/\s+/g, "");
-		const dataMime = mime.startsWith("image/") ? mime : "image/png";
-		return legacyRefFromDataUrl(
-			`data:${dataMime};base64,${normalized}`,
-			dataMime,
-			byteSizeFromBase64(normalized),
-			record,
-		);
-	}
+  const base64 = stringField(record, ["base64", "b64"]);
+  if (base64 && imageLike) {
+    const normalized = base64.replace(/\s+/g, "");
+    const dataMime = mime.startsWith("image/") ? mime : "image/png";
+    return legacyRefFromDataUrl(
+      `data:${dataMime};base64,${normalized}`,
+      dataMime,
+      byteSizeFromBase64(normalized),
+      record,
+    );
+  }
 
-	const imageUrl = stringField(record, ["imageUrl", "image_url"]);
-	if (imageUrl) {
-		return legacyRefFromRemoteUrl(imageUrl, mime, 0, record);
-	}
+  const imageUrl = stringField(record, ["imageUrl", "image_url"]);
+  if (imageUrl) {
+    return legacyRefFromRemoteUrl(imageUrl, mime, 0, record);
+  }
 
-	const url = stringField(record, ["url"]);
-	if (url && imageLike) {
-		return legacyRefFromRemoteUrl(url, mime, 0, record);
-	}
+  const url = stringField(record, ["url"]);
+  if (url && imageLike) {
+    return legacyRefFromRemoteUrl(url, mime, 0, record);
+  }
 
-	return null;
+  return null;
 }
 
 /**
@@ -454,29 +454,29 @@ function legacyMediaRef(
  * timeline can still display the asset directly.
  */
 function legacyRefFromRemoteUrl(
-	url: string,
-	mime: string,
-	size: number,
-	record: Record<string, unknown>,
+  url: string,
+  mime: string,
+  size: number,
+  record: Record<string, unknown>,
 ): LegacyRefHit | null {
-	try {
-		new URL(url);
-	} catch {
-		return null;
-	}
+  try {
+    new URL(url);
+  } catch {
+    return null;
+  }
 
-	const ref: LegacyMediaRef = {
-		id: `${LEGACY_MEDIA_REF_PREFIX}${hashHex(url)}`,
-		mime,
-		size,
-		url,
-		meta: {
-			legacy: true,
-			legacyKind: "remote-url",
-			...recordField(record, "meta"),
-		},
-	};
-	return { ref, legacyKind: "remote-url" };
+  const ref: LegacyMediaRef = {
+    id: `${LEGACY_MEDIA_REF_PREFIX}${hashHex(url)}`,
+    mime,
+    size,
+    url,
+    meta: {
+      legacy: true,
+      legacyKind: "remote-url",
+      ...recordField(record, "meta"),
+    },
+  };
+  return { ref, legacyKind: "remote-url" };
 }
 
 /**
@@ -487,96 +487,96 @@ function legacyRefFromRemoteUrl(
  * for the same reason as `legacyRefFromRemoteUrl`.
  */
 function legacyRefFromDataUrl(
-	dataUrl: string,
-	mime: string,
-	size: number,
-	record: Record<string, unknown>,
+  dataUrl: string,
+  mime: string,
+  size: number,
+  record: Record<string, unknown>,
 ): LegacyRefHit | null {
-	// data: URLs do not parse with `new URL()` reliably across runtimes for
-	// size validation; trust the caller's basic prefix check instead.
-	if (!dataUrl.startsWith("data:")) return null;
+  // data: URLs do not parse with `new URL()` reliably across runtimes for
+  // size validation; trust the caller's basic prefix check instead.
+  if (!dataUrl.startsWith("data:")) return null;
 
-	const inline = size > 0 && size <= LEGACY_DATA_URL_MAX_INLINE_BYTES;
-	const ref: LegacyMediaRef = {
-		id: `${LEGACY_MEDIA_REF_PREFIX}${hashHex(dataUrl)}`,
-		mime,
-		size,
-		...(inline ? { url: dataUrl } : {}),
-		meta: {
-			legacy: true,
-			legacyKind: "data-url",
-			...(inline
-				? {}
-				: {
-						dataUrlOmitted: true,
-						dataUrlMaxBytes: LEGACY_DATA_URL_MAX_INLINE_BYTES,
-					}),
-			...recordField(record, "meta"),
-		},
-	};
-	return { ref, legacyKind: "data-url" };
+  const inline = size > 0 && size <= LEGACY_DATA_URL_MAX_INLINE_BYTES;
+  const ref: LegacyMediaRef = {
+    id: `${LEGACY_MEDIA_REF_PREFIX}${hashHex(dataUrl)}`,
+    mime,
+    size,
+    ...(inline ? { url: dataUrl } : {}),
+    meta: {
+      legacy: true,
+      legacyKind: "data-url",
+      ...(inline
+        ? {}
+        : {
+            dataUrlOmitted: true,
+            dataUrlMaxBytes: LEGACY_DATA_URL_MAX_INLINE_BYTES,
+          }),
+      ...recordField(record, "meta"),
+    },
+  };
+  return { ref, legacyKind: "data-url" };
 }
 
 function inferTurnId(value: unknown): string | null {
-	if (!value || typeof value !== "object") return null;
-	if (Array.isArray(value)) {
-		for (const item of value) {
-			const found = inferTurnId(item);
-			if (found) return found;
-		}
-		return null;
-	}
-	const record = value as Record<string, unknown>;
-	const direct = stringField(record, ["turnId"]);
-	if (direct) return direct;
-	for (const child of Object.values(record)) {
-		const found = inferTurnId(child);
-		if (found) return found;
-	}
-	return null;
+  if (!value || typeof value !== "object") return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = inferTurnId(item);
+      if (found) return found;
+    }
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const direct = stringField(record, ["turnId"]);
+  if (direct) return direct;
+  for (const child of Object.values(record)) {
+    const found = inferTurnId(child);
+    if (found) return found;
+  }
+  return null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function recordField(
-	record: Record<string, unknown>,
-	key: string,
+  record: Record<string, unknown>,
+  key: string,
 ): Readonly<Record<string, unknown>> | undefined {
-	const value = record[key];
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Readonly<Record<string, unknown>>)
-		: undefined;
+  const value = record[key];
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Readonly<Record<string, unknown>>)
+    : undefined;
 }
 
 function stringField(
-	record: Record<string, unknown>,
-	keys: readonly string[],
+  record: Record<string, unknown>,
+  keys: readonly string[],
 ): string | undefined {
-	for (const key of keys) {
-		const value = record[key];
-		if (typeof value === "string" && value.length > 0) return value;
-	}
-	return undefined;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return undefined;
 }
 
 function mimeFromDataUrl(dataUrl: string): string | undefined {
-	return /^data:([^;,]+)[;,]/i.exec(dataUrl)?.[1]?.toLowerCase();
+  return /^data:([^;,]+)[;,]/i.exec(dataUrl)?.[1]?.toLowerCase();
 }
 
 function byteSizeFromDataUrl(dataUrl: string): number {
-	const base64 = dataUrl.split(",", 2)[1] ?? "";
-	return byteSizeFromBase64(base64);
+  const base64 = dataUrl.split(",", 2)[1] ?? "";
+  return byteSizeFromBase64(base64);
 }
 
 function byteSizeFromBase64(base64: string): number {
-	const trimmed = base64.replace(/=+$/, "");
-	return Math.floor((trimmed.length * 3) / 4);
+  const trimmed = base64.replace(/=+$/, "");
+  return Math.floor((trimmed.length * 3) / 4);
 }
 
 function hashHex(value: string): string {
-	return createHash("sha256").update(value).digest("hex");
+  return createHash("sha256").update(value).digest("hex");
 }

@@ -5,18 +5,18 @@
 
 ## 能力矩阵
 
-| # | 能力 | 当前状态 | 改造后 |
-|---|------|---------|--------|
-| 1 | 外部插件目录加载 | ✅ 已完整 | 复用 |
-| 2 | UI 插槽 (right/message/left) | ✅ 已完整 | 复用 |
-| 3 | Action-level plugin-rpc | ✅ 已完整 | 复用 |
-| 4 | SSE `plugin-data.changed` | ✅ 已完整 | 复用 |
-| 5 | 插件 config 字段 | ✅ 已完整 | 复用 |
-| 6 | 图像生成 (gateway.generateImage) | ✅ 已完整 | 复用 |
-| 7 | Runtime-level manual trigger | ❌ 返回 501 | **新增** |
-| 8 | 链式 runtime (P600 → P610) | ❌ 没有 follow-up | **新增**（事件驱动） |
-| 9 | Async / background runtime | ❌ 只同步 | **新增**（`execution: 'background'`） |
-| 10 | 插件独立 provider | ⚠️ 部分 | 复用 `llm.toml` slot (选 A) |
+| #   | 能力                             | 当前状态          | 改造后                                |
+| --- | -------------------------------- | ----------------- | ------------------------------------- |
+| 1   | 外部插件目录加载                 | ✅ 已完整         | 复用                                  |
+| 2   | UI 插槽 (right/message/left)     | ✅ 已完整         | 复用                                  |
+| 3   | Action-level plugin-rpc          | ✅ 已完整         | 复用                                  |
+| 4   | SSE `plugin-data.changed`        | ✅ 已完整         | 复用                                  |
+| 5   | 插件 config 字段                 | ✅ 已完整         | 复用                                  |
+| 6   | 图像生成 (gateway.generateImage) | ✅ 已完整         | 复用                                  |
+| 7   | Runtime-level manual trigger     | ❌ 返回 501       | **新增**                              |
+| 8   | 链式 runtime (P600 → P610)       | ❌ 没有 follow-up | **新增**（事件驱动）                  |
+| 9   | Async / background runtime       | ❌ 只同步         | **新增**（`execution: 'background'`） |
+| 10  | 插件独立 provider                | ⚠️ 部分           | 复用 `llm.toml` slot (选 A)           |
 
 ## 设计决策
 
@@ -45,38 +45,38 @@
 
 ### P1 - 框架核心
 
-| 文件 | 变更 |
-|------|------|
-| `packages/shared/src/types/execution.ts` | `TurnInput` 新增 `manualTrigger?: { runtimeId, payload }` |
-| `packages/shared/src/types/plugin.ts` | `RuntimeManifest` 新增 `execution?: 'sync' \| 'background'` |
-| `packages/shared/src/manifest/runtime-manifest-schema.ts` | Zod schema 追加 execution 枚举 |
-| `packages/runtime/src/types.ts` | `TriggerContext` 保留 `isManualTrigger`，`FunctionHandlerContext` / `AgentContext` 新增 `manualPayload?` |
-| `packages/runtime/src/turn-executor.ts` | ① `isManualTrigger` 条件判断<br>② 组间 flush pending event topics<br>③ 单 runtime 模式下跳过 auto 触发筛选 |
-| `packages/runtime/src/trigger.ts` | 现有 `event` 逻辑已支持，无需改 |
-| `packages/store/src/contract/store-contract.ts` | 新增 `listPendingEvents` / `clearPendingEvents` 契约测试 |
-| `packages/store/src/types.ts` | `DataStore` 接口新增可选方法 |
-| `packages/store/src/{memory,sqlite,postgres,indexeddb}/*-store.ts` | 四套实现 |
-| `apps/server/src/routes/api/plugin-rpc.ts` | 实现 `runtimeId` 分支，sync + background 双路 |
-| `apps/server/src/routes/api/bootstrap.ts` | 把 `executeTurn`、`activeRuntimesResolver` 挂到 Hono context |
+| 文件                                                               | 变更                                                                                                       |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `packages/shared/src/types/execution.ts`                           | `TurnInput` 新增 `manualTrigger?: { runtimeId, payload }`                                                  |
+| `packages/shared/src/types/plugin.ts`                              | `RuntimeManifest` 新增 `execution?: 'sync' \| 'background'`                                                |
+| `packages/shared/src/manifest/runtime-manifest-schema.ts`          | Zod schema 追加 execution 枚举                                                                             |
+| `packages/runtime/src/types.ts`                                    | `TriggerContext` 保留 `isManualTrigger`，`FunctionHandlerContext` / `AgentContext` 新增 `manualPayload?`   |
+| `packages/runtime/src/turn-executor.ts`                            | ① `isManualTrigger` 条件判断<br>② 组间 flush pending event topics<br>③ 单 runtime 模式下跳过 auto 触发筛选 |
+| `packages/runtime/src/trigger.ts`                                  | 现有 `event` 逻辑已支持，无需改                                                                            |
+| `packages/store/src/contract/store-contract.ts`                    | 新增 `listPendingEvents` / `clearPendingEvents` 契约测试                                                   |
+| `packages/store/src/types.ts`                                      | `DataStore` 接口新增可选方法                                                                               |
+| `packages/store/src/{memory,sqlite,postgres,indexeddb}/*-store.ts` | 四套实现                                                                                                   |
+| `apps/server/src/routes/api/plugin-rpc.ts`                         | 实现 `runtimeId` 分支，sync + background 双路                                                              |
+| `apps/server/src/routes/api/bootstrap.ts`                          | 把 `executeTurn`、`activeRuntimesResolver` 挂到 Hono context                                               |
 
 ### P2 - 前端 + 插件
 
-| 文件 | 变更 |
-|------|------|
-| `apps/web/src/services/api.ts` | `postPluginRpc` 泛化返回 `{ status, result?, jobId?, pending? }` |
-| `apps/web/src/stores/session-store.tsx` | plugin-data `_jobs` 命名空间消费，暴露 `pluginJobs` 选择器 |
-| `apps/web/src/components/session/right-panel.tsx` | 识别 json-render 的 `status-indicator` 组件（如需新增） |
-| `plugins/` 或 `~/.covel/plugins/dashscope-image-gen/` | 新建插件（PLUGIN.md + package.json + tools/） |
+| 文件                                                  | 变更                                                             |
+| ----------------------------------------------------- | ---------------------------------------------------------------- |
+| `apps/web/src/services/api.ts`                        | `postPluginRpc` 泛化返回 `{ status, result?, jobId?, pending? }` |
+| `apps/web/src/stores/session-store.tsx`               | plugin-data `_jobs` 命名空间消费，暴露 `pluginJobs` 选择器       |
+| `apps/web/src/components/session/right-panel.tsx`     | 识别 json-render 的 `status-indicator` 组件（如需新增）          |
+| `plugins/` 或 `~/.covel/plugins/dashscope-image-gen/` | 新建插件（PLUGIN.md + package.json + tools/）                    |
 
 ### P3 - 文档 + Skill
 
-| 文件 | 变更 |
-|------|------|
-| `docs/reference/api.md` | plugin-rpc `runtimeId` 分支 + 202 + jobId 语义 |
-| `docs/reference/plugins.md` | `execution` 字段说明 |
-| `docs/reference/protocol.md` | `_jobs` namespace + plugin-data.changed 消费指南 |
-| `docs/guide/plugin-authoring.md` | 手动触发 + 异步 + 自定义 slot 完整教程 |
-| `.claude/skills/create-plugin/references/plugin-schema.md` | 追加 execution、事件触发、自定义 slot 段落 |
+| 文件                                                         | 变更                                              |
+| ------------------------------------------------------------ | ------------------------------------------------- |
+| `docs/reference/api.md`                                      | plugin-rpc `runtimeId` 分支 + 202 + jobId 语义    |
+| `docs/reference/plugins.md`                                  | `execution` 字段说明                              |
+| `docs/reference/protocol.md`                                 | `_jobs` namespace + plugin-data.changed 消费指南  |
+| `docs/guide/plugin-authoring.md`                             | 手动触发 + 异步 + 自定义 slot 完整教程            |
+| `.claude/skills/create-plugin/references/plugin-schema.md`   | 追加 execution、事件触发、自定义 slot 段落        |
 | `.claude/skills/create-plugin/references/example-plugins.md` | 追加"手动+异步双 runtime"样例（即本插件的简化版） |
 
 ## 目标插件设计：dashscope-image-gen
@@ -89,7 +89,7 @@
 name: dashscope-image-gen/prompt-generator
 priority: 600
 runtimeType: agent
-model: default   # 复用主文本模型
+model: default # 复用主文本模型
 trigger:
   type: manual
 input:
@@ -102,10 +102,12 @@ tools:
 ```
 
 读插件 config 中的 `promptMode`（`text` / `image-json`），两条分支的 system prompt：
+
 - `text` 模式：产出 ~80-150 词的密集场景描述（subject + scene + style + lighting + camera + quality tokens）
 - `image-json` 模式：产出结构化 JSON `{ subject, setting, composition, lighting, style, camera, mood, negative }`
 
 Runtime 输出后：
+
 1. 调用 `plugin-data-set` 把 prompt 存进 `_current/prompt`
 2. emit event proposal `image.generate.requested`
 
@@ -117,13 +119,14 @@ priority: 610
 runtimeType: function
 handler: ./runtimes/image-generator.js
 model: covel.dashscope-image
-execution: background   # 默认 background
+execution: background # 默认 background
 trigger:
   type: event
   topic: image.generate.requested
 ```
 
 Function handler:
+
 1. 从 plugin-data 读 `_current/prompt`
 2. 调用 `context.generateImage(prompt, { model, size })`（gateway 的方法，框架已实现）
 3. 产出 `record.upsert` proposal 存图片（URL 或 base64）
@@ -171,19 +174,19 @@ ui:
 
 ## 测试策略
 
-| 层级 | 新增 |
-|------|------|
-| 单元 | `turn-executor.test.ts`: manual trigger 只跑目标 runtime；pending events 在组间 flush |
-| 契约 | `store-contract.ts`: listPendingEvents/clearPendingEvents 所有后端一致 |
-| 集成 | `plugin-rpc.test.ts`: sync 分支返回 result；background 分支返回 202 + jobId |
-| E2E | `scripts/e2e-plugin-verify.ts` 新增 dashscope-image-gen case（mock gateway.generateImage） |
+| 层级 | 新增                                                                                       |
+| ---- | ------------------------------------------------------------------------------------------ |
+| 单元 | `turn-executor.test.ts`: manual trigger 只跑目标 runtime；pending events 在组间 flush      |
+| 契约 | `store-contract.ts`: listPendingEvents/clearPendingEvents 所有后端一致                     |
+| 集成 | `plugin-rpc.test.ts`: sync 分支返回 result；background 分支返回 202 + jobId                |
+| E2E  | `scripts/e2e-plugin-verify.ts` 新增 dashscope-image-gen case（mock gateway.generateImage） |
 
 ## 里程碑
 
 1. **M1 - Schema/类型**: `TurnInput.manualTrigger` + `RuntimeManifest.execution` + store 接口
 2. **M2 - Runtime**: turn-executor 两条改造 + store 四端实现
 3. **M3 - Server**: plugin-rpc runtimeId 分支 (sync) + bootstrap 依赖挂载
-4. **M4 - Server async**: plugin-rpc background 分支 + _jobs 协议
+4. **M4 - Server async**: plugin-rpc background 分支 + \_jobs 协议
 5. **M5 - 前端**: postPluginRpc + session-store + UI
 6. **M6 - 插件**: dashscope-image-gen 完整实现
 7. **M7 - 文档 + skill**: 框架文档 + skill 样例更新

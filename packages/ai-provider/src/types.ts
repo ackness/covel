@@ -4,20 +4,20 @@ import type { ZodType } from "zod";
 // ── Provider Protocol ──────────────────────────────────────────────
 
 export type ProviderProtocol =
-	| "openai-chat-v1"
-	| "openai-responses-v1"
-	| "anthropic-messages-v1";
+  | "openai-chat-v1"
+  | "openai-responses-v1"
+  | "anthropic-messages-v1";
 
 // ── Operation Mode ─────────────────────────────────────────────────
 
 export type OperationMode =
-	| "text"
-	| "object"
-	| "stream"
-	| "embed"
-	| "image"
-	| "speech"
-	| "transcription";
+  | "text"
+  | "object"
+  | "stream"
+  | "embed"
+  | "image"
+  | "speech"
+  | "transcription";
 
 // ── Model Capability ──────────────────────────────────────────────
 
@@ -29,14 +29,14 @@ export type OutputModality = "text" | "image" | "audio" | "embedding";
 
 /** Feature flags for model capabilities beyond basic I/O. */
 export type ModelFeature =
-	| "function_calling"
-	| "structured_output"
-	| "streaming"
-	| "reasoning"
-	| "vision"
-	| "prompt_caching"
-	| "web_search"
-	| "computer_use";
+  | "function_calling"
+  | "structured_output"
+  | "streaming"
+  | "reasoning"
+  | "vision"
+  | "prompt_caching"
+  | "web_search"
+  | "computer_use";
 
 /**
  * Pricing information per million tokens (USD).
@@ -44,18 +44,18 @@ export type ModelFeature =
  * Separate fields for text vs multimodal I/O to reflect real provider pricing.
  */
 export interface ModelPricing {
-	/** Cost per 1M text input tokens (USD) */
-	inputPerMToken?: number;
-	/** Cost per 1M text output tokens (USD) */
-	outputPerMToken?: number;
-	/** Cost per 1M image input tokens (USD) — vision models */
-	imageInputPerMToken?: number;
-	/** Cost per 1M audio input tokens (USD) — audio understanding */
-	audioInputPerMToken?: number;
-	/** Cost per 1M audio output tokens (USD) — speech synthesis */
-	audioOutputPerMToken?: number;
-	/** Cost per generated image (USD) — image generation models */
-	perImage?: number;
+  /** Cost per 1M text input tokens (USD) */
+  inputPerMToken?: number;
+  /** Cost per 1M text output tokens (USD) */
+  outputPerMToken?: number;
+  /** Cost per 1M image input tokens (USD) — vision models */
+  imageInputPerMToken?: number;
+  /** Cost per 1M audio input tokens (USD) — audio understanding */
+  audioInputPerMToken?: number;
+  /** Cost per 1M audio output tokens (USD) — speech synthesis */
+  audioOutputPerMToken?: number;
+  /** Cost per generated image (USD) — image generation models */
+  perImage?: number;
 }
 
 /**
@@ -73,18 +73,18 @@ export interface ModelPricing {
  * 3. Protocol-based defaults
  */
 export interface ModelCapability {
-	/** Accepted input types (e.g. ["text", "image"] for vision model) */
-	input: InputModality[];
-	/** Produced output types (e.g. ["text"] for chat, ["image"] for image gen) */
-	output: OutputModality[];
-	/** Feature flags beyond basic I/O */
-	features?: ModelFeature[];
-	/** Maximum input context window (tokens) */
-	contextWindow?: number;
-	/** Maximum output tokens the model can produce */
-	maxOutputTokens?: number;
-	/** Pricing info (per million tokens, USD) */
-	pricing?: ModelPricing;
+  /** Accepted input types (e.g. ["text", "image"] for vision model) */
+  input: InputModality[];
+  /** Produced output types (e.g. ["text"] for chat, ["image"] for image gen) */
+  output: OutputModality[];
+  /** Feature flags beyond basic I/O */
+  features?: ModelFeature[];
+  /** Maximum input context window (tokens) */
+  contextWindow?: number;
+  /** Maximum output tokens the model can produce */
+  maxOutputTokens?: number;
+  /** Pricing info (per million tokens, USD) */
+  pricing?: ModelPricing;
 }
 
 // ── Model Tier ─────────────────────────────────────────────────────
@@ -116,27 +116,27 @@ export type CacheStrategy = "anthropic-explicit" | "auto-prefix" | "none";
 // ── Provider Config ────────────────────────────────────────────────
 
 export interface ProviderConfig {
-	baseUrl?: string;
-	apiKey?: string;
-	headers?: Record<string, string>;
-	/** Abort signal for request cancellation. */
-	signal?: AbortSignal;
-	/**
-	 * Prompt cache strategy for this provider (S2-T3).
-	 *
-	 * Filled in by the provider registry based on the resolved protocol;
-	 * callers do not normally set this directly. When omitted or set to
-	 * `"none"` the adapter uses its pre-S2-T3 request construction.
-	 */
-	cacheStrategy?: CacheStrategy;
+  baseUrl?: string;
+  apiKey?: string;
+  headers?: Record<string, string>;
+  /** Abort signal for request cancellation. */
+  signal?: AbortSignal;
+  /**
+   * Prompt cache strategy for this provider (S2-T3).
+   *
+   * Filled in by the provider registry based on the resolved protocol;
+   * callers do not normally set this directly. When omitted or set to
+   * `"none"` the adapter uses its pre-S2-T3 request construction.
+   */
+  cacheStrategy?: CacheStrategy;
 }
 
 // ── Provider Defaults (from TOML [providers.*]) ────────────────────
 
 export interface ProviderDefaults {
-	baseUrl?: string;
-	protocol?: ProviderProtocol;
-	headers?: Record<string, string>;
+  baseUrl?: string;
+  protocol?: ProviderProtocol;
+  headers?: Record<string, string>;
 }
 
 // ── Per-Request Slot Overrides ─────────────────────────────────────
@@ -147,12 +147,12 @@ export interface ProviderDefaults {
  * the frontend stores in `covel:customPresets`.
  */
 export interface CustomPresetInput {
-	id: string;
-	name: string;
-	provider: string;
-	baseUrl?: string;
-	model: string;
-	protocol?: ProviderProtocol;
+  id: string;
+  name: string;
+  provider: string;
+  baseUrl?: string;
+  model: string;
+  protocol?: ProviderProtocol;
 }
 
 /**
@@ -167,262 +167,263 @@ export interface CustomPresetInput {
  * text slot.
  */
 export interface SlotOverridesInput {
-	/** Slot-name → preset-id. Consulted before the server slotRegistry. */
-	slotPresetOverrides?: Record<string, string>;
-	/** Slot-name → generation parameter overrides. */
-	parameterOverrides?: Record<string, ModelParameterOverrides>;
-	/** Preset definitions added for the duration of the call. */
-	customPresets?: CustomPresetInput[];
+  /** Slot-name → preset-id. Consulted before the server slotRegistry. */
+  slotPresetOverrides?: Record<string, string>;
+  /** Slot-name → generation parameter overrides. */
+  parameterOverrides?: Record<string, ModelParameterOverrides>;
+  /** Preset definitions added for the duration of the call. */
+  customPresets?: CustomPresetInput[];
 }
 
 // ── Model Profile ──────────────────────────────────────────────────
 
 export interface ModelProfile {
-	id: string;
-	tier: ModelTier;
-	provider: string;
-	model: string;
-	contextWindow: number;
-	latencyClass: string;
-	costClass: string;
-	supportedModes: OperationMode[];
+  id: string;
+  tier: ModelTier;
+  provider: string;
+  model: string;
+  contextWindow: number;
+  latencyClass: string;
+  costClass: string;
+  supportedModes: OperationMode[];
 }
 
 // ── Preset Config (from TOML [[presets]]) ──────────────────────────
 
 export interface PresetConfig {
-	id: string;
-	name: string;
-	provider: string;
-	protocol?: ProviderProtocol;
-	model: string;
-	tier: Exclude<ModelTier, "embed-default">;
-	baseUrl?: string;
-	fallbackPresetIds?: string[];
-	supportedModes: OperationMode[];
-	enabled: boolean;
-	isDefault?: boolean;
-	scope?: string;
-	defaultSlot?: string;
-	providerRequestMetadata?: Record<string, unknown>;
-	/** Multimodal capability descriptor. Auto-inferred or manually set. */
-	capability?: ModelCapability;
-	/** Capability tag for slot compatibility. */
-	tag?: string;
-	/**
-	 * Embeddings request body format. Carried from llm.toml `embeddingFormat`
-	 * field. Only meaningful for embed slots (output includes "embedding").
-	 * The gateway merges this into providerRequestMetadata.embeddingFormat
-	 * so adapters can dispatch on it.
-	 */
-	embeddingFormat?: EmbeddingFormat;
+  id: string;
+  name: string;
+  provider: string;
+  protocol?: ProviderProtocol;
+  model: string;
+  tier: Exclude<ModelTier, "embed-default">;
+  baseUrl?: string;
+  fallbackPresetIds?: string[];
+  supportedModes: OperationMode[];
+  enabled: boolean;
+  isDefault?: boolean;
+  scope?: string;
+  defaultSlot?: string;
+  providerRequestMetadata?: Record<string, unknown>;
+  /** Multimodal capability descriptor. Auto-inferred or manually set. */
+  capability?: ModelCapability;
+  /** Capability tag for slot compatibility. */
+  tag?: string;
+  /**
+   * Embeddings request body format. Carried from llm.toml `embeddingFormat`
+   * field. Only meaningful for embed slots (output includes "embedding").
+   * The gateway merges this into providerRequestMetadata.embeddingFormat
+   * so adapters can dispatch on it.
+   */
+  embeddingFormat?: EmbeddingFormat;
 }
 
 // ── Tool Calling ──────────────────────────────────────────────────
 
 /** OpenAI-compatible function tool definition. */
 export interface ToolDefinition {
-	type: "function";
-	function: {
-		name: string;
-		description?: string;
-		parameters?: Record<string, unknown>;
-	};
+  type: "function";
+  function: {
+    name: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+  };
 }
 
 /** A tool call returned by the model. */
 export interface ToolCallPart {
-	id: string;
-	name: string;
-	arguments: string;
+  id: string;
+  name: string;
+  arguments: string;
 }
 
 export interface TextPart {
-	type: "text";
-	text: string;
+  type: "text";
+  text: string;
 }
 
 export interface ImagePart {
-	type: "image";
-	/**
-	 * Provider adapters use image.url for native vision blocks. When URL
-	 * resolution is absent, adapters serialize a text `image_ref` payload.
-	 */
-	image: MediaRef;
+  type: "image";
+  /**
+   * Provider adapters use image.url for native vision blocks. When URL
+   * resolution is absent, adapters serialize a text `image_ref` payload.
+   */
+  image: MediaRef;
 }
 
 export type TextMessageContentPart = TextPart | ImagePart;
 export type TextMessageContent =
-	| string
-	| null
-	| readonly TextMessageContentPart[];
+  | string
+  | null
+  | readonly TextMessageContentPart[];
 
 // ── Text Generation ────────────────────────────────────────────────
 
 export interface TextGenerationParams {
-	model: string;
-	messages: TextMessage[];
-	/** Tool definitions to pass to the model (OpenAI function calling format). */
-	tools?: ToolDefinition[];
-	providerRequestMetadata?: Record<string, unknown>;
+  model: string;
+  messages: TextMessage[];
+  /** Tool definitions to pass to the model (OpenAI function calling format). */
+  tools?: ToolDefinition[];
+  providerRequestMetadata?: Record<string, unknown>;
 }
 
 export interface TextMessage {
-	role: string;
-	content: TextMessageContent;
-	/** Prompt cache hint for providers that support it (e.g. Anthropic cache_control) */
-	cacheControl?: { type: "ephemeral" };
-	/** Tool calls made by assistant (present when role === "assistant" and model invoked tools). */
-	toolCalls?: ToolCallPart[];
-	/** Tool call ID this message responds to (present when role === "tool"). */
-	toolCallId?: string;
-	/**
-	 * Thinking-mode reasoning captured on a prior assistant turn. Must be
-	 * echoed back verbatim on the next request for providers that enforce
-	 * reasoning round-trip (e.g. DashScope Qwen, DeepSeek v4 thinking). The
-	 * openai-chat adapter maps this to the `reasoning_content` wire field.
-	 */
-	reasoningContent?: string;
+  role: string;
+  content: TextMessageContent;
+  /** Prompt cache hint for providers that support it (e.g. Anthropic cache_control) */
+  cacheControl?: { type: "ephemeral" };
+  /** Tool calls made by assistant (present when role === "assistant" and model invoked tools). */
+  toolCalls?: ToolCallPart[];
+  /** Tool call ID this message responds to (present when role === "tool"). */
+  toolCallId?: string;
+  /**
+   * Thinking-mode reasoning captured on a prior assistant turn. Must be
+   * echoed back verbatim on the next request for providers that enforce
+   * reasoning round-trip (e.g. DashScope Qwen, DeepSeek v4 thinking). The
+   * openai-chat adapter maps this to the `reasoning_content` wire field.
+   */
+  reasoningContent?: string;
 }
 
 export interface UsageSummary {
-	inputTokens: number;
-	outputTokens: number;
+  inputTokens: number;
+  outputTokens: number;
 }
 
 export interface TextGenerationResult {
-	text: string;
-	finishReason: string;
-	usage: UsageSummary;
-	/** Tool calls requested by the model (present when finishReason involves tool use). */
-	toolCalls?: ToolCallPart[];
-	/**
-	 * Raw reasoning text emitted by the model in thinking mode. Present only
-	 * when the provider exposes `reasoning_content` (DashScope Qwen, DeepSeek
-	 * v4 thinking, etc.). Callers must carry this back on the assistant
-	 * message of the next request when composing a multi-turn tool loop.
-	 */
-	reasoningContent?: string;
+  text: string;
+  finishReason: string;
+  usage: UsageSummary;
+  /** Tool calls requested by the model (present when finishReason involves tool use). */
+  toolCalls?: ToolCallPart[];
+  /**
+   * Raw reasoning text emitted by the model in thinking mode. Present only
+   * when the provider exposes `reasoning_content` (DashScope Qwen, DeepSeek
+   * v4 thinking, etc.). Callers must carry this back on the assistant
+   * message of the next request when composing a multi-turn tool loop.
+   */
+  reasoningContent?: string;
 }
 
 // ── Object Generation ──────────────────────────────────────────────
 
-export interface ObjectGenerationParams<TObject = unknown>
-	extends TextGenerationParams {
-	schema: ZodType<TObject>;
+export interface ObjectGenerationParams<
+  TObject = unknown,
+> extends TextGenerationParams {
+  schema: ZodType<TObject>;
 }
 
 export interface ObjectGenerationResult<TObject = unknown> {
-	object: TObject;
-	finishReason: string;
-	usage: UsageSummary;
+  object: TObject;
+  finishReason: string;
+  usage: UsageSummary;
 }
 
 // ── Streaming ──────────────────────────────────────────────────────
 
 export type StreamEvent =
-	| { type: "text-delta"; textDelta: string }
-	| { type: "reasoning-delta"; reasoningDelta: string }
-	| { type: "tool-call"; id: string; name: string; arguments: string }
-	| {
-			type: "done";
-			finishReason: string;
-			usage: UsageSummary;
-			/**
-			 * Full reasoning_content accumulated over the stream. Exposed on
-			 * `done` so downstream callers that stitch a follow-up assistant
-			 * turn (e.g. streaming → non-stream tool loop fallback) can echo it
-			 * back per the provider's thinking-mode contract.
-			 */
-			reasoningContent?: string;
-	  };
+  | { type: "text-delta"; textDelta: string }
+  | { type: "reasoning-delta"; reasoningDelta: string }
+  | { type: "tool-call"; id: string; name: string; arguments: string }
+  | {
+      type: "done";
+      finishReason: string;
+      usage: UsageSummary;
+      /**
+       * Full reasoning_content accumulated over the stream. Exposed on
+       * `done` so downstream callers that stitch a follow-up assistant
+       * turn (e.g. streaming → non-stream tool loop fallback) can echo it
+       * back per the provider's thinking-mode contract.
+       */
+      reasoningContent?: string;
+    };
 
 // ── Embedding ──────────────────────────────────────────────────────
 
 export interface EmbeddingParams {
-	model: string;
-	values: string[];
-	providerRequestMetadata?: Record<string, unknown>;
+  model: string;
+  values: string[];
+  providerRequestMetadata?: Record<string, unknown>;
 }
 
 export interface EmbeddingResult {
-	embeddings: number[][];
-	usage: UsageSummary;
+  embeddings: number[][];
+  usage: UsageSummary;
 }
 
 // ── Speech Synthesis ───────────────────────────────────────────────
 
 export interface SpeechSynthesisParams {
-	model: string;
-	text: string;
-	voice?: string;
-	format?: string;
-	providerRequestMetadata?: Record<string, unknown>;
+  model: string;
+  text: string;
+  voice?: string;
+  format?: string;
+  providerRequestMetadata?: Record<string, unknown>;
 }
 
 export interface SpeechSynthesisResult {
-	audio: { mimeType: string; data: Uint8Array };
-	usage: UsageSummary | null;
+  audio: { mimeType: string; data: Uint8Array };
+  usage: UsageSummary | null;
 }
 
 // ── Transcription ──────────────────────────────────────────────────
 
 export interface TranscriptionParams {
-	model: string;
-	audio: { data: Uint8Array; mimeType: string; fileName?: string };
-	providerRequestMetadata?: Record<string, unknown>;
+  model: string;
+  audio: { data: Uint8Array; mimeType: string; fileName?: string };
+  providerRequestMetadata?: Record<string, unknown>;
 }
 
 export interface TranscriptionResult {
-	text: string;
-	usage: UsageSummary | null;
+  text: string;
+  usage: UsageSummary | null;
 }
 
 // ── Request Context ────────────────────────────────────────────────
 
 export interface ModelRequestContext {
-	profile: ModelProfile;
-	preset: PresetConfig | null;
-	mode: OperationMode;
+  profile: ModelProfile;
+  preset: PresetConfig | null;
+  mode: OperationMode;
 }
 
 // ── Resolved Target ────────────────────────────────────────────────
 
 export interface ResolvedTarget {
-	profile: ModelProfile;
-	preset: PresetConfig | null;
+  profile: ModelProfile;
+  preset: PresetConfig | null;
 }
 
 // ── Lifecycle Hook ─────────────────────────────────────────────────
 
 export interface ProviderLifecycleHook {
-	onRequestStart?(event: {
-		provider: string;
-		protocol: ProviderProtocol;
-		mode: OperationMode;
-		model: string;
-		traceId?: string;
-	}): void | Promise<void>;
+  onRequestStart?(event: {
+    provider: string;
+    protocol: ProviderProtocol;
+    mode: OperationMode;
+    model: string;
+    traceId?: string;
+  }): void | Promise<void>;
 
-	onRequestSuccess?(event: {
-		provider: string;
-		protocol: ProviderProtocol;
-		mode: OperationMode;
-		model: string;
-		usage: UsageSummary | null;
-		durationMs: number;
-		traceId?: string;
-	}): void | Promise<void>;
+  onRequestSuccess?(event: {
+    provider: string;
+    protocol: ProviderProtocol;
+    mode: OperationMode;
+    model: string;
+    usage: UsageSummary | null;
+    durationMs: number;
+    traceId?: string;
+  }): void | Promise<void>;
 
-	onRequestError?(event: {
-		provider: string;
-		protocol: ProviderProtocol;
-		mode: OperationMode;
-		model: string;
-		error: unknown;
-		durationMs: number;
-		traceId?: string;
-	}): void | Promise<void>;
+  onRequestError?(event: {
+    provider: string;
+    protocol: ProviderProtocol;
+    mode: OperationMode;
+    model: string;
+    error: unknown;
+    durationMs: number;
+    traceId?: string;
+  }): void | Promise<void>;
 }
 
 // ── Model Slot ────────────────────────────────────────────────────
@@ -445,18 +446,18 @@ type SlotTag = "text" | "image" | "embed" | "speech" | string;
  * does not interpret these fields when this surface is used.
  */
 export interface ResolvedSlotConfig {
-	readonly presetId: string;
-	readonly provider: string;
-	readonly protocol: string;
-	readonly baseUrl?: string;
-	readonly apiKey?: string;
-	readonly headers?: Readonly<Record<string, string>>;
-	readonly model: string;
-	/** Slot tag (text / image / embedding / speech / transcription). */
-	readonly tag: string;
-	/** Free-form fields from the llm.toml preset, plugin-owned semantics. */
-	readonly metadata: Readonly<Record<string, unknown>>;
-	readonly parameterOverrides?: ModelParameterOverrides;
+  readonly presetId: string;
+  readonly provider: string;
+  readonly protocol: string;
+  readonly baseUrl?: string;
+  readonly apiKey?: string;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly model: string;
+  /** Slot tag (text / image / embedding / speech / transcription). */
+  readonly tag: string;
+  /** Free-form fields from the llm.toml preset, plugin-owned semantics. */
+  readonly metadata: Readonly<Record<string, unknown>>;
+  readonly parameterOverrides?: ModelParameterOverrides;
 }
 
 /**
@@ -470,30 +471,30 @@ export interface ResolvedSlotConfig {
 export type EmbeddingFormat = "openai" | "nemotron-multimodal";
 
 export interface ModelSlotConfig {
-	slotId: string;
-	presetId: string;
-	/** Capability tag — determines compatibility with runtime providerTag. */
-	tag: SlotTag;
-	parameterOverrides?: ModelParameterOverrides;
+  slotId: string;
+  presetId: string;
+  /** Capability tag — determines compatibility with runtime providerTag. */
+  tag: SlotTag;
+  parameterOverrides?: ModelParameterOverrides;
 }
 
 export interface ModelParameterOverrides {
-	temperature?: number;
-	topP?: number;
-	topK?: number;
-	maxOutputTokens?: number;
-	frequencyPenalty?: number;
-	presencePenalty?: number;
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  maxOutputTokens?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
 }
 
 export interface ModelSlotMap {
-	slots: Record<string, ModelSlotConfig>;
+  slots: Record<string, ModelSlotConfig>;
 }
 
 // ── AI Config (parsed from TOML) ───────────────────────────────────
 
 export interface AiConfig {
-	providers: Record<string, ProviderDefaults>;
-	profiles: ModelProfile[];
-	presets: PresetConfig[];
+  providers: Record<string, ProviderDefaults>;
+  profiles: ModelProfile[];
+  presets: PresetConfig[];
 }

@@ -14,7 +14,7 @@ name: Build Desktop (macOS)
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       tag:
@@ -157,7 +157,7 @@ jobs:
   # `publish_release` toggle still gates publication.
   release:
     name: Publish GitHub Release
-    needs: [ build-electron ]
+    needs: [build-electron]
     runs-on: ubuntu-latest
     if: |
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||

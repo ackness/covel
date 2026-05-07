@@ -62,16 +62,16 @@ export const PROMPT_CACHE_BREAKPOINT_MARKER = "\uE000COVEL_CACHE_BREAK\uE000";
  *   are filtered out so adapters never send a degenerate cache breakpoint.
  */
 export function splitPromptCacheSegments(
-	systemPrompt: string,
+  systemPrompt: string,
 ): readonly string[] {
-	if (!systemPrompt) return [];
-	if (!systemPrompt.includes(PROMPT_CACHE_BREAKPOINT_MARKER)) {
-		return [systemPrompt];
-	}
-	return systemPrompt
-		.split(PROMPT_CACHE_BREAKPOINT_MARKER)
-		.map((segment) => segment.trimEnd())
-		.filter((segment) => segment.length > 0);
+  if (!systemPrompt) return [];
+  if (!systemPrompt.includes(PROMPT_CACHE_BREAKPOINT_MARKER)) {
+    return [systemPrompt];
+  }
+  return systemPrompt
+    .split(PROMPT_CACHE_BREAKPOINT_MARKER)
+    .map((segment) => segment.trimEnd())
+    .filter((segment) => segment.length > 0);
 }
 
 /**
@@ -84,10 +84,10 @@ export function splitPromptCacheSegments(
  * bytes and keep upstream logs clean.
  */
 export function stripPromptCacheMarkers(systemPrompt: string): string {
-	if (!systemPrompt || !systemPrompt.includes(PROMPT_CACHE_BREAKPOINT_MARKER)) {
-		return systemPrompt;
-	}
-	// Collapse adjacent newlines that bracketed the marker back into the
-	// standard `\n\n` separator used between segments.
-	return systemPrompt.split(PROMPT_CACHE_BREAKPOINT_MARKER).join("");
+  if (!systemPrompt || !systemPrompt.includes(PROMPT_CACHE_BREAKPOINT_MARKER)) {
+    return systemPrompt;
+  }
+  // Collapse adjacent newlines that bracketed the marker back into the
+  // standard `\n\n` separator used between segments.
+  return systemPrompt.split(PROMPT_CACHE_BREAKPOINT_MARKER).join("");
 }

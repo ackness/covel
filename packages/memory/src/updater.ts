@@ -13,12 +13,12 @@
  */
 
 import type {
-	CoreMemoryBlock,
-	CoreMemoryLabel,
-	MemoryLLMAdapter,
-	MemoryManager,
-	MemoryUpdateResult,
-	MemoryUpdaterConfig,
+  CoreMemoryBlock,
+  CoreMemoryLabel,
+  MemoryLLMAdapter,
+  MemoryManager,
+  MemoryUpdateResult,
+  MemoryUpdaterConfig,
 } from "./types.js";
 import { CORE_MEMORY_LABELS } from "./types.js";
 
@@ -63,115 +63,115 @@ Only output blocks that changed. If nothing worth updating happened, output \`{}
 Keep each block under 300-500 words. Use concise factual statements, not literary descriptions.`;
 
 export function createMemoryUpdater(
-	manager: MemoryManager,
-	llm: MemoryLLMAdapter,
-	config?: MemoryUpdaterConfig,
+  manager: MemoryManager,
+  llm: MemoryLLMAdapter,
+  config?: MemoryUpdaterConfig,
 ): {
-	updateAfterTurn(params: {
-		sessionId: string;
-		narrativeText: string;
-		toolCallSummaries?: readonly string[];
-		currentBlocks: readonly CoreMemoryBlock[];
-		locale?: string;
-	}): Promise<MemoryUpdateResult>;
-	awaitPending(sessionId: string): Promise<void>;
+  updateAfterTurn(params: {
+    sessionId: string;
+    narrativeText: string;
+    toolCallSummaries?: readonly string[];
+    currentBlocks: readonly CoreMemoryBlock[];
+    locale?: string;
+  }): Promise<MemoryUpdateResult>;
+  awaitPending(sessionId: string): Promise<void>;
 } {
-	const resolvedLocale = config?.locale ?? "zh-CN";
+  const resolvedLocale = config?.locale ?? "zh-CN";
 
-	// Per-session pending-promise map. Tracks the most recent in-flight
-	// updateAfterTurn() call so the next turn can await it before reading
-	// blocks. Stale-by-one-turn memory is acceptable (intentional trade-off)
-	// but stale-mid-turn is not — especially when players spam submit.
-	const pending = new Map<string, Promise<unknown>>();
+  // Per-session pending-promise map. Tracks the most recent in-flight
+  // updateAfterTurn() call so the next turn can await it before reading
+  // blocks. Stale-by-one-turn memory is acceptable (intentional trade-off)
+  // but stale-mid-turn is not — especially when players spam submit.
+  const pending = new Map<string, Promise<unknown>>();
 
-	async function runUpdate(params: {
-		sessionId: string;
-		narrativeText: string;
-		toolCallSummaries?: readonly string[];
-		currentBlocks: readonly CoreMemoryBlock[];
-		locale?: string;
-	}): Promise<MemoryUpdateResult> {
-		const {
-			sessionId,
-			narrativeText,
-			toolCallSummaries,
-			currentBlocks,
-			locale,
-		} = params;
-		const lang = (locale ?? resolvedLocale).startsWith("zh") ? "zh" : "en";
+  async function runUpdate(params: {
+    sessionId: string;
+    narrativeText: string;
+    toolCallSummaries?: readonly string[];
+    currentBlocks: readonly CoreMemoryBlock[];
+    locale?: string;
+  }): Promise<MemoryUpdateResult> {
+    const {
+      sessionId,
+      narrativeText,
+      toolCallSummaries,
+      currentBlocks,
+      locale,
+    } = params;
+    const lang = (locale ?? resolvedLocale).startsWith("zh") ? "zh" : "en";
 
-		// Build user prompt with current blocks + new events
-		const blockSection = currentBlocks
-			.filter((b) => b.content.trim())
-			.map((b) => `[${b.label}]\n${b.content}`)
-			.join("\n\n");
+    // Build user prompt with current blocks + new events
+    const blockSection = currentBlocks
+      .filter((b) => b.content.trim())
+      .map((b) => `[${b.label}]\n${b.content}`)
+      .join("\n\n");
 
-		const toolSection = toolCallSummaries?.length
-			? `\n\n## 本轮工具调用摘要\n${toolCallSummaries.join("\n")}`
-			: "";
+    const toolSection = toolCallSummaries?.length
+      ? `\n\n## 本轮工具调用摘要\n${toolCallSummaries.join("\n")}`
+      : "";
 
-		const userPrompt = `## 当前记忆块\n${blockSection || "（全部为空，首次初始化）"}\n\n## 本轮叙事\n${narrativeText}${toolSection}\n\n请输出需要更新的记忆块 JSON。`;
+    const userPrompt = `## 当前记忆块\n${blockSection || "（全部为空，首次初始化）"}\n\n## 本轮叙事\n${narrativeText}${toolSection}\n\n请输出需要更新的记忆块 JSON。`;
 
-		try {
-			const response = await llm.complete({
-				systemPrompt: lang === "zh" ? SYSTEM_PROMPT_ZH : SYSTEM_PROMPT_EN,
-				messages: [{ role: "user", content: userPrompt }],
-				model: config?.modelSlot,
-			});
+    try {
+      const response = await llm.complete({
+        systemPrompt: lang === "zh" ? SYSTEM_PROMPT_ZH : SYSTEM_PROMPT_EN,
+        messages: [{ role: "user", content: userPrompt }],
+        model: config?.modelSlot,
+      });
 
-			const parsed = parseBlockUpdates(response.content);
-			if (parsed.size === 0) {
-				return { updated: false, blocksChanged: [] };
-			}
+      const parsed = parseBlockUpdates(response.content);
+      if (parsed.size === 0) {
+        return { updated: false, blocksChanged: [] };
+      }
 
-			await manager.updateBlocks(sessionId, parsed);
+      await manager.updateBlocks(sessionId, parsed);
 
-			return {
-				updated: true,
-				blocksChanged: [...parsed.keys()],
-			};
-		} catch (err) {
-			// Memory update failure is non-fatal — blocks stay unchanged
-			return {
-				updated: false,
-				blocksChanged: [],
-				error: err instanceof Error ? err.message : String(err),
-			};
-		}
-	}
+      return {
+        updated: true,
+        blocksChanged: [...parsed.keys()],
+      };
+    } catch (err) {
+      // Memory update failure is non-fatal — blocks stay unchanged
+      return {
+        updated: false,
+        blocksChanged: [],
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
 
-	return {
-		updateAfterTurn(params): Promise<MemoryUpdateResult> {
-			// Chain this call behind any in-flight update for the same session so
-			// we never race two LLM completions writing the same block, and so
-			// `awaitPending` can serialise on the latest write.
-			const previous = pending.get(params.sessionId) ?? Promise.resolve();
-			const next = previous
-				.catch(() => {
-					/* previous failure already reported to its caller */
-				})
-				.then(() => runUpdate(params));
-			// Store a promise that resolves regardless of success/failure.
-			pending.set(
-				params.sessionId,
-				next.then(
-					() => undefined,
-					() => undefined,
-				),
-			);
-			return next;
-		},
-		async awaitPending(sessionId: string): Promise<void> {
-			const p = pending.get(sessionId);
-			if (!p) return;
-			try {
-				await p;
-			} catch {
-				// Errors already surfaced to the original caller via its returned
-				// MemoryUpdateResult; swallow here so awaitPending never throws.
-			}
-		},
-	};
+  return {
+    updateAfterTurn(params): Promise<MemoryUpdateResult> {
+      // Chain this call behind any in-flight update for the same session so
+      // we never race two LLM completions writing the same block, and so
+      // `awaitPending` can serialise on the latest write.
+      const previous = pending.get(params.sessionId) ?? Promise.resolve();
+      const next = previous
+        .catch(() => {
+          /* previous failure already reported to its caller */
+        })
+        .then(() => runUpdate(params));
+      // Store a promise that resolves regardless of success/failure.
+      pending.set(
+        params.sessionId,
+        next.then(
+          () => undefined,
+          () => undefined,
+        ),
+      );
+      return next;
+    },
+    async awaitPending(sessionId: string): Promise<void> {
+      const p = pending.get(sessionId);
+      if (!p) return;
+      try {
+        await p;
+      } catch {
+        // Errors already surfaced to the original caller via its returned
+        // MemoryUpdateResult; swallow here so awaitPending never throws.
+      }
+    },
+  };
 }
 
 /**
@@ -179,37 +179,37 @@ export function createMemoryUpdater(
  * Handles: raw JSON, markdown-wrapped JSON, partial responses.
  */
 function parseBlockUpdates(raw: string): Map<CoreMemoryLabel, string> {
-	const result = new Map<CoreMemoryLabel, string>();
+  const result = new Map<CoreMemoryLabel, string>();
 
-	// Strip markdown code fences if present
-	let cleaned = raw.trim();
-	const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
-	if (fenceMatch) {
-		cleaned = fenceMatch[1].trim();
-	}
+  // Strip markdown code fences if present
+  let cleaned = raw.trim();
+  const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+  if (fenceMatch) {
+    cleaned = fenceMatch[1].trim();
+  }
 
-	// Try JSON parse
-	let obj: Record<string, unknown>;
-	try {
-		obj = JSON.parse(cleaned);
-	} catch {
-		// Try to extract JSON from surrounding text
-		const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-		if (!jsonMatch) return result;
-		try {
-			obj = JSON.parse(jsonMatch[0]);
-		} catch {
-			return result;
-		}
-	}
+  // Try JSON parse
+  let obj: Record<string, unknown>;
+  try {
+    obj = JSON.parse(cleaned);
+  } catch {
+    // Try to extract JSON from surrounding text
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return result;
+    try {
+      obj = JSON.parse(jsonMatch[0]);
+    } catch {
+      return result;
+    }
+  }
 
-	// Extract valid block updates
-	const validLabels = new Set<string>(CORE_MEMORY_LABELS);
-	for (const [key, value] of Object.entries(obj)) {
-		if (validLabels.has(key) && typeof value === "string" && value.trim()) {
-			result.set(key as CoreMemoryLabel, value.trim());
-		}
-	}
+  // Extract valid block updates
+  const validLabels = new Set<string>(CORE_MEMORY_LABELS);
+  for (const [key, value] of Object.entries(obj)) {
+    if (validLabels.has(key) && typeof value === "string" && value.trim()) {
+      result.set(key as CoreMemoryLabel, value.trim());
+    }
+  }
 
-	return result;
+  return result;
 }

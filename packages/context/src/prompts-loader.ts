@@ -53,42 +53,42 @@ let promptsRootCache: string | null = null;
  * where the working directory differs from the monorepo layout.
  */
 export function setPromptsRoot(root: string | null): void {
-	promptsRootCache = root;
+  promptsRootCache = root;
 }
 
 async function findPromptsRoot(): Promise<string> {
-	if (promptsRootCache !== null) return promptsRootCache;
+  if (promptsRootCache !== null) return promptsRootCache;
 
-	// 1. Explicit env override (used by Docker / production deployments).
-	const envOverride = readRuntimeEnv().promptsDir;
-	if (envOverride) {
-		promptsRootCache = path.resolve(envOverride);
-		return promptsRootCache;
-	}
+  // 1. Explicit env override (used by Docker / production deployments).
+  const envOverride = readRuntimeEnv().promptsDir;
+  if (envOverride) {
+    promptsRootCache = path.resolve(envOverride);
+    return promptsRootCache;
+  }
 
-	// 2. Walk upwards from this source file looking for a sibling `prompts/`.
-	const here = path.dirname(fileURLToPath(import.meta.url));
-	let dir = here;
-	// Cap the walk so a misconfigured environment cannot loop forever.
-	for (let i = 0; i < 16; i++) {
-		const candidate = path.join(dir, "prompts");
-		try {
-			const stat = await fs.stat(candidate);
-			if (stat.isDirectory()) {
-				promptsRootCache = candidate;
-				return promptsRootCache;
-			}
-		} catch {
-			// not here, keep walking
-		}
-		const parent = path.dirname(dir);
-		if (parent === dir) break;
-		dir = parent;
-	}
+  // 2. Walk upwards from this source file looking for a sibling `prompts/`.
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  let dir = here;
+  // Cap the walk so a misconfigured environment cannot loop forever.
+  for (let i = 0; i < 16; i++) {
+    const candidate = path.join(dir, "prompts");
+    try {
+      const stat = await fs.stat(candidate);
+      if (stat.isDirectory()) {
+        promptsRootCache = candidate;
+        return promptsRootCache;
+      }
+    } catch {
+      // not here, keep walking
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
 
-	// 3. Fallback to CWD/prompts. Throws when actually used and missing.
-	promptsRootCache = path.resolve(process.cwd(), "prompts");
-	return promptsRootCache;
+  // 3. Fallback to CWD/prompts. Throws when actually used and missing.
+  promptsRootCache = path.resolve(process.cwd(), "prompts");
+  return promptsRootCache;
 }
 
 // ── Locale handling ─────────────────────────────────────────────
@@ -101,23 +101,23 @@ async function findPromptsRoot(): Promise<string> {
  * For undefined locale: `['<name>.md']`
  */
 function localeCandidates(name: string, locale?: string): string[] {
-	if (!locale) return [`${name}.md`];
+  if (!locale) return [`${name}.md`];
 
-	const lang = locale.split("-")[0]!;
-	const seen = new Set<string>();
-	const out: string[] = [];
+  const lang = locale.split("-")[0]!;
+  const seen = new Set<string>();
+  const out: string[] = [];
 
-	for (const candidate of [
-		`${name}.${locale}.md`,
-		`${name}.${lang}.md`,
-		`${name}.md`,
-	]) {
-		if (!seen.has(candidate)) {
-			seen.add(candidate);
-			out.push(candidate);
-		}
-	}
-	return out;
+  for (const candidate of [
+    `${name}.${locale}.md`,
+    `${name}.${lang}.md`,
+    `${name}.md`,
+  ]) {
+    if (!seen.has(candidate)) {
+      seen.add(candidate);
+      out.push(candidate);
+    }
+  }
+  return out;
 }
 
 // ── Public API ──────────────────────────────────────────────────
@@ -140,33 +140,33 @@ function localeCandidates(name: string, locale?: string): string[] {
  * ```
  */
 export async function loadPrompt(
-	dir: string,
-	name: string,
-	locale?: string,
+  dir: string,
+  name: string,
+  locale?: string,
 ): Promise<string> {
-	const root = await findPromptsRoot();
-	const subDir = path.join(root, dir);
-	const candidates = localeCandidates(name, locale);
+  const root = await findPromptsRoot();
+  const subDir = path.join(root, dir);
+  const candidates = localeCandidates(name, locale);
 
-	const tried: string[] = [];
-	for (const filename of candidates) {
-		const full = path.join(subDir, filename);
-		tried.push(full);
-		try {
-			return await fs.readFile(full, "utf8");
-		} catch (err: unknown) {
-			// ENOENT — keep trying. Anything else (permissions, etc.) bubbles up.
-			const code = (err as NodeJS.ErrnoException)?.code;
-			if (code !== "ENOENT") {
-				throw err;
-			}
-		}
-	}
+  const tried: string[] = [];
+  for (const filename of candidates) {
+    const full = path.join(subDir, filename);
+    tried.push(full);
+    try {
+      return await fs.readFile(full, "utf8");
+    } catch (err: unknown) {
+      // ENOENT — keep trying. Anything else (permissions, etc.) bubbles up.
+      const code = (err as NodeJS.ErrnoException)?.code;
+      if (code !== "ENOENT") {
+        throw err;
+      }
+    }
+  }
 
-	throw new Error(
-		`[loadPrompt] No prompt file found for dir="${dir}" name="${name}" locale="${locale ?? "(none)"}". ` +
-			`Tried:\n  ${tried.join("\n  ")}`,
-	);
+  throw new Error(
+    `[loadPrompt] No prompt file found for dir="${dir}" name="${name}" locale="${locale ?? "(none)"}". ` +
+      `Tried:\n  ${tried.join("\n  ")}`,
+  );
 }
 
 /**
@@ -181,11 +181,11 @@ export async function loadPrompt(
  * ```
  */
 export function interpolate(
-	template: string,
-	variables: Readonly<Record<string, string | number>>,
+  template: string,
+  variables: Readonly<Record<string, string | number>>,
 ): string {
-	return interpolateTemplate(
-		template,
-		variables as Readonly<Record<string, unknown>>,
-	);
+  return interpolateTemplate(
+    template,
+    variables as Readonly<Record<string, unknown>>,
+  );
 }

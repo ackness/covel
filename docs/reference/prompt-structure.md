@@ -9,10 +9,10 @@ V2 结构由 `devs/docs/insights/covel-improvement-plan.md` §A2 定义，分成
 
 V2 路径需要 **两个** 开关同时满足：
 
-| 开关 | 位置 | 说明 |
-|------|------|------|
-| 环境变量 `COVEL_PROMPT_V2=1` | 服务端 | 全局 kill switch，默认 off |
-| Plugin frontmatter `promptVersion: 2` | 每个 `PLUGIN.md` | 逐插件 opt-in，默认 1 |
+| 开关                                  | 位置             | 说明                       |
+| ------------------------------------- | ---------------- | -------------------------- |
+| 环境变量 `COVEL_PROMPT_V2=1`          | 服务端           | 全局 kill switch，默认 off |
+| Plugin frontmatter `promptVersion: 2` | 每个 `PLUGIN.md` | 逐插件 opt-in，默认 1      |
 
 两者都未启用时，走 V1 路径，V2 模块完全不被调用。
 
@@ -39,18 +39,18 @@ V2 路径需要 **两个** 开关同时满足：
 
 ### 2.1 每段的语义
 
-| # | 名称 | 变化频率 | 归属 | 进入 prompt cache |
-|---|------|----------|------|-------------------|
-| 1 | Framework Preamble | session 内稳定 | framework | ✅ |
-| 2 | Working Memory | session 内慢变 | framework (S3-T3) | ❌（避免慢变击穿缓存） |
-| 3 | Plugin Instructions | per-plugin 稳定 | plugin (`PLUGIN.md` 正文) | ✅ |
-| 4 | WorldInfo before-plugin | 动态 | lorebook | ❌ |
-| 5 | Upstream Injects | 动态 | runtime | ❌ |
-| 6 | WorldInfo after-plugin | 动态 | lorebook | ✅（末尾 breakpoint） |
-| 7 | Message history | 动态 | runtime | — |
-| 8 | WorldInfo at-depth | 动态 | lorebook | — |
-| 9 | Author's Note | per-plugin 稳定 + interpolation | plugin | — |
-| 10 | Post-History Instructions | per-plugin 稳定 + interpolation | plugin | — |
+| #   | 名称                      | 变化频率                        | 归属                      | 进入 prompt cache      |
+| --- | ------------------------- | ------------------------------- | ------------------------- | ---------------------- |
+| 1   | Framework Preamble        | session 内稳定                  | framework                 | ✅                     |
+| 2   | Working Memory            | session 内慢变                  | framework (S3-T3)         | ❌（避免慢变击穿缓存） |
+| 3   | Plugin Instructions       | per-plugin 稳定                 | plugin (`PLUGIN.md` 正文) | ✅                     |
+| 4   | WorldInfo before-plugin   | 动态                            | lorebook                  | ❌                     |
+| 5   | Upstream Injects          | 动态                            | runtime                   | ❌                     |
+| 6   | WorldInfo after-plugin    | 动态                            | lorebook                  | ✅（末尾 breakpoint）  |
+| 7   | Message history           | 动态                            | runtime                   | —                      |
+| 8   | WorldInfo at-depth        | 动态                            | lorebook                  | —                      |
+| 9   | Author's Note             | per-plugin 稳定 + interpolation | plugin                    | —                      |
+| 10  | Post-History Instructions | per-plugin 稳定 + interpolation | plugin                    | —                      |
 
 > 段 2 Working Memory 故意**不**打 cache breakpoint。WM 是"慢变"的（每几回合更新一次 player preference / story flag），如果进缓存会频繁击穿。放在段 1 之后让它能享受前缀稳定的一部分收益，但自身变化不会击穿前面的缓存块。
 
@@ -68,14 +68,14 @@ authorsNote:
   content: |
     请以第三人称叙述，但在关键转折时给出角色的内心独白。
     当前导演目标: {{ story.flags.currentGoal }}
-  depth: 4             # 插入位置 = 倒数第 depth 条消息前（默认 4）
-  role: system         # 生成的消息 role（默认 system）
+  depth: 4 # 插入位置 = 倒数第 depth 条消息前（默认 4）
+  role: system # 生成的消息 role（默认 system）
 
 # Segment 10 — Post-History Instructions
 postHistory:
   content: |
     输出必须包含 <narrative> 标签和 <choices> 标签。
-  role: system         # 默认 system
+  role: system # 默认 system
 
 # Compactor 使用的摘要焦点（S2-T2）
 summaryFocus:
@@ -109,11 +109,11 @@ summaryFocus:
 
 `@covel/ai-provider` 的 `ProviderConfig.cacheStrategy` 字段（默认由 provider 协议自动推导）：
 
-| strategy | Provider | 机制 |
-|----------|----------|------|
-| `anthropic-explicit` | Anthropic `messages.v1` | 在 `system` 字段数组末尾打 `cache_control: { type: 'ephemeral' }` 标记，最多 4 个 breakpoint |
-| `auto-prefix` | OpenAI chat/responses、DeepSeek、Qwen | 客户端零改动，provider 自动前缀匹配 |
-| `none` | 未知 / 未支持 | 不做任何处理 |
+| strategy             | Provider                              | 机制                                                                                         |
+| -------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `anthropic-explicit` | Anthropic `messages.v1`               | 在 `system` 字段数组末尾打 `cache_control: { type: 'ephemeral' }` 标记，最多 4 个 breakpoint |
+| `auto-prefix`        | OpenAI chat/responses、DeepSeek、Qwen | 客户端零改动，provider 自动前缀匹配                                                          |
+| `none`               | 未知 / 未支持                         | 不做任何处理                                                                                 |
 
 启用条件：环境变量 `COVEL_PROMPT_CACHE_V1=1`（默认 off）。关闭时 `ProtocolEventType` 以外的所有路径字节等价于 pre-S2-T3。
 
@@ -161,21 +161,22 @@ export COVEL_PROMPT_CACHE_V1=1
 ### 5.3 回滚
 
 任何时候都可以：
+
 - `unset COVEL_PROMPT_V2` → 全局回到 V1
 - 单个插件删掉 `promptVersion: 2` → 该插件回到 V1，其他不受影响
 - `unset COVEL_PROMPT_CACHE_V1` → cache 注入关闭但 V2 段结构保留
 
 ## 6. 已迁移到 V2 的插件清单
 
-| 插件 | Runtime(s) | 迁移 commit | Parity 测试 |
-|------|------------|-------------|--------------|
-| `narrator` | (单) | Wave B-2 `bbf2889` | 6 cases |
-| `guide` | (单) | Wave B-2 `bbf2889` | 6 cases |
-| `codex` | (单) | Wave C-1 | pending |
-| `char-creator` | `player-init`, `character-tracker` | Wave C-1 | pending |
-| `world-init` | `schema-gen` | Wave C-1 (FU-8) | — |
-| `pregame` | (function runtime — 不用 LLM) | 不适用 | — |
-| `npc-graph` | — | 未迁移 | — |
+| 插件           | Runtime(s)                         | 迁移 commit        | Parity 测试 |
+| -------------- | ---------------------------------- | ------------------ | ----------- |
+| `narrator`     | (单)                               | Wave B-2 `bbf2889` | 6 cases     |
+| `guide`        | (单)                               | Wave B-2 `bbf2889` | 6 cases     |
+| `codex`        | (单)                               | Wave C-1           | pending     |
+| `char-creator` | `player-init`, `character-tracker` | Wave C-1           | pending     |
+| `world-init`   | `schema-gen`                       | Wave C-1 (FU-8)    | —           |
+| `pregame`      | (function runtime — 不用 LLM)      | 不适用             | —           |
+| `npc-graph`    | —                                  | 未迁移             | —           |
 
 ## 7. 相关文件
 

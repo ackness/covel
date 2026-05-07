@@ -24,19 +24,19 @@ const repoRoot = path.resolve(desktopTauriRoot, "../..");
 const target = process.argv[2];
 
 if (!target) {
-	console.error("[stage-release] usage: stage-release.mjs <target-triple>");
-	process.exit(1);
+  console.error("[stage-release] usage: stage-release.mjs <target-triple>");
+  process.exit(1);
 }
 
 const bundleDir = path.join(
-	desktopTauriRoot,
-	"src-tauri/target",
-	target,
-	"release/bundle",
+  desktopTauriRoot,
+  "src-tauri/target",
+  target,
+  "release/bundle",
 );
 if (!(await exists(bundleDir))) {
-	console.error(`[stage-release] bundle missing at ${bundleDir}`);
-	process.exit(1);
+  console.error(`[stage-release] bundle missing at ${bundleDir}`);
+  process.exit(1);
 }
 
 const destDir = path.join(repoRoot, "release/tauri", target);
@@ -47,19 +47,19 @@ await fs.mkdir(destDir, { recursive: true });
 // that isn't one of these (bundle_dmg.sh, create-dmg/, icon.icns, …) is
 // build scaffolding and gets skipped.
 const FILE_EXTS = new Set([
-	".dmg",
-	".zip",
-	".msi",
-	".exe",
-	".deb",
-	".rpm",
-	".appimage",
-	".tar.gz",
+  ".dmg",
+  ".zip",
+  ".msi",
+  ".exe",
+  ".deb",
+  ".rpm",
+  ".appimage",
+  ".tar.gz",
 ]);
 const isDistFile = (name) => {
-	const lower = name.toLowerCase();
-	for (const ext of FILE_EXTS) if (lower.endsWith(ext)) return true;
-	return false;
+  const lower = name.toLowerCase();
+  for (const ext of FILE_EXTS) if (lower.endsWith(ext)) return true;
+  return false;
 };
 const isAppBundle = (name) => name.endsWith(".app");
 
@@ -71,48 +71,48 @@ const isAppBundle = (name) => name.endsWith(".app");
 //   Covel_0.0.1-beta_x64-setup.exe       →  Covel-tauri-0.0.1-beta_x64-setup.exe
 //   Covel.app                            →  Covel-tauri.app
 function renameForTauri(name) {
-	if (name === "Covel.app") return "Covel-tauri.app";
-	return name.replace(/^Covel([_-])/, "Covel-tauri$1");
+  if (name === "Covel.app") return "Covel-tauri.app";
+  return name.replace(/^Covel([_-])/, "Covel-tauri$1");
 }
 
 const kindDirs = await fs.readdir(bundleDir, { withFileTypes: true });
 const copied = [];
 for (const kind of kindDirs) {
-	if (!kind.isDirectory()) continue;
-	const kindPath = path.join(bundleDir, kind.name);
-	for (const entry of await fs.readdir(kindPath, { withFileTypes: true })) {
-		if (entry.isDirectory() && !isAppBundle(entry.name)) continue;
-		if (!entry.isDirectory() && !isDistFile(entry.name)) continue;
-		const src = path.join(kindPath, entry.name);
-		const dest = path.join(destDir, renameForTauri(entry.name));
-		await copyAny(src, dest);
-		copied.push(path.relative(repoRoot, dest));
-	}
+  if (!kind.isDirectory()) continue;
+  const kindPath = path.join(bundleDir, kind.name);
+  for (const entry of await fs.readdir(kindPath, { withFileTypes: true })) {
+    if (entry.isDirectory() && !isAppBundle(entry.name)) continue;
+    if (!entry.isDirectory() && !isDistFile(entry.name)) continue;
+    const src = path.join(kindPath, entry.name);
+    const dest = path.join(destDir, renameForTauri(entry.name));
+    await copyAny(src, dest);
+    copied.push(path.relative(repoRoot, dest));
+  }
 }
 
 console.log("[stage-release] staged:");
 for (const p of copied) console.log(`  ${p}`);
 
 async function exists(p) {
-	try {
-		await fs.access(p);
-		return true;
-	} catch {
-		return false;
-	}
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function copyAny(src, dest) {
-	const stat = await fs.lstat(src);
-	if (stat.isDirectory()) {
-		// .app bundle or similar — use system cp -a to preserve symlinks/perms.
-		if (process.platform === "win32") {
-			execSync(`xcopy "${src}" "${dest}" /E /I /Y /Q`, { stdio: "inherit" });
-		} else {
-			await fs.mkdir(dest, { recursive: true });
-			execSync(`cp -a "${src}/." "${dest}/"`, { stdio: "inherit" });
-		}
-	} else {
-		await fs.copyFile(src, dest);
-	}
+  const stat = await fs.lstat(src);
+  if (stat.isDirectory()) {
+    // .app bundle or similar — use system cp -a to preserve symlinks/perms.
+    if (process.platform === "win32") {
+      execSync(`xcopy "${src}" "${dest}" /E /I /Y /Q`, { stdio: "inherit" });
+    } else {
+      await fs.mkdir(dest, { recursive: true });
+      execSync(`cp -a "${src}/." "${dest}/"`, { stdio: "inherit" });
+    }
+  } else {
+    await fs.copyFile(src, dest);
+  }
 }

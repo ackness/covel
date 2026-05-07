@@ -71,16 +71,16 @@ pnpm dev                            # web :5173 + server :3001 (SQLite)
 
 ### 内置插件
 
-| 插件 | 类型 | 作用 |
-|------|:-:|------|
-| `narrator`     | Agent    | 主叙事 |
-| `guide`        | Agent    | 行动引导 + 选项生成 |
-| `npc-graph`    | Agent    | NPC 关系图抽取 + 2-hop 检索 |
-| `codex`        | Agent    | 世界知识典籍 |
-| `char-creator` | Agent    | 角色卡创建流程 |
-| `world-init`   | Agent    | 世界维度初始化 |
-| `pregame`      | Function | 开局前置（不走 LLM）|
-| `memory`       | UI       | 记忆面板 |
+| 插件           |   类型   | 作用                        |
+| -------------- | :------: | --------------------------- |
+| `narrator`     |  Agent   | 主叙事                      |
+| `guide`        |  Agent   | 行动引导 + 选项生成         |
+| `npc-graph`    |  Agent   | NPC 关系图抽取 + 2-hop 检索 |
+| `codex`        |  Agent   | 世界知识典籍                |
+| `char-creator` |  Agent   | 角色卡创建流程              |
+| `world-init`   |  Agent   | 世界维度初始化              |
+| `pregame`      | Function | 开局前置（不走 LLM）        |
+| `memory`       |    UI    | 记忆面板                    |
 
 ### 手写一个插件
 
@@ -95,7 +95,6 @@ trigger: { type: scheduled, interval: 1 }
 tools:
   builtin: [create-form, plugin-data-set]
 ---
-
 你是一个 XXX agent。本回合需要……
 ```
 
@@ -120,14 +119,14 @@ pnpm workspaces + Turborepo · ESM-only · TypeScript strict。完整包清单 �
 
 ### 文档
 
-| 主题 | 链接 |
-|------|------|
-| 架构与回合管线 | [`docs/architecture/flow.md`](./docs/architecture/flow.md) |
-| 写插件 | [`docs/guide/plugin-authoring.md`](./docs/guide/plugin-authoring.md) |
+| 主题              | 链接                                                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 架构与回合管线    | [`docs/architecture/flow.md`](./docs/architecture/flow.md)                                                          |
+| 写插件            | [`docs/guide/plugin-authoring.md`](./docs/guide/plugin-authoring.md)                                                |
 | 插件 / 工具注册表 | [`docs/reference/plugins.md`](./docs/reference/plugins.md) · [`docs/reference/tools.md`](./docs/reference/tools.md) |
-| API / SSE 协议 | [`docs/reference/api.md`](./docs/reference/api.md) · [`docs/reference/protocol.md`](./docs/reference/protocol.md) |
-| 桌面端配置 | [`docs/guide/desktop-config.md`](./docs/guide/desktop-config.md) |
-| 桌面打包 | [`apps/desktop/PACKAGING.md`](./apps/desktop/PACKAGING.md) |
+| API / SSE 协议    | [`docs/reference/api.md`](./docs/reference/api.md) · [`docs/reference/protocol.md`](./docs/reference/protocol.md)   |
+| 桌面端配置        | [`docs/guide/desktop-config.md`](./docs/guide/desktop-config.md)                                                    |
+| 桌面打包          | [`apps/desktop/PACKAGING.md`](./apps/desktop/PACKAGING.md)                                                          |
 
 完整索引 → [`docs/README.md`](./docs/README.md)。应用内 `/debug` 调试页提供会话时间线、runtime trace、prompt diff。
 

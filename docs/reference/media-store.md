@@ -14,12 +14,19 @@ interface MediaStore {
   resolveUrl(ref: MediaRef): Promise<string>;
   delete(id: string, opts?: { force?: boolean }): Promise<void>;
   lookup(id: string): Promise<MediaAssetLookup | null>;
-  recordOwnership(id: string, ownerSessionId: string, ownerPluginId?: string): Promise<void>;
+  recordOwnership(
+    id: string,
+    ownerSessionId: string,
+    ownerPluginId?: string,
+  ): Promise<void>;
   addRef(id: string, sessionId: string, pluginId?: string): Promise<void>;
   isReferencedBy(id: string, sessionId: string): Promise<boolean>;
   listAssets(): Promise<readonly MediaAssetRecord[]>;
   listRefs(): Promise<readonly MediaRefRecord[]>;
-  cleanup(protectedIds: ReadonlySet<string>, policy?: MediaLifecyclePolicy): Promise<MediaCleanupResult>;
+  cleanup(
+    protectedIds: ReadonlySet<string>,
+    policy?: MediaLifecyclePolicy,
+  ): Promise<MediaCleanupResult>;
   openReadStream?(ref: MediaRef): Promise<ReadableStream<Uint8Array>>;
 }
 ```
@@ -28,13 +35,13 @@ interface MediaStore {
 
 ## Backends
 
-| Backend | Factory | Byte storage | `openReadStream()` |
-|---|---|---|---|
-| Memory | `createMemoryMediaStore()` | Process memory | yes (single chunk) |
-| SQLite/local-fs | `createSqliteMediaStore(dbPath, { mediaRoot })` | Local files under `{mediaRoot}/{ab}/{cd}/{sha256}.bin` | yes (true streaming) |
-| PostgreSQL | `createPgMediaStore(databaseUrl)` | `media_assets.body` as `bytea` | **no** — see "PG streaming" |
-| S3/R2-compatible | `createS3MediaStore(client, options)` | External object storage via `S3CompatibleMediaClient` | yes (eager `get()` wrap) |
-| IndexedDB (web) | `createIndexedDbMediaStore({ dbName })` | Browser IDB Blob store | yes (Blob.stream()) |
+| Backend          | Factory                                         | Byte storage                                           | `openReadStream()`          |
+| ---------------- | ----------------------------------------------- | ------------------------------------------------------ | --------------------------- |
+| Memory           | `createMemoryMediaStore()`                      | Process memory                                         | yes (single chunk)          |
+| SQLite/local-fs  | `createSqliteMediaStore(dbPath, { mediaRoot })` | Local files under `{mediaRoot}/{ab}/{cd}/{sha256}.bin` | yes (true streaming)        |
+| PostgreSQL       | `createPgMediaStore(databaseUrl)`               | `media_assets.body` as `bytea`                         | **no** — see "PG streaming" |
+| S3/R2-compatible | `createS3MediaStore(client, options)`           | External object storage via `S3CompatibleMediaClient`  | yes (eager `get()` wrap)    |
+| IndexedDB (web)  | `createIndexedDbMediaStore({ dbName })`         | Browser IDB Blob store                                 | yes (Blob.stream())         |
 
 The S3/R2 adapter accepts a small object-client interface. Production deployments can wrap AWS SDK S3, Cloudflare R2, MinIO, or any compatible object store behind that interface.
 
@@ -73,22 +80,24 @@ If you store media larger than a few MiB on PostgreSQL, consider one of:
 
 `createS3MediaStore(client)` only persists bytes to the bucket. Owner / refs / mime / size / `createdAt` go through an `S3MediaMetadataAdapter` so they survive process restarts and span multiple server instances.
 
-| Wiring | When to use |
-|---|---|
-| `createS3MediaStore(client)` (no adapter) | Dev only. Logs a warning at construction. Owner / refs vanish on restart and `lookup()` always reports `ownerSessionId: null` post-restart, which makes every strict-route asset inaccessible. |
-| `createS3MediaStore(client, { metadataAdapter: createSqliteS3MetadataAdapter(dbPath) })` | Single-node production. Reuses the standard `media_assets` / `media_refs` schema; the same SQLite database can host metadata for both local-fs media and S3-backed media. |
-| `createS3MediaStore(client, { metadataAdapter: <custom PG adapter> })` | Multi-node production. A PG-backed adapter is the natural next step (TODO — open follow-up); implement the `S3MediaMetadataAdapter` interface against the existing `media_assets` / `media_refs` PG tables. |
+| Wiring                                                                                   | When to use                                                                                                                                                                                                 |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createS3MediaStore(client)` (no adapter)                                                | Dev only. Logs a warning at construction. Owner / refs vanish on restart and `lookup()` always reports `ownerSessionId: null` post-restart, which makes every strict-route asset inaccessible.              |
+| `createS3MediaStore(client, { metadataAdapter: createSqliteS3MetadataAdapter(dbPath) })` | Single-node production. Reuses the standard `media_assets` / `media_refs` schema; the same SQLite database can host metadata for both local-fs media and S3-backed media.                                   |
+| `createS3MediaStore(client, { metadataAdapter: <custom PG adapter> })`                   | Multi-node production. A PG-backed adapter is the natural next step (TODO — open follow-up); implement the `S3MediaMetadataAdapter` interface against the existing `media_assets` / `media_refs` PG tables. |
 
 ```ts
 import {
   createS3MediaStore,
   createSqliteS3MetadataAdapter,
-} from '@covel/store';
+} from "@covel/store";
 
 const mediaStore = createS3MediaStore(s3Client, {
-  bucket: 'covel-media',
-  keyPrefix: 'prod',
-  metadataAdapter: createSqliteS3MetadataAdapter('/var/lib/covel/media-meta.db'),
+  bucket: "covel-media",
+  keyPrefix: "prod",
+  metadataAdapter: createSqliteS3MetadataAdapter(
+    "/var/lib/covel/media-meta.db",
+  ),
 });
 ```
 
@@ -98,11 +107,11 @@ The framework exposes `POST /api/media/cleanup` for manual cleanup and scheduler
 
 Cleanup policy fields:
 
-| Field | Meaning |
-|---|---|
-| `dryRun` | Defaults to `true`; returns the deletion plan while keeping bytes in place |
-| `maxAgeMs` | Deletes unprotected assets created at or before `now - maxAgeMs` |
-| `maxBytes` | Deletes oldest unprotected assets until total stored bytes fit the cap |
+| Field             | Meaning                                                                       |
+| ----------------- | ----------------------------------------------------------------------------- |
+| `dryRun`          | Defaults to `true`; returns the deletion plan while keeping bytes in place    |
+| `maxAgeMs`        | Deletes unprotected assets created at or before `now - maxAgeMs`              |
+| `maxBytes`        | Deletes oldest unprotected assets until total stored bytes fit the cap        |
 | `keepRecentBytes` | Keeps the newest unprotected byte budget and selects older unprotected assets |
 
 An empty policy returns an inventory-style dry run with zero selected deletions. Tauri desktop uses the same authoritative store metadata; the native path remains the byte transport layer.

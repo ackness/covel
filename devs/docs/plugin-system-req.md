@@ -42,14 +42,14 @@ Framework（编排框架）
 
 Runtime 不一定在每个 Turn 自动执行，支持以下触发方式：
 
-| 触发类型 | 说明 |
-|---------|------|
-| `auto` | 每个 Turn 自动触发（默认） |
-| `manual` | 仅玩家手动触发 |
-| `scheduled` | 每 N 个轮次触发一次 |
+| 触发类型      | 说明                                        |
+| ------------- | ------------------------------------------- |
+| `auto`        | 每个 Turn 自动触发（默认）                  |
+| `manual`      | 仅玩家手动触发                              |
+| `scheduled`   | 每 N 个轮次触发一次                         |
 | `conditional` | 满足特定条件时触发，如上下文 token 超过阈值 |
-| `event` | 监听特定事件触发 |
-| `error-retry` | 前序 Runtime 出错时触发 |
+| `event`       | 监听特定事件触发                            |
+| `error-retry` | 前序 Runtime 出错时触发                     |
 
 Runtime 触发相关配置项：
 
@@ -73,10 +73,10 @@ Runtime 触发相关配置项：
 
 ### 3.2 插件分类
 
-| 类型 | `pluginType` 值 | 特点 |
-|------|----------------|------|
-| 核心插件 | `core-plugin` | 所有 Runtime 默认开启且不可关闭，只能调整配置 |
-| 普通插件 | `plugin` | 可按需启用/禁用，Runtime 可独立控制 |
+| 类型     | `pluginType` 值 | 特点                                          |
+| -------- | --------------- | --------------------------------------------- |
+| 核心插件 | `core-plugin`   | 所有 Runtime 默认开启且不可关闭，只能调整配置 |
+| 普通插件 | `plugin`        | 可按需启用/禁用，Runtime 可独立控制           |
 
 ### 3.3 插件包结构
 
@@ -137,6 +137,7 @@ priority: 520
 你是一个叙事增强 agent，负责补充更丰富的感官细节和人物内心描写。
 
 根据当前叙事内容 `{{ inputs.narrator.narrativeOutput }}`，扩展以下内容：
+
 - 环境的感官细节（气味、声音、光线）
 - 人物的细微情绪变化
 
@@ -190,31 +191,34 @@ output:
 你是一个视觉提示词优化 agent。
 
 ## 当前叙事
+
 <narrator-output>{{ inputs.narrator.main.narrativeOutput }}</narrator-output>
 
 ## 你的任务
+
 将上述叙事内容转化为适合图像生成的提示词，参考视觉风格指南：
 [视觉指南](references/visual-guidelines.md)
 
 ## 输出格式
+
 严格按照 output.schema.json 中定义的 JSON 格式输出。
 ```
 
 #### PLUGIN.md frontmatter 字段说明
 
-| 字段 | 必填 | 说明 |
-|------|------|------|
-| `name` | ✅ | 插件/Runtime 唯一标识，小写加连字符 |
-| `description` | ✅ | 激活时机说明，框架启动时加载用于判断是否激活 |
-| `priority` | ✅（Runtime）| 执行优先级 0–1000 |
-| `pluginType` | 插件级 | `plugin` 或 `core-plugin`，默认 `plugin` |
-| `version` | ❌ | 语义化版本号 |
-| `model` | ❌ | 绑定模型，不填继承系统默认 |
-| `trigger` | ❌ | 触发配置，不填默认 `auto` |
-| `tools` | ❌ | 工具声明，不填默认无工具 |
-| `input` | ❌ | 上下文输入声明 |
-| `output` | ❌ | 输出格式声明 |
-| `i18n` | ❌ | 多语言绑定，指向对应语言的 PLUGIN 文件 |
+| 字段          | 必填          | 说明                                         |
+| ------------- | ------------- | -------------------------------------------- |
+| `name`        | ✅            | 插件/Runtime 唯一标识，小写加连字符          |
+| `description` | ✅            | 激活时机说明，框架启动时加载用于判断是否激活 |
+| `priority`    | ✅（Runtime） | 执行优先级 0–1000                            |
+| `pluginType`  | 插件级        | `plugin` 或 `core-plugin`，默认 `plugin`     |
+| `version`     | ❌            | 语义化版本号                                 |
+| `model`       | ❌            | 绑定模型，不填继承系统默认                   |
+| `trigger`     | ❌            | 触发配置，不填默认 `auto`                    |
+| `tools`       | ❌            | 工具声明，不填默认无工具                     |
+| `input`       | ❌            | 上下文输入声明                               |
+| `output`      | ❌            | 输出格式声明                                 |
+| `i18n`        | ❌            | 多语言绑定，指向对应语言的 PLUGIN 文件       |
 
 ---
 
@@ -223,6 +227,7 @@ output:
 ### 4.1 默认上下文
 
 每个 Runtime 的上下文默认包含：
+
 - 当前 Turn 的 narrator 输出（Narrator Runtime 之后的 Runtime 才可用）
 - 玩家当前的输入消息
 - 框架提供的基础变量（session info、turn number 等）
@@ -238,9 +243,9 @@ output:
 ```yaml
 input:
   inject:
-    - from: narrator/main       # pluginId/runtimeId
+    - from: narrator/main # pluginId/runtimeId
       field: narrativeOutput
-      as: "<narrator-output>"   # 包裹的 XML 标签名
+      as: "<narrator-output>" # 包裹的 XML 标签名
 ```
 
 **方式二：工具调用访问（`tools`）**
@@ -251,7 +256,7 @@ input:
 input:
   tools:
     - plugin: states-plugin
-      runtime: character-state   # 可访问当前及历史数据
+      runtime: character-state # 可访问当前及历史数据
 ```
 
 ### 4.3 References 的关键词触发（借鉴 ST World Info）
@@ -265,6 +270,7 @@ keywords: [龙族, 龙鳞, 上古战争, Drakon]
 ---
 
 # 龙族历史
+
 ...
 ```
 
@@ -276,25 +282,25 @@ keywords: [龙族, 龙鳞, 上古战争, Drakon]
 
 框架统一注册所有工具，模型侧看到的是统一的 tools 列表，不感知来源：
 
-| 来源 | 声明方式 |
-|------|---------|
-| 框架内置工具 | `tools.builtin` 中按 id 引用 |
+| 来源         | 声明方式                       |
+| ------------ | ------------------------------ |
+| 框架内置工具 | `tools.builtin` 中按 id 引用   |
 | 插件私有工具 | `tools.local` 中按相对路径引用 |
 
 ### 5.2 框架内置工具（核心集）
 
 内置工具保持最小化，覆盖最常见场景：
 
-| 工具 ID | 功能 |
-|---------|------|
-| `get-game-context` | 获取当前游戏上下文摘要 |
-| `get-narrator-output` | 获取 narrator 当前/历史输出 |
-| `get-character-state` | 获取角色状态表数据 |
-| `get-scene-info` | 获取当前场景信息 |
-| `get-runtime-result` | 获取任意 Runtime 的当前或历史结果 |
-| `update-state` | 更新状态表中的字段 |
-| `query-table` | 查询动态表单数据 |
-| `emit-event` | 向事件总线发送事件 |
+| 工具 ID               | 功能                              |
+| --------------------- | --------------------------------- |
+| `get-game-context`    | 获取当前游戏上下文摘要            |
+| `get-narrator-output` | 获取 narrator 当前/历史输出       |
+| `get-character-state` | 获取角色状态表数据                |
+| `get-scene-info`      | 获取当前场景信息                  |
+| `get-runtime-result`  | 获取任意 Runtime 的当前或历史结果 |
+| `update-state`        | 更新状态表中的字段                |
+| `query-table`         | 查询动态表单数据                  |
+| `emit-event`          | 向事件总线发送事件                |
 
 ### 5.3 插件私有工具格式与注册机制
 
@@ -322,30 +328,33 @@ covel_states_plugin_character_state_get_character_hp
 
 ```js
 // tools/fetch-style-reference.js  (ESM，零构建)
-import { tool } from 'covel/sdk'
+import { tool } from "covel/sdk";
 
 // tool() 自动完成：
 // 1. 从参数定义生成 JSON Schema
 // 2. 注册为 covel_image_workflow_prompt_optimizer_fetch_style_reference
 // 3. 将函数包装为框架统一可调用格式
-export default tool({
-  description: "根据风格名称获取视觉参考资料，用于优化图像生成提示词",
-  parameters: {
-    style: {
-      type: "string",
-      description: "风格名称，如 anime、realistic、watercolor"
+export default tool(
+  {
+    description: "根据风格名称获取视觉参考资料，用于优化图像生成提示词",
+    parameters: {
+      style: {
+        type: "string",
+        description: "风格名称，如 anime、realistic、watercolor",
+      },
+      limit: {
+        type: "number",
+        description: "返回结果数量",
+        default: 3,
+      },
     },
-    limit: {
-      type: "number",
-      description: "返回结果数量",
-      default: 3
-    }
-  }
-}, async ({ style, limit }) => {
-  // 具体实现，直接写业务逻辑
-  const results = await fetchStyleData(style, limit)
-  return { references: results }
-})
+  },
+  async ({ style, limit }) => {
+    // 具体实现，直接写业务逻辑
+    const results = await fetchStyleData(style, limit);
+    return { references: results };
+  },
+);
 ```
 
 **框架如何处理 `tool()` 的返回值：**
@@ -382,6 +391,7 @@ def fetch_style_reference(
 ```
 
 Python 的 `@tool` 装饰器做的事情与 JS 的 `tool()` 完全相同：
+
 - 从类型注解（`str`、`int`）自动推导 JSON Schema 参数类型
 - 从 docstring 和参数注释提取描述
 - 自动注册到框架工具注册表
@@ -434,6 +444,7 @@ Runtime 声明 tools.local: ["./tools/fetch-style-reference.js"]
 ```
 
 这份记录：
+
 - 其他 Runtime 可通过 `get-runtime-result` 工具查询（当前 Turn 及历史）
 - 作为审批管线的审计日志
 - 作为 Audit Plugin 进行冲突裁决的输入依据
@@ -499,30 +510,49 @@ Runtime 声明 tools.local: ["./tools/fetch-style-reference.js"]
 ```json
 {
   "ui": [
-    { "type": "stat-bar", "label": "HP", "value": 80, "max": 100, "color": "red" },
-    { "type": "card", "title": "任务完成", "body": "你找到了失落的宝剑", "icon": "sword" },
-    { "type": "choice-list", "prompt": "你要怎么做？", "options": ["攻击", "逃跑", "谈判"] },
+    {
+      "type": "stat-bar",
+      "label": "HP",
+      "value": 80,
+      "max": 100,
+      "color": "red"
+    },
+    {
+      "type": "card",
+      "title": "任务完成",
+      "body": "你找到了失落的宝剑",
+      "icon": "sword"
+    },
+    {
+      "type": "choice-list",
+      "prompt": "你要怎么做？",
+      "options": ["攻击", "逃跑", "谈判"]
+    },
     { "type": "image", "url": "...", "caption": "黑暗森林入口" },
     { "type": "table", "columns": ["道具", "数量"], "rows": [["治疗药水", 3]] },
-    { "type": "notification", "level": "warning", "message": "你的 HP 低于 20%" }
+    {
+      "type": "notification",
+      "level": "warning",
+      "message": "你的 HP 低于 20%"
+    }
   ]
 }
 ```
 
 框架内置的预定义组件类型（初始集合，持续扩展）：
 
-| 组件 type | 用途 |
-|-----------|------|
-| `stat-bar` | 属性条（HP、MP、经验等）|
-| `card` | 通用信息卡片 |
-| `choice-list` | 玩家选项列表 |
-| `image` | 图片展示 |
-| `table` | 数据表格 |
-| `notification` | 系统通知/警告 |
-| `dialog` | 人物对话气泡 |
-| `inventory` | 道具栏 |
-| `map-marker` | 地图标记 |
-| `progress` | 任务/进度展示 |
+| 组件 type      | 用途                     |
+| -------------- | ------------------------ |
+| `stat-bar`     | 属性条（HP、MP、经验等） |
+| `card`         | 通用信息卡片             |
+| `choice-list`  | 玩家选项列表             |
+| `image`        | 图片展示                 |
+| `table`        | 数据表格                 |
+| `notification` | 系统通知/警告            |
+| `dialog`       | 人物对话气泡             |
+| `inventory`    | 道具栏                   |
+| `map-marker`   | 地图标记                 |
+| `progress`     | 任务/进度展示            |
 
 **第二层：玩家自定义组件扩展**
 
@@ -583,6 +613,7 @@ trigger:
 ```
 
 回调既可以是：
+
 - **轻量回调**：执行一个 JS/Python 脚本函数
 - **完整 Runtime**：触发完整的 LLM Agent 流程（工具调用、结构化输出等）
 
@@ -616,16 +647,37 @@ trigger:
   "table": "character",
   "field": "hp",
   "changeLog": [
-    { "value": 100, "changedBy": "states-plugin/init",    "turnId": "pre-game", "timestamp": "..." },
-    { "value": 80,  "changedBy": "combat-plugin/resolver", "turnId": "turn-5",   "reason": "受到 20 点伤害" },
-    { "value": 75,  "changedBy": "status-effects/poison",  "turnId": "turn-5",   "reason": "毒素 5 点" },
-    { "value": 95,  "changedBy": "item-plugin/heal",       "turnId": "turn-6",   "reason": "使用治疗药水" }
+    {
+      "value": 100,
+      "changedBy": "states-plugin/init",
+      "turnId": "pre-game",
+      "timestamp": "..."
+    },
+    {
+      "value": 80,
+      "changedBy": "combat-plugin/resolver",
+      "turnId": "turn-5",
+      "reason": "受到 20 点伤害"
+    },
+    {
+      "value": 75,
+      "changedBy": "status-effects/poison",
+      "turnId": "turn-5",
+      "reason": "毒素 5 点"
+    },
+    {
+      "value": 95,
+      "changedBy": "item-plugin/heal",
+      "turnId": "turn-6",
+      "reason": "使用治疗药水"
+    }
   ],
   "currentValue": 95
 }
 ```
 
 变更历史用途：
+
 - **审计**：可追溯每个字段值的完整变更来源
 - **Audit Plugin 裁决依据**：冲突发生时可查看历史变更模式
 - **调试**：开发插件时快速定位非预期的状态变化
@@ -733,11 +785,11 @@ config:
 
 当工具调用需要授权时，前端展示三个选项：
 
-| 选项 | 效果 |
-|------|------|
-| **本次放行** | 仅本次调用放行，下次同一工具再次触发审批 |
-| **Session 内永久放行** | 本 session 内该工具的所有调用自动放行，记录到持久化审批策略 |
-| **拒绝** | 本次拒绝，框架将拒绝结果作为工具返回值传回 Runtime，Runtime 自行处理降级逻辑 |
+| 选项                   | 效果                                                                         |
+| ---------------------- | ---------------------------------------------------------------------------- |
+| **本次放行**           | 仅本次调用放行，下次同一工具再次触发审批                                     |
+| **Session 内永久放行** | 本 session 内该工具的所有调用自动放行，记录到持久化审批策略                  |
+| **拒绝**               | 本次拒绝，框架将拒绝结果作为工具返回值传回 Runtime，Runtime 自行处理降级逻辑 |
 
 ### 11.4 审批状态的持久化
 
@@ -763,9 +815,9 @@ Session 内永久放行的策略在 session 结束后自动清除，不跨 sessi
 ```yaml
 # 工具权限配置
 permissions:
-  "builtin:*": allow          # 所有内置工具放行
-  "third-party:*": ask        # 第三方工具询问
-  "local:*": allow            # 本插件私有工具放行
+  "builtin:*": allow # 所有内置工具放行
+  "third-party:*": ask # 第三方工具询问
+  "local:*": allow # 本插件私有工具放行
 ```
 
 **当前实现策略**：代码结构中预留完整的审批管线（每次工具调用都经过管线），内置工具默认 `allow` 直接通过，不阻塞。管线代码骨架存在，暂不实现前端弹窗交互，默认全部放行。未来接入第三方工具时开启弹窗逻辑。
@@ -830,11 +882,11 @@ permissions:
 
 ### 16.2 测试分层
 
-| 测试类型 | 目录 | 说明 |
-|---------|------|------|
-| Schema 测试 | `tests/unit/` | 验证 output.schema.json 格式正确性 |
-| 集成测试 | `tests/integration/` | 使用 mock 数据测试 Runtime 完整流程 |
-| 真实模型测试 | `tests/e2e/` | 调用真实 LLM，验证输出符合预期 |
+| 测试类型     | 目录                 | 说明                                |
+| ------------ | -------------------- | ----------------------------------- |
+| Schema 测试  | `tests/unit/`        | 验证 output.schema.json 格式正确性  |
+| 集成测试     | `tests/integration/` | 使用 mock 数据测试 Runtime 完整流程 |
+| 真实模型测试 | `tests/e2e/`         | 调用真实 LLM，验证输出符合预期      |
 
 ### 16.3 独立 API 测试
 
@@ -855,17 +907,17 @@ POST /api/runtime/invoke
 
 框架提供统一的 HTTP API，所有前端 UI 操作都通过 API 完成：
 
-| 端点 | 功能 |
-|------|------|
-| `POST /session/start` | 启动新游戏 session（触发 Pre-Game） |
-| `POST /session/:id/turn` | 玩家发起一次操作（触发完整 Turn） |
-| `GET /session/:id/results` | 获取当前 Turn 所有 Runtime 的结果 |
-| `GET /plugins` | 获取所有已加载插件列表 |
-| `GET /plugins/:id/config` | 获取插件配置 schema |
-| `PATCH /plugins/:id/config` | 更新插件配置 |
-| `POST /runtime/invoke` | 独立调用单个 Runtime（测试用）|
-| `GET /events/subscribe` | SSE 订阅事件流（前端实时更新） |
-| `POST /events/emit` | 外部向框架发送事件 |
+| 端点                        | 功能                                |
+| --------------------------- | ----------------------------------- |
+| `POST /session/start`       | 启动新游戏 session（触发 Pre-Game） |
+| `POST /session/:id/turn`    | 玩家发起一次操作（触发完整 Turn）   |
+| `GET /session/:id/results`  | 获取当前 Turn 所有 Runtime 的结果   |
+| `GET /plugins`              | 获取所有已加载插件列表              |
+| `GET /plugins/:id/config`   | 获取插件配置 schema                 |
+| `PATCH /plugins/:id/config` | 更新插件配置                        |
+| `POST /runtime/invoke`      | 独立调用单个 Runtime（测试用）      |
+| `GET /events/subscribe`     | SSE 订阅事件流（前端实时更新）      |
+| `POST /events/emit`         | 外部向框架发送事件                  |
 
 ---
 
@@ -875,15 +927,15 @@ POST /api/runtime/invoke
 
 **所有内容都需要持久化**，包括：
 
-| 数据类型 | 说明 |
-|---------|------|
-| Runtime 执行结果 | 每次 Runtime 的完整输出 + 状态 |
-| 工具调用记录 | 每次 tool call 的输入、输出、耗时、审批状态 |
-| 状态表数据 | Pre-Game 创建的所有动态表单数据 |
-| 事件记录 | 所有 emit/receive 的事件历史 |
-| Session 信息 | session 元信息、Turn 序列、玩家操作历史 |
-| 审批记录 | 每次工具调用的审批决策 |
-| 日志 | 完整的 Runtime 执行日志 |
+| 数据类型         | 说明                                        |
+| ---------------- | ------------------------------------------- |
+| Runtime 执行结果 | 每次 Runtime 的完整输出 + 状态              |
+| 工具调用记录     | 每次 tool call 的输入、输出、耗时、审批状态 |
+| 状态表数据       | Pre-Game 创建的所有动态表单数据             |
+| 事件记录         | 所有 emit/receive 的事件历史                |
+| Session 信息     | session 元信息、Turn 序列、玩家操作历史     |
+| 审批记录         | 每次工具调用的审批决策                      |
+| 日志             | 完整的 Runtime 执行日志                     |
 
 ### 18.2 存储分层
 
@@ -946,14 +998,17 @@ trigger:
 你是一个游戏状态裁判 agent。
 
 ## 冲突信息
+
 本轮发生了以下写冲突：
 {{ inputs.conflicts | xml }}
 
 ## 你的任务
+
 分析每个冲突的上下文，基于游戏逻辑和叙事合理性，决定最终应采用哪个值。
 对于每个冲突字段，输出最终值和裁决理由。
 
 ## 裁决原则
+
 - 优先保留对玩家体验影响更大的变更
 - 如果两个变更都合理，尝试合并（如 HP 同时被两个 Runtime 扣减，则叠加扣减）
 - 如果无法合并，优先采用优先级更高的 Runtime 的结果
@@ -1023,8 +1078,8 @@ Turn 卡住等待审批时，前端需要提供清晰的视觉反馈：
 # 状态表历史配置（可在框架全局配置中覆盖）
 stateHistory:
   mode: sliding-window
-  windowSize: 100        # 每个字段最多保留最近 100 条变更记录
-  keepSessionBoundary: true  # session 开始时的初始值永久保留，不受窗口限制
+  windowSize: 100 # 每个字段最多保留最近 100 条变更记录
+  keepSessionBoundary: true # session 开始时的初始值永久保留，不受窗口限制
 ```
 
 设计理由：LLM 驱动的游戏状态字段数量有限（通常几十个），每个字段每 Turn 最多变更一次，100 条窗口对于大多数游戏场景完全足够审计和调试。Session 边界值（初始状态）永久保留，确保始终可以重建完整的变更链。

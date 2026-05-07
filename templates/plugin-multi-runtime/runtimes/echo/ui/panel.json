@@ -29,7 +29,10 @@
               {
                 "component": "Text",
                 "props": {
-                  "content": { "zh": "{{pluginName}} 示例插件", "en": "{{pluginName}} demo plugin" },
+                  "content": {
+                    "zh": "{{pluginName}} 示例插件",
+                    "en": "{{pluginName}} demo plugin"
+                  },
                   "weight": "bold",
                   "size": "sm"
                 }

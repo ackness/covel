@@ -14,14 +14,14 @@
 
 参考 VoltAgent 的 `createTool` 设计，结合需求文档中的 `tool()` 接口：
 
-```typescript
+````typescript
 // @covel/tools — 公共 SDK 导出为 covel/sdk
 
-import { z, type ZodSchema } from 'zod';
+import { z, type ZodSchema } from "zod";
 
 export interface ToolDefinitionInput<
   TParams extends ZodSchema = ZodSchema,
-  TOutput = unknown
+  TOutput = unknown,
 > {
   /** 工具描述（注入 LLM 的 function calling description） */
   description: string;
@@ -32,7 +32,7 @@ export interface ToolDefinitionInput<
   /** 执行函数 */
   execute: (
     params: z.infer<TParams>,
-    context: ToolExecutionContext
+    context: ToolExecutionContext,
   ) => Promise<TOutput>;
 }
 
@@ -51,18 +51,18 @@ export interface ToolExecutionContext {
 
 /**
  * 定义一个工具。
- * 
+ *
  * 框架自动完成：
  * 1. 从 Zod schema 生成 JSON Schema（用于 LLM function calling）
  * 2. 运行时参数验证
  * 3. 注册到工具注册表
  * 4. 生成命名：covel_{plugin}_{runtime}_{fn}
- * 
+ *
  * @example
  * ```typescript
  * import { tool } from 'covel/sdk';
  * import { z } from 'zod';
- * 
+ *
  * export default tool({
  *   description: "获取角色当前状态",
  *   parameters: z.object({
@@ -76,30 +76,36 @@ export interface ToolExecutionContext {
  * ```
  */
 export function tool<TParams extends ZodSchema, TOutput>(
-  definition: ToolDefinitionInput<TParams, TOutput>
+  definition: ToolDefinitionInput<TParams, TOutput>,
 ): ToolModule<TParams, TOutput>;
 
 /** tool() 返回的标准化工具模块 */
-export interface ToolModule<TParams extends ZodSchema = ZodSchema, TOutput = unknown> {
-  readonly _type: 'covel-tool';
+export interface ToolModule<
+  TParams extends ZodSchema = ZodSchema,
+  TOutput = unknown,
+> {
+  readonly _type: "covel-tool";
   readonly description: string;
   readonly parametersSchema: TParams;
   readonly outputSchema?: ZodSchema<TOutput>;
   readonly jsonSchema: Record<string, unknown>; // 从 Zod 转换的 JSON Schema
-  execute(params: z.infer<TParams>, context: ToolExecutionContext): Promise<TOutput>;
+  execute(
+    params: z.infer<TParams>,
+    context: ToolExecutionContext,
+  ): Promise<TOutput>;
 }
-```
+````
 
 ### Zod → JSON Schema 转换
 
 使用 `zod-to-json-schema` 库将 Zod schema 转换为标准 JSON Schema，适配不同 LLM provider 格式：
 
 ```typescript
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { zodToJsonSchema } from "zod-to-json-schema";
 
 function toOpenAITool(tool: ToolModule, fullName: string): OpenAIToolDef {
   return {
-    type: 'function',
+    type: "function",
     function: {
       name: fullName,
       description: tool.description,
@@ -148,7 +154,7 @@ export interface ResolvedTool {
   /** 工具模块 */
   module: ToolModule;
   /** 来源 */
-  source: 'builtin' | 'local';
+  source: "builtin" | "local";
   /** 是否需要审批 */
   requiresApproval: boolean;
 }
@@ -156,17 +162,17 @@ export interface ResolvedTool {
 export interface ToolRegistry {
   /** 注册工具 */
   register(tool: ResolvedTool): void;
-  
+
   /** 按完整名称查找 */
   getByFullName(fullName: string): ResolvedTool | undefined;
-  
+
   /** 获取某个 Runtime 可使用的所有工具 */
   getToolsForRuntime(
     pluginId: string,
     runtimeId: string,
-    manifest: RuntimeManifest
+    manifest: RuntimeManifest,
   ): ResolvedTool[];
-  
+
   /** 卸载某个插件的所有工具 */
   unregisterPlugin(pluginId: string): void;
 }
@@ -231,16 +237,16 @@ export default tool({
 
 ### 内置工具清单
 
-| 工具 ID | 功能 | 读/写 |
-|---------|------|-------|
-| `get-game-context` | 游戏上下文摘要 | 读 |
-| `get-narrator-output` | Narrator 输出 | 读 |
-| `get-character-state` | 角色状态表 | 读 |
-| `get-scene-info` | 当前场景信息 | 读 |
-| `get-runtime-result` | 任意 Runtime 结果 | 读 |
-| `update-state` | 更新状态表字段 | 写 |
-| `query-table` | 查询动态表单数据 | 读 |
-| `emit-event` | 发送事件 | 写 |
+| 工具 ID               | 功能              | 读/写 |
+| --------------------- | ----------------- | ----- |
+| `get-game-context`    | 游戏上下文摘要    | 读    |
+| `get-narrator-output` | Narrator 输出     | 读    |
+| `get-character-state` | 角色状态表        | 读    |
+| `get-scene-info`      | 当前场景信息      | 读    |
+| `get-runtime-result`  | 任意 Runtime 结果 | 读    |
+| `update-state`        | 更新状态表字段    | 写    |
+| `query-table`         | 查询动态表单数据  | 读    |
+| `emit-event`          | 发送事件          | 写    |
 
 写操作工具（`update-state`、`emit-event`）走审批管线。
 
@@ -251,12 +257,16 @@ export default tool({
 ```typescript
 export interface ToolCallRecorder {
   record(entry: ToolCallRecord): Promise<void>;
-  
+
   /** 查询某个 Turn 的所有工具调用 */
   getByTurn(turnId: string): Promise<ToolCallRecord[]>;
-  
+
   /** 查询某个 Runtime 的工具调用 */
-  getByRuntime(pluginId: string, runtimeId: string, turnId: string): Promise<ToolCallRecord[]>;
+  getByRuntime(
+    pluginId: string,
+    runtimeId: string,
+    turnId: string,
+  ): Promise<ToolCallRecord[]>;
 }
 ```
 
@@ -271,14 +281,17 @@ export interface OutputSchemaLoader {
    * 1. 如果 manifest.output.schema 指定了路径 → 加载 JSON Schema 文件
    * 2. 如果未指定 → 使用默认 schema（自由 object）
    */
-  load(manifest: RuntimeManifest, pluginDir: string): Promise<Record<string, unknown>>;
+  load(
+    manifest: RuntimeManifest,
+    pluginDir: string,
+  ): Promise<Record<string, unknown>>;
 }
 ```
 
 ### 4.6.2 输出验证
 
 ```typescript
-import Ajv from 'ajv';
+import Ajv from "ajv";
 
 export interface OutputValidator {
   /**
@@ -298,16 +311,18 @@ export interface ValidationResult {
 
 根据模型能力选择不同策略：
 
-```typescript
-export type StructuredOutputStrategy = 
-  | 'native'     // 模型原生支持 response_format（GPT-4o、Claude 3.5+）
-  | 'prompt';    // 不支持时，在 prompt 中注入 schema 描述
+````typescript
+export type StructuredOutputStrategy =
+  | "native" // 模型原生支持 response_format（GPT-4o、Claude 3.5+）
+  | "prompt"; // 不支持时，在 prompt 中注入 schema 描述
 
-export function selectStrategy(modelCapabilities: ModelCapabilities): StructuredOutputStrategy;
+export function selectStrategy(
+  modelCapabilities: ModelCapabilities,
+): StructuredOutputStrategy;
 
 /**
  * prompt 策略时注入的指令模板：
- * 
+ *
  * ## Output Format
  * You MUST respond with valid JSON matching this schema:
  * ```json
@@ -315,7 +330,7 @@ export function selectStrategy(modelCapabilities: ModelCapabilities): Structured
  * ```
  * Do not include any text outside the JSON object.
  */
-```
+````
 
 ### 4.6.4 输出验证失败重试
 
@@ -368,9 +383,9 @@ export interface RuntimeResultEnvelope {
 ```typescript
 // covel/sdk (package.json exports)
 
-export { tool } from '@covel/tools';
-export type { ToolExecutionContext, ToolModule } from '@covel/tools';
-export { z } from 'zod'; // 重导出 Zod 方便使用
+export { tool } from "@covel/tools";
+export type { ToolExecutionContext, ToolModule } from "@covel/tools";
+export { z } from "zod"; // 重导出 Zod 方便使用
 ```
 
 ## 4.9 验收标准

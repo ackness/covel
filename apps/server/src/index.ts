@@ -13,13 +13,13 @@ const port = readRuntimeEnv().serverPort;
 console.log(`Starting server on port ${port}...`);
 
 const server = serve(
-	{
-		fetch: app.fetch,
-		port,
-	},
-	(info) => {
-		console.log(`Server running at http://localhost:${info.port}`);
-	},
+  {
+    fetch: app.fetch,
+    port,
+  },
+  (info) => {
+    console.log(`Server running at http://localhost:${info.port}`);
+  },
 );
 
 registerGracefulShutdown(server);

@@ -52,13 +52,76 @@
                 "component": "Row",
                 "props": { "gap": "xs", "align": "center" },
                 "children": [
-                  { "component": "Icon", "props": { "name": { "$state": "/category1Icon" }, "size": "xs" } },
-                  { "component": "Badge", "props": { "label": { "$state": "/category1Label" }, "color": { "$state": "/category1Color" } } }
+                  {
+                    "component": "Icon",
+                    "props": {
+                      "name": { "$state": "/category1Icon" },
+                      "size": "xs"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$state": "/category1Label" },
+                      "color": { "$state": "/category1Color" }
+                    }
+                  }
                 ]
               },
-              { "component": "Button", "visible": { "$state": "/category1Suggestion1" }, "props": { "label": { "$state": "/category1Suggestion1" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category1Suggestion1" }, "selectionGroup": "guide:category1" } } } },
-              { "component": "Button", "visible": { "$state": "/category1Suggestion2" }, "props": { "label": { "$state": "/category1Suggestion2" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category1Suggestion2" }, "selectionGroup": "guide:category1" } } } },
-              { "component": "Button", "visible": { "$state": "/category1Suggestion3" }, "props": { "label": { "$state": "/category1Suggestion3" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category1Suggestion3" }, "selectionGroup": "guide:category1" } } } }
+              {
+                "component": "Button",
+                "visible": { "$state": "/category1Suggestion1" },
+                "props": {
+                  "label": { "$state": "/category1Suggestion1" },
+                  "variant": "ghost",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "draftMessage",
+                    "params": {
+                      "text": { "$state": "/category1Suggestion1" },
+                      "selectionGroup": "guide:category1"
+                    }
+                  }
+                }
+              },
+              {
+                "component": "Button",
+                "visible": { "$state": "/category1Suggestion2" },
+                "props": {
+                  "label": { "$state": "/category1Suggestion2" },
+                  "variant": "ghost",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "draftMessage",
+                    "params": {
+                      "text": { "$state": "/category1Suggestion2" },
+                      "selectionGroup": "guide:category1"
+                    }
+                  }
+                }
+              },
+              {
+                "component": "Button",
+                "visible": { "$state": "/category1Suggestion3" },
+                "props": {
+                  "label": { "$state": "/category1Suggestion3" },
+                  "variant": "ghost",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "draftMessage",
+                    "params": {
+                      "text": { "$state": "/category1Suggestion3" },
+                      "selectionGroup": "guide:category1"
+                    }
+                  }
+                }
+              }
             ]
           },
           {
@@ -70,13 +133,76 @@
                 "component": "Row",
                 "props": { "gap": "xs", "align": "center" },
                 "children": [
-                  { "component": "Icon", "props": { "name": { "$state": "/category2Icon" }, "size": "xs" } },
-                  { "component": "Badge", "props": { "label": { "$state": "/category2Label" }, "color": { "$state": "/category2Color" } } }
+                  {
+                    "component": "Icon",
+                    "props": {
+                      "name": { "$state": "/category2Icon" },
+                      "size": "xs"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$state": "/category2Label" },
+                      "color": { "$state": "/category2Color" }
+                    }
+                  }
                 ]
               },
-              { "component": "Button", "visible": { "$state": "/category2Suggestion1" }, "props": { "label": { "$state": "/category2Suggestion1" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category2Suggestion1" }, "selectionGroup": "guide:category2" } } } },
-              { "component": "Button", "visible": { "$state": "/category2Suggestion2" }, "props": { "label": { "$state": "/category2Suggestion2" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category2Suggestion2" }, "selectionGroup": "guide:category2" } } } },
-              { "component": "Button", "visible": { "$state": "/category2Suggestion3" }, "props": { "label": { "$state": "/category2Suggestion3" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category2Suggestion3" }, "selectionGroup": "guide:category2" } } } }
+              {
+                "component": "Button",
+                "visible": { "$state": "/category2Suggestion1" },
+                "props": {
+                  "label": { "$state": "/category2Suggestion1" },
+                  "variant": "ghost",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "draftMessage",
+                    "params": {
+                      "text": { "$state": "/category2Suggestion1" },
+                      "selectionGroup": "guide:category2"
+                    }
+                  }
+                }
+              },
+              {
+                "component": "Button",
+                "visible": { "$state": "/category2Suggestion2" },
+                "props": {
+                  "label": { "$state": "/category2Suggestion2" },
+                  "variant": "ghost",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "draftMessage",
+                    "params": {
+                      "text": { "$state": "/category2Suggestion2" },
+                      "selectionGroup": "guide:category2"
+                    }
+                  }
+                }
+              },
+              {
+                "component": "Button",
+                "visible": { "$state": "/category2Suggestion3" },
+                "props": {
+                  "label": { "$state": "/category2Suggestion3" },
+                  "variant": "ghost",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "draftMessage",
+                    "params": {
+                      "text": { "$state": "/category2Suggestion3" },
+                      "selectionGroup": "guide:category2"
+                    }
+                  }
+                }
+              }
             ]
           },
           {
@@ -88,13 +214,76 @@
                 "component": "Row",
                 "props": { "gap": "xs", "align": "center" },
                 "children": [
-                  { "component": "Icon", "props": { "name": { "$state": "/category3Icon" }, "size": "xs" } },
-                  { "component": "Badge", "props": { "label": { "$state": "/category3Label" }, "color": { "$state": "/category3Color" } } }
+                  {
+                    "component": "Icon",
+                    "props": {
+                      "name": { "$state": "/category3Icon" },
+                      "size": "xs"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$state": "/category3Label" },
+                      "color": { "$state": "/category3Color" }
+                    }
+                  }
                 ]
               },
-              { "component": "Button", "visible": { "$state": "/category3Suggestion1" }, "props": { "label": { "$state": "/category3Suggestion1" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category3Suggestion1" }, "selectionGroup": "guide:category3" } } } },
-              { "component": "Button", "visible": { "$state": "/category3Suggestion2" }, "props": { "label": { "$state": "/category3Suggestion2" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category3Suggestion2" }, "selectionGroup": "guide:category3" } } } },
-              { "component": "Button", "visible": { "$state": "/category3Suggestion3" }, "props": { "label": { "$state": "/category3Suggestion3" }, "variant": "ghost", "size": "compact" }, "on": { "click": { "action": "draftMessage", "params": { "text": { "$state": "/category3Suggestion3" }, "selectionGroup": "guide:category3" } } } }
+              {
+                "component": "Button",
+                "visible": { "$state": "/category3Suggestion1" },
+                "props": {
+                  "label": { "$state": "/category3Suggestion1" },
+                  "variant": "ghost",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "draftMessage",
+                    "params": {
+                      "text": { "$state": "/category3Suggestion1" },
+                      "selectionGroup": "guide:category3"
+                    }
+                  }
+                }
+              },
+              {
+                "component": "Button",
+                "visible": { "$state": "/category3Suggestion2" },
+                "props": {
+                  "label": { "$state": "/category3Suggestion2" },
+                  "variant": "ghost",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "draftMessage",
+                    "params": {
+                      "text": { "$state": "/category3Suggestion2" },
+                      "selectionGroup": "guide:category3"
+                    }
+                  }
+                }
+              },
+              {
+                "component": "Button",
+                "visible": { "$state": "/category3Suggestion3" },
+                "props": {
+                  "label": { "$state": "/category3Suggestion3" },
+                  "variant": "ghost",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "draftMessage",
+                    "params": {
+                      "text": { "$state": "/category3Suggestion3" },
+                      "selectionGroup": "guide:category3"
+                    }
+                  }
+                }
+              }
             ]
           },
           {
@@ -105,8 +294,18 @@
                 "component": "Row",
                 "props": { "gap": "sm", "align": "center" },
                 "children": [
-                  { "component": "Icon", "props": { "name": "pen-line", "size": "xs" } },
-                  { "component": "Text", "props": { "content": { "zh": "自定义行动", "en": "Custom action" }, "weight": "bold", "size": "sm" } }
+                  {
+                    "component": "Icon",
+                    "props": { "name": "pen-line", "size": "xs" }
+                  },
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "zh": "自定义行动", "en": "Custom action" },
+                      "weight": "bold",
+                      "size": "sm"
+                    }
+                  }
                 ]
               },
               {
@@ -140,7 +339,10 @@
                 "on": {
                   "click": {
                     "action": "draftMessage",
-                    "params": { "text": { "$bindState": "/customText" }, "selectionGroup": "guide:custom" }
+                    "params": {
+                      "text": { "$bindState": "/customText" },
+                      "selectionGroup": "guide:custom"
+                    }
                   }
                 }
               }

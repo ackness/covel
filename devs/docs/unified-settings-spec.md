@@ -11,13 +11,13 @@
 
 Settings are currently spread across 5 files and 4 storage media with no unified API:
 
-| Storage | Contents |
-|---|---|
-| `localStorage` (12+ keys) | locale, appearance, slot config, custom presets, param overrides, capability overrides, provider keys (fallback), runtime priority, runtime bindings (per-session), onboarded flag, migration/storage-mode flags |
-| Electron IPC → `~/.covel/keys.env` | API keys (desktop) |
-| REST `/api/config/keys` → `~/.covel/keys.env` | API keys (Tauri / self-host) |
-| `~/.covel/llm.toml` | Slot / provider definitions |
-| IndexedDB `covel-app` | Game data (not settings — out of scope) |
+| Storage                                       | Contents                                                                                                                                                                                                         |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `localStorage` (12+ keys)                     | locale, appearance, slot config, custom presets, param overrides, capability overrides, provider keys (fallback), runtime priority, runtime bindings (per-session), onboarded flag, migration/storage-mode flags |
+| Electron IPC → `~/.covel/keys.env`            | API keys (desktop)                                                                                                                                                                                               |
+| REST `/api/config/keys` → `~/.covel/keys.env` | API keys (Tauri / self-host)                                                                                                                                                                                     |
+| `~/.covel/llm.toml`                           | Slot / provider definitions                                                                                                                                                                                      |
+| IndexedDB `covel-app`                         | Game data (not settings — out of scope)                                                                                                                                                                          |
 
 Consequences:
 
@@ -49,12 +49,12 @@ Consequences:
 
 Four files coexist under `<covelHome>/` (desktop) or browser-equivalent:
 
-| File | Content | Format | Access |
-|---|---|---|---|
-| `keys.env` | API keys | KEY=value lines, mode 600 | IPC / REST (desktop); `localStorage` fallback (web) |
-| `llm.toml` | Slot / provider definitions | TOML | Hand-edit friendly; server-loaded |
-| `config.toml` | Desktop shell config (ports, paths) | TOML | Desktop shell |
-| **`settings.json`** | **Front-end user preferences (NEW)** | **JSON** | **Via unified SettingsStore** |
+| File                | Content                              | Format                    | Access                                              |
+| ------------------- | ------------------------------------ | ------------------------- | --------------------------------------------------- |
+| `keys.env`          | API keys                             | KEY=value lines, mode 600 | IPC / REST (desktop); `localStorage` fallback (web) |
+| `llm.toml`          | Slot / provider definitions          | TOML                      | Hand-edit friendly; server-loaded                   |
+| `config.toml`       | Desktop shell config (ports, paths)  | TOML                      | Desktop shell                                       |
+| **`settings.json`** | **Front-end user preferences (NEW)** | **JSON**                  | **Via unified SettingsStore**                       |
 
 ### `settings.json` shape
 
@@ -89,32 +89,32 @@ Only `entries` is authoritative data — `schemaVersion` / `savedAt` are metadat
 
 Every currently-stored key must be placed in one of these buckets:
 
-| Bucket | Backend | Exported by default? |
-|---|---|---|
-| User preference | `settings.json` / `localStorage` | Yes |
-| Secret (API keys) | `keys.env` | No (opt-in) |
-| Session state | `SessionRecord` / `plugin_data` | Never (per-session) |
-| Internal migration flag | `localStorage` outside settings | Never |
-| Deprecated | Deleted on first boot | N/A |
+| Bucket                  | Backend                          | Exported by default? |
+| ----------------------- | -------------------------------- | -------------------- |
+| User preference         | `settings.json` / `localStorage` | Yes                  |
+| Secret (API keys)       | `keys.env`                       | No (opt-in)          |
+| Session state           | `SessionRecord` / `plugin_data`  | Never (per-session)  |
+| Internal migration flag | `localStorage` outside settings  | Never                |
+| Deprecated              | Deleted on first boot            | N/A                  |
 
 ### 5.1 Current keys → new home
 
-| Current key | New home | Notes |
-|---|---|---|
-| `covel:locale` | `settings.ui.locale` | |
-| `covel:appearance` | `settings.ui.appearance` | |
-| `covel:onboardedVersion` | `settings.ui.onboardedVersion` | |
-| `covel:onboarded` | Delete | Legacy |
-| `covel:slotConfig` | `settings.llm.slotConfig` | |
-| `covel:customPresets` | `settings.llm.customPresets` | |
-| `covel:paramOverrides` | `settings.llm.paramOverrides` | |
-| `covel:capabilityOverrides` | `settings.llm.capabilityOverrides` | |
-| `covel:runtimePriority` | `settings.plugin.<pluginId>.runtime.<runtimeId>.priority` | Flattens into plugin namespace |
-| `covel:providerKeys` | `keys.env` (already has primary home); API surfaces as `settings.keys.<provider>` | Wrapped through SettingsStore but stored in `keys.env` |
-| `covel:runtimeBindings:<sessionId>` | `SessionRecord.runtimeModelOverrides` (field already exists server-side) | Delete localStorage key; UI reads from session state |
-| _(no legacy)_ | `settings.llm.prepRuntimeBindings` | New — pre-session runtime-to-slot map keyed by worldId. Transient: copied to `SessionRecord.runtimeModelOverrides` on session create, then cleared. |
-| `covel:storageMode` | Delete | Deprecated (always "remote") |
-| `covel:idbMigrated` | Keep (unrelated IDB migration flag) | Game-data migration, not settings |
+| Current key                         | New home                                                                          | Notes                                                                                                                                               |
+| ----------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `covel:locale`                      | `settings.ui.locale`                                                              |                                                                                                                                                     |
+| `covel:appearance`                  | `settings.ui.appearance`                                                          |                                                                                                                                                     |
+| `covel:onboardedVersion`            | `settings.ui.onboardedVersion`                                                    |                                                                                                                                                     |
+| `covel:onboarded`                   | Delete                                                                            | Legacy                                                                                                                                              |
+| `covel:slotConfig`                  | `settings.llm.slotConfig`                                                         |                                                                                                                                                     |
+| `covel:customPresets`               | `settings.llm.customPresets`                                                      |                                                                                                                                                     |
+| `covel:paramOverrides`              | `settings.llm.paramOverrides`                                                     |                                                                                                                                                     |
+| `covel:capabilityOverrides`         | `settings.llm.capabilityOverrides`                                                |                                                                                                                                                     |
+| `covel:runtimePriority`             | `settings.plugin.<pluginId>.runtime.<runtimeId>.priority`                         | Flattens into plugin namespace                                                                                                                      |
+| `covel:providerKeys`                | `keys.env` (already has primary home); API surfaces as `settings.keys.<provider>` | Wrapped through SettingsStore but stored in `keys.env`                                                                                              |
+| `covel:runtimeBindings:<sessionId>` | `SessionRecord.runtimeModelOverrides` (field already exists server-side)          | Delete localStorage key; UI reads from session state                                                                                                |
+| _(no legacy)_                       | `settings.llm.prepRuntimeBindings`                                                | New — pre-session runtime-to-slot map keyed by worldId. Transient: copied to `SessionRecord.runtimeModelOverrides` on session create, then cleared. |
+| `covel:storageMode`                 | Delete                                                                            | Deprecated (always "remote")                                                                                                                        |
+| `covel:idbMigrated`                 | Keep (unrelated IDB migration flag)                                               | Game-data migration, not settings                                                                                                                   |
 
 ### 5.2 Plugin-declared user settings
 
@@ -150,6 +150,7 @@ userSettings:
 ```
 
 On plugin load, the framework:
+
 1. Reads `userSettings` array.
 2. For each entry, registers `plugin.<pluginId>.<key>` in the settings registry with the declared schema, default, and UI metadata.
 3. Stores values under that key in `settings.json`.
@@ -160,7 +161,9 @@ Plugin runtimes read their own settings through the injected runtime context:
 // Inside a plugin runtime
 const style = ctx.settings.get("defaultStyle"); // scoped to this plugin; no pluginId needed
 await ctx.settings.set("defaultStyle", "realistic");
-ctx.settings.subscribe("defaultStyle", (v) => { /* react */ });
+ctx.settings.subscribe("defaultStyle", (v) => {
+  /* react */
+});
 ```
 
 The context wrapper automatically prefixes `plugin.<pluginId>.` — plugins never see the global namespace of other plugins' settings.
@@ -176,20 +179,31 @@ export type SettingKey = string; // e.g. "ui.locale", "plugin.image.defaultStyle
 
 export interface SettingEntry<T = unknown> {
   key: SettingKey;
-  schema: ZodSchema<T>;          // validates on set + on boot
+  schema: ZodSchema<T>; // validates on set + on boot
   default: T;
 
   // Grouping for UI
   group: "general" | "llm" | "plugin" | "desktop" | "data";
-  pluginId?: string;             // required when group === "plugin"
+  pluginId?: string; // required when group === "plugin"
 
-  label: I18nText;               // string | Record<string, string>
+  label: I18nText; // string | Record<string, string>
   description?: I18nText;
 
   // UI hint (auto-inferred from schema; overrideable)
-  widget?: "text" | "secret" | "select" | "slider" | "toggle" | "number" | "textarea" | "json" | "custom";
+  widget?:
+    | "text"
+    | "secret"
+    | "select"
+    | "slider"
+    | "toggle"
+    | "number"
+    | "textarea"
+    | "json"
+    | "custom";
   options?: Array<{ value: string; label: I18nText }>;
-  min?: number; max?: number; step?: number;
+  min?: number;
+  max?: number;
+  step?: number;
 
   // Backend routing — default "settings"
   backend?: "settings" | "keys";
@@ -203,16 +217,19 @@ export interface SettingEntry<T = unknown> {
 
 export interface SettingsStore {
   // Reads
-  get<T>(key: SettingKey): T;                        // always returns registered default if unset
-  has(key: SettingKey): boolean;                     // has explicit value vs default
-  list(group?: string): SettingEntry[];              // filter by group for UI
+  get<T>(key: SettingKey): T; // always returns registered default if unset
+  has(key: SettingKey): boolean; // has explicit value vs default
+  list(group?: string): SettingEntry[]; // filter by group for UI
   export(opts?: { includeSecrets?: boolean }): SettingsExportBundle;
 
   // Writes
-  set<T>(key: SettingKey, value: T): Promise<void>;  // async because desktop writes go through IPC
-  clear(key: SettingKey): Promise<void>;             // reset to default
+  set<T>(key: SettingKey, value: T): Promise<void>; // async because desktop writes go through IPC
+  clear(key: SettingKey): Promise<void>; // reset to default
   clearAll(group?: string): Promise<void>;
-  import(bundle: SettingsExportBundle, opts: { keys: SettingKey[]; includeSecrets?: boolean }): Promise<void>;
+  import(
+    bundle: SettingsExportBundle,
+    opts: { keys: SettingKey[]; includeSecrets?: boolean },
+  ): Promise<void>;
 
   // Subscribe
   subscribe<T>(key: SettingKey, handler: (value: T) => void): () => void;
@@ -220,7 +237,7 @@ export interface SettingsStore {
 
   // Registry (called at boot / plugin load)
   register<T>(entry: SettingEntry<T>): void;
-  unregister(key: SettingKey): void;                  // on plugin unload
+  unregister(key: SettingKey): void; // on plugin unload
 
   // Secrets helpers — raw access for code that ships API keys as headers
   listSecretProviders(): readonly string[];
@@ -310,6 +327,7 @@ Left nav + right content, inside the existing Dialog (retains current "overlay o
 ### 7.2 Search
 
 Top-of-nav input filters the tree:
+
 - Matches on `entry.key`, `entry.label`, `entry.description`
 - Matches on group label
 - Highlights matched nodes; collapses unmatched branches
@@ -317,8 +335,8 @@ Top-of-nav input filters the tree:
 ### 7.3 Deep linking
 
 ```ts
-openSettings("llm.slots.default");       // expands LLM > Slots, scrolls to "default" entry
-openSettings("plugin.image");       // expands Plugins > image group
+openSettings("llm.slots.default"); // expands LLM > Slots, scrolls to "default" entry
+openSettings("plugin.image"); // expands Plugins > image group
 ```
 
 Exported as:
@@ -331,19 +349,20 @@ Can be called from onboarding, error toasts, context menus.
 
 ### 7.4 Widget rendering
 
-| Widget | Inferred from | Controls |
-|---|---|---|
-| `text` | `z.string()` | `<input type="text">` |
-| `secret` | `backend === "keys"` or `secret: true` | `<input type="password">` + visibility toggle + monospace font |
-| `textarea` | `z.string()` with long default or `widget: "textarea"` | `<textarea>` |
-| `number` | `z.number()` | `<input type="number">` |
-| `slider` | `z.number()` with min/max | Range + number input side-by-side |
-| `toggle` | `z.boolean()` | Switch |
-| `select` | `z.enum(...)` | Native `<select>` |
-| `json` | `z.record(...)` or `z.object(...)` | Monaco-style mini editor |
-| `custom` | Caller registers a React component | — |
+| Widget     | Inferred from                                          | Controls                                                       |
+| ---------- | ------------------------------------------------------ | -------------------------------------------------------------- |
+| `text`     | `z.string()`                                           | `<input type="text">`                                          |
+| `secret`   | `backend === "keys"` or `secret: true`                 | `<input type="password">` + visibility toggle + monospace font |
+| `textarea` | `z.string()` with long default or `widget: "textarea"` | `<textarea>`                                                   |
+| `number`   | `z.number()`                                           | `<input type="number">`                                        |
+| `slider`   | `z.number()` with min/max                              | Range + number input side-by-side                              |
+| `toggle`   | `z.boolean()`                                          | Switch                                                         |
+| `select`   | `z.enum(...)`                                          | Native `<select>`                                              |
+| `json`     | `z.record(...)` or `z.object(...)`                     | Monaco-style mini editor                                       |
+| `custom`   | Caller registers a React component                     | —                                                              |
 
 Widget styling rules (applies across all tabs):
+
 - All inputs use shadcn form primitives. No raw `<input>` / `<select>` with ad-hoc Tailwind.
 - Label: `text-xs uppercase tracking-widest text-muted-foreground` (matches current dominant style).
 - Field border: `border border-border`, focus: `ring-1 ring-primary`. No `rounded`.
@@ -371,6 +390,7 @@ Widget styling rules (applies across all tabs):
 - Button in Data group: `[Import settings]`.
 - Opens file picker, reads JSON, parses via Zod.
 - Shows diff preview:
+
   ```
   Importing from covel-settings-2026-04-15.json
 
@@ -384,6 +404,7 @@ Widget styling rules (applies across all tabs):
 
   [Cancel] [Apply selected]
   ```
+
 - User unchecks rows they want to skip. Zero selected = "Apply" is disabled.
 - On apply: `store.import(bundle, { keys: selectedKeys, includeSecrets: checkbox })`.
 
@@ -400,11 +421,17 @@ On first boot of the new code:
 
 ```ts
 const LEGACY_KEYS = [
-  "covel:locale", "covel:appearance", "covel:slotConfig",
-  "covel:customPresets", "covel:paramOverrides",
-  "covel:capabilityOverrides", "covel:runtimePriority",
-  "covel:providerKeys", "covel:storageMode",
-  "covel:onboarded", "covel:onboardedVersion",
+  "covel:locale",
+  "covel:appearance",
+  "covel:slotConfig",
+  "covel:customPresets",
+  "covel:paramOverrides",
+  "covel:capabilityOverrides",
+  "covel:runtimePriority",
+  "covel:providerKeys",
+  "covel:storageMode",
+  "covel:onboarded",
+  "covel:onboardedVersion",
 ];
 const LEGACY_KEY_PREFIXES = ["covel:runtimeBindings:"];
 
@@ -427,6 +454,7 @@ Run once, guarded by a `covel:settings:cleaned-v1` flag. Boot proceeds with defa
 `covel:runtimeBindings:<sessionId>` localStorage keys are **deleted**. The authoritative store is `SessionRecord.runtimeModelOverrides` (already a JSONB field on the server; current code already writes it alongside the localStorage version).
 
 Changes:
+
 - `useRuntimeBindings` hook: remove `getRuntimeBindings` / `setRuntimeBindings` from `services/api.ts`.
 - Hook now reads from fetched session state and writes via `api.updateSession({ runtimeModelOverrides })` only.
 - `services/api.ts` exports `getRuntimeBindings`, `setRuntimeBindings`, `clearRuntimeBindings` → deleted.
@@ -465,6 +493,7 @@ apps/web/src/components/settings/
 ```
 
 Old files deleted:
+
 - `apps/web/src/components/settings-dialog.tsx` (replaced)
 - `apps/web/src/components/settings-desktop-tab.tsx` (contents absorbed into new Desktop group)
 - `apps/web/src/hooks/useAppearance.ts` (thin wrapper over `settings.get("ui.appearance")`; delete and inline)
@@ -499,18 +528,18 @@ _None — all decisions finalized in the brainstorming session._
 
 ## 15. Decisions Log
 
-| # | Decision | Rationale |
-|---|---|---|
-| 1 | Four-file layout (keys.env + llm.toml + config.toml + settings.json) | Each file keeps its specialty; keys keep mode-600 protection; llm.toml stays hand-editable |
-| 2 | Auto-save (no Save button) | Consistency; fixes current mixed behavior; matches macOS / VS Code idiom |
-| 3 | Flat key-value with registry | Minimal API; single list for UI; import/export trivial |
-| 4 | Plugin namespace `plugin.<id>.*` + PLUGIN.md `userSettings` | Extensible; plugin authors can expose settings without framework changes |
-| 5 | Left-nav + right-content UI with search + deep link | Scales to many plugins; searchable; `openSettings("llm.slots")` API useful everywhere |
-| 6 | No data migration; delete legacy keys | Project is early, single user; migration code is dead weight |
-| 7 | Web uses `localStorage` (single `covel:settings` key) | Sync API, negligible size, simplest impl |
-| 8 | Delete `runtimeBindings:<sessionId>` localStorage; use `SessionRecord.runtimeModelOverrides` | Already exists server-side; removes last per-session localStorage key |
-| 9 | Export defaults exclude keys; opt-in checkbox | Exported files often get shared / committed; secrets must be explicit |
-| 10 | Import shows diff preview + selective apply | Low blast radius; users understand what they'll overwrite |
-| 11 | Default appearance is `paper` (not `modern`) | Paper is Covel's primary visual identity; new users should experience it first. Changeable via General → Appearance. |
-| 12 | Global subscribers in `main.tsx` for `ui.locale` / `ui.appearance` | The hooks (`useLocalePreference`, `useAppearance`) only fire their `useEffect` when a consumer component is mounted. Changes from the new SelectWidget path bypass those hooks entirely — without a global subscriber, swapping appearance from Settings would not re-apply `data-appearance` until the next mount. |
-| 13 | Prep-phase runtime bindings keyed by worldId under `llm.prepRuntimeBindings` | The prep screen has no SessionRecord yet, so transient overrides need a home. Settings store is the natural place; cleared at session creation. |
+| #   | Decision                                                                                     | Rationale                                                                                                                                                                                                                                                                                                           |
+| --- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Four-file layout (keys.env + llm.toml + config.toml + settings.json)                         | Each file keeps its specialty; keys keep mode-600 protection; llm.toml stays hand-editable                                                                                                                                                                                                                          |
+| 2   | Auto-save (no Save button)                                                                   | Consistency; fixes current mixed behavior; matches macOS / VS Code idiom                                                                                                                                                                                                                                            |
+| 3   | Flat key-value with registry                                                                 | Minimal API; single list for UI; import/export trivial                                                                                                                                                                                                                                                              |
+| 4   | Plugin namespace `plugin.<id>.*` + PLUGIN.md `userSettings`                                  | Extensible; plugin authors can expose settings without framework changes                                                                                                                                                                                                                                            |
+| 5   | Left-nav + right-content UI with search + deep link                                          | Scales to many plugins; searchable; `openSettings("llm.slots")` API useful everywhere                                                                                                                                                                                                                               |
+| 6   | No data migration; delete legacy keys                                                        | Project is early, single user; migration code is dead weight                                                                                                                                                                                                                                                        |
+| 7   | Web uses `localStorage` (single `covel:settings` key)                                        | Sync API, negligible size, simplest impl                                                                                                                                                                                                                                                                            |
+| 8   | Delete `runtimeBindings:<sessionId>` localStorage; use `SessionRecord.runtimeModelOverrides` | Already exists server-side; removes last per-session localStorage key                                                                                                                                                                                                                                               |
+| 9   | Export defaults exclude keys; opt-in checkbox                                                | Exported files often get shared / committed; secrets must be explicit                                                                                                                                                                                                                                               |
+| 10  | Import shows diff preview + selective apply                                                  | Low blast radius; users understand what they'll overwrite                                                                                                                                                                                                                                                           |
+| 11  | Default appearance is `paper` (not `modern`)                                                 | Paper is Covel's primary visual identity; new users should experience it first. Changeable via General → Appearance.                                                                                                                                                                                                |
+| 12  | Global subscribers in `main.tsx` for `ui.locale` / `ui.appearance`                           | The hooks (`useLocalePreference`, `useAppearance`) only fire their `useEffect` when a consumer component is mounted. Changes from the new SelectWidget path bypass those hooks entirely — without a global subscriber, swapping appearance from Settings would not re-apply `data-appearance` until the next mount. |
+| 13  | Prep-phase runtime bindings keyed by worldId under `llm.prepRuntimeBindings`                 | The prep screen has no SessionRecord yet, so transient overrides need a home. Settings store is the natural place; cleared at session creation.                                                                                                                                                                     |

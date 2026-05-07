@@ -10,29 +10,29 @@
 
 // ── Types ────────────────────────────────────────────────────────
 export type {
-	CoreMemoryLabel,
-	CoreMemoryLabelInfo,
-	CoreMemoryBlock,
-	CoreMemoryConfig,
-	MemoryManager,
-	MemoryLLMAdapter,
-	MemoryUpdaterConfig,
-	MemoryUpdateResult,
-	MemoryUpdater,
-	RecallSearchResult,
-	RecallSearcher,
-	ArchivalSearchResult,
-	ArchivalSearcher,
-	CompactionConfig,
-	CompactionResult,
-	MemorySystemDeps,
-	MemorySystem,
+  CoreMemoryLabel,
+  CoreMemoryLabelInfo,
+  CoreMemoryBlock,
+  CoreMemoryConfig,
+  MemoryManager,
+  MemoryLLMAdapter,
+  MemoryUpdaterConfig,
+  MemoryUpdateResult,
+  MemoryUpdater,
+  RecallSearchResult,
+  RecallSearcher,
+  ArchivalSearchResult,
+  ArchivalSearcher,
+  CompactionConfig,
+  CompactionResult,
+  MemorySystemDeps,
+  MemorySystem,
 } from "./types.js";
 
 export {
-	CORE_MEMORY_LABELS,
-	CORE_MEMORY_LABEL_INFO,
-	DEFAULT_MAX_BLOCK_CHARS,
+  CORE_MEMORY_LABELS,
+  CORE_MEMORY_LABEL_INFO,
+  DEFAULT_MAX_BLOCK_CHARS,
 } from "./types.js";
 
 // ── Factories ────────────────────────────────────────────────────

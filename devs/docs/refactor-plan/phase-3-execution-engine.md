@@ -53,25 +53,23 @@ export interface TriggerEvaluator {
    * 判断 Runtime 是否应在本轮触发。
    * 返回 true = 执行，false = 跳过。
    */
-  shouldTrigger(
-    manifest: RuntimeManifest,
-    context: TriggerContext
-  ): boolean;
+  shouldTrigger(manifest: RuntimeManifest, context: TriggerContext): boolean;
 }
 ```
 
 ### 触发类型实现
 
-| 类型 | 判断逻辑 |
-|------|----------|
-| `auto` | 始终返回 true |
-| `manual` | 仅当 `pendingEvents` 中有 `manual-trigger` 事件且 target 匹配 |
-| `scheduled` | `turnNumber % interval === 0` |
-| `conditional` | 评估条件表达式（如 `estimatedContextTokens > 4000`） |
-| `event` | `pendingEvents` 中有匹配 `topic` 的事件 |
-| `error-retry` | `hasUpstreamFailure === true` 且重试次数未超限 |
+| 类型          | 判断逻辑                                                      |
+| ------------- | ------------------------------------------------------------- |
+| `auto`        | 始终返回 true                                                 |
+| `manual`      | 仅当 `pendingEvents` 中有 `manual-trigger` 事件且 target 匹配 |
+| `scheduled`   | `turnNumber % interval === 0`                                 |
+| `conditional` | 评估条件表达式（如 `estimatedContextTokens > 4000`）          |
+| `event`       | `pendingEvents` 中有匹配 `topic` 的事件                       |
+| `error-retry` | `hasUpstreamFailure === true` 且重试次数未超限                |
 
 还需检查全局限制：
+
 - `maxTriggerCount` → 未超过 session 内最大触发次数
 - `cooldownTurns` → 距上次触发轮次间隔足够
 
@@ -106,7 +104,7 @@ export interface DependencyAnalyzer {
    * 返回依赖图（DAG）。
    */
   analyze(runtimes: RuntimeManifest[]): DependencyGraph;
-  
+
   /**
    * 检查同优先级组内是否有依赖冲突。
    * 如果 A 依赖 B 但 A.priority === B.priority，报警告。
@@ -283,7 +281,7 @@ export interface LLMGenerateParams {
   tools?: ToolDefinition[];
   /** Structured Output 的 JSON Schema */
   responseFormat?: {
-    type: 'json_schema';
+    type: "json_schema";
     schema: Record<string, unknown>;
   };
   maxTokens?: number;
@@ -294,7 +292,7 @@ export interface LLMGenerateResult {
   content: string | null;
   toolCalls: LLMToolCall[];
   usage: { inputTokens: number; outputTokens: number };
-  finishReason: 'stop' | 'tool_calls' | 'length' | 'error';
+  finishReason: "stop" | "tool_calls" | "length" | "error";
 }
 ```
 
@@ -316,15 +314,15 @@ export interface TurnExecutor {
 async function executeTurn(input: TurnInput): Promise<TurnResult> {
   // 1. 获取 session 的活跃 Runtime 列表
   const activeRuntimes = registry.getActiveRuntimes(input.sessionId);
-  
+
   // 2. Trigger Router 过滤
   const triggeredRuntimes = activeRuntimes.filter(rt =>
     triggerEvaluator.shouldTrigger(rt, buildTriggerContext(input))
   );
-  
+
   // 3. Priority Scheduler 分组排序
   const groups = scheduler.schedule(triggeredRuntimes);
-  
+
   // 4. 逐组执行
   const allResults = new Map<string, RuntimeResult>();
   for (const group of groups) {
@@ -342,16 +340,16 @@ async function executeTurn(input: TurnInput): Promise<TurnResult> {
       }
     }
   }
-  
+
   // 5. 检测写冲突
   const conflicts = conflictDetector.detect(allResults);
-  
+
   // 6. 如有冲突，触发 Audit Runtime
   let auditResult: RuntimeResult | undefined;
   if (conflicts.length > 0) {
     auditResult = await executeAuditRuntime(conflicts, input);
   }
-  
+
   // 7. 组装 TurnResult
   return { ... };
 }
@@ -372,14 +370,14 @@ export interface ErrorPolicy {
   onRuntimeFailure(
     failedRuntime: RuntimeManifest,
     error: Error,
-    dependents: RuntimeManifest[]
+    dependents: RuntimeManifest[],
   ): FailureAction;
 }
 
 export type FailureAction =
-  | { type: 'skip-dependents' }  // 跳过所有依赖它的 Runtime
-  | { type: 'continue' }         // 忽略错误继续
-  | { type: 'retry'; maxRetries: number }; // 重试
+  | { type: "skip-dependents" } // 跳过所有依赖它的 Runtime
+  | { type: "continue" } // 忽略错误继续
+  | { type: "retry"; maxRetries: number }; // 重试
 ```
 
 ## 3.10 验收标准

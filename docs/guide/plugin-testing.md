@@ -11,36 +11,36 @@ See also: [docs/guide/plugin-authoring.md](./plugin-authoring.md) · [docs/guide
 Install nothing — `@covel/plugin-test-utils` is already a workspace package. Create a test file next to your plugin (or under `plugins/<your-plugin>/tests/`), import the utilities, and wire them up:
 
 ```ts
-import { describe, it, expect } from 'vitest';
-import path from 'node:path';
+import { describe, it, expect } from "vitest";
+import path from "node:path";
 import {
   MockLLM,
   createTestHarness,
   makeTurnInput,
-} from '@covel/plugin-test-utils';
+} from "@covel/plugin-test-utils";
 
-const PLUGINS_DIR = path.resolve(import.meta.dirname, '../../../plugins');
+const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../plugins");
 
-describe('my-plugin', () => {
-  it('runs a turn end-to-end', async () => {
+describe("my-plugin", () => {
+  it("runs a turn end-to-end", async () => {
     const llm = new MockLLM({
       defaultResponse: {
-        content: 'You step into the cavern.',
+        content: "You step into the cavern.",
         toolCalls: [],
-        finishReason: 'stop',
+        finishReason: "stop",
         usage: { inputTokens: 100, outputTokens: 20 },
       },
     });
 
     const harness = await createTestHarness({
       pluginsDir: PLUGINS_DIR,
-      activePlugins: ['my-plugin'],
+      activePlugins: ["my-plugin"],
       llm,
     });
 
-    const result = await harness.executeTurn('look around');
+    const result = await harness.executeTurn("look around");
 
-    expect(result.runtimeResults[0].status).toBe('success');
+    expect(result.runtimeResults[0].status).toBe("success");
     expect(llm.calls).toHaveLength(1);
   });
 });
@@ -48,12 +48,12 @@ describe('my-plugin', () => {
 
 What the harness gives you:
 
-| Field | Use |
-|-------|-----|
+| Field                                      | Use                                                                                    |
+| ------------------------------------------ | -------------------------------------------------------------------------------------- |
 | `harness.executeTurn(message, overrides?)` | Runs one full turn through the runtime pipeline with `@covel/runtime`'s `executeTurn`. |
-| `harness.store` | In-memory `DataStore` — inspect `plugin_data`, proposals, session state. |
-| `harness.manifests` | Discovered runtime manifests, priority-sorted. |
-| `harness.llm` | The adapter you passed in (defaults to a blank `MockLLM`). |
+| `harness.store`                            | In-memory `DataStore` — inspect `plugin_data`, proposals, session state.               |
+| `harness.manifests`                        | Discovered runtime manifests, priority-sorted.                                         |
+| `harness.llm`                              | The adapter you passed in (defaults to a blank `MockLLM`).                             |
 
 Factories (`makeTurnInput`, `makeTriggerContext`, `makeRuntimeResult`) fill required fields with sensible defaults so unit tests aren't littered with boilerplate.
 
@@ -62,33 +62,33 @@ Factories (`makeTurnInput`, `makeTriggerContext`, `makeRuntimeResult`) fill requ
 ### 1. Assert a plugin emits a specific proposal
 
 ```ts
-import { describe, it, expect } from 'vitest';
-import { MockLLM, createTestHarness } from '@covel/plugin-test-utils';
+import { describe, it, expect } from "vitest";
+import { MockLLM, createTestHarness } from "@covel/plugin-test-utils";
 
-it('narrator emits a narrative.append proposal', async () => {
+it("narrator emits a narrative.append proposal", async () => {
   const llm = new MockLLM({
     defaultResponse: {
-      content: 'The wind picks up.',
+      content: "The wind picks up.",
       toolCalls: [],
-      finishReason: 'stop',
+      finishReason: "stop",
       usage: { inputTokens: 50, outputTokens: 12 },
     },
   });
 
   const harness = await createTestHarness({
     pluginsDir: PLUGINS_DIR,
-    activePlugins: ['narrator'],
+    activePlugins: ["narrator"],
     llm,
   });
 
-  const result = await harness.executeTurn('continue');
+  const result = await harness.executeTurn("continue");
 
   const narrativeProposals = result.runtimeResults
     .flatMap((r) => r.proposals ?? [])
-    .filter((p) => p.type === 'narrative.append');
+    .filter((p) => p.type === "narrative.append");
 
   expect(narrativeProposals).toHaveLength(1);
-  expect(narrativeProposals[0].payload.text).toContain('wind');
+  expect(narrativeProposals[0].payload.text).toContain("wind");
 });
 ```
 
@@ -102,7 +102,7 @@ class ScriptedLLM extends MockLLM {
   constructor(private readonly script: LLMResponse[]) {
     super();
   }
-  async generate(params: Parameters<MockLLM['generate']>[0]) {
+  async generate(params: Parameters<MockLLM["generate"]>[0]) {
     this.calls.push({ messages: params.messages });
     const next = this.script[this.step] ?? this.defaultResponse;
     this.step++;
@@ -110,71 +110,83 @@ class ScriptedLLM extends MockLLM {
   }
 }
 
-it('calls plugin-data-set before create-character', async () => {
+it("calls plugin-data-set before create-character", async () => {
   const llm = new ScriptedLLM([
     {
       content: null,
-      toolCalls: [{ id: '1', name: 'plugin-data-set', arguments: '{"key":"stage","value":"intro"}' }],
-      finishReason: 'tool_calls',
+      toolCalls: [
+        {
+          id: "1",
+          name: "plugin-data-set",
+          arguments: '{"key":"stage","value":"intro"}',
+        },
+      ],
+      finishReason: "tool_calls",
       usage: { inputTokens: 80, outputTokens: 10 },
     },
     {
       content: null,
-      toolCalls: [{ id: '2', name: 'create-character', arguments: '{"name":"Kai"}' }],
-      finishReason: 'tool_calls',
+      toolCalls: [
+        { id: "2", name: "create-character", arguments: '{"name":"Kai"}' },
+      ],
+      finishReason: "tool_calls",
       usage: { inputTokens: 110, outputTokens: 14 },
     },
     {
-      content: 'Done.',
+      content: "Done.",
       toolCalls: [],
-      finishReason: 'stop',
+      finishReason: "stop",
       usage: { inputTokens: 120, outputTokens: 5 },
     },
   ]);
 
   const harness = await createTestHarness({
     pluginsDir: PLUGINS_DIR,
-    activePlugins: ['my-plugin'],
+    activePlugins: ["my-plugin"],
     llm,
   });
 
-  const result = await harness.executeTurn('begin onboarding');
+  const result = await harness.executeTurn("begin onboarding");
   const toolNames = result.runtimeResults[0].toolCalls.map((c) => c.name);
 
-  expect(toolNames).toEqual(['plugin-data-set', 'create-character']);
+  expect(toolNames).toEqual(["plugin-data-set", "create-character"]);
 });
 ```
 
 ### 3. Assert plugin_data.set happens with the expected key
 
 ```ts
-it('persists the current stage to plugin_data', async () => {
+it("persists the current stage to plugin_data", async () => {
   const harness = await createTestHarness({
     pluginsDir: PLUGINS_DIR,
-    activePlugins: ['my-plugin'],
+    activePlugins: ["my-plugin"],
     llm: new MockLLM({
       defaultResponse: {
         content: null,
         toolCalls: [
-          { id: 't1', name: 'plugin-data-set', arguments: '{"namespace":"progress","key":"stage","value":"act-2"}' },
+          {
+            id: "t1",
+            name: "plugin-data-set",
+            arguments: '{"namespace":"progress","key":"stage","value":"act-2"}',
+          },
         ],
-        finishReason: 'tool_calls',
+        finishReason: "tool_calls",
         usage: { inputTokens: 60, outputTokens: 8 },
       },
     }),
   });
 
-  await harness.executeTurn('continue');
+  await harness.executeTurn("continue");
 
   const entries = await harness.store.listPluginData(
-    'sess-harness',
-    'my-plugin',
-    'progress',
+    "sess-harness",
+    "my-plugin",
+    "progress",
   );
 
   expect(entries).toHaveLength(1);
-  expect(entries[0].key).toBe('stage');
-  expect(entries[0].value).toBe('act-2');
+  expect(entries[0].key).toBe("stage");
+  expect(entries[0].value).toBe("act-2");
 });
 ```
 
@@ -204,13 +216,8 @@ Put cases in `tests/runtime-cases.json` under the plugin root:
         "pluginData": [
           { "namespace": "images", "status": "done", "field": "ref" }
         ],
-        "assetGenerations": [
-          { "modality": "image", "field": "ref" }
-        ],
-        "logs": [
-          "image.generate.started",
-          "image.generate.completed"
-        ]
+        "assetGenerations": [{ "modality": "image", "field": "ref" }],
+        "logs": ["image.generate.started", "image.generate.completed"]
       }
     }
   ]
@@ -257,22 +264,22 @@ npx -p @covel/test-runtime test_runtime my-plugin/my-runtime --payload '{"debug"
 
 Useful options:
 
-| Option | Purpose |
-|--------|---------|
-| `--plugins-dir <path>` | Plugin root directory. Defaults to `~/.covel/plugins` or `COVEL_USER_PLUGINS_DIR`. |
-| `--plugin <id>` | Plugin id. Defaults to the runtime id prefix before `/`. |
-| `--case <name>` | Runs one plugin-defined case when the target is a plugin id. |
-| `--mode <mock\|live>` | Chooses fake local providers or real `llm.toml`/API provider calls. |
-| `--live` | Shortcut for `--mode live`. |
-| `--payload <json>` | Injects `ctx.manualPayload` / `manualTrigger.payload`. |
-| `--config <json>` | Returns this object from `getConfig()`. Useful for world schema/config dependent prompts. |
-| `--user-settings <json>` | Supplies this plugin's `userSettings` bucket, with manifest defaults applied by the runtime. |
-| `--llm-content <text>` | Mock LLM final text for agent runtimes. |
-| `--llm-response <json>` | Full mock LLM response, including `toolCalls`. |
-| `--llm-responses <json>` | Array of full mock LLM responses, consumed one per model call. Useful for `tool_calls → tool_calls → final JSON` scripts. |
-| `--mock-preset-id <id>` | Override the synthetic preset id surfaced by the mock gateway's `resolveSlot()` (default `mock-image`). |
-| `--show-prompts` | Include captured LLM messages in JSON output. |
-| `--ignore-upstreams` | Clears `upstreamRequired` for this debug run, useful when isolating a downstream runtime. |
+| Option                          | Purpose                                                                                                                                 |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `--plugins-dir <path>`          | Plugin root directory. Defaults to `~/.covel/plugins` or `COVEL_USER_PLUGINS_DIR`.                                                      |
+| `--plugin <id>`                 | Plugin id. Defaults to the runtime id prefix before `/`.                                                                                |
+| `--case <name>`                 | Runs one plugin-defined case when the target is a plugin id.                                                                            |
+| `--mode <mock\|live>`           | Chooses fake local providers or real `llm.toml`/API provider calls.                                                                     |
+| `--live`                        | Shortcut for `--mode live`.                                                                                                             |
+| `--payload <json>`              | Injects `ctx.manualPayload` / `manualTrigger.payload`.                                                                                  |
+| `--config <json>`               | Returns this object from `getConfig()`. Useful for world schema/config dependent prompts.                                               |
+| `--user-settings <json>`        | Supplies this plugin's `userSettings` bucket, with manifest defaults applied by the runtime.                                            |
+| `--llm-content <text>`          | Mock LLM final text for agent runtimes.                                                                                                 |
+| `--llm-response <json>`         | Full mock LLM response, including `toolCalls`.                                                                                          |
+| `--llm-responses <json>`        | Array of full mock LLM responses, consumed one per model call. Useful for `tool_calls → tool_calls → final JSON` scripts.               |
+| `--mock-preset-id <id>`         | Override the synthetic preset id surfaced by the mock gateway's `resolveSlot()` (default `mock-image`).                                 |
+| `--show-prompts`                | Include captured LLM messages in JSON output.                                                                                           |
+| `--ignore-upstreams`            | Clears `upstreamRequired` for this debug run, useful when isolating a downstream runtime.                                               |
 | `--expects-background-follower` | Writes a failed `_jobs` row when the entry runtime emits no deferred follower. Useful for testing UI-visible image-generation failures. |
 
 Plugin case files support the same knobs as CLI options. For agent runtimes that use tools before final output, script the model with `llmResponses`:
@@ -287,7 +294,11 @@ Plugin case files support the same knobs as CLI options. For agent runtimes that
       "content": null,
       "finishReason": "tool_calls",
       "toolCalls": [
-        { "id": "list", "name": "plugin-data-list", "arguments": "{\"namespace\":\"prompts\"}" }
+        {
+          "id": "list",
+          "name": "plugin-data-list",
+          "arguments": "{\"namespace\":\"prompts\"}"
+        }
       ]
     },
     {
@@ -298,7 +309,10 @@ Plugin case files support the same knobs as CLI options. For agent runtimes that
   ],
   "expect": {
     "runtimeResults": [
-      { "runtimeId": "dashscope-image-gen/prompt-generator", "status": "success" }
+      {
+        "runtimeId": "dashscope-image-gen/prompt-generator",
+        "status": "success"
+      }
     ],
     "events": ["image.generate.requested"]
   }
@@ -321,9 +335,7 @@ Expected failure paths can stay green by asserting the runtime status:
         "errorIncludes": "unparseable prose"
       }
     ],
-    "pluginData": [
-      { "namespace": "_jobs", "status": "failed" }
-    ]
+    "pluginData": [{ "namespace": "_jobs", "status": "failed" }]
   }
 }
 ```
@@ -335,13 +347,17 @@ The CLI imports `tools.local` files from the target plugin root and registers fr
 Triggers are pure functions — you do not need the harness to exercise them. Import the runtime's `shouldTrigger` (or replicate the manifest check) and feed it `makeTriggerContext(...)`.
 
 ```ts
-import { makeTriggerContext } from '@covel/plugin-test-utils';
-import { shouldRunOnInterval } from '../src/trigger.js';
+import { makeTriggerContext } from "@covel/plugin-test-utils";
+import { shouldRunOnInterval } from "../src/trigger.js";
 
-it('fires every 3 turns starting at turn 1', () => {
+it("fires every 3 turns starting at turn 1", () => {
   expect(shouldRunOnInterval(makeTriggerContext({ turnNumber: 1 }))).toBe(true);
-  expect(shouldRunOnInterval(makeTriggerContext({ turnNumber: 2 }))).toBe(false);
-  expect(shouldRunOnInterval(makeTriggerContext({ turnNumber: 3 }))).toBe(false);
+  expect(shouldRunOnInterval(makeTriggerContext({ turnNumber: 2 }))).toBe(
+    false,
+  );
+  expect(shouldRunOnInterval(makeTriggerContext({ turnNumber: 3 }))).toBe(
+    false,
+  );
   expect(shouldRunOnInterval(makeTriggerContext({ turnNumber: 4 }))).toBe(true);
 });
 ```
@@ -353,31 +369,38 @@ If your trigger consumes `turnsSinceLastTrigger`, set it explicitly in the overr
 Snapshots are useful when a runtime emits a large structured JSON blob (e.g. a codex entry list) and you want regression coverage without handwriting every assertion.
 
 ```ts
-it('matches the codex snapshot', async () => {
+it("matches the codex snapshot", async () => {
   const harness = await createTestHarness({
     pluginsDir: PLUGINS_DIR,
-    activePlugins: ['codex'],
+    activePlugins: ["codex"],
     llm: new MockLLM({
       defaultResponse: {
         content: null,
         toolCalls: [
-          { id: 'c1', name: 'codex-upsert', arguments: '{"entries":[{"key":"dragon","title":"Dragon","category":"monster"}]}' },
+          {
+            id: "c1",
+            name: "codex-upsert",
+            arguments:
+              '{"entries":[{"key":"dragon","title":"Dragon","category":"monster"}]}',
+          },
         ],
-        finishReason: 'tool_calls',
+        finishReason: "tool_calls",
         usage: { inputTokens: 200, outputTokens: 40 },
       },
     }),
   });
 
-  await harness.executeTurn('a dragon appears');
+  await harness.executeTurn("a dragon appears");
 
   const entries = await harness.store.listPluginData(
-    'sess-harness',
-    'codex',
-    'entries',
+    "sess-harness",
+    "codex",
+    "entries",
   );
 
-  expect(entries.map((e) => ({ key: e.key, value: e.value }))).toMatchSnapshot();
+  expect(
+    entries.map((e) => ({ key: e.key, value: e.value })),
+  ).toMatchSnapshot();
 });
 ```
 
@@ -402,10 +425,10 @@ pnpm test:coverage    # + @vitest/coverage-v8
 
 ### Unit tests vs `e2e-plugin-verify`
 
-| Tool | When |
-|------|------|
-| `@covel/plugin-test-utils` + Vitest | You can mock the LLM response deterministically and only need to assert what the runtime produced (proposals, tool calls, plugin_data writes). Milliseconds per test, no server, no API keys. |
-| `scripts/e2e-plugin-verify.ts` | The behaviour you care about only shows up after the HTTP pipeline (SSE, session kernel, approval policy, store) has run. Needs a live server (`pnpm dev:server`) and a slot in `llm.toml` — `llmock` is fine. |
+| Tool                                | When                                                                                                                                                                                                           |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@covel/plugin-test-utils` + Vitest | You can mock the LLM response deterministically and only need to assert what the runtime produced (proposals, tool calls, plugin_data writes). Milliseconds per test, no server, no API keys.                  |
+| `scripts/e2e-plugin-verify.ts`      | The behaviour you care about only shows up after the HTTP pipeline (SSE, session kernel, approval policy, store) has run. Needs a live server (`pnpm dev:server`) and a slot in `llm.toml` — `llmock` is fine. |
 
 The E2E script is documented at [docs/guide/e2e-plugin-verify.md](./e2e-plugin-verify.md). Artifacts land under `debugs/e2e-logs/<run-id>/`.
 

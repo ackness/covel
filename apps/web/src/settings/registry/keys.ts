@@ -10,19 +10,19 @@ import type { SettingsStoreApi } from "@covel/shared";
  * Safe to call multiple times: the registry overwrites by key.
  */
 export function registerProviderKeys(
-	store: SettingsStoreApi,
-	providers: readonly string[],
+  store: SettingsStoreApi,
+  providers: readonly string[],
 ): void {
-	for (const provider of providers) {
-		store.register({
-			key: `keys.${provider}`,
-			schema: z.string(),
-			default: "",
-			group: "llm",
-			backend: "keys",
-			secret: true,
-			widget: "secret",
-			label: provider.charAt(0).toUpperCase() + provider.slice(1),
-		});
-	}
+  for (const provider of providers) {
+    store.register({
+      key: `keys.${provider}`,
+      schema: z.string(),
+      default: "",
+      group: "llm",
+      backend: "keys",
+      secret: true,
+      widget: "secret",
+      label: provider.charAt(0).toUpperCase() + provider.slice(1),
+    });
+  }
 }

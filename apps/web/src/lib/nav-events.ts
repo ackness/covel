@@ -14,12 +14,12 @@ type Listener = (event: NavEvent) => void;
 const listeners = new Set<Listener>();
 
 export function emitNavEvent(event: NavEvent): void {
-	for (const listener of listeners) listener(event);
+  for (const listener of listeners) listener(event);
 }
 
 export function onNavEvent(listener: Listener): () => void {
-	listeners.add(listener);
-	return () => {
-		listeners.delete(listener);
-	};
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }

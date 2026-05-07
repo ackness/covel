@@ -1,6 +1,6 @@
 ---
-name: {{pluginName}}
-description: {{pluginDescription}}
+name: { { pluginName } }
+description: { { pluginDescription } }
 pluginType: plugin
 priority: 600
 model: plugin
@@ -30,6 +30,7 @@ input:
 ## 工具使用
 
 ### example-action
+
 当叙事中出现需要记录的事件时调用。
 
 ## 完成条件

@@ -70,7 +70,7 @@ interface StartSessionRequest {
 
 interface StartSessionResponse {
   sessionId: string;
-  phase: 'pre-game' | 'playing';
+  phase: "pre-game" | "playing";
   /** Pre-Game Runtime 的执行结果 */
   preGameResults: RuntimeResult[];
   /** 初始化的状态表 */
@@ -123,41 +123,65 @@ interface RuntimeInvokeRequest {
 ```typescript
 export type SSEEvent =
   // Turn 生命周期
-  | { event: 'turn:start'; data: { turnId: string; runtimeCount: number } }
-  | { event: 'turn:complete'; data: TurnResult }
-  
+  | { event: "turn:start"; data: { turnId: string; runtimeCount: number } }
+  | { event: "turn:complete"; data: TurnResult }
+
   // Runtime 执行进度
-  | { event: 'runtime:start'; data: { pluginId: string; runtimeId: string; priority: number } }
-  | { event: 'runtime:progress'; data: { pluginId: string; runtimeId: string; step: string } }
-  | { event: 'runtime:complete'; data: RuntimeResult }
-  | { event: 'runtime:skipped'; data: { pluginId: string; runtimeId: string; reason: string } }
-  
+  | {
+      event: "runtime:start";
+      data: { pluginId: string; runtimeId: string; priority: number };
+    }
+  | {
+      event: "runtime:progress";
+      data: { pluginId: string; runtimeId: string; step: string };
+    }
+  | { event: "runtime:complete"; data: RuntimeResult }
+  | {
+      event: "runtime:skipped";
+      data: { pluginId: string; runtimeId: string; reason: string };
+    }
+
   // 流式输出（Narrator 的文本可实时推送）
-  | { event: 'runtime:stream'; data: { pluginId: string; runtimeId: string; chunk: string } }
-  
+  | {
+      event: "runtime:stream";
+      data: { pluginId: string; runtimeId: string; chunk: string };
+    }
+
   // 审批请求
-  | { event: 'approval:required'; data: { approvalId: string; request: ApprovalRequest } }
-  | { event: 'approval:resolved'; data: { approvalId: string; decision: ApprovalDecision } }
-  
+  | {
+      event: "approval:required";
+      data: { approvalId: string; request: ApprovalRequest };
+    }
+  | {
+      event: "approval:resolved";
+      data: { approvalId: string; decision: ApprovalDecision };
+    }
+
   // 状态变更
-  | { event: 'state:updated'; data: { table: string; field: string; newValue: unknown } }
-  
+  | {
+      event: "state:updated";
+      data: { table: string; field: string; newValue: unknown };
+    }
+
   // 事件总线消息
-  | { event: 'message'; data: CovelMessage }
-  
+  | { event: "message"; data: CovelMessage }
+
   // 错误
-  | { event: 'error'; data: { pluginId?: string; runtimeId?: string; message: string } };
+  | {
+      event: "error";
+      data: { pluginId?: string; runtimeId?: string; message: string };
+    };
 ```
 
 ### 7.3.2 SSE 实现
 
 ```typescript
 // Hono SSE handler
-app.get('/events/subscribe', (c) => {
+app.get("/events/subscribe", (c) => {
   return streamSSE(c, async (stream) => {
-    const sessionId = c.req.query('sessionId');
-    
-    const unsubscribe = eventBus.on('*', async (event) => {
+    const sessionId = c.req.query("sessionId");
+
+    const unsubscribe = eventBus.on("*", async (event) => {
       if (event.sessionId === sessionId) {
         await stream.writeSSE({
           event: event.type,
@@ -165,7 +189,7 @@ app.get('/events/subscribe', (c) => {
         });
       }
     });
-    
+
     // 保持连接直到客户端断开
     await new Promise((_, reject) => {
       stream.onAbort(() => {
@@ -185,39 +209,39 @@ app.get('/events/subscribe', (c) => {
 // @covel/shared — UI 组件类型
 
 export type UIComponentType =
-  | 'stat-bar'
-  | 'card'
-  | 'choice-list'
-  | 'image'
-  | 'table'
-  | 'notification'
-  | 'dialog'
-  | 'inventory'
-  | 'map-marker'
-  | 'progress';
+  | "stat-bar"
+  | "card"
+  | "choice-list"
+  | "image"
+  | "table"
+  | "notification"
+  | "dialog"
+  | "inventory"
+  | "map-marker"
+  | "progress";
 
 export interface UIRenderInstruction {
   type: UIComponentType | string; // 支持自定义组件类型
-  [key: string]: unknown;         // 组件特定的属性
+  [key: string]: unknown; // 组件特定的属性
 }
 
 // 每个内置组件的 props schema
 export const uiComponentSchemas: Record<UIComponentType, z.ZodSchema> = {
-  'stat-bar': z.object({
-    type: z.literal('stat-bar'),
+  "stat-bar": z.object({
+    type: z.literal("stat-bar"),
     label: z.string(),
     value: z.number(),
     max: z.number(),
     color: z.string().optional(),
   }),
-  'card': z.object({
-    type: z.literal('card'),
+  card: z.object({
+    type: z.literal("card"),
     title: z.string(),
     body: z.string(),
     icon: z.string().optional(),
   }),
-  'choice-list': z.object({
-    type: z.literal('choice-list'),
+  "choice-list": z.object({
+    type: z.literal("choice-list"),
     prompt: z.string(),
     options: z.array(z.string()),
   }),
@@ -230,10 +254,10 @@ export const uiComponentSchemas: Record<UIComponentType, z.ZodSchema> = {
 ```typescript
 /**
  * 插件可在 ui-components/ 目录下提供自定义组件。
- * 
+ *
  * 组件格式：ESM 模块，导出 React 组件。
  * 前端通过动态 import() 加载。
- * 
+ *
  * 安全约束：
  * - 组件运行在前端沙箱中
  * - 只能访问 covel.readonly API
@@ -320,6 +344,7 @@ my-plugin/
 ```
 
 加载策略：
+
 1. 精确匹配（`PLUGIN.{locale}.md`）
 2. 语言回退（`PLUGIN.{lang}.md`，如 `zh-CN` → `zh`）
 3. 默认文件（`PLUGIN.md`）
@@ -373,13 +398,13 @@ export interface TestEnv {
   registry: PluginRegistry;
   /** Turn 执行器 */
   executor: TurnExecutor;
-  
+
   /** 加载测试插件 */
   loadPlugin(dir: string): Promise<void>;
-  
+
   /** 模拟一个 Turn */
   executeTurn(message: string): Promise<TurnResult>;
-  
+
   /** 清理 */
   cleanup(): Promise<void>;
 }
@@ -400,7 +425,7 @@ export interface MockLLMProvider extends LLMProvider {
 
 ```typescript
 export function runStoreContractTests(createStore: () => DataStore): void {
-  describe('DataStore Contract', () => {
+  describe("DataStore Contract", () => {
     // Session CRUD
     // RuntimeResult CRUD
     // State CRUD
@@ -432,33 +457,33 @@ export interface RuntimeLog {
   priority: number;
   turnId: string;
   sessionId: string;
-  
+
   /** 执行状态 */
   status: RuntimeStatus;
-  
+
   /** 工具调用记录 */
   toolCalls: ToolCallRecord[];
-  
+
   /** 输入上下文摘要（不存完整 prompt，太大） */
   contextSummary: {
     injectedSources: string[];
     loadedReferences: string[];
     templateVarsUsed: string[];
   };
-  
+
   /** 输出结果 */
   output: Record<string, unknown> | null;
-  
+
   /** 性能指标 */
   durationMs: number;
   tokenUsage?: { input: number; output: number };
-  
+
   /** 跳过原因（如有） */
   skipReason?: string;
-  
+
   /** 错误信息（如有） */
   error?: string;
-  
+
   timestamp: string;
 }
 ```
@@ -466,6 +491,7 @@ export interface RuntimeLog {
 ### 7.8.2 双通道设计
 
 保留现有的双通道设计：
+
 - **Runtime 日志**（DB 持久化）：结构化的 Runtime 执行记录
 - **Infrastructure 日志**（pino）：服务器启动、插件加载、DB 操作等
 
@@ -474,7 +500,7 @@ export interface RuntimeLog {
 ```typescript
 /**
  * 热重载完整流程：
- * 
+ *
  * 1. chokidar 监听 plugins/ 目录
  * 2. 文件变更 → 判断影响的插件 ID
  * 3. 如果是 PLUGIN.md 变更：

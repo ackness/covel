@@ -5,10 +5,10 @@
 import matter from "gray-matter";
 import { z } from "zod";
 import {
-	authorsNoteDeclSchema,
-	postHistoryDeclSchema,
-	rpcDeclMapSchema,
-	runtimeManifestSchema,
+  authorsNoteDeclSchema,
+  postHistoryDeclSchema,
+  rpcDeclMapSchema,
+  runtimeManifestSchema,
 } from "@covel/shared";
 import type { ParsedPluginMd } from "./types.js";
 
@@ -20,26 +20,26 @@ import type { ParsedPluginMd } from "./types.js";
  * Used purely for diagnostic messages — not parsing.
  */
 function findYamlKeyLine(source: string, key: string): number | null {
-	const lines = source.split(/\r?\n/);
-	// Scan only until the second `---` fence so we stay within frontmatter.
-	const re = new RegExp(`^${escapeRegex(key)}\\s*:`);
-	let inFrontmatter = false;
-	for (let i = 0; i < lines.length; i += 1) {
-		const trimmed = lines[i].trimStart();
-		if (trimmed.startsWith("---")) {
-			if (!inFrontmatter) {
-				inFrontmatter = true;
-				continue;
-			}
-			return null;
-		}
-		if (inFrontmatter && re.test(trimmed)) return i + 1;
-	}
-	return null;
+  const lines = source.split(/\r?\n/);
+  // Scan only until the second `---` fence so we stay within frontmatter.
+  const re = new RegExp(`^${escapeRegex(key)}\\s*:`);
+  let inFrontmatter = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    const trimmed = lines[i].trimStart();
+    if (trimmed.startsWith("---")) {
+      if (!inFrontmatter) {
+        inFrontmatter = true;
+        continue;
+      }
+      return null;
+    }
+    if (inFrontmatter && re.test(trimmed)) return i + 1;
+  }
+  return null;
 }
 
 function escapeRegex(s: string): string {
-	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
@@ -49,20 +49,20 @@ function escapeRegex(s: string): string {
  * makes `instanceof z.ZodError` unreliable. We match on shape instead.
  */
 interface ZodIssue {
-	readonly code: string;
-	readonly path: readonly (string | number)[];
-	readonly message: string;
+  readonly code: string;
+  readonly path: readonly (string | number)[];
+  readonly message: string;
 }
 interface ZodErrorLike {
-	readonly name: string;
-	readonly issues: readonly ZodIssue[];
+  readonly name: string;
+  readonly issues: readonly ZodIssue[];
 }
 function asZodErrorLike(err: unknown): ZodErrorLike | null {
-	if (!err || typeof err !== "object") return null;
-	const maybe = err as { name?: unknown; issues?: unknown };
-	if (maybe.name !== "ZodError") return null;
-	if (!Array.isArray(maybe.issues)) return null;
-	return err as unknown as ZodErrorLike;
+  if (!err || typeof err !== "object") return null;
+  const maybe = err as { name?: unknown; issues?: unknown };
+  if (maybe.name !== "ZodError") return null;
+  if (!Array.isArray(maybe.issues)) return null;
+  return err as unknown as ZodErrorLike;
 }
 
 /**
@@ -71,37 +71,37 @@ function asZodErrorLike(err: unknown): ZodErrorLike | null {
  * isn't one of the well-known cases.
  */
 function deriveFixHint(error: unknown): string {
-	const zerr = asZodErrorLike(error);
-	if (!zerr) {
-		return "Check the PLUGIN.md frontmatter against docs/reference/plugins.md.";
-	}
-	const firstIssue = zerr.issues[0];
-	if (!firstIssue)
-		return "Check the PLUGIN.md frontmatter against docs/reference/plugins.md.";
+  const zerr = asZodErrorLike(error);
+  if (!zerr) {
+    return "Check the PLUGIN.md frontmatter against docs/reference/plugins.md.";
+  }
+  const firstIssue = zerr.issues[0];
+  if (!firstIssue)
+    return "Check the PLUGIN.md frontmatter against docs/reference/plugins.md.";
 
-	const path = firstIssue.path.join(".");
-	const code = firstIssue.code;
+  const path = firstIssue.path.join(".");
+  const code = firstIssue.code;
 
-	// Common, author-facing failures — keep these terse and specific.
-	if (!path) {
-		return "Ensure the PLUGIN.md file begins with `---` and contains valid YAML frontmatter.";
-	}
-	if (path === "name") {
-		return "Set `name` to a lowercase kebab-case id (e.g. `narrator` or `my-plugin/runtime-name`).";
-	}
-	if (path === "description") {
-		return 'Add a `description:` field — either a single string or an i18n map like `description: { en-US: "...", zh-CN: "..." }`.';
-	}
-	if (path === "priority") {
-		return "Set `priority` to an integer between 0 and 1000 (e.g. `priority: 500`).";
-	}
-	if (code === "unrecognized_keys") {
-		return `Remove or rename the unknown field at "${path}" — refer to docs/reference/plugins.md for the full frontmatter schema.`;
-	}
-	if (code === "invalid_type") {
-		return `Field "${path}" has the wrong type — ${firstIssue.message}.`;
-	}
-	return `Field "${path}": ${firstIssue.message}.`;
+  // Common, author-facing failures — keep these terse and specific.
+  if (!path) {
+    return "Ensure the PLUGIN.md file begins with `---` and contains valid YAML frontmatter.";
+  }
+  if (path === "name") {
+    return "Set `name` to a lowercase kebab-case id (e.g. `narrator` or `my-plugin/runtime-name`).";
+  }
+  if (path === "description") {
+    return 'Add a `description:` field — either a single string or an i18n map like `description: { en-US: "...", zh-CN: "..." }`.';
+  }
+  if (path === "priority") {
+    return "Set `priority` to an integer between 0 and 1000 (e.g. `priority: 500`).";
+  }
+  if (code === "unrecognized_keys") {
+    return `Remove or rename the unknown field at "${path}" — refer to docs/reference/plugins.md for the full frontmatter schema.`;
+  }
+  if (code === "invalid_type") {
+    return `Field "${path}" has the wrong type — ${firstIssue.message}.`;
+  }
+  return `Field "${path}": ${firstIssue.message}.`;
 }
 
 /**
@@ -111,26 +111,26 @@ function deriveFixHint(error: unknown): string {
  * for when their plugin fails to load.
  */
 function formatLoaderError(
-	filePath: string,
-	line: number | null,
-	problem: string,
-	fix: string,
+  filePath: string,
+  line: number | null,
+  problem: string,
+  fix: string,
 ): string {
-	const location = line !== null ? `${filePath}:${line}` : filePath;
-	return `[plugin-loader] ${location}: ${problem}\nFix: ${fix}`;
+  const location = line !== null ? `${filePath}:${line}` : filePath;
+  return `[plugin-loader] ${location}: ${problem}\nFix: ${fix}`;
 }
 
 // ── Valid hook event names ────────────────────────────────────────
 
 const VALID_HOOK_EVENTS = new Set([
-	"TurnStart",
-	"PreRuntime",
-	"PostRuntime",
-	"PreToolUse",
-	"PostToolUse",
-	"PreStateCommit",
-	"PostStateCommit",
-	"TurnStop",
+  "TurnStart",
+  "PreRuntime",
+  "PostRuntime",
+  "PreToolUse",
+  "PostToolUse",
+  "PreStateCommit",
+  "PostStateCommit",
+  "TurnStop",
 ]);
 
 /**
@@ -139,11 +139,11 @@ const VALID_HOOK_EVENTS = new Set([
  * Built from scratch (not extending hookDeclarationSchema) to avoid .strict() incompatibility.
  */
 const lenientHookDeclarationSchema = z.object({
-	event: z.string().min(1),
-	handler: z.string().min(1),
-	match: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
-	timeoutMs: z.number().int().positive().optional(),
-	enforce: z.enum(["pre", "normal", "post"]).optional(),
+  event: z.string().min(1),
+  handler: z.string().min(1),
+  match: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+  timeoutMs: z.number().int().positive().optional(),
+  enforce: z.enum(["pre", "normal", "post"]).optional(),
 });
 
 /** Regex to extract markdown links pointing to `references/` paths. */
@@ -153,12 +153,12 @@ const REFERENCE_LINK_RE = /\[([^\]]*)\]\((references\/[^)]+)\)/g;
  * Extract reference file paths from markdown body.
  */
 function extractReferenceLinks(body: string): readonly string[] {
-	const links: string[] = [];
-	let match: RegExpExecArray | null;
-	while ((match = REFERENCE_LINK_RE.exec(body)) !== null) {
-		links.push(match[2]);
-	}
-	return links;
+  const links: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = REFERENCE_LINK_RE.exec(body)) !== null) {
+    links.push(match[2]);
+  }
+  return links;
 }
 
 /**
@@ -170,233 +170,233 @@ function extractReferenceLinks(body: string): readonly string[] {
  * @throws {Error} When frontmatter is missing or invalid
  */
 export function parsePluginMd(
-	content: string,
-	filePath: string,
+  content: string,
+  filePath: string,
 ): ParsedPluginMd {
-	const { data, content: body } = matter(content);
+  const { data, content: body } = matter(content);
 
-	let manifest;
-	try {
-		// Parse hooks leniently (accept any string for event) so we can warn
-		// on unknown event names instead of throwing. All other fields remain
-		// strictly validated. Non-hook fields are validated by runtimeManifestSchema.
-		let dataToValidate = data;
+  let manifest;
+  try {
+    // Parse hooks leniently (accept any string for event) so we can warn
+    // on unknown event names instead of throwing. All other fields remain
+    // strictly validated. Non-hook fields are validated by runtimeManifestSchema.
+    let dataToValidate = data;
 
-		// Normalize I18nText `description` for schema validation.
-		// The public manifest schema requires `description: string` (it is used
-		// inline in LLM traces/tool registries and doesn't need locale routing).
-		// The user-facing UI reads I18nText from `PluginSummary.description`
-		// which is loaded separately via `loadPluginSummary` from the raw YAML.
-		// Authors can declare description as either:
-		//   description: single string               (legacy, single-locale)
-		//   description: { zh: "...", en: "..." }    (I18nText, preferred)
-		// When an object is given, collapse to a single string for the manifest
-		// (prefer English so runtime traces stay ASCII-friendly, fall back to
-		// Chinese or any other available locale).
-		if (
-			dataToValidate &&
-			typeof dataToValidate === "object" &&
-			"description" in dataToValidate
-		) {
-			const raw = (dataToValidate as Record<string, unknown>).description;
-			if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-				const entries = raw as Record<string, unknown>;
-				const fallback =
-					(typeof entries["en"] === "string" && entries["en"]) ||
-					(typeof entries["en-US"] === "string" && entries["en-US"]) ||
-					(typeof entries["zh"] === "string" && entries["zh"]) ||
-					(typeof entries["zh-CN"] === "string" && entries["zh-CN"]) ||
-					Object.values(entries).find((v) => typeof v === "string") ||
-					"";
-				dataToValidate = {
-					...(dataToValidate as Record<string, unknown>),
-					description: fallback,
-				};
-			}
-		}
-		const rawHooks: Array<{
-			event: string;
-			handler: string;
-			[k: string]: unknown;
-		}> = [];
+    // Normalize I18nText `description` for schema validation.
+    // The public manifest schema requires `description: string` (it is used
+    // inline in LLM traces/tool registries and doesn't need locale routing).
+    // The user-facing UI reads I18nText from `PluginSummary.description`
+    // which is loaded separately via `loadPluginSummary` from the raw YAML.
+    // Authors can declare description as either:
+    //   description: single string               (legacy, single-locale)
+    //   description: { zh: "...", en: "..." }    (I18nText, preferred)
+    // When an object is given, collapse to a single string for the manifest
+    // (prefer English so runtime traces stay ASCII-friendly, fall back to
+    // Chinese or any other available locale).
+    if (
+      dataToValidate &&
+      typeof dataToValidate === "object" &&
+      "description" in dataToValidate
+    ) {
+      const raw = (dataToValidate as Record<string, unknown>).description;
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+        const entries = raw as Record<string, unknown>;
+        const fallback =
+          (typeof entries["en"] === "string" && entries["en"]) ||
+          (typeof entries["en-US"] === "string" && entries["en-US"]) ||
+          (typeof entries["zh"] === "string" && entries["zh"]) ||
+          (typeof entries["zh-CN"] === "string" && entries["zh-CN"]) ||
+          Object.values(entries).find((v) => typeof v === "string") ||
+          "";
+        dataToValidate = {
+          ...(dataToValidate as Record<string, unknown>),
+          description: fallback,
+        };
+      }
+    }
+    const rawHooks: Array<{
+      event: string;
+      handler: string;
+      [k: string]: unknown;
+    }> = [];
 
-		if (Array.isArray(data.hooks)) {
-			// Validate per-entry (not per-array) so a single malformed entry only drops
-			// itself with a warning, instead of silently dropping the entire hooks
-			// list when one entry has e.g. `handler: 123`. See S4-T3 code review I1.
-			const hooksLine = findYamlKeyLine(content, "hooks");
-			for (const rawEntry of data.hooks) {
-				const parsed = lenientHookDeclarationSchema.safeParse(rawEntry);
-				if (!parsed.success) {
-					console.warn(
-						formatLoaderError(
-							filePath,
-							hooksLine,
-							`malformed hook entry skipped — ${parsed.error.issues.map((i) => i.message).join("; ")}`,
-							"Each hook needs a string `event` and string `handler`. See docs/reference/plugins.md#hooks.",
-						),
-					);
-					continue;
-				}
-				const entry = parsed.data;
-				if (!VALID_HOOK_EVENTS.has(entry.event)) {
-					console.warn(
-						formatLoaderError(
-							filePath,
-							hooksLine,
-							`unknown hook event "${entry.event}" — skipping`,
-							`Use one of the valid events: ${[...VALID_HOOK_EVENTS].join(", ")}.`,
-						),
-					);
-					continue;
-				}
-				rawHooks.push(
-					entry as { event: string; handler: string; [k: string]: unknown },
-				);
-			}
-			// Replace hooks in data with the filtered valid ones for strict schema validation.
-			// Hook execution is version-gated: manifests must explicitly opt in with
-			// hookManifestVersion: 1 so future hook semantic changes have a stable
-			// compatibility boundary.
-			const { hooks: _omitted, ...dataWithoutHooks } = data as Record<
-				string,
-				unknown
-			>;
-			if (
-				rawHooks.length > 0 &&
-				(dataWithoutHooks as { hookManifestVersion?: unknown })
-					.hookManifestVersion !== 1
-			) {
-				console.warn(
-					formatLoaderError(
-						filePath,
-						hooksLine,
-						"hooks skipped — set `hookManifestVersion: 1` to enable lifecycle hooks",
-						"Add `hookManifestVersion: 1` next to `hooks:` after verifying docs/reference/plugins.md#hooks.",
-					),
-				);
-				dataToValidate = dataWithoutHooks;
-			} else {
-				dataToValidate =
-					rawHooks.length > 0
-						? { ...dataWithoutHooks, hooks: rawHooks }
-						: dataWithoutHooks;
-			}
-		}
+    if (Array.isArray(data.hooks)) {
+      // Validate per-entry (not per-array) so a single malformed entry only drops
+      // itself with a warning, instead of silently dropping the entire hooks
+      // list when one entry has e.g. `handler: 123`. See S4-T3 code review I1.
+      const hooksLine = findYamlKeyLine(content, "hooks");
+      for (const rawEntry of data.hooks) {
+        const parsed = lenientHookDeclarationSchema.safeParse(rawEntry);
+        if (!parsed.success) {
+          console.warn(
+            formatLoaderError(
+              filePath,
+              hooksLine,
+              `malformed hook entry skipped — ${parsed.error.issues.map((i) => i.message).join("; ")}`,
+              "Each hook needs a string `event` and string `handler`. See docs/reference/plugins.md#hooks.",
+            ),
+          );
+          continue;
+        }
+        const entry = parsed.data;
+        if (!VALID_HOOK_EVENTS.has(entry.event)) {
+          console.warn(
+            formatLoaderError(
+              filePath,
+              hooksLine,
+              `unknown hook event "${entry.event}" — skipping`,
+              `Use one of the valid events: ${[...VALID_HOOK_EVENTS].join(", ")}.`,
+            ),
+          );
+          continue;
+        }
+        rawHooks.push(
+          entry as { event: string; handler: string; [k: string]: unknown },
+        );
+      }
+      // Replace hooks in data with the filtered valid ones for strict schema validation.
+      // Hook execution is version-gated: manifests must explicitly opt in with
+      // hookManifestVersion: 1 so future hook semantic changes have a stable
+      // compatibility boundary.
+      const { hooks: _omitted, ...dataWithoutHooks } = data as Record<
+        string,
+        unknown
+      >;
+      if (
+        rawHooks.length > 0 &&
+        (dataWithoutHooks as { hookManifestVersion?: unknown })
+          .hookManifestVersion !== 1
+      ) {
+        console.warn(
+          formatLoaderError(
+            filePath,
+            hooksLine,
+            "hooks skipped — set `hookManifestVersion: 1` to enable lifecycle hooks",
+            "Add `hookManifestVersion: 1` next to `hooks:` after verifying docs/reference/plugins.md#hooks.",
+          ),
+        );
+        dataToValidate = dataWithoutHooks;
+      } else {
+        dataToValidate =
+          rawHooks.length > 0
+            ? { ...dataWithoutHooks, hooks: rawHooks }
+            : dataWithoutHooks;
+      }
+    }
 
-		// S3-T4: author's note / post-history lenient parsing.
-		// These fields are optional decorative metadata. A single malformed
-		// declaration (e.g. wrong type on `depth`) should not crash the entire
-		// plugin load — drop the bad field with a warning and continue, mirroring
-		// the per-entry lenient handling used for `hooks`.
-		if (
-			dataToValidate &&
-			typeof dataToValidate === "object" &&
-			"authorsNote" in dataToValidate
-		) {
-			const parsedNote = authorsNoteDeclSchema.safeParse(
-				(dataToValidate as Record<string, unknown>).authorsNote,
-			);
-			if (!parsedNote.success) {
-				console.warn(
-					formatLoaderError(
-						filePath,
-						findYamlKeyLine(content, "authorsNote"),
-						`malformed authorsNote skipped — ${parsedNote.error.issues.map((i) => i.message).join("; ")}`,
-						'An authorsNote must have `content: string` and optional `depth: number` / `role: "system" | "user" | "assistant"`.',
-					),
-				);
-				const { authorsNote: _omitted, ...rest } = dataToValidate as Record<
-					string,
-					unknown
-				>;
-				dataToValidate = rest;
-			}
-		}
-		if (
-			dataToValidate &&
-			typeof dataToValidate === "object" &&
-			"postHistory" in dataToValidate
-		) {
-			const parsedPost = postHistoryDeclSchema.safeParse(
-				(dataToValidate as Record<string, unknown>).postHistory,
-			);
-			if (!parsedPost.success) {
-				console.warn(
-					formatLoaderError(
-						filePath,
-						findYamlKeyLine(content, "postHistory"),
-						`malformed postHistory skipped — ${parsedPost.error.issues.map((i) => i.message).join("; ")}`,
-						'A postHistory entry must have `content: string` and optional `role: "system" | "user" | "assistant"`.',
-					),
-				);
-				const { postHistory: _omitted, ...rest } = dataToValidate as Record<
-					string,
-					unknown
-				>;
-				dataToValidate = rest;
-			}
-		}
-		// PR-3: rpc declarations. Lenient — drop the whole rpc block on
-		// structural error so a typo in one action doesn't crash the load.
-		if (
-			dataToValidate &&
-			typeof dataToValidate === "object" &&
-			"rpc" in dataToValidate
-		) {
-			const parsedRpc = rpcDeclMapSchema.safeParse(
-				(dataToValidate as Record<string, unknown>).rpc,
-			);
-			if (!parsedRpc.success) {
-				console.warn(
-					formatLoaderError(
-						filePath,
-						findYamlKeyLine(content, "rpc"),
-						`malformed rpc declaration skipped — ${parsedRpc.error.issues.map((i: { message: string }) => i.message).join("; ")}`,
-						"Each rpc action needs a lowercase kebab-case name and a `handler` path ending in .js/.mjs/.cjs, relative to the plugin root.",
-					),
-				);
-				const { rpc: _omitted, ...rest } = dataToValidate as Record<
-					string,
-					unknown
-				>;
-				dataToValidate = rest;
-			}
-		}
+    // S3-T4: author's note / post-history lenient parsing.
+    // These fields are optional decorative metadata. A single malformed
+    // declaration (e.g. wrong type on `depth`) should not crash the entire
+    // plugin load — drop the bad field with a warning and continue, mirroring
+    // the per-entry lenient handling used for `hooks`.
+    if (
+      dataToValidate &&
+      typeof dataToValidate === "object" &&
+      "authorsNote" in dataToValidate
+    ) {
+      const parsedNote = authorsNoteDeclSchema.safeParse(
+        (dataToValidate as Record<string, unknown>).authorsNote,
+      );
+      if (!parsedNote.success) {
+        console.warn(
+          formatLoaderError(
+            filePath,
+            findYamlKeyLine(content, "authorsNote"),
+            `malformed authorsNote skipped — ${parsedNote.error.issues.map((i) => i.message).join("; ")}`,
+            'An authorsNote must have `content: string` and optional `depth: number` / `role: "system" | "user" | "assistant"`.',
+          ),
+        );
+        const { authorsNote: _omitted, ...rest } = dataToValidate as Record<
+          string,
+          unknown
+        >;
+        dataToValidate = rest;
+      }
+    }
+    if (
+      dataToValidate &&
+      typeof dataToValidate === "object" &&
+      "postHistory" in dataToValidate
+    ) {
+      const parsedPost = postHistoryDeclSchema.safeParse(
+        (dataToValidate as Record<string, unknown>).postHistory,
+      );
+      if (!parsedPost.success) {
+        console.warn(
+          formatLoaderError(
+            filePath,
+            findYamlKeyLine(content, "postHistory"),
+            `malformed postHistory skipped — ${parsedPost.error.issues.map((i) => i.message).join("; ")}`,
+            'A postHistory entry must have `content: string` and optional `role: "system" | "user" | "assistant"`.',
+          ),
+        );
+        const { postHistory: _omitted, ...rest } = dataToValidate as Record<
+          string,
+          unknown
+        >;
+        dataToValidate = rest;
+      }
+    }
+    // PR-3: rpc declarations. Lenient — drop the whole rpc block on
+    // structural error so a typo in one action doesn't crash the load.
+    if (
+      dataToValidate &&
+      typeof dataToValidate === "object" &&
+      "rpc" in dataToValidate
+    ) {
+      const parsedRpc = rpcDeclMapSchema.safeParse(
+        (dataToValidate as Record<string, unknown>).rpc,
+      );
+      if (!parsedRpc.success) {
+        console.warn(
+          formatLoaderError(
+            filePath,
+            findYamlKeyLine(content, "rpc"),
+            `malformed rpc declaration skipped — ${parsedRpc.error.issues.map((i: { message: string }) => i.message).join("; ")}`,
+            "Each rpc action needs a lowercase kebab-case name and a `handler` path ending in .js/.mjs/.cjs, relative to the plugin root.",
+          ),
+        );
+        const { rpc: _omitted, ...rest } = dataToValidate as Record<
+          string,
+          unknown
+        >;
+        dataToValidate = rest;
+      }
+    }
 
-		const parsed = runtimeManifestSchema.parse(dataToValidate);
-		// Derive pluginId from name: "world-init/schema-gen" → "world-init"
-		// Single-runtime plugins: pluginId === name
-		const slashIdx = parsed.name.indexOf("/");
-		const pluginId =
-			slashIdx >= 0 ? parsed.name.slice(0, slashIdx) : parsed.name;
-		manifest = { ...parsed, pluginId };
-	} catch (error: unknown) {
-		const message = error instanceof Error ? error.message : String(error);
-		// Best-effort: attach the source line for the first failing key so the
-		// plugin author can jump straight to the offending line.
-		let line: number | null = null;
-		const zerr = asZodErrorLike(error);
-		if (zerr && zerr.issues[0]?.path.length) {
-			const topKey = String(zerr.issues[0].path[0]);
-			line = findYamlKeyLine(content, topKey);
-		}
-		throw new Error(
-			formatLoaderError(
-				filePath,
-				line,
-				`invalid PLUGIN.md frontmatter — ${message}`,
-				deriveFixHint(error),
-			),
-		);
-	}
+    const parsed = runtimeManifestSchema.parse(dataToValidate);
+    // Derive pluginId from name: "world-init/schema-gen" → "world-init"
+    // Single-runtime plugins: pluginId === name
+    const slashIdx = parsed.name.indexOf("/");
+    const pluginId =
+      slashIdx >= 0 ? parsed.name.slice(0, slashIdx) : parsed.name;
+    manifest = { ...parsed, pluginId };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    // Best-effort: attach the source line for the first failing key so the
+    // plugin author can jump straight to the offending line.
+    let line: number | null = null;
+    const zerr = asZodErrorLike(error);
+    if (zerr && zerr.issues[0]?.path.length) {
+      const topKey = String(zerr.issues[0].path[0]);
+      line = findYamlKeyLine(content, topKey);
+    }
+    throw new Error(
+      formatLoaderError(
+        filePath,
+        line,
+        `invalid PLUGIN.md frontmatter — ${message}`,
+        deriveFixHint(error),
+      ),
+    );
+  }
 
-	const referenceLinks = extractReferenceLinks(body);
+  const referenceLinks = extractReferenceLinks(body);
 
-	return {
-		manifest,
-		promptTemplate: body,
-		referenceLinks,
-		rawFrontmatter: { ...data } as Readonly<Record<string, unknown>>,
-	};
+  return {
+    manifest,
+    promptTemplate: body,
+    referenceLinks,
+    rawFrontmatter: { ...data } as Readonly<Record<string, unknown>>,
+  };
 }

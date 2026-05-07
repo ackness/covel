@@ -20,9 +20,10 @@ Covel 当前玩家输入进入 turn pipeline 前缺一个统一拦截点。
 `apps/server/src/routes/api/actions.ts` 现在的路径是：
 
 ```ts
-const playerMessage = type === 'start_session'
-  ? ''
-  : (payload.content as string) ?? (payload.command as string) ?? '';
+const playerMessage =
+  type === "start_session"
+    ? ""
+    : ((payload.content as string) ?? (payload.command as string) ?? "");
 ```
 
 随后：
@@ -56,11 +57,11 @@ pi 的 `input` event 提供了一个很好的形状：在技能/template expansi
 
 ```ts
 const SUPPORTED_ACTIONS = [
-  'send_message',
-  'execute_command',
-  'trigger_event',
-  'start_session',
-  'retry_runtime',
+  "send_message",
+  "execute_command",
+  "trigger_event",
+  "start_session",
+  "retry_runtime",
 ];
 ```
 
@@ -173,7 +174,7 @@ export type HookEvent =
 语义：
 
 ```ts
-HOOK_SEMANTICS.PreInput = 'first-transform'; // 新语义，或复用 sequential + 特殊 result
+HOOK_SEMANTICS.PreInput = "first-transform"; // 新语义，或复用 sequential + 特殊 result
 ```
 
 为了避免污染通用 `HookResult<P>`，也可以单独实现 `runPreInputHooks()`，内部复用 handler ordering / timeout / trace。
@@ -189,9 +190,14 @@ export interface PreInputPayload {
   readonly requestId: string;
   readonly sessionId: string;
   readonly turnId: string;
-  readonly actionType: 'send_message' | 'execute_command' | 'trigger_event' | 'start_session' | 'retry_runtime';
-  readonly source: 'player' | 'ui' | 'rpc' | 'system';
-  readonly channel: 'web' | 'desktop' | 'api' | 'test';
+  readonly actionType:
+    | "send_message"
+    | "execute_command"
+    | "trigger_event"
+    | "start_session"
+    | "retry_runtime";
+  readonly source: "player" | "ui" | "rpc" | "system";
+  readonly channel: "web" | "desktop" | "api" | "test";
   readonly locale: string;
   readonly modelOverride?: string;
   readonly playerMessage: string;
@@ -205,21 +211,21 @@ export interface PreInputPayload {
 
 ```ts
 export type PreInputResult =
-  | { readonly action: 'continue' }
+  | { readonly action: "continue" }
   | {
-      readonly action: 'transform';
+      readonly action: "transform";
       readonly playerMessage?: string;
       readonly payload?: Readonly<Record<string, unknown>>;
       readonly reason?: string;
     }
   | {
-      readonly action: 'handled';
+      readonly action: "handled";
       readonly events?: readonly PreInputHandledEvent[];
       readonly message?: string;
       readonly reason?: string;
     }
   | {
-      readonly action: 'reject';
+      readonly action: "reject";
       readonly status?: number;
       readonly reason: string;
     };
@@ -277,14 +283,14 @@ execution.completed { runtimeCount: 0, resultCount: 0, handled: true }
 
 ### 5.6 典型用例
 
-| 用例 | PreInput 行为 |
-|---|---|
-| `/roll d20` | 由骰子/规则插件 handled：直接生成 dice event / UI block，不调用 LLM |
-| “继续” | 由叙事/引导插件 transform：补全为“继续当前场景，但推进一个明确行动结果” |
-| “打开背包” | 由物品插件 handled 或 transform 为 plugin-rpc inventory.open |
-| UI 表单提交 | 由表单所属插件 transform：把 payload 标准化为 player.lastFormValues + message cue |
-| 敏感/越权输入 | 由安全/审计插件 reject：返回 400/403 + `error.occurred` |
-| Debug GM 命令 | 由 dev/admin 插件 handled：仅 dev/admin 可用 |
+| 用例          | PreInput 行为                                                                     |
+| ------------- | --------------------------------------------------------------------------------- |
+| `/roll d20`   | 由骰子/规则插件 handled：直接生成 dice event / UI block，不调用 LLM               |
+| “继续”        | 由叙事/引导插件 transform：补全为“继续当前场景，但推进一个明确行动结果”           |
+| “打开背包”    | 由物品插件 handled 或 transform 为 plugin-rpc inventory.open                      |
+| UI 表单提交   | 由表单所属插件 transform：把 payload 标准化为 player.lastFormValues + message cue |
+| 敏感/越权输入 | 由安全/审计插件 reject：返回 400/403 + `error.occurred`                           |
+| Debug GM 命令 | 由 dev/admin 插件 handled：仅 dev/admin 可用                                      |
 
 这些例子只说明插件可以实现的模式，不能落成框架 `if text.startsWith('/roll')` 这类硬编码。
 
@@ -325,12 +331,12 @@ execution.completed { runtimeCount: 0, resultCount: 0, handled: true }
 
 ## § 7 风险 / Tradeoffs
 
-| 风险 | 缓解 |
-|---|---|
-| 插件滥用 PreInput 抢走所有玩家输入 | 只允许 active/approved plugin；handled first-wins 需要 trace；UI 可显示 handledBy |
-| transform 后 message 与原始输入不一致 | InteractionRecord 同时保存 original/final |
-| handled 不产生 turn，前端状态机误判 | 明确 SSE `execution.completed { handled: true }` |
-| PreInput 写状态绕过 proposal | handler API 不暴露 DataStore 写；需要状态变更走 proposal/plugin-rpc/scoped pluginData |
+| 风险                                  | 缓解                                                                                  |
+| ------------------------------------- | ------------------------------------------------------------------------------------- |
+| 插件滥用 PreInput 抢走所有玩家输入    | 只允许 active/approved plugin；handled first-wins 需要 trace；UI 可显示 handledBy     |
+| transform 后 message 与原始输入不一致 | InteractionRecord 同时保存 original/final                                             |
+| handled 不产生 turn，前端状态机误判   | 明确 SSE `execution.completed { handled: true }`                                      |
+| PreInput 写状态绕过 proposal          | handler API 不暴露 DataStore 写；需要状态变更走 proposal/plugin-rpc/scoped pluginData |
 
 ---
 

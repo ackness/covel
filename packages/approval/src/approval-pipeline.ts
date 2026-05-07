@@ -14,53 +14,53 @@
  */
 
 import type {
-	ApprovalDecision,
-	ApprovalRequest,
-	ApprovalRecord,
+  ApprovalDecision,
+  ApprovalRequest,
+  ApprovalRecord,
 } from "@covel/shared";
 import type {
-	DataStore,
-	ApprovalRecord as StoreApprovalRecord,
+  DataStore,
+  ApprovalRecord as StoreApprovalRecord,
 } from "@covel/store";
 
 export interface ApprovalCheckResult {
-	readonly needsApproval: boolean;
-	readonly autoDecision?: "allow";
-	readonly reason: string;
+  readonly needsApproval: boolean;
+  readonly autoDecision?: "allow";
+  readonly reason: string;
 }
 
 export interface PermissionRule {
-	/** Pattern: 'builtin:*', 'local:*', 'third-party:*', or specific tool name. */
-	readonly pattern: string;
-	readonly action: "allow" | "deny" | "ask";
+  /** Pattern: 'builtin:*', 'local:*', 'third-party:*', or specific tool name. */
+  readonly pattern: string;
+  readonly action: "allow" | "deny" | "ask";
 }
 
 export interface ApprovalPipeline {
-	/** Check if a tool call needs approval. */
-	check(
-		request: ApprovalRequest,
-		toolSource?: "builtin" | "local" | "third-party",
-	): ApprovalCheckResult;
-	/** Get all session approval records. */
-	getSessionApprovals(sessionId: string): readonly ApprovalRecord[];
-	/** Record an approval decision. */
-	recordDecision(record: ApprovalRecord): void;
-	/** Check if a tool has a session-level allow decision for a specific plugin. */
-	hasSessionAllow(
-		sessionId: string,
-		toolName: string,
-		pluginId: string,
-	): boolean;
+  /** Check if a tool call needs approval. */
+  check(
+    request: ApprovalRequest,
+    toolSource?: "builtin" | "local" | "third-party",
+  ): ApprovalCheckResult;
+  /** Get all session approval records. */
+  getSessionApprovals(sessionId: string): readonly ApprovalRecord[];
+  /** Record an approval decision. */
+  recordDecision(record: ApprovalRecord): void;
+  /** Check if a tool has a session-level allow decision for a specific plugin. */
+  hasSessionAllow(
+    sessionId: string,
+    toolName: string,
+    pluginId: string,
+  ): boolean;
 }
 
 /** Source-category wildcards supported by permission rules. */
 const SOURCE_WILDCARDS: ReadonlyMap<
-	string,
-	"builtin" | "local" | "third-party"
+  string,
+  "builtin" | "local" | "third-party"
 > = new Map([
-	["builtin:*", "builtin"],
-	["local:*", "local"],
-	["third-party:*", "third-party"],
+  ["builtin:*", "builtin"],
+  ["local:*", "local"],
+  ["third-party:*", "third-party"],
 ]);
 
 /**
@@ -69,39 +69,39 @@ const SOURCE_WILDCARDS: ReadonlyMap<
  * Returns the first matching rule, or undefined.
  */
 export function matchPermissionRule(
-	toolName: string,
-	toolSource: "builtin" | "local" | "third-party",
-	rules: readonly PermissionRule[],
+  toolName: string,
+  toolSource: "builtin" | "local" | "third-party",
+  rules: readonly PermissionRule[],
 ): PermissionRule | undefined {
-	for (const rule of rules) {
-		const wildcardSource = SOURCE_WILDCARDS.get(rule.pattern);
-		if (wildcardSource !== undefined) {
-			if (wildcardSource === toolSource) {
-				return rule;
-			}
-			continue;
-		}
-		// Exact tool-name match (source-agnostic).
-		if (rule.pattern === toolName) {
-			return rule;
-		}
-	}
-	return undefined;
+  for (const rule of rules) {
+    const wildcardSource = SOURCE_WILDCARDS.get(rule.pattern);
+    if (wildcardSource !== undefined) {
+      if (wildcardSource === toolSource) {
+        return rule;
+      }
+      continue;
+    }
+    // Exact tool-name match (source-agnostic).
+    if (rule.pattern === toolName) {
+      return rule;
+    }
+  }
+  return undefined;
 }
 
 /**
  * Convert a shared ApprovalRecord to a store ApprovalRecord.
  */
 function toStoreApproval(record: ApprovalRecord): StoreApprovalRecord {
-	return {
-		id: record.approvalId,
-		sessionId: record.sessionId,
-		toolName: record.toolName,
-		pluginId: record.pluginId,
-		decision: record.decision,
-		turnId: record.turnId,
-		createdAt: record.decidedAt,
-	};
+  return {
+    id: record.approvalId,
+    sessionId: record.sessionId,
+    toolName: record.toolName,
+    pluginId: record.pluginId,
+    decision: record.decision,
+    turnId: record.turnId,
+    createdAt: record.decidedAt,
+  };
 }
 
 /**
@@ -132,85 +132,85 @@ function toStoreApproval(record: ApprovalRecord): StoreApprovalRecord {
  * ```
  */
 export function createApprovalPipeline(
-	store?: DataStore,
-	rules?: readonly PermissionRule[],
+  store?: DataStore,
+  rules?: readonly PermissionRule[],
 ): ApprovalPipeline {
-	// In-memory cache — always maintained for fast lookups
-	const sessionRecords = new Map<string, ApprovalRecord[]>();
+  // In-memory cache — always maintained for fast lookups
+  const sessionRecords = new Map<string, ApprovalRecord[]>();
 
-	function check(
-		request: ApprovalRequest,
-		toolSource?: "builtin" | "local" | "third-party",
-	): ApprovalCheckResult {
-		// No custom rules → default allow-all.
-		if (rules === undefined || rules.length === 0) {
-			return {
-				needsApproval: false,
-				autoDecision: "allow",
-				reason: "default-allow-all",
-			};
-		}
+  function check(
+    request: ApprovalRequest,
+    toolSource?: "builtin" | "local" | "third-party",
+  ): ApprovalCheckResult {
+    // No custom rules → default allow-all.
+    if (rules === undefined || rules.length === 0) {
+      return {
+        needsApproval: false,
+        autoDecision: "allow",
+        reason: "default-allow-all",
+      };
+    }
 
-		const source = toolSource ?? "local";
-		const matched = matchPermissionRule(request.toolName, source, rules);
+    const source = toolSource ?? "local";
+    const matched = matchPermissionRule(request.toolName, source, rules);
 
-		if (matched === undefined) {
-			// No rule matched — default allow.
-			return {
-				needsApproval: false,
-				autoDecision: "allow",
-				reason: "default-allow-all",
-			};
-		}
+    if (matched === undefined) {
+      // No rule matched — default allow.
+      return {
+        needsApproval: false,
+        autoDecision: "allow",
+        reason: "default-allow-all",
+      };
+    }
 
-		switch (matched.action) {
-			case "allow":
-				return {
-					needsApproval: false,
-					autoDecision: "allow",
-					reason: "rule-allow",
-				};
-			case "ask":
-				return { needsApproval: true, reason: "rule-ask" };
-			case "deny":
-				return { needsApproval: true, reason: "rule-deny" };
-		}
-	}
+    switch (matched.action) {
+      case "allow":
+        return {
+          needsApproval: false,
+          autoDecision: "allow",
+          reason: "rule-allow",
+        };
+      case "ask":
+        return { needsApproval: true, reason: "rule-ask" };
+      case "deny":
+        return { needsApproval: true, reason: "rule-deny" };
+    }
+  }
 
-	function getSessionApprovals(sessionId: string): readonly ApprovalRecord[] {
-		return sessionRecords.get(sessionId) ?? [];
-	}
+  function getSessionApprovals(sessionId: string): readonly ApprovalRecord[] {
+    return sessionRecords.get(sessionId) ?? [];
+  }
 
-	function recordDecision(record: ApprovalRecord): void {
-		const existing = sessionRecords.get(record.sessionId);
-		if (existing !== undefined) {
-			sessionRecords.set(record.sessionId, [...existing, record]);
-		} else {
-			sessionRecords.set(record.sessionId, [record]);
-		}
+  function recordDecision(record: ApprovalRecord): void {
+    const existing = sessionRecords.get(record.sessionId);
+    if (existing !== undefined) {
+      sessionRecords.set(record.sessionId, [...existing, record]);
+    } else {
+      sessionRecords.set(record.sessionId, [record]);
+    }
 
-		// Persist to store (fire-and-forget to keep sync API)
-		if (store) {
-			void store.saveApproval(toStoreApproval(record));
-		}
-	}
+    // Persist to store (fire-and-forget to keep sync API)
+    if (store) {
+      void store.saveApproval(toStoreApproval(record));
+    }
+  }
 
-	function hasSessionAllow(
-		sessionId: string,
-		toolName: string,
-		pluginId: string,
-	): boolean {
-		const records = sessionRecords.get(sessionId);
-		if (records === undefined) {
-			return false;
-		}
-		return records.some(
-			(r) =>
-				r.toolName === toolName &&
-				r.pluginId === pluginId &&
-				r.decision === "allow-session",
-		);
-	}
+  function hasSessionAllow(
+    sessionId: string,
+    toolName: string,
+    pluginId: string,
+  ): boolean {
+    const records = sessionRecords.get(sessionId);
+    if (records === undefined) {
+      return false;
+    }
+    return records.some(
+      (r) =>
+        r.toolName === toolName &&
+        r.pluginId === pluginId &&
+        r.decision === "allow-session",
+    );
+  }
 
-	return { check, getSessionApprovals, recordDecision, hasSessionAllow };
+  return { check, getSessionApprovals, recordDecision, hasSessionAllow };
 }

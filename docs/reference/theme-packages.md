@@ -18,7 +18,7 @@
 当前运行时主题切换入口是：
 
 ```html
-<html data-theme="paper" class="dark">
+<html data-theme="paper" class="dark"></html>
 ```
 
 其中：
@@ -66,13 +66,13 @@ JSON 结构：
 
 ## 3. JSON 字段契约
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `id` | `string` | 主题 ID，匹配 `/^[a-z0-9][a-z0-9-]{1,47}$/` |
-| `label` | `string \| Record<string, string>` | 显示名称 |
-| `schemes` | `("light" \| "dark")[]` | 支持的颜色模式 |
-| `description` | `string \| Record<string, string>` | 可选说明 |
-| `cssText` | `string` | 主题 CSS 内容 |
+| 字段          | 类型                               | 说明                                        |
+| ------------- | ---------------------------------- | ------------------------------------------- |
+| `id`          | `string`                           | 主题 ID，匹配 `/^[a-z0-9][a-z0-9-]{1,47}$/` |
+| `label`       | `string \| Record<string, string>` | 显示名称                                    |
+| `schemes`     | `("light" \| "dark")[]`            | 支持的颜色模式                              |
+| `description` | `string \| Record<string, string>` | 可选说明                                    |
+| `cssText`     | `string`                           | 主题 CSS 内容                               |
 
 ## 4. 内置主题包结构
 

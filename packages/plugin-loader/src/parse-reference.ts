@@ -13,21 +13,21 @@ import type { ParsedReference } from "./types.js";
  * @returns Parsed reference with keywords and content
  */
 export function parseReference(
-	content: string,
-	filePath: string,
+  content: string,
+  filePath: string,
 ): ParsedReference {
-	const { data, content: body } = matter(content);
+  const { data, content: body } = matter(content);
 
-	const rawKeywords: unknown = data.keywords;
-	const keywords: readonly string[] = Array.isArray(rawKeywords)
-		? rawKeywords.map((k: unknown) => String(k))
-		: [];
+  const rawKeywords: unknown = data.keywords;
+  const keywords: readonly string[] = Array.isArray(rawKeywords)
+    ? rawKeywords.map((k: unknown) => String(k))
+    : [];
 
-	return {
-		filePath,
-		keywords,
-		content: body,
-	};
+  return {
+    filePath,
+    keywords,
+    content: body,
+  };
 }
 
 /**
@@ -38,13 +38,13 @@ export function parseReference(
  * @returns true if any keyword is found in the context
  */
 export function shouldInjectReference(
-	ref: ParsedReference,
-	context: string,
+  ref: ParsedReference,
+  context: string,
 ): boolean {
-	if (ref.keywords.length === 0) {
-		return true;
-	}
+  if (ref.keywords.length === 0) {
+    return true;
+  }
 
-	const lowerContext = context.toLowerCase();
-	return ref.keywords.some((kw) => lowerContext.includes(kw.toLowerCase()));
+  const lowerContext = context.toLowerCase();
+  return ref.keywords.some((kw) => lowerContext.includes(kw.toLowerCase()));
 }

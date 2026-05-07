@@ -49,9 +49,9 @@ world importer 是框架内部的 privileged system service，但它不能绕过
 
 本地 path 有两个 root：
 
-| 来源 | path root |
-|---|---|
-| world 包 `world.data.yaml` | world root |
+| 来源                                                                         | path root              |
+| ---------------------------------------------------------------------------- | ---------------------- |
+| world 包 `world.data.yaml`                                                   | world root             |
 | 用户 override `~/.covel/world-overrides/<world-id>/world.data.override.yaml` | 该 world override root |
 
 实现要求：
@@ -65,18 +65,18 @@ world importer 是框架内部的 privileged system service，但它不能绕过
 
 建议默认限制：
 
-| 项 | 建议限制 |
-|---|---:|
-| `world.yaml` | 256 KiB |
-| `world.data.yaml` | 512 KiB |
-| 单个 YAML/JSON source | 2 MiB |
-| 单个 Markdown/Text source | 1 MiB |
-| 单个 schema 文件 | 512 KiB |
-| media 单文件 | 20 MiB |
-| 单个 media source 总量 | 100 MiB |
-| source 数量 | 128 |
-| 单 source item 数量 | 10,000 |
-| plugin-data key 长度 | 128 |
+| 项                        | 建议限制 |
+| ------------------------- | -------: |
+| `world.yaml`              |  256 KiB |
+| `world.data.yaml`         |  512 KiB |
+| 单个 YAML/JSON source     |    2 MiB |
+| 单个 Markdown/Text source |    1 MiB |
+| 单个 schema 文件          |  512 KiB |
+| media 单文件              |   20 MiB |
+| 单个 media source 总量    |  100 MiB |
+| source 数量               |      128 |
+| 单 source item 数量       |   10,000 |
+| plugin-data key 长度      |      128 |
 
 ## YAML / JSON
 

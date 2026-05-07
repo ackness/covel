@@ -9,18 +9,18 @@ export const SUPPORTED_LOCALES: readonly SupportedLocale[] = ["zh-CN", "en-US"];
 export const DEFAULT_LOCALE: SupportedLocale = "zh-CN";
 
 export function isSupportedLocale(value: unknown): value is SupportedLocale {
-	return (
-		typeof value === "string" &&
-		SUPPORTED_LOCALES.includes(value as SupportedLocale)
-	);
+  return (
+    typeof value === "string" &&
+    SUPPORTED_LOCALES.includes(value as SupportedLocale)
+  );
 }
 
 function detectFromNavigator(): SupportedLocale | null {
-	if (typeof navigator === "undefined") return null;
-	const lang = navigator.language?.toLowerCase() ?? "";
-	if (lang.startsWith("zh")) return "zh-CN";
-	if (lang.startsWith("en")) return "en-US";
-	return null;
+  if (typeof navigator === "undefined") return null;
+  const lang = navigator.language?.toLowerCase() ?? "";
+  if (lang.startsWith("zh")) return "zh-CN";
+  if (lang.startsWith("en")) return "en-US";
+  return null;
 }
 
 /**
@@ -29,10 +29,10 @@ function detectFromNavigator(): SupportedLocale | null {
  * prefer `useSetting('ui.locale')`.
  */
 export function resolveInitialLocale(): SupportedLocale {
-	return detectFromNavigator() ?? DEFAULT_LOCALE;
+  return detectFromNavigator() ?? DEFAULT_LOCALE;
 }
 
 /** Kept as a no-op for backwards compatibility — storage lives in settings. */
 export function getStoredLocale(): SupportedLocale | null {
-	return null;
+  return null;
 }

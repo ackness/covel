@@ -28,14 +28,17 @@ Use Playwright for the real player path:
 
 ```js
 await context.addInitScript(() => {
-  localStorage.setItem("covel:settings", JSON.stringify({
-    schemaVersion: 1,
-    savedAt: new Date().toISOString(),
-    entries: {
-      "ui.onboardedVersion": 3,
-      "ui.locale": "zh-CN"
-    }
-  }));
+  localStorage.setItem(
+    "covel:settings",
+    JSON.stringify({
+      schemaVersion: 1,
+      savedAt: new Date().toISOString(),
+      entries: {
+        "ui.onboardedVersion": 3,
+        "ui.locale": "zh-CN",
+      },
+    }),
+  );
 });
 ```
 
@@ -61,17 +64,25 @@ Minimal direct Playwright skeleton:
 import { chromium } from "playwright";
 
 const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext({ viewport: { width: 1440, height: 980 } });
+const context = await browser.newContext({
+  viewport: { width: 1440, height: 980 },
+});
 await context.addInitScript(() => {
-  localStorage.setItem("covel:settings", JSON.stringify({
-    schemaVersion: 1,
-    savedAt: new Date().toISOString(),
-    entries: { "ui.onboardedVersion": 3, "ui.locale": "zh-CN" }
-  }));
+  localStorage.setItem(
+    "covel:settings",
+    JSON.stringify({
+      schemaVersion: 1,
+      savedAt: new Date().toISOString(),
+      entries: { "ui.onboardedVersion": 3, "ui.locale": "zh-CN" },
+    }),
+  );
 });
 const page = await context.newPage();
 await page.goto("http://localhost:5173/session", { waitUntil: "networkidle" });
-await page.screenshot({ path: "output/playwright/session.png", fullPage: true });
+await page.screenshot({
+  path: "output/playwright/session.png",
+  fullPage: true,
+});
 await browser.close();
 ```
 

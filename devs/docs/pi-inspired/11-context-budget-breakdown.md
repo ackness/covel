@@ -136,23 +136,23 @@ readonly contextBudget?: Omit<BudgetOptions, 'estimator'>;
 export interface ContextBudgetSegment {
   readonly id: string;
   readonly kind:
-    | 'framework'
-    | 'plugin-prompt'
-    | 'runtime-inject'
-    | 'plugin-data-inject'
-    | 'world'
-    | 'memory'
-    | 'lorebook'
-    | 'history'
-    | 'summary'
-    | 'authors-note'
-    | 'post-history'
-    | 'tool-definitions'
-    | 'unknown';
+    | "framework"
+    | "plugin-prompt"
+    | "runtime-inject"
+    | "plugin-data-inject"
+    | "world"
+    | "memory"
+    | "lorebook"
+    | "history"
+    | "summary"
+    | "authors-note"
+    | "post-history"
+    | "tool-definitions"
+    | "unknown";
   readonly runtimeId?: string;
   readonly pluginId?: string;
   readonly namespace?: string;
-  readonly visibility?: 'private' | 'context-summary' | 'context-full';
+  readonly visibility?: "private" | "context-summary" | "context-full";
   readonly charCount: number;
   readonly estimatedTokens: number;
   readonly truncated?: boolean;
@@ -238,7 +238,7 @@ return `<${tagName}>\n${serialized}${countLine}\n</${tagName}>`;
 ```ts
 segmentRecorder.add({
   id: `plugin-data:${params.manifest.pluginId}:${inject.namespace}`,
-  kind: 'plugin-data-inject',
+  kind: "plugin-data-inject",
   pluginId: params.manifest.pluginId,
   runtimeId: params.manifest.name,
   namespace: inject.namespace,
@@ -252,7 +252,7 @@ segmentRecorder.add({
 如果 #01 已落地，附加：
 
 ```ts
-visibility: 'context-summary' | 'context-full'
+visibility: "context-summary" | "context-full";
 ```
 
 private 行不应出现在 segment 中；debug 可显示 filtered count。
@@ -272,7 +272,7 @@ V1 `context-builder.ts` 可能是单字符串拼接；V2 `prompt-assembler.ts` �
 新增 trace subtype：
 
 ```ts
-context.budget
+context.budget;
 ```
 
 payload：
@@ -351,12 +351,12 @@ P0/P1 不做，避免 plugin 依赖不稳定内部预算。
 
 ## § 7 风险 / Tradeoffs
 
-| 风险 | 缓解 |
-|---|---|
-| 记录 segment 改变 prompt 字节 | recorder 只旁路记录，不参与拼接；tests 保证 prompt byte-identical |
-| token 估算不准 | 明确是 estimator-based，用于归因不是计费 |
-| trace payload 太大 | segment 只存 metadata 和 token 数，不存完整文本；debug 需要文本从 Prompt Viewer 另取 |
-| V1/V2 双路径复杂 | P0 先 coarse；P1 再 V2 精细化 |
+| 风险                          | 缓解                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------ |
+| 记录 segment 改变 prompt 字节 | recorder 只旁路记录，不参与拼接；tests 保证 prompt byte-identical                    |
+| token 估算不准                | 明确是 estimator-based，用于归因不是计费                                             |
+| trace payload 太大            | segment 只存 metadata 和 token 数，不存完整文本；debug 需要文本从 Prompt Viewer 另取 |
+| V1/V2 双路径复杂              | P0 先 coarse；P1 再 V2 精细化                                                        |
 
 ---
 

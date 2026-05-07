@@ -63,7 +63,7 @@ export interface PluginDiscoveryResult {
   readonly source?: PluginSource;
 }
 
-export type PluginSource = 'builtin' | 'official' | 'community';
+export type PluginSource = "builtin" | "official" | "community";
 ```
 
 注释已经说明：外部目录 discover 的 plugin 会被标成 `community`，避免用户自造 `core-evil` 伪装 builtin。
@@ -143,16 +143,20 @@ readonly RuntimeManifest[]
 
 ```ts
 export interface ResourceProvenance {
-  readonly source: PluginSource;          // builtin | official | community
-  readonly rootPath: string;              // plugin/package root
-  readonly manifestPath?: string;         // concrete PLUGIN.md
-  readonly resourcePath?: string;         // tool/ui/prompt concrete file
-  readonly scope: 'builtin' | 'world' | 'user' | 'dev';
-  readonly origin: 'top-level' | 'package' | 'world-manifest';
-  readonly loadedBy: 'server-startup' | 'world-manifest' | 'session-activate' | 'dev-reload';
+  readonly source: PluginSource; // builtin | official | community
+  readonly rootPath: string; // plugin/package root
+  readonly manifestPath?: string; // concrete PLUGIN.md
+  readonly resourcePath?: string; // tool/ui/prompt concrete file
+  readonly scope: "builtin" | "world" | "user" | "dev";
+  readonly origin: "top-level" | "package" | "world-manifest";
+  readonly loadedBy:
+    | "server-startup"
+    | "world-manifest"
+    | "session-activate"
+    | "dev-reload";
   readonly packageName?: string;
   readonly packageVersion?: string;
-  readonly packageSource?: string;        // npm/git/local/path later
+  readonly packageSource?: string; // npm/git/local/path later
   readonly worldId?: string;
 }
 ```
@@ -167,14 +171,14 @@ export interface RuntimeRegistryView {
 
 export interface ToolRegistryView {
   readonly name: string;
-  readonly kind: 'builtin' | 'local';
+  readonly kind: "builtin" | "local";
   readonly ownerPluginId?: string;
   readonly ownerRuntimeId?: string;
   readonly provenance: ResourceProvenance;
 }
 
 export interface UiSpecRegistryView {
-  readonly slot: 'right' | 'message' | 'left';
+  readonly slot: "right" | "message" | "left";
   readonly ownerPluginId: string;
   readonly ownerRuntimeId?: string;
   readonly path: string;
@@ -343,12 +347,12 @@ P0 可以先粗略：
 
 ## § 7 风险 / Tradeoffs
 
-| 风险 | 缓解 |
-|---|---|
-| provenance 泄漏服务器绝对路径给普通玩家 | API 区分 debug/admin view；普通 UI 不显示 `rootPath/resourcePath` |
-| 类型加太多但短期不用 | P0 只加 registry view + debug consumption，不强制所有路径迁移 |
-| manifestPath 与 multi-runtime 顺序配对错误 | 在 parser 层记录 `filePath` 更稳 |
-| source 与 provenance.source 双字段漂移 | `source` 作为兼容字段，写入时由 provenance 派生，后续废弃 |
+| 风险                                       | 缓解                                                              |
+| ------------------------------------------ | ----------------------------------------------------------------- |
+| provenance 泄漏服务器绝对路径给普通玩家    | API 区分 debug/admin view；普通 UI 不显示 `rootPath/resourcePath` |
+| 类型加太多但短期不用                       | P0 只加 registry view + debug consumption，不强制所有路径迁移     |
+| manifestPath 与 multi-runtime 顺序配对错误 | 在 parser 层记录 `filePath` 更稳                                  |
+| source 与 provenance.source 双字段漂移     | `source` 作为兼容字段，写入时由 provenance 派生，后续废弃         |
 
 ---
 

@@ -35,11 +35,13 @@ ui:
 你是世界维度初始化 agent。
 
 ## 世界观文档
+
 <world-lore>
 {{ world.lore }}
 </world-lore>
 
 ## 世界元数据
+
 <world-dimensions>
 {{ config.worldDimensions }}
 </world-dimensions>
@@ -54,15 +56,15 @@ ui:
 
 **类型清单**：
 
-| type | 用途 | 必填子字段 |
-|------|------|-----------|
-| `string` | 自由文本（背景、职业、当前状态） | — |
-| `number` | 数值属性，能设 min/max/defaultValue | 建议设 min/max 以便出进度条 |
-| `boolean` | 是/否标记（是否中毒、是否觉醒） | — |
-| `enum` | 有限选项（境界阶段、职业分类） | `options: string[]` |
-| `array` | 同类元素列表（技能名、特征） | `itemType: 'string' \| 'number'` |
-| `object` | 固定结构的嵌套对象（装备栏：武器/防具/饰品） | `subSchema: AttributeDefinition[]` |
-| `map` | 自由键的字典（人际关系：姓名→关系类型） | `valueType`（可选，默认 string） |
+| type      | 用途                                         | 必填子字段                         |
+| --------- | -------------------------------------------- | ---------------------------------- |
+| `string`  | 自由文本（背景、职业、当前状态）             | —                                  |
+| `number`  | 数值属性，能设 min/max/defaultValue          | 建议设 min/max 以便出进度条        |
+| `boolean` | 是/否标记（是否中毒、是否觉醒）              | —                                  |
+| `enum`    | 有限选项（境界阶段、职业分类）               | `options: string[]`                |
+| `array`   | 同类元素列表（技能名、特征）                 | `itemType: 'string' \| 'number'`   |
+| `object`  | 固定结构的嵌套对象（装备栏：武器/防具/饰品） | `subSchema: AttributeDefinition[]` |
+| `map`     | 自由键的字典（人际关系：姓名→关系类型）      | `valueType`（可选，默认 string）   |
 
 **属性分类**：`stats`（数值）| `bio`（身份）| `abilities`（能力）| `equipment`（装备）| `social`（社交）
 
@@ -71,29 +73,95 @@ ui:
 ```json
 {
   "attributes": [
-    { "id": "hp", "name": "生命值", "type": "number", "min": 0, "max": 100, "defaultValue": 100, "category": "stats", "description": "角色当前生命值" },
-    { "id": "lingGen", "name": "灵根", "type": "enum", "options": ["金","木","水","火","土"], "category": "bio", "description": "五行灵根决定法术系别" },
-    { "id": "cultivation", "name": "境界", "type": "enum", "options": ["练气","筑基","金丹","元婴","化神"], "category": "stats", "description": "修炼境界阶段" },
-    { "id": "location", "name": "位置", "type": "object", "category": "bio",
+    {
+      "id": "hp",
+      "name": "生命值",
+      "type": "number",
+      "min": 0,
+      "max": 100,
+      "defaultValue": 100,
+      "category": "stats",
+      "description": "角色当前生命值"
+    },
+    {
+      "id": "lingGen",
+      "name": "灵根",
+      "type": "enum",
+      "options": ["金", "木", "水", "火", "土"],
+      "category": "bio",
+      "description": "五行灵根决定法术系别"
+    },
+    {
+      "id": "cultivation",
+      "name": "境界",
+      "type": "enum",
+      "options": ["练气", "筑基", "金丹", "元婴", "化神"],
+      "category": "stats",
+      "description": "修炼境界阶段"
+    },
+    {
+      "id": "location",
+      "name": "位置",
+      "type": "object",
+      "category": "bio",
       "subSchema": [
         { "id": "region", "name": "大区", "type": "string", "category": "bio" },
-        { "id": "landmark", "name": "地标", "type": "string", "category": "bio" }
+        {
+          "id": "landmark",
+          "name": "地标",
+          "type": "string",
+          "category": "bio"
+        }
       ]
     },
-    { "id": "equipment", "name": "装备", "type": "object", "category": "equipment",
+    {
+      "id": "equipment",
+      "name": "装备",
+      "type": "object",
+      "category": "equipment",
       "subSchema": [
-        { "id": "weapon", "name": "法器", "type": "string", "category": "equipment" },
-        { "id": "armor", "name": "护身", "type": "string", "category": "equipment" },
-        { "id": "consumables", "name": "丹药", "type": "array", "itemType": "string", "category": "equipment" }
+        {
+          "id": "weapon",
+          "name": "法器",
+          "type": "string",
+          "category": "equipment"
+        },
+        {
+          "id": "armor",
+          "name": "护身",
+          "type": "string",
+          "category": "equipment"
+        },
+        {
+          "id": "consumables",
+          "name": "丹药",
+          "type": "array",
+          "itemType": "string",
+          "category": "equipment"
+        }
       ]
     },
-    { "id": "relationships", "name": "人际", "type": "map", "valueType": "string", "category": "social", "description": "键=角色名，值=关系描述（如 师姐/信任）" },
-    { "id": "skills", "name": "功法", "type": "array", "itemType": "string", "category": "abilities" }
+    {
+      "id": "relationships",
+      "name": "人际",
+      "type": "map",
+      "valueType": "string",
+      "category": "social",
+      "description": "键=角色名，值=关系描述（如 师姐/信任）"
+    },
+    {
+      "id": "skills",
+      "name": "功法",
+      "type": "array",
+      "itemType": "string",
+      "category": "abilities"
+    }
   ]
 }
 ```
 
 **硬要求**：
+
 - **至少 15 个属性**，覆盖 stats / bio / abilities / equipment / social 全部 5 个分类
 - 世界观里提到 ≥2 次的任何机制都要作为一级属性（例如反复提到灵根，就必须有 `lingGen`）
 - 结构化概念（装备槽、位置、人际关系、物品栏）**必须用 `object` 或 `map`**，不要拆成 equipment_weapon、equipment_armor 这种平铺键

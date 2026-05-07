@@ -23,56 +23,60 @@
 
 export interface StateManager {
   // === 表操作 ===
-  
+
   /** 创建状态表（Pre-Game 阶段调用） */
   createTable(sessionId: string, schema: StateTableSchema): Promise<void>;
-  
+
   /** 获取所有表的 schema */
   getTableSchemas(sessionId: string): Promise<StateTableSchema[]>;
-  
+
   /** 删除表（session 结束时） */
   dropTable(sessionId: string, tableName: string): Promise<void>;
-  
+
   // === 字段读写 ===
-  
+
   /** 读取字段当前值 */
   getValue(sessionId: string, table: string, field: string): Promise<unknown>;
-  
+
   /** 读取整张表的当前状态 */
-  getTableSnapshot(sessionId: string, table: string): Promise<Record<string, unknown>>;
-  
+  getTableSnapshot(
+    sessionId: string,
+    table: string,
+  ): Promise<Record<string, unknown>>;
+
   /** 更新字段值（产生变更记录） */
   updateValue(
     sessionId: string,
     table: string,
     field: string,
     value: unknown,
-    metadata: StateChangeMetadata
+    metadata: StateChangeMetadata,
   ): Promise<void>;
-  
+
   /** 批量更新（同一个 Runtime 的多次写入合并为一次事务） */
-  batchUpdate(
-    sessionId: string,
-    updates: StateUpdateBatch[]
-  ): Promise<void>;
-  
+  batchUpdate(sessionId: string, updates: StateUpdateBatch[]): Promise<void>;
+
   // === 变更历史 ===
-  
+
   /** 获取字段的变更历史 */
   getChangeLog(
     sessionId: string,
     table: string,
     field: string,
-    options?: { limit?: number; since?: string }
+    options?: { limit?: number; since?: string },
   ): Promise<StateChangeEntry[]>;
-  
+
   /** 获取某个 Turn 内的所有变更 */
   getChangesByTurn(sessionId: string, turnId: string): Promise<StateField[]>;
-  
+
   // === 查询 ===
-  
+
   /** 通用查询（支持简单过滤） */
-  query(sessionId: string, table: string, filter?: StateFilter): Promise<Record<string, unknown>[]>;
+  query(
+    sessionId: string,
+    table: string,
+    filter?: StateFilter,
+  ): Promise<Record<string, unknown>[]>;
 }
 
 export interface StateChangeMetadata {
@@ -90,7 +94,7 @@ export interface StateUpdateBatch {
 
 export interface StateFilter {
   field: string;
-  operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in';
+  operator: "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "in";
   value: unknown;
 }
 ```
@@ -122,10 +126,10 @@ export interface StateHistoryConfig {
 export interface WriteCollector {
   /** Turn 开始时创建收集器 */
   startTurn(turnId: string): void;
-  
+
   /** 记录一次写操作（不立即写入存储） */
   recordWrite(write: PendingWrite): void;
-  
+
   /** Turn 结束时检测冲突并提交 */
   commitTurn(turnId: string): Promise<CommitResult>;
 }
@@ -158,19 +162,19 @@ export interface CommitResult {
 export interface EventBus {
   /** 发布事件 */
   emit(message: CovelMessage): Promise<void>;
-  
+
   /** 订阅 topic（精确匹配或通配符） */
   on(topic: string, handler: EventHandler): () => void;
-  
+
   /** 一次性订阅 */
   once(topic: string, handler: EventHandler): () => void;
-  
+
   /** 获取待处理的事件（供 Trigger Router 使用） */
   getPendingEvents(sessionId: string): CovelMessage[];
-  
+
   /** 消费事件（标记为已处理） */
   acknowledge(messageId: string): void;
-  
+
   /** 清理 session 的所有事件 */
   clearSession(sessionId: string): void;
 }
@@ -184,7 +188,7 @@ export type EventHandler = (message: CovelMessage) => void | Promise<void>;
 export interface MessageRouter {
   /**
    * 路由消息到正确的目标。
-   * 
+   *
    * type: "message" → 追加到目标 Runtime 的上下文
    * type: "event"   → 触发订阅该 topic 的所有回调
    * type: "callback" → 触发指定 Runtime 作为回调执行
@@ -200,11 +204,11 @@ export interface MessageRouter {
 ```typescript
 /**
  * 事件回调的两种模式：
- * 
+ *
  * 1. 轻量回调（local tool 函数）
  *    → 直接执行 JS/TS 函数，不涉及 LLM
  *    → 适合简单的数据处理、状态更新
- * 
+ *
  * 2. 完整 Runtime 回调
  *    → 触发完整的 LLM Agent 流程
  *    → 有 prompt、tools、structured output
@@ -220,7 +224,7 @@ export interface MessageRouter {
 export interface EventLog {
   /** 记录事件 */
   append(message: CovelMessage): Promise<void>;
-  
+
   /** 查询事件历史 */
   query(params: {
     sessionId: string;
@@ -244,50 +248,81 @@ export interface DataStore {
   getSession(id: string): Promise<Session | null>;
   updateSession(id: string, patch: Partial<Session>): Promise<void>;
   listSessions(): Promise<Session[]>;
-  
+
   // === Runtime Results ===
   saveRuntimeResult(result: RuntimeResult): Promise<void>;
-  getRuntimeResult(turnId: string, pluginId: string, runtimeId: string): Promise<RuntimeResult | null>;
+  getRuntimeResult(
+    turnId: string,
+    pluginId: string,
+    runtimeId: string,
+  ): Promise<RuntimeResult | null>;
   getRuntimeResults(turnId: string): Promise<RuntimeResult[]>;
-  getRecentResults(pluginId: string, runtimeId: string, limit: number): Promise<RuntimeResult[]>;
-  
+  getRecentResults(
+    pluginId: string,
+    runtimeId: string,
+    limit: number,
+  ): Promise<RuntimeResult[]>;
+
   // === Tool Call Records ===
   saveToolCall(record: ToolCallRecord): Promise<void>;
   getToolCalls(turnId: string): Promise<ToolCallRecord[]>;
-  
+
   // === State Tables ===
   createStateTable(sessionId: string, schema: StateTableSchema): Promise<void>;
-  getStateValue(sessionId: string, table: string, field: string): Promise<unknown>;
-  setStateValue(sessionId: string, table: string, field: string, value: unknown, metadata: StateChangeMetadata): Promise<void>;
-  getStateChangeLog(sessionId: string, table: string, field: string): Promise<StateChangeEntry[]>;
-  getTableSnapshot(sessionId: string, table: string): Promise<Record<string, unknown>>;
-  
+  getStateValue(
+    sessionId: string,
+    table: string,
+    field: string,
+  ): Promise<unknown>;
+  setStateValue(
+    sessionId: string,
+    table: string,
+    field: string,
+    value: unknown,
+    metadata: StateChangeMetadata,
+  ): Promise<void>;
+  getStateChangeLog(
+    sessionId: string,
+    table: string,
+    field: string,
+  ): Promise<StateChangeEntry[]>;
+  getTableSnapshot(
+    sessionId: string,
+    table: string,
+  ): Promise<Record<string, unknown>>;
+
   // === Events ===
   saveEvent(message: CovelMessage): Promise<void>;
-  getEvents(sessionId: string, options?: { topic?: string; limit?: number }): Promise<CovelMessage[]>;
-  
+  getEvents(
+    sessionId: string,
+    options?: { topic?: string; limit?: number },
+  ): Promise<CovelMessage[]>;
+
   // === Approval Records ===
   saveApproval(record: ApprovalRecord): Promise<void>;
   getSessionApprovals(sessionId: string): Promise<ApprovalRecord[]>;
-  
+
   // === Turn Log ===
   saveTurnResult(result: TurnResult): Promise<void>;
   getTurnResult(turnId: string): Promise<TurnResult | null>;
   getTurnHistory(sessionId: string, limit?: number): Promise<TurnResult[]>;
-  
+
   // === Plugin Config ===
-  savePluginConfig(pluginId: string, config: Record<string, unknown>): Promise<void>;
+  savePluginConfig(
+    pluginId: string,
+    config: Record<string, unknown>,
+  ): Promise<void>;
   getPluginConfig(pluginId: string): Promise<Record<string, unknown> | null>;
 }
 ```
 
 ### 5.4.2 存储后端实现
 
-| 后端 | 用途 | 实现方式 |
-|------|------|----------|
-| `MemoryStore` | 开发/测试 | 内存 Map/Array |
-| `IdbStore` | 浏览器 T1/T2 部署 | IndexedDB（via `idb`） |
-| `PgStore` | 生产 T3 部署 | PostgreSQL（via Drizzle ORM） |
+| 后端          | 用途              | 实现方式                      |
+| ------------- | ----------------- | ----------------------------- |
+| `MemoryStore` | 开发/测试         | 内存 Map/Array                |
+| `IdbStore`    | 浏览器 T1/T2 部署 | IndexedDB（via `idb`）        |
+| `PgStore`     | 生产 T3 部署      | PostgreSQL（via Drizzle ORM） |
 
 所有后端实现 `DataStore` 接口，通过 contract tests 确保行为一致。
 

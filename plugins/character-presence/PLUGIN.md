@@ -27,11 +27,27 @@ Manual function runtime for saving a character's presence refs.
   "presence": {
     "schemaVersion": 1,
     "characterId": "mentor-lin",
-    "avatar": { "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "mime": "image/png", "size": 1234 },
-    "sprite": { "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "mime": "image/png", "size": 5678 },
-    "voice": { "id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "mime": "audio/wav", "size": 4321 },
+    "avatar": {
+      "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "mime": "image/png",
+      "size": 1234
+    },
+    "sprite": {
+      "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "mime": "image/png",
+      "size": 5678
+    },
+    "voice": {
+      "id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "mime": "audio/wav",
+      "size": 4321
+    },
     "media": {
-      "theme": { "id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "mime": "audio/mpeg", "size": 9876 }
+      "theme": {
+        "id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "mime": "audio/mpeg",
+        "size": 9876
+      }
     }
   }
 }

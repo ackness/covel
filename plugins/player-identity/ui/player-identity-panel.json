@@ -40,7 +40,10 @@
             "component": "Input",
             "props": {
               "label": { "zh": "身份 ID", "en": "Identity ID" },
-              "placeholder": { "zh": "留空自动生成短 ID", "en": "Leave blank to auto-generate a short ID" },
+              "placeholder": {
+                "zh": "留空自动生成短 ID",
+                "en": "Leave blank to auto-generate a short ID"
+              },
               "value": { "$bindState": "/form/id" }
             }
           },
@@ -94,7 +97,10 @@
             "component": "Input",
             "props": {
               "label": { "zh": "边界", "en": "Boundaries" },
-              "placeholder": { "zh": "不主动伤害同学, 保守秘密", "en": "avoid harming classmates, keep secrets" },
+              "placeholder": {
+                "zh": "不主动伤害同学, 保守秘密",
+                "en": "avoid harming classmates, keep secrets"
+              },
               "value": { "$bindState": "/form/boundariesText" }
             }
           }
@@ -131,7 +137,10 @@
         "component": "Input",
         "props": {
           "label": { "zh": "关系基调", "en": "Relationship tone" },
-          "placeholder": { "zh": "慢热、真诚、会保持距离", "en": "slow-burn, sincere, keeps some distance" },
+          "placeholder": {
+            "zh": "慢热、真诚、会保持距离",
+            "en": "slow-burn, sincere, keeps some distance"
+          },
           "value": { "$bindState": "/form/relationshipTone" }
         }
       },

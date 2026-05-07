@@ -20,20 +20,20 @@ import type { HookPipeline } from "./pipeline.js";
 
 /** Minimal shape of a parsed PLUGIN.md as the hook registrar needs it. */
 export interface PluginHookSource {
-	/** Stable plugin id used for trace / abort reasons. */
-	readonly pluginId: string;
-	/** Absolute directory the plugin lives in — handler paths resolve relative to it. */
-	readonly rootPath: string;
-	/** Parsed `hooks:` frontmatter entries (already schema-validated). */
-	readonly hooks: readonly HookDeclaration[];
+  /** Stable plugin id used for trace / abort reasons. */
+  readonly pluginId: string;
+  /** Absolute directory the plugin lives in — handler paths resolve relative to it. */
+  readonly rootPath: string;
+  /** Parsed `hooks:` frontmatter entries (already schema-validated). */
+  readonly hooks: readonly HookDeclaration[];
 }
 
 export interface RegisterPluginHooksOptions {
-	/**
-	 * Optional hook invoked once per bad registration (module not found,
-	 * path escape, malformed match). Defaults to `console.warn`.
-	 */
-	readonly onWarn?: (message: string) => void;
+  /**
+   * Optional hook invoked once per bad registration (module not found,
+   * path escape, malformed match). Defaults to `console.warn`.
+   */
+  readonly onWarn?: (message: string) => void;
 }
 
 /**
@@ -42,9 +42,9 @@ export interface RegisterPluginHooksOptions {
  * `..` escapes and absolute paths that happen to live in sibling dirs.
  */
 function escapesRoot(rootPath: string, absPath: string): boolean {
-	if (absPath === rootPath) return false;
-	const rel = path.relative(rootPath, absPath);
-	return rel.startsWith("..") || path.isAbsolute(rel);
+  if (absPath === rootPath) return false;
+  const rel = path.relative(rootPath, absPath);
+  return rel.startsWith("..") || path.isAbsolute(rel);
 }
 
 /**
@@ -52,18 +52,18 @@ function escapesRoot(rootPath: string, absPath: string): boolean {
  * the frontmatter schema permits.
  */
 function buildMatchFn(
-	matchSpec: Readonly<Record<string, string | number>> | undefined,
+  matchSpec: Readonly<Record<string, string | number>> | undefined,
 ): ((payload: unknown) => boolean) | undefined {
-	if (!matchSpec) return undefined;
-	const entries = Object.entries(matchSpec);
-	return (payload: unknown): boolean => {
-		if (!payload || typeof payload !== "object") return false;
-		const p = payload as Record<string, unknown>;
-		for (const [key, value] of entries) {
-			if (p[key] !== value) return false;
-		}
-		return true;
-	};
+  if (!matchSpec) return undefined;
+  const entries = Object.entries(matchSpec);
+  return (payload: unknown): boolean => {
+    if (!payload || typeof payload !== "object") return false;
+    const p = payload as Record<string, unknown>;
+    for (const [key, value] of entries) {
+      if (p[key] !== value) return false;
+    }
+    return true;
+  };
 }
 
 /**
@@ -74,69 +74,69 @@ function buildMatchFn(
  * bring down the others.
  */
 export function registerPluginHooks(
-	pipeline: HookPipeline,
-	sources: Iterable<PluginHookSource>,
-	opts: RegisterPluginHooksOptions = {},
+  pipeline: HookPipeline,
+  sources: Iterable<PluginHookSource>,
+  opts: RegisterPluginHooksOptions = {},
 ): number {
-	// eslint-disable-next-line no-console
-	const warn = opts.onWarn ?? ((msg: string) => console.warn(msg));
-	let registered = 0;
+  // eslint-disable-next-line no-console
+  const warn = opts.onWarn ?? ((msg: string) => console.warn(msg));
+  let registered = 0;
 
-	for (const source of sources) {
-		const rootPath = path.resolve(source.rootPath);
-		for (let i = 0; i < source.hooks.length; i++) {
-			const decl = source.hooks[i];
-			const absPath = path.resolve(rootPath, decl.handler);
+  for (const source of sources) {
+    const rootPath = path.resolve(source.rootPath);
+    for (let i = 0; i < source.hooks.length; i++) {
+      const decl = source.hooks[i];
+      const absPath = path.resolve(rootPath, decl.handler);
 
-			if (escapesRoot(rootPath, absPath)) {
-				warn(
-					`[plugin-loader] hook handler "${decl.handler}" escapes plugin root for "${source.pluginId}" — skipping`,
-				);
-				continue;
-			}
+      if (escapesRoot(rootPath, absPath)) {
+        warn(
+          `[plugin-loader] hook handler "${decl.handler}" escapes plugin root for "${source.pluginId}" — skipping`,
+        );
+        continue;
+      }
 
-			// Lazy handler — defer the import until the first invocation so a
-			// broken handler module cannot crash server boot. Cache the loaded
-			// handler for subsequent calls.
-			let cached: HookHandler<unknown> | undefined;
-			const lazyHandler: HookHandler<unknown> = async (ctx, payload) => {
-				if (!cached) {
-					try {
-						const mod = (await import(absPath)) as {
-							default?: HookHandler<unknown>;
-						};
-						if (typeof mod.default !== "function") {
-							throw new Error(
-								`hook handler at ${decl.handler} has no default export function`,
-							);
-						}
-						cached = mod.default;
-					} catch (err) {
-						const reason = err instanceof Error ? err.message : String(err);
-						return { action: "abort", reason: `hook import failed: ${reason}` };
-					}
-				}
-				return cached(ctx, payload);
-			};
+      // Lazy handler — defer the import until the first invocation so a
+      // broken handler module cannot crash server boot. Cache the loaded
+      // handler for subsequent calls.
+      let cached: HookHandler<unknown> | undefined;
+      const lazyHandler: HookHandler<unknown> = async (ctx, payload) => {
+        if (!cached) {
+          try {
+            const mod = (await import(absPath)) as {
+              default?: HookHandler<unknown>;
+            };
+            if (typeof mod.default !== "function") {
+              throw new Error(
+                `hook handler at ${decl.handler} has no default export function`,
+              );
+            }
+            cached = mod.default;
+          } catch (err) {
+            const reason = err instanceof Error ? err.message : String(err);
+            return { action: "abort", reason: `hook import failed: ${reason}` };
+          }
+        }
+        return cached(ctx, payload);
+      };
 
-			const matchFn = buildMatchFn(decl.match);
+      const matchFn = buildMatchFn(decl.match);
 
-			pipeline.register({
-				// Handler path is stable across reorderings of `hooks[]`, which
-				// makes trace / audit logs less noisy than an index-based id.
-				id: `${source.pluginId}:${decl.event}:${decl.handler}`,
-				event: decl.event,
-				pluginId: source.pluginId,
-				handler: lazyHandler,
-				...(matchFn ? { match: matchFn } : {}),
-				...(typeof decl.timeoutMs === "number"
-					? { timeoutMs: decl.timeoutMs }
-					: {}),
-				...(decl.enforce ? { enforce: decl.enforce } : {}),
-			});
-			registered += 1;
-		}
-	}
+      pipeline.register({
+        // Handler path is stable across reorderings of `hooks[]`, which
+        // makes trace / audit logs less noisy than an index-based id.
+        id: `${source.pluginId}:${decl.event}:${decl.handler}`,
+        event: decl.event,
+        pluginId: source.pluginId,
+        handler: lazyHandler,
+        ...(matchFn ? { match: matchFn } : {}),
+        ...(typeof decl.timeoutMs === "number"
+          ? { timeoutMs: decl.timeoutMs }
+          : {}),
+        ...(decl.enforce ? { enforce: decl.enforce } : {}),
+      });
+      registered += 1;
+    }
+  }
 
-	return registered;
+  return registered;
 }

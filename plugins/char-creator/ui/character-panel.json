@@ -6,7 +6,12 @@
   "label": { "zh": "角色", "en": "Characters" },
   "icon": "users",
   "dataSource": { "source": "session.characters", "namespace": "characters" },
-  "emptyState": { "message": { "zh": "尚未创建角色，完成角色创建流程后将在此显示……", "en": "No characters created yet, complete the character creation flow to see them here…" } },
+  "emptyState": {
+    "message": {
+      "zh": "尚未创建角色，完成角色创建流程后将在此显示……",
+      "en": "No characters created yet, complete the character creation flow to see them here…"
+    }
+  },
   "view": {
     "component": "Stack",
     "props": { "gap": "sm" },

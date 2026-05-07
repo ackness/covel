@@ -43,22 +43,22 @@ npx tsx --env-file=.env --env-file=.env.llm \
 
 ## 命令行参数
 
-| 参数 | 默认 | 说明 |
-|------|------|------|
-| `--server <url>` | `http://localhost:3001/api` | API base URL |
-| `--slot <name>` | `e2e`（或 `$E2E_MODEL_SLOT`）| 故事 runtime 使用的模型 slot。**只写 `[covel.xxx]` 中的 xxx 部分**，不是 `covel.xxx` 全名 |
-| `--world <id>` | `/api/worlds` 返回的第一个 | 使用的世界包 id |
-| `--turns <n>` | `3` | 角色创建之后的 playing 轮数 |
-| `--runtime <id>` | — | 只聚焦某一个 runtime，其它依然会执行但不计入断言 |
-| `--plugin <id>` | — | 只聚焦某一个 plugin |
-| `--player-message <str>` | 内置话术循环 | 每轮玩家输入文本 |
-| `--form-values <json>` | 字段类型推断 | 角色创建表单的默认填充值 |
-| `--timeout <seconds>` | `300` | 每轮 SSE 超时 |
-| `--log-dir <path>` | `debugs/e2e-logs` | artefact 输出目录 |
-| `--no-log` | — | 关闭日志落盘 |
-| `--verbose` | — | 打印每个 SSE 事件 |
-| `--keep` | 失败才保留 | 通过也保留会话以便检查 |
-| `--help` / `-h` | — | 打印内置帮助 |
+| 参数                     | 默认                          | 说明                                                                                      |
+| ------------------------ | ----------------------------- | ----------------------------------------------------------------------------------------- |
+| `--server <url>`         | `http://localhost:3001/api`   | API base URL                                                                              |
+| `--slot <name>`          | `e2e`（或 `$E2E_MODEL_SLOT`） | 故事 runtime 使用的模型 slot。**只写 `[covel.xxx]` 中的 xxx 部分**，不是 `covel.xxx` 全名 |
+| `--world <id>`           | `/api/worlds` 返回的第一个    | 使用的世界包 id                                                                           |
+| `--turns <n>`            | `3`                           | 角色创建之后的 playing 轮数                                                               |
+| `--runtime <id>`         | —                             | 只聚焦某一个 runtime，其它依然会执行但不计入断言                                          |
+| `--plugin <id>`          | —                             | 只聚焦某一个 plugin                                                                       |
+| `--player-message <str>` | 内置话术循环                  | 每轮玩家输入文本                                                                          |
+| `--form-values <json>`   | 字段类型推断                  | 角色创建表单的默认填充值                                                                  |
+| `--timeout <seconds>`    | `300`                         | 每轮 SSE 超时                                                                             |
+| `--log-dir <path>`       | `debugs/e2e-logs`             | artefact 输出目录                                                                         |
+| `--no-log`               | —                             | 关闭日志落盘                                                                              |
+| `--verbose`              | —                             | 打印每个 SSE 事件                                                                         |
+| `--keep`                 | 失败才保留                    | 通过也保留会话以便检查                                                                    |
+| `--help` / `-h`          | —                             | 打印内置帮助                                                                              |
 
 > `--plugin` / `--runtime` 是**观测+断言过滤器**，不是禁用开关：其它 runtime 仍会运行，保证 `input.inject` 依赖链完整。
 
@@ -66,15 +66,15 @@ npx tsx --env-file=.env --env-file=.env.llm \
 
 脚本把一次运行拆成 7 个阶段，每个 Phase 都会写出小节标题和带固定列宽的表格：
 
-| # | Phase | 做了什么 |
-|---|-------|---------|
-| 1 | **Health Check** | `GET /api/health`，确认 store backend 在线 |
-| 2 | **Plugin Flow Discovery** | `GET /api/plugin-flows`，自动发现所有 plugin/runtime 及其 trigger 元数据 |
-| 3 | **World Selection** | 挑选 `--world` 或第一个可用世界包 |
-| 4 | **Session Creation** | `POST /api/sessions` 建新会话，激活所有可用插件 |
-| 5 | **Turn Execution** | 按 `pre-game → character_creation → playing×N` 顺序触发每一轮 |
-| 6 | **Final Session Snapshot** | `GET /api/sessions/:id/snapshot`，打印最终 session 状态（phase、turnCount、messages、characters、active plugins）|
-| 7 | **Summary** | 汇总 runtime/tool/assertion 成败，计算 `PASS`/`FAIL` 总结果 |
+| #   | Phase                      | 做了什么                                                                                                          |
+| --- | -------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 1   | **Health Check**           | `GET /api/health`，确认 store backend 在线                                                                        |
+| 2   | **Plugin Flow Discovery**  | `GET /api/plugin-flows`，自动发现所有 plugin/runtime 及其 trigger 元数据                                          |
+| 3   | **World Selection**        | 挑选 `--world` 或第一个可用世界包                                                                                 |
+| 4   | **Session Creation**       | `POST /api/sessions` 建新会话，激活所有可用插件                                                                   |
+| 5   | **Turn Execution**         | 按 `pre-game → character_creation → playing×N` 顺序触发每一轮                                                     |
+| 6   | **Final Session Snapshot** | `GET /api/sessions/:id/snapshot`，打印最终 session 状态（phase、turnCount、messages、characters、active plugins） |
+| 7   | **Summary**                | 汇总 runtime/tool/assertion 成败，计算 `PASS`/`FAIL` 总结果                                                       |
 
 ### Phase 5 每轮产出
 
@@ -99,33 +99,33 @@ npx tsx --env-file=.env --env-file=.env.llm \
 
 真实 LLM 链路的 SSE 容易被上游连接池回收，脚本做了三层防护：
 
-| 问题 | 处理 |
-|------|------|
-| SSE 流中途 `terminated` | `httpPostSse` 捕获后 soft-return `SsePostOutcome { terminated: true }`，不抛错 |
+| 问题                                    | 处理                                                                                                                                    |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE 流中途 `terminated`                 | `httpPostSse` 捕获后 soft-return `SsePostOutcome { terminated: true }`，不抛错                                                          |
 | 后续 `httpGet` 因 undici 连接池污染失败 | `httpGet` 对 `fetch failed` / `ECONNRESET` / `UND_ERR_SOCKET` / `terminated` 自动重试 3 次，并在 SSE 终止后强制等 1500ms 让 socket 回收 |
-| 任何 fatal 错误 | `main()` 用 `try/finally` 包装 `MainState`，即使中途抛异常也会把已有 artefact 落盘 |
+| 任何 fatal 错误                         | `main()` 用 `try/finally` 包装 `MainState`，即使中途抛异常也会把已有 artefact 落盘                                                      |
 
 ## 输出与日志
 
 每次运行默认在 `debugs/e2e-logs/` 下写入四个文件（时间戳前缀 `e2e-YYYYMMDD-HHMMSS`）：
 
-| 文件 | 内容 |
-|------|------|
-| `e2e-<ts>.log` | stdout 完整镜像（与终端输出一致） |
-| `e2e-<ts>-<session>-turns.json` | 所有 turn 的 runtime + tool-call + trigger 原始数据 |
-| `e2e-<ts>-<session>-snapshot.json` | Phase 6 的 session snapshot |
-| `e2e-<ts>-<session>-failures.json` | 只包含 FAIL 的断言细节（无失败则不写） |
-| `e2e-<ts>-<session>-fatal.json` | 出现未捕获异常时的错误对象 |
+| 文件                               | 内容                                                |
+| ---------------------------------- | --------------------------------------------------- |
+| `e2e-<ts>.log`                     | stdout 完整镜像（与终端输出一致）                   |
+| `e2e-<ts>-<session>-turns.json`    | 所有 turn 的 runtime + tool-call + trigger 原始数据 |
+| `e2e-<ts>-<session>-snapshot.json` | Phase 6 的 session snapshot                         |
+| `e2e-<ts>-<session>-failures.json` | 只包含 FAIL 的断言细节（无失败则不写）              |
+| `e2e-<ts>-<session>-fatal.json`    | 出现未捕获异常时的错误对象                          |
 
 > 所有输出为**纯文本，无 emoji、无 ANSI 颜色、列宽固定**，方便 diff、grep、通过 CI pipeline。
 
 ## 退出码
 
-| 码 | 含义 |
-|---|------|
-| `0` | 所有断言通过 |
+| 码  | 含义                                                               |
+| --- | ------------------------------------------------------------------ |
+| `0` | 所有断言通过                                                       |
 | `1` | 至少一条断言失败（runtime 执行失败 / 触发预测不符 / 工具调用失败） |
-| `2` | 基础设施失败（HTTP、超时、响应格式错误） |
+| `2` | 基础设施失败（HTTP、超时、响应格式错误）                           |
 
 ## 常见问题
 
@@ -145,23 +145,24 @@ A: `--plugin guide --turns 2 --slot e2e_local`。其它 runtime 依然会运行�
 
 脚本最重要的用途是验证每个 runtime 的实际表现是否匹配其 `PLUGIN.md` frontmatter。典型对照表：
 
-| PLUGIN.md 字段 | e2e 如何验证 |
-|----------------|------------|
-| `trigger.type: auto` | 每轮都期望触发（playing phase） |
-| `trigger.type: scheduled` + `interval: N` | 每 N 轮触发一次 |
-| `trigger.phases: [playing]` | 其它 phase 下期望不触发 |
-| `trigger.maxTriggerCount: N` | 触发 N 次后 SKIP，原因显示 `maxTriggerCount(N) reached` |
-| `trigger.cooldownTurns: N` | 触发后 N 轮内期望 SKIP |
-| `outputKind: story` | Runtime Timeline 的 output 列显示 `narrative(<字符数>c)` |
-| `outputKind: plugin`/`system` | Runtime Timeline output 显示 `keys=[...]` |
-| `maxSteps: N` | 工具循环耗尽时 failures.json 会看到 `exhausted the tool loop after N steps` |
-| `tools.builtin` / `tools.local` | Tool Calls 表格里能观测实际调用次数和成功率 |
-| `runtimeType: function` | Tool Calls 表为空（function runtime 不跑 LLM） |
-| `guard: ...` | 第一轮后 runtime 被 SKIP 说明 guard 命中 |
+| PLUGIN.md 字段                            | e2e 如何验证                                                                |
+| ----------------------------------------- | --------------------------------------------------------------------------- |
+| `trigger.type: auto`                      | 每轮都期望触发（playing phase）                                             |
+| `trigger.type: scheduled` + `interval: N` | 每 N 轮触发一次                                                             |
+| `trigger.phases: [playing]`               | 其它 phase 下期望不触发                                                     |
+| `trigger.maxTriggerCount: N`              | 触发 N 次后 SKIP，原因显示 `maxTriggerCount(N) reached`                     |
+| `trigger.cooldownTurns: N`                | 触发后 N 轮内期望 SKIP                                                      |
+| `outputKind: story`                       | Runtime Timeline 的 output 列显示 `narrative(<字符数>c)`                    |
+| `outputKind: plugin`/`system`             | Runtime Timeline output 显示 `keys=[...]`                                   |
+| `maxSteps: N`                             | 工具循环耗尽时 failures.json 会看到 `exhausted the tool loop after N steps` |
+| `tools.builtin` / `tools.local`           | Tool Calls 表格里能观测实际调用次数和成功率                                 |
+| `runtimeType: function`                   | Tool Calls 表为空（function runtime 不跑 LLM）                              |
+| `guard: ...`                              | 第一轮后 runtime 被 SKIP 说明 guard 命中                                    |
 
 ## 扩展建议
 
 如果需要在 CI 跑：
+
 1. 用 `llmock` 录制一遍真实响应，落到 `debugs/llm-cache/`
 2. 后续跑 `COVEL_LLM_REPLAY=replay` 确保只读缓存
 3. 退出码 `0` 即通过

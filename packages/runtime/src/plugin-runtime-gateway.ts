@@ -15,13 +15,13 @@
  */
 
 import type {
-	PluginRuntimeGateway,
-	ResolvedSlotForPlugin,
+  PluginRuntimeGateway,
+  ResolvedSlotForPlugin,
 } from "@covel/plugin-loader";
 import type { ZodType } from "zod";
 import type {
-	GatewayAdapterConfig,
-	SlotOverridesInput,
+  GatewayAdapterConfig,
+  SlotOverridesInput,
 } from "./gateway-llm-adapter.js";
 
 /**
@@ -30,10 +30,10 @@ import type {
  * a structural type so `@covel/runtime` stays decoupled from ai-provider.
  */
 interface FullGatewayOptions {
-	apiKeys?: Record<string, string>;
-	traceId?: string;
-	signal?: AbortSignal;
-	slotOverrides?: SlotOverridesInput;
+  apiKeys?: Record<string, string>;
+  traceId?: string;
+  signal?: AbortSignal;
+  slotOverrides?: SlotOverridesInput;
 }
 
 /**
@@ -41,47 +41,47 @@ interface FullGatewayOptions {
  * only the three methods we adapt for plugins.
  */
 export interface FullGatewayLike {
-	generateText(
-		input: {
-			presetId?: string;
-			messages: Array<{ role: string; content: string | null }>;
-			providerRequestMetadata?: Record<string, unknown>;
-		},
-		options?: FullGatewayOptions,
-	): Promise<{
-		text: string;
-		finishReason: string;
-		usage: { inputTokens: number; outputTokens: number };
-	}>;
+  generateText(
+    input: {
+      presetId?: string;
+      messages: Array<{ role: string; content: string | null }>;
+      providerRequestMetadata?: Record<string, unknown>;
+    },
+    options?: FullGatewayOptions,
+  ): Promise<{
+    text: string;
+    finishReason: string;
+    usage: { inputTokens: number; outputTokens: number };
+  }>;
 
-	generateObject<T>(
-		input: {
-			presetId?: string;
-			schema: ZodType<T>;
-			messages: Array<{ role: string; content: string | null }>;
-			providerRequestMetadata?: Record<string, unknown>;
-		},
-		options?: FullGatewayOptions,
-	): Promise<{
-		object: T;
-		finishReason: string;
-		usage: { inputTokens: number; outputTokens: number };
-	}>;
+  generateObject<T>(
+    input: {
+      presetId?: string;
+      schema: ZodType<T>;
+      messages: Array<{ role: string; content: string | null }>;
+      providerRequestMetadata?: Record<string, unknown>;
+    },
+    options?: FullGatewayOptions,
+  ): Promise<{
+    object: T;
+    finishReason: string;
+    usage: { inputTokens: number; outputTokens: number };
+  }>;
 
-	resolveSlot(
-		presetId: string | undefined,
-		options?: FullGatewayOptions & { fallbackTag?: string },
-	): {
-		presetId: string;
-		provider: string;
-		protocol: string;
-		baseUrl?: string;
-		apiKey?: string;
-		headers?: Record<string, string>;
-		model: string;
-		tag: string;
-		metadata: Record<string, unknown>;
-	} | null;
+  resolveSlot(
+    presetId: string | undefined,
+    options?: FullGatewayOptions & { fallbackTag?: string },
+  ): {
+    presetId: string;
+    provider: string;
+    protocol: string;
+    baseUrl?: string;
+    apiKey?: string;
+    headers?: Record<string, string>;
+    model: string;
+    tag: string;
+    metadata: Record<string, unknown>;
+  } | null;
 }
 
 /**
@@ -93,16 +93,16 @@ export interface FullGatewayLike {
  * `passthroughSchema` override the server can wire at startup.
  */
 export interface PluginRuntimeGatewayConfig extends GatewayAdapterConfig {
-	/**
-	 * Schema factory called per `generateObject()` invocation. Receives the
-	 * plugin-supplied JSON-schema record and must return something the
-	 * underlying gateway's `generateObject` accepts (usually a ZodType).
-	 * When omitted, the adapter rejects `generateObject` calls — agent
-	 * runtimes should be used instead.
-	 */
-	readonly toZodSchema?: (
-		jsonSchema: Readonly<Record<string, unknown>>,
-	) => ZodType<unknown>;
+  /**
+   * Schema factory called per `generateObject()` invocation. Receives the
+   * plugin-supplied JSON-schema record and must return something the
+   * underlying gateway's `generateObject` accepts (usually a ZodType).
+   * When omitted, the adapter rejects `generateObject` calls — agent
+   * runtimes should be used instead.
+   */
+  readonly toZodSchema?: (
+    jsonSchema: Readonly<Record<string, unknown>>,
+  ) => ZodType<unknown>;
 }
 
 /**
@@ -110,137 +110,137 @@ export interface PluginRuntimeGatewayConfig extends GatewayAdapterConfig {
  * Used by server bootstrap to populate `TurnExecutorDeps.gateway`.
  */
 export function createPluginRuntimeGateway(
-	gateway: FullGatewayLike,
-	config?: PluginRuntimeGatewayConfig,
+  gateway: FullGatewayLike,
+  config?: PluginRuntimeGatewayConfig,
 ): PluginRuntimeGateway {
-	const commonOptions = () => ({
-		...(config?.apiKeys ? { apiKeys: config.apiKeys } : {}),
-		...(config?.traceId ? { traceId: config.traceId } : {}),
-		...(config?.slotOverrides ? { slotOverrides: config.slotOverrides } : {}),
-	});
+  const commonOptions = () => ({
+    ...(config?.apiKeys ? { apiKeys: config.apiKeys } : {}),
+    ...(config?.traceId ? { traceId: config.traceId } : {}),
+    ...(config?.slotOverrides ? { slotOverrides: config.slotOverrides } : {}),
+  });
 
-	return {
-		async generateText(input) {
-			const messages = input.messages
-				? input.messages.map((m) => ({ role: m.role, content: m.content }))
-				: toMessages({
-						system: input.system,
-						prompt: input.prompt,
-					});
-			const result = await gateway.generateText(
-				{
-					...(input.presetId ? { presetId: input.presetId } : {}),
-					messages,
-					...(input.providerRequestMetadata
-						? { providerRequestMetadata: { ...input.providerRequestMetadata } }
-						: {}),
-				},
-				{
-					...commonOptions(),
-					...(input.signal ? { signal: input.signal } : {}),
-				},
-			);
-			return {
-				text: result.text,
-				finishReason: result.finishReason,
-				usage: result.usage,
-			};
-		},
+  return {
+    async generateText(input) {
+      const messages = input.messages
+        ? input.messages.map((m) => ({ role: m.role, content: m.content }))
+        : toMessages({
+            system: input.system,
+            prompt: input.prompt,
+          });
+      const result = await gateway.generateText(
+        {
+          ...(input.presetId ? { presetId: input.presetId } : {}),
+          messages,
+          ...(input.providerRequestMetadata
+            ? { providerRequestMetadata: { ...input.providerRequestMetadata } }
+            : {}),
+        },
+        {
+          ...commonOptions(),
+          ...(input.signal ? { signal: input.signal } : {}),
+        },
+      );
+      return {
+        text: result.text,
+        finishReason: result.finishReason,
+        usage: result.usage,
+      };
+    },
 
-		async generateObject<T>(input: {
-			readonly presetId?: string;
-			readonly schema: Readonly<Record<string, unknown>>;
-			readonly prompt?: string;
-			readonly system?: string;
-			readonly messages?: readonly {
-				readonly role: "system" | "user" | "assistant";
-				readonly content: string;
-			}[];
-			readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
-			readonly signal?: AbortSignal;
-		}): Promise<{
-			readonly object: T;
-			readonly finishReason: string;
-			readonly usage: {
-				readonly inputTokens: number;
-				readonly outputTokens: number;
-			};
-		}> {
-			if (!config?.toZodSchema) {
-				throw new Error(
-					[
-						"PluginRuntimeGateway.generateObject is unavailable in this host.",
-						"The framework intentionally ships without a JSON Schema → Zod",
-						"converter injected (audit F9): structured output for agent",
-						"runtimes is already handled by the executor via `output.schema`",
-						"and `responseFormat`, and no function-runtime caller needs this",
-						"path yet. Prefer an agent runtime; if you genuinely need",
-						"`generateObject` from a function runtime, open an issue so the",
-						"composition root can install a converter.",
-					].join(" "),
-				);
-			}
-			const zodSchema = config.toZodSchema(input.schema);
-			const messages = input.messages
-				? input.messages.map((m) => ({ role: m.role, content: m.content }))
-				: toMessages({ system: input.system, prompt: input.prompt });
-			const result = await gateway.generateObject<T>(
-				{
-					...(input.presetId ? { presetId: input.presetId } : {}),
-					schema: zodSchema as ZodType<T>,
-					messages,
-					...(input.providerRequestMetadata
-						? { providerRequestMetadata: { ...input.providerRequestMetadata } }
-						: {}),
-				},
-				{
-					...commonOptions(),
-					...(input.signal ? { signal: input.signal } : {}),
-				},
-			);
-			return {
-				object: result.object,
-				finishReason: result.finishReason,
-				usage: result.usage,
-			};
-		},
+    async generateObject<T>(input: {
+      readonly presetId?: string;
+      readonly schema: Readonly<Record<string, unknown>>;
+      readonly prompt?: string;
+      readonly system?: string;
+      readonly messages?: readonly {
+        readonly role: "system" | "user" | "assistant";
+        readonly content: string;
+      }[];
+      readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
+      readonly signal?: AbortSignal;
+    }): Promise<{
+      readonly object: T;
+      readonly finishReason: string;
+      readonly usage: {
+        readonly inputTokens: number;
+        readonly outputTokens: number;
+      };
+    }> {
+      if (!config?.toZodSchema) {
+        throw new Error(
+          [
+            "PluginRuntimeGateway.generateObject is unavailable in this host.",
+            "The framework intentionally ships without a JSON Schema → Zod",
+            "converter injected (audit F9): structured output for agent",
+            "runtimes is already handled by the executor via `output.schema`",
+            "and `responseFormat`, and no function-runtime caller needs this",
+            "path yet. Prefer an agent runtime; if you genuinely need",
+            "`generateObject` from a function runtime, open an issue so the",
+            "composition root can install a converter.",
+          ].join(" "),
+        );
+      }
+      const zodSchema = config.toZodSchema(input.schema);
+      const messages = input.messages
+        ? input.messages.map((m) => ({ role: m.role, content: m.content }))
+        : toMessages({ system: input.system, prompt: input.prompt });
+      const result = await gateway.generateObject<T>(
+        {
+          ...(input.presetId ? { presetId: input.presetId } : {}),
+          schema: zodSchema as ZodType<T>,
+          messages,
+          ...(input.providerRequestMetadata
+            ? { providerRequestMetadata: { ...input.providerRequestMetadata } }
+            : {}),
+        },
+        {
+          ...commonOptions(),
+          ...(input.signal ? { signal: input.signal } : {}),
+        },
+      );
+      return {
+        object: result.object,
+        finishReason: result.finishReason,
+        usage: result.usage,
+      };
+    },
 
-		resolveSlot(input): ResolvedSlotForPlugin | null {
-			const resolved = gateway.resolveSlot(input.presetId, {
-				...commonOptions(),
-				...(input.fallbackTag ? { fallbackTag: input.fallbackTag } : {}),
-			});
-			if (!resolved) return null;
-			return {
-				presetId: resolved.presetId,
-				provider: resolved.provider,
-				protocol: resolved.protocol,
-				...(resolved.baseUrl !== undefined
-					? { baseUrl: resolved.baseUrl }
-					: {}),
-				...(resolved.apiKey !== undefined ? { apiKey: resolved.apiKey } : {}),
-				...(resolved.headers !== undefined
-					? { headers: { ...resolved.headers } }
-					: {}),
-				model: resolved.model,
-				tag: resolved.tag,
-				metadata: { ...resolved.metadata },
-			};
-		},
-	};
+    resolveSlot(input): ResolvedSlotForPlugin | null {
+      const resolved = gateway.resolveSlot(input.presetId, {
+        ...commonOptions(),
+        ...(input.fallbackTag ? { fallbackTag: input.fallbackTag } : {}),
+      });
+      if (!resolved) return null;
+      return {
+        presetId: resolved.presetId,
+        provider: resolved.provider,
+        protocol: resolved.protocol,
+        ...(resolved.baseUrl !== undefined
+          ? { baseUrl: resolved.baseUrl }
+          : {}),
+        ...(resolved.apiKey !== undefined ? { apiKey: resolved.apiKey } : {}),
+        ...(resolved.headers !== undefined
+          ? { headers: { ...resolved.headers } }
+          : {}),
+        model: resolved.model,
+        tag: resolved.tag,
+        metadata: { ...resolved.metadata },
+      };
+    },
+  };
 }
 
 function toMessages(opts: { system?: string; prompt?: string }): Array<{
-	role: string;
-	content: string | null;
+  role: string;
+  content: string | null;
 }> {
-	const messages: Array<{ role: string; content: string | null }> = [];
-	if (opts.system) messages.push({ role: "system", content: opts.system });
-	if (opts.prompt) messages.push({ role: "user", content: opts.prompt });
-	if (messages.length === 0) {
-		throw new Error(
-			"PluginRuntimeGateway call requires at least one of { prompt, system, messages }",
-		);
-	}
-	return messages;
+  const messages: Array<{ role: string; content: string | null }> = [];
+  if (opts.system) messages.push({ role: "system", content: opts.system });
+  if (opts.prompt) messages.push({ role: "user", content: opts.prompt });
+  if (messages.length === 0) {
+    throw new Error(
+      "PluginRuntimeGateway call requires at least one of { prompt, system, messages }",
+    );
+  }
+  return messages;
 }

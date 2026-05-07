@@ -6,12 +6,14 @@ node_modules/
 .git/
 .gsd/
 .worktrees/
+.claude/
 
 dist/
 output/
 audits/
 debugs/
 
+apps/desktop-tauri/src-tauri/resources/
 apps/desktop/staging/
 apps/desktop-tauri/src-tauri/target/
 apps/web/src/routeTree.gen.ts

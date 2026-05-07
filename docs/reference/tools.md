@@ -6,25 +6,25 @@
 
 ## 概览
 
-| 工具名 | 来源 | 所属插件 | 审批策略 | 描述 |
-|--------|------|----------|----------|------|
-| create-form | builtin | — | auto-allow | 创建玩家表单 |
-| create-choices | builtin | — | auto-allow | 创建选项列表 |
-| create-notification | builtin | — | auto-allow | 显示通知消息 |
-| render-ui | builtin | — | auto-allow | 渲染带独立 part 状态的 UI 块 |
-| plugin-data-set | builtin | — | auto-allow | 写入插件持久化数据（单条） |
-| plugin-data-set-batch | builtin | — | auto-allow | 批量写入插件持久化数据 |
-| plugin-data-get | builtin | — | auto-allow | 读取当前插件持久化数据 |
-| plugin-data-list | builtin | — | auto-allow | 列出当前插件持久化数据 |
-| **create-character** | builtin | — | auto-allow | 创建角色（player/npc/companion），写 characters 表 + 镜像到 plugin-data |
-| **update-character** | builtin | — | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++ |
-| **list-characters** | builtin | — | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见） |
-| **get-character** | builtin | — | auto-allow | 按 id 或 name 查找单个角色 |
-| **world-dimension-get** | builtin | — | auto-allow | 按需读取当前 session 世界的结构化维度字段 |
-| set-world-schema | local | world-init | auto-allow | 定义世界角色属性 Schema |
-| set-world-entries-batch | local | world-init | auto-allow | 批量写入世界词条 |
-| unlock-codex-entries | local | codex | auto-allow | 批量解锁图鉴条目 |
-| update-codex-entry | local | codex | auto-allow | 更新已有图鉴条目 |
+| 工具名                  | 来源    | 所属插件   | 审批策略   | 描述                                                                    |
+| ----------------------- | ------- | ---------- | ---------- | ----------------------------------------------------------------------- |
+| create-form             | builtin | —          | auto-allow | 创建玩家表单                                                            |
+| create-choices          | builtin | —          | auto-allow | 创建选项列表                                                            |
+| create-notification     | builtin | —          | auto-allow | 显示通知消息                                                            |
+| render-ui               | builtin | —          | auto-allow | 渲染带独立 part 状态的 UI 块                                            |
+| plugin-data-set         | builtin | —          | auto-allow | 写入插件持久化数据（单条）                                              |
+| plugin-data-set-batch   | builtin | —          | auto-allow | 批量写入插件持久化数据                                                  |
+| plugin-data-get         | builtin | —          | auto-allow | 读取当前插件持久化数据                                                  |
+| plugin-data-list        | builtin | —          | auto-allow | 列出当前插件持久化数据                                                  |
+| **create-character**    | builtin | —          | auto-allow | 创建角色（player/npc/companion），写 characters 表 + 镜像到 plugin-data |
+| **update-character**    | builtin | —          | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                |
+| **list-characters**     | builtin | —          | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                   |
+| **get-character**       | builtin | —          | auto-allow | 按 id 或 name 查找单个角色                                              |
+| **world-dimension-get** | builtin | —          | auto-allow | 按需读取当前 session 世界的结构化维度字段                               |
+| set-world-schema        | local   | world-init | auto-allow | 定义世界角色属性 Schema                                                 |
+| set-world-entries-batch | local   | world-init | auto-allow | 批量写入世界词条                                                        |
+| unlock-codex-entries    | local   | codex      | auto-allow | 批量解锁图鉴条目                                                        |
+| update-codex-entry      | local   | codex      | auto-allow | 更新已有图鉴条目                                                        |
 
 ---
 
@@ -83,15 +83,16 @@ Local 工具承接插件自己的业务封装，例如：
 
 创建一个需要玩家填写的表单。框架渲染表单，玩家提交后结果注入下一轮上下文。
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| formId | string | ✓ | 表单唯一标识 |
-| title | string | ✓ | 表单标题 |
-| fields | FormField[] | ✓ | 表单字段列表 |
-| submitLabel | string | ✓ | 提交按钮文本 |
-| narrativeTemplate | string | ✓ | 叙事模板，含 `{{fieldName}}` 占位符 |
+| 参数              | 类型        | 必需 | 描述                                |
+| ----------------- | ----------- | ---- | ----------------------------------- |
+| formId            | string      | ✓    | 表单唯一标识                        |
+| title             | string      | ✓    | 表单标题                            |
+| fields            | FormField[] | ✓    | 表单字段列表                        |
+| submitLabel       | string      | ✓    | 提交按钮文本                        |
+| narrativeTemplate | string      | ✓    | 叙事模板，含 `{{fieldName}}` 占位符 |
 
 **FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue? }`
+
 - type: `text` | `textarea` | `select` | `checkbox` | `number`
 
 **使用者**: char-creator
@@ -102,13 +103,14 @@ Local 工具承接插件自己的业务封装，例如：
 
 创建选项列表供玩家选择。适用于决策点、分支剧情、NPC 对话选项。
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| choiceId | string | ✓ | 选项组唯一标识 |
-| prompt | string | ✓ | 引导文本（如"你要怎么做？"） |
-| choices | Choice[] | ✓ | 选项列表（至少 2 个） |
+| 参数     | 类型     | 必需 | 描述                         |
+| -------- | -------- | ---- | ---------------------------- |
+| choiceId | string   | ✓    | 选项组唯一标识               |
+| prompt   | string   | ✓    | 引导文本（如"你要怎么做？"） |
+| choices  | Choice[] | ✓    | 选项列表（至少 2 个）        |
 
 **Choice**: `{ id, label, description?, category? }`
+
 - category: `safe` | `aggressive` | `creative` | `wild` 等
 
 **使用者**: 通用交互插件。当前 `guide` 采用 `generate-guide + ui.message` 路径来承接更完整的插件自定义 UI。
@@ -119,12 +121,12 @@ Local 工具承接插件自己的业务封装，例如：
 
 在前端显示一条通知消息。适用于状态变化、获得物品、触发事件等。
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| level | enum | ✓ | `info` / `success` / `warning` / `error` |
-| title | string | ✓ | 通知标题 |
-| message | string | ✓ | 通知内容 |
-| icon | string | | 图标名称 |
+| 参数    | 类型   | 必需 | 描述                                     |
+| ------- | ------ | ---- | ---------------------------------------- |
+| level   | enum   | ✓    | `info` / `success` / `warning` / `error` |
+| title   | string | ✓    | 通知标题                                 |
+| message | string | ✓    | 通知内容                                 |
+| icon    | string |      | 图标名称                                 |
 
 **使用者**: codex
 
@@ -134,15 +136,15 @@ Local 工具承接插件自己的业务封装，例如：
 
 渲染一个 `ui.render` 块。每个 part 独立携带状态，适合叙事文本、图片、卡片、音频等混排输出。
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| parts | UIRenderPart[] | ✓ | UI part 列表 |
-| layout | enum | | `stream` / `split` / `overlay` |
+| 参数   | 类型           | 必需 | 描述                           |
+| ------ | -------------- | ---- | ------------------------------ |
+| parts  | UIRenderPart[] | ✓    | UI part 列表                   |
+| layout | enum           |      | `stream` / `split` / `overlay` |
 
 **UIRenderPart**:
 
 ```typescript
-type UIPartStatus = 'pending' | 'streaming' | 'success' | 'error' | 'paused';
+type UIPartStatus = "pending" | "streaming" | "success" | "error" | "paused";
 
 interface UIRenderPart {
   id: string;
@@ -161,11 +163,11 @@ interface UIRenderPart {
 
 将数据写入插件的持久化存储。数据按 `(sessionId, pluginId, namespace, key)` 隔离，同 `(namespace, key)` 会覆盖旧值。
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| namespace | string | ✓ | 数据命名空间（如 `schema`, `entries`, `config`） |
-| key | string | ✓ | 数据键名 |
-| value | unknown | ✓ | 要存储的 JSON 数据 |
+| 参数      | 类型    | 必需 | 描述                                             |
+| --------- | ------- | ---- | ------------------------------------------------ |
+| namespace | string  | ✓    | 数据命名空间（如 `schema`, `entries`, `config`） |
+| key       | string  | ✓    | 数据键名                                         |
+| value     | unknown | ✓    | 要存储的 JSON 数据                               |
 
 **输出**: `{ success, namespace, key }`
 
@@ -177,9 +179,9 @@ interface UIRenderPart {
 
 批量写入多条数据到插件持久化存储。一次调用写入整个数组，避免逐条调用的 LLM 轮次开销。适用于需要一次性写入大量条目的场景（如世界初始化）。
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| items | Array<{namespace, key, value}> | ✓ | 要批量写入的数据条目数组 |
+| 参数  | 类型                           | 必需 | 描述                     |
+| ----- | ------------------------------ | ---- | ------------------------ |
+| items | Array<{namespace, key, value}> | ✓    | 要批量写入的数据条目数组 |
 
 每个 item:
 | 字段 | 类型 | 必需 | 描述 |
@@ -200,10 +202,10 @@ interface UIRenderPart {
 
 从**当前插件**的持久化存储中读取单条数据。出于安全考虑，不允许跨插件读取。
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| namespace | string | ✓ | 数据命名空间 |
-| key | string | ✓ | 数据键名 |
+| 参数      | 类型   | 必需 | 描述         |
+| --------- | ------ | ---- | ------------ |
+| namespace | string | ✓    | 数据命名空间 |
+| key       | string | ✓    | 数据键名     |
 
 **输出**: `{ found, namespace, key, value?, updatedAt? }`
 
@@ -213,9 +215,9 @@ interface UIRenderPart {
 
 列出**当前插件**持久化存储中某个 namespace 下的所有数据条目。
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| namespace | string | | 数据命名空间（不传则列出所有） |
+| 参数      | 类型   | 必需 | 描述                           |
+| --------- | ------ | ---- | ------------------------------ |
+| namespace | string |      | 数据命名空间（不传则列出所有） |
 
 **输出**: `{ count, items: [{ namespace, key, value, updatedAt }] }`
 
@@ -230,12 +232,13 @@ interface UIRenderPart {
 1. 优先读当前 session 中 `world-data-provider` 插件写入的 `plugin_data[namespace="entries"]`
 2. 若该维度不存在，则回退到 `world.metadata.dimensions`
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| queries | Array<{ dimension, path? }> | ✓ | 查询列表，至少 1 项，最多 20 项 |
-| resolveI18n | boolean | | 是否按 session locale 解析 i18n 文本对象，默认 `true` |
+| 参数        | 类型                        | 必需 | 描述                                                  |
+| ----------- | --------------------------- | ---- | ----------------------------------------------------- |
+| queries     | Array<{ dimension, path? }> | ✓    | 查询列表，至少 1 项，最多 20 项                       |
+| resolveI18n | boolean                     |      | 是否按 session locale 解析 i18n 文本对象，默认 `true` |
 
 `dimension` 可选值：
+
 - `geography`
 - `factions`
 - `powerSystem`
@@ -247,12 +250,14 @@ interface UIRenderPart {
 - `startingConditions`
 
 `path` 语法支持对象点路径与数组下标，例如：
+
 - `contentRating`
 - `regions[0].name`
 - `tiers[2].description`
 - `startingResources.硬币`
 
 **输出 (parsedResult)**:
+
 ```json
 {
   "_text": "1. tone.contentRating [plugin-data] = \"mature\"",
@@ -272,10 +277,12 @@ interface UIRenderPart {
 ```
 
 **文本优先约定**：
+
 - LLM 看到的是 `_text`
 - trace / 调试里保留完整 `results`
 
 **适用场景**：
+
 - narrator 只需读取 `startingConditions.openingScenario`
 - guide 只需读取 `tone.themes`
 - 角色或剧情 agent 只需读取某个势力、地区、力量阶位的精确字段
@@ -288,14 +295,15 @@ interface UIRenderPart {
 
 声明在 `packages/tools/src/builtin/suspend.ts`。Agent runtime 调用 `suspend({ reason, resumeSchema })` 时，工具直接返回一个 sentinel 对象 `{ _covelSuspend: true, reason, resumeSchema }`。turn-executor 在每次 tool 执行后通过 `isSuspendSentinel()` 检测：识别到 sentinel 后会序列化当前 pendingContinuation 写入 `suspensions` 表，并发出 `turn.suspended` 事件，整个 tool loop 立即停止。后续可通过 `POST /api/sessions/:id/resume` 提交匹配 `resumeSchema` 的数据重新启动该 runtime（详见 `docs/reference/api.md`）。
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| reason | string | ✓ | 给玩家看的简短说明，解释为什么需要输入 |
-| resumeSchema | object | ✓ | **纯 JSON Schema 对象**（`type` / `properties` / `required`）。插件如需用 Zod 定义，必须先用 `zod-to-json-schema` 转换 —— 不要传 live Zod schema |
+| 参数         | 类型   | 必需 | 描述                                                                                                                                             |
+| ------------ | ------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| reason       | string | ✓    | 给玩家看的简短说明，解释为什么需要输入                                                                                                           |
+| resumeSchema | object | ✓    | **纯 JSON Schema 对象**（`type` / `properties` / `required`）。插件如需用 Zod 定义，必须先用 `zod-to-json-schema` 转换 —— 不要传 live Zod schema |
 
 **输出**: sentinel `{ _covelSuspend: true, reason, resumeSchema }`（被 turn-executor 拦截，正常情况下不会作为普通工具结果回到 LLM）
 
 **注意事项**：
+
 - `resumeSchema` 必须可被 `JSON.stringify` —— pendingContinuation 是要落盘的
 - 同一 runtime 同一时刻只能有一个未解决的 suspension（resume 路由通过 `runtimeId + sessionId` 查找）
 - 注册位置：`bootstrap.ts` 中 `toolMap.set(suspendTool.name, suspendTool)` + `builtinToolNames.add(...)`，所有 agent runtime 自动可用
@@ -314,6 +322,7 @@ interface UIRenderPart {
 - **框架追踪 / 前端 trace UI 看到的是完整 `parsedResult` 对象**（含 `_text` + 结构化字段）
 
 框架层面（`packages/runtime/tool-executor.ts`）检测 `_text` 字段：
+
 - 如果存在且为字符串 → LLM tool message content 直接写原始文本
 - 如果不存在 → 退回到旧的 `JSON.stringify(result)` 行为（向后兼容）
 
@@ -325,20 +334,23 @@ interface UIRenderPart {
 
 创建一个新的角色记录（玩家、NPC 或同伴）。同 session 内同 `(name, type)` 会自动去重 —— 返回已存在的角色 id，不会创建重复项。
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| name | string | ✓ | 角色名称 |
-| type | enum | ✓ | `player` / `npc` / `companion` |
-| description | string | | 角色简短描述 |
-| fields | Record<string, unknown> | | 属性键值对（应符合世界 schema 中的 character-attributes） |
+| 参数        | 类型                    | 必需 | 描述                                                      |
+| ----------- | ----------------------- | ---- | --------------------------------------------------------- |
+| name        | string                  | ✓    | 角色名称                                                  |
+| type        | enum                    | ✓    | `player` / `npc` / `companion`                            |
+| description | string                  |      | 角色简短描述                                              |
+| fields      | Record<string, unknown> |      | 属性键值对（应符合世界 schema 中的 character-attributes） |
 
 **输出 (parsedResult)**: `{ _text, success, existed, characterId, name, type }`
 
 **LLM 看到的 `_text` 示例**：
+
 ```
 Created npc "苏婉" as char-abc123. — 青萍宗外门首席弟子，冰灵根修士。
 ```
+
 或当去重命中时：
+
 ```
 Character "苏婉" (npc) already exists as char-abc123. No new record created. Use update-character to modify it.
 ```
@@ -353,15 +365,16 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 
 按 id 更新已有角色。`fields` 按 shallow merge 合并（新键覆盖旧键），`version` 自动 +1。适用于状态变化、装备变更、受伤、死亡等。
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| id | string | ✓ | 要更新的角色 id |
-| description | string | | 新描述（未传则保留原值） |
-| fields | Record<string, unknown> | | 要合并的字段 |
+| 参数        | 类型                    | 必需 | 描述                     |
+| ----------- | ----------------------- | ---- | ------------------------ |
+| id          | string                  | ✓    | 要更新的角色 id          |
+| description | string                  |      | 新描述（未传则保留原值） |
+| fields      | Record<string, unknown> |      | 要合并的字段             |
 
 **输出 (parsedResult)**: `{ _text, success, characterId, version }` 或 `{ _text, success: false, notFound: true }`
 
 **LLM 看到的 `_text` 示例**：
+
 ```
 Updated npc "苏婉" (char-abc123) → v2.
   hp: 100 → 60
@@ -376,13 +389,14 @@ Updated npc "苏婉" (char-abc123) → v2.
 
 **排序算法**：主键 `version desc`（版本越高 = 被交互次数越多 = 频率越高），次键 `updatedAt desc`（频率相同时最近 turn 的优先）。
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| type | enum | | `player` / `npc` / `companion` 过滤 |
+| 参数 | 类型 | 必需 | 描述                                |
+| ---- | ---- | ---- | ----------------------------------- |
+| type | enum |      | `player` / `npc` / `companion` 过滤 |
 
 **输出 (parsedResult)**: `{ _text, count, characters: CharacterSnapshot[] }`
 
 **LLM 看到的 `_text` 示例**：
+
 ```
 Characters in session (3 total, sorted by frequency then recency):
 1. 苏婉 [npc] char-abc (v3) — 青萍宗外门首席弟子，冰灵根修士，知晓野生灵脉秘密
@@ -396,14 +410,15 @@ Characters in session (3 total, sorted by frequency then recency):
 
 按 id 或 name 查询单个角色的**完整属性**（description、version、时间戳、全部 fields）。必须传入 id 或 name 其中之一。与 `list-characters` 的简洁列表形成对照，适合需要深入了解某个角色全部状态的场景。
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| id | string | | 角色 id |
-| name | string | | 角色名称（精确匹配） |
+| 参数 | 类型   | 必需 | 描述                 |
+| ---- | ------ | ---- | -------------------- |
+| id   | string |      | 角色 id              |
+| name | string |      | 角色名称（精确匹配） |
 
 **输出 (parsedResult)**: `{ _text, found, character: CharacterSnapshot }` 或 `{ _text, found: false }`
 
 **LLM 看到的 `_text` 示例**：
+
 ```
 Character: 苏婉 [npc] char-abc123
 Description: 青萍宗外门首席弟子，冰灵根修士。发现百灵沼泽深处一条野生灵脉...
@@ -441,9 +456,9 @@ Attributes:
 
 定义世界角色属性 Schema。一次调用传入所有属性定义，存储到 `plugin_data` 的 `schema/character-attributes`。
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| attributes | AttributeDef[] | ✓ | 角色属性定义数组（至少 1 个） |
+| 参数       | 类型           | 必需 | 描述                          |
+| ---------- | -------------- | ---- | ----------------------------- |
+| attributes | AttributeDef[] | ✓    | 角色属性定义数组（至少 1 个） |
 
 **AttributeDef**:
 | 字段 | 类型 | 必需 | 描述 |
@@ -471,14 +486,15 @@ Attributes:
 批量写入世界词条。一次调用传入所有词条（地理、阵营、货币等）。
 
 **FU-8 double-write**（S3-T2 lorebook 迁移收尾）：
+
 1. 写入 `plugin_data` namespace=`entries`（legacy，保持向后兼容 — 旧会话 / 未实现 lorebook 表的 store 依赖这条路径）
 2. 同步写入 session lorebook（`store.upsertLorebookEntries`）— 每个词条成为一条 `constant` lorebook row，id 稳定化为 `world-entry:<key>`，`insertionOrder` 按批次递增（100, 200, …）
 
 `loadSessionConfig` 构造 `{{ config.worldEntries }}` 时 **优先读 lorebook**，空才回退 plugin_data；这样新会话走 canonical 路径，老会话 / mock store 仍可回退。
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| entries | WorldEntry[] | ✓ | 世界词条数组（至少 1 个） |
+| 参数    | 类型         | 必需 | 描述                      |
+| ------- | ------------ | ---- | ------------------------- |
+| entries | WorldEntry[] | ✓    | 世界词条数组（至少 1 个） |
 
 **WorldEntry**:
 | 字段 | 类型 | 必需 | 描述 |
@@ -500,9 +516,9 @@ Attributes:
 
 返回的 `entryId` 使用**语义短 ID** 格式（如 `codex-fire-magic`, `codex-3`），方便 LLM 在后续 `update-codex-entry` 调用中精确引用。
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| entries | CodexEntry[] | ✓ | 要解锁的条目列表 |
+| 参数    | 类型         | 必需 | 描述             |
+| ------- | ------------ | ---- | ---------------- |
+| entries | CodexEntry[] | ✓    | 要解锁的条目列表 |
 
 **CodexEntry**:
 | 字段 | 类型 | 必需 | 描述 |
@@ -526,12 +542,12 @@ Attributes:
 
 更新已有图鉴条目，追加新发现的信息。
 
-| 参数 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| entryId | string | ✓ | 要更新的条目短 ID（如 `codex-fire-magic`） |
-| appendContent | string | ✓ | 追加的新内容 |
-| newTags | string[] | | 新增标签 |
-| rarityUpgrade | enum | | 提升稀有度 |
+| 参数          | 类型     | 必需 | 描述                                       |
+| ------------- | -------- | ---- | ------------------------------------------ |
+| entryId       | string   | ✓    | 要更新的条目短 ID（如 `codex-fire-magic`） |
+| appendContent | string   | ✓    | 追加的新内容                               |
+| newTags       | string[] |      | 新增标签                                   |
+| rarityUpgrade | enum     |      | 提升稀有度                                 |
 
 **输出**: `{ updated, entryId, ui }` — 含更新动画的 UI 卡片
 
@@ -546,9 +562,9 @@ Attributes:
 
 ### 设计原则
 
-| 层 | 格式 | 用途 | 示例 |
-|---|---|---|---|
-| **存储层** | UUID | DB 主键、API 路由 | `550e8400-e29b-41d4...` |
+| 层         | 格式  | 用途                            | 示例                         |
+| ---------- | ----- | ------------------------------- | ---------------------------- |
+| **存储层** | UUID  | DB 主键、API 路由               | `550e8400-e29b-41d4...`      |
 | **LLM 层** | 短 ID | 工具参数、返回值、prompt 中引用 | `codex-fire-magic`, `char-1` |
 
 ### 使用方法
@@ -576,13 +592,13 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 ### ID 格式规则
 
-| 输入 | 输出 | 说明 |
-|------|------|------|
-| `shortId('char', 'Dragon Knight', sid)` | `char-dragon-knight` | 英文 → 语义 slug |
-| `shortId('item', 'Fire Sword', sid)` | `item-fire-sword` | 英文 → 语义 slug |
-| `shortId('codex', '龙息术', sid)` | `codex-1` | CJK → session 内计数器 |
-| `shortId('npc', '林若风', sid)` | `npc-2` | CJK → session 内计数器 |
-| `shortIdBatch('codex', ['A', 'A'], sid)` | `['codex-a', 'codex-a-2']` | 批量自动去重 |
+| 输入                                     | 输出                       | 说明                   |
+| ---------------------------------------- | -------------------------- | ---------------------- |
+| `shortId('char', 'Dragon Knight', sid)`  | `char-dragon-knight`       | 英文 → 语义 slug       |
+| `shortId('item', 'Fire Sword', sid)`     | `item-fire-sword`          | 英文 → 语义 slug       |
+| `shortId('codex', '龙息术', sid)`        | `codex-1`                  | CJK → session 内计数器 |
+| `shortId('npc', '林若风', sid)`          | `npc-2`                    | CJK → session 内计数器 |
+| `shortIdBatch('codex', ['A', 'A'], sid)` | `['codex-a', 'codex-a-2']` | 批量自动去重           |
 
 ---
 
@@ -593,23 +609,29 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 接口位于 `@covel/tools`：
 
 ```typescript
-type ToolTransport = 'in-memory' | 'stdio' | 'http' | 'sse';
+type ToolTransport = "in-memory" | "stdio" | "http" | "sse";
 
 interface ToolClient {
   readonly transport: ToolTransport;
   readonly id: string;
   list(): Promise<readonly ToolDefinition[]>;
-  call(name: string, args: unknown, ctx: ToolExecutionContext): Promise<ToolCallResult>;
+  call(
+    name: string,
+    args: unknown,
+    ctx: ToolExecutionContext,
+  ): Promise<ToolCallResult>;
   close?(): Promise<void>;
 }
 ```
 
 兼容入口继续可用：
+
 - `registry.register(resolvedTool)`
 - `registry.getByFullName(fullName)`
 - `registry.getToolsForRuntime(pluginId, runtimeId, manifest)`
 
 新增入口用于统一执行路径：
+
 - `registry.registerClient(client, tools)`
 - `registry.getClientEntry(fullName)`
 - `registry.getClientForTool(fullName)`
@@ -622,15 +644,16 @@ interface ToolClient {
 
 工具调用经过 `ApprovalPipeline` 审批检查，当前规则（配置在 `apps/server/src/routes/api/bootstrap.ts`）：
 
-| 来源分类 | 规则 | 说明 |
-|----------|------|------|
-| `builtin:*` | **allow** | 框架内置工具，始终放行 |
-| `local:*` | **allow** | 已发现的插件本地工具，自动放行 |
-| `third-party:*` | **deny** | 未知来源工具，拒绝执行 |
+| 来源分类        | 规则      | 说明                           |
+| --------------- | --------- | ------------------------------ |
+| `builtin:*`     | **allow** | 框架内置工具，始终放行         |
+| `local:*`       | **allow** | 已发现的插件本地工具，自动放行 |
+| `third-party:*` | **deny**  | 未知来源工具，拒绝执行         |
 
 ### 来源分类逻辑
 
 Bootstrap 时自动分类：
+
 - `builtinUITools` 中的工具 → `builtin`
 - 插件 `tools/` 目录加载的工具 → `local`
 - 其他 → `third-party`（当前不存在，预留给社区插件）
@@ -640,11 +663,13 @@ Bootstrap 时自动分类：
 社区插件（位于 `~/.covel/plugins/` 或后续添加的非 first-dir 来源）会被 `getPluginTrustInfo` 标记为 `community`，bootstrap 在 `discovery → import` 阶段**跳过这些插件的 `tools.local` 加载**（见 `apps/server/src/routes/api/bootstrap.ts` 中 `if (!trust.autoLoad) continue;` 的注释）。完整的"approval 后再 import"生命周期（discovered → approved → import → active → revoked）目前**尚未实现**。
 
 实际影响：
+
 - 第三方插件可以通过 `/api/sessions/:id/plugin-rpc` 触发 runtime 调用（HITL 审批 OK）。
 - 第三方插件声明的 `tools.local` 在 toolMap 中找不到，runtime 内 `findTool` 返回 `undefined`，工具调用会失败。
 - 第三方插件目前可用的工具集 = `tools.builtin` 列表交集 + 该 runtime 自身的 `pluginToolAccess` 白名单。
 
 撰写第三方插件时的当前规约：
+
 - 仅依赖 `tools.builtin`（`plugin-data-*`、`create-form`、`create-character` 等）。
 - 真正的私有逻辑放进 function runtime 的 `handler.js`（见 `~/.covel/plugins/dashscope-image-gen` 的写法）。
 - 等到框架完成 community local-tool 的审批后加载，再考虑迁回 `tools.local`。
@@ -682,11 +707,11 @@ Bootstrap 时自动分类：
 
 ### 交互类型
 
-| 类型 | 用途 | 模板占位符 |
-|------|------|-----------|
-| `form` | 表单填写 | `{{fieldName}}` — 玩家填写的字段值 |
-| `choice` | 选项选择 | `{{selectedId}}`, `{{selectedLabel}}` — 玩家选择的选项 |
-| `confirmation` | 确认/取消 | `{{confirmed}}` — "确认" 或 "取消" |
+| 类型           | 用途      | 模板占位符                                             |
+| -------------- | --------- | ------------------------------------------------------ |
+| `form`         | 表单填写  | `{{fieldName}}` — 玩家填写的字段值                     |
+| `choice`       | 选项选择  | `{{selectedId}}`, `{{selectedLabel}}` — 玩家选择的选项 |
+| `confirmation` | 确认/取消 | `{{confirmed}}` — "确认" 或 "取消"                     |
 
 ### 返回值示例
 
@@ -695,12 +720,13 @@ Bootstrap 时自动分类：
 execute: async (params) => ({
   created: true,
   interaction: {
-    type: 'form',
+    type: "form",
     interactionId: params.formId,
     title: params.title,
     fields: params.fields,
     submitLabel: params.submitLabel,
-    narrativeTemplate: '你的名字叫 {{characterName}}，拥有 {{spiritRoot}} 灵根。',
+    narrativeTemplate:
+      "你的名字叫 {{characterName}}，拥有 {{spiritRoot}} 灵根。",
   },
 });
 
@@ -708,11 +734,11 @@ execute: async (params) => ({
 execute: async (params) => ({
   created: true,
   interaction: {
-    type: 'choice',
+    type: "choice",
     interactionId: params.choiceId,
     prompt: params.prompt,
     choices: params.choices,
-    narrativeTemplate: '你思考片刻后决定：{{selectedLabel}}。',
+    narrativeTemplate: "你思考片刻后决定：{{selectedLabel}}。",
   },
 });
 ```
@@ -747,14 +773,14 @@ POST /api/session/:id/submit-inputs
 // tools/my-tool.js
 export default function ({ tool, z, shortId }) {
   return tool({
-    name: 'my-tool-name',
-    description: '工具描述（会注入 LLM system prompt）',
+    name: "my-tool-name",
+    description: "工具描述（会注入 LLM system prompt）",
     parameters: z.object({
-      param1: z.string().describe('参数描述'),
+      param1: z.string().describe("参数描述"),
     }),
     execute: async (params, context) => {
       // context: { sessionId, turnId, pluginId, runtimeId }
-      const id = shortId('item', params.param1, context.sessionId);
+      const id = shortId("item", params.param1, context.sessionId);
       return { id, result: params.param1 };
     },
   });
@@ -763,25 +789,25 @@ export default function ({ tool, z, shortId }) {
 
 **注入对象**:
 
-| 字段 | 类型 | 描述 |
-|------|------|------|
-| `tool` | function | `tool()` 包装函数，定义工具参数和执行逻辑 |
-| `z` | object | Zod schema 库，用于参数验证 |
-| `shortId` | function | `shortId(prefix, label, sessionId)` — 生成单个短语义 ID |
-| `shortIdBatch` | function | `shortIdBatch(prefix, labels, sessionId)` — 批量生成短 ID |
-| `store` | DataStore | DataStore 实例，用于直接读写持久化数据（如批量操作） |
+| 字段           | 类型      | 描述                                                      |
+| -------------- | --------- | --------------------------------------------------------- |
+| `tool`         | function  | `tool()` 包装函数，定义工具参数和执行逻辑                 |
+| `z`            | object    | Zod schema 库，用于参数验证                               |
+| `shortId`      | function  | `shortId(prefix, label, sessionId)` — 生成单个短语义 ID   |
+| `shortIdBatch` | function  | `shortIdBatch(prefix, labels, sessionId)` — 批量生成短 ID |
+| `store`        | DataStore | DataStore 实例，用于直接读写持久化数据（如批量操作）      |
 
 ### 方式二：直接导出（TypeScript）
 
 ```typescript
-import { z } from 'zod';
-import { tool } from '@covel/tools';
+import { z } from "zod";
+import { tool } from "@covel/tools";
 
 export const myTool = tool({
-  name: 'my-tool-name',
-  description: '工具描述',
+  name: "my-tool-name",
+  description: "工具描述",
   parameters: z.object({
-    param1: z.string().describe('参数描述'),
+    param1: z.string().describe("参数描述"),
   }),
   execute: async (params, context) => {
     return { result: params.param1 };
@@ -814,7 +840,7 @@ Runtime 输出最终都被规范化为 `Proposal[]`（定义见 `packages/shared
 ```typescript
 interface UIRenderInstruction {
   parts: readonly UIRenderPart[];
-  layout?: 'stream' | 'split' | 'overlay';
+  layout?: "stream" | "split" | "overlay";
   status?: UIPartStatus;
 }
 ```
@@ -827,16 +853,16 @@ commit trace 会记录 `ui.rendered`，并为每个 part 记录 `ui.part.update`
 
 **Payload (`CharacterUpsertPayload`):**
 
-| 字段 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| id | string | ✓ | 角色 ID |
-| name | string | ✓ | 角色名称 |
-| type | string | | 角色类型，默认 `npc` |
-| description | string | | 角色描述 |
-| fields | unknown | | 角色属性 |
-| version | number | | 版本号，默认 `1` |
-| createdAt | string | | 创建时间，缺省为提交时间 |
-| mirrorPluginId | string | | 可选：同时镜像到该插件的 `plugin_data/<plugin>/characters/<id>`，供插件 UI 订阅 |
+| 字段           | 类型    | 必需 | 描述                                                                            |
+| -------------- | ------- | ---- | ------------------------------------------------------------------------------- |
+| id             | string  | ✓    | 角色 ID                                                                         |
+| name           | string  | ✓    | 角色名称                                                                        |
+| type           | string  |      | 角色类型，默认 `npc`                                                            |
+| description    | string  |      | 角色描述                                                                        |
+| fields         | unknown |      | 角色属性                                                                        |
+| version        | number  |      | 版本号，默认 `1`                                                                |
+| createdAt      | string  |      | 创建时间，缺省为提交时间                                                        |
+| mirrorPluginId | string  |      | 可选：同时镜像到该插件的 `plugin_data/<plugin>/characters/<id>`，供插件 UI 订阅 |
 
 ### `working_memory.set`（S3-T3）
 
@@ -846,14 +872,15 @@ commit trace 会记录 `ui.rendered`，并为每个 part 记录 `ui.part.update`
 
 **Payload (`WorkingMemorySetPayload`):**
 
-| 字段 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| scope | enum | ✓ | `player` / `story` / `shared` |
-| key | string | ✓ | 条目主键，按 `(sessionId, scope, key)` 唯一 |
-| value | unknown | ✓ | 任意可序列化 JSON 值 |
-| schemaRef | string | | 可选 schema 引用，仅作为元数据持久化 |
+| 字段      | 类型    | 必需 | 描述                                        |
+| --------- | ------- | ---- | ------------------------------------------- |
+| scope     | enum    | ✓    | `player` / `story` / `shared`               |
+| key       | string  | ✓    | 条目主键，按 `(sessionId, scope, key)` 唯一 |
+| value     | unknown | ✓    | 任意可序列化 JSON 值                        |
+| schemaRef | string  |      | 可选 schema 引用，仅作为元数据持久化        |
 
 **写入路径：**
+
 - runtime 端：通过 `Proposal` 输出 `{ type: 'working_memory.set', payload: { scope, key, value, schemaRef? } }`
 - HTTP 端：`PUT /api/sessions/:id/working-memory/:scope/:key` 直接调 store，不经 commit chain（详见 `docs/reference/api.md`）
 

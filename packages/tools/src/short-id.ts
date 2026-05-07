@@ -24,38 +24,38 @@ const counters = new Map<string, Map<string, number>>();
  * Get the next counter value for a (session, prefix) pair.
  */
 function nextCounter(sessionId: string, prefix: string): number {
-	let sessionCounters = counters.get(sessionId);
-	if (!sessionCounters) {
-		sessionCounters = new Map();
-		counters.set(sessionId, sessionCounters);
-	}
-	const current = sessionCounters.get(prefix) ?? 0;
-	const next = current + 1;
-	sessionCounters.set(prefix, next);
-	return next;
+  let sessionCounters = counters.get(sessionId);
+  if (!sessionCounters) {
+    sessionCounters = new Map();
+    counters.set(sessionId, sessionCounters);
+  }
+  const current = sessionCounters.get(prefix) ?? 0;
+  const next = current + 1;
+  sessionCounters.set(prefix, next);
+  return next;
 }
 
 /**
  * Clean up counters for a session (call on session delete).
  */
 export function clearSessionCounters(sessionId: string): void {
-	counters.delete(sessionId);
+  counters.delete(sessionId);
 }
 
 // ── Slug generation ─────────────────────────────────────────────
 
 /** ASCII-safe slug: lowercase, hyphens only, max length. */
 function slugify(label: string, maxLength = 24): string {
-	const slug = label
-		.toLowerCase()
-		.replace(/[^a-z0-9\s-]/g, "") // strip non-ASCII
-		.trim()
-		.replace(/\s+/g, "-") // spaces → hyphens
-		.replace(/-+/g, "-") // collapse multiple hyphens
-		.slice(0, maxLength)
-		.replace(/-$/, ""); // trim trailing hyphen
+  const slug = label
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "") // strip non-ASCII
+    .trim()
+    .replace(/\s+/g, "-") // spaces → hyphens
+    .replace(/-+/g, "-") // collapse multiple hyphens
+    .slice(0, maxLength)
+    .replace(/-$/, ""); // trim trailing hyphen
 
-	return slug;
+  return slug;
 }
 
 // ── Public API ──────────────────────────────────────────────────
@@ -69,19 +69,19 @@ function slugify(label: string, maxLength = 24): string {
  * @returns Short ID like 'char-dragon-sword' or 'codex-3'
  */
 export function shortId(
-	prefix: string,
-	label: string,
-	sessionId: string,
+  prefix: string,
+  label: string,
+  sessionId: string,
 ): string {
-	const slug = slugify(label);
+  const slug = slugify(label);
 
-	if (slug.length >= 2) {
-		return `${prefix}-${slug}`;
-	}
+  if (slug.length >= 2) {
+    return `${prefix}-${slug}`;
+  }
 
-	// Fallback: counter-based for non-ASCII labels (CJK, emoji, etc.)
-	const n = nextCounter(sessionId, prefix);
-	return `${prefix}-${n}`;
+  // Fallback: counter-based for non-ASCII labels (CJK, emoji, etc.)
+  const n = nextCounter(sessionId, prefix);
+  return `${prefix}-${n}`;
 }
 
 /**
@@ -94,15 +94,15 @@ export function shortId(
  * @returns Array of unique short IDs
  */
 export function shortIdBatch(
-	prefix: string,
-	labels: readonly string[],
-	sessionId: string,
+  prefix: string,
+  labels: readonly string[],
+  sessionId: string,
 ): string[] {
-	const seen = new Map<string, number>();
-	return labels.map((label) => {
-		const base = shortId(prefix, label, sessionId);
-		const count = seen.get(base) ?? 0;
-		seen.set(base, count + 1);
-		return count === 0 ? base : `${base}-${count + 1}`;
-	});
+  const seen = new Map<string, number>();
+  return labels.map((label) => {
+    const base = shortId(prefix, label, sessionId);
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    return count === 0 ? base : `${base}-${count + 1}`;
+  });
 }

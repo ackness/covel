@@ -19,22 +19,22 @@ import { readFile, readdir, access } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import {
-	validateWorldManifest,
-	validateDimensionData,
-	formatValidationErrors,
-	DIMENSION_KEYS,
+  validateWorldManifest,
+  validateDimensionData,
+  formatValidationErrors,
+  DIMENSION_KEYS,
 } from "@covel/shared";
 import type { DataStore, WorldRecord } from "@covel/store";
 import { resolveContainedPath } from "./world-data/safe-path.js";
 import { loadWorldDataSummary } from "./world-data/world-load.js";
 
 async function fileExists(p: string): Promise<boolean> {
-	try {
-		await access(p);
-		return true;
-	} catch {
-		return false;
-	}
+  try {
+    await access(p);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -42,14 +42,14 @@ async function fileExists(p: string): Promise<boolean> {
  * If the value is a Record, pick `defaultLocale` key → first key → empty.
  */
 function resolveText(
-	value: string | Record<string, string> | undefined,
-	defaultLocale?: string,
+  value: string | Record<string, string> | undefined,
+  defaultLocale?: string,
 ): string {
-	if (value === undefined) return "";
-	if (typeof value === "string") return value;
-	if (defaultLocale && value[defaultLocale]) return value[defaultLocale];
-	const keys = Object.keys(value);
-	return keys.length > 0 ? value[keys[0]] : "";
+  if (value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (defaultLocale && value[defaultLocale]) return value[defaultLocale];
+  const keys = Object.keys(value);
+  return keys.length > 0 ? value[keys[0]] : "";
 }
 
 /**
@@ -57,26 +57,26 @@ function resolveText(
  * Priority: WORLD.<lang>.md → WORLD.md → ''
  */
 async function readLore(
-	worldDir: string,
-	defaultLocale?: string,
+  worldDir: string,
+  defaultLocale?: string,
 ): Promise<string> {
-	const lang = defaultLocale?.split("-")[0]; // "zh-CN" → "zh"
+  const lang = defaultLocale?.split("-")[0]; // "zh-CN" → "zh"
 
-	// Try locale-specific first
-	if (lang) {
-		const localePath = path.join(worldDir, `WORLD.${lang}.md`);
-		if (await fileExists(localePath)) {
-			return readFile(localePath, "utf-8");
-		}
-	}
+  // Try locale-specific first
+  if (lang) {
+    const localePath = path.join(worldDir, `WORLD.${lang}.md`);
+    if (await fileExists(localePath)) {
+      return readFile(localePath, "utf-8");
+    }
+  }
 
-	// Fallback to default WORLD.md
-	const defaultPath = path.join(worldDir, "WORLD.md");
-	if (await fileExists(defaultPath)) {
-		return readFile(defaultPath, "utf-8");
-	}
+  // Fallback to default WORLD.md
+  const defaultPath = path.join(worldDir, "WORLD.md");
+  if (await fileExists(defaultPath)) {
+    return readFile(defaultPath, "utf-8");
+  }
 
-	return "";
+  return "";
 }
 
 /**
@@ -84,12 +84,12 @@ async function readLore(
  * Returns the resolved absolute path if safe, or null if path traversal detected.
  */
 async function resolveSafePath(
-	worldDir: string,
-	relativePath: string,
+  worldDir: string,
+  relativePath: string,
 ): Promise<string | null> {
-	return resolveContainedPath(worldDir, relativePath, {
-		rejectSymlinks: true,
-	});
+  return resolveContainedPath(worldDir, relativePath, {
+    rejectSymlinks: true,
+  });
 }
 
 /**
@@ -100,32 +100,32 @@ async function resolveSafePath(
  *   → tries geography.zh.yaml first, then geography.yaml
  */
 async function resolveLocaleDimensionPath(
-	worldDir: string,
-	relativePath: string,
-	defaultLocale?: string,
+  worldDir: string,
+  relativePath: string,
+  defaultLocale?: string,
 ): Promise<string | null> {
-	const lang = defaultLocale?.split("-")[0]; // "zh-CN" → "zh"
+  const lang = defaultLocale?.split("-")[0]; // "zh-CN" → "zh"
 
-	if (lang) {
-		const parsed = path.parse(relativePath);
-		// e.g., "./dimensions/geography.yaml" → "./dimensions/geography.zh.yaml"
-		const localePath = path.join(
-			parsed.dir,
-			`${parsed.name}.${lang}${parsed.ext}`,
-		);
-		const safePath = await resolveSafePath(worldDir, localePath);
-		if (safePath && (await fileExists(safePath))) {
-			return safePath;
-		}
-	}
+  if (lang) {
+    const parsed = path.parse(relativePath);
+    // e.g., "./dimensions/geography.yaml" → "./dimensions/geography.zh.yaml"
+    const localePath = path.join(
+      parsed.dir,
+      `${parsed.name}.${lang}${parsed.ext}`,
+    );
+    const safePath = await resolveSafePath(worldDir, localePath);
+    if (safePath && (await fileExists(safePath))) {
+      return safePath;
+    }
+  }
 
-	// Fallback to original path
-	const safePath = await resolveSafePath(worldDir, relativePath);
-	if (safePath && (await fileExists(safePath))) {
-		return safePath;
-	}
+  // Fallback to original path
+  const safePath = await resolveSafePath(worldDir, relativePath);
+  if (safePath && (await fileExists(safePath))) {
+    return safePath;
+  }
 
-	return null;
+  return null;
 }
 
 /**
@@ -137,66 +137,66 @@ async function resolveLocaleDimensionPath(
  * (e.g., `geography.zh.yaml`), then falls back to the declared path.
  */
 async function loadExternalDimensions(
-	worldDir: string,
-	sources: Record<string, string>,
-	worldId: string,
-	defaultLocale?: string,
+  worldDir: string,
+  sources: Record<string, string>,
+  worldId: string,
+  defaultLocale?: string,
 ): Promise<Record<string, unknown>> {
-	const result: Record<string, unknown> = {};
+  const result: Record<string, unknown> = {};
 
-	for (const [key, relativePath] of Object.entries(sources)) {
-		// Validate dimension key
-		if (!DIMENSION_KEYS.includes(key)) {
-			console.warn(
-				`[world-seed] ${worldId}: unknown dimension key "${key}" in dimensionSources, skipping`,
-			);
-			continue;
-		}
+  for (const [key, relativePath] of Object.entries(sources)) {
+    // Validate dimension key
+    if (!DIMENSION_KEYS.includes(key)) {
+      console.warn(
+        `[world-seed] ${worldId}: unknown dimension key "${key}" in dimensionSources, skipping`,
+      );
+      continue;
+    }
 
-		// Path traversal check on the declared path
-		if (!(await resolveSafePath(worldDir, relativePath))) {
-			console.warn(
-				`[world-seed] ${worldId}: path traversal detected for "${key}": ${relativePath}, skipping`,
-			);
-			continue;
-		}
+    // Path traversal check on the declared path
+    if (!(await resolveSafePath(worldDir, relativePath))) {
+      console.warn(
+        `[world-seed] ${worldId}: path traversal detected for "${key}": ${relativePath}, skipping`,
+      );
+      continue;
+    }
 
-		// Resolve with locale awareness
-		const resolvedPath = await resolveLocaleDimensionPath(
-			worldDir,
-			relativePath,
-			defaultLocale,
-		);
-		if (!resolvedPath) {
-			console.warn(
-				`[world-seed] ${worldId}: dimension file not found for "${key}": ${relativePath}`,
-			);
-			continue;
-		}
+    // Resolve with locale awareness
+    const resolvedPath = await resolveLocaleDimensionPath(
+      worldDir,
+      relativePath,
+      defaultLocale,
+    );
+    if (!resolvedPath) {
+      console.warn(
+        `[world-seed] ${worldId}: dimension file not found for "${key}": ${relativePath}`,
+      );
+      continue;
+    }
 
-		try {
-			const content = await readFile(resolvedPath, "utf-8");
-			const data = parseYaml(content);
+    try {
+      const content = await readFile(resolvedPath, "utf-8");
+      const data = parseYaml(content);
 
-			// Validate against dimension-specific sub-schema
-			const validation = validateDimensionData(key, data);
-			if (!validation.valid) {
-				console.warn(
-					`[world-seed] ${worldId}: invalid dimension file "${relativePath}" for "${key}":\n${formatValidationErrors(validation.errors!)}`,
-				);
-				continue;
-			}
+      // Validate against dimension-specific sub-schema
+      const validation = validateDimensionData(key, data);
+      if (!validation.valid) {
+        console.warn(
+          `[world-seed] ${worldId}: invalid dimension file "${relativePath}" for "${key}":\n${formatValidationErrors(validation.errors!)}`,
+        );
+        continue;
+      }
 
-			result[key] = validation.data;
-		} catch (err) {
-			console.warn(
-				`[world-seed] ${worldId}: failed to load dimension file "${relativePath}":`,
-				err,
-			);
-		}
-	}
+      result[key] = validation.data;
+    } catch (err) {
+      console.warn(
+        `[world-seed] ${worldId}: failed to load dimension file "${relativePath}":`,
+        err,
+      );
+    }
+  }
 
-	return result;
+  return result;
 }
 
 /**
@@ -204,121 +204,121 @@ async function loadExternalDimensions(
  * Returns a WorldRecord ready for upsert, or null if invalid/missing.
  */
 export async function loadSingleWorld(
-	worldDir: string,
+  worldDir: string,
 ): Promise<WorldRecord | null> {
-	const yamlPath = path.join(worldDir, "world.yaml");
+  const yamlPath = path.join(worldDir, "world.yaml");
 
-	if (!(await fileExists(yamlPath))) return null;
+  if (!(await fileExists(yamlPath))) return null;
 
-	const yamlContent = await readFile(yamlPath, "utf-8");
-	const raw = parseYaml(yamlContent) as Record<string, unknown>;
+  const yamlContent = await readFile(yamlPath, "utf-8");
+  const raw = parseYaml(yamlContent) as Record<string, unknown>;
 
-	const validation = validateWorldManifest(raw);
-	if (!validation.valid) {
-		const dirName = path.basename(worldDir);
-		console.warn(
-			`[world-seed] Invalid world.yaml in ${dirName}:\n${formatValidationErrors(validation.errors!)}`,
-		);
-		return null;
-	}
+  const validation = validateWorldManifest(raw);
+  if (!validation.valid) {
+    const dirName = path.basename(worldDir);
+    console.warn(
+      `[world-seed] Invalid world.yaml in ${dirName}:\n${formatValidationErrors(validation.errors!)}`,
+    );
+    return null;
+  }
 
-	const manifest = validation.data as Record<string, unknown>;
-	const worldId = manifest.id as string;
-	const defaultLocale = manifest.defaultLocale as string | undefined;
-	const dimensionSources = manifest.dimensionSources as
-		| Record<string, string>
-		| undefined;
-	const worldDataPath = manifest.worldData as string | undefined;
+  const manifest = validation.data as Record<string, unknown>;
+  const worldId = manifest.id as string;
+  const defaultLocale = manifest.defaultLocale as string | undefined;
+  const dimensionSources = manifest.dimensionSources as
+    | Record<string, string>
+    | undefined;
+  const worldDataPath = manifest.worldData as string | undefined;
 
-	// Merge inline + external dimensions (external wins for same key)
-	const inlineDims = (manifest.dimensions as Record<string, unknown>) ?? {};
-	const externalDims = dimensionSources
-		? await loadExternalDimensions(
-				worldDir,
-				dimensionSources,
-				worldId,
-				defaultLocale,
-			)
-		: {};
-	const mergedDimensions = { ...inlineDims, ...externalDims };
+  // Merge inline + external dimensions (external wins for same key)
+  const inlineDims = (manifest.dimensions as Record<string, unknown>) ?? {};
+  const externalDims = dimensionSources
+    ? await loadExternalDimensions(
+        worldDir,
+        dimensionSources,
+        worldId,
+        defaultLocale,
+      )
+    : {};
+  const mergedDimensions = { ...inlineDims, ...externalDims };
 
-	const lore = await readLore(worldDir, defaultLocale);
-	const now = new Date().toISOString();
+  const lore = await readLore(worldDir, defaultLocale);
+  const now = new Date().toISOString();
 
-	const characterBlueprintSources = Array.isArray(
-		manifest.characterBlueprintSources,
-	)
-		? (manifest.characterBlueprintSources as string[])
-		: undefined;
-	const characterBlueprints =
-		characterBlueprintSources && !worldDataPath
-			? await loadCharacterBlueprints(worldDir, characterBlueprintSources)
-			: undefined;
+  const characterBlueprintSources = Array.isArray(
+    manifest.characterBlueprintSources,
+  )
+    ? (manifest.characterBlueprintSources as string[])
+    : undefined;
+  const characterBlueprints =
+    characterBlueprintSources && !worldDataPath
+      ? await loadCharacterBlueprints(worldDir, characterBlueprintSources)
+      : undefined;
 
-	const baseMetadata: Record<string, unknown> = {
-		source: "file",
-		dimensions:
-			Object.keys(mergedDimensions).length > 0 ? mergedDimensions : undefined,
-		dimensionSources: dimensionSources,
-		requiredPlugins: manifest.requiredPlugins as string[] | undefined,
-		recommendedPlugins: manifest.recommendedPlugins as string[] | undefined,
-		excludedPlugins: manifest.excludedPlugins as string[] | undefined,
-		worldDataPath,
-		characterBlueprintSources,
-		characterBlueprints,
-	};
-	const worldData = await loadWorldDataSummary({
-		worldRoot: worldDir,
-		worldId,
-		worldDataPath,
-		metadata: baseMetadata,
-		now,
-	});
-	for (const diagnostic of worldData.diagnostics) {
-		if (diagnostic.level === "error") {
-			console.warn(
-				`[world-seed] ${worldId}: worldData ${diagnostic.sourceId ? `${diagnostic.sourceId}: ` : ""}${diagnostic.message}`,
-			);
-		}
-	}
+  const baseMetadata: Record<string, unknown> = {
+    source: "file",
+    dimensions:
+      Object.keys(mergedDimensions).length > 0 ? mergedDimensions : undefined,
+    dimensionSources: dimensionSources,
+    requiredPlugins: manifest.requiredPlugins as string[] | undefined,
+    recommendedPlugins: manifest.recommendedPlugins as string[] | undefined,
+    excludedPlugins: manifest.excludedPlugins as string[] | undefined,
+    worldDataPath,
+    characterBlueprintSources,
+    characterBlueprints,
+  };
+  const worldData = await loadWorldDataSummary({
+    worldRoot: worldDir,
+    worldId,
+    worldDataPath,
+    metadata: baseMetadata,
+    now,
+  });
+  for (const diagnostic of worldData.diagnostics) {
+    if (diagnostic.level === "error") {
+      console.warn(
+        `[world-seed] ${worldId}: worldData ${diagnostic.sourceId ? `${diagnostic.sourceId}: ` : ""}${diagnostic.message}`,
+      );
+    }
+  }
 
-	return {
-		id: worldId,
-		name: resolveText(
-			manifest.name as string | Record<string, string>,
-			defaultLocale,
-		),
-		description: resolveText(
-			manifest.summary as string | Record<string, string> | undefined,
-			defaultLocale,
-		),
-		lore: lore || undefined,
-		tags: manifest.tags as string[] | undefined,
-		locale: defaultLocale,
-		metadata: worldData.metadata,
-		createdAt: now,
-		updatedAt: now,
-	};
+  return {
+    id: worldId,
+    name: resolveText(
+      manifest.name as string | Record<string, string>,
+      defaultLocale,
+    ),
+    description: resolveText(
+      manifest.summary as string | Record<string, string> | undefined,
+      defaultLocale,
+    ),
+    lore: lore || undefined,
+    tags: manifest.tags as string[] | undefined,
+    locale: defaultLocale,
+    metadata: worldData.metadata,
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
 async function loadCharacterBlueprints(
-	worldDir: string,
-	sources: readonly string[],
+  worldDir: string,
+  sources: readonly string[],
 ): Promise<unknown[]> {
-	const blueprints: unknown[] = [];
-	for (const source of sources) {
-		const fullPath = await resolveSafePath(worldDir, source);
-		if (!fullPath) {
-			throw new Error(
-				`characterBlueprintSources path escapes world dir: ${source}`,
-			);
-		}
-		const raw = await readFile(fullPath, "utf-8");
-		const parsed = JSON.parse(raw) as unknown;
-		if (Array.isArray(parsed)) blueprints.push(...parsed);
-		else blueprints.push(parsed);
-	}
-	return blueprints;
+  const blueprints: unknown[] = [];
+  for (const source of sources) {
+    const fullPath = await resolveSafePath(worldDir, source);
+    if (!fullPath) {
+      throw new Error(
+        `characterBlueprintSources path escapes world dir: ${source}`,
+      );
+    }
+    const raw = await readFile(fullPath, "utf-8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) blueprints.push(...parsed);
+    else blueprints.push(parsed);
+  }
+  return blueprints;
 }
 
 /**
@@ -327,47 +327,47 @@ async function loadCharacterBlueprints(
  * Returns WorldRecord[] ready for upsert.
  */
 export async function loadWorldPackages(
-	worldsDir: string,
+  worldsDir: string,
 ): Promise<WorldRecord[]> {
-	if (!(await fileExists(worldsDir))) return [];
+  if (!(await fileExists(worldsDir))) return [];
 
-	const entries = await readdir(worldsDir, { withFileTypes: true });
-	const records: WorldRecord[] = [];
+  const entries = await readdir(worldsDir, { withFileTypes: true });
+  const records: WorldRecord[] = [];
 
-	for (const entry of entries) {
-		if (!entry.isDirectory()) continue;
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
 
-		const worldDir = path.join(worldsDir, entry.name);
+    const worldDir = path.join(worldsDir, entry.name);
 
-		try {
-			const record = await loadSingleWorld(worldDir);
-			if (record) records.push(record);
-		} catch (err) {
-			console.warn(`[world-seed] Failed to load world ${entry.name}:`, err);
-		}
-	}
+    try {
+      const record = await loadSingleWorld(worldDir);
+      if (record) records.push(record);
+    } catch (err) {
+      console.warn(`[world-seed] Failed to load world ${entry.name}:`, err);
+    }
+  }
 
-	return records;
+  return records;
 }
 
 /**
  * Seed all world packages into the DataStore (idempotent via upsert).
  */
 export async function seedWorlds(
-	store: DataStore,
-	worldsDir: string,
+  store: DataStore,
+  worldsDir: string,
 ): Promise<number> {
-	const records = await loadWorldPackages(worldsDir);
+  const records = await loadWorldPackages(worldsDir);
 
-	for (const record of records) {
-		await store.upsertWorld(record);
-	}
+  for (const record of records) {
+    await store.upsertWorld(record);
+  }
 
-	if (records.length > 0) {
-		console.log(
-			`[world-seed] Loaded ${records.length} world(s): ${records.map((r) => r.id).join(", ")}`,
-		);
-	}
+  if (records.length > 0) {
+    console.log(
+      `[world-seed] Loaded ${records.length} world(s): ${records.map((r) => r.id).join(", ")}`,
+    );
+  }
 
-	return records.length;
+  return records.length;
 }

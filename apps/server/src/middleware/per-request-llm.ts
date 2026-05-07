@@ -23,197 +23,197 @@
 
 import type { MiddlewareHandler } from "hono";
 import {
-	createGatewayAdapter,
-	createPluginRuntimeGateway,
+  createGatewayAdapter,
+  createPluginRuntimeGateway,
 } from "@covel/runtime";
 import type { AiStack } from "../ai-setup.js";
 import type { SlotOverridesInput } from "@covel/ai-provider";
 import type { PluginRuntimeGateway } from "@covel/plugin-loader";
 
 export interface PerRequestLlmOptions {
-	readonly ai: AiStack;
-	/** Base API keys from process.env (*_API_KEY). Client keys override. */
-	readonly envApiKeys: Record<string, string>;
-	/**
-	 * The adapter produced at server startup. Used as a fallback when the
-	 * request has no overriding headers so callers can keep relying on
-	 * `c.get('llmAdapter')` without null checks.
-	 */
-	readonly defaultLlmAdapter: import("@covel/runtime").LLMAdapter;
-	/**
-	 * The plugin-runtime gateway facade produced at server startup. When the
-	 * request carries overriding headers the middleware rebuilds a request-
-	 * scoped facade so function-runtime `ctx.gateway.resolveSlot(...)` /
-	 * `generateText(...)` calls honour the same browser-supplied provider
-	 * keys / custom presets / slot overrides as the agent-runtime LLM
-	 * adapter. Without this rebuild the function-runtime path silently uses
-	 * the startup env keys and the server-side llm.toml, defeating
-	 * per-session UI settings (audit F2).
-	 */
-	readonly defaultPluginGateway: PluginRuntimeGateway;
+  readonly ai: AiStack;
+  /** Base API keys from process.env (*_API_KEY). Client keys override. */
+  readonly envApiKeys: Record<string, string>;
+  /**
+   * The adapter produced at server startup. Used as a fallback when the
+   * request has no overriding headers so callers can keep relying on
+   * `c.get('llmAdapter')` without null checks.
+   */
+  readonly defaultLlmAdapter: import("@covel/runtime").LLMAdapter;
+  /**
+   * The plugin-runtime gateway facade produced at server startup. When the
+   * request carries overriding headers the middleware rebuilds a request-
+   * scoped facade so function-runtime `ctx.gateway.resolveSlot(...)` /
+   * `generateText(...)` calls honour the same browser-supplied provider
+   * keys / custom presets / slot overrides as the agent-runtime LLM
+   * adapter. Without this rebuild the function-runtime path silently uses
+   * the startup env keys and the server-side llm.toml, defeating
+   * per-session UI settings (audit F2).
+   */
+  readonly defaultPluginGateway: PluginRuntimeGateway;
 }
 
 const MAX_HEADER_BYTES = 64 * 1024; // sanity cap — browsers rarely send bigger
 
 export function createPerRequestLlmMiddleware(
-	opts: PerRequestLlmOptions,
+  opts: PerRequestLlmOptions,
 ): MiddlewareHandler {
-	return async (c, next) => {
-		const requestKeys = parseProviderKeys(c.req.header("X-Provider-Keys"));
-		const slotOverrides = parseSlotOverrides(c.req.header("X-Slot-Config"));
+  return async (c, next) => {
+    const requestKeys = parseProviderKeys(c.req.header("X-Provider-Keys"));
+    const slotOverrides = parseSlotOverrides(c.req.header("X-Slot-Config"));
 
-		const hasRequestKeys =
-			requestKeys !== null && Object.keys(requestKeys).length > 0;
-		const hasOverrides =
-			slotOverrides !== null &&
-			((slotOverrides.customPresets?.length ?? 0) > 0 ||
-				Object.keys(slotOverrides.parameterOverrides ?? {}).length > 0 ||
-				Object.keys(slotOverrides.slotPresetOverrides ?? {}).length > 0);
+    const hasRequestKeys =
+      requestKeys !== null && Object.keys(requestKeys).length > 0;
+    const hasOverrides =
+      slotOverrides !== null &&
+      ((slotOverrides.customPresets?.length ?? 0) > 0 ||
+        Object.keys(slotOverrides.parameterOverrides ?? {}).length > 0 ||
+        Object.keys(slotOverrides.slotPresetOverrides ?? {}).length > 0);
 
-		if (!hasRequestKeys && !hasOverrides) {
-			await next();
-			return;
-		}
+    if (!hasRequestKeys && !hasOverrides) {
+      await next();
+      return;
+    }
 
-		const mergedApiKeys: Record<string, string> = {
-			...opts.envApiKeys,
-			...requestKeys,
-		};
+    const mergedApiKeys: Record<string, string> = {
+      ...opts.envApiKeys,
+      ...requestKeys,
+    };
 
-		const perRequestAdapter = createGatewayAdapter(opts.ai.gateway, {
-			apiKeys: mergedApiKeys,
-			...(slotOverrides ? { slotOverrides } : {}),
-		});
+    const perRequestAdapter = createGatewayAdapter(opts.ai.gateway, {
+      apiKeys: mergedApiKeys,
+      ...(slotOverrides ? { slotOverrides } : {}),
+    });
 
-		// Audit F2: keep the function-runtime gateway in lock-step with the
-		// agent-runtime LLM adapter. Both are rebuilt from the same merged
-		// keys / slot overrides so `ctx.gateway.resolveSlot(...)` inside a
-		// function handler resolves the same browser-declared custom presets
-		// (e.g. a user-added DashScope preset for image plugins) as the
-		// agent-runtime side sees via `llmAdapter`.
-		const perRequestPluginGateway = createPluginRuntimeGateway(
-			opts.ai.gateway,
-			{
-				apiKeys: mergedApiKeys,
-				...(slotOverrides ? { slotOverrides } : {}),
-			},
-		);
+    // Audit F2: keep the function-runtime gateway in lock-step with the
+    // agent-runtime LLM adapter. Both are rebuilt from the same merged
+    // keys / slot overrides so `ctx.gateway.resolveSlot(...)` inside a
+    // function handler resolves the same browser-declared custom presets
+    // (e.g. a user-added DashScope preset for image plugins) as the
+    // agent-runtime side sees via `llmAdapter`.
+    const perRequestPluginGateway = createPluginRuntimeGateway(
+      opts.ai.gateway,
+      {
+        apiKeys: mergedApiKeys,
+        ...(slotOverrides ? { slotOverrides } : {}),
+      },
+    );
 
-		c.set("llmAdapter", perRequestAdapter);
-		c.set("pluginGateway", perRequestPluginGateway);
-		await next();
-	};
+    c.set("llmAdapter", perRequestAdapter);
+    c.set("pluginGateway", perRequestPluginGateway);
+    await next();
+  };
 }
 
 function parseProviderKeys(
-	header: string | undefined,
+  header: string | undefined,
 ): Record<string, string> | null {
-	if (!header || header.length > MAX_HEADER_BYTES) return null;
-	try {
-		const decoded = Buffer.from(header, "base64").toString("utf8");
-		const parsed = JSON.parse(decoded);
-		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-			return null;
-		const result: Record<string, string> = {};
-		for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-			if (typeof v === "string" && v.length > 0) result[k] = v;
-		}
-		return result;
-	} catch {
-		return null;
-	}
+  if (!header || header.length > MAX_HEADER_BYTES) return null;
+  try {
+    const decoded = Buffer.from(header, "base64").toString("utf8");
+    const parsed = JSON.parse(decoded);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      return null;
+    const result: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof v === "string" && v.length > 0) result[k] = v;
+    }
+    return result;
+  } catch {
+    return null;
+  }
 }
 
 function parseSlotOverrides(
-	header: string | undefined,
+  header: string | undefined,
 ): SlotOverridesInput | null {
-	if (!header || header.length > MAX_HEADER_BYTES) return null;
-	try {
-		const decoded = Buffer.from(header, "base64").toString("utf8");
-		const parsed = JSON.parse(decoded);
-		if (!parsed || typeof parsed !== "object") return null;
-		const out: SlotOverridesInput = {};
-		const slotMap = (parsed as Record<string, unknown>).slotPresetOverrides;
-		if (slotMap && typeof slotMap === "object" && !Array.isArray(slotMap)) {
-			const clean: Record<string, string> = {};
-			for (const [k, v] of Object.entries(slotMap as Record<string, unknown>)) {
-				if (typeof k === "string" && typeof v === "string" && v.length > 0) {
-					clean[k] = v;
-				}
-			}
-			if (Object.keys(clean).length > 0) out.slotPresetOverrides = clean;
-		}
-		const paramMap =
-			(parsed as Record<string, unknown>).parameterOverrides ??
-			(parsed as Record<string, unknown>).paramOverrides;
-		if (paramMap && typeof paramMap === "object" && !Array.isArray(paramMap)) {
-			const clean: NonNullable<SlotOverridesInput["parameterOverrides"]> = {};
-			for (const [slotId, raw] of Object.entries(
-				paramMap as Record<string, unknown>,
-			)) {
-				if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
-				const source = raw as Record<string, unknown>;
-				const next: Record<string, number> = {};
-				for (const key of [
-					"temperature",
-					"topP",
-					"topK",
-					"maxOutputTokens",
-					"frequencyPenalty",
-					"presencePenalty",
-				] as const) {
-					const value = source[key];
-					if (typeof value === "number" && Number.isFinite(value)) {
-						next[key] = value;
-					}
-				}
-				if (Object.keys(next).length > 0) {
-					clean[slotId] = next as NonNullable<
-						SlotOverridesInput["parameterOverrides"]
-					>[string];
-				}
-			}
-			if (Object.keys(clean).length > 0) out.parameterOverrides = clean;
-		}
-		const customPresets = (parsed as Record<string, unknown>).customPresets;
-		if (Array.isArray(customPresets)) {
-			const clean: SlotOverridesInput["customPresets"] = [];
-			for (const raw of customPresets) {
-				if (!raw || typeof raw !== "object") continue;
-				const r = raw as Record<string, unknown>;
-				if (
-					typeof r.id === "string" &&
-					r.id.length > 0 &&
-					typeof r.provider === "string" &&
-					r.provider.length > 0 &&
-					typeof r.model === "string" &&
-					r.model.length > 0
-				) {
-					clean.push({
-						id: r.id,
-						name: typeof r.name === "string" ? r.name : r.id,
-						provider: r.provider,
-						model: r.model,
-						...(typeof r.baseUrl === "string" ? { baseUrl: r.baseUrl } : {}),
-						...(typeof r.protocol === "string"
-							? {
-									protocol:
-										r.protocol as SlotOverridesInput["customPresets"] extends Array<
-											infer T
-										>
-											? T extends { protocol?: infer P }
-												? P
-												: never
-											: never,
-								}
-							: {}),
-					});
-				}
-			}
-			if (clean.length > 0) out.customPresets = clean;
-		}
-		return out;
-	} catch {
-		return null;
-	}
+  if (!header || header.length > MAX_HEADER_BYTES) return null;
+  try {
+    const decoded = Buffer.from(header, "base64").toString("utf8");
+    const parsed = JSON.parse(decoded);
+    if (!parsed || typeof parsed !== "object") return null;
+    const out: SlotOverridesInput = {};
+    const slotMap = (parsed as Record<string, unknown>).slotPresetOverrides;
+    if (slotMap && typeof slotMap === "object" && !Array.isArray(slotMap)) {
+      const clean: Record<string, string> = {};
+      for (const [k, v] of Object.entries(slotMap as Record<string, unknown>)) {
+        if (typeof k === "string" && typeof v === "string" && v.length > 0) {
+          clean[k] = v;
+        }
+      }
+      if (Object.keys(clean).length > 0) out.slotPresetOverrides = clean;
+    }
+    const paramMap =
+      (parsed as Record<string, unknown>).parameterOverrides ??
+      (parsed as Record<string, unknown>).paramOverrides;
+    if (paramMap && typeof paramMap === "object" && !Array.isArray(paramMap)) {
+      const clean: NonNullable<SlotOverridesInput["parameterOverrides"]> = {};
+      for (const [slotId, raw] of Object.entries(
+        paramMap as Record<string, unknown>,
+      )) {
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+        const source = raw as Record<string, unknown>;
+        const next: Record<string, number> = {};
+        for (const key of [
+          "temperature",
+          "topP",
+          "topK",
+          "maxOutputTokens",
+          "frequencyPenalty",
+          "presencePenalty",
+        ] as const) {
+          const value = source[key];
+          if (typeof value === "number" && Number.isFinite(value)) {
+            next[key] = value;
+          }
+        }
+        if (Object.keys(next).length > 0) {
+          clean[slotId] = next as NonNullable<
+            SlotOverridesInput["parameterOverrides"]
+          >[string];
+        }
+      }
+      if (Object.keys(clean).length > 0) out.parameterOverrides = clean;
+    }
+    const customPresets = (parsed as Record<string, unknown>).customPresets;
+    if (Array.isArray(customPresets)) {
+      const clean: SlotOverridesInput["customPresets"] = [];
+      for (const raw of customPresets) {
+        if (!raw || typeof raw !== "object") continue;
+        const r = raw as Record<string, unknown>;
+        if (
+          typeof r.id === "string" &&
+          r.id.length > 0 &&
+          typeof r.provider === "string" &&
+          r.provider.length > 0 &&
+          typeof r.model === "string" &&
+          r.model.length > 0
+        ) {
+          clean.push({
+            id: r.id,
+            name: typeof r.name === "string" ? r.name : r.id,
+            provider: r.provider,
+            model: r.model,
+            ...(typeof r.baseUrl === "string" ? { baseUrl: r.baseUrl } : {}),
+            ...(typeof r.protocol === "string"
+              ? {
+                  protocol:
+                    r.protocol as SlotOverridesInput["customPresets"] extends Array<
+                      infer T
+                    >
+                      ? T extends { protocol?: infer P }
+                        ? P
+                        : never
+                      : never,
+                }
+              : {}),
+          });
+        }
+      }
+      if (clean.length > 0) out.customPresets = clean;
+    }
+    return out;
+  } catch {
+    return null;
+  }
 }

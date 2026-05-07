@@ -22,8 +22,8 @@ import type { MediaRef } from "./media.js";
 
 /** A plain text segment. */
 export interface TextContentPart {
-	readonly type: "text";
-	readonly text: string;
+  readonly type: "text";
+  readonly text: string;
 }
 
 /**
@@ -33,8 +33,8 @@ export interface TextContentPart {
  * helpers in `@covel/ai-provider`.
  */
 export interface ImageContentPart {
-	readonly type: "image";
-	readonly image: MediaRef;
+  readonly type: "image";
+  readonly image: MediaRef;
 }
 
 /** Discriminated union of every supported content-part variant. */

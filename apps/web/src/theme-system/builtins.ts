@@ -7,20 +7,20 @@ import abyssManifest from "@/themes/builtins/abyss/manifest.json";
 import abyssCss from "@/themes/builtins/abyss/theme.css?raw";
 
 function toThemeDefinition(
-	manifest: ThemeManifest,
-	cssText: string,
+  manifest: ThemeManifest,
+  cssText: string,
 ): ThemeDefinition {
-	return {
-		...manifest,
-		source: "builtin",
-		cssText,
-	};
+  return {
+    ...manifest,
+    source: "builtin",
+    cssText,
+  };
 }
 
 export function getBuiltinThemes(): ThemeDefinition[] {
-	return [
-		toThemeDefinition(paperManifest as ThemeManifest, paperCss),
-		toThemeDefinition(modernManifest as ThemeManifest, modernCss),
-		toThemeDefinition(abyssManifest as ThemeManifest, abyssCss),
-	];
+  return [
+    toThemeDefinition(paperManifest as ThemeManifest, paperCss),
+    toThemeDefinition(modernManifest as ThemeManifest, modernCss),
+    toThemeDefinition(abyssManifest as ThemeManifest, abyssCss),
+  ];
 }

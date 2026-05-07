@@ -30,14 +30,14 @@
 
 ### 0.2 验收清单对照 (F7 § 6)
 
-| 验收项 | 状态 | 备注 |
-|--------|------|------|
-| 无 `pre-game / character_creation / phase.transition / phase.changed` 作为**模型概念**出现 | ✅ | 残留 grep 命中全部是"已移除/已退役/历史说明"或新模型的 band 名 `Pre-Game band` |
-| 三类核心图(生命周期 / pipeline / SSE 时序)都 Mermaid 化 | ✅ | § 2.1 / § 2.2 / § 七 |
-| 配套散文与 `(status, turnCount, preGameCompleted)` 真相源一致 | ✅ | § 2.1 补了权威状态模型小节 |
-| 内部引用更新 | ✅ | `grep "见.*phase\|参见.*phase"` 仅命中 `docs/reference/tools.md` 中已正确描述为历史退役的段落, 无悬挂引用 |
-| `pnpm lint` 未失败 | n/a | 未触 CLAUDE.md / Documentation Index; 纯文档改动 |
-| 所有 ASCII 图替换为 Mermaid; grep `┌\|│\|└\|▼` 0 命中或只剩无关 ASCII | ⚠️ 部分 | 当前 `grep -cE "^\s*[┌│└▼]" docs/architecture/flow.md` = 331, 全部属"无关 ASCII"(不含 phase 概念), 见 § 0.3 |
+| 验收项                                                                                     | 状态    | 备注                                                                                                        |
+| ------------------------------------------------------------------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------- |
+| 无 `pre-game / character_creation / phase.transition / phase.changed` 作为**模型概念**出现 | ✅      | 残留 grep 命中全部是"已移除/已退役/历史说明"或新模型的 band 名 `Pre-Game band`                              |
+| 三类核心图(生命周期 / pipeline / SSE 时序)都 Mermaid 化                                    | ✅      | § 2.1 / § 2.2 / § 七                                                                                        |
+| 配套散文与 `(status, turnCount, preGameCompleted)` 真相源一致                              | ✅      | § 2.1 补了权威状态模型小节                                                                                  |
+| 内部引用更新                                                                               | ✅      | `grep "见.*phase\|参见.*phase"` 仅命中 `docs/reference/tools.md` 中已正确描述为历史退役的段落, 无悬挂引用   |
+| `pnpm lint` 未失败                                                                         | n/a     | 未触 CLAUDE.md / Documentation Index; 纯文档改动                                                            |
+| 所有 ASCII 图替换为 Mermaid; grep `┌\|│\|└\|▼` 0 命中或只剩无关 ASCII                      | ⚠️ 部分 | 当前 `grep -cE "^\s*[┌│└▼]" docs/architecture/flow.md` = 331, 全部属"无关 ASCII"(不含 phase 概念), 见 § 0.3 |
 
 ### 0.3 剩余未做 (scope 判断)
 
@@ -80,6 +80,7 @@ F7 § 3 原文只显式列了**三类图**(生命周期 / Turn pipeline / SSE �
 审计 F1(`phase` 模型迁移)已经在代码层彻底清除 `phase.transition` / `phase.changed` —— 权威状态模型是 `(status, turnCount, preGameCompleted)`。
 
 F6 的文档 pass 已经:
+
 - 删除了文档开头的"图示仍然保留旧 phase 流程"disclaimer
 - 改写了三处关于 `phase` 的散文段落
 - **但 ASCII 图本身没动**
@@ -143,6 +144,7 @@ grep -nE "pre-game|character_creation|phase\s*=|phase:" docs/architecture/flow.m
 ### 3.1 会话生命周期状态机
 
 **旧版(ASCII)概念图**:
+
 ```
   pre-game ──> character_creation ──> playing ──> (pause/end)
 ```
@@ -222,13 +224,13 @@ flowchart TB
 
 > **优先级带**(kernel 强制):
 >
-> | Turn | 可用 priority | 阶段 |
-> |------|---------|------|
-> | 0 | 0–99 | Pre-Game |
-> | ≥1 | 100–499 | Pre-Turn |
-> | ≥1 | 500 | Narrator |
-> | ≥1 | 501–999 | After-Turn |
-> | ≥1 | 1000 | Audit |
+> | Turn | 可用 priority | 阶段       |
+> | ---- | ------------- | ---------- |
+> | 0    | 0–99          | Pre-Game   |
+> | ≥1   | 100–499       | Pre-Turn   |
+> | ≥1   | 500           | Narrator   |
+> | ≥1   | 501–999       | After-Turn |
+> | ≥1   | 1000          | Audit      |
 >
 > **Proposal 类型**(都过 commit chain):`narrative.append`、`state.patch`、`event.emit`、`record.upsert`、`ui.render`、`asset.generate`、`lorebook.upsert`。(若 F3 已落地: 加 `plugin-data.set`、`plugin-data.set-batch`。)
 
@@ -332,12 +334,12 @@ grep -n "见.*phase\|参见.*phase\|phase 小节" docs/
 
 ## 5. 风险清单
 
-| 风险 | 缓解 |
-|------|------|
+| 风险                                                           | 缓解                                                                                    |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | Mermaid 在离线 PDF / 某些静态文档站(Docusaurus 某些版本)不渲染 | Covel 现在没有离线文档场景;GitHub 原生 ✅、VSCode 原生 ✅、Claude Code markdown 渲染 ✅ |
-| 状态机图过于详细导致视觉拥挤 | stateDiagram-v2 支持嵌套 state, 用 PreGame / Playing 两层避免一张图塞太多节点 |
-| 内部 wiki 或外部文章引用过特定 ASCII 行号(比如 `flow.md:L120`) | `rg "flow\\.md[:#]" docs/ apps/ packages/` 走查, 必要时更新 |
-| 架构含义理解不对 | 施工前找一个懂全局的同事 15 分钟 review Mermaid 草稿 |
+| 状态机图过于详细导致视觉拥挤                                   | stateDiagram-v2 支持嵌套 state, 用 PreGame / Playing 两层避免一张图塞太多节点           |
+| 内部 wiki 或外部文章引用过特定 ASCII 行号(比如 `flow.md:L120`) | `rg "flow\\.md[:#]" docs/ apps/ packages/` 走查, 必要时更新                             |
+| 架构含义理解不对                                               | 施工前找一个懂全局的同事 15 分钟 review Mermaid 草稿                                    |
 
 ---
 

@@ -24,26 +24,31 @@ skills/
 ---
 name: my-skill
 description: 一句话描述这个 skill 做什么、何时触发(代理通过 description 决定是否调起)
-user_invocable: true   # 可选,允许用户用 /my-skill 直接触发
+user_invocable: true # 可选,允许用户用 /my-skill 直接触发
 ---
 
 # Skill 标题
 
 ## 何时使用
+
 - 列出 1-3 个具体场景
 
 ## 输入
+
 - 用户给出的概念、参数或上下文
 
 ## 步骤
+
 1. 第一步...
 2. 第二步...
 3. 第三步...
 
 ## 验证
+
 跑某个命令确认产物正确
 
 ## References
+
 - 需要 schema 细节时,加载 `references/xxx.md`
 - 需要示例时,加载 `references/example-xxx.md`
 ```
@@ -91,11 +96,11 @@ cp -r skills/create-world .claude/skills/
 
 ## skill 与 framework 的边界
 
-| 属于 skill | 属于 framework |
-|----------|--------------|
+| 属于 skill                         | 属于 framework                      |
+| ---------------------------------- | ----------------------------------- |
 | 创建新 world / plugin / 文档脚手架 | 运行时游戏循环、tool 调用、状态管理 |
-| 一次性的代码生成、文件改造 | 玩家每一回合都用得到的功能 |
-| 给开发者/作者的模板 | 给玩家/runtime 的 builtin tool |
+| 一次性的代码生成、文件改造         | 玩家每一回合都用得到的功能          |
+| 给开发者/作者的模板                | 给玩家/runtime 的 builtin tool      |
 
 如果一个能力需要"在 game loop 的每个 turn 都被触发",它应该是 plugin 或 builtin tool;如果它是"开发者偶尔跑一下来生成内容",它就是 skill。
 

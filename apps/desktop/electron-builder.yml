@@ -86,9 +86,9 @@ mac:
   icon: resources/icon.icns
   target:
     - target: dmg
-      arch: [ arm64 ]
+      arch: [arm64]
     - target: zip
-      arch: [ arm64 ]
+      arch: [arm64]
   category: public.app-category.games
   darkModeSupport: true
   hardenedRuntime: true
@@ -115,9 +115,9 @@ win:
   icon: resources/icon.ico
   target:
     - target: nsis
-      arch: [ x64, arm64 ]
+      arch: [x64, arm64]
     - target: portable
-      arch: [ x64 ]
+      arch: [x64]
   # electron-builder 26.x 起签名相关字段改到 signtoolOptions 下。
   # 未配置 CSC_LINK 时会直接输出 unsigned 产物。
   signtoolOptions:
@@ -143,9 +143,9 @@ linux:
   icon: resources/icon.png
   target:
     - target: AppImage
-      arch: [ x64, arm64 ]
+      arch: [x64, arm64]
     - target: deb
-      arch: [ x64 ]
+      arch: [x64]
   category: Game
   maintainer: covel@example.com
   desktop:

@@ -11,9 +11,9 @@ import type { HookPipeline } from "@covel/runtime";
 import type { DataStore } from "@covel/store";
 import type { ToolModule } from "@covel/tools";
 import {
-	discoverPlugins,
-	loadPluginManifest,
-	loadRuntime,
+  discoverPlugins,
+  loadPluginManifest,
+  loadRuntime,
 } from "@covel/plugin-loader";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { executeTurn, createToolExecutor } from "@covel/runtime";
@@ -23,30 +23,30 @@ import { builtinUITools } from "@covel/tools";
 import { MockLLM } from "./mock-llm.js";
 
 export interface TestHarnessConfig {
-	/** Path to the plugins directory. */
-	readonly pluginsDir: string;
-	/** Optional custom LLM adapter (defaults to MockLLM with empty response). */
-	readonly llm?: LLMAdapter;
-	/** Additional tools to register alongside builtins. */
-	readonly tools?: readonly ToolModule[];
-	/** Plugin IDs to activate (defaults to all discovered). */
-	readonly activePlugins?: readonly string[];
-	/** Optional hook pipeline to inject into turn execution (e.g. for testing global hooks). */
-	readonly hookPipeline?: HookPipeline;
+  /** Path to the plugins directory. */
+  readonly pluginsDir: string;
+  /** Optional custom LLM adapter (defaults to MockLLM with empty response). */
+  readonly llm?: LLMAdapter;
+  /** Additional tools to register alongside builtins. */
+  readonly tools?: readonly ToolModule[];
+  /** Plugin IDs to activate (defaults to all discovered). */
+  readonly activePlugins?: readonly string[];
+  /** Optional hook pipeline to inject into turn execution (e.g. for testing global hooks). */
+  readonly hookPipeline?: HookPipeline;
 }
 
 export interface TestHarness {
-	/** Execute a turn with the given player message. */
-	readonly executeTurn: (
-		message: string,
-		overrides?: Partial<TurnInput>,
-	) => Promise<TurnResult>;
-	/** The in-memory store backing this harness. */
-	readonly store: DataStore;
-	/** Discovered runtime manifests (sorted by priority). */
-	readonly manifests: readonly RuntimeManifest[];
-	/** The LLM adapter in use (for inspection/assertion). */
-	readonly llm: LLMAdapter;
+  /** Execute a turn with the given player message. */
+  readonly executeTurn: (
+    message: string,
+    overrides?: Partial<TurnInput>,
+  ) => Promise<TurnResult>;
+  /** The in-memory store backing this harness. */
+  readonly store: DataStore;
+  /** Discovered runtime manifests (sorted by priority). */
+  readonly manifests: readonly RuntimeManifest[];
+  /** The LLM adapter in use (for inspection/assertion). */
+  readonly llm: LLMAdapter;
 }
 
 /**
@@ -74,74 +74,74 @@ export interface TestHarness {
  * ```
  */
 export async function createTestHarness(
-	config: TestHarnessConfig,
+  config: TestHarnessConfig,
 ): Promise<TestHarness> {
-	const store = createMemoryStore();
-	const llm = config.llm ?? new MockLLM();
+  const store = createMemoryStore();
+  const llm = config.llm ?? new MockLLM();
 
-	// Discover and load plugins
-	const discoveries = await discoverPlugins(config.pluginsDir);
-	const allManifests: RuntimeManifest[] = [];
-	const loadedCache = new Map<string, LoadedRuntime>();
+  // Discover and load plugins
+  const discoveries = await discoverPlugins(config.pluginsDir);
+  const allManifests: RuntimeManifest[] = [];
+  const loadedCache = new Map<string, LoadedRuntime>();
 
-	for (const discovery of discoveries) {
-		if (config.activePlugins && !config.activePlugins.includes(discovery.id)) {
-			continue;
-		}
-		const parsed = await loadPluginManifest(discovery);
-		for (const p of parsed) {
-			allManifests.push(p.manifest);
-			const loaded = await loadRuntime(discovery, p.manifest.name);
-			loadedCache.set(p.manifest.name, loaded);
-		}
-	}
+  for (const discovery of discoveries) {
+    if (config.activePlugins && !config.activePlugins.includes(discovery.id)) {
+      continue;
+    }
+    const parsed = await loadPluginManifest(discovery);
+    for (const p of parsed) {
+      allManifests.push(p.manifest);
+      const loaded = await loadRuntime(discovery, p.manifest.name);
+      loadedCache.set(p.manifest.name, loaded);
+    }
+  }
 
-	// Sort by priority — UI-only manifests (priority === undefined) sort to the end.
-	allManifests.sort(
-		(a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity),
-	);
+  // Sort by priority — UI-only manifests (priority === undefined) sort to the end.
+  allManifests.sort(
+    (a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity),
+  );
 
-	// Build tool map
-	const toolMap = new Map<string, ToolModule>();
-	for (const t of builtinUITools) {
-		toolMap.set(t.name, t);
-	}
-	for (const t of config.tools ?? []) {
-		toolMap.set(t.name, t);
-	}
+  // Build tool map
+  const toolMap = new Map<string, ToolModule>();
+  for (const t of builtinUITools) {
+    toolMap.set(t.name, t);
+  }
+  for (const t of config.tools ?? []) {
+    toolMap.set(t.name, t);
+  }
 
-	const toolExecutor = createToolExecutor({
-		findTool: (name) => toolMap.get(name),
-		store,
-	});
+  const toolExecutor = createToolExecutor({
+    findTool: (name) => toolMap.get(name),
+    store,
+  });
 
-	let turnCount = 0;
+  let turnCount = 0;
 
-	const harness: TestHarness = {
-		store,
-		manifests: allManifests,
-		llm,
-		executeTurn: async (message: string, overrides?: Partial<TurnInput>) => {
-			turnCount++;
-			const turnInput: TurnInput = {
-				sessionId: "sess-harness",
-				turnId: `turn-${turnCount}`,
-				playerMessage: message,
-				...overrides,
-			};
+  const harness: TestHarness = {
+    store,
+    manifests: allManifests,
+    llm,
+    executeTurn: async (message: string, overrides?: Partial<TurnInput>) => {
+      turnCount++;
+      const turnInput: TurnInput = {
+        sessionId: "sess-harness",
+        turnId: `turn-${turnCount}`,
+        playerMessage: message,
+        ...overrides,
+      };
 
-			const deps: TurnExecutorDeps = {
-				loadRuntime: async (manifest) => loadedCache.get(manifest.name),
-				llm,
-				getConfig: () => ({}),
-				store,
-				toolExecutor,
-				hookPipeline: config.hookPipeline,
-			};
+      const deps: TurnExecutorDeps = {
+        loadRuntime: async (manifest) => loadedCache.get(manifest.name),
+        llm,
+        getConfig: () => ({}),
+        store,
+        toolExecutor,
+        hookPipeline: config.hookPipeline,
+      };
 
-			return executeTurn(turnInput, allManifests, deps);
-		},
-	};
+      return executeTurn(turnInput, allManifests, deps);
+    },
+  };
 
-	return harness;
+  return harness;
 }

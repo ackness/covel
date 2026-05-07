@@ -23,19 +23,19 @@ import type { RpcApprovalGate } from "@covel/approval";
 import type { RpcApprovalDecision } from "@covel/shared";
 
 type Env = {
-	Variables: {
-		rpcApprovalGate: RpcApprovalGate;
-		/**
-		 * Lazy activator for community plugins' `tools.local` modules. Wired
-		 * by bootstrap; absent in narrow test harnesses (use optional chaining).
-		 */
-		activatePluginLocalTools?: (pluginId: string) => Promise<void>;
-	};
+  Variables: {
+    rpcApprovalGate: RpcApprovalGate;
+    /**
+     * Lazy activator for community plugins' `tools.local` modules. Wired
+     * by bootstrap; absent in narrow test harnesses (use optional chaining).
+     */
+    activatePluginLocalTools?: (pluginId: string) => Promise<void>;
+  };
 };
 
 interface DecisionBody {
-	readonly decision?: "allow" | "deny";
-	readonly scope?: "once" | "session";
+  readonly decision?: "allow" | "deny";
+  readonly scope?: "once" | "session";
 }
 
 export const approvalRoutes = new Hono<Env>();
@@ -43,72 +43,72 @@ export const sessionApprovalRoutes = new Hono<Env>();
 
 // Per-session listing — mounted under /api/sessions
 sessionApprovalRoutes.get("/:id/approvals", (c) => {
-	const gate = c.get("rpcApprovalGate");
-	const sessionId = c.req.param("id");
-	return c.json({ pending: gate.listPending(sessionId) });
+  const gate = c.get("rpcApprovalGate");
+  const sessionId = c.req.param("id");
+  return c.json({ pending: gate.listPending(sessionId) });
 });
 
 approvalRoutes.post("/:approvalId/decision", async (c) => {
-	const gate = c.get("rpcApprovalGate");
-	const approvalId = c.req.param("approvalId");
+  const gate = c.get("rpcApprovalGate");
+  const approvalId = c.req.param("approvalId");
 
-	let body: DecisionBody;
-	try {
-		body = await c.req.json<DecisionBody>();
-	} catch {
-		return c.json({ error: "invalid JSON body" }, 400);
-	}
+  let body: DecisionBody;
+  try {
+    body = await c.req.json<DecisionBody>();
+  } catch {
+    return c.json({ error: "invalid JSON body" }, 400);
+  }
 
-	if (body.decision !== "allow" && body.decision !== "deny") {
-		return c.json({ error: 'decision must be "allow" or "deny"' }, 400);
-	}
+  if (body.decision !== "allow" && body.decision !== "deny") {
+    return c.json({ error: 'decision must be "allow" or "deny"' }, 400);
+  }
 
-	if (
-		body.decision === "allow" &&
-		body.scope &&
-		body.scope !== "once" &&
-		body.scope !== "session"
-	) {
-		return c.json(
-			{ error: 'scope must be "once" or "session" when allowing' },
-			400,
-		);
-	}
+  if (
+    body.decision === "allow" &&
+    body.scope &&
+    body.scope !== "once" &&
+    body.scope !== "session"
+  ) {
+    return c.json(
+      { error: 'scope must be "once" or "session" when allowing' },
+      400,
+    );
+  }
 
-	const decision: RpcApprovalDecision = {
-		approvalId,
-		decision: body.decision,
-		...(body.decision === "allow" && body.scope ? { scope: body.scope } : {}),
-		decidedAt: new Date().toISOString(),
-	};
+  const decision: RpcApprovalDecision = {
+    approvalId,
+    decision: body.decision,
+    ...(body.decision === "allow" && body.scope ? { scope: body.scope } : {}),
+    decidedAt: new Date().toISOString(),
+  };
 
-	const result = gate.decide(decision);
-	if (!result.ok) {
-		return c.json({ error: result.error }, 404);
-	}
+  const result = gate.decide(decision);
+  if (!result.ok) {
+    return c.json({ error: result.error }, 404);
+  }
 
-	// After an `allow` decision, eagerly activate the plugin's local tools so
-	// the renderer's retry of the original RPC doesn't pay the import cost on
-	// the hot path. No-op for `deny` decisions and for plugins whose tools
-	// are already loaded. Idempotent.
-	if (decision.decision === "allow") {
-		try {
-			await c.get("activatePluginLocalTools")?.(result.pending.pluginId);
-		} catch (err) {
-			// Activation failure is logged but does not roll back the approval —
-			// the user's decision stands, and the next plugin-rpc call will retry
-			// activation just-in-time.
-			console.warn(
-				`[approvals] tools.local activation failed for ${result.pending.pluginId}:`,
-				err instanceof Error ? err.message : err,
-			);
-		}
-	}
+  // After an `allow` decision, eagerly activate the plugin's local tools so
+  // the renderer's retry of the original RPC doesn't pay the import cost on
+  // the hot path. No-op for `deny` decisions and for plugins whose tools
+  // are already loaded. Idempotent.
+  if (decision.decision === "allow") {
+    try {
+      await c.get("activatePluginLocalTools")?.(result.pending.pluginId);
+    } catch (err) {
+      // Activation failure is logged but does not roll back the approval —
+      // the user's decision stands, and the next plugin-rpc call will retry
+      // activation just-in-time.
+      console.warn(
+        `[approvals] tools.local activation failed for ${result.pending.pluginId}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
 
-	return c.json({
-		ok: true,
-		decision: decision.decision,
-		scope: decision.scope ?? "once",
-		pending: result.pending,
-	});
+  return c.json({
+    ok: true,
+    decision: decision.decision,
+    scope: decision.scope ?? "once",
+    pending: result.pending,
+  });
 });

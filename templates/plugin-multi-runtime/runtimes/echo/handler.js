@@ -9,26 +9,26 @@
 const MESSAGES_NAMESPACE = "messages";
 
 export default async function echoHandler(ctx) {
-	const { pluginData, logger, turnId } = ctx;
+  const { pluginData, logger, turnId } = ctx;
 
-	if (!pluginData || typeof pluginData.set !== "function") {
-		return {
-			status: "failed",
-			error: "ctx.pluginData.set is unavailable. Upgrade @covel/runtime.",
-		};
-	}
+  if (!pluginData || typeof pluginData.set !== "function") {
+    return {
+      status: "failed",
+      error: "ctx.pluginData.set is unavailable. Upgrade @covel/runtime.",
+    };
+  }
 
-	const id = `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-	const record = {
-		id,
-		role: "echo",
-		text: "hello",
-		turnId,
-		createdAt: new Date().toISOString(),
-	};
+  const id = `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const record = {
+    id,
+    role: "echo",
+    text: "hello",
+    turnId,
+    createdAt: new Date().toISOString(),
+  };
 
-	await pluginData.set(MESSAGES_NAMESPACE, id, record);
-	await logger?.info?.("echo.appended", { id });
+  await pluginData.set(MESSAGES_NAMESPACE, id, record);
+  await logger?.info?.("echo.appended", { id });
 
-	return { status: "ok", message: record };
+  return { status: "ok", message: record };
 }

@@ -20,14 +20,16 @@ dashscope-image-gen/prompt-generator 通过默认消息历史去找"当前画面
 
 1. 在 `packages/shared/src/schemas/plugin.ts` 新增 schema：
    ```ts
-   export const runtimeOutputHistoryInjectDeclSchema = z.object({
-     kind: z.literal('runtime-output-history'),
-     from: z.string().min(1),       // upstream runtime id (e.g. narrator)
-     field: z.string().min(1),      // output 字段（如 narrativeOutput）
-     mode: z.enum(['latest']).default('latest'),
-     as: z.string().min(1),         // XML 包裹标签（<latest-narrative>）
-     // 后续可加 windowTurns / minPriority 等过滤
-   }).strict();
+   export const runtimeOutputHistoryInjectDeclSchema = z
+     .object({
+       kind: z.literal("runtime-output-history"),
+       from: z.string().min(1), // upstream runtime id (e.g. narrator)
+       field: z.string().min(1), // output 字段（如 narrativeOutput）
+       mode: z.enum(["latest"]).default("latest"),
+       as: z.string().min(1), // XML 包裹标签（<latest-narrative>）
+       // 后续可加 windowTurns / minPriority 等过滤
+     })
+     .strict();
    ```
    合并到 `inputInjectDeclSchema` 的 discriminated union。
 2. `packages/shared/src/types/plugin.ts` 新增对应的 TS 类型。
@@ -40,7 +42,7 @@ dashscope-image-gen/prompt-generator 通过默认消息历史去找"当前画面
        sessionId: string,
        runtimeId: string,
        field: string,
-     ): Promise<string | null>
+     ): Promise<string | null>;
      ```
      实现：用 `store.listRuntimeOutputs(sessionId, { runtimeId, limit: 1 })` 拿最新一条，再读 `output[field]`；返回 null 时跳过 inject。
 4. `packages/store` 暴露 `listRuntimeOutputs` 已存在则复用，否则补一条最小查询接口（限定 sessionId + runtimeId + limit）。

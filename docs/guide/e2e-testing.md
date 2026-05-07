@@ -55,6 +55,7 @@ npx tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts
 3. 后续相同的请求将直接从 fixture 回放
 
 **特点**：
+
 - 首次运行较慢（需要等待真实 LLM 响应）
 - 会消耗真实 API 配额
 - 生成 fixture 文件供后续回放
@@ -68,6 +69,7 @@ npx tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts
 3. **不会**透传到真实 LLM
 
 **特点**：
+
 - 运行极快（本地文件读取）
 - 不消耗 API 配额
 - 适合 CI/CD 环境
@@ -93,6 +95,7 @@ fixtures/
 1. **脚本未完成运行**：fixtures 只有在请求成功完成并返回响应后才会被保存。如果测试脚本被中断（Ctrl+C）或超时，fixtures 可能不会被写入。
 
 2. **容器权限问题**：检查宿主机目录是否正确挂载到容器内：
+
    ```bash
    docker exec covel-llmock-story ls -la /fixtures
    docker exec covel-llmock-plugin ls -la /fixtures
@@ -127,18 +130,19 @@ ls -la fixtures/aimock/plugin/
 **原因**：请求的 fixture 不存在（replay 模式下）。
 
 **解决方案**：
+
 - 如果是首次运行，去掉 `AIMOCK_REPLAY_ONLY=1`，让 aimock 录制新 fixtures
 - 如果是后续运行，确保之前的录制已完成
 
 ## 环境变量参考
 
-| 变量 | 说明 | 示例值 |
-|------|------|--------|
-| `COVEL_STORY_BASE_URL` | Story 服务 LLM 端点 | `http://127.0.0.1:4010/v1` 或 `https://api.deepseek.com` |
+| 变量                    | 说明                 | 示例值                                                                            |
+| ----------------------- | -------------------- | --------------------------------------------------------------------------------- |
+| `COVEL_STORY_BASE_URL`  | Story 服务 LLM 端点  | `http://127.0.0.1:4010/v1` 或 `https://api.deepseek.com`                          |
 | `COVEL_PLUGIN_BASE_URL` | Plugin 服务 LLM 端点 | `http://127.0.0.1:4011/v1` 或 `https://dashscope.aliyuncs.com/compatible-mode/v1` |
-| `AIMOCK_REPLAY_ONLY` | 纯回放模式开关 | `1` 开启，`未设置` 为录制+回放 |
-| `DASHSCOPE_API_KEY` | DashScope API 密钥 | `sk-...` |
-| `DEEPSEEK_API_KEY` | DeepSeek API 密钥 | `sk-...` |
+| `AIMOCK_REPLAY_ONLY`    | 纯回放模式开关       | `1` 开启，`未设置` 为录制+回放                                                    |
+| `DASHSCOPE_API_KEY`     | DashScope API 密钥   | `sk-...`                                                                          |
+| `DEEPSEEK_API_KEY`      | DeepSeek API 密钥    | `sk-...`                                                                          |
 
 ## 一键测试脚本
 

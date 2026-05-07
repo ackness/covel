@@ -42,9 +42,15 @@ apps/
 ```typescript
 // === Plugin Manifest（从 PLUGIN.md frontmatter 解析） ===
 
-export type PluginType = 'core-plugin' | 'plugin';
+export type PluginType = "core-plugin" | "plugin";
 
-export type TriggerType = 'auto' | 'manual' | 'scheduled' | 'conditional' | 'event' | 'error-retry';
+export type TriggerType =
+  | "auto"
+  | "manual"
+  | "scheduled"
+  | "conditional"
+  | "event"
+  | "error-retry";
 
 export interface TriggerConfig {
   type: TriggerType;
@@ -96,7 +102,7 @@ export interface ToolsConfig {
 }
 
 export interface PluginConfigField {
-  type: 'string' | 'integer' | 'number' | 'boolean' | 'enum';
+  type: "string" | "integer" | "number" | "boolean" | "enum";
   default?: unknown;
   min?: number;
   max?: number;
@@ -140,7 +146,12 @@ export interface PluginManifest {
 ```typescript
 // === Turn & Execution ===
 
-export type RuntimeStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped';
+export type RuntimeStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "skipped";
 
 export interface RuntimeResult {
   pluginId: string;
@@ -165,7 +176,7 @@ export interface ToolCallRecord {
   input: Record<string, unknown>;
   output: unknown;
   durationMs: number;
-  approvalStatus: 'auto-allowed' | 'user-allowed' | 'user-denied';
+  approvalStatus: "auto-allowed" | "user-allowed" | "user-denied";
   timestamp: string;
 }
 
@@ -211,7 +222,7 @@ export interface StateTableSchema {
   name: string;
   fields: Array<{
     name: string;
-    type: 'string' | 'integer' | 'number' | 'boolean' | 'object' | 'array';
+    type: "string" | "integer" | "number" | "boolean" | "object" | "array";
     default?: unknown;
   }>;
 }
@@ -235,7 +246,7 @@ export interface WriteConflict {
 ```typescript
 // === Events & Messages ===
 
-export type MessageType = 'message' | 'event' | 'callback';
+export type MessageType = "message" | "event" | "callback";
 
 export interface CovelMessage {
   type: MessageType;
@@ -253,7 +264,7 @@ export interface CovelMessage {
 ```typescript
 // === Approval ===
 
-export type ApprovalDecision = 'allow-once' | 'allow-session' | 'deny';
+export type ApprovalDecision = "allow-once" | "allow-session" | "deny";
 
 export interface ApprovalRequest {
   toolName: string;
@@ -279,7 +290,7 @@ export interface ApprovalRecord {
 ```typescript
 // === Session ===
 
-export type SessionPhase = 'pre-game' | 'playing' | 'paused' | 'ended';
+export type SessionPhase = "pre-game" | "playing" | "paused" | "ended";
 
 export interface Session {
   id: string;
@@ -306,18 +317,21 @@ export interface Session {
 ```typescript
 // @covel/plugin-loader
 
-import { z } from 'zod';
+import { z } from "zod";
 
 /** 解析结果 */
 export interface ParsedPluginMd {
   manifest: RuntimeManifest;
-  promptTemplate: string;        // Markdown body（未填充的模板）
-  referenceLinks: string[];      // 从 Markdown 中提取的 references/ 路径
+  promptTemplate: string; // Markdown body（未填充的模板）
+  referenceLinks: string[]; // 从 Markdown 中提取的 references/ 路径
   rawFrontmatter: Record<string, unknown>;
 }
 
 /** 解析 PLUGIN.md 文件 */
-export function parsePluginMd(content: string, filePath: string): ParsedPluginMd;
+export function parsePluginMd(
+  content: string,
+  filePath: string,
+): ParsedPluginMd;
 
 /** 验证 frontmatter schema */
 export const runtimeManifestSchema: z.ZodSchema<RuntimeManifest>;
@@ -345,10 +359,16 @@ export interface ParsedReference {
 }
 
 /** 解析 references 目录下的文件 */
-export function parseReference(content: string, filePath: string): ParsedReference;
+export function parseReference(
+  content: string,
+  filePath: string,
+): ParsedReference;
 
 /** 检查上下文中是否包含触发关键词 */
-export function shouldInjectReference(ref: ParsedReference, context: string): boolean;
+export function shouldInjectReference(
+  ref: ParsedReference,
+  context: string,
+): boolean;
 ```
 
 ## 1.6 开发环境配置
@@ -364,6 +384,7 @@ export function shouldInjectReference(ref: ParsedReference, context: string): bo
 ### 依赖
 
 本阶段新增/保留的关键依赖：
+
 - `zod` — 运行时 schema 验证
 - `gray-matter` — YAML frontmatter 解析
 - `nanoid` — ID 生成

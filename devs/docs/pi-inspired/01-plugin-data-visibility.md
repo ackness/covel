@@ -30,11 +30,11 @@ pi-mono 在它的 session JSONL 里把这件事拆得很清楚：`CustomEntry` =
 
 ### 不做会怎样
 
-| 时间 | 后果 |
-|---|---|
+| 时间     | 后果                                                                                                                        |
+| -------- | --------------------------------------------------------------------------------------------------------------------------- |
 | 现在不做 | 每个新 plugin 都要在"污染 prompt"和"花工具回合"之间二选一；plugin 作者用 `_internal` 命名约定试图绕开，但 inject 配错就翻车 |
-| 半年后做 | 已有 5–10 个第三方 plugin 按今天的语义写，迁移要逐个 review；约定漂移会形成 schema lock-in |
-| 现在做 | schema 加一列 + 默认值兼容；inject 行为加一条规则；8 个现有 core plugin 零改动 |
+| 半年后做 | 已有 5–10 个第三方 plugin 按今天的语义写，迁移要逐个 review；约定漂移会形成 schema lock-in                                  |
+| 现在做   | schema 加一列 + 默认值兼容；inject 行为加一条规则；8 个现有 core plugin 零改动                                              |
 
 ---
 
@@ -42,13 +42,13 @@ pi-mono 在它的 session JSONL 里把这件事拆得很清楚：`CustomEntry` =
 
 引用项目历史决策，作为本提案的硬约束：
 
-| 原则 | 来源 | 对本提案的约束 |
-|---|---|---|
-| Framework ↔ Plugin 隔离规则 | `CLAUDE.md` § Critical Conventions | 框架代码不得硬编码任何具体 plugin id、namespace 或数据结构；本提案的 visibility 字段必须由插件写入时显式声明，框架只按通用 visibility 过滤 |
-| Plugin 写入只走治理入口 | `CLAUDE.md` § Plugin authoring contract | visibility 字段通过 proposal / plugin-data tool / scoped pluginData writer 等既有治理入口写入，不引入绕过 commit/trace/trust 的旁路 |
-| 渐进迁移 + 默认值兼容 | `devs/docs/refactor-plan/` 系列普遍纪律 | 旧数据的 visibility 视为 `context-full`（兼容现行 inject 行为）；不强制 plugin 立刻升级 |
-| `pluginId` 是数据隔离边界 | `packages/context/src/prompt-internals.ts` 的 `resolvePluginDataInject` 注释 | visibility 不能跨 plugin 读取；只能影响“自己的 namespace 进 prompt 时怎么呈现” |
-| 框架不理解插件业务语义 | `devs/docs/pi-inspired/README.md` § 框架 ↔ 插件分离边界 | 框架不能按 `codex`/`guide` 等特例决定 visibility；只能执行插件声明和 store schema 规则 |
+| 原则                        | 来源                                                                         | 对本提案的约束                                                                                                                             |
+| --------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Framework ↔ Plugin 隔离规则 | `CLAUDE.md` § Critical Conventions                                           | 框架代码不得硬编码任何具体 plugin id、namespace 或数据结构；本提案的 visibility 字段必须由插件写入时显式声明，框架只按通用 visibility 过滤 |
+| Plugin 写入只走治理入口     | `CLAUDE.md` § Plugin authoring contract                                      | visibility 字段通过 proposal / plugin-data tool / scoped pluginData writer 等既有治理入口写入，不引入绕过 commit/trace/trust 的旁路        |
+| 渐进迁移 + 默认值兼容       | `devs/docs/refactor-plan/` 系列普遍纪律                                      | 旧数据的 visibility 视为 `context-full`（兼容现行 inject 行为）；不强制 plugin 立刻升级                                                    |
+| `pluginId` 是数据隔离边界   | `packages/context/src/prompt-internals.ts` 的 `resolvePluginDataInject` 注释 | visibility 不能跨 plugin 读取；只能影响“自己的 namespace 进 prompt 时怎么呈现”                                                             |
+| 框架不理解插件业务语义      | `devs/docs/pi-inspired/README.md` § 框架 ↔ 插件分离边界                      | 框架不能按 `codex`/`guide` 等特例决定 visibility；只能执行插件声明和 store schema 规则                                                     |
 
 ---
 
@@ -78,12 +78,12 @@ CREATE TABLE IF NOT EXISTS plugin_data (
 
 ### 1.2 写入路径
 
-| 入口 | 实现 | 状态 |
-|---|---|---|
-| Builtin tool `plugin-data-set` | `packages/tools/src/builtin/plugin-data-*.ts` | 已实装。LLM 调用，单条写入 |
-| Builtin tool `plugin-data-set-batch` | 同上 | 已实装。LLM 调用，批量写入 |
-| Proposal envelope `record.upsert` | `packages/runtime/src/turn-executor.ts` 的 commit 路径 | 已实装。Plugin handler 通过 proposal 写入 |
-| 直接 store 调用 | `store.upsertPluginData(...)` | 仅框架内部用（如 plugin-config 初始化） |
+| 入口                                 | 实现                                                   | 状态                                      |
+| ------------------------------------ | ------------------------------------------------------ | ----------------------------------------- |
+| Builtin tool `plugin-data-set`       | `packages/tools/src/builtin/plugin-data-*.ts`          | 已实装。LLM 调用，单条写入                |
+| Builtin tool `plugin-data-set-batch` | 同上                                                   | 已实装。LLM 调用，批量写入                |
+| Proposal envelope `record.upsert`    | `packages/runtime/src/turn-executor.ts` 的 commit 路径 | 已实装。Plugin handler 通过 proposal 写入 |
+| 直接 store 调用                      | `store.upsertPluginData(...)`                          | 仅框架内部用（如 plugin-config 初始化）   |
 
 **所有写路径都没有 visibility 参数**——因为字段不存在。
 
@@ -110,10 +110,10 @@ async function resolvePluginDataInject(
 
 ```ts
 export interface PluginDataInjectDecl {
-  readonly kind: 'plugin-data';
+  readonly kind: "plugin-data";
   readonly namespace: string;
   readonly as: string;
-  readonly format?: 'summary' | 'full' | 'ids-only';
+  readonly format?: "summary" | "full" | "ids-only";
   readonly maxEntries?: number;
 }
 ```
@@ -122,14 +122,14 @@ export interface PluginDataInjectDecl {
 
 `grep -rn "plugin-data-set\|plugin-data-set-batch\|listPluginData" plugins/` 结果（实测）：
 
-| Plugin | 主要 namespace | 性质 | 今天怎么处理 |
-|---|---|---|---|
-| `codex` | `entries` | LLM 可见（术语条目） | inject `kind: plugin-data, namespace: entries` |
-| `npc-graph` | `relationships` | LLM 可见（NPC 关系） | 通过 RAG 摘要后 inject 给 narrator |
-| `memory` | `archival` | LLM 可见（archival memory） | inject `kind: plugin-data, namespace: archival` |
-| `world-init` | `lore-cache` | 半可见（生成中间产物） | 不 inject；通过 record.upsert 写入 world records 后才进 prompt |
-| `pregame` | `phase-state` | **应当私有**（pre-game 阶段进度） | 现状用 namespace 名 `phase-state` 当约定，inject 谨慎避开 |
-| `guide` | `last-options` | 半私有（上一轮选项缓存） | 仅 plugin 内部 read，不 inject |
+| Plugin       | 主要 namespace  | 性质                              | 今天怎么处理                                                   |
+| ------------ | --------------- | --------------------------------- | -------------------------------------------------------------- |
+| `codex`      | `entries`       | LLM 可见（术语条目）              | inject `kind: plugin-data, namespace: entries`                 |
+| `npc-graph`  | `relationships` | LLM 可见（NPC 关系）              | 通过 RAG 摘要后 inject 给 narrator                             |
+| `memory`     | `archival`      | LLM 可见（archival memory）       | inject `kind: plugin-data, namespace: archival`                |
+| `world-init` | `lore-cache`    | 半可见（生成中间产物）            | 不 inject；通过 record.upsert 写入 world records 后才进 prompt |
+| `pregame`    | `phase-state`   | **应当私有**（pre-game 阶段进度） | 现状用 namespace 名 `phase-state` 当约定，inject 谨慎避开      |
+| `guide`      | `last-options`  | 半私有（上一轮选项缓存）          | 仅 plugin 内部 read，不 inject                                 |
 
 **关键发现**：`pregame` 和 `guide` 已经在用"约定式私有 namespace"——靠 inject 配置的人小心避开。约定但无强制 = schema 漂移已经在发生。
 
@@ -158,23 +158,23 @@ npc-graph    (中等)
 
 ## § 2 设计目标
 
-| 目标 | 衡量 |
-|---|---|
-| 给 plugin_data 加一个 visibility 维度，区分"LLM 可见 vs plugin 私有" | schema 加 `visibility` 列；inject 路径默认只取 `context-*` 行 |
-| 默认值兼容现行行为 | 旧数据 visibility 视为 `context-full`；现有 inject 配置零改动；8 个 core plugin 不需要立即迁移 |
-| 默认安全 | 目标态新写入默认 `private`，plugin 必须显式声明才进 prompt；迁移期先走 legacy-compatible 策略，避免现有插件新写入突然消失 |
-| 引入 summary 中间档 | `context-summary`：写入时同时存一个短摘要，inject 优先用 summary，节流 |
-| 跨 store 一致 | SQLite / Postgres / IDB / Memory 四个 backend 同时支持；contract test 兜底 |
-| 对 plugin 作者透明 | 现有 `plugin-data-set` 工具加可选 `visibility` 参数；迁移期省略时 warn，P0-d 后切到默认 `private` |
+| 目标                                                                 | 衡量                                                                                                                      |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 给 plugin_data 加一个 visibility 维度，区分"LLM 可见 vs plugin 私有" | schema 加 `visibility` 列；inject 路径默认只取 `context-*` 行                                                             |
+| 默认值兼容现行行为                                                   | 旧数据 visibility 视为 `context-full`；现有 inject 配置零改动；8 个 core plugin 不需要立即迁移                            |
+| 默认安全                                                             | 目标态新写入默认 `private`，plugin 必须显式声明才进 prompt；迁移期先走 legacy-compatible 策略，避免现有插件新写入突然消失 |
+| 引入 summary 中间档                                                  | `context-summary`：写入时同时存一个短摘要，inject 优先用 summary，节流                                                    |
+| 跨 store 一致                                                        | SQLite / Postgres / IDB / Memory 四个 backend 同时支持；contract test 兜底                                                |
+| 对 plugin 作者透明                                                   | 现有 `plugin-data-set` 工具加可选 `visibility` 参数；迁移期省略时 warn，P0-d 后切到默认 `private`                         |
 
 ### 默认值取舍
 
 写入默认值的两种选择：
 
-| 默认 | 优点 | 缺点 |
-|---|---|---|
-| `context-full`（向后兼容旧数据） | 旧 plugin 不改任何代码，现有 inject 完全等价 | 新 plugin 作者不显式写 visibility 时，所有内部状态也进 prompt——继承今天的脚枪 |
-| `private`（新写入默认安全） | 新 plugin 默认不泄漏；要进 prompt 必须声明 | 旧 plugin 在升级 store 后写入的新行如果不显式写 visibility，会从 prompt 消失——破坏现有行为 |
+| 默认                             | 优点                                         | 缺点                                                                                       |
+| -------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `context-full`（向后兼容旧数据） | 旧 plugin 不改任何代码，现有 inject 完全等价 | 新 plugin 作者不显式写 visibility 时，所有内部状态也进 prompt——继承今天的脚枪              |
+| `private`（新写入默认安全）      | 新 plugin 默认不泄漏；要进 prompt 必须声明   | 旧 plugin 在升级 store 后写入的新行如果不显式写 visibility，会从 prompt 消失——破坏现有行为 |
 
 **采用带过渡开关的混合策略**（详见 § 5.1）：
 
@@ -297,9 +297,9 @@ ALTER TABLE plugin_data
 ```ts
 // packages/shared/src/types/plugin.ts
 export type PluginDataVisibility =
-  | 'private'           // 永不进 prompt；只能通过 plugin-data-get 工具读
-  | 'context-summary'   // inject 时取 summary 字段（短摘要）
-  | 'context-full';     // inject 时取整 value（旧行为）
+  | "private" // 永不进 prompt；只能通过 plugin-data-get 工具读
+  | "context-summary" // inject 时取 summary 字段（短摘要）
+  | "context-full"; // inject 时取整 value（旧行为）
 
 export interface PluginDataRecord {
   readonly id: string;
@@ -309,7 +309,7 @@ export interface PluginDataRecord {
   readonly key: string;
   readonly value: unknown;
   readonly visibility: PluginDataVisibility;
-  readonly summary?: string;     // visibility = 'context-summary' 时必填
+  readonly summary?: string; // visibility = 'context-summary' 时必填
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -324,14 +324,14 @@ export interface PluginDataRecord {
 
 **框架其他部分需要适配**
 
-| 文件 | 改动 |
-|---|---|
-| `packages/store/src/sqlite/sqlite-store-mappers.ts` | DDL 加列；`toPluginDataRecord` 加映射 |
-| `packages/store/src/postgres/pg-store-mappers.ts` | 同 SQLite，PG 类型用 `text` |
-| `packages/store/src/idb/...` | IDB schema bump，加索引 `(session, pluginId, namespace, visibility)` |
-| `packages/store/src/memory/...` | 内存版结构体加字段 |
-| `packages/store/tests/store-contract.ts` | contract test 加 visibility 写读 + inject filter case |
-| `packages/store/migrations/<next>-plugin-data-visibility.sql` | 加迁移脚本（PG 走 drizzle migrate；SQLite 走 IF NOT EXISTS DDL） |
+| 文件                                                          | 改动                                                                 |
+| ------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `packages/store/src/sqlite/sqlite-store-mappers.ts`           | DDL 加列；`toPluginDataRecord` 加映射                                |
+| `packages/store/src/postgres/pg-store-mappers.ts`             | 同 SQLite，PG 类型用 `text`                                          |
+| `packages/store/src/idb/...`                                  | IDB schema bump，加索引 `(session, pluginId, namespace, visibility)` |
+| `packages/store/src/memory/...`                               | 内存版结构体加字段                                                   |
+| `packages/store/tests/store-contract.ts`                      | contract test 加 visibility 写读 + inject filter case                |
+| `packages/store/migrations/<next>-plugin-data-visibility.sql` | 加迁移脚本（PG 走 drizzle migrate；SQLite 走 IF NOT EXISTS DDL）     |
 
 **旧代码可清理**
 
@@ -370,7 +370,7 @@ export interface PluginDataRecord {
 **这条改动 unlocks 什么**
 
 1. plugin 内部状态可以放回 `plugin_data`（不再外溢到 `plugin_configs` 误用）
-2. inject 配置语义清晰："inject 默认只看 context-* 行"
+2. inject 配置语义清晰："inject 默认只看 context-\* 行"
 3. 第三方 plugin 默认安全：忘记声明 visibility = 不会泄漏
 4. 为后续 context budget breakdown、branch summary、session export/replay 提供统一可见性词汇
 
@@ -408,13 +408,13 @@ listPluginData(
 
 **框架其他部分需要适配**
 
-| 文件 | 改动 |
-|---|---|
-| `packages/store/src/types.ts` | 加 `ListPluginDataOptions` + overload |
-| `packages/store/src/{sqlite,postgres,idb,memory}/...` | 实现支持 visibility filter |
-| `packages/store/tests/store-contract.ts` | 加 visibility filter 用例 |
+| 文件                                                               | 改动                                                          |
+| ------------------------------------------------------------------ | ------------------------------------------------------------- |
+| `packages/store/src/types.ts`                                      | 加 `ListPluginDataOptions` + overload                         |
+| `packages/store/src/{sqlite,postgres,idb,memory}/...`              | 实现支持 visibility filter                                    |
+| `packages/store/tests/store-contract.ts`                           | 加 visibility filter 用例                                     |
 | `packages/context/src/prompt-internals.ts:resolvePluginDataInject` | 调用时传 `{ visibility: ['context-summary','context-full'] }` |
-| 框架内其它调用点（`grep -rn "listPluginData" packages/`） | 全部审查；plugin-data-list 工具可能要走新 visibility 选项 |
+| 框架内其它调用点（`grep -rn "listPluginData" packages/`）          | 全部审查；plugin-data-list 工具可能要走新 visibility 选项     |
 
 **旧代码可清理**
 
@@ -456,10 +456,10 @@ listPluginData(
 
 ```ts
 export interface PluginDataInjectDecl {
-  readonly kind: 'plugin-data';
+  readonly kind: "plugin-data";
   readonly namespace: string;
   readonly as: string;
-  readonly format?: 'summary' | 'full' | 'ids-only';
+  readonly format?: "summary" | "full" | "ids-only";
   readonly maxEntries?: number;
 }
 ```
@@ -472,10 +472,10 @@ export interface PluginDataInjectDecl {
 
 ```ts
 export interface PluginDataInjectDecl {
-  readonly kind: 'plugin-data';
+  readonly kind: "plugin-data";
   readonly namespace: string;
   readonly as: string;
-  readonly format?: 'summary' | 'full' | 'ids-only';
+  readonly format?: "summary" | "full" | "ids-only";
   readonly maxEntries?: number;
 
   /**
@@ -484,20 +484,20 @@ export interface PluginDataInjectDecl {
    * - `prefer-summary` → always use `row.summary`; fall back to ids-only if missing
    * - `ignore-summary` → behave as if `summary` field doesn't exist (full row, like today)
    */
-  readonly summaryMode?: 'auto' | 'prefer-summary' | 'ignore-summary';
+  readonly summaryMode?: "auto" | "prefer-summary" | "ignore-summary";
 }
 ```
 
 **框架其他部分需要适配**
 
-| 文件 | 改动 |
-|---|---|
-| `packages/shared/src/types/plugin.ts` | 类型加字段 |
-| `packages/shared/src/schemas/plugin.ts` | Zod schema 加字段 |
-| `packages/context/src/prompt-internals.ts` | `resolvePluginDataInject` 实现新逻辑 |
+| 文件                                              | 改动                                                                                          |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `packages/shared/src/types/plugin.ts`             | 类型加字段                                                                                    |
+| `packages/shared/src/schemas/plugin.ts`           | Zod schema 加字段                                                                             |
+| `packages/context/src/prompt-internals.ts`        | `resolvePluginDataInject` 实现新逻辑                                                          |
 | `packages/context/tests/prompt-internals.test.ts` | 新增 3 类用例（auto / prefer-summary / ignore-summary）+ private 行不会进入 prompt 的过滤用例 |
-| `docs/reference/plugins.md` | 更新 inject 文档 |
-| `docs/guide/plugin-authoring.md` | 加"如何选 visibility"小节 |
+| `docs/reference/plugins.md`                       | 更新 inject 文档                                                                              |
+| `docs/guide/plugin-authoring.md`                  | 加"如何选 visibility"小节                                                                     |
 
 **旧代码可清理**
 
@@ -555,13 +555,13 @@ export interface PluginDataInjectDecl {
 
 **框架其他部分需要适配**
 
-| 文件 | 改动 |
-|---|---|
-| `packages/tools/src/builtin/plugin-data-set.ts` | tool schema + 实现 |
-| `packages/tools/src/builtin/plugin-data-set-batch.ts` | 同上 |
-| `packages/tools/src/builtin/plugin-data-get.ts` | 返回值带 visibility（让 plugin handler 读取后能判断） |
-| `packages/tools/tests/...` | 新用例 |
-| `docs/reference/tools.md` | 更新工具签名文档 |
+| 文件                                                  | 改动                                                  |
+| ----------------------------------------------------- | ----------------------------------------------------- |
+| `packages/tools/src/builtin/plugin-data-set.ts`       | tool schema + 实现                                    |
+| `packages/tools/src/builtin/plugin-data-set-batch.ts` | 同上                                                  |
+| `packages/tools/src/builtin/plugin-data-get.ts`       | 返回值带 visibility（让 plugin handler 读取后能判断） |
+| `packages/tools/tests/...`                            | 新用例                                                |
+| `docs/reference/tools.md`                             | 更新工具签名文档                                      |
 
 **旧代码可清理**
 
@@ -604,11 +604,11 @@ interface PluginDataSetRequest {
 
 **框架其他部分需要适配**
 
-| 文件 | 改动 |
-|---|---|
-| `packages/shared/src/types/rpc.ts` | 加字段 |
+| 文件                                               | 改动                 |
+| -------------------------------------------------- | -------------------- |
+| `packages/shared/src/types/rpc.ts`                 | 加字段               |
 | `packages/runtime/src/rpc-defaults/plugin-data.ts` | 默认 dispatcher 透传 |
-| `packages/runtime/tests/...` | 加用例 |
+| `packages/runtime/tests/...`                       | 加用例               |
 
 **旧代码可清理**
 
@@ -636,10 +636,10 @@ Data Explorer 顶部加 segmented control：`全部 | LLM 可见 | plugin 私有
 
 **框架其他部分需要适配**
 
-| 文件 | 改动 |
-|---|---|
-| `apps/web/src/routes/debug/data-explorer.tsx` | 加 filter UI |
-| `apps/web/src/routes/debug/...` | 加"实际 inject 形态"预览组件（call 同一份 `resolvePluginDataInject` 渲染） |
+| 文件                                          | 改动                                                                       |
+| --------------------------------------------- | -------------------------------------------------------------------------- |
+| `apps/web/src/routes/debug/data-explorer.tsx` | 加 filter UI                                                               |
+| `apps/web/src/routes/debug/...`               | 加"实际 inject 形态"预览组件（call 同一份 `resolvePluginDataInject` 渲染） |
 
 **旧代码可清理**
 
@@ -681,15 +681,15 @@ Data Explorer 顶部加 segmented control：`全部 | LLM 可见 | plugin 私有
 
 逐个 plugin 审查并写入正确 visibility，不破坏行为。注意：这是**插件代码/插件工具调用**的改动，不允许在框架层写 `if pluginId === ...` 的特例映射。下表只是迁移清单，不是框架逻辑：
 
-| Plugin | 主要 namespace | 目标 visibility |
-|---|---|---|
-| codex | entries | context-summary（同步加 summary 字段写入） |
-| npc-graph | relationships | context-summary（已有 RAG summary，复用） |
-| memory | archival | context-full（现行行为） |
-| pregame | phase-state | private（修正现状的"约定" → 强制） |
-| guide | last-options | private（同上） |
-| world-init | lore-cache | private |
-| char-creator | drafts | private |
+| Plugin       | 主要 namespace | 目标 visibility                            |
+| ------------ | -------------- | ------------------------------------------ |
+| codex        | entries        | context-summary（同步加 summary 字段写入） |
+| npc-graph    | relationships  | context-summary（已有 RAG summary，复用）  |
+| memory       | archival       | context-full（现行行为）                   |
+| pregame      | phase-state    | private（修正现状的"约定" → 强制）         |
+| guide        | last-options   | private（同上）                            |
+| world-init   | lore-cache     | private                                    |
+| char-creator | drafts         | private                                    |
 
 每个 plugin 一个独立 PR；E2E 跑一遍 `scripts/e2e-plugin-verify.ts` 兜底。
 
@@ -711,23 +711,23 @@ Data Explorer 顶部加 segmented control：`全部 | LLM 可见 | plugin 私有
 
 ## § 7 风险 / Tradeoffs
 
-| 风险 | 缓解 |
-|---|---|
-| P0-c 期间某 plugin 的 visibility 标错（应当 context-* 但标了 private）→ inject 突然空 | E2E harness 在每个 plugin 切 visibility 时跑一遍验证；trace warn "inject namespace 命中 0 行" 给运维信号 |
-| `summary` 字段被滥用（plugin 作者写很长的 summary 等同失效） | store 层硬截断 200 字；UI 给可视化告警 |
-| 旧 plugin 升级了 store 但忘了改 plugin-data-set 调用 → P0-d 后新行变 private 不进 prompt | P0-a 起 legacy-compatible + trace warn；P0-c core plugin 显式声明；P0-d 再切默认 |
-| Postgres schema 迁移期间锁表 | 加列 + 默认值在 PG 14+ 是 metadata-only 操作，不锁；contract test 验证 |
-| IDB schema bump 强制刷新所有桌面端 / 浏览器端缓存 | IDB 升级走 `onupgradeneeded` 标准路径；旧数据仍可读，新写入带 visibility |
+| 风险                                                                                     | 缓解                                                                                                     |
+| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| P0-c 期间某 plugin 的 visibility 标错（应当 context-\* 但标了 private）→ inject 突然空   | E2E harness 在每个 plugin 切 visibility 时跑一遍验证；trace warn "inject namespace 命中 0 行" 给运维信号 |
+| `summary` 字段被滥用（plugin 作者写很长的 summary 等同失效）                             | store 层硬截断 200 字；UI 给可视化告警                                                                   |
+| 旧 plugin 升级了 store 但忘了改 plugin-data-set 调用 → P0-d 后新行变 private 不进 prompt | P0-a 起 legacy-compatible + trace warn；P0-c core plugin 显式声明；P0-d 再切默认                         |
+| Postgres schema 迁移期间锁表                                                             | 加列 + 默认值在 PG 14+ 是 metadata-only 操作，不锁；contract test 验证                                   |
+| IDB schema bump 强制刷新所有桌面端 / 浏览器端缓存                                        | IDB 升级走 `onupgradeneeded` 标准路径；旧数据仍可读，新写入带 visibility                                 |
 
 ---
 
 ## § 8 是否必须现在做？
 
-| 时间窗 | 后果 | 成本 |
-|---|---|---|
-| 现在不做 | `pregame` / `guide` 继续靠命名约定避开污染；下一个第三方 plugin 复制约定，schema 漂移加深 | 0（短期）/ 大（半年后） |
-| 半年后做 | 已有 5–10 个 plugin 按约定写，每个迁移要单独 review；可能要一个"约定 → schema"的过渡期，工作量翻倍 | 2× 现在做的成本 |
-| 现在做 | schema 加 2 列；4 个 backend 实现 visibility filter；8 个 plugin 显式标记；耗时 ≈ 4 周 | 1× 基线 |
+| 时间窗   | 后果                                                                                               | 成本                    |
+| -------- | -------------------------------------------------------------------------------------------------- | ----------------------- |
+| 现在不做 | `pregame` / `guide` 继续靠命名约定避开污染；下一个第三方 plugin 复制约定，schema 漂移加深          | 0（短期）/ 大（半年后） |
+| 半年后做 | 已有 5–10 个 plugin 按约定写，每个迁移要单独 review；可能要一个"约定 → schema"的过渡期，工作量翻倍 | 2× 现在做的成本         |
+| 现在做   | schema 加 2 列；4 个 backend 实现 visibility filter；8 个 plugin 显式标记；耗时 ≈ 4 周             | 1× 基线                 |
 
 **结论**：现在做的边际成本最低，越拖越贵。
 
@@ -779,25 +779,25 @@ Data Explorer 顶部加 segmented control：`全部 | LLM 可见 | plugin 私有
 
 ## 附录 A · 类型定义草案位置
 
-| 类型 | 文件 | 行号（提案完成后预期） |
-|---|---|---|
-| `PluginDataVisibility` | `packages/shared/src/types/plugin.ts` | 跟在 `OutputKind` 后 |
-| `PluginDataRecord`（增字段） | `packages/shared/src/types/plugin.ts` | 现有定义 |
-| `ListPluginDataOptions` | `packages/store/src/types.ts` | DataStore 接口附近 |
-| `PluginDataInjectDecl`（增字段） | `packages/shared/src/types/plugin.ts:90` | 现有定义 |
-| `PluginDataSetRequest`（增字段） | `packages/shared/src/types/rpc.ts` | 现有 RPC 类型集 |
+| 类型                             | 文件                                     | 行号（提案完成后预期） |
+| -------------------------------- | ---------------------------------------- | ---------------------- |
+| `PluginDataVisibility`           | `packages/shared/src/types/plugin.ts`    | 跟在 `OutputKind` 后   |
+| `PluginDataRecord`（增字段）     | `packages/shared/src/types/plugin.ts`    | 现有定义               |
+| `ListPluginDataOptions`          | `packages/store/src/types.ts`            | DataStore 接口附近     |
+| `PluginDataInjectDecl`（增字段） | `packages/shared/src/types/plugin.ts:90` | 现有定义               |
+| `PluginDataSetRequest`（增字段） | `packages/shared/src/types/rpc.ts`       | 现有 RPC 类型集        |
 
 ---
 
 ## 附录 B · 调研项目对照
 
-| pi-mono 概念 | Covel 对应 | 异同 |
-|---|---|---|
-| `CustomEntry` | `plugin_data` row with `visibility='private'` | 都是"扩展私有状态" |
-| `CustomMessageEntry` | `plugin_data` row with `visibility='context-*'` | 都进 LLM context；Covel 加了 summary 中间档 |
-| `customType` 关联 | `pluginId` 关联 | 都按"谁写的就归谁读"隔离 |
-| pi 的 JSONL append-only | Covel 的关系数据库 upsert | 不强求 append-only；pi 是 coding-agent 单文件 session，Covel 是多 session 多 player 持久化 |
-| pi 的 `display: boolean` 字段 | Covel UI 可见性是另一轴（Web `/debug`）；不与 LLM visibility 混 | 拆得更清楚 |
+| pi-mono 概念                  | Covel 对应                                                      | 异同                                                                                       |
+| ----------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `CustomEntry`                 | `plugin_data` row with `visibility='private'`                   | 都是"扩展私有状态"                                                                         |
+| `CustomMessageEntry`          | `plugin_data` row with `visibility='context-*'`                 | 都进 LLM context；Covel 加了 summary 中间档                                                |
+| `customType` 关联             | `pluginId` 关联                                                 | 都按"谁写的就归谁读"隔离                                                                   |
+| pi 的 JSONL append-only       | Covel 的关系数据库 upsert                                       | 不强求 append-only；pi 是 coding-agent 单文件 session，Covel 是多 session 多 player 持久化 |
+| pi 的 `display: boolean` 字段 | Covel UI 可见性是另一轴（Web `/debug`）；不与 LLM visibility 混 | 拆得更清楚                                                                                 |
 
 ---
 

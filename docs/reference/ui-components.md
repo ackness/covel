@@ -20,91 +20,91 @@ Reference for the json-render components available to plugin UI specs. This page
 
 ## Data bindings cheat sheet
 
-| Need | Write |
-|------|-------|
-| Read state | `{ "$state": "/path" }` |
-| Two-way bind state | `{ "$bindState": "/path" }` |
-| Iterate array | `repeat: { "statePath": "/path", "key": "id" }` |
-| Current item field | `{ "$item": "field" }` |
-| Two-way bind item field | `{ "$bindItem": "field" }` |
-| Current index | `{ "$index": true }` |
-| Resolve i18n | pass any `I18nText` value (`{ "zh": "…", "en": "…" }`) to any `content` / `label` / `placeholder` / `title` / `message` prop |
+| Need                    | Write                                                                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Read state              | `{ "$state": "/path" }`                                                                                                      |
+| Two-way bind state      | `{ "$bindState": "/path" }`                                                                                                  |
+| Iterate array           | `repeat: { "statePath": "/path", "key": "id" }`                                                                              |
+| Current item field      | `{ "$item": "field" }`                                                                                                       |
+| Two-way bind item field | `{ "$bindItem": "field" }`                                                                                                   |
+| Current index           | `{ "$index": true }`                                                                                                         |
+| Resolve i18n            | pass any `I18nText` value (`{ "zh": "…", "en": "…" }`) to any `content` / `label` / `placeholder` / `title` / `message` prop |
 
 ## Components
 
 ### Layout
 
-| Component | Purpose | Key props |
-|-----------|---------|-----------|
-| `Stack` | Vertical stack of children. | `gap` (string; styling pass-through) |
-| `Row` | Horizontal row of children. | `gap`, `align` (`center` / `start` / `end`) |
-| `Grid` | CSS grid. | `cols` (number) |
-| `Separator` | Horizontal rule. | — |
+| Component   | Purpose                     | Key props                                   |
+| ----------- | --------------------------- | ------------------------------------------- |
+| `Stack`     | Vertical stack of children. | `gap` (string; styling pass-through)        |
+| `Row`       | Horizontal row of children. | `gap`, `align` (`center` / `start` / `end`) |
+| `Grid`      | CSS grid.                   | `cols` (number)                             |
+| `Separator` | Horizontal rule.            | —                                           |
 
 ### Display
 
-| Component | Purpose | Key props |
-|-----------|---------|-----------|
-| `Text` | Paragraph text with variant controls. | `content` *(I18nText)*, `variant` (`muted`), `weight` (`bold`), `size` (`xs` / `sm` / `lg`), `align` (`center`) |
-| `Badge` | Small coloured pill. | `label` *(I18nText)*, `color` (`red` / `amber` / `blue` / `green` / `purple` / `cyan`) |
-| `Icon` | Lucide icon by name. | `name` (kebab-case, e.g. `book-open`), `size` (`xs` / `sm` / `md` / `lg`) |
-| `TagList` | Flat list of string tags. | `tags` (string[]) |
-| `Prose` | Narrative paragraphs with `**bold**` support, split on double newline. | `content` (string) |
-| `Source` | Small attribution label. | `label` (string) |
-| `Image` | Renders an image from a MediaRef resolved through the media store. Falls back to a placeholder tile when no ref is bound. | `ref` *(MediaRef, preferred)*, `src` *(MediaRef accepted for early specs)*, `alt` (string), `aspectRatio` (CSS ratio, default `"1/1"`), `rounded` (`none` / `sm` / `md` / `lg`), `fit` (`cover` / `contain`) |
-| `Media` | Renders image / audio / video / file assets from a MediaRef resolved through the media store. | `ref` *(MediaRef, preferred)*, `src` *(MediaRef accepted for early specs)*, `as` (`auto` / `image` / `audio` / `video`), `alt`, `aspectRatio`, `rounded`, `fit` |
-| `AudioPlayer` | Theme-aware self-drawn audio player. Replaces native `<audio controls>` chrome with a flat playlist row using `--color-primary` / `--color-muted` / `--color-border` / `--radius-card`. Includes play/pause, scrubbable progress bar (pointer + keyboard), `M:SS / M:SS` time, speed selector (0.75× / 1× / 1.25× / 1.5× / 2×), and download button. Falls back to an "audio unavailable" tile when ref is missing or resolution fails. | `ref` *(MediaRef)*, `src` *(MediaRef accepted)*, `alt` (string, also used as default download filename stem), `downloadName` (override filename), `className` |
-| `ImageGallery` | Framework-provided compact gallery for image-generation plugins. Reads the plugin `images` namespace, hides long prompts, and provides preview/download/re-draw controls. | `pluginId` |
-| `ImageJobs` | Framework-provided image task viewer. Reads `_jobs`, shows prompt details, copy/re-draw controls, and groups generated image thumbnails under matching prompts. | `pluginId` |
+| Component      | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                 | Key props                                                                                                                                                                                                    |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Text`         | Paragraph text with variant controls.                                                                                                                                                                                                                                                                                                                                                                                                   | `content` _(I18nText)_, `variant` (`muted`), `weight` (`bold`), `size` (`xs` / `sm` / `lg`), `align` (`center`)                                                                                              |
+| `Badge`        | Small coloured pill.                                                                                                                                                                                                                                                                                                                                                                                                                    | `label` _(I18nText)_, `color` (`red` / `amber` / `blue` / `green` / `purple` / `cyan`)                                                                                                                       |
+| `Icon`         | Lucide icon by name.                                                                                                                                                                                                                                                                                                                                                                                                                    | `name` (kebab-case, e.g. `book-open`), `size` (`xs` / `sm` / `md` / `lg`)                                                                                                                                    |
+| `TagList`      | Flat list of string tags.                                                                                                                                                                                                                                                                                                                                                                                                               | `tags` (string[])                                                                                                                                                                                            |
+| `Prose`        | Narrative paragraphs with `**bold**` support, split on double newline.                                                                                                                                                                                                                                                                                                                                                                  | `content` (string)                                                                                                                                                                                           |
+| `Source`       | Small attribution label.                                                                                                                                                                                                                                                                                                                                                                                                                | `label` (string)                                                                                                                                                                                             |
+| `Image`        | Renders an image from a MediaRef resolved through the media store. Falls back to a placeholder tile when no ref is bound.                                                                                                                                                                                                                                                                                                               | `ref` _(MediaRef, preferred)_, `src` _(MediaRef accepted for early specs)_, `alt` (string), `aspectRatio` (CSS ratio, default `"1/1"`), `rounded` (`none` / `sm` / `md` / `lg`), `fit` (`cover` / `contain`) |
+| `Media`        | Renders image / audio / video / file assets from a MediaRef resolved through the media store.                                                                                                                                                                                                                                                                                                                                           | `ref` _(MediaRef, preferred)_, `src` _(MediaRef accepted for early specs)_, `as` (`auto` / `image` / `audio` / `video`), `alt`, `aspectRatio`, `rounded`, `fit`                                              |
+| `AudioPlayer`  | Theme-aware self-drawn audio player. Replaces native `<audio controls>` chrome with a flat playlist row using `--color-primary` / `--color-muted` / `--color-border` / `--radius-card`. Includes play/pause, scrubbable progress bar (pointer + keyboard), `M:SS / M:SS` time, speed selector (0.75× / 1× / 1.25× / 1.5× / 2×), and download button. Falls back to an "audio unavailable" tile when ref is missing or resolution fails. | `ref` _(MediaRef)_, `src` _(MediaRef accepted)_, `alt` (string, also used as default download filename stem), `downloadName` (override filename), `className`                                                |
+| `ImageGallery` | Framework-provided compact gallery for image-generation plugins. Reads the plugin `images` namespace, hides long prompts, and provides preview/download/re-draw controls.                                                                                                                                                                                                                                                               | `pluginId`                                                                                                                                                                                                   |
+| `ImageJobs`    | Framework-provided image task viewer. Reads `_jobs`, shows prompt details, copy/re-draw controls, and groups generated image thumbnails under matching prompts.                                                                                                                                                                                                                                                                         | `pluginId`                                                                                                                                                                                                   |
 
 ### Data
 
-| Component | Purpose | Key props |
-|-----------|---------|-----------|
-| `Card` | Bordered container. | `variant` (`glow` / `subtle`) |
-| `CardList` | Vertical stack of `Card` children. | — |
-| `EntryCard` | Rich codex-entry card with category icon and rarity accent. | `title` *(I18nText)*, `category` (string), `content` *(I18nText)*, `tags` (string[]), `rarity` (`legendary` / `rare` / `uncommon` / `common`), `icon`, `color`, `collapsible`, `defaultExpanded`, `isNew` |
-| `StatBar` | Label + `value/max` numeric bar. | `label` *(I18nText)*, `value` (number), `max` (number) |
-| `Progress` | Percent-style progress bar. | `label` *(I18nText)*, `value` (number), `max` (number) |
-| `Accordion` | Vertical wrapper for `Section` children. | — |
-| `Section` | Collapsible header + body. | `title` *(I18nText)*, `icon`, `defaultOpen` (boolean) |
-| `JsonView` | Shape-aware render of any JSON value (primitives inline, arrays as tag list, objects as key: value pairs). | `value` (any) |
+| Component   | Purpose                                                                                                    | Key props                                                                                                                                                                                                 |
+| ----------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Card`      | Bordered container.                                                                                        | `variant` (`glow` / `subtle`)                                                                                                                                                                             |
+| `CardList`  | Vertical stack of `Card` children.                                                                         | —                                                                                                                                                                                                         |
+| `EntryCard` | Rich codex-entry card with category icon and rarity accent.                                                | `title` _(I18nText)_, `category` (string), `content` _(I18nText)_, `tags` (string[]), `rarity` (`legendary` / `rare` / `uncommon` / `common`), `icon`, `color`, `collapsible`, `defaultExpanded`, `isNew` |
+| `StatBar`   | Label + `value/max` numeric bar.                                                                           | `label` _(I18nText)_, `value` (number), `max` (number)                                                                                                                                                    |
+| `Progress`  | Percent-style progress bar.                                                                                | `label` _(I18nText)_, `value` (number), `max` (number)                                                                                                                                                    |
+| `Accordion` | Vertical wrapper for `Section` children.                                                                   | —                                                                                                                                                                                                         |
+| `Section`   | Collapsible header + body.                                                                                 | `title` _(I18nText)_, `icon`, `defaultOpen` (boolean)                                                                                                                                                     |
+| `JsonView`  | Shape-aware render of any JSON value (primitives inline, arrays as tag list, objects as key: value pairs). | `value` (any)                                                                                                                                                                                             |
 
 ### Interactive
 
-| Component | Purpose | Key props |
-|-----------|---------|-----------|
-| `Button` | Click target with selection-feedback wiring for plugin-declared interactions. | `label` *(I18nText)*, `variant` (`default` / `primary` / `danger` / `ghost`), `size` (`compact` / `md`); `on.click.action` = `draftMessage` / `selectChoice` / … |
-| `Input` | Text input. | `label` *(I18nText)*, `placeholder` *(I18nText)*, `value` (bind via `$bindState`) |
-| `SearchInput` | Input with a search glyph. | `placeholder` *(I18nText)*, `value` |
-| `Select` | Dropdown. | `label` *(I18nText)*, `options` (`[{ value, label }]`), `value` |
-| `Switch` | Boolean toggle. | `label` *(I18nText)*, `checked` (bind via `$bindState`) |
-| `FilterBar` | Horizontal toggle group (pick-one-of-many). | `options` (`[{ value, label, icon? }]`), `value` |
-| `Tabs` | Tab strip. Bind active value via `$bindState`; optional `counts` map suffixes labels with `(N)`. | `tabs` (`[{ value, label, icon?, color? }]`), `value`, `counts` (`Record<value, number>`) |
+| Component         | Purpose                                                                                                                                                                                     | Key props                                                                                                                                                                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Button`          | Click target with selection-feedback wiring for plugin-declared interactions.                                                                                                               | `label` _(I18nText)_, `variant` (`default` / `primary` / `danger` / `ghost`), `size` (`compact` / `md`); `on.click.action` = `draftMessage` / `selectChoice` / …                                                                                                             |
+| `Input`           | Text input.                                                                                                                                                                                 | `label` _(I18nText)_, `placeholder` _(I18nText)_, `value` (bind via `$bindState`)                                                                                                                                                                                            |
+| `SearchInput`     | Input with a search glyph.                                                                                                                                                                  | `placeholder` _(I18nText)_, `value`                                                                                                                                                                                                                                          |
+| `Select`          | Dropdown.                                                                                                                                                                                   | `label` _(I18nText)_, `options` (`[{ value, label }]`), `value`                                                                                                                                                                                                              |
+| `Switch`          | Boolean toggle.                                                                                                                                                                             | `label` _(I18nText)_, `checked` (bind via `$bindState`)                                                                                                                                                                                                                      |
+| `FilterBar`       | Horizontal toggle group (pick-one-of-many).                                                                                                                                                 | `options` (`[{ value, label, icon? }]`), `value`                                                                                                                                                                                                                             |
+| `Tabs`            | Tab strip. Bind active value via `$bindState`; optional `counts` map suffixes labels with `(N)`.                                                                                            | `tabs` (`[{ value, label, icon?, color? }]`), `value`, `counts` (`Record<value, number>`)                                                                                                                                                                                    |
 | `FilterContainer` | Stateful container: owns search + tab state internally, renders a registered per-item component for each filtered row. See the code comment block in `catalog.tsx` for a full spec example. | `items`, `searchPlaceholder`, `searchFields` (path[]), `filterField`, `filterTabs`, `itemComponent` (registry name), `itemPropMap` (`{ propName: itemPath }`), `itemLiteralProps`, `itemKeyField`, `emptyMessage`, `showCounts`, `footer` (string or `{ component, props }`) |
 
 ### Form
 
-| Component | Purpose | Key props |
-|-----------|---------|-----------|
-| `Form` | Bordered form container. | — |
-| `FormHeader` | Title bar for a `Form`. | see `catalog.tsx` (props pass through to the header layout) |
-| `FormField` | Single labelled field (text or select). | `fieldType` (`text` / `select`), `label` *(I18nText)*, `placeholder` *(I18nText)*, `required` (boolean), `options` (`[{ value, label }]`), `value` (bind via `$bindState`), `disabled` |
-| `SubmitButton` | Primary submit button with disabled state. | `label` *(I18nText)*, `disabled` (boolean); emit `click` via `on.click` |
+| Component      | Purpose                                    | Key props                                                                                                                                                                              |
+| -------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Form`         | Bordered form container.                   | —                                                                                                                                                                                      |
+| `FormHeader`   | Title bar for a `Form`.                    | see `catalog.tsx` (props pass through to the header layout)                                                                                                                            |
+| `FormField`    | Single labelled field (text or select).    | `fieldType` (`text` / `select`), `label` _(I18nText)_, `placeholder` _(I18nText)_, `required` (boolean), `options` (`[{ value, label }]`), `value` (bind via `$bindState`), `disabled` |
+| `SubmitButton` | Primary submit button with disabled state. | `label` _(I18nText)_, `disabled` (boolean); emit `click` via `on.click`                                                                                                                |
 
 ### Message
 
-| Component | Purpose | Key props |
-|-----------|---------|-----------|
-| `PlayerMessage` | Right-aligned player chat bubble (with a Paper-theme variant). | `content` (string) |
-| `Alert` | Info / success / warning / error notification. | `level` (`info` / `success` / `warning` / `error`), `title` *(I18nText)*, `message` *(I18nText)* |
+| Component       | Purpose                                                        | Key props                                                                                        |
+| --------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `PlayerMessage` | Right-aligned player chat bubble (with a Paper-theme variant). | `content` (string)                                                                               |
+| `Alert`         | Info / success / warning / error notification.                 | `level` (`info` / `success` / `warning` / `error`), `title` _(I18nText)_, `message` _(I18nText)_ |
 
 ### Visualization
 
-| Component | Purpose | Key props |
-|-----------|---------|-----------|
-| `GraphCanvas` | Force-directed graph via `react-force-graph-2d` (lazy-loaded, ~60 KB gzip). Reads `pluginData[pluginId][nodesNamespace]` and `[edgesNamespace]`. | `pluginId`, `nodesNamespace`, `edgesNamespace`, `height?` |
-| `WorldDimensions` | Renders the active world's structured dimensions (geography / factions / power system / …). Reads from session context; no bindings required. | — |
+| Component         | Purpose                                                                                                                                          | Key props                                                 |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| `GraphCanvas`     | Force-directed graph via `react-force-graph-2d` (lazy-loaded, ~60 KB gzip). Reads `pluginData[pluginId][nodesNamespace]` and `[edgesNamespace]`. | `pluginId`, `nodesNamespace`, `edgesNamespace`, `height?` |
+| `WorldDimensions` | Renders the active world's structured dimensions (geography / factions / power system / …). Reads from session context; no bindings required.    | —                                                         |
 
 ## Summary
 

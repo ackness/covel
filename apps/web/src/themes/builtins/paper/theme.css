@@ -29,10 +29,13 @@ html[data-theme="paper"] {
   --radius-lg: 0.3125rem;
   --radius-xl: 0.5rem;
 
-  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-sans:
+    "Geist", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji";
   --font-display: "Fraunces", "Newsreader", ui-serif, Georgia, serif;
   --font-serif: "Fraunces", "Newsreader", ui-serif, Georgia, serif;
-  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-mono:
+    "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* Surfaces — subtle 3-tier layering */
   --surface-page: var(--color-background);
@@ -46,7 +49,11 @@ html[data-theme="paper"] {
   --surface-app: var(--surface-page);
   --surface-panel: var(--surface-rail);
   --surface-panel-strong: var(--surface-elevated);
-  --surface-empty: color-mix(in oklab, var(--color-card) 88%, var(--color-background));
+  --surface-empty: color-mix(
+    in oklab,
+    var(--color-card) 88%,
+    var(--color-background)
+  );
   --border-subtle: color-mix(in oklab, var(--color-border) 65%, transparent);
 
   /* Rules — thin warm ink */
@@ -63,8 +70,16 @@ html[data-theme="paper"] {
 
   /* Ambience — warm radial wash + paper grain */
   --ambience-image:
-    radial-gradient(ellipse at 80% -10%, oklch(82% 0.085 60 / 0.18), transparent 60%),
-    radial-gradient(ellipse at -10% 110%, oklch(85% 0.05 220 / 0.12), transparent 55%);
+    radial-gradient(
+      ellipse at 80% -10%,
+      oklch(82% 0.085 60 / 0.18),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse at -10% 110%,
+      oklch(85% 0.05 220 / 0.12),
+      transparent 55%
+    );
   --noise-opacity: 0.04;
 
   --radius-card: 0.1875rem;
@@ -170,8 +185,16 @@ html[data-theme="paper"].dark {
   --accent-success: oklch(70% 0.13 145);
 
   --ambience-image:
-    radial-gradient(ellipse at 80% -10%, oklch(72% 0.12 75 / 0.08), transparent 55%),
-    radial-gradient(ellipse at -10% 110%, oklch(40% 0.08 220 / 0.08), transparent 55%);
+    radial-gradient(
+      ellipse at 80% -10%,
+      oklch(72% 0.12 75 / 0.08),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse at -10% 110%,
+      oklch(40% 0.08 220 / 0.08),
+      transparent 55%
+    );
   --noise-opacity: 0.05;
 
   --shadow-card: 0 1px 0 var(--color-border);

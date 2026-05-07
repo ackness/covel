@@ -9,17 +9,17 @@
 
 import type { DataStore } from "@covel/store";
 import type {
-	PluginDataWriter,
-	PluginLogger,
-	FunctionStoreView,
+  PluginDataWriter,
+  PluginLogger,
+  FunctionStoreView,
 } from "@covel/plugin-loader";
 import type { RpcHandlerStore } from "@covel/shared";
 
 export interface HandlerHelperContext {
-	readonly sessionId: string;
-	readonly turnId: string;
-	readonly pluginId: string;
-	readonly runtimeId: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly pluginId: string;
+  readonly runtimeId: string;
 }
 
 /**
@@ -29,45 +29,45 @@ export interface HandlerHelperContext {
  * rolled back if the turn aborts.
  */
 export function createPluginDataWriter(
-	store: DataStore,
-	ctx: HandlerHelperContext,
+  store: DataStore,
+  ctx: HandlerHelperContext,
 ): PluginDataWriter {
-	const { sessionId, pluginId } = ctx;
-	return {
-		async set(namespace: string, key: string, value: unknown) {
-			if (value === null) {
-				await store.deletePluginData(sessionId, pluginId, namespace, key);
-				return;
-			}
-			const now = new Date().toISOString();
-			await store.setPluginData({
-				id: `${sessionId}:${pluginId}:${namespace}:${key}`,
-				sessionId,
-				pluginId,
-				namespace,
-				key,
-				value,
-				createdAt: now,
-				updatedAt: now,
-			});
-		},
-		async get(namespace: string, key: string) {
-			const row = await store.getPluginData(
-				sessionId,
-				pluginId,
-				namespace,
-				key,
-			);
-			return row ? row.value : null;
-		},
-		async list(namespace: string) {
-			const rows = await store.listPluginData(sessionId, pluginId, namespace);
-			return rows.map((r) => ({ key: r.key, value: r.value }));
-		},
-		async delete(namespace: string, key: string) {
-			await store.deletePluginData(sessionId, pluginId, namespace, key);
-		},
-	};
+  const { sessionId, pluginId } = ctx;
+  return {
+    async set(namespace: string, key: string, value: unknown) {
+      if (value === null) {
+        await store.deletePluginData(sessionId, pluginId, namespace, key);
+        return;
+      }
+      const now = new Date().toISOString();
+      await store.setPluginData({
+        id: `${sessionId}:${pluginId}:${namespace}:${key}`,
+        sessionId,
+        pluginId,
+        namespace,
+        key,
+        value,
+        createdAt: now,
+        updatedAt: now,
+      });
+    },
+    async get(namespace: string, key: string) {
+      const row = await store.getPluginData(
+        sessionId,
+        pluginId,
+        namespace,
+        key,
+      );
+      return row ? row.value : null;
+    },
+    async list(namespace: string) {
+      const rows = await store.listPluginData(sessionId, pluginId, namespace);
+      return rows.map((r) => ({ key: r.key, value: r.value }));
+    },
+    async delete(namespace: string, key: string) {
+      await store.deletePluginData(sessionId, pluginId, namespace, key);
+    },
+  };
 }
 
 type LogLevel = "debug" | "info" | "warn" | "error";
@@ -82,79 +82,79 @@ const MAX_LOG_ENTRIES = 200;
  * rows are evicted so a chatty plugin can't balloon the table.
  */
 export function createPluginLogger(
-	store: DataStore,
-	ctx: HandlerHelperContext,
+  store: DataStore,
+  ctx: HandlerHelperContext,
 ): PluginLogger {
-	async function append(
-		level: LogLevel,
-		message: string,
-		meta: Record<string, unknown> | undefined,
-	): Promise<void> {
-		const now = new Date();
-		const nowMs = now.getTime();
-		const nowIso = now.toISOString();
-		const key = `${nowMs.toString(36).padStart(9, "0")}-${crypto.randomUUID().slice(0, 8)}`;
-		const entry = {
-			level,
-			message: typeof message === "string" ? message : String(message),
-			...(meta && Object.keys(meta).length > 0 ? { meta } : {}),
-			turnId: ctx.turnId,
-			runtimeId: ctx.runtimeId,
-			timestamp: nowIso,
-		};
+  async function append(
+    level: LogLevel,
+    message: string,
+    meta: Record<string, unknown> | undefined,
+  ): Promise<void> {
+    const now = new Date();
+    const nowMs = now.getTime();
+    const nowIso = now.toISOString();
+    const key = `${nowMs.toString(36).padStart(9, "0")}-${crypto.randomUUID().slice(0, 8)}`;
+    const entry = {
+      level,
+      message: typeof message === "string" ? message : String(message),
+      ...(meta && Object.keys(meta).length > 0 ? { meta } : {}),
+      turnId: ctx.turnId,
+      runtimeId: ctx.runtimeId,
+      timestamp: nowIso,
+    };
 
-		try {
-			await store.setPluginData({
-				id: `${ctx.sessionId}:${ctx.pluginId}:${LOGS_NAMESPACE}:${key}`,
-				sessionId: ctx.sessionId,
-				pluginId: ctx.pluginId,
-				namespace: LOGS_NAMESPACE,
-				key,
-				value: entry,
-				createdAt: nowIso,
-				updatedAt: nowIso,
-			});
-			// Evict oldest entries beyond MAX_LOG_ENTRIES. Done eagerly rather than
-			// on a timer so a background plugin that never touches the store again
-			// still rotates naturally on its last write.
-			const rows = await store.listPluginData(
-				ctx.sessionId,
-				ctx.pluginId,
-				LOGS_NAMESPACE,
-			);
-			if (rows.length > MAX_LOG_ENTRIES) {
-				const sorted = [...rows].sort((a, b) => a.key.localeCompare(b.key));
-				const excess = sorted.length - MAX_LOG_ENTRIES;
-				for (let i = 0; i < excess; i += 1) {
-					await store.deletePluginData(
-						ctx.sessionId,
-						ctx.pluginId,
-						LOGS_NAMESPACE,
-						sorted[i].key,
-					);
-				}
-			}
-		} catch {
-			// Logging must never throw into plugin code — a store write failure
-			// should not crash the runtime. The loss surfaces later via
-			// observability on the store itself.
-		}
-	}
+    try {
+      await store.setPluginData({
+        id: `${ctx.sessionId}:${ctx.pluginId}:${LOGS_NAMESPACE}:${key}`,
+        sessionId: ctx.sessionId,
+        pluginId: ctx.pluginId,
+        namespace: LOGS_NAMESPACE,
+        key,
+        value: entry,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      });
+      // Evict oldest entries beyond MAX_LOG_ENTRIES. Done eagerly rather than
+      // on a timer so a background plugin that never touches the store again
+      // still rotates naturally on its last write.
+      const rows = await store.listPluginData(
+        ctx.sessionId,
+        ctx.pluginId,
+        LOGS_NAMESPACE,
+      );
+      if (rows.length > MAX_LOG_ENTRIES) {
+        const sorted = [...rows].sort((a, b) => a.key.localeCompare(b.key));
+        const excess = sorted.length - MAX_LOG_ENTRIES;
+        for (let i = 0; i < excess; i += 1) {
+          await store.deletePluginData(
+            ctx.sessionId,
+            ctx.pluginId,
+            LOGS_NAMESPACE,
+            sorted[i].key,
+          );
+        }
+      }
+    } catch {
+      // Logging must never throw into plugin code — a store write failure
+      // should not crash the runtime. The loss surfaces later via
+      // observability on the store itself.
+    }
+  }
 
-	return {
-		async debug(message: string, meta?: Record<string, unknown>) {
-			await append("debug", message, meta);
-		},
-		async info(message: string, meta?: Record<string, unknown>) {
-			await append("info", message, meta);
-		},
-		async warn(message: string, meta?: Record<string, unknown>) {
-			await append("warn", message, meta);
-		},
-		async error(message: string, meta?: Record<string, unknown>) {
-			await append("error", message, meta);
-		},
-	};
+  return {
+    async debug(message: string, meta?: Record<string, unknown>) {
+      await append("debug", message, meta);
+    },
+    async info(message: string, meta?: Record<string, unknown>) {
+      await append("info", message, meta);
+    },
+    async warn(message: string, meta?: Record<string, unknown>) {
+      await append("warn", message, meta);
+    },
+    async error(message: string, meta?: Record<string, unknown>) {
+      await append("error", message, meta);
+    },
+  };
 }
 
 /**
@@ -171,29 +171,29 @@ export function createPluginLogger(
  * deterministic player upsert). The runtime decides which to inject.
  */
 export function createFunctionStoreView(
-	store: DataStore,
-	ctx: HandlerHelperContext,
+  store: DataStore,
+  ctx: HandlerHelperContext,
 ): FunctionStoreView {
-	return {
-		getPluginData(namespace, key) {
-			return store.getPluginData(ctx.sessionId, ctx.pluginId, namespace, key);
-		},
-		listPluginData(namespace) {
-			return store.listPluginData(ctx.sessionId, ctx.pluginId, namespace);
-		},
-		getSession() {
-			return store.getSession(ctx.sessionId);
-		},
-		listTurnMessages(limit) {
-			// DataStore.listTurnMessages takes a PaginationOpts ({ limit, offset }).
-			// We expose just `limit` to plugin authors — offset is a paging
-			// concern that plugins rarely need from inside a runtime handler.
-			return store.listTurnMessages(
-				ctx.sessionId,
-				typeof limit === "number" ? { limit } : undefined,
-			);
-		},
-	};
+  return {
+    getPluginData(namespace, key) {
+      return store.getPluginData(ctx.sessionId, ctx.pluginId, namespace, key);
+    },
+    listPluginData(namespace) {
+      return store.listPluginData(ctx.sessionId, ctx.pluginId, namespace);
+    },
+    getSession() {
+      return store.getSession(ctx.sessionId);
+    },
+    listTurnMessages(limit) {
+      // DataStore.listTurnMessages takes a PaginationOpts ({ limit, offset }).
+      // We expose just `limit` to plugin authors — offset is a paging
+      // concern that plugins rarely need from inside a runtime handler.
+      return store.listTurnMessages(
+        ctx.sessionId,
+        typeof limit === "number" ? { limit } : undefined,
+      );
+    },
+  };
 }
 
 /**
@@ -203,40 +203,40 @@ export function createFunctionStoreView(
  * different session or plugin namespace by supplying alternate ids.
  */
 export function createRpcHandlerStoreView(
-	store: DataStore,
-	ctx: Pick<HandlerHelperContext, "sessionId" | "pluginId">,
+  store: DataStore,
+  ctx: Pick<HandlerHelperContext, "sessionId" | "pluginId">,
 ): RpcHandlerStore {
-	return {
-		getSession() {
-			return store.getSession(ctx.sessionId);
-		},
-		listTurnMessages(_sessionId: string) {
-			return store.listTurnMessages(ctx.sessionId);
-		},
-		savePlayerInput(input) {
-			return store.savePlayerInput({
-				...input,
-				sessionId: ctx.sessionId,
-			});
-		},
-		async setPluginData(record) {
-			const now = new Date().toISOString();
-			await store.setPluginData({
-				id: `${ctx.sessionId}:${ctx.pluginId}:${record.namespace}:${record.key}`,
-				sessionId: ctx.sessionId,
-				pluginId: ctx.pluginId,
-				namespace: record.namespace,
-				key: record.key,
-				value: record.value,
-				createdAt: record.createdAt ?? now,
-				updatedAt: record.updatedAt ?? now,
-			});
-		},
-		getPluginData(_sessionId, _pluginId, namespace, key) {
-			return store.getPluginData(ctx.sessionId, ctx.pluginId, namespace, key);
-		},
-		async listPluginData(_sessionId, _pluginId, namespace) {
-			return store.listPluginData(ctx.sessionId, ctx.pluginId, namespace);
-		},
-	};
+  return {
+    getSession() {
+      return store.getSession(ctx.sessionId);
+    },
+    listTurnMessages(_sessionId: string) {
+      return store.listTurnMessages(ctx.sessionId);
+    },
+    savePlayerInput(input) {
+      return store.savePlayerInput({
+        ...input,
+        sessionId: ctx.sessionId,
+      });
+    },
+    async setPluginData(record) {
+      const now = new Date().toISOString();
+      await store.setPluginData({
+        id: `${ctx.sessionId}:${ctx.pluginId}:${record.namespace}:${record.key}`,
+        sessionId: ctx.sessionId,
+        pluginId: ctx.pluginId,
+        namespace: record.namespace,
+        key: record.key,
+        value: record.value,
+        createdAt: record.createdAt ?? now,
+        updatedAt: record.updatedAt ?? now,
+      });
+    },
+    getPluginData(_sessionId, _pluginId, namespace, key) {
+      return store.getPluginData(ctx.sessionId, ctx.pluginId, namespace, key);
+    },
+    async listPluginData(_sessionId, _pluginId, namespace) {
+      return store.listPluginData(ctx.sessionId, ctx.pluginId, namespace);
+    },
+  };
 }

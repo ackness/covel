@@ -5,7 +5,7 @@ import { createIdbStore } from "../src/indexeddb/idb-store.js";
 let dbCounter = 0;
 
 runStoreContractTests("IdbStore", async () => {
-	// Each test gets a unique DB name to avoid state leakage
-	dbCounter++;
-	return createIdbStore(`test-db-${dbCounter}`);
+  // Each test gets a unique DB name to avoid state leakage
+  dbCounter++;
+  return createIdbStore(`test-db-${dbCounter}`);
 });

@@ -3,6 +3,7 @@
 **Status**: ✅ done · **Landed**: 2026-04-21 · **Est**: 5–7 h(实际 ~6 h) · **Risk**: medium(已覆盖) · **Depends on**: F1 + F2(已完成)
 
 > 本文档已更新为 as-shipped 状态。
+>
 > - §1 保留为修复前状态描述(历史背景)。
 > - §2 起反映实际 landed 代码;§8 列出与最初计划的具体差异。
 
@@ -37,7 +38,7 @@ ui.render | asset.generate | lorebook.upsert
 ```ts
 // 当前实现(简化)
 export const pluginDataSetTool: BuiltinTool = {
-  name: 'plugin-data-set',
+  name: "plugin-data-set",
   execute: async ({ pluginId, namespace, key, value }, { store }) => {
     await store.setPluginData({ sessionId, pluginId, namespace, key, value });
     //    ^^^^^^^^^^^^^^^^^^^^^ 绕开 commit pipeline
@@ -54,8 +55,8 @@ export const pluginDataSetTool: BuiltinTool = {
 // 每个 entry 直接 setPluginData
 await context.store.setPluginData({
   sessionId: context.sessionId,
-  pluginId: 'codex',
-  namespace: 'entries',
+  pluginId: "codex",
+  namespace: "entries",
   key: shortId,
   value: entry,
 });
@@ -67,13 +68,13 @@ await context.store.setPluginData({
 
 ### 1.3 这双轨制造成的实际问题
 
-| 能力 | proposal 路径 | direct-store 路径 |
-|------|--------------|-------------------|
-| `PreStateCommit` hook 拦截 | ✅ | ❌ |
-| `PostStateCommit` hook 观察 | ✅ | ❌ |
-| `COVEL_COMMIT_TXN_V1` 事务原子性 | ✅ | ❌ |
-| Trace event(`proposal.committed`) | ✅ | ❌(只有 `plugin-data.changed` 事件 emit) |
-| 未来的审批/配额 | 统一加 | 要二次实现 |
+| 能力                              | proposal 路径 | direct-store 路径                        |
+| --------------------------------- | ------------- | ---------------------------------------- |
+| `PreStateCommit` hook 拦截        | ✅            | ❌                                       |
+| `PostStateCommit` hook 观察       | ✅            | ❌                                       |
+| `COVEL_COMMIT_TXN_V1` 事务原子性  | ✅            | ❌                                       |
+| Trace event(`proposal.committed`) | ✅            | ❌(只有 `plugin-data.changed` 事件 emit) |
+| 未来的审批/配额                   | 统一加        | 要二次实现                               |
 
 具体例子:
 
@@ -99,18 +100,18 @@ await context.store.setPluginData({
 
 ```ts
 export type ProposalType =
-  | 'narrative.append'
-  | 'narrative.template'
-  | 'state.patch'
-  | 'event.emit'
-  | 'record.upsert'
-  | 'interaction.request'
-  | 'ui.render'
-  | 'asset.generate'
-  | 'plugin.data'        // ← 新增
-  | 'plugin.data.batch'  // ← 新增
-  | 'working_memory.set'
-  | 'lorebook.upsert';
+  | "narrative.append"
+  | "narrative.template"
+  | "state.patch"
+  | "event.emit"
+  | "record.upsert"
+  | "interaction.request"
+  | "ui.render"
+  | "asset.generate"
+  | "plugin.data" // ← 新增
+  | "plugin.data.batch" // ← 新增
+  | "working_memory.set"
+  | "lorebook.upsert";
 
 export interface PluginDataPayload {
   readonly namespace: string;
@@ -152,21 +153,21 @@ export interface PluginDataBatchPayload {
 [`packages/tools/src/result.ts`](../../../packages/tools/src/result.ts)
 
 ```ts
-const TOOL_PENDING_PROPOSALS = Symbol.for('covel.tools.pendingProposals');
-const TOOL_EXECUTION_ENVELOPE = Symbol.for('covel.tools.executionEnvelope');
+const TOOL_PENDING_PROPOSALS = Symbol.for("covel.tools.pendingProposals");
+const TOOL_EXECUTION_ENVELOPE = Symbol.for("covel.tools.executionEnvelope");
 
 export function withPendingProposals<T extends object>(
   content: T,
   pendingProposals: readonly Proposal[],
-): T;  // 返回 content 本身,Symbol 属性非枚举
+): T; // 返回 content 本身,Symbol 属性非枚举
 ```
 
 tool 作者的使用方式(所有已迁移 tool 统一):
 
 ```ts
 return withPendingProposals(
-  { success: true, namespace, key },       // 给 LLM 看的内容,不变
-  [ makePluginDataProposal(context, { namespace, key, value }, now) ],
+  { success: true, namespace, key }, // 给 LLM 看的内容,不变
+  [makePluginDataProposal(context, { namespace, key, value }, now)],
 );
 ```
 
@@ -185,9 +186,9 @@ return withPendingProposals(
 export interface ToolCallResult {
   readonly toolCallId: string;
   readonly name: string;
-  readonly result: string;              // JSON for LLM
-  readonly parsedResult: unknown;       // via getToolContent(rawResult)
-  readonly pendingProposals?: readonly Proposal[];  // via getPendingProposals(rawResult)
+  readonly result: string; // JSON for LLM
+  readonly parsedResult: unknown; // via getToolContent(rawResult)
+  readonly pendingProposals?: readonly Proposal[]; // via getPendingProposals(rawResult)
   readonly success: boolean;
   readonly approvalStatus?: ApprovalStatus;
 }
@@ -234,12 +235,12 @@ export interface ToolCallResult {
 
 ## 4. 测试覆盖
 
-| 测试文件 | 覆盖点 |
-|---|---|
-| [`packages/runtime/tests/session-kernel.test.ts`](../../../packages/runtime/tests/session-kernel.test.ts) | `plugin.data` / `plugin.data.batch` 经 commit pipeline 落盘(store round-trip,断言 `setPluginData` / `setPluginDataBatch` 被调) |
-| [`packages/runtime/tests/hook-wire-session-kernel.test.ts`](../../../packages/runtime/tests/hook-wire-session-kernel.test.ts) | `PreStateCommit` 能 abort `plugin.data`,store 未写入("blocks plugin.data proposals before they reach the store") |
-| [`packages/tools/tests/plugin-data-tools.test.ts`](../../../packages/tools/tests/plugin-data-tools.test.ts) | 内置 tool 返回 `pendingProposals`,**不**再直接调 store;读路径 `plugin-data-get` / `-list` 仍走 store |
-| 各插件 `tests/*.test.js` | 各插件的单测通过一个 `applyPendingPluginData(result, store)` helper 把产出的 proposal 回放到 mock store,验证端到端语义 |
+| 测试文件                                                                                                                      | 覆盖点                                                                                                                         |
+| ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| [`packages/runtime/tests/session-kernel.test.ts`](../../../packages/runtime/tests/session-kernel.test.ts)                     | `plugin.data` / `plugin.data.batch` 经 commit pipeline 落盘(store round-trip,断言 `setPluginData` / `setPluginDataBatch` 被调) |
+| [`packages/runtime/tests/hook-wire-session-kernel.test.ts`](../../../packages/runtime/tests/hook-wire-session-kernel.test.ts) | `PreStateCommit` 能 abort `plugin.data`,store 未写入("blocks plugin.data proposals before they reach the store")               |
+| [`packages/tools/tests/plugin-data-tools.test.ts`](../../../packages/tools/tests/plugin-data-tools.test.ts)                   | 内置 tool 返回 `pendingProposals`,**不**再直接调 store;读路径 `plugin-data-get` / `-list` 仍走 store                           |
+| 各插件 `tests/*.test.js`                                                                                                      | 各插件的单测通过一个 `applyPendingPluginData(result, store)` helper 把产出的 proposal 回放到 mock store,验证端到端语义         |
 
 **未补**:`apps/server/tests/api/hook-pipeline-integration.test.ts` 原计划的 HTTP 端到端 `plugin.data` 拦截场景尚未覆盖。优先级低,留待出现集成 bug 时补。
 
@@ -247,14 +248,14 @@ export interface ToolCallResult {
 
 ## 5. 风险复盘
 
-| 风险 | 缓解情况 |
-|------|---------|
-| ~8 个 core 插件 local tool 可能漏 | grep 闭环 + 每个插件自测套 `applyPendingPluginData` 做 round-trip,无漏 |
-| `pendingProposals` 协议破坏下游 ToolAdapter | 改用**非枚举 Symbol carrier**,content 本身不变,旧 adapter `JSON.stringify` 不会泄漏 Symbol,**零破坏** |
-| 事务原子性:PG 下多个 plugin-data 写进同一个 txn | 由 `COVEL_COMMIT_TXN_V1` + `setPluginDataBatch` 本身的实现兜底,rollback 粒度即整个 commit |
-| 性能:多一层 proposal 间接 | 实测可忽略;batch 路径单 proposal 内部展开,hook 只被调 1 次 |
-| 第三方 `store.setPluginData` 调用 | 底层 API 未移除,仅官方推荐路径切走;未出弃用通告 |
-| **新出现**:guard 绕过治理 | 有意保留(见 §3.7);经 `wrapStoreWithPluginDataEvents` 仍能观测到,未来如需可治理,另开 ticket |
+| 风险                                            | 缓解情况                                                                                              |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| ~8 个 core 插件 local tool 可能漏               | grep 闭环 + 每个插件自测套 `applyPendingPluginData` 做 round-trip,无漏                                |
+| `pendingProposals` 协议破坏下游 ToolAdapter     | 改用**非枚举 Symbol carrier**,content 本身不变,旧 adapter `JSON.stringify` 不会泄漏 Symbol,**零破坏** |
+| 事务原子性:PG 下多个 plugin-data 写进同一个 txn | 由 `COVEL_COMMIT_TXN_V1` + `setPluginDataBatch` 本身的实现兜底,rollback 粒度即整个 commit             |
+| 性能:多一层 proposal 间接                       | 实测可忽略;batch 路径单 proposal 内部展开,hook 只被调 1 次                                            |
+| 第三方 `store.setPluginData` 调用               | 底层 API 未移除,仅官方推荐路径切走;未出弃用通告                                                       |
+| **新出现**:guard 绕过治理                       | 有意保留(见 §3.7);经 `wrapStoreWithPluginDataEvents` 仍能观测到,未来如需可治理,另开 ticket            |
 
 ---
 
@@ -287,15 +288,15 @@ export interface ToolCallResult {
 
 ## 8. 与最初计划的差异
 
-| 维度 | 最初计划(F3 pending 版) | 实际 landed |
-|---|---|---|
-| Proposal 命名 | `plugin-data.set` / `plugin-data.set-batch` | `plugin.data` / `plugin.data.batch` |
-| Payload 字段 | 含 `pluginId` + `expiresAt` | 仅 `namespace` / `key` / `value`;`pluginId` 从 `source` 取,无 `expiresAt` |
-| Batch payload 字段名 | `records` | `items` |
-| Tool 协议 | 扩展显式 `ToolResult { content, pendingProposals }` | 非枚举 Symbol carrier + `withPendingProposals()` helper(零侵入) |
-| SSE 事件路径 | 未涉及 | 新增 `wrapStoreWithPluginDataEvents` Proxy 让 SSE 与 commit chain 解耦 |
-| 弃用通告 | 计划文档提示 6 个月弃用窗口 | 未写弃用通告 —— `store.setPluginData` 继续作为合法底层 API,无需弃用 |
-| HTTP 集成测试 | 计划含 `hook-pipeline-integration.test.ts` 拦截 case | 未补(低优先级) |
+| 维度                 | 最初计划(F3 pending 版)                              | 实际 landed                                                               |
+| -------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------- |
+| Proposal 命名        | `plugin-data.set` / `plugin-data.set-batch`          | `plugin.data` / `plugin.data.batch`                                       |
+| Payload 字段         | 含 `pluginId` + `expiresAt`                          | 仅 `namespace` / `key` / `value`;`pluginId` 从 `source` 取,无 `expiresAt` |
+| Batch payload 字段名 | `records`                                            | `items`                                                                   |
+| Tool 协议            | 扩展显式 `ToolResult { content, pendingProposals }`  | 非枚举 Symbol carrier + `withPendingProposals()` helper(零侵入)           |
+| SSE 事件路径         | 未涉及                                               | 新增 `wrapStoreWithPluginDataEvents` Proxy 让 SSE 与 commit chain 解耦    |
+| 弃用通告             | 计划文档提示 6 个月弃用窗口                          | 未写弃用通告 —— `store.setPluginData` 继续作为合法底层 API,无需弃用       |
+| HTTP 集成测试        | 计划含 `hook-pipeline-integration.test.ts` 拦截 case | 未补(低优先级)                                                            |
 
 ---
 

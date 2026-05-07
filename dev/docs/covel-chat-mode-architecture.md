@@ -182,17 +182,17 @@ Living World Rules and Persona should complete the existing `SessionContextSnaps
 
 ## Covel-Native Mapping
 
-| SillyTavern-style capability | Covel implementation | Existing code to reuse |
-|---|---|---|
-| Character card | Character Blueprint stored in plugin data, instantiated as `Character` plus `fields` | `CharacterAttributeSchema`, `create-character`, `character.upsert`, `mirrorPluginId` |
-| Persona | Player Identity as player `Character`, plus `PersonaProfile` in session context | `characters`, `working_memory.set`, `SessionContextSnapshot.activePersona` |
-| World Info | Living World Rules as lorebook entries and context contributions | `lorebook.upsert`, `LorebookEntryRecord.extra`, Prompt V2 Seg 4/6/8 |
-| Prompt preset | Playstyle Pack through active plugins, `userSettings`, `runtimeModelOverrides`, prompt V2 | `RuntimeManifest.userSettings`, session `runtimeModelOverrides` |
-| Quick Replies | Scene Prompts through `guide`-style `ui.message` and `plugin_data.message` | `plugins/guide`, `PluginMessageBlock`, `draftMessage`, `setComposerText` |
-| Group chat | Scene Cast runtime selects active speakers before narrator | priority 450 function runtime, `input.inject`, `npc-graph` |
-| Swipe/regenerate | Branch Reply candidate set stored in plugin data, rendered in message UI | plugin RPC, manual trigger, `plugin.data`, message metadata |
-| STscript-style automation | Scene Automation as event-triggered runtimes and RPC actions | `trigger: event`, event-chain loop, hooks, approval |
-| Avatar/sprites/TTS/images | Character Presence as `MediaRef` assets bound to character/blueprint state | `MediaStore`, `asset.generate`, `Media`, `AudioPlayer`, `AssetRender` |
+| SillyTavern-style capability | Covel implementation                                                                      | Existing code to reuse                                                               |
+| ---------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Character card               | Character Blueprint stored in plugin data, instantiated as `Character` plus `fields`      | `CharacterAttributeSchema`, `create-character`, `character.upsert`, `mirrorPluginId` |
+| Persona                      | Player Identity as player `Character`, plus `PersonaProfile` in session context           | `characters`, `working_memory.set`, `SessionContextSnapshot.activePersona`           |
+| World Info                   | Living World Rules as lorebook entries and context contributions                          | `lorebook.upsert`, `LorebookEntryRecord.extra`, Prompt V2 Seg 4/6/8                  |
+| Prompt preset                | Playstyle Pack through active plugins, `userSettings`, `runtimeModelOverrides`, prompt V2 | `RuntimeManifest.userSettings`, session `runtimeModelOverrides`                      |
+| Quick Replies                | Scene Prompts through `guide`-style `ui.message` and `plugin_data.message`                | `plugins/guide`, `PluginMessageBlock`, `draftMessage`, `setComposerText`             |
+| Group chat                   | Scene Cast runtime selects active speakers before narrator                                | priority 450 function runtime, `input.inject`, `npc-graph`                           |
+| Swipe/regenerate             | Branch Reply candidate set stored in plugin data, rendered in message UI                  | plugin RPC, manual trigger, `plugin.data`, message metadata                          |
+| STscript-style automation    | Scene Automation as event-triggered runtimes and RPC actions                              | `trigger: event`, event-chain loop, hooks, approval                                  |
+| Avatar/sprites/TTS/images    | Character Presence as `MediaRef` assets bound to character/blueprint state                | `MediaStore`, `asset.generate`, `Media`, `AudioPlayer`, `AssetRender`                |
 
 ## Data Model Plan
 
@@ -217,7 +217,7 @@ export interface CharacterBlueprint {
   readonly id: string;
   readonly name: string;
   readonly source?: {
-    readonly kind: 'manual' | 'sillytavern-card' | 'world-pack';
+    readonly kind: "manual" | "sillytavern-card" | "world-pack";
     readonly importedAt?: string;
     readonly rawHash?: string;
   };
@@ -235,8 +235,8 @@ export interface CharacterBlueprint {
   };
   readonly rules?: readonly string[];
   readonly media?: {
-    readonly avatar?: import('./media.js').MediaRef;
-    readonly sprites?: Readonly<Record<string, import('./media.js').MediaRef>>;
+    readonly avatar?: import("./media.js").MediaRef;
+    readonly sprites?: Readonly<Record<string, import("./media.js").MediaRef>>;
   };
   readonly extra?: unknown;
 }
@@ -298,13 +298,18 @@ Suggested `extra` shape:
 
 ```ts
 interface LivingWorldRuleExtra {
-  readonly kind: 'constant' | 'triggered' | 'evolving';
-  readonly category?: 'character' | 'scene' | 'relationship' | 'world' | 'style';
+  readonly kind: "constant" | "triggered" | "evolving";
+  readonly category?:
+    | "character"
+    | "scene"
+    | "relationship"
+    | "world"
+    | "style";
   readonly coordinate?: {
-    readonly position: 'before_plugin' | 'after_plugin' | 'at_depth';
+    readonly position: "before_plugin" | "after_plugin" | "at_depth";
     readonly depth?: number;
   };
-  readonly budgetClass?: 'sticky' | 'flexible' | 'droppable';
+  readonly budgetClass?: "sticky" | "flexible" | "droppable";
   readonly owner?: {
     readonly pluginId?: string;
     readonly characterId?: string;
@@ -341,7 +346,7 @@ interface ReplyCandidate {
   readonly runtimeId: string;
   readonly content: string;
   readonly createdAt: string;
-  readonly source: 'original' | 'regenerate';
+  readonly source: "original" | "regenerate";
   readonly traceId?: string;
 }
 ```
@@ -710,8 +715,8 @@ Client passes plugins explicitly on session creation:
   "character-presence",
   "player-identity",
   "living-world-rules",
-  "branch-reply"
-]
+  "branch-reply",
+];
 ```
 
 Required bundled core plugins still come from `requiredCorePluginIds()`.

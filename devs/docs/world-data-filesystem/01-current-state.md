@@ -87,13 +87,13 @@ createSession
 
 v1 不新增核心存储目标，只投影到现有结构。
 
-| 目标 | 现有结构 |
-|---|---|
+| 目标           | 现有结构               |
+| -------------- | ---------------------- |
 | world metadata | `WorldRecord.metadata` |
-| plugin data | `PluginDataRecord` |
-| lorebook | `LorebookEntryRecord` |
-| characters | `CharacterRecord` |
-| media | `MediaStore` |
+| plugin data    | `PluginDataRecord`     |
+| lorebook       | `LorebookEntryRecord`  |
+| characters     | `CharacterRecord`      |
+| media          | `MediaStore`           |
 
 ## 现有 world-init 模式
 

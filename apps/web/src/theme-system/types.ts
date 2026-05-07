@@ -4,28 +4,28 @@ export type ThemeScheme = "light" | "dark";
 export type ThemeSource = "builtin" | "custom";
 
 export interface ThemeManifest {
-	id: string;
-	label: I18nText;
-	source: ThemeSource;
-	schemes: readonly ThemeScheme[];
-	description?: I18nText;
+  id: string;
+  label: I18nText;
+  source: ThemeSource;
+  schemes: readonly ThemeScheme[];
+  description?: I18nText;
 }
 
 export interface ThemeDefinition extends ThemeManifest {
-	cssText: string;
+  cssText: string;
 }
 
 export interface StoredCustomTheme {
-	id: string;
-	label: I18nText;
-	cssText: string;
-	schemes: readonly ThemeScheme[];
-	description?: I18nText;
-	importedAt: string;
-	fileName?: string;
+  id: string;
+  label: I18nText;
+  cssText: string;
+  schemes: readonly ThemeScheme[];
+  description?: I18nText;
+  importedAt: string;
+  fileName?: string;
 }
 
 export interface ImportedThemePayload {
-	theme: ThemeDefinition;
-	fileName: string;
+  theme: ThemeDefinition;
+  fileName: string;
 }

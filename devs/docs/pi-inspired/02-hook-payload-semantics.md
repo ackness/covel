@@ -27,17 +27,17 @@
 已经具备：
 
 ```ts
-export type HookSemantic = 'first' | 'sequential' | 'parallel' | 'stream';
+export type HookSemantic = "first" | "sequential" | "parallel" | "stream";
 
 export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
-  TurnStart: 'parallel',
-  PreRuntime: 'sequential',
-  PostRuntime: 'parallel',
-  PreToolUse: 'sequential',
-  PostToolUse: 'parallel',
-  PreStateCommit: 'sequential',
-  PostStateCommit: 'parallel',
-  TurnStop: 'parallel',
+  TurnStart: "parallel",
+  PreRuntime: "sequential",
+  PostRuntime: "parallel",
+  PreToolUse: "sequential",
+  PostToolUse: "parallel",
+  PreStateCommit: "sequential",
+  PostStateCommit: "parallel",
+  TurnStop: "parallel",
 };
 ```
 
@@ -45,9 +45,9 @@ export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
 
 ```ts
 type HookResult<P> =
-  | { action: 'continue' }
-  | { action: 'continue'; replace: Partial<P> }
-  | { action: 'abort'; reason: string };
+  | { action: "continue" }
+  | { action: "continue"; replace: Partial<P> }
+  | { action: "abort"; reason: string };
 ```
 
 所以本提案的目标不是“新增 HookPipeline”，而是**把 payload patch、validation、parallel 返回值、trace diff、PostToolUse 是否可 patch 等语义钉死**，避免插件作者误解。
@@ -81,21 +81,23 @@ type HookResult<P> =
 `hook.rewrote` 记录：
 
 ```ts
-diff: { before, after }
+diff: {
+  (before, after);
+}
 ```
 
 这比 pi 的 in-place mutation 更适合服务器端审计。
 
 ### 1.3 当前未钉死的问题
 
-| 问题 | 当前风险 |
-|---|---|
-| `replace` 是 shallow merge，嵌套对象如何处理未文档化 | 插件作者可能以为是 deep merge |
-| `PreToolUse` patch 后是否重新做 tool schema validation 未明确 | patch 可能产生 invalid tool input |
-| `PreToolUse` 是否允许改 `toolName` 未明确 | 可能破坏 tool access / approval 语义 |
-| `PostToolUse` 当前是 `parallel`，handler 返回 `replace` 是否会被使用不直观 | 插件作者可能以为能改 tool result |
-| `PostRuntime` / `PostStateCommit` 是 parallel，返回值语义不明显 | parallel hooks 目前基本只能 observe |
-| `stream` semantic 类型存在，但当前按 sequential fallback | 容易造成“已有 stream transform”的误解 |
+| 问题                                                                       | 当前风险                              |
+| -------------------------------------------------------------------------- | ------------------------------------- |
+| `replace` 是 shallow merge，嵌套对象如何处理未文档化                       | 插件作者可能以为是 deep merge         |
+| `PreToolUse` patch 后是否重新做 tool schema validation 未明确              | patch 可能产生 invalid tool input     |
+| `PreToolUse` 是否允许改 `toolName` 未明确                                  | 可能破坏 tool access / approval 语义  |
+| `PostToolUse` 当前是 `parallel`，handler 返回 `replace` 是否会被使用不直观 | 插件作者可能以为能改 tool result      |
+| `PostRuntime` / `PostStateCommit` 是 parallel，返回值语义不明显            | parallel hooks 目前基本只能 observe   |
+| `stream` semantic 类型存在，但当前按 sequential fallback                   | 容易造成“已有 stream transform”的误解 |
 
 ---
 
@@ -125,16 +127,16 @@ diff: { before, after }
 
 推荐语义表：
 
-| Hook | 当前 semantic | 建议语义 | 是否允许 replace | 备注 |
-|---|---|---|---|---|
-| `TurnStart` | parallel | observe-only | 否 | 初始化审计、trace、metrics |
-| `PreRuntime` | sequential | patch chain | 是 | 可改 runtime payload，例如 prompt adjunct / config view；需文档化字段 |
-| `PostRuntime` | parallel | observe-only | 否 | 不应用 replace；runtime output rewrite 应走专门 proposal/hook |
-| `PreToolUse` | sequential | patch chain + abort | 是 | 只能改 tool input，不能改 toolName/tool identity |
-| `PostToolUse` | parallel | P1 可升级为 sequential patch chain | 暂否 / 待升级 | pi 的 `tool_result` patch 最适合映射到这里 |
-| `PreStateCommit` | sequential | proposal patch chain + abort | 是 | commit 前 guard/rewrite 主入口 |
-| `PostStateCommit` | parallel | observe-only | 否 | commit 后 audit / side-effect signal |
-| `TurnStop` | parallel | observe-only | 否 | 清理、metrics |
+| Hook              | 当前 semantic | 建议语义                           | 是否允许 replace | 备注                                                                  |
+| ----------------- | ------------- | ---------------------------------- | ---------------- | --------------------------------------------------------------------- |
+| `TurnStart`       | parallel      | observe-only                       | 否               | 初始化审计、trace、metrics                                            |
+| `PreRuntime`      | sequential    | patch chain                        | 是               | 可改 runtime payload，例如 prompt adjunct / config view；需文档化字段 |
+| `PostRuntime`     | parallel      | observe-only                       | 否               | 不应用 replace；runtime output rewrite 应走专门 proposal/hook         |
+| `PreToolUse`      | sequential    | patch chain + abort                | 是               | 只能改 tool input，不能改 toolName/tool identity                      |
+| `PostToolUse`     | parallel      | P1 可升级为 sequential patch chain | 暂否 / 待升级    | pi 的 `tool_result` patch 最适合映射到这里                            |
+| `PreStateCommit`  | sequential    | proposal patch chain + abort       | 是               | commit 前 guard/rewrite 主入口                                        |
+| `PostStateCommit` | parallel      | observe-only                       | 否               | commit 后 audit / side-effect signal                                  |
+| `TurnStop`        | parallel      | observe-only                       | 否               | 清理、metrics                                                         |
 
 ---
 
@@ -167,7 +169,11 @@ currentPayload = { ...currentPayload, ...result.replace };
 如果某个 event 需要结构化 deep patch，单独为 payload 字段设计，例如：
 
 ```ts
-{ replace: { proposal: nextProposal } }
+{
+  replace: {
+    proposal: nextProposal;
+  }
+}
 ```
 
 而不是让 hook pipeline 全局 deep merge。
@@ -189,7 +195,10 @@ currentPayload = { ...currentPayload, ...result.replace };
 推荐 fail-fast：
 
 ```ts
-return { action: 'abort', reason: 'PreToolUse cannot replace toolName/toolCallId' }
+return {
+  action: "abort",
+  reason: "PreToolUse cannot replace toolName/toolCallId",
+};
 ```
 
 理由：工具 identity 影响 tool access、approval、local tool scope，不能被 hook 绕过。
@@ -231,19 +240,19 @@ P1-a：文档明确当前 `PostToolUse` observe-only，replace 不应用。
 P1-b：如确有需求，把 `PostToolUse` 改成 sequential：
 
 ```ts
-PostToolUse: 'sequential'
+PostToolUse: "sequential";
 ```
 
 并定义 patchable 字段：
 
 ```ts
-content/result/details/isError
+content / result / details / isError;
 ```
 
 不允许 patch identity：
 
 ```ts
-toolName/toolCallId/pluginId/runtimeId
+toolName / toolCallId / pluginId / runtimeId;
 ```
 
 **兼容性**
@@ -257,7 +266,7 @@ parallel → sequential 会改变 handler 执行时序。如果已有插件只�
 `runParallel()` 当前忽略 fulfilled results，只记录 rejected errors，最终：
 
 ```ts
-return { action: 'continue' };
+return { action: "continue" };
 ```
 
 这应该正式化。
@@ -300,11 +309,11 @@ return { action: 'continue' };
 
 ## § 7 风险 / Tradeoffs
 
-| 风险 | 缓解 |
-|---|---|
-| PostToolUse parallel 改 sequential 改变时序 | 先 P1-a 文档化 observe-only；P1-c 单独评审 |
-| 重新 validation 增加少量成本 | tool schema 校验成本远低于 LLM/tool call，值得 |
-| 禁止 patch toolName 限制灵活性 | 工具替换应通过 registry/activation/approval，不应由 hook 偷换 |
+| 风险                                        | 缓解                                                          |
+| ------------------------------------------- | ------------------------------------------------------------- |
+| PostToolUse parallel 改 sequential 改变时序 | 先 P1-a 文档化 observe-only；P1-c 单独评审                    |
+| 重新 validation 增加少量成本                | tool schema 校验成本远低于 LLM/tool call，值得                |
+| 禁止 patch toolName 限制灵活性              | 工具替换应通过 registry/activation/approval，不应由 hook 偷换 |
 
 ---
 

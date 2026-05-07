@@ -18,25 +18,25 @@ const projectRoot = path.resolve(desktopRoot, "../..");
 // Build main process + preload
 console.log("[dev] Building main process and preload...");
 await build({
-	entryPoints: [path.join(desktopRoot, "src/main.ts")],
-	bundle: true,
-	outfile: path.join(desktopRoot, "dist/main.mjs"),
-	format: "esm",
-	platform: "node",
-	target: "node22",
-	sourcemap: true,
-	external: ["electron", "electron-updater"],
+  entryPoints: [path.join(desktopRoot, "src/main.ts")],
+  bundle: true,
+  outfile: path.join(desktopRoot, "dist/main.mjs"),
+  format: "esm",
+  platform: "node",
+  target: "node22",
+  sourcemap: true,
+  external: ["electron", "electron-updater"],
 });
 
 await build({
-	entryPoints: [path.join(desktopRoot, "src/preload.ts")],
-	bundle: true,
-	outfile: path.join(desktopRoot, "dist/preload.mjs"),
-	format: "cjs",
-	platform: "node",
-	target: "node22",
-	sourcemap: true,
-	external: ["electron"],
+  entryPoints: [path.join(desktopRoot, "src/preload.ts")],
+  bundle: true,
+  outfile: path.join(desktopRoot, "dist/preload.mjs"),
+  format: "cjs",
+  platform: "node",
+  target: "node22",
+  sourcemap: true,
+  external: ["electron"],
 });
 
 // Launch Electron
@@ -45,24 +45,24 @@ console.log("[dev] Make sure 'pnpm dev' is running (web:5173 + server:3001)");
 
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const electron = spawn(
-	pnpmCommand,
-	["exec", "electron", path.join(desktopRoot, "dist/main.mjs")],
-	{
-		cwd: desktopRoot,
-		stdio: "inherit",
-		env: {
-			...process.env,
-			ELECTRON_IS_DEV: "1",
-		},
-	},
+  pnpmCommand,
+  ["exec", "electron", path.join(desktopRoot, "dist/main.mjs")],
+  {
+    cwd: desktopRoot,
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      ELECTRON_IS_DEV: "1",
+    },
+  },
 );
 
 electron.on("close", (code) => {
-	console.log(`[dev] Electron exited with code ${code}`);
-	process.exit(code ?? 0);
+  console.log(`[dev] Electron exited with code ${code}`);
+  process.exit(code ?? 0);
 });
 
 process.on("SIGINT", () => {
-	electron.kill();
-	process.exit(0);
+  electron.kill();
+  process.exit(0);
 });

@@ -86,7 +86,7 @@ Worker A 需要先产出这些共享接口，供 C/D/E 对齐：
 1. `worldManifestSchema` 增加：
 
 ```ts
-worldData: z.string().min(1).optional()
+worldData: z.string().min(1).optional();
 ```
 
 2. 新增 world data descriptor schema：

@@ -104,19 +104,19 @@ sources:
 
 ## Source 字段
 
-| 字段 | 必需 | 含义 |
-|---|---:|---|
-| `kind` | 是 | `yaml`、`json`、`markdown`、`text`、`media` |
-| `path` | 是 | 相对 descriptor root 的路径 |
-| `schema` | 否 | `covel://...`、`plugin://<pluginId>/<namespace>`、`schemas/*.schema.json` |
-| `to` | 是 | 投影目标 |
-| `key` | 否 | 写入 key；不同 kind 有不同简单语义 |
-| `indexTo` | 否 | media 索引写入目标，只允许 `plugin:<pluginId>/<namespace>` |
-| `effects` | 否 | 额外系统效果，例如 `characters` |
-| `enabled` | 否 | 默认 `true` |
-| `locale` | 否 | 限定 locale |
-| `merge` | 否 | 默认 `replace` |
-| `after` | 否 | 声明少量顺序依赖，字符串或字符串数组 |
+| 字段      | 必需 | 含义                                                                      |
+| --------- | ---: | ------------------------------------------------------------------------- |
+| `kind`    |   是 | `yaml`、`json`、`markdown`、`text`、`media`                               |
+| `path`    |   是 | 相对 descriptor root 的路径                                               |
+| `schema`  |   否 | `covel://...`、`plugin://<pluginId>/<namespace>`、`schemas/*.schema.json` |
+| `to`      |   是 | 投影目标                                                                  |
+| `key`     |   否 | 写入 key；不同 kind 有不同简单语义                                        |
+| `indexTo` |   否 | media 索引写入目标，只允许 `plugin:<pluginId>/<namespace>`                |
+| `effects` |   否 | 额外系统效果，例如 `characters`                                           |
+| `enabled` |   否 | 默认 `true`                                                               |
+| `locale`  |   否 | 限定 locale                                                               |
+| `merge`   |   否 | 默认 `replace`                                                            |
+| `after`   |   否 | 声明少量顺序依赖，字符串或字符串数组                                      |
 
 ### 执行顺序
 
@@ -213,11 +213,11 @@ path: schemas/custom.schema.json
 
 v1 不支持完整 JSONPath，只保留 kind-specific 的简单规则：
 
-| kind | `key` 语义 |
-|---|---|
-| `yaml` / `json` | `id` 或 `characterId` 表示从对象字段提取 key；数组源逐项提取 |
-| `markdown` / `text` | `key` 是 literal record key，例如 `opening-scene` |
-| `media` | `filename` 表示使用不含扩展名的文件名；文件 source 也可给 literal key |
+| kind                | `key` 语义                                                            |
+| ------------------- | --------------------------------------------------------------------- |
+| `yaml` / `json`     | `id` 或 `characterId` 表示从对象字段提取 key；数组源逐项提取          |
+| `markdown` / `text` | `key` 是 literal record key，例如 `opening-scene`                     |
+| `media`             | `filename` 表示使用不含扩展名的文件名；文件 source 也可给 literal key |
 
 需要复杂 key 时，先在源数据里显式写 `id`，或拆成多个 source。
 
@@ -225,10 +225,10 @@ v1 不支持完整 JSONPath，只保留 kind-specific 的简单规则：
 
 v1 只支持：
 
-| 值 | 行为 |
-|---|---|
-| `replace` | 后写覆盖前写，默认 |
-| `skipExisting` | 目标已有时跳过 |
+| 值             | 行为               |
+| -------------- | ------------------ |
+| `replace`      | 后写覆盖前写，默认 |
+| `skipExisting` | 目标已有时跳过     |
 
 `skipExisting` 的“已有”包括同一次 import 中更早的 planned write，也包括目标 session store 中已经存在的同 target/key 记录。后续 sync 时，provenance/conflict 检查优先于 `merge`：未由 importer 管理或已被玩家/插件修改的记录不会被 `replace` 自动覆盖，除非用户显式 `force`。
 
@@ -262,14 +262,14 @@ media 的实际 `MediaStore.put()` 和 session ref 授权发生在 session 创�
 
 为简洁起见，v1 使用单字符串 `to`：
 
-| 格式 | 含义 |
-|---|---|
-| `world:metadata.<path>` | 写入 `WorldRecord.metadata` 的路径 |
-| `plugin:<pluginId>/<namespace>` | 写入 plugin-data |
-| `plugin:<pluginId>/<namespace>+lorebook` | 写 plugin-data，并生成 lorebook 条目 |
-| `lorebook` | 写 session lorebook |
-| `characters` | 创建/更新 session character |
-| `media` | 导入/授权 MediaStore；仅在 `indexTo` 存在时写 media index |
+| 格式                                     | 含义                                                      |
+| ---------------------------------------- | --------------------------------------------------------- |
+| `world:metadata.<path>`                  | 写入 `WorldRecord.metadata` 的路径                        |
+| `plugin:<pluginId>/<namespace>`          | 写入 plugin-data                                          |
+| `plugin:<pluginId>/<namespace>+lorebook` | 写 plugin-data，并生成 lorebook 条目                      |
+| `lorebook`                               | 写 session lorebook                                       |
+| `characters`                             | 创建/更新 session character                               |
+| `media`                                  | 导入/授权 MediaStore；仅在 `indexTo` 存在时写 media index |
 
 v1 不提供任意 target URI 扩展点；新增 target 必须升级规范。
 
@@ -286,11 +286,11 @@ importer 只负责四件事：路径、解析、校验、投影。玩法插件�
 
 ## Schema URI
 
-| 格式 | 含义 |
-|---|---|
-| `covel://world/dimensions` | Covel 内置 schema |
+| 格式                              | 含义                        |
+| --------------------------------- | --------------------------- |
+| `covel://world/dimensions`        | Covel 内置 schema           |
 | `plugin://<pluginId>/<namespace>` | 插件声明的 namespace schema |
-| `schemas/*.schema.json` | world 包内 schema 文件 |
+| `schemas/*.schema.json`           | world 包内 schema 文件      |
 
 v1 不加载 remote schema。
 
@@ -313,14 +313,14 @@ dataSchemas:
 
 字段：
 
-| 字段 | 含义 |
-|---|---|
-| `schemaVersion` | dataSchemas 版本 |
-| `namespaces` | namespace 到 schema 的映射 |
-| `schema` | 相对 plugin root 的 JSON Schema 文件 |
-| `key` | 默认 key 字段 |
-| `acceptsWorldData` | 是否允许 world importer 写入 |
-| `ui` | 可选编辑器建议：`form`、`table`、`json`、`asset-picker` |
+| 字段               | 含义                                                    |
+| ------------------ | ------------------------------------------------------- |
+| `schemaVersion`    | dataSchemas 版本                                        |
+| `namespaces`       | namespace 到 schema 的映射                              |
+| `schema`           | 相对 plugin root 的 JSON Schema 文件                    |
+| `key`              | 默认 key 字段                                           |
+| `acceptsWorldData` | 是否允许 world importer 写入                            |
+| `ui`               | 可选编辑器建议：`form`、`table`、`json`、`asset-picker` |
 
 loader 必须把 `dataSchemas` 合并为 plugin-level registry；同一 namespace 冲突时报错。schema path 相对 plugin root，并必须做 realpath containment。
 

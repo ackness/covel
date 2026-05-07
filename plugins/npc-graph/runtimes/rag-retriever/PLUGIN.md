@@ -20,6 +20,7 @@ trigger:
 NPC 关系图检索器（function runtime）。
 
 每个游戏回合开始前自动运行：
+
 1. 读取本会话的 NPC 节点、边与邻接索引（`plugin_data[nodes/edges/index]`）
 2. 在 `playerMessage` 与最近几条 narrator 消息中字符串匹配节点名字（含别名）
 3. 对命中节点做 2-hop BFS，合并 `by-source` 与 `by-target` 索引

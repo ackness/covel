@@ -44,6 +44,7 @@ postHistory:
 你是行动引导 agent。你的任务是在叙事推进后，为玩家提供多风格的行动建议。
 
 ## 当前叙事结果
+
 <narrator-output>{{ inputs.narrator.narrator.narrativeOutput }}</narrator-output>
 
 ## 你的任务（严格两步）

@@ -32,7 +32,9 @@ export interface PluginDiscoveryResult {
  * 扫描插件目录，返回所有发现的插件。
  * 仅读取目录结构，不解析文件内容（极轻量）。
  */
-export function discoverPlugins(pluginsDir: string): Promise<PluginDiscoveryResult[]>;
+export function discoverPlugins(
+  pluginsDir: string,
+): Promise<PluginDiscoveryResult[]>;
 ```
 
 ### 2.2.2 发现逻辑
@@ -53,6 +55,7 @@ pluginsDir/
 ```
 
 规则：
+
 1. 每个子目录是一个插件候选
 2. 如果根目录有 `runtimes/` 子目录 → 多 Runtime 插件
 3. 如果根目录直接有 `PLUGIN.md` 且无 `runtimes/` → 单 Runtime 插件
@@ -79,7 +82,9 @@ export interface PluginSummary {
  * 快速加载插件摘要（仅读取 frontmatter 的 name/description）。
  * 不解析完整 manifest，不读取 Markdown body。
  */
-export function loadPluginSummary(discovery: PluginDiscoveryResult): Promise<PluginSummary>;
+export function loadPluginSummary(
+  discovery: PluginDiscoveryResult,
+): Promise<PluginSummary>;
 ```
 
 ### Level 1: Manifest 加载（插件激活时）
@@ -91,7 +96,9 @@ export function loadPluginSummary(discovery: PluginDiscoveryResult): Promise<Plu
  * 加载完整的插件 manifest（所有 frontmatter 字段）。
  * 不加载 Markdown body 和 references。
  */
-export function loadPluginManifest(discovery: PluginDiscoveryResult): Promise<PluginManifest>;
+export function loadPluginManifest(
+  discovery: PluginDiscoveryResult,
+): Promise<PluginManifest>;
 ```
 
 ### Level 2: 完整加载（Runtime 执行时）
@@ -104,7 +111,7 @@ export interface LoadedRuntime {
   promptTemplate: string;
   references: ParsedReference[];
   outputSchema?: Record<string, unknown>; // JSON Schema
-  toolModules: ToolModule[];              // 已加载的工具模块
+  toolModules: ToolModule[]; // 已加载的工具模块
 }
 
 /**
@@ -113,7 +120,7 @@ export interface LoadedRuntime {
  */
 export function loadRuntime(
   discovery: PluginDiscoveryResult,
-  runtimeName: string
+  runtimeName: string,
 ): Promise<LoadedRuntime>;
 ```
 
@@ -125,39 +132,39 @@ export function loadRuntime(
 export interface PluginRegistryEntry {
   id: string;
   summary: PluginSummary;
-  manifest?: PluginManifest;          // Level 1 后可用
+  manifest?: PluginManifest; // Level 1 后可用
   loadedRuntimes: Map<string, LoadedRuntime>; // Level 2 后逐步填充
-  status: 'discovered' | 'registered' | 'active' | 'disabled' | 'error';
+  status: "discovered" | "registered" | "active" | "disabled" | "error";
   error?: string;
 }
 
 export interface PluginRegistry {
   /** 注册插件 */
   register(entry: PluginRegistryEntry): void;
-  
+
   /** 获取所有已注册插件 */
   getAll(): ReadonlyMap<string, PluginRegistryEntry>;
-  
+
   /** 按 ID 获取 */
   get(id: string): PluginRegistryEntry | undefined;
-  
+
   /** 获取所有活跃的 Runtime（按 priority 排序） */
   getActiveRuntimes(sessionId: string): RuntimeManifest[];
-  
+
   /** 激活/去激活插件 */
   activate(pluginId: string, sessionId: string): void;
   deactivate(pluginId: string, sessionId: string): void;
-  
+
   /** 订阅注册表变更 */
   onChange(handler: (event: RegistryChangeEvent) => void): () => void;
 }
 
-export type RegistryChangeEvent = 
-  | { type: 'plugin-registered'; pluginId: string }
-  | { type: 'plugin-activated'; pluginId: string; sessionId: string }
-  | { type: 'plugin-deactivated'; pluginId: string; sessionId: string }
-  | { type: 'plugin-reloaded'; pluginId: string }
-  | { type: 'plugin-error'; pluginId: string; error: string };
+export type RegistryChangeEvent =
+  | { type: "plugin-registered"; pluginId: string }
+  | { type: "plugin-activated"; pluginId: string; sessionId: string }
+  | { type: "plugin-deactivated"; pluginId: string; sessionId: string }
+  | { type: "plugin-reloaded"; pluginId: string }
+  | { type: "plugin-error"; pluginId: string; error: string };
 ```
 
 ## 2.5 Session 级别的插件作用域
@@ -169,20 +176,23 @@ export interface SessionPluginScope {
   activePluginIds: Set<string>;
   /** 插件配置覆盖（玩家配置） */
   configOverrides: Map<string, Record<string, unknown>>;
-  
+
   /** 启用插件 */
   enable(pluginId: string): void;
   /** 禁用插件 */
   disable(pluginId: string): void;
   /** 获取 Runtime 的有效配置（默认值 + 覆盖） */
-  getEffectiveConfig(pluginId: string, runtimeId: string): Record<string, unknown>;
+  getEffectiveConfig(
+    pluginId: string,
+    runtimeId: string,
+  ): Record<string, unknown>;
 }
 ```
 
 ## 2.6 插件分类与信任级别
 
 ```typescript
-export type PluginSource = 'builtin' | 'official' | 'community';
+export type PluginSource = "builtin" | "official" | "community";
 
 export interface PluginTrustInfo {
   source: PluginSource;
@@ -192,12 +202,15 @@ export interface PluginTrustInfo {
   autoLoad: boolean;
 }
 
-/** 
+/**
  * 内置插件 → 自动加载，工具免审批
  * 官方插件 → 自动加载，工具免审批
  * 社区插件 → 需确认安装，工具需审批
  */
-export function getPluginTrustInfo(pluginId: string, source: PluginSource): PluginTrustInfo;
+export function getPluginTrustInfo(
+  pluginId: string,
+  source: PluginSource,
+): PluginTrustInfo;
 ```
 
 ## 2.7 热重载
@@ -213,13 +226,14 @@ export interface PluginWatcher {
 }
 
 export interface FileChangeEvent {
-  type: 'created' | 'modified' | 'deleted';
+  type: "created" | "modified" | "deleted";
   pluginId: string;
   filePath: string;
 }
 ```
 
 热重载规则：
+
 1. 监听 `plugins/` 目录的文件变更（使用 `chokidar` 或 Node.js `fs.watch`）
 2. 文件变更时重新解析对应的 PLUGIN.md
 3. 如果 manifest 变更，更新注册表

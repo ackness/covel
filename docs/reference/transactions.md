@@ -154,10 +154,11 @@ transaction. Operators can explicitly opt out with
 `COVEL_COMMIT_TXN_V1=0` or `COVEL_COMMIT_TXN_V1=false`:
 
 ```ts
-const txEnabled = process.env.COVEL_COMMIT_TXN_V1 !== '0' &&
-  process.env.COVEL_COMMIT_TXN_V1 !== 'false';
+const txEnabled =
+  process.env.COVEL_COMMIT_TXN_V1 !== "0" &&
+  process.env.COVEL_COMMIT_TXN_V1 !== "false";
 
-if (txEnabled && typeof store.beginTx === 'function') {
+if (txEnabled && typeof store.beginTx === "function") {
   await store.beginTx();
   try {
     // apply every proposal in order

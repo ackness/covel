@@ -32,24 +32,24 @@ import { readRuntimeEnv } from "@covel/shared";
  * ```
  */
 export async function createStore(config: StoreConfig): Promise<DataStore> {
-	switch (config.backend) {
-		case "memory": {
-			const { createMemoryStore } = await import("./memory/memory-store.js");
-			return createMemoryStore();
-		}
-		case "sqlite": {
-			const { createSqliteStore } = await import("./sqlite/sqlite-store.js");
-			return createSqliteStore(config.sqlitePath ?? "./data/covel.db");
-		}
-		case "pg": {
-			const { createPgStore } = await import("./postgres/pg-store.js");
-			if (!config.databaseUrl)
-				throw new Error("DATABASE_URL required for pg backend");
-			return createPgStore(config.databaseUrl);
-		}
-		default:
-			throw new Error(`Unknown store backend: ${String(config.backend)}`);
-	}
+  switch (config.backend) {
+    case "memory": {
+      const { createMemoryStore } = await import("./memory/memory-store.js");
+      return createMemoryStore();
+    }
+    case "sqlite": {
+      const { createSqliteStore } = await import("./sqlite/sqlite-store.js");
+      return createSqliteStore(config.sqlitePath ?? "./data/covel.db");
+    }
+    case "pg": {
+      const { createPgStore } = await import("./postgres/pg-store.js");
+      if (!config.databaseUrl)
+        throw new Error("DATABASE_URL required for pg backend");
+      return createPgStore(config.databaseUrl);
+    }
+    default:
+      throw new Error(`Unknown store backend: ${String(config.backend)}`);
+  }
 }
 
 /**
@@ -69,12 +69,12 @@ export async function createStore(config: StoreConfig): Promise<DataStore> {
  * ```
  */
 export function createStoreFromEnv(): Promise<DataStore> {
-	const env = readRuntimeEnv();
-	return createStore({
-		backend: env.storeBackend,
-		sqlitePath: env.sqlitePath,
-		databaseUrl: env.databaseUrl,
-	});
+  const env = readRuntimeEnv();
+  return createStore({
+    backend: env.storeBackend,
+    sqlitePath: env.sqlitePath,
+    databaseUrl: env.databaseUrl,
+  });
 }
 
 /**
@@ -85,5 +85,5 @@ export function createStoreFromEnv(): Promise<DataStore> {
  * can report the same value without re-reading or guessing.
  */
 export function resolveBackendFromEnv(): StoreConfig["backend"] {
-	return readRuntimeEnv().storeBackend;
+  return readRuntimeEnv().storeBackend;
 }

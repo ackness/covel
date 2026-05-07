@@ -7,47 +7,47 @@ export { scheduleByDag } from "./dag-scheduler.js";
 
 // ── Context Builder (re-exported from @covel/context) ───────────
 export {
-	interpolateTemplate,
-	buildInjectBlocks,
-	buildContext,
+  interpolateTemplate,
+  buildInjectBlocks,
+  buildContext,
 } from "@covel/context";
 
 // ── Parallel Executor ────────────────────────────────────────────
 export { executeParallel, resolveFailure } from "./parallel-executor.js";
 export type {
-	RuntimeExecuteFn,
-	FailureResolution,
+  RuntimeExecuteFn,
+  FailureResolution,
 } from "./parallel-executor.js";
 
 // ── Turn Executor ────────────────────────────────────────────────
 export { executeTurn, resumeSuspendedRuntime } from "./turn-executor.js";
 export type {
-	TurnExecutorDeps,
-	TurnExecutorOptions,
-	ResumeSuspendedRuntimeOptions,
+  TurnExecutorDeps,
+  TurnExecutorOptions,
+  ResumeSuspendedRuntimeOptions,
 } from "./turn-executor.js";
 export { createRuntimeMediaContext } from "./runtime-media-context.js";
 export type { MediaStoreLike } from "./runtime-media-context.js";
 
 // ── LLM Adapter ─────────────────────────────────────────────────
 export type {
-	LLMAdapter,
-	LLMMessage as LLMAdapterMessage,
-	LLMResponse,
-	LLMStreamEvent,
-	LLMToolCall,
-	LLMToolDefinition,
+  LLMAdapter,
+  LLMMessage as LLMAdapterMessage,
+  LLMResponse,
+  LLMStreamEvent,
+  LLMToolCall,
+  LLMToolDefinition,
 } from "./llm-adapter.js";
 
 // ── Tool Executor ────────────────────────────────────────────────
 export { createToolExecutor } from "./tool-executor.js";
 export type {
-	ToolExecutor,
-	ToolInfo,
-	ToolCall,
-	ToolCallContext,
-	ToolCallResult,
-	ToolExecutorConfig,
+  ToolExecutor,
+  ToolInfo,
+  ToolCall,
+  ToolCallContext,
+  ToolCallResult,
+  ToolExecutorConfig,
 } from "./tool-executor.js";
 
 // ── Model Resolver ──────────────────────────────────────────────
@@ -59,49 +59,49 @@ export { resolveRuntimeSlot } from "./runtime-slot-resolver.js";
 // ── Plugin RPC (PR-3) ──────────────────────────────────────────
 export { createPluginRpcRegistry } from "./rpc-registry.js";
 export type {
-	PluginRpcRegistry,
-	RpcHandler,
-	RpcHandlerContext,
-	RpcRegistryEntry,
+  PluginRpcRegistry,
+  RpcHandler,
+  RpcHandlerContext,
+  RpcRegistryEntry,
 } from "./rpc-registry.js";
 export { createRpcExecutor, RpcDispatchError } from "./rpc-executor.js";
 export type {
-	RpcExecutor,
-	RpcDispatchRequest,
-	RpcDispatchResult,
-	RpcDispatchDeps,
+  RpcExecutor,
+  RpcDispatchRequest,
+  RpcDispatchResult,
+  RpcDispatchDeps,
 } from "./rpc-executor.js";
 export {
-	submitFormHandler,
-	RpcValidationError,
+  submitFormHandler,
+  RpcValidationError,
 } from "./rpc-defaults/submit-form.js";
 
 // ── Gateway Bridge ──────────────────────────────────────────────
 export { createGatewayAdapter } from "./gateway-llm-adapter.js";
 export type {
-	GatewayLike,
-	GatewayAdapterConfig,
+  GatewayLike,
+  GatewayAdapterConfig,
 } from "./gateway-llm-adapter.js";
 
 // ── Plugin-facing Gateway Facade (function runtimes) ───────────
 export { createPluginRuntimeGateway } from "./plugin-runtime-gateway.js";
 export type {
-	FullGatewayLike,
-	PluginRuntimeGatewayConfig,
+  FullGatewayLike,
+  PluginRuntimeGatewayConfig,
 } from "./plugin-runtime-gateway.js";
 
 // ── Session Kernel ──────────────────────────────────────────────
 export {
-	normalizeOutput,
-	createCommitPipeline,
-	processRuntimeResult,
-	createTraceRecorder,
+  normalizeOutput,
+  createCommitPipeline,
+  processRuntimeResult,
+  createTraceRecorder,
 } from "./session-kernel.js";
 export type {
-	KernelStore,
-	CommitPipeline,
-	TraceRecorder,
-	ProcessRuntimeResultOutput,
+  KernelStore,
+  CommitPipeline,
+  TraceRecorder,
+  ProcessRuntimeResultOutput,
 } from "./session-kernel.js";
 
 // ── Snapshot Builder ────────────────────────────────────────────
@@ -112,16 +112,13 @@ export type { SnapshotStore } from "./snapshot-builder.js";
 export { buildSnapshotPayload } from "./snapshot-payload-builder.js";
 
 // ── Types ────────────────────────────────────────────────────────
-export type {
-	TriggerContext,
-	ScheduledGroup,
-} from "./types.js";
+export type { TriggerContext, ScheduledGroup } from "./types.js";
 
 // Re-export context types for backward compatibility
 export type {
-	AssembledContext,
-	ContextBuildParams,
-	LLMMessage,
+  AssembledContext,
+  ContextBuildParams,
+  LLMMessage,
 } from "@covel/context";
 
 // ── Prompt Delta (PR-1 translation layer) ──────────────────────
@@ -130,39 +127,39 @@ export type { PromptMessage } from "./prompt-delta.js";
 
 // ── Hook Pipeline ────────────────────────────────────────────────
 export {
-	HookPipeline,
-	createHookPipeline,
-	registerPluginHooks,
+  HookPipeline,
+  createHookPipeline,
+  registerPluginHooks,
 } from "./hooks/index.js";
 export { HOOK_SEMANTICS } from "./hooks/index.js";
 export type {
-	PluginHookSource,
-	RegisterPluginHooksOptions,
+  PluginHookSource,
+  RegisterPluginHooksOptions,
 } from "./hooks/index.js";
 export type {
-	HookEvent,
-	HookSemantic,
-	HookEnforce,
-	HookContext,
-	HookResult,
-	HookHandler,
-	HookRegistration,
-	HookDeclaration,
+  HookEvent,
+  HookSemantic,
+  HookEnforce,
+  HookContext,
+  HookResult,
+  HookHandler,
+  HookRegistration,
+  HookDeclaration,
 } from "./hooks/index.js";
 
 // ── Turn Emitter (per-turn trace fan-out) ───────────────────────
 export { createTurnEmitter, createNoopTurnEmitter } from "./turn-emitter.js";
 export type {
-	TurnEmitter,
-	TurnEmitterStore,
-	CreateTurnEmitterOptions,
+  TurnEmitter,
+  TurnEmitterStore,
+  CreateTurnEmitterOptions,
 } from "./turn-emitter.js";
 
 // ── Function-runtime handler helpers ────────────────────────────
 export {
-	createPluginDataWriter,
-	createPluginLogger,
-	createFunctionStoreView,
-	createRpcHandlerStoreView,
+  createPluginDataWriter,
+  createPluginLogger,
+  createFunctionStoreView,
+  createRpcHandlerStoreView,
 } from "./plugin-handler-helpers.js";
 export type { HandlerHelperContext } from "./plugin-handler-helpers.js";

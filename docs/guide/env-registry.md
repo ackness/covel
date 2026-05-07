@@ -10,35 +10,35 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 
 ## 分组
 
-| group | 用途 |
-| --- | --- |
-| `storage` | `STORE_BACKEND`、`DATABASE_URL`、SQLite / PostgreSQL 配置 |
-| `server` | 端口、CORS、静态资源、部署层级、限流 |
-| `desktop` | Electron / Tauri 注入给 server sidecar 的路径与桌面模式配置 |
-| `ai` | LLM 配置、provider keys、Langfuse、模型数据库、prompt 根目录 |
-| `feature` | 运行期功能开关 |
-| `web` | Vite dev proxy 与浏览器侧公开变量 |
-| `test` | Playwright、live provider tests、e2e harness、开发脚本 |
-| `packaging` | Electron / Tauri 签名、公证、updater 密钥 |
+| group       | 用途                                                         |
+| ----------- | ------------------------------------------------------------ |
+| `storage`   | `STORE_BACKEND`、`DATABASE_URL`、SQLite / PostgreSQL 配置    |
+| `server`    | 端口、CORS、静态资源、部署层级、限流                         |
+| `desktop`   | Electron / Tauri 注入给 server sidecar 的路径与桌面模式配置  |
+| `ai`        | LLM 配置、provider keys、Langfuse、模型数据库、prompt 根目录 |
+| `feature`   | 运行期功能开关                                               |
+| `web`       | Vite dev proxy 与浏览器侧公开变量                            |
+| `test`      | Playwright、live provider tests、e2e harness、开发脚本       |
+| `packaging` | Electron / Tauri 签名、公证、updater 密钥                    |
 
 ## 状态
 
-| status | 含义 |
-| --- | --- |
-| `active` | 代码已读取，属于当前运行契约 |
-| `documented` | 文档或示例已有，源码读取接入排期中 |
-| `planned` | 设计文档中的未来开关 |
-| `packaging` | 打包工具链读取，应用运行时代码通常只透传 |
+| status       | 含义                                     |
+| ------------ | ---------------------------------------- |
+| `active`     | 代码已读取，属于当前运行契约             |
+| `documented` | 文档或示例已有，源码读取接入排期中       |
+| `planned`    | 设计文档中的未来开关                     |
+| `packaging`  | 打包工具链读取，应用运行时代码通常只透传 |
 
 ## 文件职责
 
-| 文件 | 职责 |
-| --- | --- |
-| `.env` | 基础设施、server、storage、feature flag、本地开发辅助配置 |
-| `.env.llm` | provider API key 与 provider base URL |
-| `llm.toml` | slot、provider、model、protocol、capability 配置；支持 `${VAR}` 插值 |
-| `~/.covel/keys.env` | 桌面端持久化 provider API key |
-| `~/.covel/config.toml` | 桌面端数据目录与日志轮转配置 |
+| 文件                   | 职责                                                                 |
+| ---------------------- | -------------------------------------------------------------------- |
+| `.env`                 | 基础设施、server、storage、feature flag、本地开发辅助配置            |
+| `.env.llm`             | provider API key 与 provider base URL                                |
+| `llm.toml`             | slot、provider、model、protocol、capability 配置；支持 `${VAR}` 插值 |
+| `~/.covel/keys.env`    | 桌面端持久化 provider API key                                        |
+| `~/.covel/config.toml` | 桌面端数据目录与日志轮转配置                                         |
 
 ## 迁移规则
 

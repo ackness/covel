@@ -1,22 +1,22 @@
 // ── Types ────────────────────────────────────────────────────────
 export type {
-	LLMMessage,
-	AssembledContext,
-	MessageHistoryRecord,
-	ContextBuildParams,
-	SessionMeta,
-	CharacterSummary,
-	SummaryRecord,
-	WorkingMemoryEntry,
+  LLMMessage,
+  AssembledContext,
+  MessageHistoryRecord,
+  ContextBuildParams,
+  SessionMeta,
+  CharacterSummary,
+  SummaryRecord,
+  WorkingMemoryEntry,
 } from "./types.js";
 
 // ── Context Builder ─────────────────────────────────────────────
 export {
-	interpolateTemplate,
-	buildInjectBlocks,
-	buildContext,
-	buildContextAsync,
-	needsAsyncBuild,
+  interpolateTemplate,
+  buildInjectBlocks,
+  buildContext,
+  buildContextAsync,
+  needsAsyncBuild,
 } from "./context-builder.js";
 
 // ── Prompt Assembler V2 (S2-T1) ─────────────────────────────────
@@ -33,22 +33,22 @@ export { loadPrompt, interpolate, setPromptsRoot } from "./prompts-loader.js";
 // ── Compactor (S2-T2) ────────────────────────────────────────────
 export { maybeCompact } from "./compactor.js";
 export type {
-	CompactorDeps,
-	CompactorOptions,
-	CompactorResult,
-	CompactorLLMAdapter,
-	CompactorRunner,
+  CompactorDeps,
+  CompactorOptions,
+  CompactorResult,
+  CompactorLLMAdapter,
+  CompactorRunner,
 } from "./compactor.js";
 
 // ── Session Context Snapshot (Sprint 1) ──────────────────────────
 export type {
-	ContributionKind,
-	ContextContribution,
-	SessionContextSnapshot,
-	WorldContextView,
-	PersonaProfile,
-	CoreMemoryBlockView,
-	LorebookEntryView,
+  ContributionKind,
+  ContextContribution,
+  SessionContextSnapshot,
+  WorldContextView,
+  PersonaProfile,
+  CoreMemoryBlockView,
+  LorebookEntryView,
 } from "./types.js";
 
 // ── Session Context Snapshot Loader (Sprint 1) ───────────────────

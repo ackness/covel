@@ -44,10 +44,10 @@ Summarise the passage above in **≤ 100 English words**:
 
 Then call `plugin-data-set` exactly once to write the summary into the message stream:
 
-| Param | Value |
-|-------|-------|
-| `namespace` | `messages` |
-| `key` | `summary-` followed by the current timestamp in base36, e.g. `summary-lz0abc` |
-| `value` | `{ "role": "summary", "text": "<your ≤100-word summary>", "createdAt": "<ISO 8601 timestamp>" }` |
+| Param       | Value                                                                                            |
+| ----------- | ------------------------------------------------------------------------------------------------ |
+| `namespace` | `messages`                                                                                       |
+| `key`       | `summary-` followed by the current timestamp in base36, e.g. `summary-lz0abc`                    |
+| `value`     | `{ "role": "summary", "text": "<your ≤100-word summary>", "createdAt": "<ISO 8601 timestamp>" }` |
 
 After the tool call **stop immediately** — do not produce any further text.

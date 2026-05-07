@@ -11,23 +11,23 @@ import type { AiConfig } from "../types.js";
  * Interpolates `${VAR_NAME}` patterns from process.env.
  */
 export function loadAiConfig(filePath: string): AiConfig {
-	if (!filePath) {
-		throw new Error("AI config: filePath must be a non-empty string.");
-	}
+  if (!filePath) {
+    throw new Error("AI config: filePath must be a non-empty string.");
+  }
 
-	const absolutePath = resolve(filePath);
-	let raw: string;
-	try {
-		raw = readFileSync(absolutePath, "utf-8");
-	} catch (err) {
-		throw new Error(
-			`AI config: failed to read file "${absolutePath}": ${err instanceof Error ? err.message : String(err)}`,
-		);
-	}
-	const interpolated = interpolateEnv(raw);
-	const parsed = parseToml(interpolated);
-	const validated = aiConfigSchema.parse(parsed);
-	return validated;
+  const absolutePath = resolve(filePath);
+  let raw: string;
+  try {
+    raw = readFileSync(absolutePath, "utf-8");
+  } catch (err) {
+    throw new Error(
+      `AI config: failed to read file "${absolutePath}": ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  const interpolated = interpolateEnv(raw);
+  const parsed = parseToml(interpolated);
+  const validated = aiConfigSchema.parse(parsed);
+  return validated;
 }
 
 /**
@@ -35,10 +35,10 @@ export function loadAiConfig(filePath: string): AiConfig {
  * Interpolates `${VAR_NAME}` patterns from process.env.
  */
 export function parseAiConfig(toml: string): AiConfig {
-	const interpolated = interpolateEnv(toml);
-	const parsed = parseToml(interpolated);
-	const validated = aiConfigSchema.parse(parsed);
-	return validated;
+  const interpolated = interpolateEnv(toml);
+  const parsed = parseToml(interpolated);
+  const validated = aiConfigSchema.parse(parsed);
+  return validated;
 }
 
 /**
@@ -46,25 +46,25 @@ export function parseAiConfig(toml: string): AiConfig {
  * Throws if any referenced variable is not set.
  */
 function interpolateEnv(input: string): string {
-	const missing: string[] = [];
+  const missing: string[] = [];
 
-	const result = input.replace(
-		/\$\{([A-Za-z_][A-Za-z0-9_]*)}/g,
-		(match, varName: string) => {
-			const value = readEnvString(varName);
-			if (value === undefined) {
-				missing.push(varName);
-				return match;
-			}
-			return value;
-		},
-	);
+  const result = input.replace(
+    /\$\{([A-Za-z_][A-Za-z0-9_]*)}/g,
+    (match, varName: string) => {
+      const value = readEnvString(varName);
+      if (value === undefined) {
+        missing.push(varName);
+        return match;
+      }
+      return value;
+    },
+  );
 
-	if (missing.length > 0) {
-		throw new Error(
-			`AI config: unresolved environment variables: ${missing.join(", ")}`,
-		);
-	}
+  if (missing.length > 0) {
+    throw new Error(
+      `AI config: unresolved environment variables: ${missing.join(", ")}`,
+    );
+  }
 
-	return result;
+  return result;
 }

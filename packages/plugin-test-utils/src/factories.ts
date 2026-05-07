@@ -17,12 +17,12 @@ import type { TriggerContext } from "@covel/runtime";
  * ```
  */
 export function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
-	return {
-		sessionId: "sess-test",
-		turnId: "turn-1",
-		playerMessage: "开始游戏",
-		...overrides,
-	};
+  return {
+    sessionId: "sess-test",
+    turnId: "turn-1",
+    playerMessage: "开始游戏",
+    ...overrides,
+  };
 }
 
 /**
@@ -37,19 +37,19 @@ export function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
  * ```
  */
 export function makeTriggerContext(
-	overrides?: Partial<TriggerContext>,
+  overrides?: Partial<TriggerContext>,
 ): TriggerContext {
-	return {
-		sessionId: "sess-test",
-		turnNumber: 1,
-		triggerCount: 0,
-		turnsSinceLastTrigger: 999,
-		pendingEventTopics: [],
-		hasUpstreamFailure: false,
-		isManualTrigger: false,
-		preGameCompleted: [],
-		...overrides,
-	};
+  return {
+    sessionId: "sess-test",
+    turnNumber: 1,
+    triggerCount: 0,
+    turnsSinceLastTrigger: 999,
+    pendingEventTopics: [],
+    hasUpstreamFailure: false,
+    isManualTrigger: false,
+    preGameCompleted: [],
+    ...overrides,
+  };
 }
 
 /**
@@ -64,18 +64,18 @@ export function makeTriggerContext(
  * ```
  */
 export function makeRuntimeResult(
-	overrides?: Partial<RuntimeResult>,
+  overrides?: Partial<RuntimeResult>,
 ): RuntimeResult {
-	return {
-		pluginId: "test-plugin",
-		runtimeId: "test-rt",
-		runId: "run-1",
-		turnId: "turn-1",
-		status: "success",
-		output: {},
-		toolCalls: [],
-		durationMs: 100,
-		timestamp: new Date().toISOString(),
-		...overrides,
-	};
+  return {
+    pluginId: "test-plugin",
+    runtimeId: "test-rt",
+    runId: "run-1",
+    turnId: "turn-1",
+    status: "success",
+    output: {},
+    toolCalls: [],
+    durationMs: 100,
+    timestamp: new Date().toISOString(),
+    ...overrides,
+  };
 }

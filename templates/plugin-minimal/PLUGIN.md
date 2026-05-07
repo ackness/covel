@@ -1,6 +1,6 @@
 ---
-name: {{pluginName}}
-description: {{pluginDescription}}
+name: { { pluginName } }
+description: { { pluginDescription } }
 pluginType: plugin
 priority: 600
 model: plugin

@@ -24,24 +24,24 @@ console.log("=== Covel Desktop Build ===\n");
 // Step 1: Build web frontend
 console.log("[1/4] Building web frontend...");
 execSync("pnpm --filter @covel/web build", {
-	cwd: projectRoot,
-	stdio: "inherit",
+  cwd: projectRoot,
+  stdio: "inherit",
 });
 
 // Step 2: Bundle main process + preload
 console.log("\n[2/4] Bundling main process and preload...");
 await build({
-	entryPoints: [path.join(desktopRoot, "src/main.ts")],
-	bundle: true,
-	outfile: path.join(desktopRoot, "dist/main.mjs"),
-	format: "esm",
-	platform: "node",
-	target: "node22",
-	sourcemap: true,
-	// electron-updater is an optional runtime dependency loaded via dynamic
-	// import. Marking it external keeps it out of the main bundle whether or
-	// not the package happens to be installed at build time.
-	external: ["electron", "electron-updater"],
+  entryPoints: [path.join(desktopRoot, "src/main.ts")],
+  bundle: true,
+  outfile: path.join(desktopRoot, "dist/main.mjs"),
+  format: "esm",
+  platform: "node",
+  target: "node22",
+  sourcemap: true,
+  // electron-updater is an optional runtime dependency loaded via dynamic
+  // import. Marking it external keeps it out of the main bundle whether or
+  // not the package happens to be installed at build time.
+  external: ["electron", "electron-updater"],
 });
 
 // Preload must be CJS because Electron's contextBridge requires a
@@ -49,14 +49,14 @@ await build({
 // in the sandbox. Output as .mjs to keep the extension consistent, Electron
 // accepts either — the key is the commonjs format.
 await build({
-	entryPoints: [path.join(desktopRoot, "src/preload.ts")],
-	bundle: true,
-	outfile: path.join(desktopRoot, "dist/preload.mjs"),
-	format: "cjs",
-	platform: "node",
-	target: "node22",
-	sourcemap: true,
-	external: ["electron"],
+  entryPoints: [path.join(desktopRoot, "src/preload.ts")],
+  bundle: true,
+  outfile: path.join(desktopRoot, "dist/preload.mjs"),
+  format: "cjs",
+  platform: "node",
+  target: "node22",
+  sourcemap: true,
+  external: ["electron"],
 });
 
 // Step 3: Stage server resources via `pnpm deploy`.
@@ -73,118 +73,118 @@ const stagingDir = path.join(desktopRoot, "staging");
 
 // Clean previous staging
 if (fs.existsSync(stagingDir)) {
-	fs.rmSync(stagingDir, { recursive: true });
+  fs.rmSync(stagingDir, { recursive: true });
 }
 
 const serverStaging = path.join(stagingDir, "server");
 const webDistStaging = path.join(stagingDir, "web-dist");
 
 function copyIfMissing(source, target) {
-	if (fs.existsSync(target) || !fs.existsSync(source)) {
-		return;
-	}
-	fs.mkdirSync(path.dirname(target), { recursive: true });
-	fs.cpSync(fs.realpathSync(source), target, { recursive: true });
+  if (fs.existsSync(target) || !fs.existsSync(source)) {
+    return;
+  }
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.cpSync(fs.realpathSync(source), target, { recursive: true });
 }
 
 function resolveInstalledPackagePath(packageName) {
-	const segments = packageName.split("/");
-	const candidates = [
-		path.join(projectRoot, "apps/server/node_modules", ...segments),
-		path.join(projectRoot, "node_modules", ...segments),
-		path.join(projectRoot, "apps/desktop/node_modules", ...segments),
-	];
-	for (const candidate of candidates) {
-		if (fs.existsSync(candidate)) {
-			return fs.realpathSync(candidate);
-		}
-	}
-	return null;
+  const segments = packageName.split("/");
+  const candidates = [
+    path.join(projectRoot, "apps/server/node_modules", ...segments),
+    path.join(projectRoot, "node_modules", ...segments),
+    path.join(projectRoot, "apps/desktop/node_modules", ...segments),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return fs.realpathSync(candidate);
+    }
+  }
+  return null;
 }
 
 function ensureRuntimePackages() {
-	const nodeModulesDir = path.join(serverStaging, "node_modules");
-	const requiredPackages = ["tsx", "esbuild"];
+  const nodeModulesDir = path.join(serverStaging, "node_modules");
+  const requiredPackages = ["tsx", "esbuild"];
 
-	for (const packageName of requiredPackages) {
-		const target = path.join(nodeModulesDir, ...packageName.split("/"));
-		if (fs.existsSync(target)) continue;
+  for (const packageName of requiredPackages) {
+    const target = path.join(nodeModulesDir, ...packageName.split("/"));
+    if (fs.existsSync(target)) continue;
 
-		const source = resolveInstalledPackagePath(packageName);
-		if (!source) {
-			throw new Error(`Required runtime package not installed: ${packageName}`);
-		}
-		copyIfMissing(source, target);
-		console.log(`  ✓ restored missing runtime package: ${packageName}`);
-	}
+    const source = resolveInstalledPackagePath(packageName);
+    if (!source) {
+      throw new Error(`Required runtime package not installed: ${packageName}`);
+    }
+    copyIfMissing(source, target);
+    console.log(`  ✓ restored missing runtime package: ${packageName}`);
+  }
 
-	const esbuildScopeSource = resolveInstalledPackagePath("@esbuild");
-	const esbuildScopeTarget = path.join(nodeModulesDir, "@esbuild");
-	if (!fs.existsSync(esbuildScopeTarget) && esbuildScopeSource) {
-		copyIfMissing(esbuildScopeSource, esbuildScopeTarget);
-		console.log("  ✓ restored missing runtime package scope: @esbuild");
-	}
+  const esbuildScopeSource = resolveInstalledPackagePath("@esbuild");
+  const esbuildScopeTarget = path.join(nodeModulesDir, "@esbuild");
+  if (!fs.existsSync(esbuildScopeTarget) && esbuildScopeSource) {
+    copyIfMissing(esbuildScopeSource, esbuildScopeTarget);
+    console.log("  ✓ restored missing runtime package scope: @esbuild");
+  }
 }
 
 async function rebuildNativeForElectron(stagingDir) {
-	const electronPkgPath = path.join(
-		desktopRoot,
-		"node_modules/electron/package.json",
-	);
-	if (!fs.existsSync(electronPkgPath)) {
-		throw new Error(
-			`Cannot locate electron package to derive ABI version: ${electronPkgPath}`,
-		);
-	}
-	const electronVersion = JSON.parse(
-		fs.readFileSync(electronPkgPath, "utf-8"),
-	).version;
-	console.log(`  Electron ${electronVersion} ABI target`);
+  const electronPkgPath = path.join(
+    desktopRoot,
+    "node_modules/electron/package.json",
+  );
+  if (!fs.existsSync(electronPkgPath)) {
+    throw new Error(
+      `Cannot locate electron package to derive ABI version: ${electronPkgPath}`,
+    );
+  }
+  const electronVersion = JSON.parse(
+    fs.readFileSync(electronPkgPath, "utf-8"),
+  ).version;
+  console.log(`  Electron ${electronVersion} ABI target`);
 
-	await electronRebuild({
-		buildPath: stagingDir,
-		electronVersion,
-		onlyModules: ["better-sqlite3"],
-		force: true,
-	});
+  await electronRebuild({
+    buildPath: stagingDir,
+    electronVersion,
+    onlyModules: ["better-sqlite3"],
+    force: true,
+  });
 }
 
 function verifyStagedServerRuntime() {
-	const checks = [
-		path.join(serverStaging, "src/index.ts"),
-		path.join(serverStaging, "node_modules/tsx/dist/cli.mjs"),
-		path.join(serverStaging, "node_modules/esbuild/package.json"),
-	];
-	const missing = checks.filter((target) => !fs.existsSync(target));
-	if (missing.length > 0) {
-		throw new Error(
-			`Desktop server staging is incomplete:\n${missing.map((p) => `- ${p}`).join("\n")}`,
-		);
-	}
+  const checks = [
+    path.join(serverStaging, "src/index.ts"),
+    path.join(serverStaging, "node_modules/tsx/dist/cli.mjs"),
+    path.join(serverStaging, "node_modules/esbuild/package.json"),
+  ];
+  const missing = checks.filter((target) => !fs.existsSync(target));
+  if (missing.length > 0) {
+    throw new Error(
+      `Desktop server staging is incomplete:\n${missing.map((p) => `- ${p}`).join("\n")}`,
+    );
+  }
 
-	const esbuildScopeDir = path.join(serverStaging, "node_modules/@esbuild");
-	const hasPlatformBinary =
-		fs.existsSync(esbuildScopeDir) &&
-		fs
-			.readdirSync(esbuildScopeDir)
-			.some(
-				(name) =>
-					name.startsWith("darwin-") ||
-					name.startsWith("win32-") ||
-					name.startsWith("linux-"),
-			);
-	if (!hasPlatformBinary) {
-		throw new Error(
-			`Desktop server staging is missing @esbuild platform packages in ${esbuildScopeDir}`,
-		);
-	}
+  const esbuildScopeDir = path.join(serverStaging, "node_modules/@esbuild");
+  const hasPlatformBinary =
+    fs.existsSync(esbuildScopeDir) &&
+    fs
+      .readdirSync(esbuildScopeDir)
+      .some(
+        (name) =>
+          name.startsWith("darwin-") ||
+          name.startsWith("win32-") ||
+          name.startsWith("linux-"),
+      );
+  if (!hasPlatformBinary) {
+    throw new Error(
+      `Desktop server staging is missing @esbuild platform packages in ${esbuildScopeDir}`,
+    );
+  }
 }
 
 // Copy web dist
 const webDistSrc = path.join(projectRoot, "dist/web");
 if (!fs.existsSync(webDistSrc)) {
-	console.error("ERROR: Web dist not found at", webDistSrc);
-	process.exit(1);
+  console.error("ERROR: Web dist not found at", webDistSrc);
+  process.exit(1);
 }
 fs.cpSync(webDistSrc, webDistStaging, { recursive: true });
 console.log("  ✓ web-dist copied");
@@ -198,11 +198,11 @@ console.log("  ✓ web-dist copied");
 //   这种软链 macOS 可用，Windows 上 electron-builder 复制 extraResources
 //   时会断链，导致打包后 resources/server/node_modules/tsx 不存在）。
 execSync(
-	`pnpm --filter @covel/server deploy --prod --legacy --config.node-linker=hoisted "${serverStaging}"`,
-	{
-		cwd: projectRoot,
-		stdio: "inherit",
-	},
+  `pnpm --filter @covel/server deploy --prod --legacy --config.node-linker=hoisted "${serverStaging}"`,
+  {
+    cwd: projectRoot,
+    stdio: "inherit",
+  },
 );
 console.log("  ✓ pnpm deploy → staging/server/ (hoisted)");
 
@@ -216,34 +216,34 @@ ensureRuntimePackages();
 // 软链（含 typescript lib 等大量文件），electron-builder 扫描时会撑爆
 // macOS 的 fd 上限（EMFILE）。一律剔除以下噪声目录。
 const EXCLUDE_DIRS = new Set([
-	"node_modules",
-	".turbo",
-	"dist",
-	"coverage",
-	".cache",
-	"tests",
-	"__tests__",
+  "node_modules",
+  ".turbo",
+  "dist",
+  "coverage",
+  ".cache",
+  "tests",
+  "__tests__",
 ]);
 const sideCarResources = ["plugins", "prompts", "worlds"];
 for (const entry of sideCarResources) {
-	const src = path.join(projectRoot, entry);
-	const dest = path.join(serverStaging, entry);
-	if (!fs.existsSync(src)) {
-		console.log(`  ⚠ Skipping ${entry} (not found)`);
-		continue;
-	}
-	fs.cpSync(src, dest, {
-		recursive: true,
-		filter: (source) => !EXCLUDE_DIRS.has(path.basename(source)),
-	});
+  const src = path.join(projectRoot, entry);
+  const dest = path.join(serverStaging, entry);
+  if (!fs.existsSync(src)) {
+    console.log(`  ⚠ Skipping ${entry} (not found)`);
+    continue;
+  }
+  fs.cpSync(src, dest, {
+    recursive: true,
+    filter: (source) => !EXCLUDE_DIRS.has(path.basename(source)),
+  });
 }
 console.log("  ✓ plugins/prompts/worlds copied (node_modules/dist excluded)");
 
 // Copy llm.toml if present
 const llmToml = path.join(projectRoot, "llm.toml");
 if (fs.existsSync(llmToml)) {
-	fs.copyFileSync(llmToml, path.join(serverStaging, "llm.toml"));
-	console.log("  ✓ llm.toml copied");
+  fs.copyFileSync(llmToml, path.join(serverStaging, "llm.toml"));
+  console.log("  ✓ llm.toml copied");
 }
 verifyStagedServerRuntime();
 console.log("  ✓ server runtime verified");
@@ -256,16 +256,16 @@ console.log("  ✓ server resources staged");
 // after the rebuild the native addon only loads inside Electron.
 console.log("\n[3b/4] Smoke-testing staged server (with llm.toml)...");
 execSync(`node "${path.join(desktopRoot, "scripts/verify-staging.mjs")}"`, {
-	cwd: desktopRoot,
-	stdio: "inherit",
+  cwd: desktopRoot,
+  stdio: "inherit",
 });
 console.log("\n[3b/4] Smoke-testing staged server (without llm.toml)...");
 execSync(
-	`node "${path.join(desktopRoot, "scripts/verify-staging.mjs")}" --no-llm-toml`,
-	{
-		cwd: desktopRoot,
-		stdio: "inherit",
-	},
+  `node "${path.join(desktopRoot, "scripts/verify-staging.mjs")}" --no-llm-toml`,
+  {
+    cwd: desktopRoot,
+    stdio: "inherit",
+  },
 );
 
 // Step 3c: rebuild native addons against the Electron Node ABI so they load

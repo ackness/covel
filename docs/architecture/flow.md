@@ -125,9 +125,9 @@ flowchart TB
 
 **优先级 band**（`packages/runtime/src/scheduler.ts` 硬性约束）：
 
-| turnCount | 可调度 priority 区间 | 语义 |
-|-----------|----------------------|------|
-| `0`       | `0–99`               | Pre-Game band（如 `pregame`、`world-init`、`char-creator`） |
+| turnCount | 可调度 priority 区间 | 语义                                                                                                                                                                                           |
+| --------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`       | `0–99`               | Pre-Game band（如 `pregame`、`world-init`、`char-creator`）                                                                                                                                    |
 | `>= 1`    | `100–1000`           | 主循环（narrator `500` / guide / codex / npc-graph extractor / character-tracker 同 `600` …）。同优先级的下游 runtime 通过 `upstreamRequired` + `input.inject` 声明依赖，由 DAG 调度器并发执行 |
 
 **Proposal 类型**（全部过 commit chain）：`narrative.append`、`interaction.request`、`state.patch`、`event.emit`、`plugin.data` / `plugin.data.batch`、`working_memory.set`、`lorebook.upsert`。runtime 输出若带 legacy `phase` 字段会被 `normalizeOutput` 静默忽略（兼容老插件，不报错、不产生 proposal）。
@@ -757,19 +757,19 @@ Turn 执行                    @covel/runtime                   核心执行引�
 
 ### 8.3 各包核心接口
 
-| 包 | 核心导出 | 调用方 |
-|----|---------|--------|
-| **shared** | `RuntimeManifest`, `UISpec`, `ProtocolEventType`, Zod schemas | 所有包 |
-| **plugin-loader** | `discoverPlugins()`, `loadRuntime()`, `PluginRegistry` | server bootstrap |
-| **ai-provider** | `createGatewayAdapter()`, `PresetRegistry`, `SlotRegistry` | server bootstrap, runtime |
-| **context** | `buildContext()`, `interpolateTemplate()` | runtime (per-runtime) |
-| **runtime** | `executeTurn()`, `createToolExecutor()`, `shouldTrigger()` | server actions route |
-| **store** | `DataStore` interface, `createMemoryStore()`, `createPgStore()` | server, tools, runtime |
-| **events** | `createEventBus()`, `EventBus.emit()`, `EventBus.onEmit()` | server, plugin-data-tools |
-| **tools** | `tool()`, `createPluginDataTools()`, `shortIdBatch()` | bootstrap, plugin tools |
-| **state** | `createStateManager()`, `StateManager` | server, runtime |
-| **approval** | `createApprovalPipeline()`, `ApprovalPipeline.check()` | tool executor |
-| **plugin-test-utils** | `MockLLM`, `createTestHarness()` | plugin tests only |
+| 包                    | 核心导出                                                        | 调用方                    |
+| --------------------- | --------------------------------------------------------------- | ------------------------- |
+| **shared**            | `RuntimeManifest`, `UISpec`, `ProtocolEventType`, Zod schemas   | 所有包                    |
+| **plugin-loader**     | `discoverPlugins()`, `loadRuntime()`, `PluginRegistry`          | server bootstrap          |
+| **ai-provider**       | `createGatewayAdapter()`, `PresetRegistry`, `SlotRegistry`      | server bootstrap, runtime |
+| **context**           | `buildContext()`, `interpolateTemplate()`                       | runtime (per-runtime)     |
+| **runtime**           | `executeTurn()`, `createToolExecutor()`, `shouldTrigger()`      | server actions route      |
+| **store**             | `DataStore` interface, `createMemoryStore()`, `createPgStore()` | server, tools, runtime    |
+| **events**            | `createEventBus()`, `EventBus.emit()`, `EventBus.onEmit()`      | server, plugin-data-tools |
+| **tools**             | `tool()`, `createPluginDataTools()`, `shortIdBatch()`           | bootstrap, plugin tools   |
+| **state**             | `createStateManager()`, `StateManager`                          | server, runtime           |
+| **approval**          | `createApprovalPipeline()`, `ApprovalPipeline.check()`          | tool executor             |
+| **plugin-test-utils** | `MockLLM`, `createTestHarness()`                                | plugin tests only         |
 
 ## 九、设计约束与原则
 

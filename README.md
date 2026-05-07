@@ -71,16 +71,16 @@ For hand-writing plugins, debugging the runtime, or extending the kernel.
 
 ### Bundled plugins
 
-| Plugin | Kind | Role |
-|--------|:-:|------|
-| `narrator`     | Agent    | Main narration |
-| `guide`        | Agent    | Action guidance + option generation |
-| `npc-graph`    | Agent    | NPC graph extraction + 2-hop retrieval |
-| `codex`        | Agent    | World-knowledge codex |
-| `char-creator` | Agent    | Character-creation flow |
-| `world-init`   | Agent    | World-dimension initialisation |
-| `pregame`      | Function | Pre-game bootstrap (no LLM call) |
-| `memory`       | UI       | Memory panel |
+| Plugin         |   Kind   | Role                                   |
+| -------------- | :------: | -------------------------------------- |
+| `narrator`     |  Agent   | Main narration                         |
+| `guide`        |  Agent   | Action guidance + option generation    |
+| `npc-graph`    |  Agent   | NPC graph extraction + 2-hop retrieval |
+| `codex`        |  Agent   | World-knowledge codex                  |
+| `char-creator` |  Agent   | Character-creation flow                |
+| `world-init`   |  Agent   | World-dimension initialisation         |
+| `pregame`      | Function | Pre-game bootstrap (no LLM call)       |
+| `memory`       |    UI    | Memory panel                           |
 
 ### Write a plugin manually
 
@@ -95,7 +95,6 @@ trigger: { type: scheduled, interval: 1 }
 tools:
   builtin: [create-form, plugin-data-set]
 ---
-
 You are an XXX agent. On this turn you need to…
 ```
 
@@ -120,14 +119,14 @@ pnpm workspaces + Turborepo · ESM-only · TypeScript strict. Full package list 
 
 ### Documentation
 
-| Topic | Link |
-|-------|------|
-| Architecture & turn pipeline | [`docs/architecture/flow.md`](./docs/architecture/flow.md) |
-| Writing plugins              | [`docs/guide/plugin-authoring.md`](./docs/guide/plugin-authoring.md) |
+| Topic                        | Link                                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Architecture & turn pipeline | [`docs/architecture/flow.md`](./docs/architecture/flow.md)                                                          |
+| Writing plugins              | [`docs/guide/plugin-authoring.md`](./docs/guide/plugin-authoring.md)                                                |
 | Plugin / tool registries     | [`docs/reference/plugins.md`](./docs/reference/plugins.md) · [`docs/reference/tools.md`](./docs/reference/tools.md) |
-| API / SSE protocol           | [`docs/reference/api.md`](./docs/reference/api.md) · [`docs/reference/protocol.md`](./docs/reference/protocol.md) |
-| Desktop config               | [`docs/guide/desktop-config.en.md`](./docs/guide/desktop-config.en.md) |
-| Desktop packaging            | [`apps/desktop/PACKAGING.md`](./apps/desktop/PACKAGING.md) |
+| API / SSE protocol           | [`docs/reference/api.md`](./docs/reference/api.md) · [`docs/reference/protocol.md`](./docs/reference/protocol.md)   |
+| Desktop config               | [`docs/guide/desktop-config.en.md`](./docs/guide/desktop-config.en.md)                                              |
+| Desktop packaging            | [`apps/desktop/PACKAGING.md`](./apps/desktop/PACKAGING.md)                                                          |
 
 Full index → [`docs/README.md`](./docs/README.md). The in-app debug page at `/debug` shows session timeline, runtime traces, and prompt diffs.
 

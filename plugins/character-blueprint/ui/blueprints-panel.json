@@ -40,7 +40,10 @@
             "component": "Input",
             "props": {
               "label": { "zh": "ID", "en": "ID" },
-              "placeholder": { "zh": "留空自动生成短 ID", "en": "Leave blank to auto-generate a short ID" },
+              "placeholder": {
+                "zh": "留空自动生成短 ID",
+                "en": "Leave blank to auto-generate a short ID"
+              },
               "value": { "$bindState": "/form/id" }
             }
           },
@@ -65,8 +68,14 @@
               "value": { "$bindState": "/form/role" },
               "options": [
                 { "value": "npc", "label": { "zh": "NPC", "en": "NPC" } },
-                { "value": "player", "label": { "zh": "玩家", "en": "Player" } },
-                { "value": "companion", "label": { "zh": "同伴", "en": "Companion" } }
+                {
+                  "value": "player",
+                  "label": { "zh": "玩家", "en": "Player" }
+                },
+                {
+                  "value": "companion",
+                  "label": { "zh": "同伴", "en": "Companion" }
+                }
               ]
             }
           },
@@ -74,7 +83,10 @@
             "component": "Input",
             "props": {
               "label": { "zh": "角色 ID", "en": "Character ID" },
-              "placeholder": { "zh": "默认：npc-蓝图-id", "en": "Default: npc-blueprint-id" },
+              "placeholder": {
+                "zh": "默认：npc-蓝图-id",
+                "en": "Default: npc-blueprint-id"
+              },
               "value": { "$bindState": "/form/characterId" }
             }
           }
@@ -120,7 +132,10 @@
             "component": "Input",
             "props": {
               "label": { "zh": "标签", "en": "Tags" },
-              "placeholder": { "zh": "classmate, romance-candidate", "en": "classmate, romance-candidate" },
+              "placeholder": {
+                "zh": "classmate, romance-candidate",
+                "en": "classmate, romance-candidate"
+              },
               "value": { "$bindState": "/form/tagsText" }
             }
           }
@@ -134,7 +149,10 @@
             "component": "Input",
             "props": {
               "label": { "zh": "特质", "en": "Traits" },
-              "placeholder": { "zh": "礼貌, 慢热, 责任感强", "en": "polite, cautious, responsible" },
+              "placeholder": {
+                "zh": "礼貌, 慢热, 责任感强",
+                "en": "polite, cautious, responsible"
+              },
               "value": { "$bindState": "/form/traitsText" }
             }
           },
@@ -142,7 +160,10 @@
             "component": "Input",
             "props": {
               "label": { "zh": "目标", "en": "Goals" },
-              "placeholder": { "zh": "完成刊物, 保住活动室", "en": "finish the issue, protect the room" },
+              "placeholder": {
+                "zh": "完成刊物, 保住活动室",
+                "en": "finish the issue, protect the room"
+              },
               "value": { "$bindState": "/form/goalsText" }
             }
           }
@@ -156,7 +177,10 @@
             "component": "Input",
             "props": {
               "label": { "zh": "声音风格", "en": "Voice" },
-              "placeholder": { "zh": "说话轻，句子完整", "en": "quiet, precise sentences" },
+              "placeholder": {
+                "zh": "说话轻，句子完整",
+                "en": "quiet, precise sentences"
+              },
               "value": { "$bindState": "/form/voice" }
             }
           },
@@ -164,7 +188,10 @@
             "component": "Input",
             "props": {
               "label": { "zh": "动作风格", "en": "Style" },
-              "placeholder": { "zh": "用整理纸张掩饰紧张", "en": "hides nerves by arranging papers" },
+              "placeholder": {
+                "zh": "用整理纸张掩饰紧张",
+                "en": "hides nerves by arranging papers"
+              },
               "value": { "$bindState": "/form/style" }
             }
           }

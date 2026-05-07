@@ -1,15 +1,18 @@
 <!doctype html>
 <html lang="zh-CN" data-theme="paper" data-scheme="light">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Covel · Design System Showcase</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300..900;1,300..900&family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Covel · Design System Showcase</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300..900;1,300..900&family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
 
-  <style>
-  /* ─────────────────────────────────────────────────────────────────
+    <style>
+      /* ─────────────────────────────────────────────────────────────────
      COVEL DESIGN SYSTEM — single-file showcase
      This file mirrors the production token / atom layer so a designer
      can open it locally, switch themes, and tweak vars without a build.
@@ -18,2316 +21,3115 @@
      html[data-theme="<id>"] and html[data-theme="<id>"][data-scheme="dark"]
      ───────────────────────────────────────────────────────────────── */
 
-  /* ── Base tokens (paper light fallback) ─────────────────────────── */
-  :root {
-    --color-background: oklch(96.5% 0.012 80);
-    --color-foreground: oklch(20% 0.018 60);
-    --color-card: oklch(98.2% 0.008 80);
-    --color-muted: oklch(93% 0.012 80);
-    --color-muted-foreground: oklch(46% 0.018 60);
-    --color-border: oklch(85% 0.014 75);
-
-    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-    --font-display: "Fraunces", "Newsreader", Georgia, serif;
-    --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-
-    --type-display: var(--font-display);
-    --type-body: var(--font-sans);
-    --type-mono: var(--font-mono);
-    --type-meta: var(--font-mono);
-
-    --surface-page: var(--color-background);
-    --surface-rail: oklch(94.5% 0.014 80);
-    --surface-inset: oklch(91.5% 0.018 80);
-    --surface-elevated: var(--color-card);
-
-    --rule-color: oklch(82% 0.018 75);
-    --rule-strong-color: oklch(35% 0.024 60);
-    --rule-style: solid;
-
-    --accent-primary: oklch(45% 0.13 35);
-    --accent-secondary: oklch(38% 0.08 220);
-    --accent-warning: oklch(65% 0.14 75);
-    --accent-danger: oklch(54% 0.18 25);
-    --accent-success: oklch(48% 0.11 145);
-
-    --ambience-image:
-      radial-gradient(ellipse at 80% -10%, oklch(82% 0.085 60 / 0.18), transparent 60%),
-      radial-gradient(ellipse at -10% 110%, oklch(85% 0.05 220 / 0.12), transparent 55%);
-    --noise-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0   0 0 0 0 0   0 0 0 0 0   0 0 0 0.55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/></svg>");
-    --noise-opacity: 0.04;
-
-    --radius-card: 0.1875rem;
-    --radius-control: 0.125rem;
-    --radius-dialog: 0.25rem;
-    --radius-chip: 999px;
-
-    --eyebrow-letter-spacing: 0.18em;
-  }
-
-  /* ─────────────────────── PAPER ─────────────────────── */
-  html[data-theme="paper"][data-scheme="light"] {
-    --color-background: oklch(96.5% 0.012 80);
-    --color-foreground: oklch(20% 0.018 60);
-    --color-card: oklch(98.2% 0.008 80);
-    --color-muted: oklch(93% 0.012 80);
-    --color-muted-foreground: oklch(46% 0.018 60);
-    --color-border: oklch(85% 0.014 75);
-
-    --type-display: "Fraunces", Georgia, serif;
-    --type-body: "Inter", system-ui, sans-serif;
-
-    --surface-page: oklch(96.5% 0.012 80);
-    --surface-rail: oklch(94.5% 0.014 80);
-    --surface-inset: oklch(91.5% 0.018 80);
-    --surface-elevated: oklch(98.2% 0.008 80);
-
-    --rule-color: oklch(82% 0.018 75);
-    --rule-strong-color: oklch(35% 0.024 60);
-
-    --accent-primary: oklch(45% 0.13 35);
-    --accent-secondary: oklch(38% 0.08 220);
-    --accent-warning: oklch(65% 0.14 75);
-    --accent-danger: oklch(54% 0.18 25);
-    --accent-success: oklch(48% 0.11 145);
-
-    --ambience-image:
-      radial-gradient(ellipse at 80% -10%, oklch(82% 0.085 60 / 0.18), transparent 60%),
-      radial-gradient(ellipse at -10% 110%, oklch(85% 0.05 220 / 0.12), transparent 55%);
-    --noise-opacity: 0.04;
-  }
-
-  html[data-theme="paper"][data-scheme="dark"] {
-    --color-background: oklch(13% 0.01 60);
-    --color-foreground: oklch(91% 0.012 80);
-    --color-card: oklch(17% 0.014 60);
-    --color-muted: oklch(20% 0.016 60);
-    --color-muted-foreground: oklch(58% 0.018 60);
-    --color-border: oklch(25% 0.018 60);
-
-    --surface-page: oklch(13% 0.01 60);
-    --surface-rail: oklch(15% 0.012 60);
-    --surface-inset: oklch(18% 0.014 60);
-    --surface-elevated: oklch(20% 0.016 60);
-
-    --rule-color: oklch(28% 0.018 60);
-    --rule-strong-color: oklch(60% 0.02 60);
-
-    --accent-primary: oklch(72% 0.12 75);
-    --accent-secondary: oklch(70% 0.1 220);
-    --accent-warning: oklch(78% 0.16 80);
-    --accent-success: oklch(70% 0.13 145);
-
-    --ambience-image:
-      radial-gradient(ellipse at 80% -10%, oklch(72% 0.12 75 / 0.08), transparent 55%),
-      radial-gradient(ellipse at -10% 110%, oklch(40% 0.08 220 / 0.08), transparent 55%);
-    --noise-opacity: 0.05;
-  }
-
-  /* ─────────────────────── MODERN ─────────────────────── */
-  html[data-theme="modern"][data-scheme="light"] {
-    --color-background: oklch(98% 0.004 240);
-    --color-foreground: oklch(18% 0.014 240);
-    --color-card: oklch(99.4% 0.002 240);
-    --color-muted: oklch(94% 0.006 240);
-    --color-muted-foreground: oklch(46% 0.016 240);
-    --color-border: oklch(88% 0.008 240);
-
-    --type-display: "Inter", system-ui, sans-serif;
-    --type-body: "Inter", system-ui, sans-serif;
-
-    --surface-page: oklch(98% 0.004 240);
-    --surface-rail: oklch(96% 0.005 240);
-    --surface-inset: oklch(94.5% 0.007 240);
-    --surface-elevated: oklch(99.4% 0.002 240);
-
-    --rule-color: oklch(86% 0.01 240);
-    --rule-strong-color: oklch(28% 0.02 240);
-
-    --accent-primary: oklch(48% 0.13 240);
-    --accent-secondary: oklch(64% 0.13 200);
-    --accent-warning: oklch(70% 0.16 75);
-    --accent-success: oklch(58% 0.15 155);
-
-    --ambience-image:
-      radial-gradient(ellipse at 78% -10%, oklch(70% 0.13 200 / 0.16), transparent 55%),
-      radial-gradient(ellipse at 5% 110%, oklch(50% 0.13 250 / 0.1), transparent 50%);
-    --noise-opacity: 0.018;
-  }
-
-  html[data-theme="modern"][data-scheme="dark"] {
-    --color-background: oklch(13% 0.016 240);
-    --color-foreground: oklch(94% 0.006 240);
-    --color-card: oklch(17% 0.02 240);
-    --color-muted: oklch(20% 0.022 240);
-    --color-muted-foreground: oklch(62% 0.018 240);
-    --color-border: oklch(26% 0.022 240);
-
-    --surface-page: oklch(13% 0.016 240);
-    --surface-rail: oklch(15% 0.018 240);
-    --surface-inset: oklch(18% 0.02 240);
-    --surface-elevated: oklch(20% 0.022 240);
-
-    --rule-color: oklch(28% 0.022 240);
-    --rule-strong-color: oklch(64% 0.018 240);
-
-    --accent-primary: oklch(72% 0.13 200);
-    --accent-secondary: oklch(80% 0.1 200);
-    --accent-warning: oklch(78% 0.16 80);
-    --accent-success: oklch(68% 0.14 155);
-
-    --ambience-image:
-      radial-gradient(ellipse at 78% -10%, oklch(72% 0.13 200 / 0.1), transparent 55%),
-      radial-gradient(ellipse at 5% 110%, oklch(60% 0.16 250 / 0.08), transparent 50%);
-    --noise-opacity: 0.04;
-  }
-
-  /* ─────────────────────── ABYSS ─────────────────────── */
-  html[data-theme="abyss"][data-scheme="light"],
-  html[data-theme="abyss"][data-scheme="dark"] {
-    --color-background: oklch(11% 0.022 270);
-    --color-foreground: oklch(89% 0.014 80);
-    --color-card: oklch(13% 0.024 270);
-    --color-muted: oklch(16% 0.024 270);
-    --color-muted-foreground: oklch(60% 0.024 270);
-    --color-border: oklch(24% 0.026 270 / 0.6);
-
-    --type-display: "Fraunces", Georgia, serif;
-    --type-body: "Inter", system-ui, sans-serif;
-
-    --surface-page: oklch(11% 0.022 270);
-    --surface-rail: oklch(13% 0.025 270);
-    --surface-inset: oklch(15% 0.026 270);
-    --surface-elevated: oklch(17% 0.028 270);
-
-    --rule-color: oklch(24% 0.026 270);
-    --rule-strong-color: oklch(58% 0.04 270);
-
-    --accent-primary: oklch(72% 0.16 300);
-    --accent-secondary: oklch(70% 0.14 230);
-    --accent-warning: oklch(75% 0.16 75);
-    --accent-success: oklch(72% 0.13 155);
-
-    --ambience-image:
-      radial-gradient(ellipse at 80% 0%, oklch(58% 0.18 300 / 0.16), transparent 55%),
-      radial-gradient(ellipse at 0% 100%, oklch(50% 0.14 230 / 0.14), transparent 55%);
-    --noise-opacity: 0.06;
-  }
-
-  /* Italic display headings only in serif themes */
-  html[data-theme="abyss"] h1, html[data-theme="abyss"] h2 { font-style: italic; }
-
-  /* ─────────────────────── BASE ─────────────────────── */
-  *, *::before, *::after { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
-
-  html {
-    background: var(--surface-page);
-    color: var(--color-foreground);
-    font-family: var(--type-body);
-    font-size: 14px;
-    line-height: 1.55;
-    -webkit-font-smoothing: antialiased;
-    transition: background 200ms ease, color 200ms ease;
-  }
-
-  body {
-    background-image: var(--ambience-image);
-    background-size: cover;
-    background-attachment: fixed;
-    min-height: 100vh;
-    position: relative;
-  }
-
-  /* Noise overlay */
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    background-image: var(--noise-image);
-    opacity: var(--noise-opacity);
-    mix-blend-mode: multiply;
-    z-index: 0;
-  }
-  body > * { position: relative; z-index: 1; }
-
-  ::selection {
-    background: color-mix(in oklab, var(--accent-primary) 30%, transparent);
-    color: var(--color-foreground);
-  }
-
-  /* Scrollbar */
-  * { scrollbar-width: thin; scrollbar-color: color-mix(in oklab, var(--color-foreground) 14%, transparent) transparent; }
-  *::-webkit-scrollbar { width: 10px; height: 10px; }
-  *::-webkit-scrollbar-thumb {
-    background: color-mix(in oklab, var(--color-foreground) 14%, transparent);
-    border-radius: 999px;
-    border: 2px solid transparent;
-    background-clip: padding-box;
-  }
-
-  /* ─────────────────────── ATOMS ─────────────────────── */
-  .ui-meta {
-    font-family: var(--type-meta);
-    font-size: 0.6875rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--color-muted-foreground);
-  }
-  .ui-eyebrow {
-    font-family: var(--type-meta);
-    font-size: 0.6875rem;
-    font-weight: 500;
-    letter-spacing: var(--eyebrow-letter-spacing);
-    text-transform: uppercase;
-    color: var(--color-muted-foreground);
-  }
-  .ui-title {
-    font-family: var(--type-display);
-    font-weight: 600;
-    letter-spacing: -0.005em;
-    color: var(--color-foreground);
-  }
-  .ui-rule {
-    border: 0;
-    border-top: 1px var(--rule-style) var(--rule-color);
-    height: 0;
-    margin: 0;
-  }
-  .ui-rule-strong {
-    border: 0;
-    border-top: 1px solid var(--rule-strong-color);
-    height: 0;
-    margin: 0;
-  }
-  .ui-section {
-    padding-block: 1rem 1.25rem;
-    border-bottom: 1px solid var(--rule-color);
-  }
-  .ui-section:last-child { border-bottom: 0; }
-  .ui-section-head {
-    display: flex;
-    align-items: baseline;
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
-  }
-  .ui-section-title {
-    font-family: var(--type-display);
-    font-weight: 600;
-    font-size: 0.9375rem;
-  }
-
-  .ui-band {
-    position: relative;
-    padding: 0.875rem 1rem 0.875rem 1.25rem;
-    border-left: 3px solid var(--accent-primary);
-  }
-  .ui-band[data-tone="muted"] { border-left-color: var(--color-muted-foreground); border-left-width: 2px; }
-  .ui-band[data-tone="warning"] { border-left-color: var(--accent-warning); }
-  .ui-band[data-tone="danger"] { border-left-color: var(--accent-danger); }
-  .ui-band[data-tone="success"] { border-left-color: var(--accent-success); }
-  .ui-band[data-tone="info"] { border-left-color: var(--accent-secondary); }
-
-  .ui-frame {
-    background: var(--surface-elevated);
-    border: 1px solid var(--rule-color);
-    border-radius: var(--radius-card);
-  }
-
-  .ui-rail { background: var(--surface-rail); }
-
-  .ui-tag {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.0625rem 0.4375rem;
-    font-family: var(--type-meta);
-    font-size: 0.625rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--color-muted-foreground);
-    border: 1px solid var(--color-border);
-    border-radius: 2px;
-    background: transparent;
-  }
-  .ui-tag-solid {
-    background: var(--color-foreground);
-    color: var(--surface-page);
-    border-color: var(--color-foreground);
-  }
-
-  .ui-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-    padding: 0.125rem 0.625rem;
-    border-radius: 999px;
-    border: 1px solid var(--color-border);
-    background: color-mix(in oklab, var(--surface-elevated) 80%, transparent);
-    color: var(--color-muted-foreground);
-    font-size: 0.6875rem;
-  }
-
-  .ui-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.375rem;
-    padding: 0.4375rem 0.875rem;
-    font-size: 0.8125rem;
-    font-weight: 500;
-    line-height: 1;
-    border-radius: var(--radius-control);
-    border: 1px solid var(--color-border);
-    background: transparent;
-    color: var(--color-foreground);
-    cursor: pointer;
-    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
-    font-family: var(--type-body);
-  }
-  .ui-btn:hover { background: color-mix(in oklab, var(--color-foreground) 7%, transparent); }
-  .ui-btn-primary { background: var(--color-foreground); color: var(--surface-page); border-color: var(--color-foreground); }
-  .ui-btn-primary:hover { background: color-mix(in oklab, var(--color-foreground) 90%, var(--accent-primary) 10%); }
-  .ui-btn-quiet { border-color: transparent; }
-  .ui-btn-quiet:hover { background: color-mix(in oklab, var(--color-foreground) 5%, transparent); }
-
-  .ui-choice {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    padding: 0.875rem 1rem 0.875rem 1.125rem;
-    background: transparent;
-    border-left: 2px solid var(--color-border);
-    border-bottom: 1px solid var(--color-border);
-    text-align: left;
-    cursor: pointer;
-    transition: border-color 150ms ease, background 150ms ease;
-  }
-  .ui-choice:hover {
-    border-left-color: var(--accent-primary);
-    background: color-mix(in oklab, var(--accent-primary) 4%, transparent);
-  }
-  .ui-choice[data-selected="true"] {
-    border-left-color: var(--accent-primary);
-    border-left-width: 3px;
-    background: color-mix(in oklab, var(--accent-primary) 6%, transparent);
-  }
-
-  .ui-input {
-    width: 100%;
-    padding: 0.5rem 0.875rem;
-    background: var(--surface-inset);
-    border: 1px solid var(--rule-color);
-    border-radius: var(--radius-control);
-    color: var(--color-foreground);
-    font-family: var(--type-body);
-    font-size: 0.875rem;
-    outline: none;
-    transition: border-color 120ms ease;
-  }
-  .ui-input:focus { border-color: var(--accent-primary); }
-
-  /* ─────────────────────── PAGE LAYOUT ─────────────────────── */
-  .showcase {
-    max-width: 1280px;
-    margin: 0 auto;
-    padding: 2rem clamp(1rem, 3vw, 3rem) 6rem;
-  }
-
-  .topbar {
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    background: color-mix(in oklab, var(--surface-page) 92%, transparent);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--rule-color);
-  }
-  .topbar-inner {
-    max-width: 1280px;
-    margin: 0 auto;
-    padding: 0.625rem clamp(1rem, 3vw, 3rem);
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    flex-wrap: wrap;
-  }
-  .topbar-brand {
-    display: flex;
-    align-items: baseline;
-    gap: 0.625rem;
-    margin-right: auto;
-  }
-  .topbar-brand-mark {
-    font-family: var(--type-display);
-    font-weight: 600;
-    font-size: 1rem;
-    letter-spacing: -0.01em;
-  }
-  .topbar-brand-meta {
-    font-family: var(--type-meta);
-    font-size: 0.6875rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--color-muted-foreground);
-  }
-  .switcher {
-    display: inline-flex;
-    align-items: center;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-control);
-    overflow: hidden;
-    background: var(--surface-elevated);
-  }
-  .switcher button {
-    padding: 0.375rem 0.75rem;
-    font-size: 0.75rem;
-    font-weight: 500;
-    letter-spacing: 0.02em;
-    border: 0;
-    background: transparent;
-    color: var(--color-muted-foreground);
-    cursor: pointer;
-    font-family: var(--type-body);
-    transition: background 100ms ease, color 100ms ease;
-  }
-  .switcher button + button { border-left: 1px solid var(--color-border); }
-  .switcher button[aria-pressed="true"] {
-    background: var(--color-foreground);
-    color: var(--surface-page);
-  }
-  .switcher-label {
-    font-family: var(--type-meta);
-    font-size: 0.6875rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--color-muted-foreground);
-    margin-right: 0.375rem;
-  }
-
-  /* ── Cover ── */
-  .cover {
-    padding: 5rem 0 4rem;
-    border-bottom: 1px solid var(--rule-color);
-  }
-  .cover-eyebrow {
-    font-family: var(--type-meta);
-    font-size: 0.75rem;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--color-muted-foreground);
-    margin-bottom: 1rem;
-  }
-  .cover-title {
-    font-family: var(--type-display);
-    font-weight: 600;
-    font-size: clamp(2.5rem, 6vw, 5rem);
-    line-height: 0.95;
-    letter-spacing: -0.02em;
-    margin: 0 0 1.5rem;
-    max-width: 18ch;
-  }
-  .cover-title em { font-style: italic; color: var(--accent-primary); font-weight: 500; }
-  .cover-lede {
-    font-family: var(--type-body);
-    font-size: 1.0625rem;
-    line-height: 1.6;
-    color: var(--color-muted-foreground);
-    max-width: 52ch;
-    margin: 0 0 2rem;
-  }
-  .cover-meta-row {
-    display: flex;
-    align-items: center;
-    gap: 1.5rem;
-    flex-wrap: wrap;
-    color: var(--color-muted-foreground);
-    font-family: var(--type-meta);
-    font-size: 0.6875rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-  }
-
-  /* ── Section header ── */
-  .section {
-    padding-top: 3rem;
-    margin-top: 3rem;
-    border-top: 1px solid var(--rule-strong-color);
-  }
-  .section:first-of-type { border-top: 0; margin-top: 0; padding-top: 4rem; }
-  .section-num {
-    font-family: var(--type-meta);
-    font-size: 0.75rem;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: var(--color-muted-foreground);
-    margin-bottom: 0.625rem;
-  }
-  .section-title {
-    font-family: var(--type-display);
-    font-weight: 600;
-    font-size: clamp(1.5rem, 3vw, 2.25rem);
-    line-height: 1.1;
-    letter-spacing: -0.01em;
-    margin: 0 0 0.5rem;
-  }
-  .section-blurb {
-    font-size: 0.9375rem;
-    line-height: 1.6;
-    color: var(--color-muted-foreground);
-    max-width: 60ch;
-    margin: 0 0 2rem;
-  }
-
-  /* ── Full page composition preview ── */
-  .composition-frame {
-    border: 1px solid var(--rule-color);
-    border-radius: var(--radius-card);
-    overflow: hidden;
-    background: var(--surface-page);
-    min-height: 680px;
-  }
-  .composition-top {
-    min-height: 3.25rem;
-    padding: 0 1rem 0 1.25rem;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    border-bottom: 1px solid var(--rule-color);
-    background: color-mix(in oklab, var(--surface-rail) 82%, var(--surface-page));
-  }
-  .composition-brand {
-    font-family: var(--type-display);
-    font-weight: 600;
-    font-size: 1.125rem;
-    letter-spacing: -0.01em;
-  }
-  .composition-nav {
-    display: flex;
-    align-items: center;
-    gap: 0.125rem;
-    margin-left: 1rem;
-    flex-wrap: wrap;
-  }
-  .composition-nav-item {
-    padding: 0.375rem 0.625rem;
-    border-radius: var(--radius-control);
-    color: var(--color-muted-foreground);
-    font-size: 0.75rem;
-    font-weight: 500;
-  }
-  .composition-nav-item[data-active="true"] {
-    color: var(--color-foreground);
-    background: color-mix(in oklab, var(--color-foreground) 6%, transparent);
-  }
-  .composition-actions {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  .composition-body {
-    display: grid;
-    grid-template-columns: 15rem minmax(0, 1fr) 18rem;
-    min-height: 575px;
-  }
-  .composition-sidebar,
-  .composition-inspector {
-    background: var(--surface-rail);
-    min-width: 0;
-  }
-  .composition-sidebar {
-    border-right: 1px solid var(--rule-color);
-  }
-  .composition-inspector {
-    border-left: 1px solid var(--rule-color);
-    display: flex;
-    min-height: 0;
-  }
-  .composition-main {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    background: var(--surface-page);
-  }
-  .composition-area {
-    flex: 1;
-    display: grid;
-    grid-template-rows: auto 1fr auto;
-    min-height: 0;
-  }
-  .composition-hero {
-    padding: 1.5rem 1.75rem 1.25rem;
-    border-bottom: 1px solid var(--rule-color);
-  }
-  .composition-kicker {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.625rem;
-    flex-wrap: wrap;
-  }
-  .composition-title {
-    font-family: var(--type-display);
-    font-weight: 600;
-    font-size: clamp(1.75rem, 3.4vw, 3rem);
-    line-height: 1.02;
-    letter-spacing: -0.015em;
-    margin: 0 0 0.75rem;
-    max-width: 14ch;
-  }
-  .composition-copy {
-    max-width: 54ch;
-    color: var(--color-muted-foreground);
-    margin: 0;
-  }
-  .composition-stage {
-    padding: 1.25rem 1.75rem 1.5rem;
-    min-height: 0;
-  }
-  .composition-story-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 13rem;
-    gap: 1.25rem;
-    align-items: start;
-  }
-  .composition-narrative {
-    font-family: var(--type-display);
-    font-size: 1.0625rem;
-    line-height: 1.76;
-    max-width: 52rem;
-  }
-  .composition-turn {
-    border-top: 1px solid var(--rule-strong-color);
-    padding-top: 1rem;
-    position: relative;
-  }
-  .composition-turn::before {
-    content: "";
-    position: absolute;
-    top: -1px;
-    left: 0;
-    width: 4rem;
-    height: 2px;
-    background: var(--accent-primary);
-  }
-  .composition-stat-grid {
-    display: grid;
-    gap: 0.5rem;
-  }
-  .composition-stat {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 0.75rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px dashed var(--rule-color);
-    font-size: 0.75rem;
-  }
-  .composition-stat b {
-    font-family: var(--type-mono);
-    font-size: 0.6875rem;
-    color: var(--accent-primary);
-    font-weight: 500;
-  }
-  .composition-command {
-    padding: 1rem 1.75rem;
-    border-top: 1px solid var(--rule-color);
-    background: color-mix(in oklab, var(--surface-rail) 54%, transparent);
-  }
-  .composition-mini-world {
-    position: relative;
-    padding: 0.875rem 0 1rem;
-    border-top: 1px solid var(--rule-color);
-  }
-  .composition-mini-world:first-of-type {
-    border-top-color: var(--rule-strong-color);
-  }
-  .composition-mini-world[data-active="true"]::before {
-    content: "";
-    position: absolute;
-    top: -1px;
-    left: 0;
-    width: 3rem;
-    height: 2px;
-    background: var(--accent-primary);
-  }
-  .composition-mini-world-title {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.75rem;
-    font-weight: 600;
-    margin-bottom: 0.25rem;
-  }
-  .composition-panel-block {
-    padding: 1rem;
-    border-bottom: 1px solid var(--rule-color);
-  }
-  .composition-panel-block:last-child {
-    border-bottom: 0;
-  }
-  .composition-run-row {
-    display: grid;
-    grid-template-columns: 4.75rem 1fr auto;
-    gap: 0.5rem;
-    align-items: baseline;
-    padding: 0.5rem 0;
-    border-bottom: 1px dashed var(--rule-color);
-    font-family: var(--type-mono);
-    font-size: 0.6875rem;
-  }
-  .composition-run-row:last-child {
-    border-bottom: 0;
-  }
-  .composition-run-row span:first-child {
-    color: var(--accent-primary);
-  }
-  .composition-activitybar {
-    width: 3rem;
-    flex-shrink: 0;
-    padding: 0.5rem 0;
-    border-right: 1px solid var(--rule-color);
-    background: color-mix(in oklab, var(--surface-rail) 70%, var(--surface-page));
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.25rem;
-  }
-  .composition-activity-divider {
-    width: 1.5rem;
-    height: 1px;
-    background: var(--rule-color);
-    margin: 0.375rem 0;
-  }
-  .composition-activity-tab {
-    width: 2.5rem;
-    height: 2.5rem;
-    border: 0;
-    border-radius: var(--radius-control);
-    background: transparent;
-    color: var(--color-muted-foreground);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.125rem;
-    font-family: var(--type-body);
-    font-size: 0.5625rem;
-    line-height: 1;
-  }
-  .composition-activity-tab[data-active="true"] {
-    color: var(--color-foreground);
-    background: color-mix(in oklab, var(--color-foreground) 7%, transparent);
-  }
-  .composition-activity-tab svg {
-    width: 1rem;
-    height: 1rem;
-  }
-  .composition-right-content {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    background: var(--surface-rail);
-  }
-  .composition-right-scroll {
-    flex: 1;
-    min-height: 0;
-    padding: 1rem;
-    overflow: auto;
-  }
-  .composition-provider-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-  .composition-provider-switch {
-    display: inline-flex;
-    align-items: center;
-    border: 1px solid var(--rule-color);
-    border-radius: var(--radius-control);
-    overflow: hidden;
-  }
-  .composition-provider-switch span {
-    padding: 0.125rem 0.5rem;
-    font-size: 0.625rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    color: var(--color-muted-foreground);
-  }
-  .composition-provider-switch span[data-active="true"] {
-    background: var(--color-foreground);
-    color: var(--surface-page);
-  }
-  .composition-subtabs {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding-bottom: 0.5rem;
-    margin-bottom: 0.75rem;
-    border-bottom: 1px solid var(--rule-color);
-    flex-wrap: wrap;
-  }
-  .composition-subtab {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.25rem 0.25rem 0.375rem;
-    margin-bottom: -1px;
-    border-bottom: 2px solid transparent;
-    font-size: 0.6875rem;
-    font-weight: 500;
-    color: var(--color-muted-foreground);
-  }
-  .composition-subtab[data-active="true"] {
-    border-bottom-color: var(--accent-primary);
-    color: var(--color-foreground);
-  }
-  .composition-image-stack {
-    display: grid;
-    gap: 0.5rem;
-  }
-  .composition-image-card {
-    border: 1px solid var(--rule-color);
-    border-radius: 0.5rem;
-    background: color-mix(in oklab, var(--surface-elevated) 60%, transparent);
-    overflow: hidden;
-  }
-  .composition-image-card .gallery-cell {
-    border: 0;
-    border-radius: 0;
-  }
-  .composition-image-card-body {
-    padding: 0.5rem;
-    display: grid;
-    gap: 0.5rem;
-  }
-  .composition-image-card-meta {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-    min-width: 0;
-  }
-  .composition-image-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 0.375rem;
-  }
-  .composition-mini-btn {
-    height: 1.75rem;
-    padding: 0 0.375rem;
-    border: 1px solid var(--rule-color);
-    border-radius: var(--radius-control);
-    background: transparent;
-    color: var(--color-foreground);
-    font-size: 0.625rem;
-    font-family: var(--type-body);
-  }
-  .composition-storebar {
-    flex-shrink: 0;
-    padding: 0.375rem 0.75rem;
-    border-top: 1px solid var(--rule-color);
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    font-size: 0.625rem;
-    color: var(--color-muted-foreground);
-  }
-  .composition-map {
-    aspect-ratio: 4 / 3;
-    border: 1px solid var(--rule-color);
-    border-radius: var(--radius-card);
-    background:
-      linear-gradient(135deg, color-mix(in oklab, var(--accent-primary) 16%, transparent), transparent 48%),
-      linear-gradient(45deg, color-mix(in oklab, var(--accent-secondary) 20%, transparent), transparent 52%),
-      var(--surface-inset);
-    position: relative;
-    overflow: hidden;
-  }
-  .composition-map::before,
-  .composition-map::after {
-    content: "";
-    position: absolute;
-    border: 1px solid color-mix(in oklab, var(--color-foreground) 22%, transparent);
-    border-radius: 50%;
-  }
-  .composition-map::before {
-    width: 62%;
-    height: 44%;
-    left: 12%;
-    top: 18%;
-    transform: rotate(-18deg);
-  }
-  .composition-map::after {
-    width: 40%;
-    height: 34%;
-    right: 10%;
-    bottom: 12%;
-    transform: rotate(22deg);
-  }
-  @media (max-width: 1050px) {
-    .composition-body {
-      grid-template-columns: 13rem minmax(0, 1fr);
-    }
-    .composition-inspector {
-      grid-column: 1 / -1;
-      border-left: 0;
-      border-top: 1px solid var(--rule-color);
-    }
-  }
-  @media (max-width: 760px) {
-    .composition-top {
-      align-items: flex-start;
-      padding: 0.875rem 1rem;
-      flex-direction: column;
-    }
-    .composition-nav {
-      margin-left: 0;
-    }
-    .composition-actions {
-      margin-left: 0;
-    }
-    .composition-body,
-    .composition-story-grid {
-      grid-template-columns: 1fr;
-    }
-    .composition-inspector {
-      min-height: 32rem;
-    }
-    .composition-sidebar {
-      border-right: 0;
-      border-bottom: 1px solid var(--rule-color);
-    }
-    .composition-panel-block {
-      border-right: 0;
-      border-bottom: 1px solid var(--rule-color);
-    }
-    .composition-panel-block:last-child {
-      border-bottom: 0;
-    }
-    .composition-hero,
-    .composition-stage,
-    .composition-command {
-      padding-inline: 1rem;
-    }
-  }
-
-  /* ── Color swatches ── */
-  .swatch-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 1px;
-    background: var(--rule-color);
-    border: 1px solid var(--rule-color);
-    border-radius: var(--radius-card);
-    overflow: hidden;
-  }
-  .swatch {
-    background: var(--surface-elevated);
-    padding: 0.875rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-  .swatch-chip {
-    height: 56px;
-    border-radius: 2px;
-    border: 1px solid var(--rule-color);
-  }
-  .swatch-name { font-size: 0.75rem; font-weight: 500; color: var(--color-foreground); }
-  .swatch-token { font-family: var(--type-mono); font-size: 0.625rem; color: var(--color-muted-foreground); }
-
-  /* ── Type specimens ── */
-  .type-stack { display: grid; gap: 1.75rem; }
-  .type-row { display: grid; grid-template-columns: 8rem 1fr; gap: 1.5rem; align-items: baseline; padding-bottom: 1rem; border-bottom: 1px dashed var(--rule-color); }
-  .type-label { font-family: var(--type-meta); font-size: 0.6875rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--color-muted-foreground); }
-  .type-display { font-family: var(--type-display); font-weight: 600; font-size: 2.75rem; line-height: 1.05; letter-spacing: -0.015em; }
-  .type-display-italic { font-style: italic; }
-  .type-h1 { font-family: var(--type-display); font-weight: 600; font-size: 1.875rem; line-height: 1.15; letter-spacing: -0.01em; }
-  .type-h2 { font-family: var(--type-display); font-weight: 600; font-size: 1.375rem; line-height: 1.2; }
-  .type-body { font-family: var(--type-body); font-size: 1rem; line-height: 1.65; color: var(--color-foreground); }
-  .type-meta-spec { font-family: var(--type-meta); font-size: 0.6875rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--color-muted-foreground); }
-  .type-mono-spec { font-family: var(--type-mono); font-size: 0.8125rem; color: var(--color-foreground); }
-
-  /* ── World list ── */
-  .world-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(28rem, 1fr));
-    gap: 0 3rem;
-  }
-  .world-plate {
-    position: relative;
-    padding: 2rem 0;
-    border-top: 1px solid var(--rule-strong-color);
-    cursor: pointer;
-  }
-  .world-plate-marker {
-    position: absolute;
-    top: -1px;
-    left: 0;
-    height: 2px;
-    width: 3rem;
-    background: var(--accent-primary);
-    transition: width 200ms ease;
-  }
-  .world-plate:hover .world-plate-marker { width: 6rem; }
-  .world-plate-num {
-    position: absolute;
-    top: 0.5rem;
-    right: 0;
-    font-family: var(--type-meta);
-    font-size: 0.625rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--color-muted-foreground);
-  }
-  .world-plate-title {
-    font-family: var(--type-display);
-    font-weight: 600;
-    font-size: clamp(1.5rem, 2.5vw, 2rem);
-    line-height: 1.1;
-    margin: 0.75rem 0 0.625rem;
-  }
-  .world-plate-blurb {
-    font-size: 0.875rem;
-    line-height: 1.6;
-    color: var(--color-muted-foreground);
-    margin: 0 0 0.875rem;
-    max-width: 42ch;
-  }
-  .world-plate-tags { display: flex; gap: 0.375rem; flex-wrap: wrap; align-items: center; }
-  .world-plate-enter {
-    margin-left: auto;
-    color: var(--accent-primary);
-    font-family: var(--type-meta);
-    font-size: 0.6875rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-
-  /* ── Plugin chip in left rail ── */
-  .plugin-row {
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
-    padding: 0.5rem 0.625rem;
-    border-radius: var(--radius-control);
-    transition: background 100ms ease;
-  }
-  .plugin-row:hover { background: color-mix(in oklab, var(--color-foreground) 5%, transparent); }
-  .plugin-toggle {
-    width: 28px;
-    height: 16px;
-    background: var(--color-muted);
-    border-radius: 999px;
-    position: relative;
-    flex-shrink: 0;
-  }
-  .plugin-toggle::after {
-    content: "";
-    position: absolute;
-    width: 12px;
-    height: 12px;
-    border-radius: 999px;
-    background: var(--surface-elevated);
-    top: 2px;
-    left: 2px;
-    transition: transform 150ms ease;
-  }
-  .plugin-toggle[data-on="true"] { background: var(--accent-primary); }
-  .plugin-toggle[data-on="true"]::after { transform: translateX(12px); }
-  .plugin-name { font-size: 0.8125rem; flex: 1; min-width: 0; truncate: ellipsis; overflow: hidden; white-space: nowrap; }
-  .plugin-priority {
-    font-family: var(--type-mono);
-    font-size: 0.6875rem;
-    color: var(--color-muted-foreground);
-  }
-
-  /* ── Choice grid ── */
-  .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
-  @media (max-width: 700px) { .choice-grid { grid-template-columns: 1fr; } }
-
-  /* ── Player message ── */
-  .msg-player {
-    border-left: 3px solid var(--accent-primary);
-    padding: 0.625rem 0.875rem;
-    background: color-mix(in oklab, var(--accent-primary) 4%, transparent);
-    max-width: 36rem;
-  }
-  .msg-narrative { font-family: var(--type-display); line-height: 1.78; font-size: 1rem; max-width: 50rem; }
-
-  /* ── Composer ── */
-  .composer {
-    display: flex;
-    align-items: stretch;
-    border: 1px solid var(--rule-color);
-    border-radius: var(--radius-control);
-    background: var(--surface-inset);
-    transition: border-color 120ms ease;
-  }
-  .composer:focus-within { border-color: var(--accent-primary); }
-  .composer input {
-    flex: 1;
-    min-width: 0;
-    padding: 0.625rem 0.875rem;
-    background: transparent;
-    border: 0;
-    outline: none;
-    color: var(--color-foreground);
-    font-family: var(--type-body);
-    font-size: 0.875rem;
-  }
-  .composer input::placeholder { color: var(--color-muted-foreground); }
-  .composer button {
-    width: 2.75rem;
-    border: 0;
-    border-left: 1px solid var(--rule-color);
-    background: transparent;
-    color: var(--color-muted-foreground);
-    cursor: pointer;
-    transition: background 100ms ease, color 100ms ease;
-  }
-  .composer button:hover {
-    background: color-mix(in oklab, var(--color-foreground) 6%, transparent);
-    color: var(--color-foreground);
-  }
-
-  /* ── Settings dialog mock ── */
-  .settings-mock {
-    display: grid;
-    grid-template-columns: 14rem 1fr;
-    border: 1px solid var(--rule-color);
-    border-radius: var(--radius-dialog);
-    background: var(--surface-elevated);
-    overflow: hidden;
-    min-height: 460px;
-  }
-  .settings-side {
-    background: var(--surface-rail);
-    border-right: 1px solid var(--rule-color);
-    padding: 0.75rem 0;
-  }
-  .settings-nav-item {
-    position: relative;
-    width: 100%;
-    text-align: left;
-    border: 0;
-    background: transparent;
-    color: var(--color-muted-foreground);
-    padding: 0.5rem 1rem;
-    font-size: 0.8125rem;
-    font-family: var(--type-body);
-    cursor: pointer;
-  }
-  .settings-nav-item[aria-current="true"] { color: var(--color-foreground); font-weight: 500; }
-  .settings-nav-item[aria-current="true"]::before {
-    content: "";
-    position: absolute;
-    left: 0; top: 0; bottom: 0;
-    width: 3px;
-    background: var(--accent-primary);
-  }
-  .settings-nav-group {
-    padding: 1rem 1rem 0.25rem;
-    font-family: var(--type-meta);
-    font-size: 0.625rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--color-muted-foreground);
-  }
-  .settings-body { padding: 1.25rem 1.5rem; overflow: auto; }
-
-  /* ── Debug log mock ── */
-  .debug-mock { border: 1px solid var(--rule-color); border-radius: var(--radius-card); background: var(--surface-rail); }
-  .debug-row {
-    display: flex;
-    align-items: center;
-    gap: 0.875rem;
-    padding: 0.625rem 1rem;
-    border-bottom: 1px solid var(--rule-color);
-    font-family: var(--type-mono);
-    font-size: 0.75rem;
-  }
-  .debug-row:last-child { border-bottom: 0; }
-  .debug-tag {
-    flex-shrink: 0;
-    width: 4.5rem;
-    color: var(--accent-primary);
-  }
-  .debug-id { color: var(--color-muted-foreground); flex-shrink: 0; }
-  .debug-msg { color: var(--color-foreground); flex: 1; min-width: 0; }
-  .debug-dur { color: var(--color-muted-foreground); flex-shrink: 0; }
-
-  /* ── Image gallery row ── */
-  .gallery-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 0.5rem;
-  }
-  .gallery-cell {
-    aspect-ratio: 1 / 1;
-    background: linear-gradient(135deg, color-mix(in oklab, var(--accent-primary) 30%, var(--surface-inset)), color-mix(in oklab, var(--accent-secondary) 30%, var(--surface-inset)));
-    border: 1px solid var(--rule-color);
-    border-radius: var(--radius-card);
-    position: relative;
-    overflow: hidden;
-  }
-  .gallery-cell::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background:
-      radial-gradient(circle at 30% 30%, color-mix(in oklab, var(--surface-page) 50%, transparent), transparent 60%),
-      radial-gradient(circle at 75% 70%, color-mix(in oklab, var(--accent-warning) 30%, transparent), transparent 60%);
-    mix-blend-mode: overlay;
-  }
-
-  /* ── Token reference ── */
-  .token-list { columns: 2; column-gap: 2.5rem; column-rule: 1px solid var(--rule-color); font-family: var(--type-mono); font-size: 0.8125rem; }
-  @media (max-width: 700px) { .token-list { columns: 1; } }
-  .token-entry { break-inside: avoid; padding: 0.4rem 0; display: flex; gap: 1rem; }
-  .token-entry .key { color: var(--color-foreground); flex-shrink: 0; }
-  .token-entry .val { color: var(--color-muted-foreground); }
-
-  /* ── Theme overview tiles ──
+      /* ── Base tokens (paper light fallback) ─────────────────────────── */
+      :root {
+        --color-background: oklch(96.5% 0.012 80);
+        --color-foreground: oklch(20% 0.018 60);
+        --color-card: oklch(98.2% 0.008 80);
+        --color-muted: oklch(93% 0.012 80);
+        --color-muted-foreground: oklch(46% 0.018 60);
+        --color-border: oklch(85% 0.014 75);
+
+        --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+        --font-display: "Fraunces", "Newsreader", Georgia, serif;
+        --font-mono:
+          "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+        --type-display: var(--font-display);
+        --type-body: var(--font-sans);
+        --type-mono: var(--font-mono);
+        --type-meta: var(--font-mono);
+
+        --surface-page: var(--color-background);
+        --surface-rail: oklch(94.5% 0.014 80);
+        --surface-inset: oklch(91.5% 0.018 80);
+        --surface-elevated: var(--color-card);
+
+        --rule-color: oklch(82% 0.018 75);
+        --rule-strong-color: oklch(35% 0.024 60);
+        --rule-style: solid;
+
+        --accent-primary: oklch(45% 0.13 35);
+        --accent-secondary: oklch(38% 0.08 220);
+        --accent-warning: oklch(65% 0.14 75);
+        --accent-danger: oklch(54% 0.18 25);
+        --accent-success: oklch(48% 0.11 145);
+
+        --ambience-image:
+          radial-gradient(
+            ellipse at 80% -10%,
+            oklch(82% 0.085 60 / 0.18),
+            transparent 60%
+          ),
+          radial-gradient(
+            ellipse at -10% 110%,
+            oklch(85% 0.05 220 / 0.12),
+            transparent 55%
+          );
+        --noise-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0   0 0 0 0 0   0 0 0 0 0   0 0 0 0.55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/></svg>");
+        --noise-opacity: 0.04;
+
+        --radius-card: 0.1875rem;
+        --radius-control: 0.125rem;
+        --radius-dialog: 0.25rem;
+        --radius-chip: 999px;
+
+        --eyebrow-letter-spacing: 0.18em;
+      }
+
+      /* ─────────────────────── PAPER ─────────────────────── */
+      html[data-theme="paper"][data-scheme="light"] {
+        --color-background: oklch(96.5% 0.012 80);
+        --color-foreground: oklch(20% 0.018 60);
+        --color-card: oklch(98.2% 0.008 80);
+        --color-muted: oklch(93% 0.012 80);
+        --color-muted-foreground: oklch(46% 0.018 60);
+        --color-border: oklch(85% 0.014 75);
+
+        --type-display: "Fraunces", Georgia, serif;
+        --type-body: "Inter", system-ui, sans-serif;
+
+        --surface-page: oklch(96.5% 0.012 80);
+        --surface-rail: oklch(94.5% 0.014 80);
+        --surface-inset: oklch(91.5% 0.018 80);
+        --surface-elevated: oklch(98.2% 0.008 80);
+
+        --rule-color: oklch(82% 0.018 75);
+        --rule-strong-color: oklch(35% 0.024 60);
+
+        --accent-primary: oklch(45% 0.13 35);
+        --accent-secondary: oklch(38% 0.08 220);
+        --accent-warning: oklch(65% 0.14 75);
+        --accent-danger: oklch(54% 0.18 25);
+        --accent-success: oklch(48% 0.11 145);
+
+        --ambience-image:
+          radial-gradient(
+            ellipse at 80% -10%,
+            oklch(82% 0.085 60 / 0.18),
+            transparent 60%
+          ),
+          radial-gradient(
+            ellipse at -10% 110%,
+            oklch(85% 0.05 220 / 0.12),
+            transparent 55%
+          );
+        --noise-opacity: 0.04;
+      }
+
+      html[data-theme="paper"][data-scheme="dark"] {
+        --color-background: oklch(13% 0.01 60);
+        --color-foreground: oklch(91% 0.012 80);
+        --color-card: oklch(17% 0.014 60);
+        --color-muted: oklch(20% 0.016 60);
+        --color-muted-foreground: oklch(58% 0.018 60);
+        --color-border: oklch(25% 0.018 60);
+
+        --surface-page: oklch(13% 0.01 60);
+        --surface-rail: oklch(15% 0.012 60);
+        --surface-inset: oklch(18% 0.014 60);
+        --surface-elevated: oklch(20% 0.016 60);
+
+        --rule-color: oklch(28% 0.018 60);
+        --rule-strong-color: oklch(60% 0.02 60);
+
+        --accent-primary: oklch(72% 0.12 75);
+        --accent-secondary: oklch(70% 0.1 220);
+        --accent-warning: oklch(78% 0.16 80);
+        --accent-success: oklch(70% 0.13 145);
+
+        --ambience-image:
+          radial-gradient(
+            ellipse at 80% -10%,
+            oklch(72% 0.12 75 / 0.08),
+            transparent 55%
+          ),
+          radial-gradient(
+            ellipse at -10% 110%,
+            oklch(40% 0.08 220 / 0.08),
+            transparent 55%
+          );
+        --noise-opacity: 0.05;
+      }
+
+      /* ─────────────────────── MODERN ─────────────────────── */
+      html[data-theme="modern"][data-scheme="light"] {
+        --color-background: oklch(98% 0.004 240);
+        --color-foreground: oklch(18% 0.014 240);
+        --color-card: oklch(99.4% 0.002 240);
+        --color-muted: oklch(94% 0.006 240);
+        --color-muted-foreground: oklch(46% 0.016 240);
+        --color-border: oklch(88% 0.008 240);
+
+        --type-display: "Inter", system-ui, sans-serif;
+        --type-body: "Inter", system-ui, sans-serif;
+
+        --surface-page: oklch(98% 0.004 240);
+        --surface-rail: oklch(96% 0.005 240);
+        --surface-inset: oklch(94.5% 0.007 240);
+        --surface-elevated: oklch(99.4% 0.002 240);
+
+        --rule-color: oklch(86% 0.01 240);
+        --rule-strong-color: oklch(28% 0.02 240);
+
+        --accent-primary: oklch(48% 0.13 240);
+        --accent-secondary: oklch(64% 0.13 200);
+        --accent-warning: oklch(70% 0.16 75);
+        --accent-success: oklch(58% 0.15 155);
+
+        --ambience-image:
+          radial-gradient(
+            ellipse at 78% -10%,
+            oklch(70% 0.13 200 / 0.16),
+            transparent 55%
+          ),
+          radial-gradient(
+            ellipse at 5% 110%,
+            oklch(50% 0.13 250 / 0.1),
+            transparent 50%
+          );
+        --noise-opacity: 0.018;
+      }
+
+      html[data-theme="modern"][data-scheme="dark"] {
+        --color-background: oklch(13% 0.016 240);
+        --color-foreground: oklch(94% 0.006 240);
+        --color-card: oklch(17% 0.02 240);
+        --color-muted: oklch(20% 0.022 240);
+        --color-muted-foreground: oklch(62% 0.018 240);
+        --color-border: oklch(26% 0.022 240);
+
+        --surface-page: oklch(13% 0.016 240);
+        --surface-rail: oklch(15% 0.018 240);
+        --surface-inset: oklch(18% 0.02 240);
+        --surface-elevated: oklch(20% 0.022 240);
+
+        --rule-color: oklch(28% 0.022 240);
+        --rule-strong-color: oklch(64% 0.018 240);
+
+        --accent-primary: oklch(72% 0.13 200);
+        --accent-secondary: oklch(80% 0.1 200);
+        --accent-warning: oklch(78% 0.16 80);
+        --accent-success: oklch(68% 0.14 155);
+
+        --ambience-image:
+          radial-gradient(
+            ellipse at 78% -10%,
+            oklch(72% 0.13 200 / 0.1),
+            transparent 55%
+          ),
+          radial-gradient(
+            ellipse at 5% 110%,
+            oklch(60% 0.16 250 / 0.08),
+            transparent 50%
+          );
+        --noise-opacity: 0.04;
+      }
+
+      /* ─────────────────────── ABYSS ─────────────────────── */
+      html[data-theme="abyss"][data-scheme="light"],
+      html[data-theme="abyss"][data-scheme="dark"] {
+        --color-background: oklch(11% 0.022 270);
+        --color-foreground: oklch(89% 0.014 80);
+        --color-card: oklch(13% 0.024 270);
+        --color-muted: oklch(16% 0.024 270);
+        --color-muted-foreground: oklch(60% 0.024 270);
+        --color-border: oklch(24% 0.026 270 / 0.6);
+
+        --type-display: "Fraunces", Georgia, serif;
+        --type-body: "Inter", system-ui, sans-serif;
+
+        --surface-page: oklch(11% 0.022 270);
+        --surface-rail: oklch(13% 0.025 270);
+        --surface-inset: oklch(15% 0.026 270);
+        --surface-elevated: oklch(17% 0.028 270);
+
+        --rule-color: oklch(24% 0.026 270);
+        --rule-strong-color: oklch(58% 0.04 270);
+
+        --accent-primary: oklch(72% 0.16 300);
+        --accent-secondary: oklch(70% 0.14 230);
+        --accent-warning: oklch(75% 0.16 75);
+        --accent-success: oklch(72% 0.13 155);
+
+        --ambience-image:
+          radial-gradient(
+            ellipse at 80% 0%,
+            oklch(58% 0.18 300 / 0.16),
+            transparent 55%
+          ),
+          radial-gradient(
+            ellipse at 0% 100%,
+            oklch(50% 0.14 230 / 0.14),
+            transparent 55%
+          );
+        --noise-opacity: 0.06;
+      }
+
+      /* Italic display headings only in serif themes */
+      html[data-theme="abyss"] h1,
+      html[data-theme="abyss"] h2 {
+        font-style: italic;
+      }
+
+      /* ─────────────────────── BASE ─────────────────────── */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      html {
+        background: var(--surface-page);
+        color: var(--color-foreground);
+        font-family: var(--type-body);
+        font-size: 14px;
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+        transition:
+          background 200ms ease,
+          color 200ms ease;
+      }
+
+      body {
+        background-image: var(--ambience-image);
+        background-size: cover;
+        background-attachment: fixed;
+        min-height: 100vh;
+        position: relative;
+      }
+
+      /* Noise overlay */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background-image: var(--noise-image);
+        opacity: var(--noise-opacity);
+        mix-blend-mode: multiply;
+        z-index: 0;
+      }
+      body > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      ::selection {
+        background: color-mix(in oklab, var(--accent-primary) 30%, transparent);
+        color: var(--color-foreground);
+      }
+
+      /* Scrollbar */
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: color-mix(
+            in oklab,
+            var(--color-foreground) 14%,
+            transparent
+          )
+          transparent;
+      }
+      *::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      *::-webkit-scrollbar-thumb {
+        background: color-mix(
+          in oklab,
+          var(--color-foreground) 14%,
+          transparent
+        );
+        border-radius: 999px;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+      }
+
+      /* ─────────────────────── ATOMS ─────────────────────── */
+      .ui-meta {
+        font-family: var(--type-meta);
+        font-size: 0.6875rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--color-muted-foreground);
+      }
+      .ui-eyebrow {
+        font-family: var(--type-meta);
+        font-size: 0.6875rem;
+        font-weight: 500;
+        letter-spacing: var(--eyebrow-letter-spacing);
+        text-transform: uppercase;
+        color: var(--color-muted-foreground);
+      }
+      .ui-title {
+        font-family: var(--type-display);
+        font-weight: 600;
+        letter-spacing: -0.005em;
+        color: var(--color-foreground);
+      }
+      .ui-rule {
+        border: 0;
+        border-top: 1px var(--rule-style) var(--rule-color);
+        height: 0;
+        margin: 0;
+      }
+      .ui-rule-strong {
+        border: 0;
+        border-top: 1px solid var(--rule-strong-color);
+        height: 0;
+        margin: 0;
+      }
+      .ui-section {
+        padding-block: 1rem 1.25rem;
+        border-bottom: 1px solid var(--rule-color);
+      }
+      .ui-section:last-child {
+        border-bottom: 0;
+      }
+      .ui-section-head {
+        display: flex;
+        align-items: baseline;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+      }
+      .ui-section-title {
+        font-family: var(--type-display);
+        font-weight: 600;
+        font-size: 0.9375rem;
+      }
+
+      .ui-band {
+        position: relative;
+        padding: 0.875rem 1rem 0.875rem 1.25rem;
+        border-left: 3px solid var(--accent-primary);
+      }
+      .ui-band[data-tone="muted"] {
+        border-left-color: var(--color-muted-foreground);
+        border-left-width: 2px;
+      }
+      .ui-band[data-tone="warning"] {
+        border-left-color: var(--accent-warning);
+      }
+      .ui-band[data-tone="danger"] {
+        border-left-color: var(--accent-danger);
+      }
+      .ui-band[data-tone="success"] {
+        border-left-color: var(--accent-success);
+      }
+      .ui-band[data-tone="info"] {
+        border-left-color: var(--accent-secondary);
+      }
+
+      .ui-frame {
+        background: var(--surface-elevated);
+        border: 1px solid var(--rule-color);
+        border-radius: var(--radius-card);
+      }
+
+      .ui-rail {
+        background: var(--surface-rail);
+      }
+
+      .ui-tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.0625rem 0.4375rem;
+        font-family: var(--type-meta);
+        font-size: 0.625rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--color-muted-foreground);
+        border: 1px solid var(--color-border);
+        border-radius: 2px;
+        background: transparent;
+      }
+      .ui-tag-solid {
+        background: var(--color-foreground);
+        color: var(--surface-page);
+        border-color: var(--color-foreground);
+      }
+
+      .ui-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.125rem 0.625rem;
+        border-radius: 999px;
+        border: 1px solid var(--color-border);
+        background: color-mix(
+          in oklab,
+          var(--surface-elevated) 80%,
+          transparent
+        );
+        color: var(--color-muted-foreground);
+        font-size: 0.6875rem;
+      }
+
+      .ui-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.375rem;
+        padding: 0.4375rem 0.875rem;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        line-height: 1;
+        border-radius: var(--radius-control);
+        border: 1px solid var(--color-border);
+        background: transparent;
+        color: var(--color-foreground);
+        cursor: pointer;
+        transition:
+          background 120ms ease,
+          border-color 120ms ease,
+          color 120ms ease;
+        font-family: var(--type-body);
+      }
+      .ui-btn:hover {
+        background: color-mix(
+          in oklab,
+          var(--color-foreground) 7%,
+          transparent
+        );
+      }
+      .ui-btn-primary {
+        background: var(--color-foreground);
+        color: var(--surface-page);
+        border-color: var(--color-foreground);
+      }
+      .ui-btn-primary:hover {
+        background: color-mix(
+          in oklab,
+          var(--color-foreground) 90%,
+          var(--accent-primary) 10%
+        );
+      }
+      .ui-btn-quiet {
+        border-color: transparent;
+      }
+      .ui-btn-quiet:hover {
+        background: color-mix(
+          in oklab,
+          var(--color-foreground) 5%,
+          transparent
+        );
+      }
+
+      .ui-choice {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0.875rem 1rem 0.875rem 1.125rem;
+        background: transparent;
+        border-left: 2px solid var(--color-border);
+        border-bottom: 1px solid var(--color-border);
+        text-align: left;
+        cursor: pointer;
+        transition:
+          border-color 150ms ease,
+          background 150ms ease;
+      }
+      .ui-choice:hover {
+        border-left-color: var(--accent-primary);
+        background: color-mix(in oklab, var(--accent-primary) 4%, transparent);
+      }
+      .ui-choice[data-selected="true"] {
+        border-left-color: var(--accent-primary);
+        border-left-width: 3px;
+        background: color-mix(in oklab, var(--accent-primary) 6%, transparent);
+      }
+
+      .ui-input {
+        width: 100%;
+        padding: 0.5rem 0.875rem;
+        background: var(--surface-inset);
+        border: 1px solid var(--rule-color);
+        border-radius: var(--radius-control);
+        color: var(--color-foreground);
+        font-family: var(--type-body);
+        font-size: 0.875rem;
+        outline: none;
+        transition: border-color 120ms ease;
+      }
+      .ui-input:focus {
+        border-color: var(--accent-primary);
+      }
+
+      /* ─────────────────────── PAGE LAYOUT ─────────────────────── */
+      .showcase {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 2rem clamp(1rem, 3vw, 3rem) 6rem;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: color-mix(in oklab, var(--surface-page) 92%, transparent);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--rule-color);
+      }
+      .topbar-inner {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 0.625rem clamp(1rem, 3vw, 3rem);
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+      .topbar-brand {
+        display: flex;
+        align-items: baseline;
+        gap: 0.625rem;
+        margin-right: auto;
+      }
+      .topbar-brand-mark {
+        font-family: var(--type-display);
+        font-weight: 600;
+        font-size: 1rem;
+        letter-spacing: -0.01em;
+      }
+      .topbar-brand-meta {
+        font-family: var(--type-meta);
+        font-size: 0.6875rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--color-muted-foreground);
+      }
+      .switcher {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-control);
+        overflow: hidden;
+        background: var(--surface-elevated);
+      }
+      .switcher button {
+        padding: 0.375rem 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        border: 0;
+        background: transparent;
+        color: var(--color-muted-foreground);
+        cursor: pointer;
+        font-family: var(--type-body);
+        transition:
+          background 100ms ease,
+          color 100ms ease;
+      }
+      .switcher button + button {
+        border-left: 1px solid var(--color-border);
+      }
+      .switcher button[aria-pressed="true"] {
+        background: var(--color-foreground);
+        color: var(--surface-page);
+      }
+      .switcher-label {
+        font-family: var(--type-meta);
+        font-size: 0.6875rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--color-muted-foreground);
+        margin-right: 0.375rem;
+      }
+
+      /* ── Cover ── */
+      .cover {
+        padding: 5rem 0 4rem;
+        border-bottom: 1px solid var(--rule-color);
+      }
+      .cover-eyebrow {
+        font-family: var(--type-meta);
+        font-size: 0.75rem;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--color-muted-foreground);
+        margin-bottom: 1rem;
+      }
+      .cover-title {
+        font-family: var(--type-display);
+        font-weight: 600;
+        font-size: clamp(2.5rem, 6vw, 5rem);
+        line-height: 0.95;
+        letter-spacing: -0.02em;
+        margin: 0 0 1.5rem;
+        max-width: 18ch;
+      }
+      .cover-title em {
+        font-style: italic;
+        color: var(--accent-primary);
+        font-weight: 500;
+      }
+      .cover-lede {
+        font-family: var(--type-body);
+        font-size: 1.0625rem;
+        line-height: 1.6;
+        color: var(--color-muted-foreground);
+        max-width: 52ch;
+        margin: 0 0 2rem;
+      }
+      .cover-meta-row {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+        color: var(--color-muted-foreground);
+        font-family: var(--type-meta);
+        font-size: 0.6875rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      /* ── Section header ── */
+      .section {
+        padding-top: 3rem;
+        margin-top: 3rem;
+        border-top: 1px solid var(--rule-strong-color);
+      }
+      .section:first-of-type {
+        border-top: 0;
+        margin-top: 0;
+        padding-top: 4rem;
+      }
+      .section-num {
+        font-family: var(--type-meta);
+        font-size: 0.75rem;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--color-muted-foreground);
+        margin-bottom: 0.625rem;
+      }
+      .section-title {
+        font-family: var(--type-display);
+        font-weight: 600;
+        font-size: clamp(1.5rem, 3vw, 2.25rem);
+        line-height: 1.1;
+        letter-spacing: -0.01em;
+        margin: 0 0 0.5rem;
+      }
+      .section-blurb {
+        font-size: 0.9375rem;
+        line-height: 1.6;
+        color: var(--color-muted-foreground);
+        max-width: 60ch;
+        margin: 0 0 2rem;
+      }
+
+      /* ── Full page composition preview ── */
+      .composition-frame {
+        border: 1px solid var(--rule-color);
+        border-radius: var(--radius-card);
+        overflow: hidden;
+        background: var(--surface-page);
+        min-height: 680px;
+      }
+      .composition-top {
+        min-height: 3.25rem;
+        padding: 0 1rem 0 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        border-bottom: 1px solid var(--rule-color);
+        background: color-mix(
+          in oklab,
+          var(--surface-rail) 82%,
+          var(--surface-page)
+        );
+      }
+      .composition-brand {
+        font-family: var(--type-display);
+        font-weight: 600;
+        font-size: 1.125rem;
+        letter-spacing: -0.01em;
+      }
+      .composition-nav {
+        display: flex;
+        align-items: center;
+        gap: 0.125rem;
+        margin-left: 1rem;
+        flex-wrap: wrap;
+      }
+      .composition-nav-item {
+        padding: 0.375rem 0.625rem;
+        border-radius: var(--radius-control);
+        color: var(--color-muted-foreground);
+        font-size: 0.75rem;
+        font-weight: 500;
+      }
+      .composition-nav-item[data-active="true"] {
+        color: var(--color-foreground);
+        background: color-mix(
+          in oklab,
+          var(--color-foreground) 6%,
+          transparent
+        );
+      }
+      .composition-actions {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .composition-body {
+        display: grid;
+        grid-template-columns: 15rem minmax(0, 1fr) 18rem;
+        min-height: 575px;
+      }
+      .composition-sidebar,
+      .composition-inspector {
+        background: var(--surface-rail);
+        min-width: 0;
+      }
+      .composition-sidebar {
+        border-right: 1px solid var(--rule-color);
+      }
+      .composition-inspector {
+        border-left: 1px solid var(--rule-color);
+        display: flex;
+        min-height: 0;
+      }
+      .composition-main {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        background: var(--surface-page);
+      }
+      .composition-area {
+        flex: 1;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        min-height: 0;
+      }
+      .composition-hero {
+        padding: 1.5rem 1.75rem 1.25rem;
+        border-bottom: 1px solid var(--rule-color);
+      }
+      .composition-kicker {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.625rem;
+        flex-wrap: wrap;
+      }
+      .composition-title {
+        font-family: var(--type-display);
+        font-weight: 600;
+        font-size: clamp(1.75rem, 3.4vw, 3rem);
+        line-height: 1.02;
+        letter-spacing: -0.015em;
+        margin: 0 0 0.75rem;
+        max-width: 14ch;
+      }
+      .composition-copy {
+        max-width: 54ch;
+        color: var(--color-muted-foreground);
+        margin: 0;
+      }
+      .composition-stage {
+        padding: 1.25rem 1.75rem 1.5rem;
+        min-height: 0;
+      }
+      .composition-story-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 13rem;
+        gap: 1.25rem;
+        align-items: start;
+      }
+      .composition-narrative {
+        font-family: var(--type-display);
+        font-size: 1.0625rem;
+        line-height: 1.76;
+        max-width: 52rem;
+      }
+      .composition-turn {
+        border-top: 1px solid var(--rule-strong-color);
+        padding-top: 1rem;
+        position: relative;
+      }
+      .composition-turn::before {
+        content: "";
+        position: absolute;
+        top: -1px;
+        left: 0;
+        width: 4rem;
+        height: 2px;
+        background: var(--accent-primary);
+      }
+      .composition-stat-grid {
+        display: grid;
+        gap: 0.5rem;
+      }
+      .composition-stat {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 0.75rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px dashed var(--rule-color);
+        font-size: 0.75rem;
+      }
+      .composition-stat b {
+        font-family: var(--type-mono);
+        font-size: 0.6875rem;
+        color: var(--accent-primary);
+        font-weight: 500;
+      }
+      .composition-command {
+        padding: 1rem 1.75rem;
+        border-top: 1px solid var(--rule-color);
+        background: color-mix(in oklab, var(--surface-rail) 54%, transparent);
+      }
+      .composition-mini-world {
+        position: relative;
+        padding: 0.875rem 0 1rem;
+        border-top: 1px solid var(--rule-color);
+      }
+      .composition-mini-world:first-of-type {
+        border-top-color: var(--rule-strong-color);
+      }
+      .composition-mini-world[data-active="true"]::before {
+        content: "";
+        position: absolute;
+        top: -1px;
+        left: 0;
+        width: 3rem;
+        height: 2px;
+        background: var(--accent-primary);
+      }
+      .composition-mini-world-title {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.75rem;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+      }
+      .composition-panel-block {
+        padding: 1rem;
+        border-bottom: 1px solid var(--rule-color);
+      }
+      .composition-panel-block:last-child {
+        border-bottom: 0;
+      }
+      .composition-run-row {
+        display: grid;
+        grid-template-columns: 4.75rem 1fr auto;
+        gap: 0.5rem;
+        align-items: baseline;
+        padding: 0.5rem 0;
+        border-bottom: 1px dashed var(--rule-color);
+        font-family: var(--type-mono);
+        font-size: 0.6875rem;
+      }
+      .composition-run-row:last-child {
+        border-bottom: 0;
+      }
+      .composition-run-row span:first-child {
+        color: var(--accent-primary);
+      }
+      .composition-activitybar {
+        width: 3rem;
+        flex-shrink: 0;
+        padding: 0.5rem 0;
+        border-right: 1px solid var(--rule-color);
+        background: color-mix(
+          in oklab,
+          var(--surface-rail) 70%,
+          var(--surface-page)
+        );
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+      }
+      .composition-activity-divider {
+        width: 1.5rem;
+        height: 1px;
+        background: var(--rule-color);
+        margin: 0.375rem 0;
+      }
+      .composition-activity-tab {
+        width: 2.5rem;
+        height: 2.5rem;
+        border: 0;
+        border-radius: var(--radius-control);
+        background: transparent;
+        color: var(--color-muted-foreground);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.125rem;
+        font-family: var(--type-body);
+        font-size: 0.5625rem;
+        line-height: 1;
+      }
+      .composition-activity-tab[data-active="true"] {
+        color: var(--color-foreground);
+        background: color-mix(
+          in oklab,
+          var(--color-foreground) 7%,
+          transparent
+        );
+      }
+      .composition-activity-tab svg {
+        width: 1rem;
+        height: 1rem;
+      }
+      .composition-right-content {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        background: var(--surface-rail);
+      }
+      .composition-right-scroll {
+        flex: 1;
+        min-height: 0;
+        padding: 1rem;
+        overflow: auto;
+      }
+      .composition-provider-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+      .composition-provider-switch {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--rule-color);
+        border-radius: var(--radius-control);
+        overflow: hidden;
+      }
+      .composition-provider-switch span {
+        padding: 0.125rem 0.5rem;
+        font-size: 0.625rem;
+        font-weight: 500;
+        letter-spacing: 0.08em;
+        color: var(--color-muted-foreground);
+      }
+      .composition-provider-switch span[data-active="true"] {
+        background: var(--color-foreground);
+        color: var(--surface-page);
+      }
+      .composition-subtabs {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding-bottom: 0.5rem;
+        margin-bottom: 0.75rem;
+        border-bottom: 1px solid var(--rule-color);
+        flex-wrap: wrap;
+      }
+      .composition-subtab {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.25rem 0.25rem 0.375rem;
+        margin-bottom: -1px;
+        border-bottom: 2px solid transparent;
+        font-size: 0.6875rem;
+        font-weight: 500;
+        color: var(--color-muted-foreground);
+      }
+      .composition-subtab[data-active="true"] {
+        border-bottom-color: var(--accent-primary);
+        color: var(--color-foreground);
+      }
+      .composition-image-stack {
+        display: grid;
+        gap: 0.5rem;
+      }
+      .composition-image-card {
+        border: 1px solid var(--rule-color);
+        border-radius: 0.5rem;
+        background: color-mix(
+          in oklab,
+          var(--surface-elevated) 60%,
+          transparent
+        );
+        overflow: hidden;
+      }
+      .composition-image-card .gallery-cell {
+        border: 0;
+        border-radius: 0;
+      }
+      .composition-image-card-body {
+        padding: 0.5rem;
+        display: grid;
+        gap: 0.5rem;
+      }
+      .composition-image-card-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        min-width: 0;
+      }
+      .composition-image-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 0.375rem;
+      }
+      .composition-mini-btn {
+        height: 1.75rem;
+        padding: 0 0.375rem;
+        border: 1px solid var(--rule-color);
+        border-radius: var(--radius-control);
+        background: transparent;
+        color: var(--color-foreground);
+        font-size: 0.625rem;
+        font-family: var(--type-body);
+      }
+      .composition-storebar {
+        flex-shrink: 0;
+        padding: 0.375rem 0.75rem;
+        border-top: 1px solid var(--rule-color);
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        font-size: 0.625rem;
+        color: var(--color-muted-foreground);
+      }
+      .composition-map {
+        aspect-ratio: 4 / 3;
+        border: 1px solid var(--rule-color);
+        border-radius: var(--radius-card);
+        background:
+          linear-gradient(
+            135deg,
+            color-mix(in oklab, var(--accent-primary) 16%, transparent),
+            transparent 48%
+          ),
+          linear-gradient(
+            45deg,
+            color-mix(in oklab, var(--accent-secondary) 20%, transparent),
+            transparent 52%
+          ),
+          var(--surface-inset);
+        position: relative;
+        overflow: hidden;
+      }
+      .composition-map::before,
+      .composition-map::after {
+        content: "";
+        position: absolute;
+        border: 1px solid
+          color-mix(in oklab, var(--color-foreground) 22%, transparent);
+        border-radius: 50%;
+      }
+      .composition-map::before {
+        width: 62%;
+        height: 44%;
+        left: 12%;
+        top: 18%;
+        transform: rotate(-18deg);
+      }
+      .composition-map::after {
+        width: 40%;
+        height: 34%;
+        right: 10%;
+        bottom: 12%;
+        transform: rotate(22deg);
+      }
+      @media (max-width: 1050px) {
+        .composition-body {
+          grid-template-columns: 13rem minmax(0, 1fr);
+        }
+        .composition-inspector {
+          grid-column: 1 / -1;
+          border-left: 0;
+          border-top: 1px solid var(--rule-color);
+        }
+      }
+      @media (max-width: 760px) {
+        .composition-top {
+          align-items: flex-start;
+          padding: 0.875rem 1rem;
+          flex-direction: column;
+        }
+        .composition-nav {
+          margin-left: 0;
+        }
+        .composition-actions {
+          margin-left: 0;
+        }
+        .composition-body,
+        .composition-story-grid {
+          grid-template-columns: 1fr;
+        }
+        .composition-inspector {
+          min-height: 32rem;
+        }
+        .composition-sidebar {
+          border-right: 0;
+          border-bottom: 1px solid var(--rule-color);
+        }
+        .composition-panel-block {
+          border-right: 0;
+          border-bottom: 1px solid var(--rule-color);
+        }
+        .composition-panel-block:last-child {
+          border-bottom: 0;
+        }
+        .composition-hero,
+        .composition-stage,
+        .composition-command {
+          padding-inline: 1rem;
+        }
+      }
+
+      /* ── Color swatches ── */
+      .swatch-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 1px;
+        background: var(--rule-color);
+        border: 1px solid var(--rule-color);
+        border-radius: var(--radius-card);
+        overflow: hidden;
+      }
+      .swatch {
+        background: var(--surface-elevated);
+        padding: 0.875rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .swatch-chip {
+        height: 56px;
+        border-radius: 2px;
+        border: 1px solid var(--rule-color);
+      }
+      .swatch-name {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--color-foreground);
+      }
+      .swatch-token {
+        font-family: var(--type-mono);
+        font-size: 0.625rem;
+        color: var(--color-muted-foreground);
+      }
+
+      /* ── Type specimens ── */
+      .type-stack {
+        display: grid;
+        gap: 1.75rem;
+      }
+      .type-row {
+        display: grid;
+        grid-template-columns: 8rem 1fr;
+        gap: 1.5rem;
+        align-items: baseline;
+        padding-bottom: 1rem;
+        border-bottom: 1px dashed var(--rule-color);
+      }
+      .type-label {
+        font-family: var(--type-meta);
+        font-size: 0.6875rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--color-muted-foreground);
+      }
+      .type-display {
+        font-family: var(--type-display);
+        font-weight: 600;
+        font-size: 2.75rem;
+        line-height: 1.05;
+        letter-spacing: -0.015em;
+      }
+      .type-display-italic {
+        font-style: italic;
+      }
+      .type-h1 {
+        font-family: var(--type-display);
+        font-weight: 600;
+        font-size: 1.875rem;
+        line-height: 1.15;
+        letter-spacing: -0.01em;
+      }
+      .type-h2 {
+        font-family: var(--type-display);
+        font-weight: 600;
+        font-size: 1.375rem;
+        line-height: 1.2;
+      }
+      .type-body {
+        font-family: var(--type-body);
+        font-size: 1rem;
+        line-height: 1.65;
+        color: var(--color-foreground);
+      }
+      .type-meta-spec {
+        font-family: var(--type-meta);
+        font-size: 0.6875rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--color-muted-foreground);
+      }
+      .type-mono-spec {
+        font-family: var(--type-mono);
+        font-size: 0.8125rem;
+        color: var(--color-foreground);
+      }
+
+      /* ── World list ── */
+      .world-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(28rem, 1fr));
+        gap: 0 3rem;
+      }
+      .world-plate {
+        position: relative;
+        padding: 2rem 0;
+        border-top: 1px solid var(--rule-strong-color);
+        cursor: pointer;
+      }
+      .world-plate-marker {
+        position: absolute;
+        top: -1px;
+        left: 0;
+        height: 2px;
+        width: 3rem;
+        background: var(--accent-primary);
+        transition: width 200ms ease;
+      }
+      .world-plate:hover .world-plate-marker {
+        width: 6rem;
+      }
+      .world-plate-num {
+        position: absolute;
+        top: 0.5rem;
+        right: 0;
+        font-family: var(--type-meta);
+        font-size: 0.625rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--color-muted-foreground);
+      }
+      .world-plate-title {
+        font-family: var(--type-display);
+        font-weight: 600;
+        font-size: clamp(1.5rem, 2.5vw, 2rem);
+        line-height: 1.1;
+        margin: 0.75rem 0 0.625rem;
+      }
+      .world-plate-blurb {
+        font-size: 0.875rem;
+        line-height: 1.6;
+        color: var(--color-muted-foreground);
+        margin: 0 0 0.875rem;
+        max-width: 42ch;
+      }
+      .world-plate-tags {
+        display: flex;
+        gap: 0.375rem;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .world-plate-enter {
+        margin-left: auto;
+        color: var(--accent-primary);
+        font-family: var(--type-meta);
+        font-size: 0.6875rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      /* ── Plugin chip in left rail ── */
+      .plugin-row {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        padding: 0.5rem 0.625rem;
+        border-radius: var(--radius-control);
+        transition: background 100ms ease;
+      }
+      .plugin-row:hover {
+        background: color-mix(
+          in oklab,
+          var(--color-foreground) 5%,
+          transparent
+        );
+      }
+      .plugin-toggle {
+        width: 28px;
+        height: 16px;
+        background: var(--color-muted);
+        border-radius: 999px;
+        position: relative;
+        flex-shrink: 0;
+      }
+      .plugin-toggle::after {
+        content: "";
+        position: absolute;
+        width: 12px;
+        height: 12px;
+        border-radius: 999px;
+        background: var(--surface-elevated);
+        top: 2px;
+        left: 2px;
+        transition: transform 150ms ease;
+      }
+      .plugin-toggle[data-on="true"] {
+        background: var(--accent-primary);
+      }
+      .plugin-toggle[data-on="true"]::after {
+        transform: translateX(12px);
+      }
+      .plugin-name {
+        font-size: 0.8125rem;
+        flex: 1;
+        min-width: 0;
+        truncate: ellipsis;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+      .plugin-priority {
+        font-family: var(--type-mono);
+        font-size: 0.6875rem;
+        color: var(--color-muted-foreground);
+      }
+
+      /* ── Choice grid ── */
+      .choice-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+      }
+      @media (max-width: 700px) {
+        .choice-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* ── Player message ── */
+      .msg-player {
+        border-left: 3px solid var(--accent-primary);
+        padding: 0.625rem 0.875rem;
+        background: color-mix(in oklab, var(--accent-primary) 4%, transparent);
+        max-width: 36rem;
+      }
+      .msg-narrative {
+        font-family: var(--type-display);
+        line-height: 1.78;
+        font-size: 1rem;
+        max-width: 50rem;
+      }
+
+      /* ── Composer ── */
+      .composer {
+        display: flex;
+        align-items: stretch;
+        border: 1px solid var(--rule-color);
+        border-radius: var(--radius-control);
+        background: var(--surface-inset);
+        transition: border-color 120ms ease;
+      }
+      .composer:focus-within {
+        border-color: var(--accent-primary);
+      }
+      .composer input {
+        flex: 1;
+        min-width: 0;
+        padding: 0.625rem 0.875rem;
+        background: transparent;
+        border: 0;
+        outline: none;
+        color: var(--color-foreground);
+        font-family: var(--type-body);
+        font-size: 0.875rem;
+      }
+      .composer input::placeholder {
+        color: var(--color-muted-foreground);
+      }
+      .composer button {
+        width: 2.75rem;
+        border: 0;
+        border-left: 1px solid var(--rule-color);
+        background: transparent;
+        color: var(--color-muted-foreground);
+        cursor: pointer;
+        transition:
+          background 100ms ease,
+          color 100ms ease;
+      }
+      .composer button:hover {
+        background: color-mix(
+          in oklab,
+          var(--color-foreground) 6%,
+          transparent
+        );
+        color: var(--color-foreground);
+      }
+
+      /* ── Settings dialog mock ── */
+      .settings-mock {
+        display: grid;
+        grid-template-columns: 14rem 1fr;
+        border: 1px solid var(--rule-color);
+        border-radius: var(--radius-dialog);
+        background: var(--surface-elevated);
+        overflow: hidden;
+        min-height: 460px;
+      }
+      .settings-side {
+        background: var(--surface-rail);
+        border-right: 1px solid var(--rule-color);
+        padding: 0.75rem 0;
+      }
+      .settings-nav-item {
+        position: relative;
+        width: 100%;
+        text-align: left;
+        border: 0;
+        background: transparent;
+        color: var(--color-muted-foreground);
+        padding: 0.5rem 1rem;
+        font-size: 0.8125rem;
+        font-family: var(--type-body);
+        cursor: pointer;
+      }
+      .settings-nav-item[aria-current="true"] {
+        color: var(--color-foreground);
+        font-weight: 500;
+      }
+      .settings-nav-item[aria-current="true"]::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 3px;
+        background: var(--accent-primary);
+      }
+      .settings-nav-group {
+        padding: 1rem 1rem 0.25rem;
+        font-family: var(--type-meta);
+        font-size: 0.625rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--color-muted-foreground);
+      }
+      .settings-body {
+        padding: 1.25rem 1.5rem;
+        overflow: auto;
+      }
+
+      /* ── Debug log mock ── */
+      .debug-mock {
+        border: 1px solid var(--rule-color);
+        border-radius: var(--radius-card);
+        background: var(--surface-rail);
+      }
+      .debug-row {
+        display: flex;
+        align-items: center;
+        gap: 0.875rem;
+        padding: 0.625rem 1rem;
+        border-bottom: 1px solid var(--rule-color);
+        font-family: var(--type-mono);
+        font-size: 0.75rem;
+      }
+      .debug-row:last-child {
+        border-bottom: 0;
+      }
+      .debug-tag {
+        flex-shrink: 0;
+        width: 4.5rem;
+        color: var(--accent-primary);
+      }
+      .debug-id {
+        color: var(--color-muted-foreground);
+        flex-shrink: 0;
+      }
+      .debug-msg {
+        color: var(--color-foreground);
+        flex: 1;
+        min-width: 0;
+      }
+      .debug-dur {
+        color: var(--color-muted-foreground);
+        flex-shrink: 0;
+      }
+
+      /* ── Image gallery row ── */
+      .gallery-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 0.5rem;
+      }
+      .gallery-cell {
+        aspect-ratio: 1 / 1;
+        background: linear-gradient(
+          135deg,
+          color-mix(in oklab, var(--accent-primary) 30%, var(--surface-inset)),
+          color-mix(in oklab, var(--accent-secondary) 30%, var(--surface-inset))
+        );
+        border: 1px solid var(--rule-color);
+        border-radius: var(--radius-card);
+        position: relative;
+        overflow: hidden;
+      }
+      .gallery-cell::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(
+            circle at 30% 30%,
+            color-mix(in oklab, var(--surface-page) 50%, transparent),
+            transparent 60%
+          ),
+          radial-gradient(
+            circle at 75% 70%,
+            color-mix(in oklab, var(--accent-warning) 30%, transparent),
+            transparent 60%
+          );
+        mix-blend-mode: overlay;
+      }
+
+      /* ── Token reference ── */
+      .token-list {
+        columns: 2;
+        column-gap: 2.5rem;
+        column-rule: 1px solid var(--rule-color);
+        font-family: var(--type-mono);
+        font-size: 0.8125rem;
+      }
+      @media (max-width: 700px) {
+        .token-list {
+          columns: 1;
+        }
+      }
+      .token-entry {
+        break-inside: avoid;
+        padding: 0.4rem 0;
+        display: flex;
+        gap: 1rem;
+      }
+      .token-entry .key {
+        color: var(--color-foreground);
+        flex-shrink: 0;
+      }
+      .token-entry .val {
+        color: var(--color-muted-foreground);
+      }
+
+      /* ── Theme overview tiles ──
      Each tile is its own scope of CSS variables, so all 3 themes are
      visible side-by-side at once. The designer can read the whole system
      in one glance without clicking through the topbar switcher. */
-  .overview-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1rem;
-    margin-top: 2rem;
-  }
-  @media (max-width: 900px) {
-    .overview-grid { grid-template-columns: 1fr; }
-  }
-  .overview-tile {
-    background: var(--ot-page);
-    color: var(--ot-fg);
-    border: 1px solid var(--ot-rule);
-    border-radius: var(--radius-card);
-    padding: 1.25rem 1.25rem 1.5rem;
-    position: relative;
-    overflow: hidden;
-    isolation: isolate;
-    min-height: 28rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    background-image: var(--ot-ambience);
-  }
-  .overview-tile-noise {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background-image: var(--noise-image);
-    opacity: var(--ot-noise);
-    mix-blend-mode: multiply;
-  }
-  .overview-tile > * { position: relative; z-index: 1; }
-  .overview-tile-head {
-    display: flex;
-    align-items: baseline;
-    gap: 0.625rem;
-  }
-  .overview-tile-name {
-    font-family: var(--ot-display);
-    font-style: var(--ot-display-italic, normal);
-    font-weight: 600;
-    font-size: 1.5rem;
-    letter-spacing: -0.005em;
-    color: var(--ot-fg);
-  }
-  .overview-tile-tag {
-    margin-left: auto;
-    font-family: var(--font-mono);
-    font-size: 0.625rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--ot-muted);
-  }
-  .overview-tile-blurb {
-    font-family: var(--ot-body);
-    font-size: 0.8125rem;
-    line-height: 1.55;
-    color: var(--ot-muted);
-  }
-  .overview-swatches {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 0.375rem;
-  }
-  .overview-swatch {
-    height: 32px;
-    border-radius: 2px;
-    border: 1px solid var(--ot-rule);
-  }
-  .overview-mini-plate {
-    border-top: 1px solid var(--ot-rule-strong);
-    padding-top: 1rem;
-    position: relative;
-  }
-  .overview-mini-plate::before {
-    content: "";
-    position: absolute;
-    top: -1px; left: 0;
-    height: 2px; width: 3rem;
-    background: var(--ot-accent);
-  }
-  .overview-mini-plate-num {
-    font-family: var(--font-mono);
-    font-size: 0.6rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--ot-muted);
-  }
-  .overview-mini-plate-title {
-    font-family: var(--ot-display);
-    font-style: var(--ot-display-italic, normal);
-    font-weight: 600;
-    font-size: 1.0625rem;
-    line-height: 1.15;
-    margin: 0.25rem 0 0.375rem;
-    color: var(--ot-fg);
-  }
-  .overview-mini-band {
-    border-left: 3px solid var(--ot-accent);
-    padding: 0.5rem 0.75rem;
-    background: transparent;
-  }
-  .overview-mini-band-eyebrow {
-    font-family: var(--font-mono);
-    font-size: 0.625rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--ot-accent);
-    margin-bottom: 0.125rem;
-  }
-  .overview-mini-band-text {
-    font-family: var(--ot-body);
-    font-size: 0.8125rem;
-    color: var(--ot-fg);
-    line-height: 1.5;
-  }
-  .overview-mini-tags {
-    display: flex;
-    gap: 0.25rem;
-    flex-wrap: wrap;
-  }
-  .overview-mini-tag {
-    font-family: var(--font-mono);
-    font-size: 0.5625rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    padding: 0.0625rem 0.4rem;
-    border: 1px solid var(--ot-rule);
-    border-radius: 2px;
-    color: var(--ot-muted);
-  }
-  .overview-mini-typeline {
-    display: flex;
-    align-items: baseline;
-    gap: 0.625rem;
-  }
-  .overview-mini-typeline-label {
-    font-family: var(--font-mono);
-    font-size: 0.5625rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--ot-muted);
-    flex-shrink: 0;
-    width: 3rem;
-  }
-  .overview-mini-typeline-sample {
-    font-size: 0.875rem;
-    color: var(--ot-fg);
-  }
-  .overview-mini-typeline-sample.serif { font-family: var(--ot-display); font-style: var(--ot-display-italic, normal); font-weight: 600; }
-  .overview-mini-typeline-sample.sans { font-family: var(--ot-body); }
-  .overview-mini-typeline-sample.mono { font-family: var(--font-mono); font-size: 0.75rem; }
-  .overview-tile-foot {
-    margin-top: auto;
-    padding-top: 0.625rem;
-    border-top: 1px dashed var(--ot-rule);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-family: var(--font-mono);
-    font-size: 0.625rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--ot-muted);
-  }
+      .overview-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        margin-top: 2rem;
+      }
+      @media (max-width: 900px) {
+        .overview-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .overview-tile {
+        background: var(--ot-page);
+        color: var(--ot-fg);
+        border: 1px solid var(--ot-rule);
+        border-radius: var(--radius-card);
+        padding: 1.25rem 1.25rem 1.5rem;
+        position: relative;
+        overflow: hidden;
+        isolation: isolate;
+        min-height: 28rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        background-image: var(--ot-ambience);
+      }
+      .overview-tile-noise {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image: var(--noise-image);
+        opacity: var(--ot-noise);
+        mix-blend-mode: multiply;
+      }
+      .overview-tile > * {
+        position: relative;
+        z-index: 1;
+      }
+      .overview-tile-head {
+        display: flex;
+        align-items: baseline;
+        gap: 0.625rem;
+      }
+      .overview-tile-name {
+        font-family: var(--ot-display);
+        font-style: var(--ot-display-italic, normal);
+        font-weight: 600;
+        font-size: 1.5rem;
+        letter-spacing: -0.005em;
+        color: var(--ot-fg);
+      }
+      .overview-tile-tag {
+        margin-left: auto;
+        font-family: var(--font-mono);
+        font-size: 0.625rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ot-muted);
+      }
+      .overview-tile-blurb {
+        font-family: var(--ot-body);
+        font-size: 0.8125rem;
+        line-height: 1.55;
+        color: var(--ot-muted);
+      }
+      .overview-swatches {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.375rem;
+      }
+      .overview-swatch {
+        height: 32px;
+        border-radius: 2px;
+        border: 1px solid var(--ot-rule);
+      }
+      .overview-mini-plate {
+        border-top: 1px solid var(--ot-rule-strong);
+        padding-top: 1rem;
+        position: relative;
+      }
+      .overview-mini-plate::before {
+        content: "";
+        position: absolute;
+        top: -1px;
+        left: 0;
+        height: 2px;
+        width: 3rem;
+        background: var(--ot-accent);
+      }
+      .overview-mini-plate-num {
+        font-family: var(--font-mono);
+        font-size: 0.6rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ot-muted);
+      }
+      .overview-mini-plate-title {
+        font-family: var(--ot-display);
+        font-style: var(--ot-display-italic, normal);
+        font-weight: 600;
+        font-size: 1.0625rem;
+        line-height: 1.15;
+        margin: 0.25rem 0 0.375rem;
+        color: var(--ot-fg);
+      }
+      .overview-mini-band {
+        border-left: 3px solid var(--ot-accent);
+        padding: 0.5rem 0.75rem;
+        background: transparent;
+      }
+      .overview-mini-band-eyebrow {
+        font-family: var(--font-mono);
+        font-size: 0.625rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--ot-accent);
+        margin-bottom: 0.125rem;
+      }
+      .overview-mini-band-text {
+        font-family: var(--ot-body);
+        font-size: 0.8125rem;
+        color: var(--ot-fg);
+        line-height: 1.5;
+      }
+      .overview-mini-tags {
+        display: flex;
+        gap: 0.25rem;
+        flex-wrap: wrap;
+      }
+      .overview-mini-tag {
+        font-family: var(--font-mono);
+        font-size: 0.5625rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        padding: 0.0625rem 0.4rem;
+        border: 1px solid var(--ot-rule);
+        border-radius: 2px;
+        color: var(--ot-muted);
+      }
+      .overview-mini-typeline {
+        display: flex;
+        align-items: baseline;
+        gap: 0.625rem;
+      }
+      .overview-mini-typeline-label {
+        font-family: var(--font-mono);
+        font-size: 0.5625rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--ot-muted);
+        flex-shrink: 0;
+        width: 3rem;
+      }
+      .overview-mini-typeline-sample {
+        font-size: 0.875rem;
+        color: var(--ot-fg);
+      }
+      .overview-mini-typeline-sample.serif {
+        font-family: var(--ot-display);
+        font-style: var(--ot-display-italic, normal);
+        font-weight: 600;
+      }
+      .overview-mini-typeline-sample.sans {
+        font-family: var(--ot-body);
+      }
+      .overview-mini-typeline-sample.mono {
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+      }
+      .overview-tile-foot {
+        margin-top: auto;
+        padding-top: 0.625rem;
+        border-top: 1px dashed var(--ot-rule);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-family: var(--font-mono);
+        font-size: 0.625rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--ot-muted);
+      }
 
-  /* Per-tile token scopes — these mirror the production theme overrides
+      /* Per-tile token scopes — these mirror the production theme overrides
      but as local custom-prop assignments so all 3 render simultaneously. */
-  .ot-paper {
-    --ot-page: oklch(96.5% 0.012 80);
-    --ot-fg: oklch(20% 0.018 60);
-    --ot-muted: oklch(46% 0.018 60);
-    --ot-rule: oklch(82% 0.018 75);
-    --ot-rule-strong: oklch(35% 0.024 60);
-    --ot-accent: oklch(45% 0.13 35);
-    --ot-secondary: oklch(38% 0.08 220);
-    --ot-warning: oklch(65% 0.14 75);
-    --ot-success: oklch(48% 0.11 145);
-    --ot-display: "Fraunces", Georgia, serif;
-    --ot-body: "Inter", system-ui, sans-serif;
-    --ot-display-italic: normal;
-    --ot-noise: 0.04;
-    --ot-ambience:
-      radial-gradient(ellipse at 80% -10%, oklch(82% 0.085 60 / 0.18), transparent 60%),
-      radial-gradient(ellipse at -10% 110%, oklch(85% 0.05 220 / 0.12), transparent 55%);
-  }
-  .ot-modern {
-    --ot-page: oklch(98% 0.004 240);
-    --ot-fg: oklch(18% 0.014 240);
-    --ot-muted: oklch(46% 0.016 240);
-    --ot-rule: oklch(86% 0.01 240);
-    --ot-rule-strong: oklch(28% 0.02 240);
-    --ot-accent: oklch(48% 0.13 240);
-    --ot-secondary: oklch(64% 0.13 200);
-    --ot-warning: oklch(70% 0.16 75);
-    --ot-success: oklch(58% 0.15 155);
-    --ot-display: "Inter", system-ui, sans-serif;
-    --ot-body: "Inter", system-ui, sans-serif;
-    --ot-display-italic: normal;
-    --ot-noise: 0.018;
-    --ot-ambience:
-      radial-gradient(ellipse at 78% -10%, oklch(70% 0.13 200 / 0.16), transparent 55%),
-      radial-gradient(ellipse at 5% 110%, oklch(50% 0.13 250 / 0.1), transparent 50%);
-  }
-  .ot-abyss {
-    --ot-page: oklch(11% 0.022 270);
-    --ot-fg: oklch(89% 0.014 80);
-    --ot-muted: oklch(60% 0.024 270);
-    --ot-rule: oklch(24% 0.026 270);
-    --ot-rule-strong: oklch(58% 0.04 270);
-    --ot-accent: oklch(72% 0.16 300);
-    --ot-secondary: oklch(70% 0.14 230);
-    --ot-warning: oklch(75% 0.16 75);
-    --ot-success: oklch(72% 0.13 155);
-    --ot-display: "Fraunces", Georgia, serif;
-    --ot-body: "Inter", system-ui, sans-serif;
-    --ot-display-italic: italic;
-    --ot-noise: 0.06;
-    --ot-ambience:
-      radial-gradient(ellipse at 80% 0%, oklch(58% 0.18 300 / 0.16), transparent 55%),
-      radial-gradient(ellipse at 0% 100%, oklch(50% 0.14 230 / 0.14), transparent 55%);
-  }
+      .ot-paper {
+        --ot-page: oklch(96.5% 0.012 80);
+        --ot-fg: oklch(20% 0.018 60);
+        --ot-muted: oklch(46% 0.018 60);
+        --ot-rule: oklch(82% 0.018 75);
+        --ot-rule-strong: oklch(35% 0.024 60);
+        --ot-accent: oklch(45% 0.13 35);
+        --ot-secondary: oklch(38% 0.08 220);
+        --ot-warning: oklch(65% 0.14 75);
+        --ot-success: oklch(48% 0.11 145);
+        --ot-display: "Fraunces", Georgia, serif;
+        --ot-body: "Inter", system-ui, sans-serif;
+        --ot-display-italic: normal;
+        --ot-noise: 0.04;
+        --ot-ambience:
+          radial-gradient(
+            ellipse at 80% -10%,
+            oklch(82% 0.085 60 / 0.18),
+            transparent 60%
+          ),
+          radial-gradient(
+            ellipse at -10% 110%,
+            oklch(85% 0.05 220 / 0.12),
+            transparent 55%
+          );
+      }
+      .ot-modern {
+        --ot-page: oklch(98% 0.004 240);
+        --ot-fg: oklch(18% 0.014 240);
+        --ot-muted: oklch(46% 0.016 240);
+        --ot-rule: oklch(86% 0.01 240);
+        --ot-rule-strong: oklch(28% 0.02 240);
+        --ot-accent: oklch(48% 0.13 240);
+        --ot-secondary: oklch(64% 0.13 200);
+        --ot-warning: oklch(70% 0.16 75);
+        --ot-success: oklch(58% 0.15 155);
+        --ot-display: "Inter", system-ui, sans-serif;
+        --ot-body: "Inter", system-ui, sans-serif;
+        --ot-display-italic: normal;
+        --ot-noise: 0.018;
+        --ot-ambience:
+          radial-gradient(
+            ellipse at 78% -10%,
+            oklch(70% 0.13 200 / 0.16),
+            transparent 55%
+          ),
+          radial-gradient(
+            ellipse at 5% 110%,
+            oklch(50% 0.13 250 / 0.1),
+            transparent 50%
+          );
+      }
+      .ot-abyss {
+        --ot-page: oklch(11% 0.022 270);
+        --ot-fg: oklch(89% 0.014 80);
+        --ot-muted: oklch(60% 0.024 270);
+        --ot-rule: oklch(24% 0.026 270);
+        --ot-rule-strong: oklch(58% 0.04 270);
+        --ot-accent: oklch(72% 0.16 300);
+        --ot-secondary: oklch(70% 0.14 230);
+        --ot-warning: oklch(75% 0.16 75);
+        --ot-success: oklch(72% 0.13 155);
+        --ot-display: "Fraunces", Georgia, serif;
+        --ot-body: "Inter", system-ui, sans-serif;
+        --ot-display-italic: italic;
+        --ot-noise: 0.06;
+        --ot-ambience:
+          radial-gradient(
+            ellipse at 80% 0%,
+            oklch(58% 0.18 300 / 0.16),
+            transparent 55%
+          ),
+          radial-gradient(
+            ellipse at 0% 100%,
+            oklch(50% 0.14 230 / 0.14),
+            transparent 55%
+          );
+      }
 
-  /* Helpers */
-  .grid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0; }
-  .stack { display: flex; flex-direction: column; }
-  .stack-1 { gap: 0.5rem; }
-  .stack-2 { gap: 0.75rem; }
-  .stack-3 { gap: 1.25rem; }
-  .row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-  .muted { color: var(--color-muted-foreground); }
-  .accent-primary { color: var(--accent-primary); }
-  .accent-warning { color: var(--accent-warning); }
-  .accent-success { color: var(--accent-success); }
-  .accent-danger { color: var(--accent-danger); }
-  .pad { padding: 1rem; }
-  .small { font-size: 0.8125rem; }
-  .smaller { font-size: 0.75rem; }
-  </style>
-</head>
+      /* Helpers */
+      .grid-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 0;
+      }
+      .stack {
+        display: flex;
+        flex-direction: column;
+      }
+      .stack-1 {
+        gap: 0.5rem;
+      }
+      .stack-2 {
+        gap: 0.75rem;
+      }
+      .stack-3 {
+        gap: 1.25rem;
+      }
+      .row {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .muted {
+        color: var(--color-muted-foreground);
+      }
+      .accent-primary {
+        color: var(--accent-primary);
+      }
+      .accent-warning {
+        color: var(--accent-warning);
+      }
+      .accent-success {
+        color: var(--accent-success);
+      }
+      .accent-danger {
+        color: var(--accent-danger);
+      }
+      .pad {
+        padding: 1rem;
+      }
+      .small {
+        font-size: 0.8125rem;
+      }
+      .smaller {
+        font-size: 0.75rem;
+      }
+    </style>
+  </head>
 
-<body>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <div class="topbar-brand">
-        <span class="topbar-brand-mark">Covel</span>
-        <span class="topbar-brand-meta">Design System · v0.2</span>
-      </div>
-
-      <span class="switcher-label">Theme</span>
-      <div class="switcher" role="tablist" aria-label="Theme">
-        <button data-theme-btn="paper" aria-pressed="true">Paper</button>
-        <button data-theme-btn="modern" aria-pressed="false">Modern</button>
-        <button data-theme-btn="abyss" aria-pressed="false" title="Abyss is dark-only">Abyss</button>
-      </div>
-
-      <span class="switcher-label">Scheme</span>
-      <div class="switcher" role="tablist" aria-label="Scheme" id="scheme-switcher">
-        <button data-scheme-btn="light" aria-pressed="true">Light</button>
-        <button data-scheme-btn="dark" aria-pressed="false">Dark</button>
-      </div>
-      <span id="scheme-locked-hint" class="ui-meta" style="font-size: 0.625rem; color: var(--accent-primary); display: none;">
-        Abyss · dark-only
-      </span>
-    </div>
-  </header>
-
-  <main class="showcase">
-
-    <!-- ════════════════ COVER ════════════════ -->
-    <section class="cover">
-      <div class="cover-eyebrow">§ Covel design system · 2026</div>
-      <h1 class="cover-title">Edit the world,<br /><em>turn by turn.</em></h1>
-      <p class="cover-lede">
-        A type-led, instrument-grade interface for building plugin-driven RPG worlds.
-        Three coordinated themes, one shared atomic vocabulary — surfaces, rules,
-        markers, plates. No flashy cards.
-      </p>
-      <div class="cover-meta-row">
-        <span>Editorial · Atelier · Codex</span>
-        <span>·</span>
-        <span>Tokens 60 · Atoms 18</span>
-        <span>·</span>
-        <span>Light + Dark</span>
-      </div>
-    </section>
-
-    <!-- ════════════════ PAGE COMPOSITION ════════════════ -->
-    <section class="section">
-      <div class="section-num">§ 01 · Page composition</div>
-      <h2 class="section-title">Complete product surface</h2>
-      <p class="section-blurb">
-        总览预览把顶栏、世界入口、叙事主舞台、右侧上下文、底部输入与运行状态放在同一张页面里。
-        设计师可以在这里判断比例、密度、留白和信息优先级。
-      </p>
-
-      <div class="composition-frame">
-        <header class="composition-top">
-          <div class="composition-brand">Covel</div>
-          <span class="ui-tag ui-tag-solid">playing</span>
-          <nav class="composition-nav" aria-label="Product preview navigation">
-            <span class="composition-nav-item">世界</span>
-            <span class="composition-nav-item" data-active="true">会话</span>
-            <span class="composition-nav-item">插件</span>
-            <span class="composition-nav-item">图像</span>
-            <span class="composition-nav-item">调试</span>
-          </nav>
-          <div class="composition-actions">
-            <span class="ui-meta">cloudmere · turn 06</span>
-            <button class="ui-btn ui-btn-primary">继续</button>
-          </div>
-        </header>
-
-        <div class="composition-body">
-          <aside class="composition-sidebar">
-            <div class="composition-panel-block">
-              <div class="ui-eyebrow" style="margin-bottom: 0.625rem;">§ WORLD INDEX</div>
-              <div class="composition-mini-world" data-active="true">
-                <div class="composition-mini-world-title">
-                  <span>九州·云梦泽</span>
-                  <span class="ui-tag">live</span>
-                </div>
-                <p class="muted smaller" style="margin: 0;">宗门试炼 · 百灵沼泽 · 苏婉同行</p>
-              </div>
-              <div class="composition-mini-world">
-                <div class="composition-mini-world-title">
-                  <span>雾港·裂潮纪</span>
-                  <span class="ui-tag">draft</span>
-                </div>
-                <p class="muted smaller" style="margin: 0;">港口调查 · 潮汐遗物 · 夜巡线索</p>
-              </div>
-              <div class="composition-mini-world">
-                <div class="composition-mini-world-title">
-                  <span>霓虹脊·2087</span>
-                  <span class="ui-tag">idle</span>
-                </div>
-                <p class="muted smaller" style="margin: 0;">企业封锁 · 义体黑市 · 雨夜追踪</p>
-              </div>
-            </div>
-
-            <div class="composition-panel-block">
-              <div class="ui-eyebrow" style="margin-bottom: 0.625rem;">§ ACTIVE PLUGINS</div>
-              <div class="plugin-row">
-                <span class="plugin-toggle" data-on="true"></span>
-                <span class="plugin-name">core-narrator</span>
-                <span class="plugin-priority">P500</span>
-              </div>
-              <div class="plugin-row">
-                <span class="plugin-toggle" data-on="true"></span>
-                <span class="plugin-name">core-codex</span>
-                <span class="plugin-priority">P600</span>
-              </div>
-              <div class="plugin-row">
-                <span class="plugin-toggle" data-on="true"></span>
-                <span class="plugin-name">image-gen</span>
-                <span class="plugin-priority">P610</span>
-              </div>
-            </div>
-          </aside>
-
-          <section class="composition-main">
-            <div class="composition-area">
-              <div class="composition-hero">
-                <div class="composition-kicker">
-                  <span class="ui-meta">§ SESSION CANVAS</span>
-                  <span class="ui-chip">宗门外门</span>
-                  <span class="ui-chip">清瘴散</span>
-                  <span class="ui-chip">百灵沼泽</span>
-                </div>
-                <h3 class="composition-title">渡口起雾，选择下一步。</h3>
-                <p class="composition-copy">
-                  当前页面比例以叙事阅读为核心，中栏承载选择与输入，两侧保留配置、状态、图像和世界记忆。
-                </p>
-              </div>
-
-              <div class="composition-stage">
-                <div class="composition-story-grid">
-                  <div class="stack stack-3">
-                    <div class="composition-narrative">
-                      老周头将深褐色药瓶推到你面前，瓶口有淡淡草木辛气。渡口外的雾像被谁从水底慢慢搅起，木桩上的铃铛无风自响。
-                    </div>
-                    <div class="composition-turn">
-                      <div class="ui-eyebrow accent-primary" style="margin-bottom: 0.375rem;">§ NARRATIVE PROMPT</div>
-                      <div style="font-weight: 600; margin-bottom: 0.75rem;">是否接过清瘴散，与苏婉师姐连夜进入百灵沼泽</div>
-                      <div class="choice-grid">
-                        <button class="ui-choice" data-selected="true">
-                          <span class="ui-eyebrow accent-primary">§ 直接启程</span>
-                          <span style="font-weight: 500;">收好药瓶，立刻去渡口汇合</span>
-                        </button>
-                        <button class="ui-choice">
-                          <span class="ui-eyebrow accent-warning">§ 先问价格</span>
-                          <span style="font-weight: 500;">确认药效、债务和老周头的条件</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <aside class="composition-stat-grid">
-                    <div class="ui-band" data-tone="info">
-                      <div class="ui-meta" style="margin-bottom: 0.25rem;">scene</div>
-                      <div class="small">云梦泽渡口 · 酉时三刻</div>
-                    </div>
-                    <div class="composition-stat">
-                      <span>灵力</span>
-                      <b>42 / 60</b>
-                    </div>
-                    <div class="composition-stat">
-                      <span>银钱</span>
-                      <b>9.8 两</b>
-                    </div>
-                    <div class="composition-stat">
-                      <span>好感</span>
-                      <b>苏婉 +12</b>
-                    </div>
-                    <div class="composition-map" aria-label="Map preview"></div>
-                  </aside>
-                </div>
-              </div>
-
-              <div class="composition-command">
-                <div class="composer">
-                  <input placeholder="输入动作或命令…" />
-                  <button aria-label="send">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <aside class="composition-inspector">
-            <div class="composition-activitybar" aria-label="Right panel activity tabs">
-              <button class="composition-activity-tab" title="世界">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
-                <span>世界</span>
-              </button>
-              <button class="composition-activity-tab" title="数据">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/></svg>
-                <span>数据</span>
-              </button>
-              <div class="composition-activity-divider"></div>
-              <button class="composition-activity-tab">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3"/><path d="M12 18v3"/><path d="m4.2 4.2 2.1 2.1"/><path d="m17.7 17.7 2.1 2.1"/><path d="M3 12h3"/><path d="M18 12h3"/><path d="m4.2 19.8 2.1-2.1"/><path d="m17.7 6.3 2.1-2.1"/></svg>
-                <span>角色</span>
-              </button>
-              <button class="composition-activity-tab">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"/><path d="M8 7h8"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>
-                <span>词条</span>
-              </button>
-              <button class="composition-activity-tab" data-active="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
-                <span>图像</span>
-              </button>
-            </div>
-
-            <div class="composition-right-content">
-              <div class="composition-right-scroll">
-                <div class="row" style="align-items: baseline; gap: 0.75rem; margin-bottom: 0.75rem;">
-                  <span class="ui-meta">§ 图像</span>
-                  <h3 class="ui-title" style="font-size: 0.875rem; margin: 0;">图像</h3>
-                </div>
-
-                <div class="composition-provider-row">
-                  <span class="ui-meta" style="font-size: 0.625rem;">provider</span>
-                  <div class="composition-provider-switch">
-                    <span data-active="true">dashscope</span>
-                    <span>openai</span>
-                  </div>
-                </div>
-
-                <div class="composition-subtabs">
-                  <span class="composition-subtab" data-active="true">▧ 画廊</span>
-                  <span class="composition-subtab">◷ 任务</span>
-                  <span class="composition-subtab">✎ 生成</span>
-                </div>
-
-                <div class="composition-image-stack">
-                  <p class="muted" style="font-size: 0.6875rem; margin: 0;">生成结果（最新在前）。Prompt 请在「任务」页查看。</p>
-
-                  <div class="composition-image-card">
-                    <div class="gallery-cell" style="aspect-ratio: 1 / 1;"></div>
-                    <div class="composition-image-card-body">
-                      <div class="composition-image-card-meta">
-                        <div class="row" style="gap: 0.25rem; min-width: 0;">
-                          <span class="ui-tag ui-tag-solid">done</span>
-                          <span class="ui-meta" style="font-size: 0.625rem; overflow: hidden; text-overflow: ellipsis;">img-8a41c2…</span>
-                        </div>
-                        <span class="muted" style="font-size: 0.625rem;">18s</span>
-                      </div>
-                      <div class="row" style="gap: 0.25rem;">
-                        <span class="ui-tag">single-scene</span>
-                        <span class="ui-tag">wan2.7</span>
-                        <span class="ui-tag">1024</span>
-                      </div>
-                      <div class="composition-image-actions">
-                        <button class="composition-mini-btn">大图</button>
-                        <button class="composition-mini-btn">下载</button>
-                        <button class="composition-mini-btn">重抽</button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="composition-image-card">
-                    <div class="gallery-cell" style="aspect-ratio: 1 / 1; background: linear-gradient(135deg, color-mix(in oklab, var(--accent-warning) 35%, var(--surface-inset)), color-mix(in oklab, var(--accent-secondary) 35%, var(--surface-inset)));"></div>
-                    <div class="composition-image-card-body">
-                      <div class="composition-image-card-meta">
-                        <div class="row" style="gap: 0.25rem; min-width: 0;">
-                          <span class="ui-tag">pending</span>
-                          <span class="ui-meta" style="font-size: 0.625rem; overflow: hidden; text-overflow: ellipsis;">job-f3b9d0…</span>
-                        </div>
-                        <span class="muted" style="font-size: 0.625rem;">7s</span>
-                      </div>
-                      <p class="muted" style="font-size: 0.6875rem; line-height: 1.45; margin: 0;">沼泽渡口边，雾色未散，老周头佝偻在木台前。</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="composition-storebar">
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/></svg>
-                <span>Store:</span>
-                <span class="ui-tag">SQLite</span>
-              </div>
-            </div>
-          </aside>
-        </div>
-      </div>
-    </section>
-
-    <!-- ════════════════ TYPOGRAPHY ════════════════ -->
-    <section class="section">
-      <div class="section-num">§ 02 · Typography</div>
-      <h2 class="section-title">Type as the carrier</h2>
-      <p class="section-blurb">
-        Each theme picks one display family with character and one neutral
-        body family. Meta/eyebrow text is always monospace — for IDs, numbers,
-        labels.
-      </p>
-
-      <div class="type-stack">
-        <div class="type-row">
-          <span class="type-label">Display 72</span>
-          <span class="type-display">构建世界，运行回合。</span>
-        </div>
-        <div class="type-row">
-          <span class="type-label">Display Italic 56</span>
-          <span class="type-display type-display-italic">A measured campaign.</span>
-        </div>
-        <div class="type-row">
-          <span class="type-label">H1 30</span>
-          <span class="type-h1">是否接受苏婉师姐的邀约</span>
-        </div>
-        <div class="type-row">
-          <span class="type-label">H2 22</span>
-          <span class="type-h2">巧妙之策 · A subtle path</span>
-        </div>
-        <div class="type-row">
-          <span class="type-label">Body 16</span>
-          <span class="type-body">"去沼泽的话，那瓶丹药不够。渡口边的老周头那儿有更好的清瘴散——记在我账上。"她转身要走。</span>
-        </div>
-        <div class="type-row">
-          <span class="type-label">Meta 11</span>
-          <span class="type-meta-spec">§ NARRATIVE · turn 06 · t·1</span>
-        </div>
-        <div class="type-row">
-          <span class="type-label">Mono 13</span>
-          <span class="type-mono-spec">cloudmere-682fb5bf · core-narrator/P500 · 4.3s</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- ════════════════ COLOR ════════════════ -->
-    <section class="section">
-      <div class="section-num">§ 03 · Color</div>
-      <h2 class="section-title">Surfaces, rules, accents</h2>
-      <p class="section-blurb">
-        Three layered surfaces (page · rail · inset/elevated) carry hierarchy.
-        One marker accent + four state accents handle every visual signal.
-        No decorative palette. Hairline rules separate everything.
-      </p>
-
-      <div class="swatch-grid" id="swatch-grid"></div>
-    </section>
-
-    <!-- ════════════════ ATOMS ════════════════ -->
-    <section class="section">
-      <div class="section-num">§ 04 · Atoms</div>
-      <h2 class="section-title">Bands, sections, plates</h2>
-      <p class="section-blurb">
-        Eight atomic primitives compose every surface. Marker bands replace
-        cards. Sections separate via hairline rules. Plates carry editorial
-        figure-style framing. No background-color stacks.
-      </p>
-
-      <div class="stack stack-3" style="gap: 2rem;">
-
-        <div>
-          <div class="ui-eyebrow" style="margin-bottom: 0.625rem;">.ui-band — primary marker</div>
-          <div class="ui-band">
-            <div class="ui-eyebrow" style="margin-bottom: 0.25rem;">§ INFO</div>
-            <p style="margin: 0;">默认 marker bar 用 <code style="font-family:var(--type-mono); font-size: 0.8em;">--accent-primary</code>。绝大多数内容区都用这个原语，不再 wrap 圆角 card。</p>
-          </div>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-brand">
+          <span class="topbar-brand-mark">Covel</span>
+          <span class="topbar-brand-meta">Design System · v0.2</span>
         </div>
 
-        <div class="grid-cards" style="border: 1px solid var(--rule-color); border-radius: var(--radius-card); background: var(--surface-elevated); overflow: hidden;">
-          <div class="ui-band" data-tone="muted" style="border-right: 1px solid var(--rule-color);">
-            <div class="ui-eyebrow">muted</div>
-            <p style="margin: 0.25rem 0 0;" class="small">默认次要内容</p>
-          </div>
-          <div class="ui-band" data-tone="info" style="border-right: 1px solid var(--rule-color);">
-            <div class="ui-eyebrow accent-primary">info</div>
-            <p style="margin: 0.25rem 0 0;" class="small">提示与日志</p>
-          </div>
-          <div class="ui-band" data-tone="warning" style="border-right: 1px solid var(--rule-color);">
-            <div class="ui-eyebrow accent-warning">warning</div>
-            <p style="margin: 0.25rem 0 0;" class="small">需要确认</p>
-          </div>
-          <div class="ui-band" data-tone="success" style="border-right: 1px solid var(--rule-color);">
-            <div class="ui-eyebrow accent-success">success</div>
-            <p style="margin: 0.25rem 0 0;" class="small">动作完成</p>
-          </div>
-          <div class="ui-band" data-tone="danger">
-            <div class="ui-eyebrow accent-danger">danger</div>
-            <p style="margin: 0.25rem 0 0;" class="small">阻断错误</p>
-          </div>
-        </div>
-
-        <div>
-          <div class="ui-eyebrow" style="margin-bottom: 0.625rem;">.ui-section — divided block</div>
-          <div style="border-top: 1px solid var(--rule-strong-color);">
-            <div class="ui-section">
-              <div class="ui-section-head">
-                <span class="ui-eyebrow">§ characters</span>
-                <span class="ui-section-title">Active roster</span>
-                <span class="ui-tag" style="margin-left: auto;">3</span>
-              </div>
-              <p class="muted small" style="margin: 0;">section 用横线 hairline 分隔，配 monospace eyebrow + serif/sans title 锚定阅读层级。</p>
-            </div>
-            <div class="ui-section">
-              <div class="ui-section-head">
-                <span class="ui-eyebrow">§ world</span>
-                <span class="ui-section-title">Cloudmere · 云梦泽</span>
-              </div>
-              <p class="muted small" style="margin: 0;">不再用 Card 堆叠。每个 section 都"呼吸"在背景上。</p>
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <div class="ui-eyebrow" style="margin-bottom: 0.625rem;">.ui-frame — opt-in enclosure</div>
-          <div class="ui-frame" style="padding: 1rem 1.25rem;">
-            <div class="ui-eyebrow accent-primary" style="margin-bottom: 0.375rem;">§ NOTE</div>
-            <p style="margin: 0;" class="small">仅在内容必须从上下文剥离时使用 — modal 内部、popover、code block。其他地方一律 ui-band。</p>
-          </div>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- ════════════════ WORLD LIST ════════════════ -->
-    <section class="section">
-      <div class="section-num">§ 05 · World list</div>
-      <h2 class="section-title">Editorial plates</h2>
-      <p class="section-blurb">
-        每个世界一个版面 — 印章式 № 编号、彩色 marker 头线、衬线/sans 大标题、
-        meta 标签。鼠标悬停时 marker 横线延伸。没有渐变 banner、没有 SaaS 卡片。
-      </p>
-
-      <div class="world-list">
-        <article class="world-plate">
-          <span class="world-plate-marker"></span>
-          <span class="world-plate-num">№ 01 · CLOUDMERE</span>
-          <h3 class="world-plate-title">九州·云梦泽</h3>
-          <p class="world-plate-blurb">修仙世界，灵气复苏，宗门林立。你是偏僻小宗的外门弟子。</p>
-          <div class="world-plate-tags">
-            <span class="ui-tag">XIANXIA</span>
-            <span class="ui-tag">ADVENTURE</span>
-            <span class="ui-tag">POLITICAL-INTRIGUE</span>
-            <span class="world-plate-enter">Enter →</span>
-          </div>
-        </article>
-
-        <article class="world-plate">
-          <span class="world-plate-marker" style="background: var(--accent-secondary);"></span>
-          <span class="world-plate-num">№ 02 · MISTPORT</span>
-          <h3 class="world-plate-title">雾港·裂潮纪</h3>
-          <p class="world-plate-blurb">一座被永恒浓雾包裹的港口城市。潮汐带来远古遗物，也带来危险。</p>
-          <div class="world-plate-tags">
-            <span class="ui-tag">DARK-FANTASY</span>
-            <span class="ui-tag">MYSTERY</span>
-            <span class="ui-tag">EXPLORATION</span>
-            <span class="world-plate-enter" style="color: var(--accent-secondary);">Enter →</span>
-          </div>
-        </article>
-
-        <article class="world-plate">
-          <span class="world-plate-marker" style="background: var(--accent-warning);"></span>
-          <span class="world-plate-num">№ 03 · NEONRIDGE</span>
-          <h3 class="world-plate-title">霓虹脊·2087</h3>
-          <p class="world-plate-blurb">赛博朋克城市，义体改造与企业战争是日常。你是街头的无名小卒。</p>
-          <div class="world-plate-tags">
-            <span class="ui-tag">CYBERPUNK</span>
-            <span class="ui-tag">NOIR</span>
-            <span class="ui-tag">THRILLER</span>
-            <span class="world-plate-enter" style="color: var(--accent-warning);">Enter →</span>
-          </div>
-        </article>
-
-        <article class="world-plate">
-          <span class="world-plate-marker" style="background: var(--accent-success);"></span>
-          <span class="world-plate-num">№ 04 · SILVERLEAF</span>
-          <h3 class="world-plate-title">银叶·森境记</h3>
-          <p class="world-plate-blurb">古老的精灵森林苏醒了，人类需要重新学会与之共存。</p>
-          <div class="world-plate-tags">
-            <span class="ui-tag">HIGH-FANTASY</span>
-            <span class="ui-tag">DRUID</span>
-            <span class="ui-tag">PASTORAL</span>
-            <span class="world-plate-enter" style="color: var(--accent-success);">Enter →</span>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <!-- ════════════════ MESSAGES + COMPOSER variants ════════════════ -->
-    <section class="section">
-      <div class="section-num">§ 06 · Messages & composer</div>
-      <h2 class="section-title">Player ink, narrator type</h2>
-      <p class="section-blurb">
-        世界入口之后进入回合阅读。玩家输入使用 3px accent ribbon + tinted band，
-        叙事文本保持大字号 serif/sans 的阅读节奏。
-      </p>
-
-      <div class="stack stack-3">
-        <div class="msg-player">
-          <div class="ui-eyebrow accent-primary" style="margin-bottom: 0.25rem;">§ YOU</div>
-          <div>立刻去渡口找老周头要清瘴散，再赶往百灵沼泽。</div>
-        </div>
-
-        <div class="msg-narrative">
-          老周头眯着眼瞅了你许久，从柜台底下摸出一个深褐色的小药瓶："你师姐倒是看得起我这把老骨头。这清瘴散用百灵苔配着冷雾草，要文火慢熬七天才成。我账上还记着她去年欠的九两八钱银子……。"
-        </div>
-
-        <div class="composer" style="max-width: 36rem;">
-          <input placeholder="输入动作或命令…" />
-          <button aria-label="send">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>
+        <span class="switcher-label">Theme</span>
+        <div class="switcher" role="tablist" aria-label="Theme">
+          <button data-theme-btn="paper" aria-pressed="true">Paper</button>
+          <button data-theme-btn="modern" aria-pressed="false">Modern</button>
+          <button
+            data-theme-btn="abyss"
+            aria-pressed="false"
+            title="Abyss is dark-only"
+          >
+            Abyss
           </button>
         </div>
+
+        <span class="switcher-label">Scheme</span>
+        <div
+          class="switcher"
+          role="tablist"
+          aria-label="Scheme"
+          id="scheme-switcher"
+        >
+          <button data-scheme-btn="light" aria-pressed="true">Light</button>
+          <button data-scheme-btn="dark" aria-pressed="false">Dark</button>
+        </div>
+        <span
+          id="scheme-locked-hint"
+          class="ui-meta"
+          style="
+            font-size: 0.625rem;
+            color: var(--accent-primary);
+            display: none;
+          "
+        >
+          Abyss · dark-only
+        </span>
       </div>
-    </section>
+    </header>
 
-    <!-- ════════════════ SETTINGS + DEBUG ════════════════ -->
-    <section class="section">
-      <div class="section-num">§ 07 · Settings & Debug</div>
-      <h2 class="section-title">Same vocabulary</h2>
-      <p class="section-blurb">
-        会话交互之后是配置与运行观察。Settings 与 Debug 共用 eyebrow、ribbon-marker
-        sidebar 和 hairline section 体系。
-      </p>
+    <main class="showcase">
+      <!-- ════════════════ COVER ════════════════ -->
+      <section class="cover">
+        <div class="cover-eyebrow">§ Covel design system · 2026</div>
+        <h1 class="cover-title">Edit the world,<br /><em>turn by turn.</em></h1>
+        <p class="cover-lede">
+          A type-led, instrument-grade interface for building plugin-driven RPG
+          worlds. Three coordinated themes, one shared atomic vocabulary —
+          surfaces, rules, markers, plates. No flashy cards.
+        </p>
+        <div class="cover-meta-row">
+          <span>Editorial · Atelier · Codex</span>
+          <span>·</span>
+          <span>Tokens 60 · Atoms 18</span>
+          <span>·</span>
+          <span>Light + Dark</span>
+        </div>
+      </section>
 
-      <div style="display: grid; grid-template-columns: 1fr; gap: 2rem;">
-        <!-- Settings mock -->
-        <div class="settings-mock">
-          <aside class="settings-side">
-            <button class="settings-nav-item" aria-current="true">通用</button>
-            <div class="settings-nav-group">模型</div>
-            <button class="settings-nav-item">Slots</button>
-            <button class="settings-nav-item">API 密钥</button>
-            <button class="settings-nav-item">自定义 Preset</button>
-            <button class="settings-nav-item">高级参数</button>
-            <div class="settings-nav-group">插件</div>
-            <button class="settings-nav-item">dashscope-image-gen</button>
-            <button class="settings-nav-item">openai-image-gen</button>
-            <button class="settings-nav-item">数据</button>
-            <button class="settings-nav-item">导入包</button>
-          </aside>
-          <div class="settings-body">
-            <div class="row" style="margin-bottom: 1.25rem;">
-              <span class="ui-meta">§ SETTINGS</span>
-              <span class="ui-section-title">外观</span>
+      <!-- ════════════════ PAGE COMPOSITION ════════════════ -->
+      <section class="section">
+        <div class="section-num">§ 01 · Page composition</div>
+        <h2 class="section-title">Complete product surface</h2>
+        <p class="section-blurb">
+          总览预览把顶栏、世界入口、叙事主舞台、右侧上下文、底部输入与运行状态放在同一张页面里。
+          设计师可以在这里判断比例、密度、留白和信息优先级。
+        </p>
+
+        <div class="composition-frame">
+          <header class="composition-top">
+            <div class="composition-brand">Covel</div>
+            <span class="ui-tag ui-tag-solid">playing</span>
+            <nav
+              class="composition-nav"
+              aria-label="Product preview navigation"
+            >
+              <span class="composition-nav-item">世界</span>
+              <span class="composition-nav-item" data-active="true">会话</span>
+              <span class="composition-nav-item">插件</span>
+              <span class="composition-nav-item">图像</span>
+              <span class="composition-nav-item">调试</span>
+            </nav>
+            <div class="composition-actions">
+              <span class="ui-meta">cloudmere · turn 06</span>
+              <button class="ui-btn ui-btn-primary">继续</button>
+            </div>
+          </header>
+
+          <div class="composition-body">
+            <aside class="composition-sidebar">
+              <div class="composition-panel-block">
+                <div class="ui-eyebrow" style="margin-bottom: 0.625rem">
+                  § WORLD INDEX
+                </div>
+                <div class="composition-mini-world" data-active="true">
+                  <div class="composition-mini-world-title">
+                    <span>九州·云梦泽</span>
+                    <span class="ui-tag">live</span>
+                  </div>
+                  <p class="muted smaller" style="margin: 0">
+                    宗门试炼 · 百灵沼泽 · 苏婉同行
+                  </p>
+                </div>
+                <div class="composition-mini-world">
+                  <div class="composition-mini-world-title">
+                    <span>雾港·裂潮纪</span>
+                    <span class="ui-tag">draft</span>
+                  </div>
+                  <p class="muted smaller" style="margin: 0">
+                    港口调查 · 潮汐遗物 · 夜巡线索
+                  </p>
+                </div>
+                <div class="composition-mini-world">
+                  <div class="composition-mini-world-title">
+                    <span>霓虹脊·2087</span>
+                    <span class="ui-tag">idle</span>
+                  </div>
+                  <p class="muted smaller" style="margin: 0">
+                    企业封锁 · 义体黑市 · 雨夜追踪
+                  </p>
+                </div>
+              </div>
+
+              <div class="composition-panel-block">
+                <div class="ui-eyebrow" style="margin-bottom: 0.625rem">
+                  § ACTIVE PLUGINS
+                </div>
+                <div class="plugin-row">
+                  <span class="plugin-toggle" data-on="true"></span>
+                  <span class="plugin-name">core-narrator</span>
+                  <span class="plugin-priority">P500</span>
+                </div>
+                <div class="plugin-row">
+                  <span class="plugin-toggle" data-on="true"></span>
+                  <span class="plugin-name">core-codex</span>
+                  <span class="plugin-priority">P600</span>
+                </div>
+                <div class="plugin-row">
+                  <span class="plugin-toggle" data-on="true"></span>
+                  <span class="plugin-name">image-gen</span>
+                  <span class="plugin-priority">P610</span>
+                </div>
+              </div>
+            </aside>
+
+            <section class="composition-main">
+              <div class="composition-area">
+                <div class="composition-hero">
+                  <div class="composition-kicker">
+                    <span class="ui-meta">§ SESSION CANVAS</span>
+                    <span class="ui-chip">宗门外门</span>
+                    <span class="ui-chip">清瘴散</span>
+                    <span class="ui-chip">百灵沼泽</span>
+                  </div>
+                  <h3 class="composition-title">渡口起雾，选择下一步。</h3>
+                  <p class="composition-copy">
+                    当前页面比例以叙事阅读为核心，中栏承载选择与输入，两侧保留配置、状态、图像和世界记忆。
+                  </p>
+                </div>
+
+                <div class="composition-stage">
+                  <div class="composition-story-grid">
+                    <div class="stack stack-3">
+                      <div class="composition-narrative">
+                        老周头将深褐色药瓶推到你面前，瓶口有淡淡草木辛气。渡口外的雾像被谁从水底慢慢搅起，木桩上的铃铛无风自响。
+                      </div>
+                      <div class="composition-turn">
+                        <div
+                          class="ui-eyebrow accent-primary"
+                          style="margin-bottom: 0.375rem"
+                        >
+                          § NARRATIVE PROMPT
+                        </div>
+                        <div style="font-weight: 600; margin-bottom: 0.75rem">
+                          是否接过清瘴散，与苏婉师姐连夜进入百灵沼泽
+                        </div>
+                        <div class="choice-grid">
+                          <button class="ui-choice" data-selected="true">
+                            <span class="ui-eyebrow accent-primary"
+                              >§ 直接启程</span
+                            >
+                            <span style="font-weight: 500"
+                              >收好药瓶，立刻去渡口汇合</span
+                            >
+                          </button>
+                          <button class="ui-choice">
+                            <span class="ui-eyebrow accent-warning"
+                              >§ 先问价格</span
+                            >
+                            <span style="font-weight: 500"
+                              >确认药效、债务和老周头的条件</span
+                            >
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <aside class="composition-stat-grid">
+                      <div class="ui-band" data-tone="info">
+                        <div class="ui-meta" style="margin-bottom: 0.25rem">
+                          scene
+                        </div>
+                        <div class="small">云梦泽渡口 · 酉时三刻</div>
+                      </div>
+                      <div class="composition-stat">
+                        <span>灵力</span>
+                        <b>42 / 60</b>
+                      </div>
+                      <div class="composition-stat">
+                        <span>银钱</span>
+                        <b>9.8 两</b>
+                      </div>
+                      <div class="composition-stat">
+                        <span>好感</span>
+                        <b>苏婉 +12</b>
+                      </div>
+                      <div
+                        class="composition-map"
+                        aria-label="Map preview"
+                      ></div>
+                    </aside>
+                  </div>
+                </div>
+
+                <div class="composition-command">
+                  <div class="composer">
+                    <input placeholder="输入动作或命令…" />
+                    <button aria-label="send">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path
+                          d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"
+                        />
+                        <path d="m21.854 2.147-10.94 10.939" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <aside class="composition-inspector">
+              <div
+                class="composition-activitybar"
+                aria-label="Right panel activity tabs"
+              >
+                <button class="composition-activity-tab" title="世界">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 7v14" />
+                    <path
+                      d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"
+                    />
+                  </svg>
+                  <span>世界</span>
+                </button>
+                <button class="composition-activity-tab" title="数据">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <ellipse cx="12" cy="5" rx="9" ry="3" />
+                    <path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5" />
+                    <path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3" />
+                  </svg>
+                  <span>数据</span>
+                </button>
+                <div class="composition-activity-divider"></div>
+                <button class="composition-activity-tab">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M12 3v3" />
+                    <path d="M12 18v3" />
+                    <path d="m4.2 4.2 2.1 2.1" />
+                    <path d="m17.7 17.7 2.1 2.1" />
+                    <path d="M3 12h3" />
+                    <path d="M18 12h3" />
+                    <path d="m4.2 19.8 2.1-2.1" />
+                    <path d="m17.7 6.3 2.1-2.1" />
+                  </svg>
+                  <span>角色</span>
+                </button>
+                <button class="composition-activity-tab">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"
+                    />
+                    <path d="M8 7h8" />
+                    <path d="M8 11h8" />
+                    <path d="M8 15h5" />
+                  </svg>
+                  <span>词条</span>
+                </button>
+                <button class="composition-activity-tab" data-active="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect width="18" height="18" x="3" y="3" rx="2" />
+                    <circle cx="9" cy="9" r="2" />
+                    <path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" />
+                  </svg>
+                  <span>图像</span>
+                </button>
+              </div>
+
+              <div class="composition-right-content">
+                <div class="composition-right-scroll">
+                  <div
+                    class="row"
+                    style="
+                      align-items: baseline;
+                      gap: 0.75rem;
+                      margin-bottom: 0.75rem;
+                    "
+                  >
+                    <span class="ui-meta">§ 图像</span>
+                    <h3 class="ui-title" style="font-size: 0.875rem; margin: 0">
+                      图像
+                    </h3>
+                  </div>
+
+                  <div class="composition-provider-row">
+                    <span class="ui-meta" style="font-size: 0.625rem"
+                      >provider</span
+                    >
+                    <div class="composition-provider-switch">
+                      <span data-active="true">dashscope</span>
+                      <span>openai</span>
+                    </div>
+                  </div>
+
+                  <div class="composition-subtabs">
+                    <span class="composition-subtab" data-active="true"
+                      >▧ 画廊</span
+                    >
+                    <span class="composition-subtab">◷ 任务</span>
+                    <span class="composition-subtab">✎ 生成</span>
+                  </div>
+
+                  <div class="composition-image-stack">
+                    <p class="muted" style="font-size: 0.6875rem; margin: 0">
+                      生成结果（最新在前）。Prompt 请在「任务」页查看。
+                    </p>
+
+                    <div class="composition-image-card">
+                      <div
+                        class="gallery-cell"
+                        style="aspect-ratio: 1 / 1"
+                      ></div>
+                      <div class="composition-image-card-body">
+                        <div class="composition-image-card-meta">
+                          <div class="row" style="gap: 0.25rem; min-width: 0">
+                            <span class="ui-tag ui-tag-solid">done</span>
+                            <span
+                              class="ui-meta"
+                              style="
+                                font-size: 0.625rem;
+                                overflow: hidden;
+                                text-overflow: ellipsis;
+                              "
+                              >img-8a41c2…</span
+                            >
+                          </div>
+                          <span class="muted" style="font-size: 0.625rem"
+                            >18s</span
+                          >
+                        </div>
+                        <div class="row" style="gap: 0.25rem">
+                          <span class="ui-tag">single-scene</span>
+                          <span class="ui-tag">wan2.7</span>
+                          <span class="ui-tag">1024</span>
+                        </div>
+                        <div class="composition-image-actions">
+                          <button class="composition-mini-btn">大图</button>
+                          <button class="composition-mini-btn">下载</button>
+                          <button class="composition-mini-btn">重抽</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="composition-image-card">
+                      <div
+                        class="gallery-cell"
+                        style="
+                          aspect-ratio: 1 / 1;
+                          background: linear-gradient(
+                            135deg,
+                            color-mix(
+                              in oklab,
+                              var(--accent-warning) 35%,
+                              var(--surface-inset)
+                            ),
+                            color-mix(
+                              in oklab,
+                              var(--accent-secondary) 35%,
+                              var(--surface-inset)
+                            )
+                          );
+                        "
+                      ></div>
+                      <div class="composition-image-card-body">
+                        <div class="composition-image-card-meta">
+                          <div class="row" style="gap: 0.25rem; min-width: 0">
+                            <span class="ui-tag">pending</span>
+                            <span
+                              class="ui-meta"
+                              style="
+                                font-size: 0.625rem;
+                                overflow: hidden;
+                                text-overflow: ellipsis;
+                              "
+                              >job-f3b9d0…</span
+                            >
+                          </div>
+                          <span class="muted" style="font-size: 0.625rem"
+                            >7s</span
+                          >
+                        </div>
+                        <p
+                          class="muted"
+                          style="
+                            font-size: 0.6875rem;
+                            line-height: 1.45;
+                            margin: 0;
+                          "
+                        >
+                          沼泽渡口边，雾色未散，老周头佝偻在木台前。
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="composition-storebar">
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="12"
+                    height="12"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <ellipse cx="12" cy="5" rx="9" ry="3" />
+                    <path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5" />
+                  </svg>
+                  <span>Store:</span>
+                  <span class="ui-tag">SQLite</span>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════ TYPOGRAPHY ════════════════ -->
+      <section class="section">
+        <div class="section-num">§ 02 · Typography</div>
+        <h2 class="section-title">Type as the carrier</h2>
+        <p class="section-blurb">
+          Each theme picks one display family with character and one neutral
+          body family. Meta/eyebrow text is always monospace — for IDs, numbers,
+          labels.
+        </p>
+
+        <div class="type-stack">
+          <div class="type-row">
+            <span class="type-label">Display 72</span>
+            <span class="type-display">构建世界，运行回合。</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">Display Italic 56</span>
+            <span class="type-display type-display-italic"
+              >A measured campaign.</span
+            >
+          </div>
+          <div class="type-row">
+            <span class="type-label">H1 30</span>
+            <span class="type-h1">是否接受苏婉师姐的邀约</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">H2 22</span>
+            <span class="type-h2">巧妙之策 · A subtle path</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">Body 16</span>
+            <span class="type-body"
+              >"去沼泽的话，那瓶丹药不够。渡口边的老周头那儿有更好的清瘴散——记在我账上。"她转身要走。</span
+            >
+          </div>
+          <div class="type-row">
+            <span class="type-label">Meta 11</span>
+            <span class="type-meta-spec">§ NARRATIVE · turn 06 · t·1</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">Mono 13</span>
+            <span class="type-mono-spec"
+              >cloudmere-682fb5bf · core-narrator/P500 · 4.3s</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════ COLOR ════════════════ -->
+      <section class="section">
+        <div class="section-num">§ 03 · Color</div>
+        <h2 class="section-title">Surfaces, rules, accents</h2>
+        <p class="section-blurb">
+          Three layered surfaces (page · rail · inset/elevated) carry hierarchy.
+          One marker accent + four state accents handle every visual signal. No
+          decorative palette. Hairline rules separate everything.
+        </p>
+
+        <div class="swatch-grid" id="swatch-grid"></div>
+      </section>
+
+      <!-- ════════════════ ATOMS ════════════════ -->
+      <section class="section">
+        <div class="section-num">§ 04 · Atoms</div>
+        <h2 class="section-title">Bands, sections, plates</h2>
+        <p class="section-blurb">
+          Eight atomic primitives compose every surface. Marker bands replace
+          cards. Sections separate via hairline rules. Plates carry editorial
+          figure-style framing. No background-color stacks.
+        </p>
+
+        <div class="stack stack-3" style="gap: 2rem">
+          <div>
+            <div class="ui-eyebrow" style="margin-bottom: 0.625rem">
+              .ui-band — primary marker
+            </div>
+            <div class="ui-band">
+              <div class="ui-eyebrow" style="margin-bottom: 0.25rem">
+                § INFO
+              </div>
+              <p style="margin: 0">
+                默认 marker bar 用
+                <code style="font-family: var(--type-mono); font-size: 0.8em"
+                  >--accent-primary</code
+                >。绝大多数内容区都用这个原语，不再 wrap 圆角 card。
+              </p>
+            </div>
+          </div>
+
+          <div
+            class="grid-cards"
+            style="
+              border: 1px solid var(--rule-color);
+              border-radius: var(--radius-card);
+              background: var(--surface-elevated);
+              overflow: hidden;
+            "
+          >
+            <div
+              class="ui-band"
+              data-tone="muted"
+              style="border-right: 1px solid var(--rule-color)"
+            >
+              <div class="ui-eyebrow">muted</div>
+              <p style="margin: 0.25rem 0 0" class="small">默认次要内容</p>
+            </div>
+            <div
+              class="ui-band"
+              data-tone="info"
+              style="border-right: 1px solid var(--rule-color)"
+            >
+              <div class="ui-eyebrow accent-primary">info</div>
+              <p style="margin: 0.25rem 0 0" class="small">提示与日志</p>
+            </div>
+            <div
+              class="ui-band"
+              data-tone="warning"
+              style="border-right: 1px solid var(--rule-color)"
+            >
+              <div class="ui-eyebrow accent-warning">warning</div>
+              <p style="margin: 0.25rem 0 0" class="small">需要确认</p>
+            </div>
+            <div
+              class="ui-band"
+              data-tone="success"
+              style="border-right: 1px solid var(--rule-color)"
+            >
+              <div class="ui-eyebrow accent-success">success</div>
+              <p style="margin: 0.25rem 0 0" class="small">动作完成</p>
+            </div>
+            <div class="ui-band" data-tone="danger">
+              <div class="ui-eyebrow accent-danger">danger</div>
+              <p style="margin: 0.25rem 0 0" class="small">阻断错误</p>
+            </div>
+          </div>
+
+          <div>
+            <div class="ui-eyebrow" style="margin-bottom: 0.625rem">
+              .ui-section — divided block
+            </div>
+            <div style="border-top: 1px solid var(--rule-strong-color)">
+              <div class="ui-section">
+                <div class="ui-section-head">
+                  <span class="ui-eyebrow">§ characters</span>
+                  <span class="ui-section-title">Active roster</span>
+                  <span class="ui-tag" style="margin-left: auto">3</span>
+                </div>
+                <p class="muted small" style="margin: 0">
+                  section 用横线 hairline 分隔，配 monospace eyebrow +
+                  serif/sans title 锚定阅读层级。
+                </p>
+              </div>
+              <div class="ui-section">
+                <div class="ui-section-head">
+                  <span class="ui-eyebrow">§ world</span>
+                  <span class="ui-section-title">Cloudmere · 云梦泽</span>
+                </div>
+                <p class="muted small" style="margin: 0">
+                  不再用 Card 堆叠。每个 section 都"呼吸"在背景上。
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="ui-eyebrow" style="margin-bottom: 0.625rem">
+              .ui-frame — opt-in enclosure
+            </div>
+            <div class="ui-frame" style="padding: 1rem 1.25rem">
+              <div
+                class="ui-eyebrow accent-primary"
+                style="margin-bottom: 0.375rem"
+              >
+                § NOTE
+              </div>
+              <p style="margin: 0" class="small">
+                仅在内容必须从上下文剥离时使用 — modal 内部、popover、code
+                block。其他地方一律 ui-band。
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════ WORLD LIST ════════════════ -->
+      <section class="section">
+        <div class="section-num">§ 05 · World list</div>
+        <h2 class="section-title">Editorial plates</h2>
+        <p class="section-blurb">
+          每个世界一个版面 — 印章式 № 编号、彩色 marker 头线、衬线/sans 大标题、
+          meta 标签。鼠标悬停时 marker 横线延伸。没有渐变 banner、没有 SaaS
+          卡片。
+        </p>
+
+        <div class="world-list">
+          <article class="world-plate">
+            <span class="world-plate-marker"></span>
+            <span class="world-plate-num">№ 01 · CLOUDMERE</span>
+            <h3 class="world-plate-title">九州·云梦泽</h3>
+            <p class="world-plate-blurb">
+              修仙世界，灵气复苏，宗门林立。你是偏僻小宗的外门弟子。
+            </p>
+            <div class="world-plate-tags">
+              <span class="ui-tag">XIANXIA</span>
+              <span class="ui-tag">ADVENTURE</span>
+              <span class="ui-tag">POLITICAL-INTRIGUE</span>
+              <span class="world-plate-enter">Enter →</span>
+            </div>
+          </article>
+
+          <article class="world-plate">
+            <span
+              class="world-plate-marker"
+              style="background: var(--accent-secondary)"
+            ></span>
+            <span class="world-plate-num">№ 02 · MISTPORT</span>
+            <h3 class="world-plate-title">雾港·裂潮纪</h3>
+            <p class="world-plate-blurb">
+              一座被永恒浓雾包裹的港口城市。潮汐带来远古遗物，也带来危险。
+            </p>
+            <div class="world-plate-tags">
+              <span class="ui-tag">DARK-FANTASY</span>
+              <span class="ui-tag">MYSTERY</span>
+              <span class="ui-tag">EXPLORATION</span>
+              <span
+                class="world-plate-enter"
+                style="color: var(--accent-secondary)"
+                >Enter →</span
+              >
+            </div>
+          </article>
+
+          <article class="world-plate">
+            <span
+              class="world-plate-marker"
+              style="background: var(--accent-warning)"
+            ></span>
+            <span class="world-plate-num">№ 03 · NEONRIDGE</span>
+            <h3 class="world-plate-title">霓虹脊·2087</h3>
+            <p class="world-plate-blurb">
+              赛博朋克城市，义体改造与企业战争是日常。你是街头的无名小卒。
+            </p>
+            <div class="world-plate-tags">
+              <span class="ui-tag">CYBERPUNK</span>
+              <span class="ui-tag">NOIR</span>
+              <span class="ui-tag">THRILLER</span>
+              <span
+                class="world-plate-enter"
+                style="color: var(--accent-warning)"
+                >Enter →</span
+              >
+            </div>
+          </article>
+
+          <article class="world-plate">
+            <span
+              class="world-plate-marker"
+              style="background: var(--accent-success)"
+            ></span>
+            <span class="world-plate-num">№ 04 · SILVERLEAF</span>
+            <h3 class="world-plate-title">银叶·森境记</h3>
+            <p class="world-plate-blurb">
+              古老的精灵森林苏醒了，人类需要重新学会与之共存。
+            </p>
+            <div class="world-plate-tags">
+              <span class="ui-tag">HIGH-FANTASY</span>
+              <span class="ui-tag">DRUID</span>
+              <span class="ui-tag">PASTORAL</span>
+              <span
+                class="world-plate-enter"
+                style="color: var(--accent-success)"
+                >Enter →</span
+              >
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- ════════════════ MESSAGES + COMPOSER variants ════════════════ -->
+      <section class="section">
+        <div class="section-num">§ 06 · Messages & composer</div>
+        <h2 class="section-title">Player ink, narrator type</h2>
+        <p class="section-blurb">
+          世界入口之后进入回合阅读。玩家输入使用 3px accent ribbon + tinted
+          band， 叙事文本保持大字号 serif/sans 的阅读节奏。
+        </p>
+
+        <div class="stack stack-3">
+          <div class="msg-player">
+            <div
+              class="ui-eyebrow accent-primary"
+              style="margin-bottom: 0.25rem"
+            >
+              § YOU
+            </div>
+            <div>立刻去渡口找老周头要清瘴散，再赶往百灵沼泽。</div>
+          </div>
+
+          <div class="msg-narrative">
+            老周头眯着眼瞅了你许久，从柜台底下摸出一个深褐色的小药瓶："你师姐倒是看得起我这把老骨头。这清瘴散用百灵苔配着冷雾草，要文火慢熬七天才成。我账上还记着她去年欠的九两八钱银子……。"
+          </div>
+
+          <div class="composer" style="max-width: 36rem">
+            <input placeholder="输入动作或命令…" />
+            <button aria-label="send">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"
+                />
+                <path d="m21.854 2.147-10.94 10.939" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════ SETTINGS + DEBUG ════════════════ -->
+      <section class="section">
+        <div class="section-num">§ 07 · Settings & Debug</div>
+        <h2 class="section-title">Same vocabulary</h2>
+        <p class="section-blurb">
+          会话交互之后是配置与运行观察。Settings 与 Debug 共用
+          eyebrow、ribbon-marker sidebar 和 hairline section 体系。
+        </p>
+
+        <div style="display: grid; grid-template-columns: 1fr; gap: 2rem">
+          <!-- Settings mock -->
+          <div class="settings-mock">
+            <aside class="settings-side">
+              <button class="settings-nav-item" aria-current="true">
+                通用
+              </button>
+              <div class="settings-nav-group">模型</div>
+              <button class="settings-nav-item">Slots</button>
+              <button class="settings-nav-item">API 密钥</button>
+              <button class="settings-nav-item">自定义 Preset</button>
+              <button class="settings-nav-item">高级参数</button>
+              <div class="settings-nav-group">插件</div>
+              <button class="settings-nav-item">dashscope-image-gen</button>
+              <button class="settings-nav-item">openai-image-gen</button>
+              <button class="settings-nav-item">数据</button>
+              <button class="settings-nav-item">导入包</button>
+            </aside>
+            <div class="settings-body">
+              <div class="row" style="margin-bottom: 1.25rem">
+                <span class="ui-meta">§ SETTINGS</span>
+                <span class="ui-section-title">外观</span>
+              </div>
+
+              <div class="ui-section">
+                <div class="ui-section-head">
+                  <span class="ui-eyebrow">§ language</span>
+                  <span class="ui-section-title">语言</span>
+                </div>
+                <select class="ui-input" style="max-width: 16rem">
+                  <option>简体中文</option>
+                  <option>English</option>
+                </select>
+              </div>
+
+              <div class="ui-section">
+                <div class="ui-section-head">
+                  <span class="ui-eyebrow">§ theme library</span>
+                  <span class="ui-section-title">主题库</span>
+                  <button class="ui-btn" style="margin-left: auto">
+                    ↑ 导入主题
+                  </button>
+                </div>
+                <p class="muted small">
+                  导入自定义主题包，自动保存在本地，并在外观选择器里长期复用。
+                </p>
+
+                <div class="stack" style="gap: 0; margin-top: 1rem">
+                  <div class="ui-band">
+                    <div class="row" style="justify-content: space-between">
+                      <div class="row">
+                        <span class="ui-section-title small">Paper</span>
+                        <span class="ui-tag">内置</span>
+                        <span class="ui-tag ui-tag-solid">✓ 当前</span>
+                      </div>
+                    </div>
+                    <div
+                      class="ui-meta"
+                      style="margin-top: 0.25rem; font-size: 0.6rem"
+                    >
+                      paper
+                    </div>
+                  </div>
+                  <div class="ui-band" data-tone="muted">
+                    <div class="row" style="justify-content: space-between">
+                      <div class="row">
+                        <span class="ui-section-title small">Modern</span>
+                        <span class="ui-tag">内置</span>
+                      </div>
+                      <button class="ui-btn">应用</button>
+                    </div>
+                    <div
+                      class="ui-meta"
+                      style="margin-top: 0.25rem; font-size: 0.6rem"
+                    >
+                      modern
+                    </div>
+                  </div>
+                  <div class="ui-band" data-tone="muted">
+                    <div class="row" style="justify-content: space-between">
+                      <div class="row">
+                        <span class="ui-section-title small">深渊 Abyss</span>
+                        <span class="ui-tag">内置</span>
+                      </div>
+                      <button class="ui-btn">应用</button>
+                    </div>
+                    <div
+                      class="ui-meta"
+                      style="margin-top: 0.25rem; font-size: 0.6rem"
+                    >
+                      abyss
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Debug mock -->
+          <div>
+            <div class="row" style="margin-bottom: 1rem">
+              <span class="ui-meta">§ TRACE</span>
+              <span class="ui-section-title">追踪检查器</span>
+              <span class="ui-tag" style="margin-left: 0.625rem"
+                >回合 6 · 115 事件</span
+              >
             </div>
 
-            <div class="ui-section">
-              <div class="ui-section-head">
-                <span class="ui-eyebrow">§ language</span>
-                <span class="ui-section-title">语言</span>
+            <div class="debug-mock">
+              <div class="debug-row">
+                <span class="debug-tag">flow</span>
+                <span class="debug-id">5f757965·t1</span>
+                <span class="debug-msg"
+                  >turn.start · cloudmere-682fb5bf · priority 100→1000</span
+                >
+                <span class="debug-dur">0ms</span>
               </div>
-              <select class="ui-input" style="max-width: 16rem;">
-                <option>简体中文</option>
-                <option>English</option>
-              </select>
-            </div>
-
-            <div class="ui-section">
-              <div class="ui-section-head">
-                <span class="ui-eyebrow">§ theme library</span>
-                <span class="ui-section-title">主题库</span>
-                <button class="ui-btn" style="margin-left: auto;">↑ 导入主题</button>
+              <div class="debug-row">
+                <span class="debug-tag" style="color: var(--accent-secondary)"
+                  >runtime</span
+                >
+                <span class="debug-id">core-char-creator</span>
+                <span class="debug-msg"
+                  >runtime.invoke · scheduled @ P600 · streaming…</span
+                >
+                <span class="debug-dur">4.0ms</span>
               </div>
-              <p class="muted small">导入自定义主题包，自动保存在本地，并在外观选择器里长期复用。</p>
-
-              <div class="stack" style="gap: 0; margin-top: 1rem;">
-                <div class="ui-band">
-                  <div class="row" style="justify-content: space-between;">
-                    <div class="row">
-                      <span class="ui-section-title small">Paper</span>
-                      <span class="ui-tag">内置</span>
-                      <span class="ui-tag ui-tag-solid">✓ 当前</span>
-                    </div>
-                  </div>
-                  <div class="ui-meta" style="margin-top: 0.25rem; font-size: 0.6rem;">paper</div>
-                </div>
-                <div class="ui-band" data-tone="muted">
-                  <div class="row" style="justify-content: space-between;">
-                    <div class="row">
-                      <span class="ui-section-title small">Modern</span>
-                      <span class="ui-tag">内置</span>
-                    </div>
-                    <button class="ui-btn">应用</button>
-                  </div>
-                  <div class="ui-meta" style="margin-top: 0.25rem; font-size: 0.6rem;">modern</div>
-                </div>
-                <div class="ui-band" data-tone="muted">
-                  <div class="row" style="justify-content: space-between;">
-                    <div class="row">
-                      <span class="ui-section-title small">深渊 Abyss</span>
-                      <span class="ui-tag">内置</span>
-                    </div>
-                    <button class="ui-btn">应用</button>
-                  </div>
-                  <div class="ui-meta" style="margin-top: 0.25rem; font-size: 0.6rem;">abyss</div>
-                </div>
+              <div class="debug-row">
+                <span class="debug-tag" style="color: var(--accent-warning)"
+                  >llm</span
+                >
+                <span class="debug-id">deepseek-v4-flash</span>
+                <span class="debug-msg"
+                  >llm.delta · tokens=2814 · ttfb=312ms</span
+                >
+                <span class="debug-dur">11.4s</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-tag" style="color: var(--accent-success)"
+                  >tool</span
+                >
+                <span class="debug-id">create-character</span>
+                <span class="debug-msg"
+                  >tool.call · {"name":"苏婉","traits":["剑修","执拗"]} →
+                  ok</span
+                >
+                <span class="debug-dur">12ms</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-tag" style="color: var(--accent-danger)"
+                  >hook</span
+                >
+                <span class="debug-id">core-pregame</span>
+                <span class="debug-msg"
+                  >hook.PreStateCommit · validation-failed → retry</span
+                >
+                <span class="debug-dur">2ms</span>
+              </div>
+              <div class="debug-row">
+                <span class="debug-tag">flow</span>
+                <span class="debug-id">5f757965·t1</span>
+                <span class="debug-msg"
+                  >turn.commit · 8 proposals · narrative.append + state.patch
+                  ×7</span
+                >
+                <span class="debug-dur">24.4s</span>
               </div>
             </div>
           </div>
         </div>
+      </section>
 
-        <!-- Debug mock -->
-        <div>
-          <div class="row" style="margin-bottom: 1rem;">
-            <span class="ui-meta">§ TRACE</span>
-            <span class="ui-section-title">追踪检查器</span>
-            <span class="ui-tag" style="margin-left: 0.625rem;">回合 6 · 115 事件</span>
-          </div>
+      <!-- ════════════════ TOKENS REFERENCE ════════════════ -->
+      <section class="section">
+        <div class="section-num">§ 08 · Token reference</div>
+        <h2 class="section-title">Variables you can change</h2>
+        <p class="section-blurb">
+          所有主题层都通过覆写 CSS variable 工作。这里是关键 token 清单 —
+          给设计师在 Figma 之外做 spec / 调色 / fork 主题时的参考。
+        </p>
 
-          <div class="debug-mock">
-            <div class="debug-row">
-              <span class="debug-tag">flow</span>
-              <span class="debug-id">5f757965·t1</span>
-              <span class="debug-msg">turn.start ·  cloudmere-682fb5bf · priority 100→1000</span>
-              <span class="debug-dur">0ms</span>
-            </div>
-            <div class="debug-row">
-              <span class="debug-tag" style="color: var(--accent-secondary);">runtime</span>
-              <span class="debug-id">core-char-creator</span>
-              <span class="debug-msg">runtime.invoke · scheduled @ P600 · streaming…</span>
-              <span class="debug-dur">4.0ms</span>
-            </div>
-            <div class="debug-row">
-              <span class="debug-tag" style="color: var(--accent-warning);">llm</span>
-              <span class="debug-id">deepseek-v4-flash</span>
-              <span class="debug-msg">llm.delta · tokens=2814 · ttfb=312ms</span>
-              <span class="debug-dur">11.4s</span>
-            </div>
-            <div class="debug-row">
-              <span class="debug-tag" style="color: var(--accent-success);">tool</span>
-              <span class="debug-id">create-character</span>
-              <span class="debug-msg">tool.call · {"name":"苏婉","traits":["剑修","执拗"]} → ok</span>
-              <span class="debug-dur">12ms</span>
-            </div>
-            <div class="debug-row">
-              <span class="debug-tag" style="color: var(--accent-danger);">hook</span>
-              <span class="debug-id">core-pregame</span>
-              <span class="debug-msg">hook.PreStateCommit · validation-failed → retry</span>
-              <span class="debug-dur">2ms</span>
-            </div>
-            <div class="debug-row">
-              <span class="debug-tag">flow</span>
-              <span class="debug-id">5f757965·t1</span>
-              <span class="debug-msg">turn.commit · 8 proposals · narrative.append + state.patch ×7</span>
-              <span class="debug-dur">24.4s</span>
-            </div>
-          </div>
+        <div class="ui-frame" style="padding: 1.5rem">
+          <div class="token-list" id="token-list"></div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- ════════════════ TOKENS REFERENCE ════════════════ -->
-    <section class="section">
-      <div class="section-num">§ 08 · Token reference</div>
-      <h2 class="section-title">Variables you can change</h2>
-      <p class="section-blurb">
-        所有主题层都通过覆写 CSS variable 工作。这里是关键 token 清单 — 给设计师在
-        Figma 之外做 spec / 调色 / fork 主题时的参考。
-      </p>
+      <footer
+        style="
+          margin-top: 5rem;
+          padding-top: 2rem;
+          border-top: 1px solid var(--rule-color);
+        "
+      >
+        <div class="row" style="justify-content: space-between">
+          <span class="ui-meta">© Covel design 2026</span>
+          <span class="ui-meta"
+            >Single-file showcase · drop into Figma / send to designer</span
+          >
+        </div>
+      </footer>
+    </main>
 
-      <div class="ui-frame" style="padding: 1.5rem;">
-        <div class="token-list" id="token-list"></div>
-      </div>
-    </section>
+    <script>
+      (() => {
+        const root = document.documentElement;
 
-    <footer style="margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--rule-color);">
-      <div class="row" style="justify-content: space-between;">
-        <span class="ui-meta">© Covel design 2026</span>
-        <span class="ui-meta">Single-file showcase · drop into Figma / send to designer</span>
-      </div>
-    </footer>
+        // ── theme + scheme switcher ──
+        // Some themes are scheme-locked (e.g. Abyss is intentionally dark-only —
+        // a "light" Abyss would clash with Paper light's tone, and the theme is
+        // tuned as a codex/reading-mode experience).
+        const themeSchemeLock = {
+          abyss: "dark",
+        };
 
-  </main>
+        const refreshSchemeLock = () => {
+          const lock = themeSchemeLock[root.dataset.theme];
+          const lockHint = document.getElementById("scheme-locked-hint");
+          document.querySelectorAll("[data-scheme-btn]").forEach((b) => {
+            const locked = lock && b.dataset.schemeBtn !== lock;
+            b.disabled = !!locked;
+            b.style.opacity = locked ? "0.35" : "";
+            b.style.cursor = locked ? "not-allowed" : "";
+            b.title = locked
+              ? `${root.dataset.theme} only supports ${lock} scheme`
+              : "";
+          });
+          if (lockHint) {
+            lockHint.style.display = lock ? "inline" : "none";
+          }
+        };
 
-  <script>
-  (() => {
-    const root = document.documentElement;
+        const setTheme = (id) => {
+          root.dataset.theme = id;
+          document.querySelectorAll("[data-theme-btn]").forEach((b) => {
+            b.setAttribute(
+              "aria-pressed",
+              b.dataset.themeBtn === id ? "true" : "false",
+            );
+          });
+          // Snap scheme to the theme's locked value if it has one
+          const lock = themeSchemeLock[id];
+          if (lock && root.dataset.scheme !== lock) {
+            setScheme(lock);
+          } else {
+            refreshSchemeLock();
+          }
+          try {
+            localStorage.setItem("covel-showcase:theme", id);
+          } catch {}
+        };
 
-    // ── theme + scheme switcher ──
-    // Some themes are scheme-locked (e.g. Abyss is intentionally dark-only —
-    // a "light" Abyss would clash with Paper light's tone, and the theme is
-    // tuned as a codex/reading-mode experience).
-    const themeSchemeLock = {
-      abyss: 'dark',
-    };
+        const setScheme = (id) => {
+          // Reject scheme changes that fight the active theme's lock
+          const lock = themeSchemeLock[root.dataset.theme];
+          if (lock && id !== lock) return;
+          root.dataset.scheme = id;
+          document.querySelectorAll("[data-scheme-btn]").forEach((b) => {
+            b.setAttribute(
+              "aria-pressed",
+              b.dataset.schemeBtn === id ? "true" : "false",
+            );
+          });
+          refreshSchemeLock();
+          try {
+            localStorage.setItem("covel-showcase:scheme", id);
+          } catch {}
+        };
 
-    const refreshSchemeLock = () => {
-      const lock = themeSchemeLock[root.dataset.theme];
-      const lockHint = document.getElementById('scheme-locked-hint');
-      document.querySelectorAll('[data-scheme-btn]').forEach(b => {
-        const locked = lock && b.dataset.schemeBtn !== lock;
-        b.disabled = !!locked;
-        b.style.opacity = locked ? '0.35' : '';
-        b.style.cursor = locked ? 'not-allowed' : '';
-        b.title = locked ? `${root.dataset.theme} only supports ${lock} scheme` : '';
-      });
-      if (lockHint) {
-        lockHint.style.display = lock ? 'inline' : 'none';
-      }
-    };
+        document.querySelectorAll("[data-theme-btn]").forEach((b) => {
+          b.addEventListener("click", () => setTheme(b.dataset.themeBtn));
+        });
+        document.querySelectorAll("[data-scheme-btn]").forEach((b) => {
+          b.addEventListener("click", () => setScheme(b.dataset.schemeBtn));
+        });
 
-    const setTheme = (id) => {
-      root.dataset.theme = id;
-      document.querySelectorAll('[data-theme-btn]').forEach(b => {
-        b.setAttribute('aria-pressed', b.dataset.themeBtn === id ? 'true' : 'false');
-      });
-      // Snap scheme to the theme's locked value if it has one
-      const lock = themeSchemeLock[id];
-      if (lock && root.dataset.scheme !== lock) {
-        setScheme(lock);
-      } else {
-        refreshSchemeLock();
-      }
-      try { localStorage.setItem('covel-showcase:theme', id); } catch {}
-    };
+        try {
+          const t = localStorage.getItem("covel-showcase:theme");
+          const s = localStorage.getItem("covel-showcase:scheme");
+          if (t) setTheme(t);
+          if (s) setScheme(s);
+        } catch {}
 
-    const setScheme = (id) => {
-      // Reject scheme changes that fight the active theme's lock
-      const lock = themeSchemeLock[root.dataset.theme];
-      if (lock && id !== lock) return;
-      root.dataset.scheme = id;
-      document.querySelectorAll('[data-scheme-btn]').forEach(b => {
-        b.setAttribute('aria-pressed', b.dataset.schemeBtn === id ? 'true' : 'false');
-      });
-      refreshSchemeLock();
-      try { localStorage.setItem('covel-showcase:scheme', id); } catch {}
-    };
-
-    document.querySelectorAll('[data-theme-btn]').forEach(b => {
-      b.addEventListener('click', () => setTheme(b.dataset.themeBtn));
-    });
-    document.querySelectorAll('[data-scheme-btn]').forEach(b => {
-      b.addEventListener('click', () => setScheme(b.dataset.schemeBtn));
-    });
-
-    try {
-      const t = localStorage.getItem('covel-showcase:theme');
-      const s = localStorage.getItem('covel-showcase:scheme');
-      if (t) setTheme(t);
-      if (s) setScheme(s);
-    } catch {}
-
-    // ── color swatches ──
-    const swatchTokens = [
-      { name: 'page',         token: '--surface-page' },
-      { name: 'rail',         token: '--surface-rail' },
-      { name: 'inset',        token: '--surface-inset' },
-      { name: 'elevated',     token: '--surface-elevated' },
-      { name: 'foreground',   token: '--color-foreground' },
-      { name: 'muted',        token: '--color-muted-foreground' },
-      { name: 'rule',         token: '--rule-color' },
-      { name: 'rule strong',  token: '--rule-strong-color' },
-      { name: 'primary',      token: '--accent-primary' },
-      { name: 'secondary',    token: '--accent-secondary' },
-      { name: 'warning',      token: '--accent-warning' },
-      { name: 'success',      token: '--accent-success' },
-      { name: 'danger',       token: '--accent-danger' },
-    ];
-    const grid = document.getElementById('swatch-grid');
-    grid.innerHTML = swatchTokens.map(t => `
+        // ── color swatches ──
+        const swatchTokens = [
+          { name: "page", token: "--surface-page" },
+          { name: "rail", token: "--surface-rail" },
+          { name: "inset", token: "--surface-inset" },
+          { name: "elevated", token: "--surface-elevated" },
+          { name: "foreground", token: "--color-foreground" },
+          { name: "muted", token: "--color-muted-foreground" },
+          { name: "rule", token: "--rule-color" },
+          { name: "rule strong", token: "--rule-strong-color" },
+          { name: "primary", token: "--accent-primary" },
+          { name: "secondary", token: "--accent-secondary" },
+          { name: "warning", token: "--accent-warning" },
+          { name: "success", token: "--accent-success" },
+          { name: "danger", token: "--accent-danger" },
+        ];
+        const grid = document.getElementById("swatch-grid");
+        grid.innerHTML = swatchTokens
+          .map(
+            (t) => `
       <div class="swatch">
         <div class="swatch-chip" style="background: var(${t.token});"></div>
         <div class="swatch-name">${t.name}</div>
         <div class="swatch-token">${t.token}</div>
       </div>
-    `).join('');
+    `,
+          )
+          .join("");
 
-    // ── token reference list ──
-    const tokenRef = [
-      ['--type-display',         'family · headline'],
-      ['--type-body',            'family · body'],
-      ['--type-mono',            'family · meta + IDs'],
-      ['--surface-page',         'global page background'],
-      ['--surface-rail',         'left/right vertical rails'],
-      ['--surface-inset',        'inputs, code blocks, debug rail'],
-      ['--surface-elevated',     'modal / popover only'],
-      ['--rule-color',           'every hairline divider'],
-      ['--rule-strong-color',    'section dividers, top of plates'],
-      ['--rule-style',           'solid · dashed · double'],
-      ['--accent-primary',       'main marker color'],
-      ['--accent-secondary',     'secondary state · info'],
-      ['--accent-warning',       'attention'],
-      ['--accent-danger',        'destructive · error'],
-      ['--accent-success',       'completion · live status'],
-      ['--ambience-image',       'theme-level background atmosphere'],
-      ['--noise-opacity',        'paper grain intensity'],
-      ['--radius-card',          'large radii (cards, dialogs)'],
-      ['--radius-control',       'inputs, buttons, chips'],
-      ['--radius-dialog',        'modals'],
-      ['--eyebrow-letter-spacing','meta tracking'],
-    ];
-    const list = document.getElementById('token-list');
-    list.innerHTML = tokenRef.map(([k, v]) => `
+        // ── token reference list ──
+        const tokenRef = [
+          ["--type-display", "family · headline"],
+          ["--type-body", "family · body"],
+          ["--type-mono", "family · meta + IDs"],
+          ["--surface-page", "global page background"],
+          ["--surface-rail", "left/right vertical rails"],
+          ["--surface-inset", "inputs, code blocks, debug rail"],
+          ["--surface-elevated", "modal / popover only"],
+          ["--rule-color", "every hairline divider"],
+          ["--rule-strong-color", "section dividers, top of plates"],
+          ["--rule-style", "solid · dashed · double"],
+          ["--accent-primary", "main marker color"],
+          ["--accent-secondary", "secondary state · info"],
+          ["--accent-warning", "attention"],
+          ["--accent-danger", "destructive · error"],
+          ["--accent-success", "completion · live status"],
+          ["--ambience-image", "theme-level background atmosphere"],
+          ["--noise-opacity", "paper grain intensity"],
+          ["--radius-card", "large radii (cards, dialogs)"],
+          ["--radius-control", "inputs, buttons, chips"],
+          ["--radius-dialog", "modals"],
+          ["--eyebrow-letter-spacing", "meta tracking"],
+        ];
+        const list = document.getElementById("token-list");
+        list.innerHTML = tokenRef
+          .map(
+            ([k, v]) => `
       <div class="token-entry"><span class="key">${k}</span><span class="val">${v}</span></div>
-    `).join('');
-  })();
-  </script>
-</body>
+    `,
+          )
+          .join("");
+      })();
+    </script>
+  </body>
 </html>

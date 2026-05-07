@@ -44,10 +44,10 @@ input:
 
 然后调用一次 `plugin-data-set` 工具，把摘要写入消息流：
 
-| 参数 | 值 |
-|------|----|
-| `namespace` | `messages` |
-| `key` | `summary-` 加当前时间戳的 base36，例如 `summary-lz0abc` |
-| `value` | `{ "role": "summary", "text": "<你的 100 字摘要>", "createdAt": "<ISO 8601 时间戳>" }` |
+| 参数        | 值                                                                                     |
+| ----------- | -------------------------------------------------------------------------------------- |
+| `namespace` | `messages`                                                                             |
+| `key`       | `summary-` 加当前时间戳的 base36，例如 `summary-lz0abc`                                |
+| `value`     | `{ "role": "summary", "text": "<你的 100 字摘要>", "createdAt": "<ISO 8601 时间戳>" }` |
 
 调用工具完成后**立即结束**，不要再输出任何文本。

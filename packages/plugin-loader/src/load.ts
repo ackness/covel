@@ -7,12 +7,12 @@ import path from "node:path";
 import matter from "gray-matter";
 import type { PluginType } from "@covel/shared";
 import type {
-	PluginDiscoveryResult,
-	PluginSummary,
-	LoadedRuntime,
-	ParsedPluginMd,
-	ParsedReference,
-	FunctionHandler,
+  PluginDiscoveryResult,
+  PluginSummary,
+  LoadedRuntime,
+  ParsedPluginMd,
+  ParsedReference,
+  FunctionHandler,
 } from "./types.js";
 import { parsePluginMd } from "./parse-plugin-md.js";
 import { parseReference } from "./parse-reference.js";
@@ -31,24 +31,24 @@ import { parseReference } from "./parse-reference.js";
 const SAFE_LOCALE_RE = /^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{2,8})*$/;
 
 async function resolveLocalizedPluginMd(
-	dir: string,
-	locale?: string,
+  dir: string,
+  locale?: string,
 ): Promise<string> {
-	const base = path.join(dir, "PLUGIN.md");
-	if (!locale || !SAFE_LOCALE_RE.test(locale)) return base;
+  const base = path.join(dir, "PLUGIN.md");
+  if (!locale || !SAFE_LOCALE_RE.test(locale)) return base;
 
-	// Try exact locale: PLUGIN.en-US.md
-	const exact = path.join(dir, `PLUGIN.${locale}.md`);
-	if (await fileExists(exact)) return exact;
+  // Try exact locale: PLUGIN.en-US.md
+  const exact = path.join(dir, `PLUGIN.${locale}.md`);
+  if (await fileExists(exact)) return exact;
 
-	// Try language prefix: PLUGIN.en.md
-	const lang = locale.split("-")[0];
-	if (lang !== locale) {
-		const langPath = path.join(dir, `PLUGIN.${lang}.md`);
-		if (await fileExists(langPath)) return langPath;
-	}
+  // Try language prefix: PLUGIN.en.md
+  const lang = locale.split("-")[0];
+  if (lang !== locale) {
+    const langPath = path.join(dir, `PLUGIN.${lang}.md`);
+    if (await fileExists(langPath)) return langPath;
+  }
 
-	return base;
+  return base;
 }
 
 /**
@@ -57,51 +57,51 @@ async function resolveLocalizedPluginMd(
  * Falls back to lexical check when the target does not exist on disk.
  */
 async function assertInsideRoot(
-	root: string,
-	target: string,
-	label: string,
+  root: string,
+  target: string,
+  label: string,
 ): Promise<void> {
-	let realRoot: string;
-	let realTarget: string;
-	try {
-		realRoot = await fs.realpath(root);
-	} catch {
-		realRoot = path.resolve(root);
-	}
-	try {
-		realTarget = await fs.realpath(target);
-	} catch {
-		// Target doesn't exist — fall back to lexical check (safe: non-existent path can't be read)
-		realTarget = path.resolve(target);
-	}
-	const rel = path.relative(realRoot, realTarget);
-	if (rel.startsWith("..") || path.isAbsolute(rel)) {
-		throw new Error(`${label} path traversal rejected`);
-	}
+  let realRoot: string;
+  let realTarget: string;
+  try {
+    realRoot = await fs.realpath(root);
+  } catch {
+    realRoot = path.resolve(root);
+  }
+  try {
+    realTarget = await fs.realpath(target);
+  } catch {
+    // Target doesn't exist — fall back to lexical check (safe: non-existent path can't be read)
+    realTarget = path.resolve(target);
+  }
+  const rel = path.relative(realRoot, realTarget);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new Error(`${label} path traversal rejected`);
+  }
 }
 
 /**
  * Check whether a path exists and is a file.
  */
 async function fileExists(p: string): Promise<boolean> {
-	try {
-		const stat = await fs.stat(p);
-		return stat.isFile();
-	} catch {
-		return false;
-	}
+  try {
+    const stat = await fs.stat(p);
+    return stat.isFile();
+  } catch {
+    return false;
+  }
 }
 
 /**
  * Check whether a path exists and is a directory.
  */
 async function dirExists(p: string): Promise<boolean> {
-	try {
-		const stat = await fs.stat(p);
-		return stat.isDirectory();
-	} catch {
-		return false;
-	}
+  try {
+    const stat = await fs.stat(p);
+    return stat.isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -111,41 +111,41 @@ async function dirExists(p: string): Promise<boolean> {
  * @param locale - Optional locale for loading localized PLUGIN.md
  */
 export async function loadPluginSummary(
-	discovery: PluginDiscoveryResult,
-	locale?: string,
+  discovery: PluginDiscoveryResult,
+  locale?: string,
 ): Promise<PluginSummary> {
-	// For multi-runtime, prefer root PLUGIN.md; fall back to first runtime's PLUGIN.md
-	let summaryPath = await resolveLocalizedPluginMd(discovery.rootPath, locale);
-	const hasRootSummary = await fileExists(summaryPath);
-	if (!hasRootSummary) {
-		// Root PLUGIN.md doesn't exist (multi-runtime) — use first runtime's PLUGIN.md
-		const fallbackDir = path.dirname(discovery.pluginMdPaths[0]);
-		summaryPath = await resolveLocalizedPluginMd(fallbackDir, locale);
-	}
+  // For multi-runtime, prefer root PLUGIN.md; fall back to first runtime's PLUGIN.md
+  let summaryPath = await resolveLocalizedPluginMd(discovery.rootPath, locale);
+  const hasRootSummary = await fileExists(summaryPath);
+  if (!hasRootSummary) {
+    // Root PLUGIN.md doesn't exist (multi-runtime) — use first runtime's PLUGIN.md
+    const fallbackDir = path.dirname(discovery.pluginMdPaths[0]);
+    summaryPath = await resolveLocalizedPluginMd(fallbackDir, locale);
+  }
 
-	const content = await fs.readFile(summaryPath, "utf-8");
-	const { data } = matter(content);
+  const content = await fs.readFile(summaryPath, "utf-8");
+  const { data } = matter(content);
 
-	// Support I18nText: string or { "zh-CN": "...", "en-US": "..." } (reject arrays)
-	const isI18n = (v: unknown): v is string | Record<string, string> =>
-		typeof v === "string" ||
-		(typeof v === "object" && v !== null && !Array.isArray(v));
-	const name = hasRootSummary
-		? isI18n(data.name)
-			? data.name
-			: discovery.id
-		: discovery.id;
-	const description = isI18n(data.description) ? data.description : "";
-	const pluginType: PluginType =
-		data.pluginType === "core-plugin" ? "core-plugin" : "plugin";
+  // Support I18nText: string or { "zh-CN": "...", "en-US": "..." } (reject arrays)
+  const isI18n = (v: unknown): v is string | Record<string, string> =>
+    typeof v === "string" ||
+    (typeof v === "object" && v !== null && !Array.isArray(v));
+  const name = hasRootSummary
+    ? isI18n(data.name)
+      ? data.name
+      : discovery.id
+    : discovery.id;
+  const description = isI18n(data.description) ? data.description : "";
+  const pluginType: PluginType =
+    data.pluginType === "core-plugin" ? "core-plugin" : "plugin";
 
-	return {
-		id: discovery.id,
-		name,
-		description,
-		pluginType,
-		runtimeCount: discovery.pluginMdPaths.length,
-	};
+  return {
+    id: discovery.id,
+    name,
+    description,
+    pluginType,
+    runtimeCount: discovery.pluginMdPaths.length,
+  };
 }
 
 /**
@@ -155,63 +155,63 @@ export async function loadPluginSummary(
  * @param locale - Optional locale for loading localized PLUGIN.md
  */
 export async function loadPluginManifest(
-	discovery: PluginDiscoveryResult,
-	locale?: string,
+  discovery: PluginDiscoveryResult,
+  locale?: string,
 ): Promise<readonly ParsedPluginMd[]> {
-	const results: ParsedPluginMd[] = [];
+  const results: ParsedPluginMd[] = [];
 
-	for (const mdPath of discovery.pluginMdPaths) {
-		// Resolve localized version if available
-		const dir = path.dirname(mdPath);
-		const localizedPath = await resolveLocalizedPluginMd(dir, locale);
-		const content = await fs.readFile(localizedPath, "utf-8");
-		const parsed = parsePluginMd(content, localizedPath);
-		results.push(parsed);
-	}
+  for (const mdPath of discovery.pluginMdPaths) {
+    // Resolve localized version if available
+    const dir = path.dirname(mdPath);
+    const localizedPath = await resolveLocalizedPluginMd(dir, locale);
+    const content = await fs.readFile(localizedPath, "utf-8");
+    const parsed = parsePluginMd(content, localizedPath);
+    results.push(parsed);
+  }
 
-	return results;
+  return results;
 }
 
 /**
  * Resolve the directory for a given runtime name within a discovery result.
  */
 function resolveRuntimeDir(
-	discovery: PluginDiscoveryResult,
-	runtimeName: string,
+  discovery: PluginDiscoveryResult,
+  runtimeName: string,
 ): string {
-	if (!discovery.isMultiRuntime) {
-		return discovery.rootPath;
-	}
-	// runtimeName may be 'pluginId/subName' — extract the subName for directory resolution
-	const slashIdx = runtimeName.indexOf("/");
-	const subName = slashIdx >= 0 ? runtimeName.slice(slashIdx + 1) : runtimeName;
-	return path.join(discovery.rootPath, "runtimes", subName);
+  if (!discovery.isMultiRuntime) {
+    return discovery.rootPath;
+  }
+  // runtimeName may be 'pluginId/subName' — extract the subName for directory resolution
+  const slashIdx = runtimeName.indexOf("/");
+  const subName = slashIdx >= 0 ? runtimeName.slice(slashIdx + 1) : runtimeName;
+  return path.join(discovery.rootPath, "runtimes", subName);
 }
 
 /**
  * Read all reference files from a `references/` directory.
  */
 async function readReferences(
-	runtimeDir: string,
+  runtimeDir: string,
 ): Promise<readonly ParsedReference[]> {
-	const refsDir = path.join(runtimeDir, "references");
-	if (!(await dirExists(refsDir))) {
-		return [];
-	}
+  const refsDir = path.join(runtimeDir, "references");
+  if (!(await dirExists(refsDir))) {
+    return [];
+  }
 
-	const entries = await fs.readdir(refsDir, { withFileTypes: true });
-	const refs: ParsedReference[] = [];
+  const entries = await fs.readdir(refsDir, { withFileTypes: true });
+  const refs: ParsedReference[] = [];
 
-	for (const entry of entries) {
-		if (!entry.isFile() || !entry.name.endsWith(".md")) {
-			continue;
-		}
-		const filePath = path.join(refsDir, entry.name);
-		const content = await fs.readFile(filePath, "utf-8");
-		refs.push(parseReference(content, filePath));
-	}
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".md")) {
+      continue;
+    }
+    const filePath = path.join(refsDir, entry.name);
+    const content = await fs.readFile(filePath, "utf-8");
+    refs.push(parseReference(content, filePath));
+  }
 
-	return refs;
+  return refs;
 }
 
 /**
@@ -219,43 +219,43 @@ async function readReferences(
  * Validates paths to prevent traversal outside the plugin root.
  */
 async function loadUiSpecs(
-	runtimeDir: string,
-	pluginRoot: string,
-	ui:
-		| {
-				right?: readonly string[];
-				message?: readonly string[];
-				left?: readonly string[];
-		  }
-		| undefined,
+  runtimeDir: string,
+  pluginRoot: string,
+  ui:
+    | {
+        right?: readonly string[];
+        message?: readonly string[];
+        left?: readonly string[];
+      }
+    | undefined,
 ): Promise<LoadedRuntime["uiSpecs"]> {
-	if (!ui) return undefined;
+  if (!ui) return undefined;
 
-	const loadSlot = async (
-		paths: readonly string[] | undefined,
-	): Promise<readonly Readonly<Record<string, unknown>>[] | undefined> => {
-		if (!paths || paths.length === 0) return undefined;
-		const specs: Readonly<Record<string, unknown>>[] = [];
-		for (const relPath of paths) {
-			const fullPath = path.resolve(runtimeDir, relPath);
-			await assertInsideRoot(pluginRoot, fullPath, "UI spec");
-			if (fullPath.endsWith(".json")) {
-				const content = await fs.readFile(fullPath, "utf-8");
-				specs.push(JSON.parse(content) as Record<string, unknown>);
-			} else {
-				// .tsx/.js — store path for frontend dynamic loading
-				specs.push({ _componentPath: relPath });
-			}
-		}
-		return specs;
-	};
+  const loadSlot = async (
+    paths: readonly string[] | undefined,
+  ): Promise<readonly Readonly<Record<string, unknown>>[] | undefined> => {
+    if (!paths || paths.length === 0) return undefined;
+    const specs: Readonly<Record<string, unknown>>[] = [];
+    for (const relPath of paths) {
+      const fullPath = path.resolve(runtimeDir, relPath);
+      await assertInsideRoot(pluginRoot, fullPath, "UI spec");
+      if (fullPath.endsWith(".json")) {
+        const content = await fs.readFile(fullPath, "utf-8");
+        specs.push(JSON.parse(content) as Record<string, unknown>);
+      } else {
+        // .tsx/.js — store path for frontend dynamic loading
+        specs.push({ _componentPath: relPath });
+      }
+    }
+    return specs;
+  };
 
-	const right = await loadSlot(ui.right);
-	const message = await loadSlot(ui.message);
-	const left = await loadSlot(ui.left);
+  const right = await loadSlot(ui.right);
+  const message = await loadSlot(ui.message);
+  const left = await loadSlot(ui.left);
 
-	if (!right && !message && !left) return undefined;
-	return { right, message, left };
+  if (!right && !message && !left) return undefined;
+  return { right, message, left };
 }
 
 /**
@@ -265,62 +265,62 @@ async function loadUiSpecs(
  * @param locale - Optional locale for loading localized PLUGIN.md (e.g., "en-US" → PLUGIN.en.md)
  */
 export async function loadRuntime(
-	discovery: PluginDiscoveryResult,
-	runtimeName: string,
-	locale?: string,
+  discovery: PluginDiscoveryResult,
+  runtimeName: string,
+  locale?: string,
 ): Promise<LoadedRuntime> {
-	const runtimeDir = resolveRuntimeDir(discovery, runtimeName);
-	const pluginMdPath = await resolveLocalizedPluginMd(runtimeDir, locale);
+  const runtimeDir = resolveRuntimeDir(discovery, runtimeName);
+  const pluginMdPath = await resolveLocalizedPluginMd(runtimeDir, locale);
 
-	const content = await fs.readFile(pluginMdPath, "utf-8");
-	const parsed = parsePluginMd(content, pluginMdPath);
+  const content = await fs.readFile(pluginMdPath, "utf-8");
+  const parsed = parsePluginMd(content, pluginMdPath);
 
-	const references = await readReferences(runtimeDir);
+  const references = await readReferences(runtimeDir);
 
-	const schemaPath = path.join(runtimeDir, "output.schema.json");
-	let outputSchema: Readonly<Record<string, unknown>> | undefined;
-	if (await fileExists(schemaPath)) {
-		const schemaContent = await fs.readFile(schemaPath, "utf-8");
-		outputSchema = JSON.parse(schemaContent) as Record<string, unknown>;
-	}
+  const schemaPath = path.join(runtimeDir, "output.schema.json");
+  let outputSchema: Readonly<Record<string, unknown>> | undefined;
+  if (await fileExists(schemaPath)) {
+    const schemaContent = await fs.readFile(schemaPath, "utf-8");
+    outputSchema = JSON.parse(schemaContent) as Record<string, unknown>;
+  }
 
-	// Load function handler for runtimeType: 'function'
-	let handler: FunctionHandler | undefined;
-	if (parsed.manifest.runtimeType === "function" && parsed.manifest.handler) {
-		const handlerPath = path.resolve(runtimeDir, parsed.manifest.handler);
-		await assertInsideRoot(discovery.rootPath, handlerPath, "Handler");
-		const mod = await import(handlerPath);
-		handler = mod.default as FunctionHandler;
-	}
+  // Load function handler for runtimeType: 'function'
+  let handler: FunctionHandler | undefined;
+  if (parsed.manifest.runtimeType === "function" && parsed.manifest.handler) {
+    const handlerPath = path.resolve(runtimeDir, parsed.manifest.handler);
+    await assertInsideRoot(discovery.rootPath, handlerPath, "Handler");
+    const mod = await import(handlerPath);
+    handler = mod.default as FunctionHandler;
+  }
 
-	// Load guard function for agent runtimes with pre-execution gate
-	let guard: FunctionHandler | undefined;
-	if (parsed.manifest.guard) {
-		const guardPath = path.resolve(runtimeDir, parsed.manifest.guard);
-		await assertInsideRoot(discovery.rootPath, guardPath, "Guard");
-		const mod = await import(guardPath);
-		if (typeof mod.default !== "function") {
-			throw new Error(
-				`Guard module "${parsed.manifest.guard}" does not export a default function (got ${typeof mod.default})`,
-			);
-		}
-		guard = mod.default as FunctionHandler;
-	}
+  // Load guard function for agent runtimes with pre-execution gate
+  let guard: FunctionHandler | undefined;
+  if (parsed.manifest.guard) {
+    const guardPath = path.resolve(runtimeDir, parsed.manifest.guard);
+    await assertInsideRoot(discovery.rootPath, guardPath, "Guard");
+    const mod = await import(guardPath);
+    if (typeof mod.default !== "function") {
+      throw new Error(
+        `Guard module "${parsed.manifest.guard}" does not export a default function (got ${typeof mod.default})`,
+      );
+    }
+    guard = mod.default as FunctionHandler;
+  }
 
-	// Load UI spec files from ui/ directory
-	const uiSpecs = await loadUiSpecs(
-		runtimeDir,
-		discovery.rootPath,
-		parsed.manifest.ui,
-	);
+  // Load UI spec files from ui/ directory
+  const uiSpecs = await loadUiSpecs(
+    runtimeDir,
+    discovery.rootPath,
+    parsed.manifest.ui,
+  );
 
-	return {
-		manifest: parsed.manifest,
-		promptTemplate: parsed.promptTemplate,
-		references,
-		outputSchema,
-		handler,
-		guard,
-		uiSpecs,
-	};
+  return {
+    manifest: parsed.manifest,
+    promptTemplate: parsed.promptTemplate,
+    references,
+    outputSchema,
+    handler,
+    guard,
+    uiSpecs,
+  };
 }

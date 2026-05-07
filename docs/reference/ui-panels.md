@@ -53,15 +53,15 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 
 ### 当前注册的面板
 
-| 插件/runtime | 面板 ID | 图标 | group | 数据 namespace | 描述 |
-|------|---------|------|-------|---------------|------|
-| char-creator/player-init | character | users | character | characters | 角色列表（player + NPC + companion） |
-| codex | codex | book-open | codex | entries | 知识图鉴 |
-| memory | memory | brain | memory | （框架托管） | 核心记忆面板：剧情摘要 / 当前场景 / 角色关系 / 玩家状态。纯 UI，由 `@covel/memory` 在每轮结束后写入 |
-| npc-graph/extractor | npc-graph | network | npc-graph | nodes + edges | NPC 关系图（force-directed 可视化） |
-| world-init/schema-gen | world-overview | layout-dashboard | world-data | (汇总) | 世界总览（词条 + 维度的概览页） |
-| world-init/schema-gen | world-entries | book-marked | world-data | entries | 世界词条 |
-| world-init/schema-gen | world-schema | sliders-horizontal | world-data | schema | 角色属性 schema |
+| 插件/runtime             | 面板 ID        | 图标               | group      | 数据 namespace | 描述                                                                                                |
+| ------------------------ | -------------- | ------------------ | ---------- | -------------- | --------------------------------------------------------------------------------------------------- |
+| char-creator/player-init | character      | users              | character  | characters     | 角色列表（player + NPC + companion）                                                                |
+| codex                    | codex          | book-open          | codex      | entries        | 知识图鉴                                                                                            |
+| memory                   | memory         | brain              | memory     | （框架托管）   | 核心记忆面板：剧情摘要 / 当前场景 / 角色关系 / 玩家状态。纯 UI，由 `@covel/memory` 在每轮结束后写入 |
+| npc-graph/extractor      | npc-graph      | network            | npc-graph  | nodes + edges  | NPC 关系图（force-directed 可视化）                                                                 |
+| world-init/schema-gen    | world-overview | layout-dashboard   | world-data | (汇总)         | 世界总览（词条 + 维度的概览页）                                                                     |
+| world-init/schema-gen    | world-entries  | book-marked        | world-data | entries        | 世界词条                                                                                            |
+| world-init/schema-gen    | world-schema   | sliders-horizontal | world-data | schema         | 角色属性 schema                                                                                     |
 
 > `world-init` 的 schema-gen runtime 注册三个 spec（`world-overview` / `world-entries` / `world-schema`），通过相同 `group: "world-data"` + `groupLabel` 合并为单个 activity-bar tab "世界维度"，内部横向子 Tab 在总览 / 词条 / 属性 之间切换。
 > `char-creator` 的 character-panel 由 player-init runtime 声明，character-tracker runtime 共享同一个 namespace `characters`（由 `create-character` / `update-character` builtin 工具写入）。
@@ -101,7 +101,10 @@ ui:
   "icon": "book-marked",
   "dataSource": { "namespace": "entries" },
   "emptyState": {
-    "message": { "zh": "世界维度词条尚未生成，等待初始化完成……", "en": "World entries not yet generated, waiting for initialization…" }
+    "message": {
+      "zh": "世界维度词条尚未生成，等待初始化完成……",
+      "en": "World entries not yet generated, waiting for initialization…"
+    }
   },
   "view": {
     "component": "Accordion",
@@ -111,7 +114,10 @@ ui:
         "component": "Section",
         "props": { "title": { "$item": "key" }, "icon": "chevron-right" },
         "children": [
-          { "component": "JsonView", "props": { "value": { "$item": "value" } } }
+          {
+            "component": "JsonView",
+            "props": { "value": { "$item": "value" } }
+          }
         ]
       }
     ]
@@ -120,6 +126,7 @@ ui:
 ```
 
 关键字段：
+
 - `id` — 面板唯一标识
 - `group` — 同 group 的面板合并为一个外层 Tab
 - `groupLabel` — 合并后外层 Tab 的显示名（可选，省略时用第一个 spec 的 `label`）
@@ -142,8 +149,8 @@ activity-bar（右侧垂直 Tab 条）每个 Tab 只能显示极窄的文字。�
 
 ```json
 {
-  "label":      { "zh": "核心记忆", "en": "Core Memory" },
-  "shortLabel": { "zh": "记忆",     "en": "Memory" }
+  "label": { "zh": "核心记忆", "en": "Core Memory" },
+  "shortLabel": { "zh": "记忆", "en": "Memory" }
 }
 ```
 
@@ -169,14 +176,14 @@ activity-bar（右侧垂直 Tab 条）每个 Tab 只能显示极窄的文字。�
 
 **约定**：所有依赖 namespace 数据渲染的右侧面板 spec **必须**声明 `emptyState.message`，使用与面板业务语境匹配的提示语，而非通用文字。已内置 `emptyState` 的面板：
 
-| 面板 spec | 空状态提示 |
-|-----------|-----------|
-| `character-panel.json` | 尚未创建角色，完成角色创建流程后将在此显示…… |
-| `codex-panel.json` | 图鉴暂无词条，等待 narrator 发现新知识…… |
-| `memory-panel.json` | （核心记忆，由 `@covel/memory` 在每轮结束后写入）|
+| 面板 spec              | 空状态提示                                                |
+| ---------------------- | --------------------------------------------------------- |
+| `character-panel.json` | 尚未创建角色，完成角色创建流程后将在此显示……              |
+| `codex-panel.json`     | 图鉴暂无词条，等待 narrator 发现新知识……                  |
+| `memory-panel.json`    | （核心记忆，由 `@covel/memory` 在每轮结束后写入）         |
 | `npc-graph-panel.json` | 尚未识别到角色或势力关系，narrator 推进剧情后将自动浮现…… |
-| `world-schema.json` | 角色属性定义尚未生成，等待世界初始化…… |
-| `world-entries.json` | 世界维度词条尚未生成，等待初始化完成…… |
+| `world-schema.json`    | 角色属性定义尚未生成，等待世界初始化……                    |
+| `world-entries.json`   | 世界维度词条尚未生成，等待初始化完成……                    |
 
 **`alwaysRender: true` 豁免**：spec 顶层声明 `"alwaysRender": true`（或 `view.component` 是 `ImageGallery` / `ImageJobs`，由 `specUsesComponent` 隐式判定）的 panel 不依赖 namespace 数据渲染——例如 `world-overview.json` 的 `WorldDimensions` 直接读 session 上下文，`gallery.json` / `jobs.json` 的 `ImageGallery` / `ImageJobs` 自行处理空态。这类 spec **可省略 `emptyState.message`**：前端 `PluginPanel` 根本不会进入空态分支。
 
@@ -213,14 +220,14 @@ type I18nText = string | Record<LocaleTag, string>;
 
 ### json-render 绑定速查
 
-| 需求 | 写法 |
-|------|------|
-| 读状态 | `{ "$state": "/path" }` |
-| 读写状态 | `{ "$bindState": "/path" }` |
-| 迭代数组 | `repeat: { "statePath": "/path", "key": "id" }`（元素顶层字段，**非 props**） |
-| 读当前 item 字段 | `{ "$item": "field" }`（字段名不带前导斜杠） |
-| 读写当前 item 字段 | `{ "$bindItem": "field" }` |
-| 当前 index | `{ "$index": true }` |
+| 需求               | 写法                                                                          |
+| ------------------ | ----------------------------------------------------------------------------- |
+| 读状态             | `{ "$state": "/path" }`                                                       |
+| 读写状态           | `{ "$bindState": "/path" }`                                                   |
+| 迭代数组           | `repeat: { "statePath": "/path", "key": "id" }`（元素顶层字段，**非 props**） |
+| 读当前 item 字段   | `{ "$item": "field" }`（字段名不带前导斜杠）                                  |
+| 读写当前 item 字段 | `{ "$bindItem": "field" }`                                                    |
+| 当前 index         | `{ "$index": true }`                                                          |
 
 > ⚠️ `repeat` 只接受 `statePath`，不是 `$state`。字段名不能带前导斜杠（`$item: "key"` ✓，`$item: "/key"` ✗）。
 
@@ -242,6 +249,7 @@ type I18nText = string | Record<LocaleTag, string>;
 ```
 
 **核心用例**：
+
 - 单插件多 runtime：`char-creator/player-init` + `char-creator/character-tracker` 共享 `character-panel.json`
 - 跨插件组合：`char-creator` 贡献角色列表，未来 `inventory` 贡献背包，都声明 `group: "character"`，自动汇聚到同一个"角色"外层 Tab
 
@@ -272,10 +280,10 @@ type I18nText = string | Record<LocaleTag, string>;
 
 两条链路都使用同一套 json-render catalog。
 
-| 链路 | 当前承载内容 | 实现位置 |
-|------|-------------|---------|
-| Turn message | 叙事文本、玩家输入、`interaction.requested` 表单/选择、通知 | `apps/web/src/components/session/chat-messages.tsx` |
-| Plugin message | guide 建议卡、codex 本轮摘要、其他插件自定义消息面 | `apps/web/src/components/session/chat-messages.tsx`（`plugin_message` 分支） |
+| 链路           | 当前承载内容                                                | 实现位置                                                                     |
+| -------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Turn message   | 叙事文本、玩家输入、`interaction.requested` 表单/选择、通知 | `apps/web/src/components/session/chat-messages.tsx`                          |
+| Plugin message | guide 建议卡、codex 本轮摘要、其他插件自定义消息面          | `apps/web/src/components/session/chat-messages.tsx`（`plugin_message` 分支） |
 
 ### 消息 Block 声明
 
@@ -312,62 +320,69 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 框架内置 ~25 个 json-render 组件，所有插件共享：
 
 ### 布局
-| 组件 | 用途 |
-|------|------|
-| Stack | 垂直排列，可设 gap |
-| Row | 水平排列 |
-| Grid | 网格布局 |
-| Separator | 分隔线 |
+
+| 组件      | 用途               |
+| --------- | ------------------ |
+| Stack     | 垂直排列，可设 gap |
+| Row       | 水平排列           |
+| Grid      | 网格布局           |
+| Separator | 分隔线             |
 
 ### 展示
-| 组件 | 用途 |
-|------|------|
-| Text | 文本（支持 variant/weight/size） |
-| Badge | 彩色标签 |
-| Icon | Lucide 图标 |
-| TagList | 标签列表 |
-| Prose | Markdown 叙事文本（段落分割 + 加粗） |
-| Source | 来源归属标签 |
+
+| 组件    | 用途                                 |
+| ------- | ------------------------------------ |
+| Text    | 文本（支持 variant/weight/size）     |
+| Badge   | 彩色标签                             |
+| Icon    | Lucide 图标                          |
+| TagList | 标签列表                             |
+| Prose   | Markdown 叙事文本（段落分割 + 加粗） |
+| Source  | 来源归属标签                         |
 
 ### 数据
-| 组件 | 用途 |
-|------|------|
-| Card | 卡片容器 |
-| CardList | 卡片列表 |
-| EntryCard | 图鉴条目卡片（分类图标 + 稀有度 + 标签） |
-| StatBar | 数值条（label + value/max + 进度条） |
-| Progress | 进度条 |
-| Accordion | 折叠面板容器（与 `repeat` + `Section` 组合） |
-| Section | 可折叠 section（props: `title`, `icon`, `defaultOpen`） |
-| JsonView | 递归渲染任意 JSON 值（props: `value`） |
+
+| 组件      | 用途                                                    |
+| --------- | ------------------------------------------------------- |
+| Card      | 卡片容器                                                |
+| CardList  | 卡片列表                                                |
+| EntryCard | 图鉴条目卡片（分类图标 + 稀有度 + 标签）                |
+| StatBar   | 数值条（label + value/max + 进度条）                    |
+| Progress  | 进度条                                                  |
+| Accordion | 折叠面板容器（与 `repeat` + `Section` 组合）            |
+| Section   | 可折叠 section（props: `title`, `icon`, `defaultOpen`） |
+| JsonView  | 递归渲染任意 JSON 值（props: `value`）                  |
 
 ### 交互
-| 组件 | 用途 |
-|------|------|
-| Button | 按钮（default/primary/danger） |
-| Input | 文本输入 |
-| SearchInput | 带搜索图标的输入框 |
-| Select | 下拉选择 |
-| Switch | 开关 |
-| FilterBar | 分类筛选栏 |
+
+| 组件        | 用途                           |
+| ----------- | ------------------------------ |
+| Button      | 按钮（default/primary/danger） |
+| Input       | 文本输入                       |
+| SearchInput | 带搜索图标的输入框             |
+| Select      | 下拉选择                       |
+| Switch      | 开关                           |
+| FilterBar   | 分类筛选栏                     |
 
 ### 表单
-| 组件 | 用途 |
-|------|------|
-| Form | 表单容器 |
-| FormHeader | 表单标题栏 |
-| FormField | 单个表单字段（text/select） |
-| SubmitButton | 提交按钮（支持 disabled） |
+
+| 组件         | 用途                        |
+| ------------ | --------------------------- |
+| Form         | 表单容器                    |
+| FormHeader   | 表单标题栏                  |
+| FormField    | 单个表单字段（text/select） |
+| SubmitButton | 提交按钮（支持 disabled）   |
 
 ### 消息
-| 组件 | 用途 |
-|------|------|
-| PlayerMessage | 玩家消息气泡（右对齐） |
-| Alert | 通知（info/success/warning/error） |
+
+| 组件          | 用途                               |
+| ------------- | ---------------------------------- |
+| PlayerMessage | 玩家消息气泡（右对齐）             |
+| Alert         | 通知（info/success/warning/error） |
 
 ### 可视化
-| 组件 | 用途 |
-|------|------|
+
+| 组件        | 用途                                                                                                                                                                                                                                                                                                                     |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | GraphCanvas | 力导向关系图（react-force-graph-2d）。读取 `pluginId` 下两个 namespace 的数据（节点 + 边），按 `node.type` 着色，按边的 `strength` 正负染色。点击节点弹出档案。基于 lazy import，仅在打开面板时加载 ~60KB gzip 的额外 chunk。Props: `pluginId`, `nodesNamespace`, `edgesNamespace`, `height?`。当前由 `npc-graph` 使用。 |
 
 ## 数据流

@@ -21,9 +21,9 @@
  */
 
 import type {
-	ModelRequestContext,
-	TextMessage,
-	TextMessageContent,
+  ModelRequestContext,
+  TextMessage,
+  TextMessageContent,
 } from "../types.js";
 
 /**
@@ -32,42 +32,42 @@ import type {
  * input array is returned by reference for zero allocation.
  */
 export function applyCapabilityFallback(
-	messages: TextMessage[],
-	context: ModelRequestContext | undefined,
+  messages: TextMessage[],
+  context: ModelRequestContext | undefined,
 ): TextMessage[] {
-	if (!shouldDowngrade(context)) return messages;
-	let mutated = false;
-	const next = messages.map((msg) => {
-		const downgraded = downgradeContent(msg.content);
-		if (downgraded === msg.content) return msg;
-		mutated = true;
-		return { ...msg, content: downgraded };
-	});
-	return mutated ? next : messages;
+  if (!shouldDowngrade(context)) return messages;
+  let mutated = false;
+  const next = messages.map((msg) => {
+    const downgraded = downgradeContent(msg.content);
+    if (downgraded === msg.content) return msg;
+    mutated = true;
+    return { ...msg, content: downgraded };
+  });
+  return mutated ? next : messages;
 }
 
 function shouldDowngrade(context: ModelRequestContext | undefined): boolean {
-	const capability = context?.preset?.capability;
-	if (!capability) return false;
-	// `input` is optional — treat undefined as "we don't know, leave it alone".
-	if (!capability.input) return false;
-	return !capability.input.includes("image");
+  const capability = context?.preset?.capability;
+  if (!capability) return false;
+  // `input` is optional — treat undefined as "we don't know, leave it alone".
+  if (!capability.input) return false;
+  return !capability.input.includes("image");
 }
 
 function downgradeContent(content: TextMessageContent): TextMessageContent {
-	if (!Array.isArray(content)) return content;
-	let mutated = false;
-	const next = content.map((part) => {
-		if (part.type === "text") return part;
-		mutated = true;
-		return {
-			type: "text" as const,
-			text: JSON.stringify({
-				type: "image_ref",
-				ref: part.image,
-				note: "Model does not accept image input; image part was downgraded to a text descriptor.",
-			}),
-		};
-	});
-	return mutated ? next : content;
+  if (!Array.isArray(content)) return content;
+  let mutated = false;
+  const next = content.map((part) => {
+    if (part.type === "text") return part;
+    mutated = true;
+    return {
+      type: "text" as const,
+      text: JSON.stringify({
+        type: "image_ref",
+        ref: part.image,
+        note: "Model does not accept image input; image part was downgraded to a text descriptor.",
+      }),
+    };
+  });
+  return mutated ? next : content;
 }

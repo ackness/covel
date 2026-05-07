@@ -17,6 +17,7 @@ Covel 的 runtime 执行模型默认是"一次回合跑到底"——玩家输入
 - **外部系统回调**:比如接了一个外部"裁判系统",玩家的战斗结果靠 webhook 返回。
 
 为此 Covel 设计了 **suspend/resume** 机制:
+
 1. Runtime 执行时发现需要等待 → 调 suspend 工具 / 返回 `status: 'suspended'`。
 2. 框架把 runtime 标为 suspended,**回合正常收尾**(不阻塞叙事)。
 3. 外部系统准备好数据后,调 `POST /api/sessions/:id/resume` 带 resume data。
@@ -28,8 +29,8 @@ Covel 的 runtime 执行模型默认是"一次回合跑到底"——玩家输入
 
 ```ts
 // ProtocolEventType 包含:
-'turn.suspended'
-'turn.resumed'
+"turn.suspended";
+"turn.resumed";
 ```
 
 **证据 B** · Runtime 两条路径都会发 suspend 事件 · [`packages/runtime/src/turn-executor.ts:~1540, ~2140`](../../../packages/runtime/src/turn-executor.ts)
@@ -112,15 +113,15 @@ interface SuspensionRecord {
   readonly sessionId: string;
   readonly runtimeId: string;
   readonly pluginId: string;
-  readonly suspendedAt: string;  // ISO
+  readonly suspendedAt: string; // ISO
   readonly reason?: string;
-  readonly expectedResumeSchema?: Record<string, unknown>;  // 可选的 JSON schema
-  readonly metadata?: Record<string, unknown>;              // 插件自定义
+  readonly expectedResumeSchema?: Record<string, unknown>; // 可选的 JSON schema
+  readonly metadata?: Record<string, unknown>; // 插件自定义
 }
 
 interface SessionState {
   // ...existing fields
-  suspensions: SuspensionRecord[];  // 活跃挂起列表
+  suspensions: SuspensionRecord[]; // 活跃挂起列表
 }
 ```
 
@@ -173,7 +174,11 @@ dispatch({ type: "SET_SUSPENSIONS", suspensions });
 当前 `ExecutionStep.status` 可能是 `running | completed | failed` 三种。加 `suspended`:
 
 ```ts
-export type ExecutionStepStatus = 'running' | 'completed' | 'failed' | 'suspended';
+export type ExecutionStepStatus =
+  | "running"
+  | "completed"
+  | "failed"
+  | "suspended";
 ```
 
 ### 3.2 阶段 2 · UI 入口(~3h)
@@ -183,12 +188,18 @@ export type ExecutionStepStatus = 'running' | 'completed' | 'failed' | 'suspende
 [`apps/web/src/components/session/game-view.tsx`](../../../apps/web/src/components/session/game-view.tsx) 顶栏在"debug"按钮旁边加 suspensions badge:
 
 ```tsx
-{state.suspensions.length > 0 && (
-  <Button onClick={() => setSuspensionsOpen(true)} variant="outline" size="sm">
-    <Clock className="w-3.5 h-3.5 mr-1.5" />
-    {state.suspensions.length} 个等待中
-  </Button>
-)}
+{
+  state.suspensions.length > 0 && (
+    <Button
+      onClick={() => setSuspensionsOpen(true)}
+      variant="outline"
+      size="sm"
+    >
+      <Clock className="w-3.5 h-3.5 mr-1.5" />
+      {state.suspensions.length} 个等待中
+    </Button>
+  );
+}
 ```
 
 点击打开抽屉。
@@ -201,16 +212,24 @@ export type ExecutionStepStatus = 'running' | 'completed' | 'failed' | 'suspende
 function SuspensionsPanel({ suspensions, onResume, onCancel }) {
   return (
     <div className="space-y-3">
-      {suspensions.map(s => (
+      {suspensions.map((s) => (
         <div key={s.id} className="border border-border p-3 space-y-2">
           <div className="flex items-center justify-between text-xs">
-            <strong>{s.pluginId} · {s.runtimeId}</strong>
+            <strong>
+              {s.pluginId} · {s.runtimeId}
+            </strong>
             <span className="text-muted-foreground">
               {formatDistance(new Date(s.suspendedAt), new Date())}前挂起
             </span>
           </div>
-          {s.reason && <p className="text-xs text-muted-foreground">{s.reason}</p>}
-          <ResumeForm suspension={s} onResume={onResume} onCancel={() => onCancel(s.id)} />
+          {s.reason && (
+            <p className="text-xs text-muted-foreground">{s.reason}</p>
+          )}
+          <ResumeForm
+            suspension={s}
+            onResume={onResume}
+            onCancel={() => onCancel(s.id)}
+          />
         </div>
       ))}
     </div>
@@ -224,7 +243,7 @@ function SuspensionsPanel({ suspensions, onResume, onCancel }) {
 
 ```tsx
 function ResumeForm({ suspension, onResume, onCancel }) {
-  const [payload, setPayload] = useState('');
+  const [payload, setPayload] = useState("");
   const schema = suspension.expectedResumeSchema;
 
   return (
@@ -241,7 +260,12 @@ function ResumeForm({ suspension, onResume, onCancel }) {
         className="font-mono text-xs"
       />
       <div className="flex gap-2">
-        <Button size="sm" onClick={() => onResume(suspension.id, tryParseJson(payload) ?? payload)}>
+        <Button
+          size="sm"
+          onClick={() =>
+            onResume(suspension.id, tryParseJson(payload) ?? payload)
+          }
+        >
           继续执行
         </Button>
         <Button size="sm" variant="outline" onClick={onCancel}>
@@ -253,7 +277,11 @@ function ResumeForm({ suspension, onResume, onCancel }) {
 }
 
 function tryParseJson(s: string): unknown | null {
-  try { return JSON.parse(s); } catch { return null; }
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
 }
 ```
 
@@ -262,11 +290,13 @@ function tryParseJson(s: string): unknown | null {
 [`apps/web/src/components/session/execution-timeline.tsx`](../../../apps/web/src/components/session/execution-timeline.tsx) 里,给 `status === 'suspended'` 的步骤加黄色时钟图标:
 
 ```tsx
-{step.status === 'suspended' && (
-  <span title="等待外部数据" className="text-amber-500">
-    <Clock className="w-3 h-3" />
-  </span>
-)}
+{
+  step.status === "suspended" && (
+    <span title="等待外部数据" className="text-amber-500">
+      <Clock className="w-3 h-3" />
+    </span>
+  );
+}
 ```
 
 点击跳到 suspensions 抽屉对应条目。
@@ -276,7 +306,9 @@ function tryParseJson(s: string): unknown | null {
 在 [`apps/web/src/services/api.ts`](../../../apps/web/src/services/api.ts) 加:
 
 ```ts
-export async function listSuspensions(sessionId: string): Promise<SuspensionRecord[]> {
+export async function listSuspensions(
+  sessionId: string,
+): Promise<SuspensionRecord[]> {
   const res = await request<{ suspensions: SuspensionRecord[] }>(
     `/api/sessions/${encodeURIComponent(sessionId)}/suspensions`,
   );
@@ -288,14 +320,11 @@ export async function resumeSuspension(
   suspensionId: string,
   resumeData: unknown,
 ): Promise<void> {
-  await request(
-    `/api/sessions/${encodeURIComponent(sessionId)}/resume`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ suspensionId, resumeData }),
-      headers: { 'Content-Type': 'application/json' },
-    },
-  );
+  await request(`/api/sessions/${encodeURIComponent(sessionId)}/resume`, {
+    method: "POST",
+    body: JSON.stringify({ suspensionId, resumeData }),
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 export async function cancelSuspension(
@@ -304,7 +333,7 @@ export async function cancelSuspension(
 ): Promise<void> {
   await request(
     `/api/sessions/${encodeURIComponent(sessionId)}/suspensions/${encodeURIComponent(suspensionId)}`,
-    { method: 'DELETE' },
+    { method: "DELETE" },
   );
 }
 ```
@@ -342,12 +371,12 @@ export async function cancelSuspension(
 
 ## 4. 风险清单
 
-| 风险 | 缓解 |
-|------|------|
-| resumeData 格式因插件而异,一个 textarea 不够友好 | v1 就用 textarea + 可选展示 `expectedResumeSchema` 提示;未来可扩展成基于 schema 的动态表单(单独 ticket) |
-| 过期 suspensions 堆积(resume.ts 注释已提到"A future ticket should add expire stale") | UI 默认折叠 `> 48h` 的条目并标灰;真正的后端过期策略独立处理 |
-| SSE 断线重连后 suspensions 状态漂移 | 重连后重调 `listSuspensions` 对齐 |
-| 多 tab 同步:A tab resume 了,B tab 不知道 | SSE `turn.resumed` 会广播给所有订阅者,自动更新 |
+| 风险                                                                                 | 缓解                                                                                                    |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| resumeData 格式因插件而异,一个 textarea 不够友好                                     | v1 就用 textarea + 可选展示 `expectedResumeSchema` 提示;未来可扩展成基于 schema 的动态表单(单独 ticket) |
+| 过期 suspensions 堆积(resume.ts 注释已提到"A future ticket should add expire stale") | UI 默认折叠 `> 48h` 的条目并标灰;真正的后端过期策略独立处理                                             |
+| SSE 断线重连后 suspensions 状态漂移                                                  | 重连后重调 `listSuspensions` 对齐                                                                       |
+| 多 tab 同步:A tab resume 了,B tab 不知道                                             | SSE `turn.resumed` 会广播给所有订阅者,自动更新                                                          |
 
 ---
 
@@ -391,21 +420,21 @@ export async function cancelSuspension(
 
 ### 8.1 与方案的偏差
 
-| 项 | 方案原文 | 实际 | 原因 |
-|----|----------|------|------|
-| resume 请求体字段 | `{ suspensionId, resumeData }` | `{ suspensionId, data }` | 后端 `apps/server/src/routes/api/resume.ts:127` 实际读取的字段是 `data`,方案文档笔误。前端与后端字段对齐。 |
-| `expectedResumeSchema` 字段名 | `expectedResumeSchema` | `resumeSchema` | 后端 `SuspensionRecord.resumeSchema`(`packages/store/src/types.ts:655`)已是最终名;方案文档用了旧名。统一为 `resumeSchema`。 |
-| `SuspensionRecord.suspendedAt` | 方案里就叫 `suspendedAt` | 前端用 `suspendedAt`, api client 在 `listSuspensions` 里做一次 `createdAt → suspendedAt` 归一化 | 后端存储字段是 `createdAt`;前端保留语义友好的名字,但兼容 wire 格式。 |
-| 顶栏入口文案 | "N 个等待中" 作为 `<Button>` 按钮 | 同方案,改用琥珀色 outline badge 风格,贴合 timeline 里 suspended chip 的色系 | 视觉一致性。 |
-| Suspensions 容器 | "抽屉" | shadcn `<Dialog>`(项目尚无 `<Sheet>` 组件) | 仅使用既有 UI 原语,不新增依赖。 |
-| SSE 订阅 topic | 未提 | 持久订阅新增 `"game"` topic | resume 事件从 `POST /api/sessions/:id/resume` 而非 `/actions` 触发,没有 `game` topic 订阅就收不到 `turn.resumed`。 |
+| 项                             | 方案原文                          | 实际                                                                                            | 原因                                                                                                                        |
+| ------------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| resume 请求体字段              | `{ suspensionId, resumeData }`    | `{ suspensionId, data }`                                                                        | 后端 `apps/server/src/routes/api/resume.ts:127` 实际读取的字段是 `data`,方案文档笔误。前端与后端字段对齐。                  |
+| `expectedResumeSchema` 字段名  | `expectedResumeSchema`            | `resumeSchema`                                                                                  | 后端 `SuspensionRecord.resumeSchema`(`packages/store/src/types.ts:655`)已是最终名;方案文档用了旧名。统一为 `resumeSchema`。 |
+| `SuspensionRecord.suspendedAt` | 方案里就叫 `suspendedAt`          | 前端用 `suspendedAt`, api client 在 `listSuspensions` 里做一次 `createdAt → suspendedAt` 归一化 | 后端存储字段是 `createdAt`;前端保留语义友好的名字,但兼容 wire 格式。                                                        |
+| 顶栏入口文案                   | "N 个等待中" 作为 `<Button>` 按钮 | 同方案,改用琥珀色 outline badge 风格,贴合 timeline 里 suspended chip 的色系                     | 视觉一致性。                                                                                                                |
+| Suspensions 容器               | "抽屉"                            | shadcn `<Dialog>`(项目尚无 `<Sheet>` 组件)                                                      | 仅使用既有 UI 原语,不新增依赖。                                                                                             |
+| SSE 订阅 topic                 | 未提                              | 持久订阅新增 `"game"` topic                                                                     | resume 事件从 `POST /api/sessions/:id/resume` 而非 `/actions` 触发,没有 `game` topic 订阅就收不到 `turn.resumed`。          |
 
 ### 8.2 最小上游修复(方案外,但必要)
 
 方案默认 "后端完全闭环" —— 但实际有两处堵点,不修前端收不到事件:
 
 1. **`packages/runtime/src/turn-executor.ts`** — 两处 `turn.suspended` emit(function 路径 ~L1593, agent 路径 ~L2169)原来只带 `{ sessionId, turnId, suspensionId, reason, resumeSchema }`,**缺 `pluginId` / `runtimeId` / `suspendedAt`**。前端只靠 SSE 事件就想画出一行面板是做不到的。一并把 `turn.resumed` 的 emit 也补上 `pluginId` / `runtimeId`,以支持未来的 timeline chip 解除动画。
-2. **`apps/server/src/routes/api/actions.ts`** —  `/actions` SSE 的 `eventBus.onEmit` 转发白名单 `FORWARDED_SUBTYPES` 原来只有 `['plugin-data.changed', 'world.dimensions.changed']`,**`turn.suspended` / `turn.resumed` 根本没被转发**到 action 流。加进白名单,turn 内挂起才能实时送达。
+2. **`apps/server/src/routes/api/actions.ts`** — `/actions` SSE 的 `eventBus.onEmit` 转发白名单 `FORWARDED_SUBTYPES` 原来只有 `['plugin-data.changed', 'world.dimensions.changed']`,**`turn.suspended` / `turn.resumed` 根本没被转发**到 action 流。加进白名单,turn 内挂起才能实时送达。
 
 两个改动都是纯加字段 / 加成员,对既有 snapshot 和 test 向后兼容(runtime 原有 15 个 suspend 测试 `turn-executor-suspend.test.ts` 全绿,server 212 个 test 全绿)。
 

@@ -19,11 +19,11 @@ import { SchemaBlockRenderer } from "./schema-block-renderer.js";
 import type { BlockSchemaDeclaration } from "@covel/shared";
 
 export interface BlockRendererProps {
-	data: Record<string, unknown>;
-	onSubmit: (value: string) => void;
-	onSelect?: (value: string) => void;
-	selectedValue?: string | null;
-	disabled?: boolean;
+  data: Record<string, unknown>;
+  onSubmit: (value: string) => void;
+  onSelect?: (value: string) => void;
+  selectedValue?: string | null;
+  disabled?: boolean;
 }
 
 type BlockRendererComponent = React.ComponentType<BlockRendererProps>;
@@ -33,13 +33,13 @@ type BlockRendererComponent = React.ComponentType<BlockRendererProps>;
 let blockSchemas: Record<string, BlockSchemaDeclaration> = {};
 
 export function setBlockSchemas(
-	schemas: Record<string, BlockSchemaDeclaration>,
+  schemas: Record<string, BlockSchemaDeclaration>,
 ) {
-	blockSchemas = schemas;
+  blockSchemas = schemas;
 }
 
 export function getBlockSchemas(): Record<string, BlockSchemaDeclaration> {
-	return blockSchemas;
+  return blockSchemas;
 }
 
 /**
@@ -48,19 +48,19 @@ export function getBlockSchemas(): Record<string, BlockSchemaDeclaration> {
  * caller should fall back to json-render (chat-messages.tsx) or raw JSON.
  */
 export function getBlockRenderer(
-	blockType: string,
+  blockType: string,
 ): BlockRendererComponent | null {
-	const schema = blockSchemas[blockType];
-	if (!schema) return null;
+  const schema = blockSchemas[blockType];
+  if (!schema) return null;
 
-	return function SchemaBlock(props: BlockRendererProps) {
-		return (
-			<SchemaBlockRenderer
-				schema={schema}
-				data={props.data}
-				onSubmit={props.onSubmit}
-				disabled={props.disabled}
-			/>
-		);
-	};
+  return function SchemaBlock(props: BlockRendererProps) {
+    return (
+      <SchemaBlockRenderer
+        schema={schema}
+        data={props.data}
+        onSubmit={props.onSubmit}
+        disabled={props.disabled}
+      />
+    );
+  };
 }

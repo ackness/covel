@@ -21,12 +21,12 @@ import type { ContentPart } from "@covel/shared";
  * image bytes have a token cost.
  */
 function flattenContent(content: string | readonly ContentPart[]): string {
-	if (typeof content === "string") return content;
-	return content
-		.map((part) =>
-			part.type === "text" ? part.text : `[image:${part.image.id}]`,
-		)
-		.join("\n");
+  if (typeof content === "string") return content;
+  return content
+    .map((part) =>
+      part.type === "text" ? part.text : `[image:${part.image.id}]`,
+    )
+    .join("\n");
 }
 
 /**
@@ -38,37 +38,37 @@ export type TokenEstimator = (text: string) => number;
 
 /** Configuration for a single {@link applyBudget} call. */
 export interface BudgetOptions {
-	/**
-	 * Hard upper bound on the number of input tokens the LLM call may consume.
-	 * Typically derived from the slot's contextWindow. The caller is
-	 * responsible for choosing this value; budget.ts does no slot lookup.
-	 */
-	readonly maxInputTokens: number;
-	/**
-	 * Tokens to reserve for the model's response (subtracted from the budget
-	 * before pruning decisions). Default 4000.
-	 */
-	readonly reservedForResponse?: number;
-	/**
-	 * Number of trailing user messages (plus everything after them) that must
-	 * never be pruned. Protects recent conversational context. Default 2.
-	 * Matches OpenCode's "protect last 2 user turns" rule.
-	 */
-	readonly protectLastUserTurns?: number;
-	/** Token estimator injected by the caller. */
-	readonly estimator: TokenEstimator;
+  /**
+   * Hard upper bound on the number of input tokens the LLM call may consume.
+   * Typically derived from the slot's contextWindow. The caller is
+   * responsible for choosing this value; budget.ts does no slot lookup.
+   */
+  readonly maxInputTokens: number;
+  /**
+   * Tokens to reserve for the model's response (subtracted from the budget
+   * before pruning decisions). Default 4000.
+   */
+  readonly reservedForResponse?: number;
+  /**
+   * Number of trailing user messages (plus everything after them) that must
+   * never be pruned. Protects recent conversational context. Default 2.
+   * Matches OpenCode's "protect last 2 user turns" rule.
+   */
+  readonly protectLastUserTurns?: number;
+  /** Token estimator injected by the caller. */
+  readonly estimator: TokenEstimator;
 }
 
 /** Result of a {@link applyBudget} call. */
 export interface BudgetResult<M> {
-	/** The (possibly pruned) messages. */
-	readonly messages: readonly M[];
-	/** Estimated total tokens for systemPrompt + kept messages (post-prune). */
-	readonly totalTokens: number;
-	/** How many messages were dropped (not counting the placeholder). */
-	readonly prunedMessageCount: number;
-	/** Whether pruning had to be triggered. */
-	readonly budgetExceeded: boolean;
+  /** The (possibly pruned) messages. */
+  readonly messages: readonly M[];
+  /** Estimated total tokens for systemPrompt + kept messages (post-prune). */
+  readonly totalTokens: number;
+  /** How many messages were dropped (not counting the placeholder). */
+  readonly prunedMessageCount: number;
+  /** Whether pruning had to be triggered. */
+  readonly budgetExceeded: boolean;
 }
 
 const DEFAULT_RESERVED_FOR_RESPONSE = 4000;
@@ -85,23 +85,23 @@ const DEFAULT_PROTECT_LAST_USER_TURNS = 2;
  * protect window is the entire list.
  */
 function computeProtectStartIndex(
-	messages: readonly { readonly role: string }[],
-	protectLastUserTurns: number,
+  messages: readonly { readonly role: string }[],
+  protectLastUserTurns: number,
 ): number {
-	if (protectLastUserTurns <= 0 || messages.length === 0) {
-		return messages.length;
-	}
-	let userSeen = 0;
-	for (let i = messages.length - 1; i >= 0; i--) {
-		if (messages[i]!.role === "user") {
-			userSeen += 1;
-			if (userSeen >= protectLastUserTurns) {
-				return i;
-			}
-		}
-	}
-	// Fewer user messages than requested → protect the entire list.
-	return 0;
+  if (protectLastUserTurns <= 0 || messages.length === 0) {
+    return messages.length;
+  }
+  let userSeen = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]!.role === "user") {
+      userSeen += 1;
+      if (userSeen >= protectLastUserTurns) {
+        return i;
+      }
+    }
+  }
+  // Fewer user messages than requested → protect the entire list.
+  return 0;
 }
 
 /**
@@ -116,99 +116,99 @@ function computeProtectStartIndex(
  * and the protected tail is left intact (the caller decides how to react).
  */
 export function applyBudget<
-	M extends {
-		readonly role: string;
-		readonly content: string | readonly ContentPart[];
-	},
+  M extends {
+    readonly role: string;
+    readonly content: string | readonly ContentPart[];
+  },
 >(
-	systemPrompt: string,
-	messages: readonly M[],
-	options: BudgetOptions,
+  systemPrompt: string,
+  messages: readonly M[],
+  options: BudgetOptions,
 ): BudgetResult<M> {
-	const {
-		maxInputTokens,
-		reservedForResponse = DEFAULT_RESERVED_FOR_RESPONSE,
-		protectLastUserTurns = DEFAULT_PROTECT_LAST_USER_TURNS,
-		estimator,
-	} = options;
+  const {
+    maxInputTokens,
+    reservedForResponse = DEFAULT_RESERVED_FOR_RESPONSE,
+    protectLastUserTurns = DEFAULT_PROTECT_LAST_USER_TURNS,
+    estimator,
+  } = options;
 
-	const systemTokens = estimator(systemPrompt);
-	const budgetCap = maxInputTokens - reservedForResponse;
+  const systemTokens = estimator(systemPrompt);
+  const budgetCap = maxInputTokens - reservedForResponse;
 
-	// Caller misconfiguration — nothing sensible we can do.
-	if (budgetCap <= 0) {
-		return {
-			messages,
-			totalTokens: systemTokens,
-			prunedMessageCount: 0,
-			budgetExceeded: true,
-		};
-	}
+  // Caller misconfiguration — nothing sensible we can do.
+  if (budgetCap <= 0) {
+    return {
+      messages,
+      totalTokens: systemTokens,
+      prunedMessageCount: 0,
+      budgetExceeded: true,
+    };
+  }
 
-	const messageTokens: number[] = messages.map((m) =>
-		estimator(flattenContent(m.content)),
-	);
-	const messageTokensSum = messageTokens.reduce((acc, n) => acc + n, 0);
-	let total = systemTokens + messageTokensSum;
+  const messageTokens: number[] = messages.map((m) =>
+    estimator(flattenContent(m.content)),
+  );
+  const messageTokensSum = messageTokens.reduce((acc, n) => acc + n, 0);
+  let total = systemTokens + messageTokensSum;
 
-	// Happy path: fits without any pruning.
-	if (total <= budgetCap) {
-		return {
-			messages,
-			totalTokens: total,
-			prunedMessageCount: 0,
-			budgetExceeded: false,
-		};
-	}
+  // Happy path: fits without any pruning.
+  if (total <= budgetCap) {
+    return {
+      messages,
+      totalTokens: total,
+      prunedMessageCount: 0,
+      budgetExceeded: false,
+    };
+  }
 
-	// Compute the protect window boundary. Everything at/after this index
-	// must survive; everything before it is pruneable (left-to-right).
-	const protectStartIndex = computeProtectStartIndex(
-		messages,
-		protectLastUserTurns,
-	);
+  // Compute the protect window boundary. Everything at/after this index
+  // must survive; everything before it is pruneable (left-to-right).
+  const protectStartIndex = computeProtectStartIndex(
+    messages,
+    protectLastUserTurns,
+  );
 
-	let prunedMessageCount = 0;
-	let firstSurvivorIndex = 0;
+  let prunedMessageCount = 0;
+  let firstSurvivorIndex = 0;
 
-	// Drain the pruneable prefix from the left until we fit or run out.
-	while (firstSurvivorIndex < protectStartIndex && total > budgetCap) {
-		total -= messageTokens[firstSurvivorIndex]!;
-		firstSurvivorIndex += 1;
-		prunedMessageCount += 1;
-	}
+  // Drain the pruneable prefix from the left until we fit or run out.
+  while (firstSurvivorIndex < protectStartIndex && total > budgetCap) {
+    total -= messageTokens[firstSurvivorIndex]!;
+    firstSurvivorIndex += 1;
+    prunedMessageCount += 1;
+  }
 
-	// Nothing was actually prunable (protectLastUserTurns covered everything).
-	if (prunedMessageCount === 0) {
-		return {
-			messages,
-			totalTokens: total,
-			prunedMessageCount: 0,
-			budgetExceeded: true,
-		};
-	}
+  // Nothing was actually prunable (protectLastUserTurns covered everything).
+  if (prunedMessageCount === 0) {
+    return {
+      messages,
+      totalTokens: total,
+      prunedMessageCount: 0,
+      budgetExceeded: true,
+    };
+  }
 
-	const survivors = messages.slice(firstSurvivorIndex);
-	const placeholderContent = `[... ${prunedMessageCount} older messages pruned to stay within token budget ...]`;
-	// The placeholder is a synthetic message matching the caller's message
-	// shape. The `as unknown as M` cast is unavoidable: `M` is a generic
-	// constrained only to `{ role; content }`, so TypeScript can't prove a
-	// plain `{ role, content }` literal covers arbitrary extensions of `M`.
-	// This is the only escape hatch in the module and is intentional.
-	const placeholder = {
-		role: "system",
-		content: placeholderContent,
-	} as unknown as M;
+  const survivors = messages.slice(firstSurvivorIndex);
+  const placeholderContent = `[... ${prunedMessageCount} older messages pruned to stay within token budget ...]`;
+  // The placeholder is a synthetic message matching the caller's message
+  // shape. The `as unknown as M` cast is unavoidable: `M` is a generic
+  // constrained only to `{ role; content }`, so TypeScript can't prove a
+  // plain `{ role, content }` literal covers arbitrary extensions of `M`.
+  // This is the only escape hatch in the module and is intentional.
+  const placeholder = {
+    role: "system",
+    content: placeholderContent,
+  } as unknown as M;
 
-	// Placeholder counts against the budget so the caller sees a realistic
-	// figure. A small overshoot here is acceptable — one system message of
-	// ~30 characters won't meaningfully blow the budget.
-	total += estimator(placeholderContent);
+  // Placeholder counts against the budget so the caller sees a realistic
+  // figure. A small overshoot here is acceptable — one system message of
+  // ~30 characters won't meaningfully blow the budget.
+  total += estimator(placeholderContent);
 
-	return {
-		messages: [placeholder, ...survivors],
-		totalTokens: total,
-		prunedMessageCount,
-		budgetExceeded: true,
-	};
+  return {
+    messages: [placeholder, ...survivors],
+    totalTokens: total,
+    prunedMessageCount,
+    budgetExceeded: true,
+  };
 }

@@ -17,6 +17,7 @@ trigger:
 NPC graph retriever (function runtime).
 
 Runs automatically before every narrative turn:
+
 1. Reads this session's NPC nodes, edges, and adjacency indices (`plugin_data[nodes/edges/index]`)
 2. String-matches node names (including aliases) against `playerMessage` and the most recent narrator messages
 3. Performs a 2-hop BFS from the hit nodes, merging the `by-source` and `by-target` indices

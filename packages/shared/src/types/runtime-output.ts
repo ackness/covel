@@ -21,13 +21,13 @@ import type { TokenUsage } from "./execution.js";
  * one per city), or a single entry summarizing its output.
  */
 export interface RuntimeOutputResult {
-	/** Natural-language summary — read by downstream LLM runtimes. */
-	readonly text: string;
-	/**
-	 * Plugin-defined structured payload — read by frontend widgets,
-	 * downstream function runtimes, or tool chains. Opaque to the framework.
-	 */
-	readonly structured?: unknown;
+  /** Natural-language summary — read by downstream LLM runtimes. */
+  readonly text: string;
+  /**
+   * Plugin-defined structured payload — read by frontend widgets,
+   * downstream function runtimes, or tool chains. Opaque to the framework.
+   */
+  readonly structured?: unknown;
 }
 
 /**
@@ -36,11 +36,11 @@ export interface RuntimeOutputResult {
  * consumers can replay the tool trail without a separate query.
  */
 export interface RuntimeOutputToolCall {
-	readonly tool: string;
-	readonly input: unknown;
-	readonly output: unknown;
-	readonly status: "success" | "error";
-	readonly durationMs: number;
+  readonly tool: string;
+  readonly input: unknown;
+  readonly output: unknown;
+  readonly status: "success" | "error";
+  readonly durationMs: number;
 }
 
 /**
@@ -49,50 +49,50 @@ export interface RuntimeOutputToolCall {
  * provider-specific fields.
  */
 export interface RuntimeOutputPromptMessage {
-	readonly role: "system" | "user" | "assistant" | "tool";
-	readonly content: string;
+  readonly role: "system" | "user" | "assistant" | "tool";
+  readonly content: string;
 }
 
 // ── Metadata ─────────────────────────────────────────────────────
 
 export interface RuntimeOutputMetaData {
-	/** Global 0-based turnNumber (counts all player messages). */
-	readonly turn: number;
-	/** Set by Pre-Game band runtimes (priority 0-99) when they have finished
-	 *  their session-level work. Ignored on main-loop runtimes. */
-	readonly preGameDone?: boolean;
-	/**
-	 * Prompt delta relative to the previous call of the same runtime in
-	 * the same turn. First call has delta = full prompt (or null for
-	 * function runtimes). Full prompt reconstruction happens server-side
-	 * via `/runtime-outputs/:id/full-prompt`.
-	 */
-	readonly rawPromptDelta?: readonly RuntimeOutputPromptMessage[];
-	/**
-	 * Raw LLM responses (streaming events merged into final text), one
-	 * per assistant turn in the tool loop. Undefined for function runtimes.
-	 */
-	readonly outputResponses?: readonly string[];
-	/** Tool calls invoked during this runtime execution, in order. */
-	readonly toolCallList?: readonly RuntimeOutputToolCall[];
-	/** Slot name actually used to dispatch the LLM request. */
-	readonly modelSlot?: string;
-	/** Token usage for the entire runtime invocation (all tool loop steps). */
-	readonly tokenUsage?: TokenUsage;
+  /** Global 0-based turnNumber (counts all player messages). */
+  readonly turn: number;
+  /** Set by Pre-Game band runtimes (priority 0-99) when they have finished
+   *  their session-level work. Ignored on main-loop runtimes. */
+  readonly preGameDone?: boolean;
+  /**
+   * Prompt delta relative to the previous call of the same runtime in
+   * the same turn. First call has delta = full prompt (or null for
+   * function runtimes). Full prompt reconstruction happens server-side
+   * via `/runtime-outputs/:id/full-prompt`.
+   */
+  readonly rawPromptDelta?: readonly RuntimeOutputPromptMessage[];
+  /**
+   * Raw LLM responses (streaming events merged into final text), one
+   * per assistant turn in the tool loop. Undefined for function runtimes.
+   */
+  readonly outputResponses?: readonly string[];
+  /** Tool calls invoked during this runtime execution, in order. */
+  readonly toolCallList?: readonly RuntimeOutputToolCall[];
+  /** Slot name actually used to dispatch the LLM request. */
+  readonly modelSlot?: string;
+  /** Token usage for the entire runtime invocation (all tool loop steps). */
+  readonly tokenUsage?: TokenUsage;
 }
 
 // ── Top-level record ──────────────────────────────────────────────
 
 export interface RuntimeOutput {
-	readonly id: string;
-	readonly sessionId: string;
-	readonly turnId: string;
-	/** Optional back-reference to the `runtime_results` row this output corresponds to. */
-	readonly runtimeResultId?: string;
-	readonly pluginId: string;
-	/** Full runtime id in `{plugin}/{runtime}` form (or `{plugin}` for single-runtime plugins). */
-	readonly runtimeId: string;
-	readonly timestamp: string; // ISO 8601
-	readonly results: readonly RuntimeOutputResult[];
-	readonly metaData: RuntimeOutputMetaData;
+  readonly id: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  /** Optional back-reference to the `runtime_results` row this output corresponds to. */
+  readonly runtimeResultId?: string;
+  readonly pluginId: string;
+  /** Full runtime id in `{plugin}/{runtime}` form (or `{plugin}` for single-runtime plugins). */
+  readonly runtimeId: string;
+  readonly timestamp: string; // ISO 8601
+  readonly results: readonly RuntimeOutputResult[];
+  readonly metaData: RuntimeOutputMetaData;
 }

@@ -17,129 +17,129 @@ import { rateLimiter, singleFlight } from "../../middleware/rate-limit.js";
 import { loadSingleWorld } from "../../world-seed-loader.js";
 
 type Env = {
-	Variables: {
-		llmAdapter: LLMAdapter;
-		store: DataStore;
-	};
+  Variables: {
+    llmAdapter: LLMAdapter;
+    store: DataStore;
+  };
 };
 
 export const aiRoutes = new Hono<Env>();
 
 interface ProgressEvent {
-	type: "progress";
-	phase: "generating" | "validating" | "saving";
+  type: "progress";
+  phase: "generating" | "validating" | "saving";
 }
 interface DoneEvent {
-	type: "done";
-	world: unknown;
+  type: "done";
+  world: unknown;
 }
 interface ErrorEvent {
-	type: "error";
-	message: string;
+  type: "error";
+  message: string;
 }
 type GenerateEvent = ProgressEvent | DoneEvent | ErrorEvent;
 
 // POST /ai/generate-world
 aiRoutes.post(
-	"/generate-world",
-	rateLimiter({ max: 10 }),
-	singleFlight(),
-	async (c) => {
-		const llm = c.get("llmAdapter");
-		const store = c.get("store");
-		const body = await c.req.json<Record<string, unknown>>();
+  "/generate-world",
+  rateLimiter({ max: 10 }),
+  singleFlight(),
+  async (c) => {
+    const llm = c.get("llmAdapter");
+    const store = c.get("store");
+    const body = await c.req.json<Record<string, unknown>>();
 
-		const concept = body.concept ?? body.prompt;
-		if (typeof concept !== "string" || !concept.trim()) {
-			return c.json({ error: "concept (string) is required" }, 400);
-		}
-		if (concept.length > 4000) {
-			return c.json({ error: "concept must be 4000 characters or fewer" }, 400);
-		}
+    const concept = body.concept ?? body.prompt;
+    if (typeof concept !== "string" || !concept.trim()) {
+      return c.json({ error: "concept (string) is required" }, 400);
+    }
+    if (concept.length > 4000) {
+      return c.json({ error: "concept must be 4000 characters or fewer" }, 400);
+    }
 
-		const env = readRuntimeEnv();
-		const worldsDir =
-			env.userWorldsDir ??
-			env.worldsDir ??
-			resolve(import.meta.dirname, "../../../../../worlds");
+    const env = readRuntimeEnv();
+    const worldsDir =
+      env.userWorldsDir ??
+      env.worldsDir ??
+      resolve(import.meta.dirname, "../../../../../worlds");
 
-		console.log(
-			`[ai/generate-world] outputDir=${worldsDir}, concept="${(concept as string).trim().slice(0, 40)}..."`,
-		);
+    console.log(
+      `[ai/generate-world] outputDir=${worldsDir}, concept="${(concept as string).trim().slice(0, 40)}..."`,
+    );
 
-		return streamSSE(c, async (stream) => {
-			const send = async (event: GenerateEvent) => {
-				await stream.writeSSE({ data: JSON.stringify(event) });
-			};
+    return streamSSE(c, async (stream) => {
+      const send = async (event: GenerateEvent) => {
+        await stream.writeSSE({ data: JSON.stringify(event) });
+      };
 
-			try {
-				await send({ type: "progress", phase: "generating" });
+      try {
+        await send({ type: "progress", phase: "generating" });
 
-				const createOpts = {
-					llm,
-					concept: (concept as string).trim(),
-					outputDir: worldsDir,
-					model: typeof body.model === "string" ? body.model : undefined,
-					locale: typeof body.locale === "string" ? body.locale : "zh-CN",
-					logger: {
-						info: (...args: unknown[]) => console.log("[createWorld]", ...args),
-						warn: (...args: unknown[]) =>
-							console.warn("[createWorld]", ...args),
-						error: (...args: unknown[]) =>
-							console.error("[createWorld]", ...args),
-					},
-				};
+        const createOpts = {
+          llm,
+          concept: (concept as string).trim(),
+          outputDir: worldsDir,
+          model: typeof body.model === "string" ? body.model : undefined,
+          locale: typeof body.locale === "string" ? body.locale : "zh-CN",
+          logger: {
+            info: (...args: unknown[]) => console.log("[createWorld]", ...args),
+            warn: (...args: unknown[]) =>
+              console.warn("[createWorld]", ...args),
+            error: (...args: unknown[]) =>
+              console.error("[createWorld]", ...args),
+          },
+        };
 
-				const startMs = Date.now();
-				const result = await createWorld(createOpts);
-				const elapsedMs = Date.now() - startMs;
+        const startMs = Date.now();
+        const result = await createWorld(createOpts);
+        const elapsedMs = Date.now() - startMs;
 
-				console.log(
-					`[ai/generate-world] createWorld finished in ${elapsedMs}ms success=${result.success} id=${result.id}`,
-				);
+        console.log(
+          `[ai/generate-world] createWorld finished in ${elapsedMs}ms success=${result.success} id=${result.id}`,
+        );
 
-				if (!result.success) {
-					console.error(
-						`[ai/generate-world] generation failed after ${elapsedMs}ms:`,
-						result.errors,
-					);
-					await send({
-						type: "error",
-						message: result.errors?.join("\n") ?? "World generation failed",
-					});
-					return;
-				}
+        if (!result.success) {
+          console.error(
+            `[ai/generate-world] generation failed after ${elapsedMs}ms:`,
+            result.errors,
+          );
+          await send({
+            type: "error",
+            message: result.errors?.join("\n") ?? "World generation failed",
+          });
+          return;
+        }
 
-				await send({ type: "progress", phase: "validating" });
+        await send({ type: "progress", phase: "validating" });
 
-				// Reload the freshly written world.yaml into a WorldRecord and upsert
-				// into the store so the listing endpoint immediately reflects it.
-				const worldDir = path.join(worldsDir, result.id);
-				const record = await loadSingleWorld(worldDir);
+        // Reload the freshly written world.yaml into a WorldRecord and upsert
+        // into the store so the listing endpoint immediately reflects it.
+        const worldDir = path.join(worldsDir, result.id);
+        const record = await loadSingleWorld(worldDir);
 
-				if (!record) {
-					await send({
-						type: "error",
-						message: `Generated world "${result.id}" failed post-write validation`,
-					});
-					return;
-				}
+        if (!record) {
+          await send({
+            type: "error",
+            message: `Generated world "${result.id}" failed post-write validation`,
+          });
+          return;
+        }
 
-				await send({ type: "progress", phase: "saving" });
-				await store.upsertWorld(record);
+        await send({ type: "progress", phase: "saving" });
+        await store.upsertWorld(record);
 
-				console.log(
-					`[ai/generate-world] world saved to store: id=${record.id}`,
-				);
-				await send({ type: "done", world: record });
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : String(err);
-				console.error("[ai/generate-world] unexpected error:", msg);
-				await send({
-					type: "error",
-					message: msg,
-				});
-			}
-		});
-	},
+        console.log(
+          `[ai/generate-world] world saved to store: id=${record.id}`,
+        );
+        await send({ type: "done", world: record });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("[ai/generate-world] unexpected error:", msg);
+        await send({
+          type: "error",
+          message: msg,
+        });
+      }
+    });
+  },
 );
