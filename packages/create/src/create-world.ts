@@ -1,6 +1,6 @@
 /**
  * World package generator — uses LLM to create world.yaml + WORLD.md,
- * validates against worldManifestSchema, and writes to disk.
+ * validates against worldManifestSchema, and writes a worldData descriptor.
  *
  * Only requires a concept string. The LLM autonomously decides
  * all details (id, name, tags, dimensions, lore).
@@ -14,6 +14,27 @@ import type { CreateWorldOptions, CreateResult } from "./types.js";
 import { buildWorldPrompt } from "./prompts.js";
 
 const MAX_RETRIES = 2;
+const DEFAULT_ATTEMPT_TIMEOUT_MS = 150_000;
+const GENERATED_WORLD_DATA_PATH = "data/world.data.yaml";
+const GENERATED_DIMENSIONS_PATH = "data/dimensions.yaml";
+
+const WORLD_MANIFEST_ROOT_KEYS = new Set([
+  "schemaVersion",
+  "id",
+  "name",
+  "version",
+  "summary",
+  "defaultLocale",
+  "supportedLocales",
+  "tags",
+  "requiredPlugins",
+  "recommendedPlugins",
+  "excludedPlugins",
+  "worldData",
+  "characterBlueprintSources",
+  "dimensions",
+  "dimensionSources",
+]);
 
 function log(
   options: CreateWorldOptions,
@@ -24,22 +45,202 @@ function log(
 }
 
 function parseWorldOutput(raw: string): { yaml: string; lore: string } | null {
-  const yamlMatch = raw.match(/===WORLD_YAML===\s*([\s\S]*?)\s*===WORLD_MD===/);
-  const loreMatch = raw.match(/===WORLD_MD===\s*([\s\S]*?)\s*===END===/);
-  if (!yamlMatch || !loreMatch) return null;
+  const cleaned = raw.trim();
+  const yamlMarker = findSectionMarker(cleaned, "WORLD_YAML");
+  const loreMarker = findSectionMarker(cleaned, "WORLD_MD");
+  if (yamlMarker < 0 || loreMarker < 0 || loreMarker <= yamlMarker) return null;
+
+  const loreStart = loreMarker + markerLength("WORLD_MD");
+  const endMarker = findSectionMarker(cleaned, "END", loreStart);
+  const yaml = cleaned.slice(
+    yamlMarker + markerLength("WORLD_YAML"),
+    loreMarker,
+  );
+  const lore =
+    endMarker >= 0
+      ? cleaned.slice(loreStart, endMarker)
+      : cleaned.slice(loreStart);
+
+  if (!yaml.trim() || !lore.trim()) return null;
   return {
-    yaml: yamlMatch[1].trim(),
-    lore: loreMatch[1].trim(),
+    yaml: stripFence(yaml).trim(),
+    lore: stripFence(lore).trim(),
   };
 }
 
+function findSectionMarker(
+  value: string,
+  marker: "WORLD_YAML" | "WORLD_MD" | "END",
+  fromIndex = 0,
+): number {
+  const pattern = new RegExp(`(?:^|\\n)===${marker}===`, "g");
+  pattern.lastIndex = fromIndex;
+  const match = pattern.exec(value);
+  if (!match) return -1;
+  return match[0].startsWith("\n") ? match.index + 1 : match.index;
+}
+
+function markerLength(marker: "WORLD_YAML" | "WORLD_MD" | "END"): number {
+  return `===${marker}===`.length;
+}
+
+function stripFence(value: string): string {
+  return value
+    .trim()
+    .replace(/^```(?:yaml|markdown|md)?\s*/i, "")
+    .replace(/\s*```$/i, "");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function toFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function normalizeEnum(
+  record: Record<string, unknown>,
+  key: string,
+  allowed: readonly string[],
+  fallback: string,
+): void {
+  const value = record[key];
+  if (typeof value !== "string") return;
+  const normalized = value.trim().toLowerCase();
+  record[key] = allowed.includes(normalized) ? normalized : fallback;
+}
+
+function normalizeGeneratedManifest(
+  manifest: Record<string, unknown>,
+): string[] {
+  const repairs: string[] = [];
+
+  for (const key of Object.keys(manifest)) {
+    if (!WORLD_MANIFEST_ROOT_KEYS.has(key)) {
+      delete manifest[key];
+      repairs.push(`removed unknown root field "${key}"`);
+    }
+  }
+
+  for (const key of ["schemaVersion", "version"] as const) {
+    if (manifest[key] !== undefined && typeof manifest[key] !== "string") {
+      manifest[key] = String(manifest[key]);
+      repairs.push(`stringified ${key}`);
+    }
+  }
+
+  if (!isRecord(manifest.dimensions)) return repairs;
+  const dimensions = manifest.dimensions;
+
+  if (Array.isArray(dimensions.factions)) {
+    for (const faction of dimensions.factions) {
+      if (!isRecord(faction)) continue;
+      normalizeEnum(
+        faction,
+        "type",
+        [
+          "political",
+          "guild",
+          "corporate",
+          "religious",
+          "criminal",
+          "military",
+          "other",
+        ],
+        "other",
+      );
+      normalizeEnum(faction, "influence", ["major", "minor"], "minor");
+    }
+  }
+
+  if (isRecord(dimensions.powerSystem)) {
+    normalizeEnum(
+      dimensions.powerSystem,
+      "type",
+      ["magic", "technology", "cultivation", "psychic", "hybrid", "other"],
+      "other",
+    );
+  }
+
+  if (Array.isArray(dimensions.history)) {
+    for (const event of dimensions.history) {
+      if (isRecord(event)) {
+        normalizeEnum(event, "significance", ["major", "minor"], "minor");
+      }
+    }
+  }
+
+  if (isRecord(dimensions.tone)) {
+    normalizeEnum(
+      dimensions.tone,
+      "contentRating",
+      ["all-ages", "teen", "mature"],
+      "teen",
+    );
+  }
+
+  if (isRecord(dimensions.mechanics)) {
+    normalizeEnum(
+      dimensions.mechanics,
+      "combatStyle",
+      ["turn-based", "real-time", "narrative", "none"],
+      "narrative",
+    );
+    normalizeEnum(
+      dimensions.mechanics,
+      "difficulty",
+      ["easy", "normal", "hard", "adaptive"],
+      "adaptive",
+    );
+  }
+
+  const startingConditions = dimensions.startingConditions;
+  if (
+    isRecord(startingConditions) &&
+    isRecord(startingConditions.startingResources)
+  ) {
+    for (const [key, value] of Object.entries(
+      startingConditions.startingResources,
+    )) {
+      const numberValue = toFiniteNumber(value);
+      if (numberValue !== undefined && numberValue !== value) {
+        startingConditions.startingResources[key] = numberValue;
+        repairs.push(`numeric startingResources.${key}`);
+      }
+    }
+  }
+
+  return repairs;
+}
+
+function combineAbortSignals(
+  primary: AbortSignal | undefined,
+  timeoutMs: number,
+): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  if (!primary) return timeout;
+  if (primary.aborted) return primary;
+  const controller = new AbortController();
+  const abort = (signal: AbortSignal) => {
+    if (!controller.signal.aborted) controller.abort(signal.reason);
+  };
+  primary.addEventListener("abort", () => abort(primary), { once: true });
+  timeout.addEventListener("abort", () => abort(timeout), { once: true });
+  return controller.signal;
+}
+
 /**
- * If the manifest contains inline `dimensions`, extract each key into its own
- * file under <worldDir>/dimensions/ and rewrite the manifest to use
- * `dimensionSources` instead. Keeps the manifest tidy and matches the
- * reference world package layout (e.g. neonridge/dimensions/*.yaml).
+ * If the manifest contains inline `dimensions`, write them through the v1
+ * worldData descriptor so generated worlds use the same importer as hand-built
+ * world packages.
  */
-async function extractAndWriteDimensions(
+async function writeWorldDataFiles(
   worldDir: string,
   manifest: Record<string, unknown>,
 ): Promise<string[]> {
@@ -52,25 +253,41 @@ async function extractAndWriteDimensions(
     return [];
   }
 
-  const dimDir = path.join(worldDir, "dimensions");
-  await mkdir(dimDir, { recursive: true });
+  const dataDir = path.join(worldDir, "data");
+  await mkdir(dataDir, { recursive: true });
 
-  const sources: Record<string, string> = {};
-  const written: string[] = [];
+  const dimensionsPath = path.join(worldDir, GENERATED_DIMENSIONS_PATH);
+  await writeFile(
+    dimensionsPath,
+    stringifyYaml(inline, { lineWidth: 0 }),
+    "utf-8",
+  );
 
-  for (const [key, data] of Object.entries(inline)) {
-    if (data === undefined || data === null) continue;
-    const fileName = `${key}.yaml`;
-    const filePath = path.join(dimDir, fileName);
-    await writeFile(filePath, stringifyYaml(data, { lineWidth: 0 }), "utf-8");
-    sources[key] = `./dimensions/${fileName}`;
-    written.push(path.relative(worldDir, filePath));
-  }
+  const descriptorPath = path.join(worldDir, GENERATED_WORLD_DATA_PATH);
+  await writeFile(
+    descriptorPath,
+    stringifyYaml(
+      {
+        schemaVersion: 1,
+        sources: {
+          dimensions: {
+            kind: "yaml",
+            path: GENERATED_DIMENSIONS_PATH,
+            schema: "covel://world/dimensions",
+            to: "world:metadata.dimensions",
+          },
+        },
+      },
+      { lineWidth: 0 },
+    ),
+    "utf-8",
+  );
 
   delete manifest.dimensions;
-  manifest.dimensionSources = sources;
+  delete manifest.dimensionSources;
+  manifest.worldData = GENERATED_WORLD_DATA_PATH;
 
-  return written;
+  return [GENERATED_DIMENSIONS_PATH, GENERATED_WORLD_DATA_PATH];
 }
 
 export async function createWorld(
@@ -105,7 +322,10 @@ export async function createWorld(
         ? [
             {
               role: "user" as const,
-              content: `The previous output had validation errors:\n${lastErrors.join("\n")}\n\nPlease fix and regenerate.`,
+              content:
+                `Your previous answer could not be imported:\n${lastErrors.join("\n")}\n\n` +
+                `Regenerate the full package now. Start the answer with ===WORLD_YAML=== on the first line, ` +
+                `then ===WORLD_MD===, then ===END===. Do not use markdown code fences or any extra prose.`,
             },
           ]
         : [{ role: "user" as const, content: options.concept }]),
@@ -113,11 +333,45 @@ export async function createWorld(
 
     let response;
     try {
-      response = await options.llm.generate({
-        model: options.model,
-        messages,
-        signal: options.signal,
-      });
+      const signal = combineAbortSignals(
+        options.signal,
+        options.attemptTimeoutMs ?? DEFAULT_ATTEMPT_TIMEOUT_MS,
+      );
+      if (options.llm.stream) {
+        let content = "";
+        let finishReason: "stop" | "tool_calls" | "length" | "error" = "stop";
+        let reasoningContent = "";
+        for await (const event of options.llm.stream({
+          model: options.model,
+          messages,
+          signal,
+        })) {
+          if (event.type === "text-delta") {
+            content += event.textDelta;
+          } else if (event.type === "done") {
+            finishReason =
+              event.finishReason === "tool_calls" ||
+              event.finishReason === "length" ||
+              event.finishReason === "error"
+                ? event.finishReason
+                : "stop";
+            reasoningContent = event.reasoningContent ?? "";
+          }
+        }
+        response = {
+          content: content || null,
+          toolCalls: [],
+          finishReason,
+          usage: { inputTokens: 0, outputTokens: 0 },
+          ...(reasoningContent ? { reasoningContent } : {}),
+        };
+      } else {
+        response = await options.llm.generate({
+          model: options.model,
+          messages,
+          signal,
+        });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       log(options, "error", `LLM generate() threw: ${msg}`);
@@ -164,7 +418,11 @@ export async function createWorld(
     // Parse and validate YAML
     let yamlData: Record<string, unknown>;
     try {
-      yamlData = parseYaml(parsed.yaml) as Record<string, unknown>;
+      const parsedYaml = parseYaml(parsed.yaml);
+      if (!isRecord(parsedYaml)) {
+        throw new Error("world.yaml must be a mapping object");
+      }
+      yamlData = parsedYaml;
     } catch (err) {
       lastErrors = [
         `Invalid YAML: ${err instanceof Error ? err.message : String(err)}`,
@@ -186,6 +444,11 @@ export async function createWorld(
       "YAML parsed, keys=",
       Object.keys(yamlData).join(", "),
     );
+
+    const repairs = normalizeGeneratedManifest(yamlData);
+    if (repairs.length > 0) {
+      log(options, "info", "applied YAML repair:", repairs.join("; "));
+    }
 
     const validation = validateWorldManifest(yamlData);
     if (!validation.valid) {
@@ -214,10 +477,10 @@ export async function createWorld(
 
     const writtenFiles: string[] = [];
 
-    // If dimensions are inline, extract them to separate files and rewrite manifest
-    const dimFiles = await extractAndWriteDimensions(worldDir, yamlData);
+    // If dimensions are inline, write them through worldData and rewrite manifest.
+    const dimFiles = await writeWorldDataFiles(worldDir, yamlData);
     if (dimFiles.length > 0) {
-      log(options, "info", "extracted dimensions to", dimFiles);
+      log(options, "info", "wrote worldData files", dimFiles);
       writtenFiles.push(...dimFiles.map((f) => `${id}/${f}`));
     }
 

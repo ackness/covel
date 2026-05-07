@@ -2445,7 +2445,7 @@ interface SseEnvelope {
 
 #### `POST /api/ai/generate-world`
 
-AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、dimensions、lore）。
+AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、dimensions、lore）。服务器会把模型输出的 `dimensions` 写入 `data/dimensions.yaml`，生成 `data/world.data.yaml` descriptor，并在 `world.yaml` 中写入 `worldData: data/world.data.yaml`。
 
 **请求体:**
 

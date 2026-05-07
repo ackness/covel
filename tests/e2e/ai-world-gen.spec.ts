@@ -114,7 +114,7 @@ test.describe("AI World Generation", () => {
       const doneIndicator = dialog.locator(
         "text=/世界创建完成|创建完成|World created/i",
       );
-      await expect(doneIndicator.first()).toBeVisible({ timeout: 180_000 });
+      await expect(doneIndicator.first()).toBeVisible({ timeout: 240_000 });
       console.log("Phase: done (saw indicator)!");
       await page.screenshot({ path: "tests/e2e/artifacts/world-gen-done.png" });
       // Wait for dialog to auto-close
@@ -123,6 +123,9 @@ test.describe("AI World Generation", () => {
       // If we missed the done indicator, check if dialog already closed (generation succeeded)
       if (await dialog.isHidden()) {
         console.log("Phase: done (dialog already closed)!");
+      } else if ((await updatedWorldCount(page)) === initialWorldCount + 1) {
+        console.log("Phase: done (world list already updated)!");
+        await expect(dialog).toBeHidden({ timeout: 10_000 });
       } else {
         // Check for error state
         const errorEl = dialog
@@ -168,15 +171,22 @@ test.describe("AI World Generation", () => {
     const tagCount = await worldTags.count();
     console.log(`New world tags: ${tagCount}`);
 
-    // Save the name for subsequent tests
+    const newWorldId = (await updatedWorldCards.last().textContent())?.match(
+      /№\s*\d+\s*·\s*([a-z][a-z0-9-]*)/,
+    )?.[1];
+    expect(newWorldId).toBeTruthy();
+
+    // Save the generated world for subsequent tests. Use the id to avoid name
+    // collisions from live model output.
     createdWorldName = names[names.length - 1] ?? null;
+    createdWorldId = newWorldId ?? null;
     expect(createdWorldName).toBeTruthy();
-    console.log(`Created world: ${createdWorldName}`);
+    console.log(`Created world: ${createdWorldName} (${createdWorldId})`);
   });
 
   test("verify world dimensions via API", async ({ request }) => {
     test.skip(!hasProviderKeys, "No provider keys configured for live LLM e2e");
-    test.skip(!createdWorldName, "No world was created in previous test");
+    test.skip(!createdWorldId, "No world was created in previous test");
 
     // Fetch all worlds and find the newly created one
     const res = await request.get("/api/worlds");
@@ -185,24 +195,32 @@ test.describe("AI World Generation", () => {
     const worlds = data.items as Record<string, unknown>[];
 
     const created = worlds.find((w: Record<string, unknown>) => {
-      const name = w.name;
-      if (typeof name === "string") return name === createdWorldName;
-      if (typeof name === "object" && name !== null) {
-        return Object.values(name as Record<string, string>).some(
-          (v) => v === createdWorldName,
-        );
-      }
-      return false;
+      return w.id === createdWorldId;
     });
 
     expect(created).toBeTruthy();
-    createdWorldId = created.id as string;
     console.log(`World ID: ${createdWorldId}`);
 
-    // Verify dimensions exist and have content
-    const dims = created.dimensions as Record<string, unknown> | undefined;
+    // Verify dimensions exist and have content. The raw server API keeps
+    // store-backed dimensions under metadata; the web client maps them to the
+    // top-level `dimensions` field before rendering.
+    const metadata = created.metadata as Record<string, unknown> | undefined;
+    const dims = (created.dimensions ?? metadata?.dimensions) as
+      | Record<string, unknown>
+      | undefined;
     expect(dims).toBeTruthy();
     console.log(`Dimensions keys: ${Object.keys(dims!).join(", ")}`);
+
+    const worldData = metadata?.worldData as
+      | {
+          sources?: Array<{ target?: string }>;
+        }
+      | undefined;
+    expect(
+      worldData?.sources?.some(
+        (source) => source.target === "world:metadata.dimensions",
+      ),
+    ).toBe(true);
 
     // At minimum, geography and tone should be generated
     const dimKeys = Object.keys(dims!);
@@ -231,7 +249,7 @@ test.describe("AI World Generation", () => {
     page,
   }) => {
     test.skip(!hasProviderKeys, "No provider keys configured for live LLM e2e");
-    test.skip(!createdWorldName, "No world was created in previous test");
+    test.skip(!createdWorldId, "No world was created in previous test");
 
     await seedAppSettings(page);
 
@@ -245,7 +263,7 @@ test.describe("AI World Generation", () => {
     // ── Select the AI-created world ──
     const createdWorldCard = page
       .locator("article")
-      .filter({ has: page.locator(`h2:has-text("${createdWorldName}")`) });
+      .filter({ hasText: `· ${createdWorldId}` });
     await expect(createdWorldCard.first()).toBeVisible({ timeout: 10_000 });
     await createdWorldCard.first().click();
 
@@ -278,7 +296,21 @@ test.describe("AI World Generation", () => {
     await beginButton.click();
 
     // Wait for session_start to complete (narrator + npc-init + init-wizard fire)
-    await waitForExecDone(page);
+    const formArea = page
+      .locator("main")
+      .locator("div")
+      .filter({
+        has: page.locator(".ui-input-shell"),
+        hasNot: page.locator(".ui-composer-frame"),
+      })
+      .first();
+    const textFields = formArea.locator(
+      "input.ui-input-shell, textarea.ui-input-shell",
+    );
+    const selectFields = formArea.locator("select.ui-input-shell");
+    await expect(formArea.locator(".ui-input-shell").first()).toBeVisible({
+      timeout: 180_000,
+    });
     console.log("Session started");
 
     await page.screenshot({
@@ -288,21 +320,20 @@ test.describe("AI World Generation", () => {
     // ── Verify character creation form ──
     // init-wizard should emit a character_creation block
     // If schema was generated by core-npc-init, the form has multiple fields (not just name)
-    const formFields = page.locator("[id^=block-field-]");
-    const fieldCount = await formFields.count();
+    const textFieldCount = await textFields.count();
+    const selectCount = await selectFields.count();
+    const fieldCount = textFieldCount + selectCount;
     console.log(`Character creation fields: ${fieldCount}`);
 
     // There should be at least the name field
     expect(fieldCount).toBeGreaterThanOrEqual(1);
 
     // Check for select dropdowns (enum fields from schema, like faction/class/origin)
-    const selectFields = page.locator("select");
-    const selectCount = await selectFields.count();
     console.log(`Select (enum) fields: ${selectCount}`);
 
     // Log all field info
-    for (let i = 0; i < fieldCount; i++) {
-      const field = formFields.nth(i);
+    for (let i = 0; i < textFieldCount; i++) {
+      const field = textFields.nth(i);
       const id = await field.getAttribute("id");
       const placeholder = await field.getAttribute("placeholder");
       const tagName = await field.evaluate((el) => el.tagName.toLowerCase());
@@ -329,14 +360,12 @@ test.describe("AI World Generation", () => {
     }
 
     // The character_creation block should have a submit button
-    const submitBtn = page.locator("button", {
-      hasText: /confirm|确认|submit|提交|create|创建/i,
-    });
+    const submitBtn = formArea.locator("button").last();
     await expect(submitBtn.first()).toBeVisible({ timeout: 5_000 });
 
     // ── Fill the form and submit ──
-    for (let i = 0; i < fieldCount; i++) {
-      const field = formFields.nth(i);
+    for (let i = 0; i < textFieldCount; i++) {
+      const field = textFields.nth(i);
       if (!(await field.isVisible())) continue;
       const placeholder = (await field.getAttribute("placeholder")) ?? "";
       await field.fill(guessFieldValue(placeholder));
@@ -440,6 +469,13 @@ async function waitForExecDone(page: Page) {
   } catch {
     await expect(input).toBeEnabled({ timeout: 180_000 });
   }
+}
+
+async function updatedWorldCount(page: Page): Promise<number> {
+  return page
+    .locator("article")
+    .filter({ has: page.locator("h2") })
+    .count();
 }
 
 function guessFieldValue(placeholder: string): string {

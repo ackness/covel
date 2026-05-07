@@ -59,7 +59,7 @@ Need PostgreSQL, in-memory mode, or alternative paths? See [`docs/guide/env-regi
 You don't need to write code. This repo ships **two Claude Code skills** that turn a conversation into a working plugin or world pack:
 
 - **`/create-plugin`** — describe the agent you want; the skill generates a `PLUGIN.md` (frontmatter + skill prompt) and a minimal `package.json`.
-- **`/create-world`** — describe a setting; the skill produces `world.yaml` + `WORLD.md` ready to drop into `~/.covel/worlds/`.
+- **`/create-world`** — describe a setting; the skill produces `world.yaml`, `WORLD.md`, and `data/world.data.yaml` ready to drop into `~/.covel/worlds/`.
 
 Open Claude Code in this repository, type `/create-plugin` or `/create-world`, and have a conversation.
 

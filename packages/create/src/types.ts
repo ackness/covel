@@ -24,6 +24,8 @@ export interface CreateWorldOptions {
   readonly locale?: string;
   /** Optional abort signal for cancelling slow provider calls. */
   readonly signal?: AbortSignal;
+  /** Per-attempt provider timeout in milliseconds. */
+  readonly attemptTimeoutMs?: number;
   /** Optional logger for recording generation progress. */
   readonly logger?: CreateWorldLogger;
 }

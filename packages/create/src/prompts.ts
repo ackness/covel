@@ -11,8 +11,8 @@ export function buildWorldPrompt(concept: string, locale: string): string {
 
   return `You are a world-building specialist for the Covel AI RPG framework.
 
-Given a concept, you autonomously create a complete, ready-to-use world package.
-You decide ALL details: id, name, tags, factions, power system, history, etc.
+Given a concept, create a compact, ready-to-use world package.
+Prefer concise fields that validate on the first attempt.
 
 ## Concept
 ${concept}
@@ -43,18 +43,18 @@ recommendedPlugins: [] # list plugin IDs that enhance the world (if any)
 
 dimensions:
   geography:
-    overview: <overview>
-    regions:                          # at least 3
+    overview: <one sentence>
+    regions:                          # 2
       - name: <region>
-        description: <desc>
+        description: <one sentence>
         climate: <climate>
         landmarks:
           - name: <landmark>
-            description: <desc>
-  factions:                           # at least 3
+            description: <one sentence>
+  factions:                           # 2
     - id: <kebab-case>
       name: <name>
-      description: <desc>
+      description: <one sentence>
       type: <political|guild|corporate|religious|criminal|military|other>
       influence: <major|minor>
       leader: <leader>
@@ -66,29 +66,29 @@ dimensions:
   powerSystem:
     name: <name>
     type: <magic|technology|cultivation|psychic|hybrid|other>
-    description: <description>
-    rules: [<rule1>, <rule2>, ...]    # at least 3
-    tiers:                            # at least 4
+    description: <one sentence>
+    rules: [<rule1>, <rule2>]         # exactly 2
+    tiers:                            # 2
       - name: <tier>
         rank: 1
-        description: <desc>
-  history:                            # at least 3 events
+        description: <one sentence>
+  history:                            # 2 events
     - era: <era>
       name: <event>
-      description: <desc>
+      description: <one sentence>
       significance: <major|minor>
   economy:
     currencies:
       - name: <currency>
         symbol: <symbol>
-    resources: [<resource1>, ...]
-    tradeNotes: <notes>
+    resources: [<resource1>, <resource2>]
+    tradeNotes: <one sentence>
   socialStructure:
-    classes:                          # at least 3
+    classes:                          # 2
       - name: <class>
         rank: 1
-        description: <desc>
-    notes: <notes>
+        description: <one sentence>
+    notes: <one sentence>
   tone:
     genres: [<genre1>, ...]
     contentRating: <all-ages|teen|mature>
@@ -100,18 +100,24 @@ dimensions:
     skillSystem: <description>
     customRules: [<rule1>, ...]
   startingConditions:
-    openingScenario: <2-3 sentences, immediate tension/choice>
-    playerConstraints: [<constraint1>, ...]
+    openingScenario: <2 sentences, immediate tension/choice>
+    playerConstraints: [<constraint1>]
     startingLocation: <location>
     startingResources:
       <resource>: <amount>
 \`\`\`
 
 ## WORLD.md
-Write 800-1500 words of rich lore: setting overview, factions, power system, history, daily life, adventure hooks.
+Write 180-350 words of focused lore: setting overview, factions, power system, daily life, and 3 adventure hooks.
 
 ## Rules
+- The first line of the answer must be exactly ===WORLD_YAML===.
+- Do not use markdown code fences around either section.
 - ALL content in ${lang}. Only IDs in kebab-case English.
+- Use only schema fields shown above. Do not add extra fields.
+- Quote schemaVersion and version as strings.
+- startingResources values must be numbers.
+- Enum values must exactly match one listed option.
 - Be creative and specific. Avoid generic fantasy tropes.
 - The openingScenario must present an immediate choice or tension.
 - Do NOT output anything except the two delimited sections.`;
