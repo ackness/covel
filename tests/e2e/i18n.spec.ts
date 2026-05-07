@@ -1,12 +1,12 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * i18n persistence + detection smoke tests.
+ * i18n persistence smoke tests.
  *
  * Covers:
- *   1. localStorage override drives initial language on load
- *   2. navigator.language drives initial language when no override set
- *   3. Header toggle persists across reload
+ *   1. unified settings storage drives initial language on load
+ *   2. empty settings storage falls back to registry default
+ *   3. header toggle persists across reload
  */
 
 test.describe.configure({ mode: "serial" });
@@ -17,41 +17,60 @@ test.describe("Locale preference", () => {
   test("stored locale wins on reload", async ({ page }) => {
     // Seed localStorage before first document load, then navigate.
     await page.addInitScript(() => {
-      window.localStorage.setItem("covel:locale", "en-US");
+      window.localStorage.setItem(
+        "covel:settings",
+        JSON.stringify({
+          schemaVersion: 1,
+          savedAt: new Date().toISOString(),
+          entries: {
+            "ui.locale": "en-US",
+          },
+        }),
+      );
     });
     await page.goto("/");
 
-    const studio = page.getByRole("link", { name: /studio/i });
-    await expect(studio).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /start playing/i }).first(),
+    ).toBeVisible();
 
     const html = page.locator("html");
     await expect(html).toHaveAttribute("lang", "en-US");
   });
 
-  test("navigator.language seeds locale when storage is empty", async ({
-    browser,
-  }) => {
+  test("empty settings uses registry default locale", async ({ browser }) => {
     const context = await browser.newContext({ locale: "en-US" });
     const page = await context.newPage();
     await page.addInitScript(() => {
       try {
-        window.localStorage.removeItem("covel:locale");
+        window.localStorage.removeItem("covel:settings");
       } catch {
         // storage may be unavailable
       }
     });
     await page.goto("/");
-    await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
+    await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
     await context.close();
   });
 
   test("header toggle persists across reload", async ({ page }) => {
     await page.addInitScript(() => {
-      window.localStorage.setItem("covel:locale", "zh-CN");
+      if (!window.localStorage.getItem("covel:settings")) {
+        window.localStorage.setItem(
+          "covel:settings",
+          JSON.stringify({
+            schemaVersion: 1,
+            savedAt: new Date().toISOString(),
+            entries: {
+              "ui.locale": "zh-CN",
+            },
+          }),
+        );
+      }
     });
     await page.goto("/");
 
-    const toggle = page.getByRole("button", { name: /^EN$/ });
+    const toggle = page.locator("header button", { hasText: /^EN$/ });
     await expect(toggle).toBeVisible();
     await toggle.click();
 

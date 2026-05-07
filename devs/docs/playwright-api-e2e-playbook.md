@@ -19,6 +19,23 @@ curl -sS http://localhost:5173/api/health
 node --input-type=module -e 'import { chromium } from "playwright"; console.log(!!chromium);'
 ```
 
+## Local Pitfalls
+
+- The Vite app serves HTML for unknown non-API paths. Use `/api/worlds`, `/api/plugins`, and `/api/framework/capabilities` for HTTP checks through `http://localhost:5173`; legacy smoke tests that call `/worlds` or `/packages` will parse `index.html` as JSON and fail with `Unexpected token '<'`.
+- If `pnpm dev` reports `EADDRINUSE` for `3001` or Vite moves from `5173` to another port, first check whether an existing server is already healthy:
+
+```bash
+curl -sS http://localhost:5173/api/health
+lsof -nP -iTCP:3001 -sTCP:LISTEN
+lsof -nP -iTCP:5173 -sTCP:LISTEN
+```
+
+- Discovery/debug checks should include plugins with i18n metadata objects. The `/debug` session-data view must resolve `name` / `description` objects before rendering them; a raw object child will crash React with `Objects are not valid as a React child`.
+- Locale and onboarding are stored in the unified `covel:settings` bundle under `entries`. Legacy keys such as `covel:locale` and `covel:onboardedVersion` are removed during boot by the settings cleanup path, so Playwright init scripts should seed `covel:settings` directly. Empty settings use the registry default for `ui.locale` (`zh-CN`), even when the browser context locale is `en-US`.
+- `page.addInitScript()` runs on every new document, including `page.reload()`. Persistence tests that seed localStorage should guard with `if (!localStorage.getItem("covel:settings"))` before writing, otherwise reload overwrites the value being tested.
+- `game-session.spec.ts` and `ai-world-gen.spec.ts` are live LLM e2e files. In web mode, `/api/provider-keys` intentionally returns raw keys as `{ keys: {} }` and exposes only masked availability in `providers`; treat any `providers.<id>.configured === true` as enough to run live LLM tests. In desktop bearer mode the same endpoint may return raw `keys`. In a no-key local environment these tests should report skipped tests instead of failing the whole Playwright suite.
+- AI world generation uses a long non-streaming provider call. The server wraps that call with a finite timeout and should emit an SSE `error` event such as `LLM error: The operation was aborted due to timeout` instead of leaving the dialog in `generating` forever. Treat that as a live-provider failure, then validate the rest of the app with `full-flow`, `i18n`, and `game-session`.
+
 ## Browser Flow
 
 Use Playwright for the real player path:
@@ -93,6 +110,9 @@ Use HTTP checks to confirm the browser reached the expected backend state.
 Session inventory:
 
 ```bash
+curl -sS http://localhost:5173/api/worlds
+curl -sS http://localhost:5173/api/plugins
+curl -sS http://localhost:5173/api/framework/capabilities
 curl -sS http://localhost:5173/api/sessions
 curl -sS http://localhost:5173/api/sessions/<sessionId>
 curl -sS http://localhost:5173/api/sessions/<sessionId>/plugins
@@ -161,6 +181,7 @@ Right-panel validation:
 Trace validation:
 
 - `/api/traces/<sessionId>/turns` lists the tested turns.
+- `/api/traces/<sessionId>/turns.discovery` includes framework capabilities, active plugin contracts, and plugin-data namespace/key indexes without plugin-data values.
 - `/api/traces/<sessionId>` includes `runtime.started`, `runtime.completed`, `proposal.committed`, and LLM/tool events.
 - Character creation or blueprint import includes `character.upserted`.
 - `runtime-outputs` includes records for `scene-cast`, `chat-mode-narrator`, and `scene-prompts` after a normal chat-mode turn.

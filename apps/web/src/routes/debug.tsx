@@ -1673,6 +1673,7 @@ function PluginContractsPanel({ plugins }: { plugins: api.PluginContract[] }) {
   return (
     <div className="space-y-2">
       {plugins.map((plugin) => {
+        const pluginDescription = displayText(plugin.description);
         const builtinTools = plugin.tools?.builtin ?? [];
         const localTools = plugin.tools?.local ?? [];
         const uiCount =
@@ -1696,9 +1697,9 @@ function PluginContractsPanel({ plugins }: { plugins: api.PluginContract[] }) {
                 </Badge>
               )}
             </div>
-            {plugin.description && (
+            {pluginDescription && (
               <p className="text-[11px] text-muted-foreground">
-                {plugin.description}
+                {pluginDescription}
               </p>
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -1840,6 +1841,31 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
+}
+
+function displayText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const record = value as Record<string, unknown>;
+  const locale = i18n.language || "zh-CN";
+  for (const key of [
+    locale,
+    locale.split("-")[0],
+    "zh-CN",
+    "zh",
+    "en-US",
+    "en",
+  ]) {
+    const candidate = record[key];
+    if (typeof candidate === "string" && candidate.length > 0) {
+      return candidate;
+    }
+  }
+  const fallback = Object.values(record).find(
+    (candidate): candidate is string =>
+      typeof candidate === "string" && candidate.length > 0,
+  );
+  return fallback ?? "";
 }
 
 function DataSection({

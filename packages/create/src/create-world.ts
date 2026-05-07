@@ -116,6 +116,7 @@ export async function createWorld(
       response = await options.llm.generate({
         model: options.model,
         messages,
+        signal: options.signal,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

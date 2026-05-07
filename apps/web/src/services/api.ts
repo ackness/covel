@@ -2064,8 +2064,8 @@ export interface PluginDataDiscoveryIndex {
 
 export interface PluginContract {
   id: string;
-  name: string;
-  description?: string;
+  name: I18nText | unknown;
+  description?: I18nText | unknown;
   pluginType?: string;
   runtimeCount?: number;
   status?: string;

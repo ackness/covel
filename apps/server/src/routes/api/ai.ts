@@ -39,6 +39,8 @@ interface ErrorEvent {
 }
 type GenerateEvent = ProgressEvent | DoneEvent | ErrorEvent;
 
+const GENERATE_WORLD_TIMEOUT_MS = 180_000;
+
 // POST /ai/generate-world
 aiRoutes.post(
   "/generate-world",
@@ -81,6 +83,7 @@ aiRoutes.post(
           outputDir: worldsDir,
           model: typeof body.model === "string" ? body.model : undefined,
           locale: typeof body.locale === "string" ? body.locale : "zh-CN",
+          signal: AbortSignal.timeout(GENERATE_WORLD_TIMEOUT_MS),
           logger: {
             info: (...args: unknown[]) => console.log("[createWorld]", ...args),
             warn: (...args: unknown[]) =>
