@@ -1,64 +1,47 @@
 # Framework Reference
 
-Covel 框架能力注册表与 API 参考。内容与 `@covel/shared`、`@covel/runtime`、`apps/server/src/routes/api/` 保持一致。
+`reference/` 是 Covel 的权威契约层。这里记录 API、协议、插件 frontmatter、工具、world data、UI spec、存储和主题包的合法字段与边界。内容需要和 `packages/shared/src/schemas/**`、`packages/shared/src/types/**`、`@covel/runtime`、`apps/server/src/routes/api/`、`apps/web/src/**` 保持一致。
 
-> 文档索引见 [`../README.md`](../README.md)。
+> 文档总入口见 [`../README.md`](../README.md)；任务型教程见 [`../guide/`](../guide/)。
 
-## API
+## Index
 
-| 文档             | 描述                                                                                     |
-| ---------------- | ---------------------------------------------------------------------------------------- |
-| [api.md](api.md) | HTTP API 参考 — 所有 API 端点（含插件数据 CRUD）、请求/响应格式、curl 示例、存储模式说明 |
+| Area                         | Page                                         | Code source                                                                                    |
+| ---------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| HTTP API                     | [`api.md`](api.md)                           | `apps/server/src/routes/api/`, `packages/shared/src/types/rpc.ts`                              |
+| Framework discovery          | [`api.md`](api.md#插件管理)                  | `apps/server/src/routes/api/framework.ts`, `apps/server/src/routes/api/plugins.ts`             |
+| Protocol                     | [`protocol.md`](protocol.md)                 | `packages/shared/src/types/protocol.ts`, `apps/web/src/services/`                              |
+| Plugin manifest and registry | [`plugins.md`](plugins.md)                   | `packages/shared/src/schemas/plugin.ts`, `packages/plugin-loader/src/`, `plugins/**/PLUGIN.md` |
+| LLM tools                    | [`tools.md`](tools.md)                       | `packages/tools/src/`, `packages/runtime/src/turn-executor.ts`                                 |
+| World data descriptor        | [`world-data.md`](world-data.md)             | `packages/shared/src/schemas/world-data.ts`, `apps/server/src/world-data/`                     |
+| UI panels                    | [`ui-panels.md`](ui-panels.md)               | `apps/web/src/components/session/`, `apps/web/src/services/api.ts`                             |
+| UI components                | [`ui-components.md`](ui-components.md)       | `apps/web/src/components/json-render/`                                                         |
+| Prompt structure             | [`prompt-structure.md`](prompt-structure.md) | `packages/context/src/`, `packages/runtime/src/turn-executor.ts`                               |
+| Theme packages               | [`theme-packages.md`](theme-packages.md)     | `apps/web/src/lib/theme-*.ts`, `packages/shared/src/settings/`                                 |
+| Store transactions           | [`transactions.md`](transactions.md)         | `packages/store/src/`                                                                          |
+| Media store                  | [`media-store.md`](media-store.md)           | `packages/store/src/media-store.ts`, backend adapters                                          |
 
-## 协议
+## How To Use This Directory
 
-| 文档                       | 描述                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------ |
-| [protocol.md](protocol.md) | 通讯协议 — SSE 事件类型、命令类型、envelope 格式、前端事件路由、Transport 抽象 |
+- 查合法字段、枚举、URI、默认值和错误条件时先看 `reference/`。
+- 查“怎么一步步写出来”时看 [`../guide/`](../guide/)。
+- 查“为什么这么设计”时看 [`../architecture/`](../architecture/)。
+- 如果 `reference/` 和代码不一致，代码和测试是当前事实，文档需要同步修正。
 
-## 前端
+## Naming And URI Conventions
 
-| 文档                                   | 描述                                                                      |
-| -------------------------------------- | ------------------------------------------------------------------------- |
-| [ui-panels.md](ui-panels.md)           | 右侧面板 Tab 与 json-render 声明式 UI — 7 个 Tab 的职责、数据源、扩展指南 |
-| [theme-packages.md](theme-packages.md) | 主题包参考 — 主题包格式、token 契约、语义 hook、运行时注册与持久化        |
+| Syntax                            | Meaning                                                                 | Example                                   |
+| --------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------- |
+| `plugin://<pluginId>/<namespace>` | schema URI；声明数据应按哪个插件 namespace 的 schema 校验。             | `plugin://character-blueprint/blueprints` |
+| `plugin:<pluginId>/<namespace>`   | world data target URI；声明导入结果写到哪个 `plugin_data` namespace。   | `plugin:character-blueprint/blueprints`   |
+| `world:metadata.<path>`           | world data target URI；声明导入结果写入 `WorldRecord.metadata` 子路径。 | `world:metadata.dimensions`               |
+| `covel://...`                     | 框架内置 schema URI。                                                   | `covel://world/dimensions`                |
 
-## Prompt 组装
+## Planned Reference Pages
 
-| 文档                                       | 描述                                                                                                                    |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| [prompt-structure.md](prompt-structure.md) | V2 三段式 Prompt Assembler — 10 段结构、Author's Note / Post-History、Anthropic cache_control 注入、V1→V2 迁移 playbook |
-
-## 事务与持久化
-
-| 文档                               | 描述                                                                                          |
-| ---------------------------------- | --------------------------------------------------------------------------------------------- |
-| [transactions.md](transactions.md) | `DataStore` 事务契约（begin/commit/rollback）、四种后端的实现策略、`COVEL_COMMIT_TXN_V1` flag |
-| [media-store.md](media-store.md)   | `MediaStore` 契约、Memory/SQLite/PG/S3 后端、ownership/ref 规则                               |
-
-## 注册表
-
-| 文档                     | 描述                                                                                  |
-| ------------------------ | ------------------------------------------------------------------------------------- |
-| [plugins.md](plugins.md) | 插件注册表 — 所有已实现的插件（含 world-init 多 runtime）、元信息、触发方式、依赖关系 |
-| [tools.md](tools.md)     | 工具注册表 — 所有可用工具（含 plugin-data 工具）、短 ID 系统、审批策略、创建指南      |
-
-## 内容包
-
-| 文档                           | 描述                                                                                             |
-| ------------------------------ | ------------------------------------------------------------------------------------------------ |
-| [world-data.md](world-data.md) | World Data 参考 — `data/world.data.yaml`、第三方插件数据、override 包、target URI 与 source 字段 |
-
-## 相关目录
-
-- 开发指南：[`../guide/`](../guide/)
-- 架构与历史：[`../architecture/`](../architecture/)
-
-## 计划中
-
-| 文档              | 描述                                                         |
-| ----------------- | ------------------------------------------------------------ |
-| slots.md          | 模型 slot 配置参考 — slot 命名、provider 配置、优先级解析链  |
-| store-backends.md | 存储后端参考 — Memory/SQLite/IDB/PG 四种后端的能力对比与配置 |
-| events.md         | 事件系统参考 — 事件类型、topic 命名、订阅模式                |
-| approval.md       | 审批系统参考 — 权限规则、审批流程、自定义策略                |
+| Page                | Scope                                         |
+| ------------------- | --------------------------------------------- |
+| `slots.md`          | 模型 slot 配置、provider 配置、优先级解析链。 |
+| `store-backends.md` | Memory/SQLite/IDB/PG 后端能力对比与配置。     |
+| `events.md`         | KernelEvent 类型、topic 命名和订阅模式。      |
+| `approval.md`       | 权限规则、审批流程和自定义策略。              |
