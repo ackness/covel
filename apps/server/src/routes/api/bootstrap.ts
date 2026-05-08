@@ -9,7 +9,12 @@ import path from "node:path";
 import fsSync from "node:fs";
 import { Hono, type MiddlewareHandler } from "hono";
 import type { RuntimeManifest } from "@covel/shared";
-import { isEnvEnabled, readEnvString, readRuntimeEnv } from "@covel/shared";
+import {
+  isEnvEnabled,
+  readEnvString,
+  readRuntimeEnv,
+  validateRuntimeManifestSemantics,
+} from "@covel/shared";
 import {
   createPluginRegistry,
   discoverPluginsMulti,
@@ -272,19 +277,12 @@ export async function bootstrapApi(
       discoveryMap.set(discovery.id, discovery);
       manifestCache.set(discovery.id, manifests);
 
-      // Sanity check: `trigger.type: 'manual'` runtimes (UI-only plugins like
-      // memory) must leave `priority` undefined so the scheduler never
-      // considers them. A stray priority + manual trigger will be filtered
-      // today (shouldTrigger returns isManualTrigger=false for auto flows),
-      // but the combination is almost certainly a manifest typo and will
-      // produce confusing behaviour if the trigger logic evolves. Warn loudly
-      // so plugin authors catch it during development.
       for (const parsed of manifests) {
-        const mf = parsed.manifest;
-        if (mf.trigger?.type === "manual" && typeof mf.priority === "number") {
+        for (const diagnostic of validateRuntimeManifestSemantics(
+          parsed.manifest,
+        )) {
           console.warn(
-            `[bootstrap] Runtime "${mf.name}" declares trigger.type='manual' but also sets priority=${mf.priority}. ` +
-              `Manual runtimes are UI-only and should omit priority entirely — remove one of the two to keep the scheduler intent clear.`,
+            `[bootstrap] ${diagnostic.message} Remove one of the two to keep the scheduler intent clear.`,
           );
         }
       }

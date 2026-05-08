@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { runtimeManifestSchema } from "../src/schemas/plugin.js";
+import {
+  runtimeManifestSchema,
+  validateRuntimeManifestSemantics,
+} from "../src/schemas/plugin.js";
 
 describe("plugin manifest dataSchemas", () => {
   it("normalizes keyed declarations into plugin data schema declarations", () => {
@@ -83,5 +86,36 @@ describe("plugin manifest dataSchemas", () => {
       "cost:llm",
     ]);
     expect(manifest.relations?.provides).toEqual(["narrative-engine"]);
+  });
+});
+
+describe("plugin manifest semantic diagnostics", () => {
+  it("warns when manual runtimes also declare priority", () => {
+    const manifest = runtimeManifestSchema.parse({
+      name: "manual-tool",
+      description: "Manual tool",
+      priority: 700,
+      trigger: { type: "manual" },
+    });
+
+    expect(validateRuntimeManifestSemantics(manifest)).toEqual([
+      {
+        code: "manual-trigger-priority",
+        severity: "warning",
+        path: ["priority"],
+        message:
+          "Runtime \"manual-tool\" declares trigger.type='manual' but also sets priority=700. Manual runtimes are UI-only and should omit priority entirely.",
+      },
+    ]);
+  });
+
+  it("does not warn for manual runtimes without priority", () => {
+    const manifest = runtimeManifestSchema.parse({
+      name: "manual-tool",
+      description: "Manual tool",
+      trigger: { type: "manual" },
+    });
+
+    expect(validateRuntimeManifestSemantics(manifest)).toEqual([]);
   });
 });

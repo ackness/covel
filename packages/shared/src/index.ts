@@ -41,9 +41,14 @@ export {
   rpcDeclMapSchema,
   pluginRelationsSchema,
   runtimeManifestSchema,
+  validateRuntimeManifestSemantics,
 } from "./schemas/plugin.js";
 
-export type { RuntimeManifestInput } from "./schemas/plugin.js";
+export type {
+  RuntimeManifestInput,
+  RuntimeManifestSemanticDiagnostic,
+  RuntimeManifestSemanticDiagnosticCode,
+} from "./schemas/plugin.js";
 
 // ── World Schemas ───────────────────────────────────────────────
 export {
