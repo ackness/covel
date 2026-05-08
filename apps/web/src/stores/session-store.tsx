@@ -235,6 +235,23 @@ function upsertGameStateCharacter(
   return { ...gameState, characters };
 }
 
+export function mergeGameStateForReplacement(
+  current: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+): Record<string, unknown> {
+  const next = { ...incoming };
+  if (next.characters === undefined && current.characters !== undefined) {
+    next.characters = current.characters;
+  }
+  if (
+    next.characterSchema === undefined &&
+    current.characterSchema !== undefined
+  ) {
+    next.characterSchema = current.characterSchema;
+  }
+  return next;
+}
+
 export interface PendingInteractionDraft {
   id: string;
   turnId: string;
@@ -564,7 +581,10 @@ function reducer(state: SessionState, action: Action): SessionState {
     case "SET_PHASE":
       return { ...state, phase: action.phase };
     case "SET_GAME_STATE":
-      return { ...state, gameState: action.state };
+      return {
+        ...state,
+        gameState: mergeGameStateForReplacement(state.gameState, action.state),
+      };
     case "UPSERT_EXECUTION_STEP": {
       // Upsert on (turnId, runtimeId). Transitions running → completed/failed/
       // skipped / etc happen in place — missed runtime.completed no longer

@@ -191,6 +191,15 @@ export function GameView({
   const pendingDrafts = sessionState.pendingInteractionDrafts;
   const suspensions = sessionState.suspensions;
   const [suspensionsOpen, setSuspensionsOpen] = useState(false);
+  const hasActiveInteractionBlock = useMemo(
+    () =>
+      messages.some((msg) =>
+        isPendingInteractionMessage(msg, messages, submittedBlockIds),
+      ),
+    [messages, submittedBlockIds],
+  );
+  const composerBlocked = pendingDrafts.length > 0 || hasActiveInteractionBlock;
+  const composerDisabled = executing || composerBlocked;
 
   const handleConfirmDrafts = useCallback(() => {
     if (pendingDrafts.length === 0) return;
@@ -281,10 +290,10 @@ export function GameView({
 
   const handleSubmit = useCallback(() => {
     const val = inputValue.trim();
-    if (!val || executing) return;
+    if (!val || composerDisabled) return;
     onSendMessage(val);
     setInputValue("");
-  }, [inputValue, executing, onSendMessage]);
+  }, [inputValue, composerDisabled, onSendMessage]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -482,6 +491,8 @@ export function GameView({
                 size="icon"
                 className={`h-7 w-7 shrink-0 border border-border/80 ${!isLeftCollapsed && "bg-accent text-accent-foreground"}`}
                 onClick={toggleLeftPanel}
+                aria-label={t("session.toggleStoryPanel")}
+                title={t("session.toggleStoryPanel")}
               >
                 <SlidersHorizontal className="w-3.5 h-3.5" />
               </Button>
@@ -547,6 +558,7 @@ export function GameView({
                 size="icon"
                 className="h-7 w-7 shrink-0"
                 onClick={() => setSettingsOpen(true)}
+                aria-label={t("nav.settings")}
                 title={t("nav.settings")}
               >
                 <KeyRound className="w-3.5 h-3.5" />
@@ -558,6 +570,9 @@ export function GameView({
                   size="sm"
                   className="h-7 px-2 shrink-0 gap-1 text-[var(--accent-warning)] hover:bg-[color-mix(in_oklab,var(--accent-warning)_8%,transparent)]"
                   onClick={() => setSuspensionsOpen(true)}
+                  aria-label={t("session.suspensionsBadge", {
+                    count: suspensions.length,
+                  })}
                   title={t("session.suspensionsTitle")}
                 >
                   <Clock className="w-3.5 h-3.5" />
@@ -572,6 +587,7 @@ export function GameView({
                 size="icon"
                 className="hidden md:inline-flex h-7 w-7 shrink-0"
                 asChild
+                aria-label={t("session.debugTraces")}
                 title={t("session.debugTraces")}
               >
                 <Link to="/debug" search={{ sid: session.id }}>
@@ -584,6 +600,7 @@ export function GameView({
                 size="icon"
                 className={`h-7 w-7 shrink-0 ${!isRightCollapsed && "bg-accent text-accent-foreground"}`}
                 onClick={toggleRightPanel}
+                aria-label={t("session.toggleContextPanel")}
                 title={t("session.toggleContextPanel")}
               >
                 <Database className="w-3.5 h-3.5" />
@@ -657,15 +674,18 @@ export function GameView({
                     return (
                       <span
                         key={d.id}
-                        className="group inline-flex items-center gap-1 max-w-full rounded-[var(--radius-control)] border border-primary/20 bg-background pl-2 pr-0.5 py-0.5 text-[11px] leading-tight text-foreground shadow-sm"
+                        className="group inline-flex items-start gap-1 max-w-full sm:max-w-[520px] rounded-[var(--radius-control)] border border-primary/20 bg-background pl-2 pr-0.5 py-1 text-[11px] leading-tight text-foreground shadow-sm"
                       >
-                        <span className="truncate max-w-[260px]" title={label}>
+                        <span
+                          className="max-w-full overflow-hidden whitespace-normal [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
+                          title={label}
+                        >
                           {label}
                         </span>
                         <button
                           type="button"
                           onClick={() => removeInteractionDraft(d.id)}
-                          className="inline-flex items-center justify-center h-6 w-6 -my-1 rounded-[var(--radius-control)] text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                          className="inline-flex items-center justify-center h-6 w-6 -my-1 shrink-0 rounded-[var(--radius-control)] text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
                           aria-label={t("session.removeDraft")}
                           title={t("session.removeDraft")}
                         >
@@ -698,20 +718,25 @@ export function GameView({
                       "Story input — press Enter to send",
                     )}
                     placeholder={
-                      phase === "playing"
-                        ? t(
-                            "session.inputPlaceholder",
-                            "Enter action or command...",
-                          )
-                        : t("session.inputPlaceholderAny", "Send a message...")
+                      composerBlocked
+                        ? t("session.composerBlockedPlaceholder")
+                        : phase === "playing"
+                          ? t(
+                              "session.inputPlaceholder",
+                              "Enter action or command...",
+                            )
+                          : t(
+                              "session.inputPlaceholderAny",
+                              "Send a message...",
+                            )
                     }
-                    disabled={executing}
+                    disabled={composerDisabled}
                     className="flex-1 min-w-0 px-3.5 py-2.5 bg-transparent text-sm outline-none disabled:opacity-50 placeholder:text-muted-foreground"
                   />
                   <button
                     type="button"
                     onClick={handleSubmit}
-                    disabled={executing || !inputValue.trim()}
+                    disabled={composerDisabled || !inputValue.trim()}
                     aria-label={t("session.inputKbdHint", "send")}
                     className="shrink-0 inline-flex items-center justify-center w-11 self-stretch border-l border-[var(--rule-color)] text-muted-foreground hover:text-foreground hover:bg-[color-mix(in_oklab,var(--color-foreground)_6%,transparent)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
                   >
@@ -722,10 +747,16 @@ export function GameView({
                     )}
                   </button>
                 </div>
-                <div className="hidden md:flex justify-end items-center gap-1.5 ui-meta text-[10px] text-muted-foreground/60 pr-1 mt-1.5 select-none">
-                  <kbd className="ui-tag px-1.5 py-0">{"\u23CE"}</kbd>
-                  <span>{t("session.inputKbdHint", "to send")}</span>
-                </div>
+                {composerBlocked ? (
+                  <p className="ui-meta text-[10px] text-muted-foreground/80 px-1 mt-1.5">
+                    {t("session.composerBlockedHint")}
+                  </p>
+                ) : (
+                  <div className="hidden md:flex justify-end items-center gap-1.5 ui-meta text-[10px] text-muted-foreground/60 pr-1 mt-1.5 select-none">
+                    <kbd className="ui-tag px-1.5 py-0">{"\u23CE"}</kbd>
+                    <span>{t("session.inputKbdHint", "to send")}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -766,4 +797,68 @@ export function GameView({
       </ResizablePanelGroup>
     </div>
   );
+}
+
+function isPendingInteractionMessage(
+  msg: StreamMessage,
+  allMessages: StreamMessage[],
+  submittedBlockIds: ReadonlySet<string>,
+): boolean {
+  if (!msg.block || submittedBlockIds.has(msg.id)) return false;
+  if (hasLaterUserMessage(msg, allMessages)) return false;
+  return isInteractiveBlock(msg.block);
+}
+
+function hasLaterUserMessage(
+  msg: StreamMessage,
+  allMessages: StreamMessage[],
+): boolean {
+  const idx = allMessages.findIndex((m) => m.id === msg.id);
+  if (idx < 0) return false;
+  for (let i = idx + 1; i < allMessages.length; i += 1) {
+    if (allMessages[i].role === "user") return true;
+  }
+  return false;
+}
+
+function isInteractiveBlock(block: Record<string, unknown>): boolean {
+  const type = block.type as string | undefined;
+  const data = (block.data ?? block) as Record<string, unknown>;
+  const innerType = data.type as string | undefined;
+  if (
+    innerType === "form" ||
+    innerType === "choice" ||
+    innerType === "confirmation" ||
+    type === "interactive_form" ||
+    type === "interactive_choice" ||
+    type === "interactive_confirmation" ||
+    (Array.isArray(data.fields) && data.fields.length > 0)
+  ) {
+    return true;
+  }
+
+  if (type === "plugin_message") {
+    const specs = data.specs;
+    return Array.isArray(specs) && specs.some(hasInteractiveAction);
+  }
+
+  return hasInteractiveAction(data.spec);
+}
+
+function hasInteractiveAction(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  if (Array.isArray(value)) return value.some(hasInteractiveAction);
+
+  const record = value as Record<string, unknown>;
+  const action = record.action;
+  if (
+    action === "submitForm" ||
+    action === "selectChoice" ||
+    action === "selectSuggestion" ||
+    action === "draftMessage"
+  ) {
+    return true;
+  }
+
+  return Object.values(record).some(hasInteractiveAction);
 }

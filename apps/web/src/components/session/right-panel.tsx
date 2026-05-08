@@ -319,7 +319,7 @@ export function RightPanel({
                   )}
                   <TabsTrigger
                     value={item.value}
-                    className="group relative h-11 w-full rounded-none border-0 px-0 py-0 text-muted-foreground shadow-none data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                    className="group relative min-h-12 w-full rounded-none border-0 px-0 py-1 text-muted-foreground shadow-none touch-manipulation data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
                     title={item.title ?? item.label}
                     aria-label={item.label}
                   >

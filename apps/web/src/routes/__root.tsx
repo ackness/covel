@@ -36,6 +36,7 @@ function RootLayout() {
   const isDebugRoute = location.pathname.startsWith("/debug");
   const isSession = isSessionRoute || isDebugRoute;
   const isHome = location.pathname === "/";
+  const showRouterDevtools = !isSessionRoute && !isDebugRoute;
 
   // Carry the active session id between Studio (/session) and Debugger (/debug)
   // so flipping tabs preserves what the user is inspecting. /session has stale-
@@ -189,7 +190,7 @@ function RootLayout() {
                         : "text-muted-foreground hover:text-foreground"
                     } ${
                       item.disabled
-                        ? "opacity-40 cursor-not-allowed hover:text-muted-foreground"
+                        ? "text-muted-foreground/75 cursor-not-allowed hover:text-muted-foreground/75"
                         : ""
                     }`}
                   >
@@ -234,6 +235,7 @@ function RootLayout() {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label={t("nav.primary", "Primary")}
                 className="md:hidden h-9 w-9 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-[var(--radius-control)]"
               >
                 <Menu className="h-4 w-4" />
@@ -273,6 +275,7 @@ function RootLayout() {
         )}
       </div>
       {import.meta.env.DEV &&
+        showRouterDevtools &&
         import.meta.env.VITE_ROUTER_DEVTOOLS !== "false" && (
           <TanStackRouterDevtools position="bottom-right" />
         )}
