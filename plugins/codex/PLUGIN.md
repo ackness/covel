@@ -12,6 +12,12 @@ outputKind: system
 model: plugin
 timeoutMs: 120000
 promptVersion: 2
+tags:
+  - role:codex
+  - data:lorebook
+  - cost:llm
+  - ui:right-panel
+  - ui:message-block
 trigger:
   type: auto
 # Codex registers discoveries from the latest narrative — skip when narrator
@@ -37,6 +43,7 @@ ui:
     - ./ui/codex-panel.json
   message:
     - ./ui/codex-message.json
+relations: {}
 postHistory:
   role: system
   content: |

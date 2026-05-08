@@ -17,6 +17,8 @@ type JsonRecord = Record<string, unknown>;
 
 export interface PluginManifestSummary {
   capabilities: string[];
+  tags: string[];
+  relations?: unknown;
   outputKind?: string;
 }
 
@@ -27,6 +29,8 @@ export interface RuntimePluginContract {
   runtimeType: string;
   outputKind: string;
   capabilities: string[];
+  tags: string[];
+  relations?: unknown;
   priority?: number;
   trigger?: unknown;
   execution?: unknown;
@@ -79,6 +83,8 @@ export interface PluginContract {
   source?: string;
   rootPath?: string;
   capabilities: string[];
+  tags: string[];
+  relations?: unknown;
   dataSchemas: Record<string, PluginDataSchemaContract>;
   declaredPluginDataNamespaces: string[];
   tools: {
@@ -220,8 +226,17 @@ export function summarizePluginManifests(
   const capabilities = Array.from(
     new Set(manifests.flatMap((m) => m.manifest.capabilities ?? [])),
   );
+  const tags = uniqueSorted([
+    ...(entry.summary.tags ?? []),
+    ...manifests.flatMap((m) => m.manifest.tags ?? []),
+  ]);
   const outputKind = entry.manifest?.manifest.outputKind;
-  return { capabilities, outputKind };
+  return {
+    capabilities,
+    tags,
+    ...(entry.summary.relations ? { relations: entry.summary.relations } : {}),
+    outputKind,
+  };
 }
 
 function runtimeIdFromName(pluginId: string, runtimeName: string): string {
@@ -261,6 +276,8 @@ function buildRuntimeContract(
     runtimeType: manifest.runtimeType ?? "agent",
     outputKind: manifest.outputKind ?? "plugin",
     capabilities: [...(manifest.capabilities ?? [])],
+    tags: [...(manifest.tags ?? [])],
+    ...(manifest.relations ? { relations: manifest.relations } : {}),
     ...(manifest.priority !== undefined ? { priority: manifest.priority } : {}),
     ...(manifest.trigger ? { trigger: manifest.trigger } : {}),
     ...(manifest.execution ? { execution: manifest.execution } : {}),
@@ -331,6 +348,11 @@ export function buildPluginContract(
     capabilities: uniqueSorted(
       runtimes.flatMap((runtime) => runtime.capabilities),
     ),
+    tags: uniqueSorted([
+      ...(entry.summary.tags ?? []),
+      ...runtimes.flatMap((runtime) => runtime.tags),
+    ]),
+    ...(entry.summary.relations ? { relations: entry.summary.relations } : {}),
     dataSchemas,
     declaredPluginDataNamespaces: uniqueSorted([
       ...Object.keys(dataSchemas),

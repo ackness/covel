@@ -70,6 +70,14 @@ describe("parsePluginMd", () => {
           "    acceptsWorldData: true",
           "    schema: ./schemas/relationships.schema.json",
           "    description: Relationship graph",
+          "tags:",
+          "  - mode:traditional-story",
+          "  - role:narrator",
+          "relations:",
+          "  provides:",
+          "    - narrative-engine",
+          "  conflicts:",
+          "    - chat-mode-narrator",
           "config:",
           "  difficulty:",
           "    type: enum",
@@ -88,6 +96,11 @@ describe("parsePluginMd", () => {
 
       expect(result.manifest.name).toBe("combat");
       expect(result.manifest.version).toBe("1.0.0");
+      expect(result.manifest.tags).toEqual([
+        "mode:traditional-story",
+        "role:narrator",
+      ]);
+      expect(result.manifest.relations?.provides).toEqual(["narrative-engine"]);
       expect(result.manifest.model).toBe("balance");
       expect(result.manifest.trigger).toEqual({
         type: "event",

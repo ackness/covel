@@ -185,6 +185,8 @@ describe("loadPluginSummary", () => {
       name: "summary-single",
       description: "Summary test",
       pluginType: "core-plugin",
+      tags: ["mode:dialogue", "role:narrator"],
+      relations: { provides: ["narrative-engine"] },
     });
     await fs.writeFile(path.join(pluginDir, "PLUGIN.md"), fm);
 
@@ -197,6 +199,8 @@ describe("loadPluginSummary", () => {
       description: "Summary test",
       pluginType: "core-plugin",
       runtimeCount: 1,
+      tags: ["mode:dialogue", "role:narrator"],
+      relations: { provides: ["narrative-engine"] },
     });
   });
 

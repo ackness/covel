@@ -20,6 +20,7 @@ import {
   Database,
   AlertTriangle,
   Loader2,
+  Search,
 } from "lucide-react";
 import * as api from "@/services/api.js";
 import {
@@ -45,6 +46,18 @@ import { text } from "@/components/world/editor-helpers.js";
 import { ActiveModelSlots } from "./active-model-slots.js";
 import { useSlotConfig, formatSlotLabel } from "@/hooks/use-slot-config.js";
 import { useRuntimeBindings } from "@/hooks/use-runtime-bindings.js";
+import {
+  applyPluginPackSelection,
+  collectPluginTags,
+  defaultSelectedPluginIdsForWorld as computeDefaultSelectedPluginIdsForWorld,
+  filterPluginPackages,
+  groupPluginPackages,
+  pluginPacksForWorld,
+  readWorldPluginPolicy,
+  recommendationReason,
+  selectedPackForWorld,
+  textValue,
+} from "@/lib/session-plugin-selection.js";
 
 interface SessionPrepScreenProps {
   world: api.WorldRecord;
@@ -69,62 +82,23 @@ export function isLockedCorePackage(
   );
 }
 
-function stringArrayFromMetadata(
-  metadata: api.WorldRecord["metadata"] | undefined,
-  key: string,
-): string[] {
-  const value = metadata?.[key];
-  return Array.isArray(value)
-    ? value.filter(
-        (item): item is string => typeof item === "string" && item.length > 0,
-      )
-    : [];
-}
-
 export function defaultSelectedPluginIdsForWorld(
   world: api.WorldRecord,
   packages: readonly api.PackageSummary[],
 ): Set<string> {
-  const required = new Set(
-    stringArrayFromMetadata(world.metadata, "requiredPlugins"),
-  );
-  const recommended = new Set(
-    stringArrayFromMetadata(world.metadata, "recommendedPlugins"),
-  );
-  const excluded = new Set(
-    stringArrayFromMetadata(world.metadata, "excludedPlugins"),
-  );
-  const hasWorldPolicy =
-    required.size > 0 || recommended.size > 0 || excluded.size > 0;
-  const available = new Set(packages.map((pkg) => pkg.name));
-
-  if (hasWorldPolicy) {
-    return new Set(
-      packages
-        .filter(
-          (pkg) =>
-            isLockedCorePackage(pkg) ||
-            required.has(pkg.name) ||
-            recommended.has(pkg.name),
-        )
-        .filter((pkg) => available.has(pkg.name) && !excluded.has(pkg.name))
-        .map((pkg) => pkg.name),
-    );
-  }
-
-  return new Set(
-    packages
-      .filter((pkg) => pkg.enabled || isLockedCorePackage(pkg))
-      .map((pkg) => pkg.name),
+  return computeDefaultSelectedPluginIdsForWorld(
+    world,
+    packages,
+    isLockedCorePackage,
   );
 }
 
 function requiredPluginIdsForWorld(world: api.WorldRecord): Set<string> {
-  return new Set(stringArrayFromMetadata(world.metadata, "requiredPlugins"));
+  return new Set(readWorldPluginPolicy(world).requiredPlugins);
 }
 
 function excludedPluginIdsForWorld(world: api.WorldRecord): Set<string> {
-  return new Set(stringArrayFromMetadata(world.metadata, "excludedPlugins"));
+  return new Set(readWorldPluginPolicy(world).excludedPlugins);
 }
 
 // Reusable collapsible card header
@@ -174,7 +148,7 @@ export function SessionPrepScreen({
   onSettingsOpenChange,
   settingsInitialKey,
 }: SessionPrepScreenProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(
     presets,
     llmConfig,
@@ -218,6 +192,57 @@ export function SessionPrepScreen({
   const selectedPluginIds = useMemo(
     () => [...new Set([...selectedPlugins, ...lockedPluginIds])],
     [selectedPlugins, lockedPluginIds],
+  );
+  const selectedPluginIdSet = useMemo(
+    () => new Set(selectedPluginIds),
+    [selectedPluginIds],
+  );
+  const pluginPacks = useMemo(() => pluginPacksForWorld(world), [world]);
+  const worldDefaultPack = useMemo(() => selectedPackForWorld(world), [world]);
+  const [activePluginPackId, setActivePluginPackId] = useState<string | null>(
+    () => worldDefaultPack?.id ?? null,
+  );
+  const activePluginPack = useMemo(
+    () => pluginPacks.find((pack) => pack.id === activePluginPackId) ?? null,
+    [pluginPacks, activePluginPackId],
+  );
+  const [pluginSearch, setPluginSearch] = useState("");
+  const [activePluginTags, setActivePluginTags] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const availablePluginTags = useMemo(
+    () => collectPluginTags(packages),
+    [packages],
+  );
+  const visiblePluginPackages = useMemo(
+    () => filterPluginPackages(packages, pluginSearch, activePluginTags),
+    [packages, pluginSearch, activePluginTags],
+  );
+  const pluginGroups = useMemo(
+    () =>
+      groupPluginPackages(visiblePluginPackages, (groupId) =>
+        t(`session.pluginGroups.${groupId}`, groupId),
+      ),
+    [visiblePluginPackages, t],
+  );
+  const togglePluginTag = useCallback((tag: string) => {
+    setActivePluginTags((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return next;
+    });
+  }, []);
+  const applyPack = useCallback(
+    (packId: string) => {
+      const pack = pluginPacks.find((item) => item.id === packId);
+      if (!pack) return;
+      setActivePluginPackId(pack.id);
+      setSelectedPlugins((prev) =>
+        applyPluginPackSelection(prev, pack, packages, lockedPluginIds),
+      );
+    },
+    [pluginPacks, packages, lockedPluginIds],
   );
   const [worldDataPreflight, setWorldDataPreflight] =
     useState<api.WorldDataPreflightResponse | null>(null);
@@ -279,14 +304,24 @@ export function SessionPrepScreen({
   useEffect(() => {
     setSelectedPlugins((prev) => {
       const next = new Set(prev);
-      for (const id of corePluginIds) next.add(id);
-      return next.size === prev.size ? prev : next;
+      let changed = false;
+      for (const id of worldExcludedPluginIds) {
+        if (!lockedPluginIds.has(id) && next.delete(id)) changed = true;
+      }
+      for (const id of lockedPluginIds) {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
     });
-  }, [corePluginIds]);
+  }, [lockedPluginIds, worldExcludedPluginIds]);
 
   const togglePlugin = useCallback(
     (name: string) => {
-      if (corePluginIds.has(name)) return;
+      if (lockedPluginIds.has(name)) return;
+      setActivePluginPackId(null);
       setSelectedPlugins((prev) => {
         const next = new Set(prev);
         if (next.has(name)) next.delete(name);
@@ -294,7 +329,7 @@ export function SessionPrepScreen({
         return next;
       });
     },
-    [corePluginIds],
+    [lockedPluginIds],
   );
 
   // Section expand state — all collapsed by default except plugins
@@ -404,8 +439,8 @@ export function SessionPrepScreen({
   // Build flow steps filtered by selected plugins
   const selectedFlowSteps = useMemo(() => {
     if (!flowData) return [];
-    return flowData.steps.filter((s) => selectedPlugins.has(s.pluginId));
-  }, [flowData, selectedPlugins]);
+    return flowData.steps.filter((s) => selectedPluginIdSet.has(s.pluginId));
+  }, [flowData, selectedPluginIdSet]);
 
   const resolveDeclaredSlot = useCallback(
     (slotId: string) => {
@@ -688,112 +723,236 @@ export function SessionPrepScreen({
             <CollapsibleCardHeader
               expanded={pluginSectionExpanded}
               onToggle={() => setPluginSectionExpanded(!pluginSectionExpanded)}
-              summary={`${selectedPlugins.size}/${packages.length} ${t("session.pluginsSelected", "plugins selected")} · ${totalRuntimes} runtimes`}
+              summary={`${selectedPluginIds.length}/${packages.length} ${t("session.pluginsSelected", "plugins selected")} · ${totalRuntimes} runtimes`}
             >
               <Puzzle className="w-4 h-4" />
               {t("session.plugins", "Plugins & Runtimes")}
               <Badge variant="secondary" className="text-[10px] ml-1">
-                {selectedPlugins.size}/{packages.length}
+                {selectedPluginIds.length}/{packages.length}
               </Badge>
             </CollapsibleCardHeader>
             {pluginSectionExpanded && (
               <CardContent className="space-y-4">
                 {/* Plugin selection grid */}
                 <div className="space-y-1.5">
-                  {packages.map((pkg) => {
-                    const displayName = text(pkg.displayName) || pkg.name;
-                    const description = text(pkg.description);
-                    const isSelected = selectedPlugins.has(pkg.name);
-                    const isLocked = lockedPluginIds.has(pkg.name);
-                    const isCore = corePluginIds.has(pkg.name);
-                    const runtimes = pkg.runtimes ?? [];
-                    const tools = pkg.tools ?? [];
-                    const pluginBindings = bindingState.entries.filter(
-                      (e) => e.pluginId === pkg.name,
-                    );
-                    const primaryBinding = pluginBindings[0];
-                    const hasAgentRuntime = pluginBindings.length > 0;
-                    const providerSlotSetting = pkg.userSettings?.find(
-                      (spec) => spec.key === "modelPresetId",
-                    );
-                    const providerSlotName =
-                      typeof providerSlotSetting?.default === "string"
-                        ? providerSlotSetting.default
-                        : undefined;
-                    const providerSlotMissing = providerSlotName
-                      ? isMissingDeclaredSlot(providerSlotName)
-                      : false;
-                    const hasMissingRuntimeSlot = pluginBindings.some(
-                      (binding) => isMissingDeclaredSlot(binding.defaultSlot),
-                    );
-
-                    return (
-                      <div
-                        key={pkg.name}
-                        className={`border px-3 py-2.5 transition-colors ${
-                          isSelected
-                            ? "border-primary/40 bg-primary/5"
-                            : "border-border bg-muted/20 opacity-60"
-                        }`}
-                      >
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                          {/* Toggle */}
+                  {pluginPacks.length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                      {pluginPacks.map((pack) => {
+                        const isActive = activePluginPack?.id === pack.id;
+                        return (
                           <button
+                            key={pack.id}
                             type="button"
-                            role="switch"
-                            aria-checked={isSelected}
-                            disabled={isLocked}
-                            title={isLocked ? t("plugin.locked") : undefined}
-                            className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full border-2 border-transparent transition-colors ${
-                              isSelected ? "bg-primary" : "bg-input"
-                            } ${isLocked ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-                            onClick={() => !isLocked && togglePlugin(pkg.name)}
+                            className={`border px-3 py-2 text-left transition-colors ${
+                              isActive
+                                ? "border-primary/50 bg-primary/10"
+                                : "border-border bg-muted/20 hover:bg-muted/40"
+                            }`}
+                            onClick={() => applyPack(pack.id)}
                           >
-                            <span
-                              className={`pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow-sm transition ${
-                                isSelected ? "translate-x-3" : "translate-x-0"
-                              }`}
-                            />
-                          </button>
-
-                          {/* Name + badges */}
-                          <span className="text-xs font-medium truncate flex-1 min-w-0">
-                            {displayName}
-                          </span>
-                          {isCore && (
-                            <span
-                              title={t("plugin.locked")}
-                              className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/70 shrink-0"
-                            >
-                              <Lock className="w-3 h-3" />
-                              <span className="hidden sm:inline">
-                                {t("plugin.core", "core")}
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-semibold truncate">
+                                {pack.labelKey
+                                  ? t(
+                                      pack.labelKey,
+                                      textValue(pack.label, i18n.language) ||
+                                        pack.id,
+                                    )
+                                  : textValue(pack.label, i18n.language) ||
+                                    pack.id}
                               </span>
-                            </span>
-                          )}
-                          {runtimes[0] && (
-                            <Badge
-                              variant="outline"
-                              className="text-[9px] shrink-0"
-                            >
-                              P{runtimes[0].priority}
-                            </Badge>
-                          )}
-                          {runtimes[0]?.kind && (
-                            <Badge
-                              variant="secondary"
-                              className="text-[9px] shrink-0"
-                            >
-                              {runtimes[0].kind === "agent" ? "LLM" : "Fn"}
-                            </Badge>
-                          )}
-                          {tools.length > 0 && (
-                            <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground shrink-0">
-                              <Wrench className="w-2.5 h-2.5" />
-                              {tools.length}
-                            </span>
-                          )}
-                          {/* Inline model slot picker for agent runtimes. Lists
+                              <Badge
+                                variant={isActive ? "secondary" : "outline"}
+                                className="text-[9px] shrink-0"
+                              >
+                                {pack.plugins.length}
+                              </Badge>
+                            </div>
+                            {pack.description && (
+                              <p className="mt-1 text-[10px] text-muted-foreground line-clamp-2">
+                                {pack.descriptionKey
+                                  ? t(
+                                      pack.descriptionKey,
+                                      textValue(
+                                        pack.description,
+                                        i18n.language,
+                                      ),
+                                    )
+                                  : textValue(pack.description, i18n.language)}
+                              </p>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-2 mb-3">
+                    <div className="flex items-center gap-2 border border-border bg-background px-2 py-1.5">
+                      <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <input
+                        value={pluginSearch}
+                        onChange={(event) =>
+                          setPluginSearch(event.target.value)
+                        }
+                        className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                        placeholder={t(
+                          "session.searchPlugins",
+                          "Search plugins, tags, capabilities",
+                        )}
+                      />
+                    </div>
+                    {availablePluginTags.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {availablePluginTags.map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            className={`border px-2 py-0.5 text-[10px] transition-colors ${
+                              activePluginTags.has(tag)
+                                ? "border-primary/50 bg-primary/10 text-foreground"
+                                : "border-border text-muted-foreground hover:text-foreground"
+                            }`}
+                            onClick={() => togglePluginTag(tag)}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {pluginGroups.map((group) => (
+                    <div key={group.id} className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-3 pt-2">
+                        <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+                          {group.label}
+                        </h4>
+                        <span className="text-[10px] text-muted-foreground">
+                          {group.packages.length}
+                        </span>
+                      </div>
+                      {group.packages.map((pkg) => {
+                        const displayName = text(pkg.displayName) || pkg.name;
+                        const description = text(pkg.description);
+                        const isSelected = selectedPluginIdSet.has(pkg.name);
+                        const isLocked = lockedPluginIds.has(pkg.name);
+                        const isCore = corePluginIds.has(pkg.name);
+                        const reason = recommendationReason(
+                          pkg,
+                          world,
+                          activePluginPack,
+                          {
+                            locale: i18n.language,
+                            requiredByWorld: t(
+                              "session.recommendationReasons.requiredByWorld",
+                              "Required by world",
+                            ),
+                            packOptional: t(
+                              "session.recommendationReasons.packOptional",
+                              "Pack optional",
+                            ),
+                            recommendedByWorld: t(
+                              "session.recommendationReasons.recommendedByWorld",
+                              "Recommended by world",
+                            ),
+                          },
+                        );
+                        const runtimes = pkg.runtimes ?? [];
+                        const tools = pkg.tools ?? [];
+                        const pluginBindings = bindingState.entries.filter(
+                          (e) => e.pluginId === pkg.name,
+                        );
+                        const primaryBinding = pluginBindings[0];
+                        const hasAgentRuntime = pluginBindings.length > 0;
+                        const providerSlotSetting = pkg.userSettings?.find(
+                          (spec) => spec.key === "modelPresetId",
+                        );
+                        const providerSlotName =
+                          typeof providerSlotSetting?.default === "string"
+                            ? providerSlotSetting.default
+                            : undefined;
+                        const providerSlotMissing = providerSlotName
+                          ? isMissingDeclaredSlot(providerSlotName)
+                          : false;
+                        const hasMissingRuntimeSlot = pluginBindings.some(
+                          (binding) =>
+                            isMissingDeclaredSlot(binding.defaultSlot),
+                        );
+
+                        return (
+                          <div
+                            key={pkg.name}
+                            className={`border px-3 py-2.5 transition-colors ${
+                              isSelected
+                                ? "border-primary/40 bg-primary/5"
+                                : "border-border bg-muted/20 opacity-60"
+                            }`}
+                          >
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                              {/* Toggle */}
+                              <button
+                                type="button"
+                                role="switch"
+                                aria-checked={isSelected}
+                                disabled={isLocked}
+                                title={
+                                  isLocked ? t("plugin.locked") : undefined
+                                }
+                                className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full border-2 border-transparent transition-colors ${
+                                  isSelected ? "bg-primary" : "bg-input"
+                                } ${isLocked ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                                onClick={() =>
+                                  !isLocked && togglePlugin(pkg.name)
+                                }
+                              >
+                                <span
+                                  className={`pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow-sm transition ${
+                                    isSelected
+                                      ? "translate-x-3"
+                                      : "translate-x-0"
+                                  }`}
+                                />
+                              </button>
+
+                              {/* Name + badges */}
+                              <span className="text-xs font-medium truncate flex-1 min-w-0">
+                                {displayName}
+                              </span>
+                              {isCore && (
+                                <span
+                                  title={t("plugin.locked")}
+                                  className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/70 shrink-0"
+                                >
+                                  <Lock className="w-3 h-3" />
+                                  <span className="hidden sm:inline">
+                                    {t("plugin.core", "core")}
+                                  </span>
+                                </span>
+                              )}
+                              {runtimes[0] && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[9px] shrink-0"
+                                >
+                                  P{runtimes[0].priority}
+                                </Badge>
+                              )}
+                              {runtimes[0]?.kind && (
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[9px] shrink-0"
+                                >
+                                  {runtimes[0].kind === "agent" ? "LLM" : "Fn"}
+                                </Badge>
+                              )}
+                              {tools.length > 0 && (
+                                <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground shrink-0">
+                                  <Wrench className="w-2.5 h-2.5" />
+                                  {tools.length}
+                                </span>
+                              )}
+                              {/* Inline model slot picker for agent runtimes. Lists
                               every resolved slot (llm.toml + user custom);
                               picking sets localStorage bindings + (once the
                               session is created) PATCHes runtimeModelOverrides
@@ -802,199 +961,281 @@ export function SessionPrepScreen({
                               Hidden when only one slot is resolvable — the
                               dropdown would be a no-op and just adds cognitive
                               load for casual players. P-13 audit finding. */}
-                          {hasAgentRuntime &&
-                            isSelected &&
-                            primaryBinding &&
-                            pluginBindings.length === 1 &&
-                            !hasMissingRuntimeSlot &&
-                            resolvedSlots.length > 1 && (
-                              <select
-                                value={primaryBinding.slotName}
-                                onChange={(e) =>
-                                  bindingState.setBinding(
-                                    primaryBinding.qualifiedId,
-                                    e.target.value,
-                                  )
-                                }
-                                className="min-w-[100px] flex-shrink text-[11px] bg-background border border-border rounded px-2 py-1 max-w-[240px]"
-                                aria-label={t(
-                                  "plugin.modelBindingAria",
-                                  "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.",
-                                )}
-                                title={t(
-                                  "plugin.modelBindingAria",
-                                  "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.",
-                                )}
-                              >
-                                <option value="">
-                                  {(() => {
-                                    const declared = primaryBinding.defaultSlot;
-                                    const defaultSlot =
-                                      resolveDeclaredSlot(declared);
-                                    const label = formatSlotLabel(defaultSlot);
-                                    if (label) {
-                                      return t("plugin.useRuntimeDefaultWith", {
-                                        slot: declared,
-                                        value: label,
-                                        defaultValue: `Runtime default: ${declared} (${label})`,
-                                      });
+                              {hasAgentRuntime &&
+                                isSelected &&
+                                primaryBinding &&
+                                pluginBindings.length === 1 &&
+                                !hasMissingRuntimeSlot &&
+                                resolvedSlots.length > 1 && (
+                                  <select
+                                    value={primaryBinding.slotName}
+                                    onChange={(e) =>
+                                      bindingState.setBinding(
+                                        primaryBinding.qualifiedId,
+                                        e.target.value,
+                                      )
                                     }
-                                    return t("plugin.useRuntimeDefault", {
-                                      slot: declared,
-                                      defaultValue: `Runtime default: ${declared}`,
-                                    });
-                                  })()}
-                                </option>
-                                {resolvedSlots.map((slot) => (
-                                  <option key={slot.slotId} value={slot.slotId}>
-                                    {slot.slotId}
-                                    {slot.serverModel
-                                      ? ` · ${slot.serverModel}`
-                                      : ""}
-                                  </option>
-                                ))}
-                              </select>
-                            )}
-                        </div>
-                        {description && (
-                          <p className="text-[11px] text-muted-foreground mt-1.5 ml-9 line-clamp-2">
-                            {description}
-                          </p>
-                        )}
-                        {isSelected && providerSlotName && (
-                          <div className="mt-2.5 ml-9 flex items-center gap-2.5 text-[11px] text-muted-foreground">
-                            <KeyRound className="w-3 h-3 shrink-0" />
-                            <span className="font-medium shrink-0">
-                              provider slot
-                            </span>
-                            <Badge
-                              variant={
-                                providerSlotMissing ? "destructive" : "outline"
-                              }
-                              className="text-[10px] px-1.5 py-0.5 h-5 shrink-0"
-                              title={
-                                providerSlotMissing
-                                  ? `Add [covel.${providerSlotName}] to llm.toml, or change ${pkg.name}.modelPresetId in Settings → Plugins.`
-                                  : undefined
-                              }
-                            >
-                              {providerSlotMissing
-                                ? `missing [covel.${providerSlotName}]`
-                                : `[covel.${providerSlotName}]`}
-                            </Badge>
-                            <span className="truncate">
-                              {providerSlotMissing
-                                ? `Configure [covel.${providerSlotName}] in llm.toml, or change modelPresetId in Settings → Plugins → ${pkg.name}.`
-                                : `from plugin setting modelPresetId; edit in Settings → Plugins → ${pkg.name}`}
-                            </span>
-                          </div>
-                        )}
-                        {isSelected &&
-                          pluginBindings.length > 0 &&
-                          (pluginBindings.length > 1 ||
-                            hasMissingRuntimeSlot) && (
-                            <div className="mt-2.5 ml-9 space-y-1.5">
-                              {pluginBindings.map((binding) => {
-                                const declaredSlot = binding.defaultSlot;
-                                const configuredDefault =
-                                  resolveDeclaredSlot(declaredSlot);
-                                const selectedSlot = binding.slotName
-                                  ? resolvedSlots.find(
-                                      (s) => s.slotId === binding.slotName,
-                                    )
-                                  : configuredDefault;
-                                const missingDefault =
-                                  isMissingDeclaredSlot(declaredSlot);
-                                const showPicker =
-                                  pluginBindings.length > 1 ||
-                                  missingDefault ||
-                                  resolvedSlots.length > 1;
-                                return (
-                                  <div
-                                    key={binding.qualifiedId}
-                                    className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground min-w-0"
-                                  >
-                                    <Cpu className="w-3 h-3 shrink-0" />
-                                    <span
-                                      className="font-mono truncate min-w-0 max-w-[240px]"
-                                      title={binding.qualifiedId}
-                                    >
-                                      {binding.qualifiedId}
-                                    </span>
-                                    <Badge
-                                      variant={
-                                        missingDefault
-                                          ? "destructive"
-                                          : "outline"
-                                      }
-                                      className="text-[10px] px-1.5 py-0.5 h-5 shrink-0"
-                                      title={
-                                        missingDefault
-                                          ? `Add [covel.${declaredSlot}] to llm.toml`
-                                          : undefined
-                                      }
-                                    >
-                                      {missingDefault
-                                        ? `missing [covel.${declaredSlot}]`
-                                        : `default: ${declaredSlot}`}
-                                    </Badge>
-                                    {missingDefault && (
-                                      <code className="text-[10px] text-muted-foreground/80 bg-muted px-1.5 py-0.5 rounded shrink-0">
-                                        [covel.{declaredSlot}]
-                                      </code>
+                                    className="min-w-[100px] flex-shrink text-[11px] bg-background border border-border rounded px-2 py-1 max-w-[240px]"
+                                    aria-label={t(
+                                      "plugin.modelBindingAria",
+                                      "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.",
                                     )}
-                                    {showPicker ? (
-                                      <select
-                                        value={binding.slotName}
-                                        onChange={(e) =>
-                                          bindingState.setBinding(
-                                            binding.qualifiedId,
-                                            e.target.value,
-                                          )
+                                    title={t(
+                                      "plugin.modelBindingAria",
+                                      "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.",
+                                    )}
+                                  >
+                                    <option value="">
+                                      {(() => {
+                                        const declared =
+                                          primaryBinding.defaultSlot;
+                                        const defaultSlot =
+                                          resolveDeclaredSlot(declared);
+                                        const label =
+                                          formatSlotLabel(defaultSlot);
+                                        if (label) {
+                                          return t(
+                                            "plugin.useRuntimeDefaultWith",
+                                            {
+                                              slot: declared,
+                                              value: label,
+                                              defaultValue: `Runtime default: ${declared} (${label})`,
+                                            },
+                                          );
                                         }
-                                        className="ml-auto min-w-[120px] flex-shrink text-[11px] bg-background border border-border rounded px-2 py-1 max-w-[280px]"
-                                        aria-label={t(
-                                          "plugin.modelBindingAria",
-                                          "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.",
-                                        )}
+                                        return t("plugin.useRuntimeDefault", {
+                                          slot: declared,
+                                          defaultValue: `Runtime default: ${declared}`,
+                                        });
+                                      })()}
+                                    </option>
+                                    {resolvedSlots.map((slot) => (
+                                      <option
+                                        key={slot.slotId}
+                                        value={slot.slotId}
                                       >
-                                        <option value="">
-                                          {configuredDefault
-                                            ? `runtime default · ${declaredSlot}${configuredDefault.serverModel ? ` · ${configuredDefault.serverModel}` : ""}`
-                                            : `runtime default · ${declaredSlot} (missing)`}
-                                        </option>
-                                        {resolvedSlots.map((slot) => (
-                                          <option
-                                            key={slot.slotId}
-                                            value={slot.slotId}
-                                          >
-                                            {slot.slotId}
-                                            {slot.serverModel
-                                              ? ` · ${slot.serverModel}`
-                                              : ""}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    ) : selectedSlot ? (
-                                      <span
-                                        className="ml-auto truncate text-[11px]"
-                                        title={
-                                          formatSlotLabel(selectedSlot) ??
-                                          selectedSlot.slotId
-                                        }
-                                      >
-                                        {formatSlotLabel(selectedSlot) ??
-                                          selectedSlot.slotId}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                );
-                              })}
+                                        {slot.slotId}
+                                        {slot.serverModel
+                                          ? ` · ${slot.serverModel}`
+                                          : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
                             </div>
-                          )}
-                      </div>
-                    );
-                  })}
+                            {description && (
+                              <p className="text-[11px] text-muted-foreground mt-1.5 ml-9 line-clamp-2">
+                                {description}
+                              </p>
+                            )}
+                            <div className="mt-1.5 ml-9 flex flex-wrap gap-1">
+                              {reason && (
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[9px] px-1.5 py-0 h-4"
+                                >
+                                  {reason}
+                                </Badge>
+                              )}
+                              {(pkg.tags ?? []).slice(0, 4).map((tag) => (
+                                <Badge
+                                  key={tag}
+                                  variant="outline"
+                                  className="text-[9px] px-1.5 py-0 h-4 text-muted-foreground"
+                                >
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+                            {isSelected && providerSlotName && (
+                              <div className="mt-2.5 ml-9 flex items-center gap-2.5 text-[11px] text-muted-foreground">
+                                <KeyRound className="w-3 h-3 shrink-0" />
+                                <span className="font-medium shrink-0">
+                                  {t("plugin.providerSlot", "provider slot")}
+                                </span>
+                                <Badge
+                                  variant={
+                                    providerSlotMissing
+                                      ? "destructive"
+                                      : "outline"
+                                  }
+                                  className="text-[10px] px-1.5 py-0.5 h-5 shrink-0"
+                                  title={
+                                    providerSlotMissing
+                                      ? t("plugin.providerSlotMissingTitle", {
+                                          slot: providerSlotName,
+                                          plugin: pkg.name,
+                                          defaultValue:
+                                            "Add [covel.{{slot}}] to llm.toml, or change {{plugin}}.modelPresetId in Settings > Plugins.",
+                                        })
+                                      : undefined
+                                  }
+                                >
+                                  {providerSlotMissing
+                                    ? t("plugin.slotMissingShort", {
+                                        slot: providerSlotName,
+                                        defaultValue:
+                                          "missing [covel.{{slot}}]",
+                                      })
+                                    : `[covel.${providerSlotName}]`}
+                                </Badge>
+                                <span className="truncate">
+                                  {providerSlotMissing
+                                    ? t("plugin.providerSlotMissingDetail", {
+                                        slot: providerSlotName,
+                                        plugin: pkg.name,
+                                        defaultValue:
+                                          "Configure [covel.{{slot}}] in llm.toml, or change modelPresetId in Settings > Plugins > {{plugin}}.",
+                                      })
+                                    : t("plugin.providerSlotSettingDetail", {
+                                        plugin: pkg.name,
+                                        defaultValue:
+                                          "from plugin setting modelPresetId; edit in Settings > Plugins > {{plugin}}",
+                                      })}
+                                </span>
+                              </div>
+                            )}
+                            {isSelected &&
+                              pluginBindings.length > 0 &&
+                              (pluginBindings.length > 1 ||
+                                hasMissingRuntimeSlot) && (
+                                <div className="mt-2.5 ml-9 space-y-1.5">
+                                  {pluginBindings.map((binding) => {
+                                    const declaredSlot = binding.defaultSlot;
+                                    const configuredDefault =
+                                      resolveDeclaredSlot(declaredSlot);
+                                    const selectedSlot = binding.slotName
+                                      ? resolvedSlots.find(
+                                          (s) => s.slotId === binding.slotName,
+                                        )
+                                      : configuredDefault;
+                                    const missingDefault =
+                                      isMissingDeclaredSlot(declaredSlot);
+                                    const showPicker =
+                                      pluginBindings.length > 1 ||
+                                      missingDefault ||
+                                      resolvedSlots.length > 1;
+                                    return (
+                                      <div
+                                        key={binding.qualifiedId}
+                                        className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground min-w-0"
+                                      >
+                                        <Cpu className="w-3 h-3 shrink-0" />
+                                        <span
+                                          className="font-mono truncate min-w-0 max-w-[240px]"
+                                          title={binding.qualifiedId}
+                                        >
+                                          {binding.qualifiedId}
+                                        </span>
+                                        <Badge
+                                          variant={
+                                            missingDefault
+                                              ? "destructive"
+                                              : "outline"
+                                          }
+                                          className="text-[10px] px-1.5 py-0.5 h-5 shrink-0"
+                                          title={
+                                            missingDefault
+                                              ? t("plugin.slotMissingTitle", {
+                                                  slot: declaredSlot,
+                                                  defaultValue:
+                                                    "Add [covel.{{slot}}] to llm.toml",
+                                                })
+                                              : undefined
+                                          }
+                                        >
+                                          {missingDefault
+                                            ? t("plugin.slotMissingShort", {
+                                                slot: declaredSlot,
+                                                defaultValue:
+                                                  "missing [covel.{{slot}}]",
+                                              })
+                                            : `default: ${declaredSlot}`}
+                                        </Badge>
+                                        {missingDefault && (
+                                          <code className="text-[10px] text-muted-foreground/80 bg-muted px-1.5 py-0.5 rounded shrink-0">
+                                            [covel.{declaredSlot}]
+                                          </code>
+                                        )}
+                                        {showPicker ? (
+                                          <select
+                                            value={binding.slotName}
+                                            onChange={(e) =>
+                                              bindingState.setBinding(
+                                                binding.qualifiedId,
+                                                e.target.value,
+                                              )
+                                            }
+                                            className="ml-auto min-w-[120px] flex-shrink text-[11px] bg-background border border-border rounded px-2 py-1 max-w-[280px]"
+                                            aria-label={t(
+                                              "plugin.modelBindingAria",
+                                              "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.",
+                                            )}
+                                          >
+                                            <option value="">
+                                              {configuredDefault
+                                                ? configuredDefault.serverModel
+                                                  ? t(
+                                                      "plugin.runtimeDefaultSummaryWithModel",
+                                                      {
+                                                        slot: declaredSlot,
+                                                        model:
+                                                          configuredDefault.serverModel,
+                                                        defaultValue:
+                                                          "runtime default · {{slot}} · {{model}}",
+                                                      },
+                                                    )
+                                                  : t(
+                                                      "plugin.runtimeDefaultSummary",
+                                                      {
+                                                        slot: declaredSlot,
+                                                        defaultValue:
+                                                          "runtime default · {{slot}}",
+                                                      },
+                                                    )
+                                                : t(
+                                                    "plugin.runtimeDefaultMissing",
+                                                    {
+                                                      slot: declaredSlot,
+                                                      defaultValue:
+                                                        "runtime default · {{slot}} (missing)",
+                                                    },
+                                                  )}
+                                            </option>
+                                            {resolvedSlots.map((slot) => (
+                                              <option
+                                                key={slot.slotId}
+                                                value={slot.slotId}
+                                              >
+                                                {slot.slotId}
+                                                {slot.serverModel
+                                                  ? ` · ${slot.serverModel}`
+                                                  : ""}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        ) : selectedSlot ? (
+                                          <span
+                                            className="ml-auto truncate text-[11px]"
+                                            title={
+                                              formatSlotLabel(selectedSlot) ??
+                                              selectedSlot.slotId
+                                            }
+                                          >
+                                            {formatSlotLabel(selectedSlot) ??
+                                              selectedSlot.slotId}
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
 
                 <WorldDataPreflightPanel

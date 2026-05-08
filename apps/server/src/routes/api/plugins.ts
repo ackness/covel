@@ -25,7 +25,8 @@ pluginRoutes.get("/", async (c) => {
   const registry = c.get("pluginRegistry");
   const all = registry.getAll();
   const plugins = Array.from(all.values()).map((entry) => {
-    const { capabilities, outputKind } = summarizePluginManifests(entry);
+    const { capabilities, tags, relations, outputKind } =
+      summarizePluginManifests(entry);
     return {
       id: entry.id,
       name: entry.summary.name,
@@ -35,6 +36,8 @@ pluginRoutes.get("/", async (c) => {
       status: entry.status,
       source: entry.source,
       capabilities,
+      tags,
+      ...(relations ? { relations } : {}),
       outputKind,
     };
   });
@@ -84,7 +87,8 @@ pluginRoutes.get("/:id", async (c) => {
   if (!entry) {
     return c.json({ error: `Plugin "${id}" not found` }, 404);
   }
-  const { capabilities, outputKind } = summarizePluginManifests(entry);
+  const { capabilities, tags, relations, outputKind } =
+    summarizePluginManifests(entry);
   return c.json({
     id: entry.id,
     name: entry.summary.name,
@@ -94,6 +98,8 @@ pluginRoutes.get("/:id", async (c) => {
     status: entry.status,
     source: entry.source,
     capabilities,
+    tags,
+    ...(relations ? { relations } : {}),
     outputKind,
   });
 });

@@ -328,6 +328,77 @@ export const rpcDeclMapSchema = z.record(
   rpcActionDeclSchema,
 );
 
+const i18nTextLoose = z.union([z.string(), z.record(z.string(), z.string())]);
+
+// ── Plugin catalogue metadata ───────────────────────────────────
+
+const pluginTagSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$/i, {
+    message:
+      'tags must be identifiers such as "mode:dialogue", "role:narrator", or "ui-only"',
+  });
+
+const relationTargetSchema = z
+  .union([
+    z.string().min(1),
+    z
+      .object({
+        plugin: z.string().min(1).optional(),
+        runtime: z.string().min(1).optional(),
+        capability: z.string().min(1).optional(),
+        tag: pluginTagSchema.optional(),
+      })
+      .strict(),
+  ])
+  .optional();
+
+const pluginRelationSchema = z
+  .object({
+    type: z
+      .enum(["requires", "recommends", "conflicts", "provides"])
+      .optional(),
+    target: relationTargetSchema,
+    plugin: z.string().min(1).optional(),
+    runtime: z.string().min(1).optional(),
+    capability: z.string().min(1).optional(),
+    tag: pluginTagSchema.optional(),
+    optional: z.boolean().optional(),
+    reason: i18nTextLoose.optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.target !== undefined ||
+      value.plugin !== undefined ||
+      value.runtime !== undefined ||
+      value.capability !== undefined ||
+      value.tag !== undefined,
+    {
+      message:
+        "relation must declare target, plugin, runtime, capability, or tag",
+    },
+  );
+
+export const pluginRelationsSchema = z
+  .object({
+    provides: z
+      .array(z.union([z.string().min(1), pluginRelationSchema]))
+      .optional(),
+    requires: z
+      .array(z.union([z.string().min(1), pluginRelationSchema]))
+      .optional(),
+    recommends: z
+      .array(z.union([z.string().min(1), pluginRelationSchema]))
+      .optional(),
+    conflicts: z
+      .array(z.union([z.string().min(1), pluginRelationSchema]))
+      .optional(),
+  })
+  .strict();
+
 // ── UI spec ─────────────────────────────────────────────────────
 
 export const uiSpecSchema = z
@@ -339,8 +410,6 @@ export const uiSpecSchema = z
   .strict();
 
 // ── User-declared plugin settings ────────────────────────────────
-
-const i18nTextLoose = z.union([z.string(), z.record(z.string(), z.string())]);
 
 export const pluginUserSettingSpecSchema = z
   .object({
@@ -422,6 +491,8 @@ export const runtimeManifestSchema = z
     pluginType: z.enum(["core-plugin", "plugin"]).optional(),
     outputKind: outputKindSchema.optional(),
     capabilities: z.array(z.string().min(1)).optional(),
+    tags: z.array(pluginTagSchema).optional(),
+    relations: pluginRelationsSchema.optional(),
     /**
      * Runtime IDs this runtime depends on for a successful upstream output.
      * When any listed upstream ran with `status !== 'success'` in the same

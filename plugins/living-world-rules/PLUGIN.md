@@ -12,6 +12,13 @@ trigger:
 capabilities:
   - living-world-rules
   - world-info
+tags:
+  - role:world-rules
+  - data:world-data
+  - data:lorebook
+  - cost:function
+  - ui:right-panel
+  - ui:manual-action
 dataSchemas:
   rules:
     schemaVersion: 1
@@ -21,6 +28,7 @@ dataSchemas:
 ui:
   right:
     - ./ui/living-world-rules-panel.json
+relations: {}
 ---
 
 # Living World Rules

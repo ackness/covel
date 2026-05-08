@@ -143,6 +143,35 @@ export interface PluginDataSchemaDecl {
   readonly description?: string;
 }
 
+// ── Plugin catalogue metadata ───────────────────────────────────
+
+export type PluginTag = string;
+
+export interface PluginRelationTarget {
+  readonly plugin?: string;
+  readonly runtime?: string;
+  readonly capability?: string;
+  readonly tag?: PluginTag;
+}
+
+export interface PluginRelation {
+  readonly type?: "requires" | "recommends" | "conflicts" | "provides";
+  readonly target?: string | PluginRelationTarget;
+  readonly plugin?: string;
+  readonly runtime?: string;
+  readonly capability?: string;
+  readonly tag?: PluginTag;
+  readonly optional?: boolean;
+  readonly reason?: import("./world.js").I18nText;
+}
+
+export interface PluginRelations {
+  readonly provides?: readonly (string | PluginRelation)[];
+  readonly requires?: readonly (string | PluginRelation)[];
+  readonly recommends?: readonly (string | PluginRelation)[];
+  readonly conflicts?: readonly (string | PluginRelation)[];
+}
+
 // ── Tool declarations ────────────────────────────────────────────
 
 export interface ToolsConfig {
@@ -354,6 +383,18 @@ export interface RuntimeManifest {
    * Examples: `['narrative']`, `['world-data-provider']`, `['image-generation']`.
    */
   readonly capabilities?: readonly string[];
+  /**
+   * User-facing catalogue tags for filtering and scenario matching.
+   * These complement `capabilities`: capabilities are machine-discovery
+   * contracts, tags are faceted metadata for players and pack resolution.
+   */
+  readonly tags?: readonly PluginTag[];
+  /**
+   * Optional dependency/conflict/provided-feature metadata used by plugin
+   * selection UIs and future resolvers. Runtime execution semantics still
+   * come from triggers, input.inject, upstreamRequired, and scheduler config.
+   */
+  readonly relations?: PluginRelations;
   /** Enables lifecycle hook declarations for this manifest. */
   readonly hookManifestVersion?: 1;
   /**

@@ -110,6 +110,8 @@ export interface RuntimeSummary {
   providerTag?: string;
   outputKind?: string;
   capabilities?: string[];
+  tags?: string[];
+  relations?: Record<string, unknown>;
 }
 
 export interface ToolSummary {
@@ -127,6 +129,9 @@ export interface PackageSummary {
   runtimes?: RuntimeSummary[];
   tools?: ToolSummary[];
   requires?: string[];
+  capabilities?: string[];
+  tags?: string[];
+  relations?: Record<string, unknown>;
   version?: string;
   author?: string;
   /** User-editable settings declared in PLUGIN.md frontmatter. */
@@ -645,6 +650,8 @@ export interface SessionPluginInfo {
   outputKind?: string;
   /** Capability tags declared by this plugin (e.g. 'image-generation', 'world-data-provider'). */
   capabilities?: string[];
+  tags?: string[];
+  relations?: Record<string, unknown>;
   trigger?: {
     type: string;
     interval?: number;
@@ -675,6 +682,8 @@ export interface SessionPluginInfo {
     outputKind?: string;
     trigger?: { type: string; topic?: string };
     capabilities?: string[];
+    tags?: string[];
+    relations?: Record<string, unknown>;
   }>;
 }
 
@@ -698,6 +707,8 @@ export async function listSessionPlugins(
     displayName: (p.name ?? p.id) as I18nText,
     isActive: Boolean(p.active),
     capabilities: p.capabilities as string[] | undefined,
+    tags: p.tags as string[] | undefined,
+    relations: p.relations as Record<string, unknown> | undefined,
     pluginType: p.pluginType as string | undefined,
     source: p.source as SessionPluginInfo["source"],
     runtimes: p.runtimes as SessionPluginInfo["runtimes"],

@@ -619,8 +619,12 @@ sessionRoutes.get("/:id/plugins", async (c) => {
     // existing UI surface working — `isImageGenActive` and similar gates only
     // need to know "does this plugin do X".
     const caps: string[] = [];
+    const tags: string[] = [];
     if (entry.manifest?.manifest.capabilities) {
       caps.push(...entry.manifest.manifest.capabilities);
+    }
+    for (const tag of entry.summary.tags ?? []) {
+      if (!tags.includes(tag)) tags.push(tag);
     }
     // Per-runtime breakdown lets framework code discover the *right* entry
     // runtime without hardcoding plugin/runtime names. Inline buttons (e.g.
@@ -633,6 +637,8 @@ sessionRoutes.get("/:id/plugins", async (c) => {
       outputKind?: string;
       trigger?: { type: string; topic?: string };
       capabilities?: string[];
+      tags?: string[];
+      relations?: unknown;
     }> = [];
     for (const [, loaded] of entry.loadedRuntimes) {
       const m = loaded.manifest;
@@ -640,6 +646,9 @@ sessionRoutes.get("/:id/plugins", async (c) => {
         for (const c of m.capabilities) {
           if (!caps.includes(c)) caps.push(c);
         }
+      }
+      for (const tag of m.tags ?? []) {
+        if (!tags.includes(tag)) tags.push(tag);
       }
       runtimes.push({
         id: m.name,
@@ -657,6 +666,8 @@ sessionRoutes.get("/:id/plugins", async (c) => {
         ...(m.capabilities && m.capabilities.length > 0
           ? { capabilities: [...m.capabilities] }
           : {}),
+        ...(m.tags && m.tags.length > 0 ? { tags: [...m.tags] } : {}),
+        ...(m.relations ? { relations: m.relations } : {}),
       });
     }
     // Authoritative trust source — derived from the discovery directory,
@@ -674,6 +685,10 @@ sessionRoutes.get("/:id/plugins", async (c) => {
       source: trust.source,
       active: active.includes(entry.id),
       ...(caps.length > 0 ? { capabilities: caps } : {}),
+      ...(tags.length > 0 ? { tags } : {}),
+      ...(entry.summary.relations
+        ? { relations: entry.summary.relations }
+        : {}),
       ...(runtimes.length > 0 ? { runtimes } : {}),
     };
   });

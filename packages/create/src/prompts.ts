@@ -40,6 +40,9 @@ supportedLocales: [${locale}]
 tags: [<you decide genre tags>]
 requiredPlugins: []   # list plugin IDs the world depends on (if any)
 recommendedPlugins: [] # list plugin IDs that enhance the world (if any)
+pluginPolicy:
+  preset: traditional-story # traditional-story or dialogue-mode
+  preferTags: []            # optional plugin catalogue tags such as mode:dialogue
 
 dimensions:
   geography:

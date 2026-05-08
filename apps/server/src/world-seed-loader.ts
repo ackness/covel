@@ -233,6 +233,9 @@ export async function loadSingleWorld(
     | Record<string, string>
     | undefined;
   const worldDataPath = manifest.worldData as string | undefined;
+  const pluginPolicy = manifest.pluginPolicy as
+    | Record<string, unknown>
+    | undefined;
 
   // Merge inline + external dimensions (external wins for same key)
   const inlineDims = (manifest.dimensions as Record<string, unknown>) ?? {};
@@ -268,6 +271,7 @@ export async function loadSingleWorld(
     requiredPlugins: manifest.requiredPlugins as string[] | undefined,
     recommendedPlugins: manifest.recommendedPlugins as string[] | undefined,
     excludedPlugins: manifest.excludedPlugins as string[] | undefined,
+    pluginPolicy,
     worldDataPath,
     characterBlueprintSources,
     characterBlueprints,

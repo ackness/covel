@@ -485,11 +485,24 @@ export function createMiscApiRoutes(
         continue;
       }
 
-      const liveSummary = summaryMap.get(entry.id) ?? entry.summary;
       const liveManifests =
         manifestMap.get(entry.id) ??
         entry.manifests ??
         (entry.manifest ? [entry.manifest] : []);
+      const liveSummary = summaryMap.get(entry.id) ?? entry.summary;
+      const runtimeSummaryTags = [
+        ...new Set(liveManifests.flatMap((m) => [...(m.manifest.tags ?? [])])),
+      ].sort((a, b) => a.localeCompare(b));
+      const summaryTags =
+        liveSummary.tags && liveSummary.tags.length > 0
+          ? liveSummary.tags
+          : entry.summary.tags && entry.summary.tags.length > 0
+            ? entry.summary.tags
+            : runtimeSummaryTags;
+      const summaryRelations =
+        liveSummary.relations ??
+        entry.summary.relations ??
+        liveManifests[0]?.manifest.relations;
 
       const runtimes = liveManifests.map((m) => ({
         id: m.manifest.name,
@@ -503,7 +516,20 @@ export function createMiscApiRoutes(
         ...(m.manifest.capabilities && m.manifest.capabilities.length > 0
           ? { capabilities: [...m.manifest.capabilities] }
           : {}),
+        ...(m.manifest.tags && m.manifest.tags.length > 0
+          ? { tags: [...m.manifest.tags] }
+          : {}),
+        ...(m.manifest.relations ? { relations: m.manifest.relations } : {}),
       }));
+
+      const capabilities = [
+        ...new Set(
+          liveManifests.flatMap((m) => [...(m.manifest.capabilities ?? [])]),
+        ),
+      ].sort((a, b) => a.localeCompare(b));
+      const tags = [...new Set([...summaryTags, ...runtimeSummaryTags])].sort(
+        (a, b) => a.localeCompare(b),
+      );
 
       const tools = liveManifests.flatMap((m) => [
         ...(m.manifest.tools?.builtin ?? []).map((t) => ({
@@ -533,6 +559,9 @@ export function createMiscApiRoutes(
         pluginType: liveSummary.pluginType,
         source: getPluginTrustInfo(entry.id, entry.source).source,
         enabled: true,
+        ...(capabilities.length > 0 ? { capabilities } : {}),
+        ...(tags.length > 0 ? { tags } : {}),
+        ...(summaryRelations ? { relations: summaryRelations } : {}),
         runtimes,
         tools,
         ...(userSettings.length > 0 ? { userSettings } : {}),

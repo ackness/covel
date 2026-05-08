@@ -30,6 +30,7 @@ const WORLD_MANIFEST_ROOT_KEYS = new Set([
   "requiredPlugins",
   "recommendedPlugins",
   "excludedPlugins",
+  "pluginPolicy",
   "worldData",
   "characterBlueprintSources",
   "dimensions",

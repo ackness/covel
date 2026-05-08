@@ -229,8 +229,13 @@ describe("listPackages", () => {
               kind: "agent",
               priority: 500,
               trigger: { type: "event", topic: "story.ready" },
+              tags: ["mode:traditional-story", "role:narrator"],
+              relations: { provides: ["narrative-engine"] },
             },
           ],
+          capabilities: ["narrative"],
+          tags: ["mode:traditional-story", "role:narrator"],
+          relations: { provides: ["narrative-engine"] },
         },
       ],
       loadErrors: [],
@@ -239,9 +244,21 @@ describe("listPackages", () => {
     const result = await listPackages();
 
     expect(result.packages[0]?.source).toBe("builtin");
+    expect(result.packages[0]?.capabilities).toEqual(["narrative"]);
+    expect(result.packages[0]?.tags).toEqual([
+      "mode:traditional-story",
+      "role:narrator",
+    ]);
+    expect(result.packages[0]?.relations).toEqual({
+      provides: ["narrative-engine"],
+    });
     expect(result.packages[0]?.runtimes?.[0]?.trigger).toEqual({
       mode: "event",
       topic: "story.ready",
     });
+    expect(result.packages[0]?.runtimes?.[0]?.tags).toEqual([
+      "mode:traditional-story",
+      "role:narrator",
+    ]);
   });
 });

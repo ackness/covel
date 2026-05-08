@@ -392,7 +392,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 | 方法 | 路径                           | 描述                                                                                    |
 | ---- | ------------------------------ | --------------------------------------------------------------------------------------- |
 | GET  | `/api/presets`                 | 列出配置的模型预设                                                                      |
-| GET  | `/api/packages`                | 列出已加载插件包（含 runtime/tool/`userSettings` 信息）                                 |
+| GET  | `/api/packages`                | 列出已加载插件包（含 runtime/tool/`userSettings`/`tags`/`relations` 信息）              |
 | GET  | `/api/commands`                | 列出注册的命令                                                                          |
 | GET  | `/api/block-schemas`           | 列出插件 block schema                                                                   |
 | GET  | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件 |
@@ -538,6 +538,11 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
         "requiredPlugins": ["pregame", "world-init", "char-creator"],
         "recommendedPlugins": ["narrator", "guide"],
         "excludedPlugins": ["chat-mode-narrator"],
+        "pluginPolicy": {
+          "preset": "traditional-story",
+          "preferTags": ["mode:traditional-story"],
+          "avoidTags": ["mode:dialogue"]
+        },
         "worldDataPath": "data/world.data.yaml",
         "worldData": {
           "schemaVersion": 1,
@@ -584,6 +589,11 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
     "requiredPlugins": ["pregame", "world-init", "char-creator"],
     "recommendedPlugins": ["narrator", "guide"],
     "excludedPlugins": ["chat-mode-narrator"],
+    "pluginPolicy": {
+      "preset": "traditional-story",
+      "preferTags": ["mode:traditional-story"],
+      "avoidTags": ["mode:dialogue"]
+    },
     "worldDataPath": "data/world.data.yaml",
     "worldData": {
       "schemaVersion": 1,
@@ -852,6 +862,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 - `metadata.requiredPlugins`：准备页锁定启用。
 - `metadata.recommendedPlugins`：准备页默认启用。
 - `metadata.excludedPlugins`：准备页默认关闭。
+- `metadata.pluginPolicy`：准备页组合包策略。可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins`、`packs`；旧的三组插件字段仍兼容并会参与合并。
 - `metadata.characterBlueprints`：创建 session 时自动导入到 `character-blueprint` 插件数据，并实例化为 NPC character。
 
 **响应:**
@@ -1582,7 +1593,7 @@ rpc:
 
 #### `GET /api/plugins`
 
-列出所有已加载的插件。`name` 与 `description` 是 `I18nText`（可能是字符串或 `{ "<locale>": "..." }` 字典）。`capabilities` 为该插件所有 runtime 声明的 capability 并集；`outputKind` 取首个 runtime 的输出类别（`story` / `plugin` / `system`）；`source` 是框架根据加载路径派定的信任层级（`builtin` / `official` / `community`）。
+列出所有已加载的插件。`name` 与 `description` 是 `I18nText`（可能是字符串或 `{ "<locale>": "..." }` 字典）。`capabilities` 为该插件所有 runtime 声明的 capability 并集；`tags` 是玩家/作者筛选标签；`relations` 是目录关系元数据；`outputKind` 取首个 runtime 的输出类别（`story` / `plugin` / `system`）；`source` 是框架根据加载路径派定的信任层级（`builtin` / `official` / `community`）。
 
 UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` 派发，**不要**根据 `id` 字符串硬编码（违反框架/插件隔离规则）。
 
@@ -1600,6 +1611,11 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
       "status": "active",
       "source": "builtin",
       "capabilities": ["narrative"],
+      "tags": ["mode:traditional-story", "role:narrator", "cost:llm"],
+      "relations": {
+        "provides": ["narrative-engine"],
+        "conflicts": ["chat-mode-narrator"]
+      },
       "outputKind": "story"
     },
     {
@@ -1611,6 +1627,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
       "status": "active",
       "source": "community",
       "capabilities": ["image-generation", "image-prompt", "manual-invoke"],
+      "tags": ["role:image", "cost:llm"],
       "outputKind": "plugin"
     }
   ]
@@ -1639,6 +1656,11 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
   "status": "active",
   "source": "builtin",
   "capabilities": ["narrative"],
+  "tags": ["mode:traditional-story", "role:narrator", "cost:llm"],
+  "relations": {
+    "provides": ["narrative-engine"],
+    "conflicts": ["chat-mode-narrator"]
+  },
   "outputKind": "story"
 }
 ```
@@ -1736,7 +1758,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 #### `GET /api/sessions/:id/plugins`
 
-列出会话的活跃插件和所有可用插件。
+列出会话的活跃插件和所有可用插件。`available[]` 同样暴露插件 `capabilities`、`tags`、`relations`，供前端筛选和组合包状态说明使用。
 
 **响应:**
 
@@ -1750,7 +1772,12 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
       "description": "主要叙事生成插件",
       "pluginType": "runtime",
       "active": true,
-      "capabilities": ["narrative"]
+      "capabilities": ["narrative"],
+      "tags": ["mode:traditional-story", "role:narrator", "cost:llm"],
+      "relations": {
+        "provides": ["narrative-engine"],
+        "conflicts": ["chat-mode-narrator"]
+      }
     }
   ]
 }

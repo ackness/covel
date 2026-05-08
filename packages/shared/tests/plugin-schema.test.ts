@@ -62,4 +62,26 @@ describe("plugin manifest dataSchemas", () => {
       }),
     ).toThrow(/plugin-relative \.json path/);
   });
+
+  it("accepts catalogue tags and relation metadata", () => {
+    const manifest = runtimeManifestSchema.parse({
+      name: "dialogue-narrator",
+      description: "Dialogue narrator",
+      priority: 500,
+      capabilities: ["narrative"],
+      tags: ["mode:dialogue", "role:narrator", "cost:llm"],
+      relations: {
+        provides: ["narrative-engine"],
+        requires: [{ capability: "scene-cast", reason: "Needs cast state" }],
+        conflicts: ["narrator"],
+      },
+    });
+
+    expect(manifest.tags).toEqual([
+      "mode:dialogue",
+      "role:narrator",
+      "cost:llm",
+    ]);
+    expect(manifest.relations?.provides).toEqual(["narrative-engine"]);
+  });
 });

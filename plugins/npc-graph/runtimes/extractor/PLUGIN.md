@@ -10,6 +10,11 @@ priority: 600
 model: plugin
 timeoutMs: 240000
 capabilities: [npc-graph, relationship-tracking]
+tags:
+  - role:memory
+  - data:relationship-graph
+  - cost:llm
+  - ui:right-panel
 outputKind: system
 trigger:
   type: scheduled
@@ -33,6 +38,7 @@ tools:
 ui:
   right:
     - ./ui/npc-graph-panel.json
+relations: {}
 postHistory:
   role: system
   content: |

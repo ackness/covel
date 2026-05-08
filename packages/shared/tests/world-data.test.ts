@@ -17,6 +17,34 @@ describe("world data schemas", () => {
     expect(result.success).toBe(true);
   });
 
+  it("allows world.yaml to declare pluginPolicy presets and tag preferences", () => {
+    const result = worldManifestSchema.safeParse({
+      schemaVersion: "1.0",
+      id: "policy-world",
+      name: "Policy World",
+      summary: "World with plugin policy",
+      defaultLocale: "zh-CN",
+      supportedLocales: ["zh-CN"],
+      tags: ["school"],
+      pluginPolicy: {
+        preset: "dialogue-mode",
+        preferTags: ["mode:dialogue", "role:character"],
+        avoidTags: ["mode:traditional-story"],
+        requireCapabilities: ["narrative"],
+        packs: [
+          {
+            id: "custom-dialogue",
+            label: "Custom Dialogue",
+            plugins: ["chat-mode-narrator", "scene-cast"],
+            excludedPlugins: ["narrator"],
+          },
+        ],
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it("validates a minimal v1 descriptor", () => {
     const result = worldDataDescriptorSchema.safeParse({
       schemaVersion: 1,

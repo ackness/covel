@@ -10,12 +10,22 @@ timeoutMs: 240000
 callTimeoutMs: 120000
 outputKind: story
 capabilities: [narrative]
+tags:
+  - mode:traditional-story
+  - role:narrator
+  - data:relationship-graph
+  - cost:llm
 promptVersion: 2
 trigger:
   type: auto
 tools:
   builtin:
     - world-dimension-get
+relations:
+  provides:
+    - narrative-engine
+  conflicts:
+    - chat-mode-narrator
 input:
   inject:
     - from: npc-graph/rag-retriever

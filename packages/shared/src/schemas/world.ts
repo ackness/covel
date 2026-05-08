@@ -256,6 +256,38 @@ export const DIMENSION_KEYS = Object.keys(
 
 // ── World Manifest (world.yaml root) ────────────────────────────
 
+const pluginPackSchema = z
+  .object({
+    id: z
+      .string()
+      .min(1)
+      .regex(/^[a-z][a-z0-9-]*$/, {
+        message:
+          'plugin pack id must be lowercase with hyphens (e.g. "dialogue-mode")',
+      }),
+    label: i18nTextSchema,
+    description: i18nTextSchema.optional(),
+    plugins: z.array(z.string().min(1)).optional(),
+    optionalPlugins: z.array(z.string().min(1)).optional(),
+    excludedPlugins: z.array(z.string().min(1)).optional(),
+    tags: z.array(z.string().min(1)).optional(),
+    reason: i18nTextSchema.optional(),
+  })
+  .strict();
+
+const pluginPolicySchema = z
+  .object({
+    preset: z.string().min(1).optional(),
+    packs: z.array(pluginPackSchema).optional(),
+    preferTags: z.array(z.string().min(1)).optional(),
+    avoidTags: z.array(z.string().min(1)).optional(),
+    requireCapabilities: z.array(z.string().min(1)).optional(),
+    requiredPlugins: z.array(z.string().min(1)).optional(),
+    recommendedPlugins: z.array(z.string().min(1)).optional(),
+    excludedPlugins: z.array(z.string().min(1)).optional(),
+  })
+  .strict();
+
 export const worldManifestSchema = z
   .object({
     schemaVersion: z.string().min(1),
@@ -274,6 +306,7 @@ export const worldManifestSchema = z
     requiredPlugins: z.array(z.string()).optional(),
     recommendedPlugins: z.array(z.string()).optional(),
     excludedPlugins: z.array(z.string()).optional(),
+    pluginPolicy: pluginPolicySchema.optional(),
     worldData: z.string().min(1).optional(),
     characterBlueprintSources: z.array(z.string().min(1)).optional(),
     dimensions: worldDimensionsSchema.optional(),

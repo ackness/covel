@@ -39,6 +39,7 @@ export {
   postHistoryDeclSchema,
   rpcActionDeclSchema,
   rpcDeclMapSchema,
+  pluginRelationsSchema,
   runtimeManifestSchema,
 } from "./schemas/plugin.js";
 

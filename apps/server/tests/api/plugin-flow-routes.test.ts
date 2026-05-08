@@ -79,6 +79,9 @@ describe("plugin flow routes", () => {
       runtimeType: "agent",
       priority: 123,
       trigger: { type: "scheduled", interval: 3 },
+      capabilities: ["narrative"],
+      tags: ["mode:dialogue", "role:narrator"],
+      relations: { provides: ["narrative-engine"] },
     };
     const parsed: ParsedPluginMd = {
       manifest,
@@ -110,16 +113,28 @@ describe("plugin flow routes", () => {
       packages: Array<{
         name: string;
         source?: string;
+        capabilities?: string[];
+        tags?: string[];
+        relations?: Record<string, unknown>;
         runtimes?: Array<{
           trigger: { mode?: string; type?: string; interval?: number };
+          tags?: string[];
+          relations?: Record<string, unknown>;
         }>;
       }>;
     };
     const pkg = body.packages.find((item) => item.name === "test-package");
     expect(pkg?.source).toBe("builtin");
+    expect(pkg?.capabilities).toEqual(["narrative"]);
+    expect(pkg?.tags).toEqual(["mode:dialogue", "role:narrator"]);
+    expect(pkg?.relations).toEqual({ provides: ["narrative-engine"] });
     expect(pkg?.runtimes?.[0]?.trigger).toEqual({
       mode: "scheduled",
       interval: 3,
     });
+    expect(pkg?.runtimes?.[0]?.tags).toEqual([
+      "mode:dialogue",
+      "role:narrator",
+    ]);
   });
 });

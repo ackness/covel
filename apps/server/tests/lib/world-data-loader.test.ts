@@ -11,6 +11,35 @@ async function makeTempWorld(): Promise<string> {
 }
 
 describe("world data loader", () => {
+  it("passes pluginPolicy from world.yaml into world metadata", async () => {
+    const root = await makeTempWorld();
+    await writeFile(
+      path.join(root, "world.yaml"),
+      `schemaVersion: "1.0"
+id: policy-world
+name: Policy World
+summary: World with plugin policy
+defaultLocale: zh-CN
+supportedLocales: [zh-CN]
+pluginPolicy:
+  preset: dialogue-mode
+  preferTags:
+    - mode:dialogue
+  avoidTags:
+    - mode:traditional-story
+`,
+    );
+    await writeFile(path.join(root, "WORLD.md"), "# Policy World");
+
+    const record = await loadSingleWorld(root);
+
+    expect(record?.metadata?.pluginPolicy).toEqual({
+      preset: "dialogue-mode",
+      preferTags: ["mode:dialogue"],
+      avoidTags: ["mode:traditional-story"],
+    });
+  });
+
   it("builds a lightweight metadata summary and projects world metadata", async () => {
     const root = await makeTempWorld();
     await mkdir(path.join(root, "data"), { recursive: true });

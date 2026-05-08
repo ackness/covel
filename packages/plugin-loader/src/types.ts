@@ -4,6 +4,8 @@
 
 import type {
   PluginDataSchemaDecl,
+  PluginRelations,
+  PluginTag,
   MediaRef,
   PluginType,
   RuntimeManifest,
@@ -67,6 +69,8 @@ export interface PluginSummary {
   readonly description: I18nText;
   readonly pluginType: PluginType;
   readonly runtimeCount: number;
+  readonly tags?: readonly PluginTag[];
+  readonly relations?: PluginRelations;
 }
 
 /**

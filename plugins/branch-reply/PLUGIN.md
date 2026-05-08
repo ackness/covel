@@ -11,9 +11,15 @@ trigger:
   type: manual
 capabilities:
   - branch-reply
+tags:
+  - role:branching
+  - cost:function
+  - ui:message-block
+  - ui:manual-action
 ui:
   message:
     - ./ui/branch-reply-block.json
+relations: {}
 ---
 
 # Branch Reply

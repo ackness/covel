@@ -13,6 +13,12 @@ model: plugin
 outputKind: system
 timeoutMs: 180000
 capabilities: [world-data-provider]
+tags:
+  - role:pre-game
+  - data:world-data
+  - data:characters
+  - cost:llm
+  - ui:right-panel
 guard: ../../guard.js
 trigger:
   type: scheduled
@@ -30,6 +36,7 @@ ui:
     - ./ui/world-overview.json
     - ./ui/world-entries.json
     - ./ui/world-schema.json
+relations: {}
 ---
 
 你是世界维度初始化 agent。

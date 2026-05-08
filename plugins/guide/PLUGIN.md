@@ -13,6 +13,12 @@ model: plugin
 outputKind: system
 timeoutMs: 120000
 promptVersion: 2
+tags:
+  - mode:traditional-story
+  - role:guide
+  - role:quick-reply
+  - cost:llm
+  - ui:message-block
 trigger:
   type: scheduled
   interval: 1
@@ -32,6 +38,7 @@ tools:
 ui:
   message:
     - ./ui/action-guide-block.json
+relations: {}
 postHistory:
   role: system
   content: |

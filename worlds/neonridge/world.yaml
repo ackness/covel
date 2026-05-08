@@ -26,4 +26,13 @@ excludedPlugins:
   - scene-cast
   - scene-prompts
   - branch-reply
+pluginPolicy:
+  preset: traditional-story
+  preferTags:
+    - mode:traditional-story
+    - role:codex
+    - role:retrieval
+    - role:world-rules
+  avoidTags:
+    - mode:dialogue
 worldData: data/world.data.yaml

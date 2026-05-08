@@ -75,6 +75,8 @@ trigger:
 | `model`                  | 否   | string                        | 使用的模型 slot（如 `ds`、`fast`、`balance`）。不填则用 `default`                                      |
 | `outputKind`             | 否   | `story` / `plugin` / `system` | 输出在 UI 中的展示方式。`story` 显示在主聊天流，`plugin`（默认）可能被隐藏，`system` 不展示            |
 | `capabilities`           | 否   | string[]                      | 能力标签，框架通过能力发现插件而非 ID。如 `[narrative]`、`[world-data-provider]`、`[image-generation]` |
+| `tags`                   | 否   | string[]                      | 玩家/作者筛选标签，用于准备页搜索、分组和世界 `pluginPolicy` 匹配。如 `[mode:dialogue, role:narrator]` |
+| `relations`              | 否   | object                        | 插件目录关系，可含 `provides`、`requires`、`conflicts`、`recommends`                                   |
 | `trigger`                | 否   | object                        | 触发配置（见下方详解）                                                                                 |
 | `tools`                  | 否   | object                        | 工具声明（见[进阶指南](./plugin-authoring-agent.md)）                                                  |
 | `input`                  | 否   | object                        | 输入注入声明（见[进阶指南](./plugin-authoring-agent.md)）                                              |
@@ -548,6 +550,28 @@ excludedPlugins:
   - scene-cast
   - scene-prompts
   - branch-reply
+pluginPolicy:
+  preset: traditional-story
+  preferTags:
+    - mode:traditional-story
+  avoidTags:
+    - mode:dialogue
+  packs:
+    - id: focused-story
+      label: 专注故事
+      description: 主叙事器加低成本状态插件。
+      plugins:
+        - pregame
+        - world-init
+        - char-creator
+        - narrator
+      optionalPlugins:
+        - memory
+      excludedPlugins:
+        - chat-mode-narrator
+      tags:
+        - mode:traditional-story
+      reason: 适合长篇探索和较少插件干扰的开局。
 
 worldData: data/world.data.yaml
 ```
@@ -580,7 +604,7 @@ sources:
 
 **WORLD.md** 是默认的世界观长文本，框架通过 `{{ world.lore }}` 注入到插件提示词中。支持多语言：`WORLD.zh.md`、`WORLD.en.md`。
 
-**`requiredPlugins`** 是世界运行依赖，前端准备页会锁定这些插件。**`recommendedPlugins`** 会在准备页默认选中，**`excludedPlugins`** 会在准备页默认关闭。创建会话时，前端会把最终选择的插件列表传给 `POST /api/sessions`。
+**`requiredPlugins`** 是世界运行依赖，前端准备页会锁定这些插件。**`recommendedPlugins`** 会在准备页默认选中，**`excludedPlugins`** 会在准备页默认关闭。旧字段仍兼容；新 **`pluginPolicy`** 用于表达场景意图和组合包，可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins`、`packs`。内置前端组合包有 `traditional-story`、`dialogue-mode`、`low-cost`，世界可以用 `preset` 引用，也可以通过 `packs` 自定义。创建会话时，前端会把最终选择的插件列表传给 `POST /api/sessions`。
 
 **`worldData`** 指向统一数据索引。`to: world:metadata.dimensions` 会把维度写入 world metadata；`to: plugin:character-blueprint/blueprints` 加上 `effects: [characters]` 会在创建 session 时导入角色卡、实例化 NPC，并镜像到角色面板。运行中也可以在 `character-blueprint` 右侧面板用表单创建蓝图；完整迁移或调试时使用 JSON 导入入口。
 
@@ -607,6 +631,14 @@ description: 故事引导插件，在叙事后为玩家提供 2-4 个行动选�
 pluginType: plugin
 priority: 600
 model: plugin
+capabilities:
+  - guide
+tags:
+  - mode:traditional-story
+  - role:guide
+relations:
+  recommends:
+    - narrator
 trigger:
   type: auto
 tools:

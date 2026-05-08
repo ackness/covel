@@ -11,6 +11,10 @@ model: plugin
 outputKind: system
 timeoutMs: 120000
 promptVersion: 2
+tags:
+  - role:character
+  - data:characters
+  - cost:llm
 trigger:
   type: scheduled
   interval: 1
@@ -35,6 +39,7 @@ dataSchemas:
     acceptsWorldData: true
     schema: ./schemas/characters.schema.json
     description: Importable session character records for the character panel.
+relations: {}
 postHistory:
   role: system
   content: |

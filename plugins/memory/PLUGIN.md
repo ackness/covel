@@ -7,11 +7,16 @@ pluginType: core-plugin
 outputKind: system
 capabilities:
   - memory-panel
+tags:
+  - role:memory
+  - cost:ui-only
+  - ui:right-panel
 trigger:
   type: manual
 ui:
   right:
     - ./ui/memory-panel.json
+relations: {}
 ---
 
 纯 UI 插件。核心记忆的读写由框架 Memory System（@covel/memory）在每轮结束后自动完成，本插件仅声明右侧面板。

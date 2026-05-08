@@ -234,6 +234,37 @@
     "loreSummary": "{{count}} chars",
     "loreSummaryHint": "{{count}} characters · click to edit world lore",
     "pluginsSummary": "{{pluginCount}} plugins, {{runtimeCount}} runtimes",
+    "pluginsSelected": "plugins selected",
+    "searchPlugins": "Search plugins, tags, capabilities",
+    "pluginGroups": {
+      "core": "Core",
+      "setup": "Setup",
+      "traditional": "Traditional story",
+      "dialogue": "Dialogue mode",
+      "characters": "Characters",
+      "memory": "Memory & retrieval",
+      "guidance": "Guidance",
+      "utility": "Utility"
+    },
+    "pluginPacks": {
+      "traditional-story": {
+        "label": "Traditional Story",
+        "description": "Narrator, suggestions, codex, and relationship memory for long-form exploration."
+      },
+      "dialogue-mode": {
+        "label": "Dialogue Mode",
+        "description": "Dialogue-first narration, scene cast state, quick replies, and character profiles."
+      },
+      "low-cost": {
+        "label": "Low Cost",
+        "description": "Keeps the core loop and function plugins while reducing downstream LLM calls."
+      }
+    },
+    "recommendationReasons": {
+      "requiredByWorld": "Required by world",
+      "packOptional": "Pack optional",
+      "recommendedByWorld": "Recommended by world"
+    },
     "exportDimensions": "Export Dimensions",
     "importDimensions": "Import Dimensions",
     "dimensionsImported": "Imported successfully",
@@ -263,7 +294,6 @@
     "suspensionAgoHours": "{{count}}h ago",
     "suspensionAgoDays": "{{count}}d ago",
     "memoryStoreWarning": "Data lost on restart",
-    "pluginsSelected": "plugins selected",
     "worldDataPreflight": {
       "title": "World Data",
       "loading": "Checking",
@@ -619,6 +649,15 @@
     "slotsMissing": "Configure model slots in llm.toml to override",
     "useRuntimeDefault": "Runtime default: {{slot}}",
     "useRuntimeDefaultWith": "Runtime default: {{slot}} ({{value}})",
+    "providerSlot": "provider slot",
+    "providerSlotMissingTitle": "Add [covel.{{slot}}] to llm.toml, or change {{plugin}}.modelPresetId in Settings > Plugins.",
+    "providerSlotMissingDetail": "Configure [covel.{{slot}}] in llm.toml, or change modelPresetId in Settings > Plugins > {{plugin}}.",
+    "providerSlotSettingDetail": "from plugin setting modelPresetId; edit in Settings > Plugins > {{plugin}}",
+    "slotMissingTitle": "Add [covel.{{slot}}] to llm.toml",
+    "slotMissingShort": "missing [covel.{{slot}}]",
+    "runtimeDefaultSummary": "runtime default · {{slot}}",
+    "runtimeDefaultSummaryWithModel": "runtime default · {{slot}} · {{model}}",
+    "runtimeDefaultMissing": "runtime default · {{slot}} (missing)",
     "invalidPanelSpec": "Invalid panel spec",
     "source": {
       "builtin": {

@@ -8,10 +8,14 @@ priority: 10
 runtimeType: function
 outputKind: system
 handler: ./handler.js
+tags:
+  - role:pre-game
+  - cost:function
 trigger:
   type: scheduled
   interval: 1
   maxTriggerCount: 1
+relations: {}
 ---
 
 # Pre-Game 初始化插件

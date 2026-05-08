@@ -11,6 +11,14 @@ trigger:
   type: manual
 capabilities:
   - character-presence
+tags:
+  - role:character
+  - data:world-data
+  - data:characters
+  - data:media-assets
+  - cost:function
+  - ui:right-panel
+  - ui:manual-action
 dataSchemas:
   presence:
     schemaVersion: 1
@@ -25,6 +33,7 @@ dataSchemas:
 ui:
   right:
     - ./ui/character-presence-panel.json
+relations: {}
 ---
 
 # Character Presence

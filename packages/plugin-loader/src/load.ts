@@ -5,7 +5,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
-import type { PluginType } from "@covel/shared";
+import { pluginRelationsSchema } from "@covel/shared";
+import type { PluginRelations, PluginTag, PluginType } from "@covel/shared";
 import type {
   PluginDiscoveryResult,
   PluginSummary,
@@ -139,12 +140,17 @@ export async function loadPluginSummary(
   const pluginType: PluginType =
     data.pluginType === "core-plugin" ? "core-plugin" : "plugin";
 
+  const tags = stringArray(data.tags);
+  const relations = parseSummaryRelations(data.relations);
+
   return {
     id: discovery.id,
     name,
     description,
     pluginType,
     runtimeCount: discovery.pluginMdPaths.length,
+    ...(tags.length > 0 ? { tags: tags as PluginTag[] } : {}),
+    ...(relations ? { relations } : {}),
   };
 }
 
@@ -186,6 +192,17 @@ function resolveRuntimeDir(
   const slashIdx = runtimeName.indexOf("/");
   const subName = slashIdx >= 0 ? runtimeName.slice(slashIdx + 1) : runtimeName;
   return path.join(discovery.rootPath, "runtimes", subName);
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function parseSummaryRelations(value: unknown): PluginRelations | undefined {
+  const parsed = pluginRelationsSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
 /**

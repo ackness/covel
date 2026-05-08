@@ -10,6 +10,12 @@ timeoutMs: 240000
 callTimeoutMs: 120000
 outputKind: story
 capabilities: [narrative, chat-mode]
+tags:
+  - mode:dialogue
+  - role:narrator
+  - data:characters
+  - data:relationship-graph
+  - cost:llm
 promptVersion: 2
 trigger:
   type: auto
@@ -21,6 +27,13 @@ input:
     - from: npc-graph/rag-retriever
       field: npcContext
       as: "<npc-relationships>"
+relations:
+  provides:
+    - narrative-engine
+  conflicts:
+    - narrator
+  requires:
+    - scene-cast
 userSettings:
   - key: dialogueRatio
     type: number

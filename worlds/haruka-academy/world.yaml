@@ -28,4 +28,12 @@ excludedPlugins:
   - narrator
   - guide
   - codex
+pluginPolicy:
+  preset: dialogue-mode
+  preferTags:
+    - mode:dialogue
+    - role:character
+    - role:world-rules
+  avoidTags:
+    - mode:traditional-story
 worldData: data/world.data.yaml

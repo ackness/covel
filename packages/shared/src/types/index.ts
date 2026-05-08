@@ -44,6 +44,10 @@ export type {
   ToolsConfig,
   ConfigFieldType,
   PluginConfigField,
+  PluginRelation,
+  PluginRelations,
+  PluginRelationTarget,
+  PluginTag,
   UISlotType,
   UISpec,
   HookEventName,
@@ -299,4 +303,6 @@ export type {
   WorldMechanics,
   WorldStartingConditions,
   WorldDimensions,
+  WorldPluginPack,
+  WorldPluginPolicy,
 } from "./world.js";

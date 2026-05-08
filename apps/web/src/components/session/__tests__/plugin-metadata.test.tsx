@@ -86,6 +86,59 @@ describe("session plugin metadata UI", () => {
     expect(selected.has("guide")).toBe(false);
   });
 
+  it("uses world pluginPolicy tags to compute session prep defaults", () => {
+    const packages: PackageSummary[] = [
+      {
+        name: "pregame",
+        pluginType: "core-plugin",
+        source: "builtin",
+        enabled: true,
+        tags: ["role:pre-game"],
+      },
+      {
+        name: "chat-mode-narrator",
+        pluginType: "plugin",
+        source: "builtin",
+        enabled: true,
+        tags: ["mode:dialogue", "role:narrator"],
+      },
+      {
+        name: "scene-cast",
+        pluginType: "plugin",
+        source: "builtin",
+        enabled: true,
+        tags: ["mode:dialogue", "role:scene-state"],
+      },
+      {
+        name: "narrator",
+        pluginType: "core-plugin",
+        source: "builtin",
+        enabled: true,
+        tags: ["mode:traditional-story", "role:narrator"],
+      },
+    ];
+    const world: WorldRecord = {
+      id: "dialogue-world",
+      name: "Dialogue World",
+      description: "Test",
+      metadata: {
+        pluginPolicy: {
+          preset: "dialogue-mode",
+          preferTags: ["mode:dialogue"],
+          avoidTags: ["mode:traditional-story"],
+        },
+      },
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+
+    const selected = defaultSelectedPluginIdsForWorld(world, packages);
+
+    expect(selected.has("pregame")).toBe(true);
+    expect(selected.has("chat-mode-narrator")).toBe(true);
+    expect(selected.has("scene-cast")).toBe(true);
+    expect(selected.has("narrator")).toBe(false);
+  });
+
   it("labels world storage locations", () => {
     const base = {
       id: "world",

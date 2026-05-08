@@ -9,12 +9,17 @@ pluginType: plugin
 # runtimes (embeddings, lore retrieval, etc.) that could share this layer.
 priority: 400
 capabilities: [npc-graph, graph-rag]
+tags:
+  - role:retrieval
+  - data:relationship-graph
+  - cost:function
 outputKind: plugin
 runtimeType: function
 handler: ./handler.js
 trigger:
   type: scheduled
   interval: 1
+relations: {}
 ---
 
 NPC 关系图检索器（function runtime）。

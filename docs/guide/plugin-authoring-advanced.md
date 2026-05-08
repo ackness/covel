@@ -202,6 +202,23 @@ sources:
     key: id
 ```
 
+同一个 `PLUGIN.md` frontmatter 可以声明目录元数据：
+
+```yaml
+tags:
+  - mode:dialogue
+  - role:scene-state
+relations:
+  provides:
+    - scene-state
+  requires:
+    - chat-mode-narrator
+  conflicts:
+    - narrator
+```
+
+`tags` 用于玩家/作者筛选和世界 `pluginPolicy` 匹配；`capabilities` 仍表示框架可依赖的机器能力契约。世界包可通过 `pluginPolicy.preset` 引用内置前端组合包 `traditional-story`、`dialogue-mode`、`low-cost`，也可在 `pluginPolicy.packs` 中声明自定义组合。
+
 导入成功后，每条 `plugin_data`、`lorebook`、`character` 和 media index 都会写入 `world_data_import_ledger`。`POST /api/worlds/:id/sync-data` 基于 ledger 做 dry-run、hash 冲突检测和同步。完整格式见 [World Data reference](../reference/world-data.md)。
 
 ## 5. 多 Runtime 插件

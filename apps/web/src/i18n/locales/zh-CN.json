@@ -234,6 +234,37 @@
     "loreSummary": "{{count}} 字符",
     "loreSummaryHint": "{{count}} 字符 · 点此编辑世界观文档",
     "pluginsSummary": "{{pluginCount}} 个插件，共 {{runtimeCount}} 个 runtime",
+    "pluginsSelected": "个插件已选择",
+    "searchPlugins": "搜索插件、标签、能力",
+    "pluginGroups": {
+      "core": "核心",
+      "setup": "开局准备",
+      "traditional": "传统故事",
+      "dialogue": "对话模式",
+      "characters": "角色",
+      "memory": "记忆与检索",
+      "guidance": "引导",
+      "utility": "工具"
+    },
+    "pluginPacks": {
+      "traditional-story": {
+        "label": "传统故事模式",
+        "description": "主叙事器、行动建议、图鉴和关系图，适合长篇探索。"
+      },
+      "dialogue-mode": {
+        "label": "对话模式",
+        "description": "对话优先叙事、场景演员、快速短句和角色资料。"
+      },
+      "low-cost": {
+        "label": "低成本",
+        "description": "保留核心流程和函数型插件，减少下游 LLM 调用。"
+      }
+    },
+    "recommendationReasons": {
+      "requiredByWorld": "世界必需",
+      "packOptional": "组合包可选",
+      "recommendedByWorld": "世界推荐"
+    },
     "exportDimensions": "导出维度",
     "importDimensions": "导入维度",
     "dimensionsImported": "导入成功",
@@ -263,7 +294,6 @@
     "suspensionAgoHours": "{{count}} 小时前",
     "suspensionAgoDays": "{{count}} 天前",
     "memoryStoreWarning": "重启后数据将丢失",
-    "pluginsSelected": "个插件已选",
     "worldDataPreflight": {
       "title": "世界数据",
       "loading": "检查中",
@@ -619,6 +649,15 @@
     "slotsMissing": "请在 llm.toml 中配置模型 Slot 后再覆盖",
     "useRuntimeDefault": "运行时默认: {{slot}}",
     "useRuntimeDefaultWith": "运行时默认: {{slot}} ({{value}})",
+    "providerSlot": "provider slot",
+    "providerSlotMissingTitle": "请在 llm.toml 添加 [covel.{{slot}}]，或在 设置 > 插件 中修改 {{plugin}}.modelPresetId。",
+    "providerSlotMissingDetail": "请在 llm.toml 配置 [covel.{{slot}}]，或在 设置 > 插件 > {{plugin}} 中修改 modelPresetId。",
+    "providerSlotSettingDetail": "来自插件设置 modelPresetId；可在 设置 > 插件 > {{plugin}} 修改",
+    "slotMissingTitle": "请在 llm.toml 添加 [covel.{{slot}}]",
+    "slotMissingShort": "缺少 [covel.{{slot}}]",
+    "runtimeDefaultSummary": "运行时默认 · {{slot}}",
+    "runtimeDefaultSummaryWithModel": "运行时默认 · {{slot}} · {{model}}",
+    "runtimeDefaultMissing": "运行时默认 · {{slot}} (缺少配置)",
     "invalidPanelSpec": "面板规范无效",
     "source": {
       "builtin": {

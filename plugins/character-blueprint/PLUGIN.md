@@ -11,6 +11,13 @@ trigger:
   type: manual
 capabilities:
   - character-blueprint
+tags:
+  - role:character
+  - data:world-data
+  - data:characters
+  - cost:function
+  - ui:right-panel
+  - ui:manual-action
 dataSchemas:
   blueprints:
     schemaVersion: 1
@@ -25,6 +32,7 @@ dataSchemas:
 ui:
   right:
     - ./ui/blueprints-panel.json
+relations: {}
 ---
 
 # Character Blueprint

@@ -11,9 +11,16 @@ trigger:
   type: manual
 capabilities:
   - player-identity
+tags:
+  - role:character
+  - data:characters
+  - cost:function
+  - ui:right-panel
+  - ui:manual-action
 ui:
   right:
     - ./ui/player-identity-panel.json
+relations: {}
 ---
 
 # Player Identity

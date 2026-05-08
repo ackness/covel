@@ -9,6 +9,13 @@ outputKind: system
 model: plugin
 timeoutMs: 180000
 promptVersion: 2
+tags:
+  - role:pre-game
+  - role:character
+  - data:world-data
+  - data:characters
+  - cost:llm
+  - ui:right-panel
 guard: ./guard.js
 trigger:
   type: auto
@@ -42,6 +49,7 @@ dataSchemas:
 ui:
   right:
     - ../../ui/character-panel.json
+relations: {}
 postHistory:
   role: system
   content: |

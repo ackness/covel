@@ -32,10 +32,29 @@ requiredPlugins:
   - char-creator
 recommendedPlugins:
   - character-blueprint
+pluginPolicy:
+  preset: traditional-story
+  preferTags:
+    - mode:traditional-story
+  avoidTags:
+    - mode:dialogue
 worldData: data/world.data.yaml
 ```
 
-`worldData` path 相对 world root。
+`worldData` path 相对 world root。旧的 `requiredPlugins`、`recommendedPlugins`、`excludedPlugins` 仍兼容；新 `pluginPolicy` 用于表达场景意图和组合包。
+
+`pluginPolicy` 字段：
+
+| 字段                  | 说明                                                                                                                         |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `preset`              | 前端内置组合包 ID：`traditional-story`、`dialogue-mode`、`low-cost`。                                                        |
+| `preferTags`          | 默认选中匹配这些插件 `tags` 的插件。                                                                                         |
+| `avoidTags`           | 默认关闭匹配这些插件 `tags` 的插件。                                                                                         |
+| `requireCapabilities` | 要求启用的机器能力标签。                                                                                                     |
+| `requiredPlugins`     | 额外锁定启用的插件。                                                                                                         |
+| `recommendedPlugins`  | 额外默认启用的插件。                                                                                                         |
+| `excludedPlugins`     | 额外默认关闭的插件。                                                                                                         |
+| `packs`               | 自定义组合包列表，每项可含 `id`、`label`、`description`、`plugins`、`optionalPlugins`、`excludedPlugins`、`tags`、`reason`。 |
 
 ## Descriptor
 
@@ -289,11 +308,14 @@ my-covel-pack/
             └── social/links.yaml
 ```
 
-`world.yaml` 用 `requiredPlugins` 或 `recommendedPlugins` 声明插件关系：
+`world.yaml` 用 `requiredPlugins`、`recommendedPlugins` 或 `pluginPolicy` 声明插件关系：
 
 ```yaml
 recommendedPlugins:
   - social-sim
+pluginPolicy:
+  recommendedPlugins:
+    - social-sim
 worldData: data/world.data.yaml
 ```
 
