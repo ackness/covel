@@ -1,21 +1,35 @@
 /**
  * App-level IndexedDB key-value store for frontend-only data.
  *
- * Stores game data that was previously in localStorage and could
- * exceed the ~5 MB quota (state snapshots, world overlays, etc.).
- *
- * Uses a separate IDB database (`covel-app`) so it doesn't
- * interfere with the `@covel/store` DataStore schema.
+ * Stores frontend-only records that are keyed by session/world ids:
+ * state snapshots, world overlays, submitted block UI state, etc.
  */
 
-const DB_NAME = "covel-app";
-const DB_VERSION = 4;
+import {
+  APP_KV_STORE_EXECUTION_STEPS,
+  APP_KV_STORE_STATE_PATCHES,
+  APP_KV_STORE_STATE_SNAPSHOTS,
+  APP_KV_STORE_SUBMITTED_BLOCKS,
+  APP_KV_STORE_WORLD_OVERLAYS,
+  BROWSER_IDB_SCHEMA_VERSION,
+  upgradeBrowserIdbSchema,
+} from "@covel/store/idb";
+import {
+  BROWSER_STORAGE_RESET_KEY,
+  LEGACY_BROWSER_DATABASES,
+  LEGACY_LOCAL_STORAGE_KEYS,
+  LEGACY_LOCAL_STORAGE_PREFIXES,
+} from "./storage/legacy-keys.js";
+import { BROWSER_STORAGE_DB_NAME } from "./storage/data-store.js";
 
-const STORE_STATE_SNAPSHOTS = "stateSnapshots"; // key: sessionId
-const STORE_WORLD_OVERLAYS = "worldOverlays"; // key: worldId
-const STORE_STATE_PATCHES = "statePatches"; // key: sessionId
-const STORE_SUBMITTED_BLOCKS = "submittedBlocks"; // key: sessionId
-const STORE_EXECUTION_STEPS = "executionSteps"; // key: sessionId
+const DB_NAME = BROWSER_STORAGE_DB_NAME;
+const DB_VERSION = BROWSER_IDB_SCHEMA_VERSION;
+
+const STORE_STATE_SNAPSHOTS = APP_KV_STORE_STATE_SNAPSHOTS; // key: sessionId
+const STORE_WORLD_OVERLAYS = APP_KV_STORE_WORLD_OVERLAYS; // key: worldId
+const STORE_STATE_PATCHES = APP_KV_STORE_STATE_PATCHES; // key: sessionId
+const STORE_SUBMITTED_BLOCKS = APP_KV_STORE_SUBMITTED_BLOCKS; // key: sessionId
+const STORE_EXECUTION_STEPS = APP_KV_STORE_EXECUTION_STEPS; // key: sessionId
 
 type StoreNames =
   | typeof STORE_STATE_SNAPSHOTS
@@ -30,23 +44,8 @@ function openAppDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE_STATE_SNAPSHOTS)) {
-        db.createObjectStore(STORE_STATE_SNAPSHOTS);
-      }
-      if (!db.objectStoreNames.contains(STORE_WORLD_OVERLAYS)) {
-        db.createObjectStore(STORE_WORLD_OVERLAYS);
-      }
-      if (!db.objectStoreNames.contains(STORE_STATE_PATCHES)) {
-        db.createObjectStore(STORE_STATE_PATCHES);
-      }
-      if (!db.objectStoreNames.contains(STORE_SUBMITTED_BLOCKS)) {
-        db.createObjectStore(STORE_SUBMITTED_BLOCKS);
-      }
-      if (!db.objectStoreNames.contains(STORE_EXECUTION_STEPS)) {
-        db.createObjectStore(STORE_EXECUTION_STEPS);
-      }
+    req.onupgradeneeded = (event) => {
+      upgradeBrowserIdbSchema(req.result, event.oldVersion);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -211,61 +210,86 @@ export async function removeExecutionSteps(sessionId: string): Promise<void> {
   return idbDelete(STORE_EXECUTION_STEPS, sessionId);
 }
 
-// ── Migration ────────────────────────────────────────────────────
+// ── Legacy reset ──────────────────────────────────────────────────
 
-const MIGRATED_KEY = "covel:idbMigrated";
+function deleteDatabase(name: string): Promise<boolean> {
+  if (typeof indexedDB === "undefined") return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let req: IDBOpenDBRequest;
+    try {
+      req = indexedDB.deleteDatabase(name);
+    } catch {
+      resolve(false);
+      return;
+    }
+    req.onsuccess = () => resolve(true);
+    req.onerror = () => resolve(false);
+    req.onblocked = () => resolve(false);
+  });
+}
+
+function removeLegacyLocalStorageData(): void {
+  if (typeof localStorage === "undefined") return;
+  const keysToRemove: string[] = [];
+
+  for (const key of LEGACY_LOCAL_STORAGE_KEYS) {
+    keysToRemove.push(key);
+  }
+
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key) continue;
+    if (
+      LEGACY_LOCAL_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
+    ) {
+      keysToRemove.push(key);
+    }
+  }
+
+  for (const key of keysToRemove) {
+    localStorage.removeItem(key);
+  }
+}
 
 /**
- * One-time migration: move state snapshots and world overlays
- * from localStorage to IndexedDB.
+ * One-time browser storage reset for early local data.
  *
- * Idempotent — safe to call on every app boot.
+ * The reset only touches the current browser/WebView origin: legacy
+ * IndexedDB database names plus old frontend localStorage data keys. Desktop
+ * SQLite files and media directories live outside this origin and are not
+ * affected.
  */
-export async function migrateLocalStorageToIdb(): Promise<void> {
-  if (localStorage.getItem(MIGRATED_KEY) === "1") return;
+export async function resetLegacyBrowserStorage(): Promise<void> {
+  if (typeof localStorage !== "undefined") {
+    try {
+      if (localStorage.getItem(BROWSER_STORAGE_RESET_KEY) === "1") return;
+    } catch {
+      return;
+    }
+  }
+
+  const deleted = await Promise.all(
+    LEGACY_BROWSER_DATABASES.map((name) => deleteDatabase(name)),
+  );
 
   try {
-    const keysToRemove: string[] = [];
-
-    // Migrate state snapshots
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (!key) continue;
-      if (key.startsWith("covel:stateSnapshot:")) {
-        const sessionId = key.slice("covel:stateSnapshot:".length);
-        const raw = localStorage.getItem(key);
-        if (raw) {
-          try {
-            const data = JSON.parse(raw) as Record<string, unknown>;
-            await saveStateSnapshot(sessionId, data);
-            keysToRemove.push(key);
-          } catch {
-            // Skip corrupt entries
-          }
-        }
-      }
-      if (key.startsWith("covel:worldOverlay:")) {
-        const worldId = key.slice("covel:worldOverlay:".length);
-        const raw = localStorage.getItem(key);
-        if (raw) {
-          try {
-            const data = JSON.parse(raw) as WorldOverlay;
-            await setWorldOverlay(worldId, data);
-            keysToRemove.push(key);
-          } catch {
-            // Skip corrupt entries
-          }
-        }
-      }
+    removeLegacyLocalStorageData();
+    if (deleted.every(Boolean)) {
+      localStorage.setItem(BROWSER_STORAGE_RESET_KEY, "1");
     }
-
-    // Clean up localStorage after successful migration
-    for (const key of keysToRemove) {
-      localStorage.removeItem(key);
-    }
-
-    localStorage.setItem(MIGRATED_KEY, "1");
   } catch {
-    // IDB not available (e.g. private browsing) — keep localStorage fallback
+    // localStorage unavailable (private mode, quota) — reset remains best-effort.
+  }
+}
+
+/**
+ * Backward-compatible boot hook name. The early project reset deliberately
+ * clears legacy browser data instead of migrating it.
+ */
+export async function migrateLocalStorageToIdb(): Promise<void> {
+  try {
+    await resetLegacyBrowserStorage();
+  } catch {
+    // IDB not available (e.g. private browsing) — keep boot non-fatal.
   }
 }

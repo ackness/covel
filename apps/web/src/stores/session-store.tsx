@@ -1183,7 +1183,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [state.session]);
 
   const boot = useCallback(async () => {
-    // Migrate localStorage game data to IndexedDB (one-time, idempotent)
+    // Reset early browser-local data before opening the unified IDB.
     await migrateLocalStorageToIdb();
 
     try {

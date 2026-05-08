@@ -21,8 +21,33 @@ import { dirname, join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
 import postgres, { type JSONValue, type Sql } from "postgres";
+import { readRuntimeEnv } from "@covel/shared";
 import { createTables } from "./sqlite/sqlite-store-mappers.js";
 import { CREATE_MEDIA_TABLES_SQL } from "./postgres/pg-store-mappers.js";
+import type { StoreBackend } from "./types.js";
+
+export type MediaStoreBackend =
+  | "mirror"
+  | "memory"
+  | "sqlite"
+  | "pg"
+  | "s3"
+  | "idb"
+  | "none";
+
+export interface MediaStoreConfig {
+  readonly backend?: MediaStoreBackend;
+  readonly storeBackend?: StoreBackend;
+  readonly sqlitePath?: string;
+  readonly databaseUrl?: string;
+  readonly mediaRoot?: string;
+  readonly idbDbName?: string;
+  readonly s3Bucket?: string;
+  readonly s3Region?: string;
+  readonly s3Endpoint?: string;
+  readonly s3KeyPrefix?: string;
+  readonly s3PublicBaseUrl?: string;
+}
 
 // Re-export the shared MediaStore wire-shape interfaces so existing
 // `import { MediaStore, ... } from '@covel/store'` call sites keep
@@ -83,6 +108,16 @@ export interface S3MediaStoreOptions {
    * See `createSqliteS3MetadataAdapter` for the canonical implementation.
    */
   readonly metadataAdapter?: S3MediaMetadataAdapter;
+}
+
+function resolveMediaBackend(
+  config: MediaStoreConfig,
+): Exclude<MediaStoreBackend, "mirror"> {
+  const requested = config.backend ?? "mirror";
+  if (requested !== "mirror") return requested;
+  const dataBackend = config.storeBackend ?? "sqlite";
+  if (dataBackend === "idb") return "idb";
+  return dataBackend;
 }
 
 /**
@@ -242,6 +277,60 @@ function normalizeBytes(value: Uint8Array | Buffer): Uint8Array {
   return new Uint8Array(
     value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength),
   );
+}
+
+export async function createMediaStore(
+  config: MediaStoreConfig = {},
+): Promise<MediaStore | undefined> {
+  const backend = resolveMediaBackend(config);
+
+  switch (backend) {
+    case "none":
+      return undefined;
+    case "memory":
+      return createMemoryMediaStore();
+    case "sqlite": {
+      const sqlitePath = resolve(config.sqlitePath ?? "./data/covel.db");
+      return createSqliteMediaStore(sqlitePath, {
+        mediaRoot: config.mediaRoot,
+      });
+    }
+    case "pg": {
+      if (!config.databaseUrl) return undefined;
+      return createPgMediaStore(config.databaseUrl);
+    }
+    case "idb": {
+      const { createIndexedDbMediaStore } =
+        await import("./indexeddb/idb-media-store.js");
+      return createIndexedDbMediaStore({
+        dbName: config.idbDbName,
+      });
+    }
+    case "s3":
+      throw new Error(
+        "S3 media requires an S3CompatibleMediaClient; use createS3MediaStore(client, options) until a client factory is configured.",
+      );
+    default:
+      throw new Error(`Unknown media store backend: ${String(backend)}`);
+  }
+}
+
+export function createMediaStoreFromEnv(
+  source?: Parameters<typeof readRuntimeEnv>[0],
+): Promise<MediaStore | undefined> {
+  const env = readRuntimeEnv(source);
+  return createMediaStore({
+    backend: env.mediaBackend,
+    storeBackend: env.storeBackend,
+    sqlitePath: env.sqlitePath,
+    databaseUrl: env.databaseUrl,
+    mediaRoot: env.mediaRoot,
+    s3Bucket: env.mediaS3Bucket,
+    s3Region: env.mediaS3Region,
+    s3Endpoint: env.mediaS3Endpoint,
+    s3KeyPrefix: env.mediaS3KeyPrefix,
+    s3PublicBaseUrl: env.mediaS3PublicBaseUrl,
+  });
 }
 
 export function createMemoryMediaStore(): MediaStore {

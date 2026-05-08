@@ -29,13 +29,14 @@ interface CursorWithValue {
   continue(): void;
 }
 type IdbHandler = () => void;
+type IdbUpgradeHandler = (event: { oldVersion: number }) => void;
 
 interface FakeRequest<T = unknown> {
   result: T;
   error: unknown;
   onsuccess: IdbHandler | null;
   onerror: IdbHandler | null;
-  onupgradeneeded?: IdbHandler | null;
+  onupgradeneeded?: IdbUpgradeHandler | null;
   onblocked?: IdbHandler | null;
 }
 
@@ -45,6 +46,7 @@ class FakeStore {
   constructor(keyPath: string) {
     this.keyPath = keyPath;
   }
+  createIndex(): void {}
   get(key: string): FakeRequest {
     const req = makeReq();
     queueMicrotask(() => {
@@ -53,11 +55,11 @@ class FakeStore {
     });
     return req;
   }
-  put(record: Record<string, unknown>): FakeRequest {
+  put(record: Record<string, unknown>, key?: string): FakeRequest {
     const req = makeReq();
-    const key = record[this.keyPath] as string;
+    const recordKey = key ?? (record[this.keyPath] as string);
     queueMicrotask(() => {
-      this.data.set(key, record);
+      this.data.set(recordKey, record);
       req.onsuccess?.();
     });
     return req;
@@ -109,8 +111,8 @@ class FakeDb {
   readonly objectStoreNames = {
     contains: (name: string): boolean => this.stores.has(name),
   };
-  createObjectStore(name: string, opts: { keyPath: string }): FakeStore {
-    const store = new FakeStore(opts.keyPath);
+  createObjectStore(name: string, opts?: { keyPath?: string }): FakeStore {
+    const store = new FakeStore(opts?.keyPath ?? "id");
     this.stores.set(name, store);
     return store;
   }
@@ -146,7 +148,7 @@ function fakeIndexedDB() {
       queueMicrotask(() => {
         if (isNew) {
           req.result = db as FakeDb;
-          req.onupgradeneeded?.();
+          req.onupgradeneeded?.({ oldVersion: 0 });
         }
         req.result = db as FakeDb;
         req.onsuccess?.();

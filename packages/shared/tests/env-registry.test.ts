@@ -52,6 +52,8 @@ describe("env registry", () => {
 
   it("looks up definitions by name", () => {
     expect(getEnvDefinition("STORE_BACKEND")?.defaultValue).toBe("sqlite");
+    expect(getEnvDefinition("MEDIA_BACKEND")?.defaultValue).toBe("mirror");
+    expect(getEnvDefinition("VECTOR_BACKEND")?.defaultValue).toBe("embedded");
     expect(getEnvDefinition("COVEL_PROMPT_V2")?.group).toBe("feature");
   });
 
@@ -98,7 +100,17 @@ describe("env registry", () => {
     const env = readRuntimeEnv({});
     expect(env.storeBackend).toBe("sqlite");
     expect(env.sqlitePath).toBe("./data/covel.db");
+    expect(env.mediaBackend).toBe("mirror");
+    expect(env.vectorBackend).toBe("embedded");
     expect(env.serverPort).toBe(3001);
+  });
+
+  it("derives the default SQLite path from COVEL_DATA_ROOT when SQLITE_PATH is omitted", () => {
+    const env = readRuntimeEnv({
+      COVEL_DATA_ROOT: "/home/covel/data",
+    });
+
+    expect(env.sqlitePath).toBe("/home/covel/data/covel.db");
   });
 
   it("reads explicit runtime env values across storage, server, desktop and AI fields", () => {
@@ -106,6 +118,15 @@ describe("env registry", () => {
       STORE_BACKEND: "pg",
       SQLITE_PATH: "/tmp/covel.db",
       DATABASE_URL: "postgresql://user:pass@localhost:5432/covel",
+      MEDIA_BACKEND: "pg",
+      MEDIA_ROOT: "/srv/media",
+      MEDIA_S3_BUCKET: "covel-media",
+      MEDIA_S3_REGION: "us-east-1",
+      MEDIA_S3_ENDPOINT: "https://s3.example.test",
+      MEDIA_S3_KEY_PREFIX: "assets",
+      MEDIA_S3_PUBLIC_BASE_URL: "https://media.example.test",
+      COVEL_MEDIA_TOKEN_SECRET: "media-token-secret",
+      VECTOR_BACKEND: "external",
       SERVER_PORT: "18080",
       NODE_ENV: "test",
       SERVE_STATIC: "true",
@@ -136,6 +157,15 @@ describe("env registry", () => {
       storeBackend: "pg",
       sqlitePath: "/tmp/covel.db",
       databaseUrl: "postgresql://user:pass@localhost:5432/covel",
+      mediaBackend: "pg",
+      mediaRoot: "/srv/media",
+      mediaS3Bucket: "covel-media",
+      mediaS3Region: "us-east-1",
+      mediaS3Endpoint: "https://s3.example.test",
+      mediaS3KeyPrefix: "assets",
+      mediaS3PublicBaseUrl: "https://media.example.test",
+      mediaTokenSecret: "media-token-secret",
+      vectorBackend: "external",
       serverPort: 18080,
       nodeEnv: "test",
       serveStatic: true,
@@ -166,6 +196,8 @@ describe("env registry", () => {
   it("falls back for invalid runtime enum and integer values", () => {
     const env = readRuntimeEnv({
       STORE_BACKEND: "postgres",
+      MEDIA_BACKEND: "blobstore",
+      VECTOR_BACKEND: "qdrant",
       NODE_ENV: "staging",
       SERVER_PORT: "abc",
       RATE_LIMIT_RPM: "rpm",
@@ -173,6 +205,8 @@ describe("env registry", () => {
     });
 
     expect(env.storeBackend).toBe("sqlite");
+    expect(env.mediaBackend).toBe("mirror");
+    expect(env.vectorBackend).toBe("embedded");
     expect(env.nodeEnv).toBe("development");
     expect(env.serverPort).toBe(3001);
     expect(env.rateLimitRpm).toBe(60);

@@ -2128,6 +2128,33 @@ export interface ServerHealth {
   version: string;
   storeBackend: "pg" | "sqlite" | "memory";
   bootId?: string;
+  storage?: {
+    data?: {
+      backend?: "pg" | "sqlite" | "memory";
+      durable?: boolean;
+      frontendMode?: "local" | "remote";
+    };
+    media?: {
+      backend?: "memory" | "sqlite" | "pg" | "s3" | "idb" | "none";
+      configuredBackend?:
+        | "mirror"
+        | "memory"
+        | "sqlite"
+        | "pg"
+        | "s3"
+        | "idb"
+        | "none";
+      enabled?: boolean;
+      durable?: boolean;
+    };
+    vector?: {
+      backend?: "embedded" | "none" | "external";
+      capable?: boolean;
+      driver?: "in-memory" | "sqlite-vec" | "pgvector" | "external" | "none";
+      modelCount?: number;
+      tableCount?: number;
+    };
+  };
 }
 
 export async function fetchServerHealth(): Promise<ServerHealth> {

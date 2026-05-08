@@ -6,7 +6,7 @@ Applies to both [`apps/desktop/`](../../apps/desktop/) (Electron) and [`apps/des
 
 ## Directory structure
 
-On first launch the desktop app creates `~/.covel/`. Config, user plugins, and user worlds live here; the heavy bits (SQLite, logs) live in `~/.covel/data/` by default and can be redirected to an external drive — that way relocating data does not strand `worlds/` or `keys.env`.
+On first launch the desktop app creates `~/.covel/`. Config and user plugins live here; the heavy bits (SQLite, logs, and user worlds) live in `~/.covel/data/` by default and can be redirected together.
 
 ```
 ~/.covel/                    ← config root (small, version-stable)
@@ -14,11 +14,10 @@ On first launch the desktop app creates `~/.covel/`. Config, user plugins, and u
   llm.toml                   ← LLM slot config (provider / model / baseUrl)
   keys.env                   ← provider API keys, plain KEY=VALUE lines
   plugins/                   ← user plugins (merged on top of bundled cores)
-  worlds/                    ← user-created worlds (NOT under data_root, so
-                               redirecting data_root does not strand them)
 
 <data_root>/                 ← default ~/.covel/data; redirectable
   covel.db                   ← SQLite database
+  worlds/                    ← user-created worlds
   logs/                      ← app logs (auto-rotated)
     tauri-main*.log          ← Tauri main process
     electron-*.log           ← Electron main process
@@ -44,7 +43,7 @@ max_size_mb = 10
 max_files   = 10
 ```
 
-Restart Covel after edits. **Changing `data_root` does NOT move old data** — the new location starts empty, and the old path is left intact for you to migrate (or ignore).
+Restart Covel after edits. **Changing `data_root` does NOT move old data** — the new location starts empty, and the old data and user worlds are left intact for you to migrate or ignore.
 
 ## `~/.covel/keys.env`
 

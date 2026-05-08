@@ -109,6 +109,7 @@ export const CREATE_TABLES_SQL = `
     pre_game_completed JSONB NOT NULL DEFAULT '[]'::jsonb,
     locale TEXT NOT NULL DEFAULT 'zh-CN',
     active_plugins JSONB NOT NULL DEFAULT '[]',
+    metadata JSONB,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     embedding_model_id INTEGER,
@@ -122,6 +123,7 @@ export const CREATE_TABLES_SQL = `
   ALTER TABLE sessions DROP COLUMN IF EXISTS playing_turn_offset;
   -- PR-6: per-runtime model slot overrides.
   ALTER TABLE sessions ADD COLUMN IF NOT EXISTS runtime_model_overrides JSONB DEFAULT '{}'::jsonb;
+  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS metadata JSONB;
 
   CREATE TABLE IF NOT EXISTS turn_results (
     id TEXT PRIMARY KEY,
@@ -518,6 +520,17 @@ export function toSessionRecord(
       []) as readonly string[],
     locale: row.locale,
     activePlugins: (row.activePlugins ?? []) as string[],
+    ...(() => {
+      const metadata = (row.metadata ?? undefined) as
+        | Record<string, unknown>
+        | undefined;
+      return {
+        metadata,
+        ...(typeof metadata?.presetId === "string"
+          ? { presetId: metadata.presetId }
+          : {}),
+      };
+    })(),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     ...(row.embeddingModelId != null
@@ -541,6 +554,9 @@ export function toSessionRecord(
 export function toWorldRecord(
   row: typeof schema.worlds.$inferSelect,
 ): WorldRecord {
+  const metadata = (row.metadata ?? undefined) as
+    | Record<string, unknown>
+    | undefined;
   return {
     id: row.id,
     name: row.name,
@@ -548,9 +564,8 @@ export function toWorldRecord(
     lore: row.lore ?? undefined,
     tags: (row.tags ?? undefined) as string[] | undefined,
     locale: row.locale ?? undefined,
-    metadata: (row.metadata ?? undefined) as
-      | Record<string, unknown>
-      | undefined,
+    metadata,
+    dimensions: metadata?.dimensions as WorldRecord["dimensions"],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt ?? undefined,
   };

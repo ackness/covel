@@ -1,14 +1,15 @@
 import type { MediaRef, MediaStore } from "@covel/shared";
-
-const BROWSER_MEDIA_DB = "covel-media-store";
+import {
+  BROWSER_MEDIA_STORE_DB_NAME,
+  createBrowserMediaStore,
+} from "@/services/storage";
 
 let browserMediaStorePromise: Promise<MediaStore> | null = null;
 
 export function getBrowserMediaStore(): Promise<MediaStore> {
   if (!browserMediaStorePromise) {
-    browserMediaStorePromise = import("@covel/store/idb").then(
-      ({ createIndexedDbMediaStore }) =>
-        createIndexedDbMediaStore({ dbName: BROWSER_MEDIA_DB }),
+    browserMediaStorePromise = createBrowserMediaStore(
+      BROWSER_MEDIA_STORE_DB_NAME,
     );
   }
   return browserMediaStorePromise;

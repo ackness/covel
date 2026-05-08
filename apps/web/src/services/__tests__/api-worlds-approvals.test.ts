@@ -34,8 +34,11 @@ const {
   listApprovals,
 } = apiModule;
 const dataServiceModule = await import("../data-service.js");
-const { generatedWorldSaveTargetForBackend, storageModeForServerBackend } =
-  dataServiceModule;
+const {
+  generatedWorldSaveTargetForBackend,
+  storageModeForServerBackend,
+  storageModeForServerStorage,
+} = dataServiceModule;
 
 function mockFetchOnce(body: unknown, status = 200): void {
   vi.stubGlobal(
@@ -59,6 +62,15 @@ describe("world API mapping", () => {
     expect(storageModeForServerBackend("memory")).toBe("local");
     expect(storageModeForServerBackend("sqlite")).toBe("remote");
     expect(storageModeForServerBackend("pg")).toBe("remote");
+  });
+
+  it("prefers structured server storage capabilities for frontend mode", () => {
+    expect(
+      storageModeForServerStorage({
+        data: { backend: "memory", frontendMode: "remote" },
+      }),
+    ).toBe("remote");
+    expect(storageModeForServerStorage({ data: { backend: "pg" } })).toBeNull();
   });
 
   it("maps server store backend to generated-world save target", () => {

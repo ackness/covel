@@ -86,6 +86,7 @@ export function createTables(sqlite: Database.Database): void {
       pre_game_completed TEXT NOT NULL DEFAULT '[]',
       locale TEXT NOT NULL DEFAULT 'zh-CN',
       active_plugins TEXT NOT NULL DEFAULT '[]',
+      metadata TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       embedding_model_id INTEGER,
@@ -497,6 +498,9 @@ export function createTables(sqlite: Database.Database): void {
       "ALTER TABLE sessions ADD COLUMN runtime_model_overrides TEXT DEFAULT '{}'",
     );
   }
+  if (!colNames.has("metadata")) {
+    sqlite.exec("ALTER TABLE sessions ADD COLUMN metadata TEXT");
+  }
 }
 
 // ── Row → Record mappers ────────────────────────────────────────
@@ -514,6 +518,17 @@ export function toSessionRecord(
       : [],
     locale: row.locale,
     activePlugins: row.activePlugins ? JSON.parse(row.activePlugins) : [],
+    ...(() => {
+      const metadata = fromJson(row.metadata) as
+        | Record<string, unknown>
+        | undefined;
+      return {
+        metadata,
+        ...(typeof metadata?.presetId === "string"
+          ? { presetId: metadata.presetId }
+          : {}),
+      };
+    })(),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     ...(row.embeddingModelId != null
@@ -538,6 +553,9 @@ export function toSessionRecord(
 export function toWorldRecord(
   row: typeof schema.worlds.$inferSelect,
 ): WorldRecord {
+  const metadata = fromJson(row.metadata) as
+    | Record<string, unknown>
+    | undefined;
   return {
     id: row.id,
     name: row.name,
@@ -545,7 +563,8 @@ export function toWorldRecord(
     lore: row.lore ?? undefined,
     tags: fromJson(row.tags) as string[] | undefined,
     locale: row.locale ?? undefined,
-    metadata: fromJson(row.metadata) as Record<string, unknown> | undefined,
+    metadata,
+    dimensions: metadata?.dimensions as WorldRecord["dimensions"],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt ?? undefined,
   };

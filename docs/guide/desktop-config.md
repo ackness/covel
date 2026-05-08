@@ -6,7 +6,7 @@
 
 ## 目录结构
 
-桌面版首次启动会自动创建 `~/.covel/`。配置小文件、用户插件与用户世界都放这里；占空间的 SQLite 与日志默认放 `~/.covel/data/`，可通过 `config.toml` 重定向到外置硬盘——这样换盘不会带走 `worlds/` 与 `keys.env`。
+桌面版首次启动会自动创建 `~/.covel/`。配置小文件与用户插件放这里；占空间的 SQLite、日志与用户世界默认放 `~/.covel/data/`，可通过 `config.toml` 一起重定向到外置硬盘。
 
 ```
 ~/.covel/                    ← 配置根（小文件，随应用版本稳定）
@@ -14,11 +14,10 @@
   llm.toml                   ← LLM slot 配置（provider / model / baseUrl）
   keys.env                   ← provider API key，KEY=VALUE 纯文本
   plugins/                   ← 用户插件（和 app bundle 内的核心插件合并）
-  worlds/                    ← 用户创建的世界（**不**位于 data_root 下；
-                               重定向 data_root 不会带走这里）
 
 <data_root>/                 ← 默认 ~/.covel/data；可改到任意路径
   covel.db                   ← SQLite 数据库
+  worlds/                    ← 用户创建的世界
   logs/                      ← 应用日志（按尺寸轮转，NDJSON 一行一记录）
     desktop.log              ← Electron 主进程事件（窗口 / IPC / sidecar 监督 / 启动失败）
     server.log               ← Node sidecar 的 stdout/stderr（bootstrap 输出 + Hono 请求日志）
@@ -52,7 +51,7 @@ max_size_mb = 10
 max_files   = 10
 ```
 
-改完要重启 Covel 生效。**改 `data_root` 不会搬旧数据** —— 新位置是空的，老数据留在原处你自己处理。
+改完要重启 Covel 生效。**改 `data_root` 不会搬旧数据** —— 新位置是空的，老数据与用户世界留在原处你自己处理。
 
 ## `~/.covel/keys.env`
 

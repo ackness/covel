@@ -61,6 +61,33 @@ describe("Health Route", () => {
     expect(body.status).toBe("ok");
     expect(body.version).toBe("1.0.0");
   });
+
+  it("returns structured storage capabilities while keeping storeBackend compatible", async () => {
+    const memStore = createMemoryStore();
+    const app = createTestApp({
+      store: memStore,
+      stateManager: createStateManager(memStore),
+      pluginRegistry: createPluginRegistry(),
+    });
+
+    const res = await app.request("/api/health");
+    const body = (await json(res)) as Record<string, unknown>;
+
+    expect(body.storeBackend).toBe("memory");
+    expect(body.storage).toMatchObject({
+      data: {
+        backend: "memory",
+        frontendMode: "local",
+        durable: false,
+      },
+      vector: {
+        backend: "embedded",
+        capable: true,
+        driver: "in-memory",
+      },
+    });
+    expect(body.vector).toEqual((body.storage as { vector: unknown }).vector);
+  });
 });
 
 describe("Session Routes", () => {

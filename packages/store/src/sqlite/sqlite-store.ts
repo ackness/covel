@@ -42,10 +42,9 @@ import type {
   SuspensionRecord,
   SnapshotRecord,
 } from "../types.js";
+import { mergeSessionPatch } from "../types.js";
 import {
   toJson,
-  fromJson,
-  fromJsonRequired,
   createTables,
   toSessionRecord,
   toWorldRecord,
@@ -131,6 +130,7 @@ export function createSqliteStore(
           preGameCompleted: JSON.stringify(session.preGameCompleted ?? []),
           locale: session.locale,
           activePlugins: JSON.stringify(session.activePlugins),
+          metadata: session.metadata != null ? toJson(session.metadata) : null,
           createdAt: session.createdAt,
           updatedAt: session.updatedAt,
           runtimeModelOverrides: JSON.stringify(
@@ -158,13 +158,25 @@ export function createSqliteStore(
           | "turnCount"
           | "preGameCompleted"
           | "activePlugins"
+          | "presetId"
           | "updatedAt"
+          | "metadata"
           | "embeddingModelId"
           | "embeddingLockedAt"
           | "runtimeModelOverrides"
         >
       >,
     ): Promise<void> {
+      const rows = db
+        .select()
+        .from(schema.sessions)
+        .where(eq(schema.sessions.id, id));
+      const existingRow = rows.get();
+      if (!existingRow) return;
+      const mergedSession = mergeSessionPatch(
+        toSessionRecord(existingRow),
+        patch,
+      );
       const values: Record<string, unknown> = {};
       if (patch.status !== undefined) values.status = patch.status;
       if (patch.turnCount !== undefined) values.turnCount = patch.turnCount;
@@ -172,6 +184,12 @@ export function createSqliteStore(
         values.preGameCompleted = JSON.stringify(patch.preGameCompleted);
       if (patch.activePlugins !== undefined)
         values.activePlugins = JSON.stringify(patch.activePlugins);
+      if ("metadata" in patch || "presetId" in patch) {
+        values.metadata =
+          mergedSession.metadata != null
+            ? toJson(mergedSession.metadata)
+            : null;
+      }
       if (patch.updatedAt !== undefined) values.updatedAt = patch.updatedAt;
       if ("embeddingModelId" in patch)
         values.embeddingModelId = patch.embeddingModelId ?? null;

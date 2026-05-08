@@ -31,7 +31,6 @@ import { createEventBus, type EventBus } from "@covel/events";
 import type { DataStore, StoreBackend } from "@covel/store";
 import type {
   LLMAdapter,
-  ToolExecutor,
   HookPipeline,
   PluginHookSource,
 } from "@covel/runtime";
@@ -98,6 +97,7 @@ import { aiRoutes } from "./ai.js";
 import { traceRoutes } from "./traces.js";
 import { mediaRoutes } from "./media.js";
 import type { MediaStore } from "@covel/store";
+import type { MediaStoreBackend, VectorBackend } from "@covel/store";
 import { resumeRoutes } from "./resume.js";
 import { snapshotRoutes } from "./snapshots.js";
 import { lorebookRoutes } from "./lorebook.js";
@@ -193,6 +193,8 @@ export interface ApiBootstrapConfig {
    * route returns 503 in that case. See SPEC §5.1 (b)(g).
    */
   readonly mediaStore?: MediaStore;
+  readonly mediaBackend?: MediaStoreBackend;
+  readonly vectorBackend?: VectorBackend;
 }
 
 export interface ApiBootstrapResult {
@@ -660,7 +662,7 @@ export async function bootstrapApi(
   });
 
   // 6b. Eagerly load runtimes that declare UI specs so /api/ui-specs has data at boot
-  for (const [pluginId, discovery] of discoveryMap) {
+  for (const [pluginId] of discoveryMap) {
     const manifests = manifestCache.get(pluginId);
     if (!manifests) continue;
     for (const parsed of manifests) {
@@ -1038,7 +1040,14 @@ export async function bootstrapApi(
   app.route("/api/events", eventRoutes);
   app.route("/api/events", subscribeRoutes);
   app.route("/api/worlds", worldRoutes);
-  app.route("/api/health", createHealthRoutes(store, config.storeBackend));
+  app.route(
+    "/api/health",
+    createHealthRoutes(store, config.storeBackend, {
+      mediaBackend: config.mediaBackend,
+      mediaStore: config.mediaStore,
+      vectorBackend: config.vectorBackend,
+    }),
+  );
   app.route("/api/install", installRoutes);
   app.route("/api/ai", aiRoutes);
   app.route("/api/actions", actionRoutes);

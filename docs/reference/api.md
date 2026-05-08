@@ -10,7 +10,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 
 ### 存储后端
 
-服务器端支持三种存储后端，通过环境变量 `STORE_BACKEND` 配置：
+服务器端常用三种存储后端，通过环境变量 `STORE_BACKEND` 配置：
 
 | 后端       | 值              | 用途                                                                                                                     |
 | ---------- | --------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -18,7 +18,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 | Memory     | `memory`        | 测试或一次性 demo，数据存于内存，重启丢失                                                                                |
 | PostgreSQL | `pg`            | 生产环境，需配置 `DATABASE_URL`；**多实例部署自动启用 `pg_advisory_lock` 分布式会话锁，跨 Node 进程对同一 session 互斥** |
 
-> **注意**: IndexedDB (IDB) 是**前端专用**的存储后端，仅在浏览器中使用，服务器端不可用。
+> **注意**: `@covel/store` 工厂也支持 `idb`，用于浏览器能力调用；常规服务器部署使用 `memory` / `sqlite` / `pg`。
 
 ---
 
@@ -32,7 +32,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 # 安装依赖
 pnpm install
 
-# 启动开发服务器 (Memory 后端, 端口 3001)
+# 启动开发服务器 (SQLite 默认后端, 端口 3001)
 pnpm dev:server
 ```
 
@@ -465,22 +465,55 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
   "storeBackend": "sqlite",
   "bootId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "timestamp": "2025-01-15T10:00:00.000Z",
+  "storage": {
+    "data": {
+      "backend": "sqlite",
+      "durable": true,
+      "frontendMode": "remote"
+    },
+    "media": {
+      "backend": "sqlite",
+      "configuredBackend": "mirror",
+      "enabled": true,
+      "durable": true
+    },
+    "vector": {
+      "backend": "embedded",
+      "capable": true,
+      "driver": "sqlite-vec",
+      "modelCount": 0,
+      "tableCount": 0
+    },
+    "migrations": [
+      {
+        "id": "browser:idb:unified-storage",
+        "domain": "browser",
+        "backend": "idb",
+        "version": 11,
+        "status": "managed-by-backend",
+        "description": "Browser-local data, media, app-KV, and render cache share the covel-browser IndexedDB schema."
+      }
+    ]
+  },
   "vector": {
     "capable": true,
-    "driver": "sqlite-vss",
+    "driver": "sqlite-vec",
     "modelCount": 0,
     "tableCount": 0
   }
 }
 ```
 
-| 字段                                      | 说明                                                                                                                |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `storeBackend`                            | 当前存储后端（`memory` / `sqlite` / `pg`），前端据此选择 `LocalDataService` 或 `RemoteDataService`。默认 `sqlite`。 |
-| `bootId`                                  | 服务器启动 ID（UUID），每次重启变化，可用于检测服务器重启                                                           |
-| `vector.capable`                          | 当前后端是否支持向量检索（受 store 类型 + 编译时 vector 扩展可用性影响）                                            |
-| `vector.driver`                           | `sqlite-vss` / `pgvector` / `in-memory` / `none`                                                                    |
-| `vector.modelCount` / `vector.tableCount` | 已注册的 embedding 模型数量及对应物理表数量（每个模型一张表）                                                       |
+| 字段                                      | 说明                                                                                                   |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `storeBackend`                            | 兼容字段：当前服务端 DataStore 后端（`memory` / `sqlite` / `pg`）。默认 `sqlite`。                     |
+| `bootId`                                  | 服务器启动 ID（UUID），每次重启变化，可用于检测服务器重启                                              |
+| `storage.data.frontendMode`               | 前端数据模式：`local` 使用浏览器 IndexedDB；`remote` 使用服务端 API，由服务端 `STORE_BACKEND` 持久化。 |
+| `storage.media`                           | 当前 MediaStore 的配置值、实际后端、启用状态和持久化状态。                                             |
+| `storage.migrations`                      | 已注册迁移域、版本和状态；SQL 迁移由服务端迁移流程执行，IDB 迁移由浏览器数据库升级回调执行。           |
+| `vector.capable`                          | 当前后端是否支持向量检索（受 store 类型 + 编译时 vector 扩展可用性影响）                               |
+| `vector.driver`                           | `sqlite-vec` / `pgvector` / `in-memory` / `external` / `none`                                          |
+| `vector.modelCount` / `vector.tableCount` | 已注册的 embedding 模型数量及对应物理表数量（每个模型一张表）                                          |
 
 ---
 
@@ -2485,7 +2518,7 @@ AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、
 }
 ```
 
-Web 前端会根据 `/api/health.storeBackend` 选择生成世界保存目标。当后端是 `memory` 时，前端使用 `saveTarget: "return-only"`，然后通过 `packages/store` 的 IndexedDB `DataStore.upsertWorld()` 保存到用户浏览器，并把 `world.metadata.storage` 标注为 `{ "scope": "browser", "backend": "indexeddb", "durable": true }`。当后端是 `sqlite` 或 `pg` 时，前端使用 `saveTarget: "server-store"`，并通过服务端 `packages/store` 后端持久化。未知后端保留 `server-file` 兼容旧行为。
+Web 前端优先根据 `/api/health.storage.data.frontendMode` 选择生成世界保存目标，旧服务端响应缺少 `storage` 时回退到 `/api/health.storeBackend`。`local` 模式使用 `saveTarget: "return-only"`，然后通过 `packages/store` 的 IndexedDB `DataStore.upsertWorld()` 保存到用户浏览器，并把 `world.metadata.storage` 标注为 `{ "scope": "browser", "backend": "indexeddb", "durable": true }`。`remote` 模式使用 `saveTarget: "server-store"`，并通过服务端 `packages/store` 后端持久化。未知后端保留 `server-file` 兼容旧行为。
 
 **响应 200:** SSE 帧。
 
@@ -2741,13 +2774,13 @@ interface ProtocolEvent {
 
 ## 存储模式说明
 
-Covel 支持三种部署层级 (Deployment Tier)，每种层级使用不同的存储策略：
+Covel 支持三种部署层级 (Deployment Tier)，每种层级使用不同的存储策略。浏览器模式可切换：`local` 保存到用户浏览器 IndexedDB，`remote` 通过服务端 API 保存到 `STORE_BACKEND` 指定的后端。
 
 ### T1: 自部署 (Self-Deploy)
 
 - **服务器存储**: SQLite（默认，`./data/covel.db`）；可显式切换 Memory（仅用于一次性测试）
-- **前端存储**: 浏览器 IndexedDB
-- **数据流**: 前端在每次操作前通过 `syncToServer()` 将 IndexedDB 数据推送到服务器的本地 store，让服务器能处理 Turn
+- **前端存储**: 默认 remote 使用服务端 SQLite；local 模式使用浏览器 IndexedDB
+- **数据流**: remote 模式下前端通过 API 读写服务端 store；local 模式下业务记录持久保存在浏览器 `covel-browser` IndexedDB 中，并在执行 turn 前通过 `syncToServer()` 向本地服务器补齐临时执行上下文；生成世界等服务器能力通过 `return-only` 响应交给前端保存
 - **API 密钥**: 用户自行管理，存储在浏览器 localStorage
 - **认证**: 无
 
@@ -2760,7 +2793,7 @@ STORE_BACKEND=memory pnpm dev:server  # 临时 Memory 后端（重启即丢失�
 ### T2: 演示托管 (Demo Host)
 
 - **服务器存储**: Memory 或 SQLite
-- **前端存储**: 浏览器 IndexedDB
+- **前端存储**: 演示公开写入可用 local IndexedDB；私有演示也可用 remote 服务端存储
 - **API 密钥**: 用户自行管理，HTTPS 传输必需
 - **认证**: 无
 

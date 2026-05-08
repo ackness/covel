@@ -11,6 +11,11 @@
 
 import type { I18nText } from "@covel/shared";
 import type {
+  DataStore,
+  WorldRecord as StoreWorldRecord,
+  SessionRecord as StoreSessionRecord,
+} from "@covel/store";
+import type {
   GeneratedWorldSaveTarget,
   WorldRecord,
   SessionRecord,
@@ -20,7 +25,20 @@ import type {
 } from "./api.js";
 import * as api from "./api.js";
 import * as appKv from "./app-kv-store.js";
+import {
+  createBrowserDataStore,
+  getStorageMode as getStorageModeFromFacade,
+  setStorageMode as setStorageModeFromFacade,
+  storageModeForServerBackend as storageModeForServerBackendFromFacade,
+  storageModeForServerStorage as storageModeForServerStorageFromFacade,
+  type ServerStoreBackend,
+  type ServerStorageCapabilities,
+  type StorageMode,
+} from "./storage/index.js";
 import { text } from "@/components/world/editor-helpers.js";
+
+type Writable<T> = { -readonly [K in keyof T]: T[K] };
+export type { ServerStoreBackend, StorageMode } from "./storage/index.js";
 
 // ── Interface ─────────────────────────────────────────────────────
 
@@ -115,15 +133,16 @@ export interface DataService {
 
 // ── Storage mode ──────────────────────────────────────────────────
 
-const STORAGE_MODE_KEY = "covel:storageMode";
-
-export type StorageMode = "local" | "remote";
-export type ServerStoreBackend = "memory" | "sqlite" | "pg";
-
 export function storageModeForServerBackend(
   backend: ServerStoreBackend,
 ): StorageMode {
-  return backend === "memory" ? "local" : "remote";
+  return storageModeForServerBackendFromFacade(backend);
+}
+
+export function storageModeForServerStorage(
+  storage: ServerStorageCapabilities | null | undefined,
+): StorageMode | null {
+  return storageModeForServerStorageFromFacade(storage);
 }
 
 export function generatedWorldSaveTargetForBackend(
@@ -135,13 +154,11 @@ export function generatedWorldSaveTargetForBackend(
 }
 
 export function getStorageMode(): StorageMode {
-  const val = localStorage.getItem(STORAGE_MODE_KEY);
-  // Default to "remote" (server-side SQLite). "local" (IndexedDB) is legacy.
-  return val === "local" ? "local" : "remote";
+  return getStorageModeFromFacade();
 }
 
 export function setStorageMode(mode: StorageMode): void {
-  localStorage.setItem(STORAGE_MODE_KEY, mode);
+  setStorageModeFromFacade(mode);
 }
 
 // ── Remote implementation ─────────────────────────────────────────
@@ -341,41 +358,56 @@ const LOCAL_SEED_WORLDS: Array<{
   },
 ];
 
-/**
- * IDB store handle type.
- *
- * IndexedDB is schemaless — the DataStore returned by createIdbStore()
- * happily persists any JS object regardless of the TypeScript field types.
- * LocalDataService exploits this: it writes I18nText names, extra fields
- * (lore, tags, worldId, status…), and calls schemaless CRUD methods that
- * don't exist on the strict DataStore contract.
- *
- * We intentionally type the handle as `any` to match IDB's runtime
- * flexibility. All data flowing *out* of the store is re-mapped to the
- * frontend's typed records inside each method below.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type IdbStoreHandle = any;
+function toFrontendWorld(w: StoreWorldRecord): WorldRecord {
+  return {
+    id: w.id,
+    name: w.name as I18nText,
+    description: w.description as I18nText,
+    lore: w.lore as I18nText | undefined,
+    locale: w.locale,
+    tags: w.tags ? [...w.tags] : undefined,
+    dimensions:
+      w.dimensions ?? (w.metadata?.dimensions as WorldRecord["dimensions"]),
+    metadata: w.metadata as WorldRecord["metadata"],
+    createdAt: w.createdAt,
+    updatedAt: w.updatedAt,
+  };
+}
+
+function toFrontendSession(s: StoreSessionRecord): SessionRecord {
+  return {
+    id: s.id,
+    worldId: s.worldId ?? "",
+    status: s.status,
+    turnCount: s.turnCount,
+    preGameCompleted: s.preGameCompleted,
+    activePlugins: s.activePlugins,
+    presetId: s.presetId,
+    runtimeModelOverrides: s.runtimeModelOverrides
+      ? { ...s.runtimeModelOverrides }
+      : undefined,
+    createdAt: s.createdAt,
+  };
+}
 
 class LocalDataService implements DataService {
-  private idbStore: IdbStoreHandle | null = null;
+  private idbStore: DataStore | null = null;
   private statePatches = new Map<string, StatePatchRecord[]>();
   private initPromise: Promise<void> | null = null;
 
-  private async getStore(): Promise<IdbStoreHandle> {
+  private async getStore(): Promise<DataStore> {
     if (this.idbStore) return this.idbStore;
     if (!this.initPromise) {
       this.initPromise = (async () => {
-        const { createIdbStore } = await import("@covel/store/idb");
-        this.idbStore = await createIdbStore("covel-game");
+        this.idbStore = await createBrowserDataStore();
         // Seed minimal worlds for offline/no-server scenarios
         const existing = await this.idbStore.listWorlds();
         if (existing.length === 0) {
           for (const seed of LOCAL_SEED_WORLDS) {
             await this.idbStore.upsertWorld({
               id: uid("world"),
-              name: seed.name,
-              description: seed.description,
+              name: seed.name as StoreWorldRecord["name"],
+              description: seed.description as StoreWorldRecord["description"],
               tags: seed.tags,
               createdAt: new Date().toISOString(),
             });
@@ -388,41 +420,19 @@ class LocalDataService implements DataService {
   }
 
   // ── Worlds ──────────────────────────────────────────────────────
-  // IDB is schemaless — stores I18nText, tags, lore directly despite
-  // the typed DataStore interface only knowing string fields.
 
   async listWorlds(): Promise<WorldRecord[]> {
     const store = await this.getStore();
-    const worlds = (await store.listWorlds()) as any[];
+    const worlds = await store.listWorlds();
     return worlds
-      .map(
-        (w: any) =>
-          ({
-            id: w.id,
-            name: w.name,
-            description: w.description,
-            lore: w.lore,
-            tags: w.tags,
-            dimensions: w.dimensions ?? w.metadata?.dimensions,
-            createdAt: w.createdAt,
-          }) as WorldRecord,
-      )
+      .map(toFrontendWorld)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async getWorld(id: string): Promise<WorldRecord | null> {
     const store = await this.getStore();
-    const w = (await store.getWorld(id)) as any;
-    if (!w) return null;
-    return {
-      id: w.id,
-      name: w.name,
-      description: w.description,
-      lore: w.lore,
-      tags: w.tags,
-      dimensions: w.dimensions ?? w.metadata?.dimensions,
-      createdAt: w.createdAt,
-    } as WorldRecord;
+    const w = await store.getWorld(id);
+    return w ? toFrontendWorld(w) : null;
   }
 
   async createWorld(name: string, description: string): Promise<WorldRecord> {
@@ -433,7 +443,7 @@ class LocalDataService implements DataService {
       description,
       createdAt: new Date().toISOString(),
     };
-    await store.upsertWorld(world as any);
+    await store.upsertWorld(world as StoreWorldRecord);
     return world;
   }
 
@@ -457,7 +467,7 @@ class LocalDataService implements DataService {
       updatedAt: now,
       createdAt: world.createdAt ?? now,
     };
-    await store.upsertWorld(record as any);
+    await store.upsertWorld(record as StoreWorldRecord);
     return record;
   }
 
@@ -471,54 +481,32 @@ class LocalDataService implements DataService {
     >,
   ): Promise<WorldRecord> {
     const store = await this.getStore();
-    const existing = (await store.getWorld(id)) as any;
+    const existing = await store.getWorld(id);
     if (!existing) throw new Error("World not found: " + id);
-    const updated: WorldRecord = {
+    const updated: StoreWorldRecord = {
       ...existing,
       ...patch,
       updatedAt: new Date().toISOString(),
-    };
-    await store.upsertWorld(updated as any);
-    return updated;
+    } as StoreWorldRecord;
+    await store.upsertWorld(updated);
+    return toFrontendWorld(updated);
   }
 
   // ── Sessions ────────────────────────────────────────────────────
-  // Frontend SessionRecord has status/presetId not in store's SessionRecord.
-  // IDB stores them anyway (schemaless).
 
   async listSessions(worldId: string): Promise<SessionRecord[]> {
     const store = await this.getStore();
-    const sessions = (await store.listSessions()) as any[];
+    const sessions = await store.listSessions();
     return sessions
-      .filter((s: any) => !worldId || s.worldId === worldId)
-      .map(
-        (s: any) =>
-          ({
-            id: s.id,
-            worldId: s.worldId ?? "",
-            status: (s.status ?? "active") as SessionStatus,
-            turnCount: s.turnCount ?? 0,
-            preGameCompleted: s.preGameCompleted ?? [],
-            presetId: s.presetId,
-            createdAt: s.createdAt,
-          }) as SessionRecord,
-      )
+      .filter((s) => !worldId || s.worldId === worldId)
+      .map(toFrontendSession)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async getSession(sessionId: string): Promise<SessionRecord | null> {
     const store = await this.getStore();
-    const s = (await store.getSession(sessionId)) as any;
-    if (!s) return null;
-    return {
-      id: s.id,
-      worldId: s.worldId ?? "",
-      status: (s.status ?? "active") as SessionStatus,
-      turnCount: s.turnCount ?? 0,
-      preGameCompleted: s.preGameCompleted ?? [],
-      presetId: s.presetId,
-      createdAt: s.createdAt,
-    } as SessionRecord;
+    const s = await store.getSession(sessionId);
+    return s ? toFrontendSession(s) : null;
   }
 
   async createSession(
@@ -547,9 +535,11 @@ class LocalDataService implements DataService {
       preGameCompleted: [],
       locale: locale ?? "zh-CN",
       activePlugins: _plugins ?? [],
+      presetId,
+      metadata: presetId ? { presetId } : undefined,
       createdAt: nowIso,
       updatedAt: nowIso,
-    } as any);
+    });
     return session;
   }
 
@@ -558,7 +548,7 @@ class LocalDataService implements DataService {
     updates: Partial<Pick<SessionRecord, "status" | "presetId">>,
   ): Promise<SessionRecord> {
     const store = await this.getStore();
-    const existing = (await store.getSession(sessionId)) as any;
+    const existing = await store.getSession(sessionId);
     if (!existing) throw new Error("Session not found: " + sessionId);
     const nextStatus = (updates.status ??
       existing.status ??
@@ -572,11 +562,12 @@ class LocalDataService implements DataService {
       presetId: updates.presetId ?? existing.presetId,
       createdAt: existing.createdAt,
     };
-    const patch: Record<string, unknown> = {
+    const patch: Writable<Partial<StoreSessionRecord>> = {
       updatedAt: new Date().toISOString(),
     };
     if (updates.status !== undefined) patch.status = nextStatus;
-    await store.updateSession(sessionId, patch as any);
+    if ("presetId" in updates) patch.presetId = updates.presetId;
+    await store.updateSession(sessionId, patch);
     return updated;
   }
 
@@ -592,10 +583,10 @@ class LocalDataService implements DataService {
 
   async listMessages(sessionId: string): Promise<MessageRecord[]> {
     const store = await this.getStore();
-    const messages = (await store.listMessages(sessionId)) as any[];
+    const messages = await store.listMessages(sessionId);
     return messages
       .map(
-        (m: any) =>
+        (m) =>
           ({
             id: m.id,
             sessionId: m.sessionId,

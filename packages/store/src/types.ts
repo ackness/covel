@@ -1,11 +1,12 @@
 /**
  * Unified DataStore interface and record types.
  *
- * All data is session-scoped. Switching backends requires only changing
- * the STORE_BACKEND environment variable (memory | sqlite | pg).
+ * All data is session-scoped. Server deployments switch backends through
+ * STORE_BACKEND (memory | sqlite | pg). Browser callers can request idb
+ * directly through createStore({ backend: "idb" }).
  */
 
-import type { SessionStatus } from "@covel/shared";
+import type { SessionStatus, WorldDimensions } from "@covel/shared";
 
 // ── Record types ─────────────────────────────────────────────────
 
@@ -16,6 +17,7 @@ export interface WorldRecord {
   readonly lore?: string;
   readonly tags?: readonly string[];
   readonly locale?: string;
+  readonly dimensions?: WorldDimensions;
   readonly metadata?: Readonly<Record<string, unknown>>;
   readonly createdAt: string;
   readonly updatedAt?: string;
@@ -35,8 +37,10 @@ export interface SessionRecord {
   readonly preGameCompleted: readonly string[];
   readonly locale: string;
   readonly activePlugins: readonly string[];
+  readonly presetId?: string;
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
   /** FK to vector_models.id; null = RAG disabled */
   readonly embeddingModelId?: number | null;
   /** ISO 8601 timestamp; null = not locked */
@@ -48,6 +52,67 @@ export interface SessionRecord {
    * `manifest.model` then `"default"`.
    */
   readonly runtimeModelOverrides?: Readonly<Record<string, string>>;
+}
+
+export function normalizeSessionRecord(session: SessionRecord): SessionRecord {
+  const metadataPresetId = session.metadata?.presetId;
+  if (session.presetId === undefined) {
+    return typeof metadataPresetId === "string"
+      ? { ...session, presetId: metadataPresetId }
+      : session;
+  }
+  return {
+    ...session,
+    metadata: {
+      ...session.metadata,
+      presetId: session.presetId,
+    },
+  };
+}
+
+export function mergeSessionPatch(
+  existing: SessionRecord,
+  patch: Partial<
+    Pick<
+      SessionRecord,
+      | "status"
+      | "turnCount"
+      | "preGameCompleted"
+      | "activePlugins"
+      | "presetId"
+      | "updatedAt"
+      | "metadata"
+      | "embeddingModelId"
+      | "embeddingLockedAt"
+      | "runtimeModelOverrides"
+    >
+  >,
+): SessionRecord {
+  const metadata: Record<string, unknown> = {
+    ...existing.metadata,
+    ...patch.metadata,
+  };
+  if ("presetId" in patch) {
+    if (patch.presetId === undefined) {
+      delete metadata.presetId;
+    } else {
+      metadata.presetId = patch.presetId;
+    }
+  }
+  return normalizeSessionRecord({
+    ...existing,
+    ...patch,
+    metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+  });
+}
+
+export function normalizeWorldRecord(world: WorldRecord): WorldRecord {
+  return {
+    ...world,
+    dimensions:
+      world.dimensions ??
+      (world.metadata?.dimensions as WorldRecord["dimensions"]),
+  };
 }
 
 export interface TurnResultRecord {
@@ -332,7 +397,9 @@ export interface DataStore {
         | "turnCount"
         | "preGameCompleted"
         | "activePlugins"
+        | "presetId"
         | "updatedAt"
+        | "metadata"
         | "embeddingModelId"
         | "embeddingLockedAt"
         | "runtimeModelOverrides"
@@ -800,7 +867,8 @@ export interface SuspensionRecord {
 
 // ── Store config ─────────────────────────────────────────────────
 
-export type StoreBackend = "memory" | "sqlite" | "pg";
+export type StoreBackend = "memory" | "sqlite" | "pg" | "idb";
+export type RuntimeStoreBackend = Exclude<StoreBackend, "idb">;
 
 export interface StoreConfig {
   readonly backend: StoreBackend;
@@ -808,4 +876,6 @@ export interface StoreConfig {
   readonly sqlitePath?: string;
   /** PostgreSQL connection URL */
   readonly databaseUrl?: string;
+  /** IndexedDB database name (default: covel-browser) */
+  readonly idbDbName?: string;
 }

@@ -5,7 +5,7 @@
  * Route logic lives in routes/ modules.
  */
 
-import { dirname, resolve, join } from "node:path";
+import { resolve, join } from "node:path";
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { Hono } from "hono";
@@ -15,12 +15,9 @@ import { secureHeaders } from "hono/secure-headers";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createAiStack } from "./ai-setup.js";
 import {
-  createMemoryMediaStore,
-  createPgMediaStore,
-  createSqliteMediaStore,
+  createMediaStoreFromEnv,
   createStoreFromEnv,
   resolveBackendFromEnv,
-  type MediaStore,
 } from "@covel/store";
 import { createEmbeddingLockHelper } from "./embedding-lock.js";
 import {
@@ -88,33 +85,6 @@ function resolvePreferredMemorySlot(slotRegistry: {
     if (slotRegistry.resolveSlot(candidate)) return candidate;
   }
   return slotRegistry.listSlotsByTag("text")[0]?.slotId ?? "plugin";
-}
-
-async function createMediaStoreForBackend(
-  backend: ReturnType<typeof resolveBackendFromEnv>,
-  runtimeEnv: ReturnType<typeof readRuntimeEnv>,
-): Promise<MediaStore | undefined> {
-  if (backend === "memory") {
-    console.log("[server] media store: memory");
-    return createMemoryMediaStore();
-  }
-
-  if (backend === "sqlite") {
-    const sqlitePath = resolve(runtimeEnv.sqlitePath);
-    const mediaRoot = join(dirname(sqlitePath), "media");
-    console.log(`[server] media store: sqlite (${mediaRoot})`);
-    return createSqliteMediaStore(sqlitePath, { mediaRoot });
-  }
-
-  if (backend === "pg" && runtimeEnv.databaseUrl) {
-    console.log("[server] media store: pg");
-    return createPgMediaStore(runtimeEnv.databaseUrl);
-  }
-
-  console.warn(
-    "[server] media store: unavailable for pg backend without DATABASE_URL",
-  );
-  return undefined;
 }
 
 const app = new Hono();
@@ -198,7 +168,7 @@ loadKeysEnvInto(process.env);
 const ai = createAiStack();
 const storeBackend = resolveBackendFromEnv();
 const store = await createStoreFromEnv();
-const mediaStore = await createMediaStoreForBackend(storeBackend, env);
+const mediaStore = await createMediaStoreFromEnv(process.env);
 
 // ── Session lock ────────────────────────────────────────────────
 //
@@ -294,6 +264,8 @@ const api = await bootstrapApi({
   store,
   storeBackend,
   mediaStore,
+  mediaBackend: env.mediaBackend,
+  vectorBackend: env.vectorBackend,
   ensureEmbeddingLock,
   preferredMemorySlot,
   perRequestMiddleware: [perRequestLlm],

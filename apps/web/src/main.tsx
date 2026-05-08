@@ -7,6 +7,7 @@ import { SessionProvider } from "@/stores/session-store";
 import {
   setStorageMode,
   storageModeForServerBackend,
+  storageModeForServerStorage,
   type ServerStoreBackend,
 } from "@/services/data-service";
 import { loadProviderKeysFromStorage } from "@/services/api";
@@ -31,16 +32,24 @@ declare module "@tanstack/react-router" {
 
 /**
  * Detect server storage backend and set frontend storage mode accordingly.
- * STORE_BACKEND=pg  → RemoteDataService (all data on server via @covel/store PgStore)
- * STORE_BACKEND=memory → LocalDataService (session data in browser IDB)
+ * storage.data.frontendMode=remote → RemoteDataService (server @covel/store)
+ * storage.data.frontendMode=local  → LocalDataService (browser IDB)
  */
 async function syncStorageMode(): Promise<void> {
   try {
     const res = await fetch("/api/health");
     if (!res.ok) return;
-    const health = (await res.json()) as { storeBackend?: ServerStoreBackend };
-    if (health.storeBackend) {
-      setStorageMode(storageModeForServerBackend(health.storeBackend));
+    const health = (await res.json()) as {
+      storeBackend?: ServerStoreBackend;
+      storage?: Parameters<typeof storageModeForServerStorage>[0];
+    };
+    const mode =
+      storageModeForServerStorage(health.storage) ??
+      (health.storeBackend
+        ? storageModeForServerBackend(health.storeBackend)
+        : null);
+    if (mode) {
+      setStorageMode(mode);
     }
   } catch {
     // server unreachable — keep current mode

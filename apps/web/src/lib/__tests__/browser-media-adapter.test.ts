@@ -13,10 +13,13 @@ const put = vi.fn<MediaStore["put"]>();
 const get = vi.fn<MediaStore["get"]>();
 const resolveUrl = vi.fn<MediaStore["resolveUrl"]>();
 const deleteById = vi.fn<MediaStore["delete"]>();
-const createIndexedDbMediaStore = vi.fn();
+const mocks = vi.hoisted(() => ({
+  createBrowserMediaStore: vi.fn(),
+}));
 
-vi.mock("@covel/store/idb", () => ({
-  createIndexedDbMediaStore,
+vi.mock("@/services/storage", () => ({
+  BROWSER_MEDIA_STORE_DB_NAME: "covel-browser",
+  createBrowserMediaStore: mocks.createBrowserMediaStore,
 }));
 
 const ref: MediaRef = {
@@ -57,7 +60,7 @@ describe("browser-media-adapter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     __resetBrowserMediaStoreForTests();
-    createIndexedDbMediaStore.mockResolvedValue(makeStore());
+    mocks.createBrowserMediaStore.mockResolvedValue(makeStore());
     put.mockResolvedValue(ref);
     get.mockResolvedValue(new Blob(["abc"], { type: "image/png" }));
     resolveUrl.mockResolvedValue("blob:https://app.example/1");
@@ -69,10 +72,8 @@ describe("browser-media-adapter", () => {
     const second = await getBrowserMediaStore();
 
     expect(first).toBe(second);
-    expect(createIndexedDbMediaStore).toHaveBeenCalledTimes(1);
-    expect(createIndexedDbMediaStore).toHaveBeenCalledWith({
-      dbName: "covel-media-store",
-    });
+    expect(mocks.createBrowserMediaStore).toHaveBeenCalledTimes(1);
+    expect(mocks.createBrowserMediaStore).toHaveBeenCalledWith("covel-browser");
   });
 
   it("forwards media operations to the IndexedDB media store", async () => {

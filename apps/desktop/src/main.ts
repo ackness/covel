@@ -28,7 +28,6 @@ import path from "node:path";
 import fs from "node:fs";
 
 import {
-  covelHome,
   ensureUserPaths,
   isDev,
   resolvePreloadScript,
@@ -482,6 +481,49 @@ function saveKeysEnv(keysFile: string, keys: Record<string, string>): void {
   fs.writeFileSync(keysFile, body, { mode: 0o600 });
 }
 
+async function requestSidecarConfig<T>(
+  pathName: string,
+  init?: RequestInit,
+): Promise<T> {
+  if (serverPort <= 0) throw new Error("sidecar not ready");
+  const res = await fetch(`http://127.0.0.1:${serverPort}${pathName}`, {
+    ...init,
+    headers: {
+      ...init?.headers,
+      Authorization: `Bearer ${desktopRestToken}`,
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`sidecar ${pathName} failed: ${res.status}`);
+  }
+  return (await res.json()) as T;
+}
+
+async function getSettingsViaSidecar(): Promise<Record<string, unknown>> {
+  const bundle = await requestSidecarConfig<{
+    entries?: Record<string, unknown>;
+  }>("/api/config/settings");
+  return bundle.entries ?? {};
+}
+
+async function saveSettingsViaSidecar(
+  entries: Record<string, unknown>,
+): Promise<void> {
+  await requestSidecarConfig<{ ok?: boolean }>("/api/config/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ entries }),
+  });
+}
+
+async function saveKeysViaSidecar(keys: Record<string, string>): Promise<void> {
+  await requestSidecarConfig<{ ok?: boolean }>("/api/config/keys", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(keys),
+  });
+}
+
 function parseEnvFileInto(
   filePath: string,
   into: Record<string, string>,
@@ -906,14 +948,19 @@ function registerIpcHandlers(paths: ReturnType<typeof ensureUserPaths>): void {
   // safeStorage only bought us a macOS Keychain prompt with no real security
   // uplift on an unsigned build.
   ipcMain.handle("covel:keys:load", () => loadKeysEnv(paths.userKeysEnvPath));
-  ipcMain.handle("covel:keys:save", (_event, payload: unknown) => {
+  ipcMain.handle("covel:keys:save", async (_event, payload: unknown) => {
     if (!payload || typeof payload !== "object") return { ok: false };
     const keys: Record<string, string> = {};
     for (const [k, v] of Object.entries(payload as Record<string, unknown>)) {
       if (typeof v === "string") keys[k] = v;
     }
     try {
-      saveKeysEnv(paths.userKeysEnvPath, keys);
+      try {
+        await saveKeysViaSidecar(keys);
+      } catch (err) {
+        writeLog("warn", "keys:save sidecar fallback:", err);
+        saveKeysEnv(paths.userKeysEnvPath, keys);
+      }
       return { ok: true };
     } catch (err) {
       writeLog("error", "keys:save failed:", err);
@@ -925,33 +972,40 @@ function registerIpcHandlers(paths: ReturnType<typeof ensureUserPaths>): void {
   // Read returns the `entries` map only; writes accept the full entries blob
   // and rewrite the file atomically with a timestamp for audit purposes.
   ipcMain.handle("covel:settings:load", () => {
-    try {
-      const raw = fs.readFileSync(paths.userSettingsJsonPath, "utf-8");
-      const parsed = JSON.parse(raw) as {
-        entries?: Record<string, unknown>;
-      };
-      return parsed.entries ?? {};
-    } catch {
-      return {};
-    }
+    return getSettingsViaSidecar().catch(() => {
+      try {
+        const raw = fs.readFileSync(paths.userSettingsJsonPath, "utf-8");
+        const parsed = JSON.parse(raw) as {
+          entries?: Record<string, unknown>;
+        };
+        return parsed.entries ?? {};
+      } catch {
+        return {};
+      }
+    });
   });
-  ipcMain.handle("covel:settings:save", (_event, payload: unknown) => {
+  ipcMain.handle("covel:settings:save", async (_event, payload: unknown) => {
     if (!payload || typeof payload !== "object") return { ok: false };
     const entries = payload as Record<string, unknown>;
     try {
-      fs.mkdirSync(path.dirname(paths.userSettingsJsonPath), {
-        recursive: true,
-      });
-      const bundle = {
-        schemaVersion: 1,
-        savedAt: new Date().toISOString(),
-        entries,
-      };
-      fs.writeFileSync(
-        paths.userSettingsJsonPath,
-        JSON.stringify(bundle, null, 2) + "\n",
-        { mode: 0o600 },
-      );
+      try {
+        await saveSettingsViaSidecar(entries);
+      } catch (err) {
+        writeLog("warn", "settings:save sidecar fallback:", err);
+        fs.mkdirSync(path.dirname(paths.userSettingsJsonPath), {
+          recursive: true,
+        });
+        const bundle = {
+          schemaVersion: 1,
+          savedAt: new Date().toISOString(),
+          entries,
+        };
+        fs.writeFileSync(
+          paths.userSettingsJsonPath,
+          JSON.stringify(bundle, null, 2) + "\n",
+          { mode: 0o600 },
+        );
+      }
       return { ok: true };
     } catch (err) {
       writeLog("error", "settings:save failed:", err);

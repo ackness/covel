@@ -6,9 +6,14 @@ import type {
   MediaStore,
 } from "@covel/shared";
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+import {
+  BROWSER_IDB_DATABASE_NAME,
+  BROWSER_IDB_SCHEMA_VERSION,
+  upgradeBrowserIdbSchema,
+} from "./idb-schema.js";
 
-const DEFAULT_DB_NAME = "covel-media-store";
-const DB_VERSION = 2;
+const DEFAULT_DB_NAME = BROWSER_IDB_DATABASE_NAME;
+const DB_VERSION = BROWSER_IDB_SCHEMA_VERSION;
 const STORE_ASSETS = "media_assets";
 const STORE_REFS = "media_refs";
 
@@ -56,17 +61,8 @@ export interface IndexedDbMediaStoreOptions {
 
 async function openMediaDb(dbName: string): Promise<IDBPDatabase<IdbMediaDb>> {
   return openDB<IdbMediaDb>(dbName, DB_VERSION, {
-    upgrade(db) {
-      if (!db.objectStoreNames.contains(STORE_ASSETS)) {
-        const assets = db.createObjectStore(STORE_ASSETS, { keyPath: "id" });
-        assets.createIndex("owner", ["ownerSessionId", "ownerPluginId"]);
-      }
-      if (!db.objectStoreNames.contains(STORE_REFS)) {
-        const refs = db.createObjectStore(STORE_REFS, { keyPath: "key" });
-        refs.createIndex("sessionId", "sessionId");
-        refs.createIndex("mediaId", "mediaId");
-        refs.createIndex("session_media", ["sessionId", "mediaId"]);
-      }
+    upgrade(db, oldVersion) {
+      upgradeBrowserIdbSchema(db, oldVersion);
     },
   });
 }

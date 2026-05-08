@@ -11,51 +11,37 @@
  */
 
 import { Hono } from "hono";
-import type { DataStore, StoreBackend } from "@covel/store";
-import { supportsVector } from "@covel/store";
+import type {
+  DataStore,
+  MediaStore,
+  MediaStoreBackend,
+  StoreBackend,
+  VectorBackend,
+} from "@covel/store";
+import { describeStorageCapabilities } from "@covel/store";
 
 const bootId = crypto.randomUUID();
-
-function getVectorDriver(backend: StoreBackend): string {
-  switch (backend) {
-    case "sqlite":
-      return "sqlite-vec";
-    case "pg":
-      return "pgvector";
-    case "memory":
-      return "in-memory";
-    default:
-      return "none";
-  }
-}
 
 export function createHealthRoutes(
   store: DataStore,
   backend: StoreBackend,
+  options: {
+    readonly mediaBackend?: MediaStoreBackend;
+    readonly mediaStore?: MediaStore;
+    readonly vectorBackend?: VectorBackend;
+  } = {},
 ): Hono {
   const app = new Hono();
 
   // GET /health — Health check
   app.get("/", async (c) => {
-    const capable = supportsVector(store);
-    const driver = getVectorDriver(backend);
-
-    let modelCount = 0;
-    let tableCount = 0;
-    if (capable) {
-      try {
-        const models = await store.listVectorModels();
-        modelCount = models.length;
-        // Each model owns exactly one physical table.
-        tableCount = models.length;
-      } catch (err) {
-        // Don't let observability break the health endpoint.
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[health] listVectorModels failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    }
+    const storage = await describeStorageCapabilities({
+      dataBackend: backend,
+      mediaBackend: options.mediaBackend,
+      mediaStore: options.mediaStore,
+      vectorBackend: options.vectorBackend,
+      store,
+    });
 
     return c.json({
       status: "ok",
@@ -63,12 +49,8 @@ export function createHealthRoutes(
       storeBackend: backend,
       bootId,
       timestamp: new Date().toISOString(),
-      vector: {
-        capable,
-        driver,
-        modelCount,
-        tableCount,
-      },
+      storage,
+      vector: storage.vector,
     });
   });
 

@@ -37,6 +37,7 @@ export const sessions = sqliteTable("sessions", {
   preGameCompleted: text("pre_game_completed").notNull().default("[]"), // JSON
   locale: text("locale").notNull().default("zh-CN"),
   activePlugins: text("active_plugins").notNull().default("[]"),
+  metadata: text("metadata"), // JSON
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   embeddingModelId: integer("embedding_model_id"),

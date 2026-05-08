@@ -46,6 +46,7 @@ export const sessions = pgTable("sessions", {
   preGameCompleted: jsonb("pre_game_completed").notNull().default([]), // JSON string[] — runtimeIds that have finished pre-game band
   locale: text("locale").notNull().default("zh-CN"),
   activePlugins: jsonb("active_plugins").notNull().default([]), // JSON array
+  metadata: jsonb("metadata"), // JSON
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   embeddingModelId: integer("embedding_model_id"), // FK → vector_models.id; NULL = RAG disabled

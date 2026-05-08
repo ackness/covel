@@ -314,7 +314,7 @@ submitBehavior: {
 框架会在玩家点击底部发送时自动：
 
 1. 将每个 draft 按 `sourceBlockId`（即原 `StreamMessage.id`）汇总；
-2. 调用内部 `submitBlock(sourceBlockId, { _kind: "selection", _label, items })`，把选择持久化到 IDB（`submittedBlockValues` 表）；
+2. 调用内部 `submitBlock(sourceBlockId, { _kind: "selection", _label, items })`，把选择持久化到浏览器 app-KV 的 `submittedBlocks` store；
 3. 重新渲染该 block 时，框架追加一行 `你的选择：xxx` 的 `SubmittedSelectionFooter`。
 
 `form` 类提交（`submitForm` → `submitInteraction`）走另一条路径：原始字段值已经直接烘焙进 disabled 表单 spec，所以框架**不会**再额外渲染 footer。

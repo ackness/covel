@@ -45,7 +45,8 @@ export const COVEL_ENV_REGISTRY = [
     values: ["memory", "sqlite", "pg"],
     defaultValue: "sqlite",
     example: "sqlite",
-    description: "Server DataStore backend.",
+    description:
+      "Server DataStore backend. Browser callers can use idb through @covel/store createStore().",
   },
   {
     name: "SQLITE_PATH",
@@ -62,6 +63,72 @@ export const COVEL_ENV_REGISTRY = [
     status: "active",
     example: "postgresql://covel:covel_dev@localhost:5432/covel",
     description: "PostgreSQL connection string for the pg store and Drizzle.",
+  },
+  {
+    name: "MEDIA_BACKEND",
+    group: "storage",
+    type: "enum",
+    status: "active",
+    values: ["mirror", "memory", "sqlite", "pg", "none"],
+    defaultValue: "mirror",
+    example: "mirror",
+    description:
+      "Server MediaStore backend. mirror follows STORE_BACKEND; none disables media routes.",
+  },
+  {
+    name: "MEDIA_ROOT",
+    group: "storage",
+    type: "path",
+    status: "active",
+    description:
+      "Filesystem root for sqlite media blobs. Defaults to a media directory beside SQLITE_PATH.",
+  },
+  {
+    name: "MEDIA_S3_BUCKET",
+    group: "storage",
+    type: "string",
+    status: "planned",
+    description: "S3-compatible bucket for future explicit S3 media wiring.",
+  },
+  {
+    name: "MEDIA_S3_REGION",
+    group: "storage",
+    type: "string",
+    status: "planned",
+    description: "S3-compatible region for future explicit S3 media wiring.",
+  },
+  {
+    name: "MEDIA_S3_ENDPOINT",
+    group: "storage",
+    type: "url",
+    status: "planned",
+    description: "S3-compatible endpoint for future explicit S3 media wiring.",
+  },
+  {
+    name: "MEDIA_S3_KEY_PREFIX",
+    group: "storage",
+    type: "string",
+    status: "planned",
+    description: "Object key prefix for future explicit S3 media wiring.",
+  },
+  {
+    name: "MEDIA_S3_PUBLIC_BASE_URL",
+    group: "storage",
+    type: "url",
+    status: "planned",
+    description:
+      "Public base URL for resolving explicitly wired S3 media assets without signed URLs.",
+  },
+  {
+    name: "VECTOR_BACKEND",
+    group: "storage",
+    type: "enum",
+    status: "active",
+    values: ["embedded", "none", "external"],
+    defaultValue: "embedded",
+    example: "embedded",
+    description:
+      "VectorStore backend. embedded uses the active DataStore vector capability; none disables vector search; external is reserved for an injected adapter.",
   },
   {
     name: "POSTGRES_USER",
@@ -822,6 +889,15 @@ export function providerApiKeyEnvName(providerId: string): string | null {
   return providerIdToApiKeyEnvName(providerId);
 }
 
+function readSqlitePath(source: EnvSource): string {
+  const explicit = readEnvString("SQLITE_PATH", undefined, source);
+  if (explicit) return explicit;
+  const dataRoot = readEnvString("COVEL_DATA_ROOT", undefined, source);
+  return dataRoot
+    ? `${dataRoot.replace(/[\\/]+$/, "")}/covel.db`
+    : "./data/covel.db";
+}
+
 export function readRuntimeEnv(source: EnvSource = defaultSource()) {
   return {
     storeBackend: readEnvChoice(
@@ -830,8 +906,35 @@ export function readRuntimeEnv(source: EnvSource = defaultSource()) {
       "sqlite",
       source,
     ),
-    sqlitePath: readEnvString("SQLITE_PATH", "./data/covel.db", source)!,
+    sqlitePath: readSqlitePath(source),
     databaseUrl: readEnvString("DATABASE_URL", undefined, source),
+    mediaBackend: readEnvChoice(
+      "MEDIA_BACKEND",
+      ["mirror", "memory", "sqlite", "pg", "none"] as const,
+      "mirror",
+      source,
+    ),
+    mediaRoot: readEnvString("MEDIA_ROOT", undefined, source),
+    mediaS3Bucket: readEnvString("MEDIA_S3_BUCKET", undefined, source),
+    mediaS3Region: readEnvString("MEDIA_S3_REGION", undefined, source),
+    mediaS3Endpoint: readEnvString("MEDIA_S3_ENDPOINT", undefined, source),
+    mediaS3KeyPrefix: readEnvString("MEDIA_S3_KEY_PREFIX", undefined, source),
+    mediaS3PublicBaseUrl: readEnvString(
+      "MEDIA_S3_PUBLIC_BASE_URL",
+      undefined,
+      source,
+    ),
+    mediaTokenSecret: readEnvString(
+      "COVEL_MEDIA_TOKEN_SECRET",
+      undefined,
+      source,
+    ),
+    vectorBackend: readEnvChoice(
+      "VECTOR_BACKEND",
+      ["embedded", "none", "external"] as const,
+      "embedded",
+      source,
+    ),
     serverPort: readEnvInt("SERVER_PORT", 3001, source),
     nodeEnv: readEnvChoice(
       "NODE_ENV",

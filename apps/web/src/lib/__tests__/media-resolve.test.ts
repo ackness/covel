@@ -30,13 +30,14 @@ interface FakeReq<T = unknown> {
   error: unknown;
   onsuccess: (() => void) | null;
   onerror: (() => void) | null;
-  onupgradeneeded?: (() => void) | null;
+  onupgradeneeded?: ((event: { oldVersion: number }) => void) | null;
   onblocked?: (() => void) | null;
 }
 
 class FakeStore {
   data = new Map<string, unknown>();
   constructor(readonly keyPath: string) {}
+  createIndex(): void {}
   get(key: string): FakeReq {
     const req = mk();
     queueMicrotask(() => {
@@ -45,10 +46,11 @@ class FakeStore {
     });
     return req;
   }
-  put(record: Record<string, unknown>): FakeReq {
+  put(record: Record<string, unknown>, key?: string): FakeReq {
     const req = mk();
+    const recordKey = key ?? (record[this.keyPath] as string);
     queueMicrotask(() => {
-      this.data.set(record[this.keyPath] as string, record);
+      this.data.set(recordKey, record);
       req.onsuccess?.();
     });
     return req;
@@ -81,8 +83,8 @@ class FakeTx {
 class FakeDb {
   stores = new Map<string, FakeStore>();
   objectStoreNames = { contains: (n: string) => this.stores.has(n) };
-  createObjectStore(name: string, opts: { keyPath: string }): FakeStore {
-    const s = new FakeStore(opts.keyPath);
+  createObjectStore(name: string, opts?: { keyPath?: string }): FakeStore {
+    const s = new FakeStore(opts?.keyPath ?? "id");
     this.stores.set(name, s);
     return s;
   }
@@ -113,7 +115,7 @@ function fakeIndexedDB() {
       queueMicrotask(() => {
         if (isNew) {
           req.result = db as FakeDb;
-          req.onupgradeneeded?.();
+          req.onupgradeneeded?.({ oldVersion: 0 });
         }
         req.result = db as FakeDb;
         req.onsuccess?.();

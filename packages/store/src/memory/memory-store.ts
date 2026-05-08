@@ -3,7 +3,12 @@
  * Used for testing and ephemeral sessions.
  */
 
-import type { PaginationOpts } from "../types.js";
+import {
+  mergeSessionPatch,
+  normalizeSessionRecord,
+  normalizeWorldRecord,
+  type PaginationOpts,
+} from "../types.js";
 
 function applyPagination<T>(items: T[], pagination?: PaginationOpts): T[] {
   if (!pagination) return items;
@@ -306,21 +311,22 @@ export function createMemoryStore(): DataStore &
     // ── Session ──
 
     async createSession(session) {
-      sessions.set(session.id, session);
+      sessions.set(session.id, normalizeSessionRecord(session));
     },
 
     async getSession(id) {
-      return sessions.get(id) ?? null;
+      const session = sessions.get(id);
+      return session ? normalizeSessionRecord(session) : null;
     },
 
     async updateSession(id, patch) {
       const existing = sessions.get(id);
       if (!existing) return;
-      sessions.set(id, { ...existing, ...patch });
+      sessions.set(id, mergeSessionPatch(existing, patch));
     },
 
     async listSessions() {
-      return [...sessions.values()];
+      return [...sessions.values()].map(normalizeSessionRecord);
     },
 
     async deleteSession(id) {
@@ -665,15 +671,16 @@ export function createMemoryStore(): DataStore &
     // ── Worlds ──
 
     async listWorlds() {
-      return [...worlds.values()];
+      return [...worlds.values()].map(normalizeWorldRecord);
     },
 
     async getWorld(id) {
-      return worlds.get(id) ?? null;
+      const world = worlds.get(id);
+      return world ? normalizeWorldRecord(world) : null;
     },
 
     async upsertWorld(record) {
-      worlds.set(record.id, record);
+      worlds.set(record.id, normalizeWorldRecord(record));
     },
 
     async deleteWorld(id) {

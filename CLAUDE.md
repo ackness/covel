@@ -265,7 +265,7 @@ Locale enters the execution chain via `KernelInput.locale` → `RuntimeContextVi
 
 Core objects (never collapse into a single JSON blob): **Run, Branch, Snapshot, State, Event, Record, Character, PluginData**.
 
-Store backends (`@covel/store`): `MemoryStore` (dev/test), `SqliteStore` (desktop/default), `IdbStore` (browser IDB), `PgStore` (production PG via Drizzle). Selection at server startup uses `STORE_BACKEND` with default `sqlite`; `STORE_BACKEND=pg` requires `DATABASE_URL`. World seeds load from `COVEL_WORLDS_DIR` (default `worlds/`). Desktop shells additionally pass `COVEL_USER_WORLDS_DIR=~/.covel/worlds` (Electron via `paths.worldsDirs[]`, Tauri via the env var directly) so user-authored worlds live next to config and survive a `data_root` redirect.
+Store backends (`@covel/store`): `MemoryStore` (dev/test), `SqliteStore` (desktop/default), `IdbStore` (browser IDB), `PgStore` (production PG via Drizzle). Selection at server startup uses `STORE_BACKEND=memory|sqlite|pg` with default `sqlite`; `STORE_BACKEND=pg` requires `DATABASE_URL`. Browser `local` mode uses IDB through `createStore({ backend: "idb" })`; browser `remote` mode uses the server API and the server's configured backend. `MEDIA_BACKEND=mirror` follows the server data backend by default. `VECTOR_BACKEND=embedded` uses the active DataStore vector capability. World seeds load from `COVEL_WORLDS_DIR` (default `worlds/`). Desktop shells additionally pass `COVEL_USER_WORLDS_DIR=<data_root>/worlds` so user-authored worlds move together with SQLite and logs when `data_root` is redirected.
 
 Each SQL backend splits into two files by convention:
 
@@ -322,10 +322,10 @@ Trace chain: `traceId → runId → branchId → turnId → runtimeId → plugin
 
 ## Deployment Tiers
 
-| Tier           | Storage     | API keys        | Notes          |
-| -------------- | ----------- | --------------- | -------------- |
-| T1 Self-Deploy | Browser IDB | User-managed    | No auth        |
-| T2 Demo Host   | Browser IDB | User-managed    | HTTPS required |
-| T3 Commercial  | PostgreSQL  | Platform + user | Auth required  |
+| Tier           | Storage              | API keys        | Notes          |
+| -------------- | -------------------- | --------------- | -------------- |
+| T1 Self-Deploy | SQLite / Browser IDB | User-managed    | No auth        |
+| T2 Demo Host   | SQLite / Browser IDB | User-managed    | HTTPS required |
+| T3 Commercial  | PostgreSQL           | Platform + user | Auth required  |
 
 Key env vars: `DEPLOYMENT_TIER`, `CORS_ORIGIN`, `ENABLE_DEBUG_PAGE`, `RATE_LIMIT_RPM`, `STORE_BACKEND`.

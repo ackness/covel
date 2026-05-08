@@ -8,8 +8,29 @@
  */
 
 import { openDB, type IDBPDatabase } from "idb";
+import {
+  mergeSessionPatch,
+  normalizeSessionRecord,
+  normalizeWorldRecord,
+} from "../types.js";
+import {
+  BROWSER_IDB_DATABASE_NAME,
+  BROWSER_IDB_SCHEMA_VERSION,
+  upgradeBrowserIdbSchema,
+} from "./idb-schema.js";
 export { createIndexedDbMediaStore } from "./idb-media-store.js";
 export type { IndexedDbMediaStoreOptions } from "./idb-media-store.js";
+export {
+  APP_KV_STORE_EXECUTION_STEPS,
+  APP_KV_STORE_STATE_PATCHES,
+  APP_KV_STORE_STATE_SNAPSHOTS,
+  APP_KV_STORE_SUBMITTED_BLOCKS,
+  APP_KV_STORE_WORLD_OVERLAYS,
+  BROWSER_IDB_DATABASE_NAME,
+  BROWSER_IDB_SCHEMA_VERSION,
+  MEDIA_CACHE_STORE_BLOBS,
+  upgradeBrowserIdbSchema,
+} from "./idb-schema.js";
 
 function applyPagination<T>(items: T[], pagination?: PaginationOpts): T[] {
   if (!pagination) return items;
@@ -51,181 +72,12 @@ import type {
   SnapshotRecord,
 } from "../types.js";
 
-const DB_VERSION = 9;
+const DB_VERSION = BROWSER_IDB_SCHEMA_VERSION;
 
 async function initDb(dbName: string): Promise<IDBPDatabase> {
   return openDB(dbName, DB_VERSION, {
     upgrade(db, oldVersion) {
-      if (oldVersion < 1) {
-        db.createObjectStore("sessions", { keyPath: "id" });
-
-        const turnResults = db.createObjectStore("turnResults", {
-          keyPath: "id",
-        });
-        turnResults.createIndex("sessionId", "sessionId");
-
-        const runtimeResults = db.createObjectStore("runtimeResults", {
-          keyPath: "id",
-        });
-        runtimeResults.createIndex("sessionId_turnId", ["sessionId", "turnId"]);
-
-        const toolCalls = db.createObjectStore("toolCalls", { keyPath: "id" });
-        toolCalls.createIndex("sessionId", "sessionId");
-        toolCalls.createIndex("sessionId_turnId", ["sessionId", "turnId"]);
-
-        const stateSchemas = db.createObjectStore("stateSchemas", {
-          keyPath: "id",
-        });
-        stateSchemas.createIndex("sessionId", "sessionId");
-
-        const stateEntries = db.createObjectStore("stateEntries", {
-          keyPath: "id",
-        });
-        stateEntries.createIndex("sessionId", "sessionId");
-        stateEntries.createIndex("lookup", [
-          "sessionId",
-          "tableName",
-          "fieldName",
-        ]);
-
-        const stateChanges = db.createObjectStore("stateChanges", {
-          keyPath: "id",
-        });
-        stateChanges.createIndex("sessionId", "sessionId");
-
-        const events = db.createObjectStore("events", { keyPath: "id" });
-        events.createIndex("sessionId", "sessionId");
-
-        const approvals = db.createObjectStore("approvals", { keyPath: "id" });
-        approvals.createIndex("sessionId", "sessionId");
-
-        const messages = db.createObjectStore("messages", { keyPath: "id" });
-        messages.createIndex("sessionId", "sessionId");
-
-        const characters = db.createObjectStore("characters", {
-          keyPath: "id",
-        });
-        characters.createIndex("sessionId", "sessionId");
-
-        const pluginConfigs = db.createObjectStore("pluginConfigs", {
-          keyPath: "id",
-        });
-        pluginConfigs.createIndex("lookup", ["sessionId", "pluginId"]);
-
-        db.createObjectStore("worlds", { keyPath: "id" });
-
-        const traceEvents = db.createObjectStore("traceEvents", {
-          keyPath: "id",
-        });
-        traceEvents.createIndex("sessionId", "sessionId");
-      }
-
-      if (oldVersion < 2) {
-        const turnMsgs = db.createObjectStore("turnMessages", {
-          keyPath: "id",
-        });
-        turnMsgs.createIndex("sessionId", "sessionId");
-
-        const playerInputs = db.createObjectStore("playerInputs", {
-          keyPath: "id",
-        });
-        playerInputs.createIndex("sessionId", "sessionId");
-        playerInputs.createIndex("lookup", ["sessionId", "formId"]);
-      }
-
-      if (oldVersion < 3) {
-        const pluginData = db.createObjectStore("plugin_data", {
-          keyPath: "id",
-        });
-        pluginData.createIndex("sessionId_pluginId", ["sessionId", "pluginId"]);
-        pluginData.createIndex("lookup", [
-          "sessionId",
-          "pluginId",
-          "namespace",
-          "key",
-        ]);
-      }
-
-      if (oldVersion < 4) {
-        const workingMemory = db.createObjectStore("working_memory", {
-          keyPath: "id",
-        });
-        workingMemory.createIndex("sessionId", "sessionId");
-        workingMemory.createIndex("scopeKeyLookup", [
-          "sessionId",
-          "scope",
-          "key",
-        ]);
-
-        const summaries = db.createObjectStore("sessionSummaries", {
-          keyPath: "id",
-        });
-        summaries.createIndex("sessionId", "sessionId");
-
-        const suspensions = db.createObjectStore("suspensions", {
-          keyPath: "id",
-        });
-        suspensions.createIndex("sessionId", "sessionId");
-      }
-
-      if (oldVersion < 5) {
-        const snapshots = db.createObjectStore("state_snapshots", {
-          keyPath: "id",
-        });
-        snapshots.createIndex("sessionId", "sessionId");
-      }
-
-      if (oldVersion < 6) {
-        const lorebookEntries = db.createObjectStore("lorebook_entries", {
-          keyPath: "id",
-        });
-        lorebookEntries.createIndex("sessionId", "sessionId");
-      }
-
-      if (oldVersion < 7) {
-        // PR-1 translation layer: runtime_outputs + interaction_records
-        const runtimeOutputs = db.createObjectStore("runtime_outputs", {
-          keyPath: "id",
-        });
-        runtimeOutputs.createIndex("sessionId", "sessionId");
-        runtimeOutputs.createIndex("session_time", ["sessionId", "timestamp"]);
-        runtimeOutputs.createIndex("session_runtime", [
-          "sessionId",
-          "runtimeId",
-        ]);
-
-        const interactionRecords = db.createObjectStore("interaction_records", {
-          keyPath: "id",
-        });
-        interactionRecords.createIndex("sessionId", "sessionId");
-        interactionRecords.createIndex("session_time", [
-          "sessionId",
-          "timestamp",
-        ]);
-        interactionRecords.createIndex("session_type", ["sessionId", "type"]);
-      }
-
-      if (oldVersion < 8) {
-        // SessionRecord schema migration: phase/playingTurnOffset → status/preGameCompleted.
-        // IDB cannot ALTER columns; drop-and-recreate is acceptable because
-        // T1/T2 IdbStore is dev/test only.
-        if (db.objectStoreNames.contains("sessions")) {
-          db.deleteObjectStore("sessions");
-        }
-        db.createObjectStore("sessions", { keyPath: "id" });
-      }
-
-      if (oldVersion < 9) {
-        const ledger = db.createObjectStore("world_data_import_ledger", {
-          keyPath: "id",
-        });
-        ledger.createIndex("sessionId", "sessionId");
-        ledger.createIndex("source", [
-          "sessionId",
-          "sourceWorldId",
-          "sourceId",
-        ]);
-      }
+      upgradeBrowserIdbSchema(db, oldVersion);
     },
   });
 }
@@ -262,7 +114,7 @@ const OBJECT_STORES = [
 type StoreName = (typeof OBJECT_STORES)[number];
 
 export async function createIdbStore(dbName?: string): Promise<DataStore> {
-  const db = await initDb(dbName ?? "covel-store");
+  const db = await initDb(dbName ?? BROWSER_IDB_DATABASE_NAME);
 
   // ── Transaction snapshot state (S4-T1, Finding 3 fix) ──
   //
@@ -318,21 +170,25 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     // ── Session ──
 
     async createSession(session: SessionRecord): Promise<void> {
-      await putAndTrack("sessions", structuredClone(session));
+      await putAndTrack(
+        "sessions",
+        structuredClone(normalizeSessionRecord(session)),
+      );
     },
 
     async getSession(id: string): Promise<SessionRecord | null> {
-      return (await db.get("sessions", id)) ?? null;
+      const session = (await db.get("sessions", id)) ?? null;
+      return session ? normalizeSessionRecord(session) : null;
     },
 
     async updateSession(id, patch): Promise<void> {
       const existing = await db.get("sessions", id);
       if (!existing) return;
-      await putAndTrack("sessions", { ...existing, ...patch });
+      await putAndTrack("sessions", mergeSessionPatch(existing, patch));
     },
 
     async listSessions(): Promise<SessionRecord[]> {
-      return db.getAll("sessions");
+      return (await db.getAll("sessions")).map(normalizeSessionRecord);
     },
 
     async deleteSession(id: string): Promise<void> {
@@ -749,15 +605,19 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     // ── Worlds ──
 
     async listWorlds(): Promise<WorldRecord[]> {
-      return db.getAll("worlds");
+      return (await db.getAll("worlds")).map(normalizeWorldRecord);
     },
 
     async getWorld(id: string): Promise<WorldRecord | null> {
-      return (await db.get("worlds", id)) ?? null;
+      const world = (await db.get("worlds", id)) ?? null;
+      return world ? normalizeWorldRecord(world) : null;
     },
 
     async upsertWorld(record: WorldRecord): Promise<void> {
-      await putAndTrack("worlds", structuredClone(record));
+      await putAndTrack(
+        "worlds",
+        structuredClone(normalizeWorldRecord(record)),
+      );
     },
 
     async deleteWorld(id: string): Promise<void> {

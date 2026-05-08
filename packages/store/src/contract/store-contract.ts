@@ -544,6 +544,49 @@ export function runStoreContractTests(
         });
       });
 
+      it("persists session metadata and presetId through create and update", async () => {
+        const session = makeSession({
+          presetId: "preset-a",
+          metadata: {
+            presetId: "preset-a",
+            localOnly: true,
+          },
+        });
+        await store.createSession(session);
+        const created = await store.getSession(session.id);
+        expect(created?.presetId).toBe("preset-a");
+        expect(created?.metadata).toEqual({
+          presetId: "preset-a",
+          localOnly: true,
+        });
+
+        await store.updateSession(session.id, {
+          presetId: "preset-b",
+          updatedAt: ts(),
+        });
+        const updated = await store.getSession(session.id);
+        expect(updated?.presetId).toBe("preset-b");
+        expect(updated?.metadata).toMatchObject({
+          presetId: "preset-b",
+          localOnly: true,
+        });
+
+        await store.updateSession(session.id, {
+          presetId: "preset-c",
+          metadata: {
+            mergedPatch: true,
+          },
+          updatedAt: ts(),
+        });
+        const merged = await store.getSession(session.id);
+        expect(merged?.presetId).toBe("preset-c");
+        expect(merged?.metadata).toEqual({
+          presetId: "preset-c",
+          localOnly: true,
+          mergedPatch: true,
+        });
+      });
+
       it("PR-6: clearing runtimeModelOverrides with empty object removes it", async () => {
         const session = makeSession();
         await store.createSession({
@@ -1366,6 +1409,24 @@ export function runStoreContractTests(
         await store.upsertWorld(world);
         const result = await store.getWorld(world.id);
         expect(result).toEqual(world);
+      });
+
+      it("maps metadata.dimensions onto the world dimensions field", async () => {
+        const dimensions = {
+          geography: {
+            regions: ["North"],
+          },
+        };
+        const world = makeWorld({
+          metadata: {
+            dimensions,
+            source: "contract",
+          },
+        });
+        await store.upsertWorld(world);
+        const result = await store.getWorld(world.id);
+        expect(result?.metadata).toEqual(world.metadata);
+        expect(result?.dimensions).toEqual(dimensions);
       });
 
       it("should list all worlds", async () => {

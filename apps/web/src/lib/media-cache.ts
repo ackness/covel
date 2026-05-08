@@ -1,8 +1,8 @@
 /**
  * IndexedDB blob cache for MediaRef-addressed assets.
  *
- * - DB name:    `covel-media`
- * - Store:      `blobs` (keyPath `id`, content-addressable SHA-256)
+ * - DB name:    `covel-browser`
+ * - Store:      `media_cache_blobs` (keyPath `id`, content-addressable SHA-256)
  * - Schema:     `MediaCacheRecord`
  *
  * The cache is content-addressable, so writes are idempotent: writing the
@@ -15,9 +15,16 @@
  * function via the network fallback in `media-resolve.ts`.
  */
 
-const DB_NAME = "covel-media";
-const DB_VERSION = 1;
-const STORE_BLOBS = "blobs";
+import {
+  BROWSER_IDB_SCHEMA_VERSION,
+  MEDIA_CACHE_STORE_BLOBS,
+  upgradeBrowserIdbSchema,
+} from "@covel/store/idb";
+import { BROWSER_STORAGE_DB_NAME } from "@/services/storage";
+
+const DB_NAME = BROWSER_STORAGE_DB_NAME;
+const DB_VERSION = BROWSER_IDB_SCHEMA_VERSION;
+const STORE_BLOBS = MEDIA_CACHE_STORE_BLOBS;
 
 export interface MediaCacheRecord {
   readonly id: string;
@@ -48,11 +55,8 @@ function openMediaDb(): Promise<IDBDatabase | null> {
       resolve(null);
       return;
     }
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE_BLOBS)) {
-        db.createObjectStore(STORE_BLOBS, { keyPath: "id" });
-      }
+    req.onupgradeneeded = (event) => {
+      upgradeBrowserIdbSchema(req.result, event.oldVersion);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => {

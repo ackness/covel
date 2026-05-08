@@ -40,6 +40,7 @@ import type {
   SuspensionRecord,
   SnapshotRecord,
 } from "../types.js";
+import { mergeSessionPatch } from "../types.js";
 import { createPgTxAdapter } from "./pg-store-tx.js";
 import {
   CREATE_TABLES_SQL,
@@ -121,6 +122,7 @@ export async function createPgStore(
         preGameCompleted: session.preGameCompleted as string[],
         locale: session.locale,
         activePlugins: session.activePlugins as string[],
+        metadata: session.metadata ?? null,
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
         runtimeModelOverrides: (session.runtimeModelOverrides ?? {}) as Record<
@@ -147,13 +149,24 @@ export async function createPgStore(
           | "turnCount"
           | "preGameCompleted"
           | "activePlugins"
+          | "presetId"
           | "updatedAt"
+          | "metadata"
           | "embeddingModelId"
           | "embeddingLockedAt"
           | "runtimeModelOverrides"
         >
       >,
     ): Promise<void> {
+      const existingRows = await db
+        .select()
+        .from(schema.sessions)
+        .where(eq(schema.sessions.id, id));
+      if (!existingRows[0]) return;
+      const mergedSession = mergeSessionPatch(
+        toSessionRecord(existingRows[0]),
+        patch,
+      );
       const values: Record<string, unknown> = {};
       if (patch.status !== undefined) values.status = patch.status;
       if (patch.turnCount !== undefined) values.turnCount = patch.turnCount;
@@ -161,6 +174,9 @@ export async function createPgStore(
         values.preGameCompleted = patch.preGameCompleted as string[];
       if (patch.activePlugins !== undefined)
         values.activePlugins = patch.activePlugins as string[];
+      if ("metadata" in patch || "presetId" in patch) {
+        values.metadata = mergedSession.metadata ?? null;
+      }
       if (patch.updatedAt !== undefined) values.updatedAt = patch.updatedAt;
       if ("embeddingModelId" in patch)
         values.embeddingModelId = patch.embeddingModelId ?? null;

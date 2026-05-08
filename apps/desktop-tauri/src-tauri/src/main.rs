@@ -71,14 +71,12 @@ fn resolve_sidecar_paths(app: &AppHandle) -> Result<SidecarPaths, String> {
 
     // New layout: all config under ~/.covel/, data under <data_root> (default
     // ~/.covel/data, user can redirect via [paths] data_root in config.toml).
-    // User-authored worlds live alongside config (`~/.covel/worlds`), NOT under
-    // <data_root> — this matches `apps/desktop/src/paths.ts: userWorldsDir()`
-    // so users can redirect heavy storage (covel.db, logs) without losing their
-    // world packages. The two layouts must stay in sync.
+    // User-authored worlds live under <data_root> so redirecting data_root
+    // moves SQLite, logs, and local world packages together.
     let home = covel_home();
     let user_config = UserConfig::load(&home);
     let data_root = user_config.resolved_data_root(&home);
-    let user_worlds_dir = home.join("worlds");
+    let user_worlds_dir = data_root.join("worlds");
 
     for dir in [
         &home,

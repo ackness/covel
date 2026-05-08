@@ -6,20 +6,21 @@
 
 ## Index
 
-| Area                         | Page                                         | Code source                                                                                    |
-| ---------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| HTTP API                     | [`api.md`](api.md)                           | `apps/server/src/routes/api/`, `packages/shared/src/types/rpc.ts`                              |
-| Framework discovery          | [`api.md`](api.md#插件管理)                  | `apps/server/src/routes/api/framework.ts`, `apps/server/src/routes/api/plugins.ts`             |
-| Protocol                     | [`protocol.md`](protocol.md)                 | `packages/shared/src/types/protocol.ts`, `apps/web/src/services/`                              |
-| Plugin manifest and registry | [`plugins.md`](plugins.md)                   | `packages/shared/src/schemas/plugin.ts`, `packages/plugin-loader/src/`, `plugins/**/PLUGIN.md` |
-| LLM tools                    | [`tools.md`](tools.md)                       | `packages/tools/src/`, `packages/runtime/src/turn-executor.ts`                                 |
-| World data descriptor        | [`world-data.md`](world-data.md)             | `packages/shared/src/schemas/world-data.ts`, `apps/server/src/world-data/`                     |
-| UI panels                    | [`ui-panels.md`](ui-panels.md)               | `apps/web/src/components/session/`, `apps/web/src/services/api.ts`                             |
-| UI components                | [`ui-components.md`](ui-components.md)       | `apps/web/src/components/json-render/`                                                         |
-| Prompt structure             | [`prompt-structure.md`](prompt-structure.md) | `packages/context/src/`, `packages/runtime/src/turn-executor.ts`                               |
-| Theme packages               | [`theme-packages.md`](theme-packages.md)     | `apps/web/src/lib/theme-*.ts`, `packages/shared/src/settings/`                                 |
-| Store transactions           | [`transactions.md`](transactions.md)         | `packages/store/src/`                                                                          |
-| Media store                  | [`media-store.md`](media-store.md)           | `packages/store/src/media-store.ts`, backend adapters                                          |
+| Area                         | Page                                                       | Code source                                                                                    |
+| ---------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| HTTP API                     | [`api.md`](api.md)                                         | `apps/server/src/routes/api/`, `packages/shared/src/types/rpc.ts`                              |
+| Framework discovery          | [`api.md`](api.md#插件管理)                                | `apps/server/src/routes/api/framework.ts`, `apps/server/src/routes/api/plugins.ts`             |
+| Protocol                     | [`protocol.md`](protocol.md)                               | `packages/shared/src/types/protocol.ts`, `apps/web/src/services/`                              |
+| Plugin manifest and registry | [`plugins.md`](plugins.md)                                 | `packages/shared/src/schemas/plugin.ts`, `packages/plugin-loader/src/`, `plugins/**/PLUGIN.md` |
+| LLM tools                    | [`tools.md`](tools.md)                                     | `packages/tools/src/`, `packages/runtime/src/turn-executor.ts`                                 |
+| World data descriptor        | [`world-data.md`](world-data.md)                           | `packages/shared/src/schemas/world-data.ts`, `apps/server/src/world-data/`                     |
+| UI panels                    | [`ui-panels.md`](ui-panels.md)                             | `apps/web/src/components/session/`, `apps/web/src/services/api.ts`                             |
+| UI components                | [`ui-components.md`](ui-components.md)                     | `apps/web/src/components/json-render/`                                                         |
+| Prompt structure             | [`prompt-structure.md`](prompt-structure.md)               | `packages/context/src/`, `packages/runtime/src/turn-executor.ts`                               |
+| Theme packages               | [`theme-packages.md`](theme-packages.md)                   | `apps/web/src/lib/theme-*.ts`, `packages/shared/src/settings/`                                 |
+| Store transactions           | [`transactions.md`](transactions.md)                       | `packages/store/src/`                                                                          |
+| Media store                  | [`media-store.md`](media-store.md)                         | `packages/store/src/media-store.ts`, backend adapters                                          |
+| Storage architecture         | [`../architecture/storage.md`](../architecture/storage.md) | `packages/store/src/`, `apps/web/src/services/storage/`, desktop path helpers                  |
 
 ## How To Use This Directory
 
@@ -39,9 +40,8 @@
 
 ## Planned Reference Pages
 
-| Page                | Scope                                         |
-| ------------------- | --------------------------------------------- |
-| `slots.md`          | 模型 slot 配置、provider 配置、优先级解析链。 |
-| `store-backends.md` | Memory/SQLite/IDB/PG 后端能力对比与配置。     |
-| `events.md`         | KernelEvent 类型、topic 命名和订阅模式。      |
-| `approval.md`       | 权限规则、审批流程和自定义策略。              |
+| Page          | Scope                                         |
+| ------------- | --------------------------------------------- |
+| `slots.md`    | 模型 slot 配置、provider 配置、优先级解析链。 |
+| `events.md`   | KernelEvent 类型、topic 命名和订阅模式。      |
+| `approval.md` | 权限规则、审批流程和自定义策略。              |
