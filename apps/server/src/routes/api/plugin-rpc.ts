@@ -42,16 +42,15 @@ import {
 } from "@covel/runtime";
 import { RpcDispatchError, RpcValidationError } from "@covel/runtime";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
-import type { TurnInput } from "@covel/shared";
+import type {
+  PluginRpcActionRequest,
+  PluginRpcRuntimeRequest,
+  TurnInput,
+} from "@covel/shared";
 import { loadSessionConfig } from "./load-session-config.js";
 
-interface PluginRpcBody {
-  readonly pluginId?: string;
-  readonly action?: string;
-  readonly runtimeId?: string;
-  readonly payload?: unknown;
-  readonly expectsBackgroundFollower?: boolean;
-}
+type PluginRpcBody = Partial<PluginRpcActionRequest> &
+  Partial<PluginRpcRuntimeRequest>;
 
 /**
  * Decode the `X-Plugin-User-Settings` request header — base64(json) whose
@@ -295,6 +294,30 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
       }>;
     };
 
+    type PluginJobValue = Readonly<Record<string, unknown>> & {
+      readonly status: "pending" | "done" | "failed";
+      readonly progress: number;
+    };
+
+    const writePluginJob = async (args: {
+      readonly pluginId: string;
+      readonly jobId: string;
+      readonly startedAt: string;
+      readonly updatedAt?: string;
+      readonly value: PluginJobValue;
+    }): Promise<void> => {
+      await store.setPluginData({
+        id: `${sessionId}:${args.pluginId}:_jobs:${args.jobId}`,
+        sessionId,
+        pluginId: args.pluginId,
+        namespace: "_jobs",
+        key: args.jobId,
+        value: args.value,
+        createdAt: args.startedAt,
+        updatedAt: args.updatedAt ?? args.startedAt,
+      });
+    };
+
     const runManualTurn = async (): Promise<ManualTurnSummary> => {
       const emitter = createTurnEmitter({ store, eventBus, sessionId, turnId });
       const turnInput: TurnInput = {
@@ -398,12 +421,12 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
         (rt) => rt.name === args.runtimeId,
       );
       if (!followerManifest) {
-        await store.setPluginData({
-          id: `${sessionId}:${args.pluginId}:_jobs:${args.jobId}`,
-          sessionId,
+        const completedAt = new Date().toISOString();
+        await writePluginJob({
           pluginId: args.pluginId,
-          namespace: "_jobs",
-          key: args.jobId,
+          jobId: args.jobId,
+          startedAt: args.startedAt,
+          updatedAt: completedAt,
           value: {
             status: "failed",
             progress: 100,
@@ -411,11 +434,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
             turnId: args.followerTurnId,
             triggerEvent: args.triggerEvent,
             startedAt: args.startedAt,
-            completedAt: new Date().toISOString(),
+            completedAt,
             error: "follower manifest not found in active set",
           },
-          createdAt: args.startedAt,
-          updatedAt: new Date().toISOString(),
         });
         return;
       }
@@ -527,12 +548,11 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
         // matches what the trace pipeline records above.
         const jobStatus: "done" | "failed" = isFailure ? "failed" : "done";
         const completedAt = new Date().toISOString();
-        await store.setPluginData({
-          id: `${sessionId}:${args.pluginId}:_jobs:${args.jobId}`,
-          sessionId,
+        await writePluginJob({
           pluginId: args.pluginId,
-          namespace: "_jobs",
-          key: args.jobId,
+          jobId: args.jobId,
+          startedAt: args.startedAt,
+          updatedAt: completedAt,
           value: {
             status: jobStatus,
             progress: 100,
@@ -554,33 +574,27 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
               },
             ],
           },
-          createdAt: args.startedAt,
-          updatedAt: completedAt,
         });
       } catch (err) {
-        await store
-          .setPluginData({
-            id: `${sessionId}:${args.pluginId}:_jobs:${args.jobId}`,
-            sessionId,
-            pluginId: args.pluginId,
-            namespace: "_jobs",
-            key: args.jobId,
-            value: {
-              status: "failed",
-              progress: 100,
-              runtimeId: args.runtimeId,
-              turnId: args.followerTurnId,
-              triggerEvent: args.triggerEvent,
-              startedAt: args.startedAt,
-              completedAt: new Date().toISOString(),
-              error: err instanceof Error ? err.message : String(err),
-            },
-            createdAt: args.startedAt,
-            updatedAt: new Date().toISOString(),
-          })
-          .catch(() => {
-            // Writeback itself failed — frontend will see stale pending record.
-          });
+        const completedAt = new Date().toISOString();
+        await writePluginJob({
+          pluginId: args.pluginId,
+          jobId: args.jobId,
+          startedAt: args.startedAt,
+          updatedAt: completedAt,
+          value: {
+            status: "failed",
+            progress: 100,
+            runtimeId: args.runtimeId,
+            turnId: args.followerTurnId,
+            triggerEvent: args.triggerEvent,
+            startedAt: args.startedAt,
+            completedAt,
+            error: err instanceof Error ? err.message : String(err),
+          },
+        }).catch(() => {
+          // Writeback itself failed — frontend will see stale pending record.
+        });
       }
     };
 
@@ -604,12 +618,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
         const jobId = crypto.randomUUID();
         const followerTurnId = crypto.randomUUID();
         const startedAt = new Date().toISOString();
-        await store.setPluginData({
-          id: `${sessionId}:${follower.pluginId}:_jobs:${jobId}`,
-          sessionId,
+        await writePluginJob({
           pluginId: follower.pluginId,
-          namespace: "_jobs",
-          key: jobId,
+          jobId,
+          startedAt,
           value: {
             status: "pending",
             progress: 5,
@@ -618,8 +630,6 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
             triggerEvent: follower.triggerEvent,
             startedAt,
           },
-          createdAt: startedAt,
-          updatedAt: startedAt,
         });
         scheduled.push({ jobId, runtimeId: follower.runtimeId });
         setImmediate(() => {
@@ -650,12 +660,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
     }): Promise<{ readonly jobId: string; readonly runtimeId: string }> => {
       const jobId = crypto.randomUUID();
       const now = new Date().toISOString();
-      await store.setPluginData({
-        id: `${sessionId}:${body.pluginId}:_jobs:${jobId}`,
-        sessionId,
+      await writePluginJob({
         pluginId: body.pluginId!,
-        namespace: "_jobs",
-        key: jobId,
+        jobId,
+        startedAt: now,
         value: {
           status: "failed",
           progress: 100,
@@ -669,8 +677,6 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
             : {}),
           reason: "expected-background-follower-missing",
         },
-        createdAt: now,
-        updatedAt: now,
       });
       return { jobId, runtimeId: body.runtimeId! };
     };
@@ -695,12 +701,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
       const startedAt = new Date().toISOString();
 
       try {
-        await store.setPluginData({
-          id: `${sessionId}:${body.pluginId}:_jobs:${jobId}`,
-          sessionId,
+        await writePluginJob({
           pluginId: body.pluginId,
-          namespace: "_jobs",
-          key: jobId,
+          jobId,
+          startedAt,
           value: {
             status: "pending",
             progress: 5,
@@ -709,8 +713,6 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
             ...(body.payload !== undefined ? { payload: body.payload } : {}),
             startedAt,
           },
-          createdAt: startedAt,
-          updatedAt: startedAt,
         });
       } catch (err) {
         return c.json(
@@ -751,12 +753,11 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
               failedResult?.error ??
               (failedResult ? "runtime reported failure" : undefined);
 
-            await store.setPluginData({
-              id: `${sessionId}:${body.pluginId}:_jobs:${jobId}`,
-              sessionId,
+            await writePluginJob({
               pluginId: body.pluginId!,
-              namespace: "_jobs",
-              key: jobId,
+              jobId,
+              startedAt,
+              updatedAt: completedAt,
               value: {
                 status: topLevelStatus,
                 progress: 100,
@@ -774,41 +775,34 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
                   ? { abortReason: summary.abortReason }
                   : {}),
               },
-              createdAt: startedAt,
-              updatedAt: completedAt,
             });
           } catch (err) {
             const completedAt = new Date().toISOString();
-            await store
-              .setPluginData({
-                id: `${sessionId}:${body.pluginId}:_jobs:${jobId}`,
-                sessionId,
-                pluginId: body.pluginId!,
-                namespace: "_jobs",
-                key: jobId,
-                value: {
-                  status: "failed",
-                  progress: 100,
-                  runtimeId: body.runtimeId,
-                  turnId,
-                  ...(body.payload !== undefined
-                    ? { payload: body.payload }
-                    : {}),
-                  startedAt,
-                  completedAt,
-                  error:
-                    err instanceof Error
-                      ? err.message
-                      : "runtime execution failed",
-                },
-                createdAt: startedAt,
-                updatedAt: completedAt,
-              })
-              .catch(() => {
-                // Terminal failure — both the runtime AND the writeback
-                // blew up. Nothing useful to do from here; the frontend
-                // will see the stale `pending` record and can reconcile.
-              });
+            await writePluginJob({
+              pluginId: body.pluginId!,
+              jobId,
+              startedAt,
+              updatedAt: completedAt,
+              value: {
+                status: "failed",
+                progress: 100,
+                runtimeId: body.runtimeId,
+                turnId,
+                ...(body.payload !== undefined
+                  ? { payload: body.payload }
+                  : {}),
+                startedAt,
+                completedAt,
+                error:
+                  err instanceof Error
+                    ? err.message
+                    : "runtime execution failed",
+              },
+            }).catch(() => {
+              // Terminal failure — both the runtime AND the writeback
+              // blew up. Nothing useful to do from here; the frontend
+              // will see the stale `pending` record and can reconcile.
+            });
           }
         })();
       });
@@ -844,12 +838,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
       const placeholderJobId = crypto.randomUUID();
       const startedAt = new Date().toISOString();
       try {
-        await store.setPluginData({
-          id: `${sessionId}:${body.pluginId}:_jobs:${placeholderJobId}`,
-          sessionId,
+        await writePluginJob({
           pluginId: body.pluginId,
-          namespace: "_jobs",
-          key: placeholderJobId,
+          jobId: placeholderJobId,
+          startedAt,
           value: {
             status: "pending",
             progress: 1,
@@ -859,8 +851,6 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
             phase: "prompt",
             message: "Generating image prompt...",
           },
-          createdAt: startedAt,
-          updatedAt: startedAt,
         });
       } catch (err) {
         return c.json(
@@ -889,12 +879,11 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
               (r) => r.status === "failed",
             );
             if (deferredJobs.length > 0) {
-              await store.setPluginData({
-                id: `${sessionId}:${body.pluginId}:_jobs:${placeholderJobId}`,
-                sessionId,
+              await writePluginJob({
                 pluginId: body.pluginId!,
-                namespace: "_jobs",
-                key: placeholderJobId,
+                jobId: placeholderJobId,
+                startedAt,
+                updatedAt: completedAt,
                 value: {
                   status: "done",
                   progress: 100,
@@ -911,17 +900,14 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
                     ? { abortReason: summary.abortReason }
                     : {}),
                 },
-                createdAt: startedAt,
-                updatedAt: completedAt,
               });
               return;
             }
-            await store.setPluginData({
-              id: `${sessionId}:${body.pluginId}:_jobs:${placeholderJobId}`,
-              sessionId,
+            await writePluginJob({
               pluginId: body.pluginId!,
-              namespace: "_jobs",
-              key: placeholderJobId,
+              jobId: placeholderJobId,
+              startedAt,
+              updatedAt: completedAt,
               value: {
                 status: "failed",
                 progress: 100,
@@ -939,34 +925,27 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
                   ? { abortReason: summary.abortReason }
                   : {}),
               },
-              createdAt: startedAt,
-              updatedAt: completedAt,
             });
           } catch (err) {
             const completedAt = new Date().toISOString();
-            await store
-              .setPluginData({
-                id: `${sessionId}:${body.pluginId}:_jobs:${placeholderJobId}`,
-                sessionId,
-                pluginId: body.pluginId!,
-                namespace: "_jobs",
-                key: placeholderJobId,
-                value: {
-                  status: "failed",
-                  progress: 100,
-                  runtimeId: body.runtimeId,
-                  turnId,
-                  startedAt,
-                  completedAt,
-                  error:
-                    err instanceof Error
-                      ? err.message
-                      : "runtime execution failed",
-                },
-                createdAt: startedAt,
-                updatedAt: completedAt,
-              })
-              .catch(() => undefined);
+            await writePluginJob({
+              pluginId: body.pluginId!,
+              jobId: placeholderJobId,
+              startedAt,
+              updatedAt: completedAt,
+              value: {
+                status: "failed",
+                progress: 100,
+                runtimeId: body.runtimeId,
+                turnId,
+                startedAt,
+                completedAt,
+                error:
+                  err instanceof Error
+                    ? err.message
+                    : "runtime execution failed",
+              },
+            }).catch(() => undefined);
           }
         })();
       });

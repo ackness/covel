@@ -111,21 +111,73 @@ export type RpcDeclMap = Readonly<Record<string, RpcActionDecl>>;
  * Either `action` or `runtimeId` must be set, never both. Sending both
  * is a 400.
  */
-export interface PluginRpcRequest {
+export interface PluginRpcActionRequest {
   readonly pluginId: string;
-  readonly action?: string;
-  readonly runtimeId?: string;
+  readonly action: string;
   readonly payload?: unknown;
 }
+
+export interface PluginRpcRuntimeRequest {
+  readonly pluginId: string;
+  readonly runtimeId: string;
+  readonly payload?: unknown;
+  /**
+   * Runtime-level calls can opt into immediate background acknowledgement when
+   * the target runtime is only a prompt-builder for a background follower.
+   */
+  readonly expectsBackgroundFollower?: boolean;
+}
+
+export type PluginRpcRequest = PluginRpcActionRequest | PluginRpcRuntimeRequest;
 
 /**
  * Sync-mode response from `POST /api/sessions/:id/plugin-rpc?mode=sync`.
  * Streaming mode returns SSE — see `docs/reference/protocol.md`.
  */
-export interface PluginRpcResponse {
-  readonly status: "ok" | "error" | "approval-required";
-  readonly result?: unknown;
+export interface PluginRpcRuntimeResultSummary {
+  readonly runtimeId: string;
+  readonly pluginId: string;
+  readonly status: string;
+  readonly durationMs: number;
   readonly error?: string;
-  /** Set when status === 'approval-required'. PR-7 ties this to the dialog. */
-  readonly approvalId?: string;
+  readonly output: unknown;
 }
+
+export interface PluginRpcDeferredJob {
+  readonly jobId: string;
+  readonly runtimeId: string;
+}
+
+export type PluginRpcResponse =
+  | {
+      readonly status: "ok";
+      readonly result?: unknown;
+      readonly turnId?: string;
+      readonly runtimeResults?: readonly PluginRpcRuntimeResultSummary[];
+      readonly durationMs?: number;
+      readonly abortReason?: string;
+      readonly deferredJobs?: readonly PluginRpcDeferredJob[];
+      /**
+       * @deprecated Server writes expected-background-follower failures to
+       * `_jobs/<jobId>` and returns `accepted`.
+       */
+      readonly failedJobs?: readonly PluginRpcDeferredJob[];
+    }
+  | {
+      readonly status: "accepted";
+      readonly jobId: string;
+      readonly pending: true;
+      readonly turnId: string;
+      readonly runtimeId: string;
+      readonly phase?: string;
+    }
+  | {
+      readonly status: "approval-required";
+      readonly approvalId: string;
+      readonly pending?: unknown;
+    }
+  | {
+      readonly status: "error";
+      readonly error: string;
+      readonly code?: string;
+    };

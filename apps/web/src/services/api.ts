@@ -7,10 +7,13 @@ import type {
   RuntimeResult,
   SessionEvent,
   SessionStatus,
+  PluginRpcRequest,
+  PluginRpcResponse,
 } from "@covel/shared";
 import { normalizeProviderKeyMap, providerKeyToId } from "@covel/shared";
 import { getSettings, registerKnownProviders } from "@/settings/store";
 import { emitToast } from "@/lib/toast-channel";
+import { parseJsonSseData, readSseStream } from "./sse.js";
 export { getDesktopRestToken } from "@/lib/desktop-bridge";
 import i18n from "@/i18n";
 
@@ -36,6 +39,7 @@ export type GeneratedWorldSaveTarget =
   | "return-only";
 
 export type { SessionStatus };
+export type { PluginRpcRequest, PluginRpcResponse } from "@covel/shared";
 
 export interface SessionRecord {
   id: string;
@@ -579,34 +583,12 @@ export function generateWorld(
         throw new Error(`API ${res.status}: ${text}`);
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No response body");
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (line.startsWith("data:")) {
-            const data = line.slice(5).trim();
-            if (data) {
-              try {
-                const event = JSON.parse(data) as GenerateWorldEvent;
-                onEvent(event);
-              } catch {
-                // skip malformed
-              }
-            }
-          }
-        }
-      }
+      await readSseStream({
+        response: res,
+        signal: controller.signal,
+        parse: parseJsonSseData<GenerateWorldEvent>,
+        onMessage: onEvent,
+      });
 
       onDone?.();
     } catch (err) {
@@ -1253,34 +1235,12 @@ export function sendAction(
         throw new Error(`Action failed ${res.status}: ${text}`);
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No response body");
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (line.startsWith("data:")) {
-            const data = line.slice(5).trim();
-            if (data) {
-              try {
-                const envelope = JSON.parse(data) as SseEnvelope;
-                onEvent(envelope);
-              } catch {
-                // skip malformed
-              }
-            }
-          }
-        }
-      }
+      await readSseStream({
+        response: res,
+        signal: controller.signal,
+        parse: parseJsonSseData<SseEnvelope>,
+        onMessage: onEvent,
+      });
 
       onDone?.();
     } catch (err) {
@@ -1758,86 +1718,6 @@ export async function deleteLorebookEntry(
 //                           via plugin-data.changed SSE
 //   - 'approval-required' — community plugin needs user approval
 //   - 'error'             — dispatch or execution failure
-
-export interface PluginRpcActionRequest {
-  readonly pluginId: string;
-  readonly action: string;
-  readonly payload?: unknown;
-}
-
-export interface PluginRpcRuntimeRequest {
-  readonly pluginId: string;
-  readonly runtimeId: string;
-  readonly payload?: unknown;
-  readonly expectsBackgroundFollower?: boolean;
-}
-
-export type PluginRpcRequest = PluginRpcActionRequest | PluginRpcRuntimeRequest;
-
-export interface PluginRpcRuntimeResultSummary {
-  readonly runtimeId: string;
-  readonly pluginId: string;
-  readonly status: string;
-  readonly durationMs: number;
-  readonly error?: string;
-  readonly output: unknown;
-}
-
-export type PluginRpcResponse =
-  | {
-      readonly status: "ok";
-      readonly result?: unknown;
-      readonly turnId?: string;
-      readonly runtimeResults?: readonly PluginRpcRuntimeResultSummary[];
-      readonly durationMs?: number;
-      readonly abortReason?: string;
-      /**
-       * Event-chain followers that declare `execution: 'background'` are
-       * not awaited in the sync response — the framework writes one
-       * `_jobs/<jobId>` pending row per follower and continues them
-       * off-cycle. UIs can subscribe to `plugin-data.changed` on the
-       * `_jobs` namespace to reflect progress. Absent when no background
-       * follower was triggered (audit F1).
-       */
-      readonly deferredJobs?: readonly {
-        readonly jobId: string;
-        readonly runtimeId: string;
-      }[];
-      /**
-       * @deprecated Server no longer emits this — `expectsBackgroundFollower`
-       * paths return 202 `accepted` instead and the failure surfaces on
-       * `_jobs/<jobId>` with `reason: 'expected-background-follower-missing'`.
-       * Kept on the type so older clients compile; remove once no UI branch
-       * reads it (Q3-2026 follow-up).
-       */
-      readonly failedJobs?: readonly {
-        readonly jobId: string;
-        readonly runtimeId: string;
-      }[];
-    }
-  | {
-      readonly status: "accepted";
-      readonly jobId: string;
-      readonly pending: true;
-      readonly turnId: string;
-      readonly runtimeId: string;
-      /**
-       * Which phase of the runtime was accepted. For `expectsBackgroundFollower`
-       * sync runtimes that act as prompt-builders, this is `"prompt"`. The
-       * subsequent follower job appears separately on `_jobs` with its own id.
-       */
-      readonly phase?: string;
-    }
-  | {
-      readonly status: "approval-required";
-      readonly approvalId: string;
-      readonly pending: unknown;
-    }
-  | {
-      readonly status: "error";
-      readonly error: string;
-      readonly code?: string;
-    };
 
 export async function postPluginRpc(
   sessionId: string,

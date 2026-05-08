@@ -264,8 +264,12 @@ export type {
   RpcActionDecl,
   RpcDeclMap,
   RpcHandlerStore,
+  PluginRpcActionRequest,
   PluginRpcRequest,
+  PluginRpcDeferredJob,
   PluginRpcResponse,
+  PluginRpcRuntimeRequest,
+  PluginRpcRuntimeResultSummary,
 } from "./rpc.js";
 
 export type {

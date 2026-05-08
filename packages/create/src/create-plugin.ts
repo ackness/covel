@@ -32,7 +32,7 @@ export interface CreatePluginOptions {
   readonly description?: string;
   /** Parent directory to write into — will contain `<name>/`. */
   readonly outputDir: string;
-  /** Priority band (defaults per template). */
+  /** Priority band (defaults per template). Ignored for zero-code/manual. */
   readonly priority?: number;
   /** Overwrite an existing directory. Defaults to false. */
   readonly force?: boolean;
@@ -69,18 +69,17 @@ async function pathExists(p: string): Promise<boolean> {
   }
 }
 
-function defaultPriority(template: PluginTemplate): number {
+function defaultPriority(template: PluginTemplate): number | undefined {
   // Stay inside After-Narrator band by default so new plugins pick up
   // narrator output without fighting the narrator itself.
-  if (template === "zero-code") return 700;
+  if (template === "zero-code") return undefined;
   if (template === "function") return 800;
   return 600;
 }
 
 function renderPluginMd(
-  options: Required<
-    Pick<CreatePluginOptions, "name" | "template" | "priority">
-  > & { description: string },
+  options: Required<Pick<CreatePluginOptions, "name" | "template">> &
+    Pick<CreatePluginOptions, "priority"> & { description: string },
 ): string {
   const { name, template, priority, description } = options;
   const common = `---
@@ -89,8 +88,7 @@ description:
   en: ${description}
   zh: ${description}
 pluginType: plugin
-priority: ${priority}
-`;
+${priority === undefined ? "" : `priority: ${priority}\n`}`;
   if (template === "zero-code") {
     return (
       common +
@@ -238,7 +236,10 @@ export async function createPlugin(
     );
   }
 
-  const priority = options.priority ?? defaultPriority(template);
+  const priority =
+    template === "zero-code"
+      ? undefined
+      : (options.priority ?? defaultPriority(template));
   const description = options.description?.trim() || `${name} plugin`;
 
   await mkdir(pluginDir, { recursive: true });
@@ -266,6 +267,11 @@ export async function createPlugin(
   if (template === "agent") {
     notes.push(
       "Agent template emits a local tool. Remember to install `zod` in your plugin package if you keep the schema validation.",
+    );
+  }
+  if (template === "zero-code" && options.priority !== undefined) {
+    notes.push(
+      "Zero-code plugins use a manual trigger, so the supplied priority was ignored.",
     );
   }
   notes.push(

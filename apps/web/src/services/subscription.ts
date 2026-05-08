@@ -9,6 +9,8 @@
  * The subscription handles lifecycle events: runtime.*, state.*, game.*, plugin.*, session.*, system.*.
  */
 
+import { parseJsonSseData, readSseStream } from "./sse.js";
+
 // ── Types ──────────────────────────────────────────────────────────
 
 export type ConnectionState =
@@ -147,73 +149,33 @@ export function createSessionSubscription(
         );
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No response body for SSE stream");
-
       // Connected successfully — reset backoff
       setState("connected");
       backoffMs = INITIAL_BACKOFF_MS;
 
-      const decoder = new TextDecoder();
-      let buffer = "";
-      // SSE field accumulators
-      let sseId = "";
-      let sseEvent = "";
-      let sseData = "";
+      await readSseStream({
+        response: res,
+        signal: abortController.signal,
+        parse: (data, message) => {
+          const parsed = parseJsonSseData<Record<string, unknown>>(data);
+          if (!parsed) return undefined;
+          if (message.id) lastEventId = message.id;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+          const eventType =
+            message.event || (parsed.type as string) || "unknown";
+          const topic = extractTopic(eventType);
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (line === "") {
-            // Empty line = end of SSE event, dispatch accumulated fields
-            if (sseData) {
-              if (sseId) {
-                lastEventId = sseId;
-              }
-              try {
-                const parsed = JSON.parse(sseData) as Record<string, unknown>;
-                const eventType =
-                  sseEvent || (parsed.type as string) || "unknown";
-                const topic = extractTopic(eventType);
-
-                const event: SubscriptionEvent = {
-                  id: sseId || (parsed.id as string) || "",
-                  topic,
-                  type: eventType,
-                  sessionId: (parsed.sessionId as string) || sessionId,
-                  timestamp:
-                    (parsed.timestamp as string) || new Date().toISOString(),
-                  payload:
-                    (parsed.payload as Record<string, unknown>) || parsed,
-                };
-                dispatch(event);
-              } catch {
-                // Skip malformed event data
-              }
-            }
-            // Reset accumulators
-            sseId = "";
-            sseEvent = "";
-            sseData = "";
-          } else if (line.startsWith("id:")) {
-            sseId = line.slice(3).trim();
-          } else if (line.startsWith("event:")) {
-            sseEvent = line.slice(6).trim();
-          } else if (line.startsWith("data:")) {
-            // Data can span multiple lines — concatenate
-            const dataPart = line.slice(5).trim();
-            sseData = sseData ? sseData + "\n" + dataPart : dataPart;
-          }
-          // Lines starting with ":" are comments, ignore them
-          // Lines with "retry:" could set reconnect interval, ignored for now
-        }
-      }
+          return {
+            id: message.id || (parsed.id as string) || "",
+            topic,
+            type: eventType,
+            sessionId: (parsed.sessionId as string) || sessionId,
+            timestamp: (parsed.timestamp as string) || new Date().toISOString(),
+            payload: (parsed.payload as Record<string, unknown>) || parsed,
+          };
+        },
+        onMessage: dispatch,
+      });
 
       // Stream ended normally — reconnect unless closed
       if (!closed) {

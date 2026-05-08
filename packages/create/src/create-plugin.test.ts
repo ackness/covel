@@ -52,9 +52,28 @@ describe("createPlugin", () => {
     );
     expect(pluginMd).toContain("name: my-tiny");
     expect(pluginMd).toContain("trigger:\n  type: manual");
+    expect(pluginMd).not.toContain("priority:");
     expect(
       await exists(path.join(result.pluginDir, "tools", "my-tiny-tool.js")),
     ).toBe(false);
+  });
+
+  it("ignores caller-supplied priority for zero-code manual plugins", async () => {
+    const result = await createPlugin({
+      name: "manual-only",
+      template: "zero-code",
+      outputDir: tmp,
+      priority: 650,
+    });
+    const pluginMd = await readFile(
+      path.join(result.pluginDir, "PLUGIN.md"),
+      "utf8",
+    );
+    expect(pluginMd).toContain("trigger:\n  type: manual");
+    expect(pluginMd).not.toContain("priority:");
+    expect(result.notes).toContain(
+      "Zero-code plugins use a manual trigger, so the supplied priority was ignored.",
+    );
   });
 
   it("writes an agent plugin with a local tool skeleton", async () => {
