@@ -21,9 +21,12 @@ import {
   usePluginNamespace,
 } from "@/stores/plugin-data-store.js";
 import { useSession } from "@/stores/session-store.js";
-import { postPluginRpc, resolveApproval } from "@/services/api.js";
-import type { PluginRpcRequest, PluginRpcResponse } from "@/services/api.js";
+import type { PluginRpcRequest } from "@/services/api.js";
 import { emitToast } from "@/lib/toast-channel.js";
+import {
+  emitPluginRpcRuntimeResponse,
+  postPluginRpcWithApproval,
+} from "./plugin-rpc-ui.js";
 import {
   Dialog,
   DialogContent,
@@ -84,18 +87,6 @@ function rewriteComponentToType(
     }
   }
   return result;
-}
-
-function getPluginRpcFailureMessage(res: PluginRpcResponse): string {
-  if (res.status === "error") return res.error;
-  if (res.status !== "ok") return "";
-  const runtimeError = res.runtimeResults?.find(
-    (r) =>
-      r.status === "failed" ||
-      (typeof r.error === "string" && r.error.length > 0),
-  )?.error;
-  if (runtimeError) return runtimeError;
-  return res.abortReason ?? "";
 }
 
 function shortJobId(jobId: string): string {
@@ -277,127 +268,6 @@ export function PluginPanel({
   const defaultHandlers = useMemo<
     Record<string, (params: Record<string, unknown>) => Promise<void> | void>
   >(() => {
-    function emitAcceptedJob(jobId: string): void {
-      emitToast(
-        "info",
-        t("plugin.invokeRuntime.submitted", {
-          count: 1,
-          ids: jobId,
-          defaultValue:
-            "Submitted {{count}} background job(s): {{ids}}. Waiting for completion...",
-        }),
-      );
-    }
-
-    function emitDeferredJobs(
-      jobs: readonly { readonly jobId?: string; readonly runtimeId?: string }[],
-    ): void {
-      const jobIds = jobs.map((j) => j.jobId).filter(Boolean) as string[];
-      const idList =
-        jobIds.slice(0, 3).join(", ") +
-        (jobIds.length > 3 ? ` (+${jobIds.length - 3})` : "");
-      emitToast(
-        "info",
-        t("plugin.invokeRuntime.submitted", {
-          count: jobIds.length,
-          ids: idList,
-          defaultValue:
-            "Submitted {{count}} background job(s): {{ids}}. Waiting for completion...",
-        }),
-      );
-    }
-
-    async function handleApprovalRequired(
-      approvalId: string,
-      humanLabel: string,
-      retry: () => Promise<PluginRpcResponse>,
-    ): Promise<void> {
-      // Themed React dialog instead of the browser's native confirm prompt:
-      // respects the active locale, doesn't block the JS thread, and matches
-      // the rest of the panel chrome. `session` scope means subsequent clicks
-      // during this session skip the prompt entirely.
-      const proceed = await confirmAsync({
-        title: t("plugin.approval.title", {
-          defaultValue: "Authorize plugin action",
-        }),
-        message: t("plugin.approval.confirmMessage", {
-          pluginId,
-          action: humanLabel,
-          defaultValue:
-            "Plugin {{pluginId}} requests permission to run {{action}}. Authorize all matching calls for this session?",
-        }),
-        confirmLabel: t("plugin.approval.allow", {
-          defaultValue: "Authorize",
-        }),
-        cancelLabel: t("plugin.approval.deny", {
-          defaultValue: "Deny",
-        }),
-      });
-      try {
-        await resolveApproval(
-          approvalId,
-          proceed ? "allow" : "deny",
-          "session",
-        );
-      } catch (err) {
-        emitToast(
-          "error",
-          t("plugin.approval.submitFailed", {
-            error: err instanceof Error ? err.message : String(err),
-            defaultValue: "Approval submission failed: {{error}}",
-          }),
-        );
-        return;
-      }
-      if (!proceed) {
-        emitToast(
-          "info",
-          t("plugin.approval.denied", {
-            action: humanLabel,
-            defaultValue: "Denied {{action}}",
-          }),
-        );
-        return;
-      }
-      // Retry the original RPC now that the gate has a session-scoped grant.
-      try {
-        const next = await retry();
-        if (next.status === "error") {
-          emitToast("error", next.error);
-        } else if (next.status === "approval-required") {
-          // Shouldn't happen — the gate just cached the allow. Surface so we
-          // notice if it ever does.
-          emitToast(
-            "error",
-            t("plugin.approval.unexpectedRequired", {
-              defaultValue:
-                "Still got approval-required after grant — please check the approval backend",
-            }),
-          );
-        } else if (next.status === "accepted") {
-          emitAcceptedJob(next.jobId);
-        } else if (next.status === "ok") {
-          const failureMessage = getPluginRpcFailureMessage(next);
-          if (failureMessage) {
-            emitToast("error", failureMessage);
-          } else if ((next.failedJobs ?? []).length > 0) {
-            emitToast(
-              "error",
-              t("plugin.invokeRuntime.failedJobs", {
-                count: next.failedJobs?.length ?? 0,
-                defaultValue:
-                  "{{count}} background job(s) failed. Check the job panel for details.",
-              }),
-            );
-          } else if ((next.deferredJobs ?? []).length > 0) {
-            emitDeferredJobs(next.deferredJobs ?? []);
-          }
-        }
-      } catch (err) {
-        emitToast("error", err instanceof Error ? err.message : String(err));
-      }
-    }
-
     const handlers: Record<
       string,
       (params: Record<string, unknown>) => Promise<void> | void
@@ -420,60 +290,22 @@ export function PluginPanel({
         };
         markInvoking(`runtime:${runtimeId}`, true);
         try {
-          const res = await postPluginRpc(sessionId, req);
-          if (res.status === "error") {
-            emitToast("error", res.error);
-          } else if (res.status === "approval-required") {
-            await handleApprovalRequired(
-              res.approvalId,
-              `runtime ${runtimeId}`,
-              () => postPluginRpc(sessionId, req),
-            );
-          } else if (res.status === "ok") {
-            const failureMessage = getPluginRpcFailureMessage(res);
-            if (failureMessage) {
-              emitToast("error", failureMessage);
-              return;
-            }
-            if ((res.failedJobs ?? []).length > 0) {
-              emitToast(
-                "error",
-                t("plugin.invokeRuntime.failedJobs", {
-                  count: res.failedJobs?.length ?? 0,
-                  defaultValue:
-                    "{{count}} background job(s) failed. Check the job panel for details.",
-                }),
-              );
-              return;
-            }
-            // Audit P1-8: when a sync runtime declares an event-chain
-            // contract (e.g. prompt-generator → image-generator) but the
-            // LLM emitted no events[].topic that matches a follower, the
-            // response carries `runtimeResults` but no `deferredJobs`.
-            // Surface a warning so the player isn't left staring at a
-            // panel that "did nothing" — common failure mode when the
-            // model drops the JSON envelope.
-            const expectsFollower = params.expectsBackgroundFollower === true;
-            const deferred = res.deferredJobs ?? [];
-            if (expectsFollower && deferred.length === 0) {
-              emitToast(
-                "error",
-                t("plugin.invokeRuntime.noFollowerEvents", {
-                  runtimeId,
-                  defaultValue:
-                    "{{runtimeId}} finished but emitted no background follower (missing matching events[]). Check that the model output a valid JSON envelope.",
-                }),
-              );
-            } else if (deferred.length > 0) {
-              // Background follower(s) queued — emit a submission toast with
-              // the framework-assigned jobIds so the player knows their click
-              // landed and which jobs to watch in the gallery / _jobs surface.
-              // The terminal "completed" / "failed" toast is fired by the
-              // generic _jobs status-transition listener in session-store.
-              emitDeferredJobs(deferred);
-            }
-          } else if (res.status === "accepted") {
-            emitAcceptedJob(res.jobId);
+          const res = await postPluginRpcWithApproval({
+            sessionId,
+            request: req,
+            pluginId,
+            actionLabel: `runtime ${runtimeId}`,
+            confirm: confirmAsync,
+            t,
+          });
+          if (res) {
+            emitPluginRpcRuntimeResponse({
+              response: res,
+              t,
+              runtimeId,
+              expectsBackgroundFollower:
+                params.expectsBackgroundFollower === true,
+            });
           }
         } catch (err) {
           emitToast("error", err instanceof Error ? err.message : String(err));
@@ -498,15 +330,20 @@ export function PluginPanel({
         };
         markInvoking(`action:${action}`, true);
         try {
-          const res = await postPluginRpc(sessionId, req);
-          if (res.status === "error") {
-            emitToast("error", res.error);
-          } else if (res.status === "approval-required") {
-            await handleApprovalRequired(
-              res.approvalId,
-              `action ${action}`,
-              () => postPluginRpc(sessionId, req),
-            );
+          const res = await postPluginRpcWithApproval({
+            sessionId,
+            request: req,
+            pluginId,
+            actionLabel: `action ${action}`,
+            confirm: confirmAsync,
+            t,
+          });
+          if (res) {
+            emitPluginRpcRuntimeResponse({
+              response: res,
+              t,
+              runtimeId: action,
+            });
           }
         } catch (err) {
           emitToast("error", err instanceof Error ? err.message : String(err));

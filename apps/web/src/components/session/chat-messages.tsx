@@ -34,10 +34,13 @@ import {
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import { useSession } from "@/stores/session-store.js";
 import { isAssetGenerateView } from "@covel/shared";
-import { postPluginRpc, resolveApproval } from "@/services/api.js";
+import type { PluginRpcRequest } from "@covel/shared";
 import { emitToast } from "@/lib/toast-channel.js";
+import {
+  emitPluginRpcRuntimeResponse,
+  postPluginRpcWithApproval,
+} from "./plugin-rpc-ui.js";
 import type {
-  PluginRpcResponse,
   WorldRecord,
   PackageSummary,
   SessionPluginInfo,
@@ -165,128 +168,26 @@ export function ChatMessages({
       pluginId: imageGenEntry.pluginId,
       runtimeId: imageGenEntry.runtimeId,
       expectsBackgroundFollower: true,
-    };
-    const handleResponse = async (res: PluginRpcResponse): Promise<void> => {
-      if (res.status === "error") {
-        emitToast("error", res.error);
-        return;
-      }
-      if (res.status === "approval-required") {
-        const actionLabel = `runtime ${imageGenEntry.runtimeId}`;
-        const proceed = await confirmAsync({
-          title: t("plugin.approval.title", {
-            defaultValue: "Authorize plugin action",
-          }),
-          message: t("plugin.approval.confirmMessage", {
-            pluginId: imageGenEntry.pluginId,
-            action: actionLabel,
-            defaultValue:
-              "Plugin {{pluginId}} requests permission to run {{action}}. Authorize all matching calls for this session?",
-          }),
-          confirmLabel: t("plugin.approval.allow", {
-            defaultValue: "Authorize",
-          }),
-          cancelLabel: t("plugin.approval.deny", {
-            defaultValue: "Deny",
-          }),
-        });
-        try {
-          await resolveApproval(
-            res.approvalId,
-            proceed ? "allow" : "deny",
-            "session",
-          );
-        } catch (err) {
-          emitToast(
-            "error",
-            t("plugin.approval.submitFailed", {
-              error: err instanceof Error ? err.message : String(err),
-              defaultValue: "Approval submission failed: {{error}}",
-            }),
-          );
-          return;
-        }
-        if (!proceed) {
-          emitToast(
-            "info",
-            t("plugin.approval.denied", {
-              action: actionLabel,
-              defaultValue: "Denied {{action}}",
-            }),
-          );
-          return;
-        }
-        await handleResponse(await postPluginRpc(sessionId, req));
-        return;
-      }
-      if (res.status === "accepted") {
-        emitToast(
-          "info",
-          t("plugin.invokeRuntime.submitted", {
-            count: 1,
-            ids: res.jobId,
-            defaultValue:
-              "Submitted {{count}} background job(s): {{ids}}. Waiting for completion...",
-          }),
-        );
-        return;
-      }
-      const runtimeFailure = res.runtimeResults?.find(
-        (r) =>
-          r.status === "failed" ||
-          (typeof r.error === "string" && r.error.length > 0),
-      )?.error;
-      if (runtimeFailure || res.abortReason) {
-        emitToast(
-          "error",
-          runtimeFailure ?? res.abortReason ?? "Image generation failed",
-        );
-        return;
-      }
-      if ((res.failedJobs ?? []).length > 0) {
-        emitToast(
-          "error",
-          t("plugin.invokeRuntime.failedJobs", {
-            count: res.failedJobs?.length ?? 0,
-            defaultValue:
-              "{{count}} background job(s) failed. Check the job panel for details.",
-          }),
-        );
-        return;
-      }
-      if ((res.deferredJobs ?? []).length === 0) {
-        // Same UX guard as the right-panel button: when the entry runtime
-        // succeeds but emits no `events[]` to wake the image generator, the
-        // gallery would silently stay empty.
-        emitToast(
-          "error",
-          t("plugin.invokeRuntime.noFollowerEvents", {
-            runtimeId: imageGenEntry.runtimeId,
-            defaultValue:
-              "{{runtimeId}} finished but emitted no background follower (missing matching events[]). Check that the model output a valid JSON envelope.",
-          }),
-        );
-        return;
-      }
-      const jobIds = (res.deferredJobs ?? [])
-        .map((j) => j.jobId)
-        .filter(Boolean);
-      const idList =
-        jobIds.slice(0, 3).join(", ") +
-        (jobIds.length > 3 ? ` (+${jobIds.length - 3})` : "");
-      emitToast(
-        "info",
-        t("plugin.invokeRuntime.submitted", {
-          count: jobIds.length,
-          ids: idList,
-          defaultValue:
-            "Submitted {{count}} background job(s): {{ids}}. Waiting for completion...",
-        }),
-      );
-    };
+    } satisfies PluginRpcRequest;
     setGeneratingImage(true);
     try {
-      await handleResponse(await postPluginRpc(sessionId, req));
+      const res = await postPluginRpcWithApproval({
+        sessionId,
+        request: req,
+        pluginId: imageGenEntry.pluginId,
+        actionLabel: `runtime ${imageGenEntry.runtimeId}`,
+        confirm: confirmAsync,
+        t,
+      });
+      if (res) {
+        emitPluginRpcRuntimeResponse({
+          response: res,
+          t,
+          runtimeId: imageGenEntry.runtimeId,
+          expectsBackgroundFollower: true,
+          fallbackFailureMessage: "Image generation failed",
+        });
+      }
     } catch (err) {
       emitToast("error", err instanceof Error ? err.message : String(err));
     } finally {
