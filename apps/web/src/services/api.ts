@@ -24,11 +24,16 @@ export interface WorldRecord {
   locale?: string;
   tags?: string[];
   dimensions?: import("@covel/shared").WorldDimensions;
-  /** Server-side metadata. `source === 'file'` means built-in (non-deletable). */
+  /** World metadata, including storage/source labels used by the world list. */
   metadata?: { source?: string; [key: string]: unknown };
   createdAt: string;
   updatedAt?: string;
 }
+
+export type GeneratedWorldSaveTarget =
+  | "server-file"
+  | "server-store"
+  | "return-only";
 
 export type { SessionStatus };
 
@@ -544,6 +549,7 @@ export function generateWorld(
   onEvent: (event: GenerateWorldEvent) => void,
   onError?: (err: Error) => void,
   onDone?: () => void,
+  options?: { saveTarget?: GeneratedWorldSaveTarget },
 ): AbortController {
   const controller = new AbortController();
 
@@ -555,7 +561,11 @@ export function generateWorld(
           "Content-Type": "application/json",
           ...buildAiHeaders(),
         },
-        body: JSON.stringify({ prompt, locale }),
+        body: JSON.stringify({
+          prompt,
+          locale,
+          saveTarget: options?.saveTarget,
+        }),
         signal: controller.signal,
       });
 

@@ -26,8 +26,16 @@ Object.defineProperty(globalThis, "localStorage", {
 });
 
 const apiModule = await import("../api.js");
-const { updateWorld, importDimensions, preflightWorldData, listApprovals } =
-  apiModule;
+const {
+  generateWorld,
+  updateWorld,
+  importDimensions,
+  preflightWorldData,
+  listApprovals,
+} = apiModule;
+const dataServiceModule = await import("../data-service.js");
+const { generatedWorldSaveTargetForBackend, storageModeForServerBackend } =
+  dataServiceModule;
 
 function mockFetchOnce(body: unknown, status = 200): void {
   vi.stubGlobal(
@@ -47,6 +55,63 @@ afterEach(() => {
 });
 
 describe("world API mapping", () => {
+  it("maps server store backend to frontend storage mode", () => {
+    expect(storageModeForServerBackend("memory")).toBe("local");
+    expect(storageModeForServerBackend("sqlite")).toBe("remote");
+    expect(storageModeForServerBackend("pg")).toBe("remote");
+  });
+
+  it("maps server store backend to generated-world save target", () => {
+    expect(generatedWorldSaveTargetForBackend("memory")).toBe("return-only");
+    expect(generatedWorldSaveTargetForBackend("sqlite")).toBe("server-store");
+    expect(generatedWorldSaveTargetForBackend("pg")).toBe("server-store");
+    expect(generatedWorldSaveTargetForBackend(undefined)).toBe("server-file");
+  });
+
+  it("generateWorld sends the requested save target", async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            'data: {"type":"done","world":{"id":"w1","name":"W","description":"D","createdAt":"2026-01-01T00:00:00.000Z"}}\n\n',
+          ),
+        );
+        controller.close();
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: stream,
+      }),
+    );
+    const events: unknown[] = [];
+
+    generateWorld(
+      "idea",
+      "zh-CN",
+      (event) => events.push(event),
+      undefined,
+      undefined,
+      {
+        saveTarget: "return-only",
+      },
+    );
+
+    await vi.waitFor(() => expect(events).toHaveLength(1));
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/ai/generate-world");
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
+      prompt: "idea",
+      locale: "zh-CN",
+      saveTarget: "return-only",
+    });
+  });
+
   it("updateWorld maps metadata.dimensions onto the frontend record", async () => {
     mockFetchOnce({
       id: "world-1",

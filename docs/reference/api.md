@@ -2447,25 +2447,61 @@ interface SseEnvelope {
 
 AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、dimensions、lore）。服务器会把模型输出的 `dimensions` 写入 `data/dimensions.yaml`，生成 `data/world.data.yaml` descriptor，并在 `world.yaml` 中写入 `worldData: data/world.data.yaml`。
 
+这个接口使用 SSE 返回进度和最终世界。客户端通过 `fetch()` + `ReadableStream` 解析 `data: {...}\n\n` 帧。
+
 **请求体:**
 
 ```json
 {
   "concept": "一个被永恒暴风雪笼罩的冰封大陆",
   "locale": "zh-CN",
-  "model": "deepseek-chat"
+  "model": "deepseek-chat",
+  "saveTarget": "server-file"
 }
 ```
 
-| 字段      | 类型   | 必填 | 说明                           |
-| --------- | ------ | ---- | ------------------------------ |
-| `concept` | string | 是   | 世界概念描述（最多 2000 字符） |
-| `locale`  | string | 否   | 语言区域，默认 `zh-CN`         |
-| `model`   | string | 否   | 覆盖 LLM 模型                  |
+| 字段         | 类型   | 必填 | 说明                                                  |
+| ------------ | ------ | ---- | ----------------------------------------------------- |
+| `concept`    | string | 是   | 世界概念描述（最多 4000 字符）。兼容旧字段名 `prompt` |
+| `locale`     | string | 否   | 语言区域，默认 `zh-CN`                                |
+| `model`      | string | 否   | 覆盖 LLM 模型                                         |
+| `saveTarget` | string | 否   | 保存目标，默认 `server-file`。可选值见下表            |
 
-**响应 200:** 生成的世界包数据。
+| `saveTarget`   | 保存位置                              | 持久性来源                     | 适用场景                                                       |
+| -------------- | ------------------------------------- | ------------------------------ | -------------------------------------------------------------- |
+| `server-file`  | 服务端 `COVEL_USER_WORLDS_DIR` 世界包 | 服务端文件系统                 | Electron、本机开发、可信私有服务                               |
+| `server-store` | 服务端 `DataStore.upsertWorld()`      | `STORE_BACKEND=sqlite` 或 `pg` | 自部署 Web 服务希望复用服务端数据库，并避免长期保留世界包文件  |
+| `return-only`  | SSE 响应体                            | 调用方自行保存                 | 浏览器本地 IndexedDB、预览生成结果、公开服务避免写服务端持久层 |
+
+`server-store` 和 `return-only` 会先把世界包写入临时目录做校验，然后删除临时目录。因为当前 `worldData` 文件导入依赖包内相对路径，这两个模式保存的 `WorldRecord.metadata` 会移除 `worldDataPath`、`worldData` 和 `dimensionSources`，保留已经归一化到 `metadata.dimensions` 的世界维度数据。
+
+响应里的 `world.metadata.storage` 标注真实保存位置：
+
+```json
+{
+  "scope": "server",
+  "backend": "pg",
+  "durable": true
+}
+```
+
+Web 前端会根据 `/api/health.storeBackend` 选择生成世界保存目标。当后端是 `memory` 时，前端使用 `saveTarget: "return-only"`，然后通过 `packages/store` 的 IndexedDB `DataStore.upsertWorld()` 保存到用户浏览器，并把 `world.metadata.storage` 标注为 `{ "scope": "browser", "backend": "indexeddb", "durable": true }`。当后端是 `sqlite` 或 `pg` 时，前端使用 `saveTarget: "server-store"`，并通过服务端 `packages/store` 后端持久化。未知后端保留 `server-file` 兼容旧行为。
+
+**响应 200:** SSE 帧。
+
+```text
+data: {"type":"progress","phase":"generating"}
+
+data: {"type":"progress","phase":"validating"}
+
+data: {"type":"progress","phase":"saving"}
+
+data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","metadata":{"storage":{"scope":"server","backend":"file","durable":true}}}}
+```
 
 **响应 422:** `{ "error": "World generation failed", "details": [...] }`
+
+**响应 400:** `{ "error": "concept (string) is required" }` 或 `{ "error": "saveTarget must be \"server-file\", \"server-store\", or \"return-only\"" }`
 
 ---
 

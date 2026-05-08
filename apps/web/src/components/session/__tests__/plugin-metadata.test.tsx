@@ -6,6 +6,7 @@ import {
   defaultSelectedPluginIdsForWorld,
   isLockedCorePackage,
 } from "../session-prep-screen.js";
+import { worldStorageLabel } from "../world-select-screen.js";
 import type { PackageSummary, WorldRecord } from "@/services/api.js";
 
 describe("session plugin metadata UI", () => {
@@ -83,6 +84,34 @@ describe("session plugin metadata UI", () => {
     expect(selected.has("scene-cast")).toBe(true);
     expect(selected.has("narrator")).toBe(false);
     expect(selected.has("guide")).toBe(false);
+  });
+
+  it("labels world storage locations", () => {
+    const base = {
+      id: "world",
+      name: "World",
+      description: "Desc",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    } satisfies WorldRecord;
+
+    expect(
+      worldStorageLabel({
+        ...base,
+        metadata: { storage: { scope: "browser", backend: "indexeddb" } },
+      }),
+    ).toBe("Browser IndexedDB");
+    expect(
+      worldStorageLabel({
+        ...base,
+        metadata: { storage: { scope: "server", backend: "pg" } },
+      }),
+    ).toBe("Server pg");
+    expect(
+      worldStorageLabel({
+        ...base,
+        metadata: { source: "file" },
+      }),
+    ).toBe("Built-in");
   });
 
   it("renders runtime trigger labels from trigger.mode", async () => {

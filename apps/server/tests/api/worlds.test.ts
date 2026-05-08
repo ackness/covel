@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createEventBus } from "@covel/events";
@@ -176,6 +176,35 @@ describe("world routes", () => {
     const metadata = world?.metadata as Record<string, unknown>;
     expect(metadata.publishing).toEqual({ status: "draft" });
     expect(metadata.dimensions).toEqual(makeDimensions("New Reach", "Guild"));
+  });
+
+  it("DELETE /api/worlds/:id removes generated-file world packages", async () => {
+    const worldsDir = await mkdtemp(path.join(tmpdir(), "covel-delete-world-"));
+    const worldRoot = path.join(worldsDir, "generated-world");
+    await mkdir(worldRoot, { recursive: true });
+    app = createTestApp(store, {} as PluginRegistry, {
+      worldsDirs: [worldsDir],
+    });
+    const now = new Date().toISOString();
+    await store.upsertWorld({
+      id: "generated-world",
+      name: "Generated",
+      description: "desc",
+      metadata: {
+        source: "generated-file",
+        storage: { scope: "server", backend: "file", path: worldsDir },
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const res = await app.request("/api/worlds/generated-world", {
+      method: "DELETE",
+    });
+
+    expect(res.status).toBe(200);
+    await expect(access(worldRoot)).rejects.toThrow();
+    expect(await store.getWorld("generated-world")).toBeNull();
   });
 
   it("POST /api/worlds/:id/sync-dimensions refreshes plugin_data and lorebook entries together", async () => {
@@ -558,11 +587,9 @@ describe("world routes", () => {
       "assets",
       "mio.png",
     );
-    const mediaId =
-      typeof (mediaRowB?.value as { ref?: { id?: unknown } } | undefined)?.ref
-        ?.id === "string"
-        ? (mediaRowB?.value as { ref: { id: string } }).ref.id
-        : undefined;
+    const mediaRef = (mediaRowB?.value as { ref?: { id?: unknown } } | null)
+      ?.ref;
+    const mediaId = typeof mediaRef?.id === "string" ? mediaRef.id : undefined;
     expect(mediaId).toEqual(expect.any(String));
     expect(await mediaStore.lookup(mediaId!)).not.toBeNull();
     expect(await mediaStore.isReferencedBy(mediaId!, "media-a")).toBe(true);

@@ -205,6 +205,10 @@ async function loadExternalDimensions(
  */
 export async function loadSingleWorld(
   worldDir: string,
+  options?: {
+    source?: string;
+    storage?: Record<string, unknown>;
+  },
 ): Promise<WorldRecord | null> {
   const yamlPath = path.join(worldDir, "world.yaml");
 
@@ -256,7 +260,8 @@ export async function loadSingleWorld(
       : undefined;
 
   const baseMetadata: Record<string, unknown> = {
-    source: "file",
+    source: options?.source ?? "file",
+    ...(options?.storage ? { storage: options.storage } : {}),
     dimensions:
       Object.keys(mergedDimensions).length > 0 ? mergedDimensions : undefined,
     dimensionSources: dimensionSources,

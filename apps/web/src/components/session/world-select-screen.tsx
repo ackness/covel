@@ -59,6 +59,29 @@ function hashIndex(id: string, mod: number): number {
   return Math.abs(hash) % mod;
 }
 
+export function worldStorageLabel(world: WorldRecord): string {
+  const metadata = world.metadata;
+  const storage = metadata?.storage as
+    | {
+        scope?: string;
+        backend?: string;
+      }
+    | undefined;
+  if (storage?.scope === "browser" && storage.backend === "indexeddb") {
+    return "Browser IndexedDB";
+  }
+  if (storage?.scope === "server" && storage.backend === "file") {
+    return "Server file";
+  }
+  if (storage?.scope === "server" && storage.backend) {
+    return `Server ${storage.backend}`;
+  }
+  if (metadata?.source === "file") return "Built-in";
+  if (metadata?.source === "browser-indexeddb") return "Browser IndexedDB";
+  if (metadata?.source === "server-store") return "Server store";
+  return "Server";
+}
+
 export function WorldSelectScreen({
   worlds,
   packages,
@@ -341,6 +364,9 @@ export function WorldSelectScreen({
 
                       <div className="flex items-center justify-between gap-3 pt-1">
                         <div className="flex flex-wrap gap-1.5 min-w-0">
+                          <span className="ui-tag" title="World storage">
+                            {worldStorageLabel(world)}
+                          </span>
                           {(world.tags ?? []).slice(0, 4).map((tag) => (
                             <span key={tag} className="ui-tag">
                               {tag}

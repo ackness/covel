@@ -12,6 +12,11 @@ import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
 import type { WorldRecord, GenerateWorldEvent } from "@/services/api.js";
 import * as api from "@/services/api.js";
+import {
+  generatedWorldSaveTargetForBackend,
+  getDataService,
+  getStorageMode,
+} from "@/services/data-service.js";
 
 interface AiWorldGeneratorProps {
   open: boolean;
@@ -32,6 +37,8 @@ export function AiWorldGenerator({
   const [prompt, setPrompt] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [storeBackend, setStoreBackend] =
+    useState<api.ServerHealth["storeBackend"]>();
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -41,6 +48,14 @@ export function AiWorldGenerator({
     },
     [],
   );
+
+  useEffect(() => {
+    if (!open) return;
+    void api
+      .fetchServerHealth()
+      .then((health) => setStoreBackend(health.storeBackend))
+      .catch(() => setStoreBackend(undefined));
+  }, [open]);
 
   const handleGenerate = useCallback(() => {
     if (!prompt.trim()) return;
@@ -54,13 +69,24 @@ export function AiWorldGenerator({
           setPhase(event.phase);
           break;
         case "done":
-          setPhase("done");
-          onWorldCreated(event.world);
-          timerRef.current = setTimeout(() => {
-            setPhase("idle");
-            setPrompt("");
-            onOpenChange(false);
-          }, 900);
+          void (async () => {
+            try {
+              const world =
+                getStorageMode() === "local"
+                  ? await getDataService().saveGeneratedWorld(event.world)
+                  : event.world;
+              setPhase("done");
+              onWorldCreated(world);
+              timerRef.current = setTimeout(() => {
+                setPhase("idle");
+                setPrompt("");
+                onOpenChange(false);
+              }, 900);
+            } catch (err) {
+              setPhase("error");
+              setError(err instanceof Error ? err.message : String(err));
+            }
+          })();
           break;
         case "error":
           setPhase("error");
@@ -77,8 +103,12 @@ export function AiWorldGenerator({
         setPhase("error");
         setError(err.message);
       },
+      undefined,
+      {
+        saveTarget: generatedWorldSaveTargetForBackend(storeBackend),
+      },
     );
-  }, [prompt, i18n.language, onWorldCreated, onOpenChange]);
+  }, [prompt, i18n.language, onWorldCreated, onOpenChange, storeBackend]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();

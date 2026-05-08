@@ -9,8 +9,9 @@
  * regardless of storage mode.
  */
 
-import type { WorldDimensions, I18nText } from "@covel/shared";
+import type { I18nText } from "@covel/shared";
 import type {
+  GeneratedWorldSaveTarget,
   WorldRecord,
   SessionRecord,
   MessageRecord,
@@ -28,6 +29,7 @@ export interface DataService {
   listWorlds(): Promise<WorldRecord[]>;
   getWorld(id: string): Promise<WorldRecord | null>;
   createWorld(name: string, description: string): Promise<WorldRecord>;
+  saveGeneratedWorld(world: WorldRecord): Promise<WorldRecord>;
   updateWorld(
     id: string,
     patch: Partial<
@@ -116,6 +118,21 @@ export interface DataService {
 const STORAGE_MODE_KEY = "covel:storageMode";
 
 export type StorageMode = "local" | "remote";
+export type ServerStoreBackend = "memory" | "sqlite" | "pg";
+
+export function storageModeForServerBackend(
+  backend: ServerStoreBackend,
+): StorageMode {
+  return backend === "memory" ? "local" : "remote";
+}
+
+export function generatedWorldSaveTargetForBackend(
+  backend: ServerStoreBackend | null | undefined,
+): GeneratedWorldSaveTarget {
+  if (backend === "memory") return "return-only";
+  if (backend === "sqlite" || backend === "pg") return "server-store";
+  return "server-file";
+}
 
 export function getStorageMode(): StorageMode {
   const val = localStorage.getItem(STORAGE_MODE_KEY);
@@ -142,6 +159,9 @@ class RemoteDataService implements DataService {
   }
   async createWorld(name: string, description: string) {
     return api.createWorld(name, description);
+  }
+  async saveGeneratedWorld(world: WorldRecord) {
+    return world;
   }
   async updateWorld(
     id: string,
@@ -417,6 +437,30 @@ class LocalDataService implements DataService {
     return world;
   }
 
+  async saveGeneratedWorld(world: WorldRecord): Promise<WorldRecord> {
+    const store = await this.getStore();
+    const now = new Date().toISOString();
+    const metadata: Record<string, unknown> = {
+      ...world.metadata,
+      source: "browser-indexeddb",
+      storage: {
+        scope: "browser",
+        backend: "indexeddb",
+        durable: true,
+      },
+    };
+    delete metadata.worldDataPath;
+    delete metadata.worldData;
+    const record = {
+      ...world,
+      metadata,
+      updatedAt: now,
+      createdAt: world.createdAt ?? now,
+    };
+    await store.upsertWorld(record as any);
+    return record;
+  }
+
   async updateWorld(
     id: string,
     patch: Partial<
@@ -557,12 +601,12 @@ class LocalDataService implements DataService {
             sessionId: m.sessionId,
             role: m.role,
             content: m.content,
-            ...((m.metadata as {
+            ...(m.metadata as {
               turnId?: string;
               runtimeId?: string;
               kind?: string;
               block?: Record<string, unknown>;
-            }) ?? {}),
+            }),
             createdAt: m.createdAt,
           }) as MessageRecord,
       )

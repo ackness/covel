@@ -3,6 +3,8 @@
  */
 
 import { Hono } from "hono";
+import { rm } from "node:fs/promises";
+import path from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 import { validateDimensions } from "@covel/shared";
 import type { DataStore, MediaStore, WorldRecord } from "@covel/store";
@@ -12,6 +14,7 @@ import {
   syncWorldDataForSession,
   preflightWorldDataForSession,
 } from "../../world-data/session-import.js";
+import { resolveContainedPath } from "../../world-data/safe-path.js";
 
 type Env = {
   Variables: {
@@ -312,6 +315,18 @@ worldRoutes.delete("/:id", async (c) => {
   const meta = world.metadata as Record<string, unknown> | undefined;
   if (meta?.source === "file") {
     return c.json({ error: "Built-in worlds cannot be deleted" }, 403);
+  }
+  if (meta?.source === "generated-file") {
+    const worldsDirs = c.get("worldsDirs") ?? [];
+    for (const worldsDir of worldsDirs) {
+      const worldPath = await resolveContainedPath(worldsDir, id, {
+        rejectSymlinks: true,
+      });
+      if (worldPath && path.basename(worldPath) === id) {
+        await rm(worldPath, { recursive: true, force: true });
+        break;
+      }
+    }
   }
   await store.deleteWorld(id);
   return c.json({ success: true });
