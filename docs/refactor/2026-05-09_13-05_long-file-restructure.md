@@ -109,6 +109,7 @@ Refactored in this pass:
 - Kept SQL and IndexedDB schema/index execution paths unchanged.
 - Added SQLite/PostgreSQL backend-local value helpers for state entries, plugin data, worlds, working memory, world-data import ledger, and lorebook upserts.
 - Added SQLite/PostgreSQL backend-local session cascade helpers for `deleteSession()` child-row cleanup.
+- Moved SQLite/PostgreSQL plugin data, working memory, world-data import ledger, and lorebook CRUD families into backend-local `*-data-crud.ts` modules.
 - Kept SQLite TEXT JSON serialization and PostgreSQL JSONB value shaping in separate backend modules.
 
 ### Server Misc API
@@ -155,10 +156,12 @@ Refactored in this pass:
 - `packages/store/src/media-store/sqlite.ts`: 267 lines
 - `packages/store/src/memory/memory-store.ts`: 1073 lines
 - `packages/store/src/indexeddb/idb-store.ts`: 1083 lines
-- `packages/store/src/sqlite/sqlite-store.ts`: 1423 lines
+- `packages/store/src/sqlite/sqlite-store.ts`: 1132 lines
+- `packages/store/src/sqlite/sqlite-data-crud.ts`: 324 lines
 - `packages/store/src/sqlite/sqlite-store-values.ts`: 196 lines
 - `packages/store/src/sqlite/sqlite-session-cascade.ts`: 87 lines
-- `packages/store/src/postgres/pg-store.ts`: 1356 lines
+- `packages/store/src/postgres/pg-store.ts`: 1068 lines
+- `packages/store/src/postgres/pg-data-crud.ts`: 330 lines
 - `packages/store/src/postgres/pg-store-values.ts`: 190 lines
 - `packages/store/src/postgres/pg-session-cascade.ts`: 85 lines
 - `apps/server/src/routes/misc-api.ts`: 429 lines
@@ -175,11 +178,11 @@ Refactored in this pass:
 
 Future passes should focus on large maintenance files that are production code, have clear internal feature boundaries, and can be validated through package-level tests.
 
-| Priority |                                                                 File |     Lines | Refactor boundary                                           | Validation focus                     |
-| -------- | -------------------------------------------------------------------: | --------: | ----------------------------------------------------------- | ------------------------------------ |
-| 1        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 1356-1423 | focused SQL CRUD grouping and smaller query helper families | Store contract tests across backends |
-| 2        |                           `apps/server/src/routes/api/plugin-rpc.ts` |      1078 | runtime turn, deferred followers, action dispatch           | Plugin RPC and approval route tests  |
-| 3        |                                           `apps/desktop/src/main.ts` |      1226 | logging, window/menu helpers, then supervisor/IPC helpers   | Desktop build smoke                  |
+| Priority |                                                                 File |     Lines | Refactor boundary                                         | Validation focus                     |
+| -------- | -------------------------------------------------------------------: | --------: | --------------------------------------------------------- | ------------------------------------ |
+| 1        |                           `apps/server/src/routes/api/plugin-rpc.ts` |      1078 | runtime turn, deferred followers, action dispatch         | Plugin RPC and approval route tests  |
+| 2        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 1068-1132 | session CRUD, runtime records, conversation persistence   | Store contract tests across backends |
+| 3        |                                           `apps/desktop/src/main.ts` |      1226 | logging, window/menu helpers, then supervisor/IPC helpers | Desktop build smoke                  |
 
 ## Validation Run
 
@@ -249,6 +252,11 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 180s mise exec -- pnpm --filter @covel/web exec vitest run src/components/session/__tests__/plugin-rpc-ui.test.ts src/components/session/__tests__/plugin-metadata.test.tsx src/lib/__tests__/interaction-selection.test.ts src/components/asset-render/__tests__/AssetTurnSidebar.test.tsx`
   - `timeout 240s mise exec -- pnpm --filter @covel/web test`
   - `timeout 120s mise exec -- pnpm exec prettier --check apps/web/src/components/session/chat-messages.tsx apps/web/src/components/session/chat-messages/message-blocks.tsx apps/web/src/components/session/chat-messages/message-primitives.tsx apps/web/src/components/session/chat-messages/session-canvas-hero.tsx`
+- Twelfth pass validation:
+  - `timeout 120s mise exec -- pnpm --filter @covel/store lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/store exec vitest run tests/sqlite-store.test.ts tests/pg-store.test.ts tests/plugin-data-contract-extras.test.ts`
+  - `timeout 240s mise exec -- pnpm --filter @covel/store test`
+  - `timeout 120s mise exec -- pnpm exec prettier --check packages/store/src/sqlite/sqlite-store.ts packages/store/src/sqlite/sqlite-data-crud.ts packages/store/src/postgres/pg-store.ts packages/store/src/postgres/pg-data-crud.ts`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -299,8 +307,10 @@ flowchart TD
   IdbStore["idb-store.ts"] --> StoreCommon
   SqliteStore["sqlite-store.ts"] --> SqliteValues["sqlite-store-values.ts"]
   SqliteStore --> SqliteCascade["sqlite-session-cascade.ts"]
+  SqliteStore --> SqliteDataCrud["sqlite-data-crud.ts"]
   PgStore["pg-store.ts"] --> PgValues["pg-store-values.ts"]
   PgStore --> PgCascade["pg-session-cascade.ts"]
+  PgStore --> PgDataCrud["pg-data-crud.ts"]
   MiscApi["misc-api.ts"] --> MiscModules["routes/misc-api/*"]
   PluginRpc["plugin-rpc.ts"] --> PluginRpcHelpers["plugin-rpc/{body,jobs}.ts"]
   DesktopMain["desktop/main.ts"] --> DesktopLeaf["desktop/{startup-errors,network,splash-screen,env-files}.ts"]

@@ -23,7 +23,6 @@ import type {
   ApprovalRecord,
   MessageRecord,
   CharacterRecord,
-  PluginDataRecord,
   PluginConfigRecord,
   WorldRecord,
   TraceEventRecord,
@@ -33,9 +32,6 @@ import type {
   InteractionRecordFilters,
   TurnMessageRecord,
   PlayerInputRecord,
-  WorkingMemoryRecord,
-  WorldDataImportLedgerRecord,
-  LorebookEntryRecord,
   SessionSummaryRecord,
   SuspensionRecord,
   SnapshotRecord,
@@ -57,35 +53,24 @@ import {
   toApprovalRecord,
   toMessageRecord,
   toCharacterRecord,
-  toPluginDataRecord,
   toPluginConfigRecord,
   toTraceEventRecord,
   toRuntimeOutputRecord,
   toInteractionRecordRow,
   toTurnMessageRecord,
   toPlayerInputRecord,
-  toWorkingMemoryRecord,
-  toWorldDataImportLedgerRecord,
-  toLorebookEntryRecord,
   toSessionSummaryRecord,
   toSuspensionRecord,
   toSnapshotRecord,
 } from "./pg-store-mappers.js";
 import {
-  pgLorebookEntryInsert,
-  pgLorebookEntryUpdate,
-  pgPluginDataInsert,
-  pgPluginDataUpdate,
   pgStateEntryInsert,
   pgStateEntryUpdate,
-  pgWorkingMemoryInsert,
-  pgWorkingMemoryUpdate,
-  pgWorldDataLedgerInsert,
-  pgWorldDataLedgerUpdate,
   pgWorldInsert,
   pgWorldUpdate,
 } from "./pg-store-values.js";
 import { deletePgSessionCascade } from "./pg-session-cascade.js";
+import { createPgDataCrud } from "./pg-data-crud.js";
 import type { VectorStoreCapability, VectorModelOps } from "../vector-store.js";
 import { createPgVectorCapability } from "./pg-vector.js";
 
@@ -597,127 +582,7 @@ export async function createPgStore(
         );
     },
 
-    // ── Plugin Data ──────────────────────────────────────────
-
-    async setPluginData(record: PluginDataRecord): Promise<void> {
-      await db
-        .insert(schema.pluginData)
-        .values(pgPluginDataInsert(record))
-        .onConflictDoUpdate({
-          target: [
-            schema.pluginData.sessionId,
-            schema.pluginData.pluginId,
-            schema.pluginData.namespace,
-            schema.pluginData.key,
-          ],
-          set: pgPluginDataUpdate(record),
-        });
-    },
-
-    async setPluginDataBatch(
-      records: readonly PluginDataRecord[],
-    ): Promise<void> {
-      if (records.length === 0) return;
-      await db.transaction(async (tx) => {
-        for (const record of records) {
-          await tx
-            .insert(schema.pluginData)
-            .values(pgPluginDataInsert(record))
-            .onConflictDoUpdate({
-              target: [
-                schema.pluginData.sessionId,
-                schema.pluginData.pluginId,
-                schema.pluginData.namespace,
-                schema.pluginData.key,
-              ],
-              set: pgPluginDataUpdate(record),
-            });
-        }
-      });
-    },
-
-    async getPluginData(
-      sessionId: string,
-      pluginId: string,
-      namespace: string,
-      key: string,
-    ): Promise<PluginDataRecord | null> {
-      const rows = await db
-        .select()
-        .from(schema.pluginData)
-        .where(
-          and(
-            eq(schema.pluginData.sessionId, sessionId),
-            eq(schema.pluginData.pluginId, pluginId),
-            eq(schema.pluginData.namespace, namespace),
-            eq(schema.pluginData.key, key),
-          ),
-        );
-      return rows.length > 0 ? toPluginDataRecord(rows[0]) : null;
-    },
-
-    async listPluginData(
-      sessionId: string,
-      pluginId: string,
-      namespace?: string,
-      pagination?: PaginationOpts,
-    ): Promise<PluginDataRecord[]> {
-      const conditions = [
-        eq(schema.pluginData.sessionId, sessionId),
-        eq(schema.pluginData.pluginId, pluginId),
-      ];
-      if (namespace != null) {
-        conditions.push(eq(schema.pluginData.namespace, namespace));
-      }
-
-      let query = db
-        .select()
-        .from(schema.pluginData)
-        .where(and(...conditions))
-        .$dynamic();
-      if (pagination?.limit !== undefined)
-        query = query.limit(pagination.limit);
-      if (pagination?.offset) query = query.offset(pagination.offset);
-      const rows = await query;
-      return rows.map(toPluginDataRecord);
-    },
-
-    async listPluginDataSessionScope(
-      sessionId: string,
-      pagination?: PaginationOpts,
-    ): Promise<readonly PluginDataRecord[]> {
-      // Full session scope — used by the snapshot payload builder to avoid
-      // missing plugins that never produced a runtime result (audit
-      // 2026-04-20 finding 7.2).
-      let query = db
-        .select()
-        .from(schema.pluginData)
-        .where(eq(schema.pluginData.sessionId, sessionId))
-        .$dynamic();
-      if (pagination?.limit !== undefined)
-        query = query.limit(pagination.limit);
-      if (pagination?.offset) query = query.offset(pagination.offset);
-      const rows = await query;
-      return rows.map(toPluginDataRecord);
-    },
-
-    async deletePluginData(
-      sessionId: string,
-      pluginId: string,
-      namespace: string,
-      key: string,
-    ): Promise<void> {
-      await db
-        .delete(schema.pluginData)
-        .where(
-          and(
-            eq(schema.pluginData.sessionId, sessionId),
-            eq(schema.pluginData.pluginId, pluginId),
-            eq(schema.pluginData.namespace, namespace),
-            eq(schema.pluginData.key, key),
-          ),
-        );
-    },
+    ...createPgDataCrud(() => db),
 
     // ── Plugin Configs ───────────────────────────────────────
 
@@ -999,159 +864,6 @@ export async function createPgStore(
         .from(schema.playerInputs)
         .where(eq(schema.playerInputs.sessionId, sessionId));
       return rows.map(toPlayerInputRecord);
-    },
-
-    // ── Working Memory (S3-T3) ───────────────────────────────
-
-    async upsertWorkingMemory(record: WorkingMemoryRecord): Promise<void> {
-      await db
-        .insert(schema.workingMemory)
-        .values(pgWorkingMemoryInsert(record))
-        .onConflictDoUpdate({
-          target: [
-            schema.workingMemory.sessionId,
-            schema.workingMemory.scope,
-            schema.workingMemory.key,
-          ],
-          set: pgWorkingMemoryUpdate(record),
-        });
-    },
-
-    async getWorkingMemory(
-      sessionId: string,
-      scope: WorkingMemoryRecord["scope"],
-      key: string,
-    ): Promise<WorkingMemoryRecord | null> {
-      const rows = await db
-        .select()
-        .from(schema.workingMemory)
-        .where(
-          and(
-            eq(schema.workingMemory.sessionId, sessionId),
-            eq(schema.workingMemory.scope, scope),
-            eq(schema.workingMemory.key, key),
-          ),
-        );
-      return rows.length > 0 ? toWorkingMemoryRecord(rows[0]) : null;
-    },
-
-    async listWorkingMemory(
-      sessionId: string,
-    ): Promise<readonly WorkingMemoryRecord[]> {
-      const rows = await db
-        .select()
-        .from(schema.workingMemory)
-        .where(eq(schema.workingMemory.sessionId, sessionId))
-        .orderBy(
-          asc(schema.workingMemory.scope),
-          asc(schema.workingMemory.key),
-        );
-      return rows.map(toWorkingMemoryRecord);
-    },
-
-    async deleteWorkingMemory(
-      sessionId: string,
-      scope: WorkingMemoryRecord["scope"],
-      key: string,
-    ): Promise<void> {
-      await db
-        .delete(schema.workingMemory)
-        .where(
-          and(
-            eq(schema.workingMemory.sessionId, sessionId),
-            eq(schema.workingMemory.scope, scope),
-            eq(schema.workingMemory.key, key),
-          ),
-        );
-    },
-
-    // ── World Data Import Ledger ─────────────────────────────
-
-    async saveWorldDataImportLedgerBatch(
-      records: readonly WorldDataImportLedgerRecord[],
-    ): Promise<void> {
-      if (records.length === 0) return;
-      await db.transaction(async (tx) => {
-        for (const r of records) {
-          await tx
-            .insert(schema.worldDataImportLedger)
-            .values(pgWorldDataLedgerInsert(r))
-            .onConflictDoUpdate({
-              target: schema.worldDataImportLedger.id,
-              set: pgWorldDataLedgerUpdate(r),
-            });
-        }
-      });
-    },
-
-    async listWorldDataImportLedger(
-      sessionId: string,
-    ): Promise<readonly WorldDataImportLedgerRecord[]> {
-      const rows = await db
-        .select()
-        .from(schema.worldDataImportLedger)
-        .where(eq(schema.worldDataImportLedger.sessionId, sessionId))
-        .orderBy(
-          asc(schema.worldDataImportLedger.importedAt),
-          asc(schema.worldDataImportLedger.id),
-        );
-      return rows.map(toWorldDataImportLedgerRecord);
-    },
-
-    async deleteWorldDataImportLedger(
-      sessionId: string,
-      id: string,
-    ): Promise<void> {
-      await db
-        .delete(schema.worldDataImportLedger)
-        .where(
-          and(
-            eq(schema.worldDataImportLedger.sessionId, sessionId),
-            eq(schema.worldDataImportLedger.id, id),
-          ),
-        );
-    },
-
-    // ── Lorebook Entries (S3-T2) ──────────────────────────────
-
-    async upsertLorebookEntries(
-      records: readonly LorebookEntryRecord[],
-    ): Promise<void> {
-      if (records.length === 0) return;
-      for (const r of records) {
-        await db
-          .insert(schema.lorebookEntries)
-          .values(pgLorebookEntryInsert(r))
-          .onConflictDoUpdate({
-            target: schema.lorebookEntries.id,
-            set: pgLorebookEntryUpdate(r),
-          });
-      }
-    },
-
-    async listSessionLorebookEntries(
-      sessionId: string,
-    ): Promise<readonly LorebookEntryRecord[]> {
-      const rows = await db
-        .select()
-        .from(schema.lorebookEntries)
-        .where(eq(schema.lorebookEntries.sessionId, sessionId))
-        .orderBy(
-          asc(schema.lorebookEntries.insertionOrder),
-          asc(schema.lorebookEntries.id),
-        );
-      return rows.map(toLorebookEntryRecord);
-    },
-
-    async deleteLorebookEntry(sessionId: string, id: string): Promise<void> {
-      await db
-        .delete(schema.lorebookEntries)
-        .where(
-          and(
-            eq(schema.lorebookEntries.sessionId, sessionId),
-            eq(schema.lorebookEntries.id, id),
-          ),
-        );
     },
 
     // ── Session Summaries (S2-T2 Compactor) ─────────────────
