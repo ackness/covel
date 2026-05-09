@@ -23,17 +23,8 @@ import {
 import { createStateManager, type StateManager } from "@covel/state";
 import { createEventBus, type EventBus } from "@covel/events";
 import type { DataStore, StoreBackend } from "@covel/store";
-import type {
-  LLMAdapter,
-  HookPipeline,
-  PluginHookSource,
-} from "@covel/runtime";
-import {
-  createToolExecutor,
-  createModelResolver,
-  createHookPipeline,
-  registerPluginHooks,
-} from "@covel/runtime";
+import type { LLMAdapter } from "@covel/runtime";
+import { createToolExecutor, createModelResolver } from "@covel/runtime";
 import {
   maybeCompact,
   type CompactorRunner,
@@ -92,6 +83,7 @@ import { pluginRpcRoutes } from "./plugin-rpc.js";
 import { approvalRoutes, sessionApprovalRoutes } from "./approvals.js";
 export { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
 import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
+import { createBootstrapHookPipeline } from "./bootstrap/plugin-hooks.js";
 import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
 import { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
 
@@ -618,35 +610,10 @@ export async function bootstrapApi(
       manifestCache,
     });
 
-  // 7d. Hook pipeline — singleton per bootstrapApi() call.
-  //
-  //   Each plugin's PLUGIN.md may declare `hooks: [{ event, handler }]` entries
-  //   pointing at a module relative to the plugin root. Delegation to
-  //   `registerPluginHooks` keeps the handler-resolution / lazy-import / path
-  //   traversal logic co-located with the pipeline itself (see
-  //   `packages/runtime/src/hooks/register-plugin-hooks.ts`). Plugins with
-  //   no hooks leave the pipeline empty.
-  const hookPipeline: HookPipeline = createHookPipeline();
-  const hookSources: PluginHookSource[] = [];
-  for (const [pluginId, manifests] of manifestCache) {
-    const discovery = discoveryMap.get(pluginId);
-    if (!discovery) continue;
-    for (const parsed of manifests) {
-      const hooks = parsed.manifest.hooks ?? [];
-      if (hooks.length === 0) continue;
-      hookSources.push({
-        pluginId,
-        rootPath: discovery.rootPath,
-        hooks,
-      });
-    }
-  }
-  const registeredHookCount = registerPluginHooks(hookPipeline, hookSources);
-  if (registeredHookCount > 0) {
-    console.log(
-      `[bootstrap] registered ${registeredHookCount} plugin hook handler(s) across ${hookSources.length} source(s)`,
-    );
-  }
+  const hookPipeline = createBootstrapHookPipeline({
+    discoveryMap,
+    manifestCache,
+  });
 
   // 7b. CompactorRunner (S2-T2) — wraps maybeCompact with server-level deps.
   //     Feature-gated by COVEL_COMPACTOR_V1=1 at call site (turn-executor.ts).
