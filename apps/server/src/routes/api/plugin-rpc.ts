@@ -34,15 +34,9 @@
  */
 
 import { Hono } from "hono";
-import {
-  executeTurn,
-  processRuntimeResult,
-  createTurnEmitter,
-  createRpcHandlerStoreView,
-} from "@covel/runtime";
+import { createRpcHandlerStoreView } from "@covel/runtime";
 import { RpcDispatchError, RpcValidationError } from "@covel/runtime";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
-import type { TurnInput } from "@covel/shared";
 import { loadSessionConfig } from "./load-session-config.js";
 import {
   decodePluginUserSettingsHeader,
@@ -57,6 +51,7 @@ import {
   deriveFollowerRuntimeJobResult,
   type ManualTurnSummary,
 } from "./plugin-rpc/runtime-response.js";
+import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
 
 export const pluginRpcRoutes = new Hono();
 
@@ -236,14 +231,6 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
 
     const turnId = crypto.randomUUID();
 
-    // Build outputKind lookup once — shared between sync and background paths.
-    const outputKindMap = new Map<string, string>();
-    const runtimeCapabilitiesMap = new Map<string, readonly string[]>();
-    for (const rt of activeRuntimes) {
-      outputKindMap.set(rt.name, rt.outputKind ?? "plugin");
-      runtimeCapabilitiesMap.set(rt.name, rt.capabilities ?? []);
-    }
-
     const writePluginJob = async (args: {
       readonly pluginId: string;
       readonly jobId: string;
@@ -261,81 +248,43 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
       });
     };
 
-    const runManualTurn = async (): Promise<ManualTurnSummary> => {
-      const emitter = createTurnEmitter({ store, eventBus, sessionId, turnId });
-      const turnInput: TurnInput = {
-        sessionId,
+    const runtimeTurnRunner = createPluginRpcRuntimeTurnRunner({
+      store,
+      eventBus,
+      sessionLock,
+      sessionId,
+      session,
+      activeRuntimes,
+      deps: {
+        loadRuntime: loadRuntimeFn,
+        llm: llmAdapter,
+        ...(pluginGateway ? { gateway: pluginGateway } : {}),
+        ...(pluginUtils ? { utils: pluginUtils } : {}),
+        ...(getPluginSource ? { getPluginSource } : {}),
+        getConfig: turnGetConfig,
+        ...(mediaStore ? { mediaStore } : {}),
+        toolExecutor,
+        resolveModel,
+        // Without eventBus the executor's emitSubEvent calls (turn.started,
+        // runtime.started/completed, turn.completed, …) silently no-op,
+        // leaving the trace timeline with only the two LLM lifecycle events
+        // that flow through the parallel `emitter` channel. The /debug page
+        // then can't tell the runtime ever finished. Wire it through so
+        // manual-trigger turns produce the same trace surface as auto turns.
+        compactor: compactorRunner,
+        worldDataPluginId,
+        ...(hookPipeline ? { hookPipeline } : {}),
+      },
+      ...(hookPipeline ? { hookPipeline } : {}),
+    });
+
+    const runManualTurn = (): Promise<ManualTurnSummary> =>
+      runtimeTurnRunner.runManualTurn({
         turnId,
-        playerMessage: "",
-        locale: session.locale ?? "zh-CN",
-        manualTrigger: {
-          runtimeId: body.runtimeId!,
-          ...(body.payload !== undefined && body.payload !== null
-            ? { payload: body.payload as Record<string, unknown> }
-            : {}),
-        },
-        ...(session.runtimeModelOverrides
-          ? { runtimeModelOverrides: session.runtimeModelOverrides }
-          : {}),
-        ...(userSettingsMap && Object.keys(userSettingsMap).length > 0
-          ? { userSettings: userSettingsMap }
-          : {}),
-      };
-
-      const result = await sessionLock.withLock(sessionId, () =>
-        executeTurn(turnInput, activeRuntimes, {
-          loadRuntime: loadRuntimeFn,
-          llm: llmAdapter,
-          ...(pluginGateway ? { gateway: pluginGateway } : {}),
-          ...(pluginUtils ? { utils: pluginUtils } : {}),
-          ...(getPluginSource ? { getPluginSource } : {}),
-          getConfig: turnGetConfig,
-          store,
-          ...(mediaStore ? { mediaStore } : {}),
-          toolExecutor,
-          resolveModel,
-          emitter,
-          // Without eventBus the executor's emitSubEvent calls (turn.started,
-          // runtime.started/completed, turn.completed, …) silently no-op,
-          // leaving the trace timeline with only the two LLM lifecycle events
-          // that flow through the parallel `emitter` channel. The /debug page
-          // then can't tell the runtime ever finished. Wire it through so
-          // manual-trigger turns produce the same trace surface as auto turns.
-          eventBus,
-          compactor: compactorRunner,
-          worldDataPluginId,
-          ...(hookPipeline ? { hookPipeline } : {}),
-        }),
-      );
-
-      for (const rr of result.runtimeResults) {
-        const kind = outputKindMap.get(rr.runtimeId) ?? "plugin";
-        const processOpts = {
-          ...(hookPipeline ? { hookPipeline } : {}),
-          eventBus,
-          emitter,
-          capabilities: runtimeCapabilitiesMap.get(rr.runtimeId) ?? [],
-        };
-        await processRuntimeResult(rr, store, sessionId, kind, processOpts);
-      }
-
-      const summary = result.runtimeResults.map((rr) => ({
-        runtimeId: rr.runtimeId,
-        pluginId: rr.pluginId,
-        status: rr.status,
-        durationMs: rr.durationMs,
-        ...(rr.error ? { error: rr.error } : {}),
-        output: rr.output,
-      }));
-
-      return {
-        turnId,
-        runtimeResults: summary,
-        durationMs: result.durationMs,
-        ...(result.abortReason ? { abortReason: result.abortReason } : {}),
-        deferredFollowers: result.deferredFollowers ?? [],
-      };
-    };
+        runtimeId: body.runtimeId!,
+        ...(body.payload !== undefined ? { payload: body.payload } : {}),
+        ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
+      });
 
     // Audit P1: run ONE background follower off-cycle and write its result
     // back into `_jobs/<jobId>`. Routes the follower through the same
@@ -385,66 +334,16 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
       }
 
       try {
-        const followerEmitter = createTurnEmitter({
-          store,
-          eventBus,
-          sessionId,
-          turnId: args.followerTurnId,
-        });
-        const followerInput: TurnInput = {
-          sessionId,
-          turnId: args.followerTurnId,
-          playerMessage: "",
-          locale: session.locale ?? "zh-CN",
-          manualTrigger: {
-            runtimeId: args.runtimeId,
-            triggerEvent: args.triggerEvent,
-          },
-          ...(session.runtimeModelOverrides
-            ? { runtimeModelOverrides: session.runtimeModelOverrides }
-            : {}),
-          ...(userSettingsMap && Object.keys(userSettingsMap).length > 0
-            ? { userSettings: userSettingsMap }
-            : {}),
-        };
-
-        const turnResult = await executeTurn(followerInput, activeRuntimes, {
-          loadRuntime: loadRuntimeFn,
-          llm: llmAdapter,
-          ...(pluginGateway ? { gateway: pluginGateway } : {}),
-          ...(pluginUtils ? { utils: pluginUtils } : {}),
-          ...(getPluginSource ? { getPluginSource } : {}),
-          getConfig: turnGetConfig,
-          store,
-          ...(mediaStore ? { mediaStore } : {}),
-          toolExecutor,
-          resolveModel,
-          emitter: followerEmitter,
-          eventBus,
-          compactor: compactorRunner,
-          worldDataPluginId,
-          ...(hookPipeline ? { hookPipeline } : {}),
+        const { turnResult } = await runtimeTurnRunner.runDeferredFollowerTurn({
+          followerTurnId: args.followerTurnId,
+          runtimeId: args.runtimeId,
+          triggerEvent: args.triggerEvent,
+          ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
         });
 
         const followerResult = turnResult.runtimeResults.find(
           (rr) => rr.runtimeId === args.runtimeId,
         );
-
-        // Commit proposals for every runtime the follower turn produced
-        // (the targeted follower plus any sync event-chained downstream
-        // runtimes that fired in its mini-pipeline). asset.generated /
-        // ui.rendered / state.patch.applied flow through the per-turn
-        // emitter so the SSE stream reaches the chat UI in real time.
-        for (const rr of turnResult.runtimeResults) {
-          const kind = outputKindMap.get(rr.runtimeId) ?? "plugin";
-          const processOpts = {
-            ...(hookPipeline ? { hookPipeline } : {}),
-            eventBus,
-            emitter: followerEmitter,
-            capabilities: runtimeCapabilitiesMap.get(rr.runtimeId) ?? [],
-          };
-          await processRuntimeResult(rr, store, sessionId, kind, processOpts);
-        }
 
         // The follower turn may itself surface deferredFollowers — schedule
         // them as their own `_jobs/<jobId>` so a chain of background
