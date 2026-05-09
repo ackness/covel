@@ -1,0 +1,551 @@
+import { isAssetGenerateView } from "@covel/shared";
+import * as api from "@/services/api";
+import type { DataService } from "@/services/data-service.js";
+import {
+  applyChanges as applyPluginDataStoreChanges,
+  type PluginDataChange,
+} from "@/stores/plugin-data-store.js";
+import { buildResumedExecutionStep } from "./execution-steps.js";
+import { upsertGameStateCharacter } from "./game-state.js";
+import {
+  collectJobTransitions,
+  emitJobTransitionToast,
+} from "./job-transitions.js";
+import type {
+  AssetProgressEvent,
+  ExecutionStep,
+  SessionAction,
+  SessionState,
+  SnapshotCharacter,
+  StreamMessage,
+  SuspensionRecord,
+} from "./types.js";
+
+interface MutableRef<T> {
+  current: T;
+}
+
+interface DeltaBufferEntry {
+  turnId: string;
+  runtimeId: string;
+  pluginId: string;
+  text: string;
+  flushSessionId: string | null;
+}
+
+export type DeltaBufferRef = MutableRef<Map<string, DeltaBufferEntry>>;
+export type DeltaRafRef = MutableRef<number | null>;
+
+export interface SseEventHandlerDeps {
+  dispatch: (action: SessionAction) => void;
+  ds: DataService;
+  sessionIdRef: MutableRef<string | null>;
+  stateRef: MutableRef<SessionState>;
+  runtimeKindRef: MutableRef<Map<string, string>>;
+  deltaBufferRef: DeltaBufferRef;
+  deltaRafRef: DeltaRafRef;
+  lastBackfilledTurnIdRef: MutableRef<string | null>;
+}
+
+export type SseEventHandler = (envelope: api.SseEnvelope) => void;
+
+export function clearNarrativeDeltaBuffer(
+  deltaBufferRef: DeltaBufferRef,
+  deltaRafRef: DeltaRafRef,
+): void {
+  if (deltaRafRef.current !== null) {
+    cancelAnimationFrame(deltaRafRef.current);
+    deltaRafRef.current = null;
+  }
+  deltaBufferRef.current.clear();
+}
+
+function queueNarrativeDelta(
+  deps: Pick<
+    SseEventHandlerDeps,
+    "dispatch" | "sessionIdRef" | "deltaBufferRef" | "deltaRafRef"
+  >,
+  entry: {
+    turnId: string | undefined;
+    runtimeId: string;
+    pluginId: string;
+    delta: string;
+  },
+): void {
+  const turnId = entry.turnId ?? "unknown";
+  const bufKey = `${turnId}_${entry.runtimeId}`;
+  const existing = deps.deltaBufferRef.current.get(bufKey);
+  if (existing) {
+    existing.text += entry.delta;
+  } else {
+    deps.deltaBufferRef.current.set(bufKey, {
+      turnId,
+      runtimeId: entry.runtimeId,
+      pluginId: entry.pluginId,
+      text: entry.delta,
+      flushSessionId: deps.sessionIdRef.current,
+    });
+  }
+  if (deps.deltaRafRef.current !== null) return;
+
+  deps.deltaRafRef.current = requestAnimationFrame(() => {
+    const currentSid = deps.sessionIdRef.current;
+    for (const buffered of deps.deltaBufferRef.current.values()) {
+      if (buffered.flushSessionId !== currentSid) continue;
+      deps.dispatch({
+        type: "APPEND_DELTA",
+        turnId: buffered.turnId,
+        runtimeId: buffered.runtimeId,
+        pluginId: buffered.pluginId,
+        delta: buffered.text,
+      });
+    }
+    deps.deltaBufferRef.current.clear();
+    deps.deltaRafRef.current = null;
+  });
+}
+
+function addBlockMessageFromSse(
+  deps: Pick<SseEventHandlerDeps, "dispatch" | "ds" | "sessionIdRef">,
+  block: Record<string, unknown>,
+  payload: Record<string, unknown>,
+  timestamp: string,
+  fallbackTurnId?: string,
+): void {
+  const blockMeta = block.meta as Record<string, unknown> | undefined;
+  const blockId =
+    (block.id as string) ?? (payload.proposalId as string) ?? api.uid();
+  const blockTurnId =
+    (blockMeta?.turnId as string | undefined) ??
+    (payload.turnId as string | undefined) ??
+    fallbackTurnId;
+  const runtimeId =
+    (blockMeta?.runtimeId as string | undefined) ??
+    (payload.runtimeId as string | undefined) ??
+    undefined;
+  const msg: StreamMessage = {
+    id: blockId,
+    role: "assistant",
+    content: "",
+    timestamp,
+    turnId: blockTurnId,
+    runtimeId,
+    kind: "plugin",
+    block,
+  };
+  deps.dispatch({ type: "ADD_MESSAGE", message: msg });
+  const sid = deps.sessionIdRef.current;
+  if (sid) {
+    deps.ds
+      .addMessage({
+        id: blockId,
+        sessionId: sid,
+        role: "assistant",
+        content: "",
+        turnId: blockTurnId,
+        runtimeId,
+        kind: "plugin",
+        block,
+        createdAt: timestamp,
+      })
+      .catch(() => {});
+  }
+}
+
+function toRuntimeCompletedStatus(rawStatus: unknown): ExecutionStep["status"] {
+  if (rawStatus === "suspended") return "suspended";
+  if (rawStatus === "skipped") return "skipped";
+  if (rawStatus === "failed") return "failed";
+  return "completed";
+}
+
+function toAssetProgressEvent(
+  payload: Record<string, unknown>,
+  timestamp: string,
+): AssetProgressEvent | null {
+  const phase = payload.phase;
+  if (typeof phase !== "string" || phase.length === 0) return null;
+
+  return {
+    phase,
+    timestamp,
+    ...(typeof payload.assetId === "string" && payload.assetId.length > 0
+      ? { assetId: payload.assetId }
+      : {}),
+    ...(typeof payload.percent === "number" && Number.isFinite(payload.percent)
+      ? { percent: payload.percent }
+      : {}),
+    ...(typeof payload.message === "string" && payload.message.length > 0
+      ? { message: payload.message }
+      : {}),
+    ...(typeof payload.modality === "string" && payload.modality.length > 0
+      ? { modality: payload.modality }
+      : {}),
+    ...(typeof payload.pluginId === "string" && payload.pluginId.length > 0
+      ? { pluginId: payload.pluginId }
+      : {}),
+    ...(typeof payload.runtimeId === "string" && payload.runtimeId.length > 0
+      ? { runtimeId: payload.runtimeId }
+      : {}),
+    ...(payload.meta &&
+    typeof payload.meta === "object" &&
+    !Array.isArray(payload.meta)
+      ? { meta: payload.meta as Record<string, unknown> }
+      : {}),
+  };
+}
+
+export function createSseEventHandler(
+  deps: SseEventHandlerDeps,
+): SseEventHandler {
+  return (envelope) => {
+    const { type, payload, turnId } = envelope;
+
+    if (turnId && turnId !== deps.lastBackfilledTurnIdRef.current) {
+      deps.lastBackfilledTurnIdRef.current = turnId;
+      deps.dispatch({ type: "BACKFILL_TURN_ID", turnId });
+    }
+
+    switch (type) {
+      case "narrative.delta": {
+        const delta = (payload.delta as string) ?? "";
+        const runtimeId = (payload.runtimeId as string) ?? "unknown";
+        const pluginId = (payload.pluginId as string) ?? "";
+        const deltaKind =
+          (payload.kind as string) ??
+          deps.runtimeKindRef.current.get(runtimeId);
+        if (delta && deltaKind === "story") {
+          queueNarrativeDelta(deps, { turnId, runtimeId, pluginId, delta });
+        }
+        break;
+      }
+      case "narrative.completed": {
+        const content = (payload.content as string) ?? "";
+        const runtimeId = (payload.runtimeId as string) ?? "unknown";
+        const msgId = (payload.messageId as string) ?? api.uid();
+        const completedKind =
+          (payload.kind as string) ??
+          deps.runtimeKindRef.current.get(runtimeId);
+        if (content && completedKind === "story") {
+          const msg: StreamMessage = {
+            id: msgId,
+            role: "assistant",
+            content,
+            timestamp: envelope.timestamp,
+            turnId,
+            runtimeId: runtimeId !== "unknown" ? runtimeId : undefined,
+          };
+          deps.dispatch({
+            type: "COMPLETE_MESSAGE",
+            turnId: turnId ?? "unknown",
+            runtimeId,
+            message: msg,
+          });
+        }
+
+        if (content) {
+          const sid = deps.sessionIdRef.current;
+          if (sid) {
+            deps.ds
+              .addMessage({
+                id: msgId,
+                sessionId: sid,
+                role: "assistant",
+                content,
+                turnId,
+                runtimeId: runtimeId !== "unknown" ? runtimeId : undefined,
+                kind: completedKind,
+                createdAt: envelope.timestamp,
+              })
+              .catch(() => {});
+          }
+        }
+        break;
+      }
+      case "interaction.requested": {
+        const block = payload.block as Record<string, unknown>;
+        if (block) {
+          addBlockMessageFromSse(
+            deps,
+            block,
+            payload,
+            envelope.timestamp,
+            turnId,
+          );
+        }
+        break;
+      }
+      case "ui.rendered": {
+        const block = payload.block as Record<string, unknown> | undefined;
+        const render = payload.render as Record<string, unknown> | undefined;
+        const uiBlock =
+          block ??
+          (render
+            ? {
+                id: (payload.proposalId as string | undefined) ?? api.uid(),
+                type: "ui.render",
+                data: render,
+                meta: {
+                  runtimeId: payload.runtimeId,
+                  pluginId: payload.pluginId,
+                  turnId: (payload.turnId as string | undefined) ?? turnId,
+                },
+              }
+            : null);
+        if (uiBlock) {
+          addBlockMessageFromSse(
+            deps,
+            uiBlock,
+            payload,
+            envelope.timestamp,
+            turnId,
+          );
+        }
+        break;
+      }
+      case "state.changed": {
+        const table = payload.table as string | undefined;
+        const field = payload.field as string | undefined;
+        const value = payload.value;
+        const patch = {
+          id: `sp_${Date.now()}`,
+          summary: field ? `${table ?? "default"}.${field}` : "state change",
+          packageName: (payload.pluginId as string) ?? "system",
+          data: field ? { [field]: value } : undefined,
+        };
+
+        deps.dispatch({ type: "ADD_STATE_PATCH", patch });
+        const sid = deps.sessionIdRef.current;
+        if (sid) {
+          deps.ds
+            .addStatePatch(sid, {
+              ...patch,
+              sessionId: sid,
+              createdAt: new Date().toISOString(),
+            })
+            .catch(() => {});
+        }
+        break;
+      }
+      case "execution.started":
+        break;
+      case "runtime.started": {
+        const runtimeId = (payload.runtimeId as string) ?? "unknown";
+        const pluginId = (payload.pluginId as string) ?? "";
+        const label = payload.label as string | undefined;
+        let kind = payload.kind as string | undefined;
+        if (!kind && label) {
+          const slashIdx = label.indexOf("/");
+          if (slashIdx >= 0) kind = label.slice(slashIdx + 1);
+        }
+        if (kind) deps.runtimeKindRef.current.set(runtimeId, kind);
+        deps.dispatch({
+          type: "UPSERT_EXECUTION_STEP",
+          step: {
+            runtimeId,
+            pluginId,
+            status: "running",
+            label,
+            turnId,
+            startedAt: envelope.timestamp,
+          },
+        });
+        break;
+      }
+      case "runtime.completed": {
+        deps.dispatch({
+          type: "UPSERT_EXECUTION_STEP",
+          step: {
+            runtimeId: (payload.runtimeId as string) ?? "unknown",
+            pluginId: (payload.pluginId as string) ?? "",
+            status: toRuntimeCompletedStatus(payload.status),
+            durationMs: payload.durationMs as number | undefined,
+            turnId,
+          },
+        });
+        break;
+      }
+      case "runtime.failed": {
+        deps.dispatch({
+          type: "UPSERT_EXECUTION_STEP",
+          step: {
+            runtimeId: (payload.runtimeId as string) ?? "unknown",
+            pluginId: (payload.pluginId as string) ?? "",
+            status: "failed",
+            detail: payload.error as string | undefined,
+            durationMs: payload.durationMs as number | undefined,
+            turnId,
+          },
+        });
+        break;
+      }
+      case "runtime.skipped": {
+        deps.dispatch({
+          type: "UPSERT_EXECUTION_STEP",
+          step: {
+            runtimeId: (payload.runtimeId as string) ?? "unknown",
+            pluginId: (payload.pluginId as string) ?? "",
+            status: "skipped",
+            durationMs: payload.durationMs as number | undefined,
+            turnId,
+          },
+        });
+        break;
+      }
+      case "execution.completed": {
+        deps.dispatch({ type: "SET_EXECUTING", value: false });
+        deps.dispatch({
+          type: "FINALIZE_HANGING_RUNTIMES",
+          reason: "__i18n:session.reasonConnectionClosed__",
+        });
+        break;
+      }
+      case "turn.suspended": {
+        const id = payload.suspensionId as string | undefined;
+        if (!id) break;
+        const suspension: SuspensionRecord = {
+          id,
+          sessionId: (payload.sessionId as string) ?? envelope.sessionId,
+          turnId: (payload.turnId as string) ?? turnId ?? "",
+          runtimeId: (payload.runtimeId as string) ?? "",
+          pluginId: (payload.pluginId as string) ?? "",
+          suspendedAt: (payload.suspendedAt as string) ?? envelope.timestamp,
+          reason: payload.reason as string | undefined,
+          resumeSchema: payload.resumeSchema,
+        };
+        deps.dispatch({ type: "ADD_SUSPENSION", suspension });
+        break;
+      }
+      case "turn.resumed": {
+        const id = payload.suspensionId as string | undefined;
+        if (!id) break;
+        const resumedStep = buildResumedExecutionStep(payload, turnId);
+        if (resumedStep) {
+          deps.dispatch({ type: "UPSERT_EXECUTION_STEP", step: resumedStep });
+        }
+        deps.dispatch({ type: "REMOVE_SUSPENSION", suspensionId: id });
+        break;
+      }
+      case "event.emitted": {
+        const topic = (payload.topic as string) ?? (payload.type as string);
+        const eventData = payload.data ?? payload;
+        if (topic) {
+          deps.dispatch({
+            type: "ADD_STATE_PATCH",
+            patch: {
+              id: `evt_${Date.now()}`,
+              summary: `event: ${topic}`,
+              packageName: (payload.pluginId as string) ?? "system",
+              data: {
+                events: [
+                  {
+                    id: `evt_${Date.now()}`,
+                    title: topic,
+                    type: (payload.eventType as string) ?? topic,
+                    status: "active",
+                    description:
+                      typeof eventData === "object"
+                        ? JSON.stringify(eventData)
+                        : String(eventData),
+                    turnCreated: turnId
+                      ? parseInt(turnId.split("-").pop() ?? "0", 10)
+                      : undefined,
+                  },
+                ],
+              },
+            },
+          });
+        }
+        break;
+      }
+      case "plugin-data.changed": {
+        const pluginId = payload.pluginId as string | undefined;
+        const changes = payload.changes as
+          | readonly PluginDataChange[]
+          | undefined;
+        if (pluginId && changes) {
+          const transitions = collectJobTransitions(pluginId, changes);
+          deps.dispatch({ type: "PLUGIN_DATA_CHANGED", pluginId, changes });
+          applyPluginDataStoreChanges(pluginId, changes);
+          for (const tr of transitions) emitJobTransitionToast(tr);
+        }
+        break;
+      }
+      case "character.upserted": {
+        const character = payload.character;
+        if (character && typeof character === "object") {
+          deps.dispatch({
+            type: "SET_GAME_STATE",
+            state: upsertGameStateCharacter(
+              deps.stateRef.current.gameState,
+              character as SnapshotCharacter,
+            ),
+          });
+        }
+        break;
+      }
+      case "asset.generated": {
+        const asset = isAssetGenerateView(payload.asset)
+          ? payload.asset
+          : undefined;
+        const turnIdFromPayload =
+          (payload.turnId as string | undefined) ?? turnId;
+        if (!asset || !turnIdFromPayload) break;
+        deps.dispatch({
+          type: "ASSET_GENERATED",
+          turnId: turnIdFromPayload,
+          asset,
+        });
+        break;
+      }
+      case "asset.progress": {
+        const turnIdFromPayload =
+          (payload.turnId as string | undefined) ?? turnId;
+        if (!turnIdFromPayload) break;
+        const progress = toAssetProgressEvent(payload, envelope.timestamp);
+        if (!progress) break;
+        deps.dispatch({
+          type: "ASSET_PROGRESS",
+          turnId: turnIdFromPayload,
+          progress,
+        });
+        break;
+      }
+      case "error.occurred": {
+        deps.dispatch({
+          type: "SET_EXECUTION_ERROR",
+          error: (payload.message as string) ?? "Execution failed",
+        });
+        deps.dispatch({ type: "SET_EXECUTING", value: false });
+        deps.dispatch({
+          type: "FINALIZE_HANGING_RUNTIMES",
+          reason: "__i18n:session.reasonConnectionClosed__",
+        });
+        break;
+      }
+    }
+  };
+}
+
+export function applyResumeEvents(
+  events: api.ResumeSuspensionResponse["events"],
+  handleSseEvent: SseEventHandler,
+): void {
+  for (const event of events) {
+    handleSseEvent({
+      type: event.type,
+      requestId: api.uid(),
+      traceId: event.turnId,
+      sessionId: event.sessionId,
+      turnId: event.turnId,
+      flowId: event.turnId,
+      seq: -1,
+      timestamp: event.timestamp,
+      payload: {
+        ...event.payload,
+        runtimeId: event.source.runtimeId,
+        pluginId: event.source.pluginId,
+      },
+    });
+  }
+}
