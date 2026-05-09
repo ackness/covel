@@ -26,6 +26,8 @@ Refactored in this pass:
 - `apps/desktop/src/logging.ts`
 - `apps/desktop/src/windows.ts`
 - `apps/server/src/routes/api/plugin-rpc.ts`
+- `packages/ai-provider/src/gateway.ts`
+- `packages/test-runtime/src/runner.ts`
 
 ## Assumptions
 
@@ -157,6 +159,12 @@ Refactored in this pass:
 - Split target provider/model resolution, fallback eligibility, provider-error normalization, and lifecycle hook notifications into `packages/ai-provider/src/gateway-lifecycle.ts`.
 - Preserved gateway fallback semantics and hook isolation behavior.
 
+### Test Runtime Runner
+
+- Kept `runner.ts` as the public debug/case runner entrypoint.
+- Split plugin-data report collection, case expectation evaluation, expected-failure matching, and image artifact saving into `packages/test-runtime/src/reporting.ts`.
+- Added focused reporting helper tests for runtime/event/log/plugin-data/asset assertions and expected runtime failures.
+
 ## Current Size Snapshot
 
 - `packages/runtime/src/turn-executor.ts`: 867 lines
@@ -196,6 +204,9 @@ Refactored in this pass:
 - `packages/store/src/postgres/pg-session-cascade.ts`: 85 lines
 - `packages/ai-provider/src/gateway.ts`: 852 lines
 - `packages/ai-provider/src/gateway-lifecycle.ts`: 147 lines
+- `packages/test-runtime/src/runner.ts`: 1017 lines
+- `packages/test-runtime/src/reporting.ts`: 290 lines
+- `packages/test-runtime/src/reporting.test.ts`: 86 lines
 - `apps/server/src/routes/misc-api.ts`: 429 lines
 - `apps/server/src/routes/api/plugin-rpc.ts`: 913 lines
 - `apps/server/src/routes/api/plugin-rpc/body.ts`: 38 lines
@@ -226,7 +237,7 @@ Future passes should focus on large maintenance files that are production code, 
 | 2        |                              `packages/runtime/src/turn-executor.ts` |     867 | pre-game completion and turn prelude          | Runtime scheduler/context tests      |
 | 3        |                           `apps/server/src/routes/api/plugin-rpc.ts` |     913 | deferred follower scheduling, action dispatch | Plugin RPC and approval route tests  |
 | 4        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 834-885 | session CRUD and conversation persistence     | Store contract tests across backends |
-| 5        |                                `packages/ai-provider/src/gateway.ts` |     852 | slot resolution and parameter overrides       | AI provider gateway tests            |
+| 5        |                                `packages/test-runtime/src/runner.ts` |    1017 | fixtures and deferred execution harness       | Test-runtime package tests           |
 
 ## Validation Run
 
@@ -374,6 +385,11 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 180s mise exec -- pnpm --filter @covel/ai-provider exec vitest run tests/gateway.test.ts tests/fixes.test.ts`
   - `timeout 240s mise exec -- pnpm --filter @covel/ai-provider test`
   - `timeout 240s mise exec -- pnpm lint`
+- Twenty-sixth pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --check packages/test-runtime/src/runner.ts packages/test-runtime/src/reporting.ts packages/test-runtime/src/reporting.test.ts docs/refactor/2026-05-09_13-05_long-file-restructure.md`
+  - `timeout 120s mise exec -- pnpm --filter @covel/test-runtime lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/test-runtime test`
+  - `timeout 240s mise exec -- pnpm lint`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -389,6 +405,7 @@ Future passes should focus on large maintenance files that are production code, 
 - `bootstrap.ts` still owns tool registration and memory setup. Future passes should split one subsystem at a time and preserve bootstrapApi as the composition root.
 - DataStore SQL backend files still contain session, message, summary, suspension, and snapshot families. The next store pass should prefer focused backend-local helper families while keeping SQLite and PostgreSQL execution differences local.
 - `gateway.ts` still owns slot fallback, per-request overlays, and parameter-override metadata merging. The next AI provider pass should extract slot resolution with `gateway-slot-overrides` and `parameter-overrides` tests in scope.
+- `runner.ts` still owns plugin/case loading, live adapter setup, local tool imports, deferred follower execution, and case orchestration. The next test-runtime pass should split fixtures before touching execution harness behavior.
 - `main.ts` still owns sidecar supervisor state and broad IPC registration; the next desktop pass should split IPC handlers before attempting supervisor dependency injection.
 
 ## Rollback
@@ -427,6 +444,7 @@ flowchart TD
   MemoryStore["memory-store.ts"] --> StoreCommon["common/{keys,pagination}.ts"]
   IdbStore["idb-store.ts"] --> StoreCommon
   Gateway["gateway.ts"] --> GatewayLifecycle["gateway-lifecycle.ts"]
+  TestRuntimeRunner["test-runtime/runner.ts"] --> TestRuntimeReporting["test-runtime/reporting.ts"]
   SqliteStore["sqlite-store.ts"] --> SqliteValues["sqlite-store-values.ts"]
   SqliteStore --> SqliteCascade["sqlite-session-cascade.ts"]
   SqliteStore --> SqliteDataCrud["sqlite-data-crud.ts"]
