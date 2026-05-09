@@ -173,7 +173,9 @@ Refactored in this pass:
 
 - Kept `LlmSlotsPane.tsx` as the Settings tab component.
 - Split legacy slot ids, runtime-requested slot discovery, visible-slot merge logic, preset candidate collection, and auto-bind selection into `apps/web/src/settings/panes/llm-slots-model.ts`.
+- Split capability tags, capability editor controls, token/price formatting, and modality/feature option lists into `apps/web/src/settings/panes/llm-capability-controls.tsx`.
 - Added focused tests for runtime slot discovery, configured/legacy slot merging, auto-bind priority, and preset source marking.
+- Added focused component tests for capability tag rendering, token/price formatting, modality/feature toggles, and numeric/pricing override patches.
 
 ### Shared Env Registry
 
@@ -229,9 +231,11 @@ Refactored in this pass:
 - `packages/test-runtime/src/cases.test.ts`: 109 lines
 - `packages/test-runtime/src/reporting.ts`: 290 lines
 - `packages/test-runtime/src/reporting.test.ts`: 86 lines
-- `apps/web/src/settings/panes/LlmSlotsPane.tsx`: 783 lines
+- `apps/web/src/settings/panes/LlmSlotsPane.tsx`: 418 lines
 - `apps/web/src/settings/panes/llm-slots-model.ts`: 127 lines
 - `apps/web/src/settings/panes/__tests__/llm-slots-model.test.ts`: 131 lines
+- `apps/web/src/settings/panes/llm-capability-controls.tsx`: 369 lines
+- `apps/web/src/settings/panes/__tests__/llm-capability-controls.test.tsx`: 142 lines
 - `apps/server/src/routes/misc-api.ts`: 429 lines
 - `apps/server/src/routes/api/plugin-rpc.ts`: 913 lines
 - `apps/server/src/routes/api/plugin-rpc/body.ts`: 38 lines
@@ -263,7 +267,7 @@ Future passes should focus on large maintenance files that are production code, 
 | 3        |                           `apps/server/src/routes/api/plugin-rpc.ts` |     913 | deferred follower scheduling, action dispatch | Plugin RPC and approval route tests  |
 | 4        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 834-885 | session CRUD and conversation persistence     | Store contract tests across backends |
 | 5        |                                `packages/test-runtime/src/runner.ts` |     967 | deferred execution harness                    | Test-runtime package tests           |
-| 6        |                       `apps/web/src/settings/panes/LlmSlotsPane.tsx` |     783 | capability controls                           | Web settings tests                   |
+| 6        |                                `packages/ai-provider/src/gateway.ts` |     852 | slot resolution and parameter overrides       | AI provider gateway tests            |
 
 ## Validation Run
 
@@ -433,6 +437,13 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 180s mise exec -- pnpm --filter @covel/shared exec vitest run tests/env-registry.test.ts`
   - `timeout 180s mise exec -- pnpm --filter @covel/store exec vitest run tests/store-factory-env.test.ts`
   - `timeout 240s mise exec -- pnpm lint`
+- Thirtieth pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --check apps/web/src/settings/panes/LlmSlotsPane.tsx apps/web/src/settings/panes/llm-capability-controls.tsx apps/web/src/settings/panes/__tests__/llm-capability-controls.test.tsx docs/refactor/2026-05-09_13-05_long-file-restructure.md`
+  - `timeout 120s mise exec -- pnpm --filter @covel/web exec vitest run src/settings/panes/__tests__/llm-capability-controls.test.tsx`
+  - `timeout 120s mise exec -- pnpm --filter @covel/web exec vitest run src/settings/panes/__tests__/llm-slots-model.test.ts`
+  - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
+  - `timeout 240s mise exec -- pnpm --filter @covel/web test`
+  - `timeout 240s mise exec -- pnpm lint`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -449,7 +460,7 @@ Future passes should focus on large maintenance files that are production code, 
 - DataStore SQL backend files still contain session, message, summary, suspension, and snapshot families. The next store pass should prefer focused backend-local helper families while keeping SQLite and PostgreSQL execution differences local.
 - `gateway.ts` still owns slot fallback, per-request overlays, and parameter-override metadata merging. The next AI provider pass should extract slot resolution with `gateway-slot-overrides` and `parameter-overrides` tests in scope.
 - `runner.ts` still owns plugin discovery/runtime loading, live adapter setup, local tool imports, deferred follower execution, and case orchestration. The next test-runtime pass should split execution harness behavior only with plugin case smoke tests in scope.
-- `LlmSlotsPane.tsx` still owns capability tags and editor controls. The next web settings pass should extract those controls with component-level interaction tests.
+- `llm-capability-controls.tsx` now owns capability tag/editor rendering. Future settings passes should target model database refresh/status UI or split slot cards after component-level coverage exists.
 - `registry-definitions.ts` still owns the full flat env variable catalog. Future grouping by env group should keep `COVEL_ENV_REGISTRY` as the stable flattened export.
 - `main.ts` still owns sidecar supervisor state and broad IPC registration; the next desktop pass should split IPC handlers before attempting supervisor dependency injection.
 
@@ -492,6 +503,7 @@ flowchart TD
   TestRuntimeRunner["test-runtime/runner.ts"] --> TestRuntimeReporting["test-runtime/reporting.ts"]
   TestRuntimeRunner --> TestRuntimeCases["test-runtime/cases.ts"]
   LlmSlotsPane["LlmSlotsPane.tsx"] --> LlmSlotsModel["llm-slots-model.ts"]
+  LlmSlotsPane --> LlmCapabilityControls["llm-capability-controls.tsx"]
   EnvRegistry["env/registry.ts"] --> EnvDefinitions["env/registry-definitions.ts"]
   EnvRegistry --> EnvReaders["env/registry-readers.ts"]
   SqliteStore["sqlite-store.ts"] --> SqliteValues["sqlite-store-values.ts"]
