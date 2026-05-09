@@ -68,6 +68,12 @@ import {
   type CaseAssertion,
   type CaseExpectations,
 } from "./reporting.js";
+import {
+  buildCaseDebugOptions,
+  caseFilesFor,
+  filterRuntimeCases,
+  parseCaseFile,
+} from "./cases.js";
 
 export interface RunRuntimeDebugOptions {
   readonly target?: string;
@@ -141,30 +147,6 @@ export interface RunRuntimeCasesResult {
     readonly status: "passed" | "failed";
     readonly result: RunRuntimeDebugResult;
   }[];
-}
-
-interface RuntimeCaseFile {
-  readonly cases?: readonly RuntimeCase[];
-}
-
-interface RuntimeCase {
-  readonly name: string;
-  readonly runtimeId: string;
-  readonly pluginId?: string;
-  readonly message?: string;
-  readonly payload?: Record<string, unknown>;
-  readonly config?: Record<string, unknown>;
-  readonly userSettings?: Record<string, unknown>;
-  readonly llmResponse?: Record<string, unknown>;
-  readonly llmResponses?: readonly Record<string, unknown>[];
-  readonly llmContent?: string;
-  readonly llmObject?: Record<string, unknown>;
-  readonly mockPresetId?: string;
-  readonly ignoreUpstreams?: boolean;
-  readonly expectsBackgroundFollower?: boolean;
-  readonly mode?: "mock" | "live" | "both";
-  readonly expect?: CaseExpectations;
-  readonly artifacts?: CaseArtifactConfig;
 }
 
 const DEFAULT_LLM_TOML = `
@@ -891,22 +873,6 @@ export async function runRuntimeDebug(
   return baseResult;
 }
 
-function caseFilesFor(pluginRoot: string): readonly string[] {
-  return [
-    path.join(pluginRoot, "tests", "runtime-cases.json"),
-    path.join(pluginRoot, "covel.test.json"),
-  ];
-}
-
-function parseCaseFile(file: string): readonly RuntimeCase[] {
-  const parsed: unknown = JSON.parse(fs.readFileSync(file, "utf-8"));
-  if (Array.isArray(parsed)) return parsed as readonly RuntimeCase[];
-  if (parsed && typeof parsed === "object") {
-    return (parsed as RuntimeCaseFile).cases ?? [];
-  }
-  return [];
-}
-
 export async function runRuntimeCases(
   options: RunRuntimeDebugOptions,
 ): Promise<RunRuntimeCasesResult> {
@@ -953,40 +919,24 @@ export async function runRuntimeCases(
     );
   }
   const activeMode = options.mode ?? "mock";
-  const cases = parseCaseFile(caseFile).filter((item) => {
-    if (options.caseName && item.name !== options.caseName) return false;
-    const caseMode = item.mode ?? "both";
-    return caseMode === "both" || caseMode === activeMode;
+  const cases = filterRuntimeCases({
+    cases: parseCaseFile(caseFile),
+    caseName: options.caseName,
+    mode: activeMode,
+    caseFile,
   });
-  if (cases.length === 0) {
-    const reason = options.caseName
-      ? `case "${options.caseName}" not found or not enabled for mode "${activeMode}"`
-      : `no cases enabled for mode "${activeMode}"`;
-    throw new Error(`${reason} in ${caseFile}`);
-  }
 
   const results: Array<RunRuntimeCasesResult["cases"][number]> = [];
   for (const testCase of cases) {
     const mediaStore = createMemoryMediaStore();
-    const result = await runRuntimeDebug({
-      ...options,
-      runtimeId: testCase.runtimeId,
-      pluginId: testCase.pluginId ?? pluginId,
-      caseName: testCase.name,
-      message: testCase.message ?? options.message,
-      payload: testCase.payload ?? options.payload,
-      config: testCase.config ?? options.config,
-      userSettings: testCase.userSettings ?? options.userSettings,
-      llmResponse: testCase.llmResponse ?? options.llmResponse,
-      llmResponses: testCase.llmResponses ?? options.llmResponses,
-      llmContent: testCase.llmContent ?? options.llmContent,
-      llmObject: testCase.llmObject ?? options.llmObject,
-      mockPresetId: testCase.mockPresetId ?? options.mockPresetId,
-      ignoreUpstreams: testCase.ignoreUpstreams ?? options.ignoreUpstreams,
-      expectsBackgroundFollower:
-        testCase.expectsBackgroundFollower ?? options.expectsBackgroundFollower,
-      mediaStore,
-    });
+    const result = await runRuntimeDebug(
+      buildCaseDebugOptions({
+        base: options,
+        testCase,
+        pluginId,
+        mediaStore,
+      }),
+    );
     const assertions = evaluateExpectations(testCase.expect, result);
     const artifacts = await saveImageArtifacts({
       result,
