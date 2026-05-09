@@ -42,45 +42,16 @@ import {
 } from "@covel/runtime";
 import { RpcDispatchError, RpcValidationError } from "@covel/runtime";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
-import type {
-  PluginRpcActionRequest,
-  PluginRpcRuntimeRequest,
-  TurnInput,
-} from "@covel/shared";
+import type { TurnInput } from "@covel/shared";
 import { loadSessionConfig } from "./load-session-config.js";
-
-type PluginRpcBody = Partial<PluginRpcActionRequest> &
-  Partial<PluginRpcRuntimeRequest>;
-
-/**
- * Decode the `X-Plugin-User-Settings` request header — base64(json) whose
- * body is `{ [pluginId]: { [settingKey]: value } }`. Malformed input (bad
- * base64, non-JSON, wrong shape) is treated as "no settings" so a single
- * corrupt client request can't poison the turn executor.
- */
-function decodePluginUserSettingsHeader(
-  raw: string | undefined,
-): Readonly<Record<string, Readonly<Record<string, unknown>>>> | undefined {
-  if (!raw) return undefined;
-  try {
-    const json = JSON.parse(
-      Buffer.from(raw, "base64").toString("utf-8"),
-    ) as unknown;
-    if (!json || typeof json !== "object" || Array.isArray(json))
-      return undefined;
-    const out: Record<string, Record<string, unknown>> = {};
-    for (const [pluginId, bucket] of Object.entries(
-      json as Record<string, unknown>,
-    )) {
-      if (!bucket || typeof bucket !== "object" || Array.isArray(bucket))
-        continue;
-      out[pluginId] = { ...(bucket as Record<string, unknown>) };
-    }
-    return Object.keys(out).length > 0 ? out : undefined;
-  } catch {
-    return undefined;
-  }
-}
+import {
+  decodePluginUserSettingsHeader,
+  type PluginRpcBody,
+} from "./plugin-rpc/body.js";
+import {
+  type PluginJobValue,
+  writePluginJob as persistPluginJob,
+} from "./plugin-rpc/jobs.js";
 
 export const pluginRpcRoutes = new Hono();
 
@@ -294,11 +265,6 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
       }>;
     };
 
-    type PluginJobValue = Readonly<Record<string, unknown>> & {
-      readonly status: "pending" | "done" | "failed";
-      readonly progress: number;
-    };
-
     const writePluginJob = async (args: {
       readonly pluginId: string;
       readonly jobId: string;
@@ -306,15 +272,13 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
       readonly updatedAt?: string;
       readonly value: PluginJobValue;
     }): Promise<void> => {
-      await store.setPluginData({
-        id: `${sessionId}:${args.pluginId}:_jobs:${args.jobId}`,
+      await persistPluginJob(store, {
         sessionId,
         pluginId: args.pluginId,
-        namespace: "_jobs",
-        key: args.jobId,
-        value: args.value,
-        createdAt: args.startedAt,
+        jobId: args.jobId,
+        startedAt: args.startedAt,
         updatedAt: args.updatedAt ?? args.startedAt,
+        value: args.value,
       });
     };
 
