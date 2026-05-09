@@ -401,6 +401,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 ```
 plugins/<plugin-id>/
+├── README.md              # 必需：给人类 / 开发者看的插件说明
 ├── PLUGIN.md              # 必需：frontmatter 元信息 + Markdown 提示词
 ├── package.json           # 必需：workspace 依赖声明
 ├── vitest.config.ts       # 可选：测试配置
@@ -418,6 +419,7 @@ plugins/<plugin-id>/
 
 ```
 plugins/<plugin-id>/
+├── README.md              # 必需：给人类 / 开发者看的插件说明
 ├── package.json
 ├── PLUGIN.md              # 可选：包级摘要（见下）
 ├── runtimes/
@@ -433,6 +435,16 @@ plugins/<plugin-id>/
 > 真实多 runtime 范例见 `plugins/npc-graph/`（`extractor` agent + `rag-retriever` function）和 `plugins/char-creator/`（`player-init` 首轮 agent + `character-tracker` 持续 agent）。`world-init` 当前是单 runtime（`schema-gen`）+ 一个 `guard` 文件，不算多 runtime。
 
 子运行时之间可通过 `input.inject` 传递数据（上游输出 → 下游 prompt 注入）。
+
+#### README.md（必需，用于人类阅读）
+
+每个插件根目录都需要 `README.md`。它不参与 runtime 执行，也不会被当作模型提示词；它服务于插件作者、维护者和代码审核者。建议包含：
+
+- 插件解决什么玩家问题
+- 运行时组成：哪些 agent runtime、哪些 function runtime、哪些 UI 面板
+- 数据读写：主要 namespace、world-data schema、角色 / lorebook / media 写入
+- 主要文件：`handler.js`、`tools/`、`ui/`、`schemas/`、`tests/`
+- 测试方式、已知限制和后续计划
 
 #### 包级 PLUGIN.md（可选，用于 displayName）
 

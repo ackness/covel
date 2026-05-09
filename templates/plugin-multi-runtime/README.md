@@ -17,6 +17,11 @@ cp -r {{pluginName}}/ ~/.covel/plugins/
 pnpm install --dir ~/.covel/plugins/{{pluginName}}   # 如果有依赖
 ```
 
+## 文档分工
+
+- `README.md` 面向人类和开发者，说明插件用途、实现方式、运行时划分和维护信息。
+- `PLUGIN.md` 面向框架和模型，保存展示元信息、触发条件、工具声明和 agent runtime 的提示词。
+
 ## 下一步
 
 - 改 `runtimes/echo/handler.js`，把 "hello" 换成你想要的副作用。

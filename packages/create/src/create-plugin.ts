@@ -2,8 +2,8 @@
  * Plugin scaffolder — generates a minimal Covel plugin in three flavours.
  *
  * Goal: let a plugin author go from idea to "file loads without errors"
- * in under one minute. The scaffolder produces a PLUGIN.md + package.json
- * pair (plus an optional tool skeleton) and never talks to an LLM.
+ * in under one minute. The scaffolder produces a README.md + PLUGIN.md +
+ * package.json set (plus an optional tool skeleton) and never talks to an LLM.
  *
  * Template choices:
  *   - `zero-code` : manual trigger + skill prompt only. No tools, no local code.
@@ -176,6 +176,40 @@ function renderPackageJson(name: string): string {
   )}\n`;
 }
 
+function renderReadme(
+  options: Required<Pick<CreatePluginOptions, "name" | "template">> & {
+    description: string;
+  },
+): string {
+  const runtimeSummary =
+    options.template === "function"
+      ? "`runtime.js` 中的纯函数 runtime，执行确定性代码，不调用模型。"
+      : options.template === "agent"
+        ? "`PLUGIN.md` 中的 agent runtime；Markdown 正文是运行时提示词，`tools/` 保存可选本地工具。"
+        : "`PLUGIN.md` 中的纯提示词手动 runtime；Markdown 正文是运行时提示词。";
+
+  return `# ${options.name}
+
+${options.description}
+
+## 功能
+
+用一到两段话说明这个插件解决什么玩家问题，以及玩家会在界面中看到什么。
+
+## 实现
+
+- 模板：\`${options.template}\`
+- Runtime: ${runtimeSummary}
+- 入口文件：\`PLUGIN.md\`
+
+## 开发
+
+1. 修改 \`README.md\`，维护给人类和开发者看的说明。
+2. 修改 \`PLUGIN.md\`，维护 runtime 元信息和模型指令。
+3. 添加测试后，在插件目录运行 \`pnpm test\`。
+`;
+}
+
 function renderAgentTool(name: string): string {
   return `/**
  * ${name}-tool — local tool wired into the ${name} plugin.
@@ -246,6 +280,7 @@ export async function createPlugin(
 
   const files: string[] = [];
   const writes: Array<[string, string]> = [
+    ["README.md", renderReadme({ name, template, description })],
     ["PLUGIN.md", renderPluginMd({ name, template, priority, description })],
     ["package.json", renderPackageJson(name)],
   ];

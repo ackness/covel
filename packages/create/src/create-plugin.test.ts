@@ -37,7 +37,7 @@ describe("createPlugin", () => {
     ).rejects.toThrow(/Invalid plugin name/);
   });
 
-  it("writes a zero-code plugin with PLUGIN.md + package.json and nothing else", async () => {
+  it("writes a zero-code plugin with README.md + PLUGIN.md + package.json and nothing else", async () => {
     const result = await createPlugin({
       name: "my-tiny",
       template: "zero-code",
@@ -45,7 +45,13 @@ describe("createPlugin", () => {
     });
     expect(result.success).toBe(true);
     expect(result.name).toBe("my-tiny");
-    expect(result.files).toHaveLength(2);
+    expect(result.files).toHaveLength(3);
+    const readme = await readFile(
+      path.join(result.pluginDir, "README.md"),
+      "utf8",
+    );
+    expect(readme).toContain("# my-tiny");
+    expect(readme).toContain("人类和开发者看的说明");
     const pluginMd = await readFile(
       path.join(result.pluginDir, "PLUGIN.md"),
       "utf8",

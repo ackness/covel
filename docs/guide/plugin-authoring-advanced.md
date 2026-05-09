@@ -521,12 +521,14 @@ export default async function handler(ctx) {
 
 ```
 my-plugin/
+├── README.md      # 必需：给人类 / 开发者看的插件说明
 ├── PLUGIN.md       # 必需：frontmatter + 提示词
 └── package.json    # 必需：workspace 依赖声明
 ```
 
 ### 发布检查清单
 
+- [ ] `README.md` 说明插件用途、运行时组成、数据读写、测试方式和已知限制
 - [ ] `PLUGIN.md` frontmatter 通过 `runtimeManifestSchema` 校验
 - [ ] `name` 字段唯一，建议用 `your-prefix-` 前缀避免冲突
 - [ ] `description` 清晰描述插件功能

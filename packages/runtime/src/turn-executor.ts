@@ -17,7 +17,6 @@ import type {
 } from "@covel/shared";
 import { isEnvEnabled } from "@covel/shared";
 import type {
-  AssetProgressInput,
   LoadedRuntime,
   PluginSource,
   PluginRuntimeGateway,
@@ -27,7 +26,6 @@ import type {
   DataStore,
   TurnMessageRecord,
   SuspensionRecord,
-  RuntimeOutputRecord,
 } from "@covel/store";
 import {
   isSuspendSentinel,
@@ -97,20 +95,36 @@ import {
   runPreToolUseHook,
   runPostToolUseHook,
 } from "./hooks/wire-helpers.js";
+import {
+  buildRuntimeOutputFromResult,
+  createAssetProgressEmitter,
+  emitSubEvent,
+  isTrustedPluginSource,
+} from "./turn-runtime-helpers.js";
+import {
+  __testOnly_parseFinalOutputEnvelope,
+  extractRequiredFields,
+  extractToolFailureMessage,
+  findLastStructuredToolOutput,
+  findPresentableToolOutput,
+  formatToolLoopFailure,
+  isRecord,
+  isRequiredUpstreamSatisfied,
+  looksLikeStructuredRuntimeOutput,
+  parseFinalOutputEnvelope,
+  sanitizeStoryNarrativeText,
+  shouldRetryMalformedToolArguments,
+  shouldSuppressToolLoopNarrative,
+  type ExecutedToolCallState,
+  type FailedToolCallState,
+} from "./turn-output-helpers.js";
+
+export {
+  __testOnly_parseFinalOutputEnvelope,
+  looksLikeStructuredRuntimeOutput,
+} from "./turn-output-helpers.js";
 
 // ── Types ────────────────────────────────────────────────────────
-
-interface ExecutedToolCallState {
-  readonly name: string;
-  readonly arguments: string;
-  readonly result: unknown;
-  readonly success: boolean;
-}
-
-interface FailedToolCallState {
-  readonly toolName: string;
-  readonly message?: string;
-}
 
 export interface TurnExecutorDeps {
   /** Resolve a runtime manifest to its fully loaded data. Locale enables localized PLUGIN.md (e.g., PLUGIN.en.md). */
@@ -314,425 +328,6 @@ export class MaxRecursionExceeded extends Error {
     this.depth = args.depth;
     this.maxDepth = args.maxDepth;
   }
-}
-
-// ── Helpers ─────────────────────────────────────────────────────
-
-/** Emit a subscription-style event via the EventBus (if present). */
-/**
- * Heuristic: does `content` look like structured (non-narrative) runtime
- * output that the narrator should NOT ingest as prior prose? Covers:
- *
- *  - Raw JSON (starts with `{` or `[`)
- *  - Markdown-fenced JSON: ```` ```json ```` / ```` ```ts ```` / ```` ``` ````
- *    wrapping an object/array body
- *  - Bare backtick-wrapped bodies (codex EntryCard text dumps)
- *  - `<tool>`-prefixed transcripts that tool-using plugins occasionally log
- *
- * Any false positive here just reduces context the narrator sees — much
- * safer than leaking structured JSON into the prose stream and triggering
- * the narrator to mimic the schema.
- *
- * Exported for unit testing (see turn-executor-story-filter.test.ts).
- */
-export function looksLikeStructuredRuntimeOutput(
-  raw: string | undefined | null,
-): boolean {
-  if (!raw) return false;
-  let s = raw.trim();
-  if (s.length === 0) return false;
-
-  // Strip one level of markdown fences (```json / ```ts / ```).
-  const fence = s.match(/^```[\w-]*\s*([\s\S]*?)\s*```$/);
-  if (fence && fence[1]) {
-    s = fence[1].trim();
-  }
-
-  // Classic JSON opener.
-  if (s.startsWith("{") || s.startsWith("[")) return true;
-
-  // Bare backtick-wrapped body — codex/guide sometimes emit ``…`` with JSON
-  // inside. Strip a single pair of backticks and recheck.
-  if (s.startsWith("`") && s.endsWith("`")) {
-    const inner = s.slice(1, -1).trim();
-    if (inner.startsWith("{") || inner.startsWith("[")) return true;
-  }
-
-  // `<tool>` / `<tool-call>` transcript dumps.
-  if (/^<tool[- >]/i.test(s)) return true;
-
-  return false;
-}
-
-function emitSubEvent(
-  eventBus: EventBus | undefined,
-  subTopic: string,
-  subType: string,
-  sessionId: string,
-  payload: Record<string, unknown>,
-): void {
-  if (!eventBus) return;
-  eventBus.emit({
-    id: crypto.randomUUID(),
-    type: "event",
-    topic: subTopic,
-    sessionId,
-    timestamp: new Date().toISOString(),
-    payload: { ...payload, _subTopic: subTopic, _subType: subType },
-  });
-}
-
-function isTrustedPluginSource(
-  deps: TurnExecutorDeps,
-  manifest: RuntimeManifest,
-): boolean {
-  const source = deps.getPluginSource?.(manifest.pluginId);
-  if (source) return source === "builtin" || source === "official";
-  return manifest.pluginType === "core-plugin";
-}
-
-function createAssetProgressEmitter(
-  emitter: TurnExecutorDeps["emitter"],
-  identity: {
-    readonly sessionId: string;
-    readonly turnId: string;
-    readonly pluginId: string;
-    readonly runtimeId: string;
-  },
-): ((progress: AssetProgressInput) => Promise<void>) | undefined {
-  if (!emitter) return undefined;
-  return async (progress) => {
-    const phase = progress.phase.trim();
-    if (phase.length === 0) {
-      throw new Error("assetProgress.phase must be a non-empty string");
-    }
-    if (
-      progress.percent !== undefined &&
-      (!Number.isFinite(progress.percent) ||
-        progress.percent < 0 ||
-        progress.percent > 100)
-    ) {
-      throw new Error("assetProgress.percent must be a number from 0 to 100");
-    }
-
-    await emitter.emit("asset.progress", {
-      ...identity,
-      ...(progress.assetId ? { assetId: progress.assetId } : {}),
-      phase,
-      ...(progress.percent === undefined ? {} : { percent: progress.percent }),
-      ...(progress.message ? { message: progress.message } : {}),
-      ...(progress.modality ? { modality: progress.modality } : {}),
-      ...(progress.meta === undefined ? {} : { meta: progress.meta }),
-    });
-  };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function parseFinalOutput(finalContent: string): Record<string, unknown> {
-  const stripped = finalContent
-    .replace(/^```(?:json)?\s*\n?/i, "")
-    .replace(/\n?```\s*$/i, "")
-    .trim();
-  try {
-    return JSON.parse(stripped) as Record<string, unknown>;
-  } catch {
-    return { narrativeOutput: finalContent };
-  }
-}
-
-/**
- * Test-only export. Used by `tests/parse-final-output-envelope.test.ts` to
- * exercise the lenient-fallback contract documented in the body. Production
- * callers stay inside this module.
- */
-export function __testOnly_parseFinalOutputEnvelope(
-  finalContent: string,
-): ReturnType<typeof parseFinalOutputEnvelope> {
-  return parseFinalOutputEnvelope(finalContent);
-}
-
-function parseFinalOutputEnvelope(finalContent: string): {
-  readonly output: Record<string, unknown>;
-  readonly parsedAsJson: boolean;
-} {
-  const stripped = finalContent
-    .replace(/^```(?:json)?\s*\n?/i, "")
-    .replace(/\n?```\s*$/i, "")
-    .trim();
-  // Fast path: the model obeyed and produced a clean JSON object.
-  try {
-    const direct = JSON.parse(stripped);
-    if (direct && typeof direct === "object" && !Array.isArray(direct)) {
-      return { output: direct as Record<string, unknown>, parsedAsJson: true };
-    }
-  } catch {
-    // fall through to lenient extraction below
-  }
-
-  // Lenient path: the model violated the "pure JSON only" contract and
-  // emitted prose followed by a trailing JSON envelope. This is the typical
-  // failure mode of plugin runtimes that share a system prompt with the
-  // narrator (the model's training nudges it to keep telling the story
-  // before reaching the JSON envelope it was actually asked to output). If
-  // the trailing object is the canonical envelope the runtime declared, we
-  // would rather salvage it than drop the whole event chain — without this
-  // fallback, e.g. an image-prompt runtime's `events[].topic` envelope is
-  // lost, the follower runtime never fires, and any background gallery
-  // silently stays empty for the player.
-  const salvaged = extractLastBalancedJsonObject(stripped);
-  if (salvaged) {
-    return { output: salvaged, parsedAsJson: true };
-  }
-
-  return { output: { narrativeOutput: finalContent }, parsedAsJson: false };
-}
-
-/**
- * Find the last balanced JSON object embedded in `text` and parse it.
- *
- * Scans forward tracking brace depth and string state so braces inside JSON
- * string literals don't unbalance the count. Whenever depth returns to zero
- * the spanning slice is parsed; the latest successful parse wins. Returns
- * null when no balanced object parses cleanly.
- *
- * Restricted to plain objects (not arrays / primitives) because every plugin
- * runtime envelope this fallback exists for is an object — accepting arrays
- * would risk swallowing prose that happens to end in `[1,2,3]`.
- */
-function extractLastBalancedJsonObject(
-  text: string,
-): Record<string, unknown> | null {
-  let lastValid: Record<string, unknown> | null = null;
-  let depth = 0;
-  let start = -1;
-  let inString = false;
-  let escape = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inString) {
-      if (escape) {
-        escape = false;
-      } else if (ch === "\\") {
-        escape = true;
-      } else if (ch === '"') {
-        inString = false;
-      }
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      continue;
-    }
-    if (ch === "{") {
-      if (depth === 0) start = i;
-      depth++;
-    } else if (ch === "}") {
-      if (depth === 0) continue;
-      depth--;
-      if (depth === 0 && start >= 0) {
-        const candidate = text.slice(start, i + 1);
-        try {
-          const parsed = JSON.parse(candidate);
-          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-            lastValid = parsed as Record<string, unknown>;
-          }
-        } catch {
-          // not a complete JSON object yet — keep scanning
-        }
-        start = -1;
-      }
-    }
-  }
-  return lastValid;
-}
-
-/**
- * Pull the top-level `required: [...]` field names out of a JSON Schema so
- * the schema-validation failure path can surface them as a hint to the user.
- * Returns an empty array for malformed schemas — never throws.
- */
-function extractRequiredFields(
-  schema: Readonly<Record<string, unknown>>,
-): readonly string[] {
-  const required = schema.required;
-  if (!Array.isArray(required)) return [];
-  return required.filter(
-    (field): field is string => typeof field === "string" && field.length > 0,
-  );
-}
-
-function shouldSuppressToolLoopNarrative(args: {
-  outputKind?: string;
-  executedToolCalls: readonly ExecutedToolCallState[];
-  parsedAsJson: boolean;
-}): boolean {
-  return (
-    args.outputKind === "system" &&
-    args.executedToolCalls.length > 0 &&
-    !args.parsedAsJson
-  );
-}
-
-function findPresentableToolOutput(
-  executedToolCalls: readonly ExecutedToolCallState[],
-): Record<string, unknown> | null {
-  for (let i = executedToolCalls.length - 1; i >= 0; i--) {
-    const result = executedToolCalls[i]?.result;
-    if (!isRecord(result)) continue;
-    if (Array.isArray(result.ui) || isRecord(result.interaction)) {
-      return { ...result };
-    }
-  }
-  return null;
-}
-
-function findLastStructuredToolOutput(
-  executedToolCalls: readonly ExecutedToolCallState[],
-): Record<string, unknown> | null {
-  for (let i = executedToolCalls.length - 1; i >= 0; i--) {
-    const result = executedToolCalls[i]?.result;
-    if (isRecord(result)) return { ...result };
-  }
-  return null;
-}
-
-function extractToolFailureMessage(result: string): string | undefined {
-  try {
-    const parsed = JSON.parse(result) as { error?: unknown };
-    if (typeof parsed.error === "string" && parsed.error.length > 0) {
-      return parsed.error;
-    }
-  } catch {
-    // Ignore parse failures and fall back to the raw text below.
-  }
-  return result.length > 0 ? result : undefined;
-}
-
-function formatToolLoopFailure(args: {
-  runtimeId: string;
-  reason: "max_steps" | "timeout" | "tool_failed_without_output";
-  maxSteps?: number;
-  failedToolCalls: readonly FailedToolCallState[];
-}): string {
-  const reasonText =
-    args.reason === "max_steps"
-      ? `exhausted the tool loop after ${args.maxSteps ?? 0} steps without producing final output`
-      : args.reason === "timeout"
-        ? "timed out while waiting for final output after tool execution"
-        : "stopped without final output after a tool failure";
-  const lastFailure = args.failedToolCalls.at(-1);
-  if (!lastFailure) {
-    return `Runtime "${args.runtimeId}" ${reasonText}.`;
-  }
-  return `Runtime "${args.runtimeId}" ${reasonText}. Last tool failure: ${lastFailure.toolName}${lastFailure.message ? ` — ${lastFailure.message}` : ""}`;
-}
-
-function shouldRetryMalformedToolArguments(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return (
-    message.includes("function.arguments") && message.includes("JSON format")
-  );
-}
-
-function isRequiredUpstreamSatisfied(
-  upstream: RuntimeResult | undefined,
-): boolean {
-  if (!upstream) return false;
-  if (upstream.status === "success") return true;
-  if (upstream.status !== "skipped") return false;
-  const output = upstream.output ?? {};
-  return output.preGameDone === true || output.initialized === true;
-}
-
-function isMetaChoiceParagraph(paragraph: string): boolean {
-  const plain = paragraph.replace(/\*\*/g, "").trim();
-  return /^(?:现在，你需要(?:做出选择|做出决定)|你的选择是|你需要决定|你要如何选择|你会怎么做|请选择)/u.test(
-    plain,
-  );
-}
-
-function sanitizeStoryNarrativeText(content: string): string {
-  const paragraphs = content
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
-
-  while (
-    paragraphs.length > 0 &&
-    isMetaChoiceParagraph(paragraphs[paragraphs.length - 1]!)
-  ) {
-    paragraphs.pop();
-  }
-
-  return paragraphs.join("\n\n").trim();
-}
-
-/**
- * PR-1 translation layer: convert a `RuntimeResult` (the internal execution
- * record) into a `RuntimeOutputRecord` (the normalised, consumable record).
- *
- * This is a lossy projection — the goal is NOT to store the full prompt
- * history (that lives in `turn_messages` and can be rebuilt), but to give
- * downstream consumers a stable, cross-runtime shape with a human-readable
- * `text` field and a plugin-defined `structured` blob.
- *
- * `rawPromptDelta` is intentionally left undefined in this first iteration.
- * Wiring the actual prompt-delta source into the agent loop is a follow-up
- * once the adapter exposes "what messages were sent on this call".
- */
-function buildRuntimeOutputFromResult(
-  rr: RuntimeResult,
-  sessionId: string,
-  turn: number,
-  createdAt: string,
-): RuntimeOutputRecord {
-  const output = rr.output as Record<string, unknown> | null;
-
-  // Pull a natural-language summary from common fields, fall back to JSON.
-  const narrativeOutput =
-    output && typeof output["narrativeOutput"] === "string"
-      ? (output["narrativeOutput"] as string)
-      : null;
-  const textValue =
-    output && typeof output["_text"] === "string"
-      ? (output["_text"] as string)
-      : null;
-  const summaryText =
-    narrativeOutput ?? textValue ?? (output ? JSON.stringify(output) : "");
-
-  const toolCallList = rr.toolCalls.map((tc: ToolCallRecord) => ({
-    tool: tc.toolName,
-    input: tc.input,
-    output: tc.output,
-    status: "success" as const,
-    durationMs: tc.durationMs,
-  }));
-
-  return {
-    id: crypto.randomUUID(),
-    sessionId,
-    turnId: rr.turnId,
-    runtimeResultId: rr.runId,
-    pluginId: rr.pluginId,
-    runtimeId: rr.runtimeId,
-    timestamp: rr.timestamp ?? createdAt,
-    results: [
-      {
-        text: summaryText,
-        structured: output ?? undefined,
-      },
-    ],
-    metaData: {
-      turn,
-      toolCallList: toolCallList.length > 0 ? toolCallList : undefined,
-      tokenUsage: rr.tokenUsage,
-      // rawPromptDelta / outputResponses / modelSlot: not populated in PR-1
-    },
-    createdAt,
-  };
 }
 
 // ── Implementation ───────────────────────────────────────────────

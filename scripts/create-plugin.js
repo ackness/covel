@@ -210,29 +210,35 @@ listFiles(targetDir);
 console.log("\n下一步：");
 if (mode === "legacy-with-tools") {
   console.log(
-    `  1. 编辑 ${relative(process.cwd(), targetDir)}/PLUGIN.md，填写 LLM 提示词`,
+    `  1. 编辑 ${relative(process.cwd(), targetDir)}/README.md，填写给开发者看的插件说明`,
   );
-  console.log(`  2. 修改 tools/example.js，实现工具逻辑`);
   console.log(
-    `  3. 在 ${relative(process.cwd(), targetDir)} 下跑 pnpm install && pnpm test`,
+    `  2. 编辑 ${relative(process.cwd(), targetDir)}/PLUGIN.md，填写 runtime 元信息和提示词`,
+  );
+  console.log(`  3. 修改 tools/example.js，实现工具逻辑`);
+  console.log(
+    `  4. 在 ${relative(process.cwd(), targetDir)} 下跑 pnpm install && pnpm test`,
   );
 } else {
   console.log(
-    `  1. 检查 ${relative(process.cwd(), targetDir)}/runtimes/<name>/PLUGIN.md，按需修改`,
+    `  1. 检查 ${relative(process.cwd(), targetDir)}/README.md，填写给开发者看的插件说明`,
+  );
+  console.log(
+    `  2. 检查 ${relative(process.cwd(), targetDir)}/runtimes/<name>/PLUGIN.md，按需修改`,
   );
   if (mode === "demo-multi-runtime") {
     console.log(
-      "  2. 默认包含 echo (function) + summarizer (agent) 两个 runtime",
+      "  3. 默认包含 echo (function) + summarizer (agent) 两个 runtime",
     );
-    console.log("  3. 启动框架后侧栏会出现 Hello World 标签页，按按钮验证");
+    console.log("  4. 启动框架后侧栏会出现 Hello World 标签页，按按钮验证");
   } else {
     console.log(
-      "  2. 函数 runtime 编辑 handler.js，agent runtime 编辑 PLUGIN.md system prompt",
+      "  3. 函数 runtime 编辑 handler.js，agent runtime 编辑 PLUGIN.md 提示词",
     );
   }
   if (targetBaseDir !== DEFAULT_TARGET) {
     console.log(
-      `  4. 如未在默认插件目录，请确认 COVEL_PLUGINS_DIR 指向 ${targetBaseDir}`,
+      `  5. 如未在默认插件目录，请确认 COVEL_PLUGINS_DIR 指向 ${targetBaseDir}`,
     );
   }
 }

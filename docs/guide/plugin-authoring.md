@@ -1,6 +1,6 @@
 # Covel 插件开发指南
 
-> Covel 是一个 AI RPG 框架，核心理念：**插件承载游戏逻辑，内核提供原语和编排**。每个插件本质上是一个 `PLUGIN.md` 文件——YAML frontmatter 定义元信息，Markdown 正文就是 LLM 的 system prompt。
+> Covel 是一个 AI RPG 框架，核心理念：**插件承载游戏逻辑，内核提供原语和编排**。`PLUGIN.md` 是运行时文件：YAML frontmatter 定义元信息，agent runtime 的 Markdown 正文会进入模型提示词。`README.md` 是人类文档，用来说明插件用途、实现情况和维护方式。
 
 这份指南按三个难度层次拆成三份文档。先决定自己属于哪条路径，再从对应的文档开始读。
 
@@ -128,6 +128,7 @@ hooks:
 
 ```
 plugins/<plugin-id>/
+├── README.md             # 必需：给人类 / 开发者看的插件说明
 ├── PLUGIN.md              # 必需：frontmatter + 提示词
 ├── package.json           # 必需：workspace 依赖
 ├── .npmrc                 # 必需：供应链防护（minimum-release-age=10080）
@@ -142,6 +143,8 @@ plugins/<plugin-id>/
     └── sub-runtime/
         └── PLUGIN.md
 ```
+
+`README.md` 写给人类和开发者，建议包含：插件用途、玩家能看到什么、运行时组成、数据读写位置、主要文件、测试方式和已知限制。`PLUGIN.md` 写给框架和模型；单 runtime 插件的正文是提示词，多 runtime 插件的子目录 `PLUGIN.md` 正文才是各 runtime 的提示词。
 
 > **多 runtime 插件的根 PLUGIN.md**：当 `runtimes/` 存在时，框架不再把根 `PLUGIN.md` 当成 runtime——但仍会读它的 frontmatter `name`/`description` 作为整个插件的展示信息。**没有**根 PLUGIN.md 时，UI 会回退显示 plugin id（如 `dashscope-image-gen`），不直观。详见 [plugins.md 多 runtime 插件](../reference/plugins.md#多-runtime-插件)。
 

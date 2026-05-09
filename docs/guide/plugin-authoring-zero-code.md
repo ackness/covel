@@ -1,6 +1,6 @@
 # 插件开发指南 · 零代码
 
-> 面向**内容创作者**：只写 Markdown + YAML frontmatter，不写任何 JS/TS。一个合法的 Covel 插件最少只需要一个 `PLUGIN.md`。
+> 面向**内容创作者**：只写 Markdown + YAML frontmatter，不写任何 JS/TS。插件运行最少依赖 `PLUGIN.md`；可维护插件还需要 `README.md` 给人类阅读。
 
 > **读完你能做到**
 >
@@ -13,14 +13,17 @@
 
 ---
 
-## 1. 最简插件：只需一个 PLUGIN.md
+## 1. 最简运行时：PLUGIN.md
 
-一个合法的 Covel 插件最少只需要一个文件：
+框架加载一个最简运行时只需要 `PLUGIN.md`。实际提交插件时同时提供 `README.md`：
 
 ```
 plugins/my-narrator/
+├── README.md
 └── PLUGIN.md
 ```
+
+`README.md` 写给人类，说明插件功能、实现情况、测试方式和维护注意事项。`PLUGIN.md` 写给框架和模型。
 
 `PLUGIN.md` 由两部分组成：
 
