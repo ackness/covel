@@ -115,6 +115,7 @@ Refactored in this pass:
 - Added SQLite/PostgreSQL backend-local value helpers for state entries, plugin data, worlds, working memory, world-data import ledger, and lorebook upserts.
 - Added SQLite/PostgreSQL backend-local session cascade helpers for `deleteSession()` child-row cleanup.
 - Moved SQLite/PostgreSQL plugin data, working memory, world-data import ledger, and lorebook CRUD families into backend-local `*-data-crud.ts` modules.
+- Moved SQLite/PostgreSQL turn results, runtime results, tool calls, runtime outputs, and interaction record CRUD families into backend-local `*-runtime-records.ts` modules.
 - Kept SQLite TEXT JSON serialization and PostgreSQL JSONB value shaping in separate backend modules.
 
 ### Server Misc API
@@ -177,12 +178,14 @@ Refactored in this pass:
 - `packages/store/src/media-store/sqlite.ts`: 267 lines
 - `packages/store/src/memory/memory-store.ts`: 1073 lines
 - `packages/store/src/indexeddb/idb-store.ts`: 1083 lines
-- `packages/store/src/sqlite/sqlite-store.ts`: 1132 lines
+- `packages/store/src/sqlite/sqlite-store.ts`: 885 lines
 - `packages/store/src/sqlite/sqlite-data-crud.ts`: 324 lines
+- `packages/store/src/sqlite/sqlite-runtime-records.ts`: 274 lines
 - `packages/store/src/sqlite/sqlite-store-values.ts`: 196 lines
 - `packages/store/src/sqlite/sqlite-session-cascade.ts`: 87 lines
-- `packages/store/src/postgres/pg-store.ts`: 1068 lines
+- `packages/store/src/postgres/pg-store.ts`: 834 lines
 - `packages/store/src/postgres/pg-data-crud.ts`: 330 lines
+- `packages/store/src/postgres/pg-runtime-records.ts`: 270 lines
 - `packages/store/src/postgres/pg-store-values.ts`: 190 lines
 - `packages/store/src/postgres/pg-session-cascade.ts`: 85 lines
 - `apps/server/src/routes/misc-api.ts`: 429 lines
@@ -209,13 +212,13 @@ Refactored in this pass:
 
 Future passes should focus on large maintenance files that are production code, have clear internal feature boundaries, and can be validated through package-level tests.
 
-| Priority |                                                                 File |     Lines | Refactor boundary                                       | Validation focus                     |
-| -------- | -------------------------------------------------------------------: | --------: | ------------------------------------------------------- | ------------------------------------ |
-| 1        |                            `apps/server/src/routes/api/bootstrap.ts` |       821 | tool bootstrap and memory setup                         | Server bootstrap and API route tests |
-| 2        |                              `packages/runtime/src/turn-executor.ts` |       867 | pre-game completion and turn prelude                    | Runtime scheduler/context tests      |
-| 3        |                           `apps/server/src/routes/api/plugin-rpc.ts` |       913 | deferred follower scheduling, action dispatch           | Plugin RPC and approval route tests  |
-| 4        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 1068-1132 | session CRUD, runtime records, conversation persistence | Store contract tests across backends |
-| 5        |                                           `apps/desktop/src/main.ts` |       762 | IPC helpers, then supervisor                            | Desktop build smoke                  |
+| Priority |                                                                 File |   Lines | Refactor boundary                             | Validation focus                     |
+| -------- | -------------------------------------------------------------------: | ------: | --------------------------------------------- | ------------------------------------ |
+| 1        |                            `apps/server/src/routes/api/bootstrap.ts` |     821 | tool bootstrap and memory setup               | Server bootstrap and API route tests |
+| 2        |                              `packages/runtime/src/turn-executor.ts` |     867 | pre-game completion and turn prelude          | Runtime scheduler/context tests      |
+| 3        |                           `apps/server/src/routes/api/plugin-rpc.ts` |     913 | deferred follower scheduling, action dispatch | Plugin RPC and approval route tests  |
+| 4        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 834-885 | session CRUD and conversation persistence     | Store contract tests across backends |
+| 5        |                                           `apps/desktop/src/main.ts` |     762 | IPC helpers, then supervisor                  | Desktop build smoke                  |
 
 ## Validation Run
 
@@ -351,6 +354,12 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 180s mise exec -- pnpm --filter @covel/context exec vitest run tests/compactor.test.ts tests/context-builder.test.ts`
   - `timeout 240s mise exec -- pnpm --filter @covel/server test`
   - `timeout 240s mise exec -- pnpm lint`
+- Twenty-fourth pass validation:
+  - `timeout 120s mise exec -- pnpm --filter @covel/store lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/store exec vitest run tests/sqlite-store.test.ts tests/pg-store.test.ts`
+  - `timeout 240s mise exec -- pnpm --filter @covel/store test`
+  - `timeout 120s mise exec -- pnpm exec prettier --check packages/store/src/sqlite/sqlite-store.ts packages/store/src/sqlite/sqlite-runtime-records.ts packages/store/src/postgres/pg-store.ts packages/store/src/postgres/pg-runtime-records.ts docs/refactor/2026-05-09_13-05_long-file-restructure.md`
+  - `timeout 240s mise exec -- pnpm lint`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -364,7 +373,7 @@ Future passes should focus on large maintenance files that are production code, 
 - `plugin-selection-card.tsx` is still sizeable because filtering, grouping, pack selection, and required/excluded policy rendering share local UI state; it is the next extraction candidate inside session prep after component behavior tests are expanded.
 - `plugin-rpc.ts` still owns runtime execution and deferred follower scheduling; future passes should extract these only with the full runtime/background tests in scope.
 - `bootstrap.ts` still owns tool registration and memory setup. Future passes should split one subsystem at a time and preserve bootstrapApi as the composition root.
-- DataStore SQL backend files still contain repeated CRUD families. The next store pass should prefer focused backend-local helper families while keeping SQLite and PostgreSQL execution differences local.
+- DataStore SQL backend files still contain session, message, summary, suspension, and snapshot families. The next store pass should prefer focused backend-local helper families while keeping SQLite and PostgreSQL execution differences local.
 - `main.ts` still owns sidecar supervisor state and broad IPC registration; the next desktop pass should split IPC handlers before attempting supervisor dependency injection.
 
 ## Rollback
@@ -405,9 +414,11 @@ flowchart TD
   SqliteStore["sqlite-store.ts"] --> SqliteValues["sqlite-store-values.ts"]
   SqliteStore --> SqliteCascade["sqlite-session-cascade.ts"]
   SqliteStore --> SqliteDataCrud["sqlite-data-crud.ts"]
+  SqliteStore --> SqliteRuntimeRecords["sqlite-runtime-records.ts"]
   PgStore["pg-store.ts"] --> PgValues["pg-store-values.ts"]
   PgStore --> PgCascade["pg-session-cascade.ts"]
   PgStore --> PgDataCrud["pg-data-crud.ts"]
+  PgStore --> PgRuntimeRecords["pg-runtime-records.ts"]
   MiscApi["misc-api.ts"] --> MiscModules["routes/misc-api/*"]
   PluginRpc["plugin-rpc.ts"] --> PluginRpcHelpers["plugin-rpc/{body,jobs,runtime-response,runtime-turn}.ts"]
   BootstrapApi["bootstrap.ts"] --> BootstrapStoreEvents["bootstrap/plugin-data-store-events.ts"]
