@@ -28,6 +28,7 @@ Refactored in this pass:
 - `apps/server/src/routes/api/plugin-rpc.ts`
 - `packages/ai-provider/src/gateway.ts`
 - `packages/test-runtime/src/runner.ts`
+- `apps/web/src/settings/panes/LlmSlotsPane.tsx`
 
 ## Assumptions
 
@@ -165,6 +166,12 @@ Refactored in this pass:
 - Split plugin-data report collection, case expectation evaluation, expected-failure matching, and image artifact saving into `packages/test-runtime/src/reporting.ts`.
 - Added focused reporting helper tests for runtime/event/log/plugin-data/asset assertions and expected runtime failures.
 
+### Web LLM Slots Pane
+
+- Kept `LlmSlotsPane.tsx` as the Settings tab component.
+- Split legacy slot ids, runtime-requested slot discovery, visible-slot merge logic, preset candidate collection, and auto-bind selection into `apps/web/src/settings/panes/llm-slots-model.ts`.
+- Added focused tests for runtime slot discovery, configured/legacy slot merging, auto-bind priority, and preset source marking.
+
 ## Current Size Snapshot
 
 - `packages/runtime/src/turn-executor.ts`: 867 lines
@@ -207,6 +214,9 @@ Refactored in this pass:
 - `packages/test-runtime/src/runner.ts`: 1017 lines
 - `packages/test-runtime/src/reporting.ts`: 290 lines
 - `packages/test-runtime/src/reporting.test.ts`: 86 lines
+- `apps/web/src/settings/panes/LlmSlotsPane.tsx`: 783 lines
+- `apps/web/src/settings/panes/llm-slots-model.ts`: 127 lines
+- `apps/web/src/settings/panes/__tests__/llm-slots-model.test.ts`: 131 lines
 - `apps/server/src/routes/misc-api.ts`: 429 lines
 - `apps/server/src/routes/api/plugin-rpc.ts`: 913 lines
 - `apps/server/src/routes/api/plugin-rpc/body.ts`: 38 lines
@@ -238,6 +248,7 @@ Future passes should focus on large maintenance files that are production code, 
 | 3        |                           `apps/server/src/routes/api/plugin-rpc.ts` |     913 | deferred follower scheduling, action dispatch | Plugin RPC and approval route tests  |
 | 4        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 834-885 | session CRUD and conversation persistence     | Store contract tests across backends |
 | 5        |                                `packages/test-runtime/src/runner.ts` |    1017 | fixtures and deferred execution harness       | Test-runtime package tests           |
+| 6        |                       `apps/web/src/settings/panes/LlmSlotsPane.tsx` |     783 | capability controls                           | Web settings tests                   |
 
 ## Validation Run
 
@@ -390,6 +401,12 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 120s mise exec -- pnpm --filter @covel/test-runtime lint`
   - `timeout 180s mise exec -- pnpm --filter @covel/test-runtime test`
   - `timeout 240s mise exec -- pnpm lint`
+- Twenty-seventh pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --check apps/web/src/settings/panes/LlmSlotsPane.tsx apps/web/src/settings/panes/llm-slots-model.ts apps/web/src/settings/panes/__tests__/llm-slots-model.test.ts docs/refactor/2026-05-09_13-05_long-file-restructure.md`
+  - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
+  - `timeout 120s mise exec -- pnpm --filter @covel/web exec vitest run src/settings/panes/__tests__/llm-slots-model.test.ts`
+  - `timeout 240s mise exec -- pnpm --filter @covel/web test`
+  - `timeout 240s mise exec -- pnpm lint`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -406,6 +423,7 @@ Future passes should focus on large maintenance files that are production code, 
 - DataStore SQL backend files still contain session, message, summary, suspension, and snapshot families. The next store pass should prefer focused backend-local helper families while keeping SQLite and PostgreSQL execution differences local.
 - `gateway.ts` still owns slot fallback, per-request overlays, and parameter-override metadata merging. The next AI provider pass should extract slot resolution with `gateway-slot-overrides` and `parameter-overrides` tests in scope.
 - `runner.ts` still owns plugin/case loading, live adapter setup, local tool imports, deferred follower execution, and case orchestration. The next test-runtime pass should split fixtures before touching execution harness behavior.
+- `LlmSlotsPane.tsx` still owns capability tags and editor controls. The next web settings pass should extract those controls with component-level interaction tests.
 - `main.ts` still owns sidecar supervisor state and broad IPC registration; the next desktop pass should split IPC handlers before attempting supervisor dependency injection.
 
 ## Rollback
@@ -445,6 +463,7 @@ flowchart TD
   IdbStore["idb-store.ts"] --> StoreCommon
   Gateway["gateway.ts"] --> GatewayLifecycle["gateway-lifecycle.ts"]
   TestRuntimeRunner["test-runtime/runner.ts"] --> TestRuntimeReporting["test-runtime/reporting.ts"]
+  LlmSlotsPane["LlmSlotsPane.tsx"] --> LlmSlotsModel["llm-slots-model.ts"]
   SqliteStore["sqlite-store.ts"] --> SqliteValues["sqlite-store-values.ts"]
   SqliteStore --> SqliteCascade["sqlite-session-cascade.ts"]
   SqliteStore --> SqliteDataCrud["sqlite-data-crud.ts"]

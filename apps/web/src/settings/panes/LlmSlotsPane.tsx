@@ -21,6 +21,12 @@ import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
 import { useSession } from "@/stores/session-store.js";
+import {
+  autoBindDiscoveredSlots as resolveAutoBindDiscoveredSlots,
+  collectLlmSlotPresetCandidates,
+  createVisibleSlotIds,
+  discoverRuntimeSlotIds,
+} from "./llm-slots-model.js";
 
 /**
  * Pane that surfaces the `[covel.<slot>]` sections from llm.toml and lets the
@@ -32,16 +38,6 @@ export function LlmSlotsPane() {
   const { state } = useSession();
   const llm = state.llmConfig;
   const isConfigured = llm?.configured ?? false;
-
-  const LEGACY_SLOTS = [
-    "story",
-    "plugin",
-    "memory",
-    "image",
-    "fast",
-    "balance",
-    "default",
-  ];
 
   const [slotConfig, setSlotConfigLocal] = useState<
     Record<string, SlotConfigEntry>
@@ -60,42 +56,25 @@ export function LlmSlotsPane() {
   }, []);
 
   const customPresets = getCustomPresets();
-  const allPresets = [
-    ...state.presets.map((p) => ({
-      id: p.id,
-      name: p.name,
-      provider: p.provider,
-      model: p.model,
-      isCustom: false,
-    })),
-    ...customPresets.map((p) => ({
-      id: p.id,
-      name: p.name,
-      provider: p.provider,
-      model: p.model,
-      isCustom: true,
-    })),
-  ];
+  const allPresets = collectLlmSlotPresetCandidates(
+    state.presets,
+    customPresets,
+  );
 
   const configuredSlots = isConfigured ? Object.keys(llm!.slots) : [];
   const discoveredSlotIds = useMemo(
     () => discoverRuntimeSlotIds(state.packages),
     [state.packages],
   );
-  const slots = useMemo(() => {
-    const out: string[] = [];
-    const add = (slotId: string | undefined) => {
-      if (!slotId || slotId === "default" || out.includes(slotId)) return;
-      out.push(slotId);
-    };
-    if (isConfigured) {
-      configuredSlots.forEach(add);
-    } else {
-      LEGACY_SLOTS.forEach(add);
-    }
-    discoveredSlotIds.forEach(add);
-    return out;
-  }, [isConfigured, configuredSlots.join("\n"), discoveredSlotIds.join("\n")]);
+  const slots = useMemo(
+    () =>
+      createVisibleSlotIds({
+        isConfigured,
+        configuredSlots,
+        discoveredSlotIds,
+      }),
+    [isConfigured, configuredSlots.join("\n"), discoveredSlotIds.join("\n")],
+  );
 
   const commitSlot = (next: Record<string, SlotConfigEntry>) => {
     setSlotConfigLocal(next);
@@ -103,17 +82,9 @@ export function LlmSlotsPane() {
   };
 
   const autoBindDiscoveredSlots = () => {
-    const next = { ...slotConfig };
-    for (const slotId of discoveredSlotIds) {
-      if (slotId === "default" || next[slotId]?.presetId) continue;
-      const byName = allPresets.find(
-        (p) => p.id === `slot-${slotId}` || p.id === slotId,
-      );
-      const byProvider = allPresets.find((p) => p.provider === slotId);
-      const candidate = byName ?? byProvider;
-      if (candidate) next[slotId] = { presetId: candidate.id };
-    }
-    commitSlot(next);
+    commitSlot(
+      resolveAutoBindDiscoveredSlots(slotConfig, discoveredSlotIds, allPresets),
+    );
   };
 
   const updateCapOverride = (
@@ -809,42 +780,4 @@ function CapabilityEditor({
       </div>
     </div>
   );
-}
-
-function discoverRuntimeSlotIds(
-  packages: readonly {
-    runtimes?: readonly {
-      kind: string;
-      model?: string;
-      providerTag?: string;
-    }[];
-    userSettings?: readonly { key: string; default: unknown }[];
-  }[],
-): string[] {
-  const out = new Set<string>();
-  for (const pkg of packages) {
-    for (const rt of pkg.runtimes ?? []) {
-      if (rt.kind === "function") continue;
-      const slot = rt.model ?? rt.providerTag;
-      if (
-        typeof slot === "string" &&
-        slot.length > 0 &&
-        slot !== "default" &&
-        slot !== "text"
-      ) {
-        out.add(slot);
-      }
-    }
-    for (const setting of pkg.userSettings ?? []) {
-      if (setting.key !== "modelPresetId") continue;
-      if (
-        typeof setting.default === "string" &&
-        setting.default.length > 0 &&
-        setting.default !== "default"
-      ) {
-        out.add(setting.default);
-      }
-    }
-  }
-  return [...out].sort((a, b) => a.localeCompare(b));
 }
