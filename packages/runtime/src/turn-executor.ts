@@ -76,7 +76,6 @@ import {
   runPostToolUseHook,
 } from "./hooks/wire-helpers.js";
 import {
-  buildRuntimeOutputFromResult,
   createAssetProgressEmitter,
   emitSubEvent,
   isTrustedPluginSource,
@@ -105,6 +104,7 @@ import {
   type TurnExecutorDeps,
   type TurnExecutorOptions,
 } from "./turn-executor-types.js";
+import { finalizeTurnResult } from "./turn-result-finalizer.js";
 
 export {
   __testOnly_parseFinalOutputEnvelope,
@@ -893,164 +893,13 @@ export async function executeTurn(
   // keeps the user interactable while Pre-Game is still progressing.
   await markPreGameCompletion();
 
-  // Collect pending inputs from completed RuntimeResults (avoids redundant DB reload)
-  const pendingInputs: import("@covel/shared").PendingInputInfo[] = [];
-  for (const [, result] of completedResults) {
-    if (!result.output) continue;
-    const out = result.output as Record<string, unknown>;
-    const interactions = out.interactions as
-      | Array<Record<string, unknown>>
-      | undefined;
-    const form = out.form as Record<string, unknown> | undefined;
-    const narrativeFallback =
-      typeof out.narrativeTemplate === "string"
-        ? out.narrativeTemplate
-        : typeof out.narrativeOutput === "string"
-          ? out.narrativeOutput
-          : "";
-
-    if (interactions && interactions.length > 0) {
-      for (const interaction of interactions) {
-        pendingInputs.push({
-          pluginId: result.pluginId,
-          runtimeId: result.runtimeId,
-          interaction:
-            interaction as unknown as import("@covel/shared").InteractionPayload,
-          form:
-            interaction.type === "form"
-              ? (interaction as Record<string, unknown>)
-              : undefined,
-          narrativeTemplate:
-            (interaction.narrativeTemplate as string) ?? narrativeFallback,
-        });
-      }
-    } else if (form?.formId) {
-      // Legacy format: single form object
-      pendingInputs.push({
-        pluginId: result.pluginId,
-        runtimeId: result.runtimeId,
-        interaction: {
-          type: "form",
-          interactionId: (form.formId ?? "") as string,
-          ...(form as object),
-        } as import("@covel/shared").InteractionPayload,
-        form,
-        narrativeTemplate: narrativeFallback,
-      });
-    }
-  }
-
-  const turnResult: TurnResult = {
-    turnId: input.turnId,
-    sessionId: input.sessionId,
-    runtimeResults: [...completedResults.values()],
-    pendingInputs: pendingInputs.length > 0 ? pendingInputs : undefined,
-    durationMs: Date.now() - startTime,
-    timestamp: new Date().toISOString(),
-    ...(deferredFollowers.length > 0 ? { deferredFollowers } : {}),
-  };
-
-  // Persist results to store if available
-  if (deps.store) {
-    const now = new Date().toISOString();
-
-    // Save each runtime result
-    for (const rr of turnResult.runtimeResults) {
-      await deps.store.saveRuntimeResult({
-        id: rr.runId,
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        pluginId: rr.pluginId,
-        runtimeId: rr.runtimeId,
-        status: rr.status,
-        output: rr.output,
-        toolCalls: rr.toolCalls,
-        durationMs: rr.durationMs,
-        error: rr.error,
-        createdAt: rr.timestamp ?? now,
-      });
-
-      // PR-1: write a normalised RuntimeOutput alongside RuntimeResult so
-      // downstream consumers can read the translation-layer record without
-      // knowing the runtime internals.
-      try {
-        await deps.store.saveRuntimeOutput(
-          buildRuntimeOutputFromResult(rr, input.sessionId, turnNumber, now),
-        );
-      } catch (err) {
-        // Translation-layer writes are best-effort in this iteration: a
-        // failure here must not bring the turn down, since RuntimeResult
-        // is still the authoritative record. Log and continue.
-        console.warn(
-          `[turn-executor] saveRuntimeOutput failed for ${rr.runtimeId}:`,
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    }
-
-    // Save the aggregated turn result
-    await deps.store.saveTurnResult({
-      id: crypto.randomUUID(),
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      runtimeResults: turnResult.runtimeResults,
-      durationMs: turnResult.durationMs,
-      createdAt: turnResult.timestamp ?? now,
-    });
-
-    // ── Auto-snapshot (S4-T2) ─────────────────────────────────
-    // When COVEL_SNAPSHOTS_V1=1, capture a materialized snapshot of the
-    // session state at turn boundary. Failures are logged but never fail
-    // the turn — snapshots are a best-effort recovery primitive, not a
-    // commit invariant.
-    if (isEnvEnabled("COVEL_SNAPSHOTS_V1")) {
-      try {
-        const { buildSnapshotPayload } =
-          await import("./snapshot-payload-builder.js");
-        const payload = await buildSnapshotPayload(
-          deps.store,
-          input.sessionId,
-          input.turnId,
-        );
-        const snapshotId = crypto.randomUUID();
-        await deps.store.saveSnapshot({
-          id: snapshotId,
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          kind: "auto",
-          payload,
-          createdAt: turnResult.timestamp ?? now,
-        });
-        // Emit SSE event so reactive UI can refresh snapshot lists.
-        // Topic 'session' matches the session.forked convention; the
-        // SSE forwarder picks `_subType` as the named event field.
-        emitSubEvent(
-          deps.eventBus,
-          "session",
-          "state.snapshot.created",
-          input.sessionId,
-          {
-            turnId: input.turnId,
-            snapshotId,
-            kind: "auto",
-          },
-        );
-      } catch (err) {
-        // Log and continue — never block turn completion on snapshot failure.
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[turn-executor] auto snapshot failed for session ${input.sessionId} turn ${input.turnId}:`,
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    }
-  }
-
-  // Emit turn.completed
-  emitSubEvent(deps.eventBus, "game", "turn.completed", input.sessionId, {
-    turnId: input.turnId,
-    sessionId: input.sessionId,
-    durationMs: turnResult.durationMs,
+  const turnResult = await finalizeTurnResult({
+    input,
+    startTime,
+    completedResults,
+    deferredFollowers,
+    deps,
+    turnNumber,
   });
 
   // ── Post-turn memory update (Letta-style) ─────────────────────

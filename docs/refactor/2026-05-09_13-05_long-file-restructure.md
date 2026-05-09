@@ -41,6 +41,7 @@ Refactored in this pass:
 - Moved exported executor types and recursion error into `turn-executor-types.ts`.
 - Moved suspended-runtime resume flow into `turn-resume.ts`.
 - Moved single-runtime dispatch into `turn-runtime-execution.ts`.
+- Moved turn-result assembly, runtime/turn result persistence, auto-snapshot persistence, and `turn.completed` emission into `turn-result-finalizer.ts`.
 - Split runtime execution modes into:
   - `turn-function-runtime.ts`
   - `turn-agent-guard.ts`
@@ -147,8 +148,9 @@ Refactored in this pass:
 
 ## Current Size Snapshot
 
-- `packages/runtime/src/turn-executor.ts`: 1132 lines
+- `packages/runtime/src/turn-executor.ts`: 981 lines
 - `packages/runtime/src/turn-runtime-execution.ts`: 316 lines
+- `packages/runtime/src/turn-result-finalizer.ts`: 185 lines
 - `packages/runtime/src/turn-agent-runtime.ts`: 618 lines
 - `packages/runtime/src/turn-agent-tool-loop.ts`: 699 lines
 - `apps/web/src/stores/session-store.tsx`: 918 lines
@@ -202,9 +204,10 @@ Future passes should focus on large maintenance files that are production code, 
 | Priority |                                                                 File |     Lines | Refactor boundary                                       | Validation focus                     |
 | -------- | -------------------------------------------------------------------: | --------: | ------------------------------------------------------- | ------------------------------------ |
 | 1        |                            `apps/server/src/routes/api/bootstrap.ts` |       984 | tool/RPC/hook bootstrap, memory setup                   | Server bootstrap and API route tests |
-| 2        |                           `apps/server/src/routes/api/plugin-rpc.ts` |       913 | deferred follower scheduling, action dispatch           | Plugin RPC and approval route tests  |
-| 3        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 1068-1132 | session CRUD, runtime records, conversation persistence | Store contract tests across backends |
-| 4        |                                           `apps/desktop/src/main.ts` |       762 | IPC helpers, then supervisor                            | Desktop build smoke                  |
+| 2        |                              `packages/runtime/src/turn-executor.ts` |       981 | event-chain fan-out and deferred followers              | Runtime event-chain tests            |
+| 3        |                           `apps/server/src/routes/api/plugin-rpc.ts` |       913 | deferred follower scheduling, action dispatch           | Plugin RPC and approval route tests  |
+| 4        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 1068-1132 | session CRUD, runtime records, conversation persistence | Store contract tests across backends |
+| 5        |                                           `apps/desktop/src/main.ts` |       762 | IPC helpers, then supervisor                            | Desktop build smoke                  |
 
 ## Validation Run
 
@@ -308,6 +311,13 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 240s mise exec -- pnpm --filter @covel/server exec vitest run tests/api/chat-mode-http-e2e.test.ts tests/api/e2e-narrator.test.ts tests/api/plugin-flow-routes.test.ts tests/api/ui-specs-session-aware.test.ts tests/api/security-fixes.test.ts`
   - `timeout 240s mise exec -- pnpm --filter @covel/server test`
   - `timeout 240s mise exec -- pnpm lint`
+- Nineteenth pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --write packages/runtime/src/turn-executor.ts packages/runtime/src/turn-result-finalizer.ts`
+  - `timeout 120s mise exec -- pnpm --filter @covel/runtime lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/runtime exec vitest run tests/turn-executor-turn-result-always-saved.test.ts tests/turn-executor.test.ts`
+  - `timeout 180s mise exec -- pnpm --filter @covel/server exec vitest run tests/api/snapshot.test.ts`
+  - `timeout 240s mise exec -- pnpm --filter @covel/runtime test`
+  - `timeout 240s mise exec -- pnpm lint`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -339,6 +349,7 @@ flowchart TD
   AgentRuntime --> AgentToolLoop["turn-agent-tool-loop.ts"]
   TurnExecutor --> TurnResume["turn-resume.ts"]
   TurnExecutor --> TurnTypes["turn-executor-types.ts"]
+  TurnExecutor --> TurnResultFinalizer["turn-result-finalizer.ts"]
 
   SessionStore["session-store.tsx"] --> SessionModules["session-store/*"]
   Catalog["catalog.tsx"] --> CatalogModules["catalog/*"]
