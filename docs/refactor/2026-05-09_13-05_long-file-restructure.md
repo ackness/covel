@@ -90,6 +90,12 @@ Refactored in this pass:
 - Moved trace/event helpers, page-data loading, event detail rendering, session data panels, and trace panels into `apps/web/src/routes/debug/`.
 - Kept route search params and route component ownership in the original route file.
 
+### Web Chat Messages
+
+- Kept `chat-messages.tsx` as the session chat orchestration component for message filtering, timeline placement, asset rendering, and image RPC controls.
+- Moved json-render block rendering, plugin-message rendering, raw JSON/system/footer primitives, and the empty-session hero into `apps/web/src/components/session/chat-messages/`.
+- Preserved the existing branch-reply, plugin-message, submitted-selection, and disabled interactive-block behavior.
+
 ### Media Store
 
 - Kept `media-store.ts` as the public media-store compatibility entrypoint.
@@ -137,6 +143,10 @@ Refactored in this pass:
 - `packages/runtime/src/session-kernel.ts`: 14 lines
 - `apps/server/src/world-data/session-import.ts`: 459 lines
 - `apps/web/src/components/session/session-prep-screen.tsx`: 499 lines
+- `apps/web/src/components/session/chat-messages.tsx`: 627 lines
+- `apps/web/src/components/session/chat-messages/message-blocks.tsx`: 420 lines
+- `apps/web/src/components/session/chat-messages/message-primitives.tsx`: 107 lines
+- `apps/web/src/components/session/chat-messages/session-canvas-hero.tsx`: 78 lines
 - `apps/web/src/routes/debug.tsx`: 640 lines
 - `packages/store/src/media-store.ts`: 30 lines
 - `packages/store/src/media-store/memory.ts`: 179 lines
@@ -169,8 +179,7 @@ Future passes should focus on large maintenance files that are production code, 
 | -------- | -------------------------------------------------------------------: | --------: | ----------------------------------------------------------- | ------------------------------------ |
 | 1        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 1356-1423 | focused SQL CRUD grouping and smaller query helper families | Store contract tests across backends |
 | 2        |                           `apps/server/src/routes/api/plugin-rpc.ts` |      1078 | runtime turn, deferred followers, action dispatch           | Plugin RPC and approval route tests  |
-| 3        |                  `apps/web/src/components/session/chat-messages.tsx` |      1226 | leaf display components, block renderers, RPC hook          | Web component/session tests          |
-| 4        |                                           `apps/desktop/src/main.ts` |      1226 | logging, window/menu helpers, then supervisor/IPC helpers   | Desktop build smoke                  |
+| 3        |                                           `apps/desktop/src/main.ts` |      1226 | logging, window/menu helpers, then supervisor/IPC helpers   | Desktop build smoke                  |
 
 ## Validation Run
 
@@ -235,6 +244,11 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 120s mise exec -- pnpm --filter @covel/server lint`
   - `timeout 240s mise exec -- pnpm --filter @covel/server exec vitest run tests/api/plugin-rpc.test.ts tests/api/approvals.test.ts tests/api/plugin-data-routes.test.ts`
   - `timeout 120s mise exec -- pnpm exec prettier --check apps/server/src/routes/api/plugin-rpc.ts apps/server/src/routes/api/plugin-rpc/body.ts apps/server/src/routes/api/plugin-rpc/jobs.ts`
+- Eleventh pass validation:
+  - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/web exec vitest run src/components/session/__tests__/plugin-rpc-ui.test.ts src/components/session/__tests__/plugin-metadata.test.tsx src/lib/__tests__/interaction-selection.test.ts src/components/asset-render/__tests__/AssetTurnSidebar.test.tsx`
+  - `timeout 240s mise exec -- pnpm --filter @covel/web test`
+  - `timeout 120s mise exec -- pnpm exec prettier --check apps/web/src/components/session/chat-messages.tsx apps/web/src/components/session/chat-messages/message-blocks.tsx apps/web/src/components/session/chat-messages/message-primitives.tsx apps/web/src/components/session/chat-messages/session-canvas-hero.tsx`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -275,6 +289,9 @@ flowchart TD
   SessionImport["session-import.ts"] --> ImportModules["session-import/*"]
   SessionPrep["session-prep-screen.tsx"] --> SessionPrepModules["session-prep/*"]
   DebugRoute["debug.tsx"] --> DebugModules["routes/debug/*"]
+  ChatMessages["chat-messages.tsx"] --> ChatMessageBlocks["chat-messages/message-blocks.tsx"]
+  ChatMessages --> ChatMessagePrimitives["chat-messages/message-primitives.tsx"]
+  ChatMessages --> SessionCanvasHero["chat-messages/session-canvas-hero.tsx"]
   MediaStore["media-store.ts"] --> MediaFactory["media-store/factory.ts"]
   MediaStore --> MediaBackends["media-store/{memory,sqlite,pg,s3}.ts"]
   MediaStore --> MediaCommon["media-store/{types,utils}.ts"]
