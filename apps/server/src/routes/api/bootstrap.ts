@@ -9,24 +9,13 @@ import path from "node:path";
 import fsSync from "node:fs";
 import { Hono, type MiddlewareHandler } from "hono";
 import type { RuntimeManifest } from "@covel/shared";
+import { isEnvEnabled, readEnvString, readRuntimeEnv } from "@covel/shared";
 import {
-  isEnvEnabled,
-  readEnvString,
-  readRuntimeEnv,
-  validateRuntimeManifestSemantics,
-} from "@covel/shared";
-import {
-  createPluginRegistry,
-  discoverPluginsMulti,
-  loadPluginSummary,
-  loadPluginManifest,
   loadRuntime as loadRuntimeFromDisk,
   getPluginTrustInfo,
   loadPluginLlmConfig,
   type PluginRegistry,
   type LoadedRuntime,
-  type PluginDiscoveryResult,
-  type ParsedPluginMd,
   type PluginLlmConfig,
   type PluginRuntimeGateway,
   type PluginRuntimeUtils,
@@ -108,6 +97,7 @@ import { runtimeOutputRoutes } from "./runtime-outputs.js";
 import { pluginRpcRoutes } from "./plugin-rpc.js";
 import { approvalRoutes, sessionApprovalRoutes } from "./approvals.js";
 export { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
+import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
 import { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
 
 // ── Bootstrap config ─────────────────────────────────────────────
@@ -250,82 +240,12 @@ export async function bootstrapApi(
   // on every setPluginData / setPluginDataBatch call, regardless of caller.
   const store = wrapStoreWithPluginDataEvents(config.store, eventBus);
 
-  // 2. Discover plugins
-  const registry = createPluginRegistry({ eventBus });
-  const pluginsDirs =
-    config.pluginsDirs && config.pluginsDirs.length > 0
-      ? config.pluginsDirs
-      : [config.pluginsDir];
-  const discoveries = await discoverPluginsMulti(
-    pluginsDirs,
-    (id, kept, skipped) => {
-      console.warn(
-        `[bootstrap] Plugin id collision: "${id}" — keeping ${kept}, ignoring ${skipped}`,
-      );
-    },
-  );
-
-  // Preload and register each plugin
-  const discoveryMap = new Map<string, PluginDiscoveryResult>();
-  const manifestCache = new Map<string, readonly ParsedPluginMd[]>();
-
-  for (const discovery of discoveries) {
-    try {
-      const summary = await loadPluginSummary(discovery);
-      const manifests = await loadPluginManifest(discovery);
-
-      discoveryMap.set(discovery.id, discovery);
-      manifestCache.set(discovery.id, manifests);
-
-      for (const parsed of manifests) {
-        for (const diagnostic of validateRuntimeManifestSemantics(
-          parsed.manifest,
-        )) {
-          console.warn(
-            `[bootstrap] ${diagnostic.message} Remove one of the two to keep the scheduler intent clear.`,
-          );
-        }
-      }
-
-      // Register with all manifests (first is primary for getActiveRuntimes).
-      // `source` comes from `discoverPluginsMulti`: bundled first-dir plugins
-      // keep their prefix-derived trust, everything else is clamped to
-      // `'community'` — so a third-party plugin can't self-assign a higher
-      // trust level by forging `pluginType: core-plugin` in its frontmatter.
-      registry.register({
-        id: discovery.id,
-        summary,
-        rootPath: discovery.rootPath,
-        manifest: manifests[0],
-        manifests,
-        loadedRuntimes: new Map(),
-        status: "registered",
-        ...(discovery.source ? { source: discovery.source } : {}),
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(
-        `[bootstrap] Failed to load plugin ${discovery.id}:`,
-        message,
-      );
-
-      // Register as error so the frontend can display it — don't crash the whole server
-      registry.register({
-        id: discovery.id,
-        summary: {
-          id: discovery.id,
-          name: discovery.id,
-          description: "",
-          pluginType: "plugin",
-          runtimeCount: 0,
-        },
-        loadedRuntimes: new Map(),
-        status: "error",
-        error: message,
-        ...(discovery.source ? { source: discovery.source } : {}),
-      });
-    }
-  }
+  const { registry, discoveryMap, manifestCache } =
+    await discoverAndRegisterPlugins({
+      pluginsDir: config.pluginsDir,
+      pluginsDirs: config.pluginsDirs,
+      eventBus,
+    });
 
   // 3. Load plugin-level llm.toml configs for model resolution
   const pluginLlmConfigs = new Map<string, PluginLlmConfig>();
