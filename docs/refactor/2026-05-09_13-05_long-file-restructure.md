@@ -20,6 +20,7 @@ Refactored in this pass:
 - `packages/store/src/media-store.ts`
 - `packages/store/src/memory/memory-store.ts`
 - `packages/store/src/indexeddb/idb-store.ts`
+- `apps/server/src/routes/misc-api.ts`
 
 ## Assumptions
 
@@ -99,6 +100,12 @@ Refactored in this pass:
 - Added `packages/store/src/common/keys.ts` for in-memory composite key builders.
 - Kept SQL and IndexedDB schema/index execution paths unchanged.
 
+### Server Misc API
+
+- Kept `misc-api.ts` as the root-mounted miscellaneous API route entrypoint.
+- Split plugin flow builders, package catalog builders, live plugin map loading, UI spec sync/building, and shared route helpers into `apps/server/src/routes/misc-api/`.
+- Preserved the existing `/api/*` route prefixes and direct `createMiscApiRoutes(...)` test/import surface.
+
 ## Current Size Snapshot
 
 - `packages/runtime/src/turn-executor.ts`: 1132 lines
@@ -120,16 +127,17 @@ Refactored in this pass:
 - `packages/store/src/media-store/sqlite.ts`: 267 lines
 - `packages/store/src/memory/memory-store.ts`: 1073 lines
 - `packages/store/src/indexeddb/idb-store.ts`: 1083 lines
+- `apps/server/src/routes/misc-api.ts`: 429 lines
 
 ## Remaining Priority Queue
 
 Future passes should focus on large maintenance files that are production code, have clear internal feature boundaries, and can be validated through package-level tests.
 
-| Priority |                                                                 File |     Lines | Refactor boundary                                               | Validation focus                     |
-| -------- | -------------------------------------------------------------------: | --------: | --------------------------------------------------------------- | ------------------------------------ |
-| 1        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 1527-1596 | shared SQL helper extraction after contract coverage review     | Store contract tests across backends |
-| 2        |                                           `apps/desktop/src/main.ts` |      1492 | desktop app bootstrap, config, window, sidecar, IPC helpers     | Desktop lint/build smoke             |
-| 3        |                                 `apps/server/src/routes/misc-api.ts` |       988 | route families for catalog, UI specs, LLM config, provider keys | Server route tests and server lint   |
+| Priority |                                                                 File |     Lines | Refactor boundary                                           | Validation focus                     |
+| -------- | -------------------------------------------------------------------: | --------: | ----------------------------------------------------------- | ------------------------------------ |
+| 1        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 1527-1596 | shared SQL helper extraction after contract coverage review | Store contract tests across backends |
+| 2        |                                           `apps/desktop/src/main.ts` |      1492 | desktop app bootstrap, config, window, sidecar, IPC helpers | Desktop lint/build smoke             |
+| 3        |                           `apps/server/src/routes/api/plugin-rpc.ts` |      1114 | action dispatch, runtime turn, jobs, deferred followers     | Plugin RPC and approval route tests  |
 
 ## Validation Run
 
@@ -170,6 +178,12 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 120s mise exec -- pnpm --filter @covel/store lint`
   - `timeout 180s mise exec -- pnpm --filter @covel/store exec vitest run tests/memory-store.test.ts tests/idb-store.test.ts tests/plugin-data-contract-extras.test.ts`
   - `timeout 240s mise exec -- pnpm --filter @covel/store test`
+- Sixth pass validation:
+  - `timeout 120s mise exec -- pnpm --filter @covel/server lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/server exec vitest run tests/api/plugin-flow-routes.test.ts tests/api/ui-specs-session-aware.test.ts tests/api/ui-specs-user-plugins.test.ts tests/api/security-fixes.test.ts`
+  - `timeout 240s mise exec -- pnpm --filter @covel/server test`
+  - `timeout 240s mise exec -- pnpm lint`
+  - `timeout 360s mise exec -- pnpm test`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -213,4 +227,5 @@ flowchart TD
   MediaStore --> MediaCommon["media-store/{types,utils}.ts"]
   MemoryStore["memory-store.ts"] --> StoreCommon["common/{keys,pagination}.ts"]
   IdbStore["idb-store.ts"] --> StoreCommon
+  MiscApi["misc-api.ts"] --> MiscModules["routes/misc-api/*"]
 ```
