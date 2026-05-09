@@ -1,8 +1,8 @@
 ---
 name: guide
 description:
-  zh: 行动引导插件。分析叙事结果，为玩家生成分风格的选择建议（稳妥/激进/创意/疯狂），让 narrator 专注叙事。
-  en: Action guide. Reads the latest narrative and offers the player categorised suggestions (safe / bold / creative / wild) so the narrator can focus on prose.
+  zh: 在每轮故事后给出几种行动建议，帮你更快决定下一步。
+  en: Suggests a few possible actions after each story beat so you can choose your next move faster.
 pluginType: plugin
 # Narrator-downstream layer — shares priority 600 with codex, npc-graph
 # extractor, and character-tracker so the scheduler runs them in parallel.

@@ -1,8 +1,8 @@
 ---
 name: player-identity
 description:
-  zh: 玩家身份插件。把玩家 Persona 保存为会话身份档案，并可绑定到 Covel player Character 与 Prompt V2。
-  en: Player identity plugin. Saves player persona profiles as session identity state and can bind them to the Covel player Character and Prompt V2.
+  zh: 让你在游玩中调整主角的口吻、目标和行事边界。
+  en: Lets you adjust your hero's voice, goals, and boundaries during play.
 pluginType: plugin
 runtimeType: function
 outputKind: system

@@ -1,8 +1,8 @@
 ---
 name: character-blueprint
 description:
-  zh: 角色蓝图导入器。把可导入的玩法/人设源数据保存为 plugin_data，并可通过 character.upsert 实例化为 Covel Character。
-  en: Character Blueprint importer. Stores importable playstyle/persona source data as plugin_data and can instantiate it as Covel Character state through character.upsert.
+  zh: 保存预设人物资料，方便在故事中快速加入重要角色。
+  en: Saves preset character profiles so important people can be added to the story quickly.
 pluginType: plugin
 runtimeType: function
 outputKind: system

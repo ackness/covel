@@ -1,8 +1,8 @@
 ---
 name: char-creator/character-tracker
 description:
-  zh: NPC 与角色状态跟踪 agent。每轮扫描 narrator 输出，识别新出现的 NPC 并按世界 schema 创建；检测现有角色的状态变化（属性更新、受伤、死亡、装备）并通过 update-character 维护。
-  en: NPC and character state tracker. Scans the narrator output every turn to spot new NPCs and create them using the world schema; detects state changes on existing characters (attribute updates, injuries, death, equipment) and records them via update-character.
+  zh: 记录故事中新出现的人物，并更新他们的状态、伤势和装备变化。
+  en: Records newly appearing characters and updates changes to their condition, injuries, and equipment.
 pluginType: core-plugin
 priority: 750
 model: plugin

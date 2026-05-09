@@ -119,6 +119,25 @@ describe("session plugin selection helpers", () => {
     expect(selected.has("chat-mode-narrator")).toBe(true);
   });
 
+  it("keeps player persona optional outside dialogue mode", () => {
+    const traditional = pluginPacksForWorld(world({})).find(
+      (item) => item.id === "traditional-story",
+    );
+    const lowCost = pluginPacksForWorld(world({})).find(
+      (item) => item.id === "low-cost",
+    );
+    const dialogue = pluginPacksForWorld(world({})).find(
+      (item) => item.id === "dialogue-mode",
+    );
+
+    expect(traditional?.plugins).not.toContain("player-identity");
+    expect(traditional?.optionalPlugins).toContain("player-identity");
+    expect(traditional?.plugins).toContain("living-world-rules");
+    expect(lowCost?.plugins).not.toContain("player-identity");
+    expect(lowCost?.optionalPlugins).toContain("player-identity");
+    expect(dialogue?.plugins).toContain("player-identity");
+  });
+
   it("filters and groups packages by tags", () => {
     expect(collectPluginTags(packages)).toContain("mode:dialogue");
 

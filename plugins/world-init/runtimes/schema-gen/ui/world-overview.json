@@ -1,8 +1,8 @@
 {
   "id": "world-overview",
   "group": "world-data",
-  "groupLabel": { "zh": "世界维度", "en": "World Data" },
-  "shortLabel": { "zh": "维度", "en": "World" },
+  "groupLabel": { "zh": "世界资料", "en": "World Details" },
+  "shortLabel": { "zh": "资料", "en": "Details" },
   "groupOrder": 300,
   "label": { "zh": "总览", "en": "Overview" },
   "icon": "map",

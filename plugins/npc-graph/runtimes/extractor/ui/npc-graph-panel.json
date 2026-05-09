@@ -6,8 +6,8 @@
   "dataSource": { "namespace": "nodes" },
   "emptyState": {
     "message": {
-      "zh": "尚未识别到角色或势力关系，narrator 推进剧情后将自动浮现……",
-      "en": "No characters or factions extracted yet — relationships will appear once the narrator advances the story."
+      "zh": "尚未发现角色或势力关系，继续推进故事后会自动出现……",
+      "en": "No character or faction relationships yet. They will appear as the story continues."
     }
   },
   "view": {

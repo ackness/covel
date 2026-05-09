@@ -19,8 +19,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "Letta 式记忆管理。每轮结束后自动更新，保存关键剧情、场景和角色信息。",
-            "en": "Letta-style memory management. Auto-updates after each turn to capture key story, scene, and character information."
+            "zh": "每轮结束后自动更新，保存关键剧情、场景和角色信息。",
+            "en": "Updates after each turn to keep key plot, scene, and character details."
           },
           "size": "xs",
           "variant": "muted"

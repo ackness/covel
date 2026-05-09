@@ -1,8 +1,8 @@
 ---
 name: char-creator/player-init
 description:
-  zh: 玩家角色创建表单生成器。Pre-Game band 插件，仅在 guard 放行（无角色 + 无提交）时运行，生成一次开场表单；角色的落库由 guard.js 在玩家提交后确定性完成，不经过 LLM。
-  en: Player character creation form generator. Pre-Game band plugin — runs only when the guard admits Branch 3 (no player + no submission) to emit a single opening form; actual character creation is performed deterministically by guard.js once the player submits, bypassing the LLM.
+  zh: 开局引导你填写主角信息，并把主角加入故事。
+  en: Guides you through creating your hero at the start and brings them into the story.
 pluginType: core-plugin
 priority: 50
 outputKind: system

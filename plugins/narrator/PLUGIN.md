@@ -1,8 +1,8 @@
 ---
 name: narrator
 description:
-  zh: 主叙事生成器，负责根据玩家输入和世界观设定生成故事内容。每个 Turn 自动执行。
-  en: Primary narrative generator. Produces story prose each turn based on player input and the world lore. Runs automatically every turn.
+  zh: 根据你的行动继续推进故事，描写场景、人物反应和结果。
+  en: Continues the story from your actions, describing scenes, reactions, and outcomes.
 pluginType: core-plugin
 priority: 500
 model: story

@@ -1,8 +1,8 @@
 ---
 name: pregame
 description:
-  zh: 游戏初始化插件。仅在 session 首轮触发，读取世界信息、欢迎玩家、上报 preGameDone。纯函数执行，不调用 LLM。
-  en: Game initialization plugin. Fires only on the first turn of a session — reads world metadata, greets the player, and reports preGameDone. Pure function runtime, never calls the LLM.
+  zh: 在开局时读取世界资料，准备好第一段冒险。
+  en: Reads the world details at the start and prepares the first step of the adventure.
 pluginType: core-plugin
 priority: 10
 runtimeType: function

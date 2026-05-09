@@ -8,8 +8,8 @@
   "dataSource": { "namespace": "entries" },
   "emptyState": {
     "message": {
-      "zh": "图鉴暂无词条，等待 narrator 发现新知识……",
-      "en": "No codex entries yet, waiting for the narrator to uncover new knowledge…"
+      "zh": "图鉴暂无词条，继续推进故事后会自动出现……",
+      "en": "No codex entries yet. They will appear as the story continues…"
     }
   },
   "view": {

@@ -1,8 +1,8 @@
 ---
 name: chat-mode-narrator
 description:
-  zh: Chat Mode 对话优先叙事器。读取场景演员状态，生成角色扮演风格的故事回复。
-  en: Chat Mode dialogue-first narrator. Reads scene cast state and produces roleplay-style story replies.
+  zh: 让故事更像角色对话，适合重视聊天和人物互动的玩法。
+  en: Makes the story feel more like character dialogue, suited for play focused on conversation and interaction.
 pluginType: plugin
 priority: 500
 model: story

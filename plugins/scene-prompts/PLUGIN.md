@@ -1,8 +1,8 @@
 ---
 name: scene-prompts
 description:
-  zh: 场景提示插件。读取最新叙事，为玩家生成可快速草拟或直接发送的场景化行动短句。
-  en: Scene prompts. Reads the latest narrative and offers scene-oriented quick replies that can be drafted or sent from the chat UI.
+  zh: 根据当前场景给出几句可直接采用的行动短句。
+  en: Suggests short actions that fit the current scene and can be used right away.
 pluginType: plugin
 priority: 600
 model: plugin

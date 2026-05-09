@@ -1,15 +1,15 @@
 {
   "id": "world-entries",
   "group": "world-data",
-  "groupLabel": { "zh": "世界维度", "en": "World Data" },
-  "shortLabel": { "zh": "维度", "en": "World" },
+  "groupLabel": { "zh": "世界资料", "en": "World Details" },
+  "shortLabel": { "zh": "资料", "en": "Details" },
   "label": { "zh": "词条", "en": "Entries" },
   "icon": "book-marked",
   "dataSource": { "namespace": "entries" },
   "emptyState": {
     "message": {
-      "zh": "世界维度词条尚未生成，等待初始化完成……",
-      "en": "World entries not yet generated, waiting for initialization…"
+      "zh": "世界词条尚未生成，等待开局准备完成……",
+      "en": "World entries are not ready yet. Waiting for the opening setup to finish…"
     }
   },
   "view": {

@@ -391,7 +391,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | core-quest | 650        | 任务追踪      |
 | image      | 800        | 故事配图生成  |
 
-当前世界包推荐使用 `pluginPolicy` 表达插件组合意图。内置前端组合包包括：`traditional-story`（传统叙事主线 + 行动建议/图鉴/关系图）、`dialogue-mode`（对话优先叙事 + 场景演员/短句回复）、`low-cost`（保留核心流程并减少下游 LLM 调用）。世界可以通过 `preset` 引用这些组合包，也可以在 `packs` 中提供自定义组合。
+当前世界包推荐使用 `pluginPolicy` 表达插件组合意图。内置前端组合包包括：`traditional-story`（传统叙事主线 + 行动建议/图鉴/关系图，玩家口吻设置为可选项）、`dialogue-mode`（对话优先叙事 + 场景演员/短句回复 + 玩家口吻设置）、`low-cost`（保留核心流程并减少下游 LLM 调用，玩家口吻设置为可选项）。世界可以通过 `preset` 引用这些组合包，也可以在 `packs` 中提供自定义组合。
 
 ---
 

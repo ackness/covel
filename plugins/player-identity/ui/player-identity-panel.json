@@ -1,12 +1,12 @@
 {
   "id": "player-identity",
   "label": {
-    "zh": "玩家身份",
-    "en": "Player Identity"
+    "zh": "玩家口吻",
+    "en": "Player Voice"
   },
   "shortLabel": {
-    "zh": "身份",
-    "en": "Identity"
+    "zh": "口吻",
+    "en": "Voice"
   },
   "icon": "user-round-cog",
   "group": "chat-mode",
@@ -25,8 +25,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "填写玩家身份，保存后可作为当前会话 Persona，并同步到 player Character。",
-            "en": "Fill in the player identity. Saving can activate it as the session persona and sync it to the player Character."
+            "zh": "游玩中调整主角的说话方式、目标和边界，保存后会影响后续故事。",
+            "en": "Adjust your hero's voice, goals, and boundaries during play. Saving affects later story scenes."
           },
           "variant": "muted",
           "size": "xs"
@@ -39,10 +39,10 @@
           {
             "component": "Input",
             "props": {
-              "label": { "zh": "身份 ID", "en": "Identity ID" },
+              "label": { "zh": "口吻编号", "en": "Voice code" },
               "placeholder": {
-                "zh": "留空自动生成短 ID",
-                "en": "Leave blank to auto-generate a short ID"
+                "zh": "留空自动生成短编号",
+                "en": "Leave blank to create a short code"
               },
               "value": { "$bindState": "/form/id" }
             }
@@ -62,8 +62,8 @@
         "props": {
           "label": { "zh": "身份简介", "en": "Description" },
           "placeholder": {
-            "zh": "你是谁、刚来到哪里、现在最想守住什么。",
-            "en": "Who you are, where you just arrived, and what you want to protect."
+            "zh": "补充当前主角的自我认知、处境和最想守住的东西。",
+            "en": "Add the current character's self-image, situation, and what they want to protect."
           },
           "value": { "$bindState": "/form/description" },
           "rows": 3
@@ -152,8 +152,8 @@
             "component": "Button",
             "props": {
               "label": {
-                "zh": "保存并启用身份",
-                "en": "Save and activate"
+                "zh": "启用并同步主角",
+                "en": "Activate and update hero"
               },
               "variant": "primary",
               "size": "compact"
@@ -176,8 +176,8 @@
             "component": "Button",
             "props": {
               "label": {
-                "zh": "仅保存身份",
-                "en": "Save only"
+                "zh": "仅保存口吻",
+                "en": "Save voice only"
               },
               "variant": "ghost",
               "size": "compact"
@@ -205,8 +205,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "JSON 导入",
-            "en": "JSON import"
+            "zh": "完整资料导入",
+            "en": "Full profile import"
           },
           "variant": "muted",
           "size": "xs"
@@ -216,8 +216,8 @@
         "component": "Textarea",
         "props": {
           "label": {
-            "zh": "身份 JSON",
-            "en": "Identity JSON"
+            "zh": "完整资料",
+            "en": "Full profile"
           },
           "placeholder": "{ \"schemaVersion\": 1, \"id\": \"wanderer\", \"name\": \"Wanderer\", \"description\": \"A cautious outsider.\" }",
           "value": { "$bindState": "/draftJson" },
@@ -228,8 +228,8 @@
         "component": "Button",
         "props": {
           "label": {
-            "zh": "从 JSON 导入",
-            "en": "Import from JSON"
+            "zh": "从完整资料导入",
+            "en": "Import full profile"
           },
           "variant": "primary",
           "size": "compact"
@@ -255,8 +255,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "已保存身份",
-            "en": "Saved identities"
+            "zh": "已保存口吻",
+            "en": "Saved voices"
           },
           "variant": "muted",
           "size": "xs"

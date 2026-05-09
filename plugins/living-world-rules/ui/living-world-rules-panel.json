@@ -25,8 +25,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "填写会持续影响对话的世界规则。保存后会写入 Covel lorebook，并按坐标注入 Prompt V2。",
-            "en": "Fill in a world rule that influences dialogue. Saving writes it to the Covel lorebook and injects it through Prompt V2 coordinates."
+            "zh": "添加会长期影响故事的世界规则，比如禁忌、风俗和特殊设定。",
+            "en": "Add lasting world rules, such as taboos, customs, and special setting details."
           },
           "variant": "muted",
           "size": "xs"
@@ -39,10 +39,10 @@
           {
             "component": "Input",
             "props": {
-              "label": { "zh": "规则 ID", "en": "Rule ID" },
+              "label": { "zh": "规则编号", "en": "Rule code" },
               "placeholder": {
-                "zh": "留空自动生成短 ID",
-                "en": "Leave blank to auto-generate a short ID"
+                "zh": "留空自动生成短编号",
+                "en": "Leave blank to create a short code"
               },
               "value": { "$bindState": "/form/id" }
             }
@@ -149,20 +149,20 @@
           {
             "component": "Select",
             "props": {
-              "label": { "zh": "注入位置", "en": "Position" },
+              "label": { "zh": "出现位置", "en": "Placement" },
               "value": { "$bindState": "/form/position" },
               "options": [
                 {
                   "value": "after_plugin",
-                  "label": { "zh": "插件后", "en": "After plugin" }
+                  "label": { "zh": "靠后出现", "en": "Later" }
                 },
                 {
                   "value": "before_plugin",
-                  "label": { "zh": "插件前", "en": "Before plugin" }
+                  "label": { "zh": "靠前出现", "en": "Earlier" }
                 },
                 {
                   "value": "at_depth",
-                  "label": { "zh": "指定深度", "en": "At depth" }
+                  "label": { "zh": "固定位置", "en": "Fixed place" }
                 }
               ]
             }
@@ -170,10 +170,10 @@
           {
             "component": "Input",
             "props": {
-              "label": { "zh": "深度", "en": "Depth" },
+              "label": { "zh": "位置编号", "en": "Place number" },
               "placeholder": {
-                "zh": "位置为指定深度时填写",
-                "en": "Used with at depth"
+                "zh": "选择固定位置时填写",
+                "en": "Used with fixed place"
               },
               "value": { "$bindState": "/form/depth" }
             }
@@ -257,8 +257,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "JSON 导入",
-            "en": "JSON import"
+            "zh": "完整规则导入",
+            "en": "Full rule import"
           },
           "variant": "muted",
           "size": "xs"
@@ -268,8 +268,8 @@
         "component": "Textarea",
         "props": {
           "label": {
-            "zh": "规则 JSON",
-            "en": "Rule JSON"
+            "zh": "完整规则",
+            "en": "Full rule"
           },
           "placeholder": {
             "zh": "{ \"schemaVersion\": 1, \"id\": \"rain-market\", \"content\": \"雨市里没人会直接说出真实姓名。\", \"kind\": \"constant\", \"coordinate\": { \"position\": \"before_plugin\" } }",
@@ -283,8 +283,8 @@
         "component": "Button",
         "props": {
           "label": {
-            "zh": "从 JSON 导入",
-            "en": "Import from JSON"
+            "zh": "从完整规则导入",
+            "en": "Import full rule"
           },
           "variant": "primary",
           "size": "compact"

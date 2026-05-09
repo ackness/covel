@@ -1,8 +1,8 @@
 ---
 name: npc-graph/rag-retriever
 description:
-  zh: NPC 关系图检索器 — 在每个叙事回合开始前，从玩家当前输入中提取被提及的人物，并沿关系图 2-hop 扩展，把相关事实注入 narrator 上下文。无 LLM 调用。
-  en: NPC graph retriever — before each narrative turn, extracts mentioned characters from the player's input, expands along the graph up to 2 hops, and injects relevant facts into the narrator context. No LLM calls.
+  zh: 当你提到某个人时，帮助故事想起相关人物和关系。
+  en: When you mention someone, helps the story remember related people and relationships.
 pluginType: plugin
 # Narrator-prep layer — runs before narrator (500) so narrator's inject
 # of `npcContext` is populated. Leaves 100–499 free for future prep

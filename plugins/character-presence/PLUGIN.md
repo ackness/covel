@@ -1,8 +1,8 @@
 ---
 name: character-presence
 description:
-  zh: 角色存在感插件。保存角色头像、立绘、语音与媒体引用，供会话右侧面板和后续运行时读取。
-  en: Character presence plugin. Saves character avatar, sprite, voice, and media refs for sidebar display and downstream runtimes.
+  zh: 保存角色头像、立绘和声音，让人物展示更有存在感。
+  en: Saves character portraits, images, and voices so characters feel more present.
 pluginType: plugin
 runtimeType: function
 outputKind: system

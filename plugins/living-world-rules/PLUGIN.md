@@ -1,8 +1,8 @@
 ---
 name: living-world-rules
 description:
-  zh: 生活世界规则插件。把 World Info 风格规则保存为 Covel lorebook，并交给 Prompt V2 分段注入。
-  en: Living World Rules plugin. Saves World Info style rules as Covel lorebook entries for Prompt V2 segmented injection.
+  zh: 让你添加会长期生效的世界规则，比如禁忌、风俗和特殊设定。
+  en: Lets you add lasting world rules, such as taboos, customs, and special setting details.
 pluginType: plugin
 runtimeType: function
 outputKind: system

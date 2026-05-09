@@ -1,12 +1,12 @@
 {
   "id": "character-presence",
   "label": {
-    "zh": "角色存在感",
-    "en": "Character Presence"
+    "zh": "角色展示",
+    "en": "Character Display"
   },
   "shortLabel": {
-    "zh": "存在感",
-    "en": "Presence"
+    "zh": "展示",
+    "en": "Display"
   },
   "icon": "image-plus",
   "group": "chat-mode",
@@ -25,8 +25,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "填写角色存在感资源。头像、立绘、语音等引用会保存到当前角色。",
-            "en": "Fill in character presence assets. Avatar, sprite, voice, and media refs are saved for this character."
+            "zh": "保存角色的头像、立绘和声音，让人物在故事中更鲜明。",
+            "en": "Save portraits, character art, and voice details so the character feels more vivid in the story."
           },
           "variant": "muted",
           "size": "xs"
@@ -39,10 +39,10 @@
           {
             "component": "Input",
             "props": {
-              "label": { "zh": "角色 ID", "en": "Character ID" },
+              "label": { "zh": "角色编号", "en": "Character code" },
               "placeholder": {
-                "zh": "留空自动生成短 ID",
-                "en": "Leave blank to auto-generate a short ID"
+                "zh": "留空自动生成短编号",
+                "en": "Leave blank to create a short code"
               },
               "value": { "$bindState": "/form/characterId" }
             }
@@ -73,8 +73,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "头像引用",
-            "en": "Avatar ref"
+            "zh": "头像",
+            "en": "Portrait"
           },
           "variant": "muted",
           "size": "xs"
@@ -87,15 +87,15 @@
           {
             "component": "Input",
             "props": {
-              "label": { "zh": "头像 Asset ID", "en": "Avatar asset ID" },
+              "label": { "zh": "头像编号", "en": "Portrait code" },
               "value": { "$bindState": "/form/avatarId" }
             }
           },
           {
             "component": "Input",
             "props": {
-              "label": { "zh": "MIME", "en": "MIME" },
-              "placeholder": { "zh": "image/png", "en": "image/png" },
+              "label": { "zh": "文件类型", "en": "File type" },
+              "placeholder": { "zh": "例如：图片", "en": "e.g. image/png" },
               "value": { "$bindState": "/form/avatarMime" }
             }
           },
@@ -113,8 +113,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "立绘引用",
-            "en": "Sprite ref"
+            "zh": "立绘",
+            "en": "Character art"
           },
           "variant": "muted",
           "size": "xs"
@@ -127,15 +127,15 @@
           {
             "component": "Input",
             "props": {
-              "label": { "zh": "立绘 Asset ID", "en": "Sprite asset ID" },
+              "label": { "zh": "立绘编号", "en": "Character art code" },
               "value": { "$bindState": "/form/spriteId" }
             }
           },
           {
             "component": "Input",
             "props": {
-              "label": { "zh": "MIME", "en": "MIME" },
-              "placeholder": { "zh": "image/png", "en": "image/png" },
+              "label": { "zh": "文件类型", "en": "File type" },
+              "placeholder": { "zh": "例如：图片", "en": "e.g. image/png" },
               "value": { "$bindState": "/form/spriteMime" }
             }
           },
@@ -152,8 +152,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "语音引用",
-            "en": "Voice ref"
+            "zh": "声音",
+            "en": "Voice"
           },
           "variant": "muted",
           "size": "xs"
@@ -166,15 +166,15 @@
           {
             "component": "Input",
             "props": {
-              "label": { "zh": "语音 Asset ID", "en": "Voice asset ID" },
+              "label": { "zh": "声音编号", "en": "Voice code" },
               "value": { "$bindState": "/form/voiceId" }
             }
           },
           {
             "component": "Input",
             "props": {
-              "label": { "zh": "MIME", "en": "MIME" },
-              "placeholder": { "zh": "audio/wav", "en": "audio/wav" },
+              "label": { "zh": "文件类型", "en": "File type" },
+              "placeholder": { "zh": "例如：声音", "en": "e.g. audio/wav" },
               "value": { "$bindState": "/form/voiceMime" }
             }
           },
@@ -191,8 +191,8 @@
         "component": "Button",
         "props": {
           "label": {
-            "zh": "保存存在感",
-            "en": "Save presence"
+            "zh": "保存展示",
+            "en": "Save display"
           },
           "variant": "primary",
           "size": "compact"
@@ -216,8 +216,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "JSON 导入",
-            "en": "JSON import"
+            "zh": "完整资料导入",
+            "en": "Full profile import"
           },
           "variant": "muted",
           "size": "xs"
@@ -227,8 +227,8 @@
         "component": "Textarea",
         "props": {
           "label": {
-            "zh": "存在感 JSON",
-            "en": "Presence JSON"
+            "zh": "完整资料",
+            "en": "Full profile"
           },
           "placeholder": "{ \"schemaVersion\": 1, \"characterId\": \"mentor-lin\", \"avatar\": { \"id\": \"...\", \"mime\": \"image/png\", \"size\": 1234 } }",
           "value": { "$bindState": "/draftJson" },
@@ -239,8 +239,8 @@
         "component": "Button",
         "props": {
           "label": {
-            "zh": "从 JSON 导入",
-            "en": "Import from JSON"
+            "zh": "从完整资料导入",
+            "en": "Import full profile"
           },
           "variant": "primary",
           "size": "compact"
@@ -264,8 +264,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "已保存存在感",
-            "en": "Saved presence"
+            "zh": "已保存展示",
+            "en": "Saved display"
           },
           "variant": "muted",
           "size": "xs"

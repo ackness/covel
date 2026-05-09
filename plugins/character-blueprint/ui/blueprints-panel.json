@@ -1,12 +1,12 @@
 {
   "id": "character-blueprint",
   "label": {
-    "zh": "角色蓝图",
-    "en": "Character Blueprints"
+    "zh": "预设角色",
+    "en": "Preset Characters"
   },
   "shortLabel": {
-    "zh": "蓝图",
-    "en": "Blueprints"
+    "zh": "预设",
+    "en": "Presets"
   },
   "icon": "id-card",
   "group": "chat-mode",
@@ -25,8 +25,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "填写主要信息导入角色蓝图。蓝图会保存到当前会话，并可同步创建为 Covel 角色。",
-            "en": "Fill in the core fields to import a character blueprint. It is saved to this session and can be instantiated as a Covel character."
+            "zh": "提前保存重要人物资料，之后可以直接加入当前故事。",
+            "en": "Save important character details ahead of time, then add them directly to the current story."
           },
           "variant": "muted",
           "size": "xs"
@@ -39,10 +39,10 @@
           {
             "component": "Input",
             "props": {
-              "label": { "zh": "ID", "en": "ID" },
+              "label": { "zh": "资料编号", "en": "Profile code" },
               "placeholder": {
-                "zh": "留空自动生成短 ID",
-                "en": "Leave blank to auto-generate a short ID"
+                "zh": "留空自动生成短编号",
+                "en": "Leave blank to create a short code"
               },
               "value": { "$bindState": "/form/id" }
             }
@@ -67,7 +67,10 @@
               "label": { "zh": "角色类型", "en": "Role" },
               "value": { "$bindState": "/form/role" },
               "options": [
-                { "value": "npc", "label": { "zh": "NPC", "en": "NPC" } },
+                {
+                  "value": "npc",
+                  "label": { "zh": "配角", "en": "Supporting character" }
+                },
                 {
                   "value": "player",
                   "label": { "zh": "玩家", "en": "Player" }
@@ -82,10 +85,10 @@
           {
             "component": "Input",
             "props": {
-              "label": { "zh": "角色 ID", "en": "Character ID" },
+              "label": { "zh": "角色编号", "en": "Character code" },
               "placeholder": {
-                "zh": "默认：npc-蓝图-id",
-                "en": "Default: npc-blueprint-id"
+                "zh": "留空使用资料编号",
+                "en": "Leave blank to reuse the profile code"
               },
               "value": { "$bindState": "/form/characterId" }
             }
@@ -107,7 +110,7 @@
       {
         "component": "Textarea",
         "props": {
-          "label": { "zh": "人格摘要", "en": "Persona summary" },
+          "label": { "zh": "性格摘要", "en": "Personality summary" },
           "placeholder": {
             "zh": "角色在故事里如何说话、如何隐藏情绪、想要什么。",
             "en": "How this character speaks, hides emotion, and what they want."
@@ -133,7 +136,7 @@
             "props": {
               "label": { "zh": "标签", "en": "Tags" },
               "placeholder": {
-                "zh": "classmate, romance-candidate",
+                "zh": "同学, 重要人物",
                 "en": "classmate, romance-candidate"
               },
               "value": { "$bindState": "/form/tagsText" }
@@ -265,8 +268,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "JSON 导入",
-            "en": "Advanced JSON import"
+            "zh": "完整资料导入",
+            "en": "Full profile import"
           },
           "variant": "muted",
           "size": "xs"
@@ -276,8 +279,8 @@
         "component": "Textarea",
         "props": {
           "label": {
-            "zh": "蓝图 JSON",
-            "en": "Blueprint JSON"
+            "zh": "完整资料",
+            "en": "Full profile"
           },
           "placeholder": "{ \"schemaVersion\": 1, \"id\": \"mentor-lin\", \"name\": \"Lin Yue\", \"role\": \"npc\" }",
           "value": { "$bindState": "/draftJson" },
@@ -288,8 +291,8 @@
         "component": "Button",
         "props": {
           "label": {
-            "zh": "从 JSON 导入",
-            "en": "Import from JSON"
+            "zh": "从完整资料导入",
+            "en": "Import full profile"
           },
           "variant": "primary",
           "size": "compact"
@@ -314,8 +317,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "已导入蓝图",
-            "en": "Imported blueprints"
+            "zh": "已保存预设角色",
+            "en": "Saved preset characters"
           },
           "variant": "muted",
           "size": "xs"

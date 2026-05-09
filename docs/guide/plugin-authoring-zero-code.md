@@ -543,8 +543,9 @@ recommendedPlugins:
   - guide
   - codex
   - npc-graph
-  - player-identity
   - living-world-rules
+optionalPlugins:
+  - player-identity
 excludedPlugins:
   - chat-mode-narrator
   - scene-cast

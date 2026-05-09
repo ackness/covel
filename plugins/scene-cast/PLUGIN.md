@@ -1,8 +1,8 @@
 ---
 name: scene-cast
 description:
-  zh: Chat Mode 场景演员选择器。每轮在叙事前准备活跃说话者和场景演员状态。
-  en: Chat Mode scene cast selector. Prepares active speaker and cast state before narration.
+  zh: 记录当前场景里谁在场、谁正在说话。
+  en: Tracks who is present in the scene and who is currently speaking.
 pluginType: plugin
 runtimeType: function
 handler: ./handler.js

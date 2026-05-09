@@ -1,8 +1,8 @@
 ---
 name: branch-reply
 description:
-  zh: 分支回复插件。为指定回合保存可滑动候选回复，并记录消息块选择状态。
-  en: Branch reply plugin. Saves swipeable reply candidates for a turn and records message block selection state.
+  zh: 提供多条可切换的回复，让你挑选更合适的说法。
+  en: Offers several reply options so you can choose the one that fits best.
 pluginType: plugin
 runtimeType: function
 outputKind: system

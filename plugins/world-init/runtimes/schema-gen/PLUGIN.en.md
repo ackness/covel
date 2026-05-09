@@ -1,8 +1,8 @@
 ---
 name: world-init/schema-gen
 description:
-  zh: 世界维度 Schema 生成器。读取世界观文档，通过专用工具批量创建角色属性维度和世界词条。
-  en: World dimension schema generator. Reads the worldlore document and uses dedicated tools to bulk-create character attribute dimensions and world entries.
+  zh: 开局整理世界设定，让角色属性和背景资料更贴合这个世界。
+  en: Organizes the setting at the start so character traits and background details fit the world.
 pluginType: core-plugin
 # audit P0-2: schema-gen must run BEFORE char-creator/player-init (50)
 # so the player-init agent can read `{{ config.worldSchema }}` populated by
