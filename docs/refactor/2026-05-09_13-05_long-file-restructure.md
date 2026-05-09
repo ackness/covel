@@ -15,6 +15,8 @@ Refactored in this pass:
 - `apps/web/src/services/api.ts`
 - `packages/runtime/src/session-kernel.ts`
 - `apps/server/src/world-data/session-import.ts`
+- `apps/web/src/components/session/session-prep-screen.tsx`
+- `apps/web/src/routes/debug.tsx`
 
 ## Assumptions
 
@@ -70,6 +72,18 @@ Refactored in this pass:
 - Kept `session-import.ts` as the public import/preflight/sync orchestration entrypoint.
 - Split public types, world manifest/root utilities, write identity, preflight/schema validation, import planning, ledger/hash/conflict/delete logic, media materialization/finalization/cleanup, and store write helpers into `apps/server/src/world-data/session-import/`.
 
+### Web Session Prep
+
+- Kept `session-prep-screen.tsx` as the route-facing session setup entrypoint.
+- Moved plugin-policy helpers, model slot helpers, session action helpers, and focused cards/panels into `apps/web/src/components/session/session-prep/`.
+- Preserved the exported `defaultSelectedPluginIdsForWorld` and `isLockedCorePackage` test/helper surface from the original module.
+
+### Web Debug Route
+
+- Kept `debug.tsx` as the TanStack route shell.
+- Moved trace/event helpers, page-data loading, event detail rendering, session data panels, and trace panels into `apps/web/src/routes/debug/`.
+- Kept route search params and route component ownership in the original route file.
+
 ## Current Size Snapshot
 
 - `packages/runtime/src/turn-executor.ts`: 1132 lines
@@ -82,18 +96,18 @@ Refactored in this pass:
 - `apps/web/src/services/api.ts`: 47 lines
 - `packages/runtime/src/session-kernel.ts`: 14 lines
 - `apps/server/src/world-data/session-import.ts`: 459 lines
+- `apps/web/src/components/session/session-prep-screen.tsx`: 499 lines
+- `apps/web/src/routes/debug.tsx`: 640 lines
 
 ## Remaining Priority Queue
 
 Future passes should focus on large maintenance files that are production code, have clear internal feature boundaries, and can be validated through package-level tests.
 
-| Priority |                                                                                                                       File |     Lines | Refactor boundary                                               | Validation focus                                     |
-| -------- | -------------------------------------------------------------------------------------------------------------------------: | --------: | --------------------------------------------------------------- | ---------------------------------------------------- |
-| 1        |                                                                                            `apps/web/src/routes/debug.tsx` |      1906 | route shell plus debug panels/actions                           | Web lint and debug-route smoke tests where available |
-| 2        |                                                                  `apps/web/src/components/session/session-prep-screen.tsx` |      1597 | world/plugin/preset selection panels and action helpers         | Session-prep component tests, web lint               |
-| 3        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` / `memory/memory-store.ts` / `indexeddb/idb-store.ts` | 1090-1596 | shared backend helper extraction after contract coverage review | Store contract tests across backends                 |
-| 4        |                                                                                                 `apps/desktop/src/main.ts` |      1492 | desktop app bootstrap, config, window, sidecar, IPC helpers     | Desktop lint/build smoke                             |
-| 5        |                                                                                        `packages/store/src/media-store.ts` |      1248 | media metadata, refs, cleanup, filesystem helpers               | Media store tests and server media API tests         |
+| Priority |                                                                                                                       File |     Lines | Refactor boundary                                               | Validation focus                             |
+| -------- | -------------------------------------------------------------------------------------------------------------------------: | --------: | --------------------------------------------------------------- | -------------------------------------------- |
+| 1        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` / `memory/memory-store.ts` / `indexeddb/idb-store.ts` | 1090-1596 | shared backend helper extraction after contract coverage review | Store contract tests across backends         |
+| 2        |                                                                                                 `apps/desktop/src/main.ts` |      1492 | desktop app bootstrap, config, window, sidecar, IPC helpers     | Desktop lint/build smoke                     |
+| 3        |                                                                                        `packages/store/src/media-store.ts` |      1248 | media metadata, refs, cleanup, filesystem helpers               | Media store tests and server media API tests |
 
 ## Validation Run
 
@@ -117,6 +131,14 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 240s mise exec -- pnpm --filter @covel/server test`
   - `timeout 240s mise exec -- pnpm lint`
   - `timeout 360s mise exec -- pnpm test`
+- Third pass validation:
+  - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
+  - `timeout 120s mise exec -- pnpm --filter @covel/web exec vitest run src/components/session/__tests__/plugin-metadata.test.tsx src/lib/__tests__/session-plugin-selection.test.ts src/services/__tests__/api-worlds-approvals.test.ts`
+  - `timeout 120s mise exec -- pnpm exec prettier --check apps/web/src/components/session/session-prep-screen.tsx apps/web/src/components/session/session-prep/*.ts apps/web/src/components/session/session-prep/*.tsx apps/web/src/routes/debug.tsx apps/web/src/routes/debug/*.ts apps/web/src/routes/debug/*.tsx`
+  - `git diff --check`
+  - `timeout 240s mise exec -- pnpm --filter @covel/web test`
+  - `timeout 240s mise exec -- pnpm lint`
+  - `timeout 360s mise exec -- pnpm test`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -127,6 +149,7 @@ Future passes should focus on large maintenance files that are production code, 
 
 - `turn-agent-tool-loop.ts` remains intentionally dense because LLM response handling, tool execution, suspend capture, and runtime-done semantics share mutable loop state.
 - `session-store.tsx` still coordinates many side effects from the public Zustand store; future reductions should split store action factories only after broader UI flow tests are in place.
+- `plugin-selection-card.tsx` is still sizeable because filtering, grouping, pack selection, and required/excluded policy rendering share local UI state; it is the next extraction candidate inside session prep after component behavior tests are expanded.
 
 ## Rollback
 
@@ -148,4 +171,9 @@ flowchart TD
   Catalog["catalog.tsx"] --> CatalogModules["catalog/*"]
   StoreContract["store-contract.ts"] --> StoreSuites["contract/suites/*"]
   StoreContract --> StoreFixtures["contract/test-fixtures.ts"]
+  Api["api.ts"] --> ApiModules["services/api/*"]
+  SessionKernel["session-kernel.ts"] --> KernelModules["session-*"]
+  SessionImport["session-import.ts"] --> ImportModules["session-import/*"]
+  SessionPrep["session-prep-screen.tsx"] --> SessionPrepModules["session-prep/*"]
+  DebugRoute["debug.tsx"] --> DebugModules["routes/debug/*"]
 ```
