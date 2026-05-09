@@ -17,6 +17,7 @@ Refactored in this pass:
 - `apps/server/src/world-data/session-import.ts`
 - `apps/web/src/components/session/session-prep-screen.tsx`
 - `apps/web/src/routes/debug.tsx`
+- `packages/store/src/media-store.ts`
 
 ## Assumptions
 
@@ -84,6 +85,12 @@ Refactored in this pass:
 - Moved trace/event helpers, page-data loading, event detail rendering, session data panels, and trace panels into `apps/web/src/routes/debug/`.
 - Kept route search params and route component ownership in the original route file.
 
+### Media Store
+
+- Kept `media-store.ts` as the public media-store compatibility entrypoint.
+- Split shared media-store types, factory/env backend selection, common byte/cleanup helpers, and backend implementations into `packages/store/src/media-store/`.
+- Preserved existing exports for memory, SQLite, PostgreSQL, S3-compatible, and environment-created media stores.
+
 ## Current Size Snapshot
 
 - `packages/runtime/src/turn-executor.ts`: 1132 lines
@@ -98,16 +105,21 @@ Refactored in this pass:
 - `apps/server/src/world-data/session-import.ts`: 459 lines
 - `apps/web/src/components/session/session-prep-screen.tsx`: 499 lines
 - `apps/web/src/routes/debug.tsx`: 640 lines
+- `packages/store/src/media-store.ts`: 30 lines
+- `packages/store/src/media-store/memory.ts`: 179 lines
+- `packages/store/src/media-store/pg.ts`: 261 lines
+- `packages/store/src/media-store/s3.ts`: 278 lines
+- `packages/store/src/media-store/sqlite.ts`: 267 lines
 
 ## Remaining Priority Queue
 
 Future passes should focus on large maintenance files that are production code, have clear internal feature boundaries, and can be validated through package-level tests.
 
-| Priority |                                                                                                                       File |     Lines | Refactor boundary                                               | Validation focus                             |
-| -------- | -------------------------------------------------------------------------------------------------------------------------: | --------: | --------------------------------------------------------------- | -------------------------------------------- |
-| 1        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` / `memory/memory-store.ts` / `indexeddb/idb-store.ts` | 1090-1596 | shared backend helper extraction after contract coverage review | Store contract tests across backends         |
-| 2        |                                                                                                 `apps/desktop/src/main.ts` |      1492 | desktop app bootstrap, config, window, sidecar, IPC helpers     | Desktop lint/build smoke                     |
-| 3        |                                                                                        `packages/store/src/media-store.ts` |      1248 | media metadata, refs, cleanup, filesystem helpers               | Media store tests and server media API tests |
+| Priority |                                                                                                                       File |     Lines | Refactor boundary                                               | Validation focus                     |
+| -------- | -------------------------------------------------------------------------------------------------------------------------: | --------: | --------------------------------------------------------------- | ------------------------------------ |
+| 1        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` / `memory/memory-store.ts` / `indexeddb/idb-store.ts` | 1090-1596 | shared backend helper extraction after contract coverage review | Store contract tests across backends |
+| 2        |                                                                                                 `apps/desktop/src/main.ts` |      1492 | desktop app bootstrap, config, window, sidecar, IPC helpers     | Desktop lint/build smoke             |
+| 3        |                                                                                       `apps/server/src/routes/misc-api.ts` |       988 | route families for catalog, UI specs, LLM config, provider keys | Server route tests and server lint   |
 
 ## Validation Run
 
@@ -139,6 +151,11 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 240s mise exec -- pnpm --filter @covel/web test`
   - `timeout 240s mise exec -- pnpm lint`
   - `timeout 360s mise exec -- pnpm test`
+- Fourth pass validation:
+  - `timeout 120s mise exec -- pnpm --filter @covel/store lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/store exec vitest run tests/media-store.test.ts tests/store-factory-env.test.ts`
+  - `timeout 240s mise exec -- pnpm --filter @covel/store test`
+  - `timeout 180s mise exec -- pnpm --filter @covel/server exec vitest run tests/api/media.test.ts tests/api/media-cleanup.test.ts`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -150,6 +167,7 @@ Future passes should focus on large maintenance files that are production code, 
 - `turn-agent-tool-loop.ts` remains intentionally dense because LLM response handling, tool execution, suspend capture, and runtime-done semantics share mutable loop state.
 - `session-store.tsx` still coordinates many side effects from the public Zustand store; future reductions should split store action factories only after broader UI flow tests are in place.
 - `plugin-selection-card.tsx` is still sizeable because filtering, grouping, pack selection, and required/excluded policy rendering share local UI state; it is the next extraction candidate inside session prep after component behavior tests are expanded.
+- DataStore backend files still contain repeated CRUD families. The lowest-risk next pass is pure helper extraction for pagination, memory key builders, and array filter/sort helpers before changing SQL/IDB execution paths.
 
 ## Rollback
 
@@ -176,4 +194,7 @@ flowchart TD
   SessionImport["session-import.ts"] --> ImportModules["session-import/*"]
   SessionPrep["session-prep-screen.tsx"] --> SessionPrepModules["session-prep/*"]
   DebugRoute["debug.tsx"] --> DebugModules["routes/debug/*"]
+  MediaStore["media-store.ts"] --> MediaFactory["media-store/factory.ts"]
+  MediaStore --> MediaBackends["media-store/{memory,sqlite,pg,s3}.ts"]
+  MediaStore --> MediaCommon["media-store/{types,utils}.ts"]
 ```
