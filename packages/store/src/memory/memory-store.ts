@@ -7,17 +7,16 @@ import {
   mergeSessionPatch,
   normalizeSessionRecord,
   normalizeWorldRecord,
-  type PaginationOpts,
 } from "../types.js";
-
-function applyPagination<T>(items: T[], pagination?: PaginationOpts): T[] {
-  if (!pagination) return items;
-  const offset = pagination.offset ?? 0;
-  const limit = pagination.limit;
-  if (limit !== undefined) return items.slice(offset, offset + limit);
-  if (offset > 0) return items.slice(offset);
-  return items;
-}
+import { applyPagination } from "../common/pagination.js";
+import {
+  lorebookEntryKey,
+  pluginConfigKey,
+  pluginDataKey,
+  stateEntryKey,
+  vectorRowKey,
+  workingMemoryKey,
+} from "../common/keys.js";
 
 import type {
   DataStore,
@@ -114,48 +113,6 @@ export function createMemoryStore(): DataStore &
   /** Keyed by `${sessionId}:${entryId}`. */
   const lorebookEntries = new Map<string, LorebookEntryRecord>();
   const sessionSummaries: SessionSummaryRecord[] = [];
-
-  function stateEntryKey(
-    sessionId: string,
-    tableName: string,
-    fieldName: string,
-  ): string {
-    return `${sessionId}:${tableName}:${fieldName}`;
-  }
-
-  function pluginDataKey(
-    sessionId: string,
-    pluginId: string,
-    namespace: string,
-    key: string,
-  ): string {
-    return `${sessionId}:${pluginId}:${namespace}:${key}`;
-  }
-
-  function pluginConfigKey(sessionId: string, pluginId: string): string {
-    return `${sessionId}:${pluginId}`;
-  }
-
-  function workingMemoryKey(
-    sessionId: string,
-    scope: string,
-    key: string,
-  ): string {
-    return `${sessionId}:${scope}:${key}`;
-  }
-
-  function lorebookEntryKey(sessionId: string, id: string): string {
-    return `${sessionId}:${id}`;
-  }
-
-  function vectorRowKey(
-    sessionId: string,
-    pluginId: string,
-    namespace: string,
-    key: string,
-  ): string {
-    return `${sessionId}:${pluginId}:${namespace}:${key}`;
-  }
 
   // ── Transaction snapshot state (S4-T1) ──
   //

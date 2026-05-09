@@ -13,6 +13,7 @@ import {
   normalizeSessionRecord,
   normalizeWorldRecord,
 } from "../types.js";
+import { applyPagination } from "../common/pagination.js";
 import {
   BROWSER_IDB_DATABASE_NAME,
   BROWSER_IDB_SCHEMA_VERSION,
@@ -32,14 +33,6 @@ export {
   upgradeBrowserIdbSchema,
 } from "./idb-schema.js";
 
-function applyPagination<T>(items: T[], pagination?: PaginationOpts): T[] {
-  if (!pagination) return items;
-  const offset = pagination.offset ?? 0;
-  const limit = pagination.limit;
-  if (limit !== undefined) return items.slice(offset, offset + limit);
-  if (offset > 0) return items.slice(offset);
-  return items;
-}
 import type {
   DataStore,
   PaginationOpts,

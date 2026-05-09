@@ -18,6 +18,8 @@ Refactored in this pass:
 - `apps/web/src/components/session/session-prep-screen.tsx`
 - `apps/web/src/routes/debug.tsx`
 - `packages/store/src/media-store.ts`
+- `packages/store/src/memory/memory-store.ts`
+- `packages/store/src/indexeddb/idb-store.ts`
 
 ## Assumptions
 
@@ -91,6 +93,12 @@ Refactored in this pass:
 - Split shared media-store types, factory/env backend selection, common byte/cleanup helpers, and backend implementations into `packages/store/src/media-store/`.
 - Preserved existing exports for memory, SQLite, PostgreSQL, S3-compatible, and environment-created media stores.
 
+### Store Backend Helpers
+
+- Added `packages/store/src/common/pagination.ts` for Memory/IndexedDB list pagination.
+- Added `packages/store/src/common/keys.ts` for in-memory composite key builders.
+- Kept SQL and IndexedDB schema/index execution paths unchanged.
+
 ## Current Size Snapshot
 
 - `packages/runtime/src/turn-executor.ts`: 1132 lines
@@ -110,16 +118,18 @@ Refactored in this pass:
 - `packages/store/src/media-store/pg.ts`: 261 lines
 - `packages/store/src/media-store/s3.ts`: 278 lines
 - `packages/store/src/media-store/sqlite.ts`: 267 lines
+- `packages/store/src/memory/memory-store.ts`: 1073 lines
+- `packages/store/src/indexeddb/idb-store.ts`: 1083 lines
 
 ## Remaining Priority Queue
 
 Future passes should focus on large maintenance files that are production code, have clear internal feature boundaries, and can be validated through package-level tests.
 
-| Priority |                                                                                                                       File |     Lines | Refactor boundary                                               | Validation focus                     |
-| -------- | -------------------------------------------------------------------------------------------------------------------------: | --------: | --------------------------------------------------------------- | ------------------------------------ |
-| 1        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` / `memory/memory-store.ts` / `indexeddb/idb-store.ts` | 1090-1596 | shared backend helper extraction after contract coverage review | Store contract tests across backends |
-| 2        |                                                                                                 `apps/desktop/src/main.ts` |      1492 | desktop app bootstrap, config, window, sidecar, IPC helpers     | Desktop lint/build smoke             |
-| 3        |                                                                                       `apps/server/src/routes/misc-api.ts` |       988 | route families for catalog, UI specs, LLM config, provider keys | Server route tests and server lint   |
+| Priority |                                                                 File |     Lines | Refactor boundary                                               | Validation focus                     |
+| -------- | -------------------------------------------------------------------: | --------: | --------------------------------------------------------------- | ------------------------------------ |
+| 1        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 1527-1596 | shared SQL helper extraction after contract coverage review     | Store contract tests across backends |
+| 2        |                                           `apps/desktop/src/main.ts` |      1492 | desktop app bootstrap, config, window, sidecar, IPC helpers     | Desktop lint/build smoke             |
+| 3        |                                 `apps/server/src/routes/misc-api.ts` |       988 | route families for catalog, UI specs, LLM config, provider keys | Server route tests and server lint   |
 
 ## Validation Run
 
@@ -156,6 +166,10 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 180s mise exec -- pnpm --filter @covel/store exec vitest run tests/media-store.test.ts tests/store-factory-env.test.ts`
   - `timeout 240s mise exec -- pnpm --filter @covel/store test`
   - `timeout 180s mise exec -- pnpm --filter @covel/server exec vitest run tests/api/media.test.ts tests/api/media-cleanup.test.ts`
+- Fifth pass validation:
+  - `timeout 120s mise exec -- pnpm --filter @covel/store lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/store exec vitest run tests/memory-store.test.ts tests/idb-store.test.ts tests/plugin-data-contract-extras.test.ts`
+  - `timeout 240s mise exec -- pnpm --filter @covel/store test`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -167,7 +181,7 @@ Future passes should focus on large maintenance files that are production code, 
 - `turn-agent-tool-loop.ts` remains intentionally dense because LLM response handling, tool execution, suspend capture, and runtime-done semantics share mutable loop state.
 - `session-store.tsx` still coordinates many side effects from the public Zustand store; future reductions should split store action factories only after broader UI flow tests are in place.
 - `plugin-selection-card.tsx` is still sizeable because filtering, grouping, pack selection, and required/excluded policy rendering share local UI state; it is the next extraction candidate inside session prep after component behavior tests are expanded.
-- DataStore backend files still contain repeated CRUD families. The lowest-risk next pass is pure helper extraction for pagination, memory key builders, and array filter/sort helpers before changing SQL/IDB execution paths.
+- DataStore SQL backend files still contain repeated CRUD families. The next store pass should prefer shared SQL metadata/helpers while keeping SQLite and PostgreSQL execution differences local.
 
 ## Rollback
 
@@ -197,4 +211,6 @@ flowchart TD
   MediaStore["media-store.ts"] --> MediaFactory["media-store/factory.ts"]
   MediaStore --> MediaBackends["media-store/{memory,sqlite,pg,s3}.ts"]
   MediaStore --> MediaCommon["media-store/{types,utils}.ts"]
+  MemoryStore["memory-store.ts"] --> StoreCommon["common/{keys,pagination}.ts"]
+  IdbStore["idb-store.ts"] --> StoreCommon
 ```
