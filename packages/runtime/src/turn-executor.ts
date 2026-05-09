@@ -98,6 +98,7 @@ import {
   type FailedToolCallState,
 } from "./turn-output-helpers.js";
 import { executeOneRuntime } from "./turn-runtime-execution.js";
+import { runEventChain } from "./turn-event-chain.js";
 import {
   MaxRecursionExceeded,
   type RecursiveTurnInput,
@@ -564,24 +565,6 @@ export async function executeTurn(
 
   // 3. Execute each group
   const completedResults = new Map<string, RuntimeResult>();
-  // Collect emitted events as a topic → payload map. First emission wins if
-  // multiple runtimes publish the same topic in a single depth — keeps the
-  // chain deterministic and avoids one runtime silently overriding another.
-  const collectEventsFrom = (
-    result: RuntimeResult,
-    sink: Map<string, Record<string, unknown>>,
-  ): void => {
-    const output = result.output as Record<string, unknown> | null | undefined;
-    const events = output?.events as Array<Record<string, unknown>> | undefined;
-    if (!events) return;
-    for (const evt of events) {
-      const topic = evt?.topic;
-      if (typeof topic !== "string" || topic.length === 0) continue;
-      if (sink.has(topic)) continue;
-      const data = (evt?.data as Record<string, unknown> | undefined) ?? {};
-      sink.set(topic, data);
-    }
-  };
 
   const markPreGameCompletion = async (): Promise<boolean> => {
     if (!isPreGamePending || !deps.store || input.manualTrigger) {
@@ -732,99 +715,11 @@ export async function executeTurn(
     }
   }
 
-  // 3b. Event-chain resolution.
-  //
-  // Any runtime may emit `output.events: [{ topic, data }]`; those topics are
-  // collected here and used to schedule *unfinished* runtimes whose
-  // `trigger.type === 'event'` and `trigger.topic` matches. The matched event
-  // (topic + data) is forwarded to the downstream handler via
-  // `ctx.triggerEvent`, so a function runtime can read the payload directly
-  // without a separate store round-trip. This powers:
-  //
-  //   a. Manual-trigger chains — `plugin-rpc` runs a target runtime, and any
-  //      event-triggered followers (e.g. image generator listening on
-  //      `image.prompt.ready`) fire inside the same turn.
-  //   b. Mid-turn event fan-out — a regular auto-triggered runtime can wake
-  //      up an event-subscriber in the same turn (previously impossible
-  //      because pendingEventTopics was always empty).
-  //
-  // Depth-bounded loop (MAX_EVENT_CHAIN_DEPTH) protects against plugins that
-  // emit events in a cycle. Priority ordering inside each depth keeps
-  // behaviour deterministic.
-  const MAX_EVENT_CHAIN_DEPTH = 8;
-  const emittedEvents = new Map<string, Record<string, unknown>>();
-  for (const [, result] of completedResults) {
-    collectEventsFrom(result, emittedEvents);
-  }
-
-  // Audit F1: followers declaring `execution: 'background'` are pulled out
-  // of the sync chain and returned to the caller so it can schedule them
-  // as independent `_jobs`. The sync response thus completes as soon as
-  // the sync-mode runtimes finish; the caller (typically plugin-rpc) runs
-  // the background followers off-cycle and the frontend picks up progress
-  // via `plugin-data.changed` SSE on `_jobs/<jobId>`.
-  const deferredFollowers: {
-    runtimeId: string;
-    pluginId: string;
-    triggerEvent: { topic: string; data: Readonly<Record<string, unknown>> };
-  }[] = [];
-
-  let chainDepth = 0;
-  while (emittedEvents.size > 0 && chainDepth < MAX_EVENT_CHAIN_DEPTH) {
-    chainDepth += 1;
-    const nextBatch = activeRuntimes.filter((rt) => {
-      if (completedResults.has(rt.name)) return false;
-      if (rt.trigger?.type !== "event") return false;
-      return (
-        rt.trigger.topic !== undefined && emittedEvents.has(rt.trigger.topic)
-      );
-    });
-    if (nextBatch.length === 0) break;
-
-    const ordered = [...nextBatch].sort(
-      (a, b) => (a.priority ?? 500) - (b.priority ?? 500),
-    );
-
-    // Snapshot the event map *before* executing this depth — new events
-    // produced by this batch must only wake the next depth, not the current.
-    const currentDepthEvents = new Map(emittedEvents);
-    const newEvents = new Map<string, Record<string, unknown>>();
-
-    // Split this depth into sync-executed runtimes and deferred
-    // (background) ones. Deferred runtimes don't block the turn, don't
-    // contribute to completedResults, and don't wake downstream event
-    // followers in THIS turn — the caller owns their fan-out.
-    const syncBatch: RuntimeManifest[] = [];
-    for (const manifest of ordered) {
-      const topic = manifest.trigger?.topic;
-      const matchedEvent =
-        topic !== undefined ? currentDepthEvents.get(topic) : undefined;
-      if (
-        manifest.execution === "background" &&
-        topic !== undefined &&
-        matchedEvent !== undefined
-      ) {
-        deferredFollowers.push({
-          runtimeId: manifest.name,
-          pluginId: manifest.pluginId,
-          triggerEvent: { topic, data: matchedEvent },
-        });
-        continue;
-      }
-      syncBatch.push(manifest);
-    }
-
-    if (syncBatch.length === 0) break;
-
-    const results = await executeParallel(syncBatch, async (manifest) => {
-      const topic = manifest.trigger?.topic;
-      const matchedEvent =
-        topic !== undefined ? currentDepthEvents.get(topic) : undefined;
-      const triggerEvent =
-        topic !== undefined && matchedEvent !== undefined
-          ? { topic, data: matchedEvent }
-          : undefined;
-      return executeOneRuntime(
+  const deferredFollowers = await runEventChain({
+    activeRuntimes,
+    completedResults,
+    executeRuntime: (manifest, triggerEvent) =>
+      executeOneRuntime(
         manifest,
         input,
         activeRuntimes,
@@ -843,17 +738,8 @@ export async function executeTurn(
         options,
         executeTurn,
         recursionDepth,
-      );
-    });
-    for (const [name, result] of results) {
-      completedResults.set(name, result);
-      collectEventsFrom(result, newEvents);
-    }
-    // Reset event window to just newly-produced events so stale topics from
-    // earlier depths don't keep re-matching the same runtimes.
-    emittedEvents.clear();
-    for (const [topic, data] of newEvents) emittedEvents.set(topic, data);
-  }
+      ),
+  });
 
   // ── Pre-Game completion tracking ────────────────────────────────
   //

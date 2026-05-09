@@ -42,6 +42,7 @@ Refactored in this pass:
 - Moved suspended-runtime resume flow into `turn-resume.ts`.
 - Moved single-runtime dispatch into `turn-runtime-execution.ts`.
 - Moved turn-result assembly, runtime/turn result persistence, auto-snapshot persistence, and `turn.completed` emission into `turn-result-finalizer.ts`.
+- Moved emitted-event collection, depth-bounded event-chain fan-out, priority ordering, and background follower deferral into `turn-event-chain.ts`.
 - Split runtime execution modes into:
   - `turn-function-runtime.ts`
   - `turn-agent-guard.ts`
@@ -148,9 +149,10 @@ Refactored in this pass:
 
 ## Current Size Snapshot
 
-- `packages/runtime/src/turn-executor.ts`: 981 lines
+- `packages/runtime/src/turn-executor.ts`: 867 lines
 - `packages/runtime/src/turn-runtime-execution.ts`: 316 lines
 - `packages/runtime/src/turn-result-finalizer.ts`: 185 lines
+- `packages/runtime/src/turn-event-chain.ts`: 115 lines
 - `packages/runtime/src/turn-agent-runtime.ts`: 618 lines
 - `packages/runtime/src/turn-agent-tool-loop.ts`: 699 lines
 - `apps/web/src/stores/session-store.tsx`: 918 lines
@@ -204,7 +206,7 @@ Future passes should focus on large maintenance files that are production code, 
 | Priority |                                                                 File |     Lines | Refactor boundary                                       | Validation focus                     |
 | -------- | -------------------------------------------------------------------: | --------: | ------------------------------------------------------- | ------------------------------------ |
 | 1        |                            `apps/server/src/routes/api/bootstrap.ts` |       984 | tool/RPC/hook bootstrap, memory setup                   | Server bootstrap and API route tests |
-| 2        |                              `packages/runtime/src/turn-executor.ts` |       981 | event-chain fan-out and deferred followers              | Runtime event-chain tests            |
+| 2        |                              `packages/runtime/src/turn-executor.ts` |       867 | pre-game completion and turn prelude                    | Runtime scheduler/context tests      |
 | 3        |                           `apps/server/src/routes/api/plugin-rpc.ts` |       913 | deferred follower scheduling, action dispatch           | Plugin RPC and approval route tests  |
 | 4        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 1068-1132 | session CRUD, runtime records, conversation persistence | Store contract tests across backends |
 | 5        |                                           `apps/desktop/src/main.ts` |       762 | IPC helpers, then supervisor                            | Desktop build smoke                  |
@@ -318,6 +320,13 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 180s mise exec -- pnpm --filter @covel/server exec vitest run tests/api/snapshot.test.ts`
   - `timeout 240s mise exec -- pnpm --filter @covel/runtime test`
   - `timeout 240s mise exec -- pnpm lint`
+- Twentieth pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --write packages/runtime/src/turn-executor.ts packages/runtime/src/turn-event-chain.ts`
+  - `timeout 120s mise exec -- pnpm --filter @covel/runtime lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/runtime exec vitest run tests/turn-executor-manual-trigger.test.ts tests/turn-executor-events.test.ts`
+  - `timeout 240s mise exec -- pnpm --filter @covel/server exec vitest run tests/api/plugin-rpc.test.ts tests/api/plugin-rpc-runtime-response.test.ts`
+  - `timeout 240s mise exec -- pnpm --filter @covel/runtime test`
+  - `timeout 240s mise exec -- pnpm lint`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -350,6 +359,7 @@ flowchart TD
   TurnExecutor --> TurnResume["turn-resume.ts"]
   TurnExecutor --> TurnTypes["turn-executor-types.ts"]
   TurnExecutor --> TurnResultFinalizer["turn-result-finalizer.ts"]
+  TurnExecutor --> TurnEventChain["turn-event-chain.ts"]
 
   SessionStore["session-store.tsx"] --> SessionModules["session-store/*"]
   Catalog["catalog.tsx"] --> CatalogModules["catalog/*"]
