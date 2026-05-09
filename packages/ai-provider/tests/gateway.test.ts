@@ -282,6 +282,24 @@ describe("gateway slot tag fallback", () => {
     warn.mockRestore();
   });
 
+  it("keeps fallback warning state scoped to each gateway instance", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const first = setupMinimalSlots();
+    const second = setupMinimalSlots();
+
+    await first.gateway.generateText({
+      presetId: "plugin",
+      messages: [{ role: "user", content: "first" }],
+    });
+    await second.gateway.generateText({
+      presetId: "plugin",
+      messages: [{ role: "user", content: "second" }],
+    });
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+  });
+
   it("does not cross-tag fallback: image slot resolution rejects when only text slot exists", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { gateway } = setupMinimalSlots();

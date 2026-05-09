@@ -216,6 +216,125 @@ describe("gateway + slotOverrides", () => {
     });
   });
 
+  it("lets top-level parameter overrides win over request-scoped slot overrides", async () => {
+    const { gateway, calls } = setup();
+
+    await gateway.generateText(
+      {
+        presetId: "story",
+        messages: [{ role: "user", content: "hi" }],
+      },
+      {
+        parameterOverrides: {
+          temperature: 0.1,
+          maxOutputTokens: 128,
+        },
+        slotOverrides: {
+          parameterOverrides: {
+            story: {
+              temperature: 0.9,
+              maxOutputTokens: 999,
+            },
+          },
+        },
+      },
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].providerRequestMetadata).toMatchObject({
+      parameterOverrides: {
+        temperature: 0.1,
+        maxOutputTokens: 128,
+      },
+    });
+  });
+
+  it("applies provider metadata precedence before resolved parameter overrides", async () => {
+    const calls: AdapterCall[] = [];
+    const providerRegistry = createProviderRegistry({
+      providers: {
+        deepseek: {
+          adapter: createRecordingAdapter("deepseek", calls),
+          defaults: {
+            baseUrl: "https://api.deepseek.com",
+            protocol: "openai-chat-v1",
+          },
+        },
+      },
+    });
+    const presetRegistry = createPresetRegistry({
+      profiles,
+      presets: [
+        {
+          ...basePresets[0],
+          providerRequestMetadata: {
+            reasoningEffort: "low",
+            parameterOverrides: {
+              temperature: 0.8,
+            },
+          },
+        },
+      ],
+    });
+    const slotRegistry = createSlotRegistry({ presetRegistry });
+    slotRegistry.configure({
+      slots: {
+        story: {
+          slotId: "story",
+          presetId: "ds-chat",
+          tag: "text",
+          parameterOverrides: {
+            temperature: 0.2,
+            topP: 0.7,
+          },
+        },
+      },
+    });
+    const gateway = createGateway({
+      providerRegistry,
+      presetRegistry,
+      slotRegistry,
+    });
+
+    await gateway.generateText({
+      presetId: "story",
+      messages: [{ role: "user", content: "hi" }],
+      providerRequestMetadata: {
+        reasoningEffort: "high",
+        userFlag: true,
+        parameterOverrides: {
+          temperature: 0.6,
+        },
+      },
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].providerRequestMetadata).toEqual({
+      reasoningEffort: "high",
+      userFlag: true,
+      parameterOverrides: {
+        temperature: 0.2,
+        topP: 0.7,
+      },
+    });
+  });
+
+  it("uses original slot id for resolveSlot parameter overrides during fallback", () => {
+    const { gateway } = setup();
+
+    const resolved = gateway.resolveSlot("plugin", {
+      slotOverrides: {
+        parameterOverrides: {
+          plugin: { temperature: 0.4 },
+          story: { temperature: 0.8 },
+        },
+      },
+    });
+
+    expect(resolved?.presetId).toBe("ds-chat");
+    expect(resolved?.parameterOverrides).toEqual({ temperature: 0.4 });
+  });
+
   it("streamText applies and rolls back the overlay even when the stream completes", async () => {
     const { gateway, calls, presetRegistry } = setup();
     const overrides: SlotOverridesInput = {
