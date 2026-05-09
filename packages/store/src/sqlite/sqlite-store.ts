@@ -88,6 +88,7 @@ import {
   sqliteWorldInsert,
   sqliteWorldUpdate,
 } from "./sqlite-store-values.js";
+import { deleteSqliteSessionCascade } from "./sqlite-session-cascade.js";
 import type { VectorStoreCapability, VectorModelOps } from "../vector-store.js";
 import { createSqliteVectorCapability } from "./sqlite-vector.js";
 
@@ -229,75 +230,7 @@ export function createSqliteStore(
     },
 
     async deleteSession(id: string): Promise<void> {
-      // Cascade delete all session-scoped child rows within a transaction.
-      sqlite.transaction(() => {
-        db.delete(schema.turnResults)
-          .where(eq(schema.turnResults.sessionId, id))
-          .run();
-        db.delete(schema.runtimeResults)
-          .where(eq(schema.runtimeResults.sessionId, id))
-          .run();
-        db.delete(schema.toolCalls)
-          .where(eq(schema.toolCalls.sessionId, id))
-          .run();
-        db.delete(schema.stateSchemas)
-          .where(eq(schema.stateSchemas.sessionId, id))
-          .run();
-        db.delete(schema.stateEntries)
-          .where(eq(schema.stateEntries.sessionId, id))
-          .run();
-        db.delete(schema.stateChanges)
-          .where(eq(schema.stateChanges.sessionId, id))
-          .run();
-        db.delete(schema.events).where(eq(schema.events.sessionId, id)).run();
-        db.delete(schema.approvals)
-          .where(eq(schema.approvals.sessionId, id))
-          .run();
-        db.delete(schema.messages)
-          .where(eq(schema.messages.sessionId, id))
-          .run();
-        db.delete(schema.characters)
-          .where(eq(schema.characters.sessionId, id))
-          .run();
-        db.delete(schema.pluginData)
-          .where(eq(schema.pluginData.sessionId, id))
-          .run();
-        db.delete(schema.worldDataImportLedger)
-          .where(eq(schema.worldDataImportLedger.sessionId, id))
-          .run();
-        db.delete(schema.pluginConfigs)
-          .where(eq(schema.pluginConfigs.sessionId, id))
-          .run();
-        db.delete(schema.traceEvents)
-          .where(eq(schema.traceEvents.sessionId, id))
-          .run();
-        db.delete(schema.runtimeOutputs)
-          .where(eq(schema.runtimeOutputs.sessionId, id))
-          .run();
-        db.delete(schema.interactionRecords)
-          .where(eq(schema.interactionRecords.sessionId, id))
-          .run();
-        db.delete(schema.turnMessages)
-          .where(eq(schema.turnMessages.sessionId, id))
-          .run();
-        db.delete(schema.playerInputs)
-          .where(eq(schema.playerInputs.sessionId, id))
-          .run();
-        db.delete(schema.workingMemory)
-          .where(eq(schema.workingMemory.sessionId, id))
-          .run();
-        db.delete(schema.lorebookEntries)
-          .where(eq(schema.lorebookEntries.sessionId, id))
-          .run();
-        db.delete(schema.sessionSummaries)
-          .where(eq(schema.sessionSummaries.sessionId, id))
-          .run();
-        sqlite.prepare("DELETE FROM suspensions WHERE session_id = ?").run(id);
-        sqlite
-          .prepare("DELETE FROM state_snapshots WHERE session_id = ?")
-          .run(id);
-        db.delete(schema.sessions).where(eq(schema.sessions.id, id)).run();
-      })();
+      deleteSqliteSessionCascade(sqlite, db, id);
     },
 
     // ── Turn Results ─────────────────────────────────────────

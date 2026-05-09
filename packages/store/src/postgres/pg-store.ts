@@ -85,6 +85,7 @@ import {
   pgWorldInsert,
   pgWorldUpdate,
 } from "./pg-store-values.js";
+import { deletePgSessionCascade } from "./pg-session-cascade.js";
 import type { VectorStoreCapability, VectorModelOps } from "../vector-store.js";
 import { createPgVectorCapability } from "./pg-vector.js";
 
@@ -216,75 +217,7 @@ export async function createPgStore(
 
     async deleteSession(id: string): Promise<void> {
       await db.transaction(async (tx) => {
-        // Delete all session-scoped child rows before removing the session itself.
-        await tx
-          .delete(schema.turnResults)
-          .where(eq(schema.turnResults.sessionId, id));
-        await tx
-          .delete(schema.runtimeResults)
-          .where(eq(schema.runtimeResults.sessionId, id));
-        await tx
-          .delete(schema.toolCalls)
-          .where(eq(schema.toolCalls.sessionId, id));
-        await tx
-          .delete(schema.stateSchemas)
-          .where(eq(schema.stateSchemas.sessionId, id));
-        await tx
-          .delete(schema.stateEntries)
-          .where(eq(schema.stateEntries.sessionId, id));
-        await tx
-          .delete(schema.stateChanges)
-          .where(eq(schema.stateChanges.sessionId, id));
-        await tx.delete(schema.events).where(eq(schema.events.sessionId, id));
-        await tx
-          .delete(schema.approvals)
-          .where(eq(schema.approvals.sessionId, id));
-        await tx
-          .delete(schema.messages)
-          .where(eq(schema.messages.sessionId, id));
-        await tx
-          .delete(schema.characters)
-          .where(eq(schema.characters.sessionId, id));
-        await tx
-          .delete(schema.pluginData)
-          .where(eq(schema.pluginData.sessionId, id));
-        await tx
-          .delete(schema.worldDataImportLedger)
-          .where(eq(schema.worldDataImportLedger.sessionId, id));
-        await tx
-          .delete(schema.pluginConfigs)
-          .where(eq(schema.pluginConfigs.sessionId, id));
-        await tx
-          .delete(schema.traceEvents)
-          .where(eq(schema.traceEvents.sessionId, id));
-        await tx
-          .delete(schema.runtimeOutputs)
-          .where(eq(schema.runtimeOutputs.sessionId, id));
-        await tx
-          .delete(schema.interactionRecords)
-          .where(eq(schema.interactionRecords.sessionId, id));
-        await tx
-          .delete(schema.turnMessages)
-          .where(eq(schema.turnMessages.sessionId, id));
-        await tx
-          .delete(schema.playerInputs)
-          .where(eq(schema.playerInputs.sessionId, id));
-        await tx
-          .delete(schema.workingMemory)
-          .where(eq(schema.workingMemory.sessionId, id));
-        await tx
-          .delete(schema.lorebookEntries)
-          .where(eq(schema.lorebookEntries.sessionId, id));
-        await tx
-          .delete(schema.sessionSummaries)
-          .where(eq(schema.sessionSummaries.sessionId, id));
-        await tx
-          .delete(schema.suspensions)
-          .where(eq(schema.suspensions.sessionId, id));
-        await tx
-          .delete(schema.stateSnapshots)
-          .where(eq(schema.stateSnapshots.sessionId, id));
-        await tx.delete(schema.sessions).where(eq(schema.sessions.id, id));
+        await deletePgSessionCascade(tx, id);
       });
     },
 
