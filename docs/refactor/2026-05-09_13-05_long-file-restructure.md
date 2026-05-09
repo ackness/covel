@@ -167,8 +167,10 @@ Refactored in this pass:
 - Kept `runner.ts` as the public debug/case runner entrypoint.
 - Split plugin-data report collection, case expectation evaluation, expected-failure matching, and image artifact saving into `packages/test-runtime/src/reporting.ts`.
 - Split case-file discovery, parsing, mode/name filtering, and per-case option merging into `packages/test-runtime/src/cases.ts`.
+- Split deferred follower job execution and expected-background-follower failure job writing into `packages/test-runtime/src/execution.ts`.
 - Added focused reporting helper tests for runtime/event/log/plugin-data/asset assertions and expected runtime failures.
 - Added focused case helper tests for file parsing, mode filtering, and option precedence.
+- Added focused execution helper tests for `_jobs` rows, plugin-data commits, handler thrown failures, reported failures, missing manifests/handlers, and unavailable recursive calls.
 
 ### Web LLM Slots Pane
 
@@ -228,7 +230,9 @@ Refactored in this pass:
 - `packages/ai-provider/src/gateway.ts`: 638 lines
 - `packages/ai-provider/src/gateway-lifecycle.ts`: 147 lines
 - `packages/ai-provider/src/gateway-slot-resolution.ts`: 311 lines
-- `packages/test-runtime/src/runner.ts`: 967 lines
+- `packages/test-runtime/src/runner.ts`: 725 lines
+- `packages/test-runtime/src/execution.ts`: 262 lines
+- `packages/test-runtime/src/execution.test.ts`: 432 lines
 - `packages/test-runtime/src/cases.ts`: 92 lines
 - `packages/test-runtime/src/cases.test.ts`: 109 lines
 - `packages/test-runtime/src/reporting.ts`: 290 lines
@@ -452,6 +456,15 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 180s mise exec -- pnpm --filter @covel/ai-provider exec vitest run tests/gateway.test.ts tests/gateway-slot-overrides.test.ts tests/parameter-overrides.test.ts tests/embedding.test.ts tests/reasoning-thinking.test.ts`
   - `timeout 240s mise exec -- pnpm --filter @covel/ai-provider test`
   - `timeout 240s mise exec -- pnpm lint`
+- Thirty-second pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --check packages/test-runtime/src/runner.ts packages/test-runtime/src/execution.ts packages/test-runtime/src/execution.test.ts docs/refactor/2026-05-09_13-05_long-file-restructure.md`
+  - `timeout 120s mise exec -- pnpm --filter @covel/test-runtime lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/test-runtime test`
+  - `timeout 240s mise exec -- pnpm --filter @covel/runtime test`
+  - `timeout 240s mise exec -- pnpm lint`
+  - `git diff --check`
+  - `timeout 360s mise exec -- pnpm test`
+  - `timeout 240s mise exec -- pre-commit run --files docs/refactor/2026-05-09_13-05_long-file-restructure.md packages/test-runtime/src/runner.ts packages/test-runtime/src/execution.ts packages/test-runtime/src/execution.test.ts`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -467,7 +480,7 @@ Future passes should focus on large maintenance files that are production code, 
 - `bootstrap.ts` still owns tool registration and memory setup. Future passes should split one subsystem at a time and preserve bootstrapApi as the composition root.
 - DataStore SQL backend files still contain session, message, summary, suspension, and snapshot families. The next store pass should prefer focused backend-local helper families while keeping SQLite and PostgreSQL execution differences local.
 - `gateway.ts` still owns operation-level provider routing and retry loops. Future AI provider passes should keep retry/fallback loop changes covered by gateway, fixes, and stream tests.
-- `runner.ts` still owns plugin discovery/runtime loading, live adapter setup, local tool imports, deferred follower execution, and case orchestration. The next test-runtime pass should split execution harness behavior only with plugin case smoke tests in scope.
+- `runner.ts` still owns plugin discovery/runtime loading, live adapter setup, local tool imports, and case orchestration. `execution.ts` now owns test-runtime deferred follower execution; its `recursiveCall` behavior remains intentionally unavailable and covered by focused tests.
 - `llm-capability-controls.tsx` now owns capability tag/editor rendering. Future settings passes should target model database refresh/status UI or split slot cards after component-level coverage exists.
 - `registry-definitions.ts` still owns the full flat env variable catalog. Future grouping by env group should keep `COVEL_ENV_REGISTRY` as the stable flattened export.
 - `main.ts` still owns sidecar supervisor state and broad IPC registration; the next desktop pass should split IPC handlers before attempting supervisor dependency injection.
@@ -511,6 +524,7 @@ flowchart TD
   Gateway --> GatewaySlotResolution["gateway-slot-resolution.ts"]
   TestRuntimeRunner["test-runtime/runner.ts"] --> TestRuntimeReporting["test-runtime/reporting.ts"]
   TestRuntimeRunner --> TestRuntimeCases["test-runtime/cases.ts"]
+  TestRuntimeRunner --> TestRuntimeExecution["test-runtime/execution.ts"]
   LlmSlotsPane["LlmSlotsPane.tsx"] --> LlmSlotsModel["llm-slots-model.ts"]
   LlmSlotsPane --> LlmCapabilityControls["llm-capability-controls.tsx"]
   EnvRegistry["env/registry.ts"] --> EnvDefinitions["env/registry-definitions.ts"]
