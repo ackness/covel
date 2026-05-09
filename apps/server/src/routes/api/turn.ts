@@ -6,16 +6,13 @@ import { Hono } from "hono";
 import type { RuntimeManifest } from "@covel/shared";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
 import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
-import {
-  executeTurn,
-  processRuntimeResult,
-  createTurnEmitter,
-} from "@covel/runtime";
+import { executeTurn, createTurnEmitter } from "@covel/runtime";
 import type { EventBus } from "@covel/events";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import { loadSessionConfig } from "./load-session-config.js";
 import type { DataStore, MediaStore } from "@covel/store";
 import type { CompactorRunner } from "@covel/context";
+import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
 
 type Env = {
   Variables: {
@@ -180,22 +177,15 @@ turnRoutes.post("/:id/turn", rateLimiter({ max: 30 }), async (c) => {
     // Forward hookPipeline + eventBus so PreStateCommit / PostStateCommit
     // hooks registered by plugins fire on this route too, matching
     // /api/actions.
-    const outputKindMap = new Map<string, string>();
-    const runtimeCapabilitiesMap = new Map<string, readonly string[]>();
-    for (const rt of activeRuntimes) {
-      outputKindMap.set(rt.name, rt.outputKind ?? "plugin");
-      runtimeCapabilitiesMap.set(rt.name, rt.capabilities ?? []);
-    }
-    for (const rr of executed.runtimeResults) {
-      const kind = outputKindMap.get(rr.runtimeId) ?? "plugin";
-      const processOpts = {
-        ...(hookPipeline ? { hookPipeline } : {}),
-        ...(eventBus ? { eventBus } : {}),
-        emitter,
-        capabilities: runtimeCapabilitiesMap.get(rr.runtimeId) ?? [],
-      };
-      await processRuntimeResult(rr, store, sessionId, kind, processOpts);
-    }
+    const resultProcessor = createRuntimeResultProcessor({
+      store,
+      sessionId,
+      runtimes: activeRuntimes,
+      ...(hookPipeline ? { hookPipeline } : {}),
+      ...(eventBus ? { eventBus } : {}),
+      emitter,
+    });
+    await resultProcessor.processAll(executed.runtimeResults);
 
     return executed;
   });

@@ -1,4 +1,5 @@
 import i18n from "i18next";
+import { compactJobId, formatJobDuration } from "@/lib/job-ui.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import {
   getPluginNamespaceSnapshot,
@@ -47,17 +48,14 @@ export function collectJobTransitions(
   return transitions;
 }
 
-function formatDuration(ms: number | undefined): string {
-  if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) return "—";
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
-
 export function emitJobTransitionToast(tr: JobTransition): void {
   const value = tr.value ?? {};
   const runtimeId = (value.runtimeId as string | undefined) ?? "";
   const durationMs = value.durationMs as number | undefined;
-  const shortId = tr.jobId.length > 14 ? `${tr.jobId.slice(0, 14)}…` : tr.jobId;
+  const shortId = compactJobId(tr.jobId, {
+    maxLength: 14,
+    prefixLength: 14,
+  });
   const target = runtimeId
     ? `${runtimeId} · ${shortId}`
     : `${tr.pluginId} · ${shortId}`;
@@ -66,7 +64,10 @@ export function emitJobTransitionToast(tr: JobTransition): void {
       "success",
       i18n.t("pluginJob.completed", {
         target,
-        duration: formatDuration(durationMs),
+        duration: formatJobDuration(durationMs, {
+          emptyValue: "—",
+          style: "fixed",
+        }),
         defaultValue: "{{target}} completed in {{duration}}",
       }),
     );

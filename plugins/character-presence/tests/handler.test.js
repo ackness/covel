@@ -1,19 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { makeManualFunctionContext } from "@covel/plugin-test-utils";
 import { getPendingProposals } from "@covel/tools";
 import handler from "../handler.js";
 
 function ctx(manualPayload) {
-  return {
+  return makeManualFunctionContext({
     sessionId: "sess-presence",
     turnId: "turn-presence",
     pluginId: "character-presence",
-    runtimeId: "character-presence",
-    playerMessage: "",
-    store: {},
-    completedResults: new Map(),
-    config: {},
     manualPayload,
-  };
+  });
 }
 
 const avatar = {

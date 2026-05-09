@@ -140,6 +140,7 @@ export async function runDeferredFollower(args: {
       sessionId: args.sessionId,
       turnId,
       pluginId: args.follower.pluginId,
+      runtimeId: args.follower.runtimeId,
       playerMessage: "",
       locale: args.locale,
       store: createFunctionStoreView(args.store, helperCtx),

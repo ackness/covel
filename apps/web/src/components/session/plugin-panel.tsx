@@ -13,8 +13,6 @@ import {
   createStateStore,
   type StateStore,
 } from "@json-render/react";
-import { nestedToFlat } from "@json-render/core";
-import type { Spec } from "@json-render/core";
 import { covelRegistry } from "@/lib/catalog.js";
 import {
   usePluginJobs,
@@ -27,6 +25,15 @@ import {
   emitPluginRpcRuntimeResponse,
   postPluginRpcWithApproval,
 } from "./plugin-rpc-ui.js";
+import { compactJobId } from "@/lib/job-ui.js";
+import {
+  pluginPanelViewToSpec,
+  specUsesComponent,
+} from "@/lib/plugin-panel-spec.js";
+import {
+  buildPluginPanelInitialState,
+  flattenStateForPluginPanel,
+} from "@/lib/plugin-panel-state.js";
 import {
   Dialog,
   DialogContent,
@@ -50,47 +57,6 @@ export interface PluginPanelProps {
   >;
   stateOverride?: Record<string, unknown>;
   interactionLocked?: boolean;
-}
-
-/**
- * Convert our JSON spec format (uses "component" key) to json-render's
- * nested format (uses "type" key), then flatten to Spec.
- */
-function convertToSpec(view: unknown): Spec | null {
-  if (!view || typeof view !== "object") return null;
-  try {
-    const nested = rewriteComponentToType(view as Record<string, unknown>);
-    return nestedToFlat(nested);
-  } catch (e) {
-    console.warn("[PluginPanel] Failed to convert spec:", e);
-    return null;
-  }
-}
-
-/** Recursively rename "component" → "type" to match json-render's expected format. */
-function rewriteComponentToType(
-  node: Record<string, unknown>,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(node)) {
-    if (key === "component") {
-      result.type = value;
-    } else if (key === "children" && Array.isArray(value)) {
-      result.children = value.map((child) => {
-        if (typeof child === "object" && child !== null) {
-          return rewriteComponentToType(child as Record<string, unknown>);
-        }
-        return child;
-      });
-    } else {
-      result[key] = value;
-    }
-  }
-  return result;
-}
-
-function shortJobId(jobId: string): string {
-  return jobId.length > 10 ? `${jobId.slice(0, 8)}…` : jobId;
 }
 
 function resolveEmptyMessage(value: unknown): string {
@@ -218,13 +184,10 @@ export function PluginPanel({
   }
   const stateStore = stateStoreRef.current;
 
-  const initialState = useMemo(() => {
-    const entries = Object.entries(data).map(([key, value]) => ({
-      key,
-      value,
-    }));
-    return { ...expandIndexedState(data), entries, _invoking: invokingMap };
-  }, [data, invokingMap]);
+  const initialState = useMemo(
+    () => buildPluginPanelInitialState(data, invokingMap),
+    [data, invokingMap],
+  );
   useEffect(() => {
     const updates = flattenStateForPluginPanel(initialState);
     stateStore.update(updates);
@@ -243,7 +206,14 @@ export function PluginPanel({
     [dismissedErrorJobs, jobs],
   );
 
-  const flatSpec = useMemo(() => convertToSpec(spec.view), [spec.view]);
+  const flatSpec = useMemo(() => {
+    try {
+      return pluginPanelViewToSpec(spec.view);
+    } catch (e) {
+      console.warn("[PluginPanel] Failed to convert spec:", e);
+      return null;
+    }
+  }, [spec.view]);
 
   const sessionId = sessionState.session?.id;
 
@@ -444,7 +414,7 @@ export function PluginPanel({
             {failedJobs.map((job) => (
               <div key={job.jobId} className="leading-relaxed">
                 <span className="font-mono text-[10px] opacity-80">
-                  {shortJobId(job.jobId)}
+                  {compactJobId(job.jobId)}
                 </span>
                 {job.runtimeId ? (
                   <span className="opacity-80"> · {job.runtimeId}</span>
@@ -492,107 +462,4 @@ export function PluginPanel({
       </Dialog>
     </div>
   );
-}
-
-function specUsesComponent(node: unknown, component: string): boolean {
-  if (!node || typeof node !== "object") return false;
-  const rec = node as Record<string, unknown>;
-  if (rec.component === component || rec.type === component) return true;
-  const children = rec.children;
-  if (Array.isArray(children)) {
-    return children.some((child) => specUsesComponent(child, component));
-  }
-  return false;
-}
-
-function flattenStateForPluginPanel(
-  value: Record<string, unknown>,
-): Record<string, unknown> {
-  const updates: Record<string, unknown> = {};
-  flattenStateValue(updates, "", value);
-  return updates;
-}
-
-function flattenStateValue(
-  updates: Record<string, unknown>,
-  basePath: string,
-  value: unknown,
-): void {
-  if (Array.isArray(value)) {
-    updates[basePath || "/"] = value;
-    return;
-  }
-  if (value && typeof value === "object") {
-    for (const [key, child] of Object.entries(
-      value as Record<string, unknown>,
-    )) {
-      flattenStateValue(updates, `${basePath}/${key}`, child);
-    }
-    return;
-  }
-  updates[basePath || "/"] = value;
-}
-
-function expandIndexedState(
-  data: Record<string, unknown>,
-): Record<string, unknown> {
-  const expanded: Record<string, unknown> = { ...data };
-
-  for (const [key, value] of Object.entries(data)) {
-    flattenIndexedValue(expanded, singularize(key), value);
-  }
-
-  return expanded;
-}
-
-function flattenIndexedValue(
-  target: Record<string, unknown>,
-  baseKey: string,
-  value: unknown,
-): void {
-  if (!Array.isArray(value)) return;
-
-  value.forEach((item, index) => {
-    const itemKey = `${baseKey}${index + 1}`;
-    if (Array.isArray(item)) {
-      item.forEach((entry, entryIndex) => {
-        target[`${itemKey}${entryIndex + 1}`] = entry;
-      });
-      return;
-    }
-
-    if (item && typeof item === "object") {
-      for (const [childKey, childValue] of Object.entries(
-        item as Record<string, unknown>,
-      )) {
-        const nestedKey = `${itemKey}${capitalize(childKey)}`;
-        if (Array.isArray(childValue)) {
-          flattenIndexedValue(target, nestedKey, childValue);
-        } else if (childValue && typeof childValue === "object") {
-          for (const [innerKey, innerValue] of Object.entries(
-            childValue as Record<string, unknown>,
-          )) {
-            target[`${nestedKey}${capitalize(innerKey)}`] = innerValue;
-          }
-        } else {
-          target[nestedKey] = childValue;
-        }
-      }
-      return;
-    }
-
-    target[itemKey] = item;
-  });
-}
-
-function singularize(value: string): string {
-  if (value.endsWith("ies")) return `${value.slice(0, -3)}y`;
-  if (value.endsWith("s")) return value.slice(0, -1);
-  return value;
-}
-
-function capitalize(value: string): string {
-  return value.length > 0
-    ? `${value[0].toUpperCase()}${value.slice(1)}`
-    : value;
 }

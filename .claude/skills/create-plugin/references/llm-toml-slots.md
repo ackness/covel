@@ -84,7 +84,7 @@ tag    = ""     # ❌ z.string().min(1) 拒空（等价于 undefined）
 
 ### 3. baseUrl 末尾的 `/v1` 取决于 provider
 
-OpenAI 兼容 host：写 `baseUrl = "https://api.example.com"` ——adapter 自己拼 `/v1/chat/completions`。  
+OpenAI 兼容 host：写 `baseUrl = "https://api.example.com"` ——adapter 自己拼 `/v1/chat/completions`。
 某些 provider 文档会让你写 `https://x.example.com/v1` ——也行，但不同 wire 实现对重复 `/v1` 的处理不一致。
 
 **插件作者**自管 wire 时建议写**容错**：

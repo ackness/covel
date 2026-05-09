@@ -40,17 +40,9 @@ import { getPluginTrustInfo } from "@covel/plugin-loader";
 import { loadSessionConfig } from "./load-session-config.js";
 import {
   decodePluginUserSettingsHeader,
-  type PluginRpcBody,
+  validatePluginRpcBody,
 } from "./plugin-rpc/body.js";
-import {
-  type PluginJobValue,
-  writePluginJob as persistPluginJob,
-} from "./plugin-rpc/jobs.js";
-import {
-  deriveBackgroundJobCompletion,
-  deriveFollowerRuntimeJobResult,
-  type ManualTurnSummary,
-} from "./plugin-rpc/runtime-response.js";
+import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
 
 export const pluginRpcRoutes = new Hono();
@@ -68,33 +60,21 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
     );
   }
 
-  let body: PluginRpcBody;
+  let rawBody: unknown;
   try {
-    body = await c.req.json<PluginRpcBody>();
+    rawBody = await c.req.json();
   } catch {
     return c.json({ status: "error", error: "invalid JSON body" }, 400);
   }
 
-  if (!body.pluginId || typeof body.pluginId !== "string") {
+  const bodyResult = validatePluginRpcBody(rawBody);
+  if (!bodyResult.ok) {
     return c.json(
-      { status: "error", error: "pluginId (string) is required" },
-      400,
+      { status: "error", error: bodyResult.error },
+      bodyResult.status,
     );
   }
-
-  if (body.action && body.runtimeId) {
-    return c.json(
-      { status: "error", error: "action and runtimeId are mutually exclusive" },
-      400,
-    );
-  }
-
-  if (!body.action && !body.runtimeId) {
-    return c.json(
-      { status: "error", error: "either action or runtimeId is required" },
-      400,
-    );
-  }
+  const body = bodyResult.body;
 
   // ── Runtime-level manual trigger ─────────────────────────────────
   //
@@ -231,23 +211,6 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
 
     const turnId = crypto.randomUUID();
 
-    const writePluginJob = async (args: {
-      readonly pluginId: string;
-      readonly jobId: string;
-      readonly startedAt: string;
-      readonly updatedAt?: string;
-      readonly value: PluginJobValue;
-    }): Promise<void> => {
-      await persistPluginJob(store, {
-        sessionId,
-        pluginId: args.pluginId,
-        jobId: args.jobId,
-        startedAt: args.startedAt,
-        updatedAt: args.updatedAt ?? args.startedAt,
-        value: args.value,
-      });
-    };
-
     const runtimeTurnRunner = createPluginRpcRuntimeTurnRunner({
       store,
       eventBus,
@@ -278,7 +241,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
       ...(hookPipeline ? { hookPipeline } : {}),
     });
 
-    const runManualTurn = (): Promise<ManualTurnSummary> =>
+    const runManualTurn = () =>
       runtimeTurnRunner.runManualTurn({
         turnId,
         runtimeId: body.runtimeId!,
@@ -286,212 +249,16 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
         ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
       });
 
-    // Audit P1: run ONE background follower off-cycle and write its result
-    // back into `_jobs/<jobId>`. Routes the follower through the same
-    // `executeTurn(...)` pipeline as a manual-trigger turn so the handler
-    // gets a real `recursiveCall`, a real `assetProgress` emitter, hook
-    // firing, deferredFollower fan-out, and `asset.generated` events on
-    // the SSE stream — instead of the bespoke handler invocation that
-    // hard-stubbed `recursiveCall` to throw and dropped `assetProgress` /
-    // `asset.generated` entirely.
-    //
-    // Running each follower in its own isolated turn keeps job ids 1:1
-    // with followers — simpler to surface in the UI than a tree of nested
-    // jobs.
-    const runDeferredFollower = async (args: {
-      readonly jobId: string;
-      readonly runtimeId: string;
-      readonly pluginId: string;
-      readonly triggerEvent: {
-        readonly topic: string;
-        readonly data: Readonly<Record<string, unknown>>;
-      };
-      readonly followerTurnId: string;
-      readonly startedAt: string;
-    }): Promise<void> => {
-      const followerManifest = activeRuntimes.find(
-        (rt) => rt.name === args.runtimeId,
-      );
-      if (!followerManifest) {
-        const completedAt = new Date().toISOString();
-        await writePluginJob({
-          pluginId: args.pluginId,
-          jobId: args.jobId,
-          startedAt: args.startedAt,
-          updatedAt: completedAt,
-          value: {
-            status: "failed",
-            progress: 100,
-            runtimeId: args.runtimeId,
-            turnId: args.followerTurnId,
-            triggerEvent: args.triggerEvent,
-            startedAt: args.startedAt,
-            completedAt,
-            error: "follower manifest not found in active set",
-          },
-        });
-        return;
-      }
-
-      try {
-        const { turnResult } = await runtimeTurnRunner.runDeferredFollowerTurn({
-          followerTurnId: args.followerTurnId,
-          runtimeId: args.runtimeId,
-          triggerEvent: args.triggerEvent,
-          ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
-        });
-
-        const followerResult = turnResult.runtimeResults.find(
-          (rr) => rr.runtimeId === args.runtimeId,
-        );
-
-        // The follower turn may itself surface deferredFollowers — schedule
-        // them as their own `_jobs/<jobId>` so a chain of background
-        // followers stays observable to the UI.
-        if (
-          turnResult.deferredFollowers &&
-          turnResult.deferredFollowers.length > 0
-        ) {
-          await scheduleDeferredFollowers(turnResult.deferredFollowers);
-        }
-
-        const jobResult = deriveFollowerRuntimeJobResult({
-          followerResult,
-          turnDurationMs: turnResult.durationMs,
-        });
-        const completedAt = new Date().toISOString();
-        await writePluginJob({
-          pluginId: args.pluginId,
-          jobId: args.jobId,
-          startedAt: args.startedAt,
-          updatedAt: completedAt,
-          value: {
-            status: jobResult.jobStatus,
-            progress: 100,
-            runtimeId: args.runtimeId,
-            turnId: args.followerTurnId,
-            triggerEvent: args.triggerEvent,
-            startedAt: args.startedAt,
-            completedAt,
-            durationMs: jobResult.durationMs,
-            ...(jobResult.error ? { error: jobResult.error } : {}),
-            runtimeResults: [
-              {
-                runtimeId: args.runtimeId,
-                pluginId: args.pluginId,
-                status: jobResult.runtimeStatus,
-                durationMs: jobResult.durationMs,
-                ...(jobResult.error ? { error: jobResult.error } : {}),
-                output: jobResult.output,
-              },
-            ],
-          },
-        });
-      } catch (err) {
-        const completedAt = new Date().toISOString();
-        await writePluginJob({
-          pluginId: args.pluginId,
-          jobId: args.jobId,
-          startedAt: args.startedAt,
-          updatedAt: completedAt,
-          value: {
-            status: "failed",
-            progress: 100,
-            runtimeId: args.runtimeId,
-            turnId: args.followerTurnId,
-            triggerEvent: args.triggerEvent,
-            startedAt: args.startedAt,
-            completedAt,
-            error: err instanceof Error ? err.message : String(err),
-          },
-        }).catch(() => {
-          // Writeback itself failed — frontend will see stale pending record.
-        });
-      }
-    };
-
-    // Write the pending `_jobs/<jobId>` rows synchronously and spawn
-    // setImmediate tasks to run each follower. Returns the job ids so
-    // the sync response body can reference them.
-    const scheduleDeferredFollowers = async (
-      followers: ReadonlyArray<{
-        readonly runtimeId: string;
-        readonly pluginId: string;
-        readonly triggerEvent: {
-          readonly topic: string;
-          readonly data: Readonly<Record<string, unknown>>;
-        };
-      }>,
-    ): Promise<
-      ReadonlyArray<{ readonly jobId: string; readonly runtimeId: string }>
-    > => {
-      const scheduled: { jobId: string; runtimeId: string }[] = [];
-      for (const follower of followers) {
-        const jobId = crypto.randomUUID();
-        const followerTurnId = crypto.randomUUID();
-        const startedAt = new Date().toISOString();
-        await writePluginJob({
-          pluginId: follower.pluginId,
-          jobId,
-          startedAt,
-          value: {
-            status: "pending",
-            progress: 5,
-            runtimeId: follower.runtimeId,
-            turnId: followerTurnId,
-            triggerEvent: follower.triggerEvent,
-            startedAt,
-          },
-        });
-        scheduled.push({ jobId, runtimeId: follower.runtimeId });
-        setImmediate(() => {
-          void runDeferredFollower({
-            jobId,
-            runtimeId: follower.runtimeId,
-            pluginId: follower.pluginId,
-            triggerEvent: follower.triggerEvent,
-            followerTurnId,
-            startedAt,
-          });
-        });
-      }
-      return scheduled;
-    };
-
-    const writeExpectedFollowerFailureJob = async (args: {
-      readonly turnId: string;
-      readonly error: string;
-      readonly runtimeResults?: ReadonlyArray<{
-        readonly runtimeId: string;
-        readonly pluginId: string;
-        readonly status: string;
-        readonly durationMs: number;
-        readonly error?: string;
-        readonly output: unknown;
-      }>;
-    }): Promise<{ readonly jobId: string; readonly runtimeId: string }> => {
-      const jobId = crypto.randomUUID();
-      const now = new Date().toISOString();
-      await writePluginJob({
-        pluginId: body.pluginId!,
-        jobId,
-        startedAt: now,
-        value: {
-          status: "failed",
-          progress: 100,
-          runtimeId: body.runtimeId,
-          turnId: args.turnId,
-          startedAt: now,
-          completedAt: now,
-          error: args.error,
-          ...(args.runtimeResults
-            ? { runtimeResults: args.runtimeResults }
-            : {}),
-          reason: "expected-background-follower-missing",
-        },
-      });
-      return { jobId, runtimeId: body.runtimeId! };
-    };
+    const jobRunner = createPluginRpcJobRunner({
+      store,
+      sessionId,
+      ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
+      runManualTurn,
+      runDeferredFollowerTurn: (args) =>
+        runtimeTurnRunner.runDeferredFollowerTurn(args),
+      hasActiveRuntime: (runtimeId) =>
+        activeRuntimes.some((rt) => rt.name === runtimeId),
+    });
 
     const mode: "sync" | "background" = target.execution ?? "sync";
 
@@ -509,22 +276,13 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
     // `plugin-data.changed` on the event bus; SSE subscribers pick it
     // up and update the UI. No bespoke streaming protocol.
     if (mode === "background") {
-      const jobId = crypto.randomUUID();
-      const startedAt = new Date().toISOString();
-
+      let job;
       try {
-        await writePluginJob({
+        job = await jobRunner.enqueueBackgroundRuntime({
           pluginId: body.pluginId,
-          jobId,
-          startedAt,
-          value: {
-            status: "pending",
-            progress: 5,
-            runtimeId: body.runtimeId,
-            turnId,
-            ...(body.payload !== undefined ? { payload: body.payload } : {}),
-            startedAt,
-          },
+          runtimeId: body.runtimeId,
+          turnId,
+          payload: body.payload,
         });
       } catch (err) {
         return c.json(
@@ -540,79 +298,13 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
         );
       }
 
-      // Detach from the request: run off-cycle so the 202 response can
-      // flush immediately. Errors inside the async closure never
-      // surface as an HTTP status — they're written back into
-      // `_jobs/{jobId}` and picked up by the frontend via SSE.
-      setImmediate(() => {
-        void (async (): Promise<void> => {
-          try {
-            const summary = await runManualTurn();
-            const completedAt = new Date().toISOString();
-
-            const completion = deriveBackgroundJobCompletion(summary);
-
-            await writePluginJob({
-              pluginId: body.pluginId!,
-              jobId,
-              startedAt,
-              updatedAt: completedAt,
-              value: {
-                status: completion.status,
-                progress: 100,
-                runtimeId: body.runtimeId,
-                turnId: summary.turnId,
-                ...(body.payload !== undefined
-                  ? { payload: body.payload }
-                  : {}),
-                startedAt,
-                completedAt,
-                durationMs: summary.durationMs,
-                runtimeResults: summary.runtimeResults,
-                ...(completion.error ? { error: completion.error } : {}),
-                ...(summary.abortReason
-                  ? { abortReason: summary.abortReason }
-                  : {}),
-              },
-            });
-          } catch (err) {
-            const completedAt = new Date().toISOString();
-            await writePluginJob({
-              pluginId: body.pluginId!,
-              jobId,
-              startedAt,
-              updatedAt: completedAt,
-              value: {
-                status: "failed",
-                progress: 100,
-                runtimeId: body.runtimeId,
-                turnId,
-                ...(body.payload !== undefined
-                  ? { payload: body.payload }
-                  : {}),
-                startedAt,
-                completedAt,
-                error:
-                  err instanceof Error
-                    ? err.message
-                    : "runtime execution failed",
-              },
-            }).catch(() => {
-              // Terminal failure — both the runtime AND the writeback
-              // blew up. Nothing useful to do from here; the frontend
-              // will see the stale `pending` record and can reconcile.
-            });
-          }
-        })();
-      });
-
       return c.json(
         {
           status: "accepted",
-          jobId,
+          jobId: job.jobId,
           pending: true,
           turnId,
-          runtimeId: body.runtimeId,
+          runtimeId: job.runtimeId,
         },
         202,
       );
@@ -634,22 +326,12 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
     // can then show "generating prompt" at once instead of waiting 20–40s for
     // the prompt LLM call before any job row exists.
     if (body.expectsBackgroundFollower === true) {
-      const placeholderJobId = crypto.randomUUID();
-      const startedAt = new Date().toISOString();
+      let job;
       try {
-        await writePluginJob({
+        job = await jobRunner.enqueueExpectedFollowerRuntime({
           pluginId: body.pluginId,
-          jobId: placeholderJobId,
-          startedAt,
-          value: {
-            status: "pending",
-            progress: 1,
-            runtimeId: body.runtimeId,
-            turnId,
-            startedAt,
-            phase: "prompt",
-            message: "Generating image prompt...",
-          },
+          runtimeId: body.runtimeId,
+          turnId,
         });
       } catch (err) {
         return c.json(
@@ -665,98 +347,14 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
         );
       }
 
-      setImmediate(() => {
-        void (async (): Promise<void> => {
-          try {
-            const summary = await runManualTurn();
-            const deferredJobs =
-              summary.deferredFollowers.length > 0
-                ? await scheduleDeferredFollowers(summary.deferredFollowers)
-                : [];
-            const completedAt = new Date().toISOString();
-            const failedResult = summary.runtimeResults.find(
-              (r) => r.status === "failed",
-            );
-            if (deferredJobs.length > 0) {
-              await writePluginJob({
-                pluginId: body.pluginId!,
-                jobId: placeholderJobId,
-                startedAt,
-                updatedAt: completedAt,
-                value: {
-                  status: "done",
-                  progress: 100,
-                  runtimeId: body.runtimeId,
-                  turnId: summary.turnId,
-                  startedAt,
-                  completedAt,
-                  durationMs: summary.durationMs,
-                  phase: "prompt",
-                  message: "Image prompt generated; image job queued.",
-                  runtimeResults: summary.runtimeResults,
-                  deferredJobs,
-                  ...(summary.abortReason
-                    ? { abortReason: summary.abortReason }
-                    : {}),
-                },
-              });
-              return;
-            }
-            await writePluginJob({
-              pluginId: body.pluginId!,
-              jobId: placeholderJobId,
-              startedAt,
-              updatedAt: completedAt,
-              value: {
-                status: "failed",
-                progress: 100,
-                runtimeId: body.runtimeId,
-                turnId: summary.turnId,
-                startedAt,
-                completedAt,
-                durationMs: summary.durationMs,
-                error:
-                  failedResult?.error ??
-                  `runtime "${body.runtimeId}" completed without emitting a matching background follower event`,
-                runtimeResults: summary.runtimeResults,
-                reason: "expected-background-follower-missing",
-                ...(summary.abortReason
-                  ? { abortReason: summary.abortReason }
-                  : {}),
-              },
-            });
-          } catch (err) {
-            const completedAt = new Date().toISOString();
-            await writePluginJob({
-              pluginId: body.pluginId!,
-              jobId: placeholderJobId,
-              startedAt,
-              updatedAt: completedAt,
-              value: {
-                status: "failed",
-                progress: 100,
-                runtimeId: body.runtimeId,
-                turnId,
-                startedAt,
-                completedAt,
-                error:
-                  err instanceof Error
-                    ? err.message
-                    : "runtime execution failed",
-              },
-            }).catch(() => undefined);
-          }
-        })();
-      });
-
       return c.json(
         {
           status: "accepted",
-          jobId: placeholderJobId,
+          jobId: job.jobId,
           pending: true,
           turnId,
-          runtimeId: body.runtimeId,
-          phase: "prompt",
+          runtimeId: job.runtimeId,
+          phase: job.phase,
         },
         202,
       );
@@ -766,7 +364,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
       const summary = await runManualTurn();
       const deferredJobs =
         summary.deferredFollowers.length > 0
-          ? await scheduleDeferredFollowers(summary.deferredFollowers)
+          ? await jobRunner.scheduleDeferredFollowers(summary.deferredFollowers)
           : [];
       return c.json({
         status: "ok",
@@ -803,19 +401,21 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
   // `pluginId === "framework"` for framework defaults. Plugin-declared
   // actions still use the real plugin ID.
   const FRAMEWORK_PLUGIN_SENTINEL = "framework";
+  const action = body.action!;
+  const pluginId = body.pluginId;
   const registry = c.get("rpcRegistry");
   const gate = c.get("rpcApprovalGate");
   let entryTrust: "builtin" | "official" | "community" = "community";
   let entryDescription: string | undefined;
   const pluginEntry =
-    body.pluginId === FRAMEWORK_PLUGIN_SENTINEL
+    pluginId === FRAMEWORK_PLUGIN_SENTINEL
       ? undefined
-      : registry.getPluginAction(body.pluginId, body.action!);
+      : registry.getPluginAction(pluginId, action);
   if (pluginEntry) {
     entryTrust = pluginEntry.trustLevel;
     entryDescription = pluginEntry.description;
-  } else if (body.pluginId === FRAMEWORK_PLUGIN_SENTINEL) {
-    const fwEntry = registry.getFrameworkDefault(body.action!);
+  } else if (pluginId === FRAMEWORK_PLUGIN_SENTINEL) {
+    const fwEntry = registry.getFrameworkDefault(action);
     if (fwEntry) {
       entryTrust = fwEntry.trustLevel; // always 'builtin'
       entryDescription = fwEntry.description;
@@ -823,7 +423,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
       return c.json(
         {
           status: "error",
-          error: `unknown framework action "${body.action}"`,
+          error: `unknown framework action "${action}"`,
           code: "unknown-action",
         },
         404,
@@ -833,7 +433,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
     return c.json(
       {
         status: "error",
-        error: `unknown action "${body.action}" for plugin "${body.pluginId}"`,
+        error: `unknown action "${action}" for plugin "${pluginId}"`,
         code: "unknown-action",
       },
       404,
@@ -842,8 +442,8 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
 
   const verdict = gate.evaluate({
     sessionId,
-    pluginId: body.pluginId,
-    action: body.action!,
+    pluginId,
+    action,
     payload: body.payload,
     trustLevel: entryTrust,
     description: entryDescription,
@@ -879,12 +479,12 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
         ? store
         : createRpcHandlerStoreView(store, {
             sessionId,
-            pluginId: body.pluginId,
+            pluginId,
           });
     const dispatch = await executor.dispatch(
       {
-        pluginId: body.pluginId,
-        action: body.action!,
+        pluginId,
+        action,
         payload: body.payload,
       },
       { sessionId, store: rpcStore },

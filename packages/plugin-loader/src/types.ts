@@ -253,6 +253,8 @@ export interface FunctionHandlerContext {
   readonly turnId: string;
   /** Plugin ID this handler belongs to (derived from manifest). */
   readonly pluginId: string;
+  /** Runtime ID this handler belongs to (full manifest name). */
+  readonly runtimeId: string;
   readonly playerMessage: string;
   readonly locale?: string;
   /**

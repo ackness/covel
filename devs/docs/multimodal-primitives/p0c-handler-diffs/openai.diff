@@ -2,18 +2,18 @@ diff --color -ruN /Users/wuyong/.covel/plugins/openai-image-gen.bak-p0c-20260426
 --- /Users/wuyong/.covel/plugins/openai-image-gen.bak-p0c-20260426-185742/runtimes/image-generator/handler.js	2026-04-26 18:57:42
 +++ /Users/wuyong/.covel/plugins/openai-image-gen/runtimes/image-generator/handler.js	2026-04-26 19:01:33
 @@ -150,7 +150,7 @@
- 
+
  /** @type {import('@covel/plugin-loader').FunctionHandler} */
  export default async function imageGeneratorHandler(ctx) {
 -  const { turnId, gateway, utils, userSettings, pluginData, logger } = ctx;
 +  const { turnId, gateway, utils, userSettings, pluginData, logger, media } = ctx;
- 
+
    if (!gateway || typeof gateway.resolveSlot !== 'function') {
      return {
 @@ -162,6 +162,15 @@
      };
    }
- 
+
 +  if (!media || typeof media.put !== 'function') {
 +    return {
 +      status: 'failed',
@@ -29,7 +29,7 @@ diff --color -ruN /Users/wuyong/.covel/plugins/openai-image-gen.bak-p0c-20260426
 @@ -325,20 +334,28 @@
        );
      }
- 
+
 -    const base64 = typeof first.base64 === 'string' ? first.base64 : null;
 -    const mimeType = typeof first.mediaType === 'string' ? first.mediaType : 'image/png';
 -    const dataUrl = base64 ? `data:${mimeType};base64,${base64}` : null;

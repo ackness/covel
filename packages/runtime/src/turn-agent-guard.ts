@@ -91,6 +91,7 @@ export async function executeAgentGuard({
       sessionId: input.sessionId,
       turnId: input.turnId,
       pluginId: manifest.pluginId,
+      runtimeId: manifest.name,
       playerMessage: input.playerMessage,
       locale: input.locale,
       store: guardStore,

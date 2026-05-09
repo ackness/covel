@@ -1,7 +1,6 @@
 import {
   createTurnEmitter,
   executeTurn,
-  processRuntimeResult,
   type TurnExecutorDeps,
 } from "@covel/runtime";
 import type { DataStore, SessionRecord } from "@covel/store";
@@ -9,6 +8,7 @@ import type { EventBus } from "@covel/events";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 
 import type { SessionLock } from "../../../lib/session-lock.js";
+import { createRuntimeResultProcessor } from "../runtime-result-processor.js";
 import type { ManualTurnSummary } from "./runtime-response.js";
 
 export interface PluginRpcRuntimeTurnContext {
@@ -51,33 +51,19 @@ export function createPluginRpcRuntimeTurnRunner(
     readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
   }>;
 } {
-  const outputKindMap = new Map<string, string>();
-  const runtimeCapabilitiesMap = new Map<string, readonly string[]>();
-  for (const rt of ctx.activeRuntimes) {
-    outputKindMap.set(rt.name, rt.outputKind ?? "plugin");
-    runtimeCapabilitiesMap.set(rt.name, rt.capabilities ?? []);
-  }
-
   async function processTurnResults(
     turnResult: Awaited<ReturnType<typeof executeTurn>>,
     emitter: ReturnType<typeof createTurnEmitter>,
   ): Promise<void> {
-    for (const rr of turnResult.runtimeResults) {
-      const kind = outputKindMap.get(rr.runtimeId) ?? "plugin";
-      const processOpts = {
-        ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
-        eventBus: ctx.eventBus,
-        emitter,
-        capabilities: runtimeCapabilitiesMap.get(rr.runtimeId) ?? [],
-      };
-      await processRuntimeResult(
-        rr,
-        ctx.store,
-        ctx.sessionId,
-        kind,
-        processOpts,
-      );
-    }
+    const resultProcessor = createRuntimeResultProcessor({
+      store: ctx.store,
+      sessionId: ctx.sessionId,
+      runtimes: ctx.activeRuntimes,
+      ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
+      eventBus: ctx.eventBus,
+      emitter,
+    });
+    await resultProcessor.processAll(turnResult.runtimeResults);
   }
 
   async function runManualTurn(

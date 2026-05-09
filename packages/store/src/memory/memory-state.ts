@@ -1,0 +1,35 @@
+import type { MemoryState } from "./memory-types.js";
+
+export function createMemoryState(): MemoryState {
+  return {
+    sessions: new Map(),
+    turnResults: [],
+    runtimeResults: [],
+    toolCalls: [],
+    stateSchemas: [],
+    stateEntries: new Map(),
+    stateChanges: [],
+    events: [],
+    approvals: [],
+    messages: [],
+    characters: new Map(),
+    pluginData: new Map(),
+    pluginConfigs: new Map(),
+    suspensions: new Map(),
+    snapshots: new Map(),
+    vectorRows: new Map(),
+    vectorModelRegistry: new Map(),
+    nextModelId: 1,
+    sessionVectorTargets: new Map(),
+    worlds: new Map(),
+    traceEvents: [],
+    runtimeOutputs: [],
+    interactionRecords: [],
+    turnMessages: [],
+    playerInputs: [],
+    workingMemoryEntries: new Map(),
+    worldDataImportLedger: new Map(),
+    lorebookEntries: new Map(),
+    sessionSummaries: [],
+  };
+}

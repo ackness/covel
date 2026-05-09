@@ -20,30 +20,17 @@ import {
   fetchUiSpecs,
   listPluginData,
 } from "@/services/api.js";
-import type { UISlotEntry, WorldRecord } from "@/services/api.js";
-import { resolveI18n } from "@/lib/catalog.js";
+import type { WorldRecord } from "@/services/api.js";
+import {
+  aggregateSpecsIntoGroups,
+  compactTabLabel,
+  groupShortLabel,
+  panelProviderLabel,
+  planPluginPanelProviders,
+  type PluginPanelTabGroup,
+} from "@/lib/plugin-panel-tabs.js";
 import { loadPluginData } from "@/stores/plugin-data-store.js";
 import { useSession } from "@/stores/session-store.js";
-
-// ── Plugin tab aggregation ───────────────────────────────────────
-
-interface SubPanel {
-  id: string;
-  pluginId: string;
-  label: string;
-  shortLabel?: string;
-  icon: string;
-  spec: Record<string, unknown>;
-}
-
-interface PluginTabGroup {
-  id: string;
-  label: string;
-  shortLabel?: string;
-  icon: string;
-  order: number;
-  subPanels: SubPanel[];
-}
 
 interface RightPanelTabItem {
   id: string;
@@ -72,105 +59,6 @@ function resolvePluginIcon(name: string): Icons.LucideIcon {
     );
   }
   return HelpCircle;
-}
-
-/**
- * Resolve a short, human-readable label for a plugin in the provider switcher
- * row. Prefers the manifest's locale-aware `displayName`; falls back to the
- * raw pluginId if no manifest is loaded yet. Framework code does not bake in
- * any plugin naming convention (e.g. `core-` prefix or `-image-gen` suffix).
- */
-function pluginShortLabel(
-  pluginId: string,
-  sessionPlugins: readonly { id: string; displayName: unknown }[],
-  locale: string,
-): string {
-  const plugin = sessionPlugins.find((p) => p.id === pluginId);
-  if (!plugin) return pluginId;
-  const label = resolveI18n(
-    plugin.displayName as Parameters<typeof resolveI18n>[0],
-    locale,
-  );
-  return label.length > 0 ? label : pluginId;
-}
-
-function compactTabLabel(label: string): string {
-  const normalized = label.trim();
-  if (!normalized) return "";
-
-  const chars = Array.from(normalized);
-  const hanChars = chars.filter((char) => /\p{Script=Han}/u.test(char));
-  if (hanChars.length >= 2) return hanChars.slice(0, 2).join("");
-
-  const words = normalized.split(/\s+/).filter(Boolean);
-  if (words.length > 1) {
-    return words
-      .map((word) => Array.from(word)[0]?.toUpperCase() ?? "")
-      .join("")
-      .slice(0, 3);
-  }
-
-  return chars.slice(0, 4).join("");
-}
-
-function groupShortLabel(group: PluginTabGroup): string | undefined {
-  return group.shortLabel;
-}
-
-function aggregateSpecsIntoGroups(
-  slotEntries: readonly UISlotEntry[],
-  locale: string,
-): PluginTabGroup[] {
-  const groupMap = new Map<string, PluginTabGroup>();
-  let counter = 0;
-
-  for (const entry of slotEntries) {
-    for (const spec of entry.specs) {
-      const specId = spec.id ?? `${entry.pluginId}-${counter++}`;
-      const groupKey = spec.group ?? `${entry.pluginId}::${specId}`;
-
-      const subShort = resolveI18n(spec.shortLabel, locale) || undefined;
-      const sub: SubPanel = {
-        id: specId,
-        pluginId: entry.pluginId,
-        label: resolveI18n(spec.label, locale),
-        shortLabel: subShort,
-        icon: spec.icon ?? "layout",
-        spec: spec as unknown as Record<string, unknown>,
-      };
-
-      const existing = groupMap.get(groupKey);
-      if (existing) {
-        // Warn when two plugins share the same `group` but disagree on
-        // `groupLabel`. The first-defined label wins (so tabs stay
-        // stable) but the disagreement is surfaced so plugin authors
-        // notice the collision during dev.
-        const incomingLabel = resolveI18n(spec.groupLabel, locale);
-        if (
-          import.meta.env.DEV &&
-          incomingLabel &&
-          incomingLabel !== existing.label
-        ) {
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[right-panel] plugin "${entry.pluginId}" declares group "${groupKey}" with label "${incomingLabel}", but group already exists with label "${existing.label}". Keeping first.`,
-          );
-        }
-        existing.subPanels.push(sub);
-      } else {
-        groupMap.set(groupKey, {
-          id: groupKey,
-          label: resolveI18n(spec.groupLabel, locale) || sub.label,
-          shortLabel: subShort,
-          icon: sub.icon,
-          order: spec.groupOrder ?? 500,
-          subPanels: [sub],
-        });
-      }
-    }
-  }
-
-  return Array.from(groupMap.values()).sort((a, b) => a.order - b.order);
 }
 
 export interface RightPanelProps {
@@ -205,7 +93,9 @@ export function RightPanel({
   const { t, i18n } = useTranslation();
   const pluginPanelStateCacheRef = useRef<PluginPanelStateCache>(new Map());
   const [storeBackend, setStoreBackend] = useState<string | null>(null);
-  const [rawSlotEntries, setRawSlotEntries] = useState<UISlotEntry[]>([]);
+  const [pluginTabGroups, setPluginTabGroups] = useState<PluginPanelTabGroup[]>(
+    [],
+  );
   const [activePluginSubTab, setActivePluginSubTab] = useState<
     Record<string, number>
   >({});
@@ -220,10 +110,6 @@ export function RightPanel({
     [sessionState.sessionPlugins],
   );
 
-  const pluginTabGroups = useMemo(
-    () => aggregateSpecsIntoGroups(rawSlotEntries, i18n.language),
-    [rawSlotEntries, i18n.language],
-  );
   const tabItems = useMemo<RightPanelTabItem[]>(
     () => [
       {
@@ -262,7 +148,16 @@ export function RightPanel({
     fetchUiSpecs(sessionId)
       .then((specs) => {
         if (cancelled) return;
-        setRawSlotEntries([...specs.right]);
+        setPluginTabGroups(
+          aggregateSpecsIntoGroups(specs.right, i18n.language, {
+            warn: (message) => {
+              if (import.meta.env.DEV) {
+                // eslint-disable-next-line no-console
+                console.warn(message);
+              }
+            },
+          }),
+        );
 
         const pluginIds = new Set(specs.right.map((entry) => entry.pluginId));
         for (const pid of pluginIds) {
@@ -286,7 +181,7 @@ export function RightPanel({
     return () => {
       cancelled = true;
     };
-  }, [sessionId, activePluginKey]);
+  }, [sessionId, activePluginKey, i18n.language]);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
@@ -366,33 +261,7 @@ export function RightPanel({
           {pluginTabGroups.map((group) => {
             const subIdx = activePluginSubTab[group.id] ?? 0;
             const currentSub = group.subPanels[subIdx];
-            // Group sub-panels by pluginId so that when multiple plugins
-            // contribute the same group (e.g. dashscope-image-gen +
-            // openai-image-gen both publish a 画廊/任务/生成 trio under
-            // image-studio), we render a 2-tier picker:
-            //   row 1 = provider segmented control
-            //   row 2 = sub-panel chips for that provider
-            // This avoids the awful flat list of "画廊·dashscope, 任务·dashscope,
-            // 生成·dashscope, 画廊·openai, 任务·openai, 生成·openai".
-            const byProvider = new Map<
-              string,
-              { pluginId: string; subs: { sub: SubPanel; idx: number }[] }
-            >();
-            group.subPanels.forEach((sub, idx) => {
-              if (!byProvider.has(sub.pluginId)) {
-                byProvider.set(sub.pluginId, {
-                  pluginId: sub.pluginId,
-                  subs: [],
-                });
-              }
-              byProvider.get(sub.pluginId)!.subs.push({ sub, idx });
-            });
-            const providers = [...byProvider.values()];
-            const multiProvider = providers.length > 1;
-            const activeProviderId =
-              currentSub?.pluginId ?? providers[0]?.pluginId;
-            const activeProviderSubs =
-              byProvider.get(activeProviderId)?.subs ?? [];
+            const providerPlan = planPluginPanelProviders(group, subIdx);
             const GroupIcon = resolvePluginIcon(group.icon);
 
             return (
@@ -409,20 +278,20 @@ export function RightPanel({
                 </div>
 
                 {/* Provider switcher — only when 2+ plugins share the group */}
-                {multiProvider && (
+                {providerPlan.multiProvider && (
                   <div className="flex items-center gap-2 mb-2 ui-meta text-[10px] text-muted-foreground">
                     <span>provider</span>
                     <div className="flex items-center border border-[var(--rule-color)] rounded-[var(--radius-control)] overflow-hidden">
-                      {providers.map((p) => {
-                        const isActive = p.pluginId === activeProviderId;
+                      {providerPlan.providers.map((p) => {
+                        const isActive =
+                          p.pluginId === providerPlan.activeProviderId;
                         return (
                           <button
                             key={p.pluginId}
                             type="button"
                             onClick={() => {
                               // jump to first sub-panel of this provider
-                              const firstIdx = byProvider.get(p.pluginId)!
-                                .subs[0]?.idx;
+                              const firstIdx = p.subs[0]?.idx;
                               if (typeof firstIdx === "number") {
                                 setActivePluginSubTab((prev) => ({
                                   ...prev,
@@ -452,11 +321,12 @@ export function RightPanel({
                 )}
 
                 {/* Sub-panel chips (filtered to active provider) */}
-                {(activeProviderSubs.length > 1 ||
-                  (!multiProvider && group.subPanels.length > 1)) && (
+                {(providerPlan.activeProviderSubs.length > 1 ||
+                  (!providerPlan.multiProvider &&
+                    group.subPanels.length > 1)) && (
                   <div className="flex items-center gap-2 mb-3 border-b border-[var(--rule-color)] pb-2 flex-wrap">
-                    {(multiProvider
-                      ? activeProviderSubs
+                    {(providerPlan.multiProvider
+                      ? providerPlan.activeProviderSubs
                       : group.subPanels.map((sub, idx) => ({ sub, idx }))
                     ).map(({ sub, idx }) => {
                       const SubIcon = resolvePluginIcon(sub.icon);
@@ -527,18 +397,4 @@ export function RightPanel({
       )}
     </div>
   );
-}
-
-function panelProviderLabel(
-  pluginId: string,
-  groupId: string,
-  subPanels: readonly SubPanel[],
-  sessionPlugins: readonly { id: string; displayName: unknown }[],
-  locale: string,
-): string {
-  if (groupId === "chat-mode" && subPanels.length > 0) {
-    const first = subPanels[0];
-    return first.shortLabel ?? first.label;
-  }
-  return pluginShortLabel(pluginId, sessionPlugins, locale);
 }

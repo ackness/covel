@@ -8,94 +8,17 @@
  */
 
 import type {
-  Proposal,
   RuntimeManifest,
   RuntimeResult,
-  ToolCallRecord,
   TurnInput,
   TurnResult,
 } from "@covel/shared";
-import { isEnvEnabled } from "@covel/shared";
-import type { TurnMessageRecord, SuspensionRecord } from "@covel/store";
-import {
-  isSuspendSentinel,
-  isRuntimeDoneSentinel,
-  validateOutput,
-  withPendingProposals,
-} from "@covel/tools";
-import { shouldTrigger } from "./trigger.js";
-import {
-  isMainLoopPriority,
-  isPreGamePriority,
-  scheduleByPriority,
-} from "./scheduler.js";
-import { scheduleByDag } from "./dag-scheduler.js";
-import {
-  applyBranchReplyAcceptedCandidates,
-  buildContext,
-  buildContextAsync,
-  buildSessionContextSnapshot,
-  needsAsyncBuild,
-} from "@covel/context";
-import type { SessionContextSnapshot } from "@covel/context";
 import { executeParallel } from "./parallel-executor.js";
-import type { TriggerContext, ScheduledGroup } from "./types.js";
-import type { LLMMessage } from "./llm-adapter.js";
-import type { HookPipeline } from "./hooks/pipeline.js";
-import {
-  buildToolDefinitions,
-  makeFailedResult,
-  resolveUserSettings,
-} from "./turn-executor-helpers.js";
-import {
-  createPluginDataWriter,
-  createPluginLogger,
-  createFunctionStoreView,
-} from "./plugin-handler-helpers.js";
-import { createRuntimeMediaContext } from "./runtime-media-context.js";
-import {
-  buildRetryPolicy,
-  callLLMWithRetry,
-  streamLLMWithRetry,
-  detectToolLoop,
-  perturbMessages,
-  LLMRetryError,
-  type RetryInfo,
-} from "./llm-retry.js";
-import {
-  buildLlmCallingPayload,
-  buildLlmRespondedErrorPayload,
-  buildLlmRespondedSuccessPayload,
-} from "./llm-trace-payload.js";
-import {
-  runTurnStartHook,
-  runTurnStopHook,
-  runPreRuntimeHook,
-  runPostRuntimeHook,
-  runPreToolUseHook,
-  runPostToolUseHook,
-} from "./hooks/wire-helpers.js";
-import {
-  createAssetProgressEmitter,
-  emitSubEvent,
-  isTrustedPluginSource,
-} from "./turn-runtime-helpers.js";
+import { runTurnStartHook, runTurnStopHook } from "./hooks/wire-helpers.js";
+import { emitSubEvent } from "./turn-runtime-helpers.js";
 import {
   __testOnly_parseFinalOutputEnvelope,
-  extractRequiredFields,
-  extractToolFailureMessage,
-  findLastStructuredToolOutput,
-  findPresentableToolOutput,
-  formatToolLoopFailure,
-  isRecord,
-  isRequiredUpstreamSatisfied,
   looksLikeStructuredRuntimeOutput,
-  parseFinalOutputEnvelope,
-  sanitizeStoryNarrativeText,
-  shouldRetryMalformedToolArguments,
-  shouldSuppressToolLoopNarrative,
-  type ExecutedToolCallState,
-  type FailedToolCallState,
 } from "./turn-output-helpers.js";
 import { executeOneRuntime } from "./turn-runtime-execution.js";
 import { runEventChain } from "./turn-event-chain.js";
@@ -106,6 +29,24 @@ import {
   type TurnExecutorOptions,
 } from "./turn-executor-types.js";
 import { finalizeTurnResult } from "./turn-result-finalizer.js";
+import { markPreGameCompletion } from "./turn-executor/pre-game-completion.js";
+import { schedulePostTurnMemoryUpdate } from "./turn-executor/post-turn-memory.js";
+import {
+  loadCoreMemoryBlocks,
+  loadSessionSummaries,
+  loadWorkingMemory,
+  refreshSessionContextSnapshot,
+} from "./turn-executor/session-context.js";
+import {
+  buildProjectedPromptHistory,
+  getPreGameRuntimeState,
+  loadTurnSessionState,
+} from "./turn-executor/session-state.js";
+import {
+  scheduleMainLoopFollowups,
+  scheduleTriggeredRuntimes,
+  selectTriggeredRuntimes,
+} from "./turn-executor/scheduling.js";
 
 export {
   __testOnly_parseFinalOutputEnvelope,
@@ -215,124 +156,14 @@ export async function executeTurn(
     }
   }
 
-  // 0a. Await any in-flight memory update from the previous turn before we
-  // load coreMemoryBlocks. Without this, a player who submits two turns
-  // back-to-back will see the second turn's prompt assembled against the
-  // stale blocks from *before* last turn's update finished writing.
-  // Fire-and-forget semantics are preserved for callers that don't care —
-  // only THIS turn-start blocks on the previous write.
-  if (deps.memorySystem?.updater.awaitPending) {
-    await deps.memorySystem.updater.awaitPending(input.sessionId);
-  }
+  const sessionState = await loadTurnSessionState({
+    input,
+    deps,
+    shouldAppendPlayerMessage,
+  });
+  const { messageHistory, runtimeTriggerCounts, sessionStatus, turnNumber } =
+    sessionState;
 
-  // 0. Load message history from store (append-only conversation history)
-  let messageHistory: readonly TurnMessageRecord[] = [];
-  if (deps.store) {
-    messageHistory = await deps.store.listTurnMessages(input.sessionId);
-  }
-
-  // turnNumber = number of player messages BEFORE the current one.
-  // Must be computed from the pre-append history to preserve 0-based semantics
-  // that interval-based triggers depend on (e.g. interval:2 fires at 0,2,4…).
-  const turnNumber = messageHistory.filter(
-    (m) => m.sourceType === "player",
-  ).length;
-
-  // Save player message to the append-only history.
-  // Skip for manual-trigger turns — plugin-rpc invocations are not player
-  // chat messages and must not pollute history or bump turnsSinceLastTrigger.
-  if (deps.store && shouldAppendPlayerMessage) {
-    await deps.store.appendTurnMessage({
-      id: crypto.randomUUID(),
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      sourceType: "player",
-      role: "user",
-      content: input.playerMessage,
-      order: 0,
-      createdAt: new Date().toISOString(),
-    });
-    // Reload so messageHistory includes the current player message.
-    // This ensures turnsSinceLastTrigger counts the current turn correctly —
-    // without this, cooldownTurns checks always see 0 player messages after
-    // the last runtime message, blocking plugins like guide on every
-    // subsequent turn.
-    messageHistory = await deps.store.listTurnMessages(input.sessionId);
-  }
-
-  // 0b. Compaction (S2-T2): run before buildContext so summaries are stored
-  //     before the turn's context assembly reads them.
-  //     Only runs when COVEL_COMPACTOR_V1=1 AND a compactor is injected.
-  //     Skipped for manual triggers — they don't add player messages, so
-  //     there's nothing new to compact.
-  if (
-    isEnvEnabled("COVEL_COMPACTOR_V1") &&
-    deps.compactor &&
-    deps.store &&
-    shouldAppendPlayerMessage
-  ) {
-    // Reload messages after appending the player message so the compactor
-    // sees the full updated history (including the just-appended player msg).
-    const freshMessages = await deps.store.listTurnMessages(input.sessionId);
-    await deps.compactor.run(input.sessionId, "", freshMessages);
-    // Reload the history for subsequent processing (trigger counts, etc.)
-    messageHistory = await deps.store.listTurnMessages(input.sessionId);
-  }
-
-  // 1. Trigger filter — determine which runtimes should run this turn
-  //    Each runtime gets its own triggerContext with accurate triggerCount from store.
-  // Build a map of runtimeId → number of times it has been triggered (from message history)
-  // We use TurnMessages with sourceType='runtime' as the trigger count source.
-  // Key by sourceRuntimeId (e.g. "world-init/schema-gen") to match rt.name used in lookup,
-  // since sourcePluginId stores the plugin package ID (e.g. "world-init") which differs for
-  // multi-runtime plugins.
-  const runtimeTriggerCounts = new Map<string, number>();
-  for (const msg of messageHistory) {
-    if (msg.sourceType === "runtime" && msg.sourceRuntimeId) {
-      runtimeTriggerCounts.set(
-        msg.sourceRuntimeId,
-        (runtimeTriggerCounts.get(msg.sourceRuntimeId) ?? 0) + 1,
-      );
-    }
-  }
-
-  // Load session metadata for context injection (turnNumber, characters, lastFormValues, status, preGameCompleted).
-  let sessionStatus: "active" | "paused" | "ended" = "active";
-  let preGameCompleted: readonly string[] = [];
-  let sessionCharacters: {
-    name: string;
-    type: string;
-    description?: string;
-    fields?: Record<string, unknown>;
-  }[] = [];
-  let lastFormValues: Record<string, unknown> | undefined;
-  if (deps.store) {
-    const session = await deps.store.getSession(input.sessionId);
-    if (session) {
-      sessionStatus = session.status;
-      preGameCompleted = session.preGameCompleted ?? [];
-    }
-    const charRecords = await deps.store.listCharacters(input.sessionId);
-    sessionCharacters = charRecords.map((c) => ({
-      name: c.name,
-      type: c.type,
-      description: c.description,
-      fields: c.fields as Record<string, unknown>,
-    }));
-    // Most recent player submission — latest row in player_inputs for this session.
-    // Plugins read this via `{{ player.lastFormValues }}` to process form submissions.
-    try {
-      const inputs = await deps.store.listPlayerInputs(input.sessionId);
-      if (inputs.length > 0) {
-        const latest = inputs[inputs.length - 1];
-        if (latest?.values && typeof latest.values === "object") {
-          lastFormValues = latest.values as Record<string, unknown>;
-        }
-      }
-    } catch {
-      // Non-critical: player inputs may not exist yet
-    }
-  }
   // Abort early if session is paused or ended — no runtimes should execute.
   if (sessionStatus !== "active") {
     return {
@@ -343,86 +174,37 @@ export async function executeTurn(
       timestamp: new Date().toISOString(),
     };
   }
-  let sessionMeta = {
-    turnNumber,
-    characters: sessionCharacters,
-    lastFormValues,
-    preGameCompleted,
-  };
-  const promptHistory = messageHistory.filter(
-    (msg) => !(msg.turnId === input.turnId && msg.sourceType === "player"),
-  );
-  let projectedPromptHistory: readonly TurnMessageRecord[] = promptHistory;
-  if (deps.store) {
-    try {
-      const branchReplyTurns = await deps.store.listPluginData(
-        input.sessionId,
-        "branch-reply",
-        "turns",
-      );
-      projectedPromptHistory = applyBranchReplyAcceptedCandidates(
-        promptHistory,
-        branchReplyTurns,
-      );
-    } catch {
-      projectedPromptHistory = promptHistory;
-    }
-  }
-  const preGameRuntimes = activeRuntimes.filter(
-    (rt) => rt.priority !== undefined && rt.priority <= 99,
-  );
-  const isPreGamePending = preGameRuntimes.some(
-    (rt) => !preGameCompleted.includes(rt.name),
-  );
 
-  // Manual trigger short-circuit: plugin-rpc targeted one specific runtime,
-  // so bypass the per-runtime shouldTrigger check and only run that runtime
-  // plus any event-chain it produces (handled after the groups loop).
-  const manualTarget = input.manualTrigger
-    ? activeRuntimes.find((rt) => rt.name === input.manualTrigger!.runtimeId)
-    : undefined;
-  if (input.manualTrigger && !manualTarget) {
+  let sessionMeta = sessionState.sessionMeta;
+  let preGameCompleted = sessionMeta.preGameCompleted;
+  const projectedPromptHistory = await buildProjectedPromptHistory({
+    input,
+    deps,
+    messageHistory,
+  });
+  const { preGameRuntimes, isPreGamePending } = getPreGameRuntimeState(
+    activeRuntimes,
+    preGameCompleted,
+  );
+  const { manualTarget, triggered, abortReason } = selectTriggeredRuntimes({
+    activeRuntimes,
+    manualRuntimeId: input.manualTrigger?.runtimeId,
+    messageHistory,
+    preGameCompleted,
+    runtimeTriggerCounts,
+    sessionId: input.sessionId,
+    turnNumber,
+  });
+  if (abortReason) {
     return {
       turnId: input.turnId,
       sessionId: input.sessionId,
       runtimeResults: [],
       durationMs: Date.now() - startTime,
       timestamp: new Date().toISOString(),
-      abortReason: `manual-trigger: runtime not found or inactive: ${input.manualTrigger.runtimeId}`,
+      abortReason,
     };
   }
-
-  const triggered = manualTarget
-    ? [manualTarget]
-    : activeRuntimes.filter((rt) => {
-        // Compute turnsSinceLastTrigger: count player messages after this runtime's last message
-        let lastRuntimeMsgIdx = -1;
-        for (let i = messageHistory.length - 1; i >= 0; i--) {
-          const m = messageHistory[i];
-          if (m.sourceType === "runtime" && m.sourceRuntimeId === rt.name) {
-            lastRuntimeMsgIdx = i;
-            break;
-          }
-        }
-        const turnsSinceLastTrigger =
-          lastRuntimeMsgIdx >= 0
-            ? messageHistory
-                .slice(lastRuntimeMsgIdx)
-                .filter((m) => m.sourceType === "player").length
-            : 999;
-
-        const triggerContext: TriggerContext = {
-          sessionId: input.sessionId,
-          turnNumber,
-          triggerCount: runtimeTriggerCounts.get(rt.name) ?? 0,
-          turnsSinceLastTrigger,
-          pendingEventTopics: [],
-          hasUpstreamFailure: false,
-          isManualTrigger: false,
-          preGameCompleted,
-        };
-        return shouldTrigger(rt, triggerContext);
-      });
 
   // 2. Schedule runtimes.
   //
@@ -442,190 +224,48 @@ export async function executeTurn(
   // only if a cycle is detected (plugin authoring mistake).
   //
   // See packages/runtime/src/dag-scheduler.ts for the algorithm.
-  let groups: readonly ScheduledGroup[];
-  if (manualTarget) {
-    // Manual trigger: one-runtime group. Event-chain resolution happens in the
-    // post-group loop below, so any event-triggered downstreams fire in
-    // priority order without going through the DAG scheduler.
-    groups = [
-      {
-        priority: manualTarget.priority ?? 500,
-        runtimes: [manualTarget],
-      },
-    ];
-  } else if (isPreGamePending) {
-    const preGameTriggered = triggered.filter((rt) =>
-      isPreGamePriority(rt.priority),
-    );
-    groups = scheduleByPriority(preGameTriggered, 0);
-  } else {
-    const mainLoop = triggered.filter((rt) => isMainLoopPriority(rt.priority));
-    const dag = scheduleByDag(mainLoop);
-    if (dag.error) {
-      console.warn(
-        `[turn-executor] DAG scheduler: ${dag.error}; falling back to priority ordering`,
-      );
-      groups = scheduleByPriority(triggered, turnNumber);
-    } else {
-      groups = dag.groups;
-    }
-  }
-
-  // Load session summaries for compaction substitution in buildContext (S2-T2)
-  let sessionSummaries: import("@covel/store").SessionSummaryRecord[] = [];
-  if (isEnvEnabled("COVEL_COMPACTOR_V1") && deps.store) {
-    sessionSummaries = [
-      ...(await deps.store.listSessionSummaries(input.sessionId)),
-    ];
-  }
-
-  // Load working memory for prompt injection (S3-T3, B1 fix).
-  // The store may not implement listWorkingMemory on older backends, so we
-  // probe for the method before calling. The downstream context-builder gates
-  // actual rendering on COVEL_WORKING_MEMORY_V1=1, so loading here is cheap
-  // and idempotent — when the flag is off, the loaded entries are simply not
-  // rendered into the system prompt.
-  let workingMemory: readonly import("@covel/context").WorkingMemoryEntry[] =
-    [];
-  if (deps.store && typeof deps.store.listWorkingMemory === "function") {
-    try {
-      const records = await deps.store.listWorkingMemory(input.sessionId);
-      workingMemory = records.map((r) => ({
-        scope: r.scope,
-        key: r.key,
-        value: r.value,
-      }));
-    } catch {
-      // Non-critical: working memory load failures must not abort the turn.
-      workingMemory = [];
-    }
-  }
-
-  // Load core memory blocks (Letta-style three-tier memory).
-  // When COVEL_MEMORY_V1=1 and a memory system is injected, load the blocks
-  // so they can be injected into every runtime's prompt as [Core Memory].
-  let coreMemoryBlocks: readonly {
-    label: string;
-    content: string;
-    updatedAt: string;
-  }[] = [];
-  if (isEnvEnabled("COVEL_MEMORY_V1") && deps.memorySystem) {
-    try {
-      await deps.memorySystem.manager.initializeDefaults(input.sessionId);
-      coreMemoryBlocks = await deps.memorySystem.manager.loadBlocks(
-        input.sessionId,
-      );
-    } catch {
-      // Non-critical: memory load failures must not abort the turn.
-      coreMemoryBlocks = [];
-    }
-  }
-
-  // Sprint 1-D: Unified SessionContextSnapshot loader (feature-flagged).
-  //
-  // When COVEL_SESSION_CONTEXT=1, collapse all the scattered reads above into a
-  // single `buildSessionContextSnapshot` call. The snapshot carries the same
-  // data (session meta, characters, world bundle, lore entries, working memory,
-  // core blocks, summaries) plus a pre-built `legacyConfigView` that is
-  // byte-identical to `loadSessionConfig()` — so downstream prompt assembly can
-  // read from `snapshot.legacyConfigView` transparently.
-  //
-  // The flag-off path below preserves the original scattered-load behaviour
-  // (unchanged from pre-Sprint 1). We accept a minor DB read duplication on
-  // flag-on turns for Sprint 1: Sprint 2 (Lorebook) removes the duplicates by
-  // deleting the legacy reads once all consumers migrate to the snapshot.
-  let sessionContext: SessionContextSnapshot | undefined;
-  const refreshSessionContext = async (): Promise<void> => {
-    if (!isEnvEnabled("COVEL_SESSION_CONTEXT") || !deps.store) return;
-    try {
-      const sessionRecord = await deps.store.getSession(input.sessionId);
-      sessionContext = await buildSessionContextSnapshot(
-        deps.store,
-        input.sessionId,
-        {
-          locale: input.locale ?? "zh-CN",
-          turnNumber,
-          worldId: sessionRecord?.worldId ?? undefined,
-          worldDataPluginId: deps.worldDataPluginId,
-          coreMemoryBlocks,
-          summaries: sessionSummaries,
-          playerMessage: input.playerMessage,
-        },
-      );
-    } catch (err) {
-      // Non-critical: snapshot build failures must not abort the turn.
-      // Legacy scattered reads above still cover every downstream consumer.
-      console.warn(
-        "[turn-executor] SessionContextSnapshot build failed, falling back to legacy reads:",
-        err instanceof Error ? err.message : String(err),
-      );
-    }
-  };
-  await refreshSessionContext();
+  const groups = scheduleTriggeredRuntimes({
+    manualTarget,
+    triggered,
+    isPreGamePending,
+    turnNumber,
+  });
+  const sessionSummaries = await loadSessionSummaries({ input, deps });
+  const workingMemory = await loadWorkingMemory({ input, deps });
+  const coreMemoryBlocks = await loadCoreMemoryBlocks({ input, deps });
+  const loadSessionContext = () =>
+    refreshSessionContextSnapshot({
+      input,
+      deps,
+      turnNumber,
+      sessionSummaries,
+      coreMemoryBlocks,
+    });
+  let sessionContext = await loadSessionContext();
+  const refreshSessionContext = async () =>
+    (await loadSessionContext()) ?? sessionContext;
 
   // 3. Execute each group
   const completedResults = new Map<string, RuntimeResult>();
 
-  const markPreGameCompletion = async (): Promise<boolean> => {
-    if (!isPreGamePending || !deps.store || input.manualTrigger) {
-      return !isPreGamePending;
-    }
-    const newlyDone: string[] = [];
-    for (const [name, result] of completedResults) {
-      if (preGameCompleted.includes(name)) continue;
-      const output = result.output as Record<string, unknown> | undefined;
-      const preGameDone = output?.preGameDone === true;
-      const guardSkipped = result.status === "skipped" && output?.skip === true;
-      if (preGameDone || guardSkipped) {
-        newlyDone.push(name);
-      }
-    }
-
-    // Mark runtimes that hit maxTriggerCount as done — they were never
-    // scheduled but shouldn't hold up Pre-Game forever.
-    for (const rt of activeRuntimes) {
-      if (rt.priority === undefined || rt.priority > 99) continue;
-      if (preGameCompleted.includes(rt.name)) continue;
-      if (newlyDone.includes(rt.name)) continue;
-      const max = rt.trigger?.maxTriggerCount;
-      if (
-        max !== undefined &&
-        (runtimeTriggerCounts.get(rt.name) ?? 0) >= max
-      ) {
-        newlyDone.push(rt.name);
-      }
-    }
-
-    const updated =
-      newlyDone.length > 0
-        ? [...preGameCompleted, ...newlyDone]
-        : preGameCompleted;
-    const allDone = preGameRuntimes.every((rt) => updated.includes(rt.name));
-
-    if (newlyDone.length > 0) {
-      preGameCompleted = updated;
-      await deps.store.updateSession(input.sessionId, {
-        preGameCompleted: updated,
-        ...(allDone ? { turnCount: 1 } : {}),
-        updatedAt: new Date().toISOString(),
-      });
-      const refreshedCharacters = await deps.store.listCharacters(
-        input.sessionId,
-      );
-      sessionMeta = {
-        ...sessionMeta,
-        preGameCompleted,
-        characters: refreshedCharacters.map((c) => ({
-          name: c.name,
-          type: c.type,
-          description: c.description,
-          fields: c.fields as Record<string, unknown>,
-        })),
-      };
-      await refreshSessionContext();
-    }
-
-    return allDone;
+  const recordPreGameCompletion = async (): Promise<boolean> => {
+    const result = await markPreGameCompletion({
+      activeRuntimes,
+      completedResults,
+      deps,
+      input,
+      isPreGamePending,
+      preGameRuntimes,
+      preGameCompleted,
+      runtimeTriggerCounts,
+      sessionMeta,
+      sessionContext,
+      refreshSessionContext,
+    });
+    preGameCompleted = result.preGameCompleted;
+    sessionMeta = result.sessionMeta;
+    sessionContext = result.sessionContext;
+    return result.allDone;
   };
 
   // Manual-trigger turns can carry an optional `triggerEvent` payload — used
@@ -673,16 +313,14 @@ export async function executeTurn(
   }
 
   const completedPreGameThisTurn = isPreGamePending
-    ? await markPreGameCompletion()
+    ? await recordPreGameCompletion()
     : false;
   if (completedPreGameThisTurn && !manualTarget) {
-    const mainLoop = triggered.filter(
-      (rt) => isMainLoopPriority(rt.priority) && !completedResults.has(rt.name),
-    );
-    const dag = scheduleByDag(mainLoop);
-    const followupGroups = dag.error
-      ? scheduleByPriority(mainLoop, turnNumber)
-      : dag.groups;
+    const followupGroups = scheduleMainLoopFollowups({
+      triggered,
+      completedRuntimeIds: new Set(completedResults.keys()),
+      turnNumber,
+    });
     for (const group of followupGroups) {
       const results = await executeParallel(
         group.runtimes,
@@ -777,7 +415,7 @@ export async function executeTurn(
   // player-init) MUST NOT report `preGameDone: true` in the "form shown"
   // turn — they report it only after the player submits the form. This
   // keeps the user interactable while Pre-Game is still progressing.
-  await markPreGameCompletion();
+  await recordPreGameCompletion();
 
   const turnResult = await finalizeTurnResult({
     input,
@@ -791,62 +429,7 @@ export async function executeTurn(
   // ── Post-turn memory update (Letta-style) ─────────────────────
   // Fire-and-forget: memory update runs asynchronously so it doesn't
   // block the turn response. Stale-by-one-turn is acceptable.
-  if (
-    isEnvEnabled("COVEL_MEMORY_V1") &&
-    deps.memorySystem &&
-    coreMemoryBlocks.length > 0
-  ) {
-    // Collect narrative text from all successful runtimes
-    const narrativeParts: string[] = [];
-    for (const rr of turnResult.runtimeResults) {
-      const out = rr.output as Record<string, unknown> | null;
-      const text =
-        (out?.narrativeOutput as string) ?? (out?.text as string) ?? "";
-      if (text.trim()) narrativeParts.push(text);
-    }
-    const narrativeText = narrativeParts.join("\n\n");
-
-    // eslint-disable-next-line no-console
-    console.log(
-      `[memory] post-turn: ${narrativeParts.length} narrative parts, ${narrativeText.length} chars, statuses: [${turnResult.runtimeResults.map((r) => `${r.runtimeId}:${r.status}`).join(", ")}]`,
-    );
-
-    if (narrativeText.trim()) {
-      const toolSummaries = turnResult.runtimeResults.flatMap((rr) =>
-        rr.toolCalls.map(
-          (tc) => `[${tc.toolName}] ${JSON.stringify(tc.input).slice(0, 200)}`,
-        ),
-      );
-
-      deps.memorySystem.updater
-        .updateAfterTurn({
-          sessionId: input.sessionId,
-          narrativeText,
-          toolCallSummaries:
-            toolSummaries.length > 0 ? toolSummaries : undefined,
-          currentBlocks: coreMemoryBlocks,
-          locale: input.locale,
-        })
-        .then((result) => {
-          // eslint-disable-next-line no-console
-          console.log(
-            `[memory] update result: updated=${result.updated}, blocks=[${result.blocksChanged.join(",")}]${result.error ? `, error=${result.error}` : ""}`,
-          );
-        })
-        .catch((err) => {
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[turn-executor] memory update failed for ${input.sessionId}:`,
-            err instanceof Error ? err.message : String(err),
-          );
-        });
-    } else {
-      // eslint-disable-next-line no-console
-      console.log(
-        "[memory] post-turn: no narrative text found, skipping memory update",
-      );
-    }
-  }
+  schedulePostTurnMemoryUpdate({ input, turnResult, deps, coreMemoryBlocks });
 
   // ── TurnStop hook (S4-T3) — Post* hooks cannot abort ────────
   await runTurnStopHook(

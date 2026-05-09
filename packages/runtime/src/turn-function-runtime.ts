@@ -123,6 +123,7 @@ export async function executeFunctionRuntime({
     sessionId: input.sessionId,
     turnId: input.turnId,
     pluginId: manifest.pluginId,
+    runtimeId: manifest.name,
     playerMessage: input.playerMessage,
     locale: input.locale,
     store: handlerStore,

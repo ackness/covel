@@ -220,6 +220,24 @@ describe("executeTurn: manual trigger", () => {
     expect(handlerCalls["plug/chained"]?.[0]?.manualPayload).toBeUndefined();
   });
 
+  it("forwards the full runtimeId to function handlers", async () => {
+    const target = fnManifest("plug/target", { trigger: { type: "manual" } });
+
+    const { handlerCalls } = await runTurn(
+      [target],
+      { "plug/target": async () => ({ ok: true }) },
+      {
+        sessionId: "sess-runtime-id",
+        turnId: "turn-runtime-id",
+        playerMessage: "",
+        manualTrigger: { runtimeId: "plug/target" },
+      },
+    );
+
+    expect(handlerCalls["plug/target"]?.[0]?.pluginId).toBe("plug");
+    expect(handlerCalls["plug/target"]?.[0]?.runtimeId).toBe("plug/target");
+  });
+
   it("exposes deps.gateway to function handlers via ctx.gateway", async () => {
     const target = fnManifest("plug/needs-gateway", {
       trigger: { type: "manual" },

@@ -14,12 +14,12 @@ diff --color -ruN /Users/wuyong/.covel/plugins/dashscope-image-gen.bak-p0c-20260
 + * `asset.generate` proposal so the kernel can fan the asset out to trace
 + * + SSE + render pipelines (see SPEC §5.7).
   */
- 
+
  const PROMPT_RUNTIME_ID = 'dashscope-image-gen/prompt-generator';
 @@ -28,14 +36,6 @@
  const POLL_INTERVAL_MS = 2000;
  const POLL_MAX_ATTEMPTS = 30; // ~60s ceiling
- 
+
 -/**
 - * DashScope async result URLs expire 24 h after generation per the
 - * provider's text-to-image documentation. Stamp `expiresAt` so the
@@ -32,18 +32,18 @@ diff --color -ruN /Users/wuyong/.covel/plugins/dashscope-image-gen.bak-p0c-20260
  function modelRejectsNegativePrompt(model) {
    return typeof model === 'string' && model.startsWith('wan2.7-image');
 @@ -215,7 +215,7 @@
- 
+
  /** @type {import('@covel/plugin-loader').FunctionHandler} */
  export default async function imageGeneratorHandler(ctx) {
 -  const { turnId, gateway, utils, userSettings, pluginData, logger } = ctx;
 +  const { turnId, gateway, utils, userSettings, pluginData, logger, media } = ctx;
- 
+
    if (!gateway || typeof gateway.resolveSlot !== 'function') {
      return {
 @@ -226,6 +226,15 @@
      };
    }
- 
+
 +  if (!media || typeof media.ingestUrl !== 'function' || typeof media.put !== 'function') {
 +    return {
 +      status: 'failed',

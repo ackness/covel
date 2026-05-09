@@ -13,7 +13,6 @@ import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
 import type { EventBus } from "@covel/events";
 import {
   executeTurn,
-  processRuntimeResult,
   createTraceRecorder,
   createTurnEmitter,
 } from "@covel/runtime";
@@ -21,6 +20,7 @@ import type { RuntimeManifest } from "@covel/shared";
 import type { CompactorRunner } from "@covel/context";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import { loadSessionConfig } from "./load-session-config.js";
+import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
 
 // SSE uses ProtocolEventType names directly — no legacy mapping.
 // Frontend handleSseEvent handles these standard types.
@@ -195,14 +195,13 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       !(session.preGameCompleted ?? []).includes(rt.name),
   );
 
-  // Build outputKind lookup from manifest declarations (framework never hardcodes plugin IDs).
-  // Key = manifest.name, which the executor uses as both runtimeId and pluginId.
-  const outputKindMap = new Map<string, string>();
-  const runtimeCapabilitiesMap = new Map<string, readonly string[]>();
-  for (const rt of activeRuntimes) {
-    outputKindMap.set(rt.name, rt.outputKind ?? "plugin");
-    runtimeCapabilitiesMap.set(rt.name, rt.capabilities ?? []);
-  }
+  // Resolve runtime display kind from manifest declarations for progress SSE.
+  // The commit path creates its own processor once the per-turn emitter exists.
+  const outputKindResolver = createRuntimeResultProcessor({
+    store,
+    sessionId,
+    runtimes: activeRuntimes,
+  });
 
   // Discover the world data provider plugin by capability (framework never hardcodes plugin IDs)
   const worldDataPluginId = pluginRegistry.findPluginByCapability(
@@ -403,7 +402,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 makeEnvelope("narrative.delta", {
                   runtimeId: delta.runtimeId,
                   pluginId: delta.pluginId,
-                  kind: outputKindMap.get(delta.runtimeId) ?? "plugin",
+                  kind: outputKindResolver.getOutputKind(delta.runtimeId),
                   delta: delta.textDelta,
                 }),
               ),
@@ -415,7 +414,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               pluginId: info.pluginId,
               priority: info.priority,
             });
-            const kind = outputKindMap.get(info.runtimeId) ?? "plugin";
+            const kind = outputKindResolver.getOutputKind(info.runtimeId);
             await stream.writeSSE({
               data: JSON.stringify(
                 makeEnvelope("runtime.started", {
@@ -489,21 +488,16 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       // `PostStateCommit` hooks declared by plugins actually fire on the
       // production write path (previously they only ran in tests).
       const hookPipeline = c.get("hookPipeline");
+      const resultProcessor = createRuntimeResultProcessor({
+        store,
+        sessionId,
+        runtimes: activeRuntimes,
+        ...(hookPipeline ? { hookPipeline } : {}),
+        eventBus,
+        emitter,
+      });
       for (const rr of result.runtimeResults) {
-        const kind = outputKindMap.get(rr.runtimeId) ?? "plugin";
-        const processOpts = {
-          ...(hookPipeline ? { hookPipeline } : {}),
-          eventBus,
-          emitter,
-          capabilities: runtimeCapabilitiesMap.get(rr.runtimeId) ?? [],
-        };
-        const { events } = await processRuntimeResult(
-          rr,
-          store,
-          sessionId,
-          kind,
-          processOpts,
-        );
+        const { events } = await resultProcessor.process(rr);
 
         for (const evt of events) {
           // Emit using ProtocolEventType directly — no legacy mapping

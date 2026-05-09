@@ -1,22 +1,5 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "@tanstack/react-router";
-import {
-  SlidersHorizontal,
-  Database,
-  Send,
-  Code,
-  LayoutTemplate,
-  ListTree,
-  Loader2,
-  KeyRound,
-  Check,
-  Bug,
-  X,
-  Clock,
-} from "lucide-react";
-import { Button } from "@/components/ui/button.js";
-import { Toggle } from "@/components/ui/toggle.js";
 import {
   Dialog,
   DialogContent,
@@ -34,10 +17,8 @@ import type { PanelImperativeHandle } from "react-resizable-panels";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
-import { SessionBreadcrumb } from "./session-breadcrumb.js";
 import { ChatMessages } from "./chat-messages.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
-import { useSession } from "@/stores/session-store.js";
 import type {
   SessionRecord,
   WorldRecord,
@@ -48,10 +29,16 @@ import type {
   PluginLoadError,
   SessionPluginInfo,
 } from "@/services/api.js";
-import { text } from "@/components/world/editor-helpers.js";
 import { LeftPanel } from "./left-panel.js";
 import { RightPanel } from "./right-panel.js";
 import { onNavEvent } from "@/lib/nav-events.js";
+import {
+  GameViewHeader,
+  type GameViewMode,
+} from "./game-view/game-view-header.js";
+import { MessageComposer } from "./game-view/message-composer.js";
+import { PendingDraftsBar } from "./game-view/pending-drafts-bar.js";
+import { useGameViewComposer } from "./game-view/use-game-view-composer.js";
 
 // ── Extracted Panel Components (see left-panel.tsx, right-panel.tsx) ──
 
@@ -157,88 +144,34 @@ export function GameView({
     llmConfig,
   );
 
-  const [viewMode, setViewMode] = useState<"parsed" | "detailed" | "raw">(
-    "parsed",
-  );
-  const [inputValue, setInputValue] = useState("");
+  const [viewMode, setViewMode] = useState<GameViewMode>("parsed");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsInitialKey, setSettingsInitialKey] = useState<
     string | undefined
   >(undefined);
 
-  // Legacy blockSelections path is kept only to satisfy ChatMessages' prop
-  // contract (some older blocks still wire onSelect). The "confirm & send"
-  // bar below is driven by pendingInteractionDrafts (V2 flow) instead.
-  const [blockSelections, setBlockSelections] = useState<
-    Record<string, string>
-  >({});
-
-  const handleBlockSelect = useCallback((blockId: string, value: string) => {
-    setBlockSelections((prev) => ({ ...prev, [blockId]: value }));
-  }, []);
-
-  // ── Unified draft send — pending interaction drafts ──────────────
-  // Plugin-declared buttons (guide suggestions, draftMessage actions) push
-  // drafts into the session store. The confirm bar materialises them here.
   const {
-    state: sessionState,
-    clearInteractionDrafts,
+    inputValue,
+    setInputValue,
+    blockSelections,
+    handleBlockSelect,
+    pendingDrafts,
+    suspensions,
+    composerBlocked,
+    composerDisabled,
+    handleConfirmDrafts,
+    handleSubmit,
+    handleKeyDown,
     removeInteractionDraft,
-    submitBlock,
     resumeSuspension,
     cancelSuspension,
-  } = useSession();
-  const pendingDrafts = sessionState.pendingInteractionDrafts;
-  const suspensions = sessionState.suspensions;
+  } = useGameViewComposer({
+    messages,
+    submittedBlockIds,
+    executing,
+    onSendMessage,
+  });
   const [suspensionsOpen, setSuspensionsOpen] = useState(false);
-  const hasActiveInteractionBlock = useMemo(
-    () =>
-      messages.some((msg) =>
-        isPendingInteractionMessage(msg, messages, submittedBlockIds),
-      ),
-    [messages, submittedBlockIds],
-  );
-  const composerBlocked = pendingDrafts.length > 0 || hasActiveInteractionBlock;
-  const composerDisabled = executing || composerBlocked;
-
-  const handleConfirmDrafts = useCallback(() => {
-    if (pendingDrafts.length === 0) return;
-    const combined = pendingDrafts
-      .map((d) => String(d.values?.text ?? d.label ?? "").trim())
-      .filter(Boolean)
-      .join("\n");
-    if (!combined) {
-      clearInteractionDrafts();
-      return;
-    }
-    // Stamp each source block with the player's selection so the disabled
-    // re-render can show what was chosen. Generic across plugin types — any
-    // draft that names a sourceBlockId participates without per-plugin code.
-    const bySource = new Map<string, typeof pendingDrafts>();
-    for (const draft of pendingDrafts) {
-      if (!draft.sourceBlockId) continue;
-      const list = bySource.get(draft.sourceBlockId) ?? [];
-      list.push(draft);
-      bySource.set(draft.sourceBlockId, list);
-    }
-    for (const [blockId, drafts] of bySource) {
-      const items = drafts.map((d) => ({
-        type: d.type,
-        label: d.label,
-        values: d.values,
-        interactionId: d.interactionId,
-        selectionGroup: d.selectionGroup,
-      }));
-      const labelSummary = drafts
-        .map((d) => d.label)
-        .filter(Boolean)
-        .join(" / ");
-      submitBlock(blockId, { _kind: "selection", _label: labelSummary, items });
-    }
-    onSendMessage(combined);
-    clearInteractionDrafts();
-    setBlockSelections({});
-  }, [pendingDrafts, clearInteractionDrafts, onSendMessage, submitBlock]);
 
   // Load session-scoped plugin list whenever the session changes.
   useEffect(() => {
@@ -287,23 +220,6 @@ export function GameView({
       else panel.collapse();
     }
   };
-
-  const handleSubmit = useCallback(() => {
-    const val = inputValue.trim();
-    if (!val || composerDisabled) return;
-    onSendMessage(val);
-    setInputValue("");
-  }, [inputValue, composerDisabled, onSendMessage]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSubmit();
-      }
-    },
-    [handleSubmit],
-  );
 
   const handleSettingsOpenChange = (v: boolean) => {
     setSettingsOpen(v);
@@ -484,129 +400,23 @@ export function GameView({
           style={{ background: "var(--surface-page)" }}
         >
           {/* Header */}
-          <div className="ui-panel-header px-3 flex justify-between items-center gap-2 z-10">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`h-7 w-7 shrink-0 border border-border/80 ${!isLeftCollapsed && "bg-accent text-accent-foreground"}`}
-                onClick={toggleLeftPanel}
-                aria-label={t("session.toggleStoryPanel")}
-                title={t("session.toggleStoryPanel")}
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-              </Button>
-              <SessionBreadcrumb
-                step="game"
-                worldName={text(world?.name)}
-                onGoWorldSelect={onBackToWorldSelect}
-                onGoPrep={onResetSession}
-                disabled={executing}
-              />
-              <span
-                className={`ui-chip hidden lg:inline-flex ml-1 text-[10px] ${
-                  executing
-                    ? "border-transparent bg-[color-mix(in_oklab,var(--accent-primary)_12%,transparent)] text-[var(--accent-primary)]"
-                    : "border-transparent bg-[color-mix(in_oklab,var(--accent-success)_14%,transparent)] text-[var(--accent-success)]"
-                }`}
-                aria-live="polite"
-              >
-                <span
-                  className={`w-[5px] h-[5px] rounded-full bg-current ${executing ? "ui-pulse-dot" : ""}`}
-                />
-                {executing
-                  ? t("session.stateStreaming")
-                  : t("session.statePlaying")}
-              </span>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <div className="flex items-center border border-[var(--rule-color)] rounded-[var(--radius-control)] overflow-hidden">
-                <Toggle
-                  pressed={viewMode === "parsed"}
-                  onPressedChange={() => setViewMode("parsed")}
-                  size="sm"
-                  className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-[var(--surface-page)]"
-                  aria-label={t("session.viewParsedAria")}
-                  title={t("session.viewParsed")}
-                >
-                  <LayoutTemplate className="w-3.5 h-3.5" />
-                </Toggle>
-                <Toggle
-                  pressed={viewMode === "detailed"}
-                  onPressedChange={() => setViewMode("detailed")}
-                  size="sm"
-                  className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-[var(--surface-page)]"
-                  aria-label={t("session.viewDetailedAria")}
-                  title={t("session.viewDetailed")}
-                >
-                  <ListTree className="w-3.5 h-3.5" />
-                </Toggle>
-                <Toggle
-                  pressed={viewMode === "raw"}
-                  onPressedChange={() => setViewMode("raw")}
-                  size="sm"
-                  className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-[var(--surface-page)]"
-                  aria-label={t("session.viewRawAria")}
-                  title={t("session.viewRaw")}
-                >
-                  <Code className="w-3.5 h-3.5" />
-                </Toggle>
-              </div>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0"
-                onClick={() => setSettingsOpen(true)}
-                aria-label={t("nav.settings")}
-                title={t("nav.settings")}
-              >
-                <KeyRound className="w-3.5 h-3.5" />
-              </Button>
-
-              {suspensions.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 shrink-0 gap-1 text-[var(--accent-warning)] hover:bg-[color-mix(in_oklab,var(--accent-warning)_8%,transparent)]"
-                  onClick={() => setSuspensionsOpen(true)}
-                  aria-label={t("session.suspensionsBadge", {
-                    count: suspensions.length,
-                  })}
-                  title={t("session.suspensionsTitle")}
-                >
-                  <Clock className="w-3.5 h-3.5" />
-                  <span className="text-[11px] tabular-nums">
-                    {suspensions.length}
-                  </span>
-                </Button>
-              )}
-
-              <Button
-                variant="ghost"
-                size="icon"
-                className="hidden md:inline-flex h-7 w-7 shrink-0"
-                asChild
-                aria-label={t("session.debugTraces")}
-                title={t("session.debugTraces")}
-              >
-                <Link to="/debug" search={{ sid: session.id }}>
-                  <Bug className="w-3.5 h-3.5" />
-                </Link>
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`h-7 w-7 shrink-0 ${!isRightCollapsed && "bg-accent text-accent-foreground"}`}
-                onClick={toggleRightPanel}
-                aria-label={t("session.toggleContextPanel")}
-                title={t("session.toggleContextPanel")}
-              >
-                <Database className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          </div>
+          <GameViewHeader
+            t={t}
+            sessionId={session.id}
+            world={world}
+            executing={executing}
+            viewMode={viewMode}
+            isLeftCollapsed={isLeftCollapsed}
+            isRightCollapsed={isRightCollapsed}
+            onViewModeChange={setViewMode}
+            onToggleLeftPanel={toggleLeftPanel}
+            onToggleRightPanel={toggleRightPanel}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSuspensions={() => setSuspensionsOpen(true)}
+            onBackToWorldSelect={onBackToWorldSelect}
+            onResetSession={onResetSession}
+            suspensionsCount={suspensions.length}
+          />
 
           {/* Messages */}
           <ChatMessages
@@ -632,134 +442,26 @@ export function GameView({
             messagesEndRef={messagesEndRef}
           />
 
-          {/* Pending drafts bar — plugin-declared buttons (guide suggestions,
-              draftMessage actions) stage their text here. Confirm joins them
-              with newlines and sends as one player message. */}
-          {pendingDrafts.length > 0 && (
-            <div
-              className="px-3 md:px-4 py-2.5 border-t border-[var(--rule-color)] shrink-0 relative"
-              style={{
-                background:
-                  "color-mix(in oklab, var(--accent-primary) 4%, transparent)",
-              }}
-            >
-              <div className="max-w-4xl mx-auto space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-[11px] font-medium tabular-nums leading-none">
-                      {pendingDrafts.length}
-                    </span>
-                    <span className="text-xs text-muted-foreground truncate">
-                      {t("session.selectionsReady", {
-                        count: pendingDrafts.length,
-                      })}
-                    </span>
-                  </div>
-                  <Button
-                    size="sm"
-                    className="h-7 gap-1.5 shrink-0"
-                    disabled={executing}
-                    onClick={handleConfirmDrafts}
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    {t("session.confirmSelections")}
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {pendingDrafts.map((d) => {
-                    const label = String(
-                      d.values?.text ?? d.label ?? "",
-                    ).trim();
-                    if (!label) return null;
-                    return (
-                      <span
-                        key={d.id}
-                        className="group inline-flex items-start gap-1 max-w-full sm:max-w-[520px] rounded-[var(--radius-control)] border border-primary/20 bg-background pl-2 pr-0.5 py-1 text-[11px] leading-tight text-foreground shadow-sm"
-                      >
-                        <span
-                          className="max-w-full overflow-hidden whitespace-normal [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
-                          title={label}
-                        >
-                          {label}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => removeInteractionDraft(d.id)}
-                          className="inline-flex items-center justify-center h-6 w-6 -my-1 shrink-0 rounded-[var(--radius-control)] text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
-                          aria-label={t("session.removeDraft")}
-                          title={t("session.removeDraft")}
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
+          <PendingDraftsBar
+            t={t}
+            pendingDrafts={pendingDrafts}
+            executing={executing}
+            onConfirmDrafts={handleConfirmDrafts}
+            onRemoveDraft={removeInteractionDraft}
+          />
 
           {/* Input — always fixed at bottom */}
-          <div className="border-t border-[var(--rule-color)] shrink-0 px-3 md:px-4 py-4 md:py-5 bg-[var(--surface-page)]">
-            {phase === "ended" ? (
-              <p className="ui-empty-copy mx-auto text-center text-sm">
-                {t("session.ended", "This session has ended.")}
-              </p>
-            ) : (
-              <div className="ui-composer-frame mx-auto">
-                <div className="flex items-stretch rounded-[var(--radius-control)] border border-[var(--rule-color)] bg-[var(--surface-inset)] focus-within:border-[var(--accent-primary)] transition-colors">
-                  <input
-                    type="text"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    aria-label={t(
-                      "session.inputAriaLabel",
-                      "Story input — press Enter to send",
-                    )}
-                    placeholder={
-                      composerBlocked
-                        ? t("session.composerBlockedPlaceholder")
-                        : phase === "playing"
-                          ? t(
-                              "session.inputPlaceholder",
-                              "Enter action or command...",
-                            )
-                          : t(
-                              "session.inputPlaceholderAny",
-                              "Send a message...",
-                            )
-                    }
-                    disabled={composerDisabled}
-                    className="flex-1 min-w-0 px-3.5 py-2.5 bg-transparent text-sm outline-none disabled:opacity-50 placeholder:text-muted-foreground"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={composerDisabled || !inputValue.trim()}
-                    aria-label={t("session.inputKbdHint", "send")}
-                    className="shrink-0 inline-flex items-center justify-center w-11 self-stretch border-l border-[var(--rule-color)] text-muted-foreground hover:text-foreground hover:bg-[color-mix(in_oklab,var(--color-foreground)_6%,transparent)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
-                  >
-                    {executing ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Send className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                </div>
-                {composerBlocked ? (
-                  <p className="ui-meta text-[10px] text-muted-foreground/80 px-1 mt-1.5">
-                    {t("session.composerBlockedHint")}
-                  </p>
-                ) : (
-                  <div className="hidden md:flex justify-end items-center gap-1.5 ui-meta text-[10px] text-muted-foreground/60 pr-1 mt-1.5 select-none">
-                    <kbd className="ui-tag px-1.5 py-0">{"\u23CE"}</kbd>
-                    <span>{t("session.inputKbdHint", "to send")}</span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <MessageComposer
+            t={t}
+            phase={phase}
+            executing={executing}
+            inputValue={inputValue}
+            composerBlocked={composerBlocked}
+            composerDisabled={composerDisabled}
+            onInputValueChange={setInputValue}
+            onSubmit={handleSubmit}
+            onKeyDown={handleKeyDown}
+          />
         </ResizablePanel>
 
         {/* Desktop: Right panel */}
@@ -797,68 +499,4 @@ export function GameView({
       </ResizablePanelGroup>
     </div>
   );
-}
-
-function isPendingInteractionMessage(
-  msg: StreamMessage,
-  allMessages: StreamMessage[],
-  submittedBlockIds: ReadonlySet<string>,
-): boolean {
-  if (!msg.block || submittedBlockIds.has(msg.id)) return false;
-  if (hasLaterUserMessage(msg, allMessages)) return false;
-  return isInteractiveBlock(msg.block);
-}
-
-function hasLaterUserMessage(
-  msg: StreamMessage,
-  allMessages: StreamMessage[],
-): boolean {
-  const idx = allMessages.findIndex((m) => m.id === msg.id);
-  if (idx < 0) return false;
-  for (let i = idx + 1; i < allMessages.length; i += 1) {
-    if (allMessages[i].role === "user") return true;
-  }
-  return false;
-}
-
-function isInteractiveBlock(block: Record<string, unknown>): boolean {
-  const type = block.type as string | undefined;
-  const data = (block.data ?? block) as Record<string, unknown>;
-  const innerType = data.type as string | undefined;
-  if (
-    innerType === "form" ||
-    innerType === "choice" ||
-    innerType === "confirmation" ||
-    type === "interactive_form" ||
-    type === "interactive_choice" ||
-    type === "interactive_confirmation" ||
-    (Array.isArray(data.fields) && data.fields.length > 0)
-  ) {
-    return true;
-  }
-
-  if (type === "plugin_message") {
-    const specs = data.specs;
-    return Array.isArray(specs) && specs.some(hasInteractiveAction);
-  }
-
-  return hasInteractiveAction(data.spec);
-}
-
-function hasInteractiveAction(value: unknown): boolean {
-  if (!value || typeof value !== "object") return false;
-  if (Array.isArray(value)) return value.some(hasInteractiveAction);
-
-  const record = value as Record<string, unknown>;
-  const action = record.action;
-  if (
-    action === "submitForm" ||
-    action === "selectChoice" ||
-    action === "selectSuggestion" ||
-    action === "draftMessage"
-  ) {
-    return true;
-  }
-
-  return Object.values(record).some(hasInteractiveAction);
 }

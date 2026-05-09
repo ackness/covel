@@ -1,0 +1,1 @@
+export const ERROR_PREVIEW_MAX_CHARS = 200;

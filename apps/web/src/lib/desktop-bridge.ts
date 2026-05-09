@@ -252,21 +252,43 @@ export function initDesktopBridge(handlers: DesktopBridgeHandlers): CleanupFn {
   };
 }
 
-async function postOpenFolder(
-  target: "config" | "data" | "logs",
+async function desktopConfigRequest(
+  path: string,
+  init: { method: "POST" | "PUT"; body: Record<string, unknown> },
 ): Promise<void> {
-  const res = await fetch("/api/config/open-folder", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...getDesktopRestAuthHeaders(),
-    },
-    body: JSON.stringify({ target }),
+  const res = await fetch(path, {
+    method: init.method,
+    headers: desktopJsonHeaders(),
+    body: JSON.stringify(init.body),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
+    throw new Error(await desktopRestErrorMessage(res));
   }
+}
+
+function desktopJsonHeaders(): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    ...getDesktopRestAuthHeaders(),
+  };
+}
+
+async function desktopRestErrorMessage(res: Response): Promise<string> {
+  const err = await res.json().catch(() => null);
+  if (err && typeof err === "object" && "error" in err) {
+    const message = (err as { error?: unknown }).error;
+    if (typeof message === "string" && message.length > 0) return message;
+  }
+  return res.statusText || `HTTP ${res.status}`;
+}
+
+type OpenFolderTarget = "config" | "data" | "logs" | "llm.toml" | "keys.env";
+
+function postOpenFolder(target: OpenFolderTarget): Promise<void> {
+  return desktopConfigRequest("/api/config/open-folder", {
+    method: "POST",
+    body: { target },
+  });
 }
 
 export async function openLogsDir(): Promise<void> {
@@ -289,34 +311,12 @@ export async function openDataDir(): Promise<void> {
 
 /** Open `~/.covel/llm.toml` in the platform default editor. */
 export async function openLlmToml(): Promise<void> {
-  const res = await fetch("/api/config/open-folder", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...getDesktopRestAuthHeaders(),
-    },
-    body: JSON.stringify({ target: "llm.toml" }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
-  }
+  return postOpenFolder("llm.toml");
 }
 
 /** Open `~/.covel/keys.env` in the platform default editor. */
 export async function openKeysEnv(): Promise<void> {
-  const res = await fetch("/api/config/open-folder", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...getDesktopRestAuthHeaders(),
-    },
-    body: JSON.stringify({ target: "keys.env" }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
-  }
+  return postOpenFolder("keys.env");
 }
 
 /**
@@ -336,18 +336,10 @@ export async function pickDataDir(manualPath?: string): Promise<string | null> {
     return result?.path ?? null;
   }
   if (!manualPath) return null;
-  const res = await fetch("/api/config/data-root", {
+  await desktopConfigRequest("/api/config/data-root", {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      ...getDesktopRestAuthHeaders(),
-    },
-    body: JSON.stringify({ path: manualPath }),
+    body: { path: manualPath },
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
-  }
   return manualPath;
 }
 

@@ -4,6 +4,7 @@ import {
   MockLLM,
   createTestHarness,
   expectAssetGenerated,
+  makeManualFunctionContext,
   makeTurnInput,
   makeTriggerContext,
   makeRuntimeResult,
@@ -61,6 +62,44 @@ describe("makeRuntimeResult", () => {
     });
     expect(result.status).toBe("failed");
     expect(result.output).toEqual({ foo: "bar" });
+  });
+});
+
+describe("makeManualFunctionContext", () => {
+  it("creates a function handler context with manual payload defaults", () => {
+    const ctx = makeManualFunctionContext({
+      pluginId: "character-blueprint",
+      runtimeId: "character-blueprint/import",
+      manualPayload: { blueprint: { id: "mentor-lin" } },
+    });
+
+    expect(ctx.sessionId).toBe("sess-character-blueprint");
+    expect(ctx.turnId).toBe("turn-character-blueprint");
+    expect(ctx.pluginId).toBe("character-blueprint");
+    expect(ctx.runtimeId).toBe("character-blueprint/import");
+    expect(ctx.playerMessage).toBe("");
+    expect(ctx.completedResults).toBeInstanceOf(Map);
+    expect(ctx.config).toEqual({});
+    expect(ctx.manualPayload).toEqual({ blueprint: { id: "mentor-lin" } });
+  });
+
+  it("keeps explicit store and ids", () => {
+    const store = { listPluginData: async () => [] };
+    const completedResults = new Map([["narrator", { status: "success" }]]);
+    const ctx = makeManualFunctionContext({
+      pluginId: "player-identity",
+      sessionId: "sess-custom",
+      turnId: "turn-custom",
+      store,
+      completedResults,
+      config: { tone: "quiet" },
+    });
+
+    expect(ctx.sessionId).toBe("sess-custom");
+    expect(ctx.turnId).toBe("turn-custom");
+    expect(ctx.store).toBe(store);
+    expect(ctx.completedResults).toBe(completedResults);
+    expect(ctx.config).toEqual({ tone: "quiet" });
   });
 });
 
