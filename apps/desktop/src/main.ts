@@ -22,7 +22,6 @@ import {
   type IpcMainInvokeEvent,
 } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
-import { createServer } from "node:net";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
@@ -38,7 +37,15 @@ import {
   userServerPortFile,
   writeDataRoot,
 } from "./paths.js";
-import { normalizeProviderKeyMap, toApiKeyEnvMap } from "./provider-keys.js";
+import {
+  loadEnvFiles,
+  loadKeysEnv,
+  loadKeysEnvForChild,
+  saveKeysEnv,
+} from "./env-files.js";
+import { findFreePort, isPortFree, waitForServer } from "./network.js";
+import { diagnoseStartupError, type DiagnosedError } from "./startup-errors.js";
+import { buildSplashHtml } from "./splash-screen.js";
 
 // Name matters on macOS (app menu "About …") and Windows (DPAPI service
 // label if we ever re-introduce secure-storage). Derived default would be
@@ -211,103 +218,6 @@ function writeServerStreamLine(
   writeChannel(serverChannel, ndjsonLine(level, source, line));
 }
 
-// ── Startup error classification ───────────────────────────────
-
-interface DiagnosedError {
-  title: string;
-  detail: string;
-  hint?: string;
-}
-
-function diagnoseStartupError(err: unknown): DiagnosedError {
-  const msg = err instanceof Error ? err.message : String(err);
-  if (/EADDRINUSE|address already in use/i.test(msg)) {
-    return {
-      title: "Port conflict",
-      detail: msg,
-      hint: "Another process is using the required port. Close other Covel instances or restart your computer.",
-    };
-  }
-  if (/EACCES|permission denied/i.test(msg)) {
-    return {
-      title: "Permission denied",
-      detail: msg,
-      hint: "Covel could not access a required directory. Check that the app has permission to write to its data folder.",
-    };
-  }
-  if (/did not start within|timeout/i.test(msg)) {
-    return {
-      title: "Server timed out",
-      detail: msg,
-      hint: "The backend took too long to boot. Check the logs. A missing llm.toml or slow disk can cause this.",
-    };
-  }
-  if (/ENOENT/i.test(msg)) {
-    return {
-      title: "Missing file",
-      detail: msg,
-      hint: "A required bundled file is missing. The installation may be corrupt — reinstall the app.",
-    };
-  }
-  return { title: "Startup failed", detail: msg };
-}
-
-// ── Network helpers ─────────────────────────────────────────────
-
-/** Check whether a TCP port is currently occupied on 127.0.0.1. */
-function isPortFree(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const s = createServer();
-    s.once("error", () => resolve(false));
-    s.once("listening", () => {
-      s.close(() => resolve(true));
-    });
-    s.listen(port, "127.0.0.1");
-  });
-}
-
-/** Find a random free port. */
-function findFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.listen(0, "127.0.0.1", () => {
-      const addr = server.address();
-      if (addr && typeof addr === "object") {
-        const port = addr.port;
-        server.close(() => resolve(port));
-      } else {
-        server.close(() => reject(new Error("Could not find free port")));
-      }
-    });
-    server.on("error", reject);
-  });
-}
-
-/** Poll a URL until it returns 200 or timeout. */
-async function waitForServer(
-  url: string,
-  timeoutMs = 30_000,
-  initialIntervalMs = 150,
-  onProgress?: (elapsed: number, total: number) => void,
-): Promise<void> {
-  const start = Date.now();
-  const deadline = start + timeoutMs;
-  let interval = initialIntervalMs;
-  while (Date.now() < deadline) {
-    onProgress?.(Date.now() - start, timeoutMs);
-    try {
-      const res = await fetch(url);
-      if (res.ok) return;
-    } catch {
-      // Not ready yet
-    }
-    await new Promise((r) => setTimeout(r, interval));
-    // Back off: start with rapid polls for quick boot, then slow to 1s
-    interval = Math.min(1000, Math.round(interval * 1.35));
-  }
-  throw new Error(`Server did not start within ${timeoutMs}ms`);
-}
-
 // ── Splash screen ──────────────────────────────────────────────
 
 /** Collected server stderr lines for the "View Logs" feature. */
@@ -322,163 +232,6 @@ function captureStderrLine(line: string): void {
   }
   // Sidecar stderr → server.log (NDJSON). desktop.log stays uncluttered.
   writeServerStreamLine("stderr", line);
-}
-
-function buildSplashHtml(): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; script-src 'unsafe-inline'; style-src 'unsafe-inline';">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Covel</title>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: #09090b; color: #fafafa;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    height: 100vh; display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    overflow: hidden; -webkit-app-region: drag; user-select: none;
-  }
-  @media (prefers-color-scheme: light) {
-    body { background: #fafafa; color: #09090b; }
-    .brand { color: #18181b !important; }
-    #status { color: #52525b !important; }
-    .btn { background: #f4f4f5 !important; border-color: #e4e4e7 !important; color: #18181b !important; }
-    .btn:hover { background: #e4e4e7 !important; }
-    #log-viewer { background: #f4f4f5 !important; border-color: #e4e4e7 !important; }
-    #log-content { color: #52525b !important; }
-  }
-  .brand { font-size: 42px; font-weight: 700; letter-spacing: 0.08em; color: #e4e4e7;
-    margin-bottom: 48px; opacity: 0; animation: fade-in 0.6s ease-out 0.15s forwards; }
-  .spinner-wrap { position: relative; width: 56px; height: 56px; margin-bottom: 40px;
-    opacity: 0; animation: fade-in 0.6s ease-out 0.35s forwards; }
-  .ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid transparent; }
-  .ring-1 { border-top-color: #a1a1aa; animation: spin 1.1s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite; }
-  .ring-2 { inset: 6px; border-right-color: #71717a; animation: spin 1.6s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite reverse; }
-  .ring-3 { inset: 12px; border-bottom-color: #52525b; animation: spin 2.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite; }
-  .dot { position: absolute; width: 4px; height: 4px; background: #d4d4d8; border-radius: 50%;
-    top: 50%; left: 50%; transform: translate(-50%, -50%); animation: pulse 2s ease-in-out infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @keyframes pulse {
-    0%, 100% { opacity: 0.4; transform: translate(-50%, -50%) scale(1); }
-    50% { opacity: 1; transform: translate(-50%, -50%) scale(1.6); }
-  }
-  @keyframes fade-in { to { opacity: 1; } }
-  #status { font-size: 13px; color: #a1a1aa; letter-spacing: 0.04em; min-height: 20px;
-    opacity: 0; animation: fade-in 0.6s ease-out 0.5s forwards; transition: color 0.3s ease; }
-  .error-wrap { display: none; flex-direction: column; align-items: center; gap: 10px;
-    margin-top: 24px; opacity: 0; animation: fade-in 0.4s ease-out forwards; }
-  .error-wrap.visible { display: flex; }
-  .error-title { font-size: 14px; font-weight: 600; color: #f87171; }
-  .error-msg { font-size: 12px; color: #a1a1aa; text-align: center; max-width: 460px; line-height: 1.5; }
-  .error-hint { font-size: 12px; color: #d4d4d8; text-align: center; max-width: 460px; line-height: 1.5; margin-top: 4px; }
-  .btn-row { display: flex; gap: 10px; -webkit-app-region: no-drag; margin-top: 6px; flex-wrap: wrap; justify-content: center; }
-  .btn { padding: 7px 18px; border-radius: 6px; border: 1px solid #27272a; background: #18181b;
-    color: #d4d4d8; font-size: 12px; font-weight: 500; cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease; letter-spacing: 0.02em; }
-  .btn:hover { background: #27272a; border-color: #3f3f46; }
-  .btn-primary { background: #27272a; border-color: #3f3f46; }
-  .btn-primary:hover { background: #3f3f46; border-color: #52525b; }
-  #log-viewer { display: none; margin-top: 16px; padding: 12px 16px; background: #18181b;
-    border: 1px solid #27272a; border-radius: 8px; max-width: 560px; max-height: 200px;
-    overflow-y: auto; width: 90vw; -webkit-app-region: no-drag; }
-  #log-viewer.visible { display: block; }
-  #log-content { font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
-    font-size: 11px; color: #a1a1aa; white-space: pre-wrap; word-break: break-all; line-height: 1.6; }
-</style>
-</head>
-<body>
-  <div class="brand">COVEL</div>
-  <div class="spinner-wrap" id="spinner">
-    <div class="ring ring-1"></div><div class="ring ring-2"></div>
-    <div class="ring ring-3"></div><div class="dot"></div>
-  </div>
-  <div id="status">Initializing\u2026</div>
-
-  <div class="error-wrap" id="error-wrap">
-    <div class="error-title" id="error-title">Startup failed</div>
-    <div class="error-msg" id="error-msg"></div>
-    <div class="error-hint" id="error-hint"></div>
-    <div class="btn-row">
-      <button class="btn btn-primary" id="btn-retry">Retry</button>
-      <button class="btn" id="btn-logs">View Logs</button>
-      <button class="btn" id="btn-open-logs">Open Logs Folder</button>
-      <button class="btn" id="btn-open-data">Open Data Folder</button>
-    </div>
-  </div>
-
-  <div id="log-viewer"><div id="log-content"></div></div>
-
-  <script>
-    const ipc = window.covelIpc;
-    document.getElementById('btn-retry').addEventListener('click', () => ipc.invoke('covel:retry-startup'));
-    document.getElementById('btn-logs').addEventListener('click', () => {
-      document.getElementById('log-viewer').classList.toggle('visible');
-    });
-    document.getElementById('btn-open-logs').addEventListener('click', () => ipc.invoke('covel:open-logs-dir'));
-    document.getElementById('btn-open-data').addEventListener('click', () => ipc.invoke('covel:open-data-dir'));
-
-    ipc.on('covel:startup:progress', (payload) => {
-      document.getElementById('status').textContent = payload && payload.label ? payload.label : 'Loading\u2026';
-    });
-
-    ipc.on('covel:startup:error', (payload) => {
-      document.getElementById('spinner').style.display = 'none';
-      document.getElementById('status').style.color = '#71717a';
-      document.getElementById('status').textContent = 'Startup failed';
-      document.getElementById('error-title').textContent = payload.title || 'Startup failed';
-      document.getElementById('error-msg').textContent = payload.detail || '';
-      document.getElementById('error-hint').textContent = payload.hint || '';
-      document.getElementById('log-content').textContent = payload.logs || '';
-      document.getElementById('error-wrap').classList.add('visible');
-    });
-  </script>
-</body>
-</html>`;
-}
-
-// ── Env file loader ─────────────────────────────────────────────
-
-function loadEnvFiles(baseDir: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const name of [".env", ".env.llm"]) {
-    const filePath = path.join(baseDir, name);
-    if (!fs.existsSync(filePath)) continue;
-    parseEnvFileInto(filePath, result);
-  }
-  return result;
-}
-
-/**
- * Read `~/.covel/keys.env` into a provider-id keyed record for the renderer.
- * Missing file is fine (fresh install). Legacy bare keys like `deepseek=...`
- * are folded into the same shape as `DEEPSEEK_API_KEY=...`.
- */
-function loadKeysEnv(keysFile: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  if (!fs.existsSync(keysFile)) return result;
-  parseEnvFileInto(keysFile, result);
-  return normalizeProviderKeyMap(result);
-}
-
-function loadKeysEnvForChild(keysFile: string): Record<string, string> {
-  return toApiKeyEnvMap(loadKeysEnv(keysFile));
-}
-
-function saveKeysEnv(keysFile: string, keys: Record<string, string>): void {
-  const envKeys = toApiKeyEnvMap(keys);
-  const body =
-    `# Covel provider API keys. One KEY=VALUE per line.\n` +
-    `# Example:\n#   DEEPSEEK_API_KEY=sk-xxx\n#   OPENAI_API_KEY=sk-xxx\n\n` +
-    Object.entries(envKeys)
-      .filter(([k, v]) => k && typeof v === "string" && v.trim())
-      .map(([k, v]) => `${k}=${v.trim()}`)
-      .join("\n") +
-    "\n";
-  fs.mkdirSync(path.dirname(keysFile), { recursive: true });
-  fs.writeFileSync(keysFile, body, { mode: 0o600 });
 }
 
 async function requestSidecarConfig<T>(
@@ -522,28 +275,6 @@ async function saveKeysViaSidecar(keys: Record<string, string>): Promise<void> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(keys),
   });
-}
-
-function parseEnvFileInto(
-  filePath: string,
-  into: Record<string, string>,
-): void {
-  const content = fs.readFileSync(filePath, "utf-8");
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eqIdx = trimmed.indexOf("=");
-    if (eqIdx < 0) continue;
-    const key = trimmed.slice(0, eqIdx).trim();
-    let val = trimmed.slice(eqIdx + 1).trim();
-    if (
-      (val.startsWith('"') && val.endsWith('"')) ||
-      (val.startsWith("'") && val.endsWith("'"))
-    ) {
-      val = val.slice(1, -1);
-    }
-    into[key] = val;
-  }
 }
 
 // ── Server lifecycle ────────────────────────────────────────────

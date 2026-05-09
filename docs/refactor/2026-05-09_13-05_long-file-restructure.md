@@ -21,6 +21,7 @@ Refactored in this pass:
 - `packages/store/src/memory/memory-store.ts`
 - `packages/store/src/indexeddb/idb-store.ts`
 - `apps/server/src/routes/misc-api.ts`
+- `apps/desktop/src/main.ts`
 
 ## Assumptions
 
@@ -106,6 +107,12 @@ Refactored in this pass:
 - Split plugin flow builders, package catalog builders, live plugin map loading, UI spec sync/building, and shared route helpers into `apps/server/src/routes/misc-api/`.
 - Preserved the existing `/api/*` route prefixes and direct `createMiscApiRoutes(...)` test/import surface.
 
+### Desktop Main Process
+
+- Kept `main.ts` as the Electron composition root for app lifecycle, logging, sidecar orchestration, IPC, native menu, and windows.
+- Split startup error classification, network/health polling, splash HTML, and env/key file helpers into `apps/desktop/src/{startup-errors,network,splash-screen,env-files}.ts`.
+- Kept sidecar config REST calls, stderr ring buffer, logging channels, and supervisor state in `main.ts` because they still depend on process-level state.
+
 ## Current Size Snapshot
 
 - `packages/runtime/src/turn-executor.ts`: 1132 lines
@@ -128,6 +135,11 @@ Refactored in this pass:
 - `packages/store/src/memory/memory-store.ts`: 1073 lines
 - `packages/store/src/indexeddb/idb-store.ts`: 1083 lines
 - `apps/server/src/routes/misc-api.ts`: 429 lines
+- `apps/desktop/src/main.ts`: 1226 lines
+- `apps/desktop/src/env-files.ts`: 66 lines
+- `apps/desktop/src/network.ts`: 55 lines
+- `apps/desktop/src/splash-screen.ts`: 114 lines
+- `apps/desktop/src/startup-errors.ts`: 38 lines
 
 ## Remaining Priority Queue
 
@@ -136,8 +148,9 @@ Future passes should focus on large maintenance files that are production code, 
 | Priority |                                                                 File |     Lines | Refactor boundary                                           | Validation focus                     |
 | -------- | -------------------------------------------------------------------: | --------: | ----------------------------------------------------------- | ------------------------------------ |
 | 1        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 1527-1596 | shared SQL helper extraction after contract coverage review | Store contract tests across backends |
-| 2        |                                           `apps/desktop/src/main.ts` |      1492 | desktop app bootstrap, config, window, sidecar, IPC helpers | Desktop lint/build smoke             |
-| 3        |                           `apps/server/src/routes/api/plugin-rpc.ts` |      1114 | action dispatch, runtime turn, jobs, deferred followers     | Plugin RPC and approval route tests  |
+| 2        |                           `apps/server/src/routes/api/plugin-rpc.ts` |      1114 | action dispatch, runtime turn, jobs, deferred followers     | Plugin RPC and approval route tests  |
+| 3        |                  `apps/web/src/components/session/chat-messages.tsx` |      1226 | leaf display components, block renderers, RPC hook          | Web component/session tests          |
+| 4        |                                           `apps/desktop/src/main.ts` |      1226 | logging, window/menu helpers, then supervisor/IPC helpers   | Desktop build smoke                  |
 
 ## Validation Run
 
@@ -184,6 +197,10 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 240s mise exec -- pnpm --filter @covel/server test`
   - `timeout 240s mise exec -- pnpm lint`
   - `timeout 360s mise exec -- pnpm test`
+- Seventh pass validation:
+  - `timeout 180s mise exec -- pnpm --filter @covel/desktop build`
+  - `timeout 240s mise exec -- pnpm lint`
+  - `timeout 120s mise exec -- pnpm exec prettier --check apps/desktop/src/main.ts apps/desktop/src/env-files.ts apps/desktop/src/network.ts apps/desktop/src/splash-screen.ts apps/desktop/src/startup-errors.ts`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -196,6 +213,7 @@ Future passes should focus on large maintenance files that are production code, 
 - `session-store.tsx` still coordinates many side effects from the public Zustand store; future reductions should split store action factories only after broader UI flow tests are in place.
 - `plugin-selection-card.tsx` is still sizeable because filtering, grouping, pack selection, and required/excluded policy rendering share local UI state; it is the next extraction candidate inside session prep after component behavior tests are expanded.
 - DataStore SQL backend files still contain repeated CRUD families. The next store pass should prefer shared SQL metadata/helpers while keeping SQLite and PostgreSQL execution differences local.
+- `main.ts` still owns logging and sidecar supervisor state; the next desktop pass should extract logging first, then move window/menu helpers before attempting supervisor/IPC dependency injection.
 
 ## Rollback
 
@@ -228,4 +246,5 @@ flowchart TD
   MemoryStore["memory-store.ts"] --> StoreCommon["common/{keys,pagination}.ts"]
   IdbStore["idb-store.ts"] --> StoreCommon
   MiscApi["misc-api.ts"] --> MiscModules["routes/misc-api/*"]
+  DesktopMain["desktop/main.ts"] --> DesktopLeaf["desktop/{startup-errors,network,splash-screen,env-files}.ts"]
 ```
