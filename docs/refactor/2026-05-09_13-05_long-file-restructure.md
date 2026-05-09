@@ -21,6 +21,7 @@ Refactored in this pass:
 - `packages/store/src/memory/memory-store.ts`
 - `packages/store/src/indexeddb/idb-store.ts`
 - `apps/server/src/routes/misc-api.ts`
+- `apps/server/src/routes/api/bootstrap.ts`
 - `apps/desktop/src/main.ts`
 - `apps/desktop/src/logging.ts`
 - `apps/desktop/src/windows.ts`
@@ -129,6 +130,12 @@ Refactored in this pass:
 - Split manual runtime turn execution and deferred follower turn execution into `apps/server/src/routes/api/plugin-rpc/runtime-turn.ts`.
 - Kept runtime execution, deferred follower scheduling, approval handling, and action dispatch in the route file for this pass.
 
+### Server API Bootstrap
+
+- Kept `bootstrap.ts` as the API composition root for plugin discovery, tool registration, RPC registration, hook registration, memory setup, dependency injection, and route mounting.
+- Split the plugin-data store event proxy into `apps/server/src/routes/api/bootstrap/plugin-data-store-events.ts`.
+- Preserved the public `wrapStoreWithPluginDataEvents` export from `bootstrap.ts` so existing route tests and callers keep their import path.
+
 ### Desktop Main Process
 
 - Kept `main.ts` as the Electron composition root for app lifecycle, sidecar orchestration, IPC, native menu, and windows.
@@ -176,6 +183,8 @@ Refactored in this pass:
 - `apps/server/src/routes/api/plugin-rpc/jobs.ts`: 31 lines
 - `apps/server/src/routes/api/plugin-rpc/runtime-response.ts`: 74 lines
 - `apps/server/src/routes/api/plugin-rpc/runtime-turn.ts`: 178 lines
+- `apps/server/src/routes/api/bootstrap.ts`: 1064 lines
+- `apps/server/src/routes/api/bootstrap/plugin-data-store-events.ts`: 131 lines
 - `apps/desktop/src/main.ts`: 762 lines
 - `apps/desktop/src/logging.ts`: 147 lines
 - `apps/desktop/src/windows.ts`: 307 lines
@@ -190,9 +199,10 @@ Future passes should focus on large maintenance files that are production code, 
 
 | Priority |                                                                 File |     Lines | Refactor boundary                                       | Validation focus                     |
 | -------- | -------------------------------------------------------------------: | --------: | ------------------------------------------------------- | ------------------------------------ |
-| 1        |                           `apps/server/src/routes/api/plugin-rpc.ts` |       913 | deferred follower scheduling, action dispatch           | Plugin RPC and approval route tests  |
-| 2        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 1068-1132 | session CRUD, runtime records, conversation persistence | Store contract tests across backends |
-| 3        |                                           `apps/desktop/src/main.ts` |       762 | IPC helpers, then supervisor                            | Desktop build smoke                  |
+| 1        |                            `apps/server/src/routes/api/bootstrap.ts` |      1064 | plugin discovery, tool/RPC/hook bootstrap               | Server bootstrap and API route tests |
+| 2        |                           `apps/server/src/routes/api/plugin-rpc.ts` |       913 | deferred follower scheduling, action dispatch           | Plugin RPC and approval route tests  |
+| 3        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 1068-1132 | session CRUD, runtime records, conversation persistence | Store contract tests across backends |
+| 4        |                                           `apps/desktop/src/main.ts` |       762 | IPC helpers, then supervisor                            | Desktop build smoke                  |
 
 ## Validation Run
 
@@ -283,6 +293,11 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 120s mise exec -- pnpm exec prettier --write apps/desktop/src/main.ts apps/desktop/src/windows.ts`
   - `timeout 180s mise exec -- pnpm --filter @covel/desktop build`
   - `timeout 240s mise exec -- pnpm lint`
+- Seventeenth pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --write apps/server/src/routes/api/bootstrap.ts apps/server/src/routes/api/bootstrap/plugin-data-store-events.ts`
+  - `timeout 120s mise exec -- pnpm --filter @covel/server lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/server exec vitest run tests/api/plugin-data-delete-event.test.ts tests/api/subscribe-event-name.test.ts`
+  - `timeout 240s mise exec -- pnpm --filter @covel/server exec vitest run tests/api/chat-mode-http-e2e.test.ts tests/api/e2e-narrator.test.ts tests/api/plugin-data-routes.test.ts`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -295,6 +310,7 @@ Future passes should focus on large maintenance files that are production code, 
 - `session-store.tsx` still coordinates many side effects from the public Zustand store; future reductions should split store action factories only after broader UI flow tests are in place.
 - `plugin-selection-card.tsx` is still sizeable because filtering, grouping, pack selection, and required/excluded policy rendering share local UI state; it is the next extraction candidate inside session prep after component behavior tests are expanded.
 - `plugin-rpc.ts` still owns runtime execution and deferred follower scheduling; future passes should extract these only with the full runtime/background tests in scope.
+- `bootstrap.ts` still owns plugin discovery, tool registration, RPC registration, hook registration, and memory setup. Future passes should split one subsystem at a time and preserve bootstrapApi as the composition root.
 - DataStore SQL backend files still contain repeated CRUD families. The next store pass should prefer focused backend-local helper families while keeping SQLite and PostgreSQL execution differences local.
 - `main.ts` still owns sidecar supervisor state and broad IPC registration; the next desktop pass should split IPC handlers before attempting supervisor dependency injection.
 
@@ -339,6 +355,7 @@ flowchart TD
   PgStore --> PgDataCrud["pg-data-crud.ts"]
   MiscApi["misc-api.ts"] --> MiscModules["routes/misc-api/*"]
   PluginRpc["plugin-rpc.ts"] --> PluginRpcHelpers["plugin-rpc/{body,jobs,runtime-response,runtime-turn}.ts"]
+  BootstrapApi["bootstrap.ts"] --> BootstrapStoreEvents["bootstrap/plugin-data-store-events.ts"]
   DesktopMain["desktop/main.ts"] --> DesktopLeaf["desktop/{startup-errors,network,splash-screen,env-files}.ts"]
   DesktopMain --> DesktopLogging["desktop/logging.ts"]
   DesktopMain --> DesktopWindows["desktop/windows.ts"]
