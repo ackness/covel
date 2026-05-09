@@ -123,6 +123,7 @@ Refactored in this pass:
 - Kept `plugin-rpc.ts` as the Hono route entrypoint for action and runtime dispatch.
 - Split request-body/header helpers into `apps/server/src/routes/api/plugin-rpc/body.ts`.
 - Split `_jobs` plugin-data write helper and job value type into `apps/server/src/routes/api/plugin-rpc/jobs.ts`.
+- Split runtime response and background follower job-status derivation into `apps/server/src/routes/api/plugin-rpc/runtime-response.ts`.
 - Kept runtime execution, deferred follower scheduling, approval handling, and action dispatch in the route file for this pass.
 
 ### Desktop Main Process
@@ -165,9 +166,10 @@ Refactored in this pass:
 - `packages/store/src/postgres/pg-store-values.ts`: 190 lines
 - `packages/store/src/postgres/pg-session-cascade.ts`: 85 lines
 - `apps/server/src/routes/misc-api.ts`: 429 lines
-- `apps/server/src/routes/api/plugin-rpc.ts`: 1078 lines
+- `apps/server/src/routes/api/plugin-rpc.ts`: 1014 lines
 - `apps/server/src/routes/api/plugin-rpc/body.ts`: 38 lines
 - `apps/server/src/routes/api/plugin-rpc/jobs.ts`: 31 lines
+- `apps/server/src/routes/api/plugin-rpc/runtime-response.ts`: 74 lines
 - `apps/desktop/src/main.ts`: 1226 lines
 - `apps/desktop/src/env-files.ts`: 66 lines
 - `apps/desktop/src/network.ts`: 55 lines
@@ -180,7 +182,7 @@ Future passes should focus on large maintenance files that are production code, 
 
 | Priority |                                                                 File |     Lines | Refactor boundary                                         | Validation focus                     |
 | -------- | -------------------------------------------------------------------: | --------: | --------------------------------------------------------- | ------------------------------------ |
-| 1        |                           `apps/server/src/routes/api/plugin-rpc.ts` |      1078 | runtime turn, deferred followers, action dispatch         | Plugin RPC and approval route tests  |
+| 1        |                           `apps/server/src/routes/api/plugin-rpc.ts` |      1014 | runtime turn, deferred followers, action dispatch         | Plugin RPC and approval route tests  |
 | 2        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 1068-1132 | session CRUD, runtime records, conversation persistence   | Store contract tests across backends |
 | 3        |                                           `apps/desktop/src/main.ts` |      1226 | logging, window/menu helpers, then supervisor/IPC helpers | Desktop build smoke                  |
 
@@ -257,6 +259,10 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 180s mise exec -- pnpm --filter @covel/store exec vitest run tests/sqlite-store.test.ts tests/pg-store.test.ts tests/plugin-data-contract-extras.test.ts`
   - `timeout 240s mise exec -- pnpm --filter @covel/store test`
   - `timeout 120s mise exec -- pnpm exec prettier --check packages/store/src/sqlite/sqlite-store.ts packages/store/src/sqlite/sqlite-data-crud.ts packages/store/src/postgres/pg-store.ts packages/store/src/postgres/pg-data-crud.ts`
+- Thirteenth pass validation:
+  - `timeout 120s mise exec -- pnpm --filter @covel/server lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/server exec vitest run tests/api/plugin-rpc-runtime-response.test.ts tests/api/plugin-rpc.test.ts tests/api/approvals.test.ts tests/api/plugin-data-routes.test.ts`
+  - `timeout 120s mise exec -- pnpm exec prettier --check apps/server/src/routes/api/plugin-rpc.ts apps/server/src/routes/api/plugin-rpc/runtime-response.ts apps/server/tests/api/plugin-rpc-runtime-response.test.ts`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -312,6 +318,6 @@ flowchart TD
   PgStore --> PgCascade["pg-session-cascade.ts"]
   PgStore --> PgDataCrud["pg-data-crud.ts"]
   MiscApi["misc-api.ts"] --> MiscModules["routes/misc-api/*"]
-  PluginRpc["plugin-rpc.ts"] --> PluginRpcHelpers["plugin-rpc/{body,jobs}.ts"]
+  PluginRpc["plugin-rpc.ts"] --> PluginRpcHelpers["plugin-rpc/{body,jobs,runtime-response}.ts"]
   DesktopMain["desktop/main.ts"] --> DesktopLeaf["desktop/{startup-errors,network,splash-screen,env-files}.ts"]
 ```

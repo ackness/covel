@@ -52,6 +52,11 @@ import {
   type PluginJobValue,
   writePluginJob as persistPluginJob,
 } from "./plugin-rpc/jobs.js";
+import {
+  deriveBackgroundJobCompletion,
+  deriveFollowerRuntimeJobResult,
+  type ManualTurnSummary,
+} from "./plugin-rpc/runtime-response.js";
 
 export const pluginRpcRoutes = new Hono();
 
@@ -238,32 +243,6 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
       outputKindMap.set(rt.name, rt.outputKind ?? "plugin");
       runtimeCapabilitiesMap.set(rt.name, rt.capabilities ?? []);
     }
-
-    // Executes the manual-trigger turn end-to-end: run through the turn
-    // pipeline, commit proposals for every emitted runtime result, and
-    // return a summary suitable for the JSON response or the `_jobs`
-    // writeback.
-    type ManualTurnSummary = {
-      readonly turnId: string;
-      readonly runtimeResults: ReadonlyArray<{
-        readonly runtimeId: string;
-        readonly pluginId: string;
-        readonly status: string;
-        readonly durationMs: number;
-        readonly error?: string;
-        readonly output: unknown;
-      }>;
-      readonly durationMs: number;
-      readonly abortReason?: string;
-      readonly deferredFollowers: ReadonlyArray<{
-        readonly runtimeId: string;
-        readonly pluginId: string;
-        readonly triggerEvent: {
-          readonly topic: string;
-          readonly data: Readonly<Record<string, unknown>>;
-        };
-      }>;
-    };
 
     const writePluginJob = async (args: {
       readonly pluginId: string;
@@ -477,40 +456,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
           await scheduleDeferredFollowers(turnResult.deferredFollowers);
         }
 
-        // Audit P1-6: business failure detection. When the handler
-        // explicitly reports failure (status: 'failed' / non-empty error),
-        // surface that on both `runtimeResult.status` and the persisted
-        // `_jobs/<jobId>.value.status` so the UI transitions pending →
-        // failed correctly. We also treat an executor-reported `failed` /
-        // `skipped` runtime as a job-level failure.
-        const outputRecord = (followerResult?.output ?? {}) as Record<
-          string,
-          unknown
-        >;
-        const executorReportedFailure =
-          followerResult?.status === "failed" ||
-          followerResult?.status === "skipped";
-        const handlerSaysFailed =
-          outputRecord.status === "failed" ||
-          (typeof outputRecord.error === "string" &&
-            outputRecord.error.length > 0);
-        const isFailure = executorReportedFailure || handlerSaysFailed;
-        const runtimeStatus: "success" | "failed" = isFailure
-          ? "failed"
-          : "success";
-        const runtimeError =
-          followerResult?.error ??
-          (handlerSaysFailed && typeof outputRecord.error === "string"
-            ? outputRecord.error
-            : isFailure
-              ? "runtime reported failure"
-              : undefined);
-
-        // Audit P1-6: persist the derived job status so a UI watching
-        // `_jobs/<jobId>` doesn't see stale `pending` after a business
-        // failure, and so the runtimeResults entry inside the job
-        // matches what the trace pipeline records above.
-        const jobStatus: "done" | "failed" = isFailure ? "failed" : "done";
+        const jobResult = deriveFollowerRuntimeJobResult({
+          followerResult,
+          turnDurationMs: turnResult.durationMs,
+        });
         const completedAt = new Date().toISOString();
         await writePluginJob({
           pluginId: args.pluginId,
@@ -518,23 +467,23 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
           startedAt: args.startedAt,
           updatedAt: completedAt,
           value: {
-            status: jobStatus,
+            status: jobResult.jobStatus,
             progress: 100,
             runtimeId: args.runtimeId,
             turnId: args.followerTurnId,
             triggerEvent: args.triggerEvent,
             startedAt: args.startedAt,
             completedAt,
-            durationMs: followerResult?.durationMs ?? turnResult.durationMs,
-            ...(runtimeError ? { error: runtimeError } : {}),
+            durationMs: jobResult.durationMs,
+            ...(jobResult.error ? { error: jobResult.error } : {}),
             runtimeResults: [
               {
                 runtimeId: args.runtimeId,
                 pluginId: args.pluginId,
-                status: runtimeStatus,
-                durationMs: followerResult?.durationMs ?? turnResult.durationMs,
-                ...(runtimeError ? { error: runtimeError } : {}),
-                output: followerResult?.output ?? outputRecord,
+                status: jobResult.runtimeStatus,
+                durationMs: jobResult.durationMs,
+                ...(jobResult.error ? { error: jobResult.error } : {}),
+                output: jobResult.output,
               },
             ],
           },
@@ -702,20 +651,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
             const summary = await runManualTurn();
             const completedAt = new Date().toISOString();
 
-            // Audit F8: `runManualTurn()` resolves even when the runtime's
-            // own handler threw — `executeOneRuntime` catches the exception
-            // and records the runtime as `status: 'failed'` inside
-            // `runtimeResults`. If we blindly wrote `status: 'done'` the
-            // frontend would render a failed image generation as success.
-            // Treat any failed runtime result as top-level failure and
-            // surface the first error message so the UI can show it.
-            const failedResult = summary.runtimeResults.find(
-              (r) => r.status === "failed",
-            );
-            const topLevelStatus = failedResult ? "failed" : "done";
-            const failureMessage =
-              failedResult?.error ??
-              (failedResult ? "runtime reported failure" : undefined);
+            const completion = deriveBackgroundJobCompletion(summary);
 
             await writePluginJob({
               pluginId: body.pluginId!,
@@ -723,7 +659,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
               startedAt,
               updatedAt: completedAt,
               value: {
-                status: topLevelStatus,
+                status: completion.status,
                 progress: 100,
                 runtimeId: body.runtimeId,
                 turnId: summary.turnId,
@@ -734,7 +670,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
                 completedAt,
                 durationMs: summary.durationMs,
                 runtimeResults: summary.runtimeResults,
-                ...(failureMessage ? { error: failureMessage } : {}),
+                ...(completion.error ? { error: completion.error } : {}),
                 ...(summary.abortReason
                   ? { abortReason: summary.abortReason }
                   : {}),
