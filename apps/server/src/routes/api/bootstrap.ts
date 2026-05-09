@@ -25,11 +25,7 @@ import { createEventBus, type EventBus } from "@covel/events";
 import type { DataStore, StoreBackend } from "@covel/store";
 import type { LLMAdapter } from "@covel/runtime";
 import { createToolExecutor, createModelResolver } from "@covel/runtime";
-import {
-  maybeCompact,
-  type CompactorRunner,
-  type CompactorLLMAdapter,
-} from "@covel/context";
+import type { CompactorRunner } from "@covel/context";
 import {
   builtinUITools,
   createPluginDataTools,
@@ -82,6 +78,7 @@ import { runtimeOutputRoutes } from "./runtime-outputs.js";
 import { pluginRpcRoutes } from "./plugin-rpc.js";
 import { approvalRoutes, sessionApprovalRoutes } from "./approvals.js";
 export { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
+import { createBootstrapCompactorRunner } from "./bootstrap/compactor.js";
 import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
 import { createBootstrapHookPipeline } from "./bootstrap/plugin-hooks.js";
 import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
@@ -615,63 +612,13 @@ export async function bootstrapApi(
     manifestCache,
   });
 
-  // 7b. CompactorRunner (S2-T2) — wraps maybeCompact with server-level deps.
-  //     Feature-gated by COVEL_COMPACTOR_V1=1 at call site (turn-executor.ts).
-  //     Collects summaryFocus from ALL registered manifests (deduplicated).
-  const allSummaryFocus = new Set<string>();
-  for (const [, manifests] of manifestCache) {
-    for (const parsed of manifests) {
-      for (const section of parsed.manifest.summaryFocus ?? []) {
-        allSummaryFocus.add(section);
-      }
-    }
-  }
-  const focusSections: readonly string[] = [...allSummaryFocus];
-
-  // Simple char-based token estimator (chars/4 ≈ tokens). Good enough for
-  // compactor threshold comparisons; budget tests use the same approach.
-  const simpleEstimator = (text: string): number => Math.ceil(text.length / 4);
-
-  // Default context window (32k tokens) — used when COVEL_COMPACTOR_V1 is on
-  // but no finer-grained window is configured. Callers may override via env.
   const runtimeEnv = readRuntimeEnv();
-  const compactorContextWindow = runtimeEnv.compactorContextWindow;
-
-  // Adapt LLMAdapter to CompactorLLMAdapter (fast slot, system+user messages)
-  const fastSlotLlm: CompactorLLMAdapter = {
-    async complete(params) {
-      const response = await config.llmAdapter.generate({
-        model: "fast",
-        messages: [
-          { role: "system", content: params.systemPrompt },
-          ...params.messages.map((m) => ({
-            role: m.role as "user",
-            content: m.content,
-          })),
-        ],
-      });
-      return { content: response.content ?? "" };
-    },
-  };
-
-  const compactorRunner: CompactorRunner = {
-    async run(sessionId, systemPromptPreview, messages) {
-      await maybeCompact(
-        sessionId,
-        systemPromptPreview,
-        messages,
-        {
-          store,
-          estimator: simpleEstimator,
-          fastSlotLlm,
-          contextWindow: compactorContextWindow,
-        },
-        {
-          focusSections,
-        },
-      );
-    },
-  };
+  const compactorRunner = createBootstrapCompactorRunner({
+    manifestCache,
+    store,
+    llmAdapter: config.llmAdapter,
+    contextWindow: runtimeEnv.compactorContextWindow,
+  });
 
   // 8. Create memory system (Letta-style three-tier memory)
   // When COVEL_MEMORY_V1=1, creates the full memory system with core memory
