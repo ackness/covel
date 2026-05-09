@@ -31,14 +31,8 @@ import type {
 import {
   createToolExecutor,
   createModelResolver,
-  createPluginRpcRegistry,
-  createRpcExecutor,
-  submitFormHandler,
   createHookPipeline,
   registerPluginHooks,
-  type PluginRpcRegistry,
-  type RpcExecutor,
-  type RpcHandler,
 } from "@covel/runtime";
 import {
   maybeCompact,
@@ -62,8 +56,8 @@ import {
 } from "@covel/tools";
 import { z } from "zod";
 import { createMemorySystem, type MemorySystem } from "@covel/memory";
-import { createApprovalPipeline, createRpcApprovalGate } from "@covel/approval";
-import type { PermissionRule, RpcApprovalGate } from "@covel/approval";
+import { createApprovalPipeline } from "@covel/approval";
+import type { PermissionRule } from "@covel/approval";
 
 import {
   createInProcessSessionLock,
@@ -98,6 +92,7 @@ import { pluginRpcRoutes } from "./plugin-rpc.js";
 import { approvalRoutes, sessionApprovalRoutes } from "./approvals.js";
 export { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
 import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
+import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
 import { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
 
 // ── Bootstrap config ─────────────────────────────────────────────
@@ -617,83 +612,11 @@ export async function bootstrapApi(
     ): Readonly<Record<string, unknown>> => ({}));
   const getPluginSource = (pluginId: string) => registry.get(pluginId)?.source;
 
-  // 7c. PR-3: Plugin RPC registry + executor.
-  //
-  //   - Register framework defaults (`submit-form`, `cancel`).
-  //   - Register every plugin-declared rpc action discovered in PLUGIN.md.
-  //   - Build the executor with a loader that imports the handler module
-  //     from the plugin's root directory.
-  const rpcRegistry: PluginRpcRegistry = createPluginRpcRegistry();
-  rpcRegistry.registerFrameworkDefault("submit-form", submitFormHandler, {
-    description:
-      "Persist player input submissions and fill the originating template message.",
-  });
-  rpcRegistry.registerFrameworkDefault(
-    "framework-submit-form",
-    submitFormHandler,
-    {
-      description: "Alias for submit-form (explicit framework namespace).",
-    },
-  );
-  for (const [pluginId, manifests] of manifestCache) {
-    for (const parsed of manifests) {
-      const rpcMap = parsed.manifest.rpc;
-      if (!rpcMap) continue;
-      const discovery = discoveryMap.get(pluginId);
-      const trustInfo = getPluginTrustInfo(pluginId, discovery?.source);
-      const trustLevel: "builtin" | "official" | "community" =
-        trustInfo.source === "builtin"
-          ? "builtin"
-          : trustInfo.source === "community"
-            ? "community"
-            : "official";
-      for (const [action, decl] of Object.entries(rpcMap)) {
-        try {
-          rpcRegistry.registerPluginAction(pluginId, action, decl, trustLevel);
-        } catch (err) {
-          console.warn(
-            `[bootstrap] plugin-rpc registration failed for ${pluginId}::${action}:`,
-            err instanceof Error ? err.message : err,
-          );
-        }
-      }
-    }
-  }
-  const rpcExecutor: RpcExecutor = createRpcExecutor({
-    registry: rpcRegistry,
-    loadHandler: async (pluginId, handlerPath) => {
-      const discovery = discoveryMap.get(pluginId);
-      if (!discovery) {
-        throw new Error(`plugin "${pluginId}" not found in discovery map`);
-      }
-      // HIGH-1 defence-in-depth: even though the schema rejects `..` and
-      // absolute paths, a future schema change or a hand-crafted manifest
-      // could still produce something that escapes the plugin root. Resolve
-      // and verify containment before importing.
-      const rootPath = path.resolve(discovery.rootPath);
-      const absPath = path.resolve(rootPath, handlerPath);
-      const rootWithSep = rootPath.endsWith(path.sep)
-        ? rootPath
-        : rootPath + path.sep;
-      if (!absPath.startsWith(rootWithSep) && absPath !== rootPath) {
-        throw new Error(
-          `handler path "${handlerPath}" escapes plugin root for "${pluginId}"`,
-        );
-      }
-      const mod = (await import(absPath)) as { default?: RpcHandler };
-      if (typeof mod.default !== "function") {
-        throw new Error(
-          `handler at ${handlerPath} has no default export function`,
-        );
-      }
-      return mod.default;
-    },
-  });
-
-  // PR-7: per-process RPC approval gate. Pending approvals + session-cached
-  // pre-authorizations live in memory; they do not survive a restart and
-  // are not tied to any specific store backend.
-  const rpcApprovalGate: RpcApprovalGate = createRpcApprovalGate();
+  const { rpcRegistry, rpcExecutor, rpcApprovalGate } =
+    createBootstrapPluginRpc({
+      discoveryMap,
+      manifestCache,
+    });
 
   // 7d. Hook pipeline — singleton per bootstrapApi() call.
   //
