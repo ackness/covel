@@ -12,6 +12,9 @@ Refactored in this pass:
 - `apps/web/src/stores/session-store.tsx`
 - `apps/web/src/lib/catalog.tsx`
 - `packages/store/src/contract/store-contract.ts`
+- `apps/web/src/services/api.ts`
+- `packages/runtime/src/session-kernel.ts`
+- `apps/server/src/world-data/session-import.ts`
 
 ## Assumptions
 
@@ -51,6 +54,22 @@ Refactored in this pass:
 - Moved shared fixtures to `test-fixtures.ts`.
 - Split contract suites into core, plugin-data, runtime-record, persistence, and integrity modules.
 
+### Web API Service
+
+- Kept `api.ts` as the public compatibility entrypoint.
+- Split endpoint families into `apps/web/src/services/api/`: request helpers, types, worlds, sessions, packages, LLM/model settings, actions, plugin data, lorebook, plugin RPC, approvals, traces, health, overlay, and utility exports.
+- Verified the actual `api.ts` export surface still has the same 151 module exports after the split.
+
+### Runtime Session Kernel
+
+- Kept `session-kernel.ts` as the public runtime output-processing facade.
+- Split output normalization, runtime result processing, asset output checks, commit pipeline, commit handlers, commit event emission, kernel store typing, trace recording, and proposal helpers into adjacent `session-*` modules.
+
+### Server World Data Import
+
+- Kept `session-import.ts` as the public import/preflight/sync orchestration entrypoint.
+- Split public types, world manifest/root utilities, write identity, preflight/schema validation, import planning, ledger/hash/conflict/delete logic, media materialization/finalization/cleanup, and store write helpers into `apps/server/src/world-data/session-import/`.
+
 ## Current Size Snapshot
 
 - `packages/runtime/src/turn-executor.ts`: 1132 lines
@@ -60,6 +79,21 @@ Refactored in this pass:
 - `apps/web/src/stores/session-store.tsx`: 918 lines
 - `apps/web/src/lib/catalog.tsx`: 151 lines
 - `packages/store/src/contract/store-contract.ts`: 48 lines
+- `apps/web/src/services/api.ts`: 47 lines
+- `packages/runtime/src/session-kernel.ts`: 14 lines
+- `apps/server/src/world-data/session-import.ts`: 459 lines
+
+## Remaining Priority Queue
+
+Future passes should focus on large maintenance files that are production code, have clear internal feature boundaries, and can be validated through package-level tests.
+
+| Priority |                                                                                                                       File |     Lines | Refactor boundary                                               | Validation focus                                     |
+| -------- | -------------------------------------------------------------------------------------------------------------------------: | --------: | --------------------------------------------------------------- | ---------------------------------------------------- |
+| 1        |                                                                                            `apps/web/src/routes/debug.tsx` |      1906 | route shell plus debug panels/actions                           | Web lint and debug-route smoke tests where available |
+| 2        |                                                                  `apps/web/src/components/session/session-prep-screen.tsx` |      1597 | world/plugin/preset selection panels and action helpers         | Session-prep component tests, web lint               |
+| 3        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` / `memory/memory-store.ts` / `indexeddb/idb-store.ts` | 1090-1596 | shared backend helper extraction after contract coverage review | Store contract tests across backends                 |
+| 4        |                                                                                                 `apps/desktop/src/main.ts` |      1492 | desktop app bootstrap, config, window, sidecar, IPC helpers     | Desktop lint/build smoke                             |
+| 5        |                                                                                        `packages/store/src/media-store.ts` |      1248 | media metadata, refs, cleanup, filesystem helpers               | Media store tests and server media API tests         |
 
 ## Validation Run
 
@@ -71,6 +105,18 @@ Refactored in this pass:
 - `timeout 240s mise exec -- pnpm test`
 - `timeout 120s mise exec -- pnpm exec prettier --check ...`
 - `git diff --check`
+- Second pass validation:
+  - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
+  - `timeout 120s mise exec -- pnpm --filter @covel/runtime lint`
+  - `timeout 120s mise exec -- pnpm --filter @covel/server lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/web exec vitest run src/services/__tests__/api-session-plugins.test.ts src/services/__tests__/api-worlds-approvals.test.ts`
+  - `timeout 180s mise exec -- pnpm --filter @covel/runtime exec vitest run tests/session-kernel.test.ts tests/session-kernel-txn.test.ts tests/hook-wire-session-kernel.test.ts tests/working-memory-commit.test.ts tests/proposal-source-invariant.test.ts tests/tool-executor-core-plugin-commit.test.ts tests/core-plugin-npc-graph-inject.test.ts`
+  - `timeout 180s mise exec -- pnpm --filter @covel/server exec vitest run tests/lib/world-data-session-import.test.ts tests/lib/world-data-loader.test.ts`
+  - `timeout 240s mise exec -- pnpm --filter @covel/web test`
+  - `timeout 240s mise exec -- pnpm --filter @covel/runtime test`
+  - `timeout 240s mise exec -- pnpm --filter @covel/server test`
+  - `timeout 240s mise exec -- pnpm lint`
+  - `timeout 360s mise exec -- pnpm test`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
