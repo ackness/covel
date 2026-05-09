@@ -100,6 +100,8 @@ Refactored in this pass:
 - Added `packages/store/src/common/pagination.ts` for Memory/IndexedDB list pagination.
 - Added `packages/store/src/common/keys.ts` for in-memory composite key builders.
 - Kept SQL and IndexedDB schema/index execution paths unchanged.
+- Added SQLite/PostgreSQL backend-local value helpers for state entries, plugin data, worlds, working memory, world-data import ledger, and lorebook upserts.
+- Kept SQLite TEXT JSON serialization and PostgreSQL JSONB value shaping in separate backend modules.
 
 ### Server Misc API
 
@@ -134,6 +136,10 @@ Refactored in this pass:
 - `packages/store/src/media-store/sqlite.ts`: 267 lines
 - `packages/store/src/memory/memory-store.ts`: 1073 lines
 - `packages/store/src/indexeddb/idb-store.ts`: 1083 lines
+- `packages/store/src/sqlite/sqlite-store.ts`: 1490 lines
+- `packages/store/src/sqlite/sqlite-store-values.ts`: 196 lines
+- `packages/store/src/postgres/pg-store.ts`: 1423 lines
+- `packages/store/src/postgres/pg-store-values.ts`: 190 lines
 - `apps/server/src/routes/misc-api.ts`: 429 lines
 - `apps/desktop/src/main.ts`: 1226 lines
 - `apps/desktop/src/env-files.ts`: 66 lines
@@ -147,7 +153,7 @@ Future passes should focus on large maintenance files that are production code, 
 
 | Priority |                                                                 File |     Lines | Refactor boundary                                           | Validation focus                     |
 | -------- | -------------------------------------------------------------------: | --------: | ----------------------------------------------------------- | ------------------------------------ |
-| 1        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 1527-1596 | shared SQL helper extraction after contract coverage review | Store contract tests across backends |
+| 1        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 1423-1490 | backend-local cascade helpers and focused SQL CRUD grouping | Store contract tests across backends |
 | 2        |                           `apps/server/src/routes/api/plugin-rpc.ts` |      1114 | action dispatch, runtime turn, jobs, deferred followers     | Plugin RPC and approval route tests  |
 | 3        |                  `apps/web/src/components/session/chat-messages.tsx` |      1226 | leaf display components, block renderers, RPC hook          | Web component/session tests          |
 | 4        |                                           `apps/desktop/src/main.ts` |      1226 | logging, window/menu helpers, then supervisor/IPC helpers   | Desktop build smoke                  |
@@ -201,6 +207,11 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 180s mise exec -- pnpm --filter @covel/desktop build`
   - `timeout 240s mise exec -- pnpm lint`
   - `timeout 120s mise exec -- pnpm exec prettier --check apps/desktop/src/main.ts apps/desktop/src/env-files.ts apps/desktop/src/network.ts apps/desktop/src/splash-screen.ts apps/desktop/src/startup-errors.ts`
+- Eighth pass validation:
+  - `timeout 120s mise exec -- pnpm --filter @covel/store lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/store exec vitest run tests/sqlite-store.test.ts tests/pg-store.test.ts tests/plugin-data-contract-extras.test.ts`
+  - `timeout 240s mise exec -- pnpm --filter @covel/store test`
+  - `timeout 120s mise exec -- pnpm exec prettier --check packages/store/src/sqlite/sqlite-store.ts packages/store/src/sqlite/sqlite-store-values.ts packages/store/src/postgres/pg-store.ts packages/store/src/postgres/pg-store-values.ts`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -212,7 +223,7 @@ Future passes should focus on large maintenance files that are production code, 
 - `turn-agent-tool-loop.ts` remains intentionally dense because LLM response handling, tool execution, suspend capture, and runtime-done semantics share mutable loop state.
 - `session-store.tsx` still coordinates many side effects from the public Zustand store; future reductions should split store action factories only after broader UI flow tests are in place.
 - `plugin-selection-card.tsx` is still sizeable because filtering, grouping, pack selection, and required/excluded policy rendering share local UI state; it is the next extraction candidate inside session prep after component behavior tests are expanded.
-- DataStore SQL backend files still contain repeated CRUD families. The next store pass should prefer shared SQL metadata/helpers while keeping SQLite and PostgreSQL execution differences local.
+- DataStore SQL backend files still contain repeated delete-session cascade and CRUD families. The next store pass should prefer backend-local cascade helpers while keeping SQLite and PostgreSQL execution differences local.
 - `main.ts` still owns logging and sidecar supervisor state; the next desktop pass should extract logging first, then move window/menu helpers before attempting supervisor/IPC dependency injection.
 
 ## Rollback
@@ -245,6 +256,8 @@ flowchart TD
   MediaStore --> MediaCommon["media-store/{types,utils}.ts"]
   MemoryStore["memory-store.ts"] --> StoreCommon["common/{keys,pagination}.ts"]
   IdbStore["idb-store.ts"] --> StoreCommon
+  SqliteStore["sqlite-store.ts"] --> SqliteValues["sqlite-store-values.ts"]
+  PgStore["pg-store.ts"] --> PgValues["pg-store-values.ts"]
   MiscApi["misc-api.ts"] --> MiscModules["routes/misc-api/*"]
   DesktopMain["desktop/main.ts"] --> DesktopLeaf["desktop/{startup-errors,network,splash-screen,env-files}.ts"]
 ```

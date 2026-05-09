@@ -74,6 +74,20 @@ import {
   toSnapshotRecord,
   type SnapshotRow,
 } from "./sqlite-store-mappers.js";
+import {
+  sqliteLorebookEntryInsert,
+  sqliteLorebookEntryUpdate,
+  sqlitePluginDataInsert,
+  sqlitePluginDataUpdate,
+  sqliteStateEntryInsert,
+  sqliteStateEntryUpdate,
+  sqliteWorkingMemoryInsert,
+  sqliteWorkingMemoryUpdate,
+  sqliteWorldDataLedgerInsert,
+  sqliteWorldDataLedgerUpdate,
+  sqliteWorldInsert,
+  sqliteWorldUpdate,
+} from "./sqlite-store-values.js";
 import type { VectorStoreCapability, VectorModelOps } from "../vector-store.js";
 import { createSqliteVectorCapability } from "./sqlite-vector.js";
 
@@ -476,24 +490,14 @@ export function createSqliteStore(
 
     async upsertStateEntry(record: StateEntryRecord): Promise<void> {
       db.insert(schema.stateEntries)
-        .values({
-          id: record.id,
-          sessionId: record.sessionId,
-          tableName: record.tableName,
-          fieldName: record.fieldName,
-          value: toJson(record.value),
-          updatedAt: record.updatedAt,
-        })
+        .values(sqliteStateEntryInsert(record))
         .onConflictDoUpdate({
           target: [
             schema.stateEntries.sessionId,
             schema.stateEntries.tableName,
             schema.stateEntries.fieldName,
           ],
-          set: {
-            value: toJson(record.value),
-            updatedAt: record.updatedAt,
-          },
+          set: sqliteStateEntryUpdate(record),
         })
         .run();
     },
@@ -698,16 +702,7 @@ export function createSqliteStore(
 
     async setPluginData(record: PluginDataRecord): Promise<void> {
       db.insert(schema.pluginData)
-        .values({
-          id: record.id,
-          sessionId: record.sessionId,
-          pluginId: record.pluginId,
-          namespace: record.namespace,
-          key: record.key,
-          value: toJson(record.value),
-          createdAt: record.createdAt,
-          updatedAt: record.updatedAt,
-        })
+        .values(sqlitePluginDataInsert(record))
         .onConflictDoUpdate({
           target: [
             schema.pluginData.sessionId,
@@ -715,10 +710,7 @@ export function createSqliteStore(
             schema.pluginData.namespace,
             schema.pluginData.key,
           ],
-          set: {
-            value: toJson(record.value),
-            updatedAt: record.updatedAt,
-          },
+          set: sqlitePluginDataUpdate(record),
         })
         .run();
     },
@@ -730,16 +722,7 @@ export function createSqliteStore(
       db.transaction((tx) => {
         for (const record of records) {
           tx.insert(schema.pluginData)
-            .values({
-              id: record.id,
-              sessionId: record.sessionId,
-              pluginId: record.pluginId,
-              namespace: record.namespace,
-              key: record.key,
-              value: toJson(record.value),
-              createdAt: record.createdAt,
-              updatedAt: record.updatedAt,
-            })
+            .values(sqlitePluginDataInsert(record))
             .onConflictDoUpdate({
               target: [
                 schema.pluginData.sessionId,
@@ -747,10 +730,7 @@ export function createSqliteStore(
                 schema.pluginData.namespace,
                 schema.pluginData.key,
               ],
-              set: {
-                value: toJson(record.value),
-                updatedAt: record.updatedAt,
-              },
+              set: sqlitePluginDataUpdate(record),
             })
             .run();
         }
@@ -894,28 +874,10 @@ export function createSqliteStore(
 
     async upsertWorld(record: WorldRecord): Promise<void> {
       db.insert(schema.worlds)
-        .values({
-          id: record.id,
-          name: record.name,
-          description: record.description,
-          lore: record.lore ?? null,
-          tags: record.tags != null ? toJson(record.tags) : null,
-          locale: record.locale ?? null,
-          metadata: record.metadata != null ? toJson(record.metadata) : null,
-          createdAt: record.createdAt,
-          updatedAt: record.updatedAt ?? null,
-        })
+        .values(sqliteWorldInsert(record))
         .onConflictDoUpdate({
           target: schema.worlds.id,
-          set: {
-            name: record.name,
-            description: record.description,
-            lore: record.lore ?? null,
-            tags: record.tags != null ? toJson(record.tags) : null,
-            locale: record.locale ?? null,
-            metadata: record.metadata != null ? toJson(record.metadata) : null,
-            updatedAt: record.updatedAt ?? null,
-          },
+          set: sqliteWorldUpdate(record),
         })
         .run();
     },
@@ -1153,27 +1115,14 @@ export function createSqliteStore(
 
     async upsertWorkingMemory(record: WorkingMemoryRecord): Promise<void> {
       db.insert(schema.workingMemory)
-        .values({
-          id: record.id,
-          sessionId: record.sessionId,
-          key: record.key,
-          scope: record.scope,
-          value: toJson(record.value),
-          schemaRef: record.schemaRef ?? null,
-          updatedAt: record.updatedAt,
-        })
+        .values(sqliteWorkingMemoryInsert(record))
         .onConflictDoUpdate({
           target: [
             schema.workingMemory.sessionId,
             schema.workingMemory.scope,
             schema.workingMemory.key,
           ],
-          set: {
-            id: record.id,
-            value: toJson(record.value),
-            schemaRef: record.schemaRef ?? null,
-            updatedAt: record.updatedAt,
-          },
+          set: sqliteWorkingMemoryUpdate(record),
         })
         .run();
     },
@@ -1234,41 +1183,10 @@ export function createSqliteStore(
       db.transaction((tx) => {
         for (const r of records) {
           tx.insert(schema.worldDataImportLedger)
-            .values({
-              id: r.id,
-              sessionId: r.sessionId,
-              target: r.target,
-              pluginId: r.pluginId ?? null,
-              namespace: r.namespace ?? null,
-              key: r.key ?? null,
-              sourceWorldId: r.sourceWorldId,
-              sourceId: r.sourceId,
-              sourceDigest: r.sourceDigest,
-              valueHash: r.valueHash,
-              schemaRef: r.schemaRef ?? null,
-              derivedFrom:
-                r.derivedFrom === undefined ? null : toJson(r.derivedFrom),
-              importedAt: r.importedAt,
-              managed: r.managed ? 1 : 0,
-            })
+            .values(sqliteWorldDataLedgerInsert(r))
             .onConflictDoUpdate({
               target: schema.worldDataImportLedger.id,
-              set: {
-                sessionId: r.sessionId,
-                target: r.target,
-                pluginId: r.pluginId ?? null,
-                namespace: r.namespace ?? null,
-                key: r.key ?? null,
-                sourceWorldId: r.sourceWorldId,
-                sourceId: r.sourceId,
-                sourceDigest: r.sourceDigest,
-                valueHash: r.valueHash,
-                schemaRef: r.schemaRef ?? null,
-                derivedFrom:
-                  r.derivedFrom === undefined ? null : toJson(r.derivedFrom),
-                importedAt: r.importedAt,
-                managed: r.managed ? 1 : 0,
-              },
+              set: sqliteWorldDataLedgerUpdate(r),
             })
             .run();
         }
@@ -1316,34 +1234,10 @@ export function createSqliteStore(
       // atomic. Volumes are small (a handful of entries per world).
       for (const r of records) {
         db.insert(schema.lorebookEntries)
-          .values({
-            id: r.id,
-            sessionId: r.sessionId,
-            pluginId: r.pluginId,
-            keys: toJson(r.keys),
-            content: r.content,
-            strategy: r.strategy,
-            position: r.position,
-            insertionOrder: r.insertionOrder,
-            enabled: r.enabled ? 1 : 0,
-            extra: r.extra === undefined ? null : toJson(r.extra),
-            createdAt: r.createdAt,
-            updatedAt: r.updatedAt,
-          })
+          .values(sqliteLorebookEntryInsert(r))
           .onConflictDoUpdate({
             target: schema.lorebookEntries.id,
-            set: {
-              sessionId: r.sessionId,
-              pluginId: r.pluginId,
-              keys: toJson(r.keys),
-              content: r.content,
-              strategy: r.strategy,
-              position: r.position,
-              insertionOrder: r.insertionOrder,
-              enabled: r.enabled ? 1 : 0,
-              extra: r.extra === undefined ? null : toJson(r.extra),
-              updatedAt: r.updatedAt,
-            },
+            set: sqliteLorebookEntryUpdate(r),
           })
           .run();
       }

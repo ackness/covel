@@ -71,6 +71,20 @@ import {
   toSuspensionRecord,
   toSnapshotRecord,
 } from "./pg-store-mappers.js";
+import {
+  pgLorebookEntryInsert,
+  pgLorebookEntryUpdate,
+  pgPluginDataInsert,
+  pgPluginDataUpdate,
+  pgStateEntryInsert,
+  pgStateEntryUpdate,
+  pgWorkingMemoryInsert,
+  pgWorkingMemoryUpdate,
+  pgWorldDataLedgerInsert,
+  pgWorldDataLedgerUpdate,
+  pgWorldInsert,
+  pgWorldUpdate,
+} from "./pg-store-values.js";
 import type { VectorStoreCapability, VectorModelOps } from "../vector-store.js";
 import { createPgVectorCapability } from "./pg-vector.js";
 
@@ -453,24 +467,14 @@ export async function createPgStore(
     async upsertStateEntry(record: StateEntryRecord): Promise<void> {
       await db
         .insert(schema.stateEntries)
-        .values({
-          id: record.id,
-          sessionId: record.sessionId,
-          tableName: record.tableName,
-          fieldName: record.fieldName,
-          value: record.value ?? null,
-          updatedAt: record.updatedAt,
-        })
+        .values(pgStateEntryInsert(record))
         .onConflictDoUpdate({
           target: [
             schema.stateEntries.sessionId,
             schema.stateEntries.tableName,
             schema.stateEntries.fieldName,
           ],
-          set: {
-            value: record.value ?? null,
-            updatedAt: record.updatedAt,
-          },
+          set: pgStateEntryUpdate(record),
         });
     },
 
@@ -665,16 +669,7 @@ export async function createPgStore(
     async setPluginData(record: PluginDataRecord): Promise<void> {
       await db
         .insert(schema.pluginData)
-        .values({
-          id: record.id,
-          sessionId: record.sessionId,
-          pluginId: record.pluginId,
-          namespace: record.namespace,
-          key: record.key,
-          value: record.value ?? null,
-          createdAt: record.createdAt,
-          updatedAt: record.updatedAt,
-        })
+        .values(pgPluginDataInsert(record))
         .onConflictDoUpdate({
           target: [
             schema.pluginData.sessionId,
@@ -682,10 +677,7 @@ export async function createPgStore(
             schema.pluginData.namespace,
             schema.pluginData.key,
           ],
-          set: {
-            value: record.value ?? null,
-            updatedAt: record.updatedAt,
-          },
+          set: pgPluginDataUpdate(record),
         });
     },
 
@@ -697,16 +689,7 @@ export async function createPgStore(
         for (const record of records) {
           await tx
             .insert(schema.pluginData)
-            .values({
-              id: record.id,
-              sessionId: record.sessionId,
-              pluginId: record.pluginId,
-              namespace: record.namespace,
-              key: record.key,
-              value: record.value ?? null,
-              createdAt: record.createdAt,
-              updatedAt: record.updatedAt,
-            })
+            .values(pgPluginDataInsert(record))
             .onConflictDoUpdate({
               target: [
                 schema.pluginData.sessionId,
@@ -714,10 +697,7 @@ export async function createPgStore(
                 schema.pluginData.namespace,
                 schema.pluginData.key,
               ],
-              set: {
-                value: record.value ?? null,
-                updatedAt: record.updatedAt,
-              },
+              set: pgPluginDataUpdate(record),
             });
         }
       });
@@ -861,28 +841,10 @@ export async function createPgStore(
     async upsertWorld(record: WorldRecord): Promise<void> {
       await db
         .insert(schema.worlds)
-        .values({
-          id: record.id,
-          name: record.name,
-          description: record.description,
-          lore: record.lore ?? null,
-          tags: record.tags ?? null,
-          locale: record.locale ?? null,
-          metadata: record.metadata ?? null,
-          createdAt: record.createdAt,
-          updatedAt: record.updatedAt ?? null,
-        })
+        .values(pgWorldInsert(record))
         .onConflictDoUpdate({
           target: schema.worlds.id,
-          set: {
-            name: record.name,
-            description: record.description,
-            lore: record.lore ?? null,
-            tags: record.tags ?? null,
-            locale: record.locale ?? null,
-            metadata: record.metadata ?? null,
-            updatedAt: record.updatedAt ?? null,
-          },
+          set: pgWorldUpdate(record),
         });
     },
 
@@ -1111,27 +1073,14 @@ export async function createPgStore(
     async upsertWorkingMemory(record: WorkingMemoryRecord): Promise<void> {
       await db
         .insert(schema.workingMemory)
-        .values({
-          id: record.id,
-          sessionId: record.sessionId,
-          key: record.key,
-          scope: record.scope,
-          value: record.value ?? null,
-          schemaRef: record.schemaRef ?? null,
-          updatedAt: record.updatedAt,
-        })
+        .values(pgWorkingMemoryInsert(record))
         .onConflictDoUpdate({
           target: [
             schema.workingMemory.sessionId,
             schema.workingMemory.scope,
             schema.workingMemory.key,
           ],
-          set: {
-            id: record.id,
-            value: record.value ?? null,
-            schemaRef: record.schemaRef ?? null,
-            updatedAt: record.updatedAt,
-          },
+          set: pgWorkingMemoryUpdate(record),
         });
     },
 
@@ -1193,39 +1142,10 @@ export async function createPgStore(
         for (const r of records) {
           await tx
             .insert(schema.worldDataImportLedger)
-            .values({
-              id: r.id,
-              sessionId: r.sessionId,
-              target: r.target,
-              pluginId: r.pluginId ?? null,
-              namespace: r.namespace ?? null,
-              key: r.key ?? null,
-              sourceWorldId: r.sourceWorldId,
-              sourceId: r.sourceId,
-              sourceDigest: r.sourceDigest,
-              valueHash: r.valueHash,
-              schemaRef: r.schemaRef ?? null,
-              derivedFrom: (r.derivedFrom ?? null) as unknown,
-              importedAt: r.importedAt,
-              managed: r.managed ? 1 : 0,
-            })
+            .values(pgWorldDataLedgerInsert(r))
             .onConflictDoUpdate({
               target: schema.worldDataImportLedger.id,
-              set: {
-                sessionId: r.sessionId,
-                target: r.target,
-                pluginId: r.pluginId ?? null,
-                namespace: r.namespace ?? null,
-                key: r.key ?? null,
-                sourceWorldId: r.sourceWorldId,
-                sourceId: r.sourceId,
-                sourceDigest: r.sourceDigest,
-                valueHash: r.valueHash,
-                schemaRef: r.schemaRef ?? null,
-                derivedFrom: (r.derivedFrom ?? null) as unknown,
-                importedAt: r.importedAt,
-                managed: r.managed ? 1 : 0,
-              },
+              set: pgWorldDataLedgerUpdate(r),
             });
         }
       });
@@ -1268,34 +1188,10 @@ export async function createPgStore(
       for (const r of records) {
         await db
           .insert(schema.lorebookEntries)
-          .values({
-            id: r.id,
-            sessionId: r.sessionId,
-            pluginId: r.pluginId,
-            keys: r.keys as unknown as string[],
-            content: r.content,
-            strategy: r.strategy,
-            position: r.position,
-            insertionOrder: r.insertionOrder,
-            enabled: r.enabled ? 1 : 0,
-            extra: (r.extra ?? null) as unknown,
-            createdAt: r.createdAt,
-            updatedAt: r.updatedAt,
-          })
+          .values(pgLorebookEntryInsert(r))
           .onConflictDoUpdate({
             target: schema.lorebookEntries.id,
-            set: {
-              sessionId: r.sessionId,
-              pluginId: r.pluginId,
-              keys: r.keys as unknown as string[],
-              content: r.content,
-              strategy: r.strategy,
-              position: r.position,
-              insertionOrder: r.insertionOrder,
-              enabled: r.enabled ? 1 : 0,
-              extra: (r.extra ?? null) as unknown,
-              updatedAt: r.updatedAt,
-            },
+            set: pgLorebookEntryUpdate(r),
           });
       }
     },
