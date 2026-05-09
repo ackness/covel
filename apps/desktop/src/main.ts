@@ -18,7 +18,6 @@ import {
   dialog,
   ipcMain,
   Menu,
-  shell,
   type IpcMainInvokeEvent,
 } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -29,11 +28,9 @@ import fs from "node:fs";
 import {
   ensureUserPaths,
   isDev,
-  resolvePreloadScript,
   resolveProjectRoot,
   resolveServerEntry,
   resolveTsx,
-  resolveWindowIconPath,
   userServerPortFile,
   writeDataRoot,
 } from "./paths.js";
@@ -45,7 +42,6 @@ import {
 } from "./env-files.js";
 import { findFreePort, isPortFree, waitForServer } from "./network.js";
 import { diagnoseStartupError, type DiagnosedError } from "./startup-errors.js";
-import { buildSplashHtml } from "./splash-screen.js";
 import {
   initPersistentLog,
   writeLog,
@@ -57,15 +53,18 @@ import {
 // "@covel/desktop" from package.json — override to the friendly product name.
 app.setName("Covel");
 import {
-  attachWindowStateTracking,
-  resolveInitialWindowOptions,
-} from "./window-state.js";
-import {
   importAsset,
   type ImportKind,
   type ImportResult,
 } from "./import-assets.js";
 import { initAutoUpdater } from "./auto-updater.js";
+import {
+  buildAppMenu,
+  createMainWindow,
+  getMainWindow,
+  loadSplashInto,
+  navigateToApp,
+} from "./windows.js";
 
 // ── Splash screen ──────────────────────────────────────────────
 
@@ -631,7 +630,7 @@ function registerIpcHandlers(paths: ReturnType<typeof ensureUserPaths>): void {
 
   // Dialog-backed entry points. Open a native file chooser, then import.
   async function pickAndImport(kind: ImportKind): Promise<ImportResult> {
-    const win = mainWindow ?? undefined;
+    const win = getMainWindow() ?? undefined;
     const picked = await dialog.showOpenDialog(win as BrowserWindow, {
       title: kind === "plugin" ? "Import Plugin" : "Import World Package",
       properties: ["openFile", "openDirectory", "treatPackageAsDirectory"],
@@ -650,318 +649,11 @@ function registerIpcHandlers(paths: ReturnType<typeof ensureUserPaths>): void {
   ipcMain.handle("covel:import:pick-world", () => pickAndImport("world"));
 }
 
-// ── Native Menu ────────────────────────────────────────────────
-
-/** Emit a typed IPC message to the focused / main window. */
-function sendMenuAction(channel: string): void {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  mainWindow.webContents.send(channel);
-}
-
-function buildAppMenu(): Electron.Menu {
-  const isMac = process.platform === "darwin";
-
-  const template: Electron.MenuItemConstructorOptions[] = [
-    ...(isMac
-      ? [
-          {
-            label: app.name,
-            submenu: [
-              { role: "about" as const, label: "About Covel" },
-              { type: "separator" as const },
-              {
-                label: "Settings\u2026",
-                accelerator: "CmdOrCtrl+,",
-                click: () => sendMenuAction("covel:menu:open-settings"),
-              },
-              { type: "separator" as const },
-              { role: "hide" as const },
-              { role: "hideOthers" as const },
-              { role: "unhide" as const },
-              { type: "separator" as const },
-              { role: "quit" as const },
-            ] as Electron.MenuItemConstructorOptions[],
-          },
-        ]
-      : []),
-
-    {
-      label: "File",
-      submenu: [
-        {
-          label: "New World",
-          accelerator: "CmdOrCtrl+N",
-          click: () => sendMenuAction("covel:menu:new-world"),
-        },
-        {
-          label: "Import Plugin\u2026",
-          click: () => {
-            // Route through the renderer so UI can show success/error toasts
-            sendMenuAction("covel:menu:import-plugin");
-          },
-        },
-        {
-          label: "Import World\u2026",
-          click: () => {
-            sendMenuAction("covel:menu:import-world");
-          },
-        },
-        { type: "separator" },
-        {
-          label: "Export Chat\u2026",
-          accelerator: "CmdOrCtrl+Shift+E",
-          click: () => sendMenuAction("covel:menu:export-chat"),
-        },
-        { type: "separator" },
-        ...(!isMac
-          ? [
-              {
-                label: "Settings\u2026",
-                accelerator: "CmdOrCtrl+,",
-                click: () => sendMenuAction("covel:menu:open-settings"),
-              },
-              { type: "separator" as const },
-            ]
-          : []),
-        isMac ? { role: "close" as const } : { role: "quit" as const },
-      ] as Electron.MenuItemConstructorOptions[],
-    },
-
-    {
-      label: "Edit",
-      submenu: [
-        { role: "undo" },
-        { role: "redo" },
-        { type: "separator" },
-        { role: "cut" },
-        { role: "copy" },
-        { role: "paste" },
-        { role: "selectAll" },
-      ] as Electron.MenuItemConstructorOptions[],
-    },
-
-    {
-      label: "View",
-      submenu: [
-        { role: "reload" },
-        { role: "toggleDevTools" },
-        { type: "separator" },
-        { role: "resetZoom", label: "Actual Size" },
-        { role: "zoomIn" },
-        { role: "zoomOut" },
-        { type: "separator" },
-        { role: "togglefullscreen" },
-      ] as Electron.MenuItemConstructorOptions[],
-    },
-
-    {
-      role: "help",
-      submenu: [
-        {
-          label: "Documentation",
-          click: () => shell.openExternal("https://github.com/AcKnEsS/covel"),
-        },
-      ] as Electron.MenuItemConstructorOptions[],
-    },
-  ];
-
-  return Menu.buildFromTemplate(template);
-}
-
-// ── Context Menu ───────────────────────────────────────────────
-
-function attachContextMenu(win: BrowserWindow): void {
-  win.webContents.on("context-menu", (_event, params) => {
-    const items: Electron.MenuItemConstructorOptions[] = [];
-    if (params.selectionText)
-      items.push({ role: "copy" }, { type: "separator" });
-    items.push({ role: "selectAll" });
-    if (isDev) {
-      items.push(
-        { type: "separator" },
-        {
-          label: "Inspect Element",
-          click: () => win.webContents.inspectElement(params.x, params.y),
-        },
-      );
-    }
-    Menu.buildFromTemplate(items).popup();
-  });
-}
-
-function attachTitleSync(win: BrowserWindow): void {
-  win.webContents.on("page-title-updated", (event, title) => {
-    event.preventDefault();
-    if (title) win.setTitle(title);
-  });
-  win.webContents.on("did-navigate-in-page", () => {
-    win.webContents
-      .executeJavaScript("document.title")
-      .then((title: string) => {
-        if (title) win.setTitle(title);
-      })
-      .catch(() => {});
-  });
-}
-
-// ── External link guard ─────────────────────────────────────────
-
-/**
- * Decide whether a `window.open()` / target=_blank link should be handed off
- * to the system browser. Layered policy (audit Stage 7):
- *
- *   - `https:` → silently opened, host audited to desktop.log
- *   - `http:`  → user confirm dialog (plaintext is the real risk surface)
- *   - everything else (`javascript:`, `file:`, `chrome-extension:`, custom
- *     schemes) → blocked, no log spam unless it looks intentional
- *
- * Loopback `http://localhost`/`http://127.0.0.1` URLs auto-allow so dev
- * tools and self-hosted plugin assets don't trigger a confirm storm.
- */
-function handleExternalLinkRequest(
-  parent: BrowserWindow,
-  linkUrl: string,
-): void {
-  let parsed: URL;
-  try {
-    parsed = new URL(linkUrl);
-  } catch {
-    writeLog("warn", `[external-link] blocked unparseable URL: ${linkUrl}`);
-    return;
-  }
-
-  const protocol = parsed.protocol;
-  const host = parsed.host;
-
-  if (protocol === "https:") {
-    writeLog("info", `[external-link] https → ${host}`);
-    void shell.openExternal(linkUrl);
-    return;
-  }
-
-  if (protocol === "http:") {
-    const isLoopback =
-      host === "localhost" || host.startsWith("127.") || host === "[::1]";
-    if (isLoopback) {
-      writeLog("info", `[external-link] http loopback → ${host}`);
-      void shell.openExternal(linkUrl);
-      return;
-    }
-    // Synchronously prompt — `setWindowOpenHandler` returns immediately
-    // either way, but the user gets a chance to opt out before the system
-    // browser launches. `dialog.showMessageBoxSync` blocks the main process
-    // briefly which is fine for an explicit user action.
-    const choice = dialog.showMessageBoxSync(parent, {
-      type: "warning",
-      buttons: ["Open", "Cancel"],
-      defaultId: 1,
-      cancelId: 1,
-      title: "Open external link?",
-      message: `Open ${host} in your browser?`,
-      detail: `${linkUrl}\n\nThis link uses unencrypted http. Only proceed if you trust the source.`,
-    });
-    if (choice === 0) {
-      writeLog("info", `[external-link] http (user-confirmed) → ${host}`);
-      void shell.openExternal(linkUrl);
-    } else {
-      writeLog("info", `[external-link] http (user-cancelled) → ${host}`);
-    }
-    return;
-  }
-
-  // Hard block for all other protocols. Log only when the URL was clearly
-  // meant to be a link (not e.g. an empty about:blank).
-  writeLog(
-    "warn",
-    `[external-link] blocked protocol ${protocol} (${host || linkUrl.slice(0, 80)})`,
-  );
-}
-
-// ── Window ──────────────────────────────────────────────────────
-
-let mainWindow: BrowserWindow | null = null;
-
-function sharedWebPreferences(): Electron.WebPreferences {
-  return {
-    preload: resolvePreloadScript(),
-    contextIsolation: true,
-    nodeIntegration: false,
-    sandbox: true,
-    // Expose the app version to the preload script for the renderer
-    additionalArguments: [`--covel-app-version=${app.getVersion()}`],
-  };
-}
-
-function createMainWindow(titleSuffix?: string): BrowserWindow {
-  const restored = resolveInitialWindowOptions();
-  const icon = resolveWindowIconPath();
-
-  const isMac = process.platform === "darwin";
-  const isWin = process.platform === "win32";
-
-  const win = new BrowserWindow({
-    x: restored.x,
-    y: restored.y,
-    width: restored.width,
-    height: restored.height,
-    minWidth: 1024,
-    minHeight: 680,
-    title: titleSuffix ? `Covel ${titleSuffix}` : "Covel",
-    backgroundColor: "#09090b",
-    show: false,
-    icon: icon && fs.existsSync(icon) ? icon : undefined,
-    // Hide the native title bar so the in-app header can extend to the top
-    // edge and follow the active theme. Traffic lights stay (hiddenInset on
-    // macOS); on Windows the WCO overlay draws controls in app colours.
-    titleBarStyle: isMac ? "hiddenInset" : isWin ? "hidden" : "default",
-    trafficLightPosition: isMac ? { x: 16, y: 14 } : undefined,
-    titleBarOverlay: isWin
-      ? { color: "#09090b", symbolColor: "#fafafa", height: 36 }
-      : undefined,
-    webPreferences: sharedWebPreferences(),
-  });
-
-  // Apply persisted maximize/fullscreen flags before first paint so we don't
-  // flash a smaller window before jumping to fullscreen.
-  if (restored.initial.fullScreen) {
-    win.setFullScreen(true);
-  } else if (restored.initial.maximize) {
-    win.maximize();
-  }
-
-  win.once("ready-to-show", () => win.show());
-
-  attachContextMenu(win);
-  attachTitleSync(win);
-  attachWindowStateTracking(win);
-  win.webContents.setWindowOpenHandler(({ url: linkUrl }) => {
-    handleExternalLinkRequest(win, linkUrl);
-    return { action: "deny" };
-  });
-  win.on("closed", () => {
-    if (mainWindow === win) mainWindow = null;
-  });
-
-  return win;
-}
-
-function loadSplashInto(win: BrowserWindow): void {
-  const html = buildSplashHtml();
-  win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-}
-
-function navigateToApp(win: BrowserWindow, port: number): void {
-  const url = `http://127.0.0.1:${port}/session`;
-  writeLog("info", `Loading ${url}`);
-  win.loadURL(url);
-}
-
 /** Production startup: splash screen → server start → navigate to app. Retries on failure. */
 async function productionStartup(
   paths: ReturnType<typeof ensureUserPaths>,
 ): Promise<void> {
   const win = createMainWindow();
-  mainWindow = win;
   loadSplashInto(win);
 
   const attemptStart = async (): Promise<void> => {
@@ -1015,7 +707,6 @@ async function devStartup(
   }
 
   const win = createMainWindow("(Dev)");
-  mainWindow = win;
   win.loadURL("http://localhost:5173/session");
   win.webContents.openDevTools({ mode: "detach" });
   // Silence unused-paths warning — dev currently relies on external dev server,
@@ -1058,14 +749,13 @@ app.whenReady().then(async () => {
   // never cascade into a "Fatal" shutdown.
   void initAutoUpdater({
     disabled: isDev,
-    window: () => mainWindow,
+    window: () => getMainWindow(),
     log: (level, ...parts) => writeLog(level, ...parts),
   });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0 && serverPort > 0) {
       const win = createMainWindow();
-      mainWindow = win;
       navigateToApp(win, serverPort);
     }
   });
