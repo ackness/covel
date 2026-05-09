@@ -29,6 +29,7 @@ Refactored in this pass:
 - `packages/ai-provider/src/gateway.ts`
 - `packages/test-runtime/src/runner.ts`
 - `apps/web/src/settings/panes/LlmSlotsPane.tsx`
+- `packages/shared/src/env/registry.ts`
 
 ## Assumptions
 
@@ -174,8 +175,18 @@ Refactored in this pass:
 - Split legacy slot ids, runtime-requested slot discovery, visible-slot merge logic, preset candidate collection, and auto-bind selection into `apps/web/src/settings/panes/llm-slots-model.ts`.
 - Added focused tests for runtime slot discovery, configured/legacy slot merging, auto-bind priority, and preset source marking.
 
+### Shared Env Registry
+
+- Kept `registry.ts` as the public compatibility entrypoint for env registry exports.
+- Split env variable definitions, feature flag names, and literal env-name types into `packages/shared/src/env/registry-definitions.ts`.
+- Split env source readers, provider API-key mapping, SQLite path derivation, and runtime env shaping into `packages/shared/src/env/registry-readers.ts`.
+- Preserved `@covel/shared` and `../src/env/index.js` import surfaces.
+
 ## Current Size Snapshot
 
+- `packages/shared/src/env/registry.ts`: 2 lines
+- `packages/shared/src/env/registry-definitions.ts`: 792 lines
+- `packages/shared/src/env/registry-readers.ts`: 189 lines
 - `packages/runtime/src/turn-executor.ts`: 867 lines
 - `packages/runtime/src/turn-runtime-execution.ts`: 316 lines
 - `packages/runtime/src/turn-result-finalizer.ts`: 185 lines
@@ -416,6 +427,12 @@ Future passes should focus on large maintenance files that are production code, 
   - `timeout 120s mise exec -- pnpm --filter @covel/test-runtime lint`
   - `timeout 180s mise exec -- pnpm --filter @covel/test-runtime test`
   - `timeout 240s mise exec -- pnpm lint`
+- Twenty-ninth pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --check packages/shared/src/env/registry.ts packages/shared/src/env/registry-definitions.ts packages/shared/src/env/registry-readers.ts docs/refactor/2026-05-09_13-05_long-file-restructure.md`
+  - `timeout 120s mise exec -- pnpm --filter @covel/shared lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/shared exec vitest run tests/env-registry.test.ts`
+  - `timeout 180s mise exec -- pnpm --filter @covel/store exec vitest run tests/store-factory-env.test.ts`
+  - `timeout 240s mise exec -- pnpm lint`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -433,6 +450,7 @@ Future passes should focus on large maintenance files that are production code, 
 - `gateway.ts` still owns slot fallback, per-request overlays, and parameter-override metadata merging. The next AI provider pass should extract slot resolution with `gateway-slot-overrides` and `parameter-overrides` tests in scope.
 - `runner.ts` still owns plugin discovery/runtime loading, live adapter setup, local tool imports, deferred follower execution, and case orchestration. The next test-runtime pass should split execution harness behavior only with plugin case smoke tests in scope.
 - `LlmSlotsPane.tsx` still owns capability tags and editor controls. The next web settings pass should extract those controls with component-level interaction tests.
+- `registry-definitions.ts` still owns the full flat env variable catalog. Future grouping by env group should keep `COVEL_ENV_REGISTRY` as the stable flattened export.
 - `main.ts` still owns sidecar supervisor state and broad IPC registration; the next desktop pass should split IPC handlers before attempting supervisor dependency injection.
 
 ## Rollback
@@ -474,6 +492,8 @@ flowchart TD
   TestRuntimeRunner["test-runtime/runner.ts"] --> TestRuntimeReporting["test-runtime/reporting.ts"]
   TestRuntimeRunner --> TestRuntimeCases["test-runtime/cases.ts"]
   LlmSlotsPane["LlmSlotsPane.tsx"] --> LlmSlotsModel["llm-slots-model.ts"]
+  EnvRegistry["env/registry.ts"] --> EnvDefinitions["env/registry-definitions.ts"]
+  EnvRegistry --> EnvReaders["env/registry-readers.ts"]
   SqliteStore["sqlite-store.ts"] --> SqliteValues["sqlite-store-values.ts"]
   SqliteStore --> SqliteCascade["sqlite-session-cascade.ts"]
   SqliteStore --> SqliteDataCrud["sqlite-data-crud.ts"]
