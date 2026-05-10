@@ -144,7 +144,7 @@ export function PluginItem({
       </div>
 
       {primaryRuntime && (
-        <div className="px-2.5 pb-1 -mt-0.5 flex items-center gap-1 text-[9px] text-muted-foreground/80 paper:px-1">
+        <div className="px-2.5 pb-1 -mt-0.5 flex items-center gap-1 text-[9px] text-muted-foreground/80">
           <Cpu className="w-2.5 h-2.5" />
           {resolvedSlots && resolvedSlots.length > 0 ? (
             (() => {

@@ -17,6 +17,8 @@ Covel 的主题系统已经统一为“主题包”模式。玩家可以通过�
 - **主题 ID**：决定作用域选择器，写法是 `html[data-theme="你的主题ID"]`
 - **主题样式**：覆盖 Covel 提供的语义 token 和语义 hook
 
+主题包选择会保存到 `ui.appearance`，颜色模式会保存到 `ui.scheme`。运行时会把它们应用到 `<html data-theme="..." data-scheme="...">`；暗色模式同时保留 `.dark` class，供 Tailwind 分支和旧主题继续工作。
+
 你可以把它理解成一层“换皮配置”：
 
 - 颜色来自 token
@@ -151,7 +153,7 @@ html[data-theme="jade-paper"] {
 - `label`：显示名称
 - `schemes`：支持的模式，常见值是 `["light"]` 或 `["light", "dark"]`
 - `description`：可选说明
-- `cssText`：真正生效的 CSS 内容
+- `cssText`：真正生效的 CSS 内容，里面只能声明与 `id` 相同的主题 ID
 
 ---
 
@@ -229,15 +231,35 @@ html[data-theme="jade-paper"] {
 
 这组 token 决定界面的空间关系：
 
-- `--surface-app`
-- `--surface-panel`
-- `--surface-panel-strong`
+- `--surface-page`
+- `--surface-rail`
+- `--surface-inset`
+- `--surface-elevated`
 - `--surface-dialog`
 - `--surface-player`
 - `--surface-empty`
 - `--border-subtle`
 
-### 6.3 圆角与尺寸 token
+旧主题别名仍然可用：
+
+- `--surface-app`
+- `--surface-panel`
+- `--surface-panel-strong`
+
+### 6.3 规则与强调 token
+
+- `--rule-color`
+- `--rule-strong-color`
+- `--rule-style`
+- `--rule-thickness`
+- `--rule-strong-thickness`
+- `--accent-primary`
+- `--accent-secondary`
+- `--accent-warning`
+- `--accent-danger`
+- `--accent-success`
+
+### 6.4 圆角、尺寸与氛围 token
 
 - `--radius-card`
 - `--radius-control`
@@ -246,10 +268,15 @@ html[data-theme="jade-paper"] {
 - `--panel-header-height`
 - `--panel-section-padding-x`
 - `--panel-section-padding-y`
+- `--rail-width-left`
+- `--rail-width-right`
 - `--composer-max-width`
 - `--session-column-max-width`
+- `--ambience-image`
+- `--noise-image`
+- `--noise-opacity`
 
-### 6.4 字体与排版 token
+### 6.5 字体与排版 token
 
 - `--font-display`
 - `--font-serif`
@@ -271,10 +298,11 @@ html[data-theme="jade-paper"] {
 - `--story-letter-spacing`
 - `--story-max-width`
 
-### 6.5 阴影 token
+### 6.6 阴影 token
 
 - `--shadow-card`
 - `--shadow-dialog`
+- `--shadow-pop`
 
 ---
 
@@ -345,11 +373,15 @@ html[data-theme="my-theme"] {
   --color-muted: #efe4d7;
   --color-muted-foreground: #7d6f63;
 
-  --surface-app: #f6f2eb;
-  --surface-panel: #fffaf2;
-  --surface-panel-strong: #fffdf8;
+  --surface-page: #f6f2eb;
+  --surface-rail: #fffaf2;
+  --surface-inset: #efe4d7;
+  --surface-elevated: #fffdf8;
   --surface-dialog: #fffdf8;
   --surface-player: transparent;
+
+  --rule-color: #d9c8b5;
+  --accent-primary: #7a4b2f;
 
   --radius-card: 1rem;
   --radius-control: 0.75rem;
@@ -405,12 +437,14 @@ html[data-theme="my-theme"].dark {
 4. 点击 `Import theme`
 5. 选择 `.css`、`.json`、`.theme` 或 `.theme.json` 文件
 6. 导入完成后，主题会自动出现在 `Appearance` 下拉菜单里
+7. 如果主题只支持单一颜色模式，`Color scheme` 会自动锁定到可用模式
 
 ### 9.2 复用方式
 
 导入后的主题会自动保存在本地。之后你可以：
 
-- 直接在 Appearance 中切换
+- 直接在 Appearance 中切换主题包
+- 在 Color scheme 中切换亮色和暗色
 - 在 Theme Library 中重新应用
 - 导出 JSON 包分享给别人
 
@@ -462,8 +496,9 @@ html[data-theme="ledger"] .ui-chip {
 
 - 有清晰的主题 ID
 - 所有规则都在 `html[data-theme="..."]` 作用域内
+- 一个主题包只声明一个 `data-theme` ID
 - 至少覆盖一组核心颜色 token
-- 至少覆盖 `--surface-panel` 和 `--surface-dialog`
+- 至少覆盖 `--surface-rail`、`--surface-elevated` 和 `--surface-dialog`
 - 至少覆盖 `--radius-card` 和 `--radius-control`
 - 叙事主题覆盖了 `--story-*` token
 - 亮色和暗色模式的对比度都足够清晰

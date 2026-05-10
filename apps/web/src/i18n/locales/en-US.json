@@ -471,6 +471,11 @@
     "themeSourceCustom": "Custom",
     "themeActive": "Active",
     "themeApply": "Apply",
+    "themeSchemeLabel": "Color scheme",
+    "themeScheme": {
+      "light": "Light",
+      "dark": "Dark"
+    },
     "modelDefault": "Default Model",
     "modelFast": "Fast Model",
     "modelBalance": "Balance Model",

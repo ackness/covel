@@ -45,4 +45,47 @@ describe("parseImportedThemeFile", () => {
       parseImportedThemeFile(".panel { color: red; }", "broken.css"),
     ).toThrow(/data-theme/);
   });
+
+  it("rejects css files that mix multiple theme ids", () => {
+    expect(() =>
+      parseImportedThemeFile(
+        `
+        html[data-theme="one"] { --color-background: red; }
+        html[data-theme="two"] { --color-background: blue; }
+        `,
+        "mixed.css",
+      ),
+    ).toThrow(/exactly one data-theme id/);
+  });
+
+  it("ignores unrelated dark selectors when detecting supported schemes", () => {
+    const payload = parseImportedThemeFile(
+      `
+      html[data-theme="linen"] {
+        --color-background: #faf5ea;
+      }
+
+      .dark .debug-panel {
+        color: white;
+      }
+      `,
+      "linen.css",
+    );
+
+    expect(payload.theme.schemes).toEqual(["light"]);
+  });
+
+  it("rejects json themes when cssText targets a different id", () => {
+    expect(() =>
+      parseImportedThemeFile(
+        JSON.stringify({
+          id: "sunfall",
+          label: "Sunfall",
+          cssText:
+            'html[data-theme="other-theme"] { --color-background: #f7e8d5; }',
+        }),
+        "sunfall.theme.json",
+      ),
+    ).toThrow(/matches "sunfall"/);
+  });
 });

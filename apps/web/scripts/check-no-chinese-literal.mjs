@@ -38,6 +38,7 @@ const ALLOW_COMMENT = /\bi18n-allow\b/;
 const WHITELIST_PREFIXES = [
   "src/i18n/locales/",
   "src/services/data-service.ts", // I18nText data model (not UI strings)
+  "src/services/data-service/seed-worlds.ts", // bilingual I18nText seed data
   "src/settings/navigation.ts", // bilingual group/subgroup labels
   "src/settings/registry/", // bilingual SettingEntry registries (core, llm, keys)
   "src/theme-system/registry.ts", // bilingual appearance/theme registry

@@ -471,6 +471,11 @@
     "themeSourceCustom": "自定义",
     "themeActive": "当前",
     "themeApply": "应用",
+    "themeSchemeLabel": "颜色模式",
+    "themeScheme": {
+      "light": "亮色",
+      "dark": "暗色"
+    },
     "modelDefault": "默认模型",
     "modelFast": "快速模型",
     "modelBalance": "均衡模型",

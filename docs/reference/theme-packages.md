@@ -18,31 +18,37 @@
 当前运行时主题切换入口是：
 
 ```html
-<html data-theme="paper" class="dark"></html>
+<html data-theme="paper" data-scheme="dark" class="dark"></html>
 ```
 
 其中：
 
-- `data-theme` 决定主题包
-- `.dark` 决定颜色模式
+- `ui.appearance` 持久化主题包 ID，并应用为 `data-theme`
+- `ui.scheme` 持久化颜色模式，并应用为 `data-scheme` 与 Tailwind 兼容的 `.dark`
+- 主题包的 `schemes` 决定可用颜色模式；只支持单一模式的主题会自动把 `ui.scheme` 对齐到可用值
 
 ## 2. 支持的导入格式
 
 ### 2.1 CSS 文件
 
-运行时会从 CSS 中解析第一个 `data-theme` 选择器：
+运行时会从 CSS 中解析 `data-theme` 选择器：
 
 ```css
 html[data-theme="ember"] {
   --color-background: #14171d;
 }
+
+html[data-theme="ember"].dark {
+  --color-background: #090b10;
+}
 ```
 
 解析规则：
 
-- 至少出现一个 `data-theme="..."` 选择器
-- 第一个匹配到的主题 ID 作为主题包 ID
-- 文件中出现 `.dark` 选择器时，运行时会把 `schemes` 视为 `["light", "dark"]`
+- 必须至少出现一个 `html[data-theme="..."]` 选择器
+- 一个 CSS 文件只能声明一个主题 ID
+- 只有同一个主题 ID 的选择器包含 `.dark` 时，运行时才会把 `schemes` 视为 `["light", "dark"]`
+- 其他 `.dark` 选择器不会影响主题模式推断
 
 ### 2.2 JSON 文件
 
@@ -66,13 +72,13 @@ JSON 结构：
 
 ## 3. JSON 字段契约
 
-| 字段          | 类型                               | 说明                                        |
-| ------------- | ---------------------------------- | ------------------------------------------- |
-| `id`          | `string`                           | 主题 ID，匹配 `/^[a-z0-9][a-z0-9-]{1,47}$/` |
-| `label`       | `string \| Record<string, string>` | 显示名称                                    |
-| `schemes`     | `("light" \| "dark")[]`            | 支持的颜色模式                              |
-| `description` | `string \| Record<string, string>` | 可选说明                                    |
-| `cssText`     | `string`                           | 主题 CSS 内容                               |
+| 字段          | 类型                               | 说明                                           |
+| ------------- | ---------------------------------- | ---------------------------------------------- |
+| `id`          | `string`                           | 主题 ID，匹配 `/^[a-z0-9][a-z0-9-]{1,47}$/`    |
+| `label`       | `string \| Record<string, string>` | 显示名称                                       |
+| `schemes`     | `("light" \| "dark")[]`            | 支持的颜色模式                                 |
+| `description` | `string \| Record<string, string>` | 可选说明                                       |
+| `cssText`     | `string`                           | 主题 CSS 内容，必须只声明与 `id` 相同的主题 ID |
 
 ## 4. 内置主题包结构
 
@@ -137,15 +143,35 @@ apps/web/src/themes/builtins/
 
 ### 5.2 表面 token
 
-- `--surface-app`
-- `--surface-panel`
-- `--surface-panel-strong`
+- `--surface-page`
+- `--surface-rail`
+- `--surface-inset`
+- `--surface-elevated`
 - `--surface-dialog`
 - `--surface-player`
 - `--surface-empty`
 - `--border-subtle`
 
-### 5.3 圆角与布局 token
+兼容旧主题的别名：
+
+- `--surface-app`
+- `--surface-panel`
+- `--surface-panel-strong`
+
+### 5.3 规则与强调 token
+
+- `--rule-color`
+- `--rule-strong-color`
+- `--rule-style`
+- `--rule-thickness`
+- `--rule-strong-thickness`
+- `--accent-primary`
+- `--accent-secondary`
+- `--accent-warning`
+- `--accent-danger`
+- `--accent-success`
+
+### 5.4 圆角、布局与氛围 token
 
 - `--radius-card`
 - `--radius-control`
@@ -154,14 +180,25 @@ apps/web/src/themes/builtins/
 - `--panel-header-height`
 - `--panel-section-padding-x`
 - `--panel-section-padding-y`
+- `--rail-width-left`
+- `--rail-width-right`
 - `--composer-max-width`
 - `--session-column-max-width`
+- `--ambience-image`
+- `--ambience-blend`
+- `--ambience-opacity`
+- `--noise-image`
+- `--noise-opacity`
 
-### 5.4 字体与排版 token
+### 5.5 字体与排版 token
 
 - `--font-display`
 - `--font-serif`
 - `--font-mono`
+- `--type-display`
+- `--type-body`
+- `--type-mono`
+- `--type-meta`
 - `--eyebrow-font-family`
 - `--eyebrow-font-size`
 - `--eyebrow-font-weight`
@@ -178,11 +215,16 @@ apps/web/src/themes/builtins/
 - `--story-font-weight`
 - `--story-letter-spacing`
 - `--story-max-width`
+- `--meta-font-family`
+- `--meta-font-size`
+- `--meta-letter-spacing`
+- `--meta-text-transform`
 
-### 5.5 阴影 token
+### 5.6 阴影 token
 
 - `--shadow-card`
 - `--shadow-dialog`
+- `--shadow-pop`
 
 ## 6. 共享语义 hook 契约
 
@@ -240,7 +282,8 @@ apps/web/src/themes/builtins/
 4. 保存到本地设置
 5. 注入 `<style data-theme-style="theme-id">`
 6. 重新注册到 `ui.appearance`
-7. 在设置面板和主题库中显示
+7. 根据 `schemes` 校正 `ui.scheme`
+8. 在设置面板和主题库中显示
 
 ## 8. 持久化行为
 
