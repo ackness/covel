@@ -120,8 +120,11 @@ Refactored in this pass:
 ### Web Debug Route
 
 - Kept `debug.tsx` as the TanStack route shell.
-- Moved trace/event helpers, page-data loading, event detail rendering, session data panels, and trace panels into `apps/web/src/routes/debug/`.
-- Kept route search params and route component ownership in the original route file.
+- Kept route search params and `validateSearch` ownership in the original route file.
+- Moved debug page composition into `apps/web/src/routes/debug/-debug-route-page.tsx`.
+- Moved search/sidebar toolbar, trace timeline, event detail panel, and session data view into focused route-local components.
+- Split story-turn indexing and trace category matching into `apps/web/src/routes/debug/-debug-page-model.ts`.
+- Added focused tests for search-param validation, manual-turn indexing, category matching, toolbar callbacks, data view rendering, timeline selection, and event detail close behavior.
 
 ### Web Chat Messages
 
@@ -264,7 +267,21 @@ Refactored in this pass:
 - `apps/web/src/components/session/game-view.tsx`: 502 lines
 - `apps/web/src/components/session/plugin-list-panel.tsx`: 75 lines
 - `apps/web/src/components/session/image-plugin-panels.tsx`: 2 lines
-- `apps/web/src/routes/debug.tsx`: 640 lines
+- `apps/web/src/routes/debug.tsx`: 24 lines
+- `apps/web/src/routes/debug/-debug-page-data.ts`: 186 lines
+- `apps/web/src/routes/debug/-debug-page-model.ts`: 42 lines
+- `apps/web/src/routes/debug/-debug-route-page.tsx`: 192 lines
+- `apps/web/src/routes/debug/-debug-toolbar.tsx`: 81 lines
+- `apps/web/src/routes/debug/-session-sidebar.tsx`: 71 lines
+- `apps/web/src/routes/debug/-session-data-view.tsx`: 242 lines
+- `apps/web/src/routes/debug/-trace-timeline.tsx`: 75 lines
+- `apps/web/src/routes/debug/-event-detail-panel.tsx`: 33 lines
+- `apps/web/src/routes/debug/-debug-helpers.ts`: 313 lines
+- `apps/web/src/routes/debug/-event-detail.tsx`: 218 lines
+- `apps/web/src/routes/debug/-session-data-panels.tsx`: 290 lines
+- `apps/web/src/routes/debug/-trace-panels.tsx`: 383 lines
+- `apps/web/src/routes/debug/__tests__/-debug-page-model.test.ts`: 80 lines
+- `apps/web/src/routes/debug/__tests__/-debug-components.test.tsx`: 221 lines
 - `packages/store/src/media-store.ts`: 30 lines
 - `packages/store/src/media-store/memory.ts`: 179 lines
 - `packages/store/src/media-store/pg.ts`: 261 lines
@@ -342,13 +359,13 @@ Future passes should focus on large maintenance files that are production code, 
 | 1        |                           `packages/runtime/src/turn-agent-tool-loop.ts` |   692 | LLM response loop and tool-call state machine | Runtime tool-loop tests              |
 | 2        |                                    `packages/test-runtime/src/runner.ts` |   660 | live adapter setup and case orchestration     | Test-runtime package tests           |
 | 3        |                     `apps/web/src/lib/catalog/interactive-renderers.tsx` |   650 | interactive json-render components            | Web catalog/component tests          |
-| 4        |                                          `apps/web/src/routes/debug.tsx` |   640 | trace/session debug panels                    | Web route/component tests            |
-| 5        |                                    `packages/ai-provider/src/gateway.ts` |   638 | operation retry/fallback loop                 | AI provider gateway tests            |
-| 6        | `apps/web/src/components/session/session-prep/plugin-selection-card.tsx` |   627 | plugin filtering and policy UI                | Web session-prep component tests     |
-| 7        |                      `apps/web/src/components/session/chat-messages.tsx` |   627 | message orchestration and timeline rendering  | Web chat/component tests             |
-| 8        |                               `packages/context/src/prompt-assembler.ts` |   613 | prompt segment assembly and budget pruning    | Context prompt tests                 |
-| 9        |                                `apps/server/src/routes/api/bootstrap.ts` |   607 | remaining route composition and DI wiring     | Server bootstrap and API route tests |
-| 10       |                                    `packages/create/src/create-world.ts` |   602 | world scaffold writing and asset generation   | Create package tests                 |
+| 4        |                                    `packages/ai-provider/src/gateway.ts` |   638 | operation retry/fallback loop                 | AI provider gateway tests            |
+| 5        | `apps/web/src/components/session/session-prep/plugin-selection-card.tsx` |   627 | plugin filtering and policy UI                | Web session-prep component tests     |
+| 6        |                      `apps/web/src/components/session/chat-messages.tsx` |   627 | message orchestration and timeline rendering  | Web chat/component tests             |
+| 7        |                               `packages/context/src/prompt-assembler.ts` |   613 | prompt segment assembly and budget pruning    | Context prompt tests                 |
+| 8        |                                `apps/server/src/routes/api/bootstrap.ts` |   607 | remaining route composition and DI wiring     | Server bootstrap and API route tests |
+| 9        |                                    `packages/create/src/create-world.ts` |   602 | world scaffold writing and asset generation   | Create package tests                 |
+| 10       |                                               `apps/desktop/src/main.ts` |   578 | sidecar supervisor state and retry lifecycle  | Desktop build/lifecycle smoke        |
 
 Very large generated/catalog/type-heavy files such as `known-models.ts`, `store/src/types.ts`, and `registry-definitions.ts` should stay lower priority unless a concrete maintenance problem appears.
 
@@ -588,6 +605,13 @@ Very large generated/catalog/type-heavy files such as `known-models.ts`, `store/
   - `timeout 120s mise exec -- pnpm exec prettier --check packages/tools/src/builtin/character-tools.ts packages/tools/src/builtin/character-tool-helpers.ts packages/tools/tests/character-tool-helpers.test.ts docs/refactor/2026-05-09_13-05_long-file-restructure.md`
   - `timeout 240s mise exec -- pnpm lint`
   - `git diff --check`
+- Thirty-ninth pass validation:
+  - `mise exec -- pnpm install --frozen-lockfile`
+  - `mise exec -- pnpm --filter @covel/web lint`
+  - `mise exec -- pnpm --filter @covel/web exec vitest run src/routes/debug/__tests__/-debug-page-model.test.ts src/routes/debug/__tests__/-debug-components.test.tsx`
+  - `mise exec -- pnpm --filter @covel/web check:i18n`
+  - `timeout 120s mise exec -- pnpm exec prettier --check apps/web/src/routes/debug.tsx apps/web/src/routes/debug/*.ts apps/web/src/routes/debug/*.tsx apps/web/src/routes/debug/__tests__/*.ts apps/web/src/routes/debug/__tests__/*.tsx docs/refactor/2026-05-09_13-05_long-file-restructure.md`
+  - `git diff --check`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -608,6 +632,7 @@ Very large generated/catalog/type-heavy files such as `known-models.ts`, `store/
 - `registry-definitions.ts` still owns the full flat env variable catalog. Future grouping by env group should keep `COVEL_ENV_REGISTRY` as the stable flattened export.
 - `main.ts` still owns sidecar supervisor state, retry lifecycle, heartbeat, and sidecar config REST calls. Future desktop passes should introduce a supervisor object only with explicit tests or build-level smoke coverage.
 - `prompt-assembler.ts` still owns segment construction and post-history assembly. Future prompt passes should target one prompt phase at a time so cache-breakpoint and budget behavior stay covered.
+- `-trace-panels.tsx` remains the largest debug-route leaf because turn cards, runtime rows, and event rows share expansion/filter state. Future debug work should split runtime/event row rendering after interaction tests cover row expansion and selection.
 
 ## Rollback
 

@@ -1,10 +1,15 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type * as api from "@/services/api.js";
-import { categorize, type EventCategory } from "./-debug-helpers.js";
 import * as apiClient from "@/services/api.js";
+import type { EventCategory } from "./-debug-helpers.js";
+import {
+  getStoryTurnCount,
+  getVisibleTurns,
+  traceEventMatchesCategory,
+  type DebugView,
+} from "./-debug-page-model.js";
 
-export type DebugView = "traces" | "data";
 export type SessionSnapshot = Awaited<
   ReturnType<typeof apiClient.getSessionSnapshot>
 >;
@@ -140,42 +145,12 @@ export function useDebugPageData(sid: string | undefined) {
     [turns],
   );
 
-  const storyTurnCount = useMemo(
-    () =>
-      turns.reduce((acc, turn) => {
-        const isManual = turn.events.some(
-          (event) =>
-            event.type === "turn.started" &&
-            event.payload &&
-            typeof event.payload === "object" &&
-            (event.payload as Record<string, unknown>).manualTrigger,
-        );
-        return acc + (isManual ? 0 : 1);
-      }, 0),
-    [turns],
-  );
+  const storyTurnCount = useMemo(() => getStoryTurnCount(turns), [turns]);
 
-  const visibleTurns = useMemo(() => {
-    let storyIndex = 0;
-    return turns.map((turn) => {
-      const isManual = turn.events.some(
-        (event) =>
-          event.type === "turn.started" &&
-          event.payload &&
-          typeof event.payload === "object" &&
-          (event.payload as Record<string, unknown>).manualTrigger,
-      );
-      if (!isManual) storyIndex++;
-      return { turn, turnIndex: storyIndex };
-    });
-  }, [turns]);
+  const visibleTurns = useMemo(() => getVisibleTurns(turns), [turns]);
 
   const filterMatchesEvent = useCallback(
-    (event: api.TraceEvent) =>
-      filterCategory === null ||
-      categorize(event.type) === filterCategory ||
-      categorize((event.payload.type as string) || event.type) ===
-        filterCategory,
+    (event: api.TraceEvent) => traceEventMatchesCategory(event, filterCategory),
     [filterCategory],
   );
 
@@ -207,3 +182,5 @@ export function useDebugPageData(sid: string | undefined) {
     filterMatchesEvent,
   };
 }
+
+export type DebugPageData = ReturnType<typeof useDebugPageData>;
