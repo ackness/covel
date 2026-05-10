@@ -6,8 +6,7 @@ directories:
   output: ../../release/electron
   buildResources: resources
 
-# Inject `-electron-` into artefact names so Electron and Tauri outputs
-# (e.g. Covel_0.0.1-beta_aarch64.dmg) never get confused in release/.
+# Keep Electron artefact names explicit in release/.
 artifactName: ${productName}-electron-${version}-${os}-${arch}.${ext}
 
 # 我们不发布到 GitHub Release / S3，禁用 publish 即可避免 latest-*.yml

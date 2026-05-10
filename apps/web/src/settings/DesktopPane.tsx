@@ -1,9 +1,10 @@
 /**
  * Desktop-only pane for the Settings dialog.
  *
- * Visible only when running inside the Electron/Tauri shell (detected via
- * `isDesktopApp()`). Exposes paths and actions: open config / data / logs
- * folders, change data_root, restart the backend server, reset onboarding.
+ * Visible only when running inside the Electron shell or desktop REST mode
+ * (detected via `isDesktopApp()`). Exposes paths and actions: open config /
+ * data / logs folders, change data_root, restart the backend server, reset
+ * onboarding.
  */
 
 import { useEffect, useState } from "react";

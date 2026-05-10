@@ -15,7 +15,7 @@ Settings are currently spread across 5 files and 4 storage media with no unified
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `localStorage` (12+ keys)                     | locale, appearance, slot config, custom presets, param overrides, capability overrides, provider keys (fallback), runtime priority, runtime bindings (per-session), onboarded flag, migration/storage-mode flags |
 | Electron IPC → `~/.covel/keys.env`            | API keys (desktop)                                                                                                                                                                                               |
-| REST `/api/config/keys` → `~/.covel/keys.env` | API keys (Tauri / self-host)                                                                                                                                                                                     |
+| REST `/api/config/keys` → `~/.covel/keys.env` | API keys (self-host)                                                                                                                                                                                             |
 | `~/.covel/llm.toml`                           | Slot / provider definitions                                                                                                                                                                                      |
 | IndexedDB `covel-app`                         | Game data (not settings — out of scope)                                                                                                                                                                          |
 
@@ -267,7 +267,7 @@ interface SettingsBackend {
 }
 
 class JsonFileBackend implements SettingsBackend {
-  // Desktop: writes <covelHome>/settings.json via IPC (Electron) or REST (Tauri / self-host)
+  // Desktop: writes <covelHome>/settings.json via IPC (Electron) or REST (self-host)
   // Atomic write: tmpfile + rename
   // Secrets delegate to keys.env (mode 600 preserved)
 }

@@ -114,7 +114,7 @@ Cleanup policy fields:
 | `maxBytes`        | Deletes oldest unprotected assets until total stored bytes fit the cap        |
 | `keepRecentBytes` | Keeps the newest unprotected byte budget and selects older unprotected assets |
 
-An empty policy returns an inventory-style dry run with zero selected deletions. Tauri desktop uses the same authoritative store metadata; the native path remains the byte transport layer.
+An empty policy returns an inventory-style dry run with zero selected deletions. Desktop and web media reads use the same authoritative store metadata, with browser cache entries validated against the `MediaRef` before serving.
 
 ## Tests
 

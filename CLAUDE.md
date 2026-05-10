@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Covel is an AI RPG plugin-based framework (modular monolith). Core philosophy: **plugins carry gameplay logic, the kernel provides primitives and orchestration**. Each plugin is a self-contained Agent Runtime that declares its own trigger rules, context injection, tool whitelist, and write proxies; the kernel routes turns, assembles context, drives LLM tool-calls, and commits proposals.
 
-Deployable as Web or Electron (recommended for desktop). A Tauri shell exists at `apps/desktop-tauri/` mirroring the same Node sidecar contract, but is **not officially supported today** — open compat issues around macOS multi-window, signing, and `tauri-plugin-log` mean it is for tinkerers only. Production desktop builds should use `pnpm build:electron`.
+Deployable as Web or Electron (desktop). Production desktop builds should use `pnpm build:electron`.
 
 ## Documentation Index
 
@@ -33,7 +33,6 @@ Before changing anything non-trivial, consult the matching reference doc — the
 | Environment variable registry                       | [docs/guide/env-registry.md](./docs/guide/env-registry.md)                                                                  |
 | Desktop config (paths, sidecar, safeStorage)        | [docs/guide/desktop-config.md](./docs/guide/desktop-config.md)                                                              |
 | Desktop packaging (Electron), signing, notarisation | [apps/desktop/PACKAGING.md](./apps/desktop/PACKAGING.md)                                                                    |
-| Desktop packaging (Tauri), signing, notarisation    | [apps/desktop-tauri/PACKAGING.md](./apps/desktop-tauri/PACKAGING.md)                                                        |
 | Prompt externalisation spec                         | [devs/docs/prompt-externalization-spec.md](./devs/docs/prompt-externalization-spec.md)                                      |
 | World package spec (world.yaml + WORLD.md + data)   | [devs/docs/world-package-spec.md](./devs/docs/world-package-spec.md)                                                        |
 | Plugin system requirements, refactor plans          | [devs/docs/plugin-system-req.md](./devs/docs/plugin-system-req.md) · [devs/docs/refactor-plan/](./devs/docs/refactor-plan/) |
@@ -76,9 +75,9 @@ npx tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts --slot 
 pnpm docker:build / docker:up / docker:down / docker:logs
 
 # Desktop
-pnpm dev:electron / dev:tauri            # dev shells (real sidecar)
-pnpm build:electron / build:tauri        # platform installers → release/
-pnpm build:desktop                       # both shells
+pnpm dev:electron                        # Electron dev shell (real sidecar)
+pnpm build:electron                      # platform installer → release/
+pnpm build:desktop                       # Electron desktop build
 ```
 
 ## Config Files
@@ -109,7 +108,6 @@ apps/
   web/              Web UI (React 19 + Vite + TanStack Router, json-render + plugin-driven panels)
   server/           Hono API + Drizzle ORM
   desktop/          Electron shell (sidecar)
-  desktop-tauri/    Tauri shell (same sidecar contract)
 
 packages/           14 internal packages: shared, context, ai-provider,
                     plugin-loader, runtime, store, state, events, tools,

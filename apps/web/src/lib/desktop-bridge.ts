@@ -38,17 +38,6 @@ interface CovelIpcApi {
   on(channel: string, handler: (payload: unknown) => void): () => void;
 }
 
-interface TauriCoreApi {
-  invoke<T = unknown>(
-    command: string,
-    args?: Record<string, unknown>,
-  ): Promise<T>;
-}
-
-interface TauriGlobalApi {
-  readonly core?: TauriCoreApi;
-}
-
 interface ServerStatus {
   state: "up" | "down" | "degraded" | "restarting";
   attempts?: number;
@@ -73,7 +62,6 @@ interface DesktopBridgeHandlers {
 declare global {
   interface Window {
     covelIpc?: CovelIpcApi;
-    __TAURI__?: TauriGlobalApi;
   }
 }
 
@@ -82,25 +70,15 @@ export function getCovelIpc(): CovelIpcApi | null {
   return window.covelIpc ?? null;
 }
 
-export function getTauriCore(): TauriCoreApi | null {
-  if (typeof window === "undefined") return null;
-  return window.__TAURI__?.core ?? null;
-}
-
-export function isTauriApp(): boolean {
-  return getTauriCore() !== null;
-}
-
 // REST-mode desktop capability — set by probeDesktopMode() at app boot.
-// Distinguishes "Tauri webview / self-host with ~/.covel present" from pure
-// web-tier deployments where file-manager / config.toml mutation are
-// meaningless.
+// Distinguishes self-host setups with ~/.covel present from pure web-tier
+// deployments where file-manager / config.toml mutation are meaningless.
 let restDesktopCapable = false;
 
 // Per-launch bearer token for privileged REST writes. Sourced from the
-// Electron IPC `covel:get-info` response (or future Tauri equivalent). On
-// pure web / dev, no token is set — the server-side guard also stays open
-// in that case, so the absence is consistent on both ends.
+// Electron IPC `covel:get-info` response. On pure web / dev, no token is set
+// — the server-side guard also stays open in that case, so the absence is
+// consistent on both ends.
 let desktopRestToken: string | null = null;
 
 /** Headers to merge into fetches that hit `/api/config/{keys,settings,data-root,open-folder}`. */
@@ -153,7 +131,7 @@ export async function probeDesktopMode(): Promise<void> {
  * available — either via Electron IPC or the server's desktop-REST surface.
  */
 export function isDesktopApp(): boolean {
-  return getCovelIpc() !== null || isTauriApp() || restDesktopCapable;
+  return getCovelIpc() !== null || restDesktopCapable;
 }
 
 /** True specifically for the IPC branch (Electron). */
@@ -323,9 +301,9 @@ export async function openKeysEnv(): Promise<void> {
  * Set the data_root path in `~/.covel/config.toml`.
  *
  * - Electron: native folder picker via IPC (returns picked path or null if cancelled).
- * - REST desktop (Tauri, self-host with ~/.covel): caller must supply an
- *   absolute path argument; the browser has no native folder picker and the
- *   UI must present a text input + example path.
+ * - REST desktop (self-host with ~/.covel): caller must supply an absolute
+ *   path argument; the browser has no native folder picker and the UI must
+ *   present a text input + example path.
  */
 export async function pickDataDir(manualPath?: string): Promise<string | null> {
   const ipc = getCovelIpc();

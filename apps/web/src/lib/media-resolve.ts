@@ -3,13 +3,9 @@
  *
  * Resolution order (per SPEC §5.1 (g)):
  *   1. /api/sessions/:sessionId/media-token?id=:id authorizes the session
- *   2. (Tauri only) native file-system fast path — only consulted *after*
- *      the server has authorized the current session for this ref. This
- *      prevents a session B from reading session A's bytes purely because
- *      it learned A's content-addressable id.
- *   3. IDB cache hit                    → URL.createObjectURL(blob), fromCache=true
- *   4. signed URL fetch                 → cache + return blob URL
- *   5. any failure                      → explicit error result + sentinel URL
+ *   2. IDB cache hit                    → URL.createObjectURL(blob), fromCache=true
+ *   3. signed URL fetch                 → cache + return blob URL
+ *   4. any failure                      → explicit error result + sentinel URL
  *
  * The token endpoint provides the framework path for refs that arrive
  * without an eager `url` from the producer plugin.
@@ -19,13 +15,6 @@
  * true, the URL is also a blob URL, but we keep the underlying record in
  * IDB — so revoking is still required, but the next render will rebuild
  * the URL trivially from cache.
- *
- * TODO(audit-2026-04-26 P0 follow-up): the Tauri fast path currently
- * trusts the session authorization gate above. A defence-in-depth
- * follow-up is to plumb `sessionId` into `native_media_read` and have
- * the Rust side verify ownership directly against the sidecar's
- * `media_assets` / `media_refs` rows before serving bytes. That keeps
- * the fast path safe even if a future caller forgets to authorize first.
  */
 
 import type { MediaRef } from "@covel/shared";
@@ -35,7 +24,6 @@ import {
   type MediaCacheRecord,
 } from "./media-cache.js";
 import { sha256Hex, subtleAvailable } from "./media-hash.js";
-import { readNativeTauriMedia } from "./tauri-media.js";
 
 export interface ResolveOptions {
   readonly sessionId: string;
@@ -231,29 +219,15 @@ export async function resolveMediaSrc(
   ref: MediaRef,
   opts: ResolveOptions,
 ): Promise<ResolveResult> {
-  // 1. Authorize the session before consulting any local fast path or the
-  // shared browser cache. This is the single chokepoint that prevents a
-  // session B from reading session A's bytes by stealing the SHA-addressed
-  // id (the on-disk SHA-bin file isn't itself session-scoped).
+  // 1. Authorize the session before consulting the shared browser cache.
+  // This is the single chokepoint that prevents a session B from reading
+  // session A's bytes by stealing the SHA-addressed id.
   const signedUrl = await fetchSignedUrl(ref, opts);
   if (!signedUrl) {
     return { url: TRANSPARENT_PNG_DATA_URI, fromCache: false, ok: false };
   }
 
-  // 2. Desktop Tauri can read the local MediaStore layout directly from
-  // native fs — only after step 1 confirmed the session is authorised.
-  // See the file-level TODO for the planned defence-in-depth Rust check.
-  const nativeBlob = await readNativeTauriMedia(ref, { authorized: true });
-  if (nativeBlob) {
-    return {
-      url: URL.createObjectURL(nativeBlob),
-      blob: nativeBlob,
-      fromCache: true,
-      ok: true,
-    };
-  }
-
-  // 3. IDB cache hit (validated against ref to prevent serving a
+  // 2. IDB cache hit (validated against ref to prevent serving a
   // poisoned record from a previous miscached fetch).
   const cachedBlob = await getAndVerifyCachedMedia(ref);
   if (cachedBlob) {
@@ -265,7 +239,7 @@ export async function resolveMediaSrc(
     };
   }
 
-  // 4. Fetch via the server-issued signed URL.
+  // 3. Fetch via the server-issued signed URL.
   const fetched = await fetchBlobAndCache(ref, signedUrl, opts);
   if (fetched) {
     return {

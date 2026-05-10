@@ -14,12 +14,12 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 | ----------- | ------------------------------------------------------------ |
 | `storage`   | `STORE_BACKEND`、`DATABASE_URL`、SQLite / PostgreSQL 配置    |
 | `server`    | 端口、CORS、静态资源、部署层级、限流                         |
-| `desktop`   | Electron / Tauri 注入给 server sidecar 的路径与桌面模式配置  |
+| `desktop`   | Electron 注入给 server sidecar 的路径与桌面模式配置          |
 | `ai`        | LLM 配置、provider keys、Langfuse、模型数据库、prompt 根目录 |
 | `feature`   | 运行期功能开关                                               |
 | `web`       | Vite dev proxy 与浏览器侧公开变量                            |
 | `test`      | Playwright、live provider tests、e2e harness、开发脚本       |
-| `packaging` | Electron / Tauri 签名、公证、updater 密钥                    |
+| `packaging` | Electron 签名、公证、updater 密钥                            |
 
 ## 状态
 

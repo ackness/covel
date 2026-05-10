@@ -1,8 +1,6 @@
 # 桌面版配置与数据目录
 
-适用于 [`apps/desktop/`](../../apps/desktop/)（Electron）与 [`apps/desktop-tauri/`](../../apps/desktop-tauri/)（Tauri）两种桌面壳。两者启动同一个 Node sidecar bundle，并按下文统一的目录契约喂入环境变量；两个 launcher 各自维护一份等价实现，必须保持一致。
-
-> **当前推荐入口：Electron**。Tauri 壳已经按相同契约对齐，但与现有 plugin / sidecar 生态在 macOS 多窗口、code signing、`tauri-plugin-log` 切换等场景下仍有兼容性问题，**暂不作为官方支持的发行入口**，仅供想自行折腾的开发者。生产分发请使用 `pnpm build:electron` 产物。
+适用于 [`apps/desktop/`](../../apps/desktop/)（Electron）。桌面壳启动同一个 Node sidecar bundle，并按下文的目录契约喂入环境变量。
 
 ## 目录结构
 
@@ -23,7 +21,6 @@
     server.log               ← Node sidecar 的 stdout/stderr（bootstrap 输出 + Hono 请求日志）
     desktop.log.1 … .N       ← 轮转副本，超过 max_files 丢弃最旧
     server.log.1 … .N
-    tauri-main*.log          ← Tauri 主进程（Tauri 壳专用，pino-roll）
   server.port                ← 最近一次启动的端口（诊断用）
 ```
 

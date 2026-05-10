@@ -1,8 +1,6 @@
 # Desktop config & data layout
 
-Applies to both [`apps/desktop/`](../../apps/desktop/) (Electron) and [`apps/desktop-tauri/`](../../apps/desktop-tauri/) (Tauri). Both launchers boot the same Node sidecar bundle and feed it the same env-var contract documented below; the two implementations are mirrored and must stay in sync.
-
-> **Recommended entry: Electron.** The Tauri shell now follows the same contract, but still has open compatibility issues around macOS multi-window, code signing, and `tauri-plugin-log` swap-out. **It is not an officially supported distribution channel today** — use `pnpm build:electron` artifacts for shipping; Tauri is for tinkerers only.
+Applies to [`apps/desktop/`](../../apps/desktop/) (Electron). The desktop shell boots the same Node sidecar bundle and feeds it the env-var contract documented below.
 
 ## Directory structure
 
@@ -19,7 +17,6 @@ On first launch the desktop app creates `~/.covel/`. Config and user plugins liv
   covel.db                   ← SQLite database
   worlds/                    ← user-created worlds
   logs/                      ← app logs (auto-rotated)
-    tauri-main*.log          ← Tauri main process
     electron-*.log           ← Electron main process
     server-*.log             ← Node backend (pino-roll)
   server.port                ← last boot port (diagnostics)

@@ -121,20 +121,11 @@ function RootLayout() {
     { id: "debug", label: t("nav.debug"), onClick: goDebug },
   ];
 
-  // Electron / Tauri both hide the native title bar so the in-app header can
-  // follow the active theme. Electron uses `-webkit-app-region: drag`; Tauri
-  // ships its own `data-tauri-drag-region` attribute. On macOS we pad-left to
-  // clear the inset traffic lights.
+  // Electron hides the native title bar so the in-app header can follow the
+  // active theme. On macOS we pad-left to clear the inset traffic lights.
   const ipc = getCovelIpc();
   const isElectron = ipc !== null;
-  const isTauri =
-    typeof window !== "undefined" &&
-    "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>);
-  const isMacDesktop =
-    (isElectron && ipc?.platform === "darwin") ||
-    (isTauri &&
-      typeof navigator !== "undefined" &&
-      /Mac|iPhone|iPad/.test(navigator.platform));
+  const isMacDesktop = isElectron && ipc?.platform === "darwin";
 
   const toggleLocale = () => {
     setLocale(locale === "zh-CN" ? "en-US" : "zh-CN");
@@ -147,7 +138,6 @@ function RootLayout() {
         <header
           className={`ui-panel-header relative flex-shrink-0 z-50 border-b border-border/80 backdrop-blur-md transition-all ${isSession ? "h-12" : "h-16"}`}
           style={isElectron ? dragStyle : undefined}
-          data-tauri-drag-region={isTauri ? "" : undefined}
         >
           {/* Centred brand — absolutely positioned so the macOS traffic-light
               padding on the inner row doesn't shift it off centre. */}
@@ -168,7 +158,6 @@ function RootLayout() {
 
           <div
             className={`w-full flex h-full items-center justify-between ${isMacDesktop ? "pl-[88px] pr-4 md:pr-6" : "px-4 md:px-6"}`}
-            data-tauri-drag-region={isTauri ? "" : undefined}
           >
             <nav
               className="hidden md:flex items-center gap-1 text-xs font-medium"

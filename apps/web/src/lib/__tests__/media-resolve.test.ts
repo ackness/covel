@@ -3,10 +3,9 @@
  *
  * Covers the resolution paths in SPEC §5.1 (g):
  *   1. media-token endpoint authorizes the current session
- *   2. (Tauri only) native fast path — but only *after* authorization
- *   3. cache hit (with integrity verification)
- *   4. signed URL fetch (with integrity verification before caching)
- *   5. explicit error result on failure
+ *   2. cache hit (with integrity verification)
+ *   3. signed URL fetch (with integrity verification before caching)
+ *   4. explicit error result on failure
  *
  * Uses the same minimal IDB shim from `media-cache.test.ts`. The IDB
  * cache is reset between tests so we can isolate the network paths.
@@ -131,11 +130,6 @@ const realIDB = (globalThis as { indexedDB?: unknown }).indexedDB;
 const realFetch = globalThis.fetch;
 const realCreateObjectURL = globalThis.URL.createObjectURL;
 const realRevokeObjectURL = globalThis.URL.revokeObjectURL;
-const realWindowTauri = window.__TAURI__;
-type TauriInvoke = <T = unknown>(
-  command: string,
-  args?: Record<string, unknown>,
-) => Promise<T>;
 
 let createdUrls: string[] = [];
 
@@ -152,7 +146,6 @@ beforeEach(() => {
     return id;
   }) as unknown as typeof URL.createObjectURL;
   globalThis.URL.revokeObjectURL = vi.fn();
-  delete window.__TAURI__;
 });
 
 afterEach(() => {
@@ -164,11 +157,6 @@ afterEach(() => {
   globalThis.fetch = realFetch;
   globalThis.URL.createObjectURL = realCreateObjectURL;
   globalThis.URL.revokeObjectURL = realRevokeObjectURL;
-  if (realWindowTauri === undefined) {
-    delete window.__TAURI__;
-  } else {
-    window.__TAURI__ = realWindowTauri;
-  }
 });
 
 const PNG_PAYLOAD = "fake-png-bytes";
@@ -264,66 +252,7 @@ describe("resolveMediaSrc", () => {
     expect(result.blob).toBeInstanceOf(Blob);
   });
 
-  it("uses the Tauri native media bridge ONLY after the session token authorizes", async () => {
-    const baseRef = await pngRef();
-    const tokenCalls: string[] = [];
-    const tauriCalls: string[] = [];
-    mockFetch(async (url) => {
-      tokenCalls.push(url);
-      if (url.startsWith("/api/sessions/")) {
-        return new Response(
-          JSON.stringify({ url: "https://signed.example.com/x.png?token=ok" }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        );
-      }
-      // Should never be hit because the Tauri native path returns first.
-      tauriCalls.push("UNEXPECTED " + url);
-      return pngResponse();
-    });
-    const invoke = vi.fn(
-      async (command: string, args?: Record<string, unknown>) => {
-        tauriCalls.push(command);
-        expect(command).toBe("native_media_read");
-        expect(args).toEqual({ id: baseRef.id });
-        return {
-          id: baseRef.id,
-          size: baseRef.size,
-          bytes: Array.from(PNG_BYTES),
-        };
-      },
-    );
-    window.__TAURI__ = {
-      core: { invoke: invoke as unknown as TauriInvoke },
-    };
-
-    const result = await resolveMediaSrc(baseRef, { sessionId: "s-tauri" });
-
-    expect(tokenCalls[0]).toBe(MEDIA_TOKEN_ENDPOINT("s-tauri", baseRef.id));
-    // Only the token call should have hit fetch — the signed URL never gets pulled.
-    expect(tokenCalls).toHaveLength(1);
-    expect(tauriCalls).toEqual(["native_media_read"]);
-    expect(result.ok).toBe(true);
-    expect(result.fromCache).toBe(true);
-    expect(result.blob).toBeInstanceOf(Blob);
-    expect(result.url.startsWith("blob:")).toBe(true);
-  });
-
-  it("does NOT consult the Tauri native media bridge when the token endpoint fails", async () => {
-    const baseRef = await pngRef();
-    mockFetch(async () => new Response("nope", { status: 401 }));
-    const invoke = vi.fn();
-    window.__TAURI__ = {
-      core: { invoke: invoke as unknown as TauriInvoke },
-    };
-
-    const result = await resolveMediaSrc(baseRef, { sessionId: "s-stranger" });
-
-    expect(invoke).not.toHaveBeenCalled();
-    expect(result.ok).toBe(false);
-    expect(result.url).toBe(__testing.TRANSPARENT_PNG_DATA_URI);
-  });
-
-  it("falls back to media-token endpoint when ref.url is absent (path 3)", async () => {
+  it("falls back to media-token endpoint when ref.url is absent", async () => {
     const baseRef = await pngRef();
     const calls: string[] = [];
     mockFetch(async (url) => {

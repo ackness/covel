@@ -1,8 +1,0 @@
-{
-  "bundle": {
-    "targets": ["appimage", "deb"],
-    "resources": {
-      "binaries/node": "bin/node"
-    }
-  }
-}

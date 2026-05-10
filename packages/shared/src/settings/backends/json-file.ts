@@ -30,8 +30,8 @@ interface JsonFileBackendOptions {
  * Desktop backend. Writes to `<covelHome>/settings.json` via one of:
  *  1. Electron IPC (`covel:settings:*` channels) when the preload bridge is
  *     present (`window.covelIpc`).
- *  2. REST (`/api/config/settings`) otherwise — Tauri and self-deploy setups
- *     where the sidecar owns the file.
+ *  2. REST (`/api/config/settings`) otherwise — self-deploy setups where the
+ *     sidecar owns the file.
  */
 export function createJsonFileBackend(
   opts: JsonFileBackendOptions = {},

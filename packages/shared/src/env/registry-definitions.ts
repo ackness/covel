@@ -725,53 +725,6 @@ export const COVEL_ENV_REGISTRY = [
     status: "packaging",
     description: "Apple Developer Team ID.",
   },
-  {
-    name: "APPLE_SIGNING_IDENTITY",
-    group: "packaging",
-    type: "string",
-    status: "packaging",
-    description: "Tauri macOS signing identity.",
-  },
-  {
-    name: "APPLE_CERTIFICATE",
-    group: "packaging",
-    type: "secret",
-    status: "packaging",
-    secret: true,
-    description: "Tauri base64-encoded Apple certificate.",
-  },
-  {
-    name: "APPLE_CERTIFICATE_PASSWORD",
-    group: "packaging",
-    type: "secret",
-    status: "packaging",
-    secret: true,
-    description: "Tauri Apple certificate password.",
-  },
-  {
-    name: "APPLE_PASSWORD",
-    group: "packaging",
-    type: "secret",
-    status: "packaging",
-    secret: true,
-    description: "Tauri Apple notarization app-specific password.",
-  },
-  {
-    name: "TAURI_SIGNING_PRIVATE_KEY",
-    group: "packaging",
-    type: "secret",
-    status: "packaging",
-    secret: true,
-    description: "Tauri updater signing private key.",
-  },
-  {
-    name: "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
-    group: "packaging",
-    type: "secret",
-    status: "packaging",
-    secret: true,
-    description: "Tauri updater signing key password.",
-  },
 ] as const satisfies readonly EnvVarDefinition[];
 
 export type CovelEnvName = (typeof COVEL_ENV_REGISTRY)[number]["name"];

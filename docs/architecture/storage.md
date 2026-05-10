@@ -44,7 +44,7 @@ for older web bundles.
 
 ## Desktop Paths
 
-Electron and Tauri use the same path contract:
+Electron uses this desktop path contract:
 
 ```text
 ~/.covel/

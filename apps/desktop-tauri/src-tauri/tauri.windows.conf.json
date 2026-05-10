@@ -1,8 +1,0 @@
-{
-  "bundle": {
-    "targets": ["nsis"],
-    "resources": {
-      "binaries/node.exe": "bin/node.exe"
-    }
-  }
-}

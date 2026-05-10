@@ -13,9 +13,9 @@
  * The PUT handler also mutates the in-process `apiKeys` map so the user's
  * first chat-turn after saving picks up the new key without a restart.
  *
- * Tauri/Electron shells share this API; pure web tiers (T2/T3) get
- * `isDesktop: false` and fall back to the existing X-Provider-Keys header
- * flow driven by browser localStorage.
+ * Electron and self-host desktop REST setups share this API; pure web tiers
+ * (T2/T3) get `isDesktop: false` and fall back to the existing
+ * X-Provider-Keys header flow driven by browser localStorage.
  */
 
 import { Hono } from "hono";
@@ -123,9 +123,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   });
 
   // GET /api/config/settings — return the entire settings.json bundle.
-  // Tauri / self-deploy uses this in place of the Electron `covel:settings:*`
-  // IPC channels. Web deployments never see `isDesktop: true` so this never
-  // leaks on production web tiers.
+  // Self-host desktop REST uses this in place of the Electron
+  // `covel:settings:*` IPC channels. Web deployments never see
+  // `isDesktop: true` so this never leaks on production web tiers.
   app.get("/api/config/settings", requireToken, (c) => {
     const covelHome = resolveCovelHome();
     if (!covelHome) {
@@ -360,7 +360,7 @@ function resolveDataRoot(): string | null {
  *
  * Trigger conditions (explicit only — filesystem presence is NOT enough):
  *   1. `COVEL_DESKTOP_REST=1` (opt-in flag for embedded/self-host cases)
- *   2. `COVEL_HOME` set by Electron/Tauri (both shells do this)
+ *   2. `COVEL_HOME` set by Electron
  *
  * A shared-backend deployment that happens to have `~/.covel/` on disk
  * (docker image bundling, admin home dir) therefore CAN'T reach these
