@@ -41,6 +41,8 @@ Refactored in this pass:
 - `packages/shared/src/env/registry.ts`
 - `apps/server/src/routes/api/bootstrap/memory.ts`
 - `apps/server/src/routes/api/bootstrap/local-tools.ts`
+- `packages/tools/src/builtin/character-tools.ts`
+- `packages/tools/src/builtin/character-tool-helpers.ts`
 
 ## Assumptions
 
@@ -219,6 +221,13 @@ Refactored in this pass:
 - Split env source readers, provider API-key mapping, SQLite path derivation, and runtime env shaping into `packages/shared/src/env/registry-readers.ts`.
 - Preserved `@covel/shared` and `../src/env/index.js` import surfaces.
 
+### Builtin Character Tools
+
+- Kept `character-tools.ts` as the public builtin tool factory entrypoint.
+- Split character tool store/dependency types, snapshot conversion, schema loading, plugin-data mirroring, field formatting, text truncation, list sorting, and fields-Zod construction into `packages/tools/src/builtin/character-tool-helpers.ts`.
+- Preserved `createCharacterTools`, `buildSessionCharacterWriteTools`, `mirrorCharacterToPluginData`, `CharacterStore`, `CharacterToolDeps`, and `CharacterSnapshot` exports from the original module path.
+- Added focused helper tests for schema loading, plugin-data mirroring, formatting, truncation, sorting, snapshot conversion, and generic/schema-aware fields-Zod construction.
+
 ## Current Size Snapshot
 
 - `packages/shared/src/env/registry.ts`: 2 lines
@@ -235,6 +244,9 @@ Refactored in this pass:
 - `packages/context/src/prompt-assembler.ts`: 613 lines
 - `packages/context/src/prompt-serialization.ts`: 41 lines
 - `packages/context/tests/prompt-serialization.test.ts`: 90 lines
+- `packages/tools/src/builtin/character-tools.ts`: 430 lines
+- `packages/tools/src/builtin/character-tool-helpers.ts`: 249 lines
+- `packages/tools/tests/character-tool-helpers.test.ts`: 184 lines
 - `apps/web/src/stores/session-store.tsx`: 77 lines
 - `apps/web/src/lib/catalog.tsx`: 151 lines
 - `apps/web/src/lib/catalog/character-renderers.tsx`: 346 lines
@@ -324,14 +336,14 @@ Future passes should focus on large maintenance files that are production code, 
 | -------- | -----------------------------------------------------------------------: | ----: | --------------------------------------------- | ------------------------------------ |
 | 1        |                           `packages/runtime/src/turn-agent-tool-loop.ts` |   692 | LLM response loop and tool-call state machine | Runtime tool-loop tests              |
 | 2        |                                    `packages/test-runtime/src/runner.ts` |   660 | live adapter setup and case orchestration     | Test-runtime package tests           |
-| 3        |                          `packages/tools/src/builtin/character-tools.ts` |   658 | character tool validation and store writes    | Tools package tests                  |
-| 4        |                     `apps/web/src/lib/catalog/interactive-renderers.tsx` |   650 | interactive json-render components            | Web catalog/component tests          |
-| 5        |                                          `apps/web/src/routes/debug.tsx` |   640 | trace/session debug panels                    | Web route/component tests            |
-| 6        |                                    `packages/ai-provider/src/gateway.ts` |   638 | operation retry/fallback loop                 | AI provider gateway tests            |
-| 7        | `apps/web/src/components/session/session-prep/plugin-selection-card.tsx` |   627 | plugin filtering and policy UI                | Web session-prep component tests     |
-| 8        |                      `apps/web/src/components/session/chat-messages.tsx` |   627 | message orchestration and timeline rendering  | Web chat/component tests             |
-| 9        |                               `packages/context/src/prompt-assembler.ts` |   613 | prompt segment assembly and budget pruning    | Context prompt tests                 |
-| 10       |                                `apps/server/src/routes/api/bootstrap.ts` |   607 | remaining route composition and DI wiring     | Server bootstrap and API route tests |
+| 3        |                     `apps/web/src/lib/catalog/interactive-renderers.tsx` |   650 | interactive json-render components            | Web catalog/component tests          |
+| 4        |                                          `apps/web/src/routes/debug.tsx` |   640 | trace/session debug panels                    | Web route/component tests            |
+| 5        |                                    `packages/ai-provider/src/gateway.ts` |   638 | operation retry/fallback loop                 | AI provider gateway tests            |
+| 6        | `apps/web/src/components/session/session-prep/plugin-selection-card.tsx` |   627 | plugin filtering and policy UI                | Web session-prep component tests     |
+| 7        |                      `apps/web/src/components/session/chat-messages.tsx` |   627 | message orchestration and timeline rendering  | Web chat/component tests             |
+| 8        |                               `packages/context/src/prompt-assembler.ts` |   613 | prompt segment assembly and budget pruning    | Context prompt tests                 |
+| 9        |                                `apps/server/src/routes/api/bootstrap.ts` |   607 | remaining route composition and DI wiring     | Server bootstrap and API route tests |
+| 10       |                                    `packages/create/src/create-world.ts` |   602 | world scaffold writing and asset generation   | Create package tests                 |
 
 Very large generated/catalog/type-heavy files such as `known-models.ts`, `store/src/types.ts`, and `registry-definitions.ts` should stay lower priority unless a concrete maintenance problem appears.
 
@@ -561,6 +573,14 @@ Very large generated/catalog/type-heavy files such as `known-models.ts`, `store/
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 240s mise exec -- pnpm --filter @covel/web test`
   - `timeout 120s mise exec -- pnpm exec prettier --check apps/web/src/lib/catalog.tsx apps/web/src/lib/catalog/character-renderers.tsx apps/web/src/lib/catalog/character-fields-renderer.tsx apps/web/src/lib/__tests__/character-fields-renderer.test.tsx docs/refactor/2026-05-09_13-05_long-file-restructure.md`
+  - `timeout 240s mise exec -- pnpm lint`
+  - `git diff --check`
+- Thirty-eighth pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --write packages/tools/src/builtin/character-tools.ts packages/tools/src/builtin/character-tool-helpers.ts packages/tools/tests/character-tool-helpers.test.ts`
+  - `timeout 180s mise exec -- pnpm --filter @covel/tools exec vitest run tests/character-tool-helpers.test.ts tests/character-tools.test.ts tests/schema-to-zod.test.ts`
+  - `timeout 120s mise exec -- pnpm --filter @covel/tools lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/tools test`
+  - `timeout 120s mise exec -- pnpm exec prettier --check packages/tools/src/builtin/character-tools.ts packages/tools/src/builtin/character-tool-helpers.ts packages/tools/tests/character-tool-helpers.test.ts docs/refactor/2026-05-09_13-05_long-file-restructure.md`
   - `timeout 240s mise exec -- pnpm lint`
   - `git diff --check`
 - Earlier in this pass, after web/store extraction:
