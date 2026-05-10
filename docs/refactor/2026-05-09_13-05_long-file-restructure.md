@@ -29,6 +29,7 @@ Refactored in this pass:
 - `apps/server/src/routes/misc-api.ts`
 - `apps/server/src/routes/api/bootstrap.ts`
 - `apps/desktop/src/main.ts`
+- `apps/desktop/src/ipc-handlers.ts`
 - `apps/desktop/src/logging.ts`
 - `apps/desktop/src/windows.ts`
 - `apps/server/src/routes/api/plugin-rpc.ts`
@@ -178,7 +179,8 @@ Refactored in this pass:
 - Split startup error classification, network/health polling, splash HTML, and env/key file helpers into `apps/desktop/src/{startup-errors,network,splash-screen,env-files}.ts`.
 - Split rolling NDJSON desktop/server logging into `apps/desktop/src/logging.ts`, with `main.ts` wiring only app version, log directory, sidecar stream lines, and shell log calls.
 - Split BrowserWindow creation, native menu template, context menu, title sync, external-link guard, splash load, and app navigation into `apps/desktop/src/windows.ts`.
-- Kept sidecar config REST calls, stderr ring buffer, IPC handlers, and supervisor state in `main.ts` because they still depend on process-level state.
+- Split Electron IPC registration, open-directory handlers, settings/key fallback persistence, and plugin/world import dialogs into `apps/desktop/src/ipc-handlers.ts`.
+- Kept sidecar config REST calls, stderr ring buffer, retry signal ownership, and supervisor state in `main.ts` because they still depend on process-level state.
 
 ### AI Provider Gateway
 
@@ -299,7 +301,8 @@ Refactored in this pass:
 - `apps/server/src/routes/api/bootstrap/plugin-hooks.ts`: 45 lines
 - `apps/server/tests/api/bootstrap-local-tools.test.ts`: 253 lines
 - `apps/server/tests/api/bootstrap-memory.test.ts`: 141 lines
-- `apps/desktop/src/main.ts`: 762 lines
+- `apps/desktop/src/main.ts`: 585 lines
+- `apps/desktop/src/ipc-handlers.ts`: 222 lines
 - `apps/desktop/src/logging.ts`: 147 lines
 - `apps/desktop/src/windows.ts`: 307 lines
 - `apps/desktop/src/env-files.ts`: 69 lines
@@ -313,15 +316,15 @@ Future passes should focus on large maintenance files that are production code, 
 
 | Priority |                                                 File | Lines | Refactor boundary                                      | Validation focus                     |
 | -------- | ---------------------------------------------------: | ----: | ------------------------------------------------------ | ------------------------------------ |
-| 1        |                           `apps/desktop/src/main.ts` |   762 | IPC handlers and sidecar supervisor state              | Desktop build and IPC smoke tests    |
-| 2        |   `apps/web/src/lib/catalog/character-renderers.tsx` |   722 | character catalog renderers and form-specific controls | Web catalog/component tests          |
-| 3        |       `packages/runtime/src/turn-agent-tool-loop.ts` |   692 | LLM response loop and tool-call state machine          | Runtime tool-loop tests              |
-| 4        |                `packages/test-runtime/src/runner.ts` |   660 | live adapter setup and case orchestration              | Test-runtime package tests           |
-| 5        |      `packages/tools/src/builtin/character-tools.ts` |   658 | character tool validation and store writes             | Tools package tests                  |
-| 6        | `apps/web/src/lib/catalog/interactive-renderers.tsx` |   650 | interactive json-render components                     | Web catalog/component tests          |
-| 7        |                      `apps/web/src/routes/debug.tsx` |   640 | trace/session debug panels                             | Web route/component tests            |
-| 8        |                `packages/ai-provider/src/gateway.ts` |   638 | operation retry/fallback loop                          | AI provider gateway tests            |
-| 9        |            `apps/server/src/routes/api/bootstrap.ts` |   607 | remaining route composition and DI wiring              | Server bootstrap and API route tests |
+| 1        |   `apps/web/src/lib/catalog/character-renderers.tsx` |   722 | character catalog renderers and form-specific controls | Web catalog/component tests          |
+| 2        |       `packages/runtime/src/turn-agent-tool-loop.ts` |   692 | LLM response loop and tool-call state machine          | Runtime tool-loop tests              |
+| 3        |                `packages/test-runtime/src/runner.ts` |   660 | live adapter setup and case orchestration              | Test-runtime package tests           |
+| 4        |      `packages/tools/src/builtin/character-tools.ts` |   658 | character tool validation and store writes             | Tools package tests                  |
+| 5        | `apps/web/src/lib/catalog/interactive-renderers.tsx` |   650 | interactive json-render components                     | Web catalog/component tests          |
+| 6        |                      `apps/web/src/routes/debug.tsx` |   640 | trace/session debug panels                             | Web route/component tests            |
+| 7        |                `packages/ai-provider/src/gateway.ts` |   638 | operation retry/fallback loop                          | AI provider gateway tests            |
+| 8        |            `apps/server/src/routes/api/bootstrap.ts` |   607 | remaining route composition and DI wiring              | Server bootstrap and API route tests |
+| 9        |                           `apps/desktop/src/main.ts` |   585 | sidecar supervisor and retry lifecycle                 | Desktop build and smoke tests        |
 
 Very large generated/catalog/type-heavy files such as `known-models.ts`, `store/src/types.ts`, and `registry-definitions.ts` should stay lower priority unless a concrete maintenance problem appears.
 
@@ -540,6 +543,11 @@ Very large generated/catalog/type-heavy files such as `known-models.ts`, `store/
   - `timeout 120s mise exec -- pnpm --filter @covel/server lint`
   - `timeout 240s mise exec -- pnpm lint`
   - `git diff --check`
+- Thirty-sixth pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --check apps/desktop/src/main.ts apps/desktop/src/ipc-handlers.ts docs/refactor/2026-05-09_13-05_long-file-restructure.md`
+  - `timeout 180s mise exec -- pnpm --filter @covel/desktop build`
+  - `timeout 240s mise exec -- pnpm lint`
+  - `git diff --check`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -558,7 +566,7 @@ Very large generated/catalog/type-heavy files such as `known-models.ts`, `store/
 - `runner.ts` still owns live adapter setup and case orchestration. `runtime-loading.ts` owns plugin discovery/runtime loading/local tool imports, while `execution.ts` owns test-runtime deferred follower execution; its `recursiveCall` behavior remains intentionally unavailable and covered by focused tests.
 - `llm-capability-controls.tsx` now owns capability tag/editor rendering. Future settings passes should target model database refresh/status UI or split slot cards after component-level coverage exists.
 - `registry-definitions.ts` still owns the full flat env variable catalog. Future grouping by env group should keep `COVEL_ENV_REGISTRY` as the stable flattened export.
-- `main.ts` still owns sidecar supervisor state and broad IPC registration; the next desktop pass should split IPC handlers before attempting supervisor dependency injection.
+- `main.ts` still owns sidecar supervisor state, retry lifecycle, heartbeat, and sidecar config REST calls. Future desktop passes should introduce a supervisor object only with explicit tests or build-level smoke coverage.
 - `prompt-assembler.ts` still owns segment construction and post-history assembly. Future prompt passes should target one prompt phase at a time so cache-breakpoint and budget behavior stay covered.
 
 ## Rollback
@@ -628,6 +636,7 @@ flowchart TD
   BootstrapApi --> BootstrapMemory["bootstrap/memory.ts"]
   BootstrapApi --> BootstrapLocalTools["bootstrap/local-tools.ts"]
   DesktopMain["desktop/main.ts"] --> DesktopLeaf["desktop/{startup-errors,network,splash-screen,env-files}.ts"]
+  DesktopMain --> DesktopIpc["desktop/ipc-handlers.ts"]
   DesktopMain --> DesktopLogging["desktop/logging.ts"]
   DesktopMain --> DesktopWindows["desktop/windows.ts"]
 ```
