@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import {
   BUNDLED_MODEL_DB_PATH,
@@ -24,11 +23,6 @@ import {
   readRuntimeEnv,
 } from "@covel/shared";
 import {
-  discoverPlugins,
-  loadPluginManifest,
-  loadRuntime,
-  type LoadedRuntime,
-  type PluginDiscoveryResult,
   type PluginRuntimeGateway,
   type PluginRuntimeUtils,
 } from "@covel/plugin-loader";
@@ -50,8 +44,6 @@ import {
   createPluginDataTools,
   runtimeDoneTool,
   suspendTool,
-  tool,
-  z,
   type ToolModule,
 } from "@covel/tools";
 import {
@@ -74,6 +66,14 @@ import {
   runDeferredFollower,
   writeExpectedFollowerFailureJob,
 } from "./execution.js";
+import {
+  defaultPluginsDir,
+  discoverPlugin,
+  expandPath,
+  loadRuntimeBundle,
+  loadRuntimeManifests,
+  pluginIdFromRuntime,
+} from "./runtime-loading.js";
 
 export interface RunRuntimeDebugOptions {
   readonly target?: string;
@@ -241,20 +241,6 @@ function isUsage(
   );
 }
 
-function expandPath(input: string): string {
-  if (input === "~") return os.homedir();
-  if (input.startsWith("~/")) return path.join(os.homedir(), input.slice(2));
-  return path.resolve(input);
-}
-
-function defaultPluginsDir(): string {
-  return expandPath(process.env.COVEL_USER_PLUGINS_DIR ?? "~/.covel/plugins");
-}
-
-function pluginIdFromRuntime(runtimeId: string): string {
-  return runtimeId.includes("/") ? runtimeId.split("/")[0]! : runtimeId;
-}
-
 function makeGateway(options: RunRuntimeDebugOptions): PluginRuntimeGateway {
   return {
     async generateText(input) {
@@ -410,37 +396,6 @@ function makeLiveAdapters(): {
   };
 }
 
-async function loadLocalTools(
-  discovery: PluginDiscoveryResult,
-  manifests: readonly RuntimeManifest[],
-): Promise<readonly ToolModule[]> {
-  const loaded: ToolModule[] = [];
-  for (const manifest of manifests) {
-    for (const localPath of manifest.tools?.local ?? []) {
-      const fullPath = path.resolve(discovery.rootPath, localPath);
-      const rel = path.relative(discovery.rootPath, fullPath);
-      if (rel.startsWith("..") || path.isAbsolute(rel)) {
-        throw new Error(`tools.local path escapes plugin root: ${localPath}`);
-      }
-      if (!fs.existsSync(fullPath)) {
-        throw new Error(`tools.local file not found: ${fullPath}`);
-      }
-      const mod = await import(pathToFileURL(fullPath).href);
-      const exported = mod.default ?? Object.values(mod)[0];
-      const candidate =
-        typeof exported === "function" ? exported({ tool, z }) : exported;
-      if (
-        candidate &&
-        typeof candidate === "object" &&
-        (candidate as { _type?: unknown })._type === "covel-tool"
-      ) {
-        loaded.push(candidate as ToolModule);
-      }
-    }
-  }
-  return loaded;
-}
-
 export async function runRuntimeDebug(
   options: RunRuntimeDebugOptions,
 ): Promise<RunRuntimeDebugResult> {
@@ -452,29 +407,14 @@ export async function runRuntimeDebug(
   const turnId = `turn-${Date.now().toString(36)}`;
   const locale = options.locale ?? "zh-CN";
 
-  const discoveries = await discoverPlugins(pluginsDir);
-  const discovery = discoveries.find((d) => d.id === pluginId);
-  if (!discovery) {
-    throw new Error(`plugin "${pluginId}" not found in ${pluginsDir}`);
-  }
-
-  const parsed = await loadPluginManifest(discovery);
-  const rawManifests = parsed.map((p) => p.manifest);
-  const manifests = options.ignoreUpstreams
-    ? rawManifests.map((m) => ({ ...m, upstreamRequired: undefined }))
-    : rawManifests;
-  const target = manifests.find((m) => m.name === runtimeId);
-  if (!target) {
-    throw new Error(`runtime "${runtimeId}" not found in plugin "${pluginId}"`);
-  }
-
-  const loadedCache = new Map<string, LoadedRuntime>();
-  for (const manifest of rawManifests) {
-    loadedCache.set(
-      manifest.name,
-      await loadRuntime(discovery, manifest.name, locale),
-    );
-  }
+  const { discovery, manifests, loadedCache, localTools } =
+    await loadRuntimeBundle({
+      pluginsDir,
+      pluginId,
+      runtimeId,
+      locale,
+      ignoreUpstreams: options.ignoreUpstreams,
+    });
 
   const store = createMemoryStore();
   const mediaStore = options.mediaStore ?? createMemoryMediaStore();
@@ -500,7 +440,7 @@ export async function runRuntimeDebug(
   })) {
     toolMap.set(t.name, t);
   }
-  for (const t of await loadLocalTools(discovery, manifests)) {
+  for (const t of localTools) {
     toolMap.set(t.name, t);
   }
 
@@ -637,18 +577,13 @@ export async function runRuntimeCases(
   const pluginId = options.pluginId;
   if (!pluginId) throw new Error("pluginId is required");
   const pluginsDir = expandPath(options.pluginsDir ?? defaultPluginsDir());
-  const discoveries = await discoverPlugins(pluginsDir);
-  const discovery = discoveries.find((item) => item.id === pluginId);
-  if (!discovery)
-    throw new Error(`plugin "${pluginId}" not found in ${pluginsDir}`);
+  const discovery = await discoverPlugin(pluginsDir, pluginId);
 
   const caseFile = caseFilesFor(discovery.rootPath).find((file) =>
     fs.existsSync(file),
   );
   if (!caseFile) {
-    const manifests = (await loadPluginManifest(discovery)).map(
-      (item) => item.manifest,
-    );
+    const manifests = await loadRuntimeManifests(discovery);
     if (manifests.some((item) => item.name === pluginId)) {
       const result = await runRuntimeDebug({
         ...options,
