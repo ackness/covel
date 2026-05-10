@@ -38,6 +38,12 @@ import {
   type ExecutedToolCallState,
   type FailedToolCallState,
 } from "./turn-output-helpers.js";
+import {
+  buildAssistantToolCallMessage,
+  buildPreToolAbortMessage,
+  buildToolExecutionUnavailableMessage,
+  buildToolResultMessage,
+} from "./turn-agent-tool-loop-messages.js";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 
 export interface AgentToolLoopCompleted {
@@ -358,14 +364,7 @@ export async function runAgentToolLoop({
       // reference tool_call_ids that don't appear in any assistant message.
       // reasoningContent is carried back verbatim so thinking-mode
       // providers (DashScope Qwen, DeepSeek v4) accept the follow-up turn.
-      messages.push({
-        role: "assistant",
-        content: response.content ?? "",
-        toolCalls: response.toolCalls,
-        ...(response.reasoningContent
-          ? { reasoningContent: response.reasoningContent }
-          : {}),
-      });
+      messages.push(buildAssistantToolCallMessage(response));
 
       for (const tc of response.toolCalls) {
         if (deps.toolExecutor) {
@@ -388,13 +387,12 @@ export async function runAgentToolLoop({
           });
           if (preToolOutcome.skipped) {
             // Skip tool execution; push synthetic tool-role message so LLM sees a result
-            messages.push({
-              role: "tool",
-              content: JSON.stringify({
-                error: `pre-tool-use hook aborted: ${preToolOutcome.reason}`,
+            messages.push(
+              buildPreToolAbortMessage({
+                toolCallId: tc.id,
+                reason: preToolOutcome.reason,
               }),
-              toolCallId: tc.id,
-            });
+            );
             continue;
           }
 
@@ -589,19 +587,14 @@ export async function runAgentToolLoop({
             timestamp: new Date().toISOString(),
           });
 
-          messages.push({
-            role: "tool",
-            content: toolResult.result,
-            toolCallId: effectiveTc.id,
-          });
-        } else {
-          messages.push({
-            role: "tool",
-            content: JSON.stringify({
-              result: "Tool execution not available",
+          messages.push(
+            buildToolResultMessage({
+              toolCallId: effectiveTc.id,
+              content: toolResult.result,
             }),
-            toolCallId: tc.id,
-          });
+          );
+        } else {
+          messages.push(buildToolExecutionUnavailableMessage(tc.id));
         }
       }
 

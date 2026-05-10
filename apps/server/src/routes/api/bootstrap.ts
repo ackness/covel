@@ -5,14 +5,11 @@
  * Can be used by the real server or by tests with mock dependencies.
  */
 
-import path from "node:path";
-import fsSync from "node:fs";
 import { Hono, type MiddlewareHandler } from "hono";
 import type { RuntimeManifest } from "@covel/shared";
-import { isEnvEnabled, readEnvString, readRuntimeEnv } from "@covel/shared";
+import { readRuntimeEnv } from "@covel/shared";
 import {
   loadRuntime as loadRuntimeFromDisk,
-  getPluginTrustInfo,
   loadPluginLlmConfig,
   type PluginRegistry,
   type LoadedRuntime,
@@ -32,17 +29,11 @@ import {
   createCharacterTools,
   buildSessionCharacterWriteTools,
   createWorldDimensionTools,
-  createMemoryTools,
   suspendTool,
   runtimeDoneTool,
-  tool,
-  shortId,
-  shortIdBatch,
   type ToolModule,
   type CharacterToolDeps,
 } from "@covel/tools";
-import { z } from "zod";
-import { createMemorySystem, type MemorySystem } from "@covel/memory";
 import { createApprovalPipeline } from "@covel/approval";
 import type { PermissionRule } from "@covel/approval";
 
@@ -81,6 +72,8 @@ export { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-eve
 import { createBootstrapCompactorRunner } from "./bootstrap/compactor.js";
 import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
 import { createBootstrapHookPipeline } from "./bootstrap/plugin-hooks.js";
+import { createBootstrapLocalTools } from "./bootstrap/local-tools.js";
+import { createBootstrapMemorySystem } from "./bootstrap/memory.js";
 import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
 import { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
 
@@ -384,129 +377,14 @@ export async function bootstrapApi(
     builtinToolNames.add(t.name);
   }
 
-  // Injection context for factory-style tools (zero-dep plugin tools)
-  const toolInjection = { tool, z, shortId, shortIdBatch, store };
-
-  // Load plugin local tools from tools/ directories
-  // SECURITY: Only auto-load tools from trusted plugins (builtin/official).
-  // Community plugins register metadata only; their tools are deferred until
-  // explicit approval via the plugin management API. The activation path is
-  // wired below as `activatePluginLocalTools(pluginId)` — called by both
-  // `/api/approvals/:approvalId/decision` (after `allow`) and the plugin-rpc
-  // route (just-in-time, in case a previous approval is still cached but
-  // tools haven't been imported into this process yet).
-  //
-  // `loadLocalToolsForPlugin` is the single source of truth for path
-  // containment, file-existence checks, and factory/ToolModule resolution.
-  // Called both eagerly here and lazily from the activator.
-  async function loadLocalToolsForPlugin(
-    pluginId: string,
-  ): Promise<readonly ToolModule[]> {
-    const discovery = discoveryMap.get(pluginId);
-    if (!discovery) return [];
-    const manifests = manifestCache.get(pluginId);
-    if (!manifests) return [];
-    const collected: ToolModule[] = [];
-    for (const parsed of manifests) {
-      const localPaths = parsed.manifest.tools?.local ?? [];
-      for (let i = 0; i < localPaths.length; i += 1) {
-        const localPath = localPaths[i];
-        const fullPath = path.resolve(discovery.rootPath, localPath);
-        const pluginRelPath = path.relative(
-          process.cwd(),
-          path.join(discovery.rootPath, "PLUGIN.md"),
-        );
-        try {
-          // Security: prevent path traversal outside plugin root
-          const rel = path.relative(discovery.rootPath, fullPath);
-          if (rel.startsWith("..") || path.isAbsolute(rel)) {
-            console.warn(
-              `[plugin-loader] ${pluginRelPath}: tools.local[${i}] "${localPath}" escapes the plugin root\n` +
-                `Fix: Use a path relative to the plugin directory (no "../" traversal).`,
-            );
-            continue;
-          }
-          if (!fsSync.existsSync(fullPath)) {
-            console.warn(
-              `[plugin-loader] ${pluginRelPath}: tool file not found — ${fullPath} (declared in tools.local[${i}] as "${localPath}")\n` +
-                `Fix: Create the file, or remove the entry from tools.local in PLUGIN.md.`,
-            );
-            continue;
-          }
-          const mod = await import(fullPath);
-          const exported = mod.default ?? Object.values(mod)[0];
-
-          let toolModule: ToolModule | undefined;
-          if (typeof exported === "function") {
-            const result = exported(toolInjection);
-            if (
-              result &&
-              (result as Record<string, unknown>)._type === "covel-tool"
-            ) {
-              toolModule = result as ToolModule;
-            }
-          } else if (
-            exported &&
-            (exported as Record<string, unknown>)._type === "covel-tool"
-          ) {
-            toolModule = exported as ToolModule;
-          }
-          if (toolModule) collected.push(toolModule);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          console.warn(
-            `[plugin-loader] ${pluginRelPath}: failed to load tools.local[${i}] "${localPath}" — ${message}\n` +
-              `Fix: Ensure ${fullPath} exports a tool module (factory or ToolModule with _type: 'covel-tool').`,
-          );
-        }
-      }
-    }
-    return collected;
-  }
-
-  // Eager-load: builtin / official plugins.
-  for (const [pluginId, discovery] of discoveryMap) {
-    const trust = getPluginTrustInfo(pluginId, discovery.source);
-    if (!trust.autoLoad) continue; // Community plugin — deferred to approval
-    for (const t of await loadLocalToolsForPlugin(pluginId)) {
-      toolMap.set(t.name, t);
-      localToolNames.add(t.name);
-    }
-  }
-
-  // Lazy-activation registry for community plugins. Once a pluginId enters
-  // `activatedPluginIds`, subsequent calls are no-ops.
-  const activatedPluginIds = new Set<string>();
-  const activationInFlight = new Map<string, Promise<void>>();
-
-  const activatePluginLocalTools = async (pluginId: string): Promise<void> => {
-    if (activatedPluginIds.has(pluginId)) return;
-    const inFlight = activationInFlight.get(pluginId);
-    if (inFlight) return inFlight;
-
-    const discovery = discoveryMap.get(pluginId);
-    if (!discovery) return;
-    const trust = getPluginTrustInfo(pluginId, discovery.source);
-    if (trust.autoLoad) {
-      // Builtin / official already loaded eagerly; nothing to do.
-      activatedPluginIds.add(pluginId);
-      return;
-    }
-
-    const promise = (async () => {
-      try {
-        for (const t of await loadLocalToolsForPlugin(pluginId)) {
-          toolMap.set(t.name, t);
-          localToolNames.add(t.name);
-        }
-        activatedPluginIds.add(pluginId);
-      } finally {
-        activationInFlight.delete(pluginId);
-      }
-    })();
-    activationInFlight.set(pluginId, promise);
-    return promise;
-  };
+  const { activatePluginLocalTools, pluginToolAccess } =
+    await createBootstrapLocalTools({
+      discoveryMap,
+      manifestCache,
+      store,
+      toolMap,
+      localToolNames,
+    });
 
   // Approval: whitelist builtin + known local tools, deny unknown third-party
   const approvalRules: PermissionRule[] = [
@@ -515,26 +393,6 @@ export async function bootstrapApi(
     { pattern: "third-party:*", action: "deny" },
   ];
   const approval = createApprovalPipeline(store, approvalRules);
-
-  // Build per-plugin tool access map: pluginId → Set<toolName>
-  const pluginToolAccess = new Map<string, Set<string>>();
-  for (const [pluginId, manifests] of manifestCache) {
-    const allowed = new Set<string>();
-    for (const parsed of manifests) {
-      // Builtin tools declared by this runtime
-      for (const t of parsed.manifest.tools?.builtin ?? []) allowed.add(t);
-      // Local tools: extract basename from path
-      for (const p of parsed.manifest.tools?.local ?? []) {
-        const basename =
-          p
-            .split("/")
-            .pop()
-            ?.replace(/\.[^.]+$/, "") ?? p;
-        allowed.add(basename);
-      }
-    }
-    pluginToolAccess.set(pluginId, allowed);
-  }
 
   const toolExecutor = createToolExecutor({
     findTool: (name, context) => {
@@ -621,91 +479,19 @@ export async function bootstrapApi(
   });
 
   // 8. Create memory system (Letta-style three-tier memory)
-  // When COVEL_MEMORY_V1=1, creates the full memory system with core memory
-  // blocks, recall/archival search, and compaction. Slot resolution: memory → story.
-  let memorySystem: MemorySystem | undefined;
-  console.log(
-    `[bootstrap] COVEL_MEMORY_V1=${readEnvString("COVEL_MEMORY_V1", "(unset)")}`,
-  );
-  if (isEnvEnabled("COVEL_MEMORY_V1")) {
-    // Resolve which slot to use for memory LLM calls. Use slot ids here so
-    // memory follows the same contract as runtime bindings and player-facing
-    // settings instead of reaching into internal preset ids.
-    const resolvedMemorySlot = config.preferredMemorySlot ?? "plugin";
-    console.log(`[bootstrap] Memory system using slot: ${resolvedMemorySlot}`);
-
-    // Discover the memory-panel host plugin by capability tag instead of
-    // hardcoding a specific plugin ID. Framework stays plugin-agnostic:
-    // any plugin declaring `capabilities: [memory-panel]` becomes the
-    // mirror target. When no such plugin is installed, mirroring is
-    // skipped and core memory still works (panel updates via polling).
-    let memoryPanelPluginId: string | undefined;
-    for (const [pluginId, manifests] of manifestCache) {
-      if (
-        manifests.some((m) => m.manifest.capabilities?.includes("memory-panel"))
-      ) {
-        memoryPanelPluginId = pluginId;
-        break;
-      }
-    }
-    if (memoryPanelPluginId) {
-      console.log(
-        `[bootstrap] Memory panel host plugin: ${memoryPanelPluginId}`,
-      );
-    } else {
-      console.log(
-        '[bootstrap] No plugin declares capability "memory-panel" — mirror disabled',
-      );
-    }
-
-    const memoryLlm = {
-      async complete(params: {
-        systemPrompt: string;
-        messages: readonly { role: string; content: string }[];
-        model?: string;
-      }) {
-        const response = await config.llmAdapter.generate({
-          model: resolvedMemorySlot,
-          messages: [
-            { role: "system", content: params.systemPrompt },
-            ...params.messages.map((m) => ({
-              role: m.role as "user" | "assistant",
-              content: m.content,
-            })),
-          ],
-        });
-        return { content: response.content ?? "" };
-      },
-    };
-    memorySystem = createMemorySystem(
-      {
-        store,
-        llm: memoryLlm,
-        resolveSlot: (slot: string) =>
-          resolveModel({ name: slot, model: slot } as RuntimeManifest),
-      },
-      {
-        coreMemory: memoryPanelPluginId
-          ? { pluginId: memoryPanelPluginId }
-          : undefined,
-        updater: { modelSlot: resolvedMemorySlot },
-      },
-    );
-
-    // Register memory tools as builtins
-    for (const t of createMemoryTools({
-      recall: memorySystem.recall,
-      archival: memorySystem.archival,
-      blocks: memorySystem.manager,
-    })) {
+  const bootstrapMemory = createBootstrapMemorySystem({
+    manifestCache,
+    store,
+    llmAdapter: config.llmAdapter,
+    preferredMemorySlot: config.preferredMemorySlot,
+    resolveModel,
+  });
+  if (bootstrapMemory) {
+    for (const t of bootstrapMemory.tools) {
       toolMap.set(t.name, t);
       builtinToolNames.add(t.name);
     }
-
-    setMemorySystem(memorySystem);
-    console.log(
-      "[bootstrap] Memory system (V1) initialized — core memory blocks + recall/archival search",
-    );
+    setMemorySystem(bootstrapMemory.memorySystem);
   }
 
   // 9. Create app with dependency injection middleware

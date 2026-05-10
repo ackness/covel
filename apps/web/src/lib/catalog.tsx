@@ -37,9 +37,9 @@ import {
 } from "./catalog/core-renderers.js";
 import {
   CharacterBlueprintList,
-  CharacterFieldsView,
   SceneCastList,
 } from "./catalog/character-renderers.js";
+import { CharacterFieldsView } from "./catalog/character-fields-renderer.js";
 import {
   Button,
   FilterBar,

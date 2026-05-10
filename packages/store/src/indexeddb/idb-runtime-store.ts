@@ -1,4 +1,3 @@
-import { applyPagination } from "../common/pagination.js";
 import type {
   ApprovalRecord,
   EventRecord,
@@ -18,13 +17,23 @@ import type {
   TurnResultRecord,
 } from "../types.js";
 import type { IdbStoreContext, IdbStoreSlice } from "./idb-context.js";
+import {
+  filterInteractionRecords,
+  filterRuntimeOutputs,
+  getSessionScopedRecord,
+  limitRows,
+  listBySession,
+  paginateRows,
+  putClonedRecord,
+  sortByCreatedAtAsc,
+} from "./idb-record-helpers.js";
 
 export function createIdbRuntimeStore(ctx: IdbStoreContext): IdbStoreSlice {
   const { db, mutations } = ctx;
 
   return {
     async saveTurnResult(record: TurnResultRecord): Promise<void> {
-      await mutations.putAndTrack("turnResults", structuredClone(record));
+      await putClonedRecord(mutations, "turnResults", record);
     },
 
     async getTurnResult(
@@ -48,12 +57,11 @@ export function createIdbRuntimeStore(ctx: IdbStoreContext): IdbStoreSlice {
         "sessionId",
         sessionId,
       );
-      const sorted = all.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-      return limit !== undefined ? sorted.slice(0, limit) : sorted;
+      return limitRows(sortByCreatedAtAsc(all), limit);
     },
 
     async saveRuntimeResult(record: RuntimeResultRecord): Promise<void> {
-      await mutations.putAndTrack("runtimeResults", structuredClone(record));
+      await putClonedRecord(mutations, "runtimeResults", record);
     },
 
     async listRuntimeResults(
@@ -67,7 +75,7 @@ export function createIdbRuntimeStore(ctx: IdbStoreContext): IdbStoreSlice {
     },
 
     async saveToolCall(record: ToolCallRecordRow): Promise<void> {
-      await mutations.putAndTrack("toolCalls", structuredClone(record));
+      await putClonedRecord(mutations, "toolCalls", record);
     },
 
     async listToolCalls(
@@ -84,11 +92,11 @@ export function createIdbRuntimeStore(ctx: IdbStoreContext): IdbStoreSlice {
     },
 
     async saveStateSchema(record: StateSchemaRecord): Promise<void> {
-      await mutations.putAndTrack("stateSchemas", structuredClone(record));
+      await putClonedRecord(mutations, "stateSchemas", record);
     },
 
     async listStateSchemas(sessionId: string): Promise<StateSchemaRecord[]> {
-      return db.getAllFromIndex("stateSchemas", "sessionId", sessionId);
+      return listBySession(db, "stateSchemas", sessionId);
     },
 
     async deleteStateSchema(
@@ -147,7 +155,7 @@ export function createIdbRuntimeStore(ctx: IdbStoreContext): IdbStoreSlice {
     },
 
     async addStateChange(record: StateChangeRecord): Promise<void> {
-      await mutations.putAndTrack("stateChanges", structuredClone(record));
+      await putClonedRecord(mutations, "stateChanges", record);
     },
 
     async listStateChanges(
@@ -166,7 +174,7 @@ export function createIdbRuntimeStore(ctx: IdbStoreContext): IdbStoreSlice {
     },
 
     async saveEvent(record: EventRecord): Promise<void> {
-      await mutations.putAndTrack("events", structuredClone(record));
+      await putClonedRecord(mutations, "events", record);
     },
 
     async listEvents(
@@ -184,28 +192,27 @@ export function createIdbRuntimeStore(ctx: IdbStoreContext): IdbStoreSlice {
     },
 
     async saveApproval(record: ApprovalRecord): Promise<void> {
-      await mutations.putAndTrack("approvals", structuredClone(record));
+      await putClonedRecord(mutations, "approvals", record);
     },
 
     async listApprovals(sessionId: string): Promise<ApprovalRecord[]> {
-      return db.getAllFromIndex("approvals", "sessionId", sessionId);
+      return listBySession(db, "approvals", sessionId);
     },
 
     async addMessage(record: MessageRecord): Promise<void> {
-      await mutations.putAndTrack("messages", structuredClone(record));
+      await putClonedRecord(mutations, "messages", record);
     },
 
     async listMessages(
       sessionId: string,
       pagination?: PaginationOpts,
     ): Promise<MessageRecord[]> {
-      const all = await db.getAllFromIndex("messages", "sessionId", sessionId);
-      const sorted = all.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-      return applyPagination(sorted, pagination);
+      const all = await listBySession<MessageRecord>(db, "messages", sessionId);
+      return paginateRows(sortByCreatedAtAsc(all), pagination);
     },
 
     async addTraceEvent(record: TraceEventRecord): Promise<void> {
-      await mutations.putAndTrack("traceEvents", structuredClone(record));
+      await putClonedRecord(mutations, "traceEvents", record);
     },
 
     async listTraceEvents(
@@ -217,96 +224,62 @@ export function createIdbRuntimeStore(ctx: IdbStoreContext): IdbStoreSlice {
         "sessionId",
         sessionId,
       );
-      return applyPagination(all, pagination);
+      return paginateRows(all, pagination);
     },
 
     async saveRuntimeOutput(record: RuntimeOutputRecord): Promise<void> {
-      await mutations.putAndTrack("runtime_outputs", structuredClone(record));
+      await putClonedRecord(mutations, "runtime_outputs", record);
     },
 
     async getRuntimeOutput(
       sessionId: string,
       id: string,
     ): Promise<RuntimeOutputRecord | null> {
-      const row = (await db.get("runtime_outputs", id)) as
-        | RuntimeOutputRecord
-        | undefined;
-      if (!row || row.sessionId !== sessionId) return null;
-      return row;
+      return getSessionScopedRecord(db, "runtime_outputs", sessionId, id);
     },
 
     async listRuntimeOutputs(
       sessionId: string,
       filters?: RuntimeOutputFilters,
     ): Promise<RuntimeOutputRecord[]> {
-      let rows = (await db.getAllFromIndex(
+      const rows = await listBySession<RuntimeOutputRecord>(
+        db,
         "runtime_outputs",
-        "sessionId",
         sessionId,
-      )) as RuntimeOutputRecord[];
-      if (filters?.runtimeId) {
-        rows = rows.filter((r) => r.runtimeId === filters.runtimeId);
-      }
-      if (filters?.pluginId) {
-        rows = rows.filter((r) => r.pluginId === filters.pluginId);
-      }
-      if (filters?.sinceTimestamp) {
-        rows = rows.filter((r) => r.timestamp >= filters.sinceTimestamp!);
-      }
-      rows.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-      if (filters?.limit !== undefined) {
-        rows = rows.slice(0, filters.limit);
-      }
-      return rows;
+      );
+      return filterRuntimeOutputs(rows, filters);
     },
 
     async saveInteractionRecord(record: InteractionRecordRow): Promise<void> {
-      await mutations.putAndTrack(
-        "interaction_records",
-        structuredClone(record),
-      );
+      await putClonedRecord(mutations, "interaction_records", record);
     },
 
     async listInteractionRecords(
       sessionId: string,
       filters?: InteractionRecordFilters,
     ): Promise<InteractionRecordRow[]> {
-      let rows = (await db.getAllFromIndex(
+      const rows = await listBySession<InteractionRecordRow>(
+        db,
         "interaction_records",
-        "sessionId",
         sessionId,
-      )) as InteractionRecordRow[];
-      if (filters?.type) {
-        rows = rows.filter((r) => r.type === filters.type);
-      }
-      if (filters?.source) {
-        rows = rows.filter((r) => r.source === filters.source);
-      }
-      if (filters?.targetPluginId) {
-        rows = rows.filter((r) => r.targetPluginId === filters.targetPluginId);
-      }
-      rows.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-      if (filters?.limit !== undefined) {
-        rows = rows.slice(0, filters.limit);
-      }
-      return rows;
+      );
+      return filterInteractionRecords(rows, filters);
     },
 
     async appendTurnMessage(record: TurnMessageRecord): Promise<void> {
-      await mutations.putAndTrack("turnMessages", structuredClone(record));
+      await putClonedRecord(mutations, "turnMessages", record);
     },
 
     async listTurnMessages(
       sessionId: string,
       pagination?: PaginationOpts,
     ): Promise<TurnMessageRecord[]> {
-      const all = await db.getAllFromIndex(
+      const all = await listBySession<TurnMessageRecord>(
+        db,
         "turnMessages",
-        "sessionId",
         sessionId,
       );
-      const sorted = all.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-      return applyPagination(sorted, pagination);
+      return paginateRows(sortByCreatedAtAsc(all), pagination);
     },
   };
 }

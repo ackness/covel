@@ -9,8 +9,13 @@ Reduce maintenance pressure in the largest Covel source files by moving cohesive
 Refactored in this pass:
 
 - `packages/runtime/src/turn-executor.ts`
+- `packages/runtime/src/turn-agent-tool-loop.ts`
+- `packages/runtime/src/turn-agent-tool-loop-messages.ts`
+- `packages/context/src/prompt-assembler.ts`
+- `packages/context/src/prompt-serialization.ts`
 - `apps/web/src/stores/session-store.tsx`
 - `apps/web/src/lib/catalog.tsx`
+- `apps/web/src/lib/catalog/character-fields-renderer.tsx`
 - `packages/store/src/contract/store-contract.ts`
 - `apps/web/src/services/api.ts`
 - `packages/runtime/src/session-kernel.ts`
@@ -20,22 +25,31 @@ Refactored in this pass:
 - `packages/store/src/media-store.ts`
 - `packages/store/src/memory/memory-store.ts`
 - `packages/store/src/indexeddb/idb-store.ts`
+- `packages/store/src/indexeddb/idb-media-store.ts`
+- `packages/store/src/indexeddb/idb-runtime-store.ts`
 - `apps/server/src/routes/misc-api.ts`
 - `apps/server/src/routes/api/bootstrap.ts`
 - `apps/desktop/src/main.ts`
+- `apps/desktop/src/ipc-handlers.ts`
 - `apps/desktop/src/logging.ts`
 - `apps/desktop/src/windows.ts`
 - `apps/server/src/routes/api/plugin-rpc.ts`
 - `packages/ai-provider/src/gateway.ts`
 - `packages/test-runtime/src/runner.ts`
+- `packages/test-runtime/src/runtime-loading.ts`
 - `apps/web/src/settings/panes/LlmSlotsPane.tsx`
 - `packages/shared/src/env/registry.ts`
+- `apps/server/src/routes/api/bootstrap/memory.ts`
+- `apps/server/src/routes/api/bootstrap/local-tools.ts`
+- `packages/tools/src/builtin/character-tools.ts`
+- `packages/tools/src/builtin/character-tool-helpers.ts`
 
 ## Assumptions
 
 - Public entrypoints remain stable: `@/stores/session-store.js`, `@/lib/catalog.js`, `runStoreContractTests`, `executeTurn`, and `resumeSuspendedRuntime`.
 - File moves are behavior-preserving unless noted below.
 - Framework code continues to discover plugin-owned UI/data by manifest and UI specs instead of hardcoding plugin IDs.
+- `bootstrapApi`, `runRuntimeDebug`, `runRuntimeCases`, `buildContextV2`, `runAgentToolLoop`, and plugin local-tool trust/activation behavior keep their public caller behavior.
 
 ## Changes
 
@@ -52,6 +66,14 @@ Refactored in this pass:
   - `turn-agent-guard.ts`
   - `turn-agent-runtime.ts`
   - `turn-agent-tool-loop.ts`
+- Split pure tool-loop follow-up message builders into `turn-agent-tool-loop-messages.ts`.
+- Added focused tests for assistant tool-call preservation, hook-aborted tool results, normal tool results, and no-executor fallback messages.
+
+### Prompt Assembly
+
+- Kept `prompt-assembler.ts` as the context assembly entrypoint for segment construction, history insertion, author notes, and budget pruning.
+- Split V2 system-prompt serialization and cache-breakpoint insertion into `packages/context/src/prompt-serialization.ts`.
+- Added focused tests for V2 segment order, empty-segment joining, cacheable segment markers, and empty cacheable segment handling.
 
 ### Web Session Store
 
@@ -63,6 +85,8 @@ Refactored in this pass:
 
 - Kept `catalog.tsx` as the registry assembly point.
 - Split renderers into catalog modules for core primitives, character, interactive UI, message forms, media, branch replies, and session helpers.
+- Split schema-aware `CharacterFieldsView` into `apps/web/src/lib/catalog/character-fields-renderer.tsx`, leaving blueprint and scene-cast renderers in `character-renderers.tsx`.
+- Added focused `CharacterFieldsView` tests for schema discovery, category rendering, default values, nested/free-form fields, and JSON fallback.
 - Preserved `covelRegistry`, `resolveI18n`, `resolveIcon`, and `useI18nResolver` imports.
 
 ### Store Contract
@@ -121,6 +145,9 @@ Refactored in this pass:
 - Moved SQLite/PostgreSQL plugin data, working memory, world-data import ledger, and lorebook CRUD families into backend-local `*-data-crud.ts` modules.
 - Moved SQLite/PostgreSQL turn results, runtime results, tool calls, runtime outputs, and interaction record CRUD families into backend-local `*-runtime-records.ts` modules.
 - Kept SQLite TEXT JSON serialization and PostgreSQL JSONB value shaping in separate backend modules.
+- Split IndexedDB media record mapping, browser blob/byte normalization, SHA-256 id generation, ref-key construction, stable list sorting, and cleanup planning into `packages/store/src/indexeddb/idb-media-records.ts`.
+- Split IndexedDB runtime record clone writes, session-index list helpers, timestamp sorting, limit/pagination, and runtime-output/interaction filtering into `packages/store/src/indexeddb/idb-record-helpers.ts`.
+- Kept `createIndexedDbMediaStore()` and `createIdbRuntimeStore()` public behavior unchanged; the original files now own backend wiring and method orchestration.
 
 ### Server Misc API
 
@@ -145,7 +172,11 @@ Refactored in this pass:
 - Split Plugin RPC registry, executor, handler path containment, and approval gate wiring into `apps/server/src/routes/api/bootstrap/plugin-rpc-wiring.ts`.
 - Split plugin hook-source collection and hook pipeline registration into `apps/server/src/routes/api/bootstrap/plugin-hooks.ts`.
 - Split compactor summary-focus collection, estimator, fast-slot adapter, and `CompactorRunner` wiring into `apps/server/src/routes/api/bootstrap/compactor.ts`.
+- Split memory V1 flag handling, slot resolution, memory-panel capability discovery, memory-system construction, and builtin memory tool creation into `apps/server/src/routes/api/bootstrap/memory.ts`.
+- Split plugin-local tool loading, tools.local path containment, trusted eager loading, community lazy activation, and per-plugin tool access map construction into `apps/server/src/routes/api/bootstrap/local-tools.ts`.
 - Preserved the public `wrapStoreWithPluginDataEvents` export from `bootstrap.ts` so existing route tests and callers keep their import path.
+- Added focused bootstrap memory tests for disabled memory, preferred memory-slot LLM calls, builtin memory-tool creation, and memory-panel plugin mirroring.
+- Added focused local-tool tests for access-map derivation, factory loading, root-escape rejection, missing-file warnings, trusted eager load, and community lazy activation.
 
 ### Desktop Main Process
 
@@ -153,7 +184,8 @@ Refactored in this pass:
 - Split startup error classification, network/health polling, splash HTML, and env/key file helpers into `apps/desktop/src/{startup-errors,network,splash-screen,env-files}.ts`.
 - Split rolling NDJSON desktop/server logging into `apps/desktop/src/logging.ts`, with `main.ts` wiring only app version, log directory, sidecar stream lines, and shell log calls.
 - Split BrowserWindow creation, native menu template, context menu, title sync, external-link guard, splash load, and app navigation into `apps/desktop/src/windows.ts`.
-- Kept sidecar config REST calls, stderr ring buffer, IPC handlers, and supervisor state in `main.ts` because they still depend on process-level state.
+- Split Electron IPC registration, open-directory handlers, settings/key fallback persistence, and plugin/world import dialogs into `apps/desktop/src/ipc-handlers.ts`.
+- Kept sidecar config REST calls, stderr ring buffer, retry signal ownership, and supervisor state in `main.ts` because they still depend on process-level state.
 
 ### AI Provider Gateway
 
@@ -168,9 +200,11 @@ Refactored in this pass:
 - Split plugin-data report collection, case expectation evaluation, expected-failure matching, and image artifact saving into `packages/test-runtime/src/reporting.ts`.
 - Split case-file discovery, parsing, mode/name filtering, and per-case option merging into `packages/test-runtime/src/cases.ts`.
 - Split deferred follower job execution and expected-background-follower failure job writing into `packages/test-runtime/src/execution.ts`.
+- Split plugin discovery, runtime manifest preparation, runtime loading cache, plugin-local tool import, and path helpers into `packages/test-runtime/src/runtime-loading.ts`.
 - Added focused reporting helper tests for runtime/event/log/plugin-data/asset assertions and expected runtime failures.
 - Added focused case helper tests for file parsing, mode filtering, and option precedence.
 - Added focused execution helper tests for `_jobs` rows, plugin-data commits, handler thrown failures, reported failures, missing manifests/handlers, and unavailable recursive calls.
+- Added focused runtime-loading tests for plugin-id derivation, path expansion, upstream stripping without mutation, missing-runtime errors, local tool factories, path escape rejection, and missing local tool files.
 
 ### Web LLM Slots Pane
 
@@ -187,6 +221,13 @@ Refactored in this pass:
 - Split env source readers, provider API-key mapping, SQLite path derivation, and runtime env shaping into `packages/shared/src/env/registry-readers.ts`.
 - Preserved `@covel/shared` and `../src/env/index.js` import surfaces.
 
+### Builtin Character Tools
+
+- Kept `character-tools.ts` as the public builtin tool factory entrypoint.
+- Split character tool store/dependency types, snapshot conversion, schema loading, plugin-data mirroring, field formatting, text truncation, list sorting, and fields-Zod construction into `packages/tools/src/builtin/character-tool-helpers.ts`.
+- Preserved `createCharacterTools`, `buildSessionCharacterWriteTools`, `mirrorCharacterToPluginData`, `CharacterStore`, `CharacterToolDeps`, and `CharacterSnapshot` exports from the original module path.
+- Added focused helper tests for schema loading, plugin-data mirroring, formatting, truncation, sorting, snapshot conversion, and generic/schema-aware fields-Zod construction.
+
 ## Current Size Snapshot
 
 - `packages/shared/src/env/registry.ts`: 2 lines
@@ -197,9 +238,20 @@ Refactored in this pass:
 - `packages/runtime/src/turn-result-finalizer.ts`: 185 lines
 - `packages/runtime/src/turn-event-chain.ts`: 115 lines
 - `packages/runtime/src/turn-agent-runtime.ts`: 618 lines
-- `packages/runtime/src/turn-agent-tool-loop.ts`: 699 lines
+- `packages/runtime/src/turn-agent-tool-loop.ts`: 692 lines
+- `packages/runtime/src/turn-agent-tool-loop-messages.ts`: 53 lines
+- `packages/runtime/tests/turn-agent-tool-loop-messages.test.ts`: 74 lines
+- `packages/context/src/prompt-assembler.ts`: 613 lines
+- `packages/context/src/prompt-serialization.ts`: 41 lines
+- `packages/context/tests/prompt-serialization.test.ts`: 90 lines
+- `packages/tools/src/builtin/character-tools.ts`: 430 lines
+- `packages/tools/src/builtin/character-tool-helpers.ts`: 249 lines
+- `packages/tools/tests/character-tool-helpers.test.ts`: 184 lines
 - `apps/web/src/stores/session-store.tsx`: 77 lines
 - `apps/web/src/lib/catalog.tsx`: 151 lines
+- `apps/web/src/lib/catalog/character-renderers.tsx`: 346 lines
+- `apps/web/src/lib/catalog/character-fields-renderer.tsx`: 356 lines
+- `apps/web/src/lib/__tests__/character-fields-renderer.test.tsx`: 148 lines
 - `packages/store/src/contract/store-contract.ts`: 48 lines
 - `apps/web/src/services/api.ts`: 47 lines
 - `packages/runtime/src/session-kernel.ts`: 14 lines
@@ -220,49 +272,63 @@ Refactored in this pass:
 - `packages/store/src/media-store/sqlite.ts`: 267 lines
 - `packages/store/src/memory/memory-store.ts`: 44 lines
 - `packages/store/src/indexeddb/idb-store.ts`: 57 lines
+- `packages/store/src/indexeddb/idb-media-store.ts`: 210 lines
+- `packages/store/src/indexeddb/idb-media-records.ts`: 204 lines
+- `packages/store/src/indexeddb/idb-runtime-store.ts`: 285 lines
+- `packages/store/src/indexeddb/idb-record-helpers.ts`: 101 lines
+- `packages/store/src/indexeddb/idb-plugin-store.ts`: 135 lines
+- `packages/store/src/indexeddb/idb-persistence-store.ts`: 138 lines
+- `packages/store/src/indexeddb/idb-world-data-store.ts`: 150 lines
 - `packages/store/src/sqlite/sqlite-store.ts`: 85 lines
 - `packages/store/src/sqlite/sqlite-data-crud.ts`: 324 lines
-- `packages/store/src/sqlite/sqlite-runtime-records.ts`: 274 lines
+- `packages/store/src/sqlite/sqlite-runtime-records.ts`: 272 lines
 - `packages/store/src/sqlite/sqlite-store-values.ts`: 196 lines
 - `packages/store/src/sqlite/sqlite-session-cascade.ts`: 87 lines
 - `packages/store/src/postgres/pg-store.ts`: 76 lines
 - `packages/store/src/postgres/pg-data-crud.ts`: 330 lines
-- `packages/store/src/postgres/pg-runtime-records.ts`: 270 lines
+- `packages/store/src/postgres/pg-runtime-records.ts`: 280 lines
 - `packages/store/src/postgres/pg-store-values.ts`: 190 lines
 - `packages/store/src/postgres/pg-session-cascade.ts`: 85 lines
 - `packages/ai-provider/src/gateway.ts`: 638 lines
 - `packages/ai-provider/src/gateway-lifecycle.ts`: 147 lines
 - `packages/ai-provider/src/gateway-slot-resolution.ts`: 311 lines
-- `packages/test-runtime/src/runner.ts`: 725 lines
-- `packages/test-runtime/src/execution.ts`: 262 lines
+- `packages/test-runtime/src/runner.ts`: 660 lines
+- `packages/test-runtime/src/runtime-loading.ts`: 155 lines
+- `packages/test-runtime/src/runtime-loading.test.ts`: 122 lines
+- `packages/test-runtime/src/execution.ts`: 263 lines
 - `packages/test-runtime/src/execution.test.ts`: 432 lines
 - `packages/test-runtime/src/cases.ts`: 92 lines
-- `packages/test-runtime/src/cases.test.ts`: 109 lines
+- `packages/test-runtime/src/cases.test.ts`: 110 lines
 - `packages/test-runtime/src/reporting.ts`: 290 lines
 - `packages/test-runtime/src/reporting.test.ts`: 86 lines
 - `apps/web/src/settings/panes/LlmSlotsPane.tsx`: 418 lines
 - `apps/web/src/settings/panes/llm-slots-model.ts`: 127 lines
 - `apps/web/src/settings/panes/__tests__/llm-slots-model.test.ts`: 131 lines
 - `apps/web/src/settings/panes/llm-capability-controls.tsx`: 369 lines
-- `apps/web/src/settings/panes/__tests__/llm-capability-controls.test.tsx`: 142 lines
+- `apps/web/src/settings/panes/__tests__/llm-capability-controls.test.tsx`: 148 lines
 - `apps/server/src/routes/misc-api.ts`: 429 lines
 - `apps/server/src/routes/api/plugin-rpc.ts`: 513 lines
-- `apps/server/src/routes/api/plugin-rpc/body.ts`: 38 lines
-- `apps/server/src/routes/api/plugin-rpc/jobs.ts`: 31 lines
+- `apps/server/src/routes/api/plugin-rpc/body.ts`: 86 lines
+- `apps/server/src/routes/api/plugin-rpc/jobs.ts`: 111 lines
 - `apps/server/src/routes/api/plugin-rpc/background-jobs.ts`: 389 lines
 - `apps/server/src/routes/api/plugin-rpc/runtime-response.ts`: 74 lines
-- `apps/server/src/routes/api/plugin-rpc/runtime-turn.ts`: 178 lines
-- `apps/server/src/routes/api/bootstrap.ts`: 821 lines
+- `apps/server/src/routes/api/plugin-rpc/runtime-turn.ts`: 164 lines
+- `apps/server/src/routes/api/bootstrap.ts`: 607 lines
 - `apps/server/src/routes/api/bootstrap/compactor.ts`: 68 lines
+- `apps/server/src/routes/api/bootstrap/local-tools.ts`: 191 lines
+- `apps/server/src/routes/api/bootstrap/memory.ts`: 120 lines
 - `apps/server/src/routes/api/bootstrap/plugin-data-store-events.ts`: 131 lines
 - `apps/server/src/routes/api/bootstrap/plugin-discovery.ts`: 104 lines
 - `apps/server/src/routes/api/bootstrap/plugin-rpc-wiring.ts`: 106 lines
 - `apps/server/src/routes/api/bootstrap/plugin-hooks.ts`: 45 lines
-- `apps/desktop/src/main.ts`: 762 lines
-- `apps/desktop/src/auto-updater.ts`: 61 lines
+- `apps/server/tests/api/bootstrap-local-tools.test.ts`: 253 lines
+- `apps/server/tests/api/bootstrap-memory.test.ts`: 141 lines
+- `apps/desktop/src/main.ts`: 578 lines
+- `apps/desktop/src/ipc-handlers.ts`: 220 lines
+- `apps/desktop/src/auto-updater.ts`: 117 lines
 - `apps/desktop/src/logging.ts`: 147 lines
 - `apps/desktop/src/windows.ts`: 307 lines
-- `apps/desktop/src/env-files.ts`: 66 lines
+- `apps/desktop/src/env-files.ts`: 69 lines
 - `apps/desktop/src/network.ts`: 55 lines
 - `apps/desktop/src/splash-screen.ts`: 114 lines
 - `apps/desktop/src/startup-errors.ts`: 38 lines
@@ -271,16 +337,20 @@ Refactored in this pass:
 
 Future passes should focus on large maintenance files that are production code, have clear internal feature boundaries, and can be validated through package-level tests.
 
-| Priority |                                                File | Lines | Refactor boundary                              | Validation focus                     |
-| -------- | --------------------------------------------------: | ----: | ---------------------------------------------- | ------------------------------------ |
-| 1        |           `apps/server/src/routes/api/bootstrap.ts` |   821 | tool bootstrap and memory setup                | Server bootstrap and API route tests |
-| 2        |                          `apps/desktop/src/main.ts` |   762 | sidecar supervisor state and IPC registration  | Electron build and staging smoke     |
-| 3        |      `packages/runtime/src/turn-agent-tool-loop.ts` |   699 | LLM tool loop, suspend capture, done semantics | Runtime agent/tool-loop tests        |
-| 4        |               `packages/ai-provider/src/gateway.ts` |   638 | provider routing and retry/fallback loop       | Gateway and adapter tests            |
-| 5        |                     `apps/web/src/routes/debug.tsx` |   640 | route shell vs trace/session panels            | Web debug route tests                |
-| 6        | `apps/web/src/components/session/chat-messages.tsx` |   627 | orchestration vs block rendering/data adapters | Web session message tests            |
-| 7        |          `apps/server/src/routes/api/plugin-rpc.ts` |   513 | route composition and background dispatch      | Plugin RPC and approval route tests  |
-| 8        |               `packages/test-runtime/src/runner.ts` |   725 | harness orchestration and live adapter setup   | Test-runtime package tests           |
+| Priority |                                                                     File | Lines | Refactor boundary                             | Validation focus                     |
+| -------- | -----------------------------------------------------------------------: | ----: | --------------------------------------------- | ------------------------------------ |
+| 1        |                           `packages/runtime/src/turn-agent-tool-loop.ts` |   692 | LLM response loop and tool-call state machine | Runtime tool-loop tests              |
+| 2        |                                    `packages/test-runtime/src/runner.ts` |   660 | live adapter setup and case orchestration     | Test-runtime package tests           |
+| 3        |                     `apps/web/src/lib/catalog/interactive-renderers.tsx` |   650 | interactive json-render components            | Web catalog/component tests          |
+| 4        |                                          `apps/web/src/routes/debug.tsx` |   640 | trace/session debug panels                    | Web route/component tests            |
+| 5        |                                    `packages/ai-provider/src/gateway.ts` |   638 | operation retry/fallback loop                 | AI provider gateway tests            |
+| 6        | `apps/web/src/components/session/session-prep/plugin-selection-card.tsx` |   627 | plugin filtering and policy UI                | Web session-prep component tests     |
+| 7        |                      `apps/web/src/components/session/chat-messages.tsx` |   627 | message orchestration and timeline rendering  | Web chat/component tests             |
+| 8        |                               `packages/context/src/prompt-assembler.ts` |   613 | prompt segment assembly and budget pruning    | Context prompt tests                 |
+| 9        |                                `apps/server/src/routes/api/bootstrap.ts` |   607 | remaining route composition and DI wiring     | Server bootstrap and API route tests |
+| 10       |                                    `packages/create/src/create-world.ts` |   602 | world scaffold writing and asset generation   | Create package tests                 |
+
+Very large generated/catalog/type-heavy files such as `known-models.ts`, `store/src/types.ts`, and `registry-definitions.ts` should stay lower priority unless a concrete maintenance problem appears.
 
 ## Validation Run
 
@@ -472,6 +542,52 @@ Future passes should focus on large maintenance files that are production code, 
   - `git diff --check`
   - `timeout 360s mise exec -- pnpm test`
   - `timeout 240s mise exec -- pre-commit run --files docs/refactor/2026-05-09_13-05_long-file-restructure.md packages/test-runtime/src/runner.ts packages/test-runtime/src/execution.ts packages/test-runtime/src/execution.test.ts`
+- Thirty-third pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --check packages/store/src/indexeddb/idb-media-store.ts packages/store/src/indexeddb/idb-runtime-store.ts packages/store/src/indexeddb/idb-media-records.ts packages/store/src/indexeddb/idb-record-helpers.ts packages/store/tests/idb-media-records.test.ts packages/store/tests/idb-record-helpers.test.ts docs/refactor/2026-05-09_13-05_long-file-restructure.md`
+  - `timeout 120s mise exec -- pnpm --filter @covel/store lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/store exec vitest run tests/idb-media-records.test.ts tests/idb-record-helpers.test.ts tests/idb-store.test.ts tests/media-store.test.ts`
+  - `timeout 240s mise exec -- pnpm --filter @covel/store test`
+  - `git diff --check`
+- Thirty-fourth pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --check apps/server/src/routes/api/bootstrap.ts apps/server/src/routes/api/bootstrap/memory.ts apps/server/tests/api/bootstrap-memory.test.ts packages/test-runtime/src/runner.ts packages/test-runtime/src/runtime-loading.ts packages/test-runtime/src/runtime-loading.test.ts packages/runtime/src/turn-agent-tool-loop.ts packages/runtime/src/turn-agent-tool-loop-messages.ts packages/runtime/tests/turn-agent-tool-loop-messages.test.ts packages/context/src/prompt-assembler.ts packages/context/src/prompt-serialization.ts packages/context/tests/prompt-serialization.test.ts docs/refactor/2026-05-09_13-05_long-file-restructure.md`
+  - `timeout 120s mise exec -- pnpm --filter @covel/server lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/server exec vitest run tests/api/bootstrap-memory.test.ts tests/api/e2e-narrator.test.ts`
+  - `timeout 120s mise exec -- pnpm --filter @covel/test-runtime lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/test-runtime test`
+  - `timeout 120s mise exec -- pnpm --filter @covel/runtime lint`
+  - `timeout 240s mise exec -- pnpm --filter @covel/runtime test`
+  - `timeout 120s mise exec -- pnpm --filter @covel/context lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/context test`
+  - `timeout 240s mise exec -- pnpm lint`
+  - `git diff --check`
+- Thirty-fifth pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --check apps/server/src/routes/api/bootstrap.ts apps/server/src/routes/api/bootstrap/local-tools.ts apps/server/tests/api/bootstrap-local-tools.test.ts docs/refactor/2026-05-09_13-05_long-file-restructure.md`
+  - `timeout 180s mise exec -- pnpm --filter @covel/server exec vitest run tests/api/bootstrap-local-tools.test.ts`
+  - `timeout 180s mise exec -- pnpm --filter @covel/server exec vitest run tests/api/bootstrap-local-tools.test.ts tests/api/bootstrap-memory.test.ts tests/api/approvals.test.ts tests/api/plugin-rpc.test.ts`
+  - `timeout 120s mise exec -- pnpm --filter @covel/server lint`
+  - `timeout 240s mise exec -- pnpm lint`
+  - `git diff --check`
+- Thirty-sixth pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --check apps/desktop/src/main.ts apps/desktop/src/ipc-handlers.ts docs/refactor/2026-05-09_13-05_long-file-restructure.md`
+  - `timeout 180s mise exec -- pnpm --filter @covel/desktop build`
+  - `timeout 240s mise exec -- pnpm lint`
+  - `git diff --check`
+- Thirty-seventh pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --write apps/web/src/lib/catalog.tsx apps/web/src/lib/catalog/character-renderers.tsx apps/web/src/lib/catalog/character-fields-renderer.tsx apps/web/src/lib/__tests__/character-fields-renderer.test.tsx`
+  - `timeout 120s mise exec -- pnpm --filter @covel/web exec vitest run src/lib/__tests__/character-fields-renderer.test.tsx`
+  - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
+  - `timeout 240s mise exec -- pnpm --filter @covel/web test`
+  - `timeout 120s mise exec -- pnpm exec prettier --check apps/web/src/lib/catalog.tsx apps/web/src/lib/catalog/character-renderers.tsx apps/web/src/lib/catalog/character-fields-renderer.tsx apps/web/src/lib/__tests__/character-fields-renderer.test.tsx docs/refactor/2026-05-09_13-05_long-file-restructure.md`
+  - `timeout 240s mise exec -- pnpm lint`
+  - `git diff --check`
+- Thirty-eighth pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --write packages/tools/src/builtin/character-tools.ts packages/tools/src/builtin/character-tool-helpers.ts packages/tools/tests/character-tool-helpers.test.ts`
+  - `timeout 180s mise exec -- pnpm --filter @covel/tools exec vitest run tests/character-tool-helpers.test.ts tests/character-tools.test.ts tests/schema-to-zod.test.ts`
+  - `timeout 120s mise exec -- pnpm --filter @covel/tools lint`
+  - `timeout 180s mise exec -- pnpm --filter @covel/tools test`
+  - `timeout 120s mise exec -- pnpm exec prettier --check packages/tools/src/builtin/character-tools.ts packages/tools/src/builtin/character-tool-helpers.ts packages/tools/tests/character-tool-helpers.test.ts docs/refactor/2026-05-09_13-05_long-file-restructure.md`
+  - `timeout 240s mise exec -- pnpm lint`
+  - `git diff --check`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -480,17 +596,18 @@ Future passes should focus on large maintenance files that are production code, 
 
 ## Risks
 
-- `turn-agent-tool-loop.ts` remains intentionally dense because LLM response handling, tool execution, suspend capture, and runtime-done semantics share mutable loop state.
-- Session store side effects now live under `apps/web/src/stores/session-store/*`; future reductions should target specific action/effect modules only with broader UI flow coverage.
+- `turn-agent-tool-loop.ts` remains intentionally dense because LLM response handling, tool execution, suspend capture, and runtime-done semantics share mutable loop state. The message helper split is intentionally pure and should not absorb executor state.
+- `apps/web/src/stores/session-store/actions.ts` and `sse-handler.ts` now carry most of the session-store side effects; future reductions should target those leaf modules only after broader UI flow tests are in place.
 - `plugin-selection-card.tsx` is still sizeable because filtering, grouping, pack selection, and required/excluded policy rendering share local UI state; it is the next extraction candidate inside session prep after component behavior tests are expanded.
 - `plugin-rpc.ts` still owns runtime execution and deferred follower scheduling; future passes should extract these only with the full runtime/background tests in scope.
-- `bootstrap.ts` still owns tool registration and memory setup. Future passes should split one subsystem at a time and preserve bootstrapApi as the composition root.
-- DataStore SQL facades are now small; the remaining store risk is keeping SQLite, PostgreSQL, memory, and IDB method families behaviorally aligned through shared contract suites.
+- `bootstrap.ts` still owns built-in tool registration, schema-aware character tool overrides, DI, and route composition. The plugin-local tool trust/activation path now lives in `local-tools.ts`; future passes should split one subsystem at a time and preserve bootstrapApi as the composition root.
+- Store backend entrypoints are now small; future store passes should target focused helper families such as runtime/session records or media metadata only when tests can cover each backend's execution differences.
 - `gateway.ts` still owns operation-level provider routing and retry loops. Future AI provider passes should keep retry/fallback loop changes covered by gateway, fixes, and stream tests.
-- `runner.ts` still owns plugin discovery/runtime loading, live adapter setup, local tool imports, and case orchestration. `execution.ts` now owns test-runtime deferred follower execution; its `recursiveCall` behavior remains intentionally unavailable and covered by focused tests.
+- `runner.ts` still owns live adapter setup and case orchestration. `runtime-loading.ts` owns plugin discovery/runtime loading/local tool imports, while `execution.ts` owns test-runtime deferred follower execution; its `recursiveCall` behavior remains intentionally unavailable and covered by focused tests.
 - `llm-capability-controls.tsx` now owns capability tag/editor rendering. Future settings passes should target model database refresh/status UI or split slot cards after component-level coverage exists.
 - `registry-definitions.ts` still owns the full flat env variable catalog. Future grouping by env group should keep `COVEL_ENV_REGISTRY` as the stable flattened export.
-- `main.ts` still owns sidecar supervisor state and broad IPC registration; the next desktop pass should split IPC handlers before attempting supervisor dependency injection.
+- `main.ts` still owns sidecar supervisor state, retry lifecycle, heartbeat, and sidecar config REST calls. Future desktop passes should introduce a supervisor object only with explicit tests or build-level smoke coverage.
+- `prompt-assembler.ts` still owns segment construction and post-history assembly. Future prompt passes should target one prompt phase at a time so cache-breakpoint and budget behavior stay covered.
 
 ## Rollback
 
@@ -505,13 +622,16 @@ flowchart TD
   RuntimeExecution --> AgentGuard["turn-agent-guard.ts"]
   RuntimeExecution --> AgentRuntime["turn-agent-runtime.ts"]
   AgentRuntime --> AgentToolLoop["turn-agent-tool-loop.ts"]
+  AgentToolLoop --> ToolLoopMessages["turn-agent-tool-loop-messages.ts"]
   TurnExecutor --> TurnResume["turn-resume.ts"]
   TurnExecutor --> TurnTypes["turn-executor-types.ts"]
   TurnExecutor --> TurnResultFinalizer["turn-result-finalizer.ts"]
   TurnExecutor --> TurnEventChain["turn-event-chain.ts"]
 
   SessionStore["session-store.tsx"] --> SessionModules["session-store/*"]
+  PromptAssembler["prompt-assembler.ts"] --> PromptSerialization["prompt-serialization.ts"]
   Catalog["catalog.tsx"] --> CatalogModules["catalog/*"]
+  Catalog --> CharacterFieldsRenderer["catalog/character-fields-renderer.tsx"]
   StoreContract["store-contract.ts"] --> StoreSuites["contract/suites/*"]
   StoreContract --> StoreFixtures["contract/test-fixtures.ts"]
   Api["api.ts"] --> ApiModules["services/api/*"]
@@ -531,11 +651,14 @@ flowchart TD
   IdbStore --> IdbRuntime["indexeddb/{idb-context,idb-db,idb-schema,idb-transaction}.ts"]
   MemoryStore --> StoreCommon["common/{keys,pagination}.ts"]
   IdbStore --> StoreCommon
+  IdbMediaStore["idb-media-store.ts"] --> IdbMediaRecords["idb-media-records.ts"]
+  IdbRuntimeStore["idb-runtime-store.ts"] --> IdbRecordHelpers["idb-record-helpers.ts"]
   Gateway["gateway.ts"] --> GatewayLifecycle["gateway-lifecycle.ts"]
   Gateway --> GatewaySlotResolution["gateway-slot-resolution.ts"]
   TestRuntimeRunner["test-runtime/runner.ts"] --> TestRuntimeReporting["test-runtime/reporting.ts"]
   TestRuntimeRunner --> TestRuntimeCases["test-runtime/cases.ts"]
   TestRuntimeRunner --> TestRuntimeExecution["test-runtime/execution.ts"]
+  TestRuntimeRunner --> RuntimeLoading["test-runtime/runtime-loading.ts"]
   LlmSlotsPane["LlmSlotsPane.tsx"] --> LlmSlotsModel["llm-slots-model.ts"]
   LlmSlotsPane --> LlmCapabilityControls["llm-capability-controls.tsx"]
   EnvRegistry["env/registry.ts"] --> EnvDefinitions["env/registry-definitions.ts"]
@@ -555,7 +678,10 @@ flowchart TD
   BootstrapApi --> BootstrapDiscovery["bootstrap/plugin-discovery.ts"]
   BootstrapApi --> BootstrapRpcWiring["bootstrap/plugin-rpc-wiring.ts"]
   BootstrapApi --> BootstrapHooks["bootstrap/plugin-hooks.ts"]
+  BootstrapApi --> BootstrapMemory["bootstrap/memory.ts"]
+  BootstrapApi --> BootstrapLocalTools["bootstrap/local-tools.ts"]
   DesktopMain["desktop/main.ts"] --> DesktopLeaf["desktop/{startup-errors,network,splash-screen,env-files}.ts"]
+  DesktopMain --> DesktopIpc["desktop/ipc-handlers.ts"]
   DesktopMain --> DesktopLogging["desktop/logging.ts"]
   DesktopMain --> DesktopWindows["desktop/windows.ts"]
   DesktopMain --> DesktopUpdater["desktop/auto-updater.ts"]
