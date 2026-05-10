@@ -26,7 +26,7 @@ export function WorldLoreCard({
   const { t } = useTranslation();
 
   return (
-    <Card className="mb-4">
+    <Card>
       <CollapsibleCardHeader
         expanded={expanded}
         onToggle={onToggle}
@@ -48,7 +48,7 @@ export function WorldLoreCard({
         )}
       </CollapsibleCardHeader>
       {expanded && (
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 px-4 pb-4">
           <textarea
             value={loreValue}
             onChange={(event) => onLoreChange(event.target.value)}

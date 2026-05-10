@@ -20,7 +20,7 @@ export function WorldInfoCard({
   const visual = worldVisual(world);
 
   return (
-    <Card className="mb-4">
+    <Card>
       <CollapsibleCardHeader
         expanded={expanded}
         onToggle={onToggle}
@@ -35,13 +35,16 @@ export function WorldInfoCard({
         )}
       </CollapsibleCardHeader>
       {expanded && (
-        <CardContent>
+        <CardContent className="px-4 pb-4">
           <div className="grid gap-4 sm:grid-cols-[11rem_1fr]">
             <div className="relative aspect-[4/3] overflow-hidden rounded-[var(--radius-card)] border border-border bg-muted">
               <img
                 src={visual.image}
                 alt=""
                 aria-hidden="true"
+                width={1536}
+                height={1024}
+                loading="lazy"
                 className="h-full w-full object-cover"
                 draggable={false}
               />

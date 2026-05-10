@@ -26,7 +26,7 @@ export function SessionHistoryCard({
   if (activeSessions.length === 0) return null;
 
   return (
-    <Card className="mb-4">
+    <Card>
       <CollapsibleCardHeader
         expanded={expanded}
         onToggle={onToggle}
@@ -41,7 +41,7 @@ export function SessionHistoryCard({
         </Badge>
       </CollapsibleCardHeader>
       {expanded && (
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-2 px-4 pb-4">
           {activeSessions.map((session) => (
             <div
               key={session.id}

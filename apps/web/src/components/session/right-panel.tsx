@@ -236,7 +236,7 @@ export function RightPanel({
         </div>
         <ScrollArea className="flex-1 min-h-0 min-w-0">
           <TabsContent value="world" className="p-4 m-0 max-w-full">
-            <div className="flex items-center gap-2 mb-4 min-w-0">
+            <div className="mb-4 flex min-w-0 items-center gap-2 border-b border-[var(--rule-color)] pb-3">
               <BookOpen className="w-4 h-4 shrink-0 text-muted-foreground" />
               <h3 className="ui-title text-sm font-semibold tracking-tight truncate">
                 {t("session.worldTab")}
@@ -245,7 +245,7 @@ export function RightPanel({
             <WorldDocumentPanel world={world} />
           </TabsContent>
           <TabsContent value="database" className="p-4 m-0 max-w-full">
-            <div className="flex items-center gap-2 mb-4 min-w-0">
+            <div className="mb-4 flex min-w-0 items-center gap-2 border-b border-[var(--rule-color)] pb-3">
               <Database className="w-4 h-4 shrink-0 text-muted-foreground" />
               <h3 className="ui-title text-sm font-semibold tracking-tight truncate">
                 {t("session.database")}
@@ -270,7 +270,7 @@ export function RightPanel({
                 value={`plugin-${group.id}`}
                 className="p-4 m-0 max-w-full"
               >
-                <div className="flex items-center gap-2 mb-3 min-w-0">
+                <div className="mb-3 flex min-w-0 items-center gap-2 border-b border-[var(--rule-color)] pb-3">
                   <GroupIcon className="w-4 h-4 shrink-0 text-muted-foreground" />
                   <h3 className="ui-title text-sm font-semibold tracking-tight truncate">
                     {group.label}
@@ -371,9 +371,9 @@ export function RightPanel({
         </ScrollArea>
       </Tabs>
       {storeBackend && (
-        <div className="border-t border-border px-3 py-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0">
+        <div className="border-t border-border px-3 py-2 flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0 bg-[color-mix(in_oklab,var(--surface-rail)_82%,var(--surface-page))]">
           <Database className="w-3 h-3" />
-          <span>Store:</span>
+          <span className="ui-meta text-[9px]">Store</span>
           <Badge
             variant="outline"
             className={`text-[9px] rounded-none ${

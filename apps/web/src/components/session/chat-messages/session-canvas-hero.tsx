@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Flame } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { resolveI18n } from "@/lib/catalog.js";
+import { worldVisual } from "@/lib/world-visuals.js";
 import type { WorldRecord } from "@/services/api.js";
 
 interface SessionCanvasHeroProps {
@@ -37,42 +38,76 @@ export function SessionCanvasHero({
     return [];
   })();
   const summary = world ? resolveI18n(world.description, locale) : "";
+  const visual = worldVisual(world);
 
   return (
-    <div className="ui-session-canvas py-8 md:py-12 max-w-3xl mx-auto px-1">
-      {/* Eyebrow + chip row — editorial "kicker" */}
-      <div className="flex flex-wrap items-center gap-2 mb-5">
-        <span className="ui-eyebrow">§ SESSION CANVAS</span>
-        {chips.map((chip, i) => (
-          <span key={`${chip}-${i}`} className="ui-chip text-[10px]">
-            {chip}
-          </span>
-        ))}
+    <div
+      className="ui-session-canvas relative mx-auto my-2 max-w-4xl overflow-hidden rounded-[var(--radius-card)] border border-[var(--rule-color)] bg-card"
+      style={{ "--world-accent": visual.accent } as React.CSSProperties}
+    >
+      <img
+        src={visual.image}
+        alt=""
+        aria-hidden="true"
+        width={1536}
+        height={1024}
+        loading="eager"
+        fetchPriority="high"
+        className="absolute inset-0 h-full w-full object-cover"
+        draggable={false}
+      />
+      <div
+        aria-hidden="true"
+        className="absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(90deg, rgba(0,0,0,.82) 0%, rgba(0,0,0,.58) 55%, rgba(0,0,0,.24) 100%)",
+        }}
+      />
+      <div
+        aria-hidden
+        className="absolute left-0 top-0 h-1 w-28"
+        style={{ background: "var(--world-accent)" }}
+      />
+
+      <div className="relative z-10 flex min-h-[360px] flex-col justify-between p-5 text-white md:min-h-[420px] md:p-7">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="ui-eyebrow text-white/62">§ SESSION CANVAS</span>
+          {chips.map((chip, i) => (
+            <span
+              key={`${chip}-${i}`}
+              className="ui-tag border-white/16 bg-black/20 text-white/70 backdrop-blur-sm"
+            >
+              {chip}
+            </span>
+          ))}
+        </div>
+
+        <div className="max-w-2xl">
+          <h2
+            className="ui-title text-3xl leading-tight tracking-tight text-white md:text-[2.65rem]"
+            style={{ textWrap: "balance" } as React.CSSProperties}
+          >
+            {hook || hintLabel}
+          </h2>
+
+          {(summary || hintLabel) && (
+            <p className="mt-4 max-w-xl text-sm leading-relaxed text-white/72 md:text-base">
+              {summary || hintLabel}
+            </p>
+          )}
+
+          <Button
+            size="lg"
+            className="mt-7 px-7 py-5 text-sm font-bold uppercase tracking-widest"
+            style={{ background: "var(--world-accent)", color: "black" }}
+            onClick={onBegin}
+          >
+            <Flame className="w-4 h-4 mr-2" />
+            {beginLabel}
+          </Button>
+        </div>
       </div>
-
-      {/* Display title — the chosen hook or the world name */}
-      <h2
-        className="ui-title text-2xl md:text-[2.25rem] leading-tight tracking-tight mb-4"
-        style={{ textWrap: "balance" } as React.CSSProperties}
-      >
-        {hook || hintLabel}
-      </h2>
-
-      {/* Body copy — fall back to summary, then to the i18n hint */}
-      {(summary || hintLabel) && (
-        <p className="ui-empty-copy text-sm md:text-base leading-relaxed mb-6 not-italic text-muted-foreground">
-          {summary || hintLabel}
-        </p>
-      )}
-
-      <Button
-        size="lg"
-        className="px-8 py-5 text-sm uppercase tracking-widest font-bold"
-        onClick={onBegin}
-      >
-        <Flame className="w-4 h-4 mr-2" />
-        {beginLabel}
-      </Button>
     </div>
   );
 }

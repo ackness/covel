@@ -214,11 +214,11 @@ export function WorldSelectScreen({
         onWorldCreated={(world) => onWorldCreated?.(world)}
       />
       <ScrollArea className="w-full h-full">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-10 py-6 md:py-12">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-10 py-5 md:py-8">
           {/* Editorial header */}
-          <header className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-10 items-end mb-12 md:mb-16">
+          <header className="grid grid-cols-1 md:grid-cols-12 gap-5 md:gap-8 items-end mb-7 md:mb-9">
             <div className="md:col-span-7">
-              <p className="ui-eyebrow text-muted-foreground mb-3">
+              <p className="ui-eyebrow text-muted-foreground mb-2.5">
                 {t(
                   "session.worldsHeaderEyebrow",
                   `${worlds.length} worlds available`,
@@ -227,10 +227,10 @@ export function WorldSelectScreen({
                   },
                 )}
               </p>
-              <h1 className="font-display font-bold tracking-tight leading-[0.95] text-[clamp(2.25rem,6vw,4.5rem)]">
+              <h1 className="font-display font-bold tracking-tight leading-[0.95] text-[clamp(2.25rem,5.4vw,4.25rem)]">
                 {t("session.selectWorld", "Choose a world")}
               </h1>
-              <p className="mt-5 text-sm md:text-base text-muted-foreground font-light leading-relaxed max-w-xl">
+              <p className="mt-4 text-sm md:text-base text-muted-foreground font-light leading-relaxed max-w-xl">
                 {t(
                   "session.worldSelectDesc",
                   "Each world is a self-contained setting with its own tone, characters, and ruleset.",
@@ -238,16 +238,16 @@ export function WorldSelectScreen({
               </p>
             </div>
 
-            {/* Right-side action card — promotes AI generate, secondary key config */}
-            <aside className="md:col-span-5 grid grid-cols-1 gap-2.5">
+            {/* Compact action rail keeps creation and setup nearby without pushing worlds down. */}
+            <aside className="md:col-span-5 grid grid-cols-2 md:grid-cols-1 lg:grid-cols-2 gap-2.5">
               <button
                 type="button"
                 onClick={() => setGeneratorOpen(true)}
-                className="group relative overflow-hidden rounded-[var(--radius-card)] border border-primary/30 bg-card hover:border-primary/60 transition-all p-5 text-left"
+                className="group relative min-h-[92px] overflow-hidden rounded-[var(--radius-card)] border border-primary/25 bg-card/80 hover:border-primary/55 transition-all p-3 sm:p-4 text-left"
               >
                 <div
                   aria-hidden="true"
-                  className="absolute -right-12 -top-12 h-32 w-32 rounded-full opacity-50 group-hover:opacity-80 transition-opacity"
+                  className="absolute -right-12 -top-12 h-28 w-28 rounded-full opacity-40 group-hover:opacity-65 transition-opacity"
                   style={{
                     background:
                       "radial-gradient(circle, color-mix(in oklab, var(--color-primary) 70%, transparent) 0%, transparent 70%)",
@@ -260,7 +260,7 @@ export function WorldSelectScreen({
                       {t("world.aiCreate", "AI generate")}
                     </span>
                   </div>
-                  <p className="font-display text-base font-semibold leading-snug">
+                  <p className="font-display text-[13px] sm:text-sm font-semibold leading-snug line-clamp-2">
                     {t(
                       "session.aiCreateTeaser",
                       "Spin up a brand new world from a one-line idea.",
@@ -276,12 +276,12 @@ export function WorldSelectScreen({
               <button
                 type="button"
                 onClick={() => onSettingsOpenChange(true)}
-                className="group flex items-center justify-between rounded-[var(--radius-card)] border border-border bg-card hover:border-primary/40 hover:bg-muted/30 transition-all p-4 text-left"
+                className="group flex min-h-[92px] items-center justify-between rounded-[var(--radius-card)] border border-border bg-card/70 hover:border-primary/40 hover:bg-muted/30 transition-all p-3 sm:p-4 text-left"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <KeyRound className="w-4 h-4 text-muted-foreground shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">
+                    <p className="text-[13px] sm:text-sm font-medium leading-snug line-clamp-2">
                       {t("session.configureKeys", "API keys & presets")}
                     </p>
                     <p className="text-[11px] text-muted-foreground/80 truncate">
@@ -297,7 +297,7 @@ export function WorldSelectScreen({
 
           {/* World list — cover-led plates with the same action surface. */}
           {worlds.length > 0 && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 md:gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
               {worlds.map((world, index) => {
                 const isEntering = enteringWorldId === world.id;
                 const dimmed = enteringWorldId !== null && !isEntering;
@@ -307,7 +307,7 @@ export function WorldSelectScreen({
                     key={world.id}
                     aria-busy={isEntering}
                     onClick={() => handleEnterWorld(world.id)}
-                    className={`group relative min-h-[360px] cursor-pointer overflow-hidden rounded-[var(--radius-card)] border border-border bg-card transition-all hover:border-primary/40 ${
+                    className={`group relative min-h-[320px] md:min-h-[332px] cursor-pointer overflow-hidden rounded-[var(--radius-card)] border border-border bg-card transition-all hover:border-primary/40 ${
                       isEntering ? "opacity-100" : ""
                     } ${dimmed ? "opacity-30 pointer-events-none" : ""}`}
                     style={
@@ -323,6 +323,10 @@ export function WorldSelectScreen({
                       src={visual.image}
                       alt=""
                       aria-hidden="true"
+                      width={1536}
+                      height={1024}
+                      loading={index < 2 ? "eager" : "lazy"}
+                      fetchPriority={index < 2 ? "high" : "auto"}
                       className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.025]"
                       draggable={false}
                     />
@@ -348,7 +352,7 @@ export function WorldSelectScreen({
                       style={{ background: "var(--world-accent)" }}
                     />
 
-                    <div className="relative z-10 flex min-h-[360px] flex-col justify-between p-5 md:p-6 text-white">
+                    <div className="relative z-10 flex min-h-[320px] md:min-h-[332px] flex-col justify-between p-5 md:p-6 text-white">
                       <div className="flex items-start justify-between gap-4">
                         <span className="ui-meta text-[10px] text-white/62 tabular-nums">
                           № {String(index + 1).padStart(2, "0")} · {world.id}
@@ -361,10 +365,10 @@ export function WorldSelectScreen({
                         </span>
                       </div>
 
-                      <div className="space-y-4">
-                        <div className="max-w-[31rem] space-y-3">
+                      <div className="space-y-3.5">
+                        <div className="max-w-[31rem] space-y-2.5">
                           <h2
-                            className="ui-title text-3xl md:text-4xl leading-[1.02] tracking-tight text-white transition-colors"
+                            className="ui-title text-3xl md:text-[2.35rem] leading-[1.02] tracking-tight text-white transition-colors"
                             style={
                               isEntering
                                 ? { color: "var(--world-accent)" }
@@ -394,7 +398,7 @@ export function WorldSelectScreen({
                           )}
                         </div>
 
-                        <div className="flex items-center justify-between gap-3 border-t border-white/14 pt-4">
+                        <div className="flex items-center justify-between gap-3 border-t border-white/14 pt-3.5">
                           <div className="flex items-center gap-1">
                             <button
                               type="button"
@@ -474,7 +478,7 @@ export function WorldSelectScreen({
           )}
 
           {/* Footer info chips */}
-          <div className="mt-12 md:mt-16 pt-6 border-t border-border flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
+          <div className="mt-8 md:mt-10 pt-5 border-t border-border flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
             {enabledPluginCount > 0 && (
               <span className="inline-flex items-center gap-1.5">
                 <Cpu className="w-3 h-3" />

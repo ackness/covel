@@ -358,15 +358,19 @@ export function SessionPrepScreen({
         initialKey={settingsInitialKey}
       />
       <ScrollArea className="w-full h-full">
-        <div className="mx-auto max-w-5xl px-4 md:px-8 py-6 md:py-10">
+        <div className="mx-auto max-w-6xl px-4 md:px-8 py-5 md:py-8">
           <header
-            className="relative mb-7 overflow-hidden rounded-[var(--radius-card)] border border-border bg-card"
+            className="relative mb-6 overflow-hidden rounded-[var(--radius-card)] border border-border bg-card"
             style={{ "--world-accent": visual.accent } as CSSProperties}
           >
             <img
               src={visual.image}
               alt=""
               aria-hidden="true"
+              width={1536}
+              height={1024}
+              loading="eager"
+              fetchPriority="high"
               className="absolute inset-0 h-full w-full object-cover"
               draggable={false}
             />
@@ -378,7 +382,7 @@ export function SessionPrepScreen({
                   "linear-gradient(90deg, rgba(0,0,0,.82) 0%, rgba(0,0,0,.58) 48%, rgba(0,0,0,.22) 100%)",
               }}
             />
-            <div className="relative z-10 flex min-h-[260px] flex-col justify-between p-5 md:p-7 text-white">
+            <div className="relative z-10 flex min-h-[236px] md:min-h-[252px] flex-col justify-between p-5 md:p-7 text-white">
               <div className="flex items-center justify-between gap-4">
                 <Button
                   variant="ghost"
@@ -424,76 +428,80 @@ export function SessionPrepScreen({
             </div>
           </header>
 
-          <div className="mx-auto max-w-3xl">
-            <WorldInfoCard
-              world={world}
-              expanded={worldInfoExpanded}
-              onToggle={() => setWorldInfoExpanded(!worldInfoExpanded)}
-            />
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)] lg:items-start">
+            <section className="min-w-0 space-y-4">
+              <WorldInfoCard
+                world={world}
+                expanded={worldInfoExpanded}
+                onToggle={() => setWorldInfoExpanded(!worldInfoExpanded)}
+              />
 
-            <SessionHistoryCard
-              activeSessions={activeSessions}
-              expanded={sessionsExpanded}
-              onToggle={() => setSessionsExpanded(!sessionsExpanded)}
-              onResume={onResume}
-              onRequestDelete={setDeleteTarget}
-            />
+              <SessionHistoryCard
+                activeSessions={activeSessions}
+                expanded={sessionsExpanded}
+                onToggle={() => setSessionsExpanded(!sessionsExpanded)}
+                onResume={onResume}
+                onRequestDelete={setDeleteTarget}
+              />
 
-            <WorldLoreCard
-              expanded={loreExpanded}
-              onToggle={() => setLoreExpanded(!loreExpanded)}
-              loreValue={loreValue}
-              originalLore={originalLore}
-              isModified={isLoreModified}
-              onLoreChange={handleLoreChange}
-              onResetLore={resetLore}
-            />
+              <WorldLoreCard
+                expanded={loreExpanded}
+                onToggle={() => setLoreExpanded(!loreExpanded)}
+                loreValue={loreValue}
+                originalLore={originalLore}
+                isModified={isLoreModified}
+                onLoreChange={handleLoreChange}
+                onResetLore={resetLore}
+              />
 
-            <DimensionActions
-              worldId={world.id}
-              enabled={Boolean(world.dimensions)}
-            />
+              <DimensionActions
+                worldId={world.id}
+                enabled={Boolean(world.dimensions)}
+              />
+            </section>
 
-            <ModelsCard
-              resolvedSlots={resolvedSlots}
-              expanded={modelsExpanded}
-              onToggle={() => setModelsExpanded(!modelsExpanded)}
-              onOpenSettings={() => onSettingsOpenChange(true)}
-            />
+            <section className="min-w-0 space-y-4 lg:sticky lg:top-4">
+              <ModelsCard
+                resolvedSlots={resolvedSlots}
+                expanded={modelsExpanded}
+                onToggle={() => setModelsExpanded(!modelsExpanded)}
+                onOpenSettings={() => onSettingsOpenChange(true)}
+              />
 
-            <PluginSelectionCard
-              world={world}
-              packages={packages}
-              selectedPluginIds={selectedPluginIds}
-              selectedPluginIdSet={selectedPluginIdSet}
-              selectedPackages={selectedPackages}
-              expanded={pluginSectionExpanded}
-              onToggleExpanded={() =>
-                setPluginSectionExpanded(!pluginSectionExpanded)
-              }
-              pluginPacks={pluginPacks}
-              activePluginPack={activePluginPack}
-              activePluginTags={activePluginTags}
-              availablePluginTags={availablePluginTags}
-              pluginSearch={pluginSearch}
-              onPluginSearchChange={setPluginSearch}
-              onTogglePluginTag={togglePluginTag}
-              onApplyPack={applyPack}
-              pluginGroups={pluginGroups}
-              corePluginIds={corePluginIds}
-              lockedPluginIds={lockedPluginIds}
-              bindingState={bindingState}
-              resolvedSlots={resolvedSlots}
-              resolveDeclaredSlot={resolveSelectedDeclaredSlot}
-              isMissingDeclaredSlot={isSelectedDeclaredSlotMissing}
-              onTogglePlugin={togglePlugin}
-              worldDataPreflight={worldDataPreflight}
-              worldDataPreflightStatus={worldDataPreflightStatus}
-              worldDataPreflightError={worldDataPreflightError}
-              onRetryWorldDataPreflight={runWorldDataPreflight}
-              flowData={flowData}
-              selectedFlowSteps={selectedFlowSteps}
-            />
+              <PluginSelectionCard
+                world={world}
+                packages={packages}
+                selectedPluginIds={selectedPluginIds}
+                selectedPluginIdSet={selectedPluginIdSet}
+                selectedPackages={selectedPackages}
+                expanded={pluginSectionExpanded}
+                onToggleExpanded={() =>
+                  setPluginSectionExpanded(!pluginSectionExpanded)
+                }
+                pluginPacks={pluginPacks}
+                activePluginPack={activePluginPack}
+                activePluginTags={activePluginTags}
+                availablePluginTags={availablePluginTags}
+                pluginSearch={pluginSearch}
+                onPluginSearchChange={setPluginSearch}
+                onTogglePluginTag={togglePluginTag}
+                onApplyPack={applyPack}
+                pluginGroups={pluginGroups}
+                corePluginIds={corePluginIds}
+                lockedPluginIds={lockedPluginIds}
+                bindingState={bindingState}
+                resolvedSlots={resolvedSlots}
+                resolveDeclaredSlot={resolveSelectedDeclaredSlot}
+                isMissingDeclaredSlot={isSelectedDeclaredSlotMissing}
+                onTogglePlugin={togglePlugin}
+                worldDataPreflight={worldDataPreflight}
+                worldDataPreflightStatus={worldDataPreflightStatus}
+                worldDataPreflightError={worldDataPreflightError}
+                onRetryWorldDataPreflight={runWorldDataPreflight}
+                flowData={flowData}
+                selectedFlowSteps={selectedFlowSteps}
+              />
+            </section>
           </div>
         </div>
       </ScrollArea>

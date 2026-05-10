@@ -9,12 +9,12 @@ export function CollapsibleCardHeader({
   summary,
 }: CollapsibleCardHeaderProps) {
   return (
-    <CardHeader className="pb-2">
+    <CardHeader className="px-4 py-3 pb-2">
       <button
         className="w-full flex items-center justify-between text-left"
         onClick={onToggle}
       >
-        <CardTitle className="flex items-center gap-2 text-base">
+        <CardTitle className="flex items-center gap-2 text-sm">
           {children}
         </CardTitle>
         {expanded ? (

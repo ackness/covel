@@ -17,6 +17,10 @@ export function Hero() {
         <img
           src="/visuals/backgrounds/home-hero.webp"
           alt=""
+          width={1536}
+          height={1024}
+          loading="eager"
+          fetchPriority="high"
           className="absolute inset-0 h-full w-full object-cover opacity-45 md:opacity-60"
           draggable={false}
         />
@@ -31,6 +35,9 @@ export function Hero() {
           <img
             src="/visuals/worlds/mistport.webp"
             alt=""
+            width={1536}
+            height={1024}
+            loading="lazy"
             className="h-full w-full object-cover opacity-35 mix-blend-screen"
             draggable={false}
             style={{ filter: "saturate(0.8) contrast(1.1)" }}

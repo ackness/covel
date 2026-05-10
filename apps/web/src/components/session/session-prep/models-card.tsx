@@ -23,7 +23,7 @@ export function ModelsCard({
   const { t } = useTranslation();
 
   return (
-    <Card className="mb-4">
+    <Card>
       <CollapsibleCardHeader
         expanded={expanded}
         onToggle={onToggle}
@@ -42,7 +42,7 @@ export function ModelsCard({
         </Badge>
       </CollapsibleCardHeader>
       {expanded && (
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-2 px-4 pb-4">
           <ActiveModelSlots slots={resolvedSlots} />
           <Button
             variant="ghost"
