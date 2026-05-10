@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Sparkles,
@@ -27,6 +27,7 @@ import * as api from "@/services/api.js";
 import type { WorldRecord, PackageSummary } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
+import { worldVisual } from "@/lib/world-visuals.js";
 
 type ViewMode = "list" | "detail" | "edit";
 
@@ -41,22 +42,6 @@ interface WorldSelectScreenProps {
   onWorldUpdated?: (world: WorldRecord) => void;
   onWorldCreated?: (world: WorldRecord) => void;
   onWorldDeleted?: (worldId: string) => void;
-}
-
-// Cycle through a small palette to give each card a distinctive but on-brand
-// gradient cap. Hashed by world id so each world keeps its colour.
-const CARD_GRADIENTS = [
-  "linear-gradient(135deg, color-mix(in oklab, var(--color-primary) 65%, transparent), color-mix(in oklab, oklch(70% 0.18 280) 55%, transparent))",
-  "linear-gradient(135deg, color-mix(in oklab, oklch(72% 0.16 200) 65%, transparent), color-mix(in oklab, var(--color-primary) 50%, transparent))",
-  "linear-gradient(135deg, color-mix(in oklab, oklch(70% 0.18 25) 60%, transparent), color-mix(in oklab, oklch(60% 0.20 320) 55%, transparent))",
-  "linear-gradient(135deg, color-mix(in oklab, oklch(75% 0.15 130) 55%, transparent), color-mix(in oklab, oklch(60% 0.18 240) 55%, transparent))",
-  "linear-gradient(135deg, color-mix(in oklab, oklch(68% 0.20 60) 55%, transparent), color-mix(in oklab, oklch(60% 0.18 350) 55%, transparent))",
-];
-
-function hashIndex(id: string, mod: number): number {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
-  return Math.abs(hash) % mod;
 }
 
 export function worldStorageLabel(world: WorldRecord): string {
@@ -310,97 +295,132 @@ export function WorldSelectScreen({
             </aside>
           </header>
 
-          {/* World list — editorial plate layout. No gradient hero, no card.
-              Each world is a numbered plate with a thin top rule, hover
-              shifts the title via the marker color. */}
+          {/* World list — cover-led plates with the same action surface. */}
           {worlds.length > 0 && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-10 gap-y-0">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 md:gap-6">
               {worlds.map((world, index) => {
                 const isEntering = enteringWorldId === world.id;
                 const dimmed = enteringWorldId !== null && !isEntering;
-                const accentHue = hashIndex(world.id, CARD_GRADIENTS.length);
-                const accentColors = [
-                  "var(--accent-primary)",
-                  "var(--accent-secondary)",
-                  "var(--accent-warning)",
-                  "var(--accent-success)",
-                  "var(--accent-primary)",
-                ];
-                const markerColor = accentColors[accentHue];
+                const visual = worldVisual(world);
                 return (
                   <article
                     key={world.id}
                     aria-busy={isEntering}
                     onClick={() => handleEnterWorld(world.id)}
-                    className={`group relative cursor-pointer py-7 transition-opacity ${
+                    className={`group relative min-h-[360px] cursor-pointer overflow-hidden rounded-[var(--radius-card)] border border-border bg-card transition-all hover:border-primary/40 ${
                       isEntering ? "opacity-100" : ""
                     } ${dimmed ? "opacity-30 pointer-events-none" : ""}`}
-                    style={{
-                      borderTop: "1px solid var(--rule-strong-color)",
-                    }}
+                    style={
+                      {
+                        "--world-accent": visual.accent,
+                        boxShadow: isEntering
+                          ? "0 24px 80px -50px var(--world-accent)"
+                          : undefined,
+                      } as CSSProperties
+                    }
                   >
-                    {/* Plate number — top right */}
-                    <div className="absolute top-2 right-0 ui-meta text-[10px] text-muted-foreground/70 tabular-nums">
-                      № {String(index + 1).padStart(2, "0")} · {world.id}
-                    </div>
-
-                    {/* Marker dot — colored hairline above title */}
+                    <img
+                      src={visual.image}
+                      alt=""
+                      aria-hidden="true"
+                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.025]"
+                      draggable={false}
+                    />
+                    <div
+                      aria-hidden="true"
+                      className="absolute inset-0"
+                      style={{
+                        background:
+                          "linear-gradient(180deg, rgba(0,0,0,.08) 0%, rgba(0,0,0,.42) 46%, rgba(0,0,0,.78) 100%)",
+                      }}
+                    />
+                    <div
+                      aria-hidden="true"
+                      className="absolute inset-0 opacity-75"
+                      style={{
+                        background:
+                          "linear-gradient(90deg, rgba(0,0,0,.62) 0%, rgba(0,0,0,.24) 58%, rgba(0,0,0,.18) 100%)",
+                      }}
+                    />
                     <div
                       aria-hidden
-                      className="absolute -top-px left-0 h-0.5 w-12 transition-all group-hover:w-24"
-                      style={{ background: markerColor }}
+                      className="absolute left-0 top-0 h-1 w-24 transition-all group-hover:w-40"
+                      style={{ background: "var(--world-accent)" }}
                     />
 
-                    <div className="space-y-3 mt-1.5 pr-4">
-                      <h2
-                        className="ui-title text-2xl md:text-3xl leading-[1.1] tracking-tight transition-colors"
-                        style={isEntering ? { color: markerColor } : undefined}
-                      >
-                        {text(world.name)}
-                      </h2>
-                      <p className="text-[14px] text-muted-foreground leading-relaxed line-clamp-3 break-words [overflow-wrap:anywhere] max-w-prose">
-                        {text(world.description)}
-                      </p>
+                    <div className="relative z-10 flex min-h-[360px] flex-col justify-between p-5 md:p-6 text-white">
+                      <div className="flex items-start justify-between gap-4">
+                        <span className="ui-meta text-[10px] text-white/62 tabular-nums">
+                          № {String(index + 1).padStart(2, "0")} · {world.id}
+                        </span>
+                        <span
+                          className="ui-tag border-white/18 bg-black/18 text-white/70 backdrop-blur-sm"
+                          title="World storage"
+                        >
+                          {worldStorageLabel(world)}
+                        </span>
+                      </div>
 
-                      <div className="flex items-center justify-between gap-3 pt-1">
-                        <div className="flex flex-wrap gap-1.5 min-w-0">
-                          <span className="ui-tag" title="World storage">
-                            {worldStorageLabel(world)}
-                          </span>
-                          {(world.tags ?? []).slice(0, 4).map((tag) => (
-                            <span key={tag} className="ui-tag">
+                      <div className="space-y-4">
+                        <div className="max-w-[31rem] space-y-3">
+                          <h2
+                            className="ui-title text-3xl md:text-4xl leading-[1.02] tracking-tight text-white transition-colors"
+                            style={
+                              isEntering
+                                ? { color: "var(--world-accent)" }
+                                : undefined
+                            }
+                          >
+                            {text(world.name)}
+                          </h2>
+                          <p className="text-[14px] leading-relaxed text-white/76 line-clamp-3 break-words [overflow-wrap:anywhere]">
+                            {text(world.description)}
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1.5">
+                          {(world.tags ?? []).slice(0, 5).map((tag) => (
+                            <span
+                              key={tag}
+                              className="ui-tag border-white/16 bg-black/20 text-white/62 backdrop-blur-sm"
+                            >
                               {tag}
                             </span>
                           ))}
-                          {(world.tags?.length ?? 0) > 4 && (
-                            <span className="ui-meta text-[10px] text-muted-foreground/70 self-center">
-                              +{(world.tags?.length ?? 0) - 4}
+                          {(world.tags?.length ?? 0) > 5 && (
+                            <span className="ui-meta text-[10px] text-white/54 self-center">
+                              +{(world.tags?.length ?? 0) - 5}
                             </span>
                           )}
                         </div>
 
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={(e) => handleViewDetails(e, world.id)}
-                            aria-label={t("world.viewDetails", "View details")}
-                            className="ui-btn ui-btn-quiet text-muted-foreground hover:text-foreground h-7 w-7 p-0"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                          {world.metadata?.source !== "file" && (
+                        <div className="flex items-center justify-between gap-3 border-t border-white/14 pt-4">
+                          <div className="flex items-center gap-1">
                             <button
                               type="button"
-                              onClick={(e) => handleDeleteClick(e, world.id)}
-                              aria-label={t("world.delete", "Delete world")}
-                              className="ui-btn ui-btn-quiet text-muted-foreground hover:text-[var(--accent-danger)] h-7 w-7 p-0"
+                              onClick={(e) => handleViewDetails(e, world.id)}
+                              aria-label={t(
+                                "world.viewDetails",
+                                "View details",
+                              )}
+                              className="ui-btn ui-btn-quiet h-8 w-8 border-white/12 bg-black/12 p-0 text-white/72 hover:bg-white/10 hover:text-white"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Eye className="w-3.5 h-3.5" />
                             </button>
-                          )}
+                            {world.metadata?.source !== "file" && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleDeleteClick(e, world.id)}
+                                aria-label={t("world.delete", "Delete world")}
+                                className="ui-btn ui-btn-quiet h-8 w-8 border-white/12 bg-black/12 p-0 text-white/72 hover:text-[var(--accent-danger)]"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                           <span
-                            className="ui-meta inline-flex items-center gap-1 ml-2 transition-all group-hover:gap-2"
-                            style={{ color: markerColor }}
+                            className="ui-meta inline-flex items-center gap-1.5 transition-all group-hover:gap-2.5"
+                            style={{ color: "var(--world-accent)" }}
                           >
                             {t("session.enter", "Enter")}
                             <ArrowRight className="w-3 h-3" />

@@ -2,6 +2,7 @@ import { MapIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { text } from "@/components/world/editor-helpers.js";
+import { worldVisual } from "@/lib/world-visuals.js";
 import type * as api from "@/services/api.js";
 import { CollapsibleCardHeader } from "./collapsible-card-header.js";
 
@@ -16,6 +17,8 @@ export function WorldInfoCard({
   expanded,
   onToggle,
 }: WorldInfoCardProps) {
+  const visual = worldVisual(world);
+
   return (
     <Card className="mb-4">
       <CollapsibleCardHeader
@@ -32,19 +35,32 @@ export function WorldInfoCard({
         )}
       </CollapsibleCardHeader>
       {expanded && (
-        <CardContent className="space-y-2">
-          <p className="text-sm text-muted-foreground break-words [overflow-wrap:anywhere]">
-            {text(world.description)}
-          </p>
-          {world.tags && world.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {world.tags.map((tag) => (
-                <Badge key={tag} variant="outline" className="text-[10px]">
-                  {tag}
-                </Badge>
-              ))}
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-[11rem_1fr]">
+            <div className="relative aspect-[4/3] overflow-hidden rounded-[var(--radius-card)] border border-border bg-muted">
+              <img
+                src={visual.image}
+                alt=""
+                aria-hidden="true"
+                className="h-full w-full object-cover"
+                draggable={false}
+              />
             </div>
-          )}
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground break-words [overflow-wrap:anywhere]">
+                {text(world.description)}
+              </p>
+              {world.tags && world.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {world.tags.map((tag) => (
+                    <Badge key={tag} variant="outline" className="text-[10px]">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </CardContent>
       )}
     </Card>
