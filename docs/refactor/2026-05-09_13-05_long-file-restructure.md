@@ -15,6 +15,7 @@ Refactored in this pass:
 - `packages/context/src/prompt-serialization.ts`
 - `apps/web/src/stores/session-store.tsx`
 - `apps/web/src/lib/catalog.tsx`
+- `apps/web/src/lib/catalog/character-fields-renderer.tsx`
 - `packages/store/src/contract/store-contract.ts`
 - `apps/web/src/services/api.ts`
 - `packages/runtime/src/session-kernel.ts`
@@ -82,6 +83,8 @@ Refactored in this pass:
 
 - Kept `catalog.tsx` as the registry assembly point.
 - Split renderers into catalog modules for core primitives, character, interactive UI, message forms, media, branch replies, and session helpers.
+- Split schema-aware `CharacterFieldsView` into `apps/web/src/lib/catalog/character-fields-renderer.tsx`, leaving blueprint and scene-cast renderers in `character-renderers.tsx`.
+- Added focused `CharacterFieldsView` tests for schema discovery, category rendering, default values, nested/free-form fields, and JSON fallback.
 - Preserved `covelRegistry`, `resolveI18n`, `resolveIcon`, and `useI18nResolver` imports.
 
 ### Store Contract
@@ -234,6 +237,9 @@ Refactored in this pass:
 - `packages/context/tests/prompt-serialization.test.ts`: 90 lines
 - `apps/web/src/stores/session-store.tsx`: 77 lines
 - `apps/web/src/lib/catalog.tsx`: 151 lines
+- `apps/web/src/lib/catalog/character-renderers.tsx`: 346 lines
+- `apps/web/src/lib/catalog/character-fields-renderer.tsx`: 356 lines
+- `apps/web/src/lib/__tests__/character-fields-renderer.test.tsx`: 148 lines
 - `packages/store/src/contract/store-contract.ts`: 48 lines
 - `apps/web/src/services/api.ts`: 47 lines
 - `packages/runtime/src/session-kernel.ts`: 14 lines
@@ -314,17 +320,18 @@ Refactored in this pass:
 
 Future passes should focus on large maintenance files that are production code, have clear internal feature boundaries, and can be validated through package-level tests.
 
-| Priority |                                                 File | Lines | Refactor boundary                                      | Validation focus                     |
-| -------- | ---------------------------------------------------: | ----: | ------------------------------------------------------ | ------------------------------------ |
-| 1        |   `apps/web/src/lib/catalog/character-renderers.tsx` |   722 | character catalog renderers and form-specific controls | Web catalog/component tests          |
-| 2        |       `packages/runtime/src/turn-agent-tool-loop.ts` |   692 | LLM response loop and tool-call state machine          | Runtime tool-loop tests              |
-| 3        |                `packages/test-runtime/src/runner.ts` |   660 | live adapter setup and case orchestration              | Test-runtime package tests           |
-| 4        |      `packages/tools/src/builtin/character-tools.ts` |   658 | character tool validation and store writes             | Tools package tests                  |
-| 5        | `apps/web/src/lib/catalog/interactive-renderers.tsx` |   650 | interactive json-render components                     | Web catalog/component tests          |
-| 6        |                      `apps/web/src/routes/debug.tsx` |   640 | trace/session debug panels                             | Web route/component tests            |
-| 7        |                `packages/ai-provider/src/gateway.ts` |   638 | operation retry/fallback loop                          | AI provider gateway tests            |
-| 8        |            `apps/server/src/routes/api/bootstrap.ts` |   607 | remaining route composition and DI wiring              | Server bootstrap and API route tests |
-| 9        |                           `apps/desktop/src/main.ts` |   585 | sidecar supervisor and retry lifecycle                 | Desktop build and smoke tests        |
+| Priority |                                                                     File | Lines | Refactor boundary                             | Validation focus                     |
+| -------- | -----------------------------------------------------------------------: | ----: | --------------------------------------------- | ------------------------------------ |
+| 1        |                           `packages/runtime/src/turn-agent-tool-loop.ts` |   692 | LLM response loop and tool-call state machine | Runtime tool-loop tests              |
+| 2        |                                    `packages/test-runtime/src/runner.ts` |   660 | live adapter setup and case orchestration     | Test-runtime package tests           |
+| 3        |                          `packages/tools/src/builtin/character-tools.ts` |   658 | character tool validation and store writes    | Tools package tests                  |
+| 4        |                     `apps/web/src/lib/catalog/interactive-renderers.tsx` |   650 | interactive json-render components            | Web catalog/component tests          |
+| 5        |                                          `apps/web/src/routes/debug.tsx` |   640 | trace/session debug panels                    | Web route/component tests            |
+| 6        |                                    `packages/ai-provider/src/gateway.ts` |   638 | operation retry/fallback loop                 | AI provider gateway tests            |
+| 7        | `apps/web/src/components/session/session-prep/plugin-selection-card.tsx` |   627 | plugin filtering and policy UI                | Web session-prep component tests     |
+| 8        |                      `apps/web/src/components/session/chat-messages.tsx` |   627 | message orchestration and timeline rendering  | Web chat/component tests             |
+| 9        |                               `packages/context/src/prompt-assembler.ts` |   613 | prompt segment assembly and budget pruning    | Context prompt tests                 |
+| 10       |                                `apps/server/src/routes/api/bootstrap.ts` |   607 | remaining route composition and DI wiring     | Server bootstrap and API route tests |
 
 Very large generated/catalog/type-heavy files such as `known-models.ts`, `store/src/types.ts`, and `registry-definitions.ts` should stay lower priority unless a concrete maintenance problem appears.
 
@@ -548,6 +555,14 @@ Very large generated/catalog/type-heavy files such as `known-models.ts`, `store/
   - `timeout 180s mise exec -- pnpm --filter @covel/desktop build`
   - `timeout 240s mise exec -- pnpm lint`
   - `git diff --check`
+- Thirty-seventh pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --write apps/web/src/lib/catalog.tsx apps/web/src/lib/catalog/character-renderers.tsx apps/web/src/lib/catalog/character-fields-renderer.tsx apps/web/src/lib/__tests__/character-fields-renderer.test.tsx`
+  - `timeout 120s mise exec -- pnpm --filter @covel/web exec vitest run src/lib/__tests__/character-fields-renderer.test.tsx`
+  - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
+  - `timeout 240s mise exec -- pnpm --filter @covel/web test`
+  - `timeout 120s mise exec -- pnpm exec prettier --check apps/web/src/lib/catalog.tsx apps/web/src/lib/catalog/character-renderers.tsx apps/web/src/lib/catalog/character-fields-renderer.tsx apps/web/src/lib/__tests__/character-fields-renderer.test.tsx docs/refactor/2026-05-09_13-05_long-file-restructure.md`
+  - `timeout 240s mise exec -- pnpm lint`
+  - `git diff --check`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -591,6 +606,7 @@ flowchart TD
   SessionStore["session-store.tsx"] --> SessionModules["session-store/*"]
   PromptAssembler["prompt-assembler.ts"] --> PromptSerialization["prompt-serialization.ts"]
   Catalog["catalog.tsx"] --> CatalogModules["catalog/*"]
+  Catalog --> CharacterFieldsRenderer["catalog/character-fields-renderer.tsx"]
   StoreContract["store-contract.ts"] --> StoreSuites["contract/suites/*"]
   StoreContract --> StoreFixtures["contract/test-fixtures.ts"]
   Api["api.ts"] --> ApiModules["services/api/*"]
