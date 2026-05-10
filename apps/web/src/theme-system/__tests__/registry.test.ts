@@ -7,6 +7,7 @@ import {
   primeThemeRegistry,
   saveCustomTheme,
   syncThemeRegistry,
+  THEME_SCHEME_KEY,
 } from "../registry.js";
 import { CUSTOM_THEMES_KEY } from "../storage.js";
 
@@ -44,6 +45,9 @@ describe("theme registry", () => {
       .querySelectorAll("style[data-theme-style]")
       .forEach((node) => node.remove());
     document.documentElement.removeAttribute("data-theme");
+    document.documentElement.removeAttribute("data-scheme");
+    document.documentElement.classList.remove("dark");
+    document.documentElement.style.colorScheme = "";
   });
 
   it("hydrates builtin themes and mounts their css", async () => {
@@ -58,6 +62,9 @@ describe("theme registry", () => {
     expect(
       document.head.querySelector('style[data-theme-style="paper"]'),
     ).toBeTruthy();
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(document.documentElement.getAttribute("data-scheme")).toBe("dark");
+    expect(document.documentElement.style.colorScheme).toBe("dark");
   });
 
   it("registers imported custom themes and removes them cleanly", async () => {
@@ -94,5 +101,17 @@ describe("theme registry", () => {
     expect(
       document.head.querySelector('style[data-theme-style="ember"]'),
     ).toBeNull();
+  });
+
+  it("locks the color scheme to the selected theme support", async () => {
+    const store = await createStore();
+    await store.set(THEME_SCHEME_KEY, "light");
+    await store.set("ui.appearance", "abyss");
+
+    syncThemeRegistry(store);
+
+    expect(store.get(THEME_SCHEME_KEY)).toBe("dark");
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(document.documentElement.getAttribute("data-theme")).toBe("abyss");
   });
 });

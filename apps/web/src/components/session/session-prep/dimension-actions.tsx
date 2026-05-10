@@ -15,7 +15,7 @@ export function DimensionActions({ worldId, enabled }: DimensionActionsProps) {
   if (!enabled) return null;
 
   return (
-    <div className="flex items-center gap-2 mb-4 px-1">
+    <div className="flex items-center gap-2 px-1">
       <a href={api.exportDimensionsUrl(worldId)} download>
         <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
           <Download className="w-3 h-3" />

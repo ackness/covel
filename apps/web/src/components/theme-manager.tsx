@@ -7,10 +7,11 @@ import {
   getRegisteredThemes,
   deleteCustomTheme,
   saveCustomTheme,
+  THEME_SCHEME_KEY,
 } from "@/theme-system/registry.js";
 import { CUSTOM_THEMES_KEY } from "@/theme-system/storage.js";
 import { parseImportedThemeFile } from "@/theme-system/validate.js";
-import type { StoredCustomTheme } from "@/theme-system/types.js";
+import type { StoredCustomTheme, ThemeScheme } from "@/theme-system/types.js";
 
 function isCustomTheme(
   themeId: string,
@@ -37,6 +38,7 @@ export function ThemeManagerWidget() {
   const { t, i18n } = useTranslation();
   const store = useSettingsStore();
   const [appearance, setAppearance] = useSetting<string>("ui.appearance");
+  const [scheme, setScheme] = useSetting<ThemeScheme>(THEME_SCHEME_KEY);
   const [customThemes] = useSetting<StoredCustomTheme[]>(CUSTOM_THEMES_KEY);
   const fileRef = useRef<HTMLInputElement>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -172,6 +174,10 @@ export function ThemeManagerWidget() {
   --accent-primary: #ff7a45;
   --rule-color: #1f2937;
   --noise-opacity: 0.04;
+}
+
+html[data-theme="my-theme"].dark {
+  --color-background: #090b10;
 }`}
           </pre>
         </div>
@@ -188,7 +194,7 @@ export function ThemeManagerWidget() {
               data-tone={selected ? undefined : "muted"}
             >
               <div className="min-w-0 space-y-0.5">
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2 min-w-0 flex-wrap">
                   <span className="ui-section-title truncate">
                     {labelToString(theme.label, i18n.language)}
                   </span>
@@ -204,10 +210,44 @@ export function ThemeManagerWidget() {
                     </span>
                   )}
                 </div>
-                <p className="ui-meta truncate">{theme.id}</p>
+                <p className="ui-meta truncate">
+                  {theme.id} ·{" "}
+                  {theme.schemes
+                    .map((themeScheme) =>
+                      t(`settings.themeScheme.${themeScheme}`),
+                    )
+                    .join(" / ")}
+                </p>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                {selected && (
+                  <div
+                    className="flex items-center overflow-hidden rounded-[var(--radius-control)] border border-[var(--rule-color)]"
+                    aria-label={t("settings.themeSchemeLabel")}
+                  >
+                    {(["light", "dark"] as const).map((nextScheme) => {
+                      const supported = theme.schemes.includes(nextScheme);
+                      return (
+                        <Button
+                          key={nextScheme}
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy || !supported}
+                          className={
+                            "h-7 rounded-none border-0 px-2 text-[11px] " +
+                            (scheme === nextScheme
+                              ? "bg-foreground text-[var(--surface-page)]"
+                              : "text-muted-foreground")
+                          }
+                          onClick={() => void setScheme(nextScheme)}
+                        >
+                          {t(`settings.themeScheme.${nextScheme}`)}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                )}
                 {!selected && (
                   <Button
                     size="sm"

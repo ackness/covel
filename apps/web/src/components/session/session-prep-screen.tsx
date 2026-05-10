@@ -1,4 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  type CSSProperties,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Play, ArrowLeft } from "lucide-react";
 import * as api from "@/services/api.js";
@@ -47,6 +53,7 @@ import { DimensionActions } from "./session-prep/dimension-actions.js";
 import { ModelsCard } from "./session-prep/models-card.js";
 import { PluginSelectionCard } from "./session-prep/plugin-selection-card.js";
 import type { SessionPrepScreenProps } from "./session-prep/types.js";
+import { worldVisual } from "@/lib/world-visuals.js";
 
 export { defaultSelectedPluginIdsForWorld, isLockedCorePackage };
 
@@ -322,6 +329,7 @@ export function SessionPrepScreen({
     () => activeSessionRecords(existingSessions),
     [existingSessions],
   );
+  const visual = useMemo(() => worldVisual(world), [world]);
   const selectedFlowSteps = useMemo(() => {
     if (!flowData) return [];
     return flowData.steps.filter((step) =>
@@ -350,105 +358,151 @@ export function SessionPrepScreen({
         initialKey={settingsInitialKey}
       />
       <ScrollArea className="w-full h-full">
-        <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
-          <div className="flex items-center gap-3 mb-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 shrink-0"
-              onClick={onBack}
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-            <h1 className="font-display font-bold text-xl md:text-2xl uppercase tracking-widest flex-1">
-              {t("session.preparation", "Session Setup")}
-            </h1>
-            <Button
-              size="sm"
-              className="uppercase tracking-widest font-bold px-5 shrink-0"
-              onClick={handleStart}
-            >
-              <Play className="w-4 h-4 mr-1.5" />
-              {t("session.startGame", "Start Game")}
-            </Button>
-          </div>
-          <div className="mb-8 ml-11">
-            <SessionBreadcrumb
-              step="prep"
-              worldName={text(world.name)}
-              onGoWorldSelect={onBack}
+        <div className="mx-auto max-w-6xl px-4 md:px-8 py-5 md:py-8">
+          <header
+            className="relative mb-6 overflow-hidden rounded-[var(--radius-card)] border border-border bg-card"
+            style={{ "--world-accent": visual.accent } as CSSProperties}
+          >
+            <img
+              src={visual.image}
+              alt=""
+              aria-hidden="true"
+              width={1536}
+              height={1024}
+              loading="eager"
+              fetchPriority="high"
+              className="absolute inset-0 h-full w-full object-cover"
+              draggable={false}
             />
+            <div
+              aria-hidden="true"
+              className="absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(90deg, rgba(0,0,0,.82) 0%, rgba(0,0,0,.58) 48%, rgba(0,0,0,.22) 100%)",
+              }}
+            />
+            <div className="relative z-10 flex min-h-[236px] md:min-h-[252px] flex-col justify-between p-5 md:p-7 text-white">
+              <div className="flex items-center justify-between gap-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 border border-white/12 bg-black/18 px-3 text-white/78 hover:bg-white/10 hover:text-white"
+                  onClick={onBack}
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  {t("session.breadcrumbWorldSelect", "Select World")}
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-9 shrink-0 px-5 font-bold uppercase tracking-widest"
+                  style={{
+                    background: "var(--world-accent)",
+                    color: "black",
+                  }}
+                  onClick={handleStart}
+                >
+                  <Play className="w-4 h-4 mr-1.5" />
+                  {t("session.startGame", "Start Game")}
+                </Button>
+              </div>
+
+              <div className="max-w-2xl space-y-4">
+                <SessionBreadcrumb
+                  step="prep"
+                  worldName={text(world.name)}
+                  onGoWorldSelect={onBack}
+                />
+                <div>
+                  <p className="ui-eyebrow mb-3 text-white/58">
+                    {t("session.preparation", "Session Setup")}
+                  </p>
+                  <h1 className="ui-title text-4xl md:text-6xl leading-[.95] text-white">
+                    {text(world.name)}
+                  </h1>
+                  <p className="mt-4 max-w-xl text-sm md:text-base leading-relaxed text-white/72">
+                    {text(world.description)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)] lg:items-start">
+            <section className="min-w-0 space-y-4">
+              <WorldInfoCard
+                world={world}
+                expanded={worldInfoExpanded}
+                onToggle={() => setWorldInfoExpanded(!worldInfoExpanded)}
+              />
+
+              <SessionHistoryCard
+                activeSessions={activeSessions}
+                expanded={sessionsExpanded}
+                onToggle={() => setSessionsExpanded(!sessionsExpanded)}
+                onResume={onResume}
+                onRequestDelete={setDeleteTarget}
+              />
+
+              <WorldLoreCard
+                expanded={loreExpanded}
+                onToggle={() => setLoreExpanded(!loreExpanded)}
+                loreValue={loreValue}
+                originalLore={originalLore}
+                isModified={isLoreModified}
+                onLoreChange={handleLoreChange}
+                onResetLore={resetLore}
+              />
+
+              <DimensionActions
+                worldId={world.id}
+                enabled={Boolean(world.dimensions)}
+              />
+            </section>
+
+            <section className="min-w-0 space-y-4 lg:sticky lg:top-4">
+              <ModelsCard
+                resolvedSlots={resolvedSlots}
+                expanded={modelsExpanded}
+                onToggle={() => setModelsExpanded(!modelsExpanded)}
+                onOpenSettings={() => onSettingsOpenChange(true)}
+              />
+
+              <PluginSelectionCard
+                world={world}
+                packages={packages}
+                selectedPluginIds={selectedPluginIds}
+                selectedPluginIdSet={selectedPluginIdSet}
+                selectedPackages={selectedPackages}
+                expanded={pluginSectionExpanded}
+                onToggleExpanded={() =>
+                  setPluginSectionExpanded(!pluginSectionExpanded)
+                }
+                pluginPacks={pluginPacks}
+                activePluginPack={activePluginPack}
+                activePluginTags={activePluginTags}
+                availablePluginTags={availablePluginTags}
+                pluginSearch={pluginSearch}
+                onPluginSearchChange={setPluginSearch}
+                onTogglePluginTag={togglePluginTag}
+                onApplyPack={applyPack}
+                pluginGroups={pluginGroups}
+                corePluginIds={corePluginIds}
+                lockedPluginIds={lockedPluginIds}
+                bindingState={bindingState}
+                resolvedSlots={resolvedSlots}
+                resolveDeclaredSlot={resolveSelectedDeclaredSlot}
+                isMissingDeclaredSlot={isSelectedDeclaredSlotMissing}
+                onTogglePlugin={togglePlugin}
+                worldDataPreflight={worldDataPreflight}
+                worldDataPreflightStatus={worldDataPreflightStatus}
+                worldDataPreflightError={worldDataPreflightError}
+                onRetryWorldDataPreflight={runWorldDataPreflight}
+                flowData={flowData}
+                selectedFlowSteps={selectedFlowSteps}
+              />
+            </section>
           </div>
-
-          <WorldInfoCard
-            world={world}
-            expanded={worldInfoExpanded}
-            onToggle={() => setWorldInfoExpanded(!worldInfoExpanded)}
-          />
-
-          <SessionHistoryCard
-            activeSessions={activeSessions}
-            expanded={sessionsExpanded}
-            onToggle={() => setSessionsExpanded(!sessionsExpanded)}
-            onResume={onResume}
-            onRequestDelete={setDeleteTarget}
-          />
-
-          <WorldLoreCard
-            expanded={loreExpanded}
-            onToggle={() => setLoreExpanded(!loreExpanded)}
-            loreValue={loreValue}
-            originalLore={originalLore}
-            isModified={isLoreModified}
-            onLoreChange={handleLoreChange}
-            onResetLore={resetLore}
-          />
-
-          <DimensionActions
-            worldId={world.id}
-            enabled={Boolean(world.dimensions)}
-          />
-
-          <ModelsCard
-            resolvedSlots={resolvedSlots}
-            expanded={modelsExpanded}
-            onToggle={() => setModelsExpanded(!modelsExpanded)}
-            onOpenSettings={() => onSettingsOpenChange(true)}
-          />
-
-          <PluginSelectionCard
-            world={world}
-            packages={packages}
-            selectedPluginIds={selectedPluginIds}
-            selectedPluginIdSet={selectedPluginIdSet}
-            selectedPackages={selectedPackages}
-            expanded={pluginSectionExpanded}
-            onToggleExpanded={() =>
-              setPluginSectionExpanded(!pluginSectionExpanded)
-            }
-            pluginPacks={pluginPacks}
-            activePluginPack={activePluginPack}
-            activePluginTags={activePluginTags}
-            availablePluginTags={availablePluginTags}
-            pluginSearch={pluginSearch}
-            onPluginSearchChange={setPluginSearch}
-            onTogglePluginTag={togglePluginTag}
-            onApplyPack={applyPack}
-            pluginGroups={pluginGroups}
-            corePluginIds={corePluginIds}
-            lockedPluginIds={lockedPluginIds}
-            bindingState={bindingState}
-            resolvedSlots={resolvedSlots}
-            resolveDeclaredSlot={resolveSelectedDeclaredSlot}
-            isMissingDeclaredSlot={isSelectedDeclaredSlotMissing}
-            onTogglePlugin={togglePlugin}
-            worldDataPreflight={worldDataPreflight}
-            worldDataPreflightStatus={worldDataPreflightStatus}
-            worldDataPreflightError={worldDataPreflightError}
-            onRetryWorldDataPreflight={runWorldDataPreflight}
-            flowData={flowData}
-            selectedFlowSteps={selectedFlowSteps}
-          />
         </div>
       </ScrollArea>
 

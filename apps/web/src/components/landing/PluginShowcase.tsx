@@ -19,6 +19,7 @@ interface Tile {
   bandKey: string;
   bandFallback: string;
   span: string;
+  icon: string;
 }
 
 const TILES: readonly Tile[] = [
@@ -28,6 +29,7 @@ const TILES: readonly Tile[] = [
     bandKey: "home.plugins.narratorBand",
     bandFallback: "Narrator · 500",
     span: "md:col-span-3 md:row-span-2",
+    icon: "/visuals/ui/world-gate.svg",
   },
   {
     key: "world-init",
@@ -35,6 +37,7 @@ const TILES: readonly Tile[] = [
     bandKey: "home.plugins.worldInitBand",
     bandFallback: "Pre-Game · 0–99",
     span: "md:col-span-2 md:row-span-1",
+    icon: "/visuals/ui/world-gate.svg",
   },
   {
     key: "image",
@@ -42,6 +45,7 @@ const TILES: readonly Tile[] = [
     bandKey: "home.plugins.imageBand",
     bandFallback: "After-Turn · 700",
     span: "md:col-span-2 md:row-span-1",
+    icon: "/visuals/ui/image-spark.svg",
   },
   {
     key: "memory",
@@ -49,6 +53,7 @@ const TILES: readonly Tile[] = [
     bandKey: "home.plugins.memoryBand",
     bandFallback: "Audit · 1000",
     span: "md:col-span-2 md:row-span-1",
+    icon: "/visuals/ui/plugin-node.svg",
   },
   {
     key: "rules",
@@ -56,6 +61,7 @@ const TILES: readonly Tile[] = [
     bandKey: "home.plugins.rulesBand",
     bandFallback: "Pre-Turn · 200",
     span: "md:col-span-2 md:row-span-1",
+    icon: "/visuals/ui/plugin-node.svg",
   },
   {
     key: "characters",
@@ -63,6 +69,7 @@ const TILES: readonly Tile[] = [
     bandKey: "home.plugins.charactersBand",
     bandFallback: "After-Turn · 600",
     span: "md:col-span-3 md:row-span-1",
+    icon: "/visuals/ui/covel-mark.svg",
   },
 ];
 
@@ -242,13 +249,20 @@ function PluginCard({
   return (
     <article
       ref={ref}
-      className={`group bg-card p-6 md:p-7 flex flex-col justify-between transition-all duration-500 hover:bg-muted/30 ${tile.span}`}
+      className={`group relative overflow-hidden bg-card p-6 md:p-7 flex flex-col justify-between transition-all duration-500 hover:bg-muted/30 ${tile.span}`}
       style={{
         opacity: inView ? 1 : 0,
         transform: inView ? "translateY(0)" : "translateY(16px)",
         transitionDelay: `${delay}ms`,
       }}
     >
+      <img
+        src={tile.icon}
+        alt=""
+        aria-hidden="true"
+        className="absolute right-4 top-4 h-20 w-20 opacity-[0.08] transition-all duration-300 group-hover:opacity-[0.16] group-hover:scale-105"
+        draggable={false}
+      />
       <header className="flex items-start justify-between mb-4">
         <span className="ui-eyebrow text-muted-foreground">
           {t(tile.bandKey, tile.bandFallback)}

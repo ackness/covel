@@ -39,6 +39,7 @@ import {
 import { MessageComposer } from "./game-view/message-composer.js";
 import { PendingDraftsBar } from "./game-view/pending-drafts-bar.js";
 import { useGameViewComposer } from "./game-view/use-game-view-composer.js";
+import { worldVisual } from "@/lib/world-visuals.js";
 
 // ── Extracted Panel Components (see left-panel.tsx, right-panel.tsx) ──
 
@@ -272,6 +273,7 @@ export function GameView({
   }, [t]);
 
   const direction = isMobile ? "vertical" : "horizontal";
+  const visual = worldVisual(world);
 
   // ── Left Panel ─────────────────────────────────────────────────
 
@@ -396,9 +398,34 @@ export function GameView({
           id="center-panel"
           defaultSize={isMobile ? "100%" : "55%"}
           minSize={isMobile ? "20%" : "30%"}
-          className="flex flex-col min-w-0 min-h-0"
-          style={{ background: "var(--surface-page)" }}
+          className="relative flex flex-col min-w-0 min-h-0 overflow-hidden"
+          style={
+            {
+              "--world-accent": visual.accent,
+              background: "var(--surface-page)",
+            } as React.CSSProperties
+          }
         >
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <img
+              src={visual.image}
+              alt=""
+              aria-hidden="true"
+              width={1536}
+              height={1024}
+              loading="lazy"
+              className="absolute inset-x-0 top-0 h-56 w-full object-cover opacity-[0.08] saturate-75"
+              draggable={false}
+            />
+            <div
+              aria-hidden="true"
+              className="absolute inset-x-0 top-0 h-72"
+              style={{
+                background:
+                  "linear-gradient(180deg, color-mix(in oklab, var(--world-accent) 12%, transparent) 0%, var(--surface-page) 92%)",
+              }}
+            />
+          </div>
           {/* Header */}
           <GameViewHeader
             t={t}

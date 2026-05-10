@@ -13,13 +13,35 @@ export function Hero() {
       aria-labelledby="hero-heading"
       className="relative w-full h-full min-h-[560px] sm:min-h-[640px] flex items-stretch overflow-hidden bg-background"
     >
-      {/* Ambient video — desktop only. On mobile the gradient overpowers the
-          tiny remaining viewport and the video just adds noise + bandwidth. */}
-      <div
-        className="absolute inset-0 pointer-events-none hidden md:block"
-        aria-hidden="true"
-      >
-        <div className="absolute right-0 top-0 h-full w-full md:w-[62%] overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+        <img
+          src="/visuals/backgrounds/home-hero.webp"
+          alt=""
+          width={1536}
+          height={1024}
+          loading="eager"
+          fetchPriority="high"
+          className="absolute inset-0 h-full w-full object-cover opacity-45 md:opacity-60"
+          draggable={false}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(90deg, var(--surface-app) 0%, color-mix(in oklab, var(--surface-app) 84%, transparent) 36%, color-mix(in oklab, var(--surface-app) 48%, transparent) 72%, color-mix(in oklab, var(--surface-app) 72%, transparent) 100%)",
+          }}
+        />
+        <div className="absolute right-0 top-0 hidden h-full w-full md:block md:w-[60%] overflow-hidden">
+          <img
+            src="/visuals/worlds/mistport.webp"
+            alt=""
+            width={1536}
+            height={1024}
+            loading="lazy"
+            className="h-full w-full object-cover opacity-35 mix-blend-screen"
+            draggable={false}
+            style={{ filter: "saturate(0.8) contrast(1.1)" }}
+          />
           <video
             className="h-full w-full object-cover opacity-60"
             src="/media/demo.mp4"
@@ -38,7 +60,7 @@ export function Hero() {
             className="absolute inset-0"
             style={{
               background:
-                "linear-gradient(90deg, var(--surface-app) 0%, color-mix(in oklab, var(--surface-app) 85%, transparent) 30%, color-mix(in oklab, var(--surface-app) 35%, transparent) 65%, color-mix(in oklab, var(--surface-app) 60%, transparent) 100%)",
+                "linear-gradient(90deg, var(--surface-app) 0%, color-mix(in oklab, var(--surface-app) 82%, transparent) 28%, color-mix(in oklab, var(--surface-app) 36%, transparent) 68%, color-mix(in oklab, var(--surface-app) 62%, transparent) 100%)",
             }}
           />
           <div

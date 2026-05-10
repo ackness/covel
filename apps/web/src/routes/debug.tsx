@@ -75,7 +75,7 @@ function DebugPage() {
   return (
     <div className="flex h-full w-full flex-col border-t border-[var(--rule-color)] overflow-hidden">
       <div
-        className="flex-shrink-0 h-11 px-4 border-b border-[var(--rule-color)] flex items-center justify-between gap-4"
+        className="flex-shrink-0 min-h-11 px-4 py-2 border-b border-[var(--rule-color)] flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
         style={{ background: "var(--surface-page)" }}
       >
         <div className="flex items-center gap-3">
@@ -95,7 +95,15 @@ function DebugPage() {
             </Badge>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="hidden md:flex items-center gap-1.5 border-r border-[var(--rule-color)] pr-3 text-[10px] text-muted-foreground">
+            <span className="ui-meta text-[9px]">SESSIONS</span>
+            <span className="font-mono text-foreground">{sessions.length}</span>
+            <span className="ui-meta text-[9px]">VIEW</span>
+            <span className="font-mono text-foreground uppercase">
+              {debugView}
+            </span>
+          </div>
           {selectedSessionId && (
             <Button
               variant="ghost"
@@ -129,6 +137,35 @@ function DebugPage() {
           </Button>
         </div>
       </div>
+
+      {selectedSessionId && (
+        <div className="flex-shrink-0 border-b border-[var(--rule-color)] bg-[color-mix(in_oklab,var(--surface-page)_82%,var(--surface-inset))] px-4 py-2">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[10px] text-muted-foreground">
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              <span className="ui-meta text-[9px]">SESSION</span>
+              <span className="truncate font-mono text-foreground">
+                {selectedSessionId}
+              </span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Activity className="h-3 w-3 text-primary" />
+              <span>{t("debugger.turn", { count: storyTurnCount })}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Database className="h-3 w-3 text-muted-foreground" />
+              <span>
+                {totalEvents} {t("session.events")}
+              </span>
+            </span>
+            {filterCategory && (
+              <span className="inline-flex items-center gap-1.5">
+                <Filter className="h-3 w-3 text-muted-foreground" />
+                <span>{t(`debugger.category.${filterCategory}`)}</span>
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <SessionSidebar

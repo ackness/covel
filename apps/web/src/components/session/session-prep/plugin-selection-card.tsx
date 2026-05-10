@@ -550,7 +550,7 @@ export function PluginSelectionCard({
   );
 
   return (
-    <Card className="mb-6">
+    <Card>
       <CollapsibleCardHeader
         expanded={expanded}
         onToggle={onToggleExpanded}
@@ -563,7 +563,7 @@ export function PluginSelectionCard({
         </Badge>
       </CollapsibleCardHeader>
       {expanded && (
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 px-4 pb-4">
           <div className="space-y-1.5">
             <PluginPackSelector
               pluginPacks={pluginPacks}
