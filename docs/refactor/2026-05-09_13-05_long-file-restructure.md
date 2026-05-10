@@ -38,13 +38,14 @@ Refactored in this pass:
 - `apps/web/src/settings/panes/LlmSlotsPane.tsx`
 - `packages/shared/src/env/registry.ts`
 - `apps/server/src/routes/api/bootstrap/memory.ts`
+- `apps/server/src/routes/api/bootstrap/local-tools.ts`
 
 ## Assumptions
 
 - Public entrypoints remain stable: `@/stores/session-store.js`, `@/lib/catalog.js`, `runStoreContractTests`, `executeTurn`, and `resumeSuspendedRuntime`.
 - File moves are behavior-preserving unless noted below.
 - Framework code continues to discover plugin-owned UI/data by manifest and UI specs instead of hardcoding plugin IDs.
-- `bootstrapApi`, `runRuntimeDebug`, `runRuntimeCases`, `buildContextV2`, and `runAgentToolLoop` keep their public caller behavior.
+- `bootstrapApi`, `runRuntimeDebug`, `runRuntimeCases`, `buildContextV2`, `runAgentToolLoop`, and plugin local-tool trust/activation behavior keep their public caller behavior.
 
 ## Changes
 
@@ -166,8 +167,10 @@ Refactored in this pass:
 - Split plugin hook-source collection and hook pipeline registration into `apps/server/src/routes/api/bootstrap/plugin-hooks.ts`.
 - Split compactor summary-focus collection, estimator, fast-slot adapter, and `CompactorRunner` wiring into `apps/server/src/routes/api/bootstrap/compactor.ts`.
 - Split memory V1 flag handling, slot resolution, memory-panel capability discovery, memory-system construction, and builtin memory tool creation into `apps/server/src/routes/api/bootstrap/memory.ts`.
+- Split plugin-local tool loading, tools.local path containment, trusted eager loading, community lazy activation, and per-plugin tool access map construction into `apps/server/src/routes/api/bootstrap/local-tools.ts`.
 - Preserved the public `wrapStoreWithPluginDataEvents` export from `bootstrap.ts` so existing route tests and callers keep their import path.
 - Added focused bootstrap memory tests for disabled memory, preferred memory-slot LLM calls, builtin memory-tool creation, and memory-panel plugin mirroring.
+- Added focused local-tool tests for access-map derivation, factory loading, root-escape rejection, missing-file warnings, trusted eager load, and community lazy activation.
 
 ### Desktop Main Process
 
@@ -286,13 +289,15 @@ Refactored in this pass:
 - `apps/server/src/routes/api/plugin-rpc/jobs.ts`: 111 lines
 - `apps/server/src/routes/api/plugin-rpc/runtime-response.ts`: 74 lines
 - `apps/server/src/routes/api/plugin-rpc/runtime-turn.ts`: 164 lines
-- `apps/server/src/routes/api/bootstrap.ts`: 748 lines
+- `apps/server/src/routes/api/bootstrap.ts`: 607 lines
 - `apps/server/src/routes/api/bootstrap/compactor.ts`: 68 lines
+- `apps/server/src/routes/api/bootstrap/local-tools.ts`: 191 lines
 - `apps/server/src/routes/api/bootstrap/memory.ts`: 120 lines
 - `apps/server/src/routes/api/bootstrap/plugin-data-store-events.ts`: 131 lines
 - `apps/server/src/routes/api/bootstrap/plugin-discovery.ts`: 104 lines
 - `apps/server/src/routes/api/bootstrap/plugin-rpc-wiring.ts`: 106 lines
 - `apps/server/src/routes/api/bootstrap/plugin-hooks.ts`: 45 lines
+- `apps/server/tests/api/bootstrap-local-tools.test.ts`: 253 lines
 - `apps/server/tests/api/bootstrap-memory.test.ts`: 141 lines
 - `apps/desktop/src/main.ts`: 762 lines
 - `apps/desktop/src/logging.ts`: 147 lines
@@ -306,16 +311,17 @@ Refactored in this pass:
 
 Future passes should focus on large maintenance files that are production code, have clear internal feature boundaries, and can be validated through package-level tests.
 
-| Priority |                                                 File | Lines | Refactor boundary                                       | Validation focus                     |
-| -------- | ---------------------------------------------------: | ----: | ------------------------------------------------------- | ------------------------------------ |
-| 1        |            `apps/server/src/routes/api/bootstrap.ts` |   748 | remaining tool bootstrap and route composition wiring   | Server bootstrap and API route tests |
-| 2        |                           `apps/desktop/src/main.ts` |   762 | IPC handlers and sidecar supervisor state               | Desktop build and IPC smoke tests    |
-| 3        |   `apps/web/src/lib/catalog/character-renderers.tsx` |   722 | character catalog renderers and form-specific controls  | Web catalog/component tests          |
-| 4        |       `packages/runtime/src/turn-agent-tool-loop.ts` |   692 | LLM response loop and tool-call state machine           | Runtime tool-loop tests              |
-| 5        |                `packages/test-runtime/src/runner.ts` |   660 | live adapter setup and case orchestration               | Test-runtime package tests           |
-| 6        |      `packages/tools/src/builtin/character-tools.ts` |   658 | character tool validation and store writes              | Tools package tests                  |
-| 7        | `apps/web/src/lib/catalog/interactive-renderers.tsx` |   650 | interactive json-render components                      | Web catalog/component tests          |
-| 8        |           `packages/context/src/prompt-assembler.ts` |   613 | segment assembly, history insertion, and budget pruning | Context package tests                |
+| Priority |                                                 File | Lines | Refactor boundary                                      | Validation focus                     |
+| -------- | ---------------------------------------------------: | ----: | ------------------------------------------------------ | ------------------------------------ |
+| 1        |                           `apps/desktop/src/main.ts` |   762 | IPC handlers and sidecar supervisor state              | Desktop build and IPC smoke tests    |
+| 2        |   `apps/web/src/lib/catalog/character-renderers.tsx` |   722 | character catalog renderers and form-specific controls | Web catalog/component tests          |
+| 3        |       `packages/runtime/src/turn-agent-tool-loop.ts` |   692 | LLM response loop and tool-call state machine          | Runtime tool-loop tests              |
+| 4        |                `packages/test-runtime/src/runner.ts` |   660 | live adapter setup and case orchestration              | Test-runtime package tests           |
+| 5        |      `packages/tools/src/builtin/character-tools.ts` |   658 | character tool validation and store writes             | Tools package tests                  |
+| 6        | `apps/web/src/lib/catalog/interactive-renderers.tsx` |   650 | interactive json-render components                     | Web catalog/component tests          |
+| 7        |                      `apps/web/src/routes/debug.tsx` |   640 | trace/session debug panels                             | Web route/component tests            |
+| 8        |                `packages/ai-provider/src/gateway.ts` |   638 | operation retry/fallback loop                          | AI provider gateway tests            |
+| 9        |            `apps/server/src/routes/api/bootstrap.ts` |   607 | remaining route composition and DI wiring              | Server bootstrap and API route tests |
 
 Very large generated/catalog/type-heavy files such as `known-models.ts`, `store/src/types.ts`, and `registry-definitions.ts` should stay lower priority unless a concrete maintenance problem appears.
 
@@ -527,6 +533,13 @@ Very large generated/catalog/type-heavy files such as `known-models.ts`, `store/
   - `timeout 180s mise exec -- pnpm --filter @covel/context test`
   - `timeout 240s mise exec -- pnpm lint`
   - `git diff --check`
+- Thirty-fifth pass validation:
+  - `timeout 120s mise exec -- pnpm exec prettier --check apps/server/src/routes/api/bootstrap.ts apps/server/src/routes/api/bootstrap/local-tools.ts apps/server/tests/api/bootstrap-local-tools.test.ts docs/refactor/2026-05-09_13-05_long-file-restructure.md`
+  - `timeout 180s mise exec -- pnpm --filter @covel/server exec vitest run tests/api/bootstrap-local-tools.test.ts`
+  - `timeout 180s mise exec -- pnpm --filter @covel/server exec vitest run tests/api/bootstrap-local-tools.test.ts tests/api/bootstrap-memory.test.ts tests/api/approvals.test.ts tests/api/plugin-rpc.test.ts`
+  - `timeout 120s mise exec -- pnpm --filter @covel/server lint`
+  - `timeout 240s mise exec -- pnpm lint`
+  - `git diff --check`
 - Earlier in this pass, after web/store extraction:
   - `timeout 120s mise exec -- pnpm --filter @covel/web lint`
   - `timeout 120s mise exec -- pnpm --dir apps/web exec vitest run src/lib/__tests__/filter-container.test.tsx src/lib/__tests__/entry-card.test.tsx src/lib/__tests__/branch-reply-candidates.test.tsx src/stores/__tests__/session-store-game-state.test.ts src/stores/__tests__/session-store-assets.test.ts src/stores/__tests__/session-store-suspensions.test.ts src/stores/__tests__/plugin-data-store.test.ts`
@@ -539,7 +552,7 @@ Very large generated/catalog/type-heavy files such as `known-models.ts`, `store/
 - `apps/web/src/stores/session-store/actions.ts` and `sse-handler.ts` now carry most of the session-store side effects; future reductions should target those leaf modules only after broader UI flow tests are in place.
 - `plugin-selection-card.tsx` is still sizeable because filtering, grouping, pack selection, and required/excluded policy rendering share local UI state; it is the next extraction candidate inside session prep after component behavior tests are expanded.
 - `plugin-rpc.ts` still owns runtime execution and deferred follower scheduling; future passes should extract these only with the full runtime/background tests in scope.
-- `bootstrap.ts` still owns broad tool registration and route composition. Future passes should split one subsystem at a time and preserve bootstrapApi as the composition root.
+- `bootstrap.ts` still owns built-in tool registration, schema-aware character tool overrides, DI, and route composition. The plugin-local tool trust/activation path now lives in `local-tools.ts`; future passes should split one subsystem at a time and preserve bootstrapApi as the composition root.
 - Store backend entrypoints are now small; future store passes should target focused helper families such as runtime/session records or media metadata only when tests can cover each backend's execution differences.
 - `gateway.ts` still owns operation-level provider routing and retry loops. Future AI provider passes should keep retry/fallback loop changes covered by gateway, fixes, and stream tests.
 - `runner.ts` still owns live adapter setup and case orchestration. `runtime-loading.ts` owns plugin discovery/runtime loading/local tool imports, while `execution.ts` owns test-runtime deferred follower execution; its `recursiveCall` behavior remains intentionally unavailable and covered by focused tests.
@@ -613,6 +626,7 @@ flowchart TD
   BootstrapApi --> BootstrapRpcWiring["bootstrap/plugin-rpc-wiring.ts"]
   BootstrapApi --> BootstrapHooks["bootstrap/plugin-hooks.ts"]
   BootstrapApi --> BootstrapMemory["bootstrap/memory.ts"]
+  BootstrapApi --> BootstrapLocalTools["bootstrap/local-tools.ts"]
   DesktopMain["desktop/main.ts"] --> DesktopLeaf["desktop/{startup-errors,network,splash-screen,env-files}.ts"]
   DesktopMain --> DesktopLogging["desktop/logging.ts"]
   DesktopMain --> DesktopWindows["desktop/windows.ts"]
