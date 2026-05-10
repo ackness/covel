@@ -1,5 +1,7 @@
 # P2 Worktree Plan
 
+> 历史计划：Tauri shell 已从当前代码库移除；表中的 Tauri worktree 仅记录当时的并行拆分背景。
+
 **目标**：并行完成 P2 扩展后端与高层抽象，主工作区负责集成、合并、测试与文档收口。
 
 **基准**：所有 P2 worktree 从 `main` 的当前 HEAD 创建。

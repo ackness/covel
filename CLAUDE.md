@@ -265,10 +265,12 @@ Core objects (never collapse into a single JSON blob): **Run, Branch, Snapshot, 
 
 Store backends (`@covel/store`): `MemoryStore` (dev/test), `SqliteStore` (desktop/default), `IdbStore` (browser IDB), `PgStore` (production PG via Drizzle). Selection at server startup uses `STORE_BACKEND=memory|sqlite|pg` with default `sqlite`; `STORE_BACKEND=pg` requires `DATABASE_URL`. Browser `local` mode uses IDB through `createStore({ backend: "idb" })`; browser `remote` mode uses the server API and the server's configured backend. `MEDIA_BACKEND=mirror` follows the server data backend by default. `VECTOR_BACKEND=embedded` uses the active DataStore vector capability. World seeds load from `COVEL_WORLDS_DIR` (default `worlds/`). Desktop shells additionally pass `COVEL_USER_WORLDS_DIR=<data_root>/worlds` so user-authored worlds move together with SQLite and logs when `data_root` is redirected.
 
-Each SQL backend splits into two files by convention:
+Each SQL backend keeps a thin public factory plus focused method modules:
 
-- `*-store-mappers.ts` — DDL + Row→Record conversion.
-- `*-store.ts` — Factory + DataStore method implementations.
+- `*-store.ts` — factory and `DataStore` composition.
+- `schema.ts` plus `*-schema-ddl.ts` — table shapes and backend DDL.
+- `*-store-mappers.ts` / `*-store-values.ts` — row conversion and JSON helpers.
+- `*-data-crud.ts`, `*-runtime-records.ts`, `*-session-*`, `*-snapshot*`, `*-state*`, `*-world*` — focused persistence surfaces.
 
 23 tables via Drizzle; full list and transactions contract in [docs/reference/transactions.md](./docs/reference/transactions.md).
 
@@ -282,7 +284,7 @@ Each SQL backend splits into two files by convention:
 ## Testing Conventions
 
 - **vitest** is the single runner (`vitest run` for CI, `vitest` for watch). No Node `node:test`.
-- **Contract tests** (`store-contract.ts`): every `DataStore` backend must pass the shared suite. Required for any new backend.
+- **Contract tests** (`store-contract.ts` + `contract/suites/`): every `DataStore` backend must pass the shared suite. Required for any new backend.
 - **Plugin tests**: use `@covel/plugin-test-utils` — `MockLLM`, `createTestHarness`, `makeTurnInput`, `makeTriggerContext`, `makeRuntimeResult`.
 - **IDB tests**: `fake-indexeddb` polyfill. **PG tests**: real local DB (`pnpm db:up`).
 - **E2E harness**: `scripts/e2e-plugin-verify.ts` is the API-driven, plugin-level, 7-phase harness (artefacts under `debugs/e2e-logs/`) — see [docs/guide/e2e-plugin-verify.md](./docs/guide/e2e-plugin-verify.md).

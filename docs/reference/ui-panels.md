@@ -214,7 +214,7 @@ type I18nText = string | Record<LocaleTag, string>;
 { "label": { "zh": "世界" } }            // 缺少英文 locale
 ```
 
-**框架端解析器**：`apps/web/src/lib/catalog.tsx` 导出 `resolveI18n(value, locale?)` 与 `useI18nResolver()`。所有内置 ComponentRenderer 已调用 hook 订阅 locale 变更；切语言时 json-render 子树会自动重渲染。
+**框架端解析器**：`apps/web/src/lib/catalog.tsx` 重新导出 `resolveI18n(value, locale?)` 与 `useI18nResolver()`；实现位于 `apps/web/src/lib/catalog/helpers.tsx`。所有内置 ComponentRenderer 已调用 hook 订阅 locale 变更；切语言时 json-render 子树会自动重渲染。
 
 **验证**：`pnpm check:i18n` 会同时跑 `check-no-chinese-literal`（应用代码）与 `check-plugin-i18n`（插件 JSON）两套扫描。
 
@@ -275,15 +275,15 @@ type I18nText = string | Record<LocaleTag, string>;
 
 当前消息区有两条并行链路：
 
-1. **Turn message 链路**：`chat-messages.tsx` 读取 `turn_messages` / SSE 事件，经 `messageToSpec()` 转成 json-render spec，由 `MessageBlockRenderer` 渲染
+1. **Turn message 链路**：`chat-messages.tsx` 读取 `turn_messages` / SSE 事件，经 `messageToSpec()` 转成 json-render spec，由 `MessageBlockRenderer` 渲染；具体 block/primitives 拆在 `apps/web/src/components/session/chat-messages/`
 2. **Plugin message 链路**：同一文件在 `block.type === "plugin_message"` 分支里，通过 `/api/ui-specs?sessionId=` 发现 `ui.message`，再用 `PluginPanel` + `plugin_data` 渲染插件消息面
 
 两条链路都使用同一套 json-render catalog。
 
-| 链路           | 当前承载内容                                                | 实现位置                                                                     |
-| -------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Turn message   | 叙事文本、玩家输入、`interaction.requested` 表单/选择、通知 | `apps/web/src/components/session/chat-messages.tsx`                          |
-| Plugin message | guide 建议卡、codex 本轮摘要、其他插件自定义消息面          | `apps/web/src/components/session/chat-messages.tsx`（`plugin_message` 分支） |
+| 链路           | 当前承载内容                                                | 实现位置                                                                                              |
+| -------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Turn message   | 叙事文本、玩家输入、`interaction.requested` 表单/选择、通知 | `apps/web/src/components/session/chat-messages.tsx`, `apps/web/src/components/session/chat-messages/` |
+| Plugin message | guide 建议卡、codex 本轮摘要、其他插件自定义消息面          | `apps/web/src/components/session/chat-messages.tsx`（`plugin_message` 分支）                          |
 
 ### 消息 Block 声明
 

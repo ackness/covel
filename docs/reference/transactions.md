@@ -146,8 +146,9 @@ be mistaken for a cooperative rollback.
 
 ## Kernel integration
 
-Turn commit (`packages/runtime/src/session-kernel.ts:commitAll`) runs in
-a transaction by default. When the underlying store implements
+Turn commit (`packages/runtime/src/session-commit-pipeline.ts`) runs in a
+transaction by default. `packages/runtime/src/session-kernel.ts` remains the
+public facade for processing runtime results. When the underlying store implements
 `beginTx` (the method is optional on `KernelStore` for backwards
 compatibility), `commitAll` wraps the proposal application in a single
 transaction. Operators can explicitly opt out with
@@ -242,7 +243,7 @@ reference doc.
 ## References
 
 - Contract type: `packages/store/src/types.ts` (`DataStore` interface)
-- Contract tests: `packages/store/src/contract/store-contract.ts`
+- Contract tests: `packages/store/src/contract/store-contract.ts` and `packages/store/src/contract/suites/`
 - PgStore adapter: `packages/store/src/postgres/pg-store-tx.ts`
-- Kernel commit path: `packages/runtime/src/session-kernel.ts`
+- Kernel commit path: `packages/runtime/src/session-commit-pipeline.ts`, `packages/runtime/src/session-commit-handlers.ts`
 - MediaStore schema + S3 metadata adapter: [`media-store.md`](./media-store.md)

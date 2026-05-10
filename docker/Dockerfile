@@ -10,7 +10,6 @@ COPY pnpm-lock.yaml package.json pnpm-workspace.yaml ./
 # manifest present for --frozen-lockfile to succeed, even if we don't
 # actually use the app in the final image)
 COPY apps/desktop/package.json apps/desktop/
-COPY apps/desktop-tauri/package.json apps/desktop-tauri/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
 

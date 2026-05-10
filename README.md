@@ -39,7 +39,7 @@ Open Settings, paste an LLM API key, pick one of the three sample worlds (`cloud
 
 Your data lives at `~/.covel/` — config, keys, SQLite, custom worlds, logs. Full schema → [`docs/guide/desktop-config.en.md`](./docs/guide/desktop-config.en.md).
 
-> Windows / Intel Mac / Linux are not officially shipped — build from source. The Tauri shell is on hold.
+> Windows / Intel Mac / Linux are not officially shipped — build from source. Electron is the only desktop shell in the current codebase.
 
 ### Run from source
 
@@ -135,7 +135,6 @@ Full index → [`docs/README.md`](./docs/README.md). The in-app debug page at `/
 - Windows / Linux / Intel Mac builds
 - Official community for sharing plugins and world packs
 - Plugin marketplace inside the desktop app
-- Tauri shell parity (currently on hold)
 
 ## Contributing & releases
 

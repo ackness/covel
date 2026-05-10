@@ -190,15 +190,15 @@ Refactored in this pass:
 ## Current Size Snapshot
 
 - `packages/shared/src/env/registry.ts`: 2 lines
-- `packages/shared/src/env/registry-definitions.ts`: 792 lines
+- `packages/shared/src/env/registry-definitions.ts`: 745 lines
 - `packages/shared/src/env/registry-readers.ts`: 189 lines
-- `packages/runtime/src/turn-executor.ts`: 867 lines
+- `packages/runtime/src/turn-executor.ts`: 450 lines
 - `packages/runtime/src/turn-runtime-execution.ts`: 316 lines
 - `packages/runtime/src/turn-result-finalizer.ts`: 185 lines
 - `packages/runtime/src/turn-event-chain.ts`: 115 lines
 - `packages/runtime/src/turn-agent-runtime.ts`: 618 lines
 - `packages/runtime/src/turn-agent-tool-loop.ts`: 699 lines
-- `apps/web/src/stores/session-store.tsx`: 918 lines
+- `apps/web/src/stores/session-store.tsx`: 77 lines
 - `apps/web/src/lib/catalog.tsx`: 151 lines
 - `packages/store/src/contract/store-contract.ts`: 48 lines
 - `apps/web/src/services/api.ts`: 47 lines
@@ -209,20 +209,23 @@ Refactored in this pass:
 - `apps/web/src/components/session/chat-messages/message-blocks.tsx`: 420 lines
 - `apps/web/src/components/session/chat-messages/message-primitives.tsx`: 107 lines
 - `apps/web/src/components/session/chat-messages/session-canvas-hero.tsx`: 78 lines
+- `apps/web/src/components/session/game-view.tsx`: 502 lines
+- `apps/web/src/components/session/plugin-list-panel.tsx`: 75 lines
+- `apps/web/src/components/session/image-plugin-panels.tsx`: 2 lines
 - `apps/web/src/routes/debug.tsx`: 640 lines
 - `packages/store/src/media-store.ts`: 30 lines
 - `packages/store/src/media-store/memory.ts`: 179 lines
 - `packages/store/src/media-store/pg.ts`: 261 lines
 - `packages/store/src/media-store/s3.ts`: 278 lines
 - `packages/store/src/media-store/sqlite.ts`: 267 lines
-- `packages/store/src/memory/memory-store.ts`: 1073 lines
-- `packages/store/src/indexeddb/idb-store.ts`: 1083 lines
-- `packages/store/src/sqlite/sqlite-store.ts`: 885 lines
+- `packages/store/src/memory/memory-store.ts`: 44 lines
+- `packages/store/src/indexeddb/idb-store.ts`: 57 lines
+- `packages/store/src/sqlite/sqlite-store.ts`: 85 lines
 - `packages/store/src/sqlite/sqlite-data-crud.ts`: 324 lines
 - `packages/store/src/sqlite/sqlite-runtime-records.ts`: 274 lines
 - `packages/store/src/sqlite/sqlite-store-values.ts`: 196 lines
 - `packages/store/src/sqlite/sqlite-session-cascade.ts`: 87 lines
-- `packages/store/src/postgres/pg-store.ts`: 834 lines
+- `packages/store/src/postgres/pg-store.ts`: 76 lines
 - `packages/store/src/postgres/pg-data-crud.ts`: 330 lines
 - `packages/store/src/postgres/pg-runtime-records.ts`: 270 lines
 - `packages/store/src/postgres/pg-store-values.ts`: 190 lines
@@ -243,9 +246,10 @@ Refactored in this pass:
 - `apps/web/src/settings/panes/llm-capability-controls.tsx`: 369 lines
 - `apps/web/src/settings/panes/__tests__/llm-capability-controls.test.tsx`: 142 lines
 - `apps/server/src/routes/misc-api.ts`: 429 lines
-- `apps/server/src/routes/api/plugin-rpc.ts`: 913 lines
+- `apps/server/src/routes/api/plugin-rpc.ts`: 513 lines
 - `apps/server/src/routes/api/plugin-rpc/body.ts`: 38 lines
 - `apps/server/src/routes/api/plugin-rpc/jobs.ts`: 31 lines
+- `apps/server/src/routes/api/plugin-rpc/background-jobs.ts`: 389 lines
 - `apps/server/src/routes/api/plugin-rpc/runtime-response.ts`: 74 lines
 - `apps/server/src/routes/api/plugin-rpc/runtime-turn.ts`: 178 lines
 - `apps/server/src/routes/api/bootstrap.ts`: 821 lines
@@ -255,6 +259,7 @@ Refactored in this pass:
 - `apps/server/src/routes/api/bootstrap/plugin-rpc-wiring.ts`: 106 lines
 - `apps/server/src/routes/api/bootstrap/plugin-hooks.ts`: 45 lines
 - `apps/desktop/src/main.ts`: 762 lines
+- `apps/desktop/src/auto-updater.ts`: 61 lines
 - `apps/desktop/src/logging.ts`: 147 lines
 - `apps/desktop/src/windows.ts`: 307 lines
 - `apps/desktop/src/env-files.ts`: 66 lines
@@ -266,14 +271,16 @@ Refactored in this pass:
 
 Future passes should focus on large maintenance files that are production code, have clear internal feature boundaries, and can be validated through package-level tests.
 
-| Priority |                                                                 File |   Lines | Refactor boundary                             | Validation focus                     |
-| -------- | -------------------------------------------------------------------: | ------: | --------------------------------------------- | ------------------------------------ |
-| 1        |                            `apps/server/src/routes/api/bootstrap.ts` |     821 | tool bootstrap and memory setup               | Server bootstrap and API route tests |
-| 2        |                              `packages/runtime/src/turn-executor.ts` |     867 | pre-game completion and turn prelude          | Runtime scheduler/context tests      |
-| 3        |                           `apps/server/src/routes/api/plugin-rpc.ts` |     913 | deferred follower scheduling, action dispatch | Plugin RPC and approval route tests  |
-| 4        | `packages/store/src/sqlite/sqlite-store.ts` / `postgres/pg-store.ts` | 834-885 | session CRUD and conversation persistence     | Store contract tests across backends |
-| 5        |                                `packages/test-runtime/src/runner.ts` |     967 | deferred execution harness                    | Test-runtime package tests           |
-| 6        |                              `apps/web/src/services/data-service.ts` |     766 | world/session data helpers                    | Web data service tests               |
+| Priority |                                                File | Lines | Refactor boundary                              | Validation focus                     |
+| -------- | --------------------------------------------------: | ----: | ---------------------------------------------- | ------------------------------------ |
+| 1        |           `apps/server/src/routes/api/bootstrap.ts` |   821 | tool bootstrap and memory setup                | Server bootstrap and API route tests |
+| 2        |                          `apps/desktop/src/main.ts` |   762 | sidecar supervisor state and IPC registration  | Electron build and staging smoke     |
+| 3        |      `packages/runtime/src/turn-agent-tool-loop.ts` |   699 | LLM tool loop, suspend capture, done semantics | Runtime agent/tool-loop tests        |
+| 4        |               `packages/ai-provider/src/gateway.ts` |   638 | provider routing and retry/fallback loop       | Gateway and adapter tests            |
+| 5        |                     `apps/web/src/routes/debug.tsx` |   640 | route shell vs trace/session panels            | Web debug route tests                |
+| 6        | `apps/web/src/components/session/chat-messages.tsx` |   627 | orchestration vs block rendering/data adapters | Web session message tests            |
+| 7        |          `apps/server/src/routes/api/plugin-rpc.ts` |   513 | route composition and background dispatch      | Plugin RPC and approval route tests  |
+| 8        |               `packages/test-runtime/src/runner.ts` |   725 | harness orchestration and live adapter setup   | Test-runtime package tests           |
 
 ## Validation Run
 
@@ -474,11 +481,11 @@ Future passes should focus on large maintenance files that are production code, 
 ## Risks
 
 - `turn-agent-tool-loop.ts` remains intentionally dense because LLM response handling, tool execution, suspend capture, and runtime-done semantics share mutable loop state.
-- `session-store.tsx` still coordinates many side effects from the public Zustand store; future reductions should split store action factories only after broader UI flow tests are in place.
+- Session store side effects now live under `apps/web/src/stores/session-store/*`; future reductions should target specific action/effect modules only with broader UI flow coverage.
 - `plugin-selection-card.tsx` is still sizeable because filtering, grouping, pack selection, and required/excluded policy rendering share local UI state; it is the next extraction candidate inside session prep after component behavior tests are expanded.
 - `plugin-rpc.ts` still owns runtime execution and deferred follower scheduling; future passes should extract these only with the full runtime/background tests in scope.
 - `bootstrap.ts` still owns tool registration and memory setup. Future passes should split one subsystem at a time and preserve bootstrapApi as the composition root.
-- DataStore SQL backend files still contain session, message, summary, suspension, and snapshot families. The next store pass should prefer focused backend-local helper families while keeping SQLite and PostgreSQL execution differences local.
+- DataStore SQL facades are now small; the remaining store risk is keeping SQLite, PostgreSQL, memory, and IDB method families behaviorally aligned through shared contract suites.
 - `gateway.ts` still owns operation-level provider routing and retry loops. Future AI provider passes should keep retry/fallback loop changes covered by gateway, fixes, and stream tests.
 - `runner.ts` still owns plugin discovery/runtime loading, live adapter setup, local tool imports, and case orchestration. `execution.ts` now owns test-runtime deferred follower execution; its `recursiveCall` behavior remains intentionally unavailable and covered by focused tests.
 - `llm-capability-controls.tsx` now owns capability tag/editor rendering. Future settings passes should target model database refresh/status UI or split slot cards after component-level coverage exists.
@@ -518,8 +525,12 @@ flowchart TD
   MediaStore["media-store.ts"] --> MediaFactory["media-store/factory.ts"]
   MediaStore --> MediaBackends["media-store/{memory,sqlite,pg,s3}.ts"]
   MediaStore --> MediaCommon["media-store/{types,utils}.ts"]
-  MemoryStore["memory-store.ts"] --> StoreCommon["common/{keys,pagination}.ts"]
-  IdbStore["idb-store.ts"] --> StoreCommon
+  MemoryStore["memory-store.ts"] --> MemoryMethods["memory/*-methods.ts"]
+  MemoryStore --> MemoryState["memory/{memory-state,memory-types,collection-helpers}.ts"]
+  IdbStore["idb-store.ts"] --> IdbStores["indexeddb/idb-*-store.ts"]
+  IdbStore --> IdbRuntime["indexeddb/{idb-context,idb-db,idb-schema,idb-transaction}.ts"]
+  MemoryStore --> StoreCommon["common/{keys,pagination}.ts"]
+  IdbStore --> StoreCommon
   Gateway["gateway.ts"] --> GatewayLifecycle["gateway-lifecycle.ts"]
   Gateway --> GatewaySlotResolution["gateway-slot-resolution.ts"]
   TestRuntimeRunner["test-runtime/runner.ts"] --> TestRuntimeReporting["test-runtime/reporting.ts"]
@@ -538,7 +549,7 @@ flowchart TD
   PgStore --> PgDataCrud["pg-data-crud.ts"]
   PgStore --> PgRuntimeRecords["pg-runtime-records.ts"]
   MiscApi["misc-api.ts"] --> MiscModules["routes/misc-api/*"]
-  PluginRpc["plugin-rpc.ts"] --> PluginRpcHelpers["plugin-rpc/{body,jobs,runtime-response,runtime-turn}.ts"]
+  PluginRpc["plugin-rpc.ts"] --> PluginRpcHelpers["plugin-rpc/{body,jobs,background-jobs,runtime-response,runtime-turn}.ts"]
   BootstrapApi["bootstrap.ts"] --> BootstrapStoreEvents["bootstrap/plugin-data-store-events.ts"]
   BootstrapApi --> BootstrapCompactor["bootstrap/compactor.ts"]
   BootstrapApi --> BootstrapDiscovery["bootstrap/plugin-discovery.ts"]
@@ -547,4 +558,5 @@ flowchart TD
   DesktopMain["desktop/main.ts"] --> DesktopLeaf["desktop/{startup-errors,network,splash-screen,env-files}.ts"]
   DesktopMain --> DesktopLogging["desktop/logging.ts"]
   DesktopMain --> DesktopWindows["desktop/windows.ts"]
+  DesktopMain --> DesktopUpdater["desktop/auto-updater.ts"]
 ```

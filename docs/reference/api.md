@@ -2477,7 +2477,7 @@ interface SseEnvelope {
 }
 ```
 
-客户端用 `fetch()` + `ReadableStream` 解析（见 `apps/web/src/services/api.ts: sendAction`），不能用 `EventSource.addEventListener('<type>', …)` —— 因为帧没有命名 event 头。`/api/events/stream` 才使用命名事件。
+客户端用 `fetch()` + `ReadableStream` 解析（见 `apps/web/src/services/api/actions.ts: sendAction`），不能用 `EventSource.addEventListener('<type>', …)` —— 因为帧没有命名 event 头。`/api/events/stream` 才使用命名事件。
 
 ---
 
@@ -2758,14 +2758,14 @@ Covel 有两条独立的 SSE 流，**信封格式和帧格式都不同**：
 
 下列事件**只**经 `/api/actions` 流转发，未来稳定后才会进 enum。当前消费方需做兼容性处理：
 
-| 事件                                                  | 来源                | 说明                                                                  |
-| ----------------------------------------------------- | ------------------- | --------------------------------------------------------------------- |
-| `runtime.skipped`                                     | `actions.ts`        | runtime 因 cooldown / startTurn / maxTriggerCount 跳过                |
-| `character.upserted`                                  | `session-kernel.ts` | `character.upsert` proposal commit 后发出（与 `record.updated` 平行） |
-| `tool.calling` / `tool.completed` / `tool.failed`     | TurnEmitter         | 工具调用 trace（debug timeline 用）                                   |
-| `llm.calling` / `llm.responded` / `message.completed` | TurnEmitter         | LLM 调用 trace                                                        |
-| `block.emitted` / `state.patch.applied`               | TurnEmitter         | 块发出 / state patch 应用 trace                                       |
-| `hook.fired` / `hook.rewrote` / `hook.aborted`        | TurnEmitter         | Hook 行为 trace                                                       |
+| 事件                                                  | 来源                         | 说明                                                                  |
+| ----------------------------------------------------- | ---------------------------- | --------------------------------------------------------------------- |
+| `runtime.skipped`                                     | `actions.ts`                 | runtime 因 cooldown / startTurn / maxTriggerCount 跳过                |
+| `character.upserted`                                  | `session-commit-handlers.ts` | `character.upsert` proposal commit 后发出（与 `record.updated` 平行） |
+| `tool.calling` / `tool.completed` / `tool.failed`     | TurnEmitter                  | 工具调用 trace（debug timeline 用）                                   |
+| `llm.calling` / `llm.responded` / `message.completed` | TurnEmitter                  | LLM 调用 trace                                                        |
+| `block.emitted` / `state.patch.applied`               | TurnEmitter                  | 块发出 / state patch 应用 trace                                       |
+| `hook.fired` / `hook.rewrote` / `hook.aborted`        | TurnEmitter                  | Hook 行为 trace                                                       |
 
 ### 信封格式
 

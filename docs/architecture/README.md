@@ -12,14 +12,14 @@
 
 ## Search Anchors
 
-| Topic               | Code paths                                                                 |
-| ------------------- | -------------------------------------------------------------------------- |
-| Turn execution      | `packages/runtime/src/turn-executor.ts`, `packages/runtime/src/trigger.ts` |
-| Prompt assembly     | `packages/context/src/`, `docs/reference/prompt-structure.md`              |
-| Plugin loading      | `packages/plugin-loader/src/`, `plugins/**/PLUGIN.md`                      |
-| Server API          | `apps/server/src/routes/api/`                                              |
-| Frontend session UI | `apps/web/src/components/session/`, `apps/web/src/services/`               |
-| Store backends      | `packages/store/src/`                                                      |
+| Topic               | Code paths                                                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Turn execution      | `packages/runtime/src/turn-executor.ts`, `packages/runtime/src/turn-runtime-execution.ts`, `packages/runtime/src/turn-executor/`, `packages/runtime/src/trigger.ts` |
+| Prompt assembly     | `packages/context/src/`, `docs/reference/prompt-structure.md`                                                                                                       |
+| Plugin loading      | `packages/plugin-loader/src/`, `plugins/**/PLUGIN.md`                                                                                                               |
+| Server API          | `apps/server/src/routes/api/`                                                                                                                                       |
+| Frontend session UI | `apps/web/src/components/session/`, `apps/web/src/services/`                                                                                                        |
+| Store backends      | `packages/store/src/`                                                                                                                                               |
 
 ## Writing Rules
 

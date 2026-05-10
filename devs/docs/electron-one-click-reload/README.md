@@ -1,6 +1,6 @@
 # Electron-only 一键重载配置方案
 
-> 目标：在当前阶段只为 **Electron 桌面端** 提供“一键重载 / 应用配置变更”能力；Tauri、Web、自部署远端暂不提供。
+> 目标：在当前阶段只为 **Electron 桌面端** 提供“一键重载 / 应用配置变更”能力；Web、自部署远端暂不提供。Tauri shell 已从当前代码库移除。
 >
 > 本方案是低风险 MVP：复用现有 Electron IPC 重启 sidecar，不做真正的运行时热替换。
 
@@ -39,7 +39,6 @@
 | 环境                            | 是否展示一键重载 |
 | ------------------------------- | ---------------- |
 | Electron                        | 是               |
-| Tauri                           | 否               |
 | Web dev / 浏览器                | 否               |
 | 远端 self-host / commercial web | 否               |
 
@@ -50,7 +49,6 @@
 - 不做 `llm.toml` 进程内热替换。
 - 不做 plugin registry / tools / rpc / hooks 进程内热替换。
 - 不提供远端 HTTP 重启 server API。
-- 不为 Tauri 实现 restart sidecar command。
 - 不 watch `~/.covel/` 文件变更自动 reload。
 
 ## 用户语义
@@ -121,7 +119,7 @@ hasElectronIpc();
 
 原因：
 
-- `isDesktopApp()` 包含 Electron、Tauri、REST desktop-capable。
+- `isDesktopApp()` 包含 Electron 与 REST desktop-capable。
 - 当前只想 Electron 提供一键重载。
 - `reloadServerAndWait()` 本身也只在有 Electron IPC 时真正执行，否则返回 `false`。
 
@@ -388,14 +386,6 @@ await startServer(paths);
 
 MVP 可以接受该现状；如果后续发现“一键重载”偶发 SQLite lock 或启动失败，应把 `stopServer()` 改成可 await 的 graceful shutdown：等待旧进程 exit，超时后再 `SIGKILL`，然后再调用 `startServer()`。
 
-### Tauri 暂不处理
-
-Tauri 没有 `window.covelIpc`，因此：
-
-- `hasElectronIpc()` 返回 false。
-- 按钮不展示。
-- 不需要新增 Tauri command。
-
 ### Web 端不提供 server restart API
 
 不要为了 Web 添加：
@@ -420,7 +410,7 @@ POST /api/config/restart
    - 安装插件后 Packages pane 的重启按钮可用。
 
 2. 非 Electron：
-   - Tauri / Web 中不显示“一键重载”按钮。
+   - Web 中不显示“一键重载”按钮。
    - `PackagesPane` 中插件安装后的重启按钮不显示。
    - 不新增可被远端调用的重启 API。
 
@@ -465,7 +455,7 @@ POST /api/config/restart
 - ❌ **可选增强：`LlmKeysPane` 快捷入口** —— 当前用户可在"模型 / Slots"区域编辑后切到"桌面"tab 重启，操作路径不算长；等真出现频繁切 tab 的痛点再加。
 - ❌ **可选增强：`bridge.canReloadBackend()` helper** —— `hasElectronIpc()` 命名已经足够清晰，再包一层属于过度设计。
 - ❌ **i18n `desktopRestartHint` 用旧 key + 同时新增 `desktopApplyConfigChangesHint`** —— 直接复用 `desktopRestartHint` 改写文案最简，避免 i18n key 数量膨胀。
-- ❌ **Tauri 适配** —— 用户明确仅 Electron。`hasElectronIpc()` 在 Tauri 下返回 false，按钮自动隐藏，符合预期。
+- ❌ **其他桌面壳适配** —— 当前代码库只保留 Electron 桌面壳。
 - ❌ **真正的热替换 / `~/.covel/` 文件 watch 自动重启** —— 范围外，列入"后续路线"。
 - ❌ **`config.toml: data_root` 通过此按钮生效** —— 涉及 Electron main 重新执行 `ensureUserPaths()`，超出 sidecar 重启范围，需单独改 main 进程，未在本次实施。
 

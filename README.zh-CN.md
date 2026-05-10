@@ -39,7 +39,7 @@ Covel 是一款由 AI 驱动的角色扮演游戏 —— 叙事、NPC 关系、�
 
 数据存放在 `~/.covel/` —— 配置、Key、SQLite、自定义世界、日志都在这。完整字段 → [`docs/guide/desktop-config.md`](./docs/guide/desktop-config.md)。
 
-> Windows / Intel Mac / Linux 暂无官方包，需要自行构建。Tauri 壳暂时搁置。
+> Windows / Intel Mac / Linux 暂无官方包，需要自行构建。当前代码库只保留 Electron 桌面壳。
 
 ### 从源码跑
 
@@ -135,7 +135,6 @@ pnpm workspaces + Turborepo · ESM-only · TypeScript strict。完整包清单 �
 - Windows / Linux / Intel Mac 安装包
 - 官方插件 / 世界包共享社区
 - 桌面端内置插件市场
-- Tauri 壳同步（目前搁置）
 
 ## 贡献与发布
 

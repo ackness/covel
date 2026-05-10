@@ -16,7 +16,7 @@
 │   主通道 POST /api/actions:                                      │
 │     · data-only SSE 帧（无 event: 头）                            │
 │     · 信封 = SseEnvelope（requestId/traceId/flowId/seq/...）      │
-│     · 客户端用 fetch + ReadableStream 解析（services/api.ts）     │
+│     · 客户端用 fetch + ReadableStream 解析（api/actions.ts）      │
 │   辅助通道 GET /api/events/stream:                               │
 │     · 命名 SSE 事件（event: <type>\ndata: ...）                   │
 │     · 信封 = ProtocolEvent（id/source/...）                      │
@@ -31,7 +31,7 @@
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-> 关键差异：`/api/actions` **没有** `event:` 命名头，因此 `EventSource.addEventListener('narrative.delta', …)` 在 actions 流上**永远不会**触发。回合内事件请使用 `services/api.ts: sendAction` 的 ReadableStream 解析路径，或自行用 `fetch()` 读取 `data:` 行；命名事件订阅只对 `/api/events/stream` 有效。
+> 关键差异：`/api/actions` **没有** `event:` 命名头，因此 `EventSource.addEventListener('narrative.delta', …)` 在 actions 流上**永远不会**触发。回合内事件请使用 `apps/web/src/services/api/actions.ts: sendAction` 的 ReadableStream 解析路径，或自行用 `fetch()` 读取 `data:` 行；命名事件订阅只对 `/api/events/stream` 有效。
 
 ## 一、事件类型（ProtocolEventType）
 
@@ -175,11 +175,11 @@ Provider 图片输入矩阵：
 
 发射点对照：
 
-| 触发路径                          | 事件序列                                                | 来源                                                       |
-| --------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------- |
-| `executeTurn` 自动捕获            | `state.snapshot.created` (kind=auto)                    | `packages/runtime/src/turn-executor.ts` (auto-snapshot 块) |
-| `POST /api/sessions/:id/snapshot` | `state.snapshot.created` (kind=manual)                  | `apps/server/src/routes/api/snapshots.ts`                  |
-| `POST /api/sessions/:id/fork`     | `state.snapshot.created` (kind=fork) → `session.forked` | `apps/server/src/routes/api/snapshots.ts`                  |
+| 触发路径                          | 事件序列                                                | 来源                                            |
+| --------------------------------- | ------------------------------------------------------- | ----------------------------------------------- |
+| `executeTurn` 自动捕获            | `state.snapshot.created` (kind=auto)                    | `packages/runtime/src/turn-result-finalizer.ts` |
+| `POST /api/sessions/:id/snapshot` | `state.snapshot.created` (kind=manual)                  | `apps/server/src/routes/api/snapshots.ts`       |
+| `POST /api/sessions/:id/fork`     | `state.snapshot.created` (kind=fork) → `session.forked` | `apps/server/src/routes/api/snapshots.ts`       |
 
 > 前端若要接收上述事件，需在 `apps/web/src/services/subscription.ts` 的 topic 路由里为 `state.snapshot.created` / `session.forked` 显式分发。当前尚未挂载这两个监听；在 fork / save UI 真正落地前，服务端已经在 SSE 通道上发送，前端订阅即生效。
 
@@ -194,14 +194,14 @@ Provider 图片输入矩阵：
 
 ### SSE 帧格式按通道区分
 
-| 通道                     | 帧形态                                                      | 客户端订阅方式                                                              | 文件                                       |
-| ------------------------ | ----------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------ |
-| `POST /api/actions`      | data-only（`data: <SseEnvelope JSON>`，**无 `event:` 头**） | `fetch()` + `ReadableStream`，按行扫 `data:` 解 JSON 后看 `envelope.type`   | `apps/web/src/services/api.ts: sendAction` |
-| `GET /api/events/stream` | 命名事件（`event: <type>\ndata: <ProtocolEvent JSON>`）     | `EventSource` + `addEventListener('<type>', handler)` —— 不监听就被静默丢弃 | `apps/web/src/services/subscription.ts`    |
+| 通道                     | 帧形态                                                      | 客户端订阅方式                                                              | 文件                                               |
+| ------------------------ | ----------------------------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------- |
+| `POST /api/actions`      | data-only（`data: <SseEnvelope JSON>`，**无 `event:` 头**） | `fetch()` + `ReadableStream`，按行扫 `data:` 解 JSON 后看 `envelope.type`   | `apps/web/src/services/api/actions.ts: sendAction` |
+| `GET /api/events/stream` | 命名事件（`event: <type>\ndata: <ProtocolEvent JSON>`）     | `EventSource` + `addEventListener('<type>', handler)` —— 不监听就被静默丢弃 | `apps/web/src/services/subscription.ts`            |
 
 `/api/events/stream` 在连接建立时先发一条 `system.connected`，每 30s 发 `system.heartbeat`；带 `lastEventId` 时会先回放 EventBus 缓存中 `seq > lastEventId` 的事件再切到实时。
 
-`apps/web/src/services/subscription.ts` 默认订阅 topic `runtime / state / game / plugin / session / system`（不含 `store`），并按 `event.topic` 路由分发；新增 topic 或 enum 事件时**必须同步更新该文件**。`/api/actions` 的回合内事件（`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）在 actions 流里以 data-only 帧推送，由 `services/api.ts: sendAction` 的回调消费，不经过 `subscription.ts`。
+`apps/web/src/services/subscription.ts` 默认订阅 topic `runtime / state / game / plugin / session / system`（不含 `store`），并按 `event.topic` 路由分发；新增 topic 或 enum 事件时**必须同步更新该文件**。`/api/actions` 的回合内事件（`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）在 actions 流里以 data-only 帧推送，由 `apps/web/src/services/api/actions.ts: sendAction` 的回调消费，不经过 `subscription.ts`。
 
 > S4-T5 注意：`state.snapshot.created` / `session.forked` 服务端已经发出但前端尚未挂载 listener（FU-6 / 等 fork & save UI 落地）。此 follow-up 是已知的，与 framework 实现无关。
 
@@ -209,14 +209,14 @@ Provider 图片输入矩阵：
 
 下列事件由 server 透过 actions SSE 流转发用于 debug / trace，但当前**不**在 `packages/shared/src/types/protocol.ts` 的 `ProtocolEventType` 枚举中。TS 客户端如果只接受 `ProtocolEventType`，需要单独放宽或定义私有 union；未来 enum 化前不建议生产消费方依赖。
 
-| 事件                                                  | 来源                                                                           | 用途                                                     |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------- |
-| `runtime.skipped`                                     | `apps/server/src/routes/api/actions.ts`                                        | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过 |
-| `character.upserted`                                  | `packages/runtime/src/session-kernel.ts`（`character.upsert` proposal commit） | 与 `record.updated` 平行的角色快照事件                   |
-| `tool.calling` / `tool.completed` / `tool.failed`     | TurnEmitter                                                                    | LLM 工具调用 trace                                       |
-| `llm.calling` / `llm.responded` / `message.completed` | TurnEmitter                                                                    | LLM 调用 trace                                           |
-| `block.emitted` / `state.patch.applied`               | TurnEmitter                                                                    | 块发出 / state patch 应用 trace                          |
-| `hook.fired` / `hook.rewrote` / `hook.aborted`        | TurnEmitter                                                                    | Hook 行为 trace                                          |
+| 事件                                                  | 来源                                                                                    | 用途                                                     |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `runtime.skipped`                                     | `apps/server/src/routes/api/actions.ts`                                                 | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过 |
+| `character.upserted`                                  | `packages/runtime/src/session-commit-handlers.ts`（`character.upsert` proposal commit） | 与 `record.updated` 平行的角色快照事件                   |
+| `tool.calling` / `tool.completed` / `tool.failed`     | TurnEmitter                                                                             | LLM 工具调用 trace                                       |
+| `llm.calling` / `llm.responded` / `message.completed` | TurnEmitter                                                                             | LLM 调用 trace                                           |
+| `block.emitted` / `state.patch.applied`               | TurnEmitter                                                                             | 块发出 / state patch 应用 trace                          |
+| `hook.fired` / `hook.rewrote` / `hook.aborted`        | TurnEmitter                                                                             | Hook 行为 trace                                          |
 
 ## 二、命令类型（CommandType）
 

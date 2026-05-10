@@ -239,7 +239,7 @@ export interface MediaStore {
 
 - P0：`MemoryStore` → in-memory `Map<id, Uint8Array>`
 - P0：`SqliteStore + local-fs` → `media_assets` 表存元数据 + `<covelHome>/media/{ab}/{cd}/<sha256>.bin`
-- P2：`PgStore + S3`、`IdbStore`、Tauri command 适配
+- P2：`PgStore + S3`、`IdbStore`、桌面端 Electron sidecar / server media routes 适配
 
 **(c)** `asset.generate` proposal 的 payload 收紧（见 § 5.7：保留单一 envelope，强制 `ref: MediaRef` + `modality: string`）。
 
@@ -352,14 +352,14 @@ Fork session 时由 commit handler 扫描 snapshot 内容（深度遍历找 `{ i
 
 **(i) Phase 1 后端缩减**（Codex 评审 #11 修正）
 
-原方案"Memory + SQLite/local-fs + PG/S3 + IDB + Tauri 五种后端一次到位"过激。第一版只做：
+原方案"Memory + SQLite/local-fs + PG/S3 + IDB + 多桌面壳原生后端一次到位"过激。第一版只做：
 
 - `MemoryStore` —— 测试 / 默认 dev 跑 in-memory Map
 - `SqliteStore + local-fs` —— 桌面默认（`<covelHome>/media/{ab}/{cd}/<sha256>.bin`）
 - `/api/media/:id` 服务端读
 - 前端 `<Media ref={ref}>` / `<Image ref={ref}>` + IDB blob 缓存层
 
-PG+S3 / IdbStore / Tauri 命令路径作为后续后端适配（Phase 2），按需补全。
+PG+S3 / IdbStore / 桌面端 Electron sidecar media routes 作为后续后端适配（Phase 2），按需补全。
 
 #### 框架其他部分需要适配
 
@@ -906,7 +906,7 @@ return {
 ### P0-a：MediaRef 最小基础设施（1 周）— 插件迁移前置能力
 
 - `MediaRef` 类型 + Zod schema（`packages/shared/src/types/media.ts`）
-- `MediaStore` 接口 + **仅 Memory + SQLite/local-fs 两个后端**（Codex 评审 #11 缩减范围；PG/S3 / IDB / Tauri 留给 P2）
+- `MediaStore` 接口 + **仅 Memory + SQLite/local-fs 两个后端**（Codex 评审 #11 缩减范围；PG/S3 / IDB / 桌面端 server media routes 留给 P2）
 - `media_assets` + `media_refs` 两张表 schema
 - `ctx.media.put` / `get` / `resolveUrl` / `ingestUrl` 注入到 `FunctionHandlerContext`
 - `GET /api/media/:id?token=...` 流式输出 + HMAC 签名校验中间件（Codex 评审 #9）
@@ -955,7 +955,7 @@ return {
 
 - [x] `MediaStore` 扩 PG/S3 后端（生产部署）
 - [x] IndexedDB media blob 后端（纯前端模式）
-- [x] Tauri command 适配（桌面端 Tauri 走原生 fs API）
+- [x] 桌面端通过 Electron sidecar / server media routes 访问本地 MediaStore（Tauri shell 已从当前代码库移除）
 - [x] `recursiveCall` + 深度限制（§ 5.4）
 - [x] `ui.render` parts 类型化 + 独立 status（§ 5.5）
 - [x] 通用 gallery / jobs preset 提取到 `@covel/shared/json-render-presets`
@@ -978,7 +978,7 @@ P2 集成备注：
 
 **P4a：策略冻结 + 小实现（当前批次）**
 
-- [x] Tauri 桌面端 MediaStore 路径采用 Tauri command，后续大文件场景补 chunk/streaming 读取。
+- [x] 桌面端 MediaStore 路径统一经 Electron sidecar / server media routes；Tauri 原生 command 路径已随 Tauri shell 移除。
 - [x] `ctx.media.ingestUrl()` 默认 `maxBytes` 保持 `50 * 1024 * 1024`，插件可在调用参数中显式提高或降低。
 - [x] HMAC media token TTL 保持 5 分钟，前端按需重新获取 token。
 - [x] 同一 runtime 同一 turn 返回多个 `assetGenerations[]` 时，数组顺序就是 commit / trace / 展示顺序。
@@ -986,7 +986,7 @@ P2 集成备注：
 
 **P4b：Media lifecycle**
 
-- [x] Media GC / quota / retention 策略：框架自动 GC + 用户手动清理入口，覆盖 Memory / SQLite / PG / S3 / IDB / Tauri 后端。
+- [x] Media GC / quota / retention 策略：框架自动 GC + 用户手动清理入口，覆盖 Memory / SQLite / PG / S3 / IDB 后端。
 - [x] Media ownership refs 扫描和 snapshot/fork 保留策略，防止清理仍被 session 引用的资产。
 
 落地文档：`docs/reference/media-store.md#lifecycle-cleanup`。`POST /api/media/cleanup` 默认 dry-run；空 policy 返回 inventory 式结果；`maxAgeMs` / `maxBytes` / `keepRecentBytes` 触发删除候选选择。保护集来自 live sessions、messages、plugin data、runtime outputs、trace events、snapshots、turn results、MediaStore owner/ref rows 的统一扫描。
@@ -1062,7 +1062,7 @@ P1/P2（Hook 语义、LLM content parts、ToolClient、recursiveCall、ui.render
 
 **MediaStore / 存储层**
 
-- [x] `MediaStore` 在 Tauri 桌面端采用 Tauri command；大文件后续补 chunk/streaming
+- [x] 桌面端 MediaStore 通过 Electron sidecar / server media routes 访问；Tauri command 路径已移除
 - [x] `MediaStore` 的清理策略（GC、quota、retention）由框架 API 承载，用户手动入口和未来 scheduler 共用 `POST /api/media/cleanup`
 - [x] `ctx.media.ingestUrl()` 默认 `maxBytes` 保持 50 MB，插件调用可显式覆盖
 - [x] HMAC 签名 token 的 TTL 保持 5 分钟，前端按需重新获取
