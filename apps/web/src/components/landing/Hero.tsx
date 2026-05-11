@@ -42,15 +42,14 @@ export function Hero() {
             draggable={false}
             style={{ filter: "saturate(0.8) contrast(1.1)" }}
           />
-          <video
+          <img
             className="h-full w-full object-cover opacity-60"
-            src="/media/demo.mp4"
-            poster="/media/demo-poster.jpg"
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="metadata"
+            src="/media/demo.gif"
+            alt=""
+            width={1152}
+            height={720}
+            loading="lazy"
+            draggable={false}
             style={{ filter: "saturate(0.85) contrast(1.05)" }}
           />
           {/* Left→right fade so the headline sits on flat surface, plus a

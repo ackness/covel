@@ -1,4 +1,3 @@
-import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useInView } from "@/hooks/use-in-view";
 
@@ -7,18 +6,6 @@ export function DemoSection() {
   const [containerRef, inView] = useInView<HTMLDivElement>({
     threshold: 0.25,
   });
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-
-  // Lazy-start playback only when on screen — saves CPU when off-screen.
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (inView) {
-      void v.play().catch(() => {});
-    } else {
-      v.pause();
-    }
-  }, [inView]);
 
   return (
     <section
@@ -55,19 +42,16 @@ export function DemoSection() {
               : "none",
           }}
         >
-          <video
-            ref={videoRef}
+          <img
             className="w-full h-auto block"
-            src="/media/demo.mp4"
-            poster="/media/demo-poster.jpg"
-            muted
-            loop
-            playsInline
-            preload="metadata"
+            src="/media/demo.gif"
+            width={1152}
+            height={720}
             aria-label={t(
               "home.demo.videoAria",
               "Recording of a Covel session in progress",
             )}
+            draggable={false}
           />
           <div
             aria-hidden="true"
