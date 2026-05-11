@@ -45,7 +45,7 @@ export function createHealthRoutes(
 
     return c.json({
       status: "ok",
-      version: "1.0.0",
+      version: "0.0.3",
       storeBackend: backend,
       bootId,
       timestamp: new Date().toISOString(),

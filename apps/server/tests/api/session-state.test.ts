@@ -46,7 +46,7 @@ async function json(res: Response): Promise<unknown> {
 // ── Tests ───────────────────────────────────────────────────────────
 
 describe("Health Route", () => {
-  it("returns status ok and version 1.0.0", async () => {
+  it("returns status ok and release version", async () => {
     const memStore = createMemoryStore();
     const app = createTestApp({
       store: memStore,
@@ -59,7 +59,7 @@ describe("Health Route", () => {
 
     const body = (await json(res)) as Record<string, unknown>;
     expect(body.status).toBe("ok");
-    expect(body.version).toBe("1.0.0");
+    expect(body.version).toBe("0.0.3");
   });
 
   it("returns structured storage capabilities while keeping storeBackend compatible", async () => {

@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-05-11
+
+第三个公开版本。重点收敛世界数据导入、生成世界持久化、插件目录元数据、存储后端边界、桌面发布链路与长期维护性重构。
+
+### Added
+
+- 世界数据导入管线：支持世界包声明式 `worldData` 数据源、会话创建时导入、同步 API、导入 ledger、角色蓝图与媒体引用同步
+- AI 生成世界新增保存目标：`server-file` / `server-store` / `return-only`，前端依据 `/api/health.storeBackend` 选择合适持久化路径
+- 插件目录元数据新增 tags、relations 与世界级 `pluginPolicy`，会话准备页支持按世界策略推荐、筛选与选择插件
+- 生成世界质量门、世界数据 schema 校验、插件 README 检查与 Playwright e2e 稳定性验证脚本
+
+### Changed
+
+- monorepo 全量版本号 `0.0.2` → `0.0.3`
+- 桌面发布链路收敛到 Electron，移除已废弃的 Tauri shell，更新 release workflow 与 staging smoke 验证
+- 存储架构统一为 DataStore / MediaStore / VectorStore 边界，浏览器本地模式使用 IndexedDB，远端模式继续走服务端持久化
+- 重构长期维护文件：拆分 bootstrap、plugin RPC、turn pipeline、store 后端、desktop IPC/logging、web session prep/debug route 等大模块
+- README、首页 demo 与视觉层级更新，刷新 demo GIF 资源与玩家视角说明
+
+### Fixed
+
+- 加固插件执行安全边界、world data schema/media sync、生成世界包输出、gateway slot fallback 与 provider 参数覆盖测试
+- 修复重复动态/静态导入、桌面 sidecar/staging 构建路径、plugin RPC/SSE 边界、存储后端空值与媒体生命周期相关边界
+
+### Documentation
+
+- 重组开发文档，补齐 storage architecture、world data、plugin authoring、desktop state、refactor follow-up 与插件 README
+
 ## [0.0.2] - 2026-04-29
 
 第二个公开版本。围绕 2026-04-29 代码库审计发现的 7 个问题做收敛——CI 红灯、桌面安全、插件生态闭环、首屏体积。
@@ -84,7 +112,8 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.3
 [0.0.2]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.2
 [0.0.1]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.1
 [0.0.1-beta]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.1-beta
