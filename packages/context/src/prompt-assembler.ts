@@ -1,8 +1,7 @@
 /**
  * Three-tier Prompt Assembler V2 — infrastructure only (S2-T1).
  *
- * Implements the 10-segment assembly model described in
- * `devs/docs/insights/covel-improvement-plan.md` section A2:
+ * Implements the 10-segment assembly model:
  *
  * ```
  * [1 Framework Preamble]        ← session-stable header (locale, rules)

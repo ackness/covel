@@ -6,18 +6,18 @@ Covel 是一个插件驱动的 AI 交互式叙事引擎。根目录 [`README.md`
 
 ## Start Here
 
-| 你要做什么               | 入口                                                                               | 接着看                                                                                                             |
-| ------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| 第一次跑项目             | [`../README.md`](../README.md)                                                     | [`CONTRIBUTING.md`](./CONTRIBUTING.md)                                                                             |
-| 写插件                   | [`guide/plugin-authoring.md`](./guide/plugin-authoring.md)                         | [`reference/plugins.md`](./reference/plugins.md), [`reference/tools.md`](./reference/tools.md)                     |
-| 写零代码插件             | [`guide/plugin-authoring-zero-code.md`](./guide/plugin-authoring-zero-code.md)     | [`guide/plugin-authoring-agent.md`](./guide/plugin-authoring-agent.md)                                             |
-| 给插件加 UI              | [`guide/plugin-ui-runtime-guidelines.md`](./guide/plugin-ui-runtime-guidelines.md) | [`reference/ui-panels.md`](./reference/ui-panels.md), [`reference/ui-components.md`](./reference/ui-components.md) |
-| 做世界包、角色卡、媒体包 | [`reference/world-data.md`](./reference/world-data.md)                             | [`devs/docs/world-data-filesystem/README.md`](../devs/docs/world-data-filesystem/README.md)                        |
-| 调 HTTP API 或自动化测试 | [`reference/api.md`](./reference/api.md)                                           | [`reference/protocol.md`](./reference/protocol.md), [`guide/e2e-plugin-verify.md`](./guide/e2e-plugin-verify.md)   |
-| 理解回合执行管线         | [`architecture/flow.md`](./architecture/flow.md)                                   | [`reference/prompt-structure.md`](./reference/prompt-structure.md)                                                 |
-| 做主题包                 | [`guide/themes.md`](./guide/themes.md)                                             | [`reference/theme-packages.md`](./reference/theme-packages.md)                                                     |
-| 查一个术语               | [`glossary.md`](./glossary.md)                                                     | 对应 `reference/` 页面                                                                                             |
-| 维护文档体系             | [`DOCS_STRATEGY.md`](./DOCS_STRATEGY.md)                                           | [`CONTRIBUTING.md#文档同步`](./CONTRIBUTING.md#文档同步)                                                           |
+| 你要做什么               | 入口                                                                               | 接着看                                                                                                               |
+| ------------------------ | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| 第一次跑项目             | [`../README.md`](../README.md)                                                     | [`CONTRIBUTING.md`](./CONTRIBUTING.md)                                                                               |
+| 写插件                   | [`guide/plugin-authoring.md`](./guide/plugin-authoring.md)                         | [`reference/plugins.md`](./reference/plugins.md), [`reference/tools.md`](./reference/tools.md)                       |
+| 写零代码插件             | [`guide/plugin-authoring-zero-code.md`](./guide/plugin-authoring-zero-code.md)     | [`guide/plugin-authoring-agent.md`](./guide/plugin-authoring-agent.md)                                               |
+| 给插件加 UI              | [`guide/plugin-ui-runtime-guidelines.md`](./guide/plugin-ui-runtime-guidelines.md) | [`reference/ui-panels.md`](./reference/ui-panels.md), [`reference/ui-components.md`](./reference/ui-components.md)   |
+| 做世界包、角色卡、媒体包 | [`reference/world-data.md`](./reference/world-data.md)                             | [`guide/plugin-authoring.md`](./guide/plugin-authoring.md), [`reference/media-store.md`](./reference/media-store.md) |
+| 调 HTTP API 或自动化测试 | [`reference/api.md`](./reference/api.md)                                           | [`reference/protocol.md`](./reference/protocol.md), [`guide/e2e-plugin-verify.md`](./guide/e2e-plugin-verify.md)     |
+| 理解回合执行管线         | [`architecture/flow.md`](./architecture/flow.md)                                   | [`reference/prompt-structure.md`](./reference/prompt-structure.md)                                                   |
+| 做主题包                 | [`guide/themes.md`](./guide/themes.md)                                             | [`reference/theme-packages.md`](./reference/theme-packages.md)                                                       |
+| 查一个术语               | [`glossary.md`](./glossary.md)                                                     | 对应 `reference/` 页面                                                                                               |
+| 维护文档体系             | [`DOCS_STRATEGY.md`](./DOCS_STRATEGY.md)                                           | [`CONTRIBUTING.md#文档同步`](./CONTRIBUTING.md#文档同步)                                                             |
 
 ## Docs Map
 
@@ -26,7 +26,6 @@ Covel 是一个插件驱动的 AI 交互式叙事引擎。根目录 [`README.md`
 | [`guide/`](./guide/)               | 插件作者、主题作者、贡献者         | 面向任务的教程和操作步骤。先讲如何做，再链接参考页。                                        |
 | [`reference/`](./reference/)       | 框架开发者、第三方开发者、AI Agent | 权威契约：API、协议、frontmatter、工具、URI、schema、数据形状。字段枚举必须来自代码或测试。 |
 | [`architecture/`](./architecture/) | 框架维护者、深入贡献者             | 运行机制、模块边界、历史决策和慢变设计。                                                    |
-| [`devs/docs/`](../devs/docs/)      | 设计草案、审计、迁移计划           | 未必是当前稳定契约；引用时需要回到 `docs/reference/` 或代码确认。                           |
 | [`docs/design/`](./design/)        | UI 设计与组件观感维护者            | 静态设计资产和视觉规范。                                                                    |
 
 ## Search Map
@@ -62,7 +61,7 @@ docs/
 ## Documentation Rules
 
 - 影响框架能力的代码改动必须同步更新对应 `reference/` 页面，常见范围包括 API、协议、插件 frontmatter、工具、UI slot、world data descriptor、主题包和存储契约。
-- `reference/` 写当前真实契约；`guide/` 写推荐路径；`architecture/` 写设计原因和模块关系；`devs/docs/` 写草案、审计和迁移计划。
+- `reference/` 写当前真实契约；`guide/` 写推荐路径；`architecture/` 写设计原因和模块关系。
 - 字段枚举、URI grammar、默认值和错误条件优先从 `packages/shared/src/schemas/**`、`packages/shared/src/types/**`、server route、runtime 实现和测试中提取。
 - 面向 AI Agent 的页面需要保留可搜索的英文标识符，例如 `worldData`, `PLUGIN.md`, `plugin://`, `plugin:`, `RuntimeManifest`, `DataStore`。
 - 文档站点和仓库拆分策略见 [`DOCS_STRATEGY.md`](./DOCS_STRATEGY.md)。

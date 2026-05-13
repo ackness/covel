@@ -34,7 +34,7 @@ See: [docs/reference/plugins.md](./reference/plugins.md), [docs/reference/tools.
 
 A user-facing bundle of slot overrides and parameter tweaks saved in `SettingsStore` (`keys.env` / `localStorage`). Players switch presets to reroute their session through a different model mix without editing `llm.toml`.
 
-See: `packages/shared/src/settings/`, `devs/docs/unified-settings-spec.md`.
+See: `packages/shared/src/settings/`.
 
 ## Proposal
 

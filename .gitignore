@@ -135,5 +135,5 @@ docker/docker-compose.mock.replay.yml
 # ── npm/pnpm pack output (can be hundreds of MB, never commit) ──
 *.tgz
 
-# ── Internal handoff bundles / session insights (local-only) ──
-devs/docs/insights/
+# ── Local developer docs ──
+devs/docs/

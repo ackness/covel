@@ -183,7 +183,7 @@ export function buildContext(params: ContextBuildParams): AssembledContext {
   //
   // Either alone falls through to V1. This double gate lets operators roll
   // out V2 at the environment level while individual plugins migrate at
-  // their own pace. See §A8 of `devs/docs/insights/covel-improvement-plan.md`.
+  // their own pace.
   if (isEnvEnabled("COVEL_PROMPT_V2") && params.manifest.promptVersion === 2) {
     return buildContextV2(params);
   }

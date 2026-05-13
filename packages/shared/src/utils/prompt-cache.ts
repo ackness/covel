@@ -38,8 +38,6 @@
  * The sentinel is only emitted when `COVEL_PROMPT_CACHE_V1=1`. When the
  * flag is off, the assembler produces a bit-identical prompt to the
  * pre-S2-T3 behaviour and adapters hit the legacy code path.
- *
- * Spec: `devs/docs/insights/covel-improvement-plan.md` §A15
  */
 
 /**

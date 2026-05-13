@@ -35,7 +35,7 @@ Covel 的当前策略是吸收两者的信息架构，不急于拆仓库。
 | `docs/reference/`    | 权威契约             | schema、types、routes、runtime、tests |
 | `docs/architecture/` | 模块边界和设计原因   | 实现代码 + 历史决策                   |
 | `docs/glossary.md`   | 统一术语             | reference 页面                        |
-| `devs/docs/`         | 草案、审计、迁移计划 | 对应实现落地后迁移到 `docs/`          |
+| Internal notes       | 草案、审计、迁移计划 | 对应实现落地后迁移到 `docs/`          |
 
 ## Static Site Plan
 
@@ -67,5 +67,5 @@ Covel 的当前策略是吸收两者的信息架构，不急于拆仓库。
 - `guide/` 页面回答“怎么做”，第一页就给最小可运行路径。
 - `reference/` 页面回答“合法值是什么”，字段表必须列出枚举、默认值、阶段和代码来源。
 - `architecture/` 页面回答“为什么这样设计”，必须包含模块边界和失败模式。
-- 草案先放 `devs/docs/<topic>/`，落地后把稳定契约迁移到 `docs/reference/` 或 `docs/guide/`。
+- 草案和审计资料保持为内部资料；落地后把稳定契约迁移到 `docs/reference/` 或 `docs/guide/`。
 - 新增文档要从 `docs/README.md` 或对应目录 `README.md` 可达。

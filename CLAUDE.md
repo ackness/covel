@@ -12,32 +12,28 @@ Deployable as Web or Electron (desktop). Production desktop builds should use `p
 
 Before changing anything non-trivial, consult the matching reference doc — they are the source of truth, CLAUDE.md only points at them.
 
-| Topic                                               | Authoritative doc                                                                                                           |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Project intro, quick start, roadmap                 | [README.md](./README.md) · [docs/README.md](./docs/README.md)                                                               |
-| End-to-end turn pipeline, full architecture         | [docs/architecture/flow.md](./docs/architecture/flow.md)                                                                    |
-| Plugin registry (all plugins, priorities, triggers) | [docs/reference/plugins.md](./docs/reference/plugins.md)                                                                    |
-| World Data (`worldData`, source import, overrides)  | [docs/reference/world-data.md](./docs/reference/world-data.md)                                                              |
-| Tool registry (builtin + local, approval policy)    | [docs/reference/tools.md](./docs/reference/tools.md)                                                                        |
-| HTTP API (all endpoints, request/response, curl)    | [docs/reference/api.md](./docs/reference/api.md)                                                                            |
-| Protocol (SSE events, envelope, Transport layer)    | [docs/reference/protocol.md](./docs/reference/protocol.md)                                                                  |
-| Right-panel tabs, json-render declarative UI        | [docs/reference/ui-panels.md](./docs/reference/ui-panels.md)                                                                |
-| Prompt assembly (10-slice, cache_control, V1→V2)    | [docs/reference/prompt-structure.md](./docs/reference/prompt-structure.md)                                                  |
-| DataStore transactions (begin/commit/rollback)      | [docs/reference/transactions.md](./docs/reference/transactions.md)                                                          |
-| Writing a plugin (tutorial + frontmatter fields)    | [docs/guide/plugin-authoring.md](./docs/guide/plugin-authoring.md)                                                          |
-| Plugin UI + runtime guidelines                      | [docs/guide/plugin-ui-runtime-guidelines.md](./docs/guide/plugin-ui-runtime-guidelines.md)                                  |
-| Plugin testing (harness + examples)                 | [docs/guide/plugin-testing.md](./docs/guide/plugin-testing.md)                                                              |
-| UI component catalogue (json-render primitives)     | [docs/reference/ui-components.md](./docs/reference/ui-components.md)                                                        |
-| Terminology glossary (session / runtime / slot / …) | [docs/glossary.md](./docs/glossary.md)                                                                                      |
-| E2E plugin verify harness                           | [docs/guide/e2e-plugin-verify.md](./docs/guide/e2e-plugin-verify.md)                                                        |
-| Environment variable registry                       | [docs/guide/env-registry.md](./docs/guide/env-registry.md)                                                                  |
-| Desktop config (paths, sidecar, safeStorage)        | [docs/guide/desktop-config.md](./docs/guide/desktop-config.md)                                                              |
-| Desktop packaging (Electron), signing, notarisation | [apps/desktop/PACKAGING.md](./apps/desktop/PACKAGING.md)                                                                    |
-| Prompt externalisation spec                         | [devs/docs/prompt-externalization-spec.md](./devs/docs/prompt-externalization-spec.md)                                      |
-| World package spec (world.yaml + WORLD.md + data)   | [devs/docs/world-package-spec.md](./devs/docs/world-package-spec.md)                                                        |
-| Plugin system requirements, refactor plans          | [devs/docs/plugin-system-req.md](./devs/docs/plugin-system-req.md) · [devs/docs/refactor-plan/](./devs/docs/refactor-plan/) |
-| Architecture audit follow-up tickets (F3/F4/F5/F7)  | [devs/docs/architecture-audit-followups/](./devs/docs/architecture-audit-followups/)                                        |
-| Contributing & release workflow                     | [docs/CONTRIBUTING.md](./docs/CONTRIBUTING.md)                                                                              |
+| Topic                                               | Authoritative doc                                                                          |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Project intro, quick start, roadmap                 | [README.md](./README.md) · [docs/README.md](./docs/README.md)                              |
+| End-to-end turn pipeline, full architecture         | [docs/architecture/flow.md](./docs/architecture/flow.md)                                   |
+| Plugin registry (all plugins, priorities, triggers) | [docs/reference/plugins.md](./docs/reference/plugins.md)                                   |
+| World Data (`worldData`, source import, overrides)  | [docs/reference/world-data.md](./docs/reference/world-data.md)                             |
+| Tool registry (builtin + local, approval policy)    | [docs/reference/tools.md](./docs/reference/tools.md)                                       |
+| HTTP API (all endpoints, request/response, curl)    | [docs/reference/api.md](./docs/reference/api.md)                                           |
+| Protocol (SSE events, envelope, Transport layer)    | [docs/reference/protocol.md](./docs/reference/protocol.md)                                 |
+| Right-panel tabs, json-render declarative UI        | [docs/reference/ui-panels.md](./docs/reference/ui-panels.md)                               |
+| Prompt assembly (10-slice, cache_control, V1→V2)    | [docs/reference/prompt-structure.md](./docs/reference/prompt-structure.md)                 |
+| DataStore transactions (begin/commit/rollback)      | [docs/reference/transactions.md](./docs/reference/transactions.md)                         |
+| Writing a plugin (tutorial + frontmatter fields)    | [docs/guide/plugin-authoring.md](./docs/guide/plugin-authoring.md)                         |
+| Plugin UI + runtime guidelines                      | [docs/guide/plugin-ui-runtime-guidelines.md](./docs/guide/plugin-ui-runtime-guidelines.md) |
+| Plugin testing (harness + examples)                 | [docs/guide/plugin-testing.md](./docs/guide/plugin-testing.md)                             |
+| UI component catalogue (json-render primitives)     | [docs/reference/ui-components.md](./docs/reference/ui-components.md)                       |
+| Terminology glossary (session / runtime / slot / …) | [docs/glossary.md](./docs/glossary.md)                                                     |
+| E2E plugin verify harness                           | [docs/guide/e2e-plugin-verify.md](./docs/guide/e2e-plugin-verify.md)                       |
+| Environment variable registry                       | [docs/guide/env-registry.md](./docs/guide/env-registry.md)                                 |
+| Desktop config (paths, sidecar, safeStorage)        | [docs/guide/desktop-config.md](./docs/guide/desktop-config.md)                             |
+| Desktop packaging (Electron), signing, notarisation | [apps/desktop/PACKAGING.md](./apps/desktop/PACKAGING.md)                                   |
+| Contributing & release workflow                     | [docs/CONTRIBUTING.md](./docs/CONTRIBUTING.md)                                             |
 
 ## Commands
 
@@ -93,7 +89,7 @@ Desktop-shell files under `<covelHome>/` (typically `~/.covel/`):
 - `config.toml` — desktop shell config (paths, log rotation)
 - `llm.toml` — hand-editable slot / provider definitions (same schema as dev-time)
 - `keys.env` — provider API keys, mode 600
-- `settings.json` — front-end user preferences (locale, appearance, slot overrides, custom presets, parameter overrides, per-plugin settings). Managed via the unified **SettingsStore** in `packages/shared/src/settings/` — see [devs/docs/unified-settings-spec.md](./devs/docs/unified-settings-spec.md). Auto-saved on every change; mirrored to `localStorage` (`covel:settings`) on pure-web tiers.
+- `settings.json` — front-end user preferences (locale, appearance, slot overrides, custom presets, parameter overrides, per-plugin settings). Managed via the unified **SettingsStore** in `packages/shared/src/settings/`. Auto-saved on every change; mirrored to `localStorage` (`covel:settings`) on pure-web tiers.
 
 Provider API keys flow through the `SettingsStore` too: writes end up in `keys.env` on desktop, `localStorage` (`covel:keys`) on web. They are never persisted server-side by the REST API — each AI request passes them via the `X-Provider-Keys` header (base64).
 
@@ -238,7 +234,7 @@ All store writes key on `pluginId`; all trace logs key on `runtimeId`.
 | Change package structure / deps           | `CLAUDE.md` (Workspace + Dependency Flow)                                                        |
 | Add/change PLUGIN.md frontmatter field    | `docs/reference/plugins.md` + `docs/guide/plugin-authoring.md`                                   |
 | Add/change `PLUGIN.md dataSchemas`        | `docs/reference/plugins.md` + `docs/guide/plugin-authoring*.md` + `docs/reference/world-data.md` |
-| Add/change world package `worldData`      | `docs/reference/world-data.md` + `devs/docs/world-package-spec.md` + relevant guide docs         |
+| Add/change world package `worldData`      | `docs/reference/world-data.md` + relevant guide docs                                             |
 | Add/change world-data import/sync rules   | `docs/reference/world-data.md` + `docs/reference/api.md` + `docs/reference/transactions.md`      |
 | Add/change RPC action / framework default | `docs/reference/api.md` (plugin-rpc) + `docs/reference/protocol.md`                              |
 | Add/change approval flow / trust level    | `docs/reference/api.md` + `docs/reference/protocol.md`                                           |

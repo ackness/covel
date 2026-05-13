@@ -3,7 +3,7 @@
 > 适用于 Covel 的 V2 Prompt Assembler（`packages/context/src/prompt-assembler.ts`）。
 > V1 路径仍然保留并走 `context-builder.ts` 的单块 systemPrompt，本文不覆盖 V1。
 
-V2 结构由 `devs/docs/insights/covel-improvement-plan.md` §A2 定义，分成 10 段（segments），灵感来自 SillyTavern Prompt Manager 和 NovelAI 的 Reserved Tokens 分配策略。目标：**prompt cache 友好 + 可插入点清晰 + 插件声明式扩展**。
+V2 结构分成 10 段（segments），灵感来自 SillyTavern Prompt Manager 和 NovelAI 的 Reserved Tokens 分配策略。目标：**prompt cache 友好 + 可插入点清晰 + 插件声明式扩展**。
 
 ## 1. 启用条件
 
@@ -189,9 +189,8 @@ export COVEL_PROMPT_CACHE_V1=1
 - `packages/plugin-loader/src/parse-plugin-md.ts` — 解析 `promptVersion` / `authorsNote` / `postHistory` 字段
 - `packages/shared/src/schemas/plugin.ts` — frontmatter zod schema
 
-## 8. 相关规范文档
+## 8. 相关实现文件
 
-- `devs/docs/insights/covel-improvement-plan.md` §A2 — 三段式设计起源
-- `devs/docs/insights/covel-improvement-plan.md` §A15 — Prompt cache 抽象
-- `devs/docs/insights/covel-improvement-plan.md` §A8 — 向后兼容 / feature flag 策略
-- `devs/docs/prompt-externalization-spec.md` — 外部化 prompt markdown 文件规范（`loadPrompt`）
+- `packages/context/src/prompt-assembler.ts` — V2 段组装器
+- `packages/shared/src/utils/prompt-cache.ts` — Prompt cache sentinel 和切分 helper
+- `packages/plugin-loader/src/parse-plugin-md.ts` — `promptVersion` / `authorsNote` / `postHistory` 解析
