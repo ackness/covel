@@ -35,7 +35,7 @@ Covel 是一款由 AI 驱动的角色扮演游戏 —— 叙事、NPC 关系、�
 
 到 [Releases](https://github.com/AcKnEsS/covel/releases) 下载最新的 **macOS Apple Silicon** 安装包 —— `Covel-electron-<version>-mac-arm64.dmg`。
 
-打开 Settings 填一个 LLM API Key，从三个示例世界（`cloudmere` / `mistport` / `neonridge`）里挑一个，就能开始玩。
+打开 Settings 填一个 LLM API Key，从四个示例世界（`cloudmere` / `mistport` / `neonridge` / `haruka-academy`）里挑一个，就能开始玩。
 
 数据存放在 `~/.covel/` —— 配置、Key、SQLite、自定义世界、日志都在这。完整字段 → [`docs/guide/desktop-config.md`](./docs/guide/desktop-config.md)。
 
@@ -69,18 +69,26 @@ pnpm dev                            # web :5173 + server :3001 (SQLite)
 
 适合手写插件、调试 runtime、或扩展 kernel 的人。
 
-### 内置插件
+### 内置插件包
 
-| 插件           |   类型   | 作用                        |
-| -------------- | :------: | --------------------------- |
-| `narrator`     |  Agent   | 主叙事                      |
-| `guide`        |  Agent   | 行动引导 + 选项生成         |
-| `npc-graph`    |  Agent   | NPC 关系图抽取 + 2-hop 检索 |
-| `codex`        |  Agent   | 世界知识典籍                |
-| `char-creator` |  Agent   | 角色卡创建流程              |
-| `world-init`   |  Agent   | 世界维度初始化              |
-| `pregame`      | Function | 开局前置（不走 LLM）        |
-| `memory`       |    UI    | 记忆面板                    |
+| 插件                  |   类型   | 作用                         |
+| --------------------- | :------: | ---------------------------- |
+| `branch-reply`        | Function | 回复候选与已接受版本记录     |
+| `char-creator`        |  Mixed   | 玩家建角与角色跟踪           |
+| `character-blueprint` | Function | 可复用人物蓝图               |
+| `character-presence`  | Function | 角色头像、立绘、声音和媒体   |
+| `chat-mode-narrator`  |  Agent   | 偏对话的叙事器               |
+| `codex`               |  Agent   | 世界知识典籍                 |
+| `guide`               |  Agent   | 行动引导与选项生成           |
+| `living-world-rules`  | Function | 长期世界规则与 lorebook 投影 |
+| `memory`              |    UI    | 记忆面板                     |
+| `narrator`            |  Agent   | 默认传统故事主叙事           |
+| `npc-graph`           |  Mixed   | 人物关系图检索与抽取         |
+| `player-identity`     | Function | 主角口吻、目标和边界         |
+| `pregame`             | Function | 开局前置准备                 |
+| `scene-cast`          | Function | 当前场景角色与说话人上下文   |
+| `scene-prompts`       |  Agent   | 对话模式短行动句             |
+| `world-init`          |  Mixed   | 世界 schema 与词条初始化     |
 
 ### 手写一个插件
 
@@ -109,8 +117,8 @@ covel/
 │   ├── server/           后端 (Hono + Drizzle)
 │   └── desktop/          Electron 壳
 ├── packages/             内部包 (runtime / context / ai-provider / store / memory / tools / …)
-├── plugins/              核心插件
-├── worlds/               世界包
+├── plugins/              内置插件包
+├── worlds/               示例世界包
 ├── prompts/              外部化 prompt 模板
 └── docs/                 参考文档与作者指南
 ```

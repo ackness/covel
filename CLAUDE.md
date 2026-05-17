@@ -108,9 +108,10 @@ packages/           14 internal packages: shared, context, ai-provider,
                     plugin-loader, runtime, store, state, events, tools,
                     approval, memory, create, plugin-test-utils, test-runtime
 
-plugins/            8 core plugins (see docs/reference/plugins.md)
+plugins/            16 bundled plugin packages (see docs/reference/plugins.md)
 prompts/            Externalised prompt templates (locale-aware markdown)
-worlds/             File-based world packages (cloudmere / mistport / neonridge / haruka-academy)
+worlds/             4 file-based sample world packages
+                    (cloudmere / mistport / neonridge / haruka-academy)
 ```
 
 Dependency flow (rough):

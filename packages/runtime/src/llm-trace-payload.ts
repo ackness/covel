@@ -5,8 +5,8 @@
  * (retry helper sync, retry helper streaming, direct generate resume path,
  * direct generate malformed-tool-args fallback).
  *
- * Payload fields map 1:1 to the schemas documented in
- * `docs/superpowers/specs/2026-04-22-debug-trace-expansion-design.md`.
+ * Payload fields map 1:1 to the debug trace event schemas documented in
+ * `docs/reference/protocol.md`.
  */
 
 import type {

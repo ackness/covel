@@ -52,11 +52,13 @@ npx tsx --env-file=.env --env-file=.env.llm \
 
 ## 环境变量
 
-| 变量             | 默认值                  | 说明                                       |
-| ---------------- | ----------------------- | ------------------------------------------ |
-| `E2E_BASE_URL`   | `http://localhost:3001` | Playwright 访问的应用地址                  |
-| `E2E_MODEL_SLOT` | `e2e`                   | `scripts/e2e-plugin-verify.ts` 使用的 slot |
-| `CI`             | `false`                 | CI 模式下 Playwright 启用重试并限制 worker |
+| 变量                    | 默认值                  | 说明                                                            |
+| ----------------------- | ----------------------- | --------------------------------------------------------------- |
+| `E2E_BASE_URL`          | `http://localhost:3001` | Playwright 访问的应用地址                                       |
+| `E2E_MODEL_SLOT`        | `e2e`                   | `scripts/e2e-plugin-verify.ts` 使用的 slot                      |
+| `COVEL_STORY_BASE_URL`  | —                       | story LLM 代理地址；用于通过环境变量覆盖测试 slot 的 `baseUrl`  |
+| `COVEL_PLUGIN_BASE_URL` | —                       | plugin LLM 代理地址；用于通过环境变量覆盖测试 slot 的 `baseUrl` |
+| `CI`                    | `false`                 | CI 模式下 Playwright 启用重试并限制 worker                      |
 
 ## PostgreSQL 模式
 

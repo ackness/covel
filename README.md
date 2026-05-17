@@ -35,7 +35,7 @@ Every agent is its own plugin. Disable one, swap one, or write your own.
 
 Grab the latest **macOS Apple Silicon** build from [Releases](https://github.com/AcKnEsS/covel/releases) — `Covel-electron-<version>-mac-arm64.dmg`.
 
-Open Settings, paste an LLM API key, pick one of the three sample worlds (`cloudmere` / `mistport` / `neonridge`), and play.
+Open Settings, paste an LLM API key, pick one of the four sample worlds (`cloudmere` / `mistport` / `neonridge` / `haruka-academy`), and play.
 
 Your data lives at `~/.covel/` — config, keys, SQLite, custom worlds, logs. Full schema → [`docs/guide/desktop-config.en.md`](./docs/guide/desktop-config.en.md).
 
@@ -69,18 +69,26 @@ Open Claude Code in this repository, type `/create-plugin` or `/create-world`, a
 
 For hand-writing plugins, debugging the runtime, or extending the kernel.
 
-### Bundled plugins
+### Bundled plugin packages
 
-| Plugin         |   Kind   | Role                                   |
-| -------------- | :------: | -------------------------------------- |
-| `narrator`     |  Agent   | Main narration                         |
-| `guide`        |  Agent   | Action guidance + option generation    |
-| `npc-graph`    |  Agent   | NPC graph extraction + 2-hop retrieval |
-| `codex`        |  Agent   | World-knowledge codex                  |
-| `char-creator` |  Agent   | Character-creation flow                |
-| `world-init`   |  Agent   | World-dimension initialisation         |
-| `pregame`      | Function | Pre-game bootstrap (no LLM call)       |
-| `memory`       |    UI    | Memory panel                           |
+| Plugin                |   Kind   | Role                                           |
+| --------------------- | :------: | ---------------------------------------------- |
+| `branch-reply`        | Function | Reply candidates and accepted-variant storage  |
+| `char-creator`        |  Mixed   | Player creation and character tracking         |
+| `character-blueprint` | Function | Reusable character blueprints                  |
+| `character-presence`  | Function | Character portraits, sprites, voice, and media |
+| `chat-mode-narrator`  |  Agent   | Dialogue-focused narration                     |
+| `codex`               |  Agent   | World-knowledge codex                          |
+| `guide`               |  Agent   | Action guidance and option generation          |
+| `living-world-rules`  | Function | Persistent world rules and lorebook projection |
+| `memory`              |    UI    | Memory panel                                   |
+| `narrator`            |  Agent   | Main traditional-story narration               |
+| `npc-graph`           |  Mixed   | Relationship graph retrieval and extraction    |
+| `player-identity`     | Function | Hero voice, goals, and boundaries              |
+| `pregame`             | Function | Pre-game bootstrap                             |
+| `scene-cast`          | Function | Current scene cast and active-speaker context  |
+| `scene-prompts`       |  Agent   | Dialogue-mode short action prompts             |
+| `world-init`          |  Mixed   | World schema and lore initialization           |
 
 ### Write a plugin manually
 
@@ -109,8 +117,8 @@ covel/
 │   ├── server/           Backend (Hono + Drizzle)
 │   └── desktop/          Electron shell
 ├── packages/             Internal packages (runtime / context / ai-provider / store / memory / tools / …)
-├── plugins/              Core plugins
-├── worlds/               World packs
+├── plugins/              Bundled plugin packages
+├── worlds/               Sample world packs
 ├── prompts/              Externalised prompt templates
 └── docs/                 Reference docs and author guides
 ```
