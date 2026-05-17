@@ -1,0 +1,42 @@
+{
+  "cases": [
+    {
+      "name": "agent-records-note-with-local-tool",
+      "runtimeId": "{{pluginName}}",
+      "message": "The player opened the sealed vault and found a silver key.",
+      "llmResponses": [
+        {
+          "content": null,
+          "finishReason": "tool_calls",
+          "toolCalls": [
+            {
+              "id": "tc-record-note",
+              "name": "record-note",
+              "arguments": "{\"title\":\"Opened vault\",\"text\":\"The player opened the sealed vault and found a silver key.\",\"tags\":[\"quest\"]}"
+            },
+            {
+              "id": "tc-runtime-done",
+              "name": "runtime-done",
+              "arguments": "{\"reason\":\"recorded\"}"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "runtimeResults": [
+          {
+            "runtimeId": "{{pluginName}}",
+            "status": "success"
+          }
+        ],
+        "pluginData": [
+          {
+            "namespace": "notes",
+            "key": "note-opened-vault",
+            "field": "title"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -92,6 +92,9 @@ describe("createPlugin", () => {
     expect(await exists(toolPath)).toBe(true);
     const tool = await readFile(toolPath, "utf8");
     expect(tool).toContain("name: 'my-agent-tool'");
+    expect(tool).toContain("export default function");
+    expect(tool).toContain("withPendingProposals");
+    expect(tool).not.toContain("from 'zod'");
     const pluginMd = await readFile(
       path.join(result.pluginDir, "PLUGIN.md"),
       "utf8",
@@ -106,14 +109,14 @@ describe("createPlugin", () => {
       template: "function",
       outputDir: tmp,
     });
-    const runtimePath = path.join(result.pluginDir, "runtime.js");
+    const runtimePath = path.join(result.pluginDir, "handler.js");
     expect(await exists(runtimePath)).toBe(true);
     const pluginMd = await readFile(
       path.join(result.pluginDir, "PLUGIN.md"),
       "utf8",
     );
-    expect(pluginMd).toContain("runtime:\n  type: function");
-    expect(pluginMd).toContain("handler: ./runtime.js");
+    expect(pluginMd).toContain("runtimeType: function");
+    expect(pluginMd).toContain("handler: ./handler.js");
   });
 
   it("refuses to overwrite an existing directory unless force is true", async () => {

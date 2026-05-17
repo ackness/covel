@@ -6,7 +6,13 @@ import {
   type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
-import { shortId, shortIdBatch, tool, type ToolModule } from "@covel/tools";
+import {
+  shortId,
+  shortIdBatch,
+  tool,
+  withPendingProposals,
+  type ToolModule,
+} from "@covel/tools";
 import { z } from "zod";
 
 export interface BootstrapLocalToolsParams {
@@ -112,7 +118,14 @@ export function createLocalToolLoader({
   readonly manifestCache: ReadonlyMap<string, readonly ParsedPluginMd[]>;
   readonly store: DataStore;
 }): (pluginId: string) => Promise<readonly ToolModule[]> {
-  const toolInjection = { tool, z, shortId, shortIdBatch, store };
+  const toolInjection = {
+    tool,
+    z,
+    shortId,
+    shortIdBatch,
+    withPendingProposals,
+    store,
+  };
 
   return async (pluginId: string): Promise<readonly ToolModule[]> => {
     const discovery = discoveryMap.get(pluginId);
@@ -170,6 +183,7 @@ function resolveToolModule(
     readonly z: typeof z;
     readonly shortId: typeof shortId;
     readonly shortIdBatch: typeof shortIdBatch;
+    readonly withPendingProposals: typeof withPendingProposals;
     readonly store: DataStore;
   },
 ): ToolModule | undefined {

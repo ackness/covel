@@ -569,7 +569,7 @@ Attributes:
 
 ### 使用方法
 
-框架提供 `shortId()` 和 `shortIdBatch()` 两个工具函数（`@covel/tools`），通过工厂注入提供给插件本地工具：
+框架通过工厂注入提供 `shortId()` 和 `shortIdBatch()`，插件本地工具可直接使用：
 
 ```javascript
 // 插件工具文件接收注入
@@ -767,7 +767,7 @@ POST /api/session/:id/submit-inputs
 
 ### 方式一：工厂函数（推荐）
 
-插件本地工具使用工厂函数模式，框架通过注入提供 `tool`, `z`, `shortId`, `shortIdBatch`：
+插件本地工具使用工厂函数模式，框架通过注入提供 `tool`, `z`, `shortId`, `shortIdBatch`, `withPendingProposals`, `store`：
 
 ```javascript
 // tools/my-tool.js
@@ -789,13 +789,14 @@ export default function ({ tool, z, shortId }) {
 
 **注入对象**:
 
-| 字段           | 类型      | 描述                                                      |
-| -------------- | --------- | --------------------------------------------------------- |
-| `tool`         | function  | `tool()` 包装函数，定义工具参数和执行逻辑                 |
-| `z`            | object    | Zod schema 库，用于参数验证                               |
-| `shortId`      | function  | `shortId(prefix, label, sessionId)` — 生成单个短语义 ID   |
-| `shortIdBatch` | function  | `shortIdBatch(prefix, labels, sessionId)` — 批量生成短 ID |
-| `store`        | DataStore | DataStore 实例，用于直接读写持久化数据（如批量操作）      |
+| 字段                   | 类型      | 描述                                                           |
+| ---------------------- | --------- | -------------------------------------------------------------- |
+| `tool`                 | function  | `tool()` 包装函数，定义工具参数和执行逻辑                      |
+| `z`                    | object    | Zod schema 库，用于参数验证                                    |
+| `shortId`              | function  | `shortId(prefix, label, sessionId)` — 生成单个短语义 ID        |
+| `shortIdBatch`         | function  | `shortIdBatch(prefix, labels, sessionId)` — 批量生成短 ID      |
+| `withPendingProposals` | function  | 把工具返回值和待提交 proposal 绑定，交给 commit chain 统一落盘 |
+| `store`                | DataStore | DataStore 实例，用于直接读写持久化数据（如批量操作）           |
 
 ### 方式二：直接导出（TypeScript）
 

@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { RuntimeManifest } from "@covel/shared";
+import type { DataStore } from "@covel/store";
 import {
   discoverPlugins,
   loadPluginManifest,
@@ -10,7 +11,14 @@ import {
   type LoadedRuntime,
   type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
-import { tool, z, type ToolModule } from "@covel/tools";
+import {
+  shortId,
+  shortIdBatch,
+  tool,
+  withPendingProposals,
+  z,
+  type ToolModule,
+} from "@covel/tools";
 
 export interface RuntimeLoadResult {
   readonly discovery: PluginDiscoveryResult;
@@ -98,6 +106,7 @@ export async function loadRuntimeBundle(args: {
   readonly runtimeId: string;
   readonly locale: string;
   readonly ignoreUpstreams?: boolean;
+  readonly store?: DataStore;
 }): Promise<RuntimeLoadResult> {
   const discovery = await discoverPlugin(args.pluginsDir, args.pluginId);
   const rawManifests = await loadRuntimeManifests(discovery);
@@ -112,7 +121,7 @@ export async function loadRuntimeBundle(args: {
     rawManifests,
     locale: args.locale,
   });
-  const localTools = await loadLocalTools(discovery, manifests);
+  const localTools = await loadLocalTools(discovery, manifests, args.store);
   return {
     discovery,
     rawManifests,
@@ -126,6 +135,7 @@ export async function loadRuntimeBundle(args: {
 export async function loadLocalTools(
   discovery: PluginDiscoveryResult,
   manifests: readonly RuntimeManifest[],
+  store?: DataStore,
 ): Promise<readonly ToolModule[]> {
   const loaded: ToolModule[] = [];
   for (const manifest of manifests) {
@@ -141,7 +151,16 @@ export async function loadLocalTools(
       const mod = await import(pathToFileURL(fullPath).href);
       const exported = mod.default ?? Object.values(mod)[0];
       const candidate =
-        typeof exported === "function" ? exported({ tool, z }) : exported;
+        typeof exported === "function"
+          ? exported({
+              tool,
+              z,
+              shortId,
+              shortIdBatch,
+              withPendingProposals,
+              store,
+            })
+          : exported;
       if (
         candidate &&
         typeof candidate === "object" &&

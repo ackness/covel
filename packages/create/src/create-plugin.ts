@@ -100,9 +100,8 @@ trigger:
 
 # ${name}
 
-Replace this prose with the skill you want the plugin runtime to perform.
-Triggering is manual — wire it up to a player command or another plugin's
-event before it will run.
+Describe the manual skill this runtime performs. Keep it focused on one
+plugin-owned responsibility and call \`runtime-done\` when the work is complete.
 `
     );
   }
@@ -110,9 +109,8 @@ event before it will run.
     return (
       common +
       `outputKind: system
-runtime:
-  type: function
-  handler: ./runtime.js
+runtimeType: function
+handler: ./handler.js
 trigger:
   type: scheduled
   interval: 1
@@ -120,8 +118,8 @@ trigger:
 
 # ${name}
 
-Pure-function runtime. Edit \`runtime.js\` to do whatever side-effect or
-data transformation you need. No LLM involved.
+Pure-function runtime. Edit \`handler.js\` to do the deterministic state update
+or data transformation you need. No LLM is involved.
 `
     );
   }
@@ -142,14 +140,20 @@ tools:
 
 # ${name}
 
-Agent runtime. The block above is shared context; write the actual skill
-prompt below — this is what the LLM sees every turn.
+Agent runtime. The block above is shared context; the Markdown below is the
+runtime prompt the LLM sees every turn.
 
-## Skill
+## Plugin Goal
 
-Describe what this plugin is supposed to *do* in plain language. You can
-call \`${name}-tool\` (defined in \`tools/\`) and \`runtime-done\` when you're
-finished.
+Replace this with the real goal. Examples: track player promises, maintain quest
+clues, record world-rule changes, or preserve reusable combat state.
+
+## Tool Contract
+
+Call \`${name}-tool\` only when the current narrative contains new information
+that should become plugin-owned state. After the tool call, immediately call
+\`runtime-done\`. If there is nothing useful to record, call \`runtime-done\`
+without writing.
 `
   );
 }
@@ -168,6 +172,7 @@ function renderPackageJson(name: string): string {
       devDependencies: {
         "@covel/plugin-test-utils": "workspace:*",
         "@covel/shared": "workspace:*",
+        "@covel/tools": "workspace:*",
         vitest: "^4.1.4",
       },
     },
@@ -183,7 +188,7 @@ function renderReadme(
 ): string {
   const runtimeSummary =
     options.template === "function"
-      ? "`runtime.js` 中的纯函数 runtime，执行确定性代码，不调用模型。"
+      ? "`handler.js` 中的纯函数 runtime，执行确定性代码，不调用模型。"
       : options.template === "agent"
         ? "`PLUGIN.md` 中的 agent runtime；Markdown 正文是运行时提示词，`tools/` 保存可选本地工具。"
         : "`PLUGIN.md` 中的纯提示词手动 runtime；Markdown 正文是运行时提示词。";
@@ -214,26 +219,52 @@ function renderAgentTool(name: string): string {
   return `/**
  * ${name}-tool — local tool wired into the ${name} plugin.
  *
- * Covel local tools expose (input) => output. Throw on invalid input;
- * the runtime will surface the error to the caller.
+ * The framework injects tool, z, shortId, and withPendingProposals at load
+ * time. Return pending proposals when the tool should persist plugin state.
  */
 
-import { z } from 'zod';
+export default function ({ tool, z, shortId, withPendingProposals }) {
+  return tool({
+    name: '${name}-tool',
+    description: 'Record one structured note for the ${name} plugin.',
+    parameters: z.object({
+      title: z.string().min(1).max(80).describe('Short title'),
+      text: z.string().min(1).max(500).describe('One or two concrete sentences'),
+      tags: z.array(z.string().min(1)).max(5).default([]).describe('Tags'),
+    }),
+    async execute(params, context) {
+      const key = shortId('note', params.title, context.sessionId);
+      const now = new Date().toISOString();
+      const note = {
+        kind: 'note',
+        title: params.title,
+        text: params.text,
+        tags: params.tags,
+        turnId: context.turnId,
+        createdAt: now,
+      };
 
-export const schema = z.object({
-  message: z.string().min(1, 'message is required'),
-});
-
-export default {
-  name: '${name}-tool',
-  description: 'Example local tool for the ${name} plugin.',
-  schema,
-  async handler(input) {
-    const { message } = schema.parse(input);
-    // TODO: replace with real behaviour.
-    return { echoed: message };
-  },
-};
+      return withPendingProposals({ recorded: true, key, note }, [
+        {
+          id: crypto.randomUUID(),
+          type: 'plugin.data',
+          source: {
+            pluginId: context.pluginId,
+            runtimeId: context.runtimeId,
+          },
+          turnId: context.turnId,
+          sessionId: context.sessionId,
+          payload: {
+            namespace: 'notes',
+            key,
+            value: note,
+          },
+          timestamp: now,
+        },
+      ]);
+    },
+  });
+}
 `;
 }
 
@@ -241,16 +272,32 @@ function renderFunctionRuntime(name: string): string {
   return `/**
  * ${name} — pure function runtime.
  *
- * Return a \`RuntimeResult\` shape: { proposals?: Proposal[], output?: unknown }.
- * See docs/reference/plugins.md for the full contract.
+ * Return a plain object. The runtime normalizer turns supported fields such as
+ * pluginData[] into proposals during commit.
  */
 
 export default async function run(context) {
-  // \`context\` carries turn + session state. Inspect context.input to see
-  // what triggered this runtime.
+  const title =
+    typeof context.manualPayload?.title === 'string'
+      ? context.manualPayload.title
+      : 'Scheduled checkpoint';
+  const now = new Date().toISOString();
+  const key = \`note-\${Date.now().toString(36)}\`;
+
   return {
-    proposals: [],
-    output: { ran: true, at: new Date().toISOString() },
+    status: 'ok',
+    pluginData: [
+      {
+        namespace: 'notes',
+        key,
+        value: {
+          kind: 'function',
+          title,
+          text: 'Replace this with deterministic plugin logic.',
+          createdAt: now,
+        },
+      },
+    ],
   };
 }
 `;
@@ -288,7 +335,7 @@ export async function createPlugin(
   if (template === "agent") {
     writes.push([path.join("tools", `${name}-tool.js`), renderAgentTool(name)]);
   } else if (template === "function") {
-    writes.push(["runtime.js", renderFunctionRuntime(name)]);
+    writes.push(["handler.js", renderFunctionRuntime(name)]);
   }
 
   for (const [rel, content] of writes) {
@@ -299,11 +346,6 @@ export async function createPlugin(
   }
 
   const notes: string[] = [];
-  if (template === "agent") {
-    notes.push(
-      "Agent template emits a local tool. Remember to install `zod` in your plugin package if you keep the schema validation.",
-    );
-  }
   if (template === "zero-code" && options.priority !== undefined) {
     notes.push(
       "Zero-code plugins use a manual trigger, so the supplied priority was ignored.",

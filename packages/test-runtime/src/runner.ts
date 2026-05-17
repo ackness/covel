@@ -406,6 +406,8 @@ export async function runRuntimeDebug(
   const sessionId = options.sessionId ?? `debug-${Date.now().toString(36)}`;
   const turnId = `turn-${Date.now().toString(36)}`;
   const locale = options.locale ?? "zh-CN";
+  const store = createMemoryStore();
+  const mediaStore = options.mediaStore ?? createMemoryMediaStore();
 
   const { discovery, manifests, loadedCache, localTools } =
     await loadRuntimeBundle({
@@ -414,10 +416,9 @@ export async function runRuntimeDebug(
       runtimeId,
       locale,
       ignoreUpstreams: options.ignoreUpstreams,
+      store,
     });
 
-  const store = createMemoryStore();
-  const mediaStore = options.mediaStore ?? createMemoryMediaStore();
   const now = new Date().toISOString();
   await store.createSession({
     id: sessionId,

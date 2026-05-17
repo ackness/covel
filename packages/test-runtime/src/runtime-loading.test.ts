@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { PluginDiscoveryResult } from "@covel/plugin-loader";
 import type { RuntimeManifest } from "@covel/shared";
 
+import { createMemoryStore } from "@covel/store";
 import {
   expandPath,
   loadLocalTools,
@@ -79,9 +80,12 @@ describe("test-runtime runtime loading helpers", () => {
       ].join("\n"),
     );
 
-    const tools = await loadLocalTools(discovery(root), [
-      manifest({ tools: { local: ["tools.js"] } }),
-    ]);
+    const store = createMemoryStore();
+    const tools = await loadLocalTools(
+      discovery(root),
+      [manifest({ tools: { local: ["tools.js"] } })],
+      store,
+    );
 
     expect(tools).toHaveLength(1);
     expect(tools[0]?.name).toBe("local_echo");
@@ -96,6 +100,49 @@ describe("test-runtime runtime loading helpers", () => {
         },
       ),
     ).resolves.toEqual({ value: "ok" });
+  });
+
+  it("injects the same helper surface that server bootstrap gives local tools", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "covel-tools-"));
+    fs.writeFileSync(
+      path.join(root, "tools.js"),
+      [
+        "export default ({ tool, z, shortId, shortIdBatch, withPendingProposals, store }) => tool({",
+        '  name: "record-note",',
+        '  description: "Record note",',
+        "  parameters: z.object({ title: z.string() }),",
+        "  async execute(params, context) {",
+        "    const key = shortId('note', params.title, context.sessionId);",
+        "    const batch = shortIdBatch('tag', ['alpha', 'alpha'], context.sessionId);",
+        "    return withPendingProposals({ key, batch, hasStore: Boolean(store) }, []);",
+        "  },",
+        "});",
+      ].join("\n"),
+    );
+
+    const store = createMemoryStore();
+    const tools = await loadLocalTools(
+      discovery(root),
+      [manifest({ tools: { local: ["tools.js"] } })],
+      store,
+    );
+
+    expect(tools).toHaveLength(1);
+    await expect(
+      tools[0]?.execute(
+        { title: "Opened Vault" },
+        {
+          sessionId: "session",
+          turnId: "turn",
+          pluginId: "plugin",
+          runtimeId: "plugin/main",
+        },
+      ),
+    ).resolves.toEqual({
+      key: "note-opened-vault",
+      batch: ["tag-alpha", "tag-alpha-2"],
+      hasStore: true,
+    });
   });
 
   it("rejects local tool paths outside the plugin root", async () => {

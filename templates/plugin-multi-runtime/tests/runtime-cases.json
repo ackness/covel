@@ -1,0 +1,66 @@
+{
+  "cases": [
+    {
+      "name": "manual-note-writes-plugin-data",
+      "runtimeId": "{{pluginName}}/note",
+      "payload": {
+        "title": "Test checkpoint",
+        "text": "The template runtime records deterministic plugin state.",
+        "tags": ["template"]
+      },
+      "expect": {
+        "runtimeResults": [
+          {
+            "runtimeId": "{{pluginName}}/note",
+            "status": "success"
+          }
+        ],
+        "pluginData": [
+          {
+            "namespace": "notes",
+            "field": "title"
+          }
+        ],
+        "logs": ["note.recorded"]
+      }
+    },
+    {
+      "name": "analyst-records-one-note",
+      "runtimeId": "{{pluginName}}/analyst",
+      "message": "The player promised the gatekeeper to return before dawn.",
+      "llmResponses": [
+        {
+          "content": null,
+          "finishReason": "tool_calls",
+          "toolCalls": [
+            {
+              "id": "tc-record-analysis",
+              "name": "plugin-data-set",
+              "arguments": "{\"namespace\":\"notes\",\"key\":\"analysis-test\",\"value\":{\"kind\":\"analysis\",\"title\":\"Gatekeeper promise\",\"text\":\"The player promised the gatekeeper to return before dawn.\",\"tags\":[\"promise\"],\"createdAt\":\"2026-05-17T00:00:00.000Z\"}}"
+            },
+            {
+              "id": "tc-runtime-done",
+              "name": "runtime-done",
+              "arguments": "{\"reason\":\"recorded\"}"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "runtimeResults": [
+          {
+            "runtimeId": "{{pluginName}}/analyst",
+            "status": "success"
+          }
+        ],
+        "pluginData": [
+          {
+            "namespace": "notes",
+            "key": "analysis-test",
+            "field": "title"
+          }
+        ]
+      }
+    }
+  ]
+}

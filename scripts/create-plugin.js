@@ -4,7 +4,7 @@
  * Covel 插件脚手架脚本
  *
  * 用法：
- *   node scripts/create-plugin.js <plugin-name>                                     # 默认：多 runtime hello-world
+ *   node scripts/create-plugin.js <plugin-name>                                     # 默认：多 runtime 插件工作台
  *   node scripts/create-plugin.js <plugin-name> -t <target-dir>                     # 自定义目标目录
  *   node scripts/create-plugin.js <plugin-name> -r <runtime-spec>                   # 自定义 runtime 列表
  *   node scripts/create-plugin.js <plugin-name> -r foo:function,bar:agent           # 多 runtime + 类型
@@ -17,9 +17,9 @@
  *   --with-tools          旧式单 runtime 带 tools/，目标固定为 <repo>/plugins/
  *
  * 示例：
- *   node scripts/create-plugin.js hello-world
+ *   node scripts/create-plugin.js session-notes
  *   node scripts/create-plugin.js my-plugin -t ./plugins
- *   node scripts/create-plugin.js my-plugin -r echo:function,assistant:agent
+ *   node scripts/create-plugin.js my-plugin -r recorder:function,analyst:agent
  *   node scripts/create-plugin.js my-plugin -t ~/.covel/plugins -r api-bridge:function
  */
 
@@ -215,9 +215,12 @@ if (mode === "legacy-with-tools") {
   console.log(
     `  2. 编辑 ${relative(process.cwd(), targetDir)}/PLUGIN.md，填写 runtime 元信息和提示词`,
   );
-  console.log(`  3. 修改 tools/example.js，实现工具逻辑`);
+  console.log(`  3. 修改 tools/record-note.js，实现工具逻辑`);
   console.log(
     `  4. 在 ${relative(process.cwd(), targetDir)} 下跑 pnpm install && pnpm test`,
+  );
+  console.log(
+    `  5. 运行 pnpm test:runtime -- ${pluginName} --plugins-dir ${targetBaseDir} --pretty`,
   );
 } else {
   console.log(
@@ -227,10 +230,8 @@ if (mode === "legacy-with-tools") {
     `  2. 检查 ${relative(process.cwd(), targetDir)}/runtimes/<name>/PLUGIN.md，按需修改`,
   );
   if (mode === "demo-multi-runtime") {
-    console.log(
-      "  3. 默认包含 echo (function) + summarizer (agent) 两个 runtime",
-    );
-    console.log("  4. 启动框架后侧栏会出现 Hello World 标签页，按按钮验证");
+    console.log("  3. 默认包含 note (function) + analyst (agent) 两个 runtime");
+    console.log("  4. 启动框架后侧栏会出现插件记录面板，按按钮验证");
   } else {
     console.log(
       "  3. 函数 runtime 编辑 handler.js，agent runtime 编辑 PLUGIN.md 提示词",
@@ -239,6 +240,13 @@ if (mode === "legacy-with-tools") {
   if (targetBaseDir !== DEFAULT_TARGET) {
     console.log(
       `  5. 如未在默认插件目录，请确认 COVEL_PLUGINS_DIR 指向 ${targetBaseDir}`,
+    );
+    console.log(
+      `  6. 运行 pnpm test:runtime -- ${pluginName} --plugins-dir ${targetBaseDir} --pretty`,
+    );
+  } else {
+    console.log(
+      `  5. 运行 pnpm test:runtime -- ${pluginName} --plugins-dir ${targetBaseDir} --pretty`,
     );
   }
 }
@@ -293,7 +301,7 @@ function parseRuntimeSpec(spec) {
 }
 
 function runCustomMultiRuntime(runtimes) {
-  // 复用多 runtime 模板的 root（package.json / .npmrc / README），跳过 runtimes/ 目录
+  // 复用多 runtime 模板的 root package 配置，跳过默认 runtimes / tests / README。
   const baseTemplateDir = resolve(ROOT, "templates", "plugin-multi-runtime");
   if (!existsSync(baseTemplateDir)) {
     console.error(
@@ -303,7 +311,14 @@ function runCustomMultiRuntime(runtimes) {
   }
   mkdirSync(targetDir, { recursive: true });
   for (const entry of readdirSync(baseTemplateDir)) {
-    if (entry === "runtimes" || entry === "node_modules") continue;
+    if (
+      entry === "runtimes" ||
+      entry === "tests" ||
+      entry === "README.md" ||
+      entry === "node_modules"
+    ) {
+      continue;
+    }
     const srcPath = join(baseTemplateDir, entry);
     const destPath = join(targetDir, entry);
     const stat = statSync(srcPath);
@@ -317,6 +332,18 @@ function runCustomMultiRuntime(runtimes) {
       );
     }
   }
+
+  writeFileSync(
+    join(targetDir, "README.md"),
+    renderCustomReadme(runtimes),
+    "utf-8",
+  );
+  mkdirSync(join(targetDir, "tests"), { recursive: true });
+  writeFileSync(
+    join(targetDir, "tests", "runtime-cases.json"),
+    renderCustomRuntimeCases(runtimes),
+    "utf-8",
+  );
 
   for (const rt of runtimes) {
     const rtDir = join(targetDir, "runtimes", rt.name);
@@ -364,17 +391,40 @@ function renderFunctionStubHandler(runtimeName) {
   return `/**
  * @covel/plugin-${pluginName} — ${runtimeName} handler
  *
- * 在此实现函数 runtime 的副作用。可访问 ctx.{ pluginData, gateway, utils,
- * media, logger, userSettings, turnId, triggerEvent, manualPayload, ... }。
+ * Manual function runtime for deterministic plugin-owned state updates.
+ * Replace the notes record below with your real plugin state.
  */
 
+const NOTES_NAMESPACE = 'notes';
+
 export default async function ${camelize(runtimeName)}Handler(ctx) {
-  const { pluginData, logger } = ctx;
+  const { pluginData, logger, manualPayload, turnId } = ctx;
 
-  // TODO: 实现 ${runtimeName} runtime 的逻辑
-  await logger?.info?.('${runtimeName}.invoked', {});
+  if (!pluginData || typeof pluginData.set !== 'function') {
+    return {
+      status: 'failed',
+      error: 'ctx.pluginData.set is unavailable. Upgrade @covel/runtime.',
+    };
+  }
 
-  return { status: 'ok' };
+  const title =
+    typeof manualPayload?.title === 'string' && manualPayload.title.trim()
+      ? manualPayload.title.trim()
+      : '${runtimeName} checkpoint';
+  const now = new Date().toISOString();
+  const key = \`${runtimeName}-\${Date.now().toString(36)}\`;
+  const note = {
+    kind: 'function',
+    title,
+    text: 'Replace this with deterministic plugin logic.',
+    turnId,
+    createdAt: now,
+  };
+
+  await pluginData.set(NOTES_NAMESPACE, key, note);
+  await logger?.info?.('${runtimeName}.recorded', { key, title });
+
+  return { status: 'ok', note };
 }
 `;
 }
@@ -386,7 +436,7 @@ description:
   zh: ${runtimeName} agent runtime —— 请填写它的职责。
   en: ${runtimeName} agent runtime — replace with the real responsibility.
 pluginType: plugin
-model: default
+model: plugin
 outputKind: plugin
 capabilities: [manual-invoke]
 execution: sync
@@ -404,18 +454,128 @@ input:
     - from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
+    - kind: plugin-data
+      namespace: notes
+      as: "<existing-notes>"
+      format: summary
+      maxEntries: 50
 ---
 
-你是 ${pluginName} 插件中的 ${runtimeName} 助手。
+你是 ${pluginName} 插件的 ${runtimeName} runtime。你的职责是把本轮剧情里和插件目标相关的信息整理成一条可维护的插件记录。
 
-## 当前剧情
+## 插件目标
+
+将这一段替换为你的真实目标。例如：追踪玩家承诺、记录世界规则变化、维护任务线索、整理可复用的战斗状态。
+
+## 输入
 
 \`<narrator-output>\` 区块里是本轮 narrator 生成的剧情文本（可能为空）。
 
-## 你的任务
+\`<existing-notes>\` 区块里是本插件已经写入 notes namespace 的记录摘要。
 
-TODO：在此描述本 agent 的具体目标。完成后调用 \`plugin-data-set\` 把结果写入本插件的某个 namespace，然后立即结束，不要输出任何额外文本。
+## 决策规则
+
+- 如果没有和插件目标相关的新信息，调用 \`runtime-done\` 结束。
+- 如果已有 notes 已覆盖同一事实，调用 \`runtime-done\` 结束。
+- 如果发现值得保留的新信息，调用一次 \`plugin-data-set\` 写入 \`notes\`，然后立即调用 \`runtime-done\`。
+
+## 写入格式
+
+调用 \`plugin-data-set\` 时使用：
+
+| 参数        | 值                                                                                                                                                  |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| \`namespace\` | \`notes\`                                                                                                                                           |
+| \`key\`       | \`${runtimeName}-\` 加短时间戳或稳定短 ID                                                                                                           |
+| \`value\`     | \`{ "kind": "analysis", "title": "<短标题>", "text": "<一到两句可执行观察>", "tags": ["<1-3 个标签>"], "createdAt": "<ISO 8601 时间戳>" }\` |
+
+不要输出解释性文字。
 `;
+}
+
+function renderCustomReadme(runtimes) {
+  const lines = runtimes
+    .map(
+      (rt) => `- \`${rt.name}\` (${rt.type}) — 请在对应 PLUGIN.md 中填写职责。`,
+    )
+    .join("\n");
+  return `# ${pluginName}
+
+${placeholders["{{pluginDescription}}"]}
+
+## Runtime
+
+${lines}
+
+## 开发
+
+1. 修改 \`README.md\`，维护给人类和开发者看的说明。
+2. 修改 \`runtimes/<name>/PLUGIN.md\`，维护 runtime 元信息和模型指令。
+3. 函数 runtime 修改 \`handler.js\`；agent runtime 修改 Markdown prompt。
+4. 运行 \`pnpm test:runtime -- ${pluginName} --plugins-dir ${targetBaseDir} --pretty\` 验证模板 case。
+`;
+}
+
+function renderCustomRuntimeCases(runtimes) {
+  const cases = runtimes.map((rt) => {
+    if (rt.type === "function") {
+      return {
+        name: `${rt.name}-manual-records-note`,
+        runtimeId: `${pluginName}/${rt.name}`,
+        payload: { title: `${rt.name} test checkpoint` },
+        expect: {
+          runtimeResults: [
+            { runtimeId: `${pluginName}/${rt.name}`, status: "success" },
+          ],
+          pluginData: [{ namespace: "notes", field: "title" }],
+          logs: [`${rt.name}.recorded`],
+        },
+      };
+    }
+    return {
+      name: `${rt.name}-agent-records-note`,
+      runtimeId: `${pluginName}/${rt.name}`,
+      message: "The player promised the gatekeeper to return before dawn.",
+      llmResponses: [
+        {
+          content: null,
+          finishReason: "tool_calls",
+          toolCalls: [
+            {
+              id: `tc-${rt.name}-record`,
+              name: "plugin-data-set",
+              arguments: JSON.stringify({
+                namespace: "notes",
+                key: `${rt.name}-test`,
+                value: {
+                  kind: "analysis",
+                  title: `${rt.name} test note`,
+                  text: "The player promised the gatekeeper to return before dawn.",
+                  tags: ["test"],
+                  createdAt: "2026-05-17T00:00:00.000Z",
+                },
+              }),
+            },
+            {
+              id: `tc-${rt.name}-done`,
+              name: "runtime-done",
+              arguments: JSON.stringify({ reason: "recorded" }),
+            },
+          ],
+        },
+      ],
+      expect: {
+        runtimeResults: [
+          { runtimeId: `${pluginName}/${rt.name}`, status: "success" },
+        ],
+        pluginData: [
+          { namespace: "notes", key: `${rt.name}-test`, field: "title" },
+        ],
+      },
+    };
+  });
+
+  return `${JSON.stringify({ cases }, null, 2)}\n`;
 }
 
 function camelize(name) {
@@ -425,7 +585,7 @@ function camelize(name) {
 function printUsage() {
   console.log("用法：");
   console.log(
-    "  node scripts/create-plugin.js <plugin-name>                  # 默认 hello-world",
+    "  node scripts/create-plugin.js <plugin-name>                  # 默认多 runtime 插件工作台",
   );
   console.log(
     "  node scripts/create-plugin.js <plugin-name> -t <dir>         # 自定义目标",

@@ -28,7 +28,7 @@ plugins/my-codex/
 
 **tools/unlock-codex-entries.js：**
 
-插件本地工具使用**工厂函数**模式 — 框架在加载时注入 `{ tool, z, shortId, shortIdBatch }`：
+插件本地工具使用**工厂函数**模式 — 框架在加载时注入 `{ tool, z, shortId, shortIdBatch, withPendingProposals, store }`：
 
 ```javascript
 // 工厂函数接收框架注入
@@ -98,12 +98,13 @@ export default function ({ tool, z, shortIdBatch }) {
 
 **关键点：**
 
-1. **工厂函数** — `export default function ({ tool, z, shortId, shortIdBatch })` 接收框架注入，无需 import
+1. **工厂函数** — `export default function ({ tool, z, shortId, shortIdBatch, withPendingProposals, store })` 接收框架注入，通常无需 import
 2. **Zod 定义参数** — 框架自动从 Zod schema 生成 JSON Schema 注入 LLM 上下文，LLM 才知道如何调用
 3. **`.describe()` 很重要** — 每个参数的 describe 会作为参数说明发给 LLM
 4. **`execute(params, context)`** — params 是经过 Zod 验证的输入，context 包含会话信息
 5. **短 ID** — 使用 `shortId()` / `shortIdBatch()` 代替 UUID，让 LLM 能精确引用实体
-6. **返回值** — 任意 JSON，会作为 tool result 返回给 LLM
+6. **持久化写入** — 需要写 plugin-data 时优先返回 `withPendingProposals(...)`，让 commit chain 统一落盘、trace 和触发 SSE
+7. **返回值** — 任意 JSON，会作为 tool result 返回给 LLM
 
 在 PLUGIN.md frontmatter 中声明本地工具：
 

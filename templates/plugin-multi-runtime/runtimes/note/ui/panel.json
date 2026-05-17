@@ -1,17 +1,17 @@
 {
-  "id": "{{pluginName}}-hello",
+  "id": "{{pluginName}}-notes",
   "group": "{{pluginName}}",
-  "groupLabel": { "zh": "Hello", "en": "Hello" },
+  "groupLabel": { "zh": "{{pluginName}}", "en": "{{pluginName}}" },
   "groupOrder": 800,
-  "label": { "zh": "Hello World", "en": "Hello World" },
-  "shortLabel": { "zh": "Hello", "en": "Hello" },
-  "icon": "smile",
-  "dataSource": { "namespace": "messages" },
+  "label": { "zh": "插件记录", "en": "Plugin Notes" },
+  "shortLabel": { "zh": "记录", "en": "Notes" },
+  "icon": "notebook-pen",
+  "dataSource": { "namespace": "notes" },
   "alwaysRender": true,
   "emptyState": {
     "message": {
-      "zh": "还没有消息。点 Echo 写入 hello，或点总结让 agent 概括 narrator。",
-      "en": "No messages yet. Click Echo to write 'hello', or click Summarize to let the agent summarise the narrator output."
+      "zh": "还没有插件记录。可以手动添加一条记录，或让 analyst runtime 分析当前剧情。",
+      "en": "No plugin notes yet. Add a manual note or ask the analyst runtime to inspect the current narrative."
     }
   },
   "view": {
@@ -30,8 +30,8 @@
                 "component": "Text",
                 "props": {
                   "content": {
-                    "zh": "{{pluginName}} 示例插件",
-                    "en": "{{pluginName}} demo plugin"
+                    "zh": "{{pluginName}} 插件工作台",
+                    "en": "{{pluginName}} plugin workbench"
                   },
                   "weight": "bold",
                   "size": "sm"
@@ -41,8 +41,8 @@
                 "component": "Text",
                 "props": {
                   "content": {
-                    "zh": "下方两个按钮分别触发函数 runtime 和 agent runtime。结果都会写入本面板的消息流。",
-                    "en": "The two buttons trigger a function runtime and an agent runtime respectively. Both write into the message log below."
+                    "zh": "函数 runtime 写入确定性记录；agent runtime 读取剧情并写入一条观察。把 notes schema 换成你的真实插件状态即可继续开发。",
+                    "en": "The function runtime writes deterministic notes; the agent runtime reads the narrative and records one observation. Replace the notes schema with your real plugin state."
                   },
                   "variant": "muted",
                   "size": "xs"
@@ -55,7 +55,7 @@
                   {
                     "component": "Button",
                     "props": {
-                      "label": { "zh": "Echo Hello", "en": "Echo hello" },
+                      "label": { "zh": "添加记录", "en": "Add note" },
                       "variant": "primary",
                       "size": "md"
                     },
@@ -63,7 +63,12 @@
                       "click": {
                         "action": "invokeRuntime",
                         "params": {
-                          "runtimeId": "{{pluginName}}/echo"
+                          "runtimeId": "{{pluginName}}/note",
+                          "payload": {
+                            "title": "Manual checkpoint",
+                            "text": "Replace this with state captured from your UI.",
+                            "tags": ["manual"]
+                          }
                         }
                       }
                     }
@@ -71,7 +76,7 @@
                   {
                     "component": "Button",
                     "props": {
-                      "label": { "zh": "总结剧情", "en": "Summarize narrator" },
+                      "label": { "zh": "分析剧情", "en": "Analyze scene" },
                       "variant": "default",
                       "size": "md"
                     },
@@ -79,7 +84,7 @@
                       "click": {
                         "action": "invokeRuntime",
                         "params": {
-                          "runtimeId": "{{pluginName}}/summarizer"
+                          "runtimeId": "{{pluginName}}/analyst"
                         }
                       }
                     }
@@ -94,7 +99,7 @@
       {
         "component": "Stack",
         "props": { "gap": "xs" },
-        "repeat": { "statePath": "/messages", "key": "key" },
+        "repeat": { "statePath": "/entries", "key": "key" },
         "children": [
           {
             "component": "Card",
@@ -111,7 +116,7 @@
                       {
                         "component": "Badge",
                         "props": {
-                          "label": { "$item": "value/role" },
+                          "label": { "$item": "value/kind" },
                           "color": "blue"
                         }
                       },
@@ -124,6 +129,14 @@
                         }
                       }
                     ]
+                  },
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "$item": "value/title" },
+                      "weight": "bold",
+                      "size": "sm"
+                    }
                   },
                   {
                     "component": "Text",
