@@ -669,14 +669,14 @@ export const COVEL_ENV_REGISTRY = [
     group: "test",
     type: "url",
     status: "documented",
-    description: "Documented aimock story endpoint override.",
+    description: "Documented story LLM endpoint override for e2e tests.",
   },
   {
     name: "COVEL_PLUGIN_BASE_URL",
     group: "test",
     type: "url",
     status: "documented",
-    description: "Documented aimock plugin endpoint override.",
+    description: "Documented plugin LLM endpoint override for e2e tests.",
   },
   {
     name: "CSC_LINK",

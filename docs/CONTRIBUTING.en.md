@@ -10,7 +10,7 @@ Thanks for considering contributing! This document outlines the process for cont
 
 - Node.js ≥ 22
 - pnpm 10.7+
-- Optional: Docker (for PostgreSQL mode and E2E testing)
+- Optional: Docker (for PostgreSQL mode)
 
 ```bash
 pnpm install

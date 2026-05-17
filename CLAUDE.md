@@ -62,7 +62,6 @@ pnpm db:up / db:down / db:generate / db:migrate / db:studio
 # E2E
 pnpm e2e              # Playwright headless
 pnpm e2e:ui
-pnpm e2e:docker       # full Docker stack + E2E + teardown
 
 # Real-LLM E2E scripts (need .env.llm)
 npx tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts --slot e2e_local --turns 3

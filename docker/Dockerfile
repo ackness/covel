@@ -1,9 +1,11 @@
 FROM node:22-alpine AS base
+RUN apk add --no-cache libc6-compat libstdc++
 RUN corepack enable pnpm
 WORKDIR /app
 
-# ── Stage 1: Install dependencies (cached by lockfile + manifests) ───
-FROM base AS deps
+# ── Stage 1: Copy workspace manifests (cached by lockfile + manifests) ───
+FROM base AS workspace-manifests
+RUN apk add --no-cache --virtual .build-deps python3 make g++
 COPY pnpm-lock.yaml package.json pnpm-workspace.yaml ./
 
 # Apps (every workspace importer declared in pnpm-lock.yaml must have its
@@ -30,19 +32,33 @@ COPY packages/test-runtime/package.json packages/test-runtime/
 COPY packages/tools/package.json packages/tools/
 
 # Plugins (workspace members, need manifests for pnpm install)
+COPY plugins/branch-reply/package.json plugins/branch-reply/
 COPY plugins/char-creator/package.json plugins/char-creator/
+COPY plugins/character-blueprint/package.json plugins/character-blueprint/
+COPY plugins/character-presence/package.json plugins/character-presence/
+COPY plugins/chat-mode-narrator/package.json plugins/chat-mode-narrator/
 COPY plugins/codex/package.json plugins/codex/
 COPY plugins/guide/package.json plugins/guide/
+COPY plugins/living-world-rules/package.json plugins/living-world-rules/
 COPY plugins/memory/package.json plugins/memory/
 COPY plugins/narrator/package.json plugins/narrator/
 COPY plugins/npc-graph/package.json plugins/npc-graph/
+COPY plugins/player-identity/package.json plugins/player-identity/
 COPY plugins/pregame/package.json plugins/pregame/
+COPY plugins/scene-cast/package.json plugins/scene-cast/
+COPY plugins/scene-prompts/package.json plugins/scene-prompts/
 COPY plugins/world-init/package.json plugins/world-init/
 
+# ── Stage 2a: Dev dependencies for the web build ──────────────────
+FROM workspace-manifests AS dev-deps
 RUN pnpm install --frozen-lockfile
 
-# ── Stage 2: Build web frontend (static assets) ─────────────────────
-FROM deps AS build-web
+# ── Stage 2b: Production dependencies for the runtime image ────────
+FROM workspace-manifests AS prod-deps
+RUN pnpm install --prod --frozen-lockfile
+
+# ── Stage 3: Build web frontend (static assets) ─────────────────────
+FROM dev-deps AS build-web
 COPY tsconfig.json turbo.json ./
 COPY packages/ packages/
 COPY apps/web/ apps/web/
@@ -51,8 +67,9 @@ COPY apps/web/ apps/web/
 # (the dev workflow already catches type errors).
 RUN cd apps/web && pnpm exec vite build
 
-# ── Stage 3: Production runtime ─────────────────────────────────────
-FROM deps AS production
+# ── Stage 4: Production runtime ─────────────────────────────────────
+FROM prod-deps AS production
+RUN apk del .build-deps
 
 # Root tsconfig (needed by workspace packages)
 COPY tsconfig.json ./

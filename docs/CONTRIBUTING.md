@@ -10,7 +10,7 @@
 
 - Node.js ≥ 22
 - pnpm 10.7+
-- 可选：Docker（用于 PostgreSQL 模式与 E2E 测试）
+- 可选：Docker（用于 PostgreSQL 模式）
 
 ```bash
 pnpm install
