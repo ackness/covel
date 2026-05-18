@@ -1,10 +1,10 @@
 /**
  * Token budget + message pruning (S1-T2).
  *
- * Pure utility used by the context builder (behind a feature flag) to drop
- * the oldest conversation messages when the estimated input-token total
- * would overflow the LLM's context window. Modeled after OpenCode's
- * "protect the last N user turns" rule.
+ * Pure utility used by the context builder to drop the oldest conversation
+ * messages when the estimated input-token total would overflow the LLM's
+ * context window. Modeled after OpenCode's "protect the last N user turns"
+ * rule.
  *
  * Design constraints:
  * - No dependency on @covel/ai-provider. The caller injects a TokenEstimator.

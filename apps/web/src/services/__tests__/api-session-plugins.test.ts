@@ -215,7 +215,7 @@ describe("listPackages", () => {
     localStorageMock.clear();
   });
 
-  it("normalizes runtime trigger.type into trigger.mode", async () => {
+  it("keeps runtime trigger.type from the server payload", async () => {
     mockFetchOnce({
       packages: [
         {
@@ -253,7 +253,7 @@ describe("listPackages", () => {
       provides: ["narrative-engine"],
     });
     expect(result.packages[0]?.runtimes?.[0]?.trigger).toEqual({
-      mode: "event",
+      type: "event",
       topic: "story.ready",
     });
     expect(result.packages[0]?.runtimes?.[0]?.tags).toEqual([

@@ -5,7 +5,6 @@ import type {
   ToolCallRecord,
   TurnInput,
 } from "@covel/shared";
-import { isEnvEnabled } from "@covel/shared";
 import type { SuspensionRecord } from "@covel/store";
 import { isSuspendSentinel, withPendingProposals } from "@covel/tools";
 import type { LLMMessage } from "./llm-adapter.js";
@@ -44,7 +43,7 @@ export interface ResumeSuspendedRuntimeOptions {
 /**
  * Re-enter the LLM tool loop for a suspended runtime.
  *
- * COVEL_SUSPEND_V1 must be enabled by the caller before invoking this helper.
+ * The caller is responsible for auth, runtime lookup, and concurrency checks.
  */
 export async function resumeSuspendedRuntime(
   suspension: SuspensionRecord,
@@ -317,10 +316,7 @@ export async function resumeSuspendedRuntime(
             pendingProposals.push(...result.pendingProposals);
           }
 
-          if (
-            isEnvEnabled("COVEL_SUSPEND_V1") &&
-            isSuspendSentinel(result.parsedResult)
-          ) {
+          if (isSuspendSentinel(result.parsedResult)) {
             messages.push({
               role: "tool",
               content: JSON.stringify({
@@ -445,18 +441,6 @@ export async function resumeSuspendedRuntime(
 
   if (interactions.length > 0) {
     output.interactions = interactions;
-    const firstForm = interactions.find(
-      (interaction) => interaction.type === "form",
-    );
-    if (firstForm) {
-      output.form = {
-        formId: firstForm.interactionId,
-        title: firstForm.title,
-        fields: firstForm.fields,
-        submitLabel: firstForm.submitLabel,
-      };
-      output.narrativeTemplate = firstForm.narrativeTemplate;
-    }
     if (finalContent && !output.narrativeOutput) {
       output.narrativeOutput = finalContent;
     }

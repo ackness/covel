@@ -844,10 +844,10 @@ describe("TurnExecutor E2E", () => {
     expect(historyAssistant).toBeDefined();
     expect(historyAssistant!.role).toBe("assistant");
 
-    // Current user message should be last non-system message
-    const currentUser = llmMessages[llmMessages.length - 1];
-    expect(currentUser.role).toBe("user");
-    expect(currentUser.content).toBe("继续探索");
+    const currentUser = llmMessages.find(
+      (m) => m.role === "user" && m.content === "继续探索",
+    );
+    expect(currentUser).toBeDefined();
     expect(llmMessages.filter((m) => m.content === "继续探索")).toHaveLength(1);
   });
 });
@@ -935,7 +935,6 @@ describe("TurnExecutor _interaction protocol", () => {
     expect(pi.interaction).toBeDefined();
     expect(pi.interaction.type).toBe("form");
     expect(pi.interaction.interactionId).toBe("test-form");
-    // Backward compat
     expect(pi.form).toBeDefined();
     expect((pi.form as Record<string, unknown>).interactionId).toBe(
       "test-form",

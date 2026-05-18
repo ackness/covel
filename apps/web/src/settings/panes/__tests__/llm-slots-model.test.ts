@@ -16,28 +16,28 @@ describe("llm slots model", () => {
             id: "runtime-image",
             kind: "agent",
             priority: 500,
-            trigger: { mode: "auto" },
+            trigger: { type: "auto" },
             model: "image",
           },
           {
             id: "runtime-plugin",
             kind: "agent",
             priority: 500,
-            trigger: { mode: "auto" },
-            providerTag: "plugin",
+            trigger: { type: "auto" },
+            model: "plugin",
           },
           {
             id: "runtime-text",
             kind: "agent",
             priority: 500,
-            trigger: { mode: "auto" },
+            trigger: { type: "auto" },
             model: "text",
           },
           {
             id: "runtime-function",
             kind: "function",
             priority: 500,
-            trigger: { mode: "auto" },
+            trigger: { type: "auto" },
             model: "ignored-function-slot",
           },
         ],
@@ -61,7 +61,7 @@ describe("llm slots model", () => {
     expect(slots).toEqual(["image", "image-fast", "plugin"]);
   });
 
-  it("merges configured or legacy slots with discovered slots", () => {
+  it("merges configured or default slots with discovered slots", () => {
     expect(
       createVisibleSlotIds({
         isConfigured: true,

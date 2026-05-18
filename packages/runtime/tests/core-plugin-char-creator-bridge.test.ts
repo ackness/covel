@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
@@ -80,20 +80,6 @@ async function createPregameStore(sessionId: string): Promise<DataStore> {
 }
 
 describe("char-creator core plugin guard bridge", () => {
-  const originalSessionContext = process.env.COVEL_SESSION_CONTEXT;
-
-  beforeEach(() => {
-    process.env.COVEL_SESSION_CONTEXT = "1";
-  });
-
-  afterEach(() => {
-    if (originalSessionContext === undefined) {
-      delete process.env.COVEL_SESSION_CONTEXT;
-    } else {
-      process.env.COVEL_SESSION_CONTEXT = originalSessionContext;
-    }
-  });
-
   it("creates the submitted player, mirrors plugin data, advances Pre-Game, and refreshes same-turn narrator context", async () => {
     const sessionId = "sess-char-bridge";
     const store = await createPregameStore(sessionId);

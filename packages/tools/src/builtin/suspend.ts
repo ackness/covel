@@ -2,10 +2,7 @@
  * Suspend builtin tool (S4-T4).
  *
  * When called by an agent runtime, returns a sentinel object that the
- * turn-executor recognises as a suspend signal (when COVEL_SUSPEND_V1=1).
- *
- * Flag-off behaviour: the sentinel is a regular tool result returned to the
- * LLM — no suspension is created, the turn continues normally.
+ * turn-executor recognises as a suspend signal.
  *
  * Plugins convert their Zod schemas to plain JSON Schema via `zod-to-json-schema`
  * before passing them to `resumeSchema`. Do NOT pass live Zod objects here.
@@ -52,8 +49,7 @@ export const suspendTool: ToolModule = tool({
       ),
   }),
   execute: async ({ reason, resumeSchema }) => {
-    // Returns the sentinel that turn-executor recognises when COVEL_SUSPEND_V1=1.
-    // When flag is off, this is just a regular tool result the LLM receives.
+    // Returns the sentinel that turn-executor recognises as a suspend signal.
     return {
       _covelSuspend: true,
       reason,

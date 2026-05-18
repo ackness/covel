@@ -65,9 +65,6 @@ export function collectAssetGenerations(
 ): AssetGeneratePayload[] {
   const assets: AssetGeneratePayload[] = [];
   appendAssets(output.assetGenerations, assets);
-  // `assets` is the alias used by the bundled image plugins. Read it after
-  // `assetGenerations` so callers that emit both keep the canonical order.
-  appendAssets(output.assets, assets);
   return assets;
 }
 

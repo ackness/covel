@@ -1,6 +1,6 @@
 /**
- * Shared prompt-assembly helpers used by both V1 (`context-builder.ts`) and
- * V2 (`prompt-assembler.ts`).
+ * Shared prompt-assembly helpers used by the public context builder and the
+ * segment-based prompt assembler.
  *
  * Extracted so the two assemblers share one source of truth for:
  * - template-variable interpolation
@@ -19,34 +19,8 @@ import type {
   PluginDataInjectDecl,
   RuntimeInjectDecl,
 } from "@covel/shared";
-import { isEnvEnabled } from "@covel/shared";
 import type { PluginDataRecord } from "./session-context-store.js";
-import type { ContextBuildParams, SessionMeta } from "./types.js";
-
-/**
- * Pick the source-of-truth for session-level data inside the prompt-variable
- * assembler. When a `SessionContextSnapshot` is present on the params, it wins
- * over the legacy scattered fields so callers can opt into the snapshot
- * channel without the legacy fields having to be cleared.
- *
- * Kept local to this module — the dual-channel collapse is a Sprint 1 detail
- * and Sprint 2/3 remove the legacy branch entirely.
- */
-function resolveVariableSources(params: ContextBuildParams): {
-  readonly config: Readonly<Record<string, unknown>>;
-  readonly sessionMeta: SessionMeta | undefined;
-} {
-  if (params.sessionContext) {
-    return {
-      config: params.sessionContext.legacyConfigView,
-      sessionMeta: params.sessionContext.sessionMeta,
-    };
-  }
-  return {
-    config: params.config,
-    sessionMeta: params.sessionMeta,
-  };
-}
+import type { ContextBuildParams } from "./types.js";
 
 /**
  * Resolve a dot-separated path against a nested object.
@@ -86,8 +60,24 @@ export function interpolateTemplate(
     if (value === undefined || value === null) {
       return "";
     }
-    return String(value);
+    return renderTemplateValue(value);
   });
+}
+
+function renderTemplateValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (typeof value === "bigint") return value.toString();
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
 }
 
 /** Extract the tag name from an XML-style tag string like `<narrator-output>`. */
@@ -121,15 +111,9 @@ function escapeXmlContent(value: string): string {
 
 /**
  * Check whether a declaration is the runtime-output variant.
- *
- * The legacy shape has no `kind` field — shared's `inputInjectDeclSchema`
- * normalises it to `kind: 'runtime'` at parse time. So at runtime we can
- * just check the discriminator. For defensive reading of hand-built data
- * (e.g. old fixtures), we also treat `kind === undefined` as `runtime`.
  */
 function isRuntimeInject(decl: InputInjectDecl): decl is RuntimeInjectDecl {
-  const kind = (decl as { kind?: string }).kind;
-  return kind === "runtime" || kind === undefined;
+  return decl.kind === "runtime";
 }
 
 function isPluginDataInject(
@@ -352,15 +336,16 @@ function safeStringify(value: unknown): string {
 /**
  * Assemble the full variables object consumed by `interpolateTemplate`.
  *
- * Mirrors the logic previously inlined in `buildContext`. Both V1 and V2
- * call this so the variable surface stays identical and plugin templates
- * see the same data regardless of which assembler is active.
+ * Mirrors the logic previously inlined in `buildContext`. The public sync and
+ * async context builders share this variable surface so plugin templates see
+ * the same data regardless of whether plugin-data injects require async IO.
  */
 export function assemblePromptVariables(
   params: ContextBuildParams,
 ): Record<string, unknown> {
   const { turnInput, completedResults } = params;
-  const { config, sessionMeta } = resolveVariableSources(params);
+  const sessionMeta = params.sessionContext?.sessionMeta ?? params.sessionMeta;
+  const world = params.sessionContext?.world ?? {};
 
   // Build the `inputs` lookup map: pluginId → runtimeId → output.
   const inputsMap: Record<string, Record<string, Record<string, unknown>>> = {};
@@ -377,17 +362,6 @@ export function assemblePromptVariables(
     inputsMap[pluginId][runtimeId] = result.output;
   }
 
-  // Build a `world` convenience object from config.world* keys so plugin
-  // templates can use `{{ world.lore }}`, `{{ world.dimensions }}`, etc.
-  const world: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(config)) {
-    if (key.startsWith("world") && key.length > 5) {
-      // worldLore → lore, worldDimensions → dimensions, worldEntries → entries, etc.
-      const shortKey = key[5]!.toLowerCase() + key.slice(6);
-      world[shortKey] = value;
-    }
-  }
-
   const playerChar =
     sessionMeta?.characters?.find((c) => c.type === "player") ?? null;
 
@@ -401,13 +375,11 @@ export function assemblePromptVariables(
 
   return {
     inputs: inputsMap,
-    config,
-    ...config,
+    config: params.config,
     world,
     session: {
       id: turnInput.sessionId,
       turnNumber: sessionMeta?.turnNumber ?? 0,
-      phase: (sessionMeta?.turnNumber ?? 0) === 0 ? "pre-game" : "playing",
     },
     player: {
       message: turnInput.playerMessage,
@@ -457,13 +429,12 @@ export function buildCurrentTurnUserMessage(
 }
 
 /**
- * Framework preamble used by V2 prompt assembly (segment 1).
+ * Framework preamble used by segment-based prompt assembly (segment 1).
  *
  * When a locale is provided, prepends a `[RUNTIME]` header that keeps
  * task-general assistants from drifting outside the interactive-narrative
  * frame, then appends the `[LANGUAGE]` constraint. When no locale is
- * supplied this returns an empty string so segment 1 is skipped — preserving
- * V1/V2 byte-identity in the locale-less baseline.
+ * supplied this returns an empty string so segment 1 is skipped.
  */
 export function buildFrameworkPreamble(locale?: string): string {
   if (!locale) {
@@ -493,8 +464,8 @@ export function buildFrameworkPreamble(locale?: string): string {
  * then alphabetical key within scope. If no entries exist, returns an
  * empty string so callers can skip the segment.
  *
- * Gated by `COVEL_WORKING_MEMORY_V1=1`. When unset, returns empty string
- * unconditionally so the feature has zero overhead when disabled.
+ * Returns an empty string when no entries exist so callers can skip the
+ * segment.
  */
 export function renderWorkingMemory(
   entries:
@@ -505,9 +476,6 @@ export function renderWorkingMemory(
       }[]
     | undefined,
 ): string {
-  if (!isEnvEnabled("COVEL_WORKING_MEMORY_V1")) {
-    return "";
-  }
   if (!entries || entries.length === 0) {
     return "";
   }
@@ -538,13 +506,12 @@ export function renderWorkingMemory(
  * They are placed in the prompt between framework preamble and message
  * history, replacing the need for full history injection.
  *
- * Gated by `COVEL_MEMORY_V1=1`. When unset, returns empty string.
+ * Returns an empty string when no non-empty blocks exist.
  */
 export function renderCoreMemory(
   blocks: readonly { label: string; content: string }[] | undefined,
   locale?: string,
 ): string {
-  if (!isEnvEnabled("COVEL_MEMORY_V1")) return "";
   if (!blocks || blocks.length === 0) return "";
 
   const nonEmpty = blocks.filter((b) => b.content.trim());

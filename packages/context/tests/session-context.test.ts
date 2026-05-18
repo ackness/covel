@@ -11,7 +11,6 @@ import type {
   WorldRecord,
 } from "@covel/store";
 import { buildSessionContextSnapshot } from "@covel/context";
-import { loadSessionConfig } from "../../../apps/server/src/routes/api/load-session-config.js";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -154,16 +153,15 @@ describe("buildSessionContextSnapshot — basic shape", () => {
     expect(snapshot.contributions).toEqual([]);
     expect(snapshot.activePersona).toBeUndefined();
 
-    // legacyConfigView must be a plain object with no keys when no sources exist.
-    expect(snapshot.legacyConfigView).toEqual({});
-    expect(Object.keys(snapshot.legacyConfigView)).toHaveLength(0);
+    expect(snapshot.world.schema).toBeUndefined();
+    expect(snapshot.world.entries).toEqual([]);
   });
 });
 
-// ── Test B: Parity with loadSessionConfig ───────────────────────
+// ── Test B: Structured world context ────────────────────────────
 
-describe("buildSessionContextSnapshot — legacyConfigView parity", () => {
-  it("produces legacyConfigView byte-for-byte equal to loadSessionConfig", async () => {
+describe("buildSessionContextSnapshot — world context", () => {
+  it("loads world metadata, schema, and lorebook entries into world.*", async () => {
     const store = createMemoryStore();
     const world = makeWorld();
     await store.upsertWorld(world);
@@ -187,8 +185,6 @@ describe("buildSessionContextSnapshot — legacyConfigView parity", () => {
       }),
     );
 
-    // Lorebook entries — the canonical source for worldEntries (FU-8).
-    // Two constant, enabled entries for the world-data plugin.
     await store.upsertLorebookEntries([
       makeLorebookEntry({
         id: "lore-a",
@@ -204,7 +200,6 @@ describe("buildSessionContextSnapshot — legacyConfigView parity", () => {
       }),
     ]);
 
-    const legacy = await loadSessionConfig(store, "sess-1", "w1", "world-data");
     const snapshot = await buildSessionContextSnapshot(store, "sess-1", {
       locale: "zh-CN",
       turnNumber: 0,
@@ -212,11 +207,6 @@ describe("buildSessionContextSnapshot — legacyConfigView parity", () => {
       worldDataPluginId: "world-data",
     });
 
-    // Byte-for-byte: deep-equal + identical key order.
-    expect(snapshot.legacyConfigView).toEqual(legacy);
-    expect(Object.keys(snapshot.legacyConfigView)).toEqual(Object.keys(legacy));
-
-    // WorldContextView spot-checks
     expect(snapshot.world.id).toBe("w1");
     expect(snapshot.world.lore).toBe("The land of Ash");
     expect(snapshot.world.tone).toBe("noir");
@@ -225,8 +215,11 @@ describe("buildSessionContextSnapshot — legacyConfigView parity", () => {
       tone: "noir",
       startingConditions: { openingScenario: "You wake in a cell" },
     });
+    expect(snapshot.world.schema).toEqual({
+      dimensions: { tone: "noir" },
+      startingConditions: { openingScenario: "X" },
+    });
 
-    // WorldContextView.entries is the array form; legacy.worldEntries is the map form.
     expect(Array.isArray(snapshot.world.entries)).toBe(true);
     expect(snapshot.world.entries).toHaveLength(2);
     expect(snapshot.world.entries?.[0]).toEqual({
@@ -237,36 +230,15 @@ describe("buildSessionContextSnapshot — legacyConfigView parity", () => {
       key: "beta",
       content: "Beta content",
     });
-
-    // legacy.worldEntries preserves the map-of-key-to-content shape verbatim.
-    expect(legacy.worldEntries).toEqual({
-      alpha: "Alpha content",
-      beta: "Beta content",
-    });
   });
 
-  it("falls back to plugin_data when no lorebook entries exist", async () => {
+  it("leaves world entries empty when no lorebook entries exist", async () => {
     const store = createMemoryStore();
     await store.upsertWorld(
       makeWorld({ id: "w2", lore: undefined, metadata: undefined }),
     );
     await store.createSession(
       makeSession({ id: "sess-fallback", worldId: "w2" }),
-    );
-    await store.setPluginData(
-      makePluginData({
-        sessionId: "sess-fallback",
-        namespace: "entries",
-        key: "gamma",
-        value: "Gamma content",
-      }),
-    );
-
-    const legacy = await loadSessionConfig(
-      store,
-      "sess-fallback",
-      "w2",
-      "world-data",
     );
     const snapshot = await buildSessionContextSnapshot(store, "sess-fallback", {
       locale: "zh-CN",
@@ -275,11 +247,7 @@ describe("buildSessionContextSnapshot — legacyConfigView parity", () => {
       worldDataPluginId: "world-data",
     });
 
-    expect(snapshot.legacyConfigView).toEqual(legacy);
-    expect(legacy.worldEntries).toEqual({ gamma: "Gamma content" });
-    expect(snapshot.world.entries).toEqual([
-      { key: "gamma", content: "Gamma content" },
-    ]);
+    expect(snapshot.world.entries).toEqual([]);
   });
 });
 
@@ -529,7 +497,7 @@ describe("buildSessionContextSnapshot — graceful degradation", () => {
     expect(snapshot.characters).toEqual([]);
     expect(snapshot.workingMemory).toEqual([]);
     expect(snapshot.loreEntries).toEqual([]);
-    expect(snapshot.legacyConfigView).toEqual({});
+    expect(snapshot.world).toEqual({ id: "w-broken", entries: [] });
     expect(snapshot.sessionMeta.lastFormValues).toBeUndefined();
   });
 });

@@ -48,7 +48,6 @@ import { worldVisual } from "@/lib/world-visuals.js";
 interface GameViewProps {
   session: SessionRecord;
   world: WorldRecord | null;
-  phase: string;
   messages: StreamMessage[];
   executing: boolean;
   executionError: string | null;
@@ -78,7 +77,7 @@ interface GameViewProps {
   onSendMessage: (content: string) => void;
   /** Mark a block as submitted (permanently locks it). */
   onSubmitBlock: (blockId: string) => void;
-  /** Submit an interactive block through submit-inputs API. */
+  /** Submit an interactive block through framework submit-form RPC. */
   onSubmitInteraction?: (
     blockId: string,
     turnId: string,
@@ -108,7 +107,6 @@ interface GameViewProps {
 export function GameView({
   session,
   world,
-  phase,
   messages,
   executing,
   executionError,
@@ -333,7 +331,6 @@ export function GameView({
         >
           <LeftPanel
             session={session}
-            phase={phase}
             isLeftCollapsed={isLeftCollapsed}
             showSessionList={showSessionList}
             otherSessions={otherSessions}
@@ -451,7 +448,7 @@ export function GameView({
             executionSteps={executionSteps}
             executionError={executionError}
             executing={executing}
-            phase={phase}
+            session={session}
             world={world}
             packages={packages}
             sessionPlugins={sessionPlugins}
@@ -480,7 +477,7 @@ export function GameView({
           {/* Input — always fixed at bottom */}
           <MessageComposer
             t={t}
-            phase={phase}
+            session={session}
             executing={executing}
             inputValue={inputValue}
             composerBlocked={composerBlocked}

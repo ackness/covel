@@ -473,7 +473,7 @@ export const workingMemory = pgTable(
     sessionId: text("session_id").notNull(),
     key: text("key").notNull(),
     scope: text("scope").notNull(), // 'player' | 'story' | 'shared'
-    value: jsonb("value").notNull(), // JSON
+    value: jsonb("value"), // JSON
     schemaRef: text("schema_ref"),
     updatedAt: text("updated_at").notNull(),
   },

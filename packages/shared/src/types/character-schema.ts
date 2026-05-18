@@ -4,7 +4,7 @@
  * Created by the `world-data-provider` plugin (world-init) during session
  * initialization. Consumed by:
  *   - char-creator: generates form fields matching attribute IDs
- *   - submit-inputs: merges default values into new characters
+ *   - submit-form: merges default values into new characters
  *   - right panel: renders structured attribute display
  *   - narrator context: injects player attributes for narrative adaptation
  *

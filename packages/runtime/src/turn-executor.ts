@@ -212,9 +212,8 @@ export async function executeTurn(
   // pending: pregame plugins
   // have implicit write-ordering (pregame → world-init/schema-gen → player-init,
   // audit P0-2) that is NOT captured in manifest inject declarations, so
-  // falling back to priority is the right semantic. player-init's prompt
-  // reads `{{ config.worldSchema }}` populated by schema-gen via
-  // loadSessionConfig — schema-gen MUST land first in the same setup pass.
+  // falling back to priority is the right semantic. player-init's prompt reads
+  // `{{ world.schema }}`, so schema-gen MUST land first in the same setup pass.
   //
   // Main-loop band uses the DAG scheduler after setup completes: it parallelises any
   // runtimes whose declared upstreams (input.inject + upstreamRequired) have

@@ -30,7 +30,6 @@ describe("scene-prompts manifest and UI loading", () => {
       priority: 600,
       model: "plugin",
       outputKind: "system",
-      promptVersion: 1,
       trigger: {
         type: "scheduled",
         interval: 1,

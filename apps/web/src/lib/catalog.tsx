@@ -5,7 +5,7 @@
  * Plugins can only use components registered here — the framework
  * controls the vocabulary, plugins compose from it.
  *
- * The Button selection feedback wires through the V1 session store's
+ * The Button selection feedback wires through the session store's
  * `pendingInteractionDrafts` so plugin-declared click bindings echo back
  * a visual selection marker when the user picks a choice.
  */

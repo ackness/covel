@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { buildContext } from "@covel/context";
 import type {
   ContextBuildParams,
@@ -43,13 +43,8 @@ const baseParams = (): ContextBuildParams => ({
   messageHistory: makeHistory(),
 });
 
-describe("buildContext — budget feature flag", () => {
-  afterEach(() => {
-    delete process.env.COVEL_CONTEXT_BUDGET_V1;
-  });
-
-  it("prunes when env flag is set AND estimator+budget are provided", () => {
-    process.env.COVEL_CONTEXT_BUDGET_V1 = "1";
+describe("buildContext — budget pruning", () => {
+  it("prunes when estimator+budget are provided", () => {
     const params: ContextBuildParams = {
       ...baseParams(),
       estimator: mockEstimator,
@@ -69,26 +64,7 @@ describe("buildContext — budget feature flag", () => {
     expect(first.content).toMatch(/older messages pruned/);
   });
 
-  it("does not prune when env flag is unset", () => {
-    delete process.env.COVEL_CONTEXT_BUDGET_V1;
-    const params: ContextBuildParams = {
-      ...baseParams(),
-      estimator: mockEstimator,
-      contextBudget: {
-        maxInputTokens: 500,
-        reservedForResponse: 0,
-      },
-    };
-
-    const ctx = buildContext(params);
-
-    // Full history + current message preserved, no placeholder.
-    expect(ctx.messages.length).toBe(21);
-    expect(ctx.messages[0]!.role).toBe("user");
-  });
-
-  it("does not prune when flag is set but estimator is missing", () => {
-    process.env.COVEL_CONTEXT_BUDGET_V1 = "1";
+  it("does not prune when estimator is missing", () => {
     const params: ContextBuildParams = {
       ...baseParams(),
       contextBudget: {
@@ -104,8 +80,7 @@ describe("buildContext — budget feature flag", () => {
     expect(ctx.messages[0]!.role).toBe("user");
   });
 
-  it("does not prune when flag is set but contextBudget is missing", () => {
-    process.env.COVEL_CONTEXT_BUDGET_V1 = "1";
+  it("does not prune when contextBudget is missing", () => {
     const params: ContextBuildParams = {
       ...baseParams(),
       estimator: mockEstimator,

@@ -16,15 +16,16 @@ tags:
   - data:characters
   - data:relationship-graph
   - cost:llm
-promptVersion: 2
 trigger:
   type: auto
 input:
   inject:
-    - from: scene-cast
+    - kind: runtime
+      from: scene-cast
       field: activeCastContext
       as: "<active-cast>"
-    - from: npc-graph/rag-retriever
+    - kind: runtime
+      from: npc-graph/rag-retriever
       field: npcContext
       as: "<npc-relationships>"
 relations:

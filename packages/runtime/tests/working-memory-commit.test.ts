@@ -2,11 +2,10 @@
  * Working Memory commit handler tests (S3-T3).
  *
  * Verifies that `working_memory.set` proposals flow through `commitAll`,
- * persist to store, and emit `working_memory.changed`. Also verifies the
- * flag-off path rejects proposals.
+ * persist to store, and emit `working_memory.changed`.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { Proposal } from "@covel/shared";
 import {
   createCommitPipeline,
@@ -61,25 +60,7 @@ function makeWmProposal(overrides?: Partial<Proposal>): Proposal {
 }
 
 describe("working_memory.set commit handler", () => {
-  let originalEnv: string | undefined;
-
-  beforeEach(() => {
-    originalEnv = process.env.COVEL_WORKING_MEMORY_V1;
-  });
-
-  afterEach(() => {
-    if (originalEnv === undefined) {
-      delete process.env.COVEL_WORKING_MEMORY_V1;
-    } else {
-      process.env.COVEL_WORKING_MEMORY_V1 = originalEnv;
-    }
-  });
-
-  describe("flag ON (COVEL_WORKING_MEMORY_V1=1)", () => {
-    beforeEach(() => {
-      process.env.COVEL_WORKING_MEMORY_V1 = "1";
-    });
-
+  describe("commit", () => {
     it("persists the WM entry and returns committed=true", async () => {
       const store = makeRecordingStore();
       const pipeline = createCommitPipeline(store);
@@ -190,24 +171,6 @@ describe("working_memory.set commit handler", () => {
       expect(store.wmEntries[0]).toMatchObject({
         schemaRef: "some-schema-name",
       });
-    });
-  });
-
-  describe("flag OFF (COVEL_WORKING_MEMORY_V1 unset)", () => {
-    beforeEach(() => {
-      delete process.env.COVEL_WORKING_MEMORY_V1;
-    });
-
-    it('returns committed=false with error "working_memory disabled"', async () => {
-      const store = makeRecordingStore();
-      const pipeline = createCommitPipeline(store);
-      const proposal = makeWmProposal();
-
-      const result = await pipeline.commit(proposal);
-
-      expect(result.committed).toBe(false);
-      expect(result.error).toContain("working_memory disabled");
-      expect(store.wmEntries).toHaveLength(0);
     });
   });
 });

@@ -333,7 +333,7 @@ export const CREATE_TABLES_SQL = `
     session_id TEXT NOT NULL,
     key TEXT NOT NULL,
     scope TEXT NOT NULL,
-    value JSONB NOT NULL,
+    value JSONB,
     schema_ref TEXT,
     updated_at TEXT NOT NULL,
     UNIQUE (session_id, scope, key)

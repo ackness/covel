@@ -1,7 +1,7 @@
 /**
  * Block renderer — schema + raw fallback only.
  *
- * V1 消息渲染已经全部走 json-render + plugin-data 数据流（见
+ * 消息渲染已经全部走 json-render + plugin-data 数据流（见
  * `apps/web/src/components/session/chat-messages.tsx`）。本模块只保留两个
  * 对外契约：
  *

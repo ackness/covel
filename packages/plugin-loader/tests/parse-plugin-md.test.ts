@@ -58,7 +58,8 @@ describe("parsePluginMd", () => {
           "    - roll-dice",
           "input:",
           "  inject:",
-          "    - from: narrator",
+          "    - kind: runtime",
+          "      from: narrator",
           "      field: narrativeOutput",
           "      as: narrativeContext",
           "output:",
@@ -113,7 +114,6 @@ describe("parsePluginMd", () => {
       expect(result.manifest.input).toEqual({
         inject: [
           {
-            // Legacy shape auto-normalised by schema preprocess.
             kind: "runtime",
             from: "narrator",
             field: "narrativeOutput",
@@ -213,7 +213,8 @@ describe("parsePluginMd", () => {
           "priority: 650",
           "input:",
           "  inject:",
-          "    - from: narrator",
+          "    - kind: runtime",
+          "      from: narrator",
           "      field: narrativeOutput",
           '      as: "<narrator-output>"',
           "    - kind: plugin-data",
@@ -469,7 +470,6 @@ describe("parsePluginMd", () => {
           "name: test-guard-plugin",
           "description: Plugin with hooks",
           "priority: 500",
-          "hookManifestVersion: 1",
           "hooks:",
           "  - event: PreToolUse",
           "    handler: ./hooks/validate.ts",
@@ -520,7 +520,6 @@ describe("parsePluginMd", () => {
             "name: test-hook-plugin",
             "description: Hook event test",
             "priority: 500",
-            "hookManifestVersion: 1",
             "hooks:",
             `  - event: ${event}`,
             "    handler: ./hooks/handler.ts",
@@ -544,7 +543,6 @@ describe("parsePluginMd", () => {
           "name: test-bad-hook",
           "description: Bad hook event",
           "priority: 500",
-          "hookManifestVersion: 1",
           "hooks:",
           "  - event: InvalidEvent",
           "    handler: ./hooks/bad.ts",
@@ -604,7 +602,6 @@ describe("parsePluginMd", () => {
           "name: test-malformed-hook",
           "description: Mix of valid + malformed entries",
           "priority: 500",
-          "hookManifestVersion: 1",
           "hooks:",
           "  - event: PreToolUse",
           "    handler: ./hooks/ok.ts",
@@ -628,13 +625,11 @@ describe("parsePluginMd", () => {
       warnSpy.mockRestore();
     });
 
-    it("skips hooks until hookManifestVersion is declared", () => {
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
+    it("enables hooks whenever hooks are declared", () => {
       const content = md(
         [
-          "name: test-ungated-hooks",
-          "description: Hooks without gate",
+          "name: test-hooks",
+          "description: Hooks declaration",
           "priority: 500",
           "hooks:",
           "  - event: PreToolUse",
@@ -643,16 +638,14 @@ describe("parsePluginMd", () => {
         "\nBody.\n",
       );
 
-      const result = parsePluginMd(
-        content,
-        "plugins/test-ungated-hooks/PLUGIN.md",
-      );
+      const result = parsePluginMd(content, "plugins/test-hooks/PLUGIN.md");
 
-      expect(result.manifest.hooks).toBeUndefined();
-      expect(warnSpy).toHaveBeenCalledOnce();
-      expect(warnSpy.mock.calls[0][0]).toContain("hookManifestVersion: 1");
-
-      warnSpy.mockRestore();
+      expect(result.manifest.hooks).toEqual([
+        {
+          event: "PreToolUse",
+          handler: "./hooks/ok.ts",
+        },
+      ]);
     });
 
     it("parses plugin without hooks field (optional)", () => {

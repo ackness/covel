@@ -1,7 +1,5 @@
 /**
- * Session Kernel TDD — Proposal Normalizer + Commit Pipeline.
- *
- * RED phase: all tests should fail because session-kernel.ts doesn't exist yet.
+ * Session Kernel — Proposal Normalizer + Commit Pipeline.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -77,7 +75,7 @@ describe("normalizeOutput", () => {
       ).toHaveLength(0);
     });
 
-    it("should fall back to content field when narrativeOutput is absent (story only)", () => {
+    it("should not use content as a narrativeOutput alias", () => {
       const output = { content: "Fallback content." };
       const proposals = normalizeOutput(
         output,
@@ -87,12 +85,7 @@ describe("normalizeOutput", () => {
         "story",
       );
 
-      expect(proposals).toHaveLength(1);
-      expect(proposals[0].type).toBe("narrative.append");
-      expect(proposals[0].payload).toEqual({
-        content: "Fallback content.",
-        kind: "story",
-      });
+      expect(proposals).toEqual([]);
     });
 
     it("should skip narrativeTemplate (contains placeholders, not displayable)", () => {
@@ -140,24 +133,6 @@ describe("normalizeOutput", () => {
       expect(interactionProposals[0].payload.type).toBe("form");
       expect(interactionProposals[1].payload.interactionId).toBe("direction");
       expect(interactionProposals[1].payload.type).toBe("choice");
-    });
-
-    it("should handle legacy form field", () => {
-      const output = {
-        form: {
-          formId: "legacy-form",
-          title: "Old Form",
-          fields: [],
-          submitLabel: "Submit",
-        },
-      };
-      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
-
-      const interactionProposals = proposals.filter(
-        (p) => p.type === "interaction.request",
-      );
-      expect(interactionProposals).toHaveLength(1);
-      expect(interactionProposals[0].payload.interactionId).toBe("legacy-form");
     });
 
     it("should extract ui blocks from tool-call outputs as ui.render proposals", () => {
@@ -242,19 +217,6 @@ describe("normalizeOutput", () => {
     });
   });
 
-  describe("legacy phase field (ignored post turn-band migration)", () => {
-    it("should not emit any proposal when output carries a phase field", () => {
-      const output = { phase: "playing" };
-      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
-
-      expect(
-        proposals.every((p) => p.type !== ("phase.transition" as string)),
-      ).toBe(true);
-      // Legacy `phase` is dropped silently so plugins can migrate lazily.
-      expect(proposals).toHaveLength(0);
-    });
-  });
-
   describe("event.emit", () => {
     it("should extract events array as event.emit proposals", () => {
       const output = {
@@ -309,49 +271,14 @@ describe("normalizeOutput", () => {
       });
     });
 
-    // Regression: bundled image plugins (dashscope-image-gen, openai-image-gen)
-    // emit `output.assets[]` instead of `output.assetGenerations[]` because the
-    // P0-c handler diffs and READMEs documented `assets` as the wire field.
-    // The framework must accept both spellings — otherwise enforceImageAssetOutput
-    // rejects every proposal (including the plugin.data write that flips the
-    // gallery row from `pending` to `done`), leaving the session in a torn state.
-    it("emits asset.generate proposals from assets[] alias (plugin compat)", () => {
+    it("ignores assets[] because assetGenerations[] is the runtime output contract", () => {
       const output = {
-        assets: [
-          { ref: MEDIA_REF, modality: "image", meta: { prompt: "forest" } },
-        ],
-      };
-
-      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
-
-      expect(proposals).toHaveLength(1);
-      expect(proposals[0].type).toBe("asset.generate");
-      expect(proposals[0].payload).toEqual({
-        ref: MEDIA_REF,
-        modality: "image",
-        meta: { prompt: "forest" },
-      });
-    });
-
-    it("merges assetGenerations[] and assets[] when both are present", () => {
-      const output = {
-        assetGenerations: [{ ref: MEDIA_REF, modality: "image" }],
         assets: [{ ref: MEDIA_REF_2, modality: "image" }],
       };
 
       const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
 
-      expect(proposals).toHaveLength(2);
-      expect(proposals.map((p) => p.type)).toEqual([
-        "asset.generate",
-        "asset.generate",
-      ]);
-      expect((proposals[0].payload as { ref: { id: string } }).ref.id).toBe(
-        MEDIA_REF.id,
-      );
-      expect((proposals[1].payload as { ref: { id: string } }).ref.id).toBe(
-        MEDIA_REF_2.id,
-      );
+      expect(proposals).toEqual([]);
     });
   });
 
@@ -556,11 +483,8 @@ describe("normalizeOutput", () => {
 
   describe("mixed output", () => {
     it("should extract all proposal types from a complex output", () => {
-      // `phase` is intentionally included to assert it is silently dropped;
-      // the migration removed persistent phase so only 3 proposals remain.
       const output = {
         narrativeOutput: "The story continues.",
-        phase: "playing",
         statePatches: [{ table: "world", field: "time", value: "night" }],
         interactions: [
           {
@@ -768,7 +692,7 @@ describe("createCommitPipeline", () => {
     });
   });
 
-  describe("phase.transition commit (removed post turn-band migration)", () => {
+  describe("phase.transition commit", () => {
     it("should return committed: false because phase.transition is no longer a known proposal type", async () => {
       const store = createMockStore();
       const pipeline = createCommitPipeline(store as any);
@@ -1244,8 +1168,6 @@ describe("processRuntimeResult", () => {
     const store = createMockStore();
     const result = makeRuntimeResult({
       narrativeOutput: "The hero enters the cave.",
-      // Legacy `phase` is silently dropped — asserts the migration guard.
-      phase: "playing",
     });
 
     const { events, failedProposals } = await processRuntimeResult(
@@ -1255,7 +1177,6 @@ describe("processRuntimeResult", () => {
       "story",
     );
 
-    // Only narrative.append remains — phase is no longer a proposal type.
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe("narrative.completed");
     expect(events[0].payload.content).toBe("The hero enters the cave.");
@@ -1597,16 +1518,9 @@ describe("processRuntimeResult", () => {
     expect(store.setPluginData).not.toHaveBeenCalled();
   });
 
-  // Regression for the cloudmere-682fb5bf "task done but gallery pending" bug:
-  // bundled image plugins emit `output.assets[]` (not `assetGenerations[]`)
-  // alongside a `pluginData[]` write that flips the gallery row to `done`.
-  // Before the alias was added, enforceImageAssetOutput rejected the entire
-  // proposal batch and the plugin.data write was silently dropped, leaving
-  // _jobs=done but images=pending in the store.
-  it("commits pluginData and asset.generate together when plugin emits assets[] alias", async () => {
+  it("requires image-generation runtimes to emit assetGenerations[]", async () => {
     const store = createMockStore();
     const result = makeRuntimeResult({
-      // Mirrors the real dashscope handler shape from ~/.covel/plugins/.
       assets: [
         { ref: MEDIA_REF, modality: "image", meta: { prompt: "forest" } },
       ],
@@ -1627,10 +1541,9 @@ describe("processRuntimeResult", () => {
       { capabilities: ["image-generation"] },
     );
 
-    expect(failedProposals).toHaveLength(0);
-    // Both proposals should have committed: one asset.generated event +
-    // one plugin.data write that flips the gallery row to `done`.
-    expect(events.map((e) => e.type).sort()).toEqual(["asset.generated"]);
+    expect(events).toHaveLength(0);
+    expect(failedProposals).toHaveLength(1);
+    expect(failedProposals[0].error).toBe("image.generate.asset_missing");
     const galleryWrites = store.setPluginData.mock.calls.filter(
       (call: ReadonlyArray<Record<string, unknown>>) =>
         call[0].namespace === "images",

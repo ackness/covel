@@ -52,11 +52,7 @@ export interface TriggerConfig {
 // ── Input declarations ───────────────────────────────────────────
 
 /**
- * Inject a field from a completed upstream runtime's output (legacy shape).
- *
- * The `kind: 'runtime'` discriminator is materialised by the schema
- * `preprocess` step. PLUGIN.md files may omit it — the legacy
- * `{ from, field, as }` shape is still accepted and normalised at parse time.
+ * Inject a field from a completed upstream runtime's output.
  */
 export interface RuntimeInjectDecl {
   readonly kind: "runtime";
@@ -299,17 +295,6 @@ export interface RuntimeManifest {
   readonly priority?: number;
   readonly version?: string;
   /**
-   * Prompt assembler version (S2-T4).
-   * - `1` or omitted: V1 single-pass `buildContext`.
-   * - `2`: V2 three-tier assembler (segments 1–10).
-   *
-   * The runtime only routes a manifest to V2 when **both** the environment
-   * flag `COVEL_PROMPT_V2=1` and `promptVersion: 2` are set. This double gate
-   * keeps migration opt-in at both the deployment level (env flag) and the
-   * plugin level (manifest field) per §A8 of the improvement plan.
-   */
-  readonly promptVersion?: 1 | 2;
-  /**
    * Execution type: 'agent' (default) uses LLM pipeline, 'function' runs a pure handler.
    * Function runtimes declare `handler` pointing to a JS module with a default export.
    */
@@ -395,8 +380,6 @@ export interface RuntimeManifest {
    * come from triggers, input.inject, upstreamRequired, and scheduler config.
    */
   readonly relations?: PluginRelations;
-  /** Enables lifecycle hook declarations for this manifest. */
-  readonly hookManifestVersion?: 1;
   /**
    * Runtime IDs this runtime depends on for a successful upstream output.
    * When any listed upstream ran with `status !== 'success'` in the same
@@ -453,24 +436,20 @@ export interface RuntimeManifest {
    */
   readonly summaryFocus?: readonly string[];
   /**
-   * Author's Note (S3-T4, V2 prompt segment 9) — director-grade instruction
+   * Author's Note prompt segment — director-grade instruction
    * inserted near the end of the message history, just before the Nth-from-last
    * message. Modeled after SillyTavern / NovelAI author's-note semantics.
    *
    * The content supports template interpolation (`{{ config.xxx }}`, etc.)
    * identical to the plugin body. Multiple active plugins' notes are merged
    * in priority order.
-   *
-   * Only applied by the V2 prompt assembler (`COVEL_PROMPT_V2=1`).
    */
   readonly authorsNote?: AuthorsNoteDecl;
   /**
-   * Post-History Instructions (S3-T4, V2 prompt segment 10) — final
+   * Post-History Instructions prompt segment — final
    * high-weight instruction appended after the last message. Used to
    * re-anchor the model on output format, style constraints, or
    * hard rules that should survive long histories.
-   *
-   * Only applied by the V2 prompt assembler (`COVEL_PROMPT_V2=1`).
    */
   readonly postHistory?: PostHistoryDecl;
   /**
@@ -495,7 +474,7 @@ export interface RuntimeManifest {
 // ── Author's note / Post-history declarations (S3-T4) ───────────
 
 /**
- * Declaration for V2 prompt segment 9 — "director's note" inserted
+ * Declaration for prompt segment 9 — "director's note" inserted
  * near the end of the message history.
  */
 export interface AuthorsNoteDecl {
@@ -512,7 +491,7 @@ export interface AuthorsNoteDecl {
 }
 
 /**
- * Declaration for V2 prompt segment 10 — high-weight instruction appended
+ * Declaration for prompt segment 10 — high-weight instruction appended
  * after the last message.
  */
 export interface PostHistoryDecl {

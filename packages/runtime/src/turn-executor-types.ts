@@ -96,12 +96,9 @@ export interface TurnExecutorDeps {
   }) => Promise<void>;
 
   /**
-   * Optional token estimator for context budgeting. When provided together with
-   * `contextBudget` AND `process.env.COVEL_CONTEXT_BUDGET_V1 === '1'`, the message
-   * history is pruned before it is handed to the LLM. See packages/context/src/budget.ts.
-   *
-   * Turn-executor does NOT read the env flag itself — that check lives in
-   * `buildContext`. Turn-executor only threads these references through.
+   * Optional token estimator for context budgeting. When provided together
+   * with `contextBudget`, the message history is pruned before it is handed
+   * to the LLM. See packages/context/src/budget.ts.
    */
   readonly estimator?: TokenEstimator;
 
@@ -123,20 +120,16 @@ export interface TurnExecutorDeps {
   readonly hookPipeline?: HookPipeline;
 
   /**
-   * Optional compactor runner (S2-T2).
-   * When present AND `process.env.COVEL_COMPACTOR_V1 === '1'`, the compactor
-   * runs before `buildContext` to summarize old history. When absent or flag
-   * is off, the compaction step is a pure no-op — identical to pre-S2-T2
-   * behaviour.
+   * Optional compactor runner. When present, the compactor runs before
+   * `buildContext` to summarize old history.
    */
   readonly compactor?: CompactorRunner;
 
   /**
    * Optional memory system (Letta-style three-tier memory).
-   * When present AND `process.env.COVEL_MEMORY_V1 === '1'`:
+   * When present:
    *   - Pre-turn: loads core memory blocks and passes to buildContext
    *   - Post-turn: calls memory updater to refresh blocks from turn results
-   * When absent or flag off: zero overhead, identical to pre-memory behaviour.
    */
   readonly memorySystem?: {
     readonly manager: {
@@ -174,9 +167,7 @@ export interface TurnExecutorDeps {
    * and passed down so `buildSessionContextSnapshot` can fetch the active
    * world's plugin_data (schema, dimensions, tone, opening scenario).
    *
-   * Only consulted when `process.env.COVEL_SESSION_CONTEXT === '1'`. When the
-   * flag is off or this field is absent, the legacy scattered-load code path
-   * runs unchanged.
+   * Consulted by `buildSessionContextSnapshot` when a store is available.
    */
   readonly worldDataPluginId?: string;
 

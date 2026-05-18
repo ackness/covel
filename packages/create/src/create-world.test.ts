@@ -272,8 +272,8 @@ dimensions:
 });
 
 describe("buildWorldPrompt", () => {
-  it("documents lore quality constraints for generated worlds", () => {
-    const prompt = buildWorldPrompt("低成本快速验证世界", "zh-CN");
+  it("documents lore quality constraints for generated worlds", async () => {
+    const prompt = await buildWorldPrompt("低成本快速验证世界", "zh-CN");
     expect(prompt).toContain('Start with exactly one H1: "# <world name>".');
     expect(prompt).toContain(
       "Never mention tests, validation, prompts, models, cost, cheapness, speed, e2e, API, or framework internals",

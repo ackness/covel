@@ -19,11 +19,10 @@ function mapWorldRecord(w: Record<string, unknown>): WorldRecord {
 }
 
 export async function listWorlds(): Promise<WorldRecord[]> {
-  const res = await request<
-    { items: Record<string, unknown>[] } | Record<string, unknown>[]
-  >("/api/worlds");
-  const raw = Array.isArray(res) ? res : res.items;
-  return raw.map(mapWorldRecord);
+  const res = await request<{ items: Record<string, unknown>[] }>(
+    "/api/worlds",
+  );
+  return res.items.map(mapWorldRecord);
 }
 
 export async function getWorld(id: string): Promise<WorldRecord> {

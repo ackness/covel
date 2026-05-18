@@ -41,9 +41,7 @@ export async function buildPackagesResponse(registry: PluginRegistry): Promise<{
       kind: m.manifest.runtimeType ?? "agent",
       priority: m.manifest.priority ?? 500,
       trigger: normalizeRuntimeTrigger(m.manifest.trigger),
-      ...(m.manifest.model
-        ? { model: m.manifest.model, providerTag: m.manifest.model }
-        : {}),
+      ...(m.manifest.model ? { model: m.manifest.model } : {}),
       ...(m.manifest.outputKind ? { outputKind: m.manifest.outputKind } : {}),
       ...(m.manifest.capabilities && m.manifest.capabilities.length > 0
         ? { capabilities: [...m.manifest.capabilities] }

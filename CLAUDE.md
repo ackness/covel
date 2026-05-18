@@ -22,7 +22,7 @@ Before changing anything non-trivial, consult the matching reference doc — the
 | HTTP API (all endpoints, request/response, curl)    | [docs/reference/api.md](./docs/reference/api.md)                                           |
 | Protocol (SSE events, envelope, Transport layer)    | [docs/reference/protocol.md](./docs/reference/protocol.md)                                 |
 | Right-panel tabs, json-render declarative UI        | [docs/reference/ui-panels.md](./docs/reference/ui-panels.md)                               |
-| Prompt assembly (10-slice, cache_control, V1→V2)    | [docs/reference/prompt-structure.md](./docs/reference/prompt-structure.md)                 |
+| Prompt assembly (segments, cache_control)           | [docs/reference/prompt-structure.md](./docs/reference/prompt-structure.md)                 |
 | DataStore transactions (begin/commit/rollback)      | [docs/reference/transactions.md](./docs/reference/transactions.md)                         |
 | Writing a plugin (tutorial + frontmatter fields)    | [docs/guide/plugin-authoring.md](./docs/guide/plugin-authoring.md)                         |
 | Plugin UI + runtime guidelines                      | [docs/guide/plugin-ui-runtime-guidelines.md](./docs/guide/plugin-ui-runtime-guidelines.md) |

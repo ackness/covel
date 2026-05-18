@@ -466,7 +466,7 @@ export function useSessionActions({
   }, [dispatch]);
 
   const setComposerText = useCallback((_text: string) => {
-    // V1 composer state lives in GameView; this callback preserves plugin API compatibility.
+    // Composer state lives in GameView; this callback preserves plugin API compatibility.
   }, []);
 
   const resumeSuspension = useCallback(
@@ -515,7 +515,7 @@ export function useSessionActions({
       if (sessionIdRef.current !== sid) return;
       dispatch({ type: "SET_SUSPENSIONS", suspensions });
     } catch {
-      // Non-critical: feature flag may be off, or network may blip.
+      // Non-critical: suspension support may be unavailable, or network may blip.
     }
   }, [dispatch, sessionIdRef]);
 

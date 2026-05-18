@@ -13,8 +13,8 @@
  *   4. Tags the original messages with `compactedAtTurnId = summaryId` so the
  *      prompt-build path can substitute the summary in their place.
  *
- * The compactor does NOT read env flags itself. Feature gating via
- * `COVEL_COMPACTOR_V1` is the caller's responsibility (turn-executor.ts).
+ * The compactor does NOT read environment configuration itself. The caller
+ * decides whether a compactor instance is available.
  *
  * Original messages are NEVER deleted. They are only tagged.
  *

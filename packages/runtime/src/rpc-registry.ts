@@ -8,10 +8,8 @@
  *      plugin load. Handlers are loaded lazily on first dispatch.
  *
  *   2. **Framework default actions** — registered eagerly at bootstrap.
- *      Always available regardless of which plugins are loaded. Their
- *      action names are prefixed with `framework-` to avoid collisions
- *      with plugin actions, but the dispatcher accepts both the prefixed
- *      and bare forms (e.g. `submit-form` and `framework-submit-form`).
+ *      Always available regardless of which plugins are loaded. Requests
+ *      address them with `pluginId: "framework"`.
  *
  * The registry does not resolve handlers (i.e. does not `import()` modules);
  * it only stores the declarations and exposes a lookup interface. The

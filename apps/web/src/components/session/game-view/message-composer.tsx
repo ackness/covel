@@ -1,10 +1,11 @@
 import { Loader2, Send } from "lucide-react";
 import type { Dispatch, KeyboardEvent, SetStateAction } from "react";
 import type { TFunction } from "i18next";
+import type { SessionRecord } from "@/services/api.js";
 
 interface MessageComposerProps {
   t: TFunction;
-  phase: string;
+  session: SessionRecord;
   executing: boolean;
   inputValue: string;
   composerBlocked: boolean;
@@ -16,7 +17,7 @@ interface MessageComposerProps {
 
 export function MessageComposer({
   t,
-  phase,
+  session,
   executing,
   inputValue,
   composerBlocked,
@@ -25,9 +26,12 @@ export function MessageComposer({
   onSubmit,
   onKeyDown,
 }: MessageComposerProps) {
+  const isPlaying = session.status === "active" && session.turnCount > 0;
+  const isEnded = session.status === "ended";
+
   return (
     <div className="border-t border-[var(--rule-color)] shrink-0 px-3 md:px-4 py-4 md:py-5 bg-[var(--surface-page)]">
-      {phase === "ended" ? (
+      {isEnded ? (
         <p className="ui-empty-copy mx-auto text-center text-sm">
           {t("session.ended", "This session has ended.")}
         </p>
@@ -46,7 +50,7 @@ export function MessageComposer({
               placeholder={
                 composerBlocked
                   ? t("session.composerBlockedPlaceholder")
-                  : phase === "playing"
+                  : isPlaying
                     ? t(
                         "session.inputPlaceholder",
                         "Enter action or command...",

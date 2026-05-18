@@ -8,14 +8,14 @@ priority: 550
 model: plugin
 outputKind: system
 timeoutMs: 120000
-promptVersion: 2
 trigger:
   type: scheduled
   interval: 1
   cooldownTurns: 1
 input:
   inject:
-    - from: narrator
+    - kind: runtime
+      from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
 tools:

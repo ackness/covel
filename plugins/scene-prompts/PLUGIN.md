@@ -8,7 +8,6 @@ priority: 600
 model: plugin
 outputKind: system
 timeoutMs: 120000
-promptVersion: 1
 tags:
   - mode:dialogue
   - role:quick-reply
@@ -22,7 +21,8 @@ upstreamRequired:
   - chat-mode-narrator
 input:
   inject:
-    - from: chat-mode-narrator
+    - kind: runtime
+      from: chat-mode-narrator
       field: narrativeOutput
       as: "<narrator-output>"
 tools:

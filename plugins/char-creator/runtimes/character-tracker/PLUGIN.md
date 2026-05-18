@@ -10,7 +10,6 @@ priority: 600
 model: plugin
 outputKind: system
 timeoutMs: 120000
-promptVersion: 2
 tags:
   - role:character
   - data:characters
@@ -24,7 +23,8 @@ upstreamRequired:
   - narrator
 input:
   inject:
-    - from: narrator
+    - kind: runtime
+      from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
 tools:
@@ -59,7 +59,7 @@ postHistory:
 ## 世界角色属性 Schema
 
 <world-schema>
-{{ config.worldSchema }}
+{{ world.schema }}
 </world-schema>
 
 ## 你的工作流

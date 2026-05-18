@@ -21,6 +21,7 @@ import {
   listPluginData,
 } from "@/services/api.js";
 import type { WorldRecord } from "@/services/api.js";
+import type { ServerStoreBackend } from "@/services/data-service.js";
 import {
   aggregateSpecsIntoGroups,
   compactTabLabel,
@@ -92,7 +93,9 @@ export function RightPanel({
 }: RightPanelProps) {
   const { t, i18n } = useTranslation();
   const pluginPanelStateCacheRef = useRef<PluginPanelStateCache>(new Map());
-  const [storeBackend, setStoreBackend] = useState<string | null>(null);
+  const [storeBackend, setStoreBackend] = useState<ServerStoreBackend | null>(
+    null,
+  );
   const [pluginTabGroups, setPluginTabGroups] = useState<PluginPanelTabGroup[]>(
     [],
   );
@@ -137,7 +140,7 @@ export function RightPanel({
 
   useEffect(() => {
     fetchServerHealth()
-      .then((h) => setStoreBackend(h.storeBackend))
+      .then((h) => setStoreBackend(h.storage?.data?.backend ?? null))
       .catch(() => {});
   }, []);
 

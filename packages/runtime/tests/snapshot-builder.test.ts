@@ -84,7 +84,6 @@ describe("buildSessionSnapshot", () => {
     // Session metadata
     expect(snapshot.session.id).toBe("sess-1");
     expect(snapshot.session.worldId).toBe("neonridge");
-    expect(snapshot.session.phase).toBe("playing");
     expect(snapshot.session.turnCount).toBe(3);
 
     // Messages flattened from metadata

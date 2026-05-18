@@ -1,6 +1,6 @@
 /**
  * Tests for the story-runtime history filter — detects markdown-fenced and
- * backtick-wrapped JSON that earlier versions let leak into the narrator
+ * backtick-wrapped JSON from leaking into the narrator
  * prompt and caused the LLM to mimic codex/guide JSON in its prose.
  */
 

@@ -1,25 +1,21 @@
 /**
  * Session-level context snapshot loader (Sprint 1-B).
  *
- * Collapses the scattered store reads spread across `turn-executor.ts` and
- * `apps/server/src/routes/api/load-session-config.ts` into a single
- * deterministic async call. Returns a strictly-readonly snapshot built once
- * per turn.
+ * Collapses the scattered store reads spread across `turn-executor.ts` into a
+ * single deterministic async call. Returns a strictly-readonly snapshot built
+ * once per turn.
  *
  * Invariants:
  *  1. All store reads are guarded (method existence probe + try/catch).
  *     Loader failures never throw; missing data degrades to empty shapes.
- *  2. `legacyConfigView` is byte-identical to `loadSessionConfig` output —
- *     same keys, same insertion order, "key absent when source empty" rule.
- *  3. World-data-provider plugin id is caller-supplied (discovered by the
+ *  2. World-data-provider plugin id is caller-supplied (discovered by the
  *     `world-data-provider` capability tag) — never hardcoded here.
- *  4. `coreMemoryBlocks` / `summaries` are caller-resolved inputs; the
- *     loader does not read feature flags.
+ *  3. `coreMemoryBlocks` / `summaries` are caller-resolved inputs; the
+ *     loader does not inspect environment configuration.
  */
 
 import type {
   LorebookEntryRecord,
-  PluginDataRecord,
   SessionContextStore,
   WorldRecord,
   WorkingMemoryRecord,
@@ -34,15 +30,12 @@ import type {
   SummaryRecord,
   WorkingMemoryEntry,
 } from "./types.js";
-import {
-  buildLegacyConfigView,
-  buildWorldContextView,
-} from "./session-context-views.js";
+import { buildWorldContextView } from "./session-context-views.js";
 
 /**
- * Options for `buildSessionContextSnapshot`. Caller supplies flag-gated
+ * Options for `buildSessionContextSnapshot`. Caller supplies optional
  * inputs (core memory, summaries) already resolved; the snapshot loader
- * does not inspect environment flags.
+ * does not inspect environment configuration.
  */
 export interface BuildSessionContextSnapshotOpts {
   /** Locale for this turn. Usually resolved from request → session → world default → app default (`zh-CN`). */
@@ -53,19 +46,19 @@ export interface BuildSessionContextSnapshotOpts {
   readonly worldId?: string;
   /**
    * Plugin ID of the world-data-provider (discovered by `world-data-provider`
-   * capability tag in bootstrap). Drives `legacyConfigView.worldEntries` /
-   * `.worldSchema` loading. Framework must NEVER hardcode a plugin id.
+   * capability tag in bootstrap). Drives `world.entries` / `world.schema`
+   * loading. Framework must NEVER hardcode a plugin id.
    */
   readonly worldDataPluginId?: string;
   /**
    * Pre-loaded core memory blocks. Caller decides whether to load them
-   * based on `COVEL_MEMORY_V1` + memorySystem availability.
+   * based on memorySystem availability.
    * Defaults to `[]`.
    */
   readonly coreMemoryBlocks?: readonly CoreMemoryBlockView[];
   /**
    * Pre-loaded session summaries. Caller decides whether to load them
-   * based on `COVEL_COMPACTOR_V1`. Defaults to `[]`.
+   * based on compactor/store availability. Defaults to `[]`.
    */
   readonly summaries?: readonly SummaryRecord[];
   /** Current player text for selective lorebook activation. */
@@ -98,10 +91,15 @@ export async function buildSessionContextSnapshot(
     ? await safeGetWorld(store, opts.worldId)
     : null;
 
-  const [worldSchema, worldEntriesMap] = await Promise.all([
-    loadWorldSchema(store, sessionId, opts.worldDataPluginId),
-    loadWorldEntries(store, sessionId, opts.worldDataPluginId, lorebookRecords),
-  ]);
+  const worldSchema = await loadWorldSchema(
+    store,
+    sessionId,
+    opts.worldDataPluginId,
+  );
+  const worldEntriesMap = lorebookWorldEntriesMap(
+    lorebookRecords,
+    opts.worldDataPluginId,
+  );
 
   return {
     sessionId,
@@ -119,11 +117,6 @@ export async function buildSessionContextSnapshot(
     coreMemoryBlocks: opts.coreMemoryBlocks ?? [],
     loreEntries: lorebookRecords.map(toLorebookEntryView),
     summaries: opts.summaries ?? [],
-    legacyConfigView: buildLegacyConfigView({
-      worldRecord,
-      schemaMap: worldSchema,
-      entriesMap: worldEntriesMap,
-    }),
     ...(activePersona ? { activePersona } : {}),
     contributions: [
       ...compileLorebookContributions(
@@ -513,36 +506,11 @@ async function loadWorldSchema(
   }
 }
 
-async function loadWorldEntries(
-  store: SessionContextStore,
-  sessionId: string,
-  worldDataPluginId: string | undefined,
-  lorebookRecords: readonly LorebookEntryRecord[],
-): Promise<Record<string, unknown> | undefined> {
-  if (!worldDataPluginId) return undefined;
-  // Prefer lorebook (canonical, FU-8) — matches `readLorebookWorldEntries`
-  // in `load-session-config.ts`.
-  const lorebookMap = lorebookWorldEntriesMap(
-    lorebookRecords,
-    worldDataPluginId,
-  );
-  if (lorebookMap !== undefined) return lorebookMap;
-  try {
-    const entryRecords: readonly PluginDataRecord[] =
-      await store.listPluginData(sessionId, worldDataPluginId, "entries");
-    if (entryRecords.length === 0) return undefined;
-    const map: Record<string, unknown> = {};
-    for (const r of entryRecords) map[r.key] = r.value;
-    return map;
-  } catch {
-    return undefined;
-  }
-}
-
 function lorebookWorldEntriesMap(
   records: readonly LorebookEntryRecord[],
-  worldDataPluginId: string,
+  worldDataPluginId: string | undefined,
 ): Record<string, unknown> | undefined {
+  if (!worldDataPluginId) return undefined;
   const relevant = records
     .filter(
       (e) =>

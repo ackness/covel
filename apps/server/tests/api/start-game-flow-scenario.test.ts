@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
+import { createRpcApprovalGate } from "@covel/approval";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { createEventBus } from "@covel/events";
 import {
@@ -18,7 +19,7 @@ import {
 } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
 import { actionRoutes } from "../../src/routes/api/actions.js";
-import { submitInputsRoutes } from "../../src/routes/api/submit-inputs.js";
+import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
 class NoopLLM implements LLMAdapter {
@@ -207,6 +208,7 @@ function makeApp(
       throw new Error("plugin handler lookup skipped in scenario tests");
     },
   });
+  const rpcApprovalGate = createRpcApprovalGate();
 
   app.use("*", async (c, next) => {
     c.set("store", store);
@@ -221,10 +223,12 @@ function makeApp(
     c.set("eventBus", eventBus);
     c.set("sessionLock", sessionLock);
     c.set("rpcExecutor", rpcExecutor);
+    c.set("rpcRegistry", rpcRegistry);
+    c.set("rpcApprovalGate", rpcApprovalGate);
     await next();
   });
   app.route("/api/actions", actionRoutes);
-  app.route("/api/sessions", submitInputsRoutes);
+  app.route("/api/sessions", pluginRpcRoutes);
   return app;
 }
 
@@ -300,19 +304,31 @@ describe("start-game API lifecycle scenario", () => {
     const bootstrapTurnId = startEvents[0]?.turnId ?? "turn-bootstrap";
 
     const submit = await app.request(
-      "/api/sessions/sess-start-flow-api/submit-inputs",
+      "/api/sessions/sess-start-flow-api/plugin-rpc",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          turnId: bootstrapTurnId,
-          formId: "form-char-creation",
-          values: { name: "Aria", concept: "cartographer" },
+          pluginId: "framework",
+          action: "submit-form",
+          payload: {
+            turnId: bootstrapTurnId,
+            submissions: [
+              {
+                interactionId: "form-char-creation",
+                type: "form",
+                values: { name: "Aria", concept: "cartographer" },
+              },
+            ],
+          },
         }),
       },
     );
     expect(submit.status).toBe(200);
-    const submitted = (await submit.json()) as { filledNarrative: string };
+    const submitted = (await submit.json()) as {
+      result: { results: ReadonlyArray<{ filledNarrative: string }> };
+    };
+    const filledNarrative = submitted.result.results[0]!.filledNarrative;
 
     const followup = await app.request("/api/actions", {
       method: "POST",
@@ -321,7 +337,7 @@ describe("start-game API lifecycle scenario", () => {
         requestId: "req-followup",
         type: "send_message",
         sessionId: "sess-start-flow-api",
-        payload: { content: submitted.filledNarrative },
+        payload: { content: filledNarrative },
       }),
     });
     expect(followup.status).toBe(200);

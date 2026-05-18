@@ -53,7 +53,6 @@ export function SessionDataView({
                 data={{
                   id: snapshotData.session.id,
                   worldId: snapshotData.session.worldId,
-                  phase: snapshotData.session.phase,
                   turnCount: snapshotData.session.turnCount,
                   locale: snapshotData.session.locale,
                 }}

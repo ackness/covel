@@ -200,7 +200,7 @@ export function BranchReplyBlock({
 
 // Renders any block other than plugin_message using message-to-spec +
 // json-render. Form/choice handlers bridge into onSubmitInteraction so
-// the existing submit-inputs API + echoFilledNarrative UX hint keeps
+// the framework submit-form RPC + echoFilledNarrative UX hint keeps
 // working exactly as before.
 export function MessageBlockRenderer({
   msg,
@@ -310,7 +310,7 @@ export function MessageBlockRenderer({
             submitBehavior,
           );
         } else {
-          // Fallback: submit-inputs unavailable -> legacy path with stringified payload
+          // Fallback: submit-form unavailable -> stringified payload
           onSubmitBlock(msg.id);
           onSendMessage(JSON.stringify(formValues));
         }
@@ -405,7 +405,7 @@ export function MessageBlockRenderer({
 
 // Locked-after-user-message helper. Once the player sends the next message,
 // any previous interactive block is considered resolved and should render in
-// disabled state — mirrors V2's `hasLaterUserMessage` / messageToSpecDisabled
+// disabled state — mirrors the `hasLaterUserMessage` / messageToSpecDisabled
 // coupling.
 export function hasLaterUserMessage(
   msg: StreamMessage,

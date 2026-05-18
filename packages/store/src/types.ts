@@ -760,7 +760,7 @@ export interface PlayerInputRecord {
  * created via `POST /fork` is rebuilt from a snapshot payload.
  *
  * `kind`:
- *  - `auto`   — created at turn commit when `COVEL_SNAPSHOTS_V1=1`.
+ *  - `auto`   — created at turn commit.
  *  - `manual` — created explicitly via `POST /api/sessions/:id/snapshot`.
  *  - `fork`   — created when a fork rebuilds a new session; `parentId`
  *               points at the origin snapshot.

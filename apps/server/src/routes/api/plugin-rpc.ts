@@ -37,7 +37,6 @@ import { Hono } from "hono";
 import { createRpcHandlerStoreView } from "@covel/runtime";
 import { RpcDispatchError, RpcValidationError } from "@covel/runtime";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
-import { loadSessionConfig } from "./load-session-config.js";
 import {
   decodePluginUserSettingsHeader,
   validatePluginRpcBody,
@@ -180,14 +179,8 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
       sessionId,
       "world-data-provider",
     );
-    const sessionConfig = await loadSessionConfig(
-      store,
-      sessionId,
-      session.worldId ?? undefined,
-      worldDataPluginId,
-    );
-    const turnGetConfig = (): Readonly<Record<string, unknown>> =>
-      sessionConfig;
+    const turnGetConfig =
+      c.get("getConfigFn") ?? ((_pluginId: string, _runtimeId: string) => ({}));
 
     // Audit F7: player-authored plugin settings travel with the request
     // as a base64-encoded JSON header (`X-Plugin-User-Settings`) sourced

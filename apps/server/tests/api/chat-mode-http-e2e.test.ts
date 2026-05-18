@@ -23,6 +23,7 @@ interface ActionEnvelope {
 class ChatModeMockLLM implements LLMAdapter {
   narratorCalls = 0;
   scenePromptCalls = 0;
+  memoryCalls = 0;
   readonly calls: Array<{
     readonly tools: readonly string[];
     readonly messages: readonly LLMMessage[];
@@ -34,6 +35,23 @@ class ChatModeMockLLM implements LLMAdapter {
   }): Promise<LLMResponse> {
     const toolNames = (params.tools ?? []).map((tool) => tool.name);
     this.calls.push({ tools: toolNames, messages: params.messages });
+    const systemPrompt =
+      typeof params.messages[0]?.content === "string"
+        ? params.messages[0].content
+        : "";
+
+    if (
+      systemPrompt.includes("memory manager") ||
+      systemPrompt.includes("记忆管理器")
+    ) {
+      this.memoryCalls += 1;
+      return {
+        content: JSON.stringify({ scene: `第${this.memoryCalls}轮课间教室` }),
+        toolCalls: [],
+        finishReason: "stop",
+        usage: { inputTokens: 80, outputTokens: 12 },
+      };
+    }
 
     if (toolNames.includes("generate-scene-prompts")) {
       this.scenePromptCalls += 1;
@@ -291,6 +309,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     expect(new Set(observedTurnIds).size).toBe(3);
     expect(mockLLM.narratorCalls).toBe(3);
     expect(mockLLM.scenePromptCalls).toBe(3);
+    expect(mockLLM.memoryCalls).toBe(3);
 
     const messages = await store.listTurnMessages(sessionId);
     const storyMessages = messages.filter(

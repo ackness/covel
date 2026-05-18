@@ -4,7 +4,7 @@ import type {
   SlotConfigEntry,
 } from "@/services/api.js";
 
-export const LEGACY_LLM_SLOT_IDS = [
+export const DEFAULT_LLM_SLOT_IDS = [
   "story",
   "plugin",
   "memory",
@@ -26,7 +26,7 @@ export function discoverRuntimeSlotIds(
   for (const pkg of packages) {
     for (const rt of pkg.runtimes ?? []) {
       if (rt.kind === "function") continue;
-      const slot = rt.model ?? rt.providerTag;
+      const slot = rt.model;
       if (isRuntimeSlotId(slot)) out.add(slot);
     }
     for (const setting of pkg.userSettings ?? []) {
@@ -50,7 +50,7 @@ export function createVisibleSlotIds(args: {
   if (args.isConfigured) {
     args.configuredSlots.forEach(add);
   } else {
-    LEGACY_LLM_SLOT_IDS.forEach(add);
+    DEFAULT_LLM_SLOT_IDS.forEach(add);
   }
   args.discoveredSlotIds.forEach(add);
   return out;

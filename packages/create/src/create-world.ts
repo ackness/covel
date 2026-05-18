@@ -363,7 +363,7 @@ export async function createWorld(
   options: CreateWorldOptions,
 ): Promise<CreateResult> {
   const locale = options.locale ?? "zh-CN";
-  const prompt = buildWorldPrompt(options.concept, locale);
+  const prompt = await buildWorldPrompt(options.concept, locale);
   log(
     options,
     "info",

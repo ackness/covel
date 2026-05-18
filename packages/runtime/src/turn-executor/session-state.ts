@@ -1,5 +1,4 @@
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
-import { isEnvEnabled } from "@covel/shared";
 import { applyBranchReplyAcceptedCandidates } from "@covel/context";
 import type { TurnMessageRecord } from "@covel/store";
 import type { TurnExecutorDeps } from "../turn-executor-types.js";
@@ -66,12 +65,7 @@ export async function loadTurnSessionState(args: {
     messageHistory = await deps.store.listTurnMessages(input.sessionId);
   }
 
-  if (
-    isEnvEnabled("COVEL_COMPACTOR_V1") &&
-    deps.compactor &&
-    deps.store &&
-    shouldAppendPlayerMessage
-  ) {
+  if (deps.compactor && deps.store && shouldAppendPlayerMessage) {
     const freshMessages = await deps.store.listTurnMessages(input.sessionId);
     await deps.compactor.run(input.sessionId, "", freshMessages);
     messageHistory = await deps.store.listTurnMessages(input.sessionId);

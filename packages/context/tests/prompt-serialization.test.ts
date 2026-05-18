@@ -20,7 +20,7 @@ function makeSegments(
 }
 
 describe("serializeSystemPrompt", () => {
-  it("joins non-empty pre-history segments in V2 order", () => {
+  it("joins non-empty pre-history segments in segment order", () => {
     const result = serializeSystemPrompt(
       makeSegments({
         frameworkPreamble: "framework",

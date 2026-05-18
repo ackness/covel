@@ -65,7 +65,7 @@
 | Narrator            | 500      | `narrator`                                                                   | 主叙事生成器                                       |
 | Narrator-downstream | 600      | `guide` · `codex` · `npc-graph/extractor` · `char-creator/character-tracker` | 四者都只依赖 narrator，彼此独立 → **同层并行执行** |
 
-Pre-Game band（priority `0-99`，由 `packages/runtime/src/scheduler.ts` 强制）仍走 priority 串行：`pregame(10) → world-init/schema-gen(40) → char-creator/player-init(50)`。Pre-Game 插件之间存在隐式 config 依赖（player-init 读取 world-init 写的 `plugin_data[schema]` 经由 `loadSessionConfig` 注入）；目前在 DAG 里不表达，所以靠 priority 顺序确保 schema 先生成、再让 player-init 读到。
+Pre-Game band（priority `0-99`，由 `packages/runtime/src/scheduler.ts` 强制）仍走 priority 串行：`pregame(10) → world-init/schema-gen(40) → char-creator/player-init(50)`。Pre-Game 插件之间存在 world context 依赖（player-init 读取 schema-gen 写出的 `world.schema`）；目前在 DAG 里不表达，所以靠 priority 顺序确保 schema 先生成、再让 player-init 读到。
 
 ---
 
@@ -139,17 +139,10 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/scheduler.ts` 强制
 
 **数据存储结构**:
 
-- namespace `schema` — 维度 schema 定义（plugin_data）
-- namespace `entries` — 世界词条数据（plugin_data，legacy fallback）
-- session lorebook（`strategy: 'constant'`）— 世界词条数据（FU-8 canonical 目的地）
+- namespace `schema` — 维度 schema 定义（plugin_data），通过 `world.schema` 注入 prompt。
+- session lorebook（`strategy: 'constant'`）— 世界词条数据，通过 `world.entries` 注入 prompt。
 
-**FU-8 lorebook 迁移**（S3-T2 收尾）：`set-world-entries-batch` 工具从 FU-8 起会 **double-write**：
-既写 `plugin_data` namespace=`entries`（保留给旧会话 / 仍未实现 lorebook 表的 store），
-也通过 `store.upsertLorebookEntries()` 写入 session 级 lorebook。
-每个词条成为一条 `constant` 类型的 lorebook row，id 按 `world-entry:<key>` 稳定化，
-`insertionOrder` 按批内顺序以 100 为步长递增。`loadSessionConfig` 在构造
-`{{ config.worldEntries }}` 时优先读 lorebook，空才回退 plugin_data。
-`{{ config.worldSchema }}` 仍从 plugin_data 读取，不进入 lorebook（结构化 JSON 不适合 free-form content）。
+`set-world-entries-batch` 工具写入 session 级 lorebook；每个词条成为一条 `constant` 类型的 lorebook row，id 按 `world-entry:<key>` 稳定化，`insertionOrder` 按批内顺序以 100 为步长递增。
 
 ---
 
@@ -552,7 +545,6 @@ Guard 适用于"先检查再决定是否需要 LLM"的场景，替代了之前�
 `hooks` 声明生命周期处理器。`handler` 路径相对插件目录解析，首次触发时懒加载。
 
 ```yaml
-hookManifestVersion: 1
 hooks:
   - event: PreToolUse
     handler: ./hooks/validate-tool.ts
@@ -562,7 +554,7 @@ hooks:
       tool: create-character
 ```
 
-`hookManifestVersion: 1` 是 hook 语义版本声明。缺少该字段时，loader 会跳过 `hooks:` 并输出 warning；manifest 其余字段继续按常规解析。
+只要 manifest 声明了 `hooks:`，loader 会校验每个条目并注册有效 hook。单个 hook 条目格式错误或事件名未知时只跳过该条目并输出 warning，其他有效条目继续生效。
 
 | 字段        | 类型                               | 默认值   | 含义                                       |
 | ----------- | ---------------------------------- | -------- | ------------------------------------------ |
@@ -713,45 +705,11 @@ firstTokenTimeoutMs: 20000 # 20s 无首 token 即判定卡死
 loopDetectionThreshold: 3 # 默认即可
 ```
 
-### promptVersion（S2-T4，V2 opt-in 闸门）
+### Prompt 组装扩展
 
-声明本 runtime 使用哪个版本的 prompt assembler：
+Agent runtime 默认使用 segment-based prompt assembler。插件正文进入 `Plugin Instructions` 段，`authorsNote` 与 `postHistory` 作为高权重消息扩展点参与同一条 context 构建路径。
 
-| 值         | 含义                             |
-| ---------- | -------------------------------- |
-| 省略 / `1` | V1 单遍组装器（legacy 路径）     |
-| `2`        | V2 三段式组装器（10 个结构化段） |
-
-V2 的路由需要**同时**满足两个条件：
-
-1. 环境变量 `COVEL_PROMPT_V2=1`（部署级启用）
-2. manifest 声明 `promptVersion: 2`（插件级启用）
-
-任一缺失都走 V1。这一"双闸门"让运维可以在部署层面统一切换，而插件作者按节奏逐个迁移（§A8 渐进策略）。
-
-当前已迁移的核心插件：
-
-| 插件                           | promptVersion | 迁移 ticket |
-| ------------------------------ | ------------- | ----------- |
-| narrator                       | 2             | S2-T4       |
-| guide                          | 2             | S2-T4       |
-| codex                          | 2             | S3-T5a      |
-| char-creator/player-init       | 2             | S3-T5a      |
-| char-creator/character-tracker | 2             | S3-T5a      |
-
-示例 frontmatter：
-
-```yaml
-promptVersion: 2
-```
-
-**迁移说明**：将 V1 插件迁移到 V2 通常只需要在 frontmatter 中添加 `promptVersion: 2`。`assemblePromptVariables` 在 V1/V2 路径下共享一份实现，因此 `{{ player.message }}`、`{{ player.lastFormValues }}`、`{{ world.* }}`、`{{ config.* }}`、`{{ inputs.* }}` 等模板变量在两条路径下行为一致。结构差异仅体现在：
-
-- V2 把 `[LANGUAGE]` 约束从系统 prompt 尾部移到段 1（framework preamble）
-- V2 的段间分隔符是 `\n\n`
-- V2 对 `authorsNote` / `postHistory` 生效（V1 忽略）
-
-### authorsNote（S3-T4，V2 prompt 段 9）
+### authorsNote（prompt 段 9）
 
 声明"导演级"指令，插入到消息历史倒数第 `depth` 条之前。借鉴 SillyTavern / NovelAI 的 author's note 语义 —— 用于在长历史中重新锚定模型的叙事方向。
 
@@ -763,7 +721,7 @@ promptVersion: 2
 
 多个插件的 authorsNote 会按 `priority` 升序聚合，落在同一 `(role, depth)` 桶内的内容会被合并为一条消息（用空行分隔）。
 
-仅在 V2 prompt assembler（`COVEL_PROMPT_V2=1`）下生效；V1 路径忽略该字段。
+该字段对所有 agent runtime 生效。
 
 示例 frontmatter：
 
@@ -776,7 +734,7 @@ authorsNote:
   role: system
 ```
 
-### postHistory（S3-T4，V2 prompt 段 10）
+### postHistory（prompt 段 10）
 
 声明最末端的高权重指令。追加在所有消息（包括 authorsNote）之后，用于提醒模型输出格式、风格约束或硬规则。
 
@@ -787,7 +745,7 @@ authorsNote:
 
 多个插件的 postHistory 会按 `priority` 升序聚合；相同 role 的声明会被合并为一条消息。
 
-仅在 V2 prompt assembler（`COVEL_PROMPT_V2=1`）下生效；V1 路径忽略该字段。
+该字段对所有 agent runtime 生效。
 
 示例 frontmatter：
 
@@ -806,7 +764,7 @@ postHistory:
 | `<action>.handler`     | `string`(必填)                                     | handler 模块的插件相对路径,必须 `.js` / `.mjs` / `.cjs`,**不允许绝对路径或 `..` 段**(框架在 schema 与 loader 两层校验) |
 | `<action>.input`       | `string`(可选)                                     | payload 的 JSON Schema 路径,仅作文档参考,框架不强制                                                                    |
 | `<action>.trustLevel`  | `'builtin' \| 'official' \| 'community'`(可选)     | 强制声明此 action 的信任级别,**只能比插件源信任更严格(降级)**;尝试升级会被 clamp 并 warn                               |
-| `<action>.streaming`   | `boolean`(可选,默认 `false`)                       | 声明 handler 是流式还是单次。当前 v1 路由只走 sync,streaming 留给后续 PR                                               |
+| `<action>.streaming`   | `boolean`(可选,默认 `false`)                       | 声明 handler 是流式还是单次。当前路由执行同步 handler,streaming 留给后续 PR                                            |
 | `<action>.description` | `string`(可选)                                     | 一句话描述,会显示在 PR-7 approval 对话框里                                                                             |
 
 handler 模块必须 default export 一个 `(payload, context) => Promise<unknown>` 函数。`context` 包含 `{ sessionId, pluginId, action, store: RpcHandlerStore }`,其中 `store` 是窄结构接口(`getSession` / `listTurnMessages` / `savePlayerInput` / 可选 plugin-data 三件套),不暴露完整的 `DataStore`。
@@ -825,9 +783,9 @@ rpc:
 
 **框架默认 actions(无需声明,通过 `pluginId: "framework"` sentinel 调用):**
 
-| Action        | 说明                                                                                                       |
-| ------------- | ---------------------------------------------------------------------------------------------------------- |
-| `submit-form` | 持久化玩家表单 / 选择 / 确认 提交,填充模板 narrative。等同于 legacy `POST /api/sessions/:id/submit-inputs` |
+| Action        | 说明                                                 |
+| ------------- | ---------------------------------------------------- |
+| `submit-form` | 持久化玩家表单 / 选择 / 确认提交，填充模板 narrative |
 
 详细 API 说明见 [api.md `POST /api/sessions/:id/plugin-rpc`](api.md#post-apisessionsidplugin-rpc),作者指南见 [../guide/plugin-authoring.md §2.3.1](../guide/plugin-authoring.md)。
 
@@ -835,16 +793,16 @@ rpc:
 
 声明"在 LLM 调用前要注入到 system prompt 里的上下文块"。每条 entry 是一个独立的 XML 块，按声明顺序拼接在 PLUGIN.md 正文末尾。支持两种 `kind`：
 
-#### `kind: runtime`（默认，向后兼容）
+#### `kind: runtime`
 
-读取前序 runtime 的结构化 output 字段。legacy 写法（不写 `kind`）会在 schema 层被自动 normalise 成 `kind: 'runtime'`，所以已有 PLUGIN.md 不需要改。
+读取前序 runtime 的结构化 output 字段。`kind: runtime` 必须显式声明，避免同一 inject entry 同时存在多种解释。
 
-| 字段    | 类型                  | 说明                                                       |
-| ------- | --------------------- | ---------------------------------------------------------- |
-| `kind`  | `'runtime'`（可省略） | 省略时等价于 `'runtime'`                                   |
-| `from`  | `string`（必填）      | 源 runtime name，可以是 `pluginId` 或 `pluginId/runtimeId` |
-| `field` | `string`（必填）      | 从源 runtime `output` 里取的字段名                         |
-| `as`    | `string`（必填）      | 包裹 XML 标签，如 `"<narrator-output>"`                    |
+| 字段    | 类型                | 说明                                                       |
+| ------- | ------------------- | ---------------------------------------------------------- |
+| `kind`  | `'runtime'`（必填） | runtime-output 注入来源                                    |
+| `from`  | `string`（必填）    | 源 runtime name，可以是 `pluginId` 或 `pluginId/runtimeId` |
+| `field` | `string`（必填）    | 从源 runtime `output` 里取的字段名                         |
+| `as`    | `string`（必填）    | 包裹 XML 标签，如 `"<narrator-output>"`                    |
 
 如果源 runtime 本回合没有执行、失败、或指定字段不存在，该 entry 静默跳过，不会污染其他注入块。
 
@@ -881,11 +839,10 @@ rpc:
 ```yaml
 input:
   inject:
-    # Legacy runtime inject（不写 kind，自动 normalise）
-    - from: narrator
+    - kind: runtime
+      from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
-    # 新 plugin-data inject
     - kind: plugin-data
       namespace: entries
       as: "<existing-entries>"

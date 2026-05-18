@@ -183,7 +183,6 @@ async function startServer(
     COVEL_LOGS_DIR: paths.logsDir,
     COVEL_LOG_MAX_SIZE_MB: String(paths.logRotation.maxSizeMb),
     COVEL_LOG_MAX_FILES: String(paths.logRotation.maxFiles),
-    COVEL_MEMORY_V1: "1",
   };
 
   if (!isDev) {

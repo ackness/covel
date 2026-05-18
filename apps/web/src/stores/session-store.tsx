@@ -20,7 +20,6 @@ import { useSessionSubscription } from "./session-store/subscription.js";
 export type {
   AssetProgressEvent,
   ExecutionStep,
-  LegacyPhase,
   PendingInteractionDraft,
   StreamMessage,
   SuspensionRecord,

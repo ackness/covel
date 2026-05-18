@@ -455,95 +455,12 @@ export const COVEL_ENV_REGISTRY = [
     description: "Documented custom LLM host allowlist.",
   },
   {
-    name: "COVEL_MEMORY_V1",
-    group: "feature",
-    type: "boolean",
-    status: "active",
-    defaultValue: "false",
-    description:
-      "Enables core memory blocks, memory tools, and memory updater.",
-  },
-  {
-    name: "COVEL_WORKING_MEMORY_V1",
-    group: "feature",
-    type: "boolean",
-    status: "active",
-    defaultValue: "false",
-    description:
-      "Enables framework working-memory prompt injection and writes.",
-  },
-  {
-    name: "COVEL_COMPACTOR_V1",
-    group: "feature",
-    type: "boolean",
-    status: "active",
-    defaultValue: "false",
-    description: "Enables message compaction and summary substitution.",
-  },
-  {
     name: "COVEL_COMPACTOR_CONTEXT_WINDOW",
     group: "feature",
     type: "integer",
     status: "active",
     defaultValue: "32768",
     description: "Compactor context window used for threshold comparisons.",
-  },
-  {
-    name: "COVEL_PROMPT_V2",
-    group: "feature",
-    type: "boolean",
-    status: "active",
-    defaultValue: "false",
-    description: "Enables V2 prompt assembly for plugins that opt in.",
-  },
-  {
-    name: "COVEL_PROMPT_CACHE_V1",
-    group: "feature",
-    type: "boolean",
-    status: "active",
-    defaultValue: "false",
-    description: "Enables prompt-cache breakpoint emission in V2 prompts.",
-  },
-  {
-    name: "COVEL_CONTEXT_BUDGET_V1",
-    group: "feature",
-    type: "boolean",
-    status: "active",
-    defaultValue: "false",
-    description:
-      "Enables prompt budget pruning when caller supplies estimator config.",
-  },
-  {
-    name: "COVEL_COMMIT_TXN_V1",
-    group: "feature",
-    type: "boolean",
-    status: "active",
-    defaultValue: "true",
-    description: "Wraps commitAll in a store transaction by default.",
-  },
-  {
-    name: "COVEL_SUSPEND_V1",
-    group: "feature",
-    type: "boolean",
-    status: "active",
-    defaultValue: "false",
-    description: "Enables suspend/resume runtime flow and routes.",
-  },
-  {
-    name: "COVEL_SNAPSHOTS_V1",
-    group: "feature",
-    type: "boolean",
-    status: "active",
-    defaultValue: "false",
-    description: "Enables manual snapshots, forks, and auto snapshots.",
-  },
-  {
-    name: "COVEL_SESSION_CONTEXT",
-    group: "feature",
-    type: "boolean",
-    status: "active",
-    defaultValue: "false",
-    description: "Enables unified SessionContextSnapshot wiring.",
   },
   {
     name: "COVEL_TRACE_TRUNCATE",
@@ -729,17 +646,6 @@ export const COVEL_ENV_REGISTRY = [
 
 export type CovelEnvName = (typeof COVEL_ENV_REGISTRY)[number]["name"];
 
-export const COVEL_FEATURE_FLAGS = [
-  "COVEL_MEMORY_V1",
-  "COVEL_WORKING_MEMORY_V1",
-  "COVEL_COMPACTOR_V1",
-  "COVEL_PROMPT_V2",
-  "COVEL_PROMPT_CACHE_V1",
-  "COVEL_CONTEXT_BUDGET_V1",
-  "COVEL_SUSPEND_V1",
-  "COVEL_SNAPSHOTS_V1",
-  "COVEL_SESSION_CONTEXT",
-  "COVEL_LLM_RETRY_DISABLED",
-] as const;
+export const COVEL_FEATURE_FLAGS = ["COVEL_LLM_RETRY_DISABLED"] as const;
 
 export type CovelFeatureFlag = (typeof COVEL_FEATURE_FLAGS)[number];

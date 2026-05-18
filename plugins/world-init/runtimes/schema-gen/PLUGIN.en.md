@@ -5,7 +5,7 @@ description:
   en: Organizes the setting at the start so character traits and background details fit the world.
 pluginType: core-plugin
 # audit P0-2: schema-gen must run BEFORE char-creator/player-init (50)
-# so the player-init agent can read `{{ config.worldSchema }}` populated by
+# so the player-init agent can read `{{ world.schema }}` populated by
 # this runtime's set-world-schema tool. Pre-Game band is 0-99 and uses
 # priority-based serial ordering.
 priority: 40
@@ -43,7 +43,7 @@ You are the World Dimension Initialization agent.
 ## World metadata
 
 <world-dimensions>
-{{ config.worldDimensions }}
+{{ world.dimensions }}
 </world-dimensions>
 
 ## Your task

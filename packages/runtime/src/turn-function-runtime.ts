@@ -4,7 +4,6 @@ import type {
   TurnInput,
   TurnResult,
 } from "@covel/shared";
-import { isEnvEnabled } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import type { SuspensionRecord } from "@covel/store";
 import {
@@ -145,10 +144,9 @@ export async function executeFunctionRuntime({
   });
 
   // ── Suspend detection for function runtimes (S4-T4) ────────────
-  // If the handler returns { status: 'suspended', reason, resumeSchema } and
-  // COVEL_SUSPEND_V1=1, persist a suspension and return status: 'suspended'.
+  // If the handler returns { status: 'suspended', reason, resumeSchema },
+  // persist a suspension and return status: 'suspended'.
   if (
-    isEnvEnabled("COVEL_SUSPEND_V1") &&
     typeof output.status === "string" &&
     output.status === "suspended" &&
     typeof output.reason === "string" &&

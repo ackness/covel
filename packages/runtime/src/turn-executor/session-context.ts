@@ -1,4 +1,3 @@
-import { isEnvEnabled } from "@covel/shared";
 import {
   buildSessionContextSnapshot,
   type SessionContextSnapshot,
@@ -14,7 +13,7 @@ export async function loadSessionSummaries(args: {
   readonly deps: TurnExecutorDeps;
 }): Promise<readonly SessionSummaryRecord[]> {
   const { input, deps } = args;
-  if (!isEnvEnabled("COVEL_COMPACTOR_V1") || !deps.store) return [];
+  if (!deps.store) return [];
   return [...(await deps.store.listSessionSummaries(input.sessionId))];
 }
 
@@ -44,7 +43,7 @@ export async function loadCoreMemoryBlocks(args: {
   readonly deps: TurnExecutorDeps;
 }): Promise<readonly CoreMemoryBlock[]> {
   const { input, deps } = args;
-  if (!isEnvEnabled("COVEL_MEMORY_V1") || !deps.memorySystem) return [];
+  if (!deps.memorySystem) return [];
 
   try {
     await deps.memorySystem.manager.initializeDefaults(input.sessionId);
@@ -62,7 +61,7 @@ export async function refreshSessionContextSnapshot(args: {
   readonly coreMemoryBlocks: readonly CoreMemoryBlock[];
 }): Promise<SessionContextSnapshot | undefined> {
   const { input, deps, turnNumber, sessionSummaries, coreMemoryBlocks } = args;
-  if (!isEnvEnabled("COVEL_SESSION_CONTEXT") || !deps.store) return undefined;
+  if (!deps.store) return undefined;
 
   try {
     const sessionRecord = await deps.store.getSession(input.sessionId);
@@ -77,7 +76,7 @@ export async function refreshSessionContextSnapshot(args: {
     });
   } catch (err) {
     console.warn(
-      "[turn-executor] SessionContextSnapshot build failed, falling back to legacy reads:",
+      "[turn-executor] SessionContextSnapshot build failed:",
       err instanceof Error ? err.message : String(err),
     );
     return undefined;

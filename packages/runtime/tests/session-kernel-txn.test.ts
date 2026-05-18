@@ -3,7 +3,7 @@
  *
  * Verifies that `commitAll()` wraps the proposal chain in a transaction
  * by default, and falls back to the legacy non-transactional path when
- * COVEL_COMMIT_TXN_V1 explicitly opts out.
+ * Stores with transaction hooks use atomic commitAll by default.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -140,60 +140,7 @@ function makeProposal(
 }
 
 describe("session-kernel commitAll atomicity (S4-T1)", () => {
-  const originalFlag = process.env.COVEL_COMMIT_TXN_V1;
-
-  beforeEach(() => {
-    delete process.env.COVEL_COMMIT_TXN_V1;
-  });
-
-  afterEach(() => {
-    if (originalFlag === undefined) {
-      delete process.env.COVEL_COMMIT_TXN_V1;
-    } else {
-      process.env.COVEL_COMMIT_TXN_V1 = originalFlag;
-    }
-  });
-
-  it("with explicit opt-out: keeps already-persisted writes when a later commit throws (legacy behaviour)", async () => {
-    process.env.COVEL_COMMIT_TXN_V1 = "0";
-
-    const store = createRecordingStore();
-    store.failOn = { method: "addStateChange", afterN: 1 };
-
-    const pipeline = createCommitPipeline(store);
-    const proposals: Proposal[] = [
-      makeProposal(
-        "narrative.append",
-        { content: "step 1", kind: "story" },
-        "a",
-      ),
-      makeProposal(
-        "state.patch",
-        { table: "stats", field: "hp", value: 50 },
-        "b",
-      ),
-      makeProposal(
-        "narrative.append",
-        { content: "step 3", kind: "story" },
-        "c",
-      ),
-    ];
-
-    await expect(pipeline.commitAll(proposals)).rejects.toThrow(
-      /forced failure/,
-    );
-
-    // The first narrative write landed durably because there is no tx guard.
-    expect(store.messages).toHaveLength(1);
-    expect(store.stateChanges).toHaveLength(0);
-
-    // Transaction hooks must not have been touched.
-    expect(store.beginCalls.count).toBe(0);
-    expect(store.commitCalls.count).toBe(0);
-    expect(store.rollbackCalls.count).toBe(0);
-  });
-
-  it("with env unset: rolls back earlier writes when a later commit throws", async () => {
+  it("rolls back earlier writes when a later commit throws", async () => {
     const store = createRecordingStore();
     store.failOn = { method: "addStateChange", afterN: 1 };
 
@@ -229,39 +176,7 @@ describe("session-kernel commitAll atomicity (S4-T1)", () => {
     expect(store.rollbackCalls.count).toBe(1);
   });
 
-  it("with explicit opt-in: also rolls back earlier writes when a later commit throws", async () => {
-    process.env.COVEL_COMMIT_TXN_V1 = "1";
-
-    const store = createRecordingStore();
-    store.failOn = { method: "addStateChange", afterN: 1 };
-
-    const pipeline = createCommitPipeline(store);
-    const proposals: Proposal[] = [
-      makeProposal(
-        "narrative.append",
-        { content: "step 1", kind: "story" },
-        "a",
-      ),
-      makeProposal(
-        "state.patch",
-        { table: "stats", field: "hp", value: 50 },
-        "b",
-      ),
-    ];
-
-    await expect(pipeline.commitAll(proposals)).rejects.toThrow(
-      /forced failure/,
-    );
-
-    expect(store.messages).toHaveLength(0);
-    expect(store.stateChanges).toHaveLength(0);
-    expect(store.beginCalls.count).toBe(1);
-    expect(store.rollbackCalls.count).toBe(1);
-  });
-
-  it("with flag ON: commits all writes when the proposal chain succeeds", async () => {
-    process.env.COVEL_COMMIT_TXN_V1 = "1";
-
+  it("commits all writes when the proposal chain succeeds", async () => {
     const store = createRecordingStore();
     const pipeline = createCommitPipeline(store);
 
@@ -288,9 +203,7 @@ describe("session-kernel commitAll atomicity (S4-T1)", () => {
     expect(store.rollbackCalls.count).toBe(0);
   });
 
-  it("with flag ON but store missing tx hooks: falls back to legacy path", async () => {
-    process.env.COVEL_COMMIT_TXN_V1 = "1";
-
+  it("store missing tx hooks: falls back to non-transactional path", async () => {
     const store: KernelStore = {
       addMessage: vi.fn().mockResolvedValue(undefined),
       updateSession: vi.fn().mockResolvedValue(undefined),

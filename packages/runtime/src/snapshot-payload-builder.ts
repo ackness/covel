@@ -5,8 +5,8 @@
  * or restore. Produces a `SnapshotPayload` from live store reads at the
  * moment of capture.
  *
- * Feature flag: `COVEL_SNAPSHOTS_V1=1`. Auto-snapshots are driven by the
- * turn-executor; manual and fork snapshots by the server routes.
+ * Auto-snapshots are driven by the turn-executor; manual and fork snapshots
+ * by the server routes.
  *
  * Session lorebook entries (FU-4 close-out): included once the store
  * exposes `listSessionLorebookEntries` (added in S3-T2). World- and

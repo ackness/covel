@@ -9,7 +9,6 @@ import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
 import { executeTurn, createTurnEmitter } from "@covel/runtime";
 import type { EventBus } from "@covel/events";
 import { rateLimiter } from "../../middleware/rate-limit.js";
-import { loadSessionConfig } from "./load-session-config.js";
 import type { DataStore, MediaStore } from "@covel/store";
 import type { CompactorRunner } from "@covel/context";
 import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
@@ -87,18 +86,6 @@ turnRoutes.post("/:id/turn", rateLimiter({ max: 30 }), async (c) => {
     "world-data-provider",
   );
 
-  // Pre-load plugin config data for context injection (async → sync bridge)
-  const sessionConfig = await loadSessionConfig(
-    store,
-    sessionId,
-    session.worldId ?? undefined,
-    worldDataPluginId,
-  );
-  const turnGetConfig = (
-    _pluginId: string,
-    _runtimeId: string,
-  ): Readonly<Record<string, unknown>> => sessionConfig;
-
   const hookPipeline = c.get("hookPipeline");
   const eventBus = c.get("eventBus");
   const sessionLock = c.get("sessionLock");
@@ -130,10 +117,8 @@ turnRoutes.post("/:id/turn", rateLimiter({ max: 30 }), async (c) => {
   // consistent and makes PG-backed multi-pod deployments safe (audit
   // 2026-04-21 F5).
   const result = await sessionLock.withLock(sessionId, async () => {
-    // Sprint 1-D: pass `worldDataPluginId` into deps so `TurnExecutor` can
-    // build a unified `SessionContextSnapshot` when `COVEL_SESSION_CONTEXT=1`.
-    // When the flag is off, the field is ignored and the legacy scattered
-    // loads run unchanged.
+    // Pass `worldDataPluginId` into deps so `TurnExecutor` can build a
+    // unified `SessionContextSnapshot`.
     const executed = await executeTurn(
       {
         sessionId,
@@ -149,7 +134,7 @@ turnRoutes.post("/:id/turn", rateLimiter({ max: 30 }), async (c) => {
         ...(pluginGateway ? { gateway: pluginGateway } : {}),
         ...(pluginUtils ? { utils: pluginUtils } : {}),
         ...(getPluginSource ? { getPluginSource } : {}),
-        getConfig: turnGetConfig,
+        getConfig: getConfigFn ?? ((_pluginId, _runtimeId) => ({})),
         store,
         ...(mediaStore ? { mediaStore } : {}),
         toolExecutor,

@@ -4,13 +4,9 @@
  * POST   /api/sessions/:id/resume
  * DELETE /api/sessions/:id/suspensions/:suspensionId
  * GET    /api/sessions/:id/suspensions
- *
- * Feature flag: COVEL_SUSPEND_V1=1 must be set for all three routes.
- * When the flag is off, all three endpoints return 503 (consistent
- * "feature disabled" semantics across the suspend surface).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import {
@@ -133,7 +129,7 @@ const TEST_MANIFEST: RuntimeManifest = {
   pluginId: "test-plugin",
   pluginType: "community" as const,
   priority: 500,
-  trigger: { mode: "always" as const },
+  trigger: { type: "auto" as const },
   model: "gpt-4o-mini",
   // This fixture emulates a narrator-style runtime that appends to the
   // main feed on resume. After 2026-04-24, only `outputKind: 'story'`
@@ -194,23 +190,12 @@ function makeDefaultDeps(store: DataStore, overrides?: Partial<Deps>): Deps {
 
 // ── Tests ─────────────────────────────────────────────────────────────
 
-const originalEnv = process.env["COVEL_SUSPEND_V1"];
-
-describe("Resume Routes — flag on (COVEL_SUSPEND_V1=1)", () => {
+describe("Resume Routes", () => {
   let store: DataStore;
 
   beforeEach(async () => {
-    process.env["COVEL_SUSPEND_V1"] = "1";
     store = createMemoryStore();
     await createSession(store);
-  });
-
-  afterEach(() => {
-    if (originalEnv === undefined) {
-      delete process.env["COVEL_SUSPEND_V1"];
-    } else {
-      process.env["COVEL_SUSPEND_V1"] = originalEnv;
-    }
   });
 
   describe("POST /api/sessions/:id/resume", () => {
@@ -563,70 +548,5 @@ describe("Resume Routes — flag on (COVEL_SUSPEND_V1=1)", () => {
       expect(suspensions).toHaveLength(1);
       expect(suspensions[0]!.id).toBe("susp-mine");
     });
-  });
-});
-
-// ── Feature flag OFF ──────────────────────────────────────────────────
-
-describe("Resume Routes — flag off (COVEL_SUSPEND_V1 != 1)", () => {
-  let store: DataStore;
-
-  beforeEach(async () => {
-    process.env["COVEL_SUSPEND_V1"] = "0";
-    store = createMemoryStore();
-    await createSession(store);
-  });
-
-  afterEach(() => {
-    if (originalEnv === undefined) {
-      delete process.env["COVEL_SUSPEND_V1"];
-    } else {
-      process.env["COVEL_SUSPEND_V1"] = originalEnv;
-    }
-  });
-
-  it("POST /resume returns 503 when flag is off", async () => {
-    const app = createTestApp(makeDefaultDeps(store));
-    await createSuspension(store);
-
-    const res = await app.request("/api/sessions/sess-1/resume", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Provider-Keys": "dGVzdA==",
-      },
-      body: JSON.stringify({ suspensionId: "susp-1", data: { name: "Alice" } }),
-    });
-
-    expect(res.status).toBe(503);
-    const body = (await res.json()) as Record<string, unknown>;
-    expect(body.error).toMatch(/COVEL_SUSPEND_V1/);
-  });
-
-  it("DELETE /suspensions/:id returns 503 when flag is off", async () => {
-    const app = createTestApp(makeDefaultDeps(store));
-    await createSuspension(store);
-
-    const res = await app.request("/api/sessions/sess-1/suspensions/susp-1", {
-      method: "DELETE",
-    });
-
-    expect(res.status).toBe(503);
-  });
-
-  it("GET /suspensions returns 200 + empty list when flag is off", async () => {
-    // The list endpoint is read-only hydration that runs on every session
-    // restore. Returning 503 there pollutes the browser network panel even
-    // though the web client treats failures as "no active suspensions".
-    // A disabled flag means "no suspensions exist", which is functionally
-    // correct as an empty list. Write paths (POST /resume, DELETE) keep
-    // their 503 gate above.
-    const app = createTestApp(makeDefaultDeps(store));
-
-    const res = await app.request("/api/sessions/sess-1/suspensions");
-
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { suspensions: unknown[] };
-    expect(body.suspensions).toEqual([]);
   });
 });

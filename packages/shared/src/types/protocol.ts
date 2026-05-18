@@ -139,7 +139,6 @@ export interface SessionSnapshot {
   readonly session: {
     readonly id: string;
     readonly worldId?: string;
-    readonly phase: string;
     readonly turnCount: number;
     readonly locale?: string;
   };

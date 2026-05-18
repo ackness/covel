@@ -48,7 +48,7 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     pluginId: "test-plugin",
     pluginType: "community",
     priority: 500,
-    trigger: { mode: "always" },
+    trigger: { type: "auto" },
     model: "gpt-4o-mini",
     ...overrides,
   };
@@ -132,10 +132,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
   let agentManifest: RuntimeManifest;
   let agentLoaded: LoadedRuntime;
 
-  const originalEnv = process.env["COVEL_SUSPEND_V1"];
-
   beforeEach(async () => {
-    process.env["COVEL_SUSPEND_V1"] = "1";
     mockLLM = new MockLLM();
     mockToolExecutor = new MockToolExecutor();
     store = createMemoryStore();
@@ -164,14 +161,6 @@ describe("TurnExecutor — agent runtime suspend", () => {
       promptTemplate: "## Test Plugin\nYou are a test agent.",
       references: [],
     };
-  });
-
-  afterEach(() => {
-    if (originalEnv === undefined) {
-      delete process.env["COVEL_SUSPEND_V1"];
-    } else {
-      process.env["COVEL_SUSPEND_V1"] = originalEnv;
-    }
   });
 
   it("should persist suspension and return status: suspended when suspend sentinel detected", async () => {
@@ -501,59 +490,6 @@ describe("TurnExecutor — agent runtime suspend", () => {
     expect(payload.reason).toBe("SSE test");
     expect(typeof payload.suspensionId).toBe("string");
   });
-
-  it("flag OFF: sentinel passed back to LLM as normal tool result, no suspension created", async () => {
-    process.env["COVEL_SUSPEND_V1"] = "0";
-
-    mockLLM.setResponses([
-      {
-        content: null,
-        toolCalls: [
-          {
-            id: "tc-s3",
-            name: "suspend",
-            arguments: JSON.stringify({
-              reason: "flag-off test",
-              resumeSchema: {},
-            }),
-          },
-        ],
-        finishReason: "tool_calls",
-        usage: { inputTokens: 5, outputTokens: 3 },
-      },
-      {
-        content: "Continuing after suspend tool...",
-        toolCalls: [],
-        finishReason: "stop",
-        usage: { inputTokens: 10, outputTokens: 8 },
-      },
-    ]);
-
-    mockToolExecutor.setToolResult("suspend", {
-      toolCallId: "tc-s3",
-      name: "suspend",
-      result: JSON.stringify(SUSPEND_SENTINEL),
-      parsedResult: SUSPEND_SENTINEL,
-      success: true,
-    });
-
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async () => agentLoaded,
-      llm: mockLLM,
-      getConfig: () => ({}),
-      store,
-      toolExecutor: mockToolExecutor,
-      eventBus,
-    };
-
-    const result = await executeTurn(makeTurnInput(), [agentManifest], deps);
-
-    const suspensions = await store.listSuspensions("sess-1");
-    expect(suspensions).toHaveLength(0);
-
-    expect(result.runtimeResults).toHaveLength(1);
-    expect(result.runtimeResults[0]!.status).toBe("success");
-  });
 });
 
 // ── Function Runtime: suspend via output.status ────────────────────
@@ -561,10 +497,8 @@ describe("TurnExecutor — agent runtime suspend", () => {
 describe("TurnExecutor — function runtime suspend", () => {
   let store: DataStore;
   let eventBus: EventBus;
-  const originalEnv = process.env["COVEL_SUSPEND_V1"];
 
   beforeEach(async () => {
-    process.env["COVEL_SUSPEND_V1"] = "1";
     store = createMemoryStore();
     // Prime history under multiple session IDs that tests exercise.
     for (const sid of ["sess-1", "sess-fn"]) {
@@ -580,14 +514,6 @@ describe("TurnExecutor — function runtime suspend", () => {
       });
     }
     eventBus = createEventBus();
-  });
-
-  afterEach(() => {
-    if (originalEnv === undefined) {
-      delete process.env["COVEL_SUSPEND_V1"];
-    } else {
-      process.env["COVEL_SUSPEND_V1"] = originalEnv;
-    }
   });
 
   it("should persist suspension and return status: suspended when function handler returns suspended status", async () => {
@@ -641,45 +567,6 @@ describe("TurnExecutor — function runtime suspend", () => {
     expect(
       suspensions[0]!.pendingContinuation.suspendToolCallId,
     ).toBeUndefined();
-  });
-
-  it("function runtime: flag OFF should not create suspension", async () => {
-    process.env["COVEL_SUSPEND_V1"] = "0";
-
-    const manifest = makeFunctionManifest();
-    const loaded: LoadedRuntime = {
-      manifest,
-      promptTemplate: "",
-      references: [],
-      handler: async () => ({
-        status: "suspended",
-        reason: "Should be ignored",
-        resumeSchema: {},
-      }),
-    };
-
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async () => loaded,
-      llm: {
-        generate: vi.fn().mockResolvedValue({
-          content: "",
-          toolCalls: [],
-          finishReason: "stop",
-          usage: { inputTokens: 0, outputTokens: 0 },
-        }),
-      },
-      getConfig: () => ({}),
-      store,
-      eventBus,
-    };
-
-    const result = await executeTurn(makeTurnInput(), [manifest], deps);
-
-    const suspensions = await store.listSuspensions("sess-1");
-    expect(suspensions).toHaveLength(0);
-
-    // The output goes through as normal success (status field is just output data)
-    expect(result.runtimeResults[0]!.status).toBe("success");
   });
 
   it("community function handler with forged core-plugin manifest gets a scoped store", async () => {
@@ -778,10 +665,8 @@ describe("resumeSuspendedRuntime", () => {
   let mockToolExecutor: MockToolExecutor;
   let store: DataStore;
   let eventBus: EventBus;
-  const originalEnv = process.env["COVEL_SUSPEND_V1"];
 
   beforeEach(async () => {
-    process.env["COVEL_SUSPEND_V1"] = "1";
     mockLLM = new MockLLM();
     mockToolExecutor = new MockToolExecutor();
     store = createMemoryStore();
@@ -797,14 +682,6 @@ describe("resumeSuspendedRuntime", () => {
       createdAt: "2024-01-01T00:00:00Z",
     });
     eventBus = createEventBus();
-  });
-
-  afterEach(() => {
-    if (originalEnv === undefined) {
-      delete process.env["COVEL_SUSPEND_V1"];
-    } else {
-      process.env["COVEL_SUSPEND_V1"] = originalEnv;
-    }
   });
 
   async function createTestSuspension(suspendToolCallId?: string) {

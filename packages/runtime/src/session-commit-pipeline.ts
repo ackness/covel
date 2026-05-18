@@ -2,7 +2,6 @@
  * Proposal commit pipeline.
  */
 
-import { isEnvDefaultOn } from "@covel/shared";
 import type { CommitResult, Proposal } from "@covel/shared";
 import type { EventBus } from "@covel/events";
 import type { HookPipeline } from "./hooks/pipeline.js";
@@ -30,10 +29,6 @@ export function createCommitPipeline(
   eventBus?: EventBus,
   emitter?: TurnEmitter,
 ): CommitPipeline {
-  function isCommitTransactionEnabled(): boolean {
-    return isEnvDefaultOn("COVEL_COMMIT_TXN_V1");
-  }
-
   const handlers = createCommitHandlers(store);
 
   async function commit(proposal: Proposal): Promise<CommitResult> {
@@ -119,13 +114,12 @@ export function createCommitPipeline(
   async function commitAll(
     proposals: readonly Proposal[],
   ): Promise<CommitResult[]> {
-    const txEnabled = isCommitTransactionEnabled();
     const supportsTx =
       typeof store.beginTx === "function" &&
       typeof store.commitTx === "function" &&
       typeof store.rollbackTx === "function";
 
-    if (!txEnabled || !supportsTx) {
+    if (!supportsTx) {
       const results: CommitResult[] = [];
       for (const p of proposals) {
         results.push(await commit(p));

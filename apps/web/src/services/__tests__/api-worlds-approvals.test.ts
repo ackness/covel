@@ -34,11 +34,8 @@ const {
   listApprovals,
 } = apiModule;
 const dataServiceModule = await import("../data-service.js");
-const {
-  generatedWorldSaveTargetForBackend,
-  storageModeForServerBackend,
-  storageModeForServerStorage,
-} = dataServiceModule;
+const { generatedWorldSaveTargetForStorageMode, storageModeForServerStorage } =
+  dataServiceModule;
 
 function mockFetchOnce(body: unknown, status = 200): void {
   vi.stubGlobal(
@@ -58,13 +55,7 @@ afterEach(() => {
 });
 
 describe("world API mapping", () => {
-  it("maps server store backend to frontend storage mode", () => {
-    expect(storageModeForServerBackend("memory")).toBe("local");
-    expect(storageModeForServerBackend("sqlite")).toBe("remote");
-    expect(storageModeForServerBackend("pg")).toBe("remote");
-  });
-
-  it("prefers structured server storage capabilities for frontend mode", () => {
+  it("maps structured server storage capabilities to frontend mode", () => {
     expect(
       storageModeForServerStorage({
         data: { backend: "memory", frontendMode: "remote" },
@@ -73,11 +64,14 @@ describe("world API mapping", () => {
     expect(storageModeForServerStorage({ data: { backend: "pg" } })).toBeNull();
   });
 
-  it("maps server store backend to generated-world save target", () => {
-    expect(generatedWorldSaveTargetForBackend("memory")).toBe("return-only");
-    expect(generatedWorldSaveTargetForBackend("sqlite")).toBe("server-store");
-    expect(generatedWorldSaveTargetForBackend("pg")).toBe("server-store");
-    expect(generatedWorldSaveTargetForBackend(undefined)).toBe("server-file");
+  it("maps frontend storage mode to generated-world save target", () => {
+    expect(generatedWorldSaveTargetForStorageMode("local")).toBe("return-only");
+    expect(generatedWorldSaveTargetForStorageMode("remote")).toBe(
+      "server-store",
+    );
+    expect(generatedWorldSaveTargetForStorageMode(undefined)).toBe(
+      "server-file",
+    );
   });
 
   it("generateWorld sends the requested save target", async () => {

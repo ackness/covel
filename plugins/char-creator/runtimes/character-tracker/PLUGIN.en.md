@@ -8,14 +8,14 @@ priority: 750
 model: plugin
 outputKind: system
 timeoutMs: 120000
-promptVersion: 2
 trigger:
   type: scheduled
   interval: 1
   cooldownTurns: 1
 input:
   inject:
-    - from: narrator
+    - kind: runtime
+      from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
 tools:
@@ -43,7 +43,7 @@ You are the Character Tracker agent. Your job is to maintain the state of every 
 ## World character attribute schema
 
 <world-schema>
-{{ config.worldSchema }}
+{{ world.schema }}
 </world-schema>
 
 ## Your workflow

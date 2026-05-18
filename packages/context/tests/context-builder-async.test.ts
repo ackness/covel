@@ -20,7 +20,12 @@ import {
   needsAsyncBuild,
   type ContextBuildParams,
 } from "@covel/context";
-import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
+import {
+  PROMPT_CACHE_BREAKPOINT_MARKER,
+  type RuntimeManifest,
+  type RuntimeResult,
+  type TurnInput,
+} from "@covel/shared";
 import type { DataStore, PluginDataRecord } from "@covel/store";
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -203,7 +208,7 @@ describe("buildContextAsync — runtime inject regression", () => {
       config: {},
     };
     const result = buildContext(params);
-    expect(result.systemPrompt).toBe("body");
+    expect(result.systemPrompt).toBe(`body${PROMPT_CACHE_BREAKPOINT_MARKER}`);
     expect(result.systemPrompt).not.toContain("<existing-entries>");
   });
 });

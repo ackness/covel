@@ -97,12 +97,15 @@ export async function processRuntimeResult(
     opts?.capabilities,
   );
   imageGenerationFailures.push(...inlineMediaFailures);
-  if (imageGenerationFailures.length > 0) {
+  if (inlineMediaFailures.length > 0) {
     return { events: [], failedProposals: imageGenerationFailures };
   }
 
   if (proposals.length === 0) {
-    return empty;
+    return {
+      events: [],
+      failedProposals: imageGenerationFailures,
+    };
   }
 
   // Thread the hook pipeline + eventBus through so PreStateCommit /
@@ -150,5 +153,8 @@ export async function processRuntimeResult(
     }
   }
 
-  return { events, failedProposals };
+  return {
+    events,
+    failedProposals: [...imageGenerationFailures, ...failedProposals],
+  };
 }

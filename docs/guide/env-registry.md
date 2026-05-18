@@ -45,8 +45,8 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 1. 新增环境变量时，先在 `COVEL_ENV_REGISTRY` 加 definition。
 2. 运行时代码读取 env 时使用 helper，保留 `process.env` 给动态枚举场景。
 3. 新增 provider 只需要遵守 `${PROVIDER}_API_KEY` 命名，registry 只记录常用示例。
-4. 新增 feature flag 使用 `COVEL_*_V1` 命名，默认关闭时用 `isEnvEnabled()`。
-5. 默认开启的兼容开关使用 `isEnvDefaultOn()`，当前代表是 `COVEL_COMMIT_TXN_V1`。
+4. 新增 feature flag 使用清晰的能力名，避免用版本号表达开发阶段。
+5. 默认关闭的运行期开关用 `isEnvEnabled()`；默认开启的开关用 `isEnvDefaultOn()` 并在 registry 里写清楚关闭值。
 6. `.env.example` 和 `.env.llm.example` 只放可公开示例值。
 
 ## 当前整理结论

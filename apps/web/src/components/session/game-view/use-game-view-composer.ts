@@ -19,7 +19,7 @@ export function useGameViewComposer({
 
   // Legacy blockSelections path is kept only to satisfy ChatMessages' prop
   // contract (some older blocks still wire onSelect). The "confirm & send"
-  // bar below is driven by pendingInteractionDrafts (V2 flow) instead.
+  // bar below is driven by pendingInteractionDrafts.
   const [blockSelections, setBlockSelections] = useState<
     Record<string, string>
   >({});

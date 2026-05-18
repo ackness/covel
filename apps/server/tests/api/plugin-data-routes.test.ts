@@ -34,7 +34,7 @@ function makeManifest(pluginId: string): RuntimeManifest {
     pluginId,
     runtime: "agent",
     description: `${pluginId} runtime`,
-    trigger: { mode: "manual" },
+    trigger: { type: "manual" },
     priority: 500,
     tools: { builtin: [], local: [] },
     permissions: [],

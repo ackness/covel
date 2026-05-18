@@ -8,19 +8,19 @@ priority: 50
 outputKind: system
 model: plugin
 timeoutMs: 180000
-promptVersion: 2
 guard: ./guard.js
 trigger:
   type: auto
 upstreamRequired:
   # Pre-Game band: schema-gen (priority 40) populates plugin_data.schema,
-  # which loadSessionConfig surfaces as `{{ config.worldSchema }}`. Without
+  # which SessionContextSnapshot surfaces as `{{ world.schema }}`. Without
   # it the form would either be skipped or fall back to defaults (audit P0-2).
   - pregame
   - world-init/schema-gen
 input:
   inject:
-    - from: narrator
+    - kind: runtime
+      from: narrator
       field: narrativeOutput
       as: "<narrator-opening>"
 tools:
@@ -53,7 +53,7 @@ You are the player character creation agent. Your single task is to **emit one o
 ## Character attribute schema (world-dimension system)
 
 <world-schema>
-{{ config.worldSchema }}
+{{ world.schema }}
 </world-schema>
 
 ---

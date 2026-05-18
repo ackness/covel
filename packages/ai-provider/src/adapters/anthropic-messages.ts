@@ -75,10 +75,9 @@ function extractAnthropicParameterOverrides(
  *
  * When the provider config advertises `cacheStrategy === 'anthropic-explicit'`
  * AND the concatenated system string contains `PROMPT_CACHE_BREAKPOINT_MARKER`
- * sentinels (emitted by the context assembler when
- * `COVEL_PROMPT_CACHE_V1=1`), the system prompt is split into labelled
- * text blocks and `cache_control: { type: 'ephemeral' }` is attached to
- * each break boundary up to the Anthropic maximum.
+ * sentinels emitted by the context assembler, the system prompt is split into
+ * labelled text blocks and `cache_control: { type: 'ephemeral' }` is attached
+ * to each break boundary up to the Anthropic maximum.
  *
  * For any other strategy, or when the sentinel is absent, the function
  * returns a plain string so the request body is byte-identical to the

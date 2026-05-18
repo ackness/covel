@@ -12,7 +12,6 @@ import {
 } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { worldRoutes } from "../../src/routes/api/worlds.js";
-import { loadSessionConfig } from "../../src/routes/api/load-session-config.js";
 
 type Env = {
   Variables: {
@@ -323,19 +322,6 @@ describe("world routes", () => {
     expect(lorebookEntries[1]?.content).toBe(
       '[geography]\n{\n  "regions": [\n    {\n      "name": "North",\n      "description": "North description",\n      "climate": "temperate"\n    }\n  ]\n}',
     );
-
-    const cfg = await loadSessionConfig(
-      store,
-      "sess-1",
-      "world-2",
-      "world-data-provider",
-    );
-    expect(cfg.worldEntries).toEqual({
-      factions:
-        '[factions]\n[\n  {\n    "id": "guild",\n    "name": "Guild",\n    "description": "Guild description",\n    "type": "guild",\n    "influence": "minor"\n  }\n]',
-      geography:
-        '[geography]\n{\n  "regions": [\n    {\n      "name": "North",\n      "description": "North description",\n      "climate": "temperate"\n    }\n  ]\n}',
-    });
   });
 
   it("POST /api/worlds/:id/world-data/preflight reports a read-only import plan", async () => {

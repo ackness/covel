@@ -62,7 +62,7 @@ describe("Health Route", () => {
     expect(body.version).toBe("0.0.3");
   });
 
-  it("returns structured storage capabilities while keeping storeBackend compatible", async () => {
+  it("returns structured storage capabilities", async () => {
     const memStore = createMemoryStore();
     const app = createTestApp({
       store: memStore,
@@ -73,7 +73,6 @@ describe("Health Route", () => {
     const res = await app.request("/api/health");
     const body = (await json(res)) as Record<string, unknown>;
 
-    expect(body.storeBackend).toBe("memory");
     expect(body.storage).toMatchObject({
       data: {
         backend: "memory",

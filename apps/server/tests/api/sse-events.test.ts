@@ -1,5 +1,5 @@
 /**
- * V2 SSE Events — tests for EventBus-wired SSE subscribe and emit endpoints.
+ * SSE Events — tests for EventBus-wired SSE subscribe and emit endpoints.
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -21,7 +21,7 @@ function createTestApp(eventBus: EventBus): Hono {
   return app;
 }
 
-describe("V2 SSE Events", () => {
+describe("SSE Events", () => {
   let app: Hono;
   let eventBus: EventBus;
 

@@ -473,7 +473,7 @@ export type EmbeddingFormat = "openai" | "nemotron-multimodal";
 export interface ModelSlotConfig {
   slotId: string;
   presetId: string;
-  /** Capability tag — determines compatibility with runtime providerTag. */
+  /** Capability tag — determines fallback compatibility for this slot. */
   tag: SlotTag;
   parameterOverrides?: ModelParameterOverrides;
 }

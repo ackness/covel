@@ -1,9 +1,7 @@
 /**
  * Snapshot / Fork routes (S4-T2, §A6).
  *
- * Materialized state snapshots power save / load / fork. The snapshots_v1
- * feature flag gates all endpoints: when off, every route returns 503 to
- * match the established suspend/resume flag behaviour.
+ * Materialized state snapshots power save / load / fork.
  *
  *   POST   /api/sessions/:id/snapshot    — create manual snapshot
  *   GET    /api/sessions/:id/snapshots   — list snapshots
@@ -22,7 +20,7 @@
 
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { collectMediaRefIds, isEnvEnabled } from "@covel/shared";
+import { collectMediaRefIds } from "@covel/shared";
 import type {
   DataStore,
   MediaStore,
@@ -49,20 +47,9 @@ export const snapshotRoutes = new Hono<Env>();
 
 const SAFE_SESSION_ID_RE = /^[a-z0-9_-]{1,128}$/i;
 
-const FLAG_OFF_BODY = {
-  error: "Snapshot / fork feature is not enabled (COVEL_SNAPSHOTS_V1)",
-  code: "feature_disabled",
-} as const;
-
-function flagOn(): boolean {
-  return isEnvEnabled("COVEL_SNAPSHOTS_V1");
-}
-
 // ── POST /api/sessions/:id/snapshot — manual snapshot ─────────────
 
 snapshotRoutes.post("/:id/snapshot", async (c) => {
-  if (!flagOn()) return c.json(FLAG_OFF_BODY, 503);
-
   const sessionId = c.req.param("id");
   const store = c.get("store");
 
@@ -132,8 +119,6 @@ snapshotRoutes.post("/:id/snapshot", async (c) => {
 // ── GET /api/sessions/:id/snapshots — list snapshots ──────────────
 
 snapshotRoutes.get("/:id/snapshots", async (c) => {
-  if (!flagOn()) return c.json(FLAG_OFF_BODY, 503);
-
   const sessionId = c.req.param("id");
   const store = c.get("store");
 
@@ -149,8 +134,6 @@ snapshotRoutes.get("/:id/snapshots", async (c) => {
 // ── POST /api/sessions/:id/fork — fork from snapshot ──────────────
 
 snapshotRoutes.post("/:id/fork", async (c) => {
-  if (!flagOn()) return c.json(FLAG_OFF_BODY, 503);
-
   const parentSessionId = c.req.param("id");
   const store = c.get("store");
   const mediaStore = c.get("mediaStore");

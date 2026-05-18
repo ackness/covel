@@ -295,7 +295,8 @@ Covel 的 turn pipeline 把每一轮拆成三段：
 ```yaml
 input:
   inject:
-    - from: narrator
+    - kind: runtime
+      from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
     - kind: plugin-data

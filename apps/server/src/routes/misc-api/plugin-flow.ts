@@ -135,7 +135,6 @@ export async function buildPluginFlowResponse() {
   plugins.sort((a, b) => a.id.localeCompare(b.id));
 
   return {
-    version: "v1",
     generatedAt: new Date().toISOString(),
     segments: [
       {

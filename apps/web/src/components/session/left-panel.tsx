@@ -25,7 +25,6 @@ import type {
 
 export interface LeftPanelProps {
   session: SessionRecord;
-  phase: string;
   isLeftCollapsed: boolean;
   showSessionList: boolean;
   otherSessions: SessionRecord[];
@@ -47,7 +46,6 @@ export interface LeftPanelProps {
 
 export function LeftPanel({
   session,
-  phase,
   showSessionList,
   otherSessions,
   enabledPackages,
@@ -101,7 +99,7 @@ export function LeftPanel({
                   className={`w-1.5 h-1.5 rounded-full shrink-0 ${session ? "bg-green-500 animate-pulse" : "bg-muted-foreground"}`}
                 />
                 <Badge variant="secondary" className="ui-chip text-[10px]">
-                  {phase}
+                  {session.status} · turn {session.turnCount}
                 </Badge>
               </div>
               <Button

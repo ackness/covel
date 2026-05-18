@@ -19,7 +19,8 @@ tools:
     - plugin-data-set
 input:
   inject:
-    - from: narrator
+    - kind: runtime
+      from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
     - kind: plugin-data

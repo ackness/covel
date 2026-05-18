@@ -5,7 +5,6 @@ import type {
   TurnInput,
   TurnResult,
 } from "@covel/shared";
-import { isEnvEnabled } from "@covel/shared";
 import {
   buildRuntimeOutputFromResult,
   emitSubEvent,
@@ -31,7 +30,6 @@ function collectPendingInputs(
     const interactions = out.interactions as
       | Array<Record<string, unknown>>
       | undefined;
-    const form = out.form as Record<string, unknown> | undefined;
     const narrativeFallback =
       typeof out.narrativeTemplate === "string"
         ? out.narrativeTemplate
@@ -53,19 +51,6 @@ function collectPendingInputs(
             (interaction.narrativeTemplate as string) ?? narrativeFallback,
         });
       }
-    } else if (form?.formId) {
-      // Legacy format: single form object.
-      pendingInputs.push({
-        pluginId: result.pluginId,
-        runtimeId: result.runtimeId,
-        interaction: {
-          type: "form",
-          interactionId: (form.formId ?? "") as string,
-          ...(form as object),
-        } as InteractionPayload,
-        form,
-        narrativeTemplate: narrativeFallback,
-      });
     }
   }
   return pendingInputs;
@@ -116,41 +101,39 @@ async function persistTurnResult(
     createdAt: turnResult.timestamp ?? now,
   });
 
-  if (isEnvEnabled("COVEL_SNAPSHOTS_V1")) {
-    try {
-      const { buildSnapshotPayload } =
-        await import("./snapshot-payload-builder.js");
-      const payload = await buildSnapshotPayload(
-        deps.store,
-        input.sessionId,
-        input.turnId,
-      );
-      const snapshotId = crypto.randomUUID();
-      await deps.store.saveSnapshot({
-        id: snapshotId,
-        sessionId: input.sessionId,
+  try {
+    const { buildSnapshotPayload } =
+      await import("./snapshot-payload-builder.js");
+    const payload = await buildSnapshotPayload(
+      deps.store,
+      input.sessionId,
+      input.turnId,
+    );
+    const snapshotId = crypto.randomUUID();
+    await deps.store.saveSnapshot({
+      id: snapshotId,
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      kind: "auto",
+      payload,
+      createdAt: turnResult.timestamp ?? now,
+    });
+    emitSubEvent(
+      deps.eventBus,
+      "session",
+      "state.snapshot.created",
+      input.sessionId,
+      {
         turnId: input.turnId,
+        snapshotId,
         kind: "auto",
-        payload,
-        createdAt: turnResult.timestamp ?? now,
-      });
-      emitSubEvent(
-        deps.eventBus,
-        "session",
-        "state.snapshot.created",
-        input.sessionId,
-        {
-          turnId: input.turnId,
-          snapshotId,
-          kind: "auto",
-        },
-      );
-    } catch (err) {
-      console.warn(
-        `[turn-executor] auto snapshot failed for session ${input.sessionId} turn ${input.turnId}:`,
-        err instanceof Error ? err.message : String(err),
-      );
-    }
+      },
+    );
+  } catch (err) {
+    console.warn(
+      `[turn-executor] auto snapshot failed for session ${input.sessionId} turn ${input.turnId}:`,
+      err instanceof Error ? err.message : String(err),
+    );
   }
 }
 

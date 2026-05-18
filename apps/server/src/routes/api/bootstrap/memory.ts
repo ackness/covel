@@ -2,7 +2,6 @@ import type { ParsedPluginMd } from "@covel/plugin-loader";
 import { createMemorySystem, type MemorySystem } from "@covel/memory";
 import type { LLMAdapter } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
-import { isEnvEnabled, readEnvString } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { createMemoryTools, type ToolModule } from "@covel/tools";
 
@@ -29,14 +28,6 @@ export function createBootstrapMemorySystem({
   preferredMemorySlot,
   resolveModel,
 }: CreateBootstrapMemorySystemParams): BootstrapMemorySystem | undefined {
-  console.log(
-    `[bootstrap] COVEL_MEMORY_V1=${readEnvString("COVEL_MEMORY_V1", "(unset)")}`,
-  );
-
-  if (!isEnvEnabled("COVEL_MEMORY_V1")) {
-    return undefined;
-  }
-
   // Resolve which slot to use for memory LLM calls. Use slot ids here so
   // memory follows the same contract as runtime bindings and player-facing
   // settings instead of reaching into internal preset ids.
@@ -88,7 +79,7 @@ export function createBootstrapMemorySystem({
   );
 
   console.log(
-    "[bootstrap] Memory system (V1) initialized — core memory blocks + recall/archival search",
+    "[bootstrap] Memory system initialized — core memory blocks + recall/archival search",
   );
 
   return {

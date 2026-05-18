@@ -11,7 +11,6 @@ priority: 600
 outputKind: system
 model: plugin
 timeoutMs: 120000
-promptVersion: 2
 tags:
   - role:codex
   - data:lorebook
@@ -26,7 +25,8 @@ upstreamRequired:
   - narrator
 input:
   inject:
-    - from: narrator
+    - kind: runtime
+      from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
     - kind: plugin-data

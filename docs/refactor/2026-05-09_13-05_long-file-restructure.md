@@ -49,7 +49,7 @@ Refactored in this pass:
 - Public entrypoints remain stable: `@/stores/session-store.js`, `@/lib/catalog.js`, `runStoreContractTests`, `executeTurn`, and `resumeSuspendedRuntime`.
 - File moves are behavior-preserving unless noted below.
 - Framework code continues to discover plugin-owned UI/data by manifest and UI specs instead of hardcoding plugin IDs.
-- `bootstrapApi`, `runRuntimeDebug`, `runRuntimeCases`, `buildContextV2`, `runAgentToolLoop`, and plugin local-tool trust/activation behavior keep their public caller behavior.
+- `bootstrapApi`, `runRuntimeDebug`, `runRuntimeCases`, `buildSegmentedContext`, `runAgentToolLoop`, and plugin local-tool trust/activation behavior keep their public caller behavior.
 
 ## Changes
 
@@ -72,8 +72,8 @@ Refactored in this pass:
 ### Prompt Assembly
 
 - Kept `prompt-assembler.ts` as the context assembly entrypoint for segment construction, history insertion, author notes, and budget pruning.
-- Split V2 system-prompt serialization and cache-breakpoint insertion into `packages/context/src/prompt-serialization.ts`.
-- Added focused tests for V2 segment order, empty-segment joining, cacheable segment markers, and empty cacheable segment handling.
+- Split system-prompt serialization and cache-breakpoint insertion into `packages/context/src/prompt-serialization.ts`.
+- Added focused tests for segment order, empty-segment joining, cacheable segment markers, and empty cacheable segment handling.
 
 ### Web Session Store
 
@@ -175,7 +175,7 @@ Refactored in this pass:
 - Split Plugin RPC registry, executor, handler path containment, and approval gate wiring into `apps/server/src/routes/api/bootstrap/plugin-rpc-wiring.ts`.
 - Split plugin hook-source collection and hook pipeline registration into `apps/server/src/routes/api/bootstrap/plugin-hooks.ts`.
 - Split compactor summary-focus collection, estimator, fast-slot adapter, and `CompactorRunner` wiring into `apps/server/src/routes/api/bootstrap/compactor.ts`.
-- Split memory V1 flag handling, slot resolution, memory-panel capability discovery, memory-system construction, and builtin memory tool creation into `apps/server/src/routes/api/bootstrap/memory.ts`.
+- Split memory slot resolution, memory-panel capability discovery, memory-system construction, and builtin memory tool creation into `apps/server/src/routes/api/bootstrap/memory.ts`.
 - Split plugin-local tool loading, tools.local path containment, trusted eager loading, community lazy activation, and per-plugin tool access map construction into `apps/server/src/routes/api/bootstrap/local-tools.ts`.
 - Preserved the public `wrapStoreWithPluginDataEvents` export from `bootstrap.ts` so existing route tests and callers keep their import path.
 - Added focused bootstrap memory tests for disabled memory, preferred memory-slot LLM calls, builtin memory-tool creation, and memory-panel plugin mirroring.

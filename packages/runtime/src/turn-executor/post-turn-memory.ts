@@ -1,4 +1,3 @@
-import { isEnvEnabled } from "@covel/shared";
 import type { TurnInput, TurnResult } from "@covel/shared";
 import type { TurnExecutorDeps } from "../turn-executor-types.js";
 import type { CoreMemoryBlock } from "./session-state.js";
@@ -10,11 +9,7 @@ export function schedulePostTurnMemoryUpdate(args: {
   readonly coreMemoryBlocks: readonly CoreMemoryBlock[];
 }): void {
   const { input, turnResult, deps, coreMemoryBlocks } = args;
-  if (
-    !isEnvEnabled("COVEL_MEMORY_V1") ||
-    !deps.memorySystem ||
-    coreMemoryBlocks.length === 0
-  ) {
+  if (!deps.memorySystem || coreMemoryBlocks.length === 0) {
     return;
   }
 

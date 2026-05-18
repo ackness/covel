@@ -11,7 +11,7 @@
  *
  * `messageContentFromHistoryRecord` rebuilds a structured
  * `readonly ContentPart[]` for those messages while preserving the
- * legacy plain-string path for ordinary text history. Adapters in
+ * plain-string path for ordinary text history. Adapters in
  * `@covel/ai-provider` that target text-only models collapse the array
  * back to its leading text summary, so the upgraded shape is safe to
  * emit even when the downstream model cannot ingest images.
@@ -34,8 +34,8 @@ import type { MessageHistoryRecord } from "./types.js";
  * `readonly ContentPart[]` built via {@link assetGenerateViewToLLM}.
  *
  * Defensive narrowing means malformed / partial metadata silently falls
- * back to the plain-string path — callers that do not understand block
- * metadata stay byte-identical to the pre-bridge behaviour.
+ * back to the plain-string path, so callers that do not understand block
+ * metadata keep the same text-only behaviour.
  */
 export function messageContentFromHistoryRecord(
   record: Pick<MessageHistoryRecord, "content" | "metadata">,

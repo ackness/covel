@@ -2,11 +2,7 @@
  * Proposal-specific commit handlers.
  */
 
-import {
-  assetGenerateToView,
-  isAssetGeneratePayload,
-  isEnvEnabled,
-} from "@covel/shared";
+import { assetGenerateToView, isAssetGeneratePayload } from "@covel/shared";
 import type {
   CharacterUpsertPayload,
   CommitResult,
@@ -440,11 +436,6 @@ export function createCommitHandlers(
   async function commitWorkingMemory(
     proposal: Proposal,
   ): Promise<CommitResult> {
-    // Feature-flag gate: reject when COVEL_WORKING_MEMORY_V1 is not enabled.
-    if (!isEnvEnabled("COVEL_WORKING_MEMORY_V1")) {
-      return { committed: false, error: "working_memory disabled" };
-    }
-
     const payload = proposal.payload as {
       scope?: unknown;
       key?: unknown;
@@ -515,8 +506,6 @@ export function createCommitHandlers(
   async function commitLorebookUpsert(
     proposal: Proposal,
   ): Promise<CommitResult> {
-    // The lorebook core itself is always on — only the session-scoped write
-    // path is gated so plugins authored for earlier versions keep working.
     const payload = proposal.payload as { entries?: unknown };
     if (!Array.isArray(payload.entries) || payload.entries.length === 0) {
       return {

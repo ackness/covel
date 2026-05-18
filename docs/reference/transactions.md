@@ -3,8 +3,8 @@
 > Covel's `DataStore` interface exposes an imperative transaction contract —
 > `beginTx / commitTx / rollbackTx` — that every backend must honor. This
 > document captures the contract, the per-backend implementation strategy,
-> and how the kernel keeps transactional commits enabled by default while
-> still exposing `COVEL_COMMIT_TXN_V1` as an explicit opt-out.
+> and how the kernel uses transactional commits whenever the active store
+> backend exposes transaction methods.
 
 ## Contract
 
@@ -146,20 +146,20 @@ be mistaken for a cooperative rollback.
 
 ## Kernel integration
 
-Turn commit (`packages/runtime/src/session-commit-pipeline.ts`) runs in a
-transaction by default. `packages/runtime/src/session-kernel.ts` remains the
-public facade for processing runtime results. When the underlying store implements
-`beginTx` (the method is optional on `KernelStore` for backwards
-compatibility), `commitAll` wraps the proposal application in a single
-transaction. Operators can explicitly opt out with
-`COVEL_COMMIT_TXN_V1=0` or `COVEL_COMMIT_TXN_V1=false`:
+Turn commit (`packages/runtime/src/session-commit-pipeline.ts`) uses a
+transaction whenever the underlying store implements `beginTx`, `commitTx`,
+and `rollbackTx`. `packages/runtime/src/session-kernel.ts` remains the public
+facade for processing runtime results. Store adapters that do not expose the
+transaction trio still execute proposals sequentially and warn on partial
+commit failure.
 
 ```ts
-const txEnabled =
-  process.env.COVEL_COMMIT_TXN_V1 !== "0" &&
-  process.env.COVEL_COMMIT_TXN_V1 !== "false";
+const supportsTx =
+  typeof store.beginTx === "function" &&
+  typeof store.commitTx === "function" &&
+  typeof store.rollbackTx === "function";
 
-if (txEnabled && typeof store.beginTx === "function") {
+if (supportsTx) {
   await store.beginTx();
   try {
     // apply every proposal in order
@@ -176,8 +176,8 @@ if (txEnabled && typeof store.beginTx === "function") {
 }
 ```
 
-Explicit opt-out preserves the legacy behavior from before `S4-T1`
-(serial apply, no rollback on mid-sequence failure).
+The non-transactional path is reserved for stores that genuinely lack the
+transaction contract.
 
 ## World Data import
 
@@ -206,25 +206,12 @@ index rows removes only the current session's explicit media ref; the
 content-addressed media asset is deleted only when the current session owns it
 and no refs remain.
 
-### Opting out
-
-Set the env var at server boot:
-
-```bash
-COVEL_COMMIT_TXN_V1=0 pnpm dev:server
-# or
-COVEL_COMMIT_TXN_V1=false pnpm dev:pg
-```
-
-Default path: leave the variable unset, or set it to `1` / `true`.
-
 ### Observability
 
-Transactional commits still produce the same `trace_events` as
-non-transactional commits (proposal apply, commit success/failure). The
-trace does not currently distinguish the two code paths — if you need to
-tell them apart during a gradual rollout, check whether
-`COVEL_COMMIT_TXN_V1` is set in the process env.
+Transactional commits produce the same `trace_events` as non-transactional
+commits (proposal apply, commit success/failure). The trace does not currently
+add a dedicated transaction-mode field; inspect the active store backend when
+debugging whether a run used transactions.
 
 ## Schema migrations
 

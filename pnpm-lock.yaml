@@ -342,6 +342,9 @@ importers:
 
   packages/create:
     dependencies:
+      '@covel/context':
+        specifier: workspace:*
+        version: link:../context
       '@covel/runtime':
         specifier: workspace:*
         version: link:../runtime

@@ -23,7 +23,7 @@ interface PackagesResponse {
 }
 
 type RawRuntimeSummary = Omit<RuntimeSummary, "trigger"> & {
-  trigger?: Partial<RuntimeSummary["trigger"]> & { type?: string };
+  trigger?: RuntimeSummary["trigger"];
 };
 
 type RawPackageSummary = Omit<PackageSummary, "runtimes"> & {
@@ -34,27 +34,19 @@ function normalizePackageSummary(pkg: RawPackageSummary): PackageSummary {
   return {
     ...pkg,
     runtimes: (pkg.runtimes ?? []).map((runtime) => {
-      const { type: triggerType, ...trigger } = runtime.trigger ?? {};
       return {
         ...runtime,
-        trigger: {
-          ...trigger,
-          mode: trigger.mode ?? triggerType ?? "always",
-        },
+        trigger: runtime.trigger ?? { type: "auto" },
       };
     }),
   };
 }
 
 export async function listPackages(): Promise<PackagesResponse> {
-  const res = await request<
-    | { packages: RawPackageSummary[]; loadErrors: PluginLoadError[] }
-    | RawPackageSummary[]
-  >("/api/packages");
-  // Backward compat: old servers return a plain array
-  if (Array.isArray(res)) {
-    return { packages: res.map(normalizePackageSummary), loadErrors: [] };
-  }
+  const res = await request<{
+    packages: RawPackageSummary[];
+    loadErrors: PluginLoadError[];
+  }>("/api/packages");
   return {
     packages: res.packages.map(normalizePackageSummary),
     loadErrors: res.loadErrors,
@@ -72,7 +64,7 @@ export interface PluginFlowStep {
   runtimeId: string;
   label: string;
   priority: number;
-  trigger: { mode: string };
+  trigger: { type: string };
   runtimeType?: string;
   outputKind?: string;
   model?: string;
@@ -117,7 +109,7 @@ export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
       runtimeId: s.runtimeId,
       label: s.runtimeName ?? s.runtimeId,
       priority: s.priority,
-      trigger: { mode: s.trigger?.type ?? "auto" },
+      trigger: { type: s.trigger?.type ?? "auto" },
       runtimeType: s.runtimeType,
       outputKind: s.outputKind,
       model: s.model,

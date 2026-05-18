@@ -110,7 +110,7 @@ export function normalizeRuntimeTrigger(trigger?: {
   condition?: string;
   maxRetryCount?: number;
 }): {
-  mode: string;
+  type: string;
   interval?: number;
   cooldownTurns?: number;
   maxTriggerCount?: number;
@@ -120,7 +120,7 @@ export function normalizeRuntimeTrigger(trigger?: {
   maxRetryCount?: number;
 } {
   return {
-    mode: trigger?.type ?? "always",
+    type: trigger?.type ?? "auto",
     ...(trigger?.interval !== undefined ? { interval: trigger.interval } : {}),
     ...(trigger?.cooldownTurns !== undefined
       ? { cooldownTurns: trigger.cooldownTurns }

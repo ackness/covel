@@ -54,16 +54,20 @@ describe("env registry", () => {
     expect(getEnvDefinition("STORE_BACKEND")?.defaultValue).toBe("sqlite");
     expect(getEnvDefinition("MEDIA_BACKEND")?.defaultValue).toBe("mirror");
     expect(getEnvDefinition("VECTOR_BACKEND")?.defaultValue).toBe("embedded");
-    expect(getEnvDefinition("COVEL_PROMPT_V2")?.group).toBe("feature");
+    expect(getEnvDefinition("COVEL_LLM_RETRY_DISABLED")?.group).toBe("ai");
   });
 
   it("parses strict feature flags", () => {
-    expect(isEnvEnabled("COVEL_PROMPT_V2", { COVEL_PROMPT_V2: "1" })).toBe(
-      true,
-    );
-    expect(isEnvEnabled("COVEL_PROMPT_V2", { COVEL_PROMPT_V2: "true" })).toBe(
-      false,
-    );
+    expect(
+      isEnvEnabled("COVEL_LLM_RETRY_DISABLED", {
+        COVEL_LLM_RETRY_DISABLED: "1",
+      }),
+    ).toBe(true);
+    expect(
+      isEnvEnabled("COVEL_LLM_RETRY_DISABLED", {
+        COVEL_LLM_RETRY_DISABLED: "true",
+      }),
+    ).toBe(false);
     expect(
       isEnvTruthy("ENABLE_DEBUG_PAGE", { ENABLE_DEBUG_PAGE: "true" }),
     ).toBe(true);
@@ -86,13 +90,15 @@ describe("env registry", () => {
     ]);
   });
 
-  it("supports default-on opt-out flags", () => {
-    expect(isEnvDefaultOn("COVEL_COMMIT_TXN_V1", {})).toBe(true);
+  it("supports default-on env parsing", () => {
+    expect(isEnvDefaultOn("ANY_DEFAULT_ON_FLAG", {})).toBe(true);
     expect(
-      isEnvDefaultOn("COVEL_COMMIT_TXN_V1", { COVEL_COMMIT_TXN_V1: "0" }),
+      isEnvDefaultOn("ANY_DEFAULT_ON_FLAG", { ANY_DEFAULT_ON_FLAG: "0" }),
     ).toBe(false);
     expect(
-      isEnvDefaultOn("COVEL_COMMIT_TXN_V1", { COVEL_COMMIT_TXN_V1: "false" }),
+      isEnvDefaultOn("ANY_DEFAULT_ON_FLAG", {
+        ANY_DEFAULT_ON_FLAG: "false",
+      }),
     ).toBe(false);
   });
 

@@ -13,11 +13,11 @@
  * the keys and the JSON-encoded values.
  *
  * Two scenarios are covered:
- *   1. Flag ON  (`COVEL_WORKING_MEMORY_V1=1`)  → segment must appear
- *   2. Flag OFF (env unset)                    → segment must NOT appear
+ *   1. Store has entries    → segment must appear
+ *   2. Store has no entries → segment must not appear
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store";
@@ -132,24 +132,11 @@ async function seedWorkingMemory(
 // ── Tests ────────────────────────────────────────────────────────
 
 describe("turn-executor → working memory injection", () => {
-  let originalEnv: string | undefined;
-
-  beforeEach(() => {
-    originalEnv = process.env.COVEL_WORKING_MEMORY_V1;
-  });
-
   afterEach(() => {
-    if (originalEnv === undefined) {
-      delete process.env.COVEL_WORKING_MEMORY_V1;
-    } else {
-      process.env.COVEL_WORKING_MEMORY_V1 = originalEnv;
-    }
     vi.restoreAllMocks();
   });
 
-  it("injects [Working Memory] segment when flag is ON and store has entries", async () => {
-    process.env.COVEL_WORKING_MEMORY_V1 = "1";
-
+  it("injects [Working Memory] segment when store has entries", async () => {
     const store = createMemoryStore();
     const sessionId = "sess-wm-on";
     await primeMainLoop(store, sessionId);
@@ -184,41 +171,7 @@ describe("turn-executor → working memory injection", () => {
     expect(systemPrompt).toContain("library");
   });
 
-  it("omits [Working Memory] segment when flag is OFF, even with entries in store", async () => {
-    delete process.env.COVEL_WORKING_MEMORY_V1;
-
-    const store = createMemoryStore();
-    const sessionId = "sess-wm-off";
-    await primeMainLoop(store, sessionId);
-    await seedWorkingMemory(store, sessionId);
-
-    const llm = makeCapturingLLM();
-    const manifest = makeManifest();
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async () => makeLoaded(manifest),
-      llm,
-      getConfig: () => ({}),
-      store,
-    };
-
-    const result = await executeTurn(
-      makeTurnInput(sessionId),
-      [manifest],
-      deps,
-    );
-
-    expect(result.runtimeResults).toHaveLength(1);
-    expect(result.runtimeResults[0]!.status).toBe("success");
-    expect(llm.captured.systemPrompts).toHaveLength(1);
-
-    const systemPrompt = llm.captured.systemPrompts[0]!;
-    expect(systemPrompt).not.toContain("[Working Memory]");
-    expect(systemPrompt).not.toContain("player.mood");
-  });
-
-  it("omits [Working Memory] segment when flag is ON but store has no entries", async () => {
-    process.env.COVEL_WORKING_MEMORY_V1 = "1";
-
+  it("omits [Working Memory] segment when store has no entries", async () => {
     const store = createMemoryStore();
     const sessionId = "sess-wm-empty";
     await primeMainLoop(store, sessionId);

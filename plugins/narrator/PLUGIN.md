@@ -15,7 +15,6 @@ tags:
   - role:narrator
   - data:relationship-graph
   - cost:llm
-promptVersion: 2
 trigger:
   type: auto
 tools:
@@ -28,7 +27,8 @@ relations:
     - chat-mode-narrator
 input:
   inject:
-    - from: npc-graph/rag-retriever
+    - kind: runtime
+      from: npc-graph/rag-retriever
       field: npcContext
       as: npc-relationships
 postHistory:

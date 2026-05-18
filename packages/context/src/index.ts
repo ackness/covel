@@ -19,8 +19,11 @@ export {
   needsAsyncBuild,
 } from "./context-builder.js";
 
-// ── Prompt Assembler V2 (S2-T1) ─────────────────────────────────
-export { buildContextV2, buildContextV2Async } from "./prompt-assembler.js";
+// ── Segment-Based Prompt Assembler ───────────────────────────────
+export {
+  buildSegmentedContext,
+  buildSegmentedContextAsync,
+} from "./prompt-assembler.js";
 export type { PromptSegments } from "./prompt-assembler.js";
 
 // ── Token Budget ────────────────────────────────────────────────

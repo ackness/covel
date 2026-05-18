@@ -1,5 +1,5 @@
 /**
- * Three-tier Prompt Assembler V2 — infrastructure only (S2-T1).
+ * Segment-based Prompt Assembler.
  *
  * Implements the 10-segment assembly model:
  *
@@ -17,18 +17,9 @@
  * [10 Post-History Instructions]← director-grade high-weight (S3-T4)
  * ```
  *
- * **Scope for this ticket (S2-T1)**: only segments 1, 3, and 5 carry real
- * content. Segments 2, 4, 6, 8, 9, 10 return empty strings and are reserved
- * as wiring points for later tickets (S2-T3 cache_control, S3-T1 Lorebook,
- * S3-T3 Working Memory, S3-T4 Author's Note). Empty segments are skipped
- * during final concatenation so the output stays clean.
- *
- * The returned `AssembledContext.messages` array is unchanged from V1
- * (history + current user message). Budget pruning, when enabled, runs
- * on the V2 output exactly as it does on V1.
- *
- * Gated by `COVEL_PROMPT_V2=1`. When the flag is OFF, callers continue
- * hitting the V1 `buildContext` path and this module is not exercised.
+ * Empty segments are skipped during final concatenation so the output stays
+ * clean. The returned `AssembledContext.messages` array contains history,
+ * the current user message, and any depth/post-history prompt contributions.
  */
 
 import type {
@@ -36,7 +27,6 @@ import type {
   PostHistoryDecl,
   RuntimeManifest,
 } from "@covel/shared";
-import { isEnvEnabled } from "@covel/shared";
 import { applyBudget } from "./budget.js";
 import { messageContentFromHistoryRecord } from "./llm-content-parts.js";
 import {
@@ -83,17 +73,13 @@ interface RenderedDepthContribution {
 // ── Summary substitution helper (mirrors context-builder.ts) ────
 
 /**
- * V2 segment 7 — history with compaction substitution.
- * Same logic as the V1 helper in context-builder.ts. Keeping them in sync
- * is intentional: both paths must produce identical output for the same input.
+ * Segment 7 — history with compaction substitution.
  */
 function buildMessageHistoryWithSummaries(
   messageHistory: readonly MessageHistoryRecord[],
   summaries: readonly SummaryRecord[],
 ): LLMMessage[] {
-  const compactorEnabled = isEnvEnabled("COVEL_COMPACTOR_V1");
-
-  if (!compactorEnabled || summaries.length === 0) {
+  if (summaries.length === 0) {
     return messageHistory.map(toLLMMessage);
   }
 
@@ -136,7 +122,7 @@ function toLLMMessage(msg: MessageHistoryRecord): LLMMessage {
 }
 
 /**
- * Structured view of the 10 system-prompt segments produced by V2.
+ * Structured view of the 10 system-prompt segments.
  *
  * Segments 1, 3, 5 carry the pre-history system prompt body. Segments 9 and
  * 10 are populated in S3-T4 and render as extra messages (not part of the
@@ -396,8 +382,8 @@ function insertAuthorsNotes(
 /**
  * Build the 10 prompt segments for a single runtime context.
  *
- * Internal helper — exported only via {@link buildContextV2} so tests stay
- * focused on the public shape.
+ * Internal helper — used by the exported segmented context builder so tests
+ * stay focused on the public shape.
  */
 function buildPromptSegments(params: ContextBuildParams): PromptSegments {
   return buildPromptSegmentsCommon(params, buildInjectBlocks(params));
@@ -453,10 +439,8 @@ function buildPromptSegmentsCommon(
     .filter(Boolean)
     .join("\n\n");
 
-  // Interpolate inject blocks too, mirroring V1 (which interpolates the
-  // concatenated `template + injectBlocks` as one string). This keeps
-  // behaviour consistent for plugins that reference template vars inside
-  // injected output — an edge case, but cheap to preserve.
+  // Interpolate inject blocks too so plugins may reference template variables
+  // inside injected output.
   const upstreamInjects = rawInjects
     ? interpolateTemplate(rawInjects, variables)
     : "";
@@ -498,56 +482,49 @@ function buildPromptSegmentsCommon(
 }
 
 /**
- * Read the S2-T3 prompt-cache feature flag lazily so tests can flip it per
- * case. Must be exactly the string `"1"` to enable — anything else
- * (undefined, `"0"`, `"true"`) keeps the pre-S2-T3 legacy path.
- */
-function isPromptCacheEnabled(): boolean {
-  return isEnvEnabled("COVEL_PROMPT_CACHE_V1");
-}
-
-/**
- * Build the V2 assembled context. Same return shape as {@link buildContext}.
+ * Build the assembled runtime context. Same return shape as
+ * {@link buildContext}.
  *
  * Assembles the system prompt as 10 named segments (see {@link PromptSegments}),
  * then joins segments 1–6 with `\n\n` as the final `systemPrompt`. The
- * `messages` array is identical to V1: history + current user message.
+ * `messages` array contains history + current user message, with any
+ * depth-positioned notes and post-history instructions applied afterward.
  *
- * When the caller supplies both `estimator` and `contextBudget` AND
- * `COVEL_CONTEXT_BUDGET_V1=1` is set, the same pruning pass used by V1 runs
- * against the V2 output before returning.
+ * When the caller supplies both `estimator` and `contextBudget`, the pruning
+ * pass runs before returning.
  *
  * @param params - Same shape as `buildContext` with an optional
  *   `frameworkPreamble` override for segment 1.
  */
-export function buildContextV2(params: ContextBuildParams): AssembledContext {
+export function buildSegmentedContext(
+  params: ContextBuildParams,
+): AssembledContext {
   const segments = buildPromptSegments(params);
-  return finalizeV2(params, segments);
+  return finalizeSegmentedContext(params, segments);
 }
 
 /**
- * Async V2 path — identical to {@link buildContextV2} but uses
+ * Async assembly path — identical to {@link buildSegmentedContext} but uses
  * {@link buildPromptSegmentsAsync} so `kind: 'plugin-data'` injects can
- * await the store. Call site (`buildContextAsync`) chooses between this
- * and the sync V2 based on the V2 feature flag + manifest opt-in.
+ * await the store.
  */
-export async function buildContextV2Async(
+export async function buildSegmentedContextAsync(
   params: ContextBuildParams,
 ): Promise<AssembledContext> {
   const segments = await buildPromptSegmentsAsync(params);
-  return finalizeV2(params, segments);
+  return finalizeSegmentedContext(params, segments);
 }
 
 /**
- * Shared V2 finalisation — message history, author's notes, post-history
- * instructions, and budget pruning. Split out so the sync and async V2
+ * Shared finalisation — message history, author's notes, post-history
+ * instructions, and budget pruning. Split out so the sync and async
  * paths share every post-segment step.
  */
-function finalizeV2(
+function finalizeSegmentedContext(
   params: ContextBuildParams,
   segments: PromptSegments,
 ): AssembledContext {
-  const systemPrompt = serializeSystemPrompt(segments, isPromptCacheEnabled());
+  const systemPrompt = serializeSystemPrompt(segments, true);
 
   // Segment 7: history with optional compaction substitution (S2-T2)
   const historyMessages: LLMMessage[] = buildMessageHistoryWithSummaries(
@@ -582,9 +559,7 @@ function finalizeV2(
       : withAuthorsNotes;
 
   const budgetEnabled =
-    params.estimator !== undefined &&
-    params.contextBudget !== undefined &&
-    isEnvEnabled("COVEL_CONTEXT_BUDGET_V1");
+    params.estimator !== undefined && params.contextBudget !== undefined;
 
   if (budgetEnabled) {
     const result = applyBudget(systemPrompt, messages, {

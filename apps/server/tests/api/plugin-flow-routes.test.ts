@@ -117,7 +117,7 @@ describe("plugin flow routes", () => {
         tags?: string[];
         relations?: Record<string, unknown>;
         runtimes?: Array<{
-          trigger: { mode?: string; type?: string; interval?: number };
+          trigger: { type?: string; interval?: number };
           tags?: string[];
           relations?: Record<string, unknown>;
         }>;
@@ -129,7 +129,7 @@ describe("plugin flow routes", () => {
     expect(pkg?.tags).toEqual(["mode:dialogue", "role:narrator"]);
     expect(pkg?.relations).toEqual({ provides: ["narrative-engine"] });
     expect(pkg?.runtimes?.[0]?.trigger).toEqual({
-      mode: "scheduled",
+      type: "scheduled",
       interval: 3,
     });
     expect(pkg?.runtimes?.[0]?.tags).toEqual([

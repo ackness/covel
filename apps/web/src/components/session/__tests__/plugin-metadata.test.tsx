@@ -167,7 +167,7 @@ describe("session plugin metadata UI", () => {
     ).toBe("Built-in");
   });
 
-  it("renders runtime trigger labels from trigger.mode", async () => {
+  it("renders runtime trigger labels from trigger.type", async () => {
     await i18n.changeLanguage("en-US");
     const packages: PackageSummary[] = [
       {
@@ -179,7 +179,7 @@ describe("session plugin metadata UI", () => {
             id: "auto-plugin",
             kind: "agent",
             priority: 100,
-            trigger: { mode: "auto" },
+            trigger: { type: "auto" },
           },
         ],
       },
@@ -192,7 +192,7 @@ describe("session plugin metadata UI", () => {
             id: "manual-plugin",
             kind: "agent",
             priority: 200,
-            trigger: { mode: "manual" },
+            trigger: { type: "manual" },
           },
         ],
       },
@@ -205,7 +205,7 @@ describe("session plugin metadata UI", () => {
             id: "event-plugin",
             kind: "function",
             priority: 300,
-            trigger: { mode: "event" },
+            trigger: { type: "event" },
           },
         ],
       },

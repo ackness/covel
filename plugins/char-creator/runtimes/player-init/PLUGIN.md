@@ -8,7 +8,6 @@ priority: 50
 outputKind: system
 model: plugin
 timeoutMs: 180000
-promptVersion: 2
 tags:
   - role:pre-game
   - role:character
@@ -25,7 +24,7 @@ upstreamRequired:
   # to invent a form without context. world-init/schema-gen (priority 40)
   # is also a hard upstream — its set-world-schema tool populates
   # `plugin_data.schema`, which this runtime's prompt reads as
-  # `{{ config.worldSchema }}` via loadSessionConfig (audit P0-2).
+  # `{{ world.schema }}` via SessionContextSnapshot (audit P0-2).
   - pregame
   - world-init/schema-gen
 input:
@@ -34,7 +33,8 @@ input:
     # the deterministic opening text produced by pregame (priority 10)
     # instead. narrator only comes online in turn 1+ and is consumed
     # by main-loop plugins (guide, codex, character-tracker, etc.).
-    - from: pregame
+    - kind: runtime
+      from: pregame
       field: narrativeOutput
       as: "<pregame-opening>"
 tools:
@@ -74,7 +74,7 @@ postHistory:
 ## 角色属性 Schema（世界维度系统定义）
 
 <world-schema>
-{{ config.worldSchema }}
+{{ world.schema }}
 </world-schema>
 
 ---

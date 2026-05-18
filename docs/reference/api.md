@@ -104,17 +104,21 @@ curl -X POST http://localhost:3001/api/sessions/<sessionId>/turn \
 ### 9. 提交玩家交互（如果 Turn 返回了 pendingInputs）
 
 ```bash
-curl -X POST http://localhost:3001/api/sessions/<sessionId>/submit-inputs \
+curl -X POST http://localhost:3001/api/sessions/<sessionId>/plugin-rpc \
   -H "Content-Type: application/json" \
   -d '{
-    "turnId": "<turnId>",
-    "submissions": [
-      {
-        "interactionId": "<interactionId>",
-        "type": "choice",
-        "values": { "selectedId": "option_1", "selectedLabel": "接受任务" }
-      }
-    ]
+    "pluginId": "framework",
+    "action": "submit-form",
+    "payload": {
+      "turnId": "<turnId>",
+      "submissions": [
+        {
+          "interactionId": "<interactionId>",
+          "type": "choice",
+          "values": { "selectedId": "option_1", "selectedLabel": "接受任务" }
+        }
+      ]
+    }
   }'
 ```
 
@@ -172,12 +176,11 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 玩家交互
 
-| 方法 | 路径                                  | 描述                                                           |
-| ---- | ------------------------------------- | -------------------------------------------------------------- |
-| POST | `/api/sessions/:id/submit-inputs`     | 提交玩家交互响应(legacy alias,转发到 plugin-rpc `submit-form`) |
-| POST | `/api/sessions/:id/plugin-rpc`        | **PR-3** 统一插件 RPC 通道(action 级 / runtime 级)             |
-| GET  | `/api/sessions/:id/approvals`         | **PR-7** 列出该 session 的待批准 RPC 请求                      |
-| POST | `/api/approvals/:approvalId/decision` | **PR-7** 提交玩家批准决定(allow/deny + once/session)           |
+| 方法 | 路径                                  | 描述                                                        |
+| ---- | ------------------------------------- | ----------------------------------------------------------- |
+| POST | `/api/sessions/:id/plugin-rpc`        | 统一插件 RPC 通道(action 级 / runtime 级，含 `submit-form`) |
+| GET  | `/api/sessions/:id/approvals`         | **PR-7** 列出该 session 的待批准 RPC 请求                   |
+| POST | `/api/approvals/:approvalId/decision` | **PR-7** 提交玩家批准决定(allow/deny + once/session)        |
 
 ### 会话插件管理
 
@@ -284,16 +287,14 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### Working Memory（工作记忆）
 
-> 需要环境变量 `COVEL_WORKING_MEMORY_V1=1`，否则返回 404。
->
 > **接入状态（2026-04-27）**：Working Memory 的 store / proposal / prompt injection 是运行时功能；下列 HTTP CRUD 是管理/调试接口，当前内置 Web UI 暂未直接消费。若未来收敛写路径，应保持 URL/响应兼容，优先替换内部实现而不是直接删除。
 
-| 方法   | 路径                                           | 描述                                                                                                                                           |
-| ------ | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/api/sessions/:id/working-memory`             | 列出该 session 的所有工作记忆条目                                                                                                              |
-| PUT    | `/api/sessions/:id/working-memory/:scope/:key` | 写入/更新工作记忆（scope: player \| story \| shared）                                                                                          |
-| DELETE | `/api/sessions/:id/working-memory/:scope/:key` | 删除工作记忆条目                                                                                                                               |
-| GET    | `/api/sessions/:id/memory-blocks`              | 只读返回 Letta 风格的 memory blocks（story scope，需 `COVEL_MEMORY_V1=1`）。2026-04-27 从 `/:id/memory` 重命名以避免与 `memory` 插件 id 冲突。 |
+| 方法   | 路径                                           | 描述                                                                                                                   |
+| ------ | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/sessions/:id/working-memory`             | 列出该 session 的所有工作记忆条目                                                                                      |
+| PUT    | `/api/sessions/:id/working-memory/:scope/:key` | 写入/更新工作记忆（scope: player \| story \| shared）                                                                  |
+| DELETE | `/api/sessions/:id/working-memory/:scope/:key` | 删除工作记忆条目                                                                                                       |
+| GET    | `/api/sessions/:id/memory-blocks`              | 只读返回 Letta 风格的 memory blocks（story scope）。2026-04-27 从 `/:id/memory` 重命名以避免与 `memory` 插件 id 冲突。 |
 
 ### Lorebook（S3-T6）
 
@@ -315,8 +316,6 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ### Suspend / Resume（S4-T4）
 
-> 需要环境变量 `COVEL_SUSPEND_V1=1`。关闭时 `POST /resume` 与 `DELETE /suspensions/:suspensionId` 返回 `503`，`GET /suspensions` 返回空列表。
-
 | 方法   | 路径                                          | 描述                                                   |
 | ------ | --------------------------------------------- | ------------------------------------------------------ |
 | POST   | `/api/sessions/:id/resume`                    | 用提交的 data 重新启动指定 suspensionId 对应的 runtime |
@@ -325,8 +324,6 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ### Snapshot / Fork（S4-T2）
 
-> 需要环境变量 `COVEL_SNAPSHOTS_V1=1`。关闭时所有路径返回 `503`。
->
 > **接入状态（2026-04-27）**：服务端手动快照、列表和 fork 能力已实现并有测试覆盖；当前内置 Web UI 只直接使用 `GET /api/sessions/:id/snapshot` 做恢复/重连，暂未提供手动快照列表或 fork 操作界面。
 
 | 方法 | 路径                          | 描述                                                               |
@@ -462,7 +459,6 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 {
   "status": "ok",
   "version": "1.0.0",
-  "storeBackend": "sqlite",
   "bootId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "timestamp": "2025-01-15T10:00:00.000Z",
   "storage": {
@@ -506,8 +502,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 | 字段                                      | 说明                                                                                                   |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `storeBackend`                            | 兼容字段：当前服务端 DataStore 后端（`memory` / `sqlite` / `pg`）。默认 `sqlite`。                     |
 | `bootId`                                  | 服务器启动 ID（UUID），每次重启变化，可用于检测服务器重启                                              |
+| `storage.data.backend`                    | 当前服务端 DataStore 后端（`memory` / `sqlite` / `pg`）。默认 `sqlite`。                               |
 | `storage.data.frontendMode`               | 前端数据模式：`local` 使用浏览器 IndexedDB；`remote` 使用服务端 API，由服务端 `STORE_BACKEND` 持久化。 |
 | `storage.media`                           | 当前 MediaStore 的配置值、实际后端、启用状态和持久化状态。                                             |
 | `storage.migrations`                      | 已注册迁移域、版本和状态；SQL 迁移由服务端迁移流程执行，IDB 迁移由浏览器数据库升级回调执行。           |
@@ -714,7 +710,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 - 覆盖同名维度 key
 - 清理目标 session 中已经失效的旧维度 key
-- 保持 `loadSessionConfig()` / `SessionContextSnapshot` 下一轮读取到最新世界词条
+- 保持 `SessionContextSnapshot.world.entries` 下一轮读取到最新世界词条
 
 **请求体:**
 
@@ -1055,15 +1051,15 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 - `runtimeResults` 包含每个 Runtime 的输出，可能包含叙事文本、工具调用结果等
 - Turn 执行后 `session.turnCount` 自动 +1
 - 服务端会对每个 runtimeResult 运行 `processRuntimeResult` 提交管道（与 `/api/actions` 一致）：normalize → state.commit → 触发后续 SessionEvent
-- 如果某个 Runtime 的输出包含 `pendingInputs`，需要通过 `/submit-inputs` 提交玩家响应
+- 如果某个 Runtime 的输出包含 `pendingInputs`，需要通过 `plugin-rpc` 的 `framework.submit-form` action 提交玩家响应
 
 ---
 
 ### 玩家交互
 
-当 Turn 执行后产生 `pendingInputs`（如表单、选择题、确认框），玩家需要通过此端点提交响应。框架会将玩家输入转化为自然语言叙事，追加到对话历史中。
+当 Turn 执行后产生 `pendingInputs`（如表单、选择题、确认框），玩家需要通过 `framework.submit-form` 提交响应。框架会将玩家输入转化为自然语言叙事，追加到对话历史中。
 
-#### `POST /api/sessions/:id/submit-inputs`
+#### `POST /api/sessions/:id/plugin-rpc` (`framework.submit-form`)
 
 提交一个或多个玩家交互响应。
 
@@ -1073,31 +1069,35 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 | ---- | ---- | ------- |
 | `id` | 路径 | 会话 ID |
 
-**请求体（批量提交）:**
+**请求体:**
 
 ```json
 {
-  "turnId": "a1b2c3d4-...",
-  "submissions": [
-    {
-      "interactionId": "char-creation-form",
-      "type": "form",
-      "values": {
-        "name": "艾尔文",
-        "class": "战士",
-        "background": "孤儿出身的流浪剑客"
+  "pluginId": "framework",
+  "action": "submit-form",
+  "payload": {
+    "turnId": "a1b2c3d4-...",
+    "submissions": [
+      {
+        "interactionId": "char-creation-form",
+        "type": "form",
+        "values": {
+          "name": "艾尔文",
+          "class": "战士",
+          "background": "孤儿出身的流浪剑客"
+        }
       }
-    }
-  ]
+    ]
+  }
 }
 ```
 
-| 字段          | 类型         | 必填 | 说明                 |
-| ------------- | ------------ | ---- | -------------------- |
-| `turnId`      | string       | 是   | 产生该交互的 Turn ID |
-| `submissions` | Submission[] | 是\* | 提交数组             |
-
-\*也支持遗留的单表单格式 `{ formId, values }`。
+| 字段                  | 类型         | 必填 | 说明                   |
+| --------------------- | ------------ | ---- | ---------------------- |
+| `pluginId`            | string       | 是   | 固定为 `"framework"`   |
+| `action`              | string       | 是   | 固定为 `"submit-form"` |
+| `payload.turnId`      | string       | 是   | 产生该交互的 Turn ID   |
+| `payload.submissions` | Submission[] | 是   | 提交数组               |
 
 **Submission 对象:**
 
@@ -1139,29 +1139,21 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 }
 ```
 
-**响应（批量）:**
+**响应:**
 
 ```json
 {
-  "results": [
-    {
-      "interactionId": "char-creation-form",
-      "filledNarrative": "旅人自称艾尔文，是一名孤儿出身的流浪剑客，以战士之姿行走江湖。",
-      "accepted": true
-    }
-  ],
-  "accepted": true
-}
-```
-
-**响应（遗留单表单格式）:**
-
-```json
-{
-  "submissionId": "...",
-  "formId": "char-creation-form",
-  "filledNarrative": "旅人自称艾尔文...",
-  "accepted": true
+  "status": "ok",
+  "result": {
+    "results": [
+      {
+        "interactionId": "char-creation-form",
+        "filledNarrative": "旅人自称艾尔文，是一名孤儿出身的流浪剑客，以战士之姿行走江湖。",
+        "accepted": true
+      }
+    ],
+    "accepted": true
+  }
 }
 ```
 
@@ -1169,7 +1161,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ```json
 { "error": "turnId is required" }                           // 400
-{ "error": "submissions[] or formId+values are required" }  // 400
+{ "error": "submissions[] is required" }                    // 400
 { "error": "Session \"<id>\" not found" }                   // 404
 ```
 
@@ -1179,8 +1171,6 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 - 该文本作为玩家消息追加到对话历史，供叙事者在下一轮 Turn 中参考（**不再生成合成的 assistant-role 消息**）
 - 模板由插件提供，使用 `{{fieldName}}` 占位符语法
 - 如果找不到模板，会生成一条简单的回退叙事（如 `[玩家输入] name: 艾尔文, class: 战士`）
-
-> **PR-3 注意**: 此端点现在是 `POST /api/sessions/:id/plugin-rpc` 的薄封装,内部转发到框架默认的 `submit-form` action。新代码建议直接走 plugin-rpc。submit-inputs 路由会保留至少一个废弃周期。
 
 ---
 
@@ -1255,9 +1245,9 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 **框架默认 action:**
 
-| Action        | 说明                                                                        |
-| ------------- | --------------------------------------------------------------------------- |
-| `submit-form` | 等同于 submit-inputs:持久化玩家输入、找模板消息、按 `{{字段}}` 填充自然语言 |
+| Action        | 说明                                                   |
+| ------------- | ------------------------------------------------------ |
+| `submit-form` | 持久化玩家输入、找模板消息、按 `{{字段}}` 填充自然语言 |
 
 **响应 200 — action 级:**
 
@@ -2020,8 +2010,6 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 ### Working Memory（工作记忆）
 
-> 需要环境变量 `COVEL_WORKING_MEMORY_V1=1`，否则所有端点返回 `404 Feature flag not enabled`。
->
 > **接入状态（2026-04-27）**：Working Memory 的 store / proposal / prompt injection 是运行时功能；下列 HTTP CRUD 是管理/调试接口，当前内置 Web UI 暂未直接消费。若未来收敛写路径，应保持 URL/响应兼容，优先替换内部实现而不是直接删除。
 
 #### `GET /api/sessions/:id/working-memory`
@@ -2076,8 +2064,6 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 ### Suspend / Resume（S4-T4）
 
-> 需要环境变量 `COVEL_SUSPEND_V1=1`。flag 关闭时所有写路径返回 `503 Service Unavailable`（表示端点存在但功能未启用），列表路径返回空数组。
-
 #### `POST /api/sessions/:id/resume`
 
 用玩家提交的数据重新启动一个被 `suspend` 工具暂停的 runtime。
@@ -2109,11 +2095,10 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 | `400` | 缺少 `X-Provider-Keys`、JSON body 错误、`suspensionId` 缺失或 schema 校验失败     |
 | `404` | session、suspension 不存在，或 suspension 已 resolved，或 runtime manifest 找不到 |
 | `500` | `resumeSuspendedRuntime()` 抛出错误                                               |
-| `503` | `COVEL_SUSPEND_V1` 未启用                                                         |
 
 #### `GET /api/sessions/:id/suspensions`
 
-列出指定 session 当前所有挂起项，按 `createdAt asc` 排序。flag 关闭时直接返回 `{ "suspensions": [] }`。
+列出指定 session 当前所有挂起项，按 `createdAt asc` 排序。
 
 **响应:**
 
@@ -2156,11 +2141,9 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 ### Snapshot / Fork（S4-T2）
 
-> 需要环境变量 `COVEL_SNAPSHOTS_V1=1`。关闭时所有路径返回 `503`（`{ "error": "...", "code": "feature_disabled" }`）。
->
 > **接入状态（2026-04-27）**：服务端手动快照、列表和 fork 能力已实现并有测试覆盖；当前内置 Web UI 只直接使用 `GET /api/sessions/:id/snapshot` 做恢复/重连，暂未提供手动快照列表或 fork 操作界面。
 
-物化快照是存档 / 读档 / 时间线分叉的核心 —— 每个快照把一个回合结束时的完整 session 状态序列化为 `payload`，保存在 `state_snapshots` 表。`kind` 取三种值：`auto`（flag 开启时每回合结束自动写入）、`manual`（`POST /snapshot` 显式创建）、`fork`（`POST /fork` 写到子 session 上记录来源）。
+物化快照是存档 / 读档 / 时间线分叉的核心 —— 每个快照把一个回合结束时的完整 session 状态序列化为 `payload`，保存在 `state_snapshots` 表。`kind` 取三种值：`auto`（每回合结束自动写入）、`manual`（`POST /snapshot` 显式创建）、`fork`（`POST /fork` 写到子 session 上记录来源）。
 
 #### `POST /api/sessions/:id/snapshot`
 
@@ -2545,7 +2528,7 @@ AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、
 }
 ```
 
-Web 前端优先根据 `/api/health.storage.data.frontendMode` 选择生成世界保存目标，旧服务端响应缺少 `storage` 时回退到 `/api/health.storeBackend`。`local` 模式使用 `saveTarget: "return-only"`，然后通过 `packages/store` 的 IndexedDB `DataStore.upsertWorld()` 保存到用户浏览器，并把 `world.metadata.storage` 标注为 `{ "scope": "browser", "backend": "indexeddb", "durable": true }`。`remote` 模式使用 `saveTarget: "server-store"`，并通过服务端 `packages/store` 后端持久化。未知后端保留 `server-file` 兼容旧行为。
+Web 前端根据 `/api/health.storage.data.frontendMode` 选择生成世界保存目标。`local` 模式使用 `saveTarget: "return-only"`，然后通过 `packages/store` 的 IndexedDB `DataStore.upsertWorld()` 保存到用户浏览器，并把 `world.metadata.storage` 标注为 `{ "scope": "browser", "backend": "indexeddb", "durable": true }`。`remote` 模式使用 `saveTarget: "server-store"`，并通过服务端 `packages/store` 后端持久化。缺少 `frontendMode` 时使用 `server-file`。
 
 **响应 200:** SSE 帧。
 
@@ -2726,33 +2709,33 @@ Covel 有两条独立的 SSE 流，**信封格式和帧格式都不同**：
 
 完整定义见 `packages/shared/src/types/protocol.ts`。
 
-| 类型                       | 分类         | 说明                                                                  |
-| -------------------------- | ------------ | --------------------------------------------------------------------- |
-| `narrative.delta`          | 叙事         | 叙事文本增量（逐 token 流式）                                         |
-| `narrative.completed`      | 叙事         | 叙事文本完成                                                          |
-| `interaction.requested`    | 交互         | 请求玩家输入（表单/选择/确认）                                        |
-| `interaction.completed`    | 交互         | 玩家交互完成                                                          |
-| `ui.rendered`              | UI           | `ui.render` proposal commit 后发出                                    |
-| `ui.part.update`           | UI           | UI part 状态更新（每个 part 一条）                                    |
-| `state.changed`            | 状态         | 游戏状态变更                                                          |
-| `state.snapshot`           | 状态         | 状态快照                                                              |
-| `state.snapshot.created`   | 状态         | 自动 / 手动 / fork 写入 snapshot 后发出（需 `COVEL_SNAPSHOTS_V1=1`）  |
-| `session.forked`           | 会话         | `POST /api/sessions/:id/fork` 物化子 session 后发出                   |
-| `execution.started`        | 执行生命周期 | Turn 执行开始                                                         |
-| `runtime.started`          | 执行生命周期 | 单个 Runtime 开始执行                                                 |
-| `runtime.completed`        | 执行生命周期 | 单个 Runtime 执行完成                                                 |
-| `runtime.failed`           | 执行生命周期 | Runtime 执行失败                                                      |
-| `execution.completed`      | 执行生命周期 | Turn 执行完成                                                         |
-| `record.updated`           | 会话生命周期 | 记录更新（角色、任务等）                                              |
-| `event.emitted`            | 会话生命周期 | 事件发射                                                              |
-| `asset.progress`           | 资产         | 多模态生成进度（`0..100`）                                            |
-| `asset.generated`          | 资产         | `asset.generate` proposal commit 后发出                               |
-| `world.dimensions.changed` | 世界         | 世界维度文件变更（热更新）                                            |
-| `plugin-data.changed`      | 插件数据     | `plugin-data-set` / DELETE / batch 等所有写路径                       |
-| `turn.suspended`           | 流程控制     | `suspend()` 工具序列化 pendingContinuation（需 `COVEL_SUSPEND_V1=1`） |
-| `turn.resumed`             | 流程控制     | `POST /api/sessions/:id/resume` 重启 runtime                          |
-| `error.occurred`           | 系统         | 执行错误                                                              |
-| `connection.restored`      | 系统         | 连接恢复                                                              |
+| 类型                       | 分类         | 说明                                                |
+| -------------------------- | ------------ | --------------------------------------------------- |
+| `narrative.delta`          | 叙事         | 叙事文本增量（逐 token 流式）                       |
+| `narrative.completed`      | 叙事         | 叙事文本完成                                        |
+| `interaction.requested`    | 交互         | 请求玩家输入（表单/选择/确认）                      |
+| `interaction.completed`    | 交互         | 玩家交互完成                                        |
+| `ui.rendered`              | UI           | `ui.render` proposal commit 后发出                  |
+| `ui.part.update`           | UI           | UI part 状态更新（每个 part 一条）                  |
+| `state.changed`            | 状态         | 游戏状态变更                                        |
+| `state.snapshot`           | 状态         | 状态快照                                            |
+| `state.snapshot.created`   | 状态         | 自动 / 手动 / fork 写入 snapshot 后发出             |
+| `session.forked`           | 会话         | `POST /api/sessions/:id/fork` 物化子 session 后发出 |
+| `execution.started`        | 执行生命周期 | Turn 执行开始                                       |
+| `runtime.started`          | 执行生命周期 | 单个 Runtime 开始执行                               |
+| `runtime.completed`        | 执行生命周期 | 单个 Runtime 执行完成                               |
+| `runtime.failed`           | 执行生命周期 | Runtime 执行失败                                    |
+| `execution.completed`      | 执行生命周期 | Turn 执行完成                                       |
+| `record.updated`           | 会话生命周期 | 记录更新（角色、任务等）                            |
+| `event.emitted`            | 会话生命周期 | 事件发射                                            |
+| `asset.progress`           | 资产         | 多模态生成进度（`0..100`）                          |
+| `asset.generated`          | 资产         | `asset.generate` proposal commit 后发出             |
+| `world.dimensions.changed` | 世界         | 世界维度文件变更（热更新）                          |
+| `plugin-data.changed`      | 插件数据     | `plugin-data-set` / DELETE / batch 等所有写路径     |
+| `turn.suspended`           | 流程控制     | `suspend()` 工具序列化 pendingContinuation          |
+| `turn.resumed`             | 流程控制     | `POST /api/sessions/:id/resume` 重启 runtime        |
+| `error.occurred`           | 系统         | 执行错误                                            |
+| `connection.restored`      | 系统         | 连接恢复                                            |
 
 ### 实现私有事件（不在 `ProtocolEventType` 内）
 

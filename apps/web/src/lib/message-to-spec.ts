@@ -2,7 +2,7 @@
  * Convert game messages to json-render specs.
  *
  * All message rendering goes through json-render — narrative text, forms,
- * notifications, player messages. This module converts each V1 StreamMessage
+ * notifications, player messages. This module converts each StreamMessage
  * to a nested spec tree, which chat-messages.tsx then flattens via
  * `nestedToFlat` and hands to `@json-render/react` Renderer.
  */

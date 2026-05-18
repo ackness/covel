@@ -212,7 +212,8 @@ trigger:
   maxTriggerCount: 1
 input:
   inject:
-    - from: narrator # 来源插件 ID
+    - kind: runtime
+      from: narrator # 来源插件 ID
       field: narrativeOutput # 要提取的输出字段
       as: "<narrator-opening>" # 包裹的 XML 标签名
 ```
@@ -282,9 +283,9 @@ curl -X POST http://localhost:3001/api/sessions/$SESSION_ID/plugin-rpc \
 
 **框架默认 action(无需声明,所有插件可直接调):**
 
-| Action        | 说明                                                                         |
-| ------------- | ---------------------------------------------------------------------------- |
-| `submit-form` | 持久化玩家输入 + 填模板,等同于 legacy `POST /api/sessions/:id/submit-inputs` |
+| Action        | 说明                                |
+| ------------- | ----------------------------------- |
+| `submit-form` | 持久化玩家输入并填充 narrative 模板 |
 
 详细 API 见 [docs/reference/api.md `POST /api/sessions/:id/plugin-rpc`](../reference/api.md#post-apisessionsidplugin-rpc)。
 

@@ -48,7 +48,6 @@ import { frameworkRoutes } from "./framework.js";
 import { stateRoutes } from "./state.js";
 import { eventRoutes } from "./events.js";
 import { createHealthRoutes } from "./health.js";
-import { submitInputsRoutes } from "./submit-inputs.js";
 import { worldRoutes } from "./worlds.js";
 import { messageRoutes } from "./messages.js";
 import { characterRoutes } from "./characters.js";
@@ -243,8 +242,8 @@ export async function bootstrapApi(
 
   // 4. (sessionScopes was removed 2026-04-12 — see audit Finding 2:
   //     `createSessionScope` had no production caller, the map was always
-  //     empty, and PATCH /api/plugins/:id/config always 404'd. Real config
-  //     lives in loadSessionConfig() + plugin_data.)
+  //     empty, and PATCH /api/plugins/:id/config always 404'd. Runtime config
+  //     now comes from explicit runtime/plugin settings.)
 
   // 5. loadRuntime resolver (locale-aware: loads PLUGIN.en.md when locale is "en-US")
   const loadRuntimeFn = async (
@@ -270,8 +269,8 @@ export async function bootstrapApi(
     builtinToolNames.add(t.name);
   }
 
-  // Register suspend tool (S4-T4). Always registered — harmless when flag off,
-  // as the sentinel just becomes a normal tool result returned to the LLM.
+  // Register suspend tool. The sentinel becomes a normal tool result returned
+  // to the LLM when no suspension handler consumes it.
   toolMap.set(suspendTool.name, suspendTool);
   builtinToolNames.add(suspendTool.name);
 
@@ -564,7 +563,6 @@ export async function bootstrapApi(
   app.route("/api/sessions", sessionRoutes);
   app.route("/api/sessions", turnRoutes);
   app.route("/api/sessions", stateRoutes);
-  app.route("/api/sessions", submitInputsRoutes);
   app.route("/api/sessions", messageRoutes);
   app.route("/api/sessions", characterRoutes);
   app.route("/api/sessions", pluginDataRoutes);

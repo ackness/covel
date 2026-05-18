@@ -26,8 +26,7 @@ The browser still has a user-visible mode switch. `local` means business
 records are saved in the user's browser IndexedDB. `remote` means the frontend
 uses the HTTP API and the server persists through its configured
 `STORE_BACKEND` (`memory`, `sqlite`, or `pg`). `/api/health.storage.data`
-publishes the resolved `frontendMode`; the legacy `storeBackend` field remains
-for older web bundles.
+publishes the resolved `backend` and `frontendMode`.
 
 `MEDIA_BACKEND` selects the `MediaStore`. The default is `mirror`, which follows
 `STORE_BACKEND`.

@@ -28,7 +28,7 @@ export function PluginItem({
   const [expanded, setExpanded] = useState(false);
 
   const agentRuntimes = (pkg.runtimes ?? []).filter(
-    (rt) => rt.kind !== "function" && rt.providerTag,
+    (rt) => rt.kind !== "function" && rt.model,
   );
   const primaryRuntime = agentRuntimes[0];
   const runtimeKey = primaryRuntime?.id ?? "";
@@ -209,16 +209,16 @@ export function PluginItem({
                       {rt.kind}
                     </Badge>
                     <span className="text-muted-foreground/60">
-                      {TRIGGER_LABELS[rt.trigger.mode]
+                      {TRIGGER_LABELS[rt.trigger.type]
                         ? t(
-                            TRIGGER_LABELS[rt.trigger.mode].key,
-                            TRIGGER_LABELS[rt.trigger.mode].fallback,
+                            TRIGGER_LABELS[rt.trigger.type].key,
+                            TRIGGER_LABELS[rt.trigger.type].fallback,
                           )
-                        : rt.trigger.mode}
+                        : rt.trigger.type}
                     </span>
-                    {rt.providerTag && (
+                    {rt.model && (
                       <span className="text-muted-foreground/60">
-                        @ {rt.providerTag}
+                        @ {rt.model}
                       </span>
                     )}
                   </div>
@@ -281,8 +281,8 @@ export function PluginItem({
                 className="w-full text-[10px] bg-background border border-border rounded px-1.5 py-1 disabled:opacity-50"
               >
                 <option value="">
-                  {primaryRuntime.providerTag
-                    ? `${t("plugin.defaultSlot", "default")}: ${primaryRuntime.providerTag}`
+                  {primaryRuntime.model
+                    ? `${t("plugin.defaultSlot", "default")}: ${primaryRuntime.model}`
                     : t("plugin.autoSlot", "auto (system default)")}
                 </option>
                 {resolvedSlots

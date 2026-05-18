@@ -3,13 +3,11 @@
  * Single call to create all entries, avoiding N separate tool calls.
  *
  * Data destinations (FU-8, S3-T2 follow-up):
- *   1. `plugin_data` namespace=entries — legacy read path, preserved for
- *      backward compatibility with `loadSessionConfig` which hydrates
- *      `{{ config.worldEntries }}` when the session has no lorebook data.
- *   2. `lorebook_entries` (session-scoped, constant strategy) — canonical
+ *   1. `plugin_data` namespace=entries — structured data mirror used by
+ *      admin/debug surfaces.
+ *   2. `lorebook_entries` (session-scoped, constant strategy) — prompt
  *      destination for world dimensions. Each entry becomes one `constant`
- *      lorebook row so the context loader can compose `worldEntries` from
- *      lorebook first, then fall back to plugin_data.
+ *      lorebook row so the context loader can compose `world.entries`.
  *
  * The tool emits both writes as pending proposals so the kernel commits them
  * through the same transaction path as every other runtime side effect.
@@ -117,9 +115,9 @@ export default function ({ tool, z, store }) {
 
 /**
  * Render a world entry as a readable lorebook content block. The context
- * loader joins these on blank lines to build `{{ config.worldEntries }}`
- * so the content should be self-describing (prefixed with the key) and
- * stable across runs for deterministic prompt assembly.
+ * loader exposes these as `{{ world.entries }}`, so the content should be
+ * self-describing (prefixed with the key) and stable across runs for
+ * deterministic prompt assembly.
  */
 function formatEntryContent(key, value) {
   let body;

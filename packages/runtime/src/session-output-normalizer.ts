@@ -28,7 +28,7 @@ export function normalizeOutput(
   const proposals: Proposal[] = [];
   const kind = outputKind ?? "plugin";
 
-  // narrative.append — from narrativeOutput or content (fallback).
+  // narrative.append — from narrativeOutput.
   //
   // Only `story` runtimes may append to the narrative feed. `system` and
   // `plugin` runtimes that happen to return `narrativeOutput` (e.g. a
@@ -39,11 +39,8 @@ export function normalizeOutput(
   // continuation that the framework silently committed alongside
   // narrator's real output.
   const narrativeText =
-    kind === "story"
-      ? (typeof output.narrativeOutput === "string" &&
-          output.narrativeOutput) ||
-        (typeof output.content === "string" && output.content) ||
-        ""
+    kind === "story" && typeof output.narrativeOutput === "string"
+      ? output.narrativeOutput
       : "";
 
   if (narrativeText) {
@@ -55,29 +52,23 @@ export function normalizeOutput(
     );
   }
 
-  // interaction.request — from interactions[] (modern) or form (legacy)
+  // interaction.request — from interactions[]
   const interactions = output.interactions as
     | Array<Record<string, unknown>>
     | undefined;
   if (interactions && interactions.length > 0) {
     for (const inter of interactions) {
+      if (typeof inter.interactionId !== "string" || !inter.interactionId) {
+        continue;
+      }
       proposals.push(
         makeProposal("interaction.request", source, turnId, sessionId, {
-          interactionId: inter.interactionId ?? inter.formId ?? "",
+          interactionId: inter.interactionId,
           type: inter.type ?? "form",
           ...inter,
         }),
       );
     }
-  } else if (output.form && typeof output.form === "object") {
-    const form = output.form as Record<string, unknown>;
-    proposals.push(
-      makeProposal("interaction.request", source, turnId, sessionId, {
-        interactionId: (form.formId ?? "") as string,
-        type: "form",
-        ...form,
-      }),
-    );
   }
 
   // ui blocks — from runtime output or tool-call parsed results
@@ -109,12 +100,6 @@ export function normalizeOutput(
     }
   }
 
-  // Legacy `phase` field from runtime output is ignored. The session state
-  // model is now `status + turnCount + preGameCompleted` — there is no
-  // persistent `phase` column and no `phase.changed` event is forwarded.
-  // Runtimes that still include `phase` in their output are silently
-  // accepted (no error) so plugins can upgrade on their own schedule.
-
   // event.emit — from events[]
   const events = output.events as Array<Record<string, unknown>> | undefined;
   if (events && events.length > 0) {
@@ -125,9 +110,7 @@ export function normalizeOutput(
     }
   }
 
-  // asset.generate — from output.assetGenerations[] (canonical, per SPEC §5.7)
-  // or output.assets[] (alias kept for the bundled image plugins whose P0-c
-  // diffs documented `assets` as the wire field). Accepted entry shape:
+  // asset.generate — from output.assetGenerations[]. Accepted entry shape:
   // { ref: MediaRef, modality: string, meta?: object }.
   for (const asset of collectAssetGenerations(output)) {
     proposals.push(

@@ -4,7 +4,7 @@
 >
 > **2026-04-17 更新（turn-band 重构）**：以下所有历史条目中提到的 `SessionPhase` / `session.phase` / `character_creation` / `transitionPhase` / `phase.changed` 均已废弃。当前实现：`SessionRecord` 取消 `phase` 字段，改用 `status` (`active`/`paused`/`ended`) + `turnCount` + `preGameCompleted: string[]`。Pre-Game 段落由每个 runtime 自行输出 `preGameDone: true` 完成自身登记，框架据此跳过已完成 runtime；不再有全局 phase 状态机。`trigger.phases` 字段也被移除。此说明对下列所有历史段落统一适用，历史条目保留以便追溯上下文。
 >
-> **2026-04-12 更新**：以下条目中提到的 `_createCharacter` magic flag 与 `submit-inputs.ts` 自动建角色 + 切 phase 的路径已被废弃。当前实现：插件通过 `create-character(transitionPhase="playing")` builtin 工具完成建角色与 phase 切换，框架不再在 submit-inputs 中检测任何插件特定字段。详见 `audits/2026-04-12-backend-webv2-framework-audit/04-changelog.md`。
+> **2026-04-12 更新**：以下条目中提到的 `_createCharacter` magic flag 与表单提交时自动建角色 + 切 phase 的路径已被废弃。当前实现：插件通过 `create-character(transitionPhase="playing")` builtin 工具完成建角色与 phase 切换，框架不再在交互提交中检测任何插件特定字段。详见 `audits/2026-04-12-backend-webv2-framework-audit/04-changelog.md`。
 
 ---
 
@@ -12,7 +12,7 @@
 
 ### 新增：CharacterAttributeSchema 共享类型
 
-`packages/shared/src/types/character-schema.ts` — 定义 `AttributeDefinition` 和 `CharacterAttributeSchema`，供 world-init、char-creator、submit-inputs、右侧面板共同使用。
+`packages/shared/src/types/character-schema.ts` — 定义 `AttributeDefinition` 和 `CharacterAttributeSchema`，供 world-init、char-creator、submit-form、右侧面板共同使用。
 
 属性类型：`string` | `number` | `boolean` | `enum` | `array`
 属性分类：`stats` | `bio` | `abilities` | `equipment` | `social`
@@ -21,7 +21,7 @@
 
 - `char-creator/PLUGIN.md` 读取 `{{ config.worldSchema }}` 生成表单字段
 - 字段 `name` 与 world schema attribute `id` 对齐（如 `lingGen`、`background`）
-- `submit-inputs.ts` 角色创建时合并 schema 默认值（hp、mp、cultivation_layer 等）
+- submit-form 角色创建时合并 schema 默认值（hp、mp、cultivation_layer 等）
 
 ### 新增：CharacterPanel 组件
 
@@ -119,7 +119,7 @@ pregame 输出 { phase: 'character_creation' }
 
 - session 创建 → `pre-game`
 - pregame 运行 → `character_creation`（pregame handler 直接调用 updateSession）
-- 角色表单提交 → `playing`（submit-inputs.ts 中 `_createCharacter` 检测后转换）
+- 角色表单提交 → `playing`（交互提交时 `_createCharacter` 检测后转换）
 
 ### 4. 消息持久化（Phase 1）
 
@@ -163,7 +163,7 @@ createCharacter: z.boolean()
   );
 ```
 
-设置后在 interaction 输出中注入 `_createCharacter: true`，submit-inputs 据此自动创建角色 + 转换 phase。
+设置后在 interaction 输出中注入 `_createCharacter: true`，交互提交据此自动创建角色 + 转换 phase。
 
 ### 6. 插件改动
 
@@ -210,14 +210,14 @@ createCharacter: z.boolean()
 
 ### B. 前端数据流断裂
 
-| #   | 问题                                        | 根因                                                                                          | 修复方向                                                                               |
-| --- | ------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| B1  | **表单提交不走 submit-inputs API**          | 前端 block 表单 onSubmit 走 `send_message` action（当文本发送），不调用 `POST /submit-inputs` | 前端添加 `submitInteraction` 方法，交互 block 走 submit-inputs API                     |
-| B2  | **CharacterRecord 不创建**                  | submit-inputs 不被调用 → `upsertCharacter` 不执行                                             | 依赖 B1                                                                                |
-| B3  | **Phase 不从 character_creation → playing** | submit-inputs 不被调用 → phase 转换不执行                                                     | 依赖 B1                                                                                |
-| B4  | **Narrator 输出不在前端显示**               | SSE handler 按 `kind === "story"` 过滤，但 kind 匹配可能因事件顺序/runtimeId 映射失败         | 排查 `outputKindMap` 填充逻辑、runtimeId 匹配、SSE 事件顺序                            |
-| B5  | **Plugin 类消息在刷新后误显示**             | 恢复的消息含 `kind=plugin`，前端过滤逻辑可能不一致                                            | 统一 live SSE 和恢复两条路径的 kind 过滤逻辑                                           |
-| B6  | **RemoteDataService 多个方法是 no-op**      | `addMessage()`、`addStatePatch()`、`persistStateSnapshot()` 全是空操作                        | Server 端负责持久化（已部分修复），RemoteDataService 的读取方法需确保从正确的 API 加载 |
+| #   | 问题                                        | 根因                                                                                            | 修复方向                                                                               |
+| --- | ------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| B1  | **表单提交不走 submit-form RPC**            | 前端 block 表单 onSubmit 走 `send_message` action（当文本发送），不调用 `framework.submit-form` | 前端添加 `submitInteraction` 方法，交互 block 走 submit-form RPC                       |
+| B2  | **CharacterRecord 不创建**                  | submit-form 不被调用 → `upsertCharacter` 不执行                                                 | 依赖 B1                                                                                |
+| B3  | **Phase 不从 character_creation → playing** | submit-form 不被调用 → phase 转换不执行                                                         | 依赖 B1                                                                                |
+| B4  | **Narrator 输出不在前端显示**               | SSE handler 按 `kind === "story"` 过滤，但 kind 匹配可能因事件顺序/runtimeId 映射失败           | 排查 `outputKindMap` 填充逻辑、runtimeId 匹配、SSE 事件顺序                            |
+| B5  | **Plugin 类消息在刷新后误显示**             | 恢复的消息含 `kind=plugin`，前端过滤逻辑可能不一致                                              | 统一 live SSE 和恢复两条路径的 kind 过滤逻辑                                           |
+| B6  | **RemoteDataService 多个方法是 no-op**      | `addMessage()`、`addStatePatch()`、`persistStateSnapshot()` 全是空操作                          | Server 端负责持久化（已部分修复），RemoteDataService 的读取方法需确保从正确的 API 加载 |
 
 ### C. 右侧面板数据为空
 

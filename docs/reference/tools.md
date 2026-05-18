@@ -171,7 +171,7 @@ interface UIRenderPart {
 
 **输出**: `{ success, namespace, key }`
 
-**治理路径**: 写入经 Session Kernel commit chain 提交，统一进入 `PreStateCommit` / `PostStateCommit`、trace 与 `COVEL_COMMIT_TXN_V1` 事务开关。
+**治理路径**: 写入经 Session Kernel commit chain 提交，统一进入 `PreStateCommit` / `PostStateCommit`、trace 与 store 事务。
 
 ---
 
@@ -290,8 +290,6 @@ interface UIRenderPart {
 ---
 
 ### suspend
-
-> 需要环境变量 `COVEL_SUSPEND_V1=1`。flag 关闭时调用本工具不会真的暂停 runtime —— sentinel 会作为普通 tool 结果交还给 LLM，回合继续按常规流程结束。
 
 声明在 `packages/tools/src/builtin/suspend.ts`。Agent runtime 调用 `suspend({ reason, resumeSchema })` 时，工具直接返回一个 sentinel 对象 `{ _covelSuspend: true, reason, resumeSchema }`。turn-executor 在每次 tool 执行后通过 `isSuspendSentinel()` 检测：识别到 sentinel 后会序列化当前 pendingContinuation 写入 `suspensions` 表，并发出 `turn.suspended` 事件，整个 tool loop 立即停止。后续可通过 `POST /api/sessions/:id/resume` 提交匹配 `resumeSchema` 的数据重新启动该 runtime（详见 `docs/reference/api.md`）。
 
@@ -485,12 +483,7 @@ Attributes:
 
 批量写入世界词条。一次调用传入所有词条（地理、阵营、货币等）。
 
-**FU-8 double-write**（S3-T2 lorebook 迁移收尾）：
-
-1. 写入 `plugin_data` namespace=`entries`（legacy，保持向后兼容 — 旧会话 / 未实现 lorebook 表的 store 依赖这条路径）
-2. 同步写入 session lorebook（`store.upsertLorebookEntries`）— 每个词条成为一条 `constant` lorebook row，id 稳定化为 `world-entry:<key>`，`insertionOrder` 按批次递增（100, 200, …）
-
-`loadSessionConfig` 构造 `{{ config.worldEntries }}` 时 **优先读 lorebook**，空才回退 plugin_data；这样新会话走 canonical 路径，老会话 / mock store 仍可回退。
+写入 session lorebook（`store.upsertLorebookEntries`）：每个词条成为一条 `constant` lorebook row，id 稳定化为 `world-entry:<key>`，`insertionOrder` 按批次递增（100, 200, …）。下一轮 prompt 通过 session context snapshot 的 `world.entries` 读取这些词条。
 
 | 参数    | 类型         | 必需 | 描述                      |
 | ------- | ------------ | ---- | ------------------------- |
@@ -700,7 +693,7 @@ Bootstrap 时自动分类：
   ↓ 聚合为数组存入 TurnMessage.pendingInput
   ↓ 返回 TurnResult.pendingInputs（支持多插件、多交互）
   ↓ 前端渲染所有交互 UI
-  ↓ 玩家提交 POST /submit-inputs { submissions: [...] }
+  ↓ 玩家提交 plugin-rpc framework.submit-form { submissions: [...] }
   ↓ 每个 submission 用 narrativeTemplate 翻译为自然语言
   ↓ 追加到消息历史（纯文本，LLM 看到的和普通消息一样）
 ```
@@ -748,17 +741,19 @@ execute: async (params) => ({
 ### 提交 API
 
 ```
-POST /api/session/:id/submit-inputs
+POST /api/sessions/:id/plugin-rpc
 
-// 新格式（支持多交互）
-{ "turnId": "...", "submissions": [
-    { "interactionId": "form-1", "type": "form", "values": { "name": "林清风" } },
-    { "interactionId": "choice-1", "type": "choice", "values": { "selectedId": "a", "selectedLabel": "跟随黑袍人" } }
-  ]
+{
+  "pluginId": "framework",
+  "action": "submit-form",
+  "payload": {
+    "turnId": "...",
+    "submissions": [
+      { "interactionId": "form-1", "type": "form", "values": { "name": "林清风" } },
+      { "interactionId": "choice-1", "type": "choice", "values": { "selectedId": "a", "selectedLabel": "跟随黑袍人" } }
+    ]
+  }
 }
-
-// 旧格式（向后兼容）
-{ "turnId": "...", "formId": "form-1", "values": { "name": "林清风" } }
 ```
 
 ---
@@ -866,8 +861,6 @@ commit trace 会记录 `ui.rendered`，并为每个 part 记录 `ui.part.update`
 | mirrorPluginId | string  |      | 可选：同时镜像到该插件的 `plugin_data/<plugin>/characters/<id>`，供插件 UI 订阅 |
 
 ### `working_memory.set`（S3-T3）
-
-> 需要环境变量 `COVEL_WORKING_MEMORY_V1=1`。flag 关闭时 commit chain 会拒绝该 proposal。
 
 写入 session 级工作记忆。commit handler 把 payload 持久化到 `working_memory` 表，并发出一个名为 `working_memory.changed` 的 KernelEvent（runtime 内部事件，目前**不会**通过 SSE 推到前端 —— 相关接入状态见 `docs/reference/protocol.md` 的 "Working Memory / 上下文压缩事件" 段落）。
 

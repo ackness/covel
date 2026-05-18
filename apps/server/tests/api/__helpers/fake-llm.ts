@@ -67,7 +67,7 @@ export function makeFakeLoadedRuntime(args: {
     runtimeType: "agent",
     outputKind: args.outputKind ?? "story",
     pluginType: args.pluginType ?? "plugin",
-    trigger: { mode: "always" },
+    trigger: { type: "auto" },
   };
 
   return {

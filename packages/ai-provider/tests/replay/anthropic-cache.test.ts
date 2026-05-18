@@ -256,7 +256,7 @@ describe("Anthropic adapter — cache_control injection (S2-T3)", () => {
       expect(body.system).not.toContain(PROMPT_CACHE_BREAKPOINT_MARKER);
     });
 
-    it("still emits legacy plain-string shape when explicit strategy is set but no sentinels are present", async () => {
+    it("still emits plain-string shape when explicit strategy is set but no sentinels are present", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(makeTextResponse()));
 
       const adapter = createAnthropicMessagesAdapter();

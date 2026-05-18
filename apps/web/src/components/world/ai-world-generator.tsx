@@ -13,9 +13,11 @@ import { Label } from "@/components/ui/label.js";
 import type { WorldRecord, GenerateWorldEvent } from "@/services/api.js";
 import * as api from "@/services/api.js";
 import {
-  generatedWorldSaveTargetForBackend,
+  generatedWorldSaveTargetForStorageMode,
   getDataService,
   getStorageMode,
+  storageModeForServerStorage,
+  type StorageMode,
 } from "@/services/data-service.js";
 
 interface AiWorldGeneratorProps {
@@ -37,8 +39,7 @@ export function AiWorldGenerator({
   const [prompt, setPrompt] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [storeBackend, setStoreBackend] =
-    useState<api.ServerHealth["storeBackend"]>();
+  const [serverStorageMode, setServerStorageMode] = useState<StorageMode>();
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -53,8 +54,12 @@ export function AiWorldGenerator({
     if (!open) return;
     void api
       .fetchServerHealth()
-      .then((health) => setStoreBackend(health.storeBackend))
-      .catch(() => setStoreBackend(undefined));
+      .then((health) =>
+        setServerStorageMode(
+          storageModeForServerStorage(health.storage) ?? undefined,
+        ),
+      )
+      .catch(() => setServerStorageMode(undefined));
   }, [open]);
 
   const handleGenerate = useCallback(() => {
@@ -105,10 +110,10 @@ export function AiWorldGenerator({
       },
       undefined,
       {
-        saveTarget: generatedWorldSaveTargetForBackend(storeBackend),
+        saveTarget: generatedWorldSaveTargetForStorageMode(serverStorageMode),
       },
     );
-  }, [prompt, i18n.language, onWorldCreated, onOpenChange, storeBackend]);
+  }, [prompt, i18n.language, onWorldCreated, onOpenChange, serverStorageMode]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();

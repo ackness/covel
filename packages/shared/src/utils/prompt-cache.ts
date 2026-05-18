@@ -33,11 +33,11 @@
  *   - Survives JSON serialization intact
  *   - Tokenizes consistently across models so it does not jitter prompt cost
  *
- * ## Feature gating
+ * ## Emission
  *
- * The sentinel is only emitted when `COVEL_PROMPT_CACHE_V1=1`. When the
- * flag is off, the assembler produces a bit-identical prompt to the
- * pre-S2-T3 behaviour and adapters hit the legacy code path.
+ * The assembler emits this sentinel at stable cache boundaries. Adapters that
+ * support explicit prompt caching split on the marker; other providers strip
+ * or ignore it.
  */
 
 /**
@@ -51,8 +51,8 @@ export const PROMPT_CACHE_BREAKPOINT_MARKER = "\uE000COVEL_CACHE_BREAK\uE000";
  * Split a cached system prompt on breakpoint markers.
  *
  * Returns one segment per marker-delimited span. When the input string
- * contains no markers (feature flag off, or adapter working on a legacy
- * prompt) a single-element array with the entire string is returned.
+ * contains no markers, a single-element array with the entire string is
+ * returned.
  *
  * @param systemPrompt - The assembled system prompt, possibly containing
  *   `PROMPT_CACHE_BREAKPOINT_MARKER` at logical cache boundaries.

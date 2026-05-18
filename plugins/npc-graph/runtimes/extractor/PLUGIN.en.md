@@ -15,7 +15,8 @@ trigger:
   cooldownTurns: 1
 input:
   inject:
-    - from: narrator
+    - kind: runtime
+      from: narrator
       field: narrativeOutput
       as: narrator-output
 tools:

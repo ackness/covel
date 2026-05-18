@@ -1,27 +1,16 @@
 /**
- * Sprint 1-D wiring tests: `SessionContextSnapshot` dual-channel activation
- * in `turn-executor.ts`.
+ * `SessionContextSnapshot` wiring tests in `turn-executor.ts`.
  *
- * Background: Sprint 1-D wires `buildSessionContextSnapshot` into
- * `executeTurn` behind the `COVEL_SESSION_CONTEXT=1` flag. When the flag is
- * on, the snapshot's `legacyConfigView` becomes the source of truth for
- * prompt-variable resolution (see `resolveVariableSources` in
- * `packages/context/src/prompt-internals.ts`).
+ * Background: `buildSessionContextSnapshot` provides structured world,
+ * memory, summary, and character data to prompt-variable resolution.
  *
  * These tests verify:
- *   1. Flag ON + no `config` passed via `getConfig` + world data seeded via
- *      store → the prompt still receives `{{ config.worldLore }}` etc.
- *      (proving the snapshot channel is active and wins over the empty
- *      legacy config).
- *   2. Flag OFF → the snapshot builder is NOT invoked; prompt variables
- *      fall back to the legacy `getConfig` path. The world data in the
- *      store is invisible to the prompt in this case (by design — the
- *      flag-off behaviour is unchanged from pre-Sprint 1).
- *   3. Flag ON but snapshot build fails → the turn does not crash; legacy
- *      scattered loads still deliver a usable prompt.
+ *   1. No `config` passed via `getConfig` + world data seeded via store → the
+ *      prompt still receives `{{ world.lore }}` etc.
+ *   2. Snapshot build failure does not crash the turn.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store";
@@ -58,7 +47,7 @@ function makeLoaded(manifest: RuntimeManifest): LoadedRuntime {
   return {
     manifest,
     promptTemplate:
-      "Lore: {{ config.worldLore }}. Tone: {{ config.worldTone }}. Player said: {{ player.message }}.",
+      "Lore: {{ world.lore }}. Tone: {{ world.tone }}. Player said: {{ player.message }}.",
     references: [],
   };
 }
@@ -150,24 +139,11 @@ async function seedWorld(
 // ── Tests ────────────────────────────────────────────────────────
 
 describe("turn-executor → SessionContextSnapshot wiring", () => {
-  let originalEnv: string | undefined;
-
-  beforeEach(() => {
-    originalEnv = process.env.COVEL_SESSION_CONTEXT;
-  });
-
   afterEach(() => {
-    if (originalEnv === undefined) {
-      delete process.env.COVEL_SESSION_CONTEXT;
-    } else {
-      process.env.COVEL_SESSION_CONTEXT = originalEnv;
-    }
     vi.restoreAllMocks();
   });
 
-  it("flag ON + empty getConfig → snapshot legacyConfigView populates prompt", async () => {
-    process.env.COVEL_SESSION_CONTEXT = "1";
-
+  it("empty getConfig → snapshot world view populates prompt", async () => {
     const store = createMemoryStore();
     const sessionId = "sess-sc-on";
     const worldId = "w-sc-on";
@@ -179,9 +155,8 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => makeLoaded(manifest),
       llm,
-      // Deliberately empty: when the snapshot channel is active, prompt
-      // variables must come from `snapshot.legacyConfigView`, NOT from
-      // whatever this `getConfig` returns.
+      // Deliberately empty: world variables must come from
+      // SessionContextSnapshot, not from runtime config.
       getConfig: () => ({}),
       store,
       // No worldDataPluginId — world.lore / world.tone come from WorldRecord
@@ -199,52 +174,11 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
     expect(llm.captured.systemPrompts).toHaveLength(1);
 
     const systemPrompt = llm.captured.systemPrompts[0]!;
-    // These only appear when `legacyConfigView.worldLore` / `worldTone` are
-    // populated — which only happens via the snapshot path when getConfig
-    // returns an empty object.
     expect(systemPrompt).toContain("The Sundered Coast");
     expect(systemPrompt).toContain("noir");
   });
 
-  it("flag OFF → snapshot path is dormant; empty getConfig leaves prompt blank", async () => {
-    delete process.env.COVEL_SESSION_CONTEXT;
-
-    const store = createMemoryStore();
-    const sessionId = "sess-sc-off";
-    const worldId = "w-sc-off";
-    await seedWorld(store, worldId, sessionId);
-    await primeMainLoop(store, sessionId);
-
-    const llm = makeCapturingLLM();
-    const manifest = makeManifest();
-    const deps: TurnExecutorDeps = {
-      loadRuntime: async () => makeLoaded(manifest),
-      llm,
-      // Same empty getConfig — but with the flag off there is no snapshot
-      // fallback, so the prompt's `{{ config.worldLore }}` resolves to the
-      // empty string.
-      getConfig: () => ({}),
-      store,
-    };
-
-    const result = await executeTurn(
-      makeTurnInput(sessionId),
-      [manifest],
-      deps,
-    );
-
-    expect(result.runtimeResults).toHaveLength(1);
-    expect(result.runtimeResults[0]!.status).toBe("success");
-    expect(llm.captured.systemPrompts).toHaveLength(1);
-
-    const systemPrompt = llm.captured.systemPrompts[0]!;
-    expect(systemPrompt).not.toContain("The Sundered Coast");
-    expect(systemPrompt).not.toContain("noir");
-  });
-
-  it("flag ON + snapshot build fails → falls back gracefully, turn still completes", async () => {
-    process.env.COVEL_SESSION_CONTEXT = "1";
-
+  it("snapshot build fails → turn still completes", async () => {
     const memStore = createMemoryStore();
     const sessionId = "sess-sc-broken";
     const worldId = "w-sc-broken";
@@ -301,8 +235,6 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
   });
 
   it("refreshes snapshot before same-turn main-loop runtimes after player creation", async () => {
-    process.env.COVEL_SESSION_CONTEXT = "1";
-
     const store = createMemoryStore();
     const sessionId = "sess-sc-refresh";
     const worldId = "w-sc-refresh";
@@ -347,7 +279,6 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
       name: "narrator",
       pluginId: "narrator",
       priority: 500,
-      promptVersion: 1,
       trigger: { type: "auto" },
     });
 

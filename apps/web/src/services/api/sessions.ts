@@ -1,4 +1,9 @@
-import type { I18nText, RuntimeResult, SessionEvent } from "@covel/shared";
+import type {
+  I18nText,
+  PluginRpcResponse,
+  RuntimeResult,
+  SessionEvent,
+} from "@covel/shared";
 import { request } from "./request.js";
 import type {
   MessageRecord,
@@ -147,10 +152,25 @@ export async function submitInputs(
     }>;
   },
 ): Promise<SubmitInputsResult> {
-  return request<SubmitInputsResult>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/submit-inputs`,
-    { method: "POST", body: JSON.stringify(body) },
+  const response = await request<PluginRpcResponse>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/plugin-rpc`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        pluginId: "framework",
+        action: "submit-form",
+        payload: body,
+      }),
+    },
   );
+  if (response.status !== "ok") {
+    throw new Error(
+      response.status === "error"
+        ? response.error
+        : `submit-form returned ${response.status}`,
+    );
+  }
+  return response.result as SubmitInputsResult;
 }
 
 // -- Session Snapshot (restore/reconnection) -------------------
@@ -166,10 +186,10 @@ export async function getSessionSnapshot(
 // -- Session API -------------------------------------------------
 
 export async function listSessions(worldId: string): Promise<SessionRecord[]> {
-  const res = await request<{ items: SessionRecord[] } | SessionRecord[]>(
+  const res = await request<{ items: SessionRecord[] }>(
     `/api/sessions?worldId=${encodeURIComponent(worldId)}`,
   );
-  return Array.isArray(res) ? res : res.items;
+  return res.items;
 }
 
 export async function getSession(sessionId: string): Promise<SessionRecord> {
@@ -327,9 +347,8 @@ export async function syncMessages(
 //   POST   /api/sessions/:id/resume                        -�� resume one
 //   DELETE /api/sessions/:id/suspensions/:suspensionId     -�� cancel one
 //
-// All three are gated server-side by the COVEL_SUSPEND_V1 flag. The web
-// client surfaces suspensions inside GameView (badge + dialog) so players
-// can feed resume data for runtimes that declared a wait-point
+// The web client surfaces suspensions inside GameView (badge + dialog) so
+// players can feed resume data for runtimes that declared a wait-point
 // (e.g. image generation, manual review, external callbacks).
 
 export interface SuspensionRecord {

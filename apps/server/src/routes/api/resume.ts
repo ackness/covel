@@ -4,8 +4,6 @@
  * POST /api/sessions/:id/resume
  *   Body: { suspensionId: string, data: unknown }
  *
- * Requires COVEL_SUSPEND_V1=1 to be active — returns 503 when flag is off.
- *
  * API keys are NEVER stored server-side; they must be supplied again via
  * the `X-Provider-Keys` header on this request (same as any turn call).
  *
@@ -36,7 +34,6 @@ import {
   createTurnEmitter,
 } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
-import { isEnvEnabled } from "@covel/shared";
 import type { EventBus } from "@covel/events";
 
 type Env = {
@@ -116,15 +113,6 @@ function validateAgainstJsonSchema(
 // ── Route ────────────────────────────────────────────────────────
 
 resumeRoutes.post("/:id/resume", async (c) => {
-  // Feature flag check — 503 when flag off (documented choice: 503 Service Unavailable
-  // indicates the endpoint exists but the feature is disabled, distinct from 404 Not Found)
-  if (!isEnvEnabled("COVEL_SUSPEND_V1")) {
-    return c.json(
-      { error: "Suspend/resume feature is not enabled (COVEL_SUSPEND_V1)" },
-      503,
-    );
-  }
-
   const sessionId = c.req.param("id");
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
@@ -321,13 +309,6 @@ resumeRoutes.post("/:id/resume", async (c) => {
 // ── DELETE (abandon) ─────────────────────────────────────────────
 
 resumeRoutes.delete("/:id/suspensions/:suspensionId", async (c) => {
-  if (!isEnvEnabled("COVEL_SUSPEND_V1")) {
-    return c.json(
-      { error: "Suspend/resume feature is not enabled (COVEL_SUSPEND_V1)" },
-      503,
-    );
-  }
-
   const sessionId = c.req.param("id");
   const suspensionId = c.req.param("suspensionId");
   const store = c.get("store");
@@ -343,12 +324,6 @@ resumeRoutes.delete("/:id/suspensions/:suspensionId", async (c) => {
 
 // ── GET list ─────────────────────────────────────────────────────
 //
-// The flag still gates write paths (POST /resume, DELETE /:id) — those create
-// or destroy state and need the explicit opt-in. The list endpoint is read-only
-// hydration that runs on every session restore, so a 503 there pollutes the
-// browser network panel even though the web client treats failures as "no
-// active suspensions". Return an empty list instead so a disabled flag means
-// "no suspensions exist", which is functionally correct.
 resumeRoutes.get("/:id/suspensions", async (c) => {
   const sessionId = c.req.param("id");
   const store = c.get("store");
@@ -356,10 +331,6 @@ resumeRoutes.get("/:id/suspensions", async (c) => {
   const session = await store.getSession(sessionId);
   if (!session) {
     return c.json({ error: "Session not found" }, 404);
-  }
-
-  if (!isEnvEnabled("COVEL_SUSPEND_V1")) {
-    return c.json({ suspensions: [] });
   }
 
   const suspensions = await store.listSuspensions(sessionId);

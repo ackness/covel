@@ -56,10 +56,6 @@ services:
       STATIC_DIR: ./web-dist
       COVEL_MEDIA_TOKEN_SECRET: ${COVEL_MEDIA_TOKEN_SECRET:?Set COVEL_MEDIA_TOKEN_SECRET in .env}
 
-      # ── Features ───────────────────────────────────────────────
-      # Enable Letta-style core memory system (post-turn LLM summarizer)
-      COVEL_MEMORY_V1: "1"
-
       # World package seed directory (inside container)
       COVEL_WORLDS_DIR: /app/worlds
     env_file:

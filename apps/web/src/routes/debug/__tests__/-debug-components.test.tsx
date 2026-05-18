@@ -79,7 +79,6 @@ describe("debug route components", () => {
       session: {
         id: "session-data",
         worldId: "world-1",
-        phase: "running",
         turnCount: 3,
         locale: "zh-CN",
       },

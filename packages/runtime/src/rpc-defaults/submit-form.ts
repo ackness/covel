@@ -1,14 +1,9 @@
 /**
  * PR-3: Framework default `submit-form` RPC handler.
  *
- * Replaces the existing `POST /api/sessions/:id/submit-inputs` route guts.
- * Accepts the same submission shape and persists player inputs + finds the
- * originating template message, but exposes it as a uniform RPC action so
- * plugins and external callers use the same channel for all structured
- * commands.
- *
- * The submit-inputs route remains as a thin alias that forwards into this
- * handler — see `apps/server/src/routes/api/submit-inputs.ts`.
+ * Persists player inputs and fills the originating interaction template.
+ * This framework default is registered as `plugin-rpc` action
+ * `{ pluginId: "framework", action: "submit-form" }`.
  */
 
 import type { RpcHandler, RpcHandlerContext } from "../rpc-registry.js";
@@ -22,9 +17,6 @@ interface Submission {
 interface SubmitFormPayload {
   readonly turnId: string;
   readonly submissions?: readonly Submission[];
-  /** @deprecated single-form legacy shape; kept so the alias route still works */
-  readonly formId?: string;
-  readonly values?: Record<string, unknown>;
 }
 
 interface SubmitFormResult {
@@ -145,15 +137,12 @@ export const submitFormHandler: RpcHandler = async (
     throw new RpcValidationError("turnId (string) is required");
   }
 
-  // Normalize legacy single-form shape into submissions[].
   const submissions: Submission[] = body.submissions
     ? [...body.submissions]
-    : body.formId && body.values
-      ? [{ interactionId: body.formId, type: "form", values: body.values }]
-      : [];
+    : [];
 
   if (submissions.length === 0) {
-    throw new RpcValidationError("submissions[] or formId+values are required");
+    throw new RpcValidationError("submissions[] is required");
   }
 
   for (const sub of submissions) {

@@ -38,36 +38,15 @@ class RecordingLlm implements LLMAdapter {
 }
 
 describe("createBootstrapMemorySystem", () => {
-  const originalFlag = process.env.COVEL_MEMORY_V1;
-
   beforeEach(() => {
     vi.spyOn(console, "log").mockImplementation(() => undefined);
   });
 
   afterEach(() => {
-    if (originalFlag === undefined) {
-      delete process.env.COVEL_MEMORY_V1;
-    } else {
-      process.env.COVEL_MEMORY_V1 = originalFlag;
-    }
     vi.restoreAllMocks();
   });
 
-  it("returns undefined and registers no tools when memory is disabled", () => {
-    delete process.env.COVEL_MEMORY_V1;
-
-    const result = createBootstrapMemorySystem({
-      manifestCache: new Map(),
-      store: createMemoryStore(),
-      llmAdapter: new RecordingLlm(),
-      resolveModel: (manifest) => manifest.model,
-    });
-
-    expect(result).toBeUndefined();
-  });
-
   it("creates memory tools and uses the preferred memory slot for LLM calls", async () => {
-    process.env.COVEL_MEMORY_V1 = "1";
     const llm = new RecordingLlm();
 
     const result = createBootstrapMemorySystem({
@@ -95,7 +74,6 @@ describe("createBootstrapMemorySystem", () => {
   });
 
   it("mirrors core memory blocks to the plugin that declares memory-panel capability", async () => {
-    process.env.COVEL_MEMORY_V1 = "1";
     const store = createMemoryStore();
     const manifestCache = new Map<string, readonly ParsedPluginMd[]>([
       [

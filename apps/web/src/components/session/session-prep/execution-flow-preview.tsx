@@ -65,7 +65,7 @@ export function ExecutionFlowPreview({
                     <div
                       key={step.runtimeId}
                       className="inline-flex items-center gap-1.5 bg-muted/40 border border-border px-2 py-1 text-[10px]"
-                      title={`${step.runtimeId} — P${step.priority} — ${step.trigger.mode}`}
+                      title={`${step.runtimeId} — P${step.priority} — ${step.trigger.type}`}
                     >
                       <span className="text-[8px] text-muted-foreground font-mono">
                         P{step.priority}

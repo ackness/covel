@@ -38,10 +38,8 @@ function collectDependencies(manifest: RuntimeManifest): readonly string[] {
   const deps = new Set<string>();
   const injects = manifest.input?.inject ?? [];
   for (const decl of injects) {
-    const kind = (decl as { kind?: string }).kind;
-    if (kind === undefined || kind === "runtime") {
-      const from = (decl as { from?: string }).from;
-      if (typeof from === "string" && from.length > 0) deps.add(from);
+    if (decl.kind === "runtime") {
+      if (decl.from.length > 0) deps.add(decl.from);
     }
   }
   for (const up of manifest.upstreamRequired ?? []) {

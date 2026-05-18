@@ -198,10 +198,8 @@ export async function executeAgentRuntime({
     summaries: sessionSummaries ?? [],
     workingMemory: workingMemory ?? [],
     coreMemoryBlocks: coreMemoryBlocks ?? [],
-    // Sprint 1-D: Thread the unified snapshot into context building so
-    // `resolveVariableSources` (in prompt-internals.ts) can prefer
-    // `sessionContext.legacyConfigView` over `config.__session_config__`.
-    // Present only when COVEL_SESSION_CONTEXT=1 (flag-off path is undefined).
+    // Thread the unified snapshot into context building so templates can
+    // read structured session data via `world`, `session`, and `player`.
     ...(sessionContext ? { sessionContext } : {}),
     ...(agentUserSettings ? { userSettings: agentUserSettings } : {}),
     ...(budgetEligible
@@ -482,17 +480,6 @@ export async function executeAgentRuntime({
 
   if (interactions.length > 0) {
     output.interactions = interactions;
-    // Backward compat: also set form/narrativeTemplate for the first form interaction
-    const firstForm = interactions.find((i) => i.type === "form");
-    if (firstForm) {
-      output.form = {
-        formId: firstForm.interactionId,
-        title: firstForm.title,
-        fields: firstForm.fields,
-        submitLabel: firstForm.submitLabel,
-      };
-      output.narrativeTemplate = firstForm.narrativeTemplate;
-    }
     if (finalContent && !output.narrativeOutput) {
       output.narrativeOutput = finalContent;
     }
@@ -528,25 +515,20 @@ export async function executeAgentRuntime({
   // calls return their output to the caller and commit proposals through
   // plugin-rpc, so they stay out of conversation history.
   if (deps.store && !input.manualTrigger) {
-    // Extract narrative content: try narrativeTemplate (for form-based plugins), then narrativeOutput, then stringify
+    // Extract narrative content.
     const narrativeContent =
-      typeof output.narrativeTemplate === "string"
-        ? output.narrativeTemplate
-        : typeof output.narrativeOutput === "string"
-          ? output.narrativeOutput
-          : typeof output.content === "string"
-            ? output.content
-            : JSON.stringify(output);
+      typeof output.narrativeOutput === "string"
+        ? output.narrativeOutput
+        : typeof output.content === "string"
+          ? output.content
+          : JSON.stringify(output);
 
-    // Extract pendingInput: prefer interactions array, fall back to legacy form
+    // Extract pendingInput from the interaction array.
     const interactionsArr = output.interactions as unknown[] | undefined;
-    const form = output.form as Record<string, unknown> | undefined;
     const pendingInput =
       interactionsArr && interactionsArr.length > 0
         ? interactionsArr
-        : form?.formId
-          ? form
-          : undefined;
+        : undefined;
 
     // Extract UI render instructions if present
     const ui = output.ui as unknown[] | undefined;

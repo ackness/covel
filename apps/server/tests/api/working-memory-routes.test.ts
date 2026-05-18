@@ -2,7 +2,6 @@
  * Working Memory REST API route tests (S3-T3).
  *
  * Tests the PUT/GET/DELETE round-trip for /api/sessions/:id/working-memory/:scope/:key
- * and the feature-flag gate (404 when COVEL_WORKING_MEMORY_V1 is unset).
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -23,13 +22,9 @@ function createTestApp(store: DataStore): Hono {
 describe("Working Memory API routes", () => {
   let store: DataStore;
   let app: Hono;
-  let originalFlag: string | undefined;
   const SESSION_ID = "wm-route-sess";
 
   beforeEach(async () => {
-    originalFlag = process.env.COVEL_WORKING_MEMORY_V1;
-    process.env.COVEL_WORKING_MEMORY_V1 = "1";
-
     store = createMemoryStore();
     await store.createSession({
       id: SESSION_ID,
@@ -47,11 +42,6 @@ describe("Working Memory API routes", () => {
   });
 
   afterEach(async () => {
-    if (originalFlag === undefined) {
-      delete process.env.COVEL_WORKING_MEMORY_V1;
-    } else {
-      process.env.COVEL_WORKING_MEMORY_V1 = originalFlag;
-    }
     await store.close();
   });
 
@@ -143,39 +133,6 @@ describe("Working Memory API routes", () => {
       );
       expect(entry).toBeDefined();
       expect(entry!.value).toBe("find the artifact");
-    });
-  });
-
-  describe("Feature flag OFF (404 on all routes)", () => {
-    beforeEach(() => {
-      delete process.env.COVEL_WORKING_MEMORY_V1;
-    });
-
-    it("GET /working-memory returns 404", async () => {
-      const res = await app.request(
-        `/api/sessions/${SESSION_ID}/working-memory`,
-      );
-      expect(res.status).toBe(404);
-    });
-
-    it("PUT /working-memory/:scope/:key returns 404", async () => {
-      const res = await app.request(
-        `/api/sessions/${SESSION_ID}/working-memory/player/key`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ value: "x" }),
-        },
-      );
-      expect(res.status).toBe(404);
-    });
-
-    it("DELETE /working-memory/:scope/:key returns 404", async () => {
-      const res = await app.request(
-        `/api/sessions/${SESSION_ID}/working-memory/player/key`,
-        { method: "DELETE" },
-      );
-      expect(res.status).toBe(404);
     });
   });
 

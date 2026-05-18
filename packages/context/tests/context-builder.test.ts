@@ -5,7 +5,12 @@ import {
   buildContext,
 } from "@covel/context";
 import type { ContextBuildParams, MessageHistoryRecord } from "@covel/context";
-import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
+import {
+  PROMPT_CACHE_BREAKPOINT_MARKER,
+  type RuntimeManifest,
+  type RuntimeResult,
+  type TurnInput,
+} from "@covel/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -101,6 +106,7 @@ describe("buildInjectBlocks", () => {
         input: {
           inject: [
             {
+              kind: "runtime",
               from: "narrator/main",
               field: "narrativeOutput",
               as: "<narrator-output>",
@@ -129,11 +135,17 @@ describe("buildInjectBlocks", () => {
         input: {
           inject: [
             {
+              kind: "runtime",
               from: "narrator/main",
               field: "narrativeOutput",
               as: "<narrator-output>",
             },
-            { from: "combat/engine", field: "combatLog", as: "<combat-log>" },
+            {
+              kind: "runtime",
+              from: "combat/engine",
+              field: "combatLog",
+              as: "<combat-log>",
+            },
           ],
         },
       }),
@@ -162,7 +174,14 @@ describe("buildInjectBlocks", () => {
       promptTemplate: "",
       manifest: makeManifest({
         input: {
-          inject: [{ from: "missing/runtime", field: "data", as: "<missing>" }],
+          inject: [
+            {
+              kind: "runtime",
+              from: "missing/runtime",
+              field: "data",
+              as: "<missing>",
+            },
+          ],
         },
       }),
       turnInput: makeTurnInput(),
@@ -196,6 +215,7 @@ describe("buildContext", () => {
         input: {
           inject: [
             {
+              kind: "runtime",
               from: "narrator/main",
               field: "narrativeOutput",
               as: "<narrator-output>",
@@ -235,7 +255,9 @@ describe("buildContext", () => {
 
     const ctx = buildContext(params);
 
-    expect(ctx.systemPrompt).toBe("Plain instructions.");
+    expect(ctx.systemPrompt).toBe(
+      `Plain instructions.${PROMPT_CACHE_BREAKPOINT_MARKER}`,
+    );
     expect(ctx.messages).toEqual([{ role: "user", content: "hello" }]);
   });
 
@@ -249,7 +271,9 @@ describe("buildContext", () => {
     };
 
     const ctx = buildContext(params);
-    expect(ctx.systemPrompt).toBe("Write in dramatic style.");
+    expect(ctx.systemPrompt).toBe(
+      `Write in dramatic style.${PROMPT_CACHE_BREAKPOINT_MARKER}`,
+    );
   });
 
   it("uses a runtime execution cue when the current player message is empty", () => {
@@ -368,47 +392,7 @@ describe("buildContext", () => {
 // ── Summary substitution (S2-T2) ────────────────────────────────
 
 describe("buildContext — summary substitution", () => {
-  const originalCompactorFlag = process.env.COVEL_COMPACTOR_V1;
-
-  afterEach(() => {
-    if (originalCompactorFlag === undefined) {
-      delete process.env.COVEL_COMPACTOR_V1;
-    } else {
-      process.env.COVEL_COMPACTOR_V1 = originalCompactorFlag;
-    }
-  });
-
-  it("passes history verbatim when COVEL_COMPACTOR_V1 is not set", () => {
-    delete process.env.COVEL_COMPACTOR_V1;
-
-    const history: MessageHistoryRecord[] = [
-      { role: "user", content: "hello", compactedAtTurnId: "sum-1" },
-      { role: "assistant", content: "world" },
-    ];
-
-    const ctx = buildContext({
-      promptTemplate: "Template.",
-      manifest: makeManifest(),
-      turnInput: makeTurnInput(),
-      completedResults: new Map(),
-      config: {},
-      messageHistory: history,
-      summaries: [
-        { id: "sum-1", content: "A summary.", focusSections: ["narrative"] },
-      ],
-    });
-
-    // Without flag, compacted message is passed through as-is
-    expect(ctx.messages[0]).toMatchObject({ role: "user", content: "hello" });
-    expect(ctx.messages[1]).toMatchObject({
-      role: "assistant",
-      content: "world",
-    });
-  });
-
-  it("substitutes compacted spans with summary when COVEL_COMPACTOR_V1=1", () => {
-    process.env.COVEL_COMPACTOR_V1 = "1";
-
+  it("substitutes compacted spans with summary", () => {
     const history: MessageHistoryRecord[] = [
       { role: "user", content: "older message 1", compactedAtTurnId: "sum-1" },
       {
@@ -449,8 +433,6 @@ describe("buildContext — summary substitution", () => {
   });
 
   it("emits summary only once per compactedAtTurnId, even for multiple messages", () => {
-    process.env.COVEL_COMPACTOR_V1 = "1";
-
     const history: MessageHistoryRecord[] = [
       { role: "user", content: "msg1", compactedAtTurnId: "sum-1" },
       { role: "assistant", content: "msg2", compactedAtTurnId: "sum-1" },

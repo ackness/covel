@@ -129,7 +129,6 @@ or data transformation you need. No LLM is involved.
     `model: plugin
 outputKind: system
 timeoutMs: 120000
-promptVersion: 2
 trigger:
   type: scheduled
   interval: 1

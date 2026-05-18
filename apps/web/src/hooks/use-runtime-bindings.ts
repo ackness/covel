@@ -12,11 +12,8 @@ export interface RuntimeBindingEntry {
   qualifiedId: string;
   pluginId: string;
   pluginDisplayName?: string;
-  kind: string;
   /** Runtime's declared default slot from PLUGIN.md `model`; defaults to `text`. */
   defaultSlot: string;
-  /** Back-compat alias for older binding helpers. */
-  providerTag: string;
   slotName: string;
 }
 
@@ -72,9 +69,7 @@ export function useRuntimeBindings(
               : typeof sp.displayName === "object"
                 ? Object.values(sp.displayName)[0]
                 : sp.id,
-          kind: sp.outputKind ?? "plugin",
           defaultSlot,
-          providerTag: defaultSlot,
         });
       }
       return result;
@@ -83,12 +78,8 @@ export function useRuntimeBindings(
     for (const pkg of packages) {
       if (!pkg.enabled || !pkg.runtimes) continue;
       for (const rt of pkg.runtimes) {
-        if (
-          rt.kind === "function" ||
-          (rt.model ?? rt.providerTag) === undefined
-        )
-          continue;
-        const defaultSlot = rt.providerTag ?? rt.model!;
+        if (rt.kind === "function" || rt.model === undefined) continue;
+        const defaultSlot = rt.model;
         result.push({
           qualifiedId: rt.id,
           pluginId: pkg.name,
@@ -98,9 +89,7 @@ export function useRuntimeBindings(
               : typeof pkg.displayName === "object"
                 ? Object.values(pkg.displayName)[0]
                 : pkg.name,
-          kind: rt.outputKind ?? rt.kind,
           defaultSlot,
-          providerTag: defaultSlot,
         });
       }
     }
@@ -180,13 +169,7 @@ export function useRuntimeBindings(
     return entries.every((e) => {
       const effectiveSlotName = e.slotName || e.defaultSlot;
       if (effectiveSlotName === "default") return resolvedSlots.length > 0;
-      return resolvedSlots.some(
-        (s) =>
-          s.slotId === effectiveSlotName &&
-          (s.tag === e.defaultSlot ||
-            s.slotId === e.defaultSlot ||
-            e.defaultSlot === "default"),
-      );
+      return resolvedSlots.some((s) => s.slotId === effectiveSlotName);
     });
   }, [entries, resolvedSlots]);
 

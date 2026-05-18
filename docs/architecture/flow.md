@@ -3,7 +3,7 @@
 > 从设置、游玩前、游玩中、游玩后到状态存储，完整描述框架运行机制。
 > 包含玩家 ↔ LLM Agent 之间的翻译层、消息流动、插件设计和前端交互。
 >
-> **状态模型（唯一真相源）**：会话的权威状态由三个字段组成——`status` (`active` / `paused` / `ended`) + `turnCount` + `preGameCompleted: string[]`。`turnCount === 0` 表示仍在 Pre-Game 段落；当所有声明 `preGameDone: true` 的 runtime 都登记完成后，Kernel 将 `turnCount` 推进到 1 进入主循环。历史上的 `SessionRecord.phase` 字段、`phase.transition` proposal 与 `phase.changed` SSE 事件均已移除；[`snapshot-builder.ts`](../../packages/runtime/src/snapshot-builder.ts) 仍会从 `(status, turnCount)` 派生一个 `SessionSnapshot.session.phase` 显示标签（`pre-game | playing | paused | ended`）——**仅用于前端空态分支**，不是持久字段也没有对应事件。
+> **状态模型（唯一真相源）**：会话的权威状态由三个字段组成——`status` (`active` / `paused` / `ended`) + `turnCount` + `preGameCompleted: string[]`。`turnCount === 0` 表示仍在 Pre-Game 段落；当所有声明 `preGameDone: true` 的 runtime 都登记完成后，Kernel 将 `turnCount` 推进到 1 进入主循环。历史上的 `SessionRecord.phase` 字段、`phase.transition` proposal 与 `phase.changed` SSE 事件均已移除；snapshot 与前端空态也直接读取 `status + turnCount`。
 
 ## 一、系统全景
 
@@ -81,12 +81,12 @@ stateDiagram-v2
 
 **权威状态模型** = `(status, turnCount, preGameCompleted)`：
 
-- **Pre-Game**：`status === 'active' && turnCount === 0`。调度器只会挑选 priority `0–99` 的 Pre-Game band runtime；每个声明 `preGameDone: true` 的 runtime 完成后会被追加进 `preGameCompleted`，玩家可以多次提交表单/消息迭代（例如 `char-creator` 的 submit-inputs）。
+- **Pre-Game**：`status === 'active' && turnCount === 0`。调度器只会挑选 priority `0–99` 的 Pre-Game band runtime；每个声明 `preGameDone: true` 的 runtime 完成后会被追加进 `preGameCompleted`，玩家可以多次提交表单/消息迭代（例如 `char-creator` 的 `framework.submit-form`）。
 - **Turn 0 → 1**：所有 Pre-Game band runtime 的 id 都已出现在 `preGameCompleted` 时，Kernel 把 `turnCount` 从 0 推到 1，进入主循环。
 - **Playing**：`status === 'active' && turnCount >= 1`。每次 `POST /api/actions` 触发一轮完整 Turn pipeline，只调度 priority `100–1000` 的 runtime。
 - **Paused / Ended**：`status === 'paused' | 'ended'`。调度器直接返回空，`/api/actions` 被服务端拒绝。Paused 可 `resumeSession()` 恢复，Ended 是终态。
 
-历史上的 `SessionRecord.phase`、`phase.transition` proposal、`phase.changed` SSE 事件已全部移除；`SessionSnapshot.session.phase` 仍存在但只是 `(status, turnCount)` 派生的显示标签，见顶部 disclaimer。
+历史上的 `SessionRecord.phase`、`phase.transition` proposal、`phase.changed` SSE 事件已全部移除；`SessionSnapshot.session` 只暴露 `id`、`worldId`、`turnCount`、`locale` 等当前字段。
 
 ### 2.2 单轮 Turn Pipeline
 
@@ -447,11 +447,11 @@ plugins/my-plugin/
   │  │ 玩家填写：陆青云 / 水灵根 / 渔民之子 / 灵识敏锐            │ │
   │  │                                                            │ │
   │  │ 点击提交 → submitFormInputs():                             │ │
-  │  │   1. POST /api/sessions/:id/submit-inputs                  │ │
-  │  │      { turnId, formId: "char-creation",                    │ │
-  │  │        values: { characterName: "陆青云", ... } }           │ │
+  │  │   1. POST /api/sessions/:id/plugin-rpc                     │ │
+  │  │      { pluginId: "framework", action: "submit-form",       │ │
+  │  │        payload: { turnId, submissions: [...] } }            │ │
   │  │                                                            │ │
-  │  │   服务端 submit-inputs:                                    │ │
+  │  │   服务端 submit-form:                                      │ │
   │  │   ├─ 找到 narrativeTemplate                                │ │
   │  │   ├─ 填充 {{characterName}} → "陆青云"                      │ │
   │  │   ├─ 生成叙事文本（自然语言，非 JSON）                      │ │
@@ -633,7 +633,7 @@ sequenceDiagram
     Note over Web: 渲染叙事 (Prose) + 表单 (Form)<br/>pluginData 更新 → 右侧面板 + 消息面板
 
     Player->>Web: 填写并提交角色创建表单
-    Web->>Server: POST /api/sessions/:id/submit-inputs
+    Web->>Server: POST /api/sessions/:id/plugin-rpc submit-form
     Server-->>Web: 返回 filledNarrative (仅模板填充，不写 turn_messages)
 
     Note over Server,Plugin: Pre-Game 可能多次迭代；<br/>最后一个 Pre-Game runtime 报 preGameDone: true 后<br/>Kernel 将 turnCount 从 0 推到 1
@@ -654,7 +654,7 @@ sequenceDiagram
     end
     end
 
-    opt 某个 runtime 挂起 (COVEL_SUSPEND_V1)
+    opt 某个 runtime 挂起
         Server-->>Web: SSE: turn.suspended
         Player->>Web: 提供 resume 输入
         Web->>Server: POST /api/sessions/:id/resume

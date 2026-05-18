@@ -1,5 +1,5 @@
 /**
- * V2 Plugin and Turn route tests.
+ * Plugin and Turn route tests.
  *
  * Uses Hono's app.request() for lightweight HTTP testing without a running server.
  */
@@ -91,7 +91,7 @@ function createTestApp(vars: AppVariables): Hono {
 
 // ── Plugin route tests ───────────────────────────────────────────
 
-describe("V2 Plugin Routes", () => {
+describe("Plugin Routes", () => {
   let registry: PluginRegistry;
   let sessionScopes: Map<string, SessionPluginScope>;
   let store: DataStore;
@@ -285,7 +285,7 @@ describe("V2 Plugin Routes", () => {
   // PATCH /api/plugins/:id/config tests removed 2026-04-12.
   // The route was deleted because the underlying sessionScopes Map was never
   // populated by any production code path. See audits/2026-04-12-backend-webv2-framework-audit
-  // Finding 2. Per-session config now lives in loadSessionConfig() + plugin_data.
+  // Finding 2. Per-session config now lives in runtime/plugin settings.
   describe("PATCH /api/plugins/:id/config (route removed)", () => {
     it("returns 404 because the route is no longer mounted", async () => {
       const res = await app.request("/api/plugins/cfg-plugin/config", {
@@ -304,7 +304,7 @@ describe("V2 Plugin Routes", () => {
 
 // ── Turn route tests ─────────────────────────────────────────────
 
-describe("V2 Turn Routes", () => {
+describe("Turn Routes", () => {
   let registry: PluginRegistry;
   let sessionScopes: Map<string, SessionPluginScope>;
   let store: DataStore;

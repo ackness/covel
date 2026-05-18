@@ -5,7 +5,6 @@ pluginType: plugin
 priority: 600
 model: plugin
 outputKind: system
-promptVersion: 2
 trigger:
   type: scheduled
   interval: 1
@@ -14,7 +13,8 @@ tools:
     - ./tools/record-note.js
 input:
   inject:
-    - from: narrator
+    - kind: runtime
+      from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
 ---

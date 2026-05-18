@@ -9,7 +9,6 @@ model: story
 timeoutMs: 240000
 outputKind: story
 capabilities: [narrative]
-promptVersion: 2
 trigger:
   type: auto
 tools:
@@ -17,7 +16,8 @@ tools:
     - world-dimension-get
 input:
   inject:
-    - from: npc-graph/rag-retriever
+    - kind: runtime
+      from: npc-graph/rag-retriever
       field: npcContext
       as: npc-relationships
 postHistory:

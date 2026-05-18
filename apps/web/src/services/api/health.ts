@@ -4,7 +4,6 @@ export interface ServerHealth {
   status: string;
   timestamp: string;
   version: string;
-  storeBackend: "pg" | "sqlite" | "memory";
   bootId?: string;
   storage?: {
     data?: {

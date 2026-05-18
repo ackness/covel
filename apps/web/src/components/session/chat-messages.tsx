@@ -41,6 +41,7 @@ import { SessionCanvasHero } from "./chat-messages/session-canvas-hero.js";
 import type {
   WorldRecord,
   PackageSummary,
+  SessionRecord,
   SessionPluginInfo,
 } from "@/services/api.js";
 
@@ -51,7 +52,7 @@ export interface ChatMessagesProps {
   executionSteps: ExecutionStep[];
   executionError: string | null;
   executing: boolean;
-  phase: string;
+  session: SessionRecord;
   world: WorldRecord | null;
   packages: PackageSummary[];
   sessionPlugins: SessionPluginInfo[];
@@ -84,7 +85,7 @@ export function ChatMessages({
   executionSteps,
   executionError,
   executing,
-  phase,
+  session,
   world,
   packages,
   sessionPlugins,
@@ -104,6 +105,9 @@ export function ChatMessages({
   const { t } = useTranslation();
   const { state: sessionState } = useSession();
   const sessionId = sessionState.session?.id;
+  const isPreGame = session.status === "active" && session.turnCount === 0;
+  const isPlaying = session.status === "active" && session.turnCount > 0;
+  const isEnded = session.status === "ended";
   const [generatingImage, setGeneratingImage] = useState(false);
   interface ConfirmRequest {
     readonly title: string;
@@ -464,14 +468,7 @@ export function ChatMessages({
         <div className="ui-session-column p-4 md:p-6 space-y-6 md:space-y-7 mx-auto w-full">
           {messages.length === 0 &&
             !executing &&
-            // Empty-state rendering no longer depends on the historical
-            // `pre-game` / `character_creation` / `playing` enum. After the
-            // turn-band migration the session is fully described by
-            // `status + turnCount + preGameCompleted`; here we only need the
-            // derived `LegacyPhase` (`init` / `playing` / `paused` / `ended`)
-            // to choose between the "begin adventure" CTA and the post-start
-            // empty message.
-            (phase === "init" ? (
+            (isPreGame ? (
               <SessionCanvasHero
                 world={world}
                 onBegin={onBeginAdventure}
@@ -482,8 +479,8 @@ export function ChatMessages({
               <div className="flex flex-col items-center justify-center py-20 text-center space-y-6">
                 <MessageSquare className="w-8 h-8 text-muted-foreground/50" />
                 <p className="text-sm text-muted-foreground">
-                  {phase === "playing" && t("session.emptyPlaying")}
-                  {phase === "ended" && t("session.emptyEnded")}
+                  {isPlaying && t("session.emptyPlaying")}
+                  {isEnded && t("session.emptyEnded")}
                 </p>
               </div>
             ))}

@@ -3,9 +3,7 @@
  *
  * Working Memory is session-scoped and isolated by (sessionId, scope, key).
  * Unlike plugin_data, this is framework-owned and injected into every turn's
- * prompt (when COVEL_WORKING_MEMORY_V1=1).
- *
- * All three routes return 404 when COVEL_WORKING_MEMORY_V1 is unset (flag off).
+ * prompt.
  *
  * Security: At T3 deployment, this route group should be placed behind
  * authentication middleware.
@@ -14,7 +12,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
-import { isEnvEnabled } from "@covel/shared";
 
 type Env = {
   Variables: {
@@ -27,18 +24,11 @@ export const workingMemoryRoutes = new Hono<Env>();
 const VALID_SCOPES = new Set(["player", "story", "shared"]);
 
 // GET /sessions/:id/memory-blocks — Returns Letta-style memory blocks (story scope).
-// Gated by COVEL_MEMORY_V1=1. Read-only convenience endpoint for the UI panel.
+// Read-only convenience endpoint for the UI panel.
 //
 // Path was renamed from `/:id/core-memory` (2026-04-27) to avoid collision with
 // the `memory` plugin id and follow the framework-plugin isolation rule.
 workingMemoryRoutes.get("/:id/memory-blocks", async (c) => {
-  if (!isEnvEnabled("COVEL_MEMORY_V1")) {
-    return c.json(
-      { error: "Memory system is disabled (set COVEL_MEMORY_V1=1)" },
-      404,
-    );
-  }
-
   const store = c.get("store");
   const sessionId = c.req.param("id");
   const session = await store.getSession(sessionId);
@@ -63,13 +53,6 @@ workingMemoryRoutes.get("/:id/memory-blocks", async (c) => {
 
 // GET /sessions/:id/working-memory
 workingMemoryRoutes.get("/:id/working-memory", async (c) => {
-  if (
-    !isEnvEnabled("COVEL_WORKING_MEMORY_V1") &&
-    !isEnvEnabled("COVEL_MEMORY_V1")
-  ) {
-    return c.json({ error: "Working memory is disabled" }, 404);
-  }
-
   const store = c.get("store");
   const sessionId = c.req.param("id");
   const session = await store.getSession(sessionId);
@@ -81,10 +64,6 @@ workingMemoryRoutes.get("/:id/working-memory", async (c) => {
 
 // PUT /sessions/:id/working-memory/:scope/:key
 workingMemoryRoutes.put("/:id/working-memory/:scope/:key", async (c) => {
-  if (!isEnvEnabled("COVEL_WORKING_MEMORY_V1")) {
-    return c.json({ error: "Working memory is disabled" }, 404);
-  }
-
   const store = c.get("store");
   const sessionId = c.req.param("id");
   const session = await store.getSession(sessionId);
@@ -135,10 +114,6 @@ workingMemoryRoutes.put("/:id/working-memory/:scope/:key", async (c) => {
 
 // DELETE /sessions/:id/working-memory/:scope/:key
 workingMemoryRoutes.delete("/:id/working-memory/:scope/:key", async (c) => {
-  if (!isEnvEnabled("COVEL_WORKING_MEMORY_V1")) {
-    return c.json({ error: "Working memory is disabled" }, 404);
-  }
-
   const store = c.get("store");
   const sessionId = c.req.param("id");
   const session = await store.getSession(sessionId);

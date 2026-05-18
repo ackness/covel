@@ -300,7 +300,7 @@ ui:
 ```
 玩家填写表单 → 点击提交按钮
   → submitFormInputs():
-    1. POST /api/sessions/:id/submit-inputs
+    1. POST /api/sessions/:id/plugin-rpc (`framework.submit-form`)
        (记录 submission + narrativeTemplate 填充)
     2. 根据 `submitBehavior` 决定是否回显自然语言与是否自动继续下一轮
     3. 下一轮由对应插件读取 `player.lastFormValues` 完成业务写入

@@ -115,9 +115,7 @@ type AssetGeneration = {
 
 图像画廊类插件仍可用 `plugin_data.images` 保存查询索引,索引值保存 `{ status, ref, prompt, ... }`。`Image` / `Media` 组件消费 `MediaRef`,由框架解析为展示 URL。
 
-声明 `image-generation` capability 的插件在完成态缺少 `assetGenerations[]` 时会产生 `image.generate.asset_missing` error。`plugin_data.images` 中出现旧 `url` / `base64` / `dataUrl` 字段时会产生 `image.generate.plugin_data_inline_media` error。
-
-旧 `plugin_data.images` 和 `runtime_results` 中的历史图像记录由 `/api/traces/:sessionId` 在读取时合成 `asset.generated` 事件，并在 payload 上标记 `legacy: true`、`legacySource`。原始数据保持原表形态，debug timeline 使用统一的 asset 事件路径展示。
+声明 `image-generation` capability 的插件在完成态缺少 `assetGenerations[]` 时会产生 `image.generate.asset_missing` error。`plugin_data.images` 中出现 `url` / `base64` / `dataUrl` 字段时会产生 `image.generate.plugin_data_inline_media` error；框架不会从这些旧字段合成 `asset.generated` 事件。
 
 ### LLM content parts
 
@@ -157,8 +155,6 @@ Provider 图片输入矩阵：
 
 ### Suspend / Resume 事件（S4-T4）
 
-需要环境变量 `COVEL_SUSPEND_V1=1`。关闭时 suspend 路径不会触发。
-
 | 事件类型         | 方向 | 描述                                                                            | 负载                                                        |
 | ---------------- | ---- | ------------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | `turn.suspended` | S→C  | 插件调用 `suspend()` 工具成功序列化 pendingContinuation 后由 turn-executor 发出 | `{ sessionId, turnId, suspensionId, reason, resumeSchema }` |
@@ -166,7 +162,7 @@ Provider 图片输入矩阵：
 
 ### Snapshot / Fork 事件（S4-T2 / S4-T5）
 
-需要环境变量 `COVEL_SNAPSHOTS_V1=1`。所有 snapshot 事件由服务端经 eventBus 广播（topic=`session`），SSE 命名事件名来自 payload 的 `_subType`。
+所有 snapshot 事件由服务端经 eventBus 广播（topic=`session`），SSE 命名事件名来自 payload 的 `_subType`。
 
 | 事件类型                 | 方向 | 描述                                                                                                                                | 负载                                                                            |
 | ------------------------ | ---- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -249,9 +245,9 @@ Provider 图片输入矩阵：
 
 ### 交互响应
 
-| 命令           | 方法 | 端点                              | 响应                                                                               |
-| -------------- | ---- | --------------------------------- | ---------------------------------------------------------------------------------- |
-| `input.submit` | POST | `/api/sessions/:id/submit-inputs` | JSON: `{ results[], accepted }` (legacy alias,内部转发到 plugin-rpc `submit-form`) |
+| 命令           | 方法 | 端点                           | 响应                                                                   |
+| -------------- | ---- | ------------------------------ | ---------------------------------------------------------------------- |
+| `input.submit` | POST | `/api/sessions/:id/plugin-rpc` | Action `{ pluginId: "framework", action: "submit-form" }` 的 JSON 响应 |
 
 ### 插件管理
 

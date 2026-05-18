@@ -107,10 +107,9 @@ export interface KernelStore {
     }>,
   ): Promise<void>;
   /**
-   * Optional transaction hooks (S4-T1). When present and opted-in via the
-   * COVEL_COMMIT_TXN_V1 feature flag, `commitAll()` wraps the whole proposal
-   * chain in begin/commit/rollback so a mid-chain failure leaves no partial
-   * state in the store.
+   * Optional transaction hooks. When present, `commitAll()` wraps the whole
+   * proposal chain in begin/commit/rollback so a mid-chain failure leaves no
+   * partial state in the store.
    */
   beginTx?(): Promise<void>;
   commitTx?(): Promise<void>;

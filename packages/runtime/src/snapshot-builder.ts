@@ -18,9 +18,8 @@ import type {
  * Minimal store interface for snapshot building.
  * Uses only the read methods it needs.
  *
- * Shape mirrors the post-turn-band SessionRecord: `status` + `turnCount`
- * replace the old `phase` string. Consumers that still want a phase-like
- * label can derive it from those two fields.
+ * Shape mirrors SessionRecord: `status` + `turnCount` + `preGameCompleted`
+ * describe the session lifecycle and scheduling state.
  */
 export interface SnapshotStore {
   getSession(id: string): Promise<{
@@ -140,10 +139,6 @@ export async function buildSessionSnapshot(
     session: {
       id: session.id,
       worldId: session.worldId,
-      // Derive a legacy phase label from (status, turnCount) so snapshot
-      // consumers that still read `phase` keep working. T20 will drop this
-      // field entirely once every consumer migrates to status+turnCount.
-      phase: derivePhase(session.status, session.turnCount),
       turnCount: session.turnCount,
       locale: session.locale,
     },
@@ -153,14 +148,4 @@ export async function buildSessionSnapshot(
     executionSteps,
     plugins: [], // Populated by the route handler from PluginRegistry
   };
-}
-
-/**
- * Derive a legacy phase label from the new (status, turnCount) pair.
- * Kept internal to this module — T20 removes the phase field altogether.
- */
-function derivePhase(status: string, turnCount: number): string {
-  if (status === "ended") return "ended";
-  if (status === "paused") return "paused";
-  return turnCount === 0 ? "pre-game" : "playing";
 }

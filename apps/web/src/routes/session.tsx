@@ -182,7 +182,6 @@ function SessionPage() {
       <GameView
         session={state.session}
         world={state.world}
-        phase={state.phase}
         messages={state.messages}
         executing={state.executing}
         executionError={state.executionError}

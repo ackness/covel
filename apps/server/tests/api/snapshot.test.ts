@@ -4,11 +4,9 @@
  * POST   /api/sessions/:id/snapshot   — create manual snapshot
  * GET    /api/sessions/:id/snapshots  — list snapshots
  * POST   /api/sessions/:id/fork       — create new session from snapshot
- *
- * Feature flag: COVEL_SNAPSHOTS_V1=1. When off every route returns 503.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
 import {
   createMemoryMediaStore,
@@ -128,62 +126,13 @@ async function seedSessionData(store: DataStore, sessionId: string) {
 
 // ── Tests ─────────────────────────────────────────────────────────
 
-const originalEnv = process.env["COVEL_SNAPSHOTS_V1"];
-
-describe("Snapshot routes — flag off", () => {
+describe("Snapshot routes", () => {
   let store: DataStore;
 
   beforeEach(async () => {
-    process.env["COVEL_SNAPSHOTS_V1"] = "0";
-    store = createMemoryStore();
-    await createSession(store);
-  });
-
-  afterEach(() => {
-    if (originalEnv === undefined) delete process.env["COVEL_SNAPSHOTS_V1"];
-    else process.env["COVEL_SNAPSHOTS_V1"] = originalEnv;
-  });
-
-  it("POST /snapshot returns 503", async () => {
-    const app = createTestApp(store);
-    const res = await app.request("/api/sessions/sess-1/snapshot", {
-      method: "POST",
-    });
-    expect(res.status).toBe(503);
-    const body = (await res.json()) as Record<string, unknown>;
-    expect(body.code).toBe("feature_disabled");
-  });
-
-  it("GET /snapshots returns 503", async () => {
-    const app = createTestApp(store);
-    const res = await app.request("/api/sessions/sess-1/snapshots");
-    expect(res.status).toBe(503);
-  });
-
-  it("POST /fork returns 503", async () => {
-    const app = createTestApp(store);
-    const res = await app.request("/api/sessions/sess-1/fork", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fromSnapshotId: "snap-x" }),
-    });
-    expect(res.status).toBe(503);
-  });
-});
-
-describe("Snapshot routes — flag on", () => {
-  let store: DataStore;
-
-  beforeEach(async () => {
-    process.env["COVEL_SNAPSHOTS_V1"] = "1";
     store = createMemoryStore();
     await createSession(store);
     await seedSessionData(store, "sess-1");
-  });
-
-  afterEach(() => {
-    if (originalEnv === undefined) delete process.env["COVEL_SNAPSHOTS_V1"];
-    else process.env["COVEL_SNAPSHOTS_V1"] = originalEnv;
   });
 
   // ── POST /snapshot ──────────────────────────────────────────
@@ -673,19 +622,13 @@ describe("Snapshot routes — flag on", () => {
 
 // ── Auto snapshot from turn executor ────────────────────────────
 
-describe("Auto snapshot (COVEL_SNAPSHOTS_V1=1)", () => {
+describe("Auto snapshot", () => {
   let store: DataStore;
 
   beforeEach(async () => {
-    process.env["COVEL_SNAPSHOTS_V1"] = "1";
     store = createMemoryStore();
     await createSession(store, "sess-auto");
     await seedSessionData(store, "sess-auto");
-  });
-
-  afterEach(() => {
-    if (originalEnv === undefined) delete process.env["COVEL_SNAPSHOTS_V1"];
-    else process.env["COVEL_SNAPSHOTS_V1"] = originalEnv;
   });
 
   it("produces a kind=auto snapshot when the turn executor runs", async () => {

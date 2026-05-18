@@ -42,7 +42,7 @@ function makeLoadedRuntime(args: {
       name: args.name,
       pluginId: args.pluginId,
       priority: 500,
-      trigger: { mode: "always" },
+      trigger: { type: "auto" },
     },
     promptTemplate: "",
     referenceLinks: [],

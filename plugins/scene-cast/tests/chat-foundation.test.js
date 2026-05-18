@@ -60,7 +60,6 @@ describe("chat foundation manifests", () => {
       priority: 500,
       outputKind: "story",
       model: "story",
-      promptVersion: 2,
     });
     expect(chatNarrator.capabilities).toEqual(
       expect.arrayContaining(["narrative", "chat-mode"]),

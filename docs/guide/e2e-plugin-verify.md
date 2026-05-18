@@ -83,7 +83,7 @@ npx tsx --env-file=.env --env-file=.env.llm \
 1. **Runtime Timeline** — 按优先级排序的 runtime 列表，含 `pri`、`runtime`、`status`、`dur`、`output` 摘要
 2. **Tool Calls** — 所有工具调用（runtime、tool、status、dur、approval、output 前 40 字符）
 3. **Trigger Verification** — 对每个已声明的 runtime 比对「期望是否触发 vs 实际是否触发」，结果为 `PASS` / `FAIL` / `SKIP` + 原因
-4. **Detected interaction form**（仅首次）— 自动识别角色创建表单并填入默认值或 `--form-values` 提供的值，然后通过 `POST /api/sessions/:id/submit-inputs` 提交
+4. **Detected interaction form**（仅首次）— 自动识别角色创建表单并填入默认值或 `--form-values` 提供的值，然后通过 `POST /api/sessions/:id/plugin-rpc` 的 `framework.submit-form` action 提交
 
 ## 自动发现 & 触发断言
 

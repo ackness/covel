@@ -5,7 +5,6 @@ import type {
   ToolCallRecord,
   TurnInput,
 } from "@covel/shared";
-import { isEnvEnabled } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import type { SuspensionRecord } from "@covel/store";
 import { isSuspendSentinel, isRuntimeDoneSentinel } from "@covel/tools";
@@ -441,15 +440,10 @@ export async function runAgentToolLoop({
           }
 
           // ── Suspend detection (S4-T4) ────────────────────────
-          // When COVEL_SUSPEND_V1=1 and the suspend tool was called, capture
-          // the current loop state and persist a SuspensionRecord. The tool
-          // result is NOT pushed back to the LLM — instead we exit the loop
-          // with status 'suspended'.
-          if (
-            isEnvEnabled("COVEL_SUSPEND_V1") &&
-            isSuspendSentinel(toolResult.parsedResult) &&
-            deps.store
-          ) {
+          // When the suspend tool is called, capture the current loop state and
+          // persist a SuspensionRecord. The tool result is not pushed back to
+          // the LLM; instead we exit the loop with status 'suspended'.
+          if (isSuspendSentinel(toolResult.parsedResult) && deps.store) {
             const sentinel = toolResult.parsedResult;
             const suspensionId = crypto.randomUUID();
 

@@ -6,9 +6,7 @@ import { ReloadOverlay } from "@/components/reload-overlay";
 import { SessionProvider } from "@/stores/session-store";
 import {
   setStorageMode,
-  storageModeForServerBackend,
   storageModeForServerStorage,
-  type ServerStoreBackend,
 } from "@/services/data-service";
 import { loadProviderKeysFromStorage } from "@/services/api";
 import { probeDesktopMode } from "@/lib/desktop-bridge";
@@ -49,14 +47,9 @@ async function syncStorageMode(): Promise<void> {
     const res = await fetch("/api/health");
     if (!res.ok) return;
     const health = (await res.json()) as {
-      storeBackend?: ServerStoreBackend;
       storage?: Parameters<typeof storageModeForServerStorage>[0];
     };
-    const mode =
-      storageModeForServerStorage(health.storage) ??
-      (health.storeBackend
-        ? storageModeForServerBackend(health.storeBackend)
-        : null);
+    const mode = storageModeForServerStorage(health.storage);
     if (mode) {
       setStorageMode(mode);
     }

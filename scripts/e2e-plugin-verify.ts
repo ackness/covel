@@ -627,8 +627,6 @@ function summariseOutput(output: Record<string, unknown> | undefined): string {
     ? output.interactions.length
     : 0;
   if (interactions > 0) parts.push(`interactions=${interactions}`);
-  if (typeof output.form === "object" && output.form !== null)
-    parts.push("form");
   if (typeof output.playerCreated === "boolean")
     parts.push(`playerCreated=${output.playerCreated}`);
   if (Array.isArray(output.categories))
@@ -781,16 +779,7 @@ function detectFormInTurn(
       }
     }
 
-    // Path 2: output.form (legacy single-form shape)
-    if (output.form && typeof output.form === "object") {
-      return toDetectedForm(
-        turnId,
-        rt.runtimeId,
-        output.form as Record<string, unknown>,
-      );
-    }
-
-    // Path 3: create-form tool call input (fallback if output doesn't carry
+    // Path 2: create-form tool call input (fallback if output doesn't carry
     // the form but the tool call does)
     for (const tc of rt.toolCalls ?? []) {
       if (tc.toolName !== "create-form") continue;
@@ -1282,11 +1271,11 @@ async function runMain(
   try {
     const health = await httpGet<{
       status: string;
-      storeBackend: string;
+      storage?: { data?: { backend?: string } };
       bootId: string;
     }>(args.server, "/health");
     kv("Status", health.status);
-    kv("Store backend", health.storeBackend);
+    kv("Store backend", health.storage?.data?.backend ?? "(unknown)");
     kv("Boot ID", health.bootId);
     if (health.status !== "ok") {
       assertions.fail("Server health not ok");
@@ -1451,22 +1440,28 @@ async function runMain(
     kv("Values", previewJson(values, 120));
 
     const submitResp = await httpPost<{
-      filledNarrative?: string;
-      results?: unknown;
-    }>(args.server, `/sessions/${session.id}/submit-inputs`, {
-      turnId: detectedForm.turnId,
-      submissions: [
-        {
-          interactionId: detectedForm.interactionId,
-          type: "form",
-          values,
-        },
-      ],
+      status: string;
+      result?: {
+        results?: Array<{ filledNarrative?: string }>;
+      };
+    }>(args.server, `/sessions/${session.id}/plugin-rpc`, {
+      pluginId: "framework",
+      action: "submit-form",
+      payload: {
+        turnId: detectedForm.turnId,
+        submissions: [
+          {
+            interactionId: detectedForm.interactionId,
+            type: "form",
+            values,
+          },
+        ],
+      },
     });
-    const filled = submitResp.filledNarrative ?? "";
+    const filled = submitResp.result?.results?.[0]?.filledNarrative ?? "";
     if (filled) kv("Filled narrative", truncate(filled, 80));
 
-    // Refresh band from server — the submit-inputs + turn commit chain may
+    // Refresh band from server — the submit-form + turn commit chain may
     // have advanced session.turnCount past Pre-Game already.
     const sessAfterSubmit = await httpGet<SessionRecord>(
       args.server,

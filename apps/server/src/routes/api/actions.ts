@@ -19,7 +19,6 @@ import {
 import type { RuntimeManifest } from "@covel/shared";
 import type { CompactorRunner } from "@covel/context";
 import { rateLimiter } from "../../middleware/rate-limit.js";
-import { loadSessionConfig } from "./load-session-config.js";
 import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
 
 // SSE uses ProtocolEventType names directly — no legacy mapping.
@@ -209,18 +208,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     "world-data-provider",
   );
 
-  // Pre-load plugin config data for context injection (async → sync bridge)
-  const sessionConfig = await loadSessionConfig(
-    store,
-    sessionId,
-    session.worldId ?? undefined,
-    worldDataPluginId,
-  );
-  const turnGetConfig = (
-    _pluginId: string,
-    _runtimeId: string,
-  ): Readonly<Record<string, unknown>> => sessionConfig;
-
   return streamSSE(c, async (stream) => {
     let seq = 0;
     const traceId = crypto.randomUUID();
@@ -390,7 +377,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           ...(pluginGateway ? { gateway: pluginGateway } : {}),
           ...(pluginUtils ? { utils: pluginUtils } : {}),
           ...(getPluginSource ? { getPluginSource } : {}),
-          getConfig: turnGetConfig,
+          getConfig: getConfigFn,
           store,
           ...(mediaStore ? { mediaStore } : {}),
           toolExecutor,
@@ -455,9 +442,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           },
           compactor: compactorRunner,
           memorySystem: _memorySystem,
-          // Sprint 1-D: let the turn executor construct a unified
-          // SessionContextSnapshot when COVEL_SESSION_CONTEXT=1. Ignored
-          // otherwise — legacy scattered loads stay in control.
+          // Let the turn executor construct a unified SessionContextSnapshot.
           worldDataPluginId,
         }),
       );

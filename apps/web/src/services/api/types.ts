@@ -84,7 +84,7 @@ export interface RuntimeSummary {
   kind: string;
   priority: number;
   trigger: {
-    mode: string;
+    type: string;
     onEvents?: string[];
     interval?: number;
     cooldownTurns?: number;
@@ -96,8 +96,6 @@ export interface RuntimeSummary {
   };
   /** Slot declared by PLUGIN.md `model` (e.g. story/plugin/image). */
   model?: string;
-  /** Back-compat alias used by runtime binding UI; same as `model` when present. */
-  providerTag?: string;
   outputKind?: string;
   capabilities?: string[];
   tags?: string[];

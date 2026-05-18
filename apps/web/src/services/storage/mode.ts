@@ -17,12 +17,6 @@ export function storageModeForServerStorage(
   return mode === "local" || mode === "remote" ? mode : null;
 }
 
-export function storageModeForServerBackend(
-  backend: ServerStoreBackend,
-): StorageMode {
-  return backend === "memory" ? "local" : "remote";
-}
-
 export function getStorageMode(): StorageMode {
   const val = localStorage.getItem(STORAGE_MODE_KEY);
   return val === "local" ? "local" : "remote";

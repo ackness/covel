@@ -62,30 +62,47 @@ describe.skipIf(!pgAvailable)("pg-session-lock", () => {
     });
     await Promise.all([a, b]);
 
-    // B MUST observe A having fully completed before starting.
-    expect(log).toEqual(["A-start", "A-end", "B-start", "B-end"]);
+    // One call must finish fully before the other starts. PostgreSQL advisory
+    // locks do not guarantee FIFO acquisition, so either complete block may run
+    // first as long as there is no interleaving.
+    expect([
+      ["A-start", "A-end", "B-start", "B-end"],
+      ["B-start", "B-end", "A-start", "A-end"],
+    ]).toContainEqual(log);
 
     await sql.end();
   });
 
   it("does NOT serialize across different sessionIds", async () => {
-    // Two separate sessions must acquire their locks independently. We
-    // compare wall-clock time: sequential execution would take ~200ms,
-    // concurrent should be close to 100ms.
+    // Two separate sessions must acquire their locks independently. Assert on
+    // critical-section overlap instead of a fixed wall-clock ceiling so this
+    // stays stable when the full test suite adds PG roundtrip overhead.
     const sql = postgres(DATABASE_URL, { max: 4 });
     const lock = createPgAdvisorySessionLock(sql);
 
     const s1 = `sess-a-${Date.now()}`;
     const s2 = `sess-b-${Date.now()}`;
+    const spans = new Map<string, { start?: number; end?: number }>();
 
-    const start = Date.now();
-    await Promise.all([
-      lock.withLock(s1, () => new Promise((r) => setTimeout(r, 100))),
-      lock.withLock(s2, () => new Promise((r) => setTimeout(r, 100))),
-    ]);
-    // Comfortable ceiling: 180ms catches accidental serialization while
-    // absorbing ~80ms of PG roundtrip overhead on slow CI.
-    expect(Date.now() - start).toBeLessThan(180);
+    const run = (id: string) =>
+      lock.withLock(id, async () => {
+        const span = spans.get(id) ?? {};
+        span.start = performance.now();
+        spans.set(id, span);
+        await new Promise((r) => setTimeout(r, 100));
+        span.end = performance.now();
+      });
+
+    await Promise.all([run(s1), run(s2)]);
+    const a = spans.get(s1);
+    const b = spans.get(s2);
+    expect(a?.start).toBeDefined();
+    expect(a?.end).toBeDefined();
+    expect(b?.start).toBeDefined();
+    expect(b?.end).toBeDefined();
+    expect(Math.max(a!.start!, b!.start!)).toBeLessThan(
+      Math.min(a!.end!, b!.end!),
+    );
 
     await sql.end();
   });

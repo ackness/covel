@@ -232,10 +232,9 @@ const Inner = ({
   // `react-force-graph` compares `graphData` by reference: every new
   // reference it sees triggers an alpha=1 simulation restart. With the
   // centre force kicking in on each restart the whole graph drifts in
-  // whichever direction the first few ticks happen to push it. V2 got
-  // away with the naive "rebuild on every render" because plugin-data
-  // rarely changed there; V1's `plugin-data.changed` SSE channel fires
-  // far more frequently and exposes the underlying instability.
+  // whichever direction the first few ticks happen to push it. The
+  // `plugin-data.changed` SSE channel can fire frequently and expose the
+  // underlying instability.
   //
   // Fix: keep ONE `{nodes, links}` object behind a ref and mutate its
   // arrays in place whenever plugin-data changes. The ref never changes

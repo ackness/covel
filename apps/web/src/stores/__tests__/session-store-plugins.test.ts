@@ -44,7 +44,7 @@ vi.mock("../../services/api.js", () => ({
       status: "ok",
       timestamp: "",
       version: "",
-      storeBackend: "memory",
+      storage: { data: { backend: "memory", frontendMode: "local" } },
     }),
   ),
   markServerAck: vi.fn(),

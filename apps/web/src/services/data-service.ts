@@ -16,9 +16,7 @@ import type { DataService } from "./data-service/types.js";
 import {
   getStorageMode as getStorageModeFromFacade,
   setStorageMode as setStorageModeFromFacade,
-  storageModeForServerBackend as storageModeForServerBackendFromFacade,
   storageModeForServerStorage as storageModeForServerStorageFromFacade,
-  type ServerStoreBackend,
   type ServerStorageCapabilities,
   type StorageMode,
 } from "./storage/index.js";
@@ -26,23 +24,17 @@ import {
 export type { DataService } from "./data-service/types.js";
 export type { ServerStoreBackend, StorageMode } from "./storage/index.js";
 
-export function storageModeForServerBackend(
-  backend: ServerStoreBackend,
-): StorageMode {
-  return storageModeForServerBackendFromFacade(backend);
-}
-
 export function storageModeForServerStorage(
   storage: ServerStorageCapabilities | null | undefined,
 ): StorageMode | null {
   return storageModeForServerStorageFromFacade(storage);
 }
 
-export function generatedWorldSaveTargetForBackend(
-  backend: ServerStoreBackend | null | undefined,
+export function generatedWorldSaveTargetForStorageMode(
+  mode: StorageMode | null | undefined,
 ): GeneratedWorldSaveTarget {
-  if (backend === "memory") return "return-only";
-  if (backend === "sqlite" || backend === "pg") return "server-store";
+  if (mode === "local") return "return-only";
+  if (mode === "remote") return "server-store";
   return "server-file";
 }
 

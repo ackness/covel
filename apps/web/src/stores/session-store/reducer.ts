@@ -7,22 +7,11 @@ import {
 import { applyPluginMessageSurface } from "./plugin-message-surface.js";
 import type {
   AssetProgressEvent,
-  LegacyPhase,
   SessionAction,
   SessionState,
 } from "./types.js";
-import type * as api from "@/services/api";
 
 const EXEC_STEPS_MAX = 500;
-
-export function toLegacyPhase(
-  session: Pick<api.SessionRecord, "status" | "turnCount"> | null | undefined,
-): LegacyPhase {
-  if (!session) return "init";
-  if (session.status === "ended") return "ended";
-  if (session.status === "paused") return "paused";
-  return (session.turnCount ?? 0) >= 1 ? "playing" : "init";
-}
 
 export const initialState: SessionState = {
   presets: [],
@@ -35,7 +24,6 @@ export const initialState: SessionState = {
   bootError: null,
   world: null,
   session: null,
-  phase: "init",
   messages: [],
   worldSessions: [],
   executing: false,
@@ -100,7 +88,6 @@ export function reducer(
       return {
         ...state,
         session: action.session,
-        phase: toLegacyPhase(action.session),
         assetsByTurn: sameSession
           ? state.assetsByTurn
           : new Map<string, readonly AssetGenerateView[]>(),
@@ -134,7 +121,7 @@ export function reducer(
       // Previously we skipped when a placeholder existed — but if any delta
       // frames were dropped mid-stream the placeholder only contains the
       // partial text the client received, and the user saw a truncated
-      // narrative. V2 replaces the placeholder with the completed content,
+      // narrative. The reducer replaces the placeholder with completed content,
       // which is always the authoritative full text; mirror that here.
       const streamId = `stream_${action.turnId}_${action.runtimeId}`;
       const idx = state.messages.findIndex((m) => m.id === streamId);
@@ -221,8 +208,6 @@ export function reducer(
         statePatches: action.patches,
         gameState: rebuildGameStateFromPatches(action.patches),
       };
-    case "SET_PHASE":
-      return { ...state, phase: action.phase };
     case "SET_GAME_STATE":
       return {
         ...state,
@@ -311,7 +296,6 @@ export function reducer(
       return {
         ...state,
         session: null,
-        phase: "init",
         messages: [],
         statePatches: [],
         gameState: {},
@@ -333,7 +317,6 @@ export function reducer(
         ...state,
         world: null,
         session: null,
-        phase: "init",
         messages: [],
         worldSessions: [],
         statePatches: [],

@@ -34,13 +34,6 @@ export function createBootstrapPluginRpc({
     description:
       "Persist player input submissions and fill the originating template message.",
   });
-  rpcRegistry.registerFrameworkDefault(
-    "framework-submit-form",
-    submitFormHandler,
-    {
-      description: "Alias for submit-form (explicit framework namespace).",
-    },
-  );
 
   for (const [pluginId, manifests] of manifestCache) {
     for (const parsed of manifests) {

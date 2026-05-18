@@ -35,13 +35,11 @@ export const triggerConfigSchema = z
 
 /**
  * Runtime-output inject — read a field from a completed upstream runtime's
- * output and wrap it in an XML tag. The legacy shape (no `kind` field) is
- * normalised to this variant via `inputInjectDeclSchema`'s preprocess step
- * so existing PLUGIN.md files keep parsing unchanged.
+ * output and wrap it in an XML tag.
  */
 export const runtimeInjectDeclSchema = z
   .object({
-    kind: z.literal("runtime").optional().default("runtime"),
+    kind: z.literal("runtime"),
     from: z.string().min(1),
     field: z.string().min(1),
     as: z.string().min(1),
@@ -87,28 +85,13 @@ export const pluginDataInjectDeclSchema = z
   .strict();
 
 /**
- * Discriminated union of inject declarations. The preprocess step normalises
- * the legacy shape `{ from, field, as }` (no `kind` field) into an explicit
- * `kind: 'runtime'` variant so we can use `z.discriminatedUnion` without
- * breaking existing PLUGIN.md files.
+ * Discriminated union of inject declarations. Every entry declares its source
+ * with `kind` so manifest semantics stay explicit.
  */
-export const inputInjectDeclSchema = z.preprocess(
-  (val) => {
-    if (
-      val &&
-      typeof val === "object" &&
-      !Array.isArray(val) &&
-      !("kind" in val)
-    ) {
-      return { ...val, kind: "runtime" };
-    }
-    return val;
-  },
-  z.discriminatedUnion("kind", [
-    runtimeInjectDeclSchema,
-    pluginDataInjectDeclSchema,
-  ]),
-);
+export const inputInjectDeclSchema = z.discriminatedUnion("kind", [
+  runtimeInjectDeclSchema,
+  pluginDataInjectDeclSchema,
+]);
 
 export const inputToolDeclSchema = z
   .object({
@@ -452,20 +435,6 @@ export const runtimeManifestSchema = z
     description: z.string().min(1),
     priority: z.number().int().min(0).max(1000).optional(),
     version: z.string().optional(),
-    /**
-     * Prompt assembler version (S2-T4).
-     * - `1` (default, omitted): legacy single-pass `buildContext` path
-     * - `2`: three-tier V2 assembler (gated on `COVEL_PROMPT_V2=1` at runtime)
-     *
-     * V2 is opt-in per-plugin. The runtime only routes a manifest to V2 when
-     * BOTH the environment flag and this field declare opt-in.
-     */
-    promptVersion: z.union([z.literal(1), z.literal(2)]).optional(),
-    /**
-     * Hooks are lifecycle-sensitive and version-gated. A manifest must set
-     * `hookManifestVersion: 1` before `hooks:` entries are activated.
-     */
-    hookManifestVersion: z.literal(1).optional(),
     runtimeType: z.enum(["agent", "function"]).optional(),
     handler: z.string().optional(),
     guard: z.string().optional(),

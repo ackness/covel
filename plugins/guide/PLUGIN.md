@@ -12,7 +12,6 @@ priority: 600
 model: plugin
 outputKind: system
 timeoutMs: 120000
-promptVersion: 2
 tags:
   - mode:traditional-story
   - role:guide
@@ -29,7 +28,8 @@ upstreamRequired:
   - narrator
 input:
   inject:
-    - from: narrator
+    - kind: runtime
+      from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
 tools:

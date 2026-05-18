@@ -25,7 +25,7 @@ export interface StreamMessage {
  * yet" from "event was lost / reordered" — any dropped runtime.completed
  * left the chip spinning forever.
  *
- * V2 uses a status-aggregation model: each runtime has a single row, and
+ * The current store uses a status-aggregation model: each runtime has a single row, and
  * every SSE event upserts the status in-place. A missed event still leaves
  * the row in the best known state, and the next arriving event overwrites
  * cleanly. That is what we adopt here to keep chips from getting stuck.
@@ -61,12 +61,6 @@ export interface ExecutionStep {
  * can keep using `import type { SuspensionRecord } from "@/stores/session-store"`.
  */
 export type SuspensionRecord = api.SuspensionRecord;
-
-/**
- * Legacy phase strings still consumed by the V1 chat/game-view UI. Produced
- * from `SessionRecord.status` + `SessionRecord.turnCount` via `toLegacyPhase`.
- */
-export type LegacyPhase = "init" | "playing" | "paused" | "ended";
 
 export interface PendingInteractionDraft {
   id: string;
@@ -118,16 +112,6 @@ export interface SessionState {
   // Active session
   world: api.WorldRecord | null;
   session: api.SessionRecord | null;
-  /**
-   * Legacy display phase derived from session (`status`, `turnCount`).
-   *
-   * The turn-band refactor replaced the per-session phase enum with a coarser
-   * `status` + `turnCount` pair. UI surfaces that still speak the old phase
-   * vocabulary ("init", "playing", "ended", …) read this derived value so
-   * they can keep rendering phase-specific empty states without each
-   * component re-implementing the mapping.
-   */
-  phase: LegacyPhase;
   messages: StreamMessage[];
 
   /** All sessions for the current world (for switching). */
@@ -254,7 +238,6 @@ export type SessionAction =
         data?: unknown;
       }>;
     }
-  | { type: "SET_PHASE"; phase: LegacyPhase }
   | { type: "UPSERT_EXECUTION_STEP"; step: ExecutionStep }
   | { type: "LOAD_EXECUTION_STEPS"; steps: ExecutionStep[] }
   | { type: "CLEAR_EXECUTION_STEPS" }

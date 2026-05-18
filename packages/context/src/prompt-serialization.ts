@@ -10,7 +10,7 @@ export interface SerializablePromptSegments {
 }
 
 /**
- * Concatenate the pre-history V2 segments into the public systemPrompt string.
+ * Concatenate the pre-history segments into the public systemPrompt string.
  * Empty segments are skipped so callers do not see stray blank separators.
  */
 export function serializeSystemPrompt(

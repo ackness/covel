@@ -35,7 +35,6 @@ export interface RuntimePluginContract {
   trigger?: unknown;
   execution?: unknown;
   model?: unknown;
-  promptVersion?: string | number;
   tools: {
     builtin: string[];
     local: Array<{ path: string; name: string }>;
@@ -282,9 +281,6 @@ function buildRuntimeContract(
     ...(manifest.trigger ? { trigger: manifest.trigger } : {}),
     ...(manifest.execution ? { execution: manifest.execution } : {}),
     ...(manifest.model ? { model: manifest.model } : {}),
-    ...(manifest.promptVersion
-      ? { promptVersion: manifest.promptVersion }
-      : {}),
     tools: {
       builtin: [...(manifest.tools?.builtin ?? [])],
       local: (manifest.tools?.local ?? []).map((path) => ({

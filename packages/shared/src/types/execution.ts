@@ -193,9 +193,7 @@ export interface PendingInputInfo {
   readonly pluginId: string;
   readonly runtimeId: string;
   readonly interaction: InteractionPayload;
-  /** @deprecated Use interaction fields instead. Kept for backward compatibility. */
   readonly form?: Readonly<Record<string, unknown>>;
-  /** @deprecated Use interaction.narrativeTemplate instead. */
   readonly narrativeTemplate?: string;
 }
 
