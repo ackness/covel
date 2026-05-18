@@ -408,7 +408,7 @@ const result = makeRuntimeResult({ status: "success" });
 pnpm --filter @covel/plugin-my-codex test
 ```
 
-更详细的测试模式（端到端 API harness、真实 LLM 验证）见 [插件测试指南](./plugin-testing.md)。
+更详细的测试模式（runtime cases、HTTP E2E、真实 LLM 验证）见 [插件测试指南](./plugin-testing.md)。
 
 ---
 

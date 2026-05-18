@@ -4,114 +4,204 @@ Schema 使用 Zod strict 模式验证，不允许未定义字段。所有文本�
 
 ## 根字段
 
-| 字段 | 类型 | 必需 | 约束 |
-|------|------|------|------|
-| schemaVersion | string | ✓ | 固定 `"1.0"` |
-| id | string | ✓ | kebab-case，正则 `^[a-z][a-z0-9-]*$` |
-| name | I18nText | ✓ | |
-| version | string | | semver 格式 |
-| summary | I18nText | ✓ | 1-2 句话 |
-| defaultLocale | string | ✓ | BCP-47，如 `zh-CN` |
-| supportedLocales | string[] | | 至少 1 个 |
-| tags | string[] | | 类型标签 |
-| requiredPlugins | string[] | | 必需插件 ID |
-| recommendedPlugins | string[] | | 推荐插件 ID |
-| dimensions | object | | 见下方 9 个维度 |
+| 字段                      | 类型                  | 必需 | 约束                                                    |
+| ------------------------- | --------------------- | ---- | ------------------------------------------------------- |
+| schemaVersion             | string                | ✓    | 当前示例推荐 `"1.0"`；schema 接受非空字符串             |
+| id                        | string                | ✓    | kebab-case，正则 `^[a-z][a-z0-9-]*$`                    |
+| name                      | I18nText              | ✓    |                                                         |
+| version                   | string                |      | semver 格式                                             |
+| summary                   | I18nText              | ✓    | 1-2 句话                                                |
+| defaultLocale             | string                | ✓    | BCP-47，如 `zh-CN`                                      |
+| supportedLocales          | string[]              |      | 至少 1 个                                               |
+| tags                      | string[]              |      | 类型标签                                                |
+| requiredPlugins           | string[]              |      | 必需插件 ID                                             |
+| recommendedPlugins        | string[]              |      | 推荐插件 ID                                             |
+| excludedPlugins           | string[]              |      | 排除插件 ID                                             |
+| pluginPolicy              | object                |      | 会话准备页的插件策略，见下方                            |
+| worldData                 | string                |      | world data descriptor 路径，通常 `data/world.data.yaml` |
+| characterBlueprintSources | string[]              |      | 旧式角色蓝图路径；声明 worldData 时通常不用             |
+| dimensions                | object                |      | 见下方 9 个维度                                         |
+| dimensionSources          | Record<string,string> |      | 外置 dimension 文件路径，key 必须是 dimensions 的有效键 |
+
+## pluginPolicy
+
+`pluginPolicy` 描述世界希望启用的插件组合。0.0.3 示例世界都使用它，前端会把它与旧的 `requiredPlugins` / `recommendedPlugins` / `excludedPlugins` 合并。
+
+```yaml
+pluginPolicy:
+  preset: traditional-story # 可选：traditional-story / dialogue-mode / low-cost
+  preferTags: # 可选，优先启用带这些 tags 的插件
+    - mode:traditional-story
+    - role:codex
+  avoidTags: # 可选，降低或排除这些 tags
+    - mode:dialogue
+  requireCapabilities: # 可选，要求能力标签
+    - narrative
+  requiredPlugins: # 可选，策略级必需插件
+    - narrator
+  recommendedPlugins: # 可选，策略级推荐插件
+    - guide
+  excludedPlugins: # 可选，策略级排除插件
+    - chat-mode-narrator
+  packs: # 可选，自定义组合包
+    - id: custom-dialogue
+      label: 对话模式
+      description: 以角色对话推进剧情
+      plugins: [chat-mode-narrator, scene-cast]
+      optionalPlugins: [branch-reply]
+      excludedPlugins: [narrator]
+      tags: [mode:dialogue]
+      reason: 更适合校园/群像世界
+```
+
+常用组合：
+
+```yaml
+# 传统故事模式
+requiredPlugins: [pregame, world-init, char-creator, narrator]
+recommendedPlugins: [guide, codex, npc-graph, player-identity, living-world-rules]
+excludedPlugins: [chat-mode-narrator, scene-cast, scene-prompts, branch-reply]
+pluginPolicy:
+  preset: traditional-story
+  preferTags: [mode:traditional-story, role:codex, role:retrieval, role:world-rules]
+  avoidTags: [mode:dialogue]
+
+# 对话模式
+requiredPlugins: [pregame, world-init, char-creator]
+recommendedPlugins: [chat-mode-narrator, scene-cast, scene-prompts, character-blueprint, character-presence, player-identity, living-world-rules, branch-reply]
+excludedPlugins: [narrator, guide, codex]
+pluginPolicy:
+  preset: dialogue-mode
+  preferTags: [mode:dialogue, role:character, role:world-rules]
+  avoidTags: [mode:traditional-story]
+```
+
+## worldData
+
+`worldData` 指向 `data/world.data.yaml`，用于会话创建时导入结构化世界资料。descriptor schema 使用 strict 模式：
+
+```yaml
+schemaVersion: 1
+sources:
+  dimensions:
+    kind: yaml # yaml|json|markdown|text|media
+    path: data/dimensions.yaml
+    schema: covel://world/dimensions
+    to: world:metadata.dimensions
+  cast:
+    kind: json
+    path: data/characters/cast.json
+    to: plugin:character-blueprint/blueprints
+    key: id
+    indexTo: lorebook
+    effects: [characters]
+    merge: replace # replace|skipExisting
+    after: dimensions # string 或 string[]
+```
+
+`to` 常见目标：
+
+- `world:metadata.dimensions` — 写入世界 metadata 维度
+- `plugin:<plugin-id>/<namespace>` — 写入插件 plugin-data
+- `plugin:<plugin-id>/<namespace>+lorebook` — 写入插件数据并投影 lorebook
+- `lorebook` — 写 lorebook 常量词条
+- `characters` — 写角色记录
+- `media` — 导入媒体资产
 
 ## dimensions.geography
 
 ```yaml
 geography:
-  overview: <I18nText>           # 可选
-  regions:                       # 必需，至少 1 个
-    - name: <I18nText>           # 必需
-      description: <I18nText>    # 必需
-      climate: <I18nText>        # 必需
-      landmarks:                 # 可选
+  overview: <I18nText> # 可选
+  regions: # 必需，至少 1 个
+    - name: <I18nText> # 必需
+      description: <I18nText> # 必需
+      climate: <I18nText> # 必需
+      landmarks: # 可选
         - name: <I18nText>
-          description: <I18nText>  # 可选
+          description: <I18nText> # 可选
 ```
 
 ## dimensions.factions
 
 ```yaml
-factions:                        # 数组
-  - id: <kebab-case>             # 必需，正则 ^[a-z][a-z0-9-]*$
-    name: <I18nText>             # 必需
-    description: <I18nText>      # 必需
-    type: <enum>                 # 必需：political|guild|corporate|religious|criminal|military|other
-    influence: <enum>            # 必需：major|minor
-    leader: <I18nText>           # 可选
-    headquarters: <I18nText>     # 可选
-    relations:                   # 可选
-      - type: <string>           # 如 hostile|neutral|allied
-        targetId: <string>       # 其他 faction 的 id
-        description: <I18nText>  # 可选
+factions: # 数组
+  - id: <kebab-case> # 必需，正则 ^[a-z][a-z0-9-]*$
+    name: <I18nText> # 必需
+    description: <I18nText> # 必需
+    type: <enum> # 必需：political|guild|corporate|religious|criminal|military|other
+    influence: <enum> # 必需：major|minor
+    leader: <I18nText> # 可选
+    headquarters: <I18nText> # 可选
+    relations: # 可选
+      - type: <string> # 如 hostile|neutral|allied
+        targetId: <string> # 其他 faction 的 id
+        description: <I18nText> # 可选
 ```
 
 ## dimensions.powerSystem
 
 ```yaml
 powerSystem:
-  name: <I18nText>               # 必需
-  type: <enum>                   # 必需：magic|technology|cultivation|psychic|hybrid|other
-  description: <I18nText>        # 必需
-  rules:                         # 必需，至少 1 条，每条为 I18nText
+  name: <I18nText> # 必需
+  type: <enum> # 必需：magic|technology|cultivation|psychic|hybrid|other
+  description: <I18nText> # 必需
+  rules: # 必需，至少 1 条，每条为 I18nText
     - <I18nText>
-  tiers:                         # 可选
+  tiers: # 可选
     - name: <I18nText>
-      rank: <int, ≥1>            # 必需
-      description: <I18nText>    # 可选
+      rank: <int, ≥1> # 必需
+      description: <I18nText> # 可选
 ```
 
 ## dimensions.history
 
 ```yaml
-history:                         # 数组
-  - name: <I18nText>             # 必需
-    description: <I18nText>      # 必需
-    significance: <enum>         # 必需：major|minor
-    era: <I18nText>              # 可选
-    year: <I18nText>             # 可选
+history: # 数组
+  - name: <I18nText> # 必需
+    description: <I18nText> # 必需
+    significance: <enum> # 必需：major|minor
+    era: <I18nText> # 可选
+    year: <I18nText> # 可选
 ```
 
 ## dimensions.economy
 
 ```yaml
 economy:
-  currencies:                    # 必需，至少 1 个
-    - name: <I18nText>           # 必需
-      symbol: <string>           # 可选
-      description: <I18nText>    # 可选
-  resources:                     # 可选，I18nText 数组
+  currencies: # 必需，至少 1 个
+    - name: <I18nText> # 必需
+      symbol: <string> # 可选
+      description: <I18nText> # 可选
+  resources: # 可选，I18nText 数组
     - <I18nText>
-  tradeNotes: <I18nText>         # 可选
+  tradeNotes: <I18nText> # 可选
 ```
 
 ## dimensions.socialStructure
 
 ```yaml
 socialStructure:
-  classes:                       # 可选
-    - name: <I18nText>           # 必需
-      description: <I18nText>    # 必需
-      rank: <int>                # 可选
-  races:                         # 可选
+  classes: # 可选
+    - name: <I18nText> # 必需
+      description: <I18nText> # 必需
+      rank: <int> # 可选
+  races: # 可选
     - name: <I18nText>
       description: <I18nText>
-      traits: [<I18nText>]       # 可选
-  notes: <I18nText>              # 可选
+      traits: [<I18nText>] # 可选
+  notes: <I18nText> # 可选
 ```
 
 ## dimensions.tone
 
 ```yaml
 tone:
-  genres:                        # 必需，至少 1 个，I18nText 数组
+  genres: # 必需，至少 1 个，I18nText 数组
     - <I18nText>
-  contentRating: <enum>          # 必需：all-ages|teen|mature
-  narrativeStyle: <I18nText>     # 可选
-  themes:                        # 可选，I18nText 数组
+  contentRating: <enum> # 必需：all-ages|teen|mature
+  narrativeStyle: <I18nText> # 可选
+  themes: # 可选，I18nText 数组
     - <I18nText>
 ```
 
@@ -119,10 +209,10 @@ tone:
 
 ```yaml
 mechanics:
-  combatStyle: <enum>            # 可选：turn-based|real-time|narrative|none
-  difficulty: <enum>             # 可选：easy|normal|hard|adaptive
-  skillSystem: <I18nText>        # 可选
-  customRules:                   # 可选，I18nText 数组
+  combatStyle: <enum> # 可选：turn-based|real-time|narrative|none
+  difficulty: <enum> # 可选：easy|normal|hard|adaptive
+  skillSystem: <I18nText> # 可选
+  customRules: # 可选，I18nText 数组
     - <I18nText>
 ```
 
@@ -130,12 +220,15 @@ mechanics:
 
 ```yaml
 startingConditions:
-  openingScenario: <I18nText>    # 必需，2-3 句呈现即时紧张感
-  startingLocation: <I18nText>   # 可选
-  playerConstraints:             # 可选，I18nText 数组
+  openingScenario: <I18nText> # 必需，2-3 句呈现即时紧张感
+  startingLocation: <I18nText> # 可选
+  playerConstraints: # 可选，I18nText 数组
     - <I18nText>
-  startingResources:             # 可选，Record<string, number>
+  startingResources: # 可选，Record<string, number>
     <资源名>: <数量>
+  openingHook: <I18nText> # 可选，开场短钩子
+  openingChips: # 可选，开场快捷行动建议
+    - <I18nText>
 ```
 
 ## 文件结构
@@ -145,5 +238,7 @@ worlds/<id>/
 ├── world.yaml       # 必需
 ├── WORLD.md         # 默认 lore（fallback）
 ├── WORLD.zh.md      # 中文 lore
-└── WORLD.en.md      # 英文 lore（可选）
+├── WORLD.en.md      # 英文 lore（可选）
+└── data/
+    └── world.data.yaml  # worldData descriptor（推荐）
 ```

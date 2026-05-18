@@ -1,255 +1,466 @@
 # 插件测试指引
 
-给生成插件后的 agent 用。三层测试,按需选择,不一定全做。
+给 `create-plugin` 生成插件后的 agent 用。优先写能稳定证明行为的最小测试；不要把 live provider 当 CI 门禁。
 
-| 层 | 跑什么 | 速度 | 何时必须 |
-|---|---|---|---|
-| **L1 Schema** | `validatePluginManifest` | 即时 | **每个 PLUGIN.md 都必须** |
-| **L2 单元** | vitest 测纯逻辑 (tools / hooks / handlers) | <1s | 写了 `tools/*.js`、`handler.js`、`hooks/*.js` 就要写 |
-| **L3 集成** | `createTestHarness` + `MockLLM` 跑一整个 turn | 1-3s | agent runtime + 注入/工具链涉及多 runtime 协作 |
-| **L4 E2E** | `scripts/e2e-plugin-verify.ts` 真实 LLM | 30s+ | 只在最终验证阶段跑,可选 |
+| 层                 | 工具                                        | 速度                            | 何时必须                                                         |
+| ------------------ | ------------------------------------------- | ------------------------------- | ---------------------------------------------------------------- |
+| L1 Schema          | `validatePluginManifest`                    | 即时                            | 每个 `PLUGIN.md`                                                 |
+| L2 单元            | Vitest + `@covel/plugin-test-utils`         | <1s                             | 写了 `tools/*.js`、`handler.js`、`hooks/*.js`                    |
+| L3 In-process turn | `createTestHarness` + `MockLLM`             | 1-3s                            | agent runtime、tool loop、`input.inject`、多 runtime/event 链    |
+| L4 Runtime cases   | `pnpm test:runtime` (`@covel/test-runtime`) | 1-10s mock / 真实 provider 更慢 | 第三方插件、手动 runtime、后台 follower、外部 `~/.covel/plugins` |
+| L5 HTTP E2E        | `scripts/e2e-plugin-verify.ts`              | 30s+                            | 发布前验证 API/SSE/store/approval 全链路                         |
 
-> 真实 LLM 不要在 CI 跑。L1-L3 全部用 MockLLM。
+默认规则：
+
+- L1 每次都跑。
+- L2/L3 使用 mock，不需要真实 provider key。
+- L4 mock 可进 CI；L4 live 和 L5 放发布前人工验证。
+- 涉及图片/音频/视频时，测试 MediaRef 与 `assetGenerations[]`，不要断言 bytes/base64 写进 plugin-data。
 
 ---
 
-## L1 — Schema 校验(必做)
+## L1 — Schema 校验
 
-已在 `SKILL.md` 步骤 4 中说明。每个 `PLUGIN.md`(根 + 所有 `runtimes/*/PLUGIN.md`)都要单独跑。
+每个 runtime 的 `PLUGIN.md` 都要单独校验。多 runtime 插件需要遍历 `runtimes/*/PLUGIN.md`。
+
+仓库内插件：
+
+```bash
+node --input-type=module -e "
+import matter from 'gray-matter';
+import { readFileSync } from 'fs';
+import { validatePluginManifest, formatValidationErrors } from '@covel/shared';
+const { data } = matter(readFileSync('plugins/<id>/PLUGIN.md','utf-8'));
+const r = validatePluginManifest(data);
+if(!r.valid){console.error(formatValidationErrors(r.errors));process.exit(1)}
+console.log('OK');
+"
+```
+
+仓库外插件（例如 `~/.covel/plugins/<id>`）在 Covel 仓库根目录运行，用绝对路径读文件即可：
+
+```bash
+node --input-type=module -e "
+import matter from 'gray-matter';
+import { readFileSync } from 'fs';
+import { validatePluginManifest, formatValidationErrors } from '@covel/shared';
+const file = process.env.HOME + '/.covel/plugins/<id>/runtimes/<sub>/PLUGIN.md';
+const { data } = matter(readFileSync(file,'utf-8'));
+const r = validatePluginManifest(data);
+if(!r.valid){console.error(formatValidationErrors(r.errors));process.exit(1)}
+console.log('OK');
+"
+```
 
 ---
 
 ## L2 — 单元测试
 
-### 在哪写
+适用对象：
 
-`plugins/<id>/tests/*.test.js`(JS) 或 `*.test.ts`(TS)。`vitest` 已是 workspace 依赖,不需要装。
+- `tools/*.js` / `tools/*.ts`
+- `runtimeType: function` 的 `handler.js`
+- `hooks/*.js`
+- provider wire helper（建议放 `lib/*.js`）
+- trigger / guard helper
 
-### 用什么
-
-- 纯函数(无 LLM、无 store):直接断言返回值
-- 工具(用 `tool(...)` 包装):用 mock store 验证它产生的 proposals 或 plugin-data 写入
-
-### 模板:测一个本地工具
+### 测 local tool
 
 ```js
-// plugins/my-plugin/tests/my-tool.test.js
-import { describe, it, expect } from 'vitest';
-import { getPendingProposals, tool, z } from '@covel/tools';
-import createMyTool from '../tools/my-tool.js';
+import { describe, expect, it } from "vitest";
+import { getPendingProposals } from "@covel/tools";
+import createMyTool from "../tools/my-tool.js";
 
-function createMockPluginDataStore() {
-  /** @type {Map<string, unknown>} */
-  const data = new Map();
-  const k = (s, p, ns, key) => `${s}:${p}:${ns}:${key}`;
-  return {
-    data,
-    async setPluginData(r) {
-      data.set(k(r.sessionId, r.pluginId, r.namespace, r.key), r);
-    },
-    async getPluginData(s, p, ns, key) { return data.get(k(s, p, ns, key)) ?? null; },
-    async listPluginData(s, p, ns) {
-      return [...data.entries()]
-        .filter(([key]) => key.startsWith(`${s}:${p}:${ns}:`))
-        .map(([, v]) => v);
-    },
-  };
-}
-
-describe('my-tool', () => {
-  it('writes plugin-data with the right key', async () => {
-    const store = createMockPluginDataStore();
+describe("my-tool", () => {
+  it("emits one plugin-data proposal", async () => {
+    const myTool = createMyTool();
     const ctx = {
-      sessionId: 'sess-1',
-      pluginId: 'my-plugin',
-      runtimeId: 'my-plugin',
-      turnId: 'turn-1',
-      store,
+      sessionId: "sess-1",
+      pluginId: "my-plugin",
+      runtimeId: "my-plugin",
+      turnId: "turn-1",
+      store: {},
     };
 
-    const myTool = createMyTool();
-    await myTool.execute({ name: 'foo', value: 42 }, ctx);
+    const result = await myTool.execute({ name: "foo", value: 42 }, ctx);
+    const proposals = getPendingProposals(result);
 
-    // 工具产生的 proposals 通过 getPendingProposals(ctx) 取
-    const proposals = getPendingProposals(ctx);
     expect(proposals).toHaveLength(1);
-    expect(proposals[0].type).toBe('plugin.data');
+    expect(proposals[0].type).toBe("plugin.data");
   });
 });
 ```
 
-> 实战参考:`plugins/codex/tests/codex.test.js`、`plugins/npc-graph/tests/npc-graph.test.js`。
+如果工具直接返回业务 JSON，不走 `withPendingProposals(...)`，就直接断言返回值。
 
-### 模板:测一个 function runtime handler
+### 测 function runtime handler
+
+`makeManualFunctionContext` 只提供通用字段。使用 `ctx.gateway`、`ctx.media`、`ctx.utils`、`ctx.pluginData`、`ctx.logger` 时，在测试里用 object spread 补齐 mock。
 
 ```js
-// plugins/my-plugin/tests/handler.test.js
-import { describe, it, expect, vi } from 'vitest';
-import handler from '../runtimes/my-runtime/handler.js';
+import { describe, expect, it, vi } from "vitest";
+import { makeManualFunctionContext } from "@covel/plugin-test-utils";
+import handler from "../runtimes/image-generator/handler.js";
 
-describe('my-runtime handler', () => {
-  it('emits event when given a valid prompt', async () => {
+describe("image-generator handler", () => {
+  it("resolves image slot and returns MediaRef asset", async () => {
+    const mediaRef = {
+      id: "a".repeat(64),
+      mime: "image/png",
+      size: 123,
+    };
     const ctx = {
-      sessionId: 'sess-1',
-      pluginId: 'my-plugin',
-      runtimeId: 'my-plugin/my-runtime',
-      turnId: 'turn-1',
-      manualPayload: { prompt: 'a dragon' },
+      ...makeManualFunctionContext({
+        pluginId: "my-plugin",
+        runtimeId: "my-plugin/image-generator",
+        manualPayload: { prompt: "a quiet harbor" },
+      }),
       gateway: {
-        // mock 任何 ctx.gateway 调用
-        generateImage: vi.fn().mockResolvedValue({
-          images: [{ url: 'https://example.com/img.png' }],
+        resolveSlot: vi.fn().mockReturnValue({
+          presetId: "image",
+          provider: "dashscope",
+          protocol: "openai-chat-v1",
+          baseUrl: "https://dashscope.aliyuncs.com",
+          apiKey: "test-key",
+          model: "wan2.7-image-pro",
+          tag: "image",
+          metadata: {},
         }),
       },
-      userSettings: {},
-      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      utils: {
+        validateBaseUrl: vi.fn().mockReturnValue({ ok: true }),
+        fetchWithRetry: vi.fn(),
+      },
+      media: {
+        put: vi.fn().mockResolvedValue(mediaRef),
+        get: vi.fn(),
+        resolveUrl: vi.fn(),
+        ingestUrl: vi.fn(),
+      },
+      logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      },
     };
 
     const result = await handler(ctx);
 
-    expect(result.pluginData[0].namespace).toBe('images');
-    expect(ctx.gateway.generateImage).toHaveBeenCalledWith(
-      expect.objectContaining({ presetId: 'image' }),
+    expect(ctx.gateway.resolveSlot).toHaveBeenCalledWith(
+      expect.objectContaining({ presetId: "image", fallbackTag: "image" }),
+    );
+    expect(result.pluginData[0].namespace).toBe("images");
+    expect(result.assetGenerations[0]).toMatchObject({
+      ref: mediaRef,
+      modality: "image",
+    });
+  });
+});
+```
+
+### 测 trigger helper
+
+```ts
+import { describe, expect, it } from "vitest";
+import { makeTriggerContext } from "@covel/plugin-test-utils";
+import { shouldRunOnInterval } from "../src/trigger.js";
+
+describe("trigger", () => {
+  it("fires every 3 turns", () => {
+    expect(shouldRunOnInterval(makeTriggerContext({ turnNumber: 1 }))).toBe(
+      true,
+    );
+    expect(shouldRunOnInterval(makeTriggerContext({ turnNumber: 2 }))).toBe(
+      false,
+    );
+    expect(shouldRunOnInterval(makeTriggerContext({ turnNumber: 4 }))).toBe(
+      true,
     );
   });
 });
 ```
 
-### 模板:测 PLUGIN.md frontmatter 形状
-
-```js
-import { describe, it, expect } from 'vitest';
-import { discoverPlugins, loadPluginManifest } from '@covel/plugin-loader';
-import path from 'node:path';
-
-const PLUGINS_DIR = path.resolve(import.meta.dirname, '../../');
-
-describe('my-plugin manifest', () => {
-  it('declares the right tools and capabilities', async () => {
-    const plugins = await discoverPlugins(PLUGINS_DIR);
-    const me = plugins.find((p) => p.id === 'my-plugin');
-    expect(me).toBeDefined();
-
-    const manifest = await loadPluginManifest(me.path);
-    expect(manifest.runtimes[0].tools.builtin).toContain('plugin-data-set');
-    expect(manifest.runtimes[0].capabilities).toContain('narrative');
-  });
-});
-```
-
-### 跑
-
-```bash
-pnpm --filter @covel/plugin-<id> test         # workspace 内插件
-pnpm vitest run plugins/<id>/tests             # 也行,直接路径
-```
+`makeTriggerContext` 默认 `turnsSinceLastTrigger: 999`，多数 cooldown 分支会直接通过。
 
 ---
 
-## L3 — 集成测试(MockLLM + harness)
+## L3 — `createTestHarness` + `MockLLM`
 
-只在你需要验证 **多个 runtime 协作** / **prompt 注入是否到位** / **agent 工具链是否被正确触发** 时才写。
-
-### 模板:跑一整个 turn
+用于跑完整 runtime pipeline：发现插件 → 排序 manifests → 组装 context → 调 LLM/tool loop → commit proposals → 写 MemoryStore。
 
 ```ts
-import { describe, it, expect } from 'vitest';
-import path from 'node:path';
+import { describe, expect, it } from "vitest";
+import path from "node:path";
 import {
   MockLLM,
   createTestHarness,
-  makeTurnInput,
-} from '@covel/plugin-test-utils';
+  expectAssetGenerated,
+} from "@covel/plugin-test-utils";
 
-const PLUGINS_DIR = path.resolve(import.meta.dirname, '../../../plugins');
+const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../plugins");
 
-describe('my-plugin integration', () => {
-  it('produces narrative + writes plugin-data on a single turn', async () => {
-    // 让 MockLLM 返回特定的工具调用,模拟 agent 决策
+describe("my-plugin integration", () => {
+  it("runs one turn and writes plugin-data", async () => {
     const llm = new MockLLM({
-      defaultResponse: {
-        content: '',
-        toolCalls: [{
-          id: 'call-1',
-          name: 'plugin-data-set',
-          arguments: { namespace: 'entries', key: 'k1', value: { ok: true } },
-        }],
-        finishReason: 'stop',
-        usage: { inputTokens: 100, outputTokens: 20 },
-      },
+      responses: [
+        {
+          content: null,
+          finishReason: "tool_calls",
+          toolCalls: [
+            {
+              id: "tc-1",
+              name: "plugin-data-set",
+              arguments:
+                '{"namespace":"notes","key":"intro","value":{"title":"Intro"}}',
+            },
+          ],
+          usage: { inputTokens: 50, outputTokens: 10 },
+        },
+        {
+          content: "Done.",
+          finishReason: "stop",
+          toolCalls: [],
+          usage: { inputTokens: 60, outputTokens: 4 },
+        },
+      ],
     });
 
     const harness = await createTestHarness({
       pluginsDir: PLUGINS_DIR,
-      activePlugins: ['my-plugin'],
+      activePlugins: ["my-plugin"],
       llm,
     });
 
-    const result = await harness.executeTurn('look around');
+    const result = await harness.executeTurn("continue");
+    const rows = await harness.store.listPluginData(
+      "sess-harness",
+      "my-plugin",
+      "notes",
+    );
 
-    expect(result.runtimeResults[0].status).toBe('success');
-    expect(llm.calls).toHaveLength(1);
-
-    // 直接查 in-memory store 验证写入
-    const rows = await harness.store.listPluginData('sess-test', 'my-plugin', 'entries');
-    expect(rows).toHaveLength(1);
+    expect(result.runtimeResults[0]?.status).toBe("success");
+    expect(llm.calls.map((call) => call.toolNames ?? [])).toContainEqual(
+      expect.arrayContaining(["plugin-data-set"]),
+    );
+    expect(rows[0]?.key).toBe("intro");
   });
 });
 ```
 
-### MockLLM 控制返回
+常用断言：
 
-| 场景 | 怎么做 |
-|------|------|
-| 总是返回同一个响应 | `new MockLLM({ defaultResponse: {...} })` |
-| 模拟工具调用 | `defaultResponse.toolCalls = [{ id, name, arguments }]` |
-| 模拟流式失败 | `defaultResponse.finishReason: 'error'` + 自定义 `content` |
-| 多轮顺序响应 | 自己继承 `MockLLM`,在 `generate()` 里按 `this.calls.length` 分支 |
+| 目标                  | 写法                                                                 |
+| --------------------- | -------------------------------------------------------------------- |
+| prompt 里包含注入内容 | `llm.calls[n].messages`                                              |
+| 工具顺序              | `result.runtimeResults[0].toolCalls.map((c) => c.name)`              |
+| plugin_data 写入      | `harness.store.listPluginData("sess-harness", pluginId, namespace)`  |
+| asset.generate 输出   | `expectAssetGenerated(result, { modality: "image" })`                |
+| 手动触发              | `harness.executeTurn("", { manualTrigger: { runtimeId, payload } })` |
+| userSettings          | `harness.executeTurn("", { userSettings: { [pluginId]: {...} } })`   |
 
-### Factory 工具
-
-- `makeTurnInput({ playerMessage, sessionId, ... })` — 造 `TurnInput`
-- `makeTriggerContext({ turnNumber, isManualTrigger, ... })` — 造 trigger 上下文(单测 `guard` 用)
-- `makeRuntimeResult({ status, output, ... })` — 造 RuntimeResult fixture
-
-### 注意
-
-- `createTestHarness` 用的是 `MemoryStore`,每个 test 之间互相隔离(各自调用各自创建)
-- `executeTurn` 跑完整管线:trigger → context → runtime → tool loop → commit
-- 想跑多轮:连续调 `harness.executeTurn(...)`;`turnId` 自动递增
+`MockLLM` 的 `responses[]` 会按调用顺序消费，耗尽后回落到 `defaultResponse`。多步 tool loop 优先用 `responses[]`，不用手写 subclass。
 
 ---
 
-## L4 — 真实 LLM E2E(可选)
+## L4 — `@covel/test-runtime`
 
-只在准备发布时跑一次。**不要进 CI**(费钱、慢、不稳)。
+用于插件作者从 CLI 调试真实插件包，尤其是 `~/.covel/plugins` 下的第三方插件。它使用同一套 in-process runtime kernel，支持 mock/live provider、后台 follower、`_jobs`、`_logs`、plugin-data 报告和图片 artifact 导出。
+
+### 命令
 
 ```bash
-# 需要 .env.llm 里的真实 provider key
-npx tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts \
-  --slot e2e_local --turns 3 --plugins my-plugin
+# 跑插件声明的 cases
+pnpm test:runtime -- my-plugin --plugins-dir plugins --pretty
+
+# 跑外部插件声明的 cases
+pnpm test:runtime -- my-plugin --plugins-dir ~/.covel/plugins --pretty
+
+# 只跑一个 case
+pnpm test:runtime -- my-plugin \
+  --plugins-dir ~/.covel/plugins \
+  --case manual-note-writes-plugin-data \
+  --pretty
+
+# 直接调试一个 runtime
+pnpm test:runtime -- my-plugin/manual-runtime \
+  --plugins-dir ~/.covel/plugins \
+  --payload '{"title":"Debug","text":"hello"}' \
+  --pretty
+
+# live provider
+pnpm test:runtime -- my-plugin \
+  --plugins-dir ~/.covel/plugins \
+  --case image-live \
+  --mode live \
+  --pretty
 ```
 
-artefact 落在 `debugs/e2e-logs/`,含每个 turn 的 prompt、LLM raw response、proposals、commit 结果。
+### CLI 选项
 
-E2E 详细用法见 [`docs/guide/e2e-plugin-verify.md`](../../../docs/guide/e2e-plugin-verify.md)。
+| Option                           | 用途                                                                    |
+| -------------------------------- | ----------------------------------------------------------------------- |
+| `--plugins-dir <path>`           | 插件根目录；默认 `~/.covel/plugins` 或 `COVEL_USER_PLUGINS_DIR`         |
+| `--plugin <id>`                  | runtime-id 模式下显式指定 plugin id                                     |
+| `--case <name>`                  | plugin-id 模式下只跑一个 case                                           |
+| `--mode <mock\|live>` / `--live` | mock provider 或真实 `llm.toml`/API key                                 |
+| `--payload <json>`               | 注入 `ctx.manualPayload`                                                |
+| `--config <json>`                | `getConfig()` 返回值                                                    |
+| `--user-settings <json>`         | 当前插件的 `ctx.userSettings` bucket                                    |
+| `--llm-content <text>`           | mock agent runtime 的最终文本                                           |
+| `--llm-object <json>`            | 自动 stringify 的 mock JSON 文本                                        |
+| `--llm-response <json>`          | 完整 mock LLM response                                                  |
+| `--llm-responses <json>`         | 多次 LLM 调用脚本，按顺序消费                                           |
+| `--mock-preset-id <id>`          | mock `resolveSlot()` 暴露的 synthetic preset id                         |
+| `--show-prompts`                 | 输出捕获的 LLM messages                                                 |
+| `--ignore-upstreams`             | 临时清空 `upstreamRequired`                                             |
+| `--expects-background-follower`  | 没有 deferred follower 时写一个 failed `_jobs` 行，便于 UI 可见失败断言 |
+| `--pretty`                       | 格式化 JSON 输出                                                        |
+
+### `tests/runtime-cases.json`
+
+`@covel/test-runtime` 自动寻找：
+
+1. `tests/runtime-cases.json`
+2. `covel.test.json`
+
+文件可以是 `{ "cases": [...] }` 或直接数组。case 字段来自 `packages/test-runtime/src/cases.ts`：
+
+```json
+{
+  "cases": [
+    {
+      "name": "manual-note-writes-plugin-data",
+      "runtimeId": "my-plugin/note",
+      "message": "optional player message",
+      "payload": {
+        "title": "Test checkpoint",
+        "text": "The runtime records deterministic plugin state."
+      },
+      "userSettings": {
+        "enabled": true
+      },
+      "llmResponses": [
+        {
+          "content": null,
+          "finishReason": "tool_calls",
+          "toolCalls": [
+            {
+              "id": "tc-runtime-done",
+              "name": "runtime-done",
+              "arguments": "{\"reason\":\"recorded\"}"
+            }
+          ],
+          "usage": { "inputTokens": 1, "outputTokens": 1 }
+        }
+      ],
+      "expect": {
+        "runtimeResults": [
+          { "runtimeId": "my-plugin/note", "status": "success" }
+        ],
+        "pluginData": [{ "namespace": "notes", "field": "title" }],
+        "logs": ["note.recorded"]
+      }
+    }
+  ]
+}
+```
+
+支持的 `expect`：
+
+| 字段                 | 断言                                          |
+| -------------------- | --------------------------------------------- |
+| `runtimeResults[]`   | runtime id、status、`errorIncludes`           |
+| `events[]`           | runtime output events topic                   |
+| `logs[]`             | `_logs` namespace 中的 `message`              |
+| `pluginData[]`       | namespace/key/status/field                    |
+| `assetGenerations[]` | output `assetGenerations[]` 的 modality/field |
+
+### Expected failure
+
+mock 模式里，图像/音频插件通常会走到 provider URL、SSRF guard 或 HTTP 层，合理失败也可以是绿色 case：
+
+```json
+{
+  "name": "invalid-base-url-is-visible",
+  "runtimeId": "my-plugin/image-generator",
+  "payload": { "prompt": "a harbor" },
+  "expect": {
+    "runtimeResults": [
+      {
+        "runtimeId": "my-plugin/image-generator",
+        "status": "failed",
+        "errorIncludes": "invalid image baseUrl"
+      }
+    ],
+    "pluginData": [{ "namespace": "images", "status": "failed" }]
+  }
+}
+```
+
+### 保存图片 artifacts
+
+如果 plugin-data value 里有 MediaRef 字段（默认 `ref`），可以导出测试图片：
+
+```json
+{
+  "name": "image-live",
+  "runtimeId": "my-plugin/image-generator",
+  "mode": "live",
+  "payload": { "prompt": "a harbor" },
+  "artifacts": {
+    "saveImages": {
+      "namespace": "images",
+      "field": "ref",
+      "dir": "tests/tmp"
+    }
+  },
+  "expect": {
+    "assetGenerations": [{ "modality": "image", "field": "ref" }]
+  }
+}
+```
+
+---
+
+## L5 — HTTP E2E
+
+只在准备发布或怀疑 HTTP/SSE/session store 路径有问题时跑。需要服务端和 `.env.llm`。
+
+```bash
+npx tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts \
+  --slot e2e_local \
+  --turns 3 \
+  --plugins my-plugin
+```
+
+Artifacts 写到 `debugs/e2e-logs/`，包含 prompt、LLM raw response、runtime results、proposals、commit 结果。详细参数看 `docs/guide/e2e-plugin-verify.md`。
 
 ---
 
 ## 决策树
 
-```
+```text
 是否包含 PLUGIN.md?
 └─ 是 → L1 必做
 
-是否含 tools/*.js / handler.js / hooks/*.js?
-└─ 是 → L2 必做(每个文件至少一个 happy path 测试)
+是否包含 tools/*.js / handler.js / hooks/*.js / lib provider wire?
+└─ 是 → L2 至少覆盖 happy path + 一个错误路径
 
-是否含 input.inject / 多 runtime / event 链?
-└─ 是 → L3 写一个跑通整 turn 的测试
+是否包含 agent runtime tool loop / input.inject / 多 runtime / event 链?
+└─ 是 → L3 或 L4 mock 至少跑一个完整 turn/case
 
-是否准备发布(对外宣称稳定)?
-└─ 是 → L4 跑一次,人工看 trace
+是否是 ~/.covel/plugins 第三方插件或需要手动 runtime 调试?
+└─ 是 → L4 `pnpm test:runtime -- <plugin> --plugins-dir <path> --pretty`
+
+是否准备发布并宣称 provider/live 能力可用?
+└─ 是 → L4 live 或 L5 跑一次，人工查看 artifact/trace
 ```
 
-测试**不是**门禁,但 L1+L2 的失败说明插件有破坏性问题,**必须**修。L3 失败可能只是 MockLLM 配错了,先看是真 bug 还是 fixture bug。
+测试失败处理：
+
+- L1 失败：修 manifest，不要继续生成其它文件。
+- L2 失败：优先修插件纯逻辑或 mock context。
+- L3 失败：先看 `MockLLM.responses[]` 和 tool call `arguments` 是否是 JSON 字符串。
+- L4 mock 失败：看 `runtimeResults[].error`、`pluginData._logs`、`jobs`。
+- L4 live / L5 失败：先确认 `llm.toml` slot、`~/.covel/keys.env`、provider baseUrl 和网络。

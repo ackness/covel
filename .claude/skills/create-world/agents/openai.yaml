@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Covel World"
+  short_description: "Generate and validate Covel world packs"
+  default_prompt: "Use $create-world to create a Covel world pack from my setting idea."

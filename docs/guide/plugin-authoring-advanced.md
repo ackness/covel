@@ -601,5 +601,5 @@ my-plugin/
 
 - 想看所有已实现插件的完整 frontmatter、调度层级、本体设计？ → [插件注册表 `docs/reference/plugins.md`](../reference/plugins.md)
 - 想写交互 UI 面板的 json-render spec？ → [插件 UI 与 runtime 指南](./plugin-ui-runtime-guidelines.md)
-- 想跑端到端 API harness + 真实 LLM 验证？ → [插件测试指南](./plugin-testing.md) · [E2E plugin verify](./e2e-plugin-verify.md)
+- 想跑 runtime cases、HTTP E2E 或真实 LLM 验证？ → [插件测试指南](./plugin-testing.md) · [E2E plugin verify](./e2e-plugin-verify.md)
 - 想回到入口？ → [插件开发指南 · 索引](./plugin-authoring.md)

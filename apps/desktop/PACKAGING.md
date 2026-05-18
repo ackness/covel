@@ -1,6 +1,6 @@
 # Packaging & Signing — Covel Desktop
 
-This document describes how to build signed, notarized Covel desktop artifacts for macOS, Windows, and Linux.
+This document describes how to build signed, notarized Covel desktop artifacts. The official GitHub Release workflow currently publishes macOS Apple Silicon artifacts; the local electron-builder config can still build Windows and Linux artifacts on their native platforms.
 
 ## One-off prep
 
@@ -49,7 +49,7 @@ APPLE_TEAM_ID=ABCDE12345 \
   pnpm --filter @covel/desktop dist:mac
 ```
 
-Artifacts land in `release/` as `.dmg` and `.zip` for both `arm64` and `x64`.
+Artifacts land in `release/electron/` as `.dmg` and `.zip`. The current release config targets `arm64`.
 
 ### Entitlements
 
@@ -156,11 +156,14 @@ The wiring lives in `apps/desktop/src/auto-updater.ts`; `main.ts` only calls
 
 ## Release checklist
 
-- [ ] Bump `apps/desktop/package.json` `version`
+- [ ] Bump workspace package versions, including root `package.json` and `apps/desktop/package.json`
+- [ ] Update `docs/CHANGELOG.md` with the target version
 - [ ] Bump `ONBOARDING_VERSION` in `onboarding-wizard.tsx` if the tutorial changed
+- [ ] Run `pnpm release:preflight`
 - [ ] Run `pnpm lint` and `pnpm test` green
 - [ ] Run `pnpm --filter @covel/desktop build`
 - [ ] Sign + notarize per the instructions above
 - [ ] Smoke test on a clean machine (not your dev machine)
 - [ ] Tag the release: `git tag v$(node -p "require('./apps/desktop/package.json').version")`
-- [ ] Upload artifacts to the release page
+- [ ] Push `main` and the `v*` tag; the release workflow publishes the GitHub Release
+- [ ] Verify the published release notes and `.dmg` / `.zip` assets

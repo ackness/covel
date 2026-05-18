@@ -4,13 +4,13 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.2-8b5cf6)](https://github.com/AcKnEsS/covel/releases)
+[![Version](https://img.shields.io/badge/version-v0.0.3-8b5cf6)](https://github.com/AcKnEsS/covel/releases/tag/v0.0.3)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)]()
 
 ![Covel demo](./.assets/images/demo.gif)
 
-> ⚠️ **早期阶段**：API、数据格式、插件 frontmatter 都会随版本破坏性变化。目前只有 macOS Apple Silicon 预编译包。请勿存放重要存档。
+> **当前公开版本：v0.0.3。** Covel 仍处于早期阶段：API、数据格式、插件 frontmatter 可能随版本变化。官方预编译包当前面向 macOS Apple Silicon。
 
 ---
 
@@ -33,13 +33,15 @@ Covel 是一款由 AI 驱动的角色扮演游戏 —— 叙事、NPC 关系、�
 
 ### 直接玩
 
-到 [Releases](https://github.com/AcKnEsS/covel/releases) 下载最新的 **macOS Apple Silicon** 安装包 —— `Covel-electron-<version>-mac-arm64.dmg`。
+到 [GitHub Releases](https://github.com/AcKnEsS/covel/releases/tag/v0.0.3) 下载官方 **v0.0.3 macOS Apple Silicon** 安装包 —— `Covel-electron-0.0.3-mac-arm64.dmg`。滚动版本列表在 [Releases](https://github.com/AcKnEsS/covel/releases)。
 
 打开 Settings 填一个 LLM API Key，从四个示例世界（`cloudmere` / `mistport` / `neonridge` / `haruka-academy`）里挑一个，就能开始玩。
 
+v0.0.3 重点收敛 world data 导入、生成世界持久化、插件元数据、存储后端边界和 Electron 发布链路。完整记录见 [`docs/CHANGELOG.md#003---2026-05-11`](./docs/CHANGELOG.md#003---2026-05-11)。
+
 数据存放在 `~/.covel/` —— 配置、Key、SQLite、自定义世界、日志都在这。完整字段 → [`docs/guide/desktop-config.md`](./docs/guide/desktop-config.md)。
 
-> Windows / Intel Mac / Linux 暂无官方包，需要自行构建。当前代码库只保留 Electron 桌面壳。
+> Windows / Intel Mac / Linux 请从源码构建。当前代码库只保留 Electron 桌面壳。
 
 ### 从源码跑
 
@@ -56,7 +58,7 @@ pnpm dev                            # web :5173 + server :3001 (SQLite)
 
 ## 做自己的玩法
 
-你不必写代码。本仓库内置了**两个 Claude Code skill**，把一段对话变成可用的插件或世界包：
+你可以通过本仓库内置的**两个 Claude Code skill**，把一段对话变成可用的插件或世界包：
 
 - **`/create-plugin`** —— 描述你想要的 agent，skill 会生成一份 `PLUGIN.md`（frontmatter + skill prompt）和最小化的 `package.json`。
 - **`/create-world`** —— 描述一个设定，skill 会产出可以直接放进 `~/.covel/worlds/` 的 `world.yaml` + `WORLD.md`。
@@ -147,7 +149,7 @@ pnpm workspaces + Turborepo · ESM-only · TypeScript strict。完整包清单 �
 ## 贡献与发布
 
 - Issue / PR 都欢迎，先读 [`docs/CONTRIBUTING.md`](./docs/CONTRIBUTING.md)。
-- 发版由 Git tag 驱动：推 `v*` tag → [`.github/workflows/release.yml`](./.github/workflows/release.yml) 自动在 macOS runner 构建 Electron arm64 安装包并发布 Release。
+- 发版由 Git tag 驱动：推 `v*` tag → [`.github/workflows/release.yml`](./.github/workflows/release.yml) 自动在 macOS runner 构建 Electron macOS arm64 `.dmg` 和 `.zip`，然后发布 GitHub Release。
 
 ## License
 

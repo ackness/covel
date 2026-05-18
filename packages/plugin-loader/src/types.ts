@@ -79,10 +79,10 @@ export interface PluginSummary {
  * This is a narrow, structural projection of `@covel/ai-provider`'s full
  * `Gateway` surface. Only the calls plugins actually need are exposed —
  * `generateText` (chat completions), `generateObject` (structured output)
- * and `generateImage` (image generation). Streaming / embeddings / speech /
- * transcription are intentionally absent; if a plugin truly needs them it
- * should declare an agent runtime and use the kernel's LLM pipeline via
- * manifest `input.inject`.
+ * and `resolveSlot` (provider configuration for plugin-owned wires).
+ * Image, audio, embeddings, speech, transcription, and streaming helpers are
+ * intentionally absent; plugins that need wire-level control should resolve a
+ * slot, use the vetted utilities, and store media through `ctx.media`.
  *
  * `presetId` is a slot name (e.g. `default`, `image`, `fast`). `undefined`
  * resolves to the framework default for the relevant modality. API keys /
@@ -142,9 +142,8 @@ export interface PluginRuntimeGateway {
    * back `{ baseUrl, apiKey, model, metadata, … }` — your handler then
    * uses any SDK or raw fetch you like.
    *
-   * Prefer this over `generateImage`/`embed` when you need wire-level
-   * control (custom polling, novel response shape, vendor-specific
-   * params). The high-level helpers stay for the most common cases.
+   * Use this for wire-level control (custom polling, novel response shape,
+   * vendor-specific params, or non-text modalities).
    */
   resolveSlot(input: {
     readonly presetId?: string;

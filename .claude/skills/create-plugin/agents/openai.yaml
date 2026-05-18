@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Covel Plugin"
+  short_description: "Generate and validate Covel plugins"
+  default_prompt: "Use $create-plugin to create a Covel plugin from my gameplay idea."

@@ -95,7 +95,7 @@ input:
 - `execution: background` 让 wan2.x 这种耗时任务不阻塞 UI
 - 事件链：agent 输出 → event → function runtime
 - 玩家可调 `userSettings`
-- 通过 `ctx.gateway.generateImage` 调 slot
+- 通过 `ctx.gateway.resolveSlot` 取 slot 配置，自管 provider wire 后落 `ctx.media`
 
 ### 目录结构
 
@@ -136,7 +136,7 @@ model: fast
 outputKind: plugin
 trigger:
   type: manual
-execution: sync                 # 生成 prompt 很快,不需要后台
+execution: sync # 生成 prompt 很快,不需要后台
 input:
   inject:
     - from: narrator
@@ -153,8 +153,11 @@ userSettings:
     default: plain
     label: { zh: "提示词模式", en: "Prompt mode" }
     options:
-      - { value: plain,      label: { zh: "纯文本", en: "Plain" } }
-      - { value: image-json, label: { zh: "结构化 JSON", en: "Structured JSON" } }
+      - { value: plain, label: { zh: "纯文本", en: "Plain" } }
+      - {
+          value: image-json,
+          label: { zh: "结构化 JSON", en: "Structured JSON" },
+        }
 ui:
   right: [./ui/generate-button.json]
 ---
@@ -175,21 +178,23 @@ ui:
   "alwaysRender": true,
   "view": {
     "component": "Card",
-    "children": [{
-      "component": "Button",
-      "props": {
-        "label": { "zh": "生成图片", "en": "Generate image" },
-        "variant": "primary"
-      },
-      "on": {
-        "click": {
-          "action": "invokeRuntime",
-          "params": {
-            "runtimeId": "dashscope-image-gen/prompt-generator"
+    "children": [
+      {
+        "component": "Button",
+        "props": {
+          "label": { "zh": "生成图片", "en": "Generate image" },
+          "variant": "primary"
+        },
+        "on": {
+          "click": {
+            "action": "invokeRuntime",
+            "params": {
+              "runtimeId": "dashscope-image-gen/prompt-generator"
+            }
           }
         }
       }
-    }]
+    ]
   }
 }
 ```
@@ -205,7 +210,7 @@ description: 消费 image.generate.requested 事件,调 DashScope wan2.x 生成�
 priority: 610
 runtimeType: function
 handler: ./handler.js
-execution: background             # wan2.x 异步任务,不阻塞 UI
+execution: background # wan2.x 异步任务,不阻塞 UI
 trigger:
   type: event
   topic: image.generate.requested
@@ -215,8 +220,14 @@ userSettings:
     default: wan2.7-image-pro
     label: { zh: "模型", en: "Model" }
     options:
-      - { value: wan2.7-image-pro,   label: { zh: "wan2.7 Pro", en: "wan2.7 Pro" } }
-      - { value: wan2.5-image-turbo, label: { zh: "wan2.5 Turbo", en: "wan2.5 Turbo" } }
+      - {
+          value: wan2.7-image-pro,
+          label: { zh: "wan2.7 Pro", en: "wan2.7 Pro" },
+        }
+      - {
+          value: wan2.5-image-turbo,
+          label: { zh: "wan2.5 Turbo", en: "wan2.5 Turbo" },
+        }
   - key: imageSize
     type: select
     default: "1024*1024"
@@ -237,22 +248,29 @@ ui:
 /**
  * DashScope wan2.x 文生图 function handler.
  *
- * 由 event trigger 激活,通过 ctx.gateway 调 image slot 生成图片,
- * 把结果写到插件的 `images` 命名空间。
+ * 由 event trigger 激活,通过 ctx.gateway.resolveSlot 取 image slot 配置,
+ * 自管 provider wire 生成图片,落 MediaStore,再把 MediaRef 写到
+ * 插件的 `images` 命名空间。
  */
 // 单参签名 —— 运行时只传 ctx。返回普通 JSON:框架识别 pluginData[] /
 // events[] / statePatches[] 等字段,normalizeOutput 转成 Proposal 走
 // commit pipeline。其它字段作为 runtime output 持久化供下游 runtime 读取。
+import { generateDashScopeImage } from "../../lib/dashscope.js";
+
 export default async function handler(ctx) {
   const prompt = ctx.triggerEvent?.data?.prompt ?? ctx.manualPayload?.prompt;
-  if (typeof prompt !== 'string' || prompt.length === 0) {
+  if (typeof prompt !== "string" || prompt.length === 0) {
     // 失败时也通过 pluginData 写入一条状态记录,前端 gallery 看到即可展示 failed。
     return {
       pluginData: [
         {
-          namespace: 'images',
+          namespace: "images",
           key: ctx.turnId,
-          value: { status: 'failed', error: 'missing prompt', completedAt: new Date().toISOString() },
+          value: {
+            status: "failed",
+            error: "missing prompt",
+            completedAt: new Date().toISOString(),
+          },
         },
       ],
     };
@@ -262,52 +280,108 @@ export default async function handler(ctx) {
   // 已把 manifest 默认和玩家值合并好)。按钮透传 ctx.manualPayload
   // 作为临时覆盖。
   const settings = ctx.userSettings ?? {};
-  const model = ctx.manualPayload?.model ?? settings.model ?? 'wan2.7-image-pro';
-  const imageSize = ctx.manualPayload?.imageSize ?? settings.imageSize ?? '1024*1024';
+  const model =
+    ctx.manualPayload?.model ?? settings.model ?? "wan2.7-image-pro";
+  const imageSize =
+    ctx.manualPayload?.imageSize ?? settings.imageSize ?? "1024*1024";
   const startedAt = new Date().toISOString();
 
   try {
-    // audit F4: PluginRuntimeGateway.generateImage 接受 model per-call
-    // 覆盖。优先用顶层 `model` 字段而不是塞进 providerRequestMetadata,
-    // 这样 wan2.7-image-pro / wan2.5-image-turbo 等同 provider 变体
-    // 不需要新建 preset 就能切换。
-    const { images } = await ctx.gateway.generateImage({
-      presetId: 'image',
-      prompt,
-      ...(model ? { model } : {}),
-      providerRequestMetadata: {
-        size: imageSize,
-        // wan2.7-image / wan2.7-image-pro 不接受 negative_prompt,
-        // 适配器会按模型 id 自动剥离;其他 wan2.x 透传(audit F5)。
-      },
+    const slot = ctx.gateway.resolveSlot({
+      presetId: "image",
+      fallbackTag: "image",
     });
-    const first = images?.[0];
-    // audit F7: DashScope 异步任务的结果 URL 24 小时后会失效。把
-    // expiresAt 一并写入记录,UI 可以基于该时间戳显示「需要重新生成」。
+    if (!slot?.baseUrl || !slot?.apiKey) {
+      return {
+        status: "failed",
+        error: "image slot missing baseUrl/apiKey",
+        pluginData: [
+          {
+            namespace: "images",
+            key: ctx.turnId,
+            value: {
+              status: "failed",
+              prompt,
+              error: "image slot missing baseUrl/apiKey",
+              startedAt,
+            },
+          },
+        ],
+      };
+    }
+
+    const guard = ctx.utils.validateBaseUrl(slot.baseUrl);
+    if (!guard.ok) {
+      return {
+        status: "failed",
+        error: `invalid image baseUrl: ${guard.reason}`,
+        pluginData: [
+          {
+            namespace: "images",
+            key: ctx.turnId,
+            value: {
+              status: "failed",
+              prompt,
+              error: `invalid image baseUrl: ${guard.reason}`,
+              startedAt,
+            },
+          },
+        ],
+      };
+    }
+
+    // 自管 provider wire。真实 DashScope wan2.x 通常是 submit + poll;
+    // 生产插件把 provider 细节放到 lib/dashscope.js,handler 只处理
+    // Covel ctx / MediaRef / pluginData 契约。
+    const generated = await generateDashScopeImage({
+      baseUrl: slot.baseUrl,
+      apiKey: slot.apiKey,
+      model,
+      prompt,
+      imageSize,
+    });
+
+    const ref = generated.url
+      ? await ctx.media.ingestUrl(generated.url, {
+          allowedMimes: ["image/png", "image/jpeg", "image/webp"],
+        })
+      : await ctx.media.put(
+          generated.bytes,
+          generated.mimeType ?? "image/png",
+          {
+            plugin: "dashscope-image-gen",
+            turnId: ctx.turnId,
+            prompt,
+            model,
+            imageSize,
+          },
+        );
+
     const completedAt = new Date().toISOString();
-    const hasRemoteUrl = typeof first?.url === 'string' && first.url.length > 0;
-    const expiresAt = hasRemoteUrl
+    const expiresAt = generated.url
       ? new Date(Date.parse(completedAt) + 24 * 60 * 60 * 1000).toISOString()
       : null;
     return {
-      url: first?.url ?? null,
-      mimeType: first?.mimeType ?? 'image/png',
+      ref,
+      mimeType: ref.mime,
       pluginData: [
         {
-          namespace: 'images',
+          namespace: "images",
           key: ctx.turnId,
           value: {
-            status: 'done',
+            status: "done",
             prompt,
             imageSize,
             startedAt,
             completedAt,
-            url: first?.url ?? null,
-            base64: first?.base64 ?? null,
-            mimeType: first?.mimeType ?? 'image/png',
+            ref,
+            mimeType: ref.mime,
             ...(expiresAt ? { expiresAt } : {}),
           },
         },
+      ],
+      assetGenerations: [
+        { ref, modality: "image", meta: { prompt, imageSize, model } },
       ],
     };
   } catch (err) {
@@ -316,10 +390,10 @@ export default async function handler(ctx) {
       error: msg,
       pluginData: [
         {
-          namespace: 'images',
+          namespace: "images",
           key: ctx.turnId,
           value: {
-            status: 'failed',
+            status: "failed",
             prompt,
             error: msg,
             startedAt,
@@ -347,27 +421,36 @@ export default async function handler(ctx) {
   "view": {
     "component": "Stack",
     "props": { "gap": "sm" },
-    "children": [{
-      "component": "CardList",
-      "repeat": { "statePath": "/entries", "key": "key" },
-      "children": [{
-        "component": "Card",
+    "children": [
+      {
+        "component": "CardList",
+        "repeat": { "statePath": "/entries", "key": "key" },
         "children": [
           {
-            "component": "Image",
-            "props": {
-              "src":      { "$item": "value/url" },
-              "base64":   { "$item": "value/base64" },
-              "mimeType": { "$item": "value/mimeType" },
-              "alt":      { "$item": "value/prompt" },
-              "aspectRatio": "1/1",
-              "rounded": "md"
-            }
-          },
-          { "component": "Text", "props": { "content": { "$item": "value/prompt" }, "size": "xs", "variant": "muted" } }
+            "component": "Card",
+            "children": [
+              {
+                "component": "Image",
+                "props": {
+                  "ref": { "$item": "value/ref" },
+                  "alt": { "$item": "value/prompt" },
+                  "aspectRatio": "1/1",
+                  "rounded": "md"
+                }
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "$item": "value/prompt" },
+                  "size": "xs",
+                  "variant": "muted"
+                }
+              }
+            ]
+          }
         ]
-      }]
-    }]
+      }
+    ]
   }
 }
 ```
@@ -379,7 +462,7 @@ export default async function handler(ctx) {
 - 按钮点击 → `POST /api/sessions/:id/plugin-rpc` `{ pluginId, runtimeId: ".../prompt-generator" }`（框架 `invokeRuntime` handler）
 - agent runtime 成功后通过 `output.events` 发出 `image.generate.requested`
 - event trigger 拉起 image-generator,`execution: background` → HTTP 立即返回 jobId(框架内部 `_jobs/<jobId>` 记录),handler 在后台跑
-- handler 写 `plugin-data[images][turnId] = {status: 'done', url, ...}`
+- handler 写 `plugin-data[images][turnId] = {status: 'done', ref, ...}` 并返回 `assetGenerations[]`
 - store-proxy 自动广播 `plugin-data.changed` SSE
 - 前端 `PluginPanel` 重新渲染 `gallery.json`
 
@@ -389,14 +472,13 @@ export default async function handler(ctx) {
 
 ```toml
 [covel.image]
-provider = "openai"          # 适配器选择 openai-chat 家族
+provider = "dashscope"       # 插件自管 wire 时主要用于标识和 key 解析
 baseUrl = "https://dashscope.aliyuncs.com"
-imageApi = "dashscope-wan"   # 走 DashScope 原生 wan2.x 异步文生图
 model = "wan2.7-image-pro"
 tag = "image"
 ```
 
-在 `keys.env`（desktop）或 localStorage（web）配 `DASHSCOPE_API_KEY`。请求时会按 `tag=image` 的 fallback 链自动路由。
+在 `keys.env`（desktop）或 localStorage（web）配 `DASHSCOPE_API_KEY`。handler 通过 `ctx.gateway.resolveSlot({ presetId: 'image', fallbackTag: 'image' })` 读取 `baseUrl/apiKey/model`，再自管 DashScope submit + poll。
 
 ---
 
@@ -437,11 +519,12 @@ tag = "image"
    const ref = await ctx.media.put(bytes, mime, { plugin: 'mimo-tts', turnId, ... });
    return {
      pluginData: [{ namespace: 'tracks', key: trackId, value: { ref, status: 'done', ... } }],
-     assets:     [{ ref, modality: 'audio', meta: { turnId, model, voice, ... } }],
+     assetGenerations: [{ ref, modality: 'audio', meta: { turnId, model, voice, ... } }],
    };
    ```
 
-   `assets[]` 让框架 emit `asset.generate` proposal,trace + SSE + render 链路自动广播。
+   `assetGenerations[]` 让框架 emit `asset.generate` proposal,trace + SSE + render 链路自动广播。
+
 4. **UI 渲染靠 `<Media as="audio">`**。json-render spec:
 
    ```json
@@ -456,6 +539,7 @@ tag = "image"
    ```
 
    浏览器原生 `<audio controls>` 就给了播放/暂停/时间轴拖动;overflow 菜单可下载,右键改速度。autoplay / 速度按钮 / 流式播放都是后续路线图(README 已写明)。
+
 5. **按钮放消息流**。manual runtime 的 `ui.message: [./ui/play-button.json]` 把按钮渲染到剧情泡里,跟「插入图像」交互一致;auto runtime 的 `ui.right: [./ui/audio-tab.json]` 把全部音轨列表放右侧 Tab。
 
 ### Slot 配置（用户侧）
@@ -473,23 +557,23 @@ tag      = "speech"
 
 ---
 
-## 现有插件一览（截至 v0.0.1）
+## 现有插件一览（截至 v0.0.3）
 
 来源:`plugins/**/PLUGIN.md` 真实 frontmatter。priority 数字若与本表对不上,以仓库实际为准。
 
-| Runtime | 优先级 | 触发 | 类型 | 说明 |
-|---------|--------|------|------|------|
-| pregame | 10 | scheduled(首轮) | function | 游戏初始化 |
-| world-init/schema-gen | 40 | scheduled(首轮) | agent + guard | 世界维度生成,guard 已存在则跳过 |
-| char-creator/player-init | 50 | scheduled(首轮) | agent | 玩家建角表单 |
-| npc-graph/rag-retriever | 400 | auto | function | 给 narrator 拉 NPC 结构化检索 |
-| narrator | 500 | auto | agent | 主叙事 |
-| codex | 600 | auto | agent | 知识图鉴 |
-| guide | 600 | auto | agent | 行动引导 |
-| npc-graph/extractor | 600 | auto | agent | NPC 关系抽取 |
-| char-creator/character-tracker | 600 | auto | agent | 角色状态跟踪 |
-| memory | — | UI only | UI | 仅前端面板 |
-| dashscope-image-gen/prompt-generator | 600 | manual | agent | 手动触发 prompt 生成(`~/.covel/plugins/`,样例) |
-| dashscope-image-gen/image-generator | 610 | event | function (background) | 调 DashScope wan2.x 生图(`~/.covel/plugins/`,样例) |
-| mimo-tts/auto-narrate | 700 | auto + upstream:[narrator] | function | narrator 后自动 TTS,写 tracks namespace(`~/.covel/plugins/`,样例) |
-| mimo-tts/manual-narrate | 750 | manual | function (background) | 手动「朗读」按钮,ui.message 嵌入消息流(`~/.covel/plugins/`,样例) |
+| Runtime                              | 优先级 | 触发                       | 类型                  | 说明                                                              |
+| ------------------------------------ | ------ | -------------------------- | --------------------- | ----------------------------------------------------------------- |
+| pregame                              | 10     | scheduled(首轮)            | function              | 游戏初始化                                                        |
+| world-init/schema-gen                | 40     | scheduled(首轮)            | agent + guard         | 世界维度生成,guard 已存在则跳过                                   |
+| char-creator/player-init             | 50     | scheduled(首轮)            | agent                 | 玩家建角表单                                                      |
+| npc-graph/rag-retriever              | 400    | auto                       | function              | 给 narrator 拉 NPC 结构化检索                                     |
+| narrator                             | 500    | auto                       | agent                 | 主叙事                                                            |
+| codex                                | 600    | auto                       | agent                 | 知识图鉴                                                          |
+| guide                                | 600    | auto                       | agent                 | 行动引导                                                          |
+| npc-graph/extractor                  | 600    | auto                       | agent                 | NPC 关系抽取                                                      |
+| char-creator/character-tracker       | 600    | auto                       | agent                 | 角色状态跟踪                                                      |
+| memory                               | —      | UI only                    | UI                    | 仅前端面板                                                        |
+| dashscope-image-gen/prompt-generator | 600    | manual                     | agent                 | 手动触发 prompt 生成(`~/.covel/plugins/`,样例)                    |
+| dashscope-image-gen/image-generator  | 610    | event                      | function (background) | 调 DashScope wan2.x 生图(`~/.covel/plugins/`,样例)                |
+| mimo-tts/auto-narrate                | 700    | auto + upstream:[narrator] | function              | narrator 后自动 TTS,写 tracks namespace(`~/.covel/plugins/`,样例) |
+| mimo-tts/manual-narrate              | 750    | manual                     | function (background) | 手动「朗读」按钮,ui.message 嵌入消息流(`~/.covel/plugins/`,样例)  |

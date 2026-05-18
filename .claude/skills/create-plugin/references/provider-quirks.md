@@ -85,7 +85,7 @@ export default async function handler(ctx) {
   return {
     status: 'done',
     pluginData: [{ namespace: 'tracks', key: ctx.turnId, value: { ref, ... } }],
-    assets:     [{ ref, modality: 'audio', meta: {...} }],
+    assetGenerations: [{ ref, modality: 'audio', meta: {...} }],
   };
 }
 
@@ -94,39 +94,39 @@ function failed(msg) { return { status: 'failed', error: msg }; }
 
 ## 鉴权头差异表（常见 provider）
 
-| Provider | header | 示例 |
-|---|---|---|
-| OpenAI / DeepSeek / 大多数兼容 | `Authorization` | `Bearer sk-...` |
-| Anthropic | `x-api-key` + `anthropic-version` | `x-api-key: sk-ant-...` |
-| Xiaomi MiMo | `api-key` | `api-key: tp-...` |
-| DashScope (Aliyun) | `Authorization` + 异步可能加 `X-DashScope-Async: enable` | — |
-| Google / Vertex | `Authorization` (Bearer 短期 token) | OAuth2 流程，复杂 |
-| Azure OpenAI | `api-key` | 但 path 含 deployment / version 参数 |
+| Provider                       | header                                                   | 示例                                 |
+| ------------------------------ | -------------------------------------------------------- | ------------------------------------ |
+| OpenAI / DeepSeek / 大多数兼容 | `Authorization`                                          | `Bearer sk-...`                      |
+| Anthropic                      | `x-api-key` + `anthropic-version`                        | `x-api-key: sk-ant-...`              |
+| Xiaomi MiMo                    | `api-key`                                                | `api-key: tp-...`                    |
+| DashScope (Aliyun)             | `Authorization` + 异步可能加 `X-DashScope-Async: enable` | —                                    |
+| Google / Vertex                | `Authorization` (Bearer 短期 token)                      | OAuth2 流程，复杂                    |
+| Azure OpenAI                   | `api-key`                                                | 但 path 含 deployment / version 参数 |
 
 > **永远不要硬编码 apiKey**——一律从 `slot.apiKey` 取。slot 由框架按 user 的 `[covel.<X>].provider` + `keys.env` 解析。
 
 ## Body 形态差异表（常见踩雷）
 
-| Provider | 写法 | 注意 |
-|---|---|---|
-| OpenAI / 多数兼容 | `messages: [{role:'user', content}]` | 标准 |
-| Xiaomi MiMo TTS | `messages: [{role:'assistant', content}]` ⚠️ | 文本要塞在 **assistant** role |
-| Anthropic | `messages` + 顶级 `system` | 不允许 `messages` 里有 system role |
-| DashScope wan2.x | `input.messages: [{content:[{text}]}]` | 嵌套两层 |
-| Image (DashScope async) | submit 拿 `task_id`，poll `/api/v1/tasks/<id>` | 24h URL 过期，要 ingestUrl 入库 |
+| Provider                | 写法                                           | 注意                               |
+| ----------------------- | ---------------------------------------------- | ---------------------------------- |
+| OpenAI / 多数兼容       | `messages: [{role:'user', content}]`           | 标准                               |
+| Xiaomi MiMo TTS         | `messages: [{role:'assistant', content}]` ⚠️   | 文本要塞在 **assistant** role      |
+| Anthropic               | `messages` + 顶级 `system`                     | 不允许 `messages` 里有 system role |
+| DashScope wan2.x        | `input.messages: [{content:[{text}]}]`         | 嵌套两层                           |
+| Image (DashScope async) | submit 拿 `task_id`，poll `/api/v1/tasks/<id>` | 24h URL 过期，要 ingestUrl 入库    |
 
 ## 响应解析差异表
 
-| 内容类型 | 在响应的什么字段 |
-|---|---|
-| 文本（OpenAI 兼容） | `choices[0].message.content` |
-| 文本（Anthropic） | `content[0].text` |
-| 流式文本（SSE） | `data: {...}` chunks，每个 chunk `choices[0].delta.content` |
-| 音频 base64 | `choices[0].message.audio.data`（OpenAI audio API 风格） |
-| 图像 url（同步） | `data[0].url` 或 `images[0].url` 或 `output.results[0].url` |
-| 图像 base64 | `data[0].b64_json` 或 `images[0].base64` |
-| Async 任务 id | `output.task_id` |
-| Async 任务结果 | `output.task_status` (`SUCCEEDED`/`FAILED`/`PENDING`/`RUNNING`) + `output.results[]` |
+| 内容类型            | 在响应的什么字段                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| 文本（OpenAI 兼容） | `choices[0].message.content`                                                         |
+| 文本（Anthropic）   | `content[0].text`                                                                    |
+| 流式文本（SSE）     | `data: {...}` chunks，每个 chunk `choices[0].delta.content`                          |
+| 音频 base64         | `choices[0].message.audio.data`（OpenAI audio API 风格）                             |
+| 图像 url（同步）    | `data[0].url` 或 `images[0].url` 或 `output.results[0].url`                          |
+| 图像 base64         | `data[0].b64_json` 或 `images[0].base64`                                             |
+| Async 任务 id       | `output.task_id`                                                                     |
+| Async 任务结果      | `output.task_status` (`SUCCEEDED`/`FAILED`/`PENDING`/`RUNNING`) + `output.results[]` |
 
 ## 排查不熟悉 provider 的标准流程
 
@@ -168,13 +168,17 @@ my-plugin/
 
 ```js
 async function recordFailure(ctx, key, message) {
-  const value = { status: 'failed', error: message, completedAt: new Date().toISOString() };
-  await ctx.pluginData.set('tracks', key, value);
-  await ctx.logger.error('failed', { key, error: message });
-  return {
-    status: 'failed',
+  const value = {
+    status: "failed",
     error: message,
-    pluginData: [{ namespace: 'tracks', key, value }],
+    completedAt: new Date().toISOString(),
+  };
+  await ctx.pluginData.set("tracks", key, value);
+  await ctx.logger.error("failed", { key, error: message });
+  return {
+    status: "failed",
+    error: message,
+    pluginData: [{ namespace: "tracks", key, value }],
   };
 }
 ```

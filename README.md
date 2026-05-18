@@ -4,13 +4,13 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.2-8b5cf6)](https://github.com/AcKnEsS/covel/releases)
+[![Version](https://img.shields.io/badge/version-v0.0.3-8b5cf6)](https://github.com/AcKnEsS/covel/releases/tag/v0.0.3)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)]()
 
 ![Covel demo](./.assets/images/demo.gif)
 
-> ⚠️ **Early access.** APIs, data formats, and plugin frontmatter may break between versions. Only macOS Apple Silicon prebuilt binaries ship today. Don't keep anything important in it yet.
+> **Current public release: v0.0.3.** Covel is still early access: APIs, data formats, and plugin frontmatter may change between versions. Official prebuilt binaries currently target macOS Apple Silicon.
 
 ---
 
@@ -33,13 +33,15 @@ Every agent is its own plugin. Disable one, swap one, or write your own.
 
 ### Play it
 
-Grab the latest **macOS Apple Silicon** build from [Releases](https://github.com/AcKnEsS/covel/releases) — `Covel-electron-<version>-mac-arm64.dmg`.
+Grab the official **v0.0.3 macOS Apple Silicon** build from [GitHub Releases](https://github.com/AcKnEsS/covel/releases/tag/v0.0.3) — `Covel-electron-0.0.3-mac-arm64.dmg`. The rolling release list is available at [Releases](https://github.com/AcKnEsS/covel/releases).
 
 Open Settings, paste an LLM API key, pick one of the four sample worlds (`cloudmere` / `mistport` / `neonridge` / `haruka-academy`), and play.
 
+v0.0.3 focuses on world-data import, generated-world persistence, plugin metadata, storage backend boundaries, and the Electron release path. Full notes: [`docs/CHANGELOG.md#003---2026-05-11`](./docs/CHANGELOG.md#003---2026-05-11).
+
 Your data lives at `~/.covel/` — config, keys, SQLite, custom worlds, logs. Full schema → [`docs/guide/desktop-config.en.md`](./docs/guide/desktop-config.en.md).
 
-> Windows / Intel Mac / Linux are not officially shipped — build from source. Electron is the only desktop shell in the current codebase.
+For Windows, Intel Mac, and Linux, build from source. Electron is the only desktop shell in the current codebase.
 
 ### Run from source
 
@@ -56,7 +58,7 @@ Need PostgreSQL, in-memory mode, or alternative paths? See [`docs/guide/env-regi
 
 ## Make your own
 
-You don't need to write code. This repo ships **two Claude Code skills** that turn a conversation into a working plugin or world pack:
+You can create a working plugin or world pack through the repo's **two Claude Code skills**:
 
 - **`/create-plugin`** — describe the agent you want; the skill generates a `PLUGIN.md` (frontmatter + skill prompt) and a minimal `package.json`.
 - **`/create-world`** — describe a setting; the skill produces `world.yaml`, `WORLD.md`, and `data/world.data.yaml` ready to drop into `~/.covel/worlds/`.
@@ -147,7 +149,7 @@ Full index → [`docs/README.md`](./docs/README.md). The in-app debug page at `/
 ## Contributing & releases
 
 - Issues and PRs welcome — please read [`docs/CONTRIBUTING.en.md`](./docs/CONTRIBUTING.en.md) first.
-- Releases are driven by Git tags: pushing a `v*` tag triggers [`.github/workflows/release.yml`](./.github/workflows/release.yml) to build the Electron arm64 installer on a macOS runner and publish a GitHub Release.
+- Releases are driven by Git tags: pushing a `v*` tag triggers [`.github/workflows/release.yml`](./.github/workflows/release.yml) to build the Electron macOS arm64 `.dmg` and `.zip`, then publish a GitHub Release.
 
 ## License
 

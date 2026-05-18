@@ -9,7 +9,7 @@ Thanks for considering contributing! This document outlines the process for cont
 ## Development environment
 
 - Node.js ≥ 22
-- pnpm 10.7+
+- pnpm 10.33.2 (see the root `package.json` `packageManager`)
 - Optional: Docker (for PostgreSQL mode)
 
 ```bash
@@ -79,20 +79,21 @@ Covel releases are driven by Git tags.
 1. All changes merged into `main` with green CI
 2. Update the `[Unreleased]` section at the top of [`CHANGELOG.md`](./CHANGELOG.md) (located under `docs/`) and migrate it to the new version
 3. Unify version numbers across workspace packages (semver: `0.0.1-beta` / `0.1.0` / `1.0.0` …)
-4. Commit and tag:
+4. Run release preflight, commit, and tag:
 
    ```bash
-   git commit -am "chore(release): v0.0.1-beta"
-   git tag v0.0.1-beta
+   pnpm release:preflight
+   git commit -am "chore(release): v0.0.4"
+   git tag v0.0.4
    git push origin main --tags
    ```
 
 5. [`.github/workflows/release.yml`](../.github/workflows/release.yml) will, on any `v*` tag push:
-   - Build `.dmg` / `.zip` on a macOS runner (arm64 + x64)
-   - Build NSIS installer and portable `.exe` on a Windows runner
-   - Aggregate artifacts into a draft GitHub Release
+   - Build Electron macOS arm64 `.dmg` / `.zip` on a macOS runner
+   - Extract the matching release notes from `docs/CHANGELOG.md`
+   - Publish the GitHub Release directly
 
-6. Open the Releases page, review the draft, edit release notes, and publish
+6. Open the Releases page and verify the published release notes and assets
 
 ### Code signing (optional)
 

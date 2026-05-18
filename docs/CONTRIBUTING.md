@@ -9,7 +9,7 @@
 ## 开发环境
 
 - Node.js ≥ 22
-- pnpm 10.7+
+- pnpm 10.33.2（见根目录 `package.json` 的 `packageManager`）
 - 可选：Docker（用于 PostgreSQL 模式）
 
 ```bash
@@ -85,20 +85,21 @@ Covel 的发布由 Git tag 驱动。
    # 版本号遵循 semver：0.0.1-beta / 0.1.0 / 1.0.0 …
    ```
 
-4. 提交并打 tag：
+4. 运行发布前检查，提交并打 tag：
 
    ```bash
-   git commit -am "chore(release): v0.0.1-beta"
-   git tag v0.0.1-beta
+   pnpm release:preflight
+   git commit -am "chore(release): v0.0.4"
+   git tag v0.0.4
    git push origin main --tags
    ```
 
 5. [`.github/workflows/release.yml`](../.github/workflows/release.yml) 将在 `v*` tag 推送时自动：
-   - 在 macOS runner 上构建 `.dmg` / `.zip`（arm64 + x64）
-   - 在 Windows runner 上构建 NSIS installer 与 portable `.exe`
-   - 将所有产物汇总为一个 GitHub Release 草稿
+   - 在 macOS runner 上构建 Electron macOS arm64 `.dmg` / `.zip`
+   - 从 `docs/CHANGELOG.md` 抽取对应版本说明
+   - 直接发布 GitHub Release
 
-6. 在 Releases 页面检查草稿、补充 release notes、发布
+6. 在 Releases 页面检查正式发布页、release notes 与附件
 
 ### 代码签名（可选）
 
