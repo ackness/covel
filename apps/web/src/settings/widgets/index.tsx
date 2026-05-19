@@ -192,6 +192,7 @@ function SliderWidget({ entry }: { entry: SettingEntry }) {
 }
 
 function SecretWidget({ entry }: { entry: SettingEntry }) {
+  const { t } = useTranslation();
   const [value, setValue] = useSetting<string>(entry.key);
   const [visible, setVisible] = useState(false);
   return (
@@ -209,7 +210,9 @@ function SecretWidget({ entry }: { entry: SettingEntry }) {
           size="icon"
           onClick={() => setVisible((v) => !v)}
           className="shrink-0"
-          aria-label={visible ? "Hide" : "Show"}
+          aria-label={
+            visible ? t("settings.hide", "Hide") : t("settings.show", "Show")
+          }
         >
           {visible ? (
             <EyeOff className="w-3.5 h-3.5" />

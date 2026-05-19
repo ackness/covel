@@ -283,7 +283,7 @@ export function RightPanel({
                 {/* Provider switcher — only when 2+ plugins share the group */}
                 {providerPlan.multiProvider && (
                   <div className="flex items-center gap-2 mb-2 ui-meta text-[10px] text-muted-foreground">
-                    <span>provider</span>
+                    <span>{t("session.provider", "provider")}</span>
                     <div className="flex items-center border border-[var(--rule-color)] rounded-[var(--radius-control)] overflow-hidden">
                       {providerPlan.providers.map((p) => {
                         const isActive =
@@ -376,7 +376,9 @@ export function RightPanel({
       {storeBackend && (
         <div className="border-t border-border px-3 py-2 flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0 bg-[color-mix(in_oklab,var(--surface-rail)_82%,var(--surface-page))]">
           <Database className="w-3 h-3" />
-          <span className="ui-meta text-[9px]">Store</span>
+          <span className="ui-meta text-[9px]">
+            {t("session.store", "Store")}
+          </span>
           <Badge
             variant="outline"
             className={`text-[9px] rounded-none ${

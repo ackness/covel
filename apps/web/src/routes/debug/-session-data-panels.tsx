@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import i18n from "@/i18n";
@@ -10,6 +11,7 @@ export function FrameworkDiscoveryPanel({
 }: {
   framework: Record<string, unknown>;
 }) {
+  const { t } = useTranslation();
   const pluginManifest = recordValue(framework.pluginManifest);
   const pluginData = recordValue(framework.pluginData);
   const tools = recordValue(framework.tools);
@@ -19,28 +21,50 @@ export function FrameworkDiscoveryPanel({
     <div className="space-y-2">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
         <DiscoveryMetric
-          label="manifest"
+          label={t("debugger.discovery.manifest", "manifest")}
           values={[
-            `${stringArray(pluginManifest.triggerTypes).length} triggers`,
-            `${stringArray(pluginManifest.outputKinds).length} outputs`,
-            `${stringArray(pluginManifest.uiSlots).join(", ") || "no slots"}`,
+            t("debugger.discovery.triggers", {
+              count: stringArray(pluginManifest.triggerTypes).length,
+              defaultValue: "{{count}} triggers",
+            }),
+            t("debugger.discovery.outputs", {
+              count: stringArray(pluginManifest.outputKinds).length,
+              defaultValue: "{{count}} outputs",
+            }),
+            stringArray(pluginManifest.uiSlots).join(", ") ||
+              t("debugger.discovery.noSlots", "no slots"),
           ]}
         />
         <DiscoveryMetric
           label="plugin_data"
           values={[
             String(pluginData.scope ?? ""),
-            `${stringArray(pluginData.writePaths).length} writes`,
-            `${stringArray(pluginData.readPaths).length} reads`,
+            t("debugger.discovery.writes", {
+              count: stringArray(pluginData.writePaths).length,
+              defaultValue: "{{count}} writes",
+            }),
+            t("debugger.discovery.reads", {
+              count: stringArray(pluginData.readPaths).length,
+              defaultValue: "{{count}} reads",
+            }),
           ]}
         />
         <DiscoveryMetric label="tools" values={stringArray(tools.builtin)} />
         <DiscoveryMetric
           label="world_data"
           values={[
-            `${stringArray(worldData.sourceKinds).length} sources`,
-            `${stringArray(worldData.mergeModes).length} merge modes`,
-            `${stringArray(worldData.targetUris).length} targets`,
+            t("debugger.discovery.sources", {
+              count: stringArray(worldData.sourceKinds).length,
+              defaultValue: "{{count}} sources",
+            }),
+            t("debugger.discovery.mergeModes", {
+              count: stringArray(worldData.mergeModes).length,
+              defaultValue: "{{count}} merge modes",
+            }),
+            t("debugger.discovery.targets", {
+              count: stringArray(worldData.targetUris).length,
+              defaultValue: "{{count}} targets",
+            }),
           ]}
         />
       </div>
@@ -54,6 +78,7 @@ export function PluginContractsPanel({
 }: {
   plugins: api.PluginContract[];
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
       {plugins.map((plugin) => {
@@ -77,7 +102,10 @@ export function PluginContractsPanel({
               )}
               {plugin.runtimeCount != null && (
                 <Badge variant="secondary" className="text-[9px]">
-                  {plugin.runtimeCount} runtime
+                  {t("debugger.discovery.runtimeCount", {
+                    count: plugin.runtimeCount,
+                    defaultValue: "{{count}} runtime",
+                  })}
                 </Badge>
               )}
             </div>
@@ -88,7 +116,7 @@ export function PluginContractsPanel({
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <DiscoveryMetric
-                label="capabilities"
+                label={t("debugger.discovery.capabilities", "capabilities")}
                 values={plugin.capabilities ?? []}
               />
               <DiscoveryMetric
@@ -96,18 +124,27 @@ export function PluginContractsPanel({
                 values={plugin.declaredPluginDataNamespaces ?? []}
               />
               <DiscoveryMetric
-                label="tools"
+                label={t("debugger.discovery.tools", "tools")}
                 values={[
                   ...builtinTools.map((name) => `builtin:${name}`),
                   ...localTools.map((tool) => `local:${tool.name}`),
                 ]}
               />
               <DiscoveryMetric
-                label="extension"
+                label={t("debugger.discovery.extension", "extension")}
                 values={[
-                  `${plugin.rpc?.length ?? 0} rpc`,
-                  `${uiCount} ui`,
-                  `${Object.keys(plugin.dataSchemas ?? {}).length} schemas`,
+                  t("debugger.discovery.rpc", {
+                    count: plugin.rpc?.length ?? 0,
+                    defaultValue: "{{count}} rpc",
+                  }),
+                  t("debugger.discovery.ui", {
+                    count: uiCount,
+                    defaultValue: "{{count}} ui",
+                  }),
+                  t("debugger.discovery.schemas", {
+                    count: Object.keys(plugin.dataSchemas ?? {}).length,
+                    defaultValue: "{{count}} schemas",
+                  }),
                 ]}
               />
             </div>
@@ -124,6 +161,7 @@ export function PluginDataIndexPanel({
 }: {
   pluginData: api.PluginDataDiscoveryIndex[];
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
       {pluginData
@@ -135,7 +173,10 @@ export function PluginDataIndexPanel({
                 {entry.pluginId}
               </span>
               <Badge variant="outline" className="text-[9px]">
-                {entry.namespaces.length} namespaces
+                {t("debugger.discovery.namespaces", {
+                  count: entry.namespaces.length,
+                  defaultValue: "{{count}} namespaces",
+                })}
               </Badge>
             </div>
             <div className="space-y-2">
@@ -149,7 +190,10 @@ export function PluginDataIndexPanel({
                       {namespace.namespace}
                     </span>
                     <Badge variant="secondary" className="text-[9px]">
-                      {namespace.count} keys
+                      {t("debugger.discovery.keys", {
+                        count: namespace.count,
+                        defaultValue: "{{count}} keys",
+                      })}
                     </Badge>
                     {namespace.latestUpdatedAt && (
                       <span className="text-[9px] text-muted-foreground">
@@ -226,6 +270,7 @@ function DiscoveryMetric({
   label: string;
   values: string[];
 }) {
+  const { t } = useTranslation();
   return (
     <div className="border border-border/60 bg-muted/10 p-2 min-w-0">
       <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1">
@@ -234,7 +279,7 @@ function DiscoveryMetric({
       <div className="flex flex-wrap gap-1">
         {values.length === 0 ? (
           <span className="text-[10px] text-muted-foreground italic">
-            empty
+            {t("debugger.discovery.empty", "empty")}
           </span>
         ) : (
           values.map((value) => (

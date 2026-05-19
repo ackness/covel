@@ -310,7 +310,23 @@
       "moreTargets": "{{count}} more"
     },
     "dbSchema": "Schema",
-    "dbValues": "Values"
+    "dbValues": "Values",
+    "provider": "provider",
+    "store": "Store",
+    "dbPluginData": "Plugin Data",
+    "dbValueEmpty": "(empty)",
+    "worldStorage": "World storage",
+    "system": "system",
+    "player": "Player",
+    "assistant": "Assistant",
+    "storage": {
+      "browserIndexedDb": "Browser IndexedDB",
+      "serverFile": "Server file",
+      "serverBackend": "Server {{backend}}",
+      "builtIn": "Built-in",
+      "serverStore": "Server store",
+      "server": "Server"
+    }
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -584,7 +600,8 @@
       "installed": "Installed {{id}}",
       "installedRestart": "Installed {{id}} — restart required",
       "restartHint": "The new plugin was written to the user plugins directory. Restart the server/desktop app to load it.",
-      "restartNow": "Restart now"
+      "restartNow": "Restart now",
+      "reloadFailed": "Reload failed"
     },
     "desktopDataLocations": "Data Locations",
     "desktopDataConfig": "Config",
@@ -627,7 +644,46 @@
     "desktopLlmMissingTitle": "No LLM slots configured yet",
     "desktopLlmMissingHint": "Click below to open ~/.covel/llm.toml and add at least one [covel.<slot>] section.",
     "autoBindSlots": "Auto-bind",
-    "runtimeSlotsDiscovered": "Runtime-requested slots"
+    "runtimeSlotsDiscovered": "Runtime-requested slots",
+    "temperature": "Temperature",
+    "topP": "Top P",
+    "maxOutputTokens": "Max Output Tokens",
+    "numberPlaceholder": "e.g. 4096",
+    "frequencyPenalty": "Frequency Penalty",
+    "presencePenalty": "Presence Penalty",
+    "resetToDefaults": "Reset to defaults",
+    "apiKeyPlaceholder": "API Key (sk-...)",
+    "required": "required",
+    "default": "default",
+    "runtime": "runtime",
+    "frontendOverlay": "frontend overlay",
+    "fallbackSlot": "fallback: {{slot}}",
+    "useBaseSlotConfig": "Use base slot config",
+    "builtInPresets": "Built-in",
+    "customPresets": "Custom",
+    "providerLabel": "Provider",
+    "modelLabel": "Model",
+    "presetCustom": "Preset: custom",
+    "presetOverride": "Preset: override",
+    "protocolLabel": "Protocol: {{protocol}}",
+    "contextWindow": "Context Window",
+    "contextWindowShort": "ctx",
+    "maxOutputTokensShort": "out",
+    "pricingInputOutputTitle": "Pricing (input/output per M tokens)",
+    "pricePerImage": "Price per image",
+    "contextWindowTokens": "Context Window (tokens)",
+    "desktopRestartFailed": "Restart failed",
+    "desktopDataDirPrompt": "Enter an absolute path for the new data directory:\n\nExamples:\n  /Users/me/Documents/covel\n  /Volumes/External/covel-data\n\nChanging this will not move existing data — the new location starts fresh.",
+    "desktopDataRootSet": "Data root set to {{path}}. Restart the app to apply.",
+    "desktopChangeDataRootFailed": "Could not change data root",
+    "desktopOnboardingResetToast": "Onboarding will show on next launch",
+    "ping": "Ping",
+    "pingTooltip": "Test connectivity and latency",
+    "pingTtfb": "{{ms}}ms TTFB",
+    "pingErrorTooltip": "Error: {{error}}",
+    "pingResolvedVia": "resolved via {{resolvedVia}}",
+    "pingSlotFallbackTitle": "Slot fell through to {{resolvedVia}}; the slot you requested is not configured.",
+    "pingFailed": "Failed"
   },
   "plugin": {
     "runtimes": "Runtimes",
@@ -695,6 +751,10 @@
       "noFollowerEvents": "{{runtimeId}} finished but emitted no background follower (missing matching events[]). Check that the model output a valid JSON envelope.",
       "failedJobs": "{{count}} background job(s) failed. Check the job panel for details."
     },
+    "jobs": {
+      "imagePromptGenerating": "Generating image prompt...",
+      "imagePromptQueued": "Image prompt generated; image job queued."
+    },
     "runtimeErrors": {
       "title": "Recent plugin error",
       "dismiss": "Dismiss plugin error"
@@ -745,7 +805,8 @@
       "auto": "Auto (follow locale)",
       "zh": "Chinese (recommended for DashScope)",
       "en": "English (recommended for GPT/Gemini)"
-    }
+    },
+    "generationFailed": "Image generation failed"
   },
   "onboarding": {
     "welcome": "Welcome to Covel",
@@ -781,7 +842,8 @@
     "step1Desc": "Choose from built-in worlds or create your own.",
     "step2Label": "Start your adventure",
     "step2Desc": "The AI narrator will build a story around you.",
-    "enter": "Enter Covel"
+    "enter": "Enter Covel",
+    "baseUrl": "Base URL"
   },
   "character": {
     "noCharacters": "Characters will appear here once created.",
@@ -825,10 +887,12 @@
     "submit": "Submit",
     "submitted": "Submitted",
     "submittedHint": "Selected",
-    "selectPrefix": "Select {{label}}"
+    "selectPrefix": "Select {{label}}",
+    "selectPlaceholder": "Select..."
   },
   "interaction": {
-    "playerSelected": "You chose:"
+    "playerSelected": "You chose:",
+    "playerLabel": "You"
   },
   "toast": {
     "copy": "Copy detail",
@@ -841,6 +905,15 @@
   "error": {
     "plugin": {
       "loadFailed": "Plugin load failed"
+    },
+    "boundary": {
+      "messageRenderingError": "Message rendering error",
+      "copyError": "Copy error",
+      "unexpectedError": "Unexpected error",
+      "appTitle": "Something broke while rendering this view.",
+      "appDescription": "Try the actions below. If the problem persists, copy the error and open an issue.",
+      "tryAgain": "Try again",
+      "reloadApp": "Reload app"
     }
   },
   "common": {
@@ -867,7 +940,11 @@
     "noMatch": "No matching entries",
     "yes": "Yes",
     "no": "No",
-    "toggleTheme": "Toggle theme"
+    "toggleTheme": "Toggle theme",
+    "copy": "Copy",
+    "new": "new",
+    "newUpper": "NEW",
+    "retry": "Retry"
   },
   "debugger": {
     "title": "Trace Inspector",
@@ -931,11 +1008,55 @@
       "message": "Message",
       "block": "Block",
       "state": "State"
+    },
+    "view": "View",
+    "session": "Session",
+    "tokenCount": "{{count}} tokens",
+    "discovery": {
+      "manifest": "manifest",
+      "triggers": "{{count}} triggers",
+      "outputs": "{{count}} outputs",
+      "noSlots": "no slots",
+      "writes": "{{count}} writes",
+      "reads": "{{count}} reads",
+      "sources": "{{count}} sources",
+      "mergeModes": "{{count}} merge modes",
+      "targets": "{{count}} targets",
+      "runtimeCount": "{{count}} runtime",
+      "capabilities": "capabilities",
+      "tools": "tools",
+      "extension": "extension",
+      "rpc": "{{count}} rpc",
+      "ui": "{{count}} ui",
+      "schemas": "{{count}} schemas",
+      "namespaces": "{{count}} namespaces",
+      "keys": "{{count}} keys",
+      "empty": "empty"
     }
   },
   "reload": {
     "reloading": "Restarting server…",
     "reloadingServer": "Restarting backend…",
     "reloadingHint": "Usually takes a few seconds."
+  },
+  "media": {
+    "audio": "audio",
+    "audioUnavailable": "audio unavailable",
+    "audioUnavailableAria": "{{label}} unavailable",
+    "play": "Play",
+    "pause": "Pause",
+    "seek": "Seek",
+    "playbackSpeed": "Playback speed",
+    "downloadAudio": "Download audio"
+  },
+  "branchReply": {
+    "replyCandidates": "Reply candidates",
+    "draft": "Draft",
+    "send": "Send",
+    "accept": "Accept",
+    "regenerate": "Regenerate",
+    "jobSubmitted": "Submitted branch-reply job: {{jobId}}",
+    "approvalRequired": "Branch reply action requires approval.",
+    "actionFailed": "Branch reply action failed"
   }
 }

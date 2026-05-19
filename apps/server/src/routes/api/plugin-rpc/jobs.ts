@@ -18,6 +18,7 @@ interface PluginJobValueBaseArgs {
   readonly triggerEvent?: PluginJobTriggerEvent;
   readonly phase?: string;
   readonly message?: string;
+  readonly messageKey?: string;
 }
 
 interface PendingPluginJobValueArgs extends PluginJobValueBaseArgs {
@@ -58,6 +59,7 @@ export function makePendingPluginJobValue(
   value.startedAt = args.startedAt;
   addDefined(value, "phase", args.phase);
   addDefined(value, "message", args.message);
+  addDefined(value, "messageKey", args.messageKey);
   return value as PluginJobValue;
 }
 
@@ -77,6 +79,7 @@ export function makeTerminalPluginJobValue(
   addDefined(value, "durationMs", args.durationMs);
   addDefined(value, "phase", args.phase);
   addDefined(value, "message", args.message);
+  addDefined(value, "messageKey", args.messageKey);
   addDefined(value, "runtimeResults", args.runtimeResults);
   addDefined(value, "deferredJobs", args.deferredJobs);
   addDefined(value, "error", args.error);

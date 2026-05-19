@@ -131,7 +131,9 @@ export function PackagesPane() {
                 }).catch((err) =>
                   flash({
                     message:
-                      err instanceof Error ? err.message : "Reload failed",
+                      err instanceof Error
+                        ? err.message
+                        : t("settings.packages.reloadFailed", "Reload failed"),
                     tone: "error",
                   }),
                 )

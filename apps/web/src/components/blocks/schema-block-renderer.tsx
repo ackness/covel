@@ -1,4 +1,5 @@
 import { useState } from "react";
+import i18n from "@/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { BlockSchemaDeclaration } from "@covel/shared";
@@ -102,7 +103,7 @@ function renderDisplayField(
           {key}
         </p>
         <span className="text-xs px-1.5 py-0.5 border border-border bg-muted/30">
-          {value ? "Yes" : "No"}
+          {value ? i18n.t("common.yes", "Yes") : i18n.t("common.no", "No")}
         </span>
       </div>
     );
@@ -295,7 +296,7 @@ function InteractiveSchemaBlock({
           disabled={disabled}
           onClick={handleSubmit}
         >
-          Submit
+          {i18n.t("form.submit", "Submit")}
         </Button>
       </CardContent>
     </Card>
@@ -331,7 +332,9 @@ function renderFormInput({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
       >
-        <option value="">{placeholder ?? "Select..."}</option>
+        <option value="">
+          {placeholder ?? i18n.t("form.selectPlaceholder", "Select...")}
+        </option>
         {options.map((opt) => (
           <option key={opt} value={opt}>
             {opt}

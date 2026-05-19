@@ -70,9 +70,11 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <div className="hidden md:flex items-center gap-1.5 border-r border-[var(--rule-color)] pr-3 text-[10px] text-muted-foreground">
-            <span className="ui-meta text-[9px]">SESSIONS</span>
+            <span className="ui-meta text-[9px]">{t("debugger.sessions")}</span>
             <span className="font-mono text-foreground">{sessions.length}</span>
-            <span className="ui-meta text-[9px]">VIEW</span>
+            <span className="ui-meta text-[9px]">
+              {t("debugger.view", "View")}
+            </span>
             <span className="font-mono text-foreground uppercase">
               {debugView}
             </span>
@@ -115,7 +117,9 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
         <div className="flex-shrink-0 border-b border-[var(--rule-color)] bg-[color-mix(in_oklab,var(--surface-page)_82%,var(--surface-inset))] px-4 py-2">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[10px] text-muted-foreground">
             <span className="inline-flex min-w-0 items-center gap-1.5">
-              <span className="ui-meta text-[9px]">SESSION</span>
+              <span className="ui-meta text-[9px]">
+                {t("debugger.session", "Session")}
+              </span>
               <span className="truncate font-mono text-foreground">
                 {selectedSessionId}
               </span>

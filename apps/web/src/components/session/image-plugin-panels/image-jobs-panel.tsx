@@ -59,6 +59,9 @@ export function ImageJobsPanel({ pluginId }: { pluginId: string }) {
         const expanded = open[job.jobId] ?? job.status === "pending";
         const { prompt, promptMode, composition } = getJobPromptContext(job);
         const linkedImages = findImagesByPrompt(images, prompt);
+        const statusMessage = job.messageKey
+          ? t(job.messageKey, { defaultValue: job.message })
+          : job.message;
         return (
           <div
             key={job.jobId}
@@ -119,6 +122,11 @@ export function ImageJobsPanel({ pluginId }: { pluginId: string }) {
                       {prompt}
                     </p>
                   </div>
+                )}
+                {statusMessage && (
+                  <p className="text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap">
+                    {statusMessage}
+                  </p>
                 )}
                 {linkedImages.length > 0 && (
                   <div className="space-y-1.5">

@@ -1,4 +1,5 @@
 import React from "react";
+import i18n from "@/i18n";
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -75,11 +76,16 @@ export class MessageErrorBoundary extends BaseBoundary {
       const msg =
         this.state.error?.message ??
         this.props.fallbackMessage ??
-        "Message rendering error";
+        i18n.t("error.boundary.messageRenderingError", {
+          defaultValue: "Message rendering error",
+        });
       return (
         <div className="p-3 text-xs border border-destructive/50 bg-destructive/5 text-destructive space-y-2">
           <div className="font-medium">
-            {this.props.fallbackMessage ?? "Message rendering error"}
+            {this.props.fallbackMessage ??
+              i18n.t("error.boundary.messageRenderingError", {
+                defaultValue: "Message rendering error",
+              })}
           </div>
           <div className="font-mono text-[11px] break-all opacity-80">
             {msg}
@@ -89,13 +95,15 @@ export class MessageErrorBoundary extends BaseBoundary {
               onClick={this.handleReset}
               className="px-2 py-1 text-[11px] border border-destructive/40 hover:bg-destructive/10 transition-colors"
             >
-              Retry
+              {i18n.t("common.retry", { defaultValue: "Retry" })}
             </button>
             <button
               onClick={this.handleCopy}
               className="px-2 py-1 text-[11px] border border-destructive/40 hover:bg-destructive/10 transition-colors"
             >
-              Copy error
+              {i18n.t("error.boundary.copyError", {
+                defaultValue: "Copy error",
+              })}
             </button>
           </div>
         </div>
@@ -118,14 +126,20 @@ export class AppErrorBoundary extends BaseBoundary {
           <div className="max-w-lg w-full border border-border p-8 space-y-6">
             <div className="space-y-2">
               <div className="text-[11px] font-mono uppercase tracking-widest text-destructive">
-                Unexpected error
+                {i18n.t("error.boundary.unexpectedError", {
+                  defaultValue: "Unexpected error",
+                })}
               </div>
               <h1 className="text-xl font-display font-bold">
-                Something broke while rendering this view.
+                {i18n.t("error.boundary.appTitle", {
+                  defaultValue: "Something broke while rendering this view.",
+                })}
               </h1>
               <p className="text-sm text-muted-foreground">
-                Try the actions below. If the problem persists, copy the error
-                and open an issue.
+                {i18n.t("error.boundary.appDescription", {
+                  defaultValue:
+                    "Try the actions below. If the problem persists, copy the error and open an issue.",
+                })}
               </p>
             </div>
             {err && (
@@ -138,19 +152,25 @@ export class AppErrorBoundary extends BaseBoundary {
                 onClick={this.handleReset}
                 className="px-3 py-2 text-xs uppercase tracking-widest border border-primary bg-primary text-primary-foreground hover:bg-primary/90"
               >
-                Try again
+                {i18n.t("error.boundary.tryAgain", {
+                  defaultValue: "Try again",
+                })}
               </button>
               <button
                 onClick={this.handleReload}
                 className="px-3 py-2 text-xs uppercase tracking-widest border border-border hover:bg-muted"
               >
-                Reload app
+                {i18n.t("error.boundary.reloadApp", {
+                  defaultValue: "Reload app",
+                })}
               </button>
               <button
                 onClick={this.handleCopy}
                 className="px-3 py-2 text-xs uppercase tracking-widest border border-border hover:bg-muted"
               >
-                Copy error
+                {i18n.t("error.boundary.copyError", {
+                  defaultValue: "Copy error",
+                })}
               </button>
             </div>
           </div>

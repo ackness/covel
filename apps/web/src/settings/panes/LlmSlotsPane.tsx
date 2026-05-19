@@ -235,17 +235,17 @@ export function LlmSlotsPane() {
               <div className="flex items-center gap-1">
                 {isRequired && (
                   <Badge variant="default" className="text-[10px]">
-                    required
+                    {t("settings.required", "required")}
                   </Badge>
                 )}
                 {isFirst && (
                   <Badge variant="default" className="text-[10px]">
-                    default
+                    {t("settings.default", "default")}
                   </Badge>
                 )}
                 {isDiscovered && (
                   <Badge variant="secondary" className="text-[10px]">
-                    runtime
+                    {t("settings.runtime", "runtime")}
                   </Badge>
                 )}
                 {isVirtualSlot && (
@@ -253,12 +253,15 @@ export function LlmSlotsPane() {
                     variant="outline"
                     className="text-[10px] text-amber-600 border-amber-400"
                   >
-                    frontend overlay
+                    {t("settings.frontendOverlay", "frontend overlay")}
                   </Badge>
                 )}
                 {serverSlot?.fallback && (
                   <Badge variant="secondary" className="text-[10px]">
-                    fallback: {serverSlot.fallback}
+                    {t("settings.fallbackSlot", {
+                      slot: serverSlot.fallback,
+                      defaultValue: "fallback: {{slot}}",
+                    })}
                   </Badge>
                 )}
                 {selectedPreset && (
@@ -289,7 +292,7 @@ export function LlmSlotsPane() {
               <option value="">
                 --{" "}
                 {serverSlot
-                  ? "Use base slot config"
+                  ? t("settings.useBaseSlotConfig", "Use base slot config")
                   : isDiscovered
                     ? t("settings.selectPreset", "Select preset")
                     : isRequired
@@ -298,7 +301,7 @@ export function LlmSlotsPane() {
                 --
               </option>
               {state.presets.length > 0 && (
-                <optgroup label="Built-in">
+                <optgroup label={t("settings.builtInPresets", "Built-in")}>
                   {state.presets.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} ({p.provider}/{p.model})
@@ -307,7 +310,7 @@ export function LlmSlotsPane() {
                 </optgroup>
               )}
               {customPresets.length > 0 && (
-                <optgroup label="Custom">
+                <optgroup label={t("settings.customPresets", "Custom")}>
                   {customPresets.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} ({p.provider}/{p.model})
@@ -318,14 +321,23 @@ export function LlmSlotsPane() {
             </select>
 
             <div className="text-xs text-muted-foreground grid grid-cols-3 gap-1">
-              <span>Provider: {effectiveProvider || "—"}</span>
-              <span>Model: {effectiveModel || "—"}</span>
+              <span>
+                {t("settings.providerLabel", "Provider")}:{" "}
+                {effectiveProvider || "—"}
+              </span>
+              <span>
+                {t("settings.modelLabel", "Model")}: {effectiveModel || "—"}
+              </span>
               <span>
                 {selectedPreset
                   ? selectedPreset.isCustom
-                    ? "Preset: custom"
-                    : "Preset: override"
-                  : `Protocol: ${(effectiveProtocol || "").replace("-v1", "") || "—"}`}
+                    ? t("settings.presetCustom", "Preset: custom")
+                    : t("settings.presetOverride", "Preset: override")
+                  : t("settings.protocolLabel", {
+                      protocol:
+                        (effectiveProtocol || "").replace("-v1", "") || "—",
+                      defaultValue: "Protocol: {{protocol}}",
+                    })}
               </span>
             </div>
 

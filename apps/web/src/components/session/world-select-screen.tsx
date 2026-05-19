@@ -28,6 +28,7 @@ import type { WorldRecord, PackageSummary } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
 import { worldVisual } from "@/lib/world-visuals.js";
+import i18n from "@/i18n";
 
 type ViewMode = "list" | "detail" | "edit";
 
@@ -53,18 +54,24 @@ export function worldStorageLabel(world: WorldRecord): string {
       }
     | undefined;
   if (storage?.scope === "browser" && storage.backend === "indexeddb") {
-    return "Browser IndexedDB";
+    return i18n.t("session.storage.browserIndexedDb", "Browser IndexedDB");
   }
   if (storage?.scope === "server" && storage.backend === "file") {
-    return "Server file";
+    return i18n.t("session.storage.serverFile", "Server file");
   }
   if (storage?.scope === "server" && storage.backend) {
-    return `Server ${storage.backend}`;
+    return i18n.t("session.storage.serverBackend", {
+      backend: storage.backend,
+      defaultValue: "Server {{backend}}",
+    });
   }
-  if (metadata?.source === "file") return "Built-in";
-  if (metadata?.source === "browser-indexeddb") return "Browser IndexedDB";
-  if (metadata?.source === "server-store") return "Server store";
-  return "Server";
+  if (metadata?.source === "file")
+    return i18n.t("session.storage.builtIn", "Built-in");
+  if (metadata?.source === "browser-indexeddb")
+    return i18n.t("session.storage.browserIndexedDb", "Browser IndexedDB");
+  if (metadata?.source === "server-store")
+    return i18n.t("session.storage.serverStore", "Server store");
+  return i18n.t("session.storage.server", "Server");
 }
 
 export function WorldSelectScreen({
@@ -359,7 +366,7 @@ export function WorldSelectScreen({
                         </span>
                         <span
                           className="ui-tag border-white/18 bg-black/18 text-white/70 backdrop-blur-sm"
-                          title="World storage"
+                          title={t("session.worldStorage", "World storage")}
                         >
                           {worldStorageLabel(world)}
                         </span>

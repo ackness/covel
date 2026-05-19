@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
 import type * as api from "@/services/api.js";
 import type { UseRuntimeBindingsResult } from "@/hooks/use-runtime-bindings.js";
+import { resolveI18n } from "@/lib/catalog/helpers.js";
 
 interface ExecutionFlowPreviewProps {
   flowData: api.PluginFlowResponse | null;
@@ -15,7 +16,7 @@ export function ExecutionFlowPreview({
   selectedFlowSteps,
   bindingState,
 }: ExecutionFlowPreviewProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   if (selectedFlowSteps.length === 0) return null;
 
@@ -52,7 +53,7 @@ export function ExecutionFlowPreview({
           return (
             <div key={segment.label}>
               <div className="text-[9px] text-muted-foreground/70 uppercase tracking-widest mb-0.5">
-                {segment.label}
+                {resolveI18n(segment.labelText, i18n.language) || segment.label}
               </div>
               <div className="flex flex-wrap gap-1">
                 {stepsInSegment.map((step) => {

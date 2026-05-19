@@ -3,6 +3,7 @@ import {
   loadPluginManifest,
   loadPluginSummary,
 } from "@covel/plugin-loader";
+import type { I18nText } from "@covel/shared";
 import { resolve } from "node:path";
 import {
   docPathFromAbsolute,
@@ -58,6 +59,49 @@ export async function buildPluginFlowResponse() {
     docPath: string;
     isStoryRuntime: boolean;
   }> = [];
+  const flowSegments: Array<{
+    id: FlowSegmentId;
+    labelText: I18nText;
+    rangeLabel: string;
+    minPriority: number;
+    maxPriority: number;
+  }> = [
+    {
+      id: "start",
+      labelText: { "zh-CN": "开始游戏", "en-US": "Start" },
+      rangeLabel: "0",
+      minPriority: 0,
+      maxPriority: 0,
+    },
+    {
+      id: "pre-game",
+      labelText: { "zh-CN": "开局前", "en-US": "Pre-Game" },
+      rangeLabel: "1-99",
+      minPriority: 1,
+      maxPriority: 99,
+    },
+    {
+      id: "pre-narrator",
+      labelText: { "zh-CN": "叙事前", "en-US": "Pre-Narrator" },
+      rangeLabel: "100-499",
+      minPriority: 100,
+      maxPriority: 499,
+    },
+    {
+      id: "narrator",
+      labelText: { "zh-CN": "叙事器", "en-US": "Narrator" },
+      rangeLabel: "500",
+      minPriority: 500,
+      maxPriority: 500,
+    },
+    {
+      id: "post-narrator",
+      labelText: { "zh-CN": "叙事后", "en-US": "Post-Narrator" },
+      rangeLabel: "501-1000",
+      minPriority: 501,
+      maxPriority: 1000,
+    },
+  ];
 
   for (const discovery of discoveries) {
     const [summary, manifests] = await Promise.all([
@@ -136,43 +180,10 @@ export async function buildPluginFlowResponse() {
 
   return {
     generatedAt: new Date().toISOString(),
-    segments: [
-      {
-        id: "start",
-        label: "开始游戏",
-        rangeLabel: "0",
-        minPriority: 0,
-        maxPriority: 0,
-      },
-      {
-        id: "pre-game",
-        label: "Pre-Game",
-        rangeLabel: "1-99",
-        minPriority: 1,
-        maxPriority: 99,
-      },
-      {
-        id: "pre-narrator",
-        label: "Pre-Narrator",
-        rangeLabel: "100-499",
-        minPriority: 100,
-        maxPriority: 499,
-      },
-      {
-        id: "narrator",
-        label: "Narrator",
-        rangeLabel: "500",
-        minPriority: 500,
-        maxPriority: 500,
-      },
-      {
-        id: "post-narrator",
-        label: "Post-Narrator",
-        rangeLabel: "501-1000",
-        minPriority: 501,
-        maxPriority: 1000,
-      },
-    ],
+    segments: flowSegments.map((segment) => ({
+      ...segment,
+      label: textValue(segment.labelText),
+    })),
     plugins,
     steps,
   };

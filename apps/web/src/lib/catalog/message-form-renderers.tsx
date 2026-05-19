@@ -34,11 +34,14 @@ export const Prose: ComponentRenderer = ({ element }) => {
  *  In Paper, follows Variant A's editorial "YOU" convention: left-aligned
  *  with a 2px accent bar and a mono uppercase eyebrow. */
 export const PlayerMessage: ComponentRenderer = ({ element }) => {
+  const { t } = useTranslation();
   const content = (element.props?.content as string) ?? "";
   return (
     <div className="ui-player-message-row flex justify-end">
       <div className="ui-message-player max-w-[80%] px-4 py-2.5 text-sm leading-relaxed">
-        <span className="ui-eyebrow mb-1 block text-primary">You</span>
+        <span className="ui-eyebrow mb-1 block text-primary">
+          {t("interaction.playerLabel", "You")}
+        </span>
         <span className="text-[14px] leading-[1.6]">{content}</span>
       </div>
     </div>

@@ -81,7 +81,7 @@ export function LlmAdvancedPane() {
       </div>
 
       <SliderField
-        label="Temperature"
+        label={t("settings.temperature", "Temperature")}
         value={current.temperature}
         onChange={(v) => setField("temperature", v)}
         min={0}
@@ -89,7 +89,7 @@ export function LlmAdvancedPane() {
         step={0.1}
       />
       <SliderField
-        label="Top P"
+        label={t("settings.topP", "Top P")}
         value={current.topP}
         onChange={(v) => setField("topP", v)}
         min={0}
@@ -97,10 +97,12 @@ export function LlmAdvancedPane() {
         step={0.05}
       />
       <div className="space-y-1.5">
-        <Label className="text-xs">Max Output Tokens</Label>
+        <Label className="text-xs">
+          {t("settings.maxOutputTokens", "Max Output Tokens")}
+        </Label>
         <input
           type="number"
-          placeholder="e.g. 4096"
+          placeholder={t("settings.numberPlaceholder", "e.g. 4096")}
           value={current.maxOutputTokens ?? ""}
           onChange={(e) => {
             const val = e.target.value
@@ -112,7 +114,7 @@ export function LlmAdvancedPane() {
         />
       </div>
       <SliderField
-        label="Frequency Penalty"
+        label={t("settings.frequencyPenalty", "Frequency Penalty")}
         value={current.frequencyPenalty}
         onChange={(v) => setField("frequencyPenalty", v)}
         min={-2}
@@ -120,7 +122,7 @@ export function LlmAdvancedPane() {
         step={0.1}
       />
       <SliderField
-        label="Presence Penalty"
+        label={t("settings.presencePenalty", "Presence Penalty")}
         value={current.presencePenalty}
         onChange={(v) => setField("presencePenalty", v)}
         min={-2}
@@ -134,7 +136,7 @@ export function LlmAdvancedPane() {
         onClick={resetSlot}
         className="w-full text-xs uppercase tracking-widest"
       >
-        Reset to defaults
+        {t("settings.resetToDefaults", "Reset to defaults")}
       </Button>
     </div>
   );

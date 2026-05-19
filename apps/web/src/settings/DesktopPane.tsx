@@ -95,7 +95,11 @@ export function DesktopPane() {
         message: t("reload.reloadingServer", "Restarting backend…"),
       });
     } catch (err) {
-      setToast(err instanceof Error ? err.message : "Restart failed");
+      setToast(
+        err instanceof Error
+          ? err.message
+          : t("settings.desktopRestartFailed", "Restart failed"),
+      );
       setBusy(null);
       setTimeout(() => setToast(null), 3000);
     }
@@ -109,9 +113,10 @@ export function DesktopPane() {
       let manualPath: string | undefined;
       if (!hasElectronIpc()) {
         const entered = window.prompt(
-          "Enter an absolute path for the new data directory:\n\n" +
-            "Examples:\n  /Users/me/Documents/covel\n  /Volumes/External/covel-data\n\n" +
-            "Changing this will not move existing data — the new location starts fresh.",
+          t(
+            "settings.desktopDataDirPrompt",
+            "Enter an absolute path for the new data directory:\n\nExamples:\n  /Users/me/Documents/covel\n  /Volumes/External/covel-data\n\nChanging this will not move existing data — the new location starts fresh.",
+          ),
           info?.dataRoot ?? "",
         );
         if (!entered || !entered.trim()) return;
@@ -119,12 +124,17 @@ export function DesktopPane() {
       }
       const picked = await pickDataDir(manualPath);
       if (picked) {
-        setToast(`Data root set to ${picked}. Restart the app to apply.`);
+        setToast(t("settings.desktopDataRootSet", { path: picked }));
         await refreshInfo();
       }
     } catch (err) {
       setToast(
-        err instanceof Error ? err.message : "Could not change data root",
+        err instanceof Error
+          ? err.message
+          : t(
+              "settings.desktopChangeDataRootFailed",
+              "Could not change data root",
+            ),
       );
     } finally {
       setBusy(null);
@@ -134,7 +144,12 @@ export function DesktopPane() {
 
   function handleResetOnboarding() {
     resetOnboarding();
-    setToast("Onboarding will show on next launch");
+    setToast(
+      t(
+        "settings.desktopOnboardingResetToast",
+        "Onboarding will show on next launch",
+      ),
+    );
     setTimeout(() => setToast(null), 3000);
   }
 

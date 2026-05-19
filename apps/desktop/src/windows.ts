@@ -16,6 +16,7 @@ import {
 } from "./window-state.js";
 import { buildSplashHtml } from "./splash-screen.js";
 import { writeLog } from "./logging.js";
+import { t } from "./main-i18n.js";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -38,10 +39,10 @@ export function buildAppMenu(): Electron.Menu {
           {
             label: app.name,
             submenu: [
-              { role: "about" as const, label: "About Covel" },
+              { role: "about" as const, label: t("menu.about") },
               { type: "separator" as const },
               {
-                label: "Settings\u2026",
+                label: t("menu.settings"),
                 accelerator: "CmdOrCtrl+,",
                 click: () => sendMenuAction("covel:menu:open-settings"),
               },
@@ -57,29 +58,29 @@ export function buildAppMenu(): Electron.Menu {
       : []),
 
     {
-      label: "File",
+      label: t("menu.file"),
       submenu: [
         {
-          label: "New World",
+          label: t("menu.newWorld"),
           accelerator: "CmdOrCtrl+N",
           click: () => sendMenuAction("covel:menu:new-world"),
         },
         {
-          label: "Import Plugin\u2026",
+          label: t("menu.importPlugin"),
           click: () => {
             // Route through the renderer so UI can show success/error toasts.
             sendMenuAction("covel:menu:import-plugin");
           },
         },
         {
-          label: "Import World\u2026",
+          label: t("menu.importWorld"),
           click: () => {
             sendMenuAction("covel:menu:import-world");
           },
         },
         { type: "separator" },
         {
-          label: "Export Chat\u2026",
+          label: t("menu.exportChat"),
           accelerator: "CmdOrCtrl+Shift+E",
           click: () => sendMenuAction("covel:menu:export-chat"),
         },
@@ -87,7 +88,7 @@ export function buildAppMenu(): Electron.Menu {
         ...(!isMac
           ? [
               {
-                label: "Settings\u2026",
+                label: t("menu.settings"),
                 accelerator: "CmdOrCtrl+,",
                 click: () => sendMenuAction("covel:menu:open-settings"),
               },
@@ -99,7 +100,7 @@ export function buildAppMenu(): Electron.Menu {
     },
 
     {
-      label: "Edit",
+      label: t("menu.edit"),
       submenu: [
         { role: "undo" },
         { role: "redo" },
@@ -112,12 +113,12 @@ export function buildAppMenu(): Electron.Menu {
     },
 
     {
-      label: "View",
+      label: t("menu.view"),
       submenu: [
         { role: "reload" },
         { role: "toggleDevTools" },
         { type: "separator" },
-        { role: "resetZoom", label: "Actual Size" },
+        { role: "resetZoom", label: t("menu.actualSize") },
         { role: "zoomIn" },
         { role: "zoomOut" },
         { type: "separator" },
@@ -129,7 +130,7 @@ export function buildAppMenu(): Electron.Menu {
       role: "help",
       submenu: [
         {
-          label: "Documentation",
+          label: t("menu.documentation"),
           click: () => shell.openExternal("https://github.com/AcKnEsS/covel"),
         },
       ] as MenuItemConstructorOptions[],
@@ -150,7 +151,7 @@ function attachContextMenu(win: BrowserWindow): void {
       items.push(
         { type: "separator" },
         {
-          label: "Inspect Element",
+          label: t("menu.inspectElement"),
           click: () => win.webContents.inspectElement(params.x, params.y),
         },
       );
@@ -211,12 +212,12 @@ function handleExternalLinkRequest(
 
     const choice = dialog.showMessageBoxSync(parent, {
       type: "warning",
-      buttons: ["Open", "Cancel"],
+      buttons: [t("dialog.open"), t("dialog.cancel")],
       defaultId: 1,
       cancelId: 1,
-      title: "Open external link?",
-      message: `Open ${host} in your browser?`,
-      detail: `${linkUrl}\n\nThis link uses unencrypted http. Only proceed if you trust the source.`,
+      title: t("dialog.externalLink.title"),
+      message: t("dialog.externalLink.message", { host }),
+      detail: t("dialog.externalLink.detail", { url: linkUrl }),
     });
     if (choice === 0) {
       writeLog("info", `[external-link] http (user-confirmed) -> ${host}`);

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { loadKeysEnv, saveKeysEnv } from "./env-files.js";
@@ -9,7 +9,8 @@ import {
 } from "./import-assets.js";
 import { writeLog } from "./logging.js";
 import { writeDataRoot, type ensureUserPaths } from "./paths.js";
-import { getMainWindow } from "./windows.js";
+import { buildAppMenu, getMainWindow } from "./windows.js";
+import { setDesktopLocaleFromSettings, t } from "./main-i18n.js";
 
 type DesktopPaths = ReturnType<typeof ensureUserPaths>;
 
@@ -83,7 +84,7 @@ export function registerDesktopIpcHandlers({
   // in the new location.
   ipcMain.handle("covel:pick-data-dir", async () => {
     const result = await dialog.showOpenDialog({
-      title: "Choose Covel data directory",
+      title: t("dialog.dataDir.title"),
       properties: ["openDirectory", "createDirectory"],
       defaultPath: paths.dataRoot,
     });
@@ -155,6 +156,8 @@ export function registerDesktopIpcHandlers({
           { mode: 0o600 },
         );
       }
+      setDesktopLocaleFromSettings(entries);
+      Menu.setApplicationMenu(buildAppMenu());
       return { ok: true };
     } catch (err) {
       writeLog("error", "settings:save failed:", err);
@@ -169,11 +172,11 @@ export function registerDesktopIpcHandlers({
     payload: unknown,
   ): Promise<ImportResult> {
     if (!payload || typeof payload !== "object") {
-      return { ok: false, kind, message: "Invalid payload" };
+      return { ok: false, kind, message: t("import.invalidPayload") };
     }
     const sourcePath = (payload as { sourcePath?: string }).sourcePath;
     if (typeof sourcePath !== "string") {
-      return { ok: false, kind, message: "sourcePath must be a string" };
+      return { ok: false, kind, message: t("import.sourcePathRequired") };
     }
     try {
       const result = await importAsset(kind, sourcePath);
@@ -202,15 +205,18 @@ export function registerDesktopIpcHandlers({
   async function pickAndImport(kind: ImportKind): Promise<ImportResult> {
     const win = getMainWindow() ?? undefined;
     const picked = await dialog.showOpenDialog(win as BrowserWindow, {
-      title: kind === "plugin" ? "Import Plugin" : "Import World Package",
+      title:
+        kind === "plugin"
+          ? t("dialog.importPlugin.title")
+          : t("dialog.importWorld.title"),
       properties: ["openFile", "openDirectory", "treatPackageAsDirectory"],
       filters: [
-        { name: "Zip archives", extensions: ["zip"] },
-        { name: "All files", extensions: ["*"] },
+        { name: t("dialog.filter.zipArchives"), extensions: ["zip"] },
+        { name: t("dialog.filter.allFiles"), extensions: ["*"] },
       ],
     });
     if (picked.canceled || picked.filePaths.length === 0) {
-      return { ok: false, kind, message: "Cancelled" };
+      return { ok: false, kind, message: t("import.cancelled") };
     }
     return handleImport(kind, { sourcePath: picked.filePaths[0] });
   }

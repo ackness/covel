@@ -1,6 +1,12 @@
+import { getDesktopLocale, t } from "./main-i18n.js";
+
 export function buildSplashHtml(): string {
+  const locale = getDesktopLocale();
+  const fallbackLoading = JSON.stringify(t("startup.status.loading"));
+  const fallbackStartupFailed = JSON.stringify(t("startup.failed.title"));
+
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${locale}">
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; script-src 'unsafe-inline'; style-src 'unsafe-inline';">
@@ -69,17 +75,17 @@ export function buildSplashHtml(): string {
     <div class="ring ring-1"></div><div class="ring ring-2"></div>
     <div class="ring ring-3"></div><div class="dot"></div>
   </div>
-  <div id="status">Initializing\u2026</div>
+  <div id="status">${t("startup.status.initializing")}</div>
 
   <div class="error-wrap" id="error-wrap">
-    <div class="error-title" id="error-title">Startup failed</div>
+    <div class="error-title" id="error-title">${t("startup.failed.title")}</div>
     <div class="error-msg" id="error-msg"></div>
     <div class="error-hint" id="error-hint"></div>
     <div class="btn-row">
-      <button class="btn btn-primary" id="btn-retry">Retry</button>
-      <button class="btn" id="btn-logs">View Logs</button>
-      <button class="btn" id="btn-open-logs">Open Logs Folder</button>
-      <button class="btn" id="btn-open-data">Open Data Folder</button>
+      <button class="btn btn-primary" id="btn-retry">${t("splash.retry")}</button>
+      <button class="btn" id="btn-logs">${t("splash.viewLogs")}</button>
+      <button class="btn" id="btn-open-logs">${t("splash.openLogsFolder")}</button>
+      <button class="btn" id="btn-open-data">${t("splash.openDataFolder")}</button>
     </div>
   </div>
 
@@ -95,14 +101,14 @@ export function buildSplashHtml(): string {
     document.getElementById('btn-open-data').addEventListener('click', () => ipc.invoke('covel:open-data-dir'));
 
     ipc.on('covel:startup:progress', (payload) => {
-      document.getElementById('status').textContent = payload && payload.label ? payload.label : 'Loading\u2026';
+      document.getElementById('status').textContent = payload && payload.label ? payload.label : ${fallbackLoading};
     });
 
     ipc.on('covel:startup:error', (payload) => {
       document.getElementById('spinner').style.display = 'none';
       document.getElementById('status').style.color = '#71717a';
-      document.getElementById('status').textContent = 'Startup failed';
-      document.getElementById('error-title').textContent = payload.title || 'Startup failed';
+      document.getElementById('status').textContent = ${fallbackStartupFailed};
+      document.getElementById('error-title').textContent = payload.title || ${fallbackStartupFailed};
       document.getElementById('error-msg').textContent = payload.detail || '';
       document.getElementById('error-hint').textContent = payload.hint || '';
       document.getElementById('log-content').textContent = payload.logs || '';

@@ -1,135 +1,317 @@
 #!/usr/bin/env node
 /**
- * check-plugin-i18n — enforce the I18nText contract for plugin UI JSON.
+ * check-plugin-i18n - enforce the I18nText contract for plugin-facing text.
  *
- * Every user-visible string in `plugins/**\/ui/*.json` (and sibling ui-only
- * locations like `plugins/**\/runtimes/**\/ui/*.json`) must either:
- *   - be a plain string that contains no CJK characters (treated as an id,
- *     icon name, path, or pre-translated English label), or
- *   - be an object with at least one English locale key (`en` / `en-US`) —
- *     this is how plugin specs declare I18nText per docs/reference/ui-panels.md.
+ * JSON UI specs:
+ *   - Scans plugins/**\/ui/*.json and templates/**\/ui/*.json, including
+ *     nested runtime ui directories.
+ *   - Bare CJK strings are rejected. Wrap them as I18nText objects.
+ *   - I18nText objects should include both zh/zh-CN and en/en-US/en-GB.
  *
- * A bare Chinese string (`"title": "世界维度"`) is rejected because the
- * framework's `resolveI18n` cannot pick a locale from a single-language
- * string. Use `{ "zh": "世界维度", "en": "World Dimensions" }` instead.
+ * PLUGIN.md frontmatter:
+ *   - Scans user-visible fields such as description, displayName, label,
+ *     title, placeholder, and options[].label/description.
+ *   - Bare CJK strings in those fields are rejected.
+ *   - I18nText objects should include both Chinese and English locales.
  *
  * Exit code: 0 = OK, 1 = violations found.
  */
-import { readFileSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { basename, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { glob } from "node:fs/promises";
+import YAML from "yaml";
 
-const CJK_REGEX = /[\u4e00-\u9fff\u3400-\u4dbf]/;
+const CJK_REGEX = /[\u3400-\u4dbf\u4e00-\u9fff]/;
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const REPO_ROOT = resolve(HERE, "..");
-
-const PLUGIN_GLOB = "plugins/**/ui/*.json";
+const SCAN_ROOTS = ["plugins", "templates"];
+const USER_VISIBLE_KEYS = new Set([
+  "description",
+  "displayName",
+  "emptyText",
+  "groupLabel",
+  "help",
+  "hint",
+  "label",
+  "message",
+  "placeholder",
+  "shortLabel",
+  "subtitle",
+  "summary",
+  "text",
+  "title",
+  "tooltip",
+]);
 // Allow the author to exempt a specific path by prefix if a false positive
 // ever appears. Keep empty by default.
 const EXEMPT_PREFIXES = [];
+
+function isChineseLocaleKey(key) {
+  return key === "zh" || key === "zh-CN";
+}
 
 function isEnglishLocaleKey(key) {
   return key === "en" || key === "en-US" || key === "en-GB";
 }
 
-function isLocaleObject(obj) {
-  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return false;
-  const keys = Object.keys(obj);
-  if (keys.length === 0) return false;
-  // Heuristic: every value is a string, and at least one key matches a known
-  // locale pattern. We intentionally accept arbitrary extra locales (fr, ja)
-  // so long as the English locale is present.
-  const allStrings = keys.every((k) => typeof obj[k] === "string");
-  if (!allStrings) return false;
-  return keys.some(isEnglishLocaleKey);
+function hasLocaleKey(keys) {
+  return keys.some(isChineseLocaleKey) || keys.some(isEnglishLocaleKey);
 }
 
-/**
- * Walk a JSON value, calling `onViolation({path, value})` for any bare CJK
- * string that is NOT part of a valid I18nText object.
- */
-function walkValue(value, pathStack, onViolation) {
+function isI18nTextObject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const keys = Object.keys(value);
+  if (keys.length === 0) return false;
+  if (!hasLocaleKey(keys)) return false;
+  return keys.every((key) => typeof value[key] === "string");
+}
+
+function localeCoverage(value) {
+  const keys = Object.keys(value);
+  return {
+    hasZh: keys.some(isChineseLocaleKey),
+    hasEn: keys.some(isEnglishLocaleKey),
+  };
+}
+
+function pathToString(pathStack) {
+  return pathStack.length > 0 ? pathStack.join(".") : "(root)";
+}
+
+function* walkFiles(dir) {
+  if (!existsSync(dir)) return;
+  for (const entry of readdirSync(dir).sort()) {
+    const fullPath = join(dir, entry);
+    const stat = statSync(fullPath);
+    if (stat.isDirectory()) {
+      yield* walkFiles(fullPath);
+    } else {
+      yield fullPath;
+    }
+  }
+}
+
+function isUiJsonFile(rel) {
+  const parts = rel.split(sep);
+  return (
+    (parts.length >= 4 &&
+      parts[0] === "plugins" &&
+      parts.includes("ui") &&
+      rel.endsWith(".json")) ||
+    (parts.length >= 4 &&
+      parts[0] === "templates" &&
+      parts.includes("ui") &&
+      rel.endsWith(".json"))
+  );
+}
+
+function isPluginMarkdownFile(rel) {
+  const parts = rel.split(sep);
+  return (
+    (parts[0] === "plugins" || parts[0] === "templates") &&
+    basename(rel) === "PLUGIN.md"
+  );
+}
+
+function collectFiles(predicate) {
+  const files = [];
+  for (const root of SCAN_ROOTS) {
+    for (const full of walkFiles(resolve(REPO_ROOT, root))) {
+      const rel = relative(REPO_ROOT, full);
+      if (EXEMPT_PREFIXES.some((prefix) => rel.startsWith(prefix))) continue;
+      if (predicate(rel)) files.push(rel);
+    }
+  }
+  files.sort();
+  return files;
+}
+
+function isTemplatedString(value) {
+  return /^\s*\{\{[^}]+\}\}\s*$/.test(value);
+}
+
+function reportBareCjk(violations, pathStack, value, context) {
+  if (!CJK_REGEX.test(value)) return;
+  violations.push({
+    kind: "bare-cjk",
+    path: pathStack.slice(),
+    value,
+    context,
+  });
+}
+
+function reportIncompleteLocale(violations, pathStack, value, context) {
+  const { hasZh, hasEn } = localeCoverage(value);
+  if (hasZh && hasEn) return;
+  violations.push({
+    kind: "incomplete-locale",
+    path: pathStack.slice(),
+    value: JSON.stringify(value),
+    context,
+  });
+}
+
+function walkJsonValue(value, pathStack, violations) {
   if (value == null) return;
   if (typeof value === "string") {
-    if (CJK_REGEX.test(value)) {
-      onViolation({ path: pathStack.slice(), value });
-    }
+    reportBareCjk(violations, pathStack, value, "JSON UI");
     return;
   }
   if (Array.isArray(value)) {
-    value.forEach((v, i) => {
-      pathStack.push(`[${i}]`);
-      walkValue(v, pathStack, onViolation);
+    value.forEach((item, index) => {
+      pathStack.push(`[${index}]`);
+      walkJsonValue(item, pathStack, violations);
       pathStack.pop();
     });
     return;
   }
   if (typeof value === "object") {
-    if (isLocaleObject(value)) {
-      // All string values inside a locale-tagged I18nText object are legal —
-      // stop recursion, they are already paired with an English sibling.
+    if (isI18nTextObject(value)) {
+      reportIncompleteLocale(violations, pathStack, value, "JSON UI");
       return;
     }
-    for (const [k, v] of Object.entries(value)) {
-      pathStack.push(k);
-      walkValue(v, pathStack, onViolation);
+    for (const [key, child] of Object.entries(value)) {
+      pathStack.push(key);
+      walkJsonValue(child, pathStack, violations);
       pathStack.pop();
     }
-    return;
   }
 }
 
-async function main() {
-  const files = [];
-  for await (const file of glob(PLUGIN_GLOB, { cwd: REPO_ROOT })) {
-    files.push(file);
-  }
-  files.sort();
+function fieldMayBeVisible(pathStack) {
+  if (pathStack.length === 0) return false;
+  const last = pathStack[pathStack.length - 1];
+  if (USER_VISIBLE_KEYS.has(last)) return true;
+  return pathStack.some((part) => USER_VISIBLE_KEYS.has(part));
+}
 
+function walkPluginField(value, pathStack, violations) {
+  if (value == null) return;
+  const visible = fieldMayBeVisible(pathStack);
+  if (typeof value === "string") {
+    if (visible && !isTemplatedString(value)) {
+      reportBareCjk(violations, pathStack, value, "PLUGIN.md frontmatter");
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => {
+      pathStack.push(`[${index}]`);
+      walkPluginField(item, pathStack, violations);
+      pathStack.pop();
+    });
+    return;
+  }
+  if (typeof value === "object") {
+    if (visible && isI18nTextObject(value)) {
+      reportIncompleteLocale(
+        violations,
+        pathStack,
+        value,
+        "PLUGIN.md frontmatter",
+      );
+      return;
+    }
+    for (const [key, child] of Object.entries(value)) {
+      pathStack.push(key);
+      walkPluginField(child, pathStack, violations);
+      pathStack.pop();
+    }
+  }
+}
+
+function extractFrontmatter(text) {
+  if (!text.startsWith("---")) return null;
+  const end = text.indexOf("\n---", 3);
+  if (end === -1) return null;
+  return text.slice(3, end).trim();
+}
+
+function normalizeTemplatePlaceholders(frontmatter) {
+  return frontmatter.replaceAll(/\{\{[^}]+\}\}/g, "template-placeholder");
+}
+
+function printViolation(rel, violation) {
+  const pathStr = pathToString(violation.path);
+  const sample = violation.value.slice(0, 120);
+  if (violation.kind === "bare-cjk") {
+    console.error(
+      `${rel}: "${pathStr}" contains bare CJK string "${sample}" in ${violation.context} - wrap it in { "zh": "...", "en": "..." }`,
+    );
+    return;
+  }
+  console.error(
+    `${rel}: "${pathStr}" is an I18nText object without both Chinese and English locales: ${sample}`,
+  );
+}
+
+function checkJsonFiles() {
+  const files = collectFiles(isUiJsonFile);
   let totalViolations = 0;
+
   for (const rel of files) {
-    if (EXEMPT_PREFIXES.some((p) => rel.startsWith(p))) continue;
-    const full = resolve(REPO_ROOT, rel);
-    const text = readFileSync(full, "utf8");
+    const text = readFileSync(resolve(REPO_ROOT, rel), "utf8");
     let parsed;
     try {
       parsed = JSON.parse(text);
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error(`${rel}: failed to parse JSON — ${err.message}`);
+      console.error(`${rel}: failed to parse JSON - ${err.message}`);
       totalViolations += 1;
       continue;
     }
 
     const violations = [];
-    walkValue(parsed, [], (v) => violations.push(v));
-
-    for (const v of violations) {
+    walkJsonValue(parsed, [], violations);
+    for (const violation of violations) {
       totalViolations += 1;
-      const pathStr = v.path.length > 0 ? v.path.join(".") : "(root)";
-      // eslint-disable-next-line no-console
-      console.error(
-        `${rel}: "${pathStr}" contains CJK string "${v.value.slice(0, 80)}" — wrap it in an I18nText object { "zh": "…", "en": "…" }`,
-      );
+      printViolation(rel, violation);
     }
   }
 
-  if (totalViolations > 0) {
-    // eslint-disable-next-line no-console
-    console.error(
-      `\ncheck-plugin-i18n: ${totalViolations} violation(s) across ${files.length} plugin UI file(s)`,
-    );
-    process.exit(1);
-  }
-  // eslint-disable-next-line no-console
-  console.log(
-    `check-plugin-i18n: OK (${files.length} plugin UI file(s) scanned)`,
-  );
+  return { files, totalViolations };
 }
 
-main().catch((err) => {
-  // eslint-disable-next-line no-console
-  console.error("check-plugin-i18n crashed:", err);
-  process.exit(2);
-});
+function checkPluginMarkdownFiles() {
+  const files = collectFiles(isPluginMarkdownFile);
+  let totalViolations = 0;
+
+  for (const rel of files) {
+    const text = readFileSync(resolve(REPO_ROOT, rel), "utf8");
+    const frontmatter = extractFrontmatter(text);
+    if (frontmatter == null) continue;
+
+    let parsed;
+    try {
+      parsed = YAML.parse(normalizeTemplatePlaceholders(frontmatter));
+    } catch (err) {
+      console.error(`${rel}: failed to parse frontmatter - ${err.message}`);
+      totalViolations += 1;
+      continue;
+    }
+
+    const violations = [];
+    walkPluginField(parsed, [], violations);
+    for (const violation of violations) {
+      totalViolations += 1;
+      printViolation(rel, violation);
+    }
+  }
+
+  return { files, totalViolations };
+}
+
+const jsonResult = checkJsonFiles();
+const pluginMdResult = checkPluginMarkdownFiles();
+const totalViolations =
+  jsonResult.totalViolations + pluginMdResult.totalViolations;
+
+if (totalViolations > 0) {
+  console.error(
+    `\ncheck-plugin-i18n: ${totalViolations} violation(s) across ${jsonResult.files.length} plugin/template UI file(s) and ${pluginMdResult.files.length} PLUGIN.md file(s)`,
+  );
+  process.exit(1);
+}
+
+console.log(
+  `check-plugin-i18n: OK (${jsonResult.files.length} plugin/template UI file(s), ${pluginMdResult.files.length} PLUGIN.md file(s) scanned)`,
+);

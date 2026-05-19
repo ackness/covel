@@ -129,7 +129,9 @@ if (existsSync(targetDir)) {
 
 const placeholders = {
   "{{pluginName}}": pluginName,
-  "{{pluginDescription}}": `${pluginName} 插件 —— 请在此填写插件描述。`,
+  "{{pluginDescription}}": `${pluginName} 插件 - 请在此填写插件描述。`,
+  "{{pluginDescriptionZh}}": `${pluginName} 插件 - 请在此填写插件描述。`,
+  "{{pluginDescriptionEn}}": `${pluginName} plugin - replace with a short plugin description.`,
   "{{packageManager}}": resolveRepoPackageManager(),
 };
 

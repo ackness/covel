@@ -37,11 +37,13 @@ export function LocaleToggle({ locale, setLocale }: LocaleControlsProps) {
 }
 
 export function CloseButton({ onDismiss }: { onDismiss: () => void }) {
+  const { t } = useTranslation();
+
   return (
     <button
       onClick={onDismiss}
       className="absolute top-3 right-3 sm:top-6 sm:right-6 text-muted-foreground hover:text-foreground transition-colors z-10"
-      aria-label="Close"
+      aria-label={t("common.close", "Close")}
     >
       <X className="w-5 h-5" />
     </button>

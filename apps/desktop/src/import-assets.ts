@@ -16,6 +16,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { userPluginsDir, userWorldsDir } from "./paths.js";
+import { t } from "./main-i18n.js";
 
 export type ImportKind = "plugin" | "world";
 
@@ -218,9 +219,13 @@ export async function importAsset(
   sourcePath: string,
 ): Promise<ImportResult> {
   if (!sourcePath)
-    return { ok: false, kind, message: "No source path provided" };
+    return { ok: false, kind, message: t("import.noSourcePath") };
   if (!fs.existsSync(sourcePath)) {
-    return { ok: false, kind, message: `Source does not exist: ${sourcePath}` };
+    return {
+      ok: false,
+      kind,
+      message: t("import.sourceMissing", { sourcePath }),
+    };
   }
 
   const targetRoot = kind === "plugin" ? userPluginsDir() : userWorldsDir();
@@ -236,8 +241,8 @@ export async function importAsset(
         kind,
         message:
           kind === "plugin"
-            ? "Directory does not contain PLUGIN.md"
-            : "Directory does not contain world.yaml",
+            ? t("import.pluginMissingManifest")
+            : t("import.worldMissingManifest"),
       };
     }
     const name = path.basename(sourcePath);
@@ -247,7 +252,7 @@ export async function importAsset(
         ok: false,
         kind,
         itemName: name,
-        message: `Already exists: ${name}`,
+        message: t("import.alreadyExists", { name }),
       };
     }
     copyDirRecursive(sourcePath, targetDir);
@@ -266,8 +271,8 @@ export async function importAsset(
           kind,
           message:
             kind === "plugin"
-              ? "Zip does not contain PLUGIN.md"
-              : "Zip does not contain world.yaml",
+              ? t("import.pluginZipMissingManifest")
+              : t("import.worldZipMissingManifest"),
         };
       }
       const name = rootPrefix ?? path.basename(sourcePath, ".zip");
@@ -277,7 +282,7 @@ export async function importAsset(
           ok: false,
           kind,
           itemName: name,
-          message: `Already exists: ${name}`,
+          message: t("import.alreadyExists", { name }),
         };
       }
       // Move validated content into place. If rootPrefix, move that subdir,
@@ -291,7 +296,11 @@ export async function importAsset(
       return { ok: true, kind, targetPath: targetDir, itemName: name };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return { ok: false, kind, message };
+      return {
+        ok: false,
+        kind,
+        message: t("import.failedWithReason", { reason: message }),
+      };
     } finally {
       // Best-effort cleanup if tmpDir still exists
       try {
@@ -307,6 +316,6 @@ export async function importAsset(
   return {
     ok: false,
     kind,
-    message: "Unsupported source (expected a folder or a .zip file)",
+    message: t("import.unsupportedSource"),
   };
 }

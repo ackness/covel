@@ -294,6 +294,7 @@ export function createPluginRpcJobRunner(
         turnId: args.turnId,
         startedAt,
         phase: "prompt",
+        messageKey: "pluginRpc.jobs.imagePromptGenerating",
         message: "Generating image prompt...",
       }),
     });
@@ -324,6 +325,7 @@ export function createPluginRpcJobRunner(
                 completedAt,
                 durationMs: summary.durationMs,
                 phase: "prompt",
+                messageKey: "pluginRpc.jobs.imagePromptQueued",
                 message: "Image prompt generated; image job queued.",
                 runtimeResults: summary.runtimeResults,
                 deferredJobs,

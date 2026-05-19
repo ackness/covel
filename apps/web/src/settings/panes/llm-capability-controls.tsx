@@ -142,23 +142,32 @@ export function CapabilityTags({
       {(hasLimits || hasPricing) && (
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground font-mono">
           {cap.contextWindow ? (
-            <span title="Context Window">
-              ctx: {formatTokenCount(cap.contextWindow)}
+            <span title={t("settings.contextWindow", "Context Window")}>
+              {t("settings.contextWindowShort", "ctx")}:{" "}
+              {formatTokenCount(cap.contextWindow)}
             </span>
           ) : null}
           {cap.maxOutputTokens ? (
-            <span title="Max Output Tokens">
-              out: {formatTokenCount(cap.maxOutputTokens)}
+            <span title={t("settings.maxOutputTokens", "Max Output Tokens")}>
+              {t("settings.maxOutputTokensShort", "out")}:{" "}
+              {formatTokenCount(cap.maxOutputTokens)}
             </span>
           ) : null}
           {cap.pricing?.inputPerMToken != null &&
           cap.pricing?.outputPerMToken != null ? (
-            <span title="Pricing (input/output per M tokens)">
+            <span
+              title={t(
+                "settings.pricingInputOutputTitle",
+                "Pricing (input/output per M tokens)",
+              )}
+            >
               {formatPrice(cap.pricing.inputPerMToken)} /{" "}
               {formatPrice(cap.pricing.outputPerMToken)}
             </span>
           ) : cap.pricing?.perImage != null ? (
-            <span title="Price per image">${cap.pricing.perImage}/img</span>
+            <span title={t("settings.pricePerImage", "Price per image")}>
+              ${cap.pricing.perImage}/img
+            </span>
           ) : null}
         </div>
       )}
@@ -274,7 +283,7 @@ export function CapabilityEditor({
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
           <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
-            Context Window (tokens)
+            {t("settings.contextWindowTokens", "Context Window (tokens)")}
           </Label>
           <input
             type="number"
@@ -292,7 +301,7 @@ export function CapabilityEditor({
         </div>
         <div className="space-y-1">
           <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
-            Max Output Tokens
+            {t("settings.maxOutputTokens", "Max Output Tokens")}
           </Label>
           <input
             type="number"

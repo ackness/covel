@@ -1,4 +1,5 @@
 import { Children, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
 import * as Icons from "lucide-react";
@@ -211,6 +212,7 @@ export const CardList: ComponentRenderer = ({ children }) => {
 };
 
 export const EntryCard: ComponentRenderer = ({ element }) => {
+  const { t } = useTranslation();
   const resolve = useI18nResolver();
   const title = resolve(element.props?.title);
   const category = (element.props?.category as string) ?? "";
@@ -322,10 +324,10 @@ export const EntryCard: ComponentRenderer = ({ element }) => {
         {isNew && (
           <span
             className="ui-chip inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-semibold tracking-wider uppercase text-purple-600 dark:text-purple-300 bg-purple-500/10 border border-purple-500/30"
-            aria-label="new"
+            aria-label={t("common.new", "new")}
           >
             <SparkleIcon className="w-2.5 h-2.5" />
-            NEW
+            {t("common.newUpper", "NEW")}
           </span>
         )}
         <span

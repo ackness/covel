@@ -48,6 +48,7 @@ import {
   loadSplashInto,
   navigateToApp,
 } from "./windows.js";
+import { initDesktopI18n, t } from "./main-i18n.js";
 
 // ── Splash screen ──────────────────────────────────────────────
 
@@ -245,13 +246,13 @@ async function startServer(
   // Wait for health check with progress updates
   const healthUrl = `http://127.0.0.1:${port}/api/health`;
   writeLog("info", `Waiting for ${healthUrl}`);
-  broadcastProgress("Starting server\u2026");
+  broadcastProgress(t("startup.status.startingServer"));
 
   const PROGRESS_STEPS: Array<{ threshold: number; label: string }> = [
-    { threshold: 0, label: "Starting server\u2026" },
-    { threshold: 1_500, label: "Loading plugins\u2026" },
-    { threshold: 6_000, label: "Initializing database\u2026" },
-    { threshold: 15_000, label: "Almost ready\u2026" },
+    { threshold: 0, label: t("startup.status.startingServer") },
+    { threshold: 1_500, label: t("startup.status.loadingPlugins") },
+    { threshold: 6_000, label: t("startup.status.initializingDatabase") },
+    { threshold: 15_000, label: t("startup.status.almostReady") },
   ];
 
   await waitForServer(healthUrl, 30_000, 150, (elapsed) => {
@@ -262,7 +263,7 @@ async function startServer(
     broadcastProgress(currentLabel);
   });
 
-  broadcastProgress("Ready!");
+  broadcastProgress(t("startup.status.ready"));
   writeLog("info", `Server ready on port ${port}`);
   restartAttempts = 0;
 
@@ -516,6 +517,7 @@ app.on("before-quit", () => {
 
 app.whenReady().then(async () => {
   const paths = ensureUserPaths();
+  initDesktopI18n(paths.userSettingsJsonPath);
   initPersistentLog(paths.logsDir, paths.logRotation, app.getVersion());
   registerDesktopIpcHandlers({
     paths,

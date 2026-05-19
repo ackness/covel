@@ -28,6 +28,7 @@ export function SubmittedSelectionFooter({
 }
 
 export function SystemMessageLine({ msg }: { msg: StreamMessage }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const content = msg.content ?? "";
   // First non-empty line is the best proxy for a headline.
@@ -59,7 +60,11 @@ export function SystemMessageLine({ msg }: { msg: StreamMessage }) {
           {msg.runtimeId && (
             <span className="opacity-60 mr-1.5">[{msg.runtimeId}]</span>
           )}
-          {summary || <span className="italic opacity-60">system</span>}
+          {summary || (
+            <span className="italic opacity-60">
+              {t("session.system", "system")}
+            </span>
+          )}
         </span>
       </button>
       {expanded && hasMore && (
@@ -72,6 +77,7 @@ export function SystemMessageLine({ msg }: { msg: StreamMessage }) {
 }
 
 export function RawJsonBlock({ content }: { content: string }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -91,7 +97,7 @@ export function RawJsonBlock({ content }: { content: string }) {
       <button
         onClick={handleCopy}
         className="absolute top-2 right-2 p-1 border border-border bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity"
-        title="Copy"
+        title={t("common.copy", "Copy")}
       >
         {copied ? (
           <Check className="w-3 h-3 text-green-500" />

@@ -29,6 +29,7 @@ import {
   readRuntimeEnv,
   toApiKeyEnvMap,
 } from "@covel/shared";
+import { apiError } from "../api-error.js";
 import { makeDesktopRestTokenGuard } from "./privileged-auth.js";
 
 export interface ConfigApiDeps {
@@ -86,7 +87,10 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     const covelHome = resolveCovelHome();
     if (!covelHome) {
       return c.json(
-        { error: "Key persistence is not available on this deployment." },
+        apiError(
+          "key_persistence_unavailable",
+          "Key persistence is not available on this deployment.",
+        ),
         400,
       );
     }
@@ -95,10 +99,16 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     try {
       body = await c.req.json();
     } catch {
-      return c.json({ error: "Invalid JSON body" }, 400);
+      return c.json(apiError("invalid_json_body", "Invalid JSON body"), 400);
     }
     if (!body || typeof body !== "object") {
-      return c.json({ error: "Body must be { [provider]: value }" }, 400);
+      return c.json(
+        apiError(
+          "invalid_provider_keys_body",
+          "Body must be { [provider]: value }",
+        ),
+        400,
+      );
     }
 
     const file = join(covelHome, "keys.env");
@@ -159,16 +169,22 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   app.put("/api/config/settings", requireToken, async (c) => {
     const covelHome = resolveCovelHome();
     if (!covelHome) {
-      return c.json({ error: "Not a desktop deployment" }, 400);
+      return c.json(
+        apiError("not_desktop_deployment", "Not a desktop deployment"),
+        400,
+      );
     }
     let body: unknown;
     try {
       body = await c.req.json();
     } catch {
-      return c.json({ error: "Invalid JSON body" }, 400);
+      return c.json(apiError("invalid_json_body", "Invalid JSON body"), 400);
     }
     if (!body || typeof body !== "object") {
-      return c.json({ error: "Body must be { entries: object }" }, 400);
+      return c.json(
+        apiError("invalid_settings_body", "Body must be { entries: object }"),
+        400,
+      );
     }
     const entries =
       (body as { entries?: unknown }).entries &&
@@ -196,35 +212,51 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   app.put("/api/config/data-root", requireToken, async (c) => {
     const covelHome = resolveCovelHome();
     if (!covelHome) {
-      return c.json({ error: "Not a desktop deployment" }, 400);
+      return c.json(
+        apiError("not_desktop_deployment", "Not a desktop deployment"),
+        400,
+      );
     }
 
     let body: unknown;
     try {
       body = await c.req.json();
     } catch {
-      return c.json({ error: "Invalid JSON body" }, 400);
+      return c.json(apiError("invalid_json_body", "Invalid JSON body"), 400);
     }
     const newPath =
       body && typeof body === "object"
         ? (body as { path?: string }).path
         : undefined;
     if (!newPath || typeof newPath !== "string" || !newPath.trim()) {
-      return c.json({ error: "Body must include { path: string }" }, 400);
+      return c.json(
+        apiError(
+          "invalid_data_root_body",
+          "Body must include { path: string }",
+        ),
+        400,
+      );
     }
 
     const trimmed = newPath.trim();
     if (!isAbsolute(trimmed)) {
-      return c.json({ error: "data_root must be an absolute path" }, 400);
+      return c.json(
+        apiError(
+          "data_root_not_absolute",
+          "data_root must be an absolute path",
+        ),
+        400,
+      );
     }
 
     try {
       writeDataRootInConfig(covelHome, trimmed);
     } catch (err) {
       return c.json(
-        {
-          error: `Could not write config.toml: ${err instanceof Error ? err.message : err}`,
-        },
+        apiError(
+          "config_write_failed",
+          `Could not write config.toml: ${err instanceof Error ? err.message : err}`,
+        ),
         500,
       );
     }
@@ -240,7 +272,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     try {
       body = await c.req.json();
     } catch {
-      return c.json({ error: "Invalid JSON body" }, 400);
+      return c.json(apiError("invalid_json_body", "Invalid JSON body"), 400);
     }
     const target =
       body && typeof body === "object"
@@ -259,15 +291,22 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
 
     if (!target || !(target in targetMap)) {
       return c.json(
-        {
-          error: `target must be one of: ${Object.keys(targetMap).join(", ")}`,
-        },
+        apiError(
+          "invalid_open_target",
+          `target must be one of: ${Object.keys(targetMap).join(", ")}`,
+        ),
         400,
       );
     }
     const path = targetMap[target];
     if (!path || !existsSync(path)) {
-      return c.json({ error: `"${target}" is not available at ${path}` }, 400);
+      return c.json(
+        apiError(
+          "open_target_unavailable",
+          `"${target}" is not available at ${path}`,
+        ),
+        400,
+      );
     }
 
     try {
@@ -275,7 +314,10 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       return c.json({ ok: true });
     } catch (err) {
       return c.json(
-        { error: err instanceof Error ? err.message : String(err) },
+        apiError(
+          "open_target_failed",
+          err instanceof Error ? err.message : String(err),
+        ),
         500,
       );
     }

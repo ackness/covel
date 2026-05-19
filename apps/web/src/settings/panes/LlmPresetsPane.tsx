@@ -139,7 +139,7 @@ export function LlmPresetsPane() {
                   variant="ghost"
                   size="icon-xs"
                   onClick={() => handleRemove(preset.id)}
-                  aria-label="Remove"
+                  aria-label={t("common.delete", "Delete")}
                 >
                   <Trash2 className="w-3 h-3" />
                 </Button>
@@ -218,7 +218,7 @@ export function LlmPresetsPane() {
           <div className="col-span-2 flex gap-1">
             <input
               type={visibleNew ? "text" : "password"}
-              placeholder="API Key (sk-...)"
+              placeholder={t("settings.apiKeyPlaceholder", "API Key (sk-...)")}
               value={newPreset.apiKey ?? ""}
               onChange={(e) =>
                 setNewPreset({ ...newPreset, apiKey: e.target.value })
@@ -230,7 +230,11 @@ export function LlmPresetsPane() {
               size="icon"
               className="shrink-0 h-7 w-7"
               onClick={() => setVisibleNew((v) => !v)}
-              aria-label={visibleNew ? "Hide" : "Show"}
+              aria-label={
+                visibleNew
+                  ? t("settings.hide", "Hide")
+                  : t("settings.show", "Show")
+              }
             >
               {visibleNew ? (
                 <EyeOff className="w-3 h-3" />

@@ -1,3 +1,5 @@
+import { t } from "./main-i18n.js";
+
 export interface DiagnosedError {
   title: string;
   detail: string;
@@ -8,31 +10,31 @@ export function diagnoseStartupError(err: unknown): DiagnosedError {
   const msg = err instanceof Error ? err.message : String(err);
   if (/EADDRINUSE|address already in use/i.test(msg)) {
     return {
-      title: "Port conflict",
+      title: t("startup.portConflict.title"),
       detail: msg,
-      hint: "Another process is using the required port. Close other Covel instances or restart your computer.",
+      hint: t("startup.portConflict.hint"),
     };
   }
   if (/EACCES|permission denied/i.test(msg)) {
     return {
-      title: "Permission denied",
+      title: t("startup.permissionDenied.title"),
       detail: msg,
-      hint: "Covel could not access a required directory. Check that the app has permission to write to its data folder.",
+      hint: t("startup.permissionDenied.hint"),
     };
   }
   if (/did not start within|timeout/i.test(msg)) {
     return {
-      title: "Server timed out",
+      title: t("startup.timeout.title"),
       detail: msg,
-      hint: "The backend took too long to boot. Check the logs. A missing llm.toml or slow disk can cause this.",
+      hint: t("startup.timeout.hint"),
     };
   }
   if (/ENOENT/i.test(msg)) {
     return {
-      title: "Missing file",
+      title: t("startup.missingFile.title"),
       detail: msg,
-      hint: "A required bundled file is missing. The installation may be corrupt — reinstall the app.",
+      hint: t("startup.missingFile.hint"),
     };
   }
-  return { title: "Startup failed", detail: msg };
+  return { title: t("startup.failed.title"), detail: msg };
 }

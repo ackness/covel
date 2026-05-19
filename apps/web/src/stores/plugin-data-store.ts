@@ -168,6 +168,8 @@ export interface PluginJobRecord {
   readonly startedAt?: string;
   readonly completedAt?: string;
   readonly durationMs?: number;
+  readonly message?: string;
+  readonly messageKey?: string;
   readonly error?: string;
   readonly runtimeResults?: readonly {
     readonly runtimeId: string;

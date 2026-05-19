@@ -126,7 +126,9 @@ export function ProviderForm({
       {isCustom && (
         <div className="space-y-2">
           <div className="space-y-1.5">
-            <Label className="ui-eyebrow text-[10px]">Base URL</Label>
+            <Label className="ui-eyebrow text-[10px]">
+              {t("onboarding.baseUrl", "Base URL")}
+            </Label>
             <input
               type="text"
               placeholder="https://api.example.com/v1"

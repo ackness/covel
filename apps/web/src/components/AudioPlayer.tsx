@@ -24,6 +24,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { clsx } from "clsx";
 import { Download, Pause, Play } from "lucide-react";
 import type { MediaRef } from "@covel/shared";
@@ -76,7 +77,9 @@ function mimeToExt(mime: string): string {
 }
 
 export function AudioPlayer(props: AudioPlayerProps): ReactElement {
-  const { src, sessionId, alt = "audio", className, downloadName } = props;
+  const { t } = useTranslation();
+  const { src, sessionId, alt, className, downloadName } = props;
+  const altText = alt ?? t("media.audio", "audio");
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
@@ -228,17 +231,20 @@ export function AudioPlayer(props: AudioPlayerProps): ReactElement {
           className,
         )}
         role="status"
-        aria-label={`${alt} unavailable`}
+        aria-label={t("media.audioUnavailableAria", "{{label}} unavailable", {
+          label: altText,
+        })}
       >
         <span className="text-xs font-mono text-muted-foreground">
-          audio unavailable
+          {t("media.audioUnavailable", "audio unavailable")}
         </span>
       </div>
     );
   }
 
   const ext = mimeToExt(refValid.mime);
-  const filename = downloadName ?? `${alt || "audio"}.${ext}`;
+  const filename =
+    downloadName ?? `${altText || t("media.audio", "audio")}.${ext}`;
   const isReady = resolved.status === "ready";
 
   return (
@@ -248,13 +254,13 @@ export function AudioPlayer(props: AudioPlayerProps): ReactElement {
         className,
       )}
       role="group"
-      aria-label={alt}
+      aria-label={altText}
     >
       <audio
         ref={audioRef}
         src={resolved.url}
         preload="metadata"
-        aria-label={alt}
+        aria-label={altText}
         className="hidden"
       />
 
@@ -263,7 +269,9 @@ export function AudioPlayer(props: AudioPlayerProps): ReactElement {
         onClick={togglePlay}
         disabled={!isReady}
         className="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-40 transition-opacity focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background"
-        aria-label={playing ? "Pause" : "Play"}
+        aria-label={
+          playing ? t("media.pause", "Pause") : t("media.play", "Play")
+        }
         aria-pressed={playing}
       >
         {playing ? (
@@ -283,7 +291,7 @@ export function AudioPlayer(props: AudioPlayerProps): ReactElement {
       <div
         ref={trackRef}
         role="slider"
-        aria-label="Seek"
+        aria-label={t("media.seek", "Seek")}
         aria-valuemin={0}
         aria-valuemax={Math.max(0, Math.floor(duration))}
         aria-valuenow={Math.floor(currentTime)}
@@ -305,7 +313,7 @@ export function AudioPlayer(props: AudioPlayerProps): ReactElement {
         value={speed}
         onChange={(ev) => setSpeed(Number(ev.target.value))}
         className="shrink-0 text-xs font-mono bg-transparent text-muted-foreground hover:text-foreground border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring rounded-sm py-0.5"
-        aria-label="Playback speed"
+        aria-label={t("media.playbackSpeed", "Playback speed")}
       >
         {SPEED_OPTIONS.map((value) => (
           <option key={value} value={value}>
@@ -321,7 +329,7 @@ export function AudioPlayer(props: AudioPlayerProps): ReactElement {
           "shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-border/40 transition-colors focus:outline-none focus:ring-2 focus:ring-ring",
           !isReady && "pointer-events-none opacity-40",
         )}
-        aria-label="Download audio"
+        aria-label={t("media.downloadAudio", "Download audio")}
         title={filename}
       >
         <Download className="w-3.5 h-3.5" aria-hidden="true" />

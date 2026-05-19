@@ -1,4 +1,5 @@
 import { request } from "./request.js";
+import type { I18nText } from "@covel/shared";
 import type {
   CommandSummary,
   PackageSummary,
@@ -72,6 +73,7 @@ export interface PluginFlowStep {
 
 export interface PluginFlowSegment {
   label: string;
+  labelText?: I18nText;
   range: [number, number];
 }
 
@@ -97,6 +99,7 @@ export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
   };
   type RawSegment = {
     label: string;
+    labelText?: I18nText;
     minPriority: number;
     maxPriority: number;
   };
@@ -116,6 +119,7 @@ export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
     })),
     segments: raw.segments.map((seg) => ({
       label: seg.label,
+      labelText: seg.labelText,
       range: [seg.minPriority, seg.maxPriority],
     })),
   };

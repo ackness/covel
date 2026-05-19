@@ -187,7 +187,10 @@ export function ChatMessages({
           t,
           runtimeId: imageGenEntry.runtimeId,
           expectsBackgroundFollower: true,
-          fallbackFailureMessage: "Image generation failed",
+          fallbackFailureMessage: t(
+            "coreImage.generationFailed",
+            "Image generation failed",
+          ),
         });
       }
     } catch (err) {
@@ -281,7 +284,7 @@ export function ChatMessages({
       >
         {showSourceBadge && (
           <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
-            {msg.runtimeId ?? "assistant"}
+            {msg.runtimeId ?? t("session.assistant", "assistant")}
             {msg.kind && msg.kind !== "story" && (
               <span className="ml-1.5 opacity-60">· {msg.kind}</span>
             )}
@@ -290,7 +293,9 @@ export function ChatMessages({
         <span
           className={`ui-eyebrow text-xs ${isUser ? "text-primary" : "text-muted-foreground"}`}
         >
-          {isUser ? "Player" : "Assistant"}
+          {isUser
+            ? t("session.player", "Player")
+            : t("session.assistant", "Assistant")}
           {msg.turnId && (
             <span className="ml-2 font-mono text-[10px]">
               {isUser ? `· ${msg.turnId}` : msg.turnId}

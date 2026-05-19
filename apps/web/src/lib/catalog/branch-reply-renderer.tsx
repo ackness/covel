@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
 import * as Icons from "lucide-react";
@@ -75,6 +76,7 @@ function normalizeBranchReplyCandidates(value: unknown): {
  * accept/regenerate call plugin-rpc directly for block-rendered candidate UI.
  */
 export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
+  const { t } = useTranslation();
   const resolve = useI18nResolver();
   const { state, sendMessage, upsertInteractionDraft } = useSession();
   const sessionId = state.session?.id;
@@ -86,11 +88,16 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
     normalizeBranchReplyCandidates(payload);
   const pluginId =
     typeof props.pluginId === "string" ? props.pluginId : "branch-reply";
-  const title = resolve(props.title) || "Reply candidates";
-  const draftLabel = resolve(props.draftLabel) || "Draft";
-  const sendLabel = resolve(props.sendLabel) || "Send";
-  const acceptLabel = resolve(props.acceptLabel) || "Accept";
-  const regenerateLabel = resolve(props.regenerateLabel) || "Regenerate";
+  const title =
+    resolve(props.title) ||
+    t("branchReply.replyCandidates", "Reply candidates");
+  const draftLabel =
+    resolve(props.draftLabel) || t("branchReply.draft", "Draft");
+  const sendLabel = resolve(props.sendLabel) || t("branchReply.send", "Send");
+  const acceptLabel =
+    resolve(props.acceptLabel) || t("branchReply.accept", "Accept");
+  const regenerateLabel =
+    resolve(props.regenerateLabel) || t("branchReply.regenerate", "Regenerate");
 
   if (candidates.length === 0) return null;
 
@@ -131,9 +138,21 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
       if (res.status === "error") {
         emitToast("error", res.error);
       } else if (res.status === "accepted") {
-        emitToast("info", `Submitted branch-reply job: ${res.jobId}`);
+        emitToast(
+          "info",
+          t("branchReply.jobSubmitted", {
+            jobId: res.jobId,
+            defaultValue: "Submitted branch-reply job: {{jobId}}",
+          }),
+        );
       } else if (res.status === "approval-required") {
-        emitToast("error", "Branch reply action requires approval.");
+        emitToast(
+          "error",
+          t(
+            "branchReply.approvalRequired",
+            "Branch reply action requires approval.",
+          ),
+        );
       } else if (res.status === "ok") {
         const runtimeError = res.runtimeResults?.find(
           (r) =>
@@ -143,7 +162,9 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
         if (runtimeError || res.abortReason) {
           emitToast(
             "error",
-            runtimeError ?? res.abortReason ?? "Branch reply action failed",
+            runtimeError ??
+              res.abortReason ??
+              t("branchReply.actionFailed", "Branch reply action failed"),
           );
         }
       }

@@ -113,10 +113,18 @@ function renderStructuredData(
         {usage && (
           <div className="flex gap-3 text-[10px] text-muted-foreground">
             <span>
-              {t("debugger.inputTokens")}: {usage.inputTokens ?? 0} tokens
+              {t("debugger.inputTokens")}:{" "}
+              {t("debugger.tokenCount", {
+                count: usage.inputTokens ?? 0,
+                defaultValue: "{{count}} tokens",
+              })}
             </span>
             <span>
-              {t("debugger.outputTokens")}: {usage.outputTokens ?? 0} tokens
+              {t("debugger.outputTokens")}:{" "}
+              {t("debugger.tokenCount", {
+                count: usage.outputTokens ?? 0,
+                defaultValue: "{{count}} tokens",
+              })}
             </span>
           </div>
         )}

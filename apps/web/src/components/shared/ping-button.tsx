@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { CheckCircle2, Loader2, XCircle, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { pingPreset, type PingResult } from "@/services/api.js";
@@ -98,6 +99,7 @@ export function PingButton({
   onBeforePing,
   className,
 }: PingButtonProps) {
+  const { t } = useTranslation();
   const requestId = requestIdFor(target);
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<PingResult | null>(null);
@@ -140,7 +142,7 @@ export function PingButton({
       const fallback: PingResult = {
         ok: false,
         latencyMs: 0,
-        error: err instanceof Error ? err.message : "Network error",
+        error: err instanceof Error ? err.message : t("toast.networkError"),
       };
       resultCache.set(requestId, { result: fallback, at: Date.now() });
       setResult(fallback);
@@ -171,17 +173,32 @@ export function PingButton({
     }
   }
   if (result?.ok && latencyDisplay !== null) {
-    tooltipLines.push(`${latencyDisplay}ms TTFB`);
+    tooltipLines.push(
+      t("settings.pingTtfb", {
+        ms: latencyDisplay,
+        defaultValue: "{{ms}}ms TTFB",
+      }),
+    );
   } else if (result && !result.ok && result.error) {
-    tooltipLines.push(`Error: ${result.error}`);
+    tooltipLines.push(
+      t("settings.pingErrorTooltip", {
+        error: result.error,
+        defaultValue: "Error: {{error}}",
+      }),
+    );
   }
   if (fellThrough) {
-    tooltipLines.push(`⚠ resolved via ${resolvedVia}`);
+    tooltipLines.push(
+      t("settings.pingResolvedVia", {
+        resolvedVia,
+        defaultValue: "resolved via {{resolvedVia}}",
+      }),
+    );
   }
   const tooltip =
     tooltipLines.length > 0
       ? tooltipLines.join("\n")
-      : "Test connectivity and latency";
+      : t("settings.pingTooltip", "Test connectivity and latency");
 
   const button = (
     <Button
@@ -203,7 +220,7 @@ export function PingButton({
           className={`${size === "xs" ? "w-2.5 h-2.5" : "w-3 h-3"} ${variant === "inline" ? "mr-1" : ""}`}
         />
       )}
-      {variant === "inline" && "Ping"}
+      {variant === "inline" && t("settings.ping", "Ping")}
     </Button>
   );
 
@@ -225,7 +242,11 @@ export function PingButton({
               {fellThrough && (
                 <span
                   className="text-[10px] text-amber-500"
-                  title={`Slot fell through to ${resolvedVia}; the slot you requested is not configured.`}
+                  title={t("settings.pingSlotFallbackTitle", {
+                    resolvedVia,
+                    defaultValue:
+                      "Slot fell through to {{resolvedVia}}; the slot you requested is not configured.",
+                  })}
                 >
                   ⚠
                 </span>
@@ -244,7 +265,8 @@ export function PingButton({
                 className="text-destructive truncate max-w-[180px]"
                 title={result.error}
               >
-                {result.error?.slice(0, 40) ?? "Failed"}
+                {result.error?.slice(0, 40) ??
+                  t("settings.pingFailed", "Failed")}
               </span>
             </>
           )}

@@ -156,7 +156,7 @@ export function DatabasePanel({
     <div className="space-y-4 min-w-0">
       <header className="flex items-center justify-between gap-2 min-w-0 pb-2 border-b border-[var(--rule-color)]">
         <span className="ui-folio truncate">
-          DATABASE&nbsp;&nbsp;
+          {t("session.database")}&nbsp;&nbsp;
           <em className="not-italic">
             {t("session.dbVolumes", { count: tables.length })}
           </em>
@@ -208,7 +208,7 @@ export function DatabasePanel({
       {core.length > 0 && (
         <Section
           ord={`§ ${t("session.dbCoreSection")}`}
-          title="State"
+          title={t("session.state")}
           count={core.length}
         >
           <RowList>
@@ -222,7 +222,7 @@ export function DatabasePanel({
       {plugins.length > 0 && (
         <Section
           ord={`§ ${t("session.dbPluginsSection")}`}
-          title="Plugin Data"
+          title={t("session.dbPluginData", "Plugin Data")}
           count={plugins.reduce((acc, g) => acc + g.rows.length, 0)}
           subCount={plugins.length}
         >
@@ -379,7 +379,9 @@ function ValuesBlock({
     <div className="space-y-1 min-w-0">
       <span className="ui-eyebrow">{t("session.dbValues", "Values")}</span>
       {valueCount === 0 ? (
-        <p className="ui-empty-copy text-[10px]">(empty)</p>
+        <p className="ui-empty-copy text-[10px]">
+          {t("session.dbValueEmpty", "(empty)")}
+        </p>
       ) : (
         <pre className="max-h-[200px] max-w-full overflow-auto p-2 text-[10px] font-mono leading-snug whitespace-pre-wrap break-words [overflow-wrap:anywhere] bg-[var(--surface-inset)] border border-[var(--rule-color)] rounded-sm">
           {JSON.stringify(data, null, 2)}
