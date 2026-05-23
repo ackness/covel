@@ -654,7 +654,7 @@ capabilities: [narrative, world-data-provider]
 
 `tags` 是面向玩家、作者和准备页筛选的目录标签，例如 `mode:dialogue`、`role:narrator`、`cost:llm`。`capabilities` 保持机器能力契约；框架逻辑依赖 `capabilities`，准备页和组合包匹配使用 `tags`。
 
-`relations` 描述插件目录关系，可包含 `provides`、`requires`、`conflicts`、`recommends`。简单写法使用字符串数组；需要更细说明时可使用带 `plugin`、`runtime`、`capability`、`tag`、`reason` 的对象。
+`relations` 描述插件目录关系，可包含 `provides`、`requires`、`conflicts`、`recommends`。简单写法使用字符串数组；需要更细说明时可使用带 `plugin`、`runtime`、`capability`、`tag`、`reason` 的对象。创建或启用 session 时，服务端会执行 `requires` 闭包并移除 `conflicts` 指向的插件；`provides` 和 `recommends` 作为目录/准备页信号保留。
 
 ```yaml
 tags:
@@ -870,14 +870,14 @@ input:
 
 ### trigger 类型
 
-| 类型          | 说明                                                   |
-| ------------- | ------------------------------------------------------ |
-| `auto`        | 每个 Turn 自动触发                                     |
-| `manual`      | 仅玩家手动触发                                         |
-| `scheduled`   | 每 N 轮触发一次（配合 `interval` + `maxTriggerCount`） |
-| `conditional` | reserved：未来条件触发能力                             |
-| `event`       | 监听特定事件触发                                       |
-| `error-retry` | 前序 Runtime 出错时触发                                |
+| 类型          | 说明                                                           |
+| ------------- | -------------------------------------------------------------- |
+| `auto`        | 每个 Turn 自动触发                                             |
+| `manual`      | 仅玩家手动触发；启用插件只表示该能力可用，不会自动进入每轮调度 |
+| `scheduled`   | 每 N 轮触发一次（配合 `interval` + `maxTriggerCount`）         |
+| `conditional` | reserved：未来条件触发能力                                     |
+| `event`       | 监听特定事件触发                                               |
+| `error-retry` | 前序 Runtime 出错时触发                                        |
 
 ### trigger 字段速查
 

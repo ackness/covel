@@ -1,5 +1,9 @@
 /**
  * Session-scoped plugin activation and configuration.
+ *
+ * Legacy/test-only helper. Production session activation is now stored on
+ * SessionRecord.activePlugins and resolved through server session routes.
+ * Keep this small utility only for compatibility with older tests/imports.
  */
 
 export interface SessionPluginScope {

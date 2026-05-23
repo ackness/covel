@@ -12,6 +12,7 @@ import { rateLimiter } from "../../middleware/rate-limit.js";
 import type { DataStore, MediaStore } from "@covel/store";
 import type { CompactorRunner } from "@covel/context";
 import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
+import { syncSessionTurnCount } from "./turn-count.js";
 
 type Env = {
   Variables: {
@@ -145,14 +146,10 @@ turnRoutes.post("/:id/turn", rateLimiter({ max: 30 }), async (c) => {
       },
     );
 
-    // Update session turn count — derive from actual turn results to avoid
-    // concurrent read-modify-write races (two parallel turns reading the
-    // same stale `session.turnCount` and overwriting each other).
-    const turnResults = await store.listTurnResults(sessionId);
-    await store.updateSession(sessionId, {
-      turnCount: turnResults.length,
-      updatedAt: new Date().toISOString(),
-    });
+    // Update session turn count with the same lifecycle semantics as
+    // /api/actions. Setup-only Pre-Game turn_results are persisted for
+    // debugging and snapshots, but they do not count as main-loop turns.
+    await syncSessionTurnCount({ store, sessionId, activeRuntimes });
 
     // Process runtime results through the same commit pipeline as
     // /api/actions. Without this, turn.ts would write runtime_results but

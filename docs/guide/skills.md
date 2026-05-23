@@ -73,6 +73,7 @@ Covel 已经内置项目本地 skills：
 - `.claude/skills/create-plugin/`：生成插件骨架与作者参考。
 - `.claude/skills/create-world/`：生成世界包与校验参考。
 - `.claude/skills/agent-browser/`：浏览器调试辅助。
+- `.claude/skills/covel-static-turn-audit/`：静态审计 start-game、插件启用、turn 调度和多轮流程。
 
 ## 在外部代理中使用
 
@@ -107,4 +108,5 @@ Covel 已经内置项目本地 skills：
 - [agentskills.io](https://agentskills.io) — skill 规范源
 - [`.claude/skills/create-plugin/SKILL.md`](../../.claude/skills/create-plugin/SKILL.md) — 创建插件
 - [`.claude/skills/create-world/SKILL.md`](../../.claude/skills/create-world/SKILL.md) — 创建世界包
+- [`.claude/skills/covel-static-turn-audit/SKILL.md`](../../.claude/skills/covel-static-turn-audit/SKILL.md) — 静态 turn flow 审计
 - [docs/guide/plugin-authoring.md](./plugin-authoring.md) — 如果你要的是 framework 级能力而不是 skill

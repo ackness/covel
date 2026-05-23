@@ -1,0 +1,4 @@
+interface:
+  display_name: "Covel Static Turn Audit"
+  short_description: "Audit Covel turn flow from code"
+  default_prompt: "Use $covel-static-turn-audit to statically audit a Covel start-game and multi-turn plugin flow."

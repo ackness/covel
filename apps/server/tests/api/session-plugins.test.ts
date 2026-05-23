@@ -86,6 +86,21 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           id: "narrator",
           name: "Core Narrator",
           pluginType: "core-plugin",
+          relations: {
+            provides: ["narrative-engine"],
+            conflicts: ["chat-mode-narrator"],
+          },
+        }),
+        source: "builtin",
+      }),
+    );
+    registry.register(
+      makeEntry({
+        id: "pregame",
+        summary: makeSummary({
+          id: "pregame",
+          name: "Core Pre-Game",
+          pluginType: "core-plugin",
         }),
         source: "builtin",
       }),
@@ -108,6 +123,19 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           id: "chat-mode-narrator",
           name: "Chat Mode Narrator",
           pluginType: "plugin",
+          relations: {
+            provides: ["narrative-engine"],
+            requires: [
+              "scene-cast",
+              "scene-prompts",
+              "character-blueprint",
+              "character-presence",
+              "player-identity",
+              "living-world-rules",
+              "branch-reply",
+            ],
+            conflicts: ["narrator"],
+          },
         }),
         source: "builtin",
       }),
@@ -259,6 +287,193 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(session?.activePlugins).toContain("living-world-rules");
       expect(session?.activePlugins).toContain("branch-reply");
       expect(session?.activePlugins).not.toContain("narrator");
+    });
+
+    it("resolves plugin dependencies and conflicts from manifest relations", async () => {
+      registry.register(
+        makeEntry({
+          id: "relation-source",
+          summary: makeSummary({
+            id: "relation-source",
+            name: "Relation Source",
+            relations: {
+              requires: [{ plugin: "relation-required" }],
+              conflicts: [{ target: { plugin: "relation-conflict" } }],
+            },
+          }),
+          source: "community",
+        }),
+      );
+      registry.register(
+        makeEntry({
+          id: "relation-required",
+          summary: makeSummary({
+            id: "relation-required",
+            name: "Relation Required",
+          }),
+          source: "community",
+        }),
+      );
+      registry.register(
+        makeEntry({
+          id: "relation-conflict",
+          summary: makeSummary({
+            id: "relation-conflict",
+            name: "Relation Conflict",
+          }),
+          source: "community",
+        }),
+      );
+
+      const res = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "sess-relations-create",
+          plugins: ["relation-source", "relation-conflict"],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { activePlugins: string[] };
+      expect(body.activePlugins).toContain("relation-source");
+      expect(body.activePlugins).toContain("relation-required");
+      expect(body.activePlugins).not.toContain("relation-conflict");
+    });
+
+    it("keeps a requested plugin when an existing active plugin declares the conflict", async () => {
+      registry.register(
+        makeEntry({
+          id: "default-engine",
+          summary: makeSummary({
+            id: "default-engine",
+            name: "Default Engine",
+            relations: {
+              conflicts: ["alternate-engine"],
+            },
+          }),
+          source: "community",
+        }),
+      );
+      registry.register(
+        makeEntry({
+          id: "alternate-engine",
+          summary: makeSummary({
+            id: "alternate-engine",
+            name: "Alternate Engine",
+          }),
+          source: "community",
+        }),
+      );
+      await store.createSession({
+        id: "sess-reverse-conflict",
+        worldId: null,
+        status: "active",
+        turnCount: 1,
+        preGameCompleted: [],
+        presetId: null,
+        activePlugins: ["default-engine"],
+        createdAt: new Date().toISOString(),
+      });
+
+      const res = await app.request(
+        "/api/sessions/sess-reverse-conflict/plugins/enable",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pluginId: "alternate-engine" }),
+        },
+      );
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { active: string[] };
+      expect(body.active).toContain("alternate-engine");
+      expect(body.active).not.toContain("default-engine");
+    });
+
+    it("does not let community conflicts remove required core plugins", async () => {
+      registry.register(
+        makeEntry({
+          id: "unsafe-community",
+          summary: makeSummary({
+            id: "unsafe-community",
+            name: "Unsafe Community",
+            relations: {
+              conflicts: ["pregame"],
+            },
+          }),
+          source: "community",
+        }),
+      );
+
+      const res = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "sess-core-conflict-create",
+          plugins: ["unsafe-community"],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { activePlugins: string[] };
+      expect(body.activePlugins).toContain("pregame");
+      expect(body.activePlugins).toContain("narrator");
+      expect(body.activePlugins).not.toContain("unsafe-community");
+    });
+
+    it("removes plugins whose required dependencies were removed by conflicts", async () => {
+      registry.register(
+        makeEntry({
+          id: "dependent-plugin",
+          summary: makeSummary({
+            id: "dependent-plugin",
+            name: "Dependent Plugin",
+            relations: {
+              requires: ["required-plugin"],
+            },
+          }),
+          source: "community",
+        }),
+      );
+      registry.register(
+        makeEntry({
+          id: "required-plugin",
+          summary: makeSummary({
+            id: "required-plugin",
+            name: "Required Plugin",
+          }),
+          source: "community",
+        }),
+      );
+      registry.register(
+        makeEntry({
+          id: "conflicting-plugin",
+          summary: makeSummary({
+            id: "conflicting-plugin",
+            name: "Conflicting Plugin",
+            relations: {
+              conflicts: ["required-plugin"],
+            },
+          }),
+          source: "community",
+        }),
+      );
+
+      const res = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "sess-unsatisfied-requires-create",
+          plugins: ["dependent-plugin", "conflicting-plugin"],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { activePlugins: string[] };
+      expect(body.activePlugins).toContain("conflicting-plugin");
+      expect(body.activePlugins).not.toContain("required-plugin");
+      expect(body.activePlugins).not.toContain("dependent-plugin");
     });
 
     it("imports world character blueprints when creating a session", async () => {

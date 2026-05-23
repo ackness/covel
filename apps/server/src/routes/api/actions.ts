@@ -20,6 +20,7 @@ import type { RuntimeManifest } from "@covel/shared";
 import type { CompactorRunner } from "@covel/context";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
+import { syncSessionTurnCount } from "./turn-count.js";
 
 // SSE uses ProtocolEventType names directly — no legacy mapping.
 // Frontend handleSseEvent handles these standard types.
@@ -187,12 +188,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
 
   // Get active runtimes for this session (sorted by priority)
   const activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
-  const preGamePendingBeforeExecution = activeRuntimes.some(
-    (rt) =>
-      rt.priority !== undefined &&
-      rt.priority <= 99 &&
-      !(session.preGameCompleted ?? []).includes(rt.name),
-  );
 
   // Resolve runtime display kind from manifest declarations for progress SSE.
   // The commit path creates its own processor once the per-turn emitter exists.
@@ -447,24 +442,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         }),
       );
 
-      // Gameplay turns keep the existing count-from-results behavior. Pending
-      // Pre-Game turns keep the lifecycle state written by the executor, so
-      // setup forms can remain in the setup phase across saved turn results.
-      const sessionAfterExecution = await store.getSession(sessionId);
-      const completedPreGame = sessionAfterExecution?.preGameCompleted ?? [];
-      const preGamePending = activeRuntimes.some(
-        (rt) =>
-          rt.priority !== undefined &&
-          rt.priority <= 99 &&
-          !completedPreGame.includes(rt.name),
-      );
-      if (!preGamePendingBeforeExecution && !preGamePending) {
-        const turnResults = await store.listTurnResults(sessionId);
-        await store.updateSession(sessionId, {
-          turnCount: turnResults.length,
-          updatedAt: new Date().toISOString(),
-        });
-      }
+      // Keep lifecycle turnCount aligned with executed main-loop turns.
+      // Pre-Game setup requests still save turn_results, but they do not
+      // advance the user-visible main-loop counter.
+      await syncSessionTurnCount({ store, sessionId, activeRuntimes });
 
       // Process all runtime results through Session Kernel:
       // normalize output → commit to Store → emit SessionEvents as SSE.

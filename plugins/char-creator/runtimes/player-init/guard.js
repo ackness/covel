@@ -21,7 +21,7 @@ const CHARACTER_PLUGIN_ID = "char-creator";
  * @returns {Promise<Record<string, unknown>>}
  */
 export default async function guard(ctx) {
-  const { sessionId, store } = ctx;
+  const { logger, sessionId, store } = ctx;
   const s = /** @type {any} */ (store);
 
   try {
@@ -30,16 +30,17 @@ export default async function guard(ctx) {
       ? characters.find((c) => c.type === "player")
       : null;
 
-    console.log(
-      `[player-init/guard] sessionId=${sessionId} characters=${Array.isArray(characters) ? characters.length : "N/A"} playerFound=${!!player}`,
-    );
+    await logger?.debug("player-init guard inspected session", {
+      characterCount: Array.isArray(characters) ? characters.length : "N/A",
+      playerFound: Boolean(player),
+    });
 
     // ── Branch 1: player already created — skip
     if (player) {
       await mirrorPlayer(s, sessionId, player);
-      console.log(
-        `[player-init/guard] SKIP — player already exists id=${player.id} name=${player.name}`,
-      );
+      await logger?.debug("player-init guard skipped existing player", {
+        playerId: player.id,
+      });
       return {
         skip: true,
         playerExists: true,
@@ -73,9 +74,9 @@ export default async function guard(ctx) {
           };
           await s.upsertCharacter(character);
           await mirrorPlayer(s, sessionId, character);
-          console.log(
-            `[player-init/guard] deterministic create-character succeeded: id=${id} name=${name}`,
-          );
+          await logger?.info("player-init guard created submitted player", {
+            playerId: id,
+          });
           return {
             skip: true,
             playerExists: true,
@@ -95,9 +96,7 @@ export default async function guard(ctx) {
     }
 
     // ── Branch 3: nothing submitted yet → let LLM generate the opening form
-    console.log(
-      `[player-init/guard] PROCEED — no player + no submission, running LLM for form generation`,
-    );
+    await logger?.debug("player-init guard proceeding to form generation");
     return { skip: false };
   } catch (err) {
     console.warn("[char-creator/player-init] guard error:", err);

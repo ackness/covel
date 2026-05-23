@@ -10,6 +10,8 @@
 !/.claude/skills/create-plugin/**
 !/.claude/skills/create-world/
 !/.claude/skills/create-world/**
+!/.claude/skills/covel-static-turn-audit/
+!/.claude/skills/covel-static-turn-audit/**
 # .agents/ is for personal/IDE-global skills (not project-specific).
 .agents/
 .windsurf/

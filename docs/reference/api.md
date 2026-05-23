@@ -993,6 +993,8 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 #### `POST /api/sessions/:id/turn`
 
+兼容的 headless/testing JSON 入口。Web UI 的主交互路径使用 `/api/actions`，因为它会返回 data-only SSE 流并转发回合内进度事件。保留该入口用于脚本、测试和不需要 SSE 的调用方；它和 `/api/actions` 共享 turn 执行、session lock、commit pipeline 与 `turnCount` 口径，但不会把回合内事件逐条流给客户端。
+
 执行一个玩家回合。
 
 **参数:**
@@ -1049,7 +1051,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 - Turn 执行是同步的，响应时间取决于 LLM 调用耗时
 - 每个活跃 Runtime 按优先级依次执行（同优先级并行）
 - `runtimeResults` 包含每个 Runtime 的输出，可能包含叙事文本、工具调用结果等
-- Turn 执行后 `session.turnCount` 自动 +1
+- `session.turnCount` 表示主循环进度：setup-only Pre-Game 执行会保存 `turn_results`，但不会计入主循环轮数；完成 Pre-Game 后最低推进到 `1`
 - 服务端会对每个 runtimeResult 运行 `processRuntimeResult` 提交管道（与 `/api/actions` 一致）：normalize → state.commit → 触发后续 SessionEvent
 - 如果某个 Runtime 的输出包含 `pendingInputs`，需要通过 `plugin-rpc` 的 `framework.submit-form` action 提交玩家响应
 
@@ -1057,7 +1059,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ### 玩家交互
 
-当 Turn 执行后产生 `pendingInputs`（如表单、选择题、确认框），玩家需要通过 `framework.submit-form` 提交响应。框架会将玩家输入转化为自然语言叙事，追加到对话历史中。
+当 Turn 执行后产生 `pendingInputs`（如表单、选择题、确认框），玩家需要通过 `framework.submit-form` 提交响应。框架会将玩家输入转化为自然语言叙事，追加到对话历史中。若该响应完成最后一个 Pre-Game runtime，随后发起的 `/api/actions` `send_message` 会在同一个请求里完成 Pre-Game 并立即补跑已触发的主循环 runtime，因此同一个 `turnId` 可能同时包含 setup completion 和第一段正式叙事。
 
 #### `POST /api/sessions/:id/plugin-rpc` (`framework.submit-form`)
 

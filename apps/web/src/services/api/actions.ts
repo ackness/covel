@@ -7,7 +7,6 @@ import type { SseEnvelope } from "./types.js";
 export type ActionType =
   | "send_message"
   | "execute_command"
-  | "submit_block_response"
   | "start_session"
   | "retry_runtime"
   | "trigger_event";

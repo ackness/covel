@@ -10,7 +10,7 @@ export { loadPluginSummary, loadPluginManifest, loadRuntime } from "./load.js";
 export { createPluginRegistry } from "./registry.js";
 export type { PluginRegistry, PluginRegistryOptions } from "./registry.js";
 
-// ── Session Scope ────────────────────────────────────────────────
+// ── Legacy Session Scope (test-only compatibility helper) ────────
 export { createSessionScope } from "./session-scope.js";
 export type { SessionPluginScope } from "./session-scope.js";
 

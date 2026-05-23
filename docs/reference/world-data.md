@@ -139,6 +139,12 @@ to: plugin:character-blueprint/blueprints
 
 world load 阶段只强校验内置 schema 和本地 schema；`plugin://...` schema 在 session import/preflight 阶段结合当前启用插件严格校验。
 
+## World-Init Schema Fast Path
+
+`world-init/schema-gen` 会优先复用 `WorldRecord.metadata.dimensions`。当 dimensions 存在时，guard 会把每个 dimension key 导入 `world-init/entries`，然后跳过 LLM schema 生成；这样启动更快，且世界包数据成为权威来源。
+
+如需精细控制玩家/角色字段，world metadata 可以提供 `schemas` 数组。`world-init` 会直接写入这些显式 schema；缺省时才从 dimensions 推导通用属性（生命值、体力、货币、势力声望、能力阶层等）。因此高设定密度世界应优先提供显式 `schemas`，把世界独特机制写成稳定字段，而不是依赖 LLM 在开局时临场生成。
+
 ## Character Blueprint Import
 
 角色卡 source 示例：

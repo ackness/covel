@@ -370,5 +370,24 @@ describe("start-game API lifecycle scenario", () => {
 
     const session = await store.getSession("sess-start-flow-api");
     expect(session?.turnCount).toBe(1);
+
+    const turnResults = await store.listTurnResults("sess-start-flow-api");
+    expect(turnResults).toHaveLength(2);
+
+    const firstMainLoop = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-main-1",
+        type: "send_message",
+        sessionId: "sess-start-flow-api",
+        payload: { content: "look around" },
+      }),
+    });
+    expect(firstMainLoop.status).toBe(200);
+    await drainActionStream(firstMainLoop);
+
+    const afterFirstMainLoop = await store.getSession("sess-start-flow-api");
+    expect(afterFirstMainLoop?.turnCount).toBe(2);
   });
 });

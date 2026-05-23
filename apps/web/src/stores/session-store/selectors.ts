@@ -5,5 +5,5 @@ export function selectSessionId(state: SessionState): string | null {
 }
 
 export function canRunSessionAction(state: SessionState): boolean {
-  return Boolean(state.session) && !state.executing;
+  return state.session?.status === "active" && !state.executing;
 }

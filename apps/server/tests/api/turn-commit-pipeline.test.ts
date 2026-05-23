@@ -60,6 +60,30 @@ function makeEntry(args: {
   } as PluginRegistryEntry;
 }
 
+function makeManualEntry(id: string): PluginRegistryEntry {
+  const manifest: RuntimeManifest = {
+    name: id,
+    pluginId: id,
+    runtimeType: "agent",
+    model: "story",
+    trigger: { type: "manual" },
+  };
+  const parsed = {
+    manifest,
+    promptTemplate: "",
+    referenceLinks: [],
+    rawFrontmatter: {},
+  };
+  return {
+    id,
+    summary: makeSummary({ id, name: id }),
+    manifest: parsed,
+    manifests: [parsed],
+    loadedRuntimes: new Map(),
+    status: "registered",
+  } as PluginRegistryEntry;
+}
+
 function createTestApp(args: {
   store: DataStore;
   registry: PluginRegistry;
@@ -156,9 +180,7 @@ describe("POST /api/sessions/:id/turn — commit pipeline (Finding 3 regression)
     expect(assistantNarratives.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("still updates session.turnCount as before", async () => {
-    // turn.ts derives turnCount from `listTurnResults(sessionId).length` after
-    // the turn commits — one executed turn → turnCount = 1.
+  it("updates session.turnCount from main-loop turn results", async () => {
     const turnsBefore = await store.listTurnResults(sessionId);
     expect(turnsBefore).toHaveLength(0);
 
@@ -170,5 +192,102 @@ describe("POST /api/sessions/:id/turn — commit pipeline (Finding 3 regression)
 
     const after = await store.getSession(sessionId);
     expect(after?.turnCount).toBe(1);
+  });
+
+  it("does not count setup-only Pre-Game turn results as main-loop turns", async () => {
+    await store.saveTurnResult({
+      id: "setup-turn-result",
+      sessionId,
+      turnId: "setup-turn",
+      runtimeResults: [
+        {
+          pluginId: "pregame",
+          runtimeId: "pregame",
+          runId: "run-pregame",
+          turnId: "setup-turn",
+          status: "completed",
+          output: { preGameDone: true },
+          toolCalls: [],
+          durationMs: 1,
+          timestamp: new Date().toISOString(),
+        },
+      ],
+      durationMs: 1,
+      createdAt: new Date().toISOString(),
+    });
+
+    const before = await store.listTurnResults(sessionId);
+    expect(before).toHaveLength(1);
+
+    await app.request(`/api/sessions/${sessionId}/turn`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "inspect the door" }),
+    });
+
+    const turnResults = await store.listTurnResults(sessionId);
+    expect(turnResults).toHaveLength(2);
+
+    const after = await store.getSession(sessionId);
+    expect(after?.turnCount).toBe(1);
+  });
+
+  it("counts main-loop turns even when no runtime fires", async () => {
+    const emptySessionId = "sess-empty-main-loop";
+    registry.register(makeManualEntry("manual-panel"));
+    await store.createSession({
+      id: emptySessionId,
+      worldId: null,
+      status: "active",
+      preGameCompleted: ["pregame"],
+      presetId: null,
+      activePlugins: ["manual-panel"],
+      turnCount: 1,
+      createdAt: new Date().toISOString(),
+    });
+    await store.saveTurnResult({
+      id: "previous-main-loop-result",
+      sessionId: emptySessionId,
+      turnId: "previous-turn",
+      runtimeResults: [
+        {
+          pluginId: "manual-panel",
+          runtimeId: "manual-panel",
+          runId: "run-previous-main-loop",
+          turnId: "previous-turn",
+          status: "completed",
+          output: { narrativeOutput: "prior beat" },
+          toolCalls: [],
+          durationMs: 1,
+          timestamp: new Date().toISOString(),
+        },
+      ],
+      durationMs: 1,
+      createdAt: new Date().toISOString(),
+    });
+    await store.appendTurnMessage({
+      id: crypto.randomUUID(),
+      sessionId: emptySessionId,
+      turnId: "pre-turn",
+      sourceType: "player",
+      role: "user",
+      content: "session opener",
+      order: 0,
+      createdAt: new Date().toISOString(),
+    });
+
+    const res = await app.request(`/api/sessions/${emptySessionId}/turn`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "wait quietly" }),
+    });
+    expect(res.status).toBe(200);
+
+    const turnResults = await store.listTurnResults(emptySessionId);
+    expect(turnResults).toHaveLength(2);
+    expect(turnResults[1]?.runtimeResults).toEqual([]);
+
+    const after = await store.getSession(emptySessionId);
+    expect(after?.turnCount).toBe(2);
   });
 });

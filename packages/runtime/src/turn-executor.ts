@@ -315,6 +315,9 @@ export async function executeTurn(
     ? await recordPreGameCompletion()
     : false;
   if (completedPreGameThisTurn && !manualTarget) {
+    // A form-submission request can finish the last Pre-Game runtime. In that
+    // same request, immediately run any already-triggered main-loop runtimes so
+    // the player sees the first story beat after submitting setup inputs.
     const followupGroups = scheduleMainLoopFollowups({
       triggered,
       completedRuntimeIds: new Set(completedResults.keys()),
@@ -414,6 +417,10 @@ export async function executeTurn(
   // player-init) MUST NOT report `preGameDone: true` in the "form shown"
   // turn — they report it only after the player submits the form. This
   // keeps the user interactable while Pre-Game is still progressing.
+  //
+  // This final pass is intentionally idempotent. The earlier pass above is
+  // needed to decide whether to run same-request main-loop followups; this
+  // one captures completion signals produced by event-chain followers.
   await recordPreGameCompletion();
 
   const turnResult = await finalizeTurnResult({

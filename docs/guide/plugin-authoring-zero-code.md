@@ -217,7 +217,7 @@ trigger:
   type: manual
 ```
 
-适用于：玩家主动点击按钮触发的功能（如查看角色面板）。
+适用于：玩家主动点击按钮触发的功能（如查看角色面板）。启用 manual 插件只表示该能力在 session 中可用；没有 `priority` 的 manual runtime 不会进入每轮自动调度，必须由 UI 或 `plugin-rpc` 显式触发。
 
 ### conditional — reserved
 

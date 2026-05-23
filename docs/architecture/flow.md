@@ -83,6 +83,7 @@ stateDiagram-v2
 
 - **Pre-Game**：`status === 'active' && turnCount === 0`。调度器只会挑选 priority `0–99` 的 Pre-Game band runtime；每个声明 `preGameDone: true` 的 runtime 完成后会被追加进 `preGameCompleted`，玩家可以多次提交表单/消息迭代（例如 `char-creator` 的 `framework.submit-form`）。
 - **Turn 0 → 1**：所有 Pre-Game band runtime 的 id 都已出现在 `preGameCompleted` 时，Kernel 把 `turnCount` 从 0 推到 1，进入主循环。
+- **Pre-Game completion followup**：角色表单这类最后一个 setup 输入提交后，`/api/actions` 的同一个请求会先完成 Pre-Game，再立即补跑本次已触发的主循环 runtime。这样玩家提交表单后能直接看到第一段正式叙事；审计、trace 和 snapshot 里该请求同时包含 setup completion 与 main-loop followup。
 - **Playing**：`status === 'active' && turnCount >= 1`。每次 `POST /api/actions` 触发一轮完整 Turn pipeline，只调度 priority `100–1000` 的 runtime。
 - **Paused / Ended**：`status === 'paused' | 'ended'`。调度器直接返回空，`/api/actions` 被服务端拒绝。Paused 可 `resumeSession()` 恢复，Ended 是终态。
 
@@ -457,13 +458,14 @@ plugins/my-plugin/
   │  │   ├─ 生成叙事文本（自然语言，非 JSON）                      │ │
   │  │   └─ 返回 filledNarrative（不写 turn_messages，不建角色）   │ │
   │  │                                                            │ │
-  │  │   下一轮 Turn 由 char-creator 运行：                       │ │
+  │  │   下一次 /api/actions 由 char-creator 运行：                │ │
   │  │   create-character() → upsertCharacter                     │ │
   │  │   （Pre-Game runtime 用 `preGameDone: true` 登记完成，     │ │
   │  │    不再写 session.phase，也不再推 phase.changed）          │ │
   │  │                                                            │ │
   │  │   2. POST /api/actions (player_action)                     │ │
-  │  │      → 触发 Turn 2 → narrator + guide + codex              │ │
+  │  │      → 同请求完成 Pre-Game 并补跑 main-loop followup        │ │
+  │  │      → narrator + guide + codex                            │ │
   │  └────────────────────────────────────────────────────────────┘ │
   └─────────────────────────────────────────────────────────────────┘
 ```

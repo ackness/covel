@@ -35,6 +35,12 @@ relations:
     - narrator
   requires:
     - scene-cast
+    - scene-prompts
+    - character-blueprint
+    - character-presence
+    - player-identity
+    - living-world-rules
+    - branch-reply
 userSettings:
   - key: dialogueRatio
     type: number
