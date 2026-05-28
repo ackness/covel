@@ -59,7 +59,7 @@ describe("Health Route", () => {
 
     const body = (await json(res)) as Record<string, unknown>;
     expect(body.status).toBe("ok");
-    expect(body.version).toBe("0.0.3");
+    expect(body.version).toBe("0.0.4");
   });
 
   it("returns structured storage capabilities", async () => {

@@ -22,6 +22,7 @@ import {
 } from "@testing-library/react";
 
 import { AudioPlayer } from "../AudioPlayer.js";
+import i18n from "../../i18n/index.js";
 import type { MediaRef } from "@covel/shared";
 
 const FAKE_REF: MediaRef = {
@@ -38,7 +39,9 @@ vi.mock("../../lib/media-resolve.js", () => ({
 
 const { resolveMediaSrc } = await import("../../lib/media-resolve.js");
 
-beforeEach(() => {
+beforeEach(async () => {
+  await i18n.changeLanguage("en-US");
+
   vi.mocked(resolveMediaSrc).mockResolvedValue({
     url: RESOLVED_URL,
     fromCache: true,

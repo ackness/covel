@@ -394,6 +394,7 @@ function makeAgentEntry(args: {
   priority?: number;
   source?: PluginSource;
   trigger?: RuntimeManifest["trigger"];
+  relations?: RuntimeManifest["relations"];
 }): { entry: PluginRegistryEntry; loaded: LoadedRuntime } {
   const manifest: RuntimeManifest = {
     name: args.runtimeId,
@@ -404,6 +405,7 @@ function makeAgentEntry(args: {
     outputKind: args.outputKind ?? "story",
     pluginType: "plugin",
     trigger: args.trigger ?? { type: "manual" },
+    ...(args.relations ? { relations: args.relations } : {}),
   } as RuntimeManifest;
 
   const loaded: LoadedRuntime = {
@@ -627,6 +629,9 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       runtimeId: "chat-mode-narrator",
       outputKind: "story",
       trigger: { type: "auto" },
+      relations: {
+        requires: ["branch-reply"],
+      },
     });
     pluginRegistry.register(branchEntry);
     pluginRegistry.register(narratorEntry);

@@ -139,7 +139,9 @@ describe("session plugin metadata UI", () => {
     expect(selected.has("narrator")).toBe(false);
   });
 
-  it("labels world storage locations", () => {
+  it("labels world storage locations", async () => {
+    await i18n.changeLanguage("en-US");
+
     const base = {
       id: "world",
       name: "World",

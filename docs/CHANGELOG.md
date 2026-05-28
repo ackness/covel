@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-05-28
+
+第四个公开版本。重点收敛回合流稳定性、插件/会话解析、框架可见文本本地化、插件模板质量与发布文档。
+
+### Added
+
+- 新增静态回合审计 skill，用于检查 turn flow、插件边界与运行时输出相关风险
+- 插件模板新增 runtime cases 与可运行 note/analyst 示例，create-plugin / create-world skills 补齐验证指引
+- 桌面主进程错误与启动文案补齐中英文 i18n 支持
+
+### Changed
+
+- monorepo 全量版本号 `0.0.3` → `0.0.4`
+- 加固 turn flow、插件解析、会话插件 API、snapshot / trace / working-memory 等运行时边界
+- 简化 prompt context feature gates，整理 context builder、prompt assembler 与 serialization 相关实现
+- 刷新 production Docker image、release docs、README 与贡献文档；移除过期本地开发草稿和废弃模板脚手架
+
+### Fixed
+
+- 修复框架 UI 中残留的硬编码可见文本，补齐对应中英文 locale
+- 修复插件 metadata、runtime loading、form submission、suspend/resume 与 post-turn memory 相关测试覆盖
+- 修复 desktop asset import、IPC handler、splash/startup error 路径与 release staging 相关边界
+
 ## [0.0.3] - 2026-05-11
 
 第三个公开版本。重点收敛世界数据导入、生成世界持久化、插件目录元数据、存储后端边界、桌面发布链路与长期维护性重构。
@@ -112,7 +135,8 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.4
 [0.0.3]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.3
 [0.0.2]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.2
 [0.0.1]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.1

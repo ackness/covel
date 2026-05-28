@@ -5,10 +5,11 @@
  * that any plugin panel can use — not codex-specific behaviour.
  */
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { JSONUIProvider } from "@json-render/react";
 import { covelRegistry } from "../catalog.js";
+import i18n from "../../i18n/index.js";
 
 afterEach(cleanup);
 
@@ -30,6 +31,10 @@ function renderEntryCard(props: Record<string, unknown>) {
 }
 
 describe("EntryCard", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("en-US");
+  });
+
   const baseProps = {
     title: "Goblin Scout",
     category: "monster",
