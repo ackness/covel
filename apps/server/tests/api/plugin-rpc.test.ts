@@ -327,6 +327,8 @@ function makeFunctionEntry(args: {
   handler: FunctionHandler;
   execution?: "sync" | "background";
   priority?: number;
+  /** Semantic capability tags for framework discovery (findPluginByCapability). */
+  capabilities?: readonly string[];
   /** Plugin discovery source — drives trust-gate verdict. Defaults to 'builtin'
    * so happy-path tests auto-allow without explicit approvals. Community
    * coverage is exercised by the approval-required test below. */
@@ -357,6 +359,7 @@ function makeFunctionEntry(args: {
     handler: "./handler.js",
     trigger: { type: "manual" },
     ...(args.execution ? { execution: args.execution } : {}),
+    ...(args.capabilities ? { capabilities: args.capabilities } : {}),
     ...(args.userSettings ? { userSettings: args.userSettings } : {}),
   } as RuntimeManifest;
 
@@ -623,6 +626,9 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       execution: "sync",
       handler: branchReplyHandler as FunctionHandler,
       priority: undefined,
+      // Declares the prompt-history-rewriter capability so the framework
+      // discovers it (instead of hardcoding "branch-reply" in the executor).
+      capabilities: ["branch-reply", "prompt-history-rewriter"],
     });
     const { entry: narratorEntry, loaded: narratorLoaded } = makeAgentEntry({
       pluginId: "chat-mode-narrator",

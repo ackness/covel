@@ -43,13 +43,14 @@ export async function buildSnapshotPayload(
   const characters: readonly CharacterRecord[] =
     await store.listCharacters(sessionId);
 
-  // State entries — iterate known tables from state schemas.
+  // State entries — query all known tables in parallel (audit 2026-06-04
+  // finding M2; previously a serial await-in-loop adding one RTT per table).
   const stateSchemas = await store.listStateSchemas(sessionId);
-  const stateEntries: StateEntryRecord[] = [];
-  for (const s of stateSchemas) {
-    const rows = await store.listStateEntries(sessionId, s.tableName);
-    stateEntries.push(...rows);
-  }
+  const stateEntries: StateEntryRecord[] = (
+    await Promise.all(
+      stateSchemas.map((s) => store.listStateEntries(sessionId, s.tableName)),
+    )
+  ).flat();
 
   // Plugin data — union two sources:
   //  1. pluginIds appearing in any runtime_result for the session.
@@ -57,12 +58,19 @@ export async function buildSnapshotPayload(
   //     list — audit 2026-04-20 finding 7.2). Source #1 alone misses
   //     plugins that wrote during install hooks, data-only providers, and
   //     plugins that suspended before producing any runtime result.
-  const pluginIds = await discoverPluginIds(store, sessionId);
-  const pluginData: PluginDataRecord[] = [];
-  for (const pid of pluginIds) {
-    const rows = await store.listPluginData(sessionId, pid);
-    pluginData.push(...rows);
-  }
+  //
+  // The session-scope list already returns every plugin_data row for the
+  // session in one query (audit 2026-06-04 finding M1), so we filter that
+  // result by the discovered plugin-id set rather than re-querying per
+  // pluginId. Source #1 only ever *adds* ids that have no plugin_data rows,
+  // so filtering by the union still yields exactly the source-#2 rows.
+  const { pluginIds, pluginDataRows } = await discoverPluginIds(
+    store,
+    sessionId,
+  );
+  const pluginData: PluginDataRecord[] = pluginDataRows.filter((row) =>
+    pluginIds.has(row.pluginId),
+  );
 
   // Working memory
   const workingMemory: readonly WorkingMemoryRecord[] =
@@ -121,7 +129,10 @@ export async function buildSnapshotPayload(
 async function discoverPluginIds(
   store: DataStore,
   sessionId: string,
-): Promise<string[]> {
+): Promise<{
+  pluginIds: ReadonlySet<string>;
+  pluginDataRows: readonly PluginDataRecord[];
+}> {
   const [turnResults, pluginDataRows] = await Promise.all([
     store.listTurnResults(sessionId),
     store.listPluginDataSessionScope(sessionId),
@@ -142,5 +153,5 @@ async function discoverPluginIds(
   for (const row of pluginDataRows) {
     if (row.pluginId) seen.add(row.pluginId);
   }
-  return [...seen];
+  return { pluginIds: seen, pluginDataRows };
 }

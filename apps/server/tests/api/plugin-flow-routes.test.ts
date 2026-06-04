@@ -44,9 +44,9 @@ describe("plugin flow routes", () => {
     expect(body.segments.map((segment) => segment.id)).toEqual([
       "start",
       "pre-game",
-      "pre-narrator",
-      "narrator",
-      "post-narrator",
+      "priority-band-pre-narrator",
+      "priority-band-narrator",
+      "priority-band-post-narrator",
     ]);
     // audit P0-1: Pre-Game band aligned to 1-99 to match scheduler edges.
     expect(body.segments[1]?.rangeLabel).toBe("1-99");
@@ -62,12 +62,15 @@ describe("plugin flow routes", () => {
     ).toBe(true);
     expect(
       body.steps.some(
-        (step) => step.priority === 500 && step.segmentId === "narrator",
+        (step) =>
+          step.priority === 500 && step.segmentId === "priority-band-narrator",
       ),
     ).toBe(true);
     expect(
       body.steps.some(
-        (step) => step.priority > 500 && step.segmentId === "post-narrator",
+        (step) =>
+          step.priority > 500 &&
+          step.segmentId === "priority-band-post-narrator",
       ),
     ).toBe(true);
   });

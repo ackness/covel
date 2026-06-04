@@ -20,7 +20,13 @@
 
 import { Hono } from "hono";
 import { resolve, join, dirname, isAbsolute } from "node:path";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  mkdirSync,
+  chmodSync,
+} from "node:fs";
 import { homedir, platform } from "node:os";
 import { spawn } from "node:child_process";
 import {
@@ -202,6 +208,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     writeFileSync(file, JSON.stringify(payload, null, 2) + "\n", {
       mode: 0o600,
     });
+    // settings.json may carry secrets via `includeSecrets`; re-assert 0600
+    // so an existing looser-permission file gets tightened (audit M1).
+    chmodSync(file, 0o600);
     return c.json({ ok: true });
   });
 
@@ -449,9 +458,24 @@ function writeKeysEnv(file: string, entries: Record<string, string>): void {
     `# Managed by Settings → Desktop. Manual edits survive restarts.\n` +
     `# File mode is 0600 — keep it that way.\n\n`;
   const body = Object.entries(envEntries)
-    .filter(([k, v]) => k && typeof v === "string" && v.trim())
+    // audit M2: reject values with CR/LF — a newline would inject extra
+    // `KEY=VALUE` lines and poison other providers' key parsing.
+    .filter(([k, v]) => {
+      if (!k || typeof v !== "string" || !v.trim()) return false;
+      if (/[\r\n]/.test(v)) {
+        console.warn(
+          `[config-api] Skipping key "${k}": value contains a newline`,
+        );
+        return false;
+      }
+      return true;
+    })
     .map(([k, v]) => `${k}=${v.trim()}`)
     .join("\n");
   mkdirSync(dirname(file), { recursive: true });
+  // mode in writeFileSync only applies when creating a new file. Re-assert
+  // 0600 after every write so an existing file with looser permissions gets
+  // tightened (audit M1). chmod is a no-op on Windows but does not throw.
   writeFileSync(file, header + body + "\n", { mode: 0o600 });
+  chmodSync(file, 0o600);
 }

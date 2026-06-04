@@ -15,6 +15,7 @@ import { Toggle } from "@/components/ui/toggle.js";
 import type { WorldRecord } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { SessionBreadcrumb } from "../session-breadcrumb.js";
+import { ConnectionStatus } from "./connection-status.js";
 
 export type GameViewMode = "parsed" | "detailed" | "raw";
 
@@ -86,6 +87,7 @@ export function GameViewHeader({
           />
           {executing ? t("session.stateStreaming") : t("session.statePlaying")}
         </span>
+        <ConnectionStatus />
       </div>
       <div className="flex items-center gap-1 shrink-0">
         <div className="flex items-center border border-[var(--rule-color)] rounded-[var(--radius-control)] overflow-hidden">

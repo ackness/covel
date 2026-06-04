@@ -70,6 +70,7 @@ export async function refreshSessionContextSnapshot(args: {
       turnNumber,
       worldId: sessionRecord?.worldId ?? undefined,
       worldDataPluginId: deps.worldDataPluginId,
+      personaPluginId: deps.personaPluginId,
       coreMemoryBlocks,
       summaries: sessionSummaries,
       playerMessage: input.playerMessage,

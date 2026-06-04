@@ -1,47 +1,40 @@
 import { randomUUID } from "node:crypto";
 import { characterBlueprintToCharacterUpsert } from "@covel/shared";
 import type { CharacterBlueprint } from "@covel/shared";
-import type { DataStore } from "@covel/store";
-
-const WORLD_BLUEPRINT_PLUGIN_ID = "character-blueprint";
-const WORLD_BLUEPRINT_NAMESPACE = "blueprints";
-const CHARACTER_PANEL_PLUGIN_ID = "char-creator";
-const MAX_SCOPED_CHARACTER_ID_LENGTH = 180;
+import type { CharacterRecord, DataStore } from "@covel/store";
+import {
+  blueprintStorageTargets,
+  characterMirrorTargets,
+  normalizeWorldCharacterBlueprint,
+  scopedCharacterId,
+} from "../../../world-data/character-effects.js";
+import type { WorldDataImportPreflightDeps } from "../../../world-data/session-import/types.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function normalizeWorldCharacterBlueprint(
-  value: unknown,
-): CharacterBlueprint | null {
-  if (!isRecord(value)) return null;
-  if (value.schemaVersion !== 1) return null;
-  if (typeof value.id !== "string" || value.id.length === 0) return null;
-  if (typeof value.name !== "string" || value.name.length === 0) return null;
-  return value as unknown as CharacterBlueprint;
-}
-
-function worldBlueprintCharacterId(
-  sessionId: string,
-  blueprint: CharacterBlueprint,
-): string {
-  const baseId =
-    typeof blueprint.instantiate?.characterId === "string" &&
-    blueprint.instantiate.characterId.length > 0
-      ? blueprint.instantiate.characterId
-      : `char-${blueprint.id}`;
-  const scopedId = `${sessionId}-${baseId}`;
-  return scopedId.length <= MAX_SCOPED_CHARACTER_ID_LENGTH
-    ? scopedId
-    : `${sessionId}-${blueprint.id}`;
-}
-
+/**
+ * Fallback world-character import for worlds that declare inline
+ * `metadata.characterBlueprints` (rather than worldData source descriptors).
+ *
+ * Mirrors the capability-driven handling in `world-data/session-import`:
+ *  - blueprint definitions land in every plugin that declares
+ *    `dataSchemas.blueprints.acceptsWorldData` (discovered, never hardcoded);
+ *  - the canonical `CharacterRecord` is the source of truth panels read via
+ *    `session.characters`;
+ *  - the character is mirrored into every plugin that declares
+ *    `dataSchemas.characters.acceptsWorldData`.
+ *
+ * When no provider is active, the corresponding writes simply skip — removing
+ * a plugin never makes this path throw.
+ */
 export async function importWorldCharacterBlueprints(
   store: DataStore,
   sessionId: string,
   worldId: string | undefined,
   now: string,
+  deps?: WorldDataImportPreflightDeps,
 ): Promise<void> {
   if (!worldId) return;
   const world = await store.getWorld(worldId);
@@ -55,37 +48,16 @@ export async function importWorldCharacterBlueprints(
     .filter((blueprint): blueprint is CharacterBlueprint => blueprint !== null);
   if (blueprints.length === 0) return;
 
-  const pluginRecords = blueprints.map((blueprint) => {
-    const upsert = characterBlueprintToCharacterUpsert(blueprint, {
-      now,
-      characterId: worldBlueprintCharacterId(sessionId, blueprint),
-      mirrorPluginId: WORLD_BLUEPRINT_PLUGIN_ID,
-    });
-    return {
-      id: randomUUID(),
-      sessionId,
-      pluginId: WORLD_BLUEPRINT_PLUGIN_ID,
-      namespace: WORLD_BLUEPRINT_NAMESPACE,
-      key: blueprint.id,
-      value: {
-        blueprint,
-        importedAt: now,
-        sourceWorldId: worldId,
-        instantiatedCharacterId: upsert.id,
-      },
-      createdAt: now,
-      updatedAt: now,
-    };
-  });
-  await store.setPluginDataBatch(pluginRecords);
+  // Discover targets by capability — never by plugin id.
+  const blueprintTargets = blueprintStorageTargets(deps);
+  const mirrorTargets = characterMirrorTargets(deps);
 
-  for (const blueprint of blueprints) {
+  const planned = blueprints.map((blueprint) => {
     const upsert = characterBlueprintToCharacterUpsert(blueprint, {
       now,
-      characterId: worldBlueprintCharacterId(sessionId, blueprint),
-      mirrorPluginId: WORLD_BLUEPRINT_PLUGIN_ID,
+      characterId: scopedCharacterId(sessionId, blueprint),
     });
-    const characterRecord = {
+    const characterRecord: CharacterRecord = {
       id: upsert.id,
       sessionId,
       name: upsert.name,
@@ -98,26 +70,45 @@ export async function importWorldCharacterBlueprints(
       createdAt: upsert.createdAt ?? now,
       updatedAt: now,
     };
+    return { blueprint, characterRecord };
+  });
+
+  // 1) Store blueprint definitions in every blueprint-accepting plugin.
+  const blueprintRecords = planned.flatMap(({ blueprint, characterRecord }) =>
+    blueprintTargets.map((target) => ({
+      id: randomUUID(),
+      sessionId,
+      pluginId: target.pluginId,
+      namespace: target.namespace,
+      key: blueprint.id,
+      value: {
+        blueprint,
+        importedAt: now,
+        sourceWorldId: worldId,
+        instantiatedCharacterId: characterRecord.id,
+      },
+      createdAt: now,
+      updatedAt: now,
+    })),
+  );
+  if (blueprintRecords.length > 0) {
+    await store.setPluginDataBatch(blueprintRecords);
+  }
+
+  // 2) Canonical character + 3) capability-discovered mirrors.
+  for (const { characterRecord } of planned) {
     await store.upsertCharacter(characterRecord);
-    await store.setPluginData({
-      id: randomUUID(),
-      sessionId,
-      pluginId: WORLD_BLUEPRINT_PLUGIN_ID,
-      namespace: "characters",
-      key: characterRecord.id,
-      value: characterRecord,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await store.setPluginData({
-      id: randomUUID(),
-      sessionId,
-      pluginId: CHARACTER_PANEL_PLUGIN_ID,
-      namespace: "characters",
-      key: characterRecord.id,
-      value: characterRecord,
-      createdAt: now,
-      updatedAt: now,
-    });
+    for (const target of mirrorTargets) {
+      await store.setPluginData({
+        id: randomUUID(),
+        sessionId,
+        pluginId: target.pluginId,
+        namespace: target.namespace,
+        key: characterRecord.id,
+        value: characterRecord,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
   }
 }

@@ -27,7 +27,7 @@ import {
   type PluginRuntimeUtils,
 } from "@covel/plugin-loader";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store";
-import type { MediaStore } from "@covel/store";
+import type { RunRuntimeDebugOptions } from "./types.js";
 import {
   createToolExecutor,
   createGatewayAdapter,
@@ -75,30 +75,7 @@ import {
   pluginIdFromRuntime,
 } from "./runtime-loading.js";
 
-export interface RunRuntimeDebugOptions {
-  readonly target?: string;
-  readonly runtimeId?: string;
-  readonly pluginId?: string;
-  readonly pluginsDir?: string;
-  readonly sessionId?: string;
-  readonly locale?: string;
-  readonly message?: string;
-  readonly payload?: Record<string, unknown>;
-  readonly config?: Record<string, unknown>;
-  readonly userSettings?: Record<string, unknown>;
-  readonly llmResponse?: Record<string, unknown>;
-  readonly llmResponses?: readonly Record<string, unknown>[];
-  readonly llmContent?: string;
-  readonly llmObject?: Record<string, unknown>;
-  /** Optional preset id surfaced by the mock gateway's resolveSlot. */
-  readonly mockPresetId?: string;
-  readonly showPrompts?: boolean;
-  readonly ignoreUpstreams?: boolean;
-  readonly expectsBackgroundFollower?: boolean;
-  readonly mode?: "mock" | "live";
-  readonly caseName?: string;
-  readonly mediaStore?: MediaStore;
-}
+export type { RunRuntimeDebugOptions };
 
 export interface RunRuntimeDebugResult {
   readonly status: "ok";

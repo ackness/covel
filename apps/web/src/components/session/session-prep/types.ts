@@ -7,8 +7,8 @@ export interface SessionPrepScreenProps {
   presets: api.PresetSummary[];
   llmConfig?: api.LlmConfigResponse | null;
   onBack: () => void;
-  onStart: (plugins?: string[]) => void;
-  onResume: (session: api.SessionRecord) => void;
+  onStart: (plugins?: string[]) => Promise<void> | void;
+  onResume: (session: api.SessionRecord) => Promise<void> | void;
   onDeleteSession: (sessionId: string) => Promise<void>;
   settingsOpen: boolean;
   onSettingsOpenChange: (v: boolean) => void;

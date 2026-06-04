@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Check,
@@ -7,7 +7,53 @@ import {
   Copy,
   Settings2,
 } from "lucide-react";
+import { Markdown } from "@/components/ui/markdown.js";
 import type { StreamMessage } from "@/stores/session-store.js";
+
+interface NarrativeMessageBodyProps {
+  isUser: boolean;
+  isHiddenAssistantKind: boolean;
+  content: string;
+}
+
+/**
+ * Memoised message-body renderer. Splitting this out gives each message row a
+ * stable memo boundary so high-frequency state changes elsewhere in the chat
+ * (e.g. a streaming delta on the latest turn, or a per-message image-gen
+ * toggle) do not force every already-rendered narrative body — including the
+ * expensive markdown parse — to re-render. Re-renders only when this row's own
+ * content or display mode changes.
+ */
+function NonMemoNarrativeMessageBody({
+  isUser,
+  isHiddenAssistantKind,
+  content,
+}: NarrativeMessageBodyProps) {
+  return (
+    <div
+      className={`text-sm wrap-break-words w-full ${
+        isUser
+          ? "ui-message-player max-w-[90%] md:max-w-[85%] border border-border p-4"
+          : isHiddenAssistantKind
+            ? "ui-message-assistant max-w-none border-l-2 border-border/40 pl-3 py-1 font-mono text-[12px] text-muted-foreground/80 whitespace-pre-wrap"
+            : "ui-message-assistant ui-narrative prose prose-sm max-w-none border-0 p-0"
+      }`}
+    >
+      {isUser ? (
+        <p className="m-0 text-[14px] leading-[1.6]">{content}</p>
+      ) : isHiddenAssistantKind ? (
+        // Plugin/debug kinds in detailed view — preserve the raw text so the
+        // structure of what the runtime emitted is visible, but skip the
+        // narrative-prose styling to signal "this is not story".
+        content
+      ) : (
+        <Markdown>{content}</Markdown>
+      )}
+    </div>
+  );
+}
+
+export const NarrativeMessageBody = memo(NonMemoNarrativeMessageBody);
 
 export function SubmittedSelectionFooter({
   values,

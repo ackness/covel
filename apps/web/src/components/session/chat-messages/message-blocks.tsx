@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { JSONUIProvider, Renderer } from "@json-render/react";
+import { emitToast } from "@/lib/toast-channel.js";
 import { nestedToFlat } from "@json-render/core";
 import { covelRegistry } from "@/lib/catalog.js";
 import { messageToSpec, messageToSpecDisabled } from "@/lib/message-to-spec.js";
 import type { StreamMessage } from "@/stores/session-store.js";
-import { useSession } from "@/stores/session-store.js";
+import { useSessionActions } from "@/stores/session-store.js";
 import { PluginPanel } from "../plugin-panel.js";
 import { RawJsonBlock } from "./message-primitives.js";
 
@@ -27,7 +29,8 @@ export function PluginMessageBlock({
   sourceBlockId: string;
   locked: boolean;
 }) {
-  const { sendMessage, upsertInteractionDraft, setComposerText } = useSession();
+  const { sendMessage, upsertInteractionDraft, setComposerText } =
+    useSessionActions();
   const data = (block.data ?? {}) as Record<string, unknown>;
   const pluginId = data.pluginId as string;
   const specs = (data.specs ?? []) as Array<Record<string, unknown>>;
@@ -229,7 +232,8 @@ export function MessageBlockRenderer({
   onSendMessage: (msg: string) => void;
   onSubmitBlock: (blockId: string) => void;
 }) {
-  const { upsertInteractionDraft } = useSession();
+  const { t } = useTranslation();
+  const { upsertInteractionDraft } = useSessionActions();
   const formStateRef = useRef<Record<string, unknown>>({});
 
   const effectiveSubmitted = submitted;
@@ -292,13 +296,23 @@ export function MessageBlockRenderer({
 
         const fields =
           (data.fields as
-            | Array<{ name?: string; required?: boolean }>
+            | Array<{ name?: string; label?: string; required?: boolean }>
             | undefined) ?? [];
-        const missingRequired = fields.some((field) => {
+        const missingFields = fields.filter((field) => {
           if (!field?.required || !field.name) return false;
           return !formValues[field.name]?.trim();
         });
-        if (missingRequired) return;
+        if (missingFields.length > 0) {
+          const names = missingFields
+            .map((field) => field.label ?? field.name)
+            .join("、");
+          emitToast(
+            "error",
+            t("form.requiredMissing", "Please fill in required fields"),
+            names,
+          );
+          return;
+        }
 
         if (onSubmitInteraction && turnId) {
           await onSubmitInteraction(
@@ -361,6 +375,7 @@ export function MessageBlockRenderer({
       },
     }),
     [
+      t,
       effectiveSubmitted,
       readBlockMeta,
       msg.id,
@@ -376,7 +391,7 @@ export function MessageBlockRenderer({
     return (
       <div key={msg.id} className="flex flex-col gap-1.5">
         <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-          Block: {block.type as string}
+          {t("session.blockLabel", "Block")}: {block.type as string}
         </span>
         <RawJsonBlock content={JSON.stringify(block, null, 2)} />
       </div>

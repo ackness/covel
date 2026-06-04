@@ -2,9 +2,11 @@ import { useEffect, useRef } from "react";
 import * as api from "@/services/api";
 import {
   createSessionSubscription,
+  type ConnectionState,
   type SessionSubscription,
   type SubscriptionEvent,
 } from "@/services/subscription.js";
+import { setConnectionState } from "@/stores/connection-store.js";
 import {
   applyChanges as applyPluginDataStoreChanges,
   type PluginDataChange,
@@ -108,6 +110,37 @@ function createSubscriptionEventHandler(
   };
 }
 
+/**
+ * Re-sync state that may have drifted while the SSE stream was down. Reuses
+ * the existing store actions (no new API surface): reload the session-scoped
+ * plugin list and the game-state snapshot so the right-panel / character /
+ * job state catch up on events missed during the reconnect window.
+ */
+function refreshAfterReconnect(
+  sessionId: string,
+  dispatch: (action: SessionAction) => void,
+): void {
+  api
+    .listSessionPlugins(sessionId)
+    .then((res) =>
+      dispatch({ type: "LOAD_SESSION_PLUGINS", plugins: res.available }),
+    )
+    .catch(() => {});
+  api
+    .getSessionSnapshot(sessionId)
+    .then((snapshot) => {
+      const enrichedState: Record<string, unknown> = {
+        ...snapshot.gameState,
+        characters: snapshot.characters,
+      };
+      if (snapshot.characterSchema) {
+        enrichedState.characterSchema = snapshot.characterSchema;
+      }
+      dispatch({ type: "SET_GAME_STATE", state: enrichedState });
+    })
+    .catch(() => {});
+}
+
 export function useSessionSubscription({
   sessionId,
   dispatch,
@@ -121,6 +154,7 @@ export function useSessionSubscription({
         subscriptionRef.current.close();
         subscriptionRef.current = null;
       }
+      setConnectionState("closed");
       return;
     }
 
@@ -128,10 +162,28 @@ export function useSessionSubscription({
       subscriptionRef.current.close();
     }
 
+    // Track connection lifecycle so the UI can surface reconnecting state and
+    // we can backfill missed events once the stream recovers. `hasConnected`
+    // distinguishes the first connect from a true reconnect (connected after
+    // an interruption), so we only refresh after a genuine recovery.
+    let hasConnected = false;
+
+    const handleConnectionStateChange = (next: ConnectionState): void => {
+      setConnectionState(next);
+      if (next === "connected") {
+        const reconnected = hasConnected;
+        hasConnected = true;
+        if (reconnected && sessionIdRef.current === sessionId) {
+          refreshAfterReconnect(sessionId, dispatch);
+        }
+      }
+    };
+
     // plugin-data.changed arrives on topic="plugin" with
     // _subType="plugin-data.changed". `game` carries F4 turn.suspended/resumed.
     const sub = createSessionSubscription(sessionId, {
       topics: ["plugin", "system", "game"],
+      onStateChange: handleConnectionStateChange,
     });
     subscriptionRef.current = sub;
 
@@ -144,6 +196,7 @@ export function useSessionSubscription({
     return () => {
       sub.close();
       subscriptionRef.current = null;
+      setConnectionState("closed");
     };
   }, [sessionId, dispatch, sessionIdRef]);
 }

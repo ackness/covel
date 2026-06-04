@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { MediaStore } from "@covel/store";
 
-import type { RunRuntimeDebugOptions } from "./runner.js";
+import type { RunRuntimeDebugOptions } from "./types.js";
 import type { CaseArtifactConfig, CaseExpectations } from "./reporting.js";
 
 interface RuntimeCaseFile {

@@ -326,7 +326,17 @@
       "builtIn": "内置",
       "serverStore": "服务端存储",
       "server": "服务端"
-    }
+    },
+    "jumpToLatest": "跳到最新",
+    "startingGame": "创建中…",
+    "resuming": "恢复中…",
+    "connectionConnecting": "连接中…",
+    "connectionReconnecting": "重新连接中…",
+    "connectionLost": "连接已断开",
+    "blockLabel": "区块",
+    "exportEmpty": "暂无可导出的消息",
+    "exportSuccess": "聊天记录已导出",
+    "exportFailed": "导出聊天记录失败"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -888,7 +898,8 @@
     "submitted": "已提交",
     "submittedHint": "已选择",
     "selectPrefix": "选择{{label}}",
-    "selectPlaceholder": "请选择..."
+    "selectPlaceholder": "请选择...",
+    "requiredMissing": "请填写必填字段"
   },
   "interaction": {
     "playerSelected": "你的选择：",
@@ -914,6 +925,11 @@
       "appDescription": "请尝试下方操作。如果问题仍然存在，请复制错误并提交 issue。",
       "tryAgain": "重试",
       "reloadApp": "重新加载应用"
+    },
+    "boot": {
+      "title": "启动失败",
+      "retry": "重试",
+      "reload": "重新加载"
     }
   },
   "common": {

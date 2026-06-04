@@ -4,7 +4,6 @@ import {
 } from "@covel/shared";
 import type { CharacterRecord } from "@covel/store";
 
-const CHARACTER_BLUEPRINT_PLUGIN_ID = "character-blueprint";
 const CHARACTER_BLUEPRINT_NAMESPACE = "blueprints";
 const CHARACTER_NAMESPACE = "characters";
 const MAX_SCOPED_CHARACTER_ID_LENGTH = 180;
@@ -40,6 +39,11 @@ export interface CharacterMirrorTarget {
   readonly namespace: typeof CHARACTER_NAMESPACE;
 }
 
+export interface BlueprintStorageTarget {
+  readonly pluginId: string;
+  readonly namespace: typeof CHARACTER_BLUEPRINT_NAMESPACE;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -54,14 +58,15 @@ export function normalizeWorldCharacterBlueprint(
   return value as unknown as CharacterBlueprint;
 }
 
+// A write targets a blueprint store when it lands in the conventional
+// `blueprints` namespace — the framework keys on the namespace marker, never
+// on a specific plugin id (mirrors the `characters` namespace convention used
+// by `characterMirrorTargets`).
 function characterBlueprintTarget(target: CharacterPluginDataTarget): boolean {
-  return (
-    target.pluginId === CHARACTER_BLUEPRINT_PLUGIN_ID &&
-    target.namespace === CHARACTER_BLUEPRINT_NAMESPACE
-  );
+  return target.namespace === CHARACTER_BLUEPRINT_NAMESPACE;
 }
 
-function scopedCharacterId(
+export function scopedCharacterId(
   sessionId: string,
   blueprint: CharacterBlueprint,
 ): string {
@@ -136,10 +141,13 @@ function characterFromBlueprint(
   blueprint: CharacterBlueprint,
   now: string,
 ): CharacterRecord {
+  // Mirror target is data-driven: honour the blueprint's own
+  // `instantiate.mirrorPluginId` when declared; the framework does not force a
+  // specific plugin. Cross-plugin mirroring is handled separately by
+  // `characterMirrorTargets` (capability discovery).
   const upsert = characterBlueprintToCharacterUpsert(blueprint, {
     now,
     characterId: scopedCharacterId(sessionId, blueprint),
-    mirrorPluginId: CHARACTER_BLUEPRINT_PLUGIN_ID,
   });
   return {
     id: upsert.id,
@@ -193,5 +201,23 @@ export function characterMirrorTargets(
         namespace: CHARACTER_NAMESPACE,
       },
     ];
+  });
+}
+
+/**
+ * Discover plugins that accept imported world character blueprints, by their
+ * `dataSchemas.blueprints.acceptsWorldData` declaration — never by a hardcoded
+ * plugin id. Mirrors `characterMirrorTargets` for the `blueprints` namespace.
+ */
+export function blueprintStorageTargets(
+  deps: CharacterEffectsDeps | undefined,
+): readonly BlueprintStorageTarget[] {
+  const activePlugins = deps?.activePlugins ?? [];
+  return activePlugins.flatMap((pluginId) => {
+    const schema = getPluginEntry(deps, pluginId)?.dataSchemas?.[
+      CHARACTER_BLUEPRINT_NAMESPACE
+    ];
+    if (schema?.acceptsWorldData !== true) return [];
+    return [{ pluginId, namespace: CHARACTER_BLUEPRINT_NAMESPACE }];
   });
 }

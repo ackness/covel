@@ -292,7 +292,7 @@ Each SQL backend keeps a thin public factory plus focused method modules:
 - **Session IDs**: `{worldId}-{uuid8}` via `crypto.randomUUID()` — enumeration-resistant.
 - **worldId**: `/^[a-z0-9_-]{1,64}$/i` regex whitelist.
 - **Rate limiting**: `middleware/rate-limit.ts` (`rateLimiter()`, `singleFlight()`).
-- **Error sanitising**: `middleware/sanitize-error.ts` strips stacks and paths in prod.
+- **Error sanitising**: the `app.onError` handler (`routes/api/bootstrap.ts` + `app.ts`) returns `"Internal server error"` in prod (stacks/paths only to `console.error`); dev returns `err.message`.
 - **Debug artefacts**: always write under `debugs/` (never repo root) — gitignored.
 
 ### Dev-mode LLM replay cache

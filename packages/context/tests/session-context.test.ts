@@ -341,6 +341,7 @@ describe("buildSessionContextSnapshot — player identity wiring", () => {
     const snapshot = await buildSessionContextSnapshot(store, "sess-1", {
       locale: "zh-CN",
       turnNumber: 4,
+      personaPluginId: "player-identity",
     });
 
     expect(snapshot.activePersona).toEqual({
@@ -364,6 +365,31 @@ describe("buildSessionContextSnapshot — player identity wiring", () => {
         budgetClass: "sticky",
       },
     ]);
+  });
+
+  it("loads no persona when no persona-provider plugin id is supplied", async () => {
+    const store = createMemoryStore();
+    await store.createSession(makeSession());
+    await store.setPluginData(
+      makePluginData({
+        pluginId: "player-identity",
+        namespace: "session-binding",
+        key: "current",
+        value: { profileId: "wanderer", updatedAt: ts() },
+      }),
+    );
+
+    // Framework discovered no `persona-provider` capability → personaPluginId
+    // omitted → persona stays off, never hardcoded to a specific plugin.
+    const snapshot = await buildSessionContextSnapshot(store, "sess-1", {
+      locale: "zh-CN",
+      turnNumber: 4,
+    });
+
+    expect(snapshot.activePersona).toBeUndefined();
+    expect(
+      snapshot.contributions.some((c) => c.kind === "persona_description"),
+    ).toBe(false);
   });
 });
 

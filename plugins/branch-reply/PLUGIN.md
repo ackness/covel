@@ -11,6 +11,7 @@ trigger:
   type: manual
 capabilities:
   - branch-reply
+  - prompt-history-rewriter
 tags:
   - role:branching
   - cost:function

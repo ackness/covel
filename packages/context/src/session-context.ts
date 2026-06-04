@@ -8,8 +8,9 @@
  * Invariants:
  *  1. All store reads are guarded (method existence probe + try/catch).
  *     Loader failures never throw; missing data degrades to empty shapes.
- *  2. World-data-provider plugin id is caller-supplied (discovered by the
- *     `world-data-provider` capability tag) — never hardcoded here.
+ *  2. World-data-provider and persona-provider plugin ids are caller-supplied
+ *     (discovered by the `world-data-provider` / `persona-provider` capability
+ *     tags) — never hardcoded here.
  *  3. `coreMemoryBlocks` / `summaries` are caller-resolved inputs; the
  *     loader does not inspect environment configuration.
  */
@@ -51,6 +52,13 @@ export interface BuildSessionContextSnapshotOpts {
    */
   readonly worldDataPluginId?: string;
   /**
+   * Plugin ID of the persona provider (discovered by the `persona-provider`
+   * capability tag in bootstrap). Drives `activePersona` loading from that
+   * plugin's `session-binding` / `profiles` namespaces. When absent, no
+   * persona is loaded. Framework must NEVER hardcode a plugin id.
+   */
+  readonly personaPluginId?: string;
+  /**
    * Pre-loaded core memory blocks. Caller decides whether to load them
    * based on memorySystem availability.
    * Defaults to `[]`.
@@ -84,7 +92,7 @@ export async function buildSessionContextSnapshot(
     loadLastFormValues(store, sessionId),
     loadWorkingMemory(store, sessionId),
     loadLorebookRecords(store, sessionId),
-    loadActivePersona(store, sessionId),
+    loadActivePersona(store, sessionId, opts.personaPluginId),
   ]);
 
   const worldRecord = opts.worldId
@@ -205,11 +213,15 @@ async function loadLorebookRecords(
 async function loadActivePersona(
   store: SessionContextStore,
   sessionId: string,
+  personaPluginId: string | undefined,
 ): Promise<PersonaProfile | undefined> {
+  // No persona provider discovered for this session — degrade to no persona.
+  // Framework never assumes a specific plugin id.
+  if (!personaPluginId) return undefined;
   try {
     const bindings = await store.listPluginData(
       sessionId,
-      "player-identity",
+      personaPluginId,
       "session-binding",
     );
     const current = bindings.find((record) => record.key === "current");
@@ -221,7 +233,7 @@ async function loadActivePersona(
 
     const profiles = await store.listPluginData(
       sessionId,
-      "player-identity",
+      personaPluginId,
       "profiles",
     );
     const profileRecord = profiles.find((record) => record.key === profileId);

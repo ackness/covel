@@ -1,4 +1,4 @@
-import { History, Trash2 } from "lucide-react";
+import { History, Loader2, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
@@ -11,6 +11,8 @@ interface SessionHistoryCardProps {
   expanded: boolean;
   onToggle: () => void;
   onResume: (session: api.SessionRecord) => void;
+  /** Session id currently being resumed — locks its Resume button. */
+  resumingId?: string | null;
   onRequestDelete: (session: api.SessionRecord) => void;
 }
 
@@ -19,6 +21,7 @@ export function SessionHistoryCard({
   expanded,
   onToggle,
   onResume,
+  resumingId,
   onRequestDelete,
 }: SessionHistoryCardProps) {
   const { t } = useTranslation();
@@ -74,9 +77,15 @@ export function SessionHistoryCard({
                   variant="outline"
                   size="sm"
                   className="text-xs"
+                  disabled={Boolean(resumingId)}
                   onClick={() => onResume(session)}
                 >
-                  {t("session.resume")}
+                  {resumingId === session.id && (
+                    <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                  )}
+                  {resumingId === session.id
+                    ? t("session.resuming", "Resuming…")
+                    : t("session.resume")}
                 </Button>
                 <Button
                   variant="ghost"

@@ -170,6 +170,21 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           name: "Character Blueprint",
           pluginType: "plugin",
         }),
+        // Declares it accepts world blueprints + mirrored characters — drives
+        // capability discovery (blueprintStorageTargets / characterMirrorTargets)
+        // instead of the framework hardcoding the plugin id.
+        dataSchemas: {
+          blueprints: {
+            schemaVersion: 1,
+            acceptsWorldData: true,
+            schema: "./schemas/blueprints.schema.json",
+          },
+          characters: {
+            schemaVersion: 1,
+            acceptsWorldData: true,
+            schema: "./schemas/characters.schema.json",
+          },
+        },
         source: "builtin",
       }),
     );
@@ -546,16 +561,10 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         id: "sess-academy-npc-test-heroine",
         name: "Test Heroine",
       });
-      const characterPanelMirror = await store.getPluginData(
-        "sess-academy",
-        "char-creator",
-        "characters",
-        "sess-academy-npc-test-heroine",
-      );
-      expect(characterPanelMirror?.value).toMatchObject({
-        id: "sess-academy-npc-test-heroine",
-        name: "Test Heroine",
-      });
+      // Mirror targets are capability-discovered (dataSchemas.characters
+      // .acceptsWorldData). char-creator does not declare it and reads the
+      // canonical `session.characters` table, so it receives no plugin-data
+      // mirror — the framework no longer hardcodes a char-creator write.
     });
 
     it("scopes imported blueprint character ids per session", async () => {
@@ -594,13 +603,15 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         const scopedId = `${sessionId}-npc-test-heroine-scoped`;
         const characters = await store.listCharacters(sessionId);
         expect(characters.map((character) => character.id)).toContain(scopedId);
-        const characterPanelMirror = await store.getPluginData(
+        // Mirror lands in capability-discovered targets (character-blueprint
+        // declares dataSchemas.characters.acceptsWorldData), scoped per session.
+        const blueprintMirror = await store.getPluginData(
           sessionId,
-          "char-creator",
+          "character-blueprint",
           "characters",
           scopedId,
         );
-        expect(characterPanelMirror?.value).toMatchObject({
+        expect(blueprintMirror?.value).toMatchObject({
           id: scopedId,
           name: "Test Heroine Scoped",
         });

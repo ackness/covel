@@ -44,6 +44,9 @@ export function ToastHost() {
   const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
+  // Toasts the pointer is currently hovering — their auto-dismiss timer is
+  // paused so the user can finish reading / copying the detail.
+  const pausedRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     const unsub = subscribeToast((event) => {
@@ -62,7 +65,7 @@ export function ToastHost() {
   useEffect(() => {
     const timers = timersRef.current;
     for (const toast of toasts) {
-      if (timers.has(toast.id)) continue;
+      if (timers.has(toast.id) || pausedRef.current.has(toast.id)) continue;
       const handle = setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== toast.id));
         timers.delete(toast.id);
@@ -77,6 +80,28 @@ export function ToastHost() {
       }
     }
   }, [toasts]);
+
+  // Pause auto-dismiss while hovered so the user can read / copy the detail.
+  const pauseDismiss = (id: number) => {
+    pausedRef.current.add(id);
+    const handle = timersRef.current.get(id);
+    if (handle !== undefined) {
+      clearTimeout(handle);
+      timersRef.current.delete(id);
+    }
+  };
+
+  // Resume by re-arming a fresh full-duration timer once the pointer leaves.
+  const resumeDismiss = (id: number) => {
+    pausedRef.current.delete(id);
+    const toast = toasts.find((entry) => entry.id === id);
+    if (!toast || timersRef.current.has(id)) return;
+    const handle = setTimeout(() => {
+      setToasts((prev) => prev.filter((entry) => entry.id !== id));
+      timersRef.current.delete(id);
+    }, AUTO_DISMISS_MS[toast.kind]);
+    timersRef.current.set(id, handle);
+  };
 
   // Clear every pending timer on unmount.
   useEffect(() => {
@@ -127,6 +152,8 @@ export function ToastHost() {
           <div
             key={toast.id}
             role={toast.kind === "error" ? "alert" : "status"}
+            onMouseEnter={() => pauseDismiss(toast.id)}
+            onMouseLeave={() => resumeDismiss(toast.id)}
             className={cn(
               "pointer-events-auto flex items-start gap-3 rounded-md border px-3 py-2.5 shadow-lg backdrop-blur-md",
               "animate-in slide-in-from-bottom-2 fade-in",

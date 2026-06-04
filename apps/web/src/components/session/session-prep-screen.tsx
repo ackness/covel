@@ -6,7 +6,7 @@ import {
   type CSSProperties,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { Play, ArrowLeft } from "lucide-react";
+import { Play, ArrowLeft, Loader2 } from "lucide-react";
 import * as api from "@/services/api.js";
 import { Button } from "@/components/ui/button.js";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
@@ -346,9 +346,34 @@ export function SessionPrepScreen({
     [resolvedSlots],
   );
 
-  const handleStart = useCallback(() => {
-    onStart(startPluginsPayload(selectedPluginIds));
-  }, [selectedPluginIds, onStart]);
+  // In-flight guards: startGame / resume run several serial network round
+  // trips, so lock the relevant button to prevent duplicate session creation
+  // or double resume on a slow connection.
+  const [isStarting, setIsStarting] = useState(false);
+  const [resumingId, setResumingId] = useState<string | null>(null);
+
+  const handleStart = useCallback(async () => {
+    if (isStarting) return;
+    setIsStarting(true);
+    try {
+      await onStart(startPluginsPayload(selectedPluginIds));
+    } finally {
+      setIsStarting(false);
+    }
+  }, [isStarting, selectedPluginIds, onStart]);
+
+  const handleResume = useCallback(
+    async (session: api.SessionRecord) => {
+      if (resumingId) return;
+      setResumingId(session.id);
+      try {
+        await onResume(session);
+      } finally {
+        setResumingId(null);
+      }
+    },
+    [resumingId, onResume],
+  );
 
   return (
     <div className="flex h-full w-full overflow-hidden">
@@ -400,10 +425,17 @@ export function SessionPrepScreen({
                     background: "var(--world-accent)",
                     color: "black",
                   }}
-                  onClick={handleStart}
+                  disabled={isStarting}
+                  onClick={() => void handleStart()}
                 >
-                  <Play className="w-4 h-4 mr-1.5" />
-                  {t("session.startGame", "Start Game")}
+                  {isStarting ? (
+                    <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                  ) : (
+                    <Play className="w-4 h-4 mr-1.5" />
+                  )}
+                  {isStarting
+                    ? t("session.startingGame", "Creating…")
+                    : t("session.startGame", "Start Game")}
                 </Button>
               </div>
 
@@ -440,7 +472,8 @@ export function SessionPrepScreen({
                 activeSessions={activeSessions}
                 expanded={sessionsExpanded}
                 onToggle={() => setSessionsExpanded(!sessionsExpanded)}
-                onResume={onResume}
+                onResume={handleResume}
+                resumingId={resumingId}
                 onRequestDelete={setDeleteTarget}
               />
 
