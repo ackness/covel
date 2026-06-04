@@ -116,8 +116,8 @@ export async function removeStateSnapshot(sessionId: string): Promise<void> {
 
 export async function getStatePatches(
   sessionId: string,
-): Promise<import("./api.js").StatePatchRecord[] | null> {
-  return idbGet<import("./api.js").StatePatchRecord[]>(
+): Promise<import("./api/types.js").StatePatchRecord[] | null> {
+  return idbGet<import("./api/types.js").StatePatchRecord[]>(
     STORE_STATE_PATCHES,
     sessionId,
   );
@@ -125,7 +125,7 @@ export async function getStatePatches(
 
 export async function saveStatePatches(
   sessionId: string,
-  patches: import("./api.js").StatePatchRecord[],
+  patches: import("./api/types.js").StatePatchRecord[],
 ): Promise<void> {
   return idbPut(STORE_STATE_PATCHES, sessionId, patches);
 }

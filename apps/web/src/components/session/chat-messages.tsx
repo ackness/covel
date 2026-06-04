@@ -26,7 +26,6 @@ import {
   postPluginRpcWithApproval,
 } from "./plugin-rpc-ui.js";
 import {
-  BranchReplyBlock,
   MessageBlockRenderer,
   PluginMessageBlock,
   UiRenderBlock,
@@ -420,22 +419,10 @@ export function ChatMessages({
       );
     }
 
-    if (blockType === "branch_reply" || blockType === "branch-reply") {
-      return (
-        <div key={msg.id} className="flex flex-col gap-1.5">
-          {viewMode === "detailed" && (
-            <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
-              branch-reply
-              {msg.runtimeId && (
-                <span className="ml-1.5 opacity-60">· {msg.runtimeId}</span>
-              )}
-            </span>
-          )}
-          <BranchReplyBlock block={block} />
-          <SubmittedSelectionFooter values={submittedValues} />
-        </div>
-      );
-    }
+    // NOTE: branch-reply blocks are NOT special-cased here. The branch-reply
+    // plugin renders through the standard plugin-message surface (its
+    // `ui.message` spec → `BranchReplyCandidates` catalog component), so the
+    // framework never hardcodes the plugin's block type (CLAUDE.md isolation).
 
     const assetView = isAssetGenerateView(block.data) ? block.data : null;
     if (blockType === "asset.generate" && sessionId && assetView) {
@@ -591,7 +578,17 @@ export function ChatMessages({
                 );
               }
 
-              return rendered;
+              // Wrap each row in a `.chat-row` so off-screen rows skip layout
+              // and paint (content-visibility) — preserves keys, refs, state,
+              // scroll anchoring, streaming follow and jump-to-latest.
+              return rendered.map((node) => {
+                const el = node as React.ReactElement;
+                return (
+                  <div key={el.key} className="chat-row">
+                    {node}
+                  </div>
+                );
+              });
             })()}
 
             {executionError && (

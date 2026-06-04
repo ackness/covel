@@ -176,31 +176,6 @@ function normalizeNestedSpec(
   return out;
 }
 
-export function BranchReplyBlock({
-  block,
-}: {
-  block: Record<string, unknown>;
-}) {
-  const data = (block.data ?? block) as Record<string, unknown>;
-  const spec = useMemo(
-    () =>
-      nestedToFlat({
-        type: "BranchReplyCandidates",
-        props: {
-          value: data,
-          pluginId: "branch-reply",
-        },
-      }),
-    [data],
-  );
-
-  return (
-    <JSONUIProvider registry={covelRegistry} initialState={{}} handlers={{}}>
-      <Renderer spec={spec} registry={covelRegistry} />
-    </JSONUIProvider>
-  );
-}
-
 // Renders any block other than plugin_message using message-to-spec +
 // json-render. Form/choice handlers bridge into onSubmitInteraction so
 // the framework submit-form RPC + echoFilledNarrative UX hint keeps

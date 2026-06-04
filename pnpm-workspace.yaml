@@ -4,3 +4,10 @@ packages:
   - "plugins/*"
 
 minimumReleaseAge: 10080
+
+# Native packages allowed to run install build scripts. Moved here from the
+# package.json `pnpm` field, which pnpm 10 no longer reads.
+onlyBuiltDependencies:
+  - better-sqlite3
+  - electron
+  - esbuild
