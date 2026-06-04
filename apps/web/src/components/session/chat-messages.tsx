@@ -431,7 +431,7 @@ export function ChatMessages({
               )}
             </span>
           )}
-          <BranchReplyBlock block={block} />
+          <BranchReplyBlock block={block} pluginId={msg.runtimeId} />
           <SubmittedSelectionFooter values={submittedValues} />
         </div>
       );

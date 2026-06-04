@@ -178,20 +178,28 @@ function normalizeNestedSpec(
 
 export function BranchReplyBlock({
   block,
+  pluginId,
 }: {
   block: Record<string, unknown>;
+  /** Authoring plugin id, sourced from the message — never hardcoded here. */
+  pluginId?: string;
 }) {
   const data = (block.data ?? block) as Record<string, unknown>;
+  const resolvedPluginId =
+    pluginId ?? (typeof data.pluginId === "string" ? data.pluginId : undefined);
   const spec = useMemo(
     () =>
       nestedToFlat({
         type: "BranchReplyCandidates",
         props: {
           value: data,
-          pluginId: "branch-reply",
+          // Pass the real authoring plugin id when known; the catalog renderer
+          // keeps its own last-resort default. The framework does not inject a
+          // hardcoded plugin id.
+          ...(resolvedPluginId ? { pluginId: resolvedPluginId } : {}),
         },
       }),
-    [data],
+    [data, resolvedPluginId],
   );
 
   return (

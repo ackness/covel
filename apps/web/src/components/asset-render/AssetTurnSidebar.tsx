@@ -19,7 +19,7 @@
 
 import type { ReactElement } from "react";
 import { useSession } from "@/stores/session-store.js";
-import { AssetRender } from "./index.js";
+import { AssetRender } from "./AssetRender.js";
 
 export interface AssetTurnSidebarProps {
   readonly turnId: string;
