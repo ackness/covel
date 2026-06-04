@@ -578,7 +578,17 @@ export function ChatMessages({
                 );
               }
 
-              return rendered;
+              // Wrap each row in a `.chat-row` so off-screen rows skip layout
+              // and paint (content-visibility) — preserves keys, refs, state,
+              // scroll anchoring, streaming follow and jump-to-latest.
+              return rendered.map((node) => {
+                const el = node as React.ReactElement;
+                return (
+                  <div key={el.key} className="chat-row">
+                    {node}
+                  </div>
+                );
+              });
             })()}
 
             {executionError && (

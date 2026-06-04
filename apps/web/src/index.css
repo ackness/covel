@@ -614,6 +614,21 @@
   max-width: var(--session-column-max-width);
 }
 
+/*
+ * Chat list off-screen render-skipping (P1-E). `content-visibility: auto`
+ * skips layout + paint for rows outside the viewport without unmounting them,
+ * so refs, component state, scroll anchoring, streaming follow, and the
+ * jump-to-latest affordance all keep working. `contain-intrinsic-size: auto …`
+ * lets the browser remember each row's real measured height after first paint,
+ * keeping the scrollbar stable on scrollback. The 240px is only the first-paint
+ * estimate for never-yet-rendered off-screen rows. Degrades to a normal render
+ * in browsers without `content-visibility`.
+ */
+.chat-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 240px;
+}
+
 /* Meters / progress */
 .ui-meter-track {
   background: var(--color-muted);
