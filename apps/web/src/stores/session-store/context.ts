@@ -2,8 +2,7 @@ import { createContext, useContext } from "react";
 import type * as api from "@/services/api";
 import type { PendingInteractionDraft, SessionState } from "./types.js";
 
-export interface SessionContextValue {
-  state: SessionState;
+export interface SessionActions {
   boot: () => Promise<void>;
   selectWorld: (worldId: string) => void;
   startGame: (plugins?: string[]) => Promise<void>;
@@ -41,10 +40,36 @@ export interface SessionContextValue {
   refreshSuspensions: () => Promise<void>;
 }
 
-export const SessionContext = createContext<SessionContextValue | null>(null);
+export interface SessionContextValue extends SessionActions {
+  state: SessionState;
+}
 
-export function useSession() {
-  const ctx = useContext(SessionContext);
-  if (!ctx) throw new Error("useSession must be used within SessionProvider");
+/**
+ * State and actions are split across two contexts so that components which
+ * only call actions (e.g. interactive block handlers) do not re-render on
+ * every streaming state change. `useSession()` stays as an aggregate hook for
+ * backwards compatibility; prefer `useSessionActions()` in action-only
+ * consumers to avoid the high-frequency state subscription.
+ */
+export const SessionStateContext = createContext<SessionState | null>(null);
+export const SessionActionsContext = createContext<SessionActions | null>(null);
+
+export function useSessionState(): SessionState {
+  const ctx = useContext(SessionStateContext);
+  if (!ctx)
+    throw new Error("useSessionState must be used within SessionProvider");
   return ctx;
+}
+
+export function useSessionActions(): SessionActions {
+  const ctx = useContext(SessionActionsContext);
+  if (!ctx)
+    throw new Error("useSessionActions must be used within SessionProvider");
+  return ctx;
+}
+
+export function useSession(): SessionContextValue {
+  const state = useSessionState();
+  const actions = useSessionActions();
+  return { state, ...actions };
 }

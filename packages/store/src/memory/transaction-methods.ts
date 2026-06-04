@@ -7,7 +7,6 @@ import type {
   MemoryStoreMethods,
   MemoryVectorRow,
 } from "./memory-types.js";
-import { cloneVectorRows } from "./vector-methods.js";
 import type {
   ApprovalRecord,
   CharacterRecord,
@@ -65,34 +64,57 @@ interface MemorySnapshot {
   readonly snapshots: Map<string, SnapshotRecord>;
 }
 
+/**
+ * Capture a transaction snapshot.
+ *
+ * Performance (audit 2026-06-04 finding H3): instead of `structuredClone`-ing
+ * every collection (O(total-bytes) per `beginTx`, run on every commit path), we
+ * take a *shallow* copy of each collection — a fresh `Map`/array containing the
+ * same record references. This is O(row-count) reference copy, not byte deep
+ * clone.
+ *
+ * Correctness invariant this relies on: MemoryStore methods never mutate a
+ * stored record object in place. Every write path either pushes a new object,
+ * `.set(key, newObject)`, replaces an array slot with a spread copy
+ * (`arr[i] = { ...arr[i], ... }`), or `.delete()`s. Patches go through
+ * `mergeSessionPatch` which returns a new object. A `Map`/array shallow copy
+ * therefore preserves the exact membership at `beginTx`, and `restoreSnapshot`
+ * rewinds structure (insertions, deletions, slot replacements) faithfully — the
+ * shared record references it restores were never mutated, so isolation and
+ * rollback semantics are unchanged.
+ *
+ * If a future method mutates a stored record in place, that invariant breaks
+ * for both this shallow snapshot *and* any reference-sharing reader — the fix
+ * is to keep replacing whole records, not to reintroduce a blanket deep clone.
+ */
 function captureSnapshot(state: MemoryState): MemorySnapshot {
   return {
-    sessions: structuredClone(state.sessions),
-    turnResults: structuredClone(state.turnResults),
-    runtimeResults: structuredClone(state.runtimeResults),
-    toolCalls: structuredClone(state.toolCalls),
-    stateSchemas: structuredClone(state.stateSchemas),
-    stateEntries: structuredClone(state.stateEntries),
-    stateChanges: structuredClone(state.stateChanges),
-    events: structuredClone(state.events),
-    approvals: structuredClone(state.approvals),
-    messages: structuredClone(state.messages),
-    characters: structuredClone(state.characters),
-    pluginData: structuredClone(state.pluginData),
-    pluginConfigs: structuredClone(state.pluginConfigs),
-    vectorRows: cloneVectorRows(state.vectorRows),
-    worlds: structuredClone(state.worlds),
-    traceEvents: structuredClone(state.traceEvents),
-    runtimeOutputs: structuredClone(state.runtimeOutputs),
-    interactionRecords: structuredClone(state.interactionRecords),
-    turnMessages: structuredClone(state.turnMessages),
-    playerInputs: structuredClone(state.playerInputs),
-    workingMemoryEntries: structuredClone(state.workingMemoryEntries),
-    worldDataImportLedger: structuredClone(state.worldDataImportLedger),
-    lorebookEntries: structuredClone(state.lorebookEntries),
-    sessionSummaries: structuredClone(state.sessionSummaries),
-    suspensions: structuredClone(state.suspensions),
-    snapshots: structuredClone(state.snapshots),
+    sessions: new Map(state.sessions),
+    turnResults: [...state.turnResults],
+    runtimeResults: [...state.runtimeResults],
+    toolCalls: [...state.toolCalls],
+    stateSchemas: [...state.stateSchemas],
+    stateEntries: new Map(state.stateEntries),
+    stateChanges: [...state.stateChanges],
+    events: [...state.events],
+    approvals: [...state.approvals],
+    messages: [...state.messages],
+    characters: new Map(state.characters),
+    pluginData: new Map(state.pluginData),
+    pluginConfigs: new Map(state.pluginConfigs),
+    vectorRows: new Map(state.vectorRows),
+    worlds: new Map(state.worlds),
+    traceEvents: [...state.traceEvents],
+    runtimeOutputs: [...state.runtimeOutputs],
+    interactionRecords: [...state.interactionRecords],
+    turnMessages: [...state.turnMessages],
+    playerInputs: [...state.playerInputs],
+    workingMemoryEntries: new Map(state.workingMemoryEntries),
+    worldDataImportLedger: new Map(state.worldDataImportLedger),
+    lorebookEntries: new Map(state.lorebookEntries),
+    sessionSummaries: [...state.sessionSummaries],
+    suspensions: new Map(state.suspensions),
+    snapshots: new Map(state.snapshots),
   };
 }
 

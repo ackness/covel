@@ -142,7 +142,10 @@ sessionRoutes.post("/", async (c) => {
     });
     importedMediaRefs = importedWorldData.mediaRefs;
     if (!importedWorldData.imported) {
-      await importWorldCharacterBlueprints(store, id, rawWorldId, now);
+      await importWorldCharacterBlueprints(store, id, rawWorldId, now, {
+        activePlugins: plugins,
+        registry: pluginRegistry,
+      });
     }
     await store.commitTx();
   } catch (err) {

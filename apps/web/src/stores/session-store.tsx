@@ -1,10 +1,12 @@
 import { useMemo, useReducer, type ReactNode } from "react";
 import { getDataService } from "@/services/data-service";
-import { useSessionActions } from "./session-store/actions.js";
+import { useBuildSessionActions } from "./session-store/actions.js";
 import {
-  SessionContext,
+  SessionActionsContext,
+  SessionStateContext,
   useSession,
-  type SessionContextValue,
+  useSessionActions,
+  useSessionState,
 } from "./session-store/context.js";
 import {
   useBootEffect,
@@ -25,7 +27,7 @@ export type {
   SuspensionRecord,
 } from "./session-store/types.js";
 export { mergeGameStateForReplacement } from "./session-store/game-state.js";
-export { useSession };
+export { useSession, useSessionActions, useSessionState };
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -48,7 +50,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [ds, refs],
   );
 
-  const actions = useSessionActions({
+  const actions = useBuildSessionActions({
     state,
     dispatch,
     ds,
@@ -65,12 +67,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     sessionIdRef: refs.sessionIdRef,
   });
 
-  const value: SessionContextValue = useMemo(
-    () => ({ state, ...actions }),
-    [state, actions],
-  );
-
+  // Two providers: the actions value is referentially stable across streaming
+  // state changes (useBuildSessionActions memoises it), so action-only
+  // consumers via useSessionActions() never re-render on delta updates. Only
+  // useSessionState() / useSession() consumers track the high-frequency state.
   return (
-    <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
+    <SessionActionsContext.Provider value={actions}>
+      <SessionStateContext.Provider value={state}>
+        {children}
+      </SessionStateContext.Provider>
+    </SessionActionsContext.Provider>
   );
 }

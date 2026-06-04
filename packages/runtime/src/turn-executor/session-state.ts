@@ -129,15 +129,20 @@ export async function buildProjectedPromptHistory(args: {
     (msg) => !(msg.turnId === input.turnId && msg.sourceType === "player"),
   );
 
-  if (!deps.store) return promptHistory;
+  // Prompt-history rewriter is discovered by the `prompt-history-rewriter`
+  // capability (resolved server-side). When no such plugin is active for the
+  // session, the projected history passes through unchanged — the framework
+  // never assumes a specific plugin id.
+  const rewriterPluginId = deps.promptHistoryRewriterPluginId;
+  if (!deps.store || !rewriterPluginId) return promptHistory;
 
   try {
-    const branchReplyTurns = await deps.store.listPluginData(
+    const rewriterTurns = await deps.store.listPluginData(
       input.sessionId,
-      "branch-reply",
+      rewriterPluginId,
       "turns",
     );
-    return applyBranchReplyAcceptedCandidates(promptHistory, branchReplyTurns);
+    return applyBranchReplyAcceptedCandidates(promptHistory, rewriterTurns);
   } catch {
     return promptHistory;
   }

@@ -1,7 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useSession } from "@/stores/session-store.js";
+import { emitToast } from "@/lib/toast-channel.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { resolveI18n } from "@/lib/catalog.js";
 import { initDesktopBridge } from "@/lib/desktop-bridge.js";
@@ -23,8 +25,10 @@ export const Route = createFileRoute("/session")({
 });
 
 function SessionPage() {
+  const { t } = useTranslation();
   const {
     state,
+    boot,
     selectWorld,
     startGame,
     beginAdventure,
@@ -117,6 +121,8 @@ function SessionPage() {
   navigateRef.current = navigate;
   const messagesRef = useRef(state.messages);
   messagesRef.current = state.messages;
+  const tRef = useRef(t);
+  tRef.current = t;
 
   // Topbar nav → in-page panel toggles. The global topbar lives in __root and
   // can't reach page-local state directly, so it dispatches via nav-events.
@@ -134,16 +140,32 @@ function SessionPage() {
       onOpenSettings: () => settingsOpenRef.current(true),
       onNewWorld: () => navigateRef.current({ to: "/session", search: {} }),
       onExportChat: () => {
+        const tt = tRef.current;
         const msgs = messagesRef.current;
-        if (msgs.length === 0) return;
-        const text = msgs.map((m) => `[${m.role}] ${m.content}`).join("\n\n");
-        const blob = new Blob([text], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "covel-chat.txt";
-        a.click();
-        URL.revokeObjectURL(url);
+        if (msgs.length === 0) {
+          emitToast(
+            "info",
+            tt("session.exportEmpty", "No messages to export yet"),
+          );
+          return;
+        }
+        try {
+          const text = msgs.map((m) => `[${m.role}] ${m.content}`).join("\n\n");
+          const blob = new Blob([text], { type: "text/plain" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "covel-chat.txt";
+          a.click();
+          URL.revokeObjectURL(url);
+          emitToast("success", tt("session.exportSuccess", "Chat exported"));
+        } catch (err) {
+          emitToast(
+            "error",
+            tt("session.exportFailed", "Failed to export chat"),
+            err instanceof Error ? err.message : String(err),
+          );
+        }
       },
     });
   }, []);
@@ -169,9 +191,34 @@ function SessionPage() {
   // Boot error
   if (state.bootError) {
     return (
-      <div className="flex items-center justify-center h-full gap-2 text-destructive">
-        <AlertCircle className="w-5 h-5" />
-        <span className="text-sm">{state.bootError}</span>
+      <div className="flex items-center justify-center h-full w-full p-6">
+        <div className="max-w-md w-full border border-border p-6 space-y-4">
+          <div className="flex items-center gap-2 text-destructive">
+            <AlertCircle className="w-5 h-5 shrink-0" />
+            <span className="text-sm font-medium">
+              {t("error.boot.title", "Failed to start")}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground break-all">
+            {state.bootError}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void boot()}
+              className="px-3 py-2 text-xs uppercase tracking-widest border border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {t("error.boot.retry", "Retry")}
+            </button>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="px-3 py-2 text-xs uppercase tracking-widest border border-border hover:bg-muted"
+            >
+              {t("error.boot.reload", "Reload app")}
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

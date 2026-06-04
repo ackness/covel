@@ -5,12 +5,17 @@ import {
   type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
 
+// audit A5: segment ids are neutral priority-band labels. The framework must
+// not assume "priority 500 == narrator" — narrator is a plugin whose priority
+// is manifest-configured, not framework knowledge. The frontend groups steps
+// by the segment's priority range (minPriority/maxPriority) and renders its
+// `labelText`/`label`; it never reads the segment `id`, so neutral ids are safe.
 export type FlowSegmentId =
   | "start"
   | "pre-game"
-  | "pre-narrator"
-  | "narrator"
-  | "post-narrator";
+  | "priority-band-pre-narrator"
+  | "priority-band-narrator"
+  | "priority-band-post-narrator";
 
 export type UiSlotName = "right" | "message" | "left";
 
@@ -64,9 +69,9 @@ export function segmentForPriority(priority: number): FlowSegmentId {
   // flow viz — same drift the audit calls out.
   if (priority <= 0) return "start";
   if (priority <= 99) return "pre-game";
-  if (priority < 500) return "pre-narrator";
-  if (priority === 500) return "narrator";
-  return "post-narrator";
+  if (priority < 500) return "priority-band-pre-narrator";
+  if (priority === 500) return "priority-band-narrator";
+  return "priority-band-post-narrator";
 }
 
 export function docPathFromAbsolute(

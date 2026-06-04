@@ -172,6 +172,24 @@ export interface TurnExecutorDeps {
   readonly worldDataPluginId?: string;
 
   /**
+   * Optional persona provider plugin ID. Resolved by the server via
+   * `pluginRegistry.findPluginByCapability(sessionId, 'persona-provider')`
+   * and passed down so `buildSessionContextSnapshot` can load the active
+   * player persona from that plugin's `session-binding` / `profiles`
+   * namespaces. Framework never hardcodes a plugin id.
+   */
+  readonly personaPluginId?: string;
+
+  /**
+   * Optional prompt-history rewriter plugin ID. Resolved by the server via
+   * `pluginRegistry.findPluginByCapability(sessionId, 'prompt-history-rewriter')`
+   * and passed down so `buildProjectedPromptHistory` can fold that plugin's
+   * accepted alternate turns into the projected history. Framework never
+   * hardcodes a plugin id.
+   */
+  readonly promptHistoryRewriterPluginId?: string;
+
+  /**
    * Trace emitter for per-turn observability. When present, runtime emits
    * tool.calling / tool.completed / llm.calling / llm.responded / message.completed
    * etc. into trace_events and the action SSE stream via eventBus.

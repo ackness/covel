@@ -1,8 +1,9 @@
-import { useState, useRef, useMemo, useCallback } from "react";
+import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, ImageIcon, MessageSquare } from "lucide-react";
+import { AlertCircle, ArrowDown, ImageIcon, MessageSquare } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Button } from "@/components/ui/button.js";
+import { useAutoScroll } from "@/hooks/use-auto-scroll.js";
 import {
   Dialog,
   DialogContent,
@@ -10,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.js";
-import { Markdown } from "@/components/ui/markdown.js";
 import { ExecutionTimeline } from "./execution-timeline.js";
 import {
   AssetRender,
@@ -27,12 +27,12 @@ import {
 } from "./plugin-rpc-ui.js";
 import {
   BranchReplyBlock,
-  hasLaterUserMessage,
   MessageBlockRenderer,
   PluginMessageBlock,
   UiRenderBlock,
 } from "./chat-messages/message-blocks.js";
 import {
+  NarrativeMessageBody,
   RawJsonBlock,
   SubmittedSelectionFooter,
   SystemMessageLine,
@@ -105,6 +105,22 @@ export function ChatMessages({
   const { t } = useTranslation();
   const { state: sessionState } = useSession();
   const sessionId = sessionState.session?.id;
+
+  // Sticky-bottom auto-scroll. Follows the stream only while the user is
+  // pinned to the bottom; surfaces a "jump to latest" button after they
+  // scroll up. The Radix ScrollArea renders its scrollable element as the
+  // [data-radix-scroll-area-viewport] node, so we resolve it from the root.
+  const scrollRootRef = useRef<HTMLDivElement | null>(null);
+  const { scrollRef, bottomRef, showJumpButton, jumpToBottom } =
+    useAutoScroll(messages);
+  useEffect(() => {
+    const root = scrollRootRef.current;
+    const viewport = root?.querySelector<HTMLElement>(
+      "[data-radix-scroll-area-viewport]",
+    );
+    scrollRef(viewport ?? null);
+    return () => scrollRef(null);
+  }, [scrollRef]);
   const isPreGame = session.status === "active" && session.turnCount === 0;
   const isPlaying = session.status === "active" && session.turnCount > 0;
   const isEnded = session.status === "ended";
@@ -159,6 +175,17 @@ export function ChatMessages({
 
   const isImageGenActive = imageGenEntry !== null;
 
+  // Precompute the index of the last user message once (O(n)). An interactive
+  // block is "locked" iff a later user message exists, i.e. its index is below
+  // the last user index — an O(1) check that replaces the previous per-block
+  // O(n) scan (which made block rendering O(n²) across the whole list).
+  const lastUserMsgIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].role === "user") return i;
+    }
+    return -1;
+  }, [messages]);
+
   // Use plugin-rpc rather than `triggerEvent`. Firing a kernel event would
   // create a fresh turn just to route the topic; plugin-rpc invokes the entry
   // runtime in-place and lets the framework dispatch its background follower
@@ -207,8 +234,8 @@ export function ChatMessages({
    *              Raw JSON / internal LLM trace stays hidden.
    *   raw      — show every message as JSON for inspection.
    */
-  function renderMessage(msg: StreamMessage) {
-    if (msg.block) return renderBlock(msg);
+  function renderMessage(msg: StreamMessage, index: number) {
+    if (msg.block) return renderBlock(msg, index);
 
     // Raw mode: show everything as JSON, no filtering
     if (viewMode === "raw") {
@@ -303,26 +330,11 @@ export function ChatMessages({
           )}
         </span>
 
-        <div
-          className={`text-sm wrap-break-words w-full ${
-            isUser
-              ? "ui-message-player max-w-[90%] md:max-w-[85%] border border-border p-4"
-              : isHiddenAssistantKind
-                ? "ui-message-assistant max-w-none border-l-2 border-border/40 pl-3 py-1 font-mono text-[12px] text-muted-foreground/80 whitespace-pre-wrap"
-                : "ui-message-assistant ui-narrative prose prose-sm max-w-none border-0 p-0"
-          }`}
-        >
-          {isUser ? (
-            <p className="m-0 text-[14px] leading-[1.6]">{msg.content}</p>
-          ) : isHiddenAssistantKind ? (
-            // Plugin/debug kinds in detailed view — preserve the raw text so
-            // the structure of what the runtime emitted is visible, but skip
-            // the narrative-prose styling to signal "this is not story".
-            msg.content
-          ) : (
-            <Markdown>{msg.content}</Markdown>
-          )}
-        </div>
+        <NarrativeMessageBody
+          isUser={isUser}
+          isHiddenAssistantKind={Boolean(isHiddenAssistantKind)}
+          content={msg.content}
+        />
 
         {showImageButton && (
           <div className="flex items-center gap-1.5">
@@ -347,16 +359,17 @@ export function ChatMessages({
     );
   }
 
-  function renderBlock(msg: StreamMessage) {
+  function renderBlock(msg: StreamMessage, index: number) {
     const block = msg.block;
     if (!block) return null;
+    const locked = lastUserMsgIndex >= 0 && index < lastUserMsgIndex;
 
     // Raw mode — show JSON for inspection.
     if (viewMode === "raw") {
       return (
         <div key={msg.id} className="flex flex-col gap-1.5">
           <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-            Block: {block.type as string}
+            {t("session.blockLabel", "Block")}: {block.type as string}
           </span>
           <RawJsonBlock content={JSON.stringify(block, null, 2)} />
         </div>
@@ -384,7 +397,7 @@ export function ChatMessages({
           <PluginMessageBlock
             block={block}
             sourceBlockId={msg.id}
-            locked={hasLaterUserMessage(msg, messages)}
+            locked={locked}
           />
           <SubmittedSelectionFooter values={submittedValues} />
         </div>
@@ -453,9 +466,7 @@ export function ChatMessages({
         <MessageBlockRenderer
           msg={msg}
           block={block}
-          submitted={
-            submittedBlockIds.has(msg.id) || hasLaterUserMessage(msg, messages)
-          }
+          submitted={submittedBlockIds.has(msg.id) || locked}
           submittedValues={submittedValues}
           executing={executing}
           onSubmitInteraction={onSubmitInteraction}
@@ -469,134 +480,156 @@ export function ChatMessages({
 
   return (
     <>
-      <ScrollArea className="flex-1 min-h-0">
-        <div className="ui-session-column p-4 md:p-6 space-y-6 md:space-y-7 mx-auto w-full">
-          {messages.length === 0 &&
-            !executing &&
-            (isPreGame ? (
-              <SessionCanvasHero
-                world={world}
-                onBegin={onBeginAdventure}
-                beginLabel={t("session.beginAdventure")}
-                hintLabel={t("session.beginAdventureHint")}
-              />
-            ) : (
-              <div className="flex flex-col items-center justify-center py-20 text-center space-y-6">
-                <MessageSquare className="w-8 h-8 text-muted-foreground/50" />
-                <p className="text-sm text-muted-foreground">
-                  {isPlaying && t("session.emptyPlaying")}
-                  {isEnded && t("session.emptyEnded")}
-                </p>
-              </div>
-            ))}
+      <div className="relative flex-1 min-h-0 flex flex-col">
+        <ScrollArea ref={scrollRootRef} className="flex-1 min-h-0">
+          <div className="ui-session-column p-4 md:p-6 space-y-6 md:space-y-7 mx-auto w-full">
+            {messages.length === 0 &&
+              !executing &&
+              (isPreGame ? (
+                <SessionCanvasHero
+                  world={world}
+                  onBegin={onBeginAdventure}
+                  beginLabel={t("session.beginAdventure")}
+                  hintLabel={t("session.beginAdventureHint")}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center py-20 text-center space-y-6">
+                  <MessageSquare className="w-8 h-8 text-muted-foreground/50" />
+                  <p className="text-sm text-muted-foreground">
+                    {isPlaying && t("session.emptyPlaying")}
+                    {isEnded && t("session.emptyEnded")}
+                  </p>
+                </div>
+              ))}
 
-          {/* Render messages with per-turn execution timelines inline */}
-          {(() => {
-            // Group execution steps by turnId for inline rendering
-            const stepsByTurn = new Map<string, ExecutionStep[]>();
-            for (const step of executionSteps) {
-              const tid = step.turnId ?? "__unknown__";
-              if (!stepsByTurn.has(tid)) stepsByTurn.set(tid, []);
-              stepsByTurn.get(tid)!.push(step);
-            }
+            {/* Render messages with per-turn execution timelines inline */}
+            {(() => {
+              // Group execution steps by turnId for inline rendering
+              const stepsByTurn = new Map<string, ExecutionStep[]>();
+              for (const step of executionSteps) {
+                const tid = step.turnId ?? "__unknown__";
+                if (!stepsByTurn.has(tid)) stepsByTurn.set(tid, []);
+                stepsByTurn.get(tid)!.push(step);
+              }
 
-            // Collect the last message index per turnId so we know where to insert
-            const lastMsgIndexByTurn = new Map<string, number>();
-            messages.forEach((msg, idx) => {
-              if (msg.turnId) lastMsgIndexByTurn.set(msg.turnId, idx);
-            });
+              // Collect the last message index per turnId so we know where to insert
+              const lastMsgIndexByTurn = new Map<string, number>();
+              messages.forEach((msg, idx) => {
+                if (msg.turnId) lastMsgIndexByTurn.set(msg.turnId, idx);
+              });
 
-            const rendered: React.ReactNode[] = [];
-            const insertedTurnIds = new Set<string>();
+              const rendered: React.ReactNode[] = [];
+              const insertedTurnIds = new Set<string>();
 
-            messages.forEach((msg, idx) => {
-              const node = renderMessage(msg);
-              if (node) rendered.push(node);
+              messages.forEach((msg, idx) => {
+                const node = renderMessage(msg, idx);
+                if (node) rendered.push(node);
 
-              // After the last message of a turn, insert that turn's execution timeline
-              if (msg.turnId && lastMsgIndexByTurn.get(msg.turnId) === idx) {
-                const turnSteps = stepsByTurn.get(msg.turnId);
-                if (turnSteps && turnSteps.length > 0) {
-                  insertedTurnIds.add(msg.turnId);
-                  const isActiveTurn =
-                    executing &&
-                    msg.turnId === [...lastMsgIndexByTurn.keys()].at(-1);
+                // After the last message of a turn, insert that turn's execution timeline
+                if (msg.turnId && lastMsgIndexByTurn.get(msg.turnId) === idx) {
+                  const turnSteps = stepsByTurn.get(msg.turnId);
+                  if (turnSteps && turnSteps.length > 0) {
+                    insertedTurnIds.add(msg.turnId);
+                    const isActiveTurn =
+                      executing &&
+                      msg.turnId === [...lastMsgIndexByTurn.keys()].at(-1);
+                    rendered.push(
+                      <ExecutionTimeline
+                        key={`exec-${msg.turnId}`}
+                        steps={turnSteps}
+                        executing={isActiveTurn ? executing : false}
+                        packages={packages}
+                        onRetryRuntime={
+                          isActiveTurn && onRetryRuntime
+                            ? (id) => onRetryRuntime(id)
+                            : undefined
+                        }
+                        onRetryAll={
+                          isActiveTurn && onRetryRuntime
+                            ? () => onRetryRuntime(undefined)
+                            : undefined
+                        }
+                      />,
+                    );
+                  }
+                  // P0-b — surface modality-routed assets emitted by this turn
+                  // out-of-band, so plain narrative turns stay untouched while
+                  // image / audio / generic-link assets show up next to the
+                  // execution timeline. Renders nothing when the turn has no
+                  // assets, so this is a layout no-op for text-only turns.
                   rendered.push(
-                    <ExecutionTimeline
-                      key={`exec-${msg.turnId}`}
-                      steps={turnSteps}
-                      executing={isActiveTurn ? executing : false}
-                      packages={packages}
-                      onRetryRuntime={
-                        isActiveTurn && onRetryRuntime
-                          ? (id) => onRetryRuntime(id)
-                          : undefined
-                      }
-                      onRetryAll={
-                        isActiveTurn && onRetryRuntime
-                          ? () => onRetryRuntime(undefined)
-                          : undefined
-                      }
+                    <AssetTurnSidebar
+                      key={`assets-${msg.turnId}`}
+                      turnId={msg.turnId}
                     />,
                   );
                 }
-                // P0-b — surface modality-routed assets emitted by this turn
-                // out-of-band, so plain narrative turns stay untouched while
-                // image / audio / generic-link assets show up next to the
-                // execution timeline. Renders nothing when the turn has no
-                // assets, so this is a layout no-op for text-only turns.
+              });
+
+              // If the current turn is executing and has no messages yet (startup),
+              // or steps belong to a turn with no messages, show at the bottom
+              const activeTurnSteps = executionSteps.filter((s) => {
+                const tid = s.turnId ?? "__unknown__";
+                return !insertedTurnIds.has(tid);
+              });
+              if (activeTurnSteps.length > 0) {
                 rendered.push(
-                  <AssetTurnSidebar
-                    key={`assets-${msg.turnId}`}
-                    turnId={msg.turnId}
+                  <ExecutionTimeline
+                    key="exec-active"
+                    steps={activeTurnSteps}
+                    executing={executing}
+                    packages={packages}
+                    onRetryRuntime={
+                      onRetryRuntime ? (id) => onRetryRuntime(id) : undefined
+                    }
+                    onRetryAll={
+                      onRetryRuntime
+                        ? () => onRetryRuntime(undefined)
+                        : undefined
+                    }
                   />,
                 );
               }
-            });
 
-            // If the current turn is executing and has no messages yet (startup),
-            // or steps belong to a turn with no messages, show at the bottom
-            const activeTurnSteps = executionSteps.filter((s) => {
-              const tid = s.turnId ?? "__unknown__";
-              return !insertedTurnIds.has(tid);
-            });
-            if (activeTurnSteps.length > 0) {
-              rendered.push(
-                <ExecutionTimeline
-                  key="exec-active"
-                  steps={activeTurnSteps}
-                  executing={executing}
-                  packages={packages}
-                  onRetryRuntime={
-                    onRetryRuntime ? (id) => onRetryRuntime(id) : undefined
-                  }
-                  onRetryAll={
-                    onRetryRuntime ? () => onRetryRuntime(undefined) : undefined
-                  }
-                />,
-              );
-            }
+              return rendered;
+            })()}
 
-            return rendered;
-          })()}
-
-          {executionError && (
-            <div className="flex items-start gap-2 border border-destructive/50 bg-destructive/5 p-4 text-sm">
-              <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium text-destructive">
-                  {t("common.error", "Error")}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1 break-all">
-                  {executionError}
-                </p>
+            {executionError && (
+              <div className="flex items-start gap-2 border border-destructive/50 bg-destructive/5 p-4 text-sm">
+                <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-destructive">
+                    {t("common.error", "Error")}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1 break-all">
+                    {executionError}
+                  </p>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <div ref={messagesEndRef} />
-        </div>
-      </ScrollArea>
+            <div
+              ref={(node) => {
+                bottomRef.current = node;
+                messagesEndRef.current = node;
+              }}
+            />
+          </div>
+        </ScrollArea>
+        {showJumpButton && (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={jumpToBottom}
+            aria-label={t("session.jumpToLatest", "Jump to latest")}
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 h-8 gap-1.5 rounded-full px-3 shadow-md"
+          >
+            <ArrowDown className="h-3.5 w-3.5" />
+            {t("session.jumpToLatest", "Jump to latest")}
+          </Button>
+        )}
+      </div>
       <Dialog
         open={confirmRequest !== null}
         onOpenChange={(open) => {

@@ -326,7 +326,17 @@
       "builtIn": "Built-in",
       "serverStore": "Server store",
       "server": "Server"
-    }
+    },
+    "jumpToLatest": "Jump to latest",
+    "startingGame": "Creating…",
+    "resuming": "Resuming…",
+    "connectionConnecting": "Connecting…",
+    "connectionReconnecting": "Reconnecting…",
+    "connectionLost": "Connection lost",
+    "blockLabel": "Block",
+    "exportEmpty": "No messages to export yet",
+    "exportSuccess": "Chat exported",
+    "exportFailed": "Failed to export chat"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -888,7 +898,8 @@
     "submitted": "Submitted",
     "submittedHint": "Selected",
     "selectPrefix": "Select {{label}}",
-    "selectPlaceholder": "Select..."
+    "selectPlaceholder": "Select...",
+    "requiredMissing": "Please fill in required fields"
   },
   "interaction": {
     "playerSelected": "You chose:",
@@ -914,6 +925,11 @@
       "appDescription": "Try the actions below. If the problem persists, copy the error and open an issue.",
       "tryAgain": "Try again",
       "reloadApp": "Reload app"
+    },
+    "boot": {
+      "title": "Failed to start",
+      "retry": "Retry",
+      "reload": "Reload app"
     }
   },
   "common": {

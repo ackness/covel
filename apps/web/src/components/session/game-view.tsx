@@ -184,11 +184,10 @@ export function GameView({
   const rightPanelRef = useRef<PanelImperativeHandle>(null);
   const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
   const [isRightCollapsed, setIsRightCollapsed] = useState(false);
+  // Sentinel ref for the bottom of the message list. Auto-scroll behaviour
+  // (sticky-bottom + jump-to-latest) lives in ChatMessages via useAutoScroll;
+  // this ref is shared so external callers can still reach the list tail.
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
 
   const isLeftCollapsedRef = useRef(isLeftCollapsed);
   const isRightCollapsedRef = useRef(isRightCollapsed);

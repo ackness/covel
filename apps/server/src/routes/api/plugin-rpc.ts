@@ -179,6 +179,14 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
       sessionId,
       "world-data-provider",
     );
+    const personaPluginId = pluginRegistry.findPluginByCapability(
+      sessionId,
+      "persona-provider",
+    );
+    const promptHistoryRewriterPluginId = pluginRegistry.findPluginByCapability(
+      sessionId,
+      "prompt-history-rewriter",
+    );
     const turnGetConfig =
       c.get("getConfigFn") ?? ((_pluginId: string, _runtimeId: string) => ({}));
 
@@ -229,6 +237,8 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
         // manual-trigger turns produce the same trace surface as auto turns.
         compactor: compactorRunner,
         worldDataPluginId,
+        personaPluginId,
+        promptHistoryRewriterPluginId,
         ...(hookPipeline ? { hookPipeline } : {}),
       },
       ...(hookPipeline ? { hookPipeline } : {}),

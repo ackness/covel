@@ -38,12 +38,27 @@ export function saveKeysEnv(
     `# Covel provider API keys. One KEY=VALUE per line.\n` +
     `# Example:\n#   DEEPSEEK_API_KEY=sk-xxx\n#   OPENAI_API_KEY=sk-xxx\n\n` +
     Object.entries(envKeys)
-      .filter(([k, v]) => k && typeof v === "string" && v.trim())
+      // audit M2: reject values with CR/LF — a newline would inject extra
+      // `KEY=VALUE` lines and poison other providers' key parsing.
+      .filter(([k, v]) => {
+        if (!k || typeof v !== "string" || !v.trim()) return false;
+        if (/[\r\n]/.test(v)) {
+          console.warn(
+            `[env-files] Skipping key "${k}": value contains a newline`,
+          );
+          return false;
+        }
+        return true;
+      })
       .map(([k, v]) => `${k}=${v.trim()}`)
       .join("\n") +
     "\n";
   fs.mkdirSync(path.dirname(keysFile), { recursive: true });
+  // mode in writeFileSync only applies when creating a new file. Re-assert
+  // 0600 after the write so an existing looser-permission file gets tightened
+  // (audit M1). chmod is a no-op on Windows but does not throw.
   fs.writeFileSync(keysFile, body, { mode: 0o600 });
+  fs.chmodSync(keysFile, 0o600);
 }
 
 function parseEnvFileInto(

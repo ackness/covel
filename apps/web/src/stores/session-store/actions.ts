@@ -7,7 +7,7 @@ import {
   setActiveSession as setActivePluginDataSession,
 } from "@/stores/plugin-data-store.js";
 import { bootSessionStore } from "./boot.js";
-import type { SessionContextValue } from "./context.js";
+import type { SessionActions } from "./context.js";
 import { toExecutionStepStatus } from "./execution-steps.js";
 import { restoreSessionState } from "./restore-session.js";
 import {
@@ -34,13 +34,13 @@ interface UseSessionActionsOptions {
   handleSseEvent: SseEventHandler;
 }
 
-export function useSessionActions({
+export function useBuildSessionActions({
   state,
   dispatch,
   ds,
   refs,
   handleSseEvent,
-}: UseSessionActionsOptions): Omit<SessionContextValue, "state"> {
+}: UseSessionActionsOptions): SessionActions {
   const { sessionIdRef } = refs;
 
   const boot = useCallback(async () => {

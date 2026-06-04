@@ -622,12 +622,16 @@ execution: background # wan2.x 文生图需要几十秒,不阻塞 UI
 
 能力标签数组，框架通过能力标签发现插件，**而非硬编码插件 ID**。
 
-| 能力标签              | 含义             | 框架用途                                                             |
-| --------------------- | ---------------- | -------------------------------------------------------------------- |
-| `narrative`           | 主叙事生成器     | 标识主叙事输出源                                                     |
-| `world-data-provider` | 世界数据提供者   | 加载世界 schema/entries 到 turn context                              |
-| `image-generation`    | 图像生成         | 前端展示「生成配图」按钮                                             |
-| `memory-panel`        | 核心记忆面板宿主 | 记忆系统将核心记忆块镜像到该插件的 plugin-data，用于实时 UI 面板更新 |
+| 能力标签                  | 含义              | 框架用途                                                                                                                                                |
+| ------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `narrative`               | 主叙事生成器      | 标识主叙事输出源                                                                                                                                        |
+| `world-data-provider`     | 世界数据提供者    | 加载世界 schema/entries 到 turn context                                                                                                                 |
+| `image-generation`        | 图像生成          | 前端展示「生成配图」按钮                                                                                                                                |
+| `memory-panel`            | 核心记忆面板宿主  | 记忆系统将核心记忆块镜像到该插件的 plugin-data，用于实时 UI 面板更新                                                                                    |
+| `persona-provider`        | 玩家人设提供者    | `buildSessionContextSnapshot` 从该插件的 `session-binding` / `profiles` 命名空间加载 `activePersona`（由 `player-identity` 声明）。未发现时不加载人设。 |
+| `prompt-history-rewriter` | prompt 历史改写者 | `buildProjectedPromptHistory` 读取该插件的 `turns` 命名空间，把已采纳的备选回合折叠进投影历史（由 `branch-reply` 声明）。未发现时历史原样透传。         |
+
+> `dataSchemas.<namespace>.acceptsWorldData: true` 同样是一种能力声明：世界角色蓝图导入（`blueprintStorageTargets` / `characterMirrorTargets`）据此发现「接受世界蓝图 / 角色镜像」的插件（如 `character-blueprint`），框架不再硬编码 `character-blueprint` / `char-creator`。
 
 声明 `image-generation` 的 runtime 在完成态返回 `assetGenerations[]`，每一项包含 `{ ref: MediaRef, modality: "image", meta? }`。图像画廊索引写入 `plugin_data.images` 时保存 `{ status, ref, prompt, ... }`，运行时会把旧 `url` / `base64` / `dataUrl` 字段记录为 `image.generate.plugin_data_inline_media` error。
 

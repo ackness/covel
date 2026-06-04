@@ -473,9 +473,13 @@ describe("[HIGH] Session creation rolls back when world-data import fails", () =
   });
 
   it("does not leave a persisted session after import failure", async () => {
+    // Inject failure on upsertCharacter — an import-time write that always runs
+    // when a world ships character blueprints. (The blueprint plugin-data batch
+    // is now capability-gated and skipped when no blueprint plugin is active,
+    // so it is no longer a reliable failure-injection point.)
     const failingStore = new Proxy(store, {
       get(target, prop, receiver) {
-        if (prop === "setPluginDataBatch") {
+        if (prop === "upsertCharacter") {
           return vi.fn(async () => {
             throw new Error("simulated import failure");
           });

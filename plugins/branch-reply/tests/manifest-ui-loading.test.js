@@ -27,7 +27,7 @@ describe("branch-reply manifest and UI loading", () => {
       outputKind: "system",
       handler: "./handler.js",
       trigger: { type: "manual" },
-      capabilities: ["branch-reply"],
+      capabilities: ["branch-reply", "prompt-history-rewriter"],
       ui: {
         message: ["./ui/branch-reply-block.json"],
       },

@@ -726,6 +726,30 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────
+   Reduced motion — collapse animations/transitions and disable smooth
+   scrolling for users who request it (WCAG 2.3.3 / vestibular safety).
+   Spinners keep spinning (load feedback) but lose their easing; the
+   .ui-keep-motion escape hatch fully opts an element back in.
+   ───────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *:not(.ui-keep-motion),
+  *:not(.ui-keep-motion)::before,
+  *:not(.ui-keep-motion)::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Keep purely-rotational loading spinners visible as motion feedback,
+     just without timing easing differences. */
+  .animate-spin {
+    animation-duration: 1s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
    Resize handle — quiet hairline by default, becomes a thin colored
    stripe on hover so the user still has a clear affordance.
    ───────────────────────────────────────────────────────────────── */

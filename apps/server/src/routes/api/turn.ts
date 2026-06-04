@@ -86,6 +86,16 @@ turnRoutes.post("/:id/turn", rateLimiter({ max: 30 }), async (c) => {
     sessionId,
     "world-data-provider",
   );
+  // Persona provider + prompt-history rewriter are likewise discovered by
+  // capability — never by plugin id. Absent capability → feature simply off.
+  const personaPluginId = pluginRegistry.findPluginByCapability(
+    sessionId,
+    "persona-provider",
+  );
+  const promptHistoryRewriterPluginId = pluginRegistry.findPluginByCapability(
+    sessionId,
+    "prompt-history-rewriter",
+  );
 
   const hookPipeline = c.get("hookPipeline");
   const eventBus = c.get("eventBus");
@@ -142,6 +152,8 @@ turnRoutes.post("/:id/turn", rateLimiter({ max: 30 }), async (c) => {
         resolveModel,
         compactor: compactorRunner,
         worldDataPluginId,
+        personaPluginId,
+        promptHistoryRewriterPluginId,
         emitter,
       },
     );

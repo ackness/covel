@@ -11,6 +11,7 @@ trigger:
   type: manual
 capabilities:
   - player-identity
+  - persona-provider
 tags:
   - role:character
   - data:characters

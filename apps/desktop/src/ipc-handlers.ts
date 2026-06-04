@@ -155,6 +155,10 @@ export function registerDesktopIpcHandlers({
           JSON.stringify(bundle, null, 2) + "\n",
           { mode: 0o600 },
         );
+        // mode only applies on file creation; re-assert 0600 so an existing
+        // looser-permission settings.json (may carry secrets) gets tightened
+        // (audit M1). chmod is a no-op on Windows but does not throw.
+        fs.chmodSync(paths.userSettingsJsonPath, 0o600);
       }
       setDesktopLocaleFromSettings(entries);
       Menu.setApplicationMenu(buildAppMenu());
