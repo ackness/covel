@@ -22,6 +22,7 @@ import {
   type ToolModule,
   type CharacterToolDeps,
 } from "@covel/tools";
+import { FrameworkCapability } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import {
   createToolExecutor,
@@ -94,7 +95,10 @@ export async function setupPluginTools(
   // output so the LLM can self-correct.
   const characterToolDeps: CharacterToolDeps = {
     findWorldDataPluginId: (sessionId) =>
-      registry.findPluginByCapability(sessionId, "world-data-provider"),
+      registry.findPluginByCapability(
+        sessionId,
+        FrameworkCapability.WorldDataProvider,
+      ),
   };
   for (const t of createCharacterTools(store, characterToolDeps)) {
     toolMap.set(t.name, t);
@@ -165,7 +169,10 @@ export async function setupPluginTools(
   // fields they need instead of relying on bulk prompt injection.
   for (const t of createWorldDimensionTools(store, {
     findWorldDataPluginId: (sessionId) =>
-      registry.findPluginByCapability(sessionId, "world-data-provider"),
+      registry.findPluginByCapability(
+        sessionId,
+        FrameworkCapability.WorldDataProvider,
+      ),
   })) {
     toolMap.set(t.name, t);
     builtinToolNames.add(t.name);

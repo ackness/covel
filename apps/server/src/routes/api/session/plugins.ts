@@ -3,6 +3,7 @@ import {
   type PluginRegistry,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
+import { FrameworkCapability } from "@covel/shared";
 import type { PluginRelation, PluginRelations } from "@covel/shared";
 
 export function isRequiredCorePlugin(entry: PluginRegistryEntry): boolean {
@@ -377,12 +378,18 @@ export function findWorldDataProviderPluginId(
     const entry = pluginRegistry.get(pid);
     if (!entry) continue;
     if (
-      entry.manifest?.manifest.capabilities?.includes("world-data-provider")
+      entry.manifest?.manifest.capabilities?.includes(
+        FrameworkCapability.WorldDataProvider,
+      )
     ) {
       return pid;
     }
     for (const [, loaded] of entry.loadedRuntimes) {
-      if (loaded.manifest.capabilities?.includes("world-data-provider")) {
+      if (
+        loaded.manifest.capabilities?.includes(
+          FrameworkCapability.WorldDataProvider,
+        )
+      ) {
         return pid;
       }
     }

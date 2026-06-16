@@ -16,6 +16,7 @@ import {
   createTraceRecorder,
   createTurnEmitter,
 } from "@covel/runtime";
+import { FrameworkCapability } from "@covel/shared";
 import type { RuntimeManifest } from "@covel/shared";
 import type { CompactorRunner } from "@covel/context";
 import { errorBody } from "../../api-error.js";
@@ -201,16 +202,16 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   // Discover the world data provider plugin by capability (framework never hardcodes plugin IDs)
   const worldDataPluginId = pluginRegistry.findPluginByCapability(
     sessionId,
-    "world-data-provider",
+    FrameworkCapability.WorldDataProvider,
   );
   // Persona provider + prompt-history rewriter discovered by capability too.
   const personaPluginId = pluginRegistry.findPluginByCapability(
     sessionId,
-    "persona-provider",
+    FrameworkCapability.PersonaProvider,
   );
   const promptHistoryRewriterPluginId = pluginRegistry.findPluginByCapability(
     sessionId,
-    "prompt-history-rewriter",
+    FrameworkCapability.PromptHistoryRewriter,
   );
 
   return streamSSE(c, async (stream) => {

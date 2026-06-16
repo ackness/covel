@@ -31,6 +31,7 @@ export type {
 
 export type {
   PluginType,
+  FrameworkCapabilityTag,
   RuntimeType,
   TriggerType,
   TriggerConfig,
@@ -58,6 +59,8 @@ export type {
   AuthorsNoteDecl,
   PostHistoryDecl,
 } from "./plugin.js";
+
+export { FrameworkCapability } from "./plugin.js";
 
 export type {
   RuntimeStatus,

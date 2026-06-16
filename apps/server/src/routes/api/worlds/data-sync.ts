@@ -8,6 +8,7 @@
  */
 
 import { Hono } from "hono";
+import { FrameworkCapability } from "@covel/shared";
 import { errorBody } from "../../../api-error.js";
 import {
   syncWorldDataForSession,
@@ -140,7 +141,7 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
   // Discover world-data-provider plugin by capability (not hardcoded ID)
   const worldDataPluginId = pluginRegistry.findPluginByCapability(
     sessionId,
-    "world-data-provider",
+    FrameworkCapability.WorldDataProvider,
   );
   if (!worldDataPluginId) {
     return c.json(

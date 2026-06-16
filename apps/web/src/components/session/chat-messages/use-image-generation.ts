@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import type { TFunction } from "i18next";
+import { FrameworkCapability } from "@covel/shared";
 import type { PluginRpcRequest } from "@covel/shared";
 import type { SessionPluginInfo } from "@/services/api.js";
 import { emitToast } from "@/lib/toast-channel.js";
@@ -45,7 +46,8 @@ export function useImageGeneration({
   const imageGenEntry = useMemo<ImageGenEntry | null>(() => {
     for (const p of sessionPlugins) {
       if (!p.isActive) continue;
-      if (!p.capabilities?.includes("image-generation")) continue;
+      if (!p.capabilities?.includes(FrameworkCapability.ImageGeneration))
+        continue;
       const entry = p.runtimes?.find(
         (r) =>
           r.trigger?.type === "manual" &&

@@ -37,6 +37,7 @@ import { Hono } from "hono";
 import { createRpcHandlerStoreView } from "@covel/runtime";
 import { RpcDispatchError, RpcValidationError } from "@covel/runtime";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
+import { FrameworkCapability } from "@covel/shared";
 import {
   decodePluginUserSettingsHeader,
   validatePluginRpcBody,
@@ -179,15 +180,15 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
 
     const worldDataPluginId = pluginRegistry.findPluginByCapability(
       sessionId,
-      "world-data-provider",
+      FrameworkCapability.WorldDataProvider,
     );
     const personaPluginId = pluginRegistry.findPluginByCapability(
       sessionId,
-      "persona-provider",
+      FrameworkCapability.PersonaProvider,
     );
     const promptHistoryRewriterPluginId = pluginRegistry.findPluginByCapability(
       sessionId,
-      "prompt-history-rewriter",
+      FrameworkCapability.PromptHistoryRewriter,
     );
     const turnGetConfig =
       c.get("getConfigFn") ?? ((_pluginId: string, _runtimeId: string) => ({}));

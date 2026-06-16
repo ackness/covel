@@ -635,7 +635,7 @@ execution: background # wan2.x 文生图需要几十秒,不阻塞 UI
 
 声明 `image-generation` 的 runtime 在完成态返回 `assetGenerations[]`，每一项包含 `{ ref: MediaRef, modality: "image", meta? }`。图像画廊索引写入 `plugin_data.images` 时保存 `{ status, ref, prompt, ... }`，运行时会把旧 `url` / `base64` / `dataUrl` 字段记录为 `image.generate.plugin_data_inline_media` error。
 
-插件可以声明任意自定义能力标签。框架仅依赖上述已定义标签。
+插件可以声明任意自定义能力标签。框架仅依赖上述已定义标签。框架代码（server / runtime / web）引用这些标签时**不得**使用裸字符串字面量，而应使用 `@covel/shared` 导出的 `FrameworkCapability` 常量（如 `FrameworkCapability.WorldDataProvider`），这样拼写漂移会变成编译错误而非静默 `undefined`。新增框架消费的能力标签时，需同时更新 `FrameworkCapability`（`packages/shared/src/types/plugin.ts`）与本表。
 
 **API 暴露**: Session plugins API（`GET /api/sessions/:id/plugins`）在响应中返回每个插件的 `capabilities` 字段（从所有子 runtime 的 manifest 中聚合），前端可据此发现插件能力。示例响应片段：
 

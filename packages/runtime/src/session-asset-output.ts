@@ -5,7 +5,7 @@
  * through session-kernel.ts unless a caller intentionally needs this boundary.
  */
 
-import { isAssetGeneratePayload } from "@covel/shared";
+import { FrameworkCapability, isAssetGeneratePayload } from "@covel/shared";
 import type { Proposal } from "@covel/shared";
 import type { KernelStore } from "./session-commit-pipeline.js";
 import { makeProposal } from "./session-kernel-helpers.js";
@@ -23,7 +23,7 @@ export async function enforceImageAssetOutput(
   proposals: readonly Proposal[],
   capabilities: readonly string[] | undefined,
 ): Promise<{ proposal: Proposal; error: string } | null> {
-  if (!capabilities?.includes("image-generation")) return null;
+  if (!capabilities?.includes(FrameworkCapability.ImageGeneration)) return null;
   if (isPendingAssetOutput(result.output)) return null;
 
   const hasAssetGenerate = proposals.some(
@@ -63,7 +63,7 @@ export async function enforceImagePluginDataRefs(
   proposals: readonly Proposal[],
   capabilities: readonly string[] | undefined,
 ): Promise<Array<{ proposal: Proposal; error: string }>> {
-  if (!capabilities?.includes("image-generation")) return [];
+  if (!capabilities?.includes(FrameworkCapability.ImageGeneration)) return [];
 
   const offenders = proposals.filter(hasInlineImagePluginData);
   if (offenders.length === 0) return [];
