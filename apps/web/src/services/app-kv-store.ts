@@ -206,10 +206,6 @@ export async function saveExecutionSteps(
   return idbPut(STORE_EXECUTION_STEPS, sessionId, steps);
 }
 
-export async function removeExecutionSteps(sessionId: string): Promise<void> {
-  return idbDelete(STORE_EXECUTION_STEPS, sessionId);
-}
-
 // ── Legacy reset ──────────────────────────────────────────────────
 
 function deleteDatabase(name: string): Promise<boolean> {

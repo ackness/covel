@@ -14,6 +14,7 @@ import * as api from "../api.js";
 import * as appKv from "../app-kv-store.js";
 import { createBrowserDataStore } from "../storage/index.js";
 import { text } from "@/components/world/editor-helpers.js";
+import { ignoreError } from "@/lib/ignore-error.js";
 import {
   toFrontendMessage,
   toFrontendSession,
@@ -246,9 +247,15 @@ export class LocalDataService implements DataService {
   async deleteSession(sessionId: string): Promise<void> {
     const store = await this.getStore();
     await store.deleteSession(sessionId);
-    appKv.removeStateSnapshot(sessionId).catch(() => {});
-    appKv.removeStatePatches(sessionId).catch(() => {});
-    appKv.removeSubmittedBlocks(sessionId).catch(() => {});
+    appKv
+      .removeStateSnapshot(sessionId)
+      .catch(ignoreError("remove state snapshot on delete"));
+    appKv
+      .removeStatePatches(sessionId)
+      .catch(ignoreError("remove state patches on delete"));
+    appKv
+      .removeSubmittedBlocks(sessionId)
+      .catch(ignoreError("remove submitted blocks on delete"));
   }
 
   // Messages
@@ -294,7 +301,9 @@ export class LocalDataService implements DataService {
     const list = this.statePatches.get(sessionId) ?? [];
     this.statePatches.set(sessionId, [...list, patch]);
     // Persist to IDB (fire-and-forget)
-    appKv.saveStatePatches(sessionId, [...list, patch]).catch(() => {});
+    appKv
+      .saveStatePatches(sessionId, [...list, patch])
+      .catch(ignoreError("save state patches"));
   }
 
   // State snapshot persistence (IndexedDB)

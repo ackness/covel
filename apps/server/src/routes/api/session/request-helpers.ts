@@ -1,8 +1,12 @@
 import type { SessionRecord } from "@covel/store";
 import type { SessionStatus } from "@covel/shared";
+import {
+  SAFE_WORLD_ID_RE,
+  SAFE_SESSION_ID_RE,
+  SAFE_WORLD_ID_DESC,
+  SAFE_SESSION_ID_DESC,
+} from "../../../lib/validators.js";
 
-const SAFE_WORLD_ID_RE = /^[a-z0-9_-]{1,64}$/i;
-const SAFE_SESSION_ID_RE = /^[a-z0-9_-]{1,128}$/i;
 const VALID_STATUSES = new Set<SessionStatus>(["active", "paused", "ended"]);
 const MAX_OVERRIDE_ENTRIES = 64;
 const RUNTIME_ID_PATTERN = /^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?$/;
@@ -28,7 +32,7 @@ export function parseCreateSessionBody(
   if (rawWorldId !== undefined && !SAFE_WORLD_ID_RE.test(rawWorldId)) {
     return {
       ok: false,
-      error: "Invalid worldId: must match /^[a-z0-9_-]{1,64}$/i",
+      error: `Invalid worldId: must match ${SAFE_WORLD_ID_DESC}`,
     };
   }
 
@@ -37,7 +41,7 @@ export function parseCreateSessionBody(
   if (rawId !== undefined && !SAFE_SESSION_ID_RE.test(rawId)) {
     return {
       ok: false,
-      error: "Invalid session id: must match /^[a-z0-9_-]{1,128}$/i",
+      error: `Invalid session id: must match ${SAFE_SESSION_ID_DESC}`,
     };
   }
 

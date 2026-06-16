@@ -175,9 +175,6 @@ importers:
       '@radix-ui/react-separator':
         specifier: ^1.1.8
         version: 1.1.8(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      '@radix-ui/react-slot':
-        specifier: ^1.2.4
-        version: 1.2.4(@types/react@19.2.14)(react@19.2.5)
       '@radix-ui/react-tabs':
         specifier: ^1.1.13
         version: 1.1.13(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -391,6 +388,19 @@ importers:
         specifier: ^4.1.4
         version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
+  packages/plugin-handlers-utils:
+    dependencies:
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.4
+        version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+
   packages/plugin-loader:
     dependencies:
       '@covel/events':
@@ -587,6 +597,9 @@ importers:
 
   plugins/branch-reply:
     dependencies:
+      '@covel/plugin-handlers-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-handlers-utils
       '@covel/tools':
         specifier: workspace:*
         version: link:../../packages/tools
@@ -627,6 +640,9 @@ importers:
 
   plugins/character-blueprint:
     dependencies:
+      '@covel/plugin-handlers-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-handlers-utils
       '@covel/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -643,6 +659,9 @@ importers:
 
   plugins/character-presence:
     dependencies:
+      '@covel/plugin-handlers-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-handlers-utils
       '@covel/tools':
         specifier: workspace:*
         version: link:../../packages/tools
@@ -713,6 +732,9 @@ importers:
 
   plugins/living-world-rules:
     dependencies:
+      '@covel/plugin-handlers-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-handlers-utils
       '@covel/tools':
         specifier: workspace:*
         version: link:../../packages/tools
@@ -728,20 +750,15 @@ importers:
 
   plugins/narrator:
     devDependencies:
-      '@covel/context':
-        specifier: workspace:*
-        version: link:../../packages/context
-      '@covel/plugin-loader':
-        specifier: workspace:*
-        version: link:../../packages/plugin-loader
-      '@covel/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       vitest:
         specifier: ^4.1.4
         version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.4)(jsdom@29.0.2)(vite@8.0.9(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
   plugins/npc-graph:
+    dependencies:
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*
@@ -758,6 +775,9 @@ importers:
 
   plugins/player-identity:
     dependencies:
+      '@covel/plugin-handlers-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-handlers-utils
       '@covel/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -812,6 +832,9 @@ importers:
       '@covel/tools':
         specifier: workspace:*
         version: link:../../packages/tools
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       vitest:
         specifier: ^4.1.4

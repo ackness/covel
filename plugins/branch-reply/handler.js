@@ -1,3 +1,4 @@
+import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
 
 const TURNS_NAMESPACE = "turns";
@@ -268,6 +269,10 @@ function makeMessageState({
   };
 }
 
+function makePluginDataBatchProposal(ctx, now, items) {
+  return makeProposal(ctx, now, "plugin.data.batch", { items });
+}
+
 async function readTurnRecord(store, sessionId, pluginId, turnId) {
   if (!store || typeof store !== "object") return undefined;
   const s = /** @type {any} */ (store);
@@ -314,19 +319,4 @@ async function readTurnRecord(store, sessionId, pluginId, turnId) {
   });
   if (candidates.length === 0) return undefined;
   return /** @type {any} */ ({ ...record, candidates });
-}
-
-function makePluginDataBatchProposal(ctx, now, items) {
-  return {
-    id: crypto.randomUUID(),
-    type: "plugin.data.batch",
-    source: {
-      pluginId: ctx.pluginId,
-      runtimeId: ctx.runtimeId ?? ctx.pluginId,
-    },
-    turnId: ctx.turnId,
-    sessionId: ctx.sessionId,
-    payload: { items },
-    timestamp: now,
-  };
 }

@@ -1,6 +1,6 @@
-import { useState, useRef, useMemo, useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, ArrowDown, ImageIcon, MessageSquare } from "lucide-react";
+import { AlertCircle, ArrowDown, MessageSquare } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Button } from "@/components/ui/button.js";
 import { useAutoScroll } from "@/hooks/use-auto-scroll.js";
@@ -11,32 +11,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.js";
-import { ExecutionTimeline } from "./execution-timeline.js";
-import {
-  AssetRender,
-  AssetTurnSidebar,
-} from "@/components/asset-render/index.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import { useSession } from "@/stores/session-store.js";
-import { isAssetGenerateView } from "@covel/shared";
-import type { PluginRpcRequest } from "@covel/shared";
-import { emitToast } from "@/lib/toast-channel.js";
-import {
-  emitPluginRpcRuntimeResponse,
-  postPluginRpcWithApproval,
-} from "./plugin-rpc-ui.js";
-import {
-  MessageBlockRenderer,
-  PluginMessageBlock,
-  UiRenderBlock,
-} from "./chat-messages/message-blocks.js";
-import {
-  NarrativeMessageBody,
-  RawJsonBlock,
-  SubmittedSelectionFooter,
-  SystemMessageLine,
-} from "./chat-messages/message-primitives.js";
 import { SessionCanvasHero } from "./chat-messages/session-canvas-hero.js";
+import { ChatMessageRenderer } from "./chat-messages/chat-message-renderer.js";
+import { ChatBlockRenderer } from "./chat-messages/chat-block-renderer.js";
+import { useImageGeneration } from "./chat-messages/use-image-generation.js";
+import { useMessageGrouping } from "./chat-messages/use-message-grouping.js";
+import type { PluginRpcConfirmRequest } from "./plugin-rpc-ui.js";
 import type {
   WorldRecord,
   PackageSummary,
@@ -59,7 +41,6 @@ export interface ChatMessagesProps {
   /** Form values keyed by submitted block id — used to repopulate disabled forms. */
   submittedBlockValues: Readonly<Record<string, Record<string, unknown>>>;
   viewMode: "parsed" | "detailed" | "raw";
-  blockSelections: Record<string, string>;
   onSendMessage: (msg: string) => void;
   onSubmitBlock: (blockId: string) => void;
   onSubmitInteraction?: (
@@ -71,10 +52,12 @@ export interface ChatMessagesProps {
     submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<void>;
   onRetryRuntime?: (runtimeId: string | undefined) => void;
-  onTriggerEvent?: (type: string, data: Record<string, unknown>) => void;
-  onBlockSelect: (blockId: string, value: string) => void;
   onBeginAdventure: () => void;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
+}
+
+interface ConfirmRequest extends PluginRpcConfirmRequest {
+  readonly resolve: (value: boolean) => void;
 }
 
 // ── Component ────────────────────────────────────────────────────
@@ -91,13 +74,10 @@ export function ChatMessages({
   submittedBlockIds,
   submittedBlockValues,
   viewMode,
-  blockSelections,
   onSendMessage,
   onSubmitBlock,
   onSubmitInteraction,
   onRetryRuntime,
-  onTriggerEvent,
-  onBlockSelect,
   onBeginAdventure,
   messagesEndRef,
 }: ChatMessagesProps) {
@@ -123,21 +103,19 @@ export function ChatMessages({
   const isPreGame = session.status === "active" && session.turnCount === 0;
   const isPlaying = session.status === "active" && session.turnCount > 0;
   const isEnded = session.status === "ended";
-  const [generatingImage, setGeneratingImage] = useState(false);
-  interface ConfirmRequest {
-    readonly title: string;
-    readonly message: string;
-    readonly confirmLabel: string;
-    readonly cancelLabel: string;
-    readonly resolve: (value: boolean) => void;
-  }
+
+  // Confirmation dialog state. The in-flight request carries its own `resolve`.
+  // A ref mirrors the latest request so `handleConfirmResult` can resolve it
+  // *outside* the state updater — resolving inside a `setState` updater is a
+  // React anti-pattern (StrictMode invokes updaters twice, double-resolving the
+  // promise). Mirrors the ref pattern used in PluginPanel.
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(
     null,
   );
   const confirmRequestRef = useRef<ConfirmRequest | null>(null);
   confirmRequestRef.current = confirmRequest;
   const confirmAsync = useCallback(
-    (params: Omit<ConfirmRequest, "resolve">) =>
+    (params: PluginRpcConfirmRequest) =>
       new Promise<boolean>((resolve) => {
         setConfirmRequest({ ...params, resolve });
       }),
@@ -150,29 +128,8 @@ export function ChatMessages({
     setConfirmRequest(null);
   }, []);
 
-  // Discover the image-gen entry runtime by capability + trigger so this
-  // framework code never names a specific plugin or runtime. An entry runtime
-  // is one with capability `image-prompt` and a manual trigger — that's the
-  // contract authors follow when wiring a multi-step image plugin (prompt
-  // generator → image generator chained via background follower).
-  const imageGenEntry = useMemo<{
-    pluginId: string;
-    runtimeId: string;
-  } | null>(() => {
-    for (const p of sessionPlugins) {
-      if (!p.isActive) continue;
-      if (!p.capabilities?.includes("image-generation")) continue;
-      const entry = p.runtimes?.find(
-        (r) =>
-          r.trigger?.type === "manual" &&
-          r.capabilities?.includes("image-prompt"),
-      );
-      if (entry) return { pluginId: p.id, runtimeId: entry.id };
-    }
-    return null;
-  }, [sessionPlugins]);
-
-  const isImageGenActive = imageGenEntry !== null;
+  const { isImageGenActive, generatingImage, handleGenerateImage } =
+    useImageGeneration({ sessionPlugins, sessionId, confirm: confirmAsync, t });
 
   // Precompute the index of the last user message once (O(n)). An interactive
   // block is "locked" iff a later user message exists, i.e. its index is below
@@ -185,285 +142,66 @@ export function ChatMessages({
     return -1;
   }, [messages]);
 
-  // Use plugin-rpc rather than `triggerEvent`. Firing a kernel event would
-  // create a fresh turn just to route the topic; plugin-rpc invokes the entry
-  // runtime in-place and lets the framework dispatch its background follower
-  // (image generator) without inflating the turn counter. The plugin's right-
-  // panel button uses the same pattern — keep them aligned.
-  async function handleGenerateImage() {
-    if (!sessionId || !imageGenEntry || generatingImage) return;
-    const req = {
-      pluginId: imageGenEntry.pluginId,
-      runtimeId: imageGenEntry.runtimeId,
-      expectsBackgroundFollower: true,
-    } satisfies PluginRpcRequest;
-    setGeneratingImage(true);
-    try {
-      const res = await postPluginRpcWithApproval({
-        sessionId,
-        request: req,
-        pluginId: imageGenEntry.pluginId,
-        actionLabel: `runtime ${imageGenEntry.runtimeId}`,
-        confirm: confirmAsync,
-        t,
-      });
-      if (res) {
-        emitPluginRpcRuntimeResponse({
-          response: res,
-          t,
-          runtimeId: imageGenEntry.runtimeId,
-          expectsBackgroundFollower: true,
-          fallbackFailureMessage: t(
-            "coreImage.generationFailed",
-            "Image generation failed",
-          ),
-        });
-      }
-    } catch (err) {
-      emitToast("error", err instanceof Error ? err.message : String(err));
-    } finally {
-      setGeneratingImage(false);
-    }
-  }
-
-  /**
-   * Visibility rules per view mode:
-   *   parsed   — user/narrative/plugin-inline only. System + debug kinds hidden.
-   *   detailed — everything parsed shows, PLUS system messages as compact one-liners.
-   *              Raw JSON / internal LLM trace stays hidden.
-   *   raw      — show every message as JSON for inspection.
-   */
-  function renderMessage(msg: StreamMessage, index: number) {
-    if (msg.block) return renderBlock(msg, index);
-
-    // Raw mode: show everything as JSON, no filtering
-    if (viewMode === "raw") {
-      return (
-        <div key={msg.id} className="flex flex-col gap-1.5">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-            {msg.role}
-            {msg.kind && (
-              <span className="ml-1.5 text-[10px] font-mono opacity-60">
-                [{msg.kind}]
-              </span>
-            )}
-            {msg.runtimeId && (
-              <span className="ml-1.5 text-[10px] font-mono opacity-60">
-                {msg.runtimeId}
-              </span>
-            )}
-            {msg.turnId && (
-              <span className="ml-2 font-mono text-[10px]">{msg.turnId}</span>
-            )}
-          </span>
-          <div className="border border-border p-4 bg-muted/10 text-xs font-mono text-muted-foreground whitespace-pre-wrap break-all max-w-[90%] md:max-w-[85%]">
-            {JSON.stringify(
-              {
-                role: msg.role,
-                kind: msg.kind,
-                runtimeId: msg.runtimeId,
-                content: msg.content,
-                turnId: msg.turnId,
-              },
-              null,
-              2,
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    // System messages — hidden in parsed mode; compact line in detailed mode.
-    if (msg.role === "system") {
-      if (viewMode !== "detailed") return null;
-      return <SystemMessageLine key={msg.id} msg={msg} />;
-    }
-    // Non-story assistant kinds (plugin debug traces, intermediate runtime
-    // chatter) stay hidden in parsed mode — the player only wants narrative.
-    // Detailed mode surfaces them with a runtime badge so the author can see
-    // which runtime emitted what without leaving the chat surface.
-    const isAssistant = msg.role === "assistant";
-    const isHiddenAssistantKind =
-      isAssistant &&
-      msg.kind &&
-      msg.kind !== "story" &&
-      msg.kind !== "plugin-message";
-    if (isHiddenAssistantKind && viewMode !== "detailed") return null;
-
-    const isUser = msg.role === "user";
-    const showImageButton =
-      !isUser &&
-      isImageGenActive &&
-      msg.kind === "story" &&
-      msg.content &&
-      sessionId;
-    // Detailed view affordance: show the runtime/plugin source above each
-    // assistant message so the author knows which runtime produced it. Hidden
-    // in parsed mode to keep the narrative immersive.
-    const showSourceBadge =
-      viewMode === "detailed" && isAssistant && (msg.runtimeId || msg.kind);
-
-    return (
-      <div
-        key={msg.id}
-        className={`ui-message-row flex flex-col gap-1.5 w-full ${isUser ? "items-end" : "items-start"}`}
-      >
-        {showSourceBadge && (
-          <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
-            {msg.runtimeId ?? t("session.assistant", "assistant")}
-            {msg.kind && msg.kind !== "story" && (
-              <span className="ml-1.5 opacity-60">· {msg.kind}</span>
-            )}
-          </span>
-        )}
-        <span
-          className={`ui-eyebrow text-xs ${isUser ? "text-primary" : "text-muted-foreground"}`}
-        >
-          {isUser
-            ? t("session.player", "Player")
-            : t("session.assistant", "Assistant")}
-          {msg.turnId && (
-            <span className="ml-2 font-mono text-[10px]">
-              {isUser ? `· ${msg.turnId}` : msg.turnId}
-            </span>
-          )}
-        </span>
-
-        <NarrativeMessageBody
-          isUser={isUser}
-          isHiddenAssistantKind={Boolean(isHiddenAssistantKind)}
-          content={msg.content}
-        />
-
-        {showImageButton && (
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1 ui-eyebrow"
-              disabled={executing || generatingImage}
-              onClick={() => void handleGenerateImage()}
-              title={t("coreImage.generateButton")}
-            >
-              <ImageIcon
-                className={`h-3 w-3 ${generatingImage ? "animate-pulse" : ""}`}
-              />
-              {generatingImage
-                ? t("session.stateStreaming")
-                : t("coreImage.generateButton")}
-            </Button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  function renderBlock(msg: StreamMessage, index: number) {
-    const block = msg.block;
-    if (!block) return null;
-    const locked = lastUserMsgIndex >= 0 && index < lastUserMsgIndex;
-
-    // Raw mode — show JSON for inspection.
-    if (viewMode === "raw") {
-      return (
-        <div key={msg.id} className="flex flex-col gap-1.5">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-            {t("session.blockLabel", "Block")}: {block.type as string}
-          </span>
-          <RawJsonBlock content={JSON.stringify(block, null, 2)} />
-        </div>
-      );
-    }
-
-    const blockType = block.type as string;
-    const submittedValues = submittedBlockValues[msg.id];
-
-    // Plugin-message surface: plugins push json-render specs via ui.message
-    // and state via plugin-data namespace=message. Each spec runs through
-    // PluginPanel, which reads the live plugin-data store for reactive state.
-    if (blockType === "plugin_message") {
-      const pluginId =
-        ((block.data as Record<string, unknown> | undefined)?.pluginId as
-          | string
-          | undefined) ?? msg.runtimeId;
-      return (
-        <div key={msg.id} className="flex flex-col gap-1.5">
-          {viewMode === "detailed" && pluginId && (
-            <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
-              plugin · {pluginId}
-            </span>
-          )}
-          <PluginMessageBlock
-            block={block}
-            sourceBlockId={msg.id}
-            locked={locked}
+  const renderMessage = useCallback(
+    (msg: StreamMessage, index: number) => {
+      if (msg.block) {
+        return (
+          <ChatBlockRenderer
+            key={msg.id}
+            msg={msg}
+            index={index}
+            viewMode={viewMode}
+            lastUserMsgIndex={lastUserMsgIndex}
+            sessionId={sessionId}
+            executing={executing}
+            submittedBlockIds={submittedBlockIds}
+            submittedBlockValues={submittedBlockValues}
+            onSendMessage={onSendMessage}
+            onSubmitBlock={onSubmitBlock}
+            onSubmitInteraction={onSubmitInteraction}
+            t={t}
           />
-          <SubmittedSelectionFooter values={submittedValues} />
-        </div>
-      );
-    }
-
-    if (blockType === "ui.render") {
+        );
+      }
       return (
-        <div key={msg.id} className="flex flex-col gap-1.5">
-          {viewMode === "detailed" && (
-            <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
-              ui.render
-              {msg.runtimeId && (
-                <span className="ml-1.5 opacity-60">· {msg.runtimeId}</span>
-              )}
-            </span>
-          )}
-          <UiRenderBlock block={block} />
-        </div>
-      );
-    }
-
-    // NOTE: branch-reply blocks are NOT special-cased here. The branch-reply
-    // plugin renders through the standard plugin-message surface (its
-    // `ui.message` spec → `BranchReplyCandidates` catalog component), so the
-    // framework never hardcodes the plugin's block type (CLAUDE.md isolation).
-
-    const assetView = isAssetGenerateView(block.data) ? block.data : null;
-    if (blockType === "asset.generate" && sessionId && assetView) {
-      return (
-        <div key={msg.id} className="flex flex-col gap-1.5">
-          {viewMode === "detailed" && (
-            <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
-              asset · {assetView.modality}
-            </span>
-          )}
-          <AssetRender view={assetView} sessionId={sessionId} />
-        </div>
-      );
-    }
-
-    // Every other block (interactive_form, notification, choice, …) resolves
-    // through messageToSpec and json-render.
-    return (
-      <div key={msg.id} className="flex flex-col gap-1.5">
-        {viewMode === "detailed" && (msg.runtimeId || blockType) && (
-          <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
-            {blockType ? `block · ${blockType}` : "block"}
-            {msg.runtimeId && (
-              <span className="ml-1.5 opacity-60">· {msg.runtimeId}</span>
-            )}
-          </span>
-        )}
-        <MessageBlockRenderer
+        <ChatMessageRenderer
+          key={msg.id}
           msg={msg}
-          block={block}
-          submitted={submittedBlockIds.has(msg.id) || locked}
-          submittedValues={submittedValues}
+          viewMode={viewMode}
+          isImageGenActive={isImageGenActive}
+          sessionId={sessionId}
           executing={executing}
-          onSubmitInteraction={onSubmitInteraction}
-          onSendMessage={onSendMessage}
-          onSubmitBlock={onSubmitBlock}
+          generatingImage={generatingImage}
+          onGenerateImage={() => void handleGenerateImage()}
+          t={t}
         />
-        <SubmittedSelectionFooter values={submittedValues} />
-      </div>
-    );
-  }
+      );
+    },
+    [
+      viewMode,
+      lastUserMsgIndex,
+      sessionId,
+      executing,
+      submittedBlockIds,
+      submittedBlockValues,
+      onSendMessage,
+      onSubmitBlock,
+      onSubmitInteraction,
+      isImageGenActive,
+      generatingImage,
+      handleGenerateImage,
+      t,
+    ],
+  );
+
+  const renderedRows = useMessageGrouping({
+    messages,
+    executionSteps,
+    executing,
+    packages,
+    onRetryRuntime,
+    renderMessage,
+  });
 
   return (
     <>
@@ -490,106 +228,7 @@ export function ChatMessages({
               ))}
 
             {/* Render messages with per-turn execution timelines inline */}
-            {(() => {
-              // Group execution steps by turnId for inline rendering
-              const stepsByTurn = new Map<string, ExecutionStep[]>();
-              for (const step of executionSteps) {
-                const tid = step.turnId ?? "__unknown__";
-                if (!stepsByTurn.has(tid)) stepsByTurn.set(tid, []);
-                stepsByTurn.get(tid)!.push(step);
-              }
-
-              // Collect the last message index per turnId so we know where to insert
-              const lastMsgIndexByTurn = new Map<string, number>();
-              messages.forEach((msg, idx) => {
-                if (msg.turnId) lastMsgIndexByTurn.set(msg.turnId, idx);
-              });
-
-              const rendered: React.ReactNode[] = [];
-              const insertedTurnIds = new Set<string>();
-
-              messages.forEach((msg, idx) => {
-                const node = renderMessage(msg, idx);
-                if (node) rendered.push(node);
-
-                // After the last message of a turn, insert that turn's execution timeline
-                if (msg.turnId && lastMsgIndexByTurn.get(msg.turnId) === idx) {
-                  const turnSteps = stepsByTurn.get(msg.turnId);
-                  if (turnSteps && turnSteps.length > 0) {
-                    insertedTurnIds.add(msg.turnId);
-                    const isActiveTurn =
-                      executing &&
-                      msg.turnId === [...lastMsgIndexByTurn.keys()].at(-1);
-                    rendered.push(
-                      <ExecutionTimeline
-                        key={`exec-${msg.turnId}`}
-                        steps={turnSteps}
-                        executing={isActiveTurn ? executing : false}
-                        packages={packages}
-                        onRetryRuntime={
-                          isActiveTurn && onRetryRuntime
-                            ? (id) => onRetryRuntime(id)
-                            : undefined
-                        }
-                        onRetryAll={
-                          isActiveTurn && onRetryRuntime
-                            ? () => onRetryRuntime(undefined)
-                            : undefined
-                        }
-                      />,
-                    );
-                  }
-                  // P0-b — surface modality-routed assets emitted by this turn
-                  // out-of-band, so plain narrative turns stay untouched while
-                  // image / audio / generic-link assets show up next to the
-                  // execution timeline. Renders nothing when the turn has no
-                  // assets, so this is a layout no-op for text-only turns.
-                  rendered.push(
-                    <AssetTurnSidebar
-                      key={`assets-${msg.turnId}`}
-                      turnId={msg.turnId}
-                    />,
-                  );
-                }
-              });
-
-              // If the current turn is executing and has no messages yet (startup),
-              // or steps belong to a turn with no messages, show at the bottom
-              const activeTurnSteps = executionSteps.filter((s) => {
-                const tid = s.turnId ?? "__unknown__";
-                return !insertedTurnIds.has(tid);
-              });
-              if (activeTurnSteps.length > 0) {
-                rendered.push(
-                  <ExecutionTimeline
-                    key="exec-active"
-                    steps={activeTurnSteps}
-                    executing={executing}
-                    packages={packages}
-                    onRetryRuntime={
-                      onRetryRuntime ? (id) => onRetryRuntime(id) : undefined
-                    }
-                    onRetryAll={
-                      onRetryRuntime
-                        ? () => onRetryRuntime(undefined)
-                        : undefined
-                    }
-                  />,
-                );
-              }
-
-              // Wrap each row in a `.chat-row` so off-screen rows skip layout
-              // and paint (content-visibility) — preserves keys, refs, state,
-              // scroll anchoring, streaming follow and jump-to-latest.
-              return rendered.map((node) => {
-                const el = node as React.ReactElement;
-                return (
-                  <div key={el.key} className="chat-row">
-                    {node}
-                  </div>
-                );
-              });
-            })()}
+            {renderedRows}
 
             {executionError && (
               <div className="flex items-start gap-2 border border-destructive/50 bg-destructive/5 p-4 text-sm">

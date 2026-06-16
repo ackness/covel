@@ -35,7 +35,7 @@ import {
   readRuntimeEnv,
   toApiKeyEnvMap,
 } from "@covel/shared";
-import { apiError } from "../api-error.js";
+import { errorBody } from "../api-error.js";
 import { makeDesktopRestTokenGuard } from "./privileged-auth.js";
 
 export interface ConfigApiDeps {
@@ -93,10 +93,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     const covelHome = resolveCovelHome();
     if (!covelHome) {
       return c.json(
-        apiError(
-          "key_persistence_unavailable",
-          "Key persistence is not available on this deployment.",
-        ),
+        errorBody("Key persistence is not available on this deployment.", {
+          code: "key_persistence_unavailable",
+        }),
         400,
       );
     }
@@ -105,14 +104,16 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     try {
       body = await c.req.json();
     } catch {
-      return c.json(apiError("invalid_json_body", "Invalid JSON body"), 400);
+      return c.json(
+        errorBody("Invalid JSON body", { code: "invalid_json_body" }),
+        400,
+      );
     }
     if (!body || typeof body !== "object") {
       return c.json(
-        apiError(
-          "invalid_provider_keys_body",
-          "Body must be { [provider]: value }",
-        ),
+        errorBody("Body must be { [provider]: value }", {
+          code: "invalid_provider_keys_body",
+        }),
         400,
       );
     }
@@ -176,7 +177,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     const covelHome = resolveCovelHome();
     if (!covelHome) {
       return c.json(
-        apiError("not_desktop_deployment", "Not a desktop deployment"),
+        errorBody("Not a desktop deployment", {
+          code: "not_desktop_deployment",
+        }),
         400,
       );
     }
@@ -184,11 +187,16 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     try {
       body = await c.req.json();
     } catch {
-      return c.json(apiError("invalid_json_body", "Invalid JSON body"), 400);
+      return c.json(
+        errorBody("Invalid JSON body", { code: "invalid_json_body" }),
+        400,
+      );
     }
     if (!body || typeof body !== "object") {
       return c.json(
-        apiError("invalid_settings_body", "Body must be { entries: object }"),
+        errorBody("Body must be { entries: object }", {
+          code: "invalid_settings_body",
+        }),
         400,
       );
     }
@@ -222,7 +230,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     const covelHome = resolveCovelHome();
     if (!covelHome) {
       return c.json(
-        apiError("not_desktop_deployment", "Not a desktop deployment"),
+        errorBody("Not a desktop deployment", {
+          code: "not_desktop_deployment",
+        }),
         400,
       );
     }
@@ -231,7 +241,10 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     try {
       body = await c.req.json();
     } catch {
-      return c.json(apiError("invalid_json_body", "Invalid JSON body"), 400);
+      return c.json(
+        errorBody("Invalid JSON body", { code: "invalid_json_body" }),
+        400,
+      );
     }
     const newPath =
       body && typeof body === "object"
@@ -239,10 +252,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
         : undefined;
     if (!newPath || typeof newPath !== "string" || !newPath.trim()) {
       return c.json(
-        apiError(
-          "invalid_data_root_body",
-          "Body must include { path: string }",
-        ),
+        errorBody("Body must include { path: string }", {
+          code: "invalid_data_root_body",
+        }),
         400,
       );
     }
@@ -250,10 +262,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     const trimmed = newPath.trim();
     if (!isAbsolute(trimmed)) {
       return c.json(
-        apiError(
-          "data_root_not_absolute",
-          "data_root must be an absolute path",
-        ),
+        errorBody("data_root must be an absolute path", {
+          code: "data_root_not_absolute",
+        }),
         400,
       );
     }
@@ -262,9 +273,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       writeDataRootInConfig(covelHome, trimmed);
     } catch (err) {
       return c.json(
-        apiError(
-          "config_write_failed",
+        errorBody(
           `Could not write config.toml: ${err instanceof Error ? err.message : err}`,
+          { code: "config_write_failed" },
         ),
         500,
       );
@@ -281,7 +292,10 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     try {
       body = await c.req.json();
     } catch {
-      return c.json(apiError("invalid_json_body", "Invalid JSON body"), 400);
+      return c.json(
+        errorBody("Invalid JSON body", { code: "invalid_json_body" }),
+        400,
+      );
     }
     const target =
       body && typeof body === "object"
@@ -300,9 +314,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
 
     if (!target || !(target in targetMap)) {
       return c.json(
-        apiError(
-          "invalid_open_target",
+        errorBody(
           `target must be one of: ${Object.keys(targetMap).join(", ")}`,
+          { code: "invalid_open_target" },
         ),
         400,
       );
@@ -310,10 +324,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     const path = targetMap[target];
     if (!path || !existsSync(path)) {
       return c.json(
-        apiError(
-          "open_target_unavailable",
-          `"${target}" is not available at ${path}`,
-        ),
+        errorBody(`"${target}" is not available at ${path}`, {
+          code: "open_target_unavailable",
+        }),
         400,
       );
     }
@@ -323,10 +336,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       return c.json({ ok: true });
     } catch (err) {
       return c.json(
-        apiError(
-          "open_target_failed",
-          err instanceof Error ? err.message : String(err),
-        ),
+        errorBody(err instanceof Error ? err.message : String(err), {
+          code: "open_target_failed",
+        }),
         500,
       );
     }

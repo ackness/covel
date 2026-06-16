@@ -1,6 +1,6 @@
 {
   "name": "@covel/plugin-branch-reply",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@covel/plugin-handlers-utils": "workspace:*",
     "@covel/tools": "workspace:*"
   },
   "devDependencies": {

@@ -13,6 +13,8 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
+import { resolveSessionParam } from "./session/session-guard.js";
+import { errorBody } from "../../api-error.js";
 
 type Env = {
   Variables: {
@@ -44,8 +46,8 @@ type EntryBody = z.infer<typeof entryBodySchema>;
 lorebookRoutes.get("/:id/lorebook", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const entries = await store.listSessionLorebookEntries(sessionId);
   return c.json({ entries });
@@ -55,13 +57,13 @@ lorebookRoutes.get("/:id/lorebook", async (c) => {
 lorebookRoutes.post("/:id/lorebook", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const raw = await c.req.json<unknown>().catch(() => null);
   const parsed = entryBodySchema.safeParse(raw);
   if (!parsed.success) {
-    return c.json({ error: "Invalid lorebook entry body" }, 400);
+    return c.json(errorBody("Invalid lorebook entry body"), 400);
   }
 
   const now = new Date().toISOString();
@@ -74,8 +76,8 @@ lorebookRoutes.post("/:id/lorebook", async (c) => {
 lorebookRoutes.put("/:id/lorebook/:entryId", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const entryId = c.req.param("entryId");
   const raw = await c.req.json<unknown>().catch(() => null);
@@ -84,7 +86,7 @@ lorebookRoutes.put("/:id/lorebook/:entryId", async (c) => {
     id: entryId,
   });
   if (!parsed.success) {
-    return c.json({ error: "Invalid lorebook entry body" }, 400);
+    return c.json(errorBody("Invalid lorebook entry body"), 400);
   }
 
   const existing = (await store.listSessionLorebookEntries(sessionId)).find(
@@ -108,8 +110,8 @@ lorebookRoutes.put("/:id/lorebook/:entryId", async (c) => {
 lorebookRoutes.patch("/:id/lorebook/:entryId", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const entryId = c.req.param("entryId");
   const raw = await c.req.json<unknown>().catch(() => null);
@@ -117,7 +119,7 @@ lorebookRoutes.patch("/:id/lorebook/:entryId", async (c) => {
   const parsed = bodySchema.safeParse(raw);
   if (!parsed.success) {
     return c.json(
-      { error: "Invalid body: expected { enabled: boolean }" },
+      errorBody("Invalid body: expected { enabled: boolean }"),
       400,
     );
   }
@@ -126,7 +128,7 @@ lorebookRoutes.patch("/:id/lorebook/:entryId", async (c) => {
     (e) => e.id === entryId,
   );
   if (!existing) {
-    return c.json({ error: "Lorebook entry not found" }, 404);
+    return c.json(errorBody("Lorebook entry not found"), 404);
   }
 
   const now = new Date().toISOString();
@@ -145,15 +147,15 @@ lorebookRoutes.patch("/:id/lorebook/:entryId", async (c) => {
 lorebookRoutes.delete("/:id/lorebook/:entryId", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const entryId = c.req.param("entryId");
   const existing = (await store.listSessionLorebookEntries(sessionId)).find(
     (e) => e.id === entryId,
   );
   if (!existing) {
-    return c.json({ error: "Lorebook entry not found" }, 404);
+    return c.json(errorBody("Lorebook entry not found"), 404);
   }
 
   await store.deleteLorebookEntry(sessionId, entryId);

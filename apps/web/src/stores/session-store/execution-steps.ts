@@ -10,6 +10,32 @@ export function toExecutionStepStatus(
   return "completed";
 }
 
+/**
+ * Builds the `UPSERT_EXECUTION_STEP` payload shared by the runtime
+ * completed / failed / skipped SSE branches. The terminal status is passed in
+ * (each branch resolves it differently); `detail` is included only when the
+ * failure carries an error string.
+ */
+export function createExecutionStepUpdate(args: {
+  readonly payload: Record<string, unknown>;
+  readonly status: ExecutionStep["status"];
+  readonly turnId: string | undefined;
+}): ExecutionStep {
+  const { payload, status, turnId } = args;
+  return {
+    runtimeId: (payload.runtimeId as string) ?? "unknown",
+    pluginId: (payload.pluginId as string) ?? "",
+    status,
+    durationMs: payload.durationMs as number | undefined,
+    turnId,
+    // Match the original failed branch, which always carries the `detail` key
+    // (possibly undefined). Completed / skipped branches omit it entirely.
+    ...(status === "failed"
+      ? { detail: payload.error as string | undefined }
+      : {}),
+  };
+}
+
 export function buildResumedExecutionStep(
   payload: Record<string, unknown>,
   fallbackTurnId?: string,

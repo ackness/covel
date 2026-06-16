@@ -1,5 +1,5 @@
 import { resolve, relative } from "node:path";
-import { readRuntimeEnv } from "@covel/shared";
+import { FrameworkCapability, readRuntimeEnv } from "@covel/shared";
 import {
   discoverPluginsMulti,
   type PluginDiscoveryResult,
@@ -101,7 +101,7 @@ export function isStoryRuntime(manifest: {
 }): boolean {
   return (
     manifest.outputKind === "story" ||
-    manifest.capabilities?.includes("narrative") === true
+    manifest.capabilities?.includes(FrameworkCapability.Narrative) === true
   );
 }
 

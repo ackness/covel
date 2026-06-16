@@ -7,7 +7,7 @@
 
 import type { MiddlewareHandler } from "hono";
 import { readRuntimeEnv } from "@covel/shared";
-import { apiError } from "../api-error.js";
+import { errorBody } from "../api-error.js";
 
 interface RateLimitOptions {
   /** Maximum requests per window. Default: 60 */
@@ -100,7 +100,10 @@ export function rateLimiter(opts: RateLimitOptions = {}): MiddlewareHandler {
 
     if (entry.count >= max) {
       c.header("Retry-After", String(Math.ceil((entry.resetAt - now) / 1000)));
-      return c.json(apiError("rate_limit_exceeded", "Too many requests"), 429);
+      return c.json(
+        errorBody("Too many requests", { code: "rate_limit_exceeded" }),
+        429,
+      );
     }
 
     entry.count++;
@@ -121,7 +124,9 @@ export function singleFlight(
     const key = keyFn(c);
     if (inflight.has(key)) {
       return c.json(
-        apiError("operation_in_progress", "Operation already in progress"),
+        errorBody("Operation already in progress", {
+          code: "operation_in_progress",
+        }),
         429,
       );
     }

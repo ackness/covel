@@ -34,6 +34,8 @@ import type {
 } from "@covel/store";
 import { buildSnapshotPayload } from "@covel/runtime";
 import type { EventBus } from "@covel/events";
+import { errorBody } from "../../api-error.js";
+import { SAFE_SESSION_ID_RE } from "../../lib/validators.js";
 
 type Env = {
   Variables: {
@@ -45,8 +47,6 @@ type Env = {
 
 export const snapshotRoutes = new Hono<Env>();
 
-const SAFE_SESSION_ID_RE = /^[a-z0-9_-]{1,128}$/i;
-
 // ── POST /api/sessions/:id/snapshot — manual snapshot ─────────────
 
 snapshotRoutes.post("/:id/snapshot", async (c) => {
@@ -55,7 +55,7 @@ snapshotRoutes.post("/:id/snapshot", async (c) => {
 
   const session = await store.getSession(sessionId);
   if (!session) {
-    return c.json({ error: "Session not found", code: "not_found" }, 404);
+    return c.json(errorBody("Session not found", { code: "not_found" }), 404);
   }
 
   // Derive a turnId for the snapshot — use the latest turn_result we can
@@ -73,10 +73,9 @@ snapshotRoutes.post("/:id/snapshot", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return c.json(
-      {
-        error: `Failed to build snapshot payload: ${message}`,
+      errorBody(`Failed to build snapshot payload: ${message}`, {
         code: "build_failed",
-      },
+      }),
       500,
     );
   }
@@ -124,7 +123,7 @@ snapshotRoutes.get("/:id/snapshots", async (c) => {
 
   const session = await store.getSession(sessionId);
   if (!session) {
-    return c.json({ error: "Session not found", code: "not_found" }, 404);
+    return c.json(errorBody("Session not found", { code: "not_found" }), 404);
   }
 
   const snapshots = await store.listSnapshots(sessionId);
@@ -142,14 +141,17 @@ snapshotRoutes.post("/:id/fork", async (c) => {
   try {
     body = await c.req.json();
   } catch {
-    return c.json({ error: "Invalid JSON body", code: "invalid_body" }, 400);
+    return c.json(
+      errorBody("Invalid JSON body", { code: "invalid_body" }),
+      400,
+    );
   }
 
   const fromSnapshotId =
     typeof body.fromSnapshotId === "string" ? body.fromSnapshotId : undefined;
   if (!fromSnapshotId) {
     return c.json(
-      { error: "fromSnapshotId is required", code: "invalid_body" },
+      errorBody("fromSnapshotId is required", { code: "invalid_body" }),
       400,
     );
   }
@@ -157,14 +159,14 @@ snapshotRoutes.post("/:id/fork", async (c) => {
   const parentSession = await store.getSession(parentSessionId);
   if (!parentSession) {
     return c.json(
-      { error: "Parent session not found", code: "not_found" },
+      errorBody("Parent session not found", { code: "not_found" }),
       404,
     );
   }
 
   const snapshot = await store.getSnapshot(fromSnapshotId);
   if (!snapshot || snapshot.sessionId !== parentSessionId) {
-    return c.json({ error: "Snapshot not found", code: "not_found" }, 404);
+    return c.json(errorBody("Snapshot not found", { code: "not_found" }), 404);
   }
 
   // Mint the child session id. Format `{worldId}-{uuid8}` matches
@@ -176,7 +178,9 @@ snapshotRoutes.post("/:id/fork", async (c) => {
     // Defensive — worldId already validated on parent creation, but fail
     // loudly rather than persist an id that would trip other routes.
     return c.json(
-      { error: "Failed to mint valid child session id", code: "fork_failed" },
+      errorBody("Failed to mint valid child session id", {
+        code: "fork_failed",
+      }),
       500,
     );
   }
@@ -291,10 +295,9 @@ snapshotRoutes.post("/:id/fork", async (c) => {
       if (cursorIdx === -1) {
         await store.rollbackTx?.();
         return c.json(
-          {
-            error: "Snapshot cursor no longer exists in parent session",
+          errorBody("Snapshot cursor no longer exists in parent session", {
             code: "cursor_missing",
-          },
+          }),
           409,
         );
       }
@@ -381,7 +384,7 @@ snapshotRoutes.post("/:id/fork", async (c) => {
     }
     const message = err instanceof Error ? err.message : String(err);
     return c.json(
-      { error: `Fork failed: ${message}`, code: "fork_failed" },
+      errorBody(`Fork failed: ${message}`, { code: "fork_failed" }),
       500,
     );
   }

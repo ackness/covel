@@ -3,6 +3,7 @@
  */
 
 import { Hono } from "hono";
+import { FrameworkCapability } from "@covel/shared";
 import type { RuntimeManifest } from "@covel/shared";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
 import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
@@ -13,6 +14,7 @@ import type { DataStore, MediaStore } from "@covel/store";
 import type { CompactorRunner } from "@covel/context";
 import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
 import { syncSessionTurnCount } from "./turn-count.js";
+import { resolveSessionParam } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -58,10 +60,9 @@ turnRoutes.post("/:id/turn", rateLimiter({ max: 30 }), async (c) => {
   const mediaStore = c.get("mediaStore");
   const sessionId = c.req.param("id");
 
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json({ error: `Session "${sessionId}" not found` }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
 
   const body = await c.req.json<{
     message: string;
@@ -84,17 +85,17 @@ turnRoutes.post("/:id/turn", rateLimiter({ max: 30 }), async (c) => {
   // Discover the world data provider plugin by capability (framework never hardcodes plugin IDs)
   const worldDataPluginId = pluginRegistry.findPluginByCapability(
     sessionId,
-    "world-data-provider",
+    FrameworkCapability.WorldDataProvider,
   );
   // Persona provider + prompt-history rewriter are likewise discovered by
   // capability — never by plugin id. Absent capability → feature simply off.
   const personaPluginId = pluginRegistry.findPluginByCapability(
     sessionId,
-    "persona-provider",
+    FrameworkCapability.PersonaProvider,
   );
   const promptHistoryRewriterPluginId = pluginRegistry.findPluginByCapability(
     sessionId,
-    "prompt-history-rewriter",
+    FrameworkCapability.PromptHistoryRewriter,
   );
 
   const hookPipeline = c.get("hookPipeline");

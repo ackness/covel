@@ -35,6 +35,8 @@ import {
 } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
 import type { EventBus } from "@covel/events";
+import { errorBody } from "../../api-error.js";
+import { resolveSessionParam } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -127,10 +129,9 @@ resumeRoutes.post("/:id/resume", async (c) => {
   const providerKeysHeader = c.req.header("X-Provider-Keys");
   if (!providerKeysHeader) {
     return c.json(
-      {
-        error:
-          "Missing X-Provider-Keys header (provider API keys are not stored server-side)",
-      },
+      errorBody(
+        "Missing X-Provider-Keys header (provider API keys are not stored server-side)",
+      ),
       400,
     );
   }
@@ -139,33 +140,31 @@ resumeRoutes.post("/:id/resume", async (c) => {
   try {
     body = await c.req.json();
   } catch {
-    return c.json({ error: "Invalid JSON body" }, 400);
+    return c.json(errorBody("Invalid JSON body"), 400);
   }
 
   const { suspensionId, data } = body;
   if (!suspensionId || typeof suspensionId !== "string") {
-    return c.json({ error: "suspensionId is required" }, 400);
+    return c.json(errorBody("suspensionId is required"), 400);
   }
 
   // Verify session exists
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json({ error: "Session not found" }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   // Load suspension — first pass is a cheap sanity read; the real claim
   // happens atomically below via `claimSuspension` to prevent double-resume
   // under concurrent requests (audit 2026-04-20 finding 2).
   const suspension = await store.getSuspension(suspensionId);
   if (!suspension) {
-    return c.json({ error: "Suspension not found" }, 404);
+    return c.json(errorBody("Suspension not found"), 404);
   }
   if (suspension.sessionId !== sessionId) {
-    return c.json({ error: "Suspension not found" }, 404);
+    return c.json(errorBody("Suspension not found"), 404);
   }
   if (suspension.resolvedAt) {
     // Already resolved OR claimed by a concurrent request.
-    return c.json({ error: "Suspension already resolved" }, 409);
+    return c.json(errorBody("Suspension already resolved"), 409);
   }
 
   // Validate resume data against stored resumeSchema (Ajv — finding 5)
@@ -175,7 +174,7 @@ resumeRoutes.post("/:id/resume", async (c) => {
   );
   if (validationError !== null) {
     return c.json(
-      { error: `Resume data validation failed: ${validationError}` },
+      errorBody(`Resume data validation failed: ${validationError}`),
       400,
     );
   }
@@ -205,7 +204,7 @@ resumeRoutes.post("/:id/resume", async (c) => {
 
   if (!effectiveManifest) {
     return c.json(
-      { error: `Runtime "${suspension.runtimeId}" not found in registry` },
+      errorBody(`Runtime "${suspension.runtimeId}" not found in registry`),
       404,
     );
   }
@@ -215,7 +214,7 @@ resumeRoutes.post("/:id/resume", async (c) => {
   // validation-failed request doesn't consume the claim slot.
   const claimed = await store.claimSuspension(suspensionId);
   if (!claimed) {
-    return c.json({ error: "Suspension already resolved" }, 409);
+    return c.json(errorBody("Suspension already resolved"), 409);
   }
 
   const hookPipeline = c.get("hookPipeline");
@@ -272,7 +271,9 @@ resumeRoutes.post("/:id/resume", async (c) => {
       await releaseClaim();
       return c.json(
         {
-          error: `Resume failed: ${result.error ?? `runtime ended with status ${result.status}`}`,
+          ...errorBody(
+            `Resume failed: ${result.error ?? `runtime ended with status ${result.status}`}`,
+          ),
           result,
         },
         500,
@@ -302,7 +303,7 @@ resumeRoutes.post("/:id/resume", async (c) => {
     await releaseClaim();
 
     const message = err instanceof Error ? err.message : String(err);
-    return c.json({ error: `Resume failed: ${message}` }, 500);
+    return c.json(errorBody(`Resume failed: ${message}`), 500);
   }
 });
 
@@ -315,7 +316,7 @@ resumeRoutes.delete("/:id/suspensions/:suspensionId", async (c) => {
 
   const suspension = await store.getSuspension(suspensionId);
   if (!suspension || suspension.sessionId !== sessionId) {
-    return c.json({ error: "Suspension not found" }, 404);
+    return c.json(errorBody("Suspension not found"), 404);
   }
 
   await store.deleteSuspension(suspensionId);
@@ -328,10 +329,8 @@ resumeRoutes.get("/:id/suspensions", async (c) => {
   const sessionId = c.req.param("id");
   const store = c.get("store");
 
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json({ error: "Session not found" }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const suspensions = await store.listSuspensions(sessionId);
   return c.json({ suspensions });

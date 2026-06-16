@@ -18,6 +18,7 @@ import { Hono } from "hono";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore, MediaStore, SessionRecord } from "@covel/store";
 import { buildSessionSnapshot } from "@covel/runtime";
+import { errorBody } from "../../api-error.js";
 import { signMediaTokenForSession } from "../../middleware/media-token.js";
 import {
   cleanupWorldDataMediaRefs,
@@ -29,6 +30,7 @@ import {
   decorateSessionList,
   withEmbeddingMetadata,
 } from "./session/embedding.js";
+import { resolveSessionParam } from "./session/session-guard.js";
 import {
   buildAvailablePluginList,
   buildSnapshotPluginList,
@@ -83,7 +85,7 @@ sessionRoutes.post("/", async (c) => {
 
   const parsedCreate = parseCreateSessionBody(body);
   if (!parsedCreate.ok) {
-    return c.json({ error: parsedCreate.error }, 400);
+    return c.json(errorBody(parsedCreate.error), 400);
   }
 
   const rawWorldId = parsedCreate.worldId;
@@ -99,7 +101,7 @@ sessionRoutes.post("/", async (c) => {
   );
   if (unknownPlugins.length > 0) {
     return c.json(
-      { error: `Unknown plugin IDs: ${unknownPlugins.join(", ")}` },
+      errorBody(`Unknown plugin IDs: ${unknownPlugins.join(", ")}`),
       400,
     );
   }
@@ -183,7 +185,7 @@ sessionRoutes.get("/:id/media-token", async (c) => {
   const mediaId = c.req.query("id");
   if (!mediaId) {
     return c.json(
-      { error: "id query parameter is required", code: "invalid_request" },
+      errorBody("id query parameter is required", { code: "invalid_request" }),
       400,
     );
   }
@@ -191,7 +193,7 @@ sessionRoutes.get("/:id/media-token", async (c) => {
   const mediaStore = c.get("mediaStore");
   if (!mediaStore) {
     return c.json(
-      { error: "Media store unavailable", code: "media_store_unavailable" },
+      errorBody("Media store unavailable", { code: "media_store_unavailable" }),
       503,
     );
   }
@@ -202,13 +204,18 @@ sessionRoutes.get("/:id/media-token", async (c) => {
   } catch (err) {
     console.error("[sessions/media-token] MediaStore.lookup failed:", err);
     return c.json(
-      { error: "Failed to load media metadata", code: "media_lookup_failed" },
+      errorBody("Failed to load media metadata", {
+        code: "media_lookup_failed",
+      }),
       500,
     );
   }
 
   if (!lookup) {
-    return c.json({ error: "Media not found", code: "media_not_found" }, 404);
+    return c.json(
+      errorBody("Media not found", { code: "media_not_found" }),
+      404,
+    );
   }
 
   let allowed = lookup.ownerSessionId === sessionId;
@@ -221,17 +228,16 @@ sessionRoutes.get("/:id/media-token", async (c) => {
         err,
       );
       return c.json(
-        {
-          error: "Failed to check media access",
+        errorBody("Failed to check media access", {
           code: "media_access_check_failed",
-        },
+        }),
         500,
       );
     }
   }
 
   if (!allowed) {
-    return c.json({ error: "Forbidden", code: "media_forbidden" }, 403);
+    return c.json(errorBody("Forbidden", { code: "media_forbidden" }), 403);
   }
 
   const token = signMediaTokenForSession(mediaId, sessionId);
@@ -244,10 +250,9 @@ sessionRoutes.get("/:id/media-token", async (c) => {
 sessionRoutes.get("/:id", async (c) => {
   const store = c.get("store");
   const id = c.req.param("id");
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
   return c.json(await withEmbeddingMetadata(store, session));
 });
 
@@ -255,16 +260,15 @@ sessionRoutes.get("/:id", async (c) => {
 sessionRoutes.patch("/:id", async (c) => {
   const store = c.get("store");
   const id = c.req.param("id");
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
 
   const body = await c.req.json<Record<string, unknown>>();
   const now = new Date().toISOString();
   const parsedPatch = buildSessionPatchUpdates(body, now);
   if (!parsedPatch.ok) {
-    return c.json({ error: parsedPatch.error }, 400);
+    return c.json(errorBody(parsedPatch.error), 400);
   }
   const updates = parsedPatch.updates;
 
@@ -277,10 +281,9 @@ sessionRoutes.patch("/:id", async (c) => {
 sessionRoutes.delete("/:id", async (c) => {
   const store = c.get("store");
   const id = c.req.param("id");
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
   await store.deleteSession(id);
   return c.json({ deleted: true });
 });
@@ -292,10 +295,9 @@ sessionRoutes.get("/:id/plugins", async (c) => {
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
   const id = c.req.param("id");
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
 
   const active = [...(session.activePlugins ?? [])];
   const available = buildAvailablePluginList(active, pluginRegistry);
@@ -308,14 +310,13 @@ sessionRoutes.post("/:id/plugins/enable", async (c) => {
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
   const id = c.req.param("id");
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
 
   const body = await c.req.json<{ pluginId: string }>();
   if (!body.pluginId || !pluginRegistry.get(body.pluginId)) {
-    return c.json({ error: `Plugin "${body.pluginId}" not found` }, 404);
+    return c.json(errorBody(`Plugin "${body.pluginId}" not found`), 404);
   }
 
   const active = resolveEnabledSessionPlugins(
@@ -343,14 +344,13 @@ sessionRoutes.post("/:id/plugins/disable", async (c) => {
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
   const id = c.req.param("id");
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
 
   const body = await c.req.json<{ pluginId: string }>();
   if (!body.pluginId || typeof body.pluginId !== "string") {
-    return c.json({ error: "pluginId is required" }, 400);
+    return c.json(errorBody("pluginId is required"), 400);
   }
 
   // Core plugin protection combines framework-owned trust source metadata
@@ -359,7 +359,7 @@ sessionRoutes.post("/:id/plugins/disable", async (c) => {
   const entry = pluginRegistry.get(body.pluginId);
   if (entry && isRequiredCorePlugin(entry)) {
     return c.json(
-      { error: `Cannot disable core plugin "${body.pluginId}"` },
+      errorBody(`Cannot disable core plugin "${body.pluginId}"`),
       403,
     );
   }
@@ -385,7 +385,7 @@ sessionRoutes.get("/:id/snapshot", async (c) => {
 
   const snapshot = await buildSessionSnapshot(store, id);
   if (!snapshot) {
-    return c.json({ error: "Session not found" }, 404);
+    return c.json(errorBody("Session not found"), 404);
   }
 
   // Populate plugins from registry + session activePlugins

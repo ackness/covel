@@ -17,17 +17,6 @@ export function useGameViewComposer({
 }: UseGameViewComposerArgs) {
   const [inputValue, setInputValue] = useState("");
 
-  // Legacy blockSelections path is kept only to satisfy ChatMessages' prop
-  // contract (some older blocks still wire onSelect). The "confirm & send"
-  // bar below is driven by pendingInteractionDrafts.
-  const [blockSelections, setBlockSelections] = useState<
-    Record<string, string>
-  >({});
-
-  const handleBlockSelect = useCallback((blockId: string, value: string) => {
-    setBlockSelections((prev) => ({ ...prev, [blockId]: value }));
-  }, []);
-
   const {
     state: sessionState,
     clearInteractionDrafts,
@@ -85,7 +74,6 @@ export function useGameViewComposer({
     }
     onSendMessage(combined);
     clearInteractionDrafts();
-    setBlockSelections({});
   }, [pendingDrafts, clearInteractionDrafts, onSendMessage, submitBlock]);
 
   const handleSubmit = useCallback(() => {
@@ -108,8 +96,6 @@ export function useGameViewComposer({
   return {
     inputValue,
     setInputValue,
-    blockSelections,
-    handleBlockSelect,
     pendingDrafts,
     suspensions,
     composerBlocked,

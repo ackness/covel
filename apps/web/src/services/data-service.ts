@@ -57,9 +57,3 @@ export function getDataService(): DataService {
     mode === "local" ? new LocalDataService() : new RemoteDataService();
   return cachedService;
 }
-
-/** Reset cached service (call after mode switch). */
-export function resetDataService(): void {
-  cachedService = null;
-  cachedMode = null;
-}

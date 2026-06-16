@@ -9,10 +9,13 @@ import {
   notifyError,
   notifyStart,
   notifySuccess,
-  shouldFallback,
   targetModel,
   targetProvider,
 } from "./gateway-lifecycle.js";
+import {
+  handleTargetFailure,
+  prepareTarget,
+} from "./gateway-fallback-chain.js";
 import { createGatewaySlotResolution } from "./gateway-slot-resolution.js";
 import type { GatewayOptions } from "./gateway-slot-resolution.js";
 import type {
@@ -191,18 +194,12 @@ export function createGateway(deps: GatewayDependencies) {
     let lastError: AiProviderError | null = null;
 
     for (const [index, target] of targets.entries()) {
-      const provider = targetProvider(target);
-      let resolved = deps.providerRegistry.resolve(
-        target.preset ?? target.profile,
-        { mode: "stream" },
+      const { provider, resolved } = prepareTarget(
+        deps.providerRegistry,
+        target,
+        "stream",
+        options,
       );
-      if (options?.apiKeys) {
-        resolved = deps.providerRegistry.withApiKeys(
-          resolved,
-          options.apiKeys,
-          provider,
-        );
-      }
 
       let emittedDelta = false;
       const startTime = Date.now();
@@ -256,26 +253,18 @@ export function createGateway(deps: GatewayDependencies) {
         );
         return;
       } catch (error) {
-        await notifyError(
-          resolved.hooks,
-          provider,
-          resolved.protocol,
-          "stream",
-          targetModel(target),
+        // Once a delta has been emitted we can no longer retry on another
+        // provider — the consumer has already seen partial output.
+        lastError = await handleTargetFailure({
           error,
-          Date.now() - startTime,
-          options?.traceId,
-        );
-        const normalized = normalizeError(error, provider);
-        lastError = normalized;
-
-        if (
-          emittedDelta ||
-          index === targets.length - 1 ||
-          !shouldFallback(normalized)
-        ) {
-          throw normalized;
-        }
+          resolved,
+          provider,
+          mode: "stream",
+          target,
+          startTime,
+          options,
+          canFallback: !emittedDelta && index < targets.length - 1,
+        });
       }
     }
 
@@ -478,18 +467,12 @@ export function createGateway(deps: GatewayDependencies) {
     let lastError: AiProviderError | null = null;
 
     for (const [index, target] of targets.entries()) {
-      const provider = targetProvider(target);
-      let resolved = deps.providerRegistry.resolve(
-        target.preset ?? target.profile,
-        { mode },
+      const { provider, resolved } = prepareTarget(
+        deps.providerRegistry,
+        target,
+        mode,
+        options,
       );
-      if (options?.apiKeys) {
-        resolved = deps.providerRegistry.withApiKeys(
-          resolved,
-          options.apiKeys,
-          provider,
-        );
-      }
 
       const startTime = Date.now();
 
@@ -515,22 +498,16 @@ export function createGateway(deps: GatewayDependencies) {
         );
         return result;
       } catch (error) {
-        await notifyError(
-          resolved.hooks,
-          provider,
-          resolved.protocol,
-          mode,
-          targetModel(target),
+        lastError = await handleTargetFailure({
           error,
-          Date.now() - startTime,
-          options?.traceId,
-        );
-        const normalized = normalizeError(error, provider);
-        lastError = normalized;
-
-        if (index === targets.length - 1 || !shouldFallback(normalized)) {
-          throw normalized;
-        }
+          resolved,
+          provider,
+          mode,
+          target,
+          startTime,
+          options,
+          canFallback: index < targets.length - 1,
+        });
       }
     }
 

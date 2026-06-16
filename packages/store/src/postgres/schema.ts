@@ -1,7 +1,18 @@
 /**
  * Drizzle ORM schema for PostgreSQL backend.
  *
- * JSON fields use native `jsonb` type — no manual serialization needed.
+ * Keep this table-for-table aligned with `../sqlite/schema.ts`; the contract
+ * suite (`store-contract.ts`) runs against both. Backend-specific differences
+ * to watch when editing either file:
+ *
+ * - JSON columns: PG uses native `jsonb` (no app-layer (de)serialization);
+ *   SQLite stores the same data as `text` and (de)serializes at the mapper
+ *   layer. Write jsonb via `sql.json(value)` — never `JSON.stringify()`.
+ * - JSON defaults: PG uses native literals (`.default([])` / `.default({})`);
+ *   SQLite uses JSON strings (`.default("[]")` / `.default("{}")`).
+ * - Binary (media_assets): PG stores bytes inline in a `bytea` column (`body`);
+ *   SQLite stores only a filesystem `path` and keeps bytes on disk.
+ * - Booleans: both backends model 0/1 as `integer` for parity.
  */
 
 import {

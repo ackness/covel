@@ -32,6 +32,7 @@ import {
 } from "@/lib/plugin-panel-tabs.js";
 import { loadPluginData } from "@/stores/plugin-data-store.js";
 import { useSession } from "@/stores/session-store.js";
+import { ignoreError } from "@/lib/ignore-error.js";
 
 interface RightPanelTabItem {
   id: string;
@@ -141,7 +142,7 @@ export function RightPanel({
   useEffect(() => {
     fetchServerHealth()
       .then((h) => setStoreBackend(h.storage?.data?.backend ?? null))
-      .catch(() => {});
+      .catch(ignoreError("fetch server health"));
   }, []);
 
   // Load plugin panel specs from /api/ui-specs and seed plugin-data-store.
@@ -177,10 +178,10 @@ export function RightPanel({
                 loadPluginData(pid, ns, entries);
               }
             })
-            .catch(() => {});
+            .catch(ignoreError("seed plugin data store"));
         }
       })
-      .catch(() => {});
+      .catch(ignoreError("fetch ui specs for right panel"));
     return () => {
       cancelled = true;
     };

@@ -20,6 +20,28 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 
 > **注意**: `@covel/store` 工厂也支持 `idb`，用于浏览器能力调用；常规服务器部署使用 `memory` / `sqlite` / `pg`。
 
+### 错误响应约定（v0.0.5 统一）
+
+所有 JSON 错误响应统一收敛为以下信封（`apps/server/src/api-error.ts`）：
+
+```jsonc
+{
+  "error": "string", // 必有：人类可读的错误消息
+  "code": "string", // 可选：稳定的机器可读错误码
+  "details": {}, // 可选：结构化诊断（如 Zod 校验错误数组）
+}
+```
+
+- `error` 字段始终存在。需要前端按错误码分流的端点（如 `plugin-rpc`、`media`）会同时给出 `code`。
+- **会话 404 统一**：所有以 `:id` 为路由参数的会话作用域端点，当会话不存在时统一返回
+  `404 { "error": "Session not found: <id>", "code": "session_not_found" }`
+  （由 `routes/api/session/session-guard.ts#resolveSessionParam` 集中产生）。
+  这是 v0.0.5 的有意破坏性改动：此前各端点的 404 响应体形态不一（`{error:"Session not found"}` /
+  `{error:"Session not found: <id>"}` / `{status:"error",error}` 等），现统一为上表形态。
+  以 query 参数 `sessionId` 取会话的端点（`/api/events/subscribe`）与以 body `sessionId` 取会话的端点
+  （`/api/actions`、`/api/worlds/:id/sync-data` 等）保持各自既有 404 文案不变。
+- `plugin-rpc` 通道保留其专属信封 `{ status: "error", error, code }`（见下文 plugin-rpc 小节），不并入通用信封。
+
 ---
 
 ## 快速开始
@@ -202,9 +224,19 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 状态查询
 
-| 方法 | 路径                      | 描述           |
-| ---- | ------------------------- | -------------- |
-| GET  | `/api/sessions/:id/state` | 获取所有状态表 |
+| 方法 | 路径                               | 描述                                        |
+| ---- | ---------------------------------- | ------------------------------------------- |
+| GET  | `/api/sessions/:id/state`          | 获取所有状态表                              |
+| GET  | `/api/sessions/:id/state-patches`  | 获取状态变更补丁列表                        |
+| GET  | `/api/sessions/:id/state-snapshot` | 获取完整状态快照                            |
+| PUT  | `/api/sessions/:id/state-snapshot` | **v0.0.5 未实现** —— 返回 `501`，见下方说明 |
+
+> **`PUT /api/sessions/:id/state-snapshot`（v0.0.5 未实现）**：恢复状态快照需要 StateManager
+> 重建状态表，当前状态模型未暴露该能力。路由有意保留（而非删除）以保持契约可见、不丢失排期，
+> 当会话存在时返回
+> `501 { "error": "State snapshot restoration not implemented. State will be rebuilt from turn execution.", "code": "not_implemented" }`
+> ——返回 501 而非 200，以避免静默丢弃 POST 进来的状态。状态改为通过回合执行或
+> `POST /api/sessions/:id/snapshots/:sid/fork`（从快照分叉）重建。
 
 ### 消息历史
 
@@ -919,7 +951,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ```json
 {
-  "error": "Session not found: <id>"
+  "error": "Session not found: <id>",
+  "code": "session_not_found"
 }
 ```
 
@@ -981,7 +1014,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ```json
 {
-  "error": "Session not found: <id>"
+  "error": "Session not found: <id>",
+  "code": "session_not_found"
 }
 ```
 
@@ -1042,7 +1076,8 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ```json
 {
-  "error": "Session \"<id>\" not found"
+  "error": "Session not found: <id>",
+  "code": "session_not_found"
 }
 ```
 
@@ -1164,7 +1199,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 ```json
 { "error": "turnId is required" }                           // 400
 { "error": "submissions[] is required" }                    // 400
-{ "error": "Session \"<id>\" not found" }                   // 404
+{ "error": "Session not found: <id>", "code": "session_not_found" }  // 404
 ```
 
 **使用说明:**
@@ -1866,7 +1901,8 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 ```json
 {
-  "error": "Session not found: <id>"
+  "error": "Session not found: <id>",
+  "code": "session_not_found"
 }
 ```
 

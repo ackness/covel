@@ -22,13 +22,7 @@
  * the current user message, and any depth/post-history prompt contributions.
  */
 
-import type {
-  AuthorsNoteDecl,
-  PostHistoryDecl,
-  RuntimeManifest,
-} from "@covel/shared";
 import { applyBudget } from "./budget.js";
-import { messageContentFromHistoryRecord } from "./llm-content-parts.js";
 import {
   assemblePromptVariables,
   buildCurrentTurnUserMessage,
@@ -40,86 +34,27 @@ import {
   renderWorkingMemory,
 } from "./prompt-internals.js";
 import { serializeSystemPrompt } from "./prompt-serialization.js";
+import {
+  activeContributions,
+  collectAuthorsNotes,
+  collectDepthContributions,
+  collectPostHistoryInstructions,
+  renderSystemLoreContributions,
+  renderSystemPersonaContributions,
+  resolveActiveManifests,
+} from "./contribution-aggregator.js";
+import {
+  buildMessageHistoryWithSummaries,
+  insertAuthorsNotes,
+  insertDepthContributions,
+  type RenderedAuthorsNote,
+  type RenderedDepthContribution,
+} from "./message-insertion.js";
 import type {
   AssembledContext,
   ContextBuildParams,
-  ContextContribution,
   LLMMessage,
-  MessageHistoryRecord,
-  SummaryRecord,
 } from "./types.js";
-
-/** Default Author's Note insertion depth (SillyTavern default). */
-const DEFAULT_AUTHORS_NOTE_DEPTH = 4;
-
-/**
- * Aggregated Author's Note: one bundle produced by merging every active
- * plugin's `authorsNote` declaration. Notes that share the same role+depth
- * are concatenated into a single rendered message to keep the prompt compact.
- */
-interface RenderedAuthorsNote {
-  readonly role: "system" | "user" | "assistant";
-  readonly depth: number;
-  readonly content: string;
-}
-
-interface RenderedDepthContribution {
-  readonly role: "system" | "user" | "assistant";
-  readonly depth: number;
-  readonly content: string;
-  readonly order: number;
-}
-
-// ── Summary substitution helper (mirrors context-builder.ts) ────
-
-/**
- * Segment 7 — history with compaction substitution.
- */
-function buildMessageHistoryWithSummaries(
-  messageHistory: readonly MessageHistoryRecord[],
-  summaries: readonly SummaryRecord[],
-): LLMMessage[] {
-  if (summaries.length === 0) {
-    return messageHistory.map(toLLMMessage);
-  }
-
-  const summaryById = new Map(summaries.map((s) => [s.id, s]));
-  const emittedSummaryIds = new Set<string>();
-  const result: LLMMessage[] = [];
-
-  for (const msg of messageHistory) {
-    const compactedId = (
-      msg as MessageHistoryRecord & { compactedAtTurnId?: string }
-    ).compactedAtTurnId;
-
-    if (compactedId) {
-      if (!emittedSummaryIds.has(compactedId)) {
-        const summary = summaryById.get(compactedId);
-        if (summary) {
-          emittedSummaryIds.add(compactedId);
-          result.push({
-            role: "system",
-            content: `[Compacted history: sections=${JSON.stringify(summary.focusSections)}]\n\n${summary.content}`,
-          });
-        }
-      }
-      continue;
-    }
-
-    result.push(toLLMMessage(msg));
-  }
-
-  return result;
-}
-
-/** See `context-builder.ts::toLLMMessage` — kept in lock-step. */
-function toLLMMessage(msg: MessageHistoryRecord): LLMMessage {
-  return {
-    role: msg.role as "system" | "user" | "assistant",
-    content: messageContentFromHistoryRecord(msg),
-    ...(msg.name ? { name: msg.name } : {}),
-  };
-}
 
 /**
  * Structured view of the 10 system-prompt segments.
@@ -159,74 +94,6 @@ export interface PromptSegments {
   readonly depthContributions: readonly RenderedDepthContribution[];
 }
 
-function activeContributions(
-  params: ContextBuildParams,
-): readonly ContextContribution[] {
-  return params.sessionContext?.contributions ?? [];
-}
-
-function renderSystemPersonaContributions(
-  contributions: readonly ContextContribution[],
-  position: "seg3_prepend" | "seg3_append",
-): string {
-  const lines = contributions
-    .filter(
-      (contribution) =>
-        contribution.kind === "persona_description" &&
-        contribution.position === position &&
-        contribution.content.trim().length > 0,
-    )
-    .map((contribution, index) => ({ contribution, index }))
-    .sort(
-      (a, b) =>
-        (a.contribution.order ?? 0) - (b.contribution.order ?? 0) ||
-        a.index - b.index,
-    )
-    .map(({ contribution }) => contribution.content.trim());
-  return lines.join("\n\n");
-}
-
-function renderSystemLoreContributions(
-  contributions: readonly ContextContribution[],
-  position: "before_plugin" | "after_plugin",
-): string {
-  const lines = contributions
-    .filter(
-      (contribution) =>
-        contribution.kind === "lore_entry" &&
-        contribution.position === position &&
-        contribution.content.trim().length > 0,
-    )
-    .map((contribution, index) => ({ contribution, index }))
-    .sort(
-      (a, b) =>
-        (a.contribution.order ?? 0) - (b.contribution.order ?? 0) ||
-        a.index - b.index,
-    )
-    .map(({ contribution }) => contribution.content.trim());
-  return lines.join("\n\n");
-}
-
-function collectDepthContributions(
-  contributions: readonly ContextContribution[],
-): readonly RenderedDepthContribution[] {
-  return contributions
-    .filter(
-      (contribution) =>
-        (contribution.kind === "persona_description" ||
-          contribution.kind === "lore_entry") &&
-        contribution.position === "at_depth" &&
-        contribution.content.trim().length > 0,
-    )
-    .map((contribution) => ({
-      role: contribution.role ?? "system",
-      depth: contribution.depth ?? DEFAULT_AUTHORS_NOTE_DEPTH,
-      content: contribution.content.trim(),
-      order: contribution.order ?? 0,
-    }))
-    .sort((a, b) => a.depth - b.depth || a.order - b.order);
-}
-
 /**
  * Build the default segment-1 framework preamble from the turn locale.
  *
@@ -238,145 +105,6 @@ function collectDepthContributions(
  */
 function defaultFrameworkPreamble(locale: string | undefined): string {
   return buildFrameworkPreamble(locale);
-}
-
-/**
- * Resolve the priority-ordered list of manifests used for segment 9/10
- * aggregation. Defaults to the single current manifest when the caller
- * does not pass `activeManifests`.
- */
-function resolveActiveManifests(
-  params: ContextBuildParams,
-): readonly RuntimeManifest[] {
-  const fromCaller = params.activeManifests;
-  if (!fromCaller || fromCaller.length === 0) {
-    return [params.manifest];
-  }
-  // Stable sort by ascending priority — matches scheduler semantics
-  // (0 = highest, runs first → renders first).
-  return [...fromCaller].sort(
-    (a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity),
-  );
-}
-
-/**
- * Collect all Author's Note declarations from the active manifests,
- * interpolate their content against the caller's variable bag, and group
- * them by `(role, depth)` so adjacent notes merge into a single message.
- */
-function collectAuthorsNotes(
-  manifests: readonly RuntimeManifest[],
-  variables: Readonly<Record<string, unknown>>,
-): readonly RenderedAuthorsNote[] {
-  type Group = {
-    readonly role: "system" | "user" | "assistant";
-    readonly depth: number;
-    readonly lines: string[];
-  };
-  const groups: Group[] = [];
-
-  for (const manifest of manifests) {
-    const decl: AuthorsNoteDecl | undefined = manifest.authorsNote;
-    if (!decl) continue;
-    const rendered = interpolateTemplate(decl.content, variables).trim();
-    if (!rendered) continue;
-
-    const role = decl.role ?? "system";
-    const depth = decl.depth ?? DEFAULT_AUTHORS_NOTE_DEPTH;
-
-    // Preserve declaration order within the same (role, depth) bucket.
-    const existing = groups.find((g) => g.role === role && g.depth === depth);
-    if (existing) {
-      existing.lines.push(rendered);
-    } else {
-      groups.push({ role, depth, lines: [rendered] });
-    }
-  }
-
-  return groups.map((g) => ({
-    role: g.role,
-    depth: g.depth,
-    content: g.lines.join("\n\n"),
-  }));
-}
-
-/**
- * Collect all Post-History Instruction declarations from the active
- * manifests and render them as a list of messages, one per unique role.
- * Notes sharing the same role are joined with a blank line.
- */
-function collectPostHistoryInstructions(
-  manifests: readonly RuntimeManifest[],
-  variables: Readonly<Record<string, unknown>>,
-): readonly LLMMessage[] {
-  type Group = {
-    readonly role: "system" | "user";
-    readonly lines: string[];
-  };
-  const groups: Group[] = [];
-
-  for (const manifest of manifests) {
-    const decl: PostHistoryDecl | undefined = manifest.postHistory;
-    if (!decl) continue;
-    const rendered = interpolateTemplate(decl.content, variables).trim();
-    if (!rendered) continue;
-
-    const role = decl.role ?? "system";
-    const existing = groups.find((g) => g.role === role);
-    if (existing) {
-      existing.lines.push(rendered);
-    } else {
-      groups.push({ role, lines: [rendered] });
-    }
-  }
-
-  return groups.map((g) => ({ role: g.role, content: g.lines.join("\n\n") }));
-}
-
-/**
- * Insert Author's Note bundles into a message array.
- *
- * Each bundle is placed before `messages[messages.length - depth]`. When
- * `depth <= 0` or `depth >= messages.length`, the bundle is appended at
- * the end (behaving like a post-history instruction). The returned array
- * is a new copy — the input is never mutated.
- */
-function insertAuthorsNotes(
-  messages: readonly LLMMessage[],
-  notes: readonly RenderedAuthorsNote[],
-): LLMMessage[] {
-  if (notes.length === 0) return [...messages];
-
-  // Work with an indexed array; each bundle converts to one LLMMessage that
-  // we splice into the correct slot. Build all insertions first, then apply
-  // from highest index to lowest so earlier splices don't shift later ones.
-  const insertions: Array<{ index: number; message: LLMMessage }> = notes.map(
-    (note) => {
-      const message: LLMMessage = { role: note.role, content: note.content };
-      const len = messages.length;
-      let index: number;
-      if (note.depth <= 0 || len === 0) {
-        index = len;
-      } else if (note.depth >= len) {
-        index = 0;
-      } else {
-        index = len - note.depth;
-      }
-      return { index, message };
-    },
-  );
-
-  // Stable sort by insertion index descending; for equal indices, preserve
-  // declaration order by reversing the tie-break so the final array shows
-  // them in the original left-to-right order after splicing.
-  const indexed = insertions.map((ins, order) => ({ ...ins, order }));
-  indexed.sort((a, b) => b.index - a.index || b.order - a.order);
-
-  const out: LLMMessage[] = [...messages];
-  for (const ins of indexed) {
-    out.splice(ins.index, 0, ins.message);
-  }
-  return out;
 }
 
 /**
@@ -540,7 +268,8 @@ function finalizeSegmentedContext(
     { role: "user", content: buildCurrentTurnUserMessage(params.turnInput) },
   ];
 
-  // Segment 9 — insert author's notes at their declared depth.
+  // Segment 8/9 — insert depth-positioned persona/lore contributions at their
+  // declared depth, then layer the author's notes on top.
   const withDepthContributions = insertDepthContributions(
     baseMessages,
     segments.depthContributions,
@@ -570,18 +299,4 @@ function finalizeSegmentedContext(
   }
 
   return { systemPrompt, messages };
-}
-
-function insertDepthContributions(
-  messages: readonly LLMMessage[],
-  contributions: readonly RenderedDepthContribution[],
-): LLMMessage[] {
-  if (contributions.length === 0) return [...messages];
-
-  const notes = contributions.map((contribution) => ({
-    role: contribution.role,
-    depth: contribution.depth,
-    content: contribution.content,
-  }));
-  return insertAuthorsNotes(messages, notes);
 }

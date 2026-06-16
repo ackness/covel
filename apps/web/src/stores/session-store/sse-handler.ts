@@ -1,11 +1,15 @@
 import { isAssetGenerateView } from "@covel/shared";
 import * as api from "@/services/api";
 import type { DataService } from "@/services/data-service.js";
+import { ignoreError } from "@/lib/ignore-error.js";
 import {
   applyChanges as applyPluginDataStoreChanges,
   type PluginDataChange,
 } from "@/stores/plugin-data-store.js";
-import { buildResumedExecutionStep } from "./execution-steps.js";
+import {
+  buildResumedExecutionStep,
+  createExecutionStepUpdate,
+} from "./execution-steps.js";
 import { upsertGameStateCharacter } from "./game-state.js";
 import {
   collectJobTransitions,
@@ -148,7 +152,7 @@ function addBlockMessageFromSse(
         block,
         createdAt: timestamp,
       })
-      .catch(() => {});
+      .catch(ignoreError("persist block message"));
   }
 }
 
@@ -257,7 +261,7 @@ export function createSseEventHandler(
                 kind: completedKind,
                 createdAt: envelope.timestamp,
               })
-              .catch(() => {});
+              .catch(ignoreError("persist narrative message"));
           }
         }
         break;
@@ -323,7 +327,7 @@ export function createSseEventHandler(
               sessionId: sid,
               createdAt: new Date().toISOString(),
             })
-            .catch(() => {});
+            .catch(ignoreError("persist state patch"));
         }
         break;
       }
@@ -355,40 +359,33 @@ export function createSseEventHandler(
       case "runtime.completed": {
         deps.dispatch({
           type: "UPSERT_EXECUTION_STEP",
-          step: {
-            runtimeId: (payload.runtimeId as string) ?? "unknown",
-            pluginId: (payload.pluginId as string) ?? "",
+          step: createExecutionStepUpdate({
+            payload,
             status: toRuntimeCompletedStatus(payload.status),
-            durationMs: payload.durationMs as number | undefined,
             turnId,
-          },
+          }),
         });
         break;
       }
       case "runtime.failed": {
         deps.dispatch({
           type: "UPSERT_EXECUTION_STEP",
-          step: {
-            runtimeId: (payload.runtimeId as string) ?? "unknown",
-            pluginId: (payload.pluginId as string) ?? "",
+          step: createExecutionStepUpdate({
+            payload,
             status: "failed",
-            detail: payload.error as string | undefined,
-            durationMs: payload.durationMs as number | undefined,
             turnId,
-          },
+          }),
         });
         break;
       }
       case "runtime.skipped": {
         deps.dispatch({
           type: "UPSERT_EXECUTION_STEP",
-          step: {
-            runtimeId: (payload.runtimeId as string) ?? "unknown",
-            pluginId: (payload.pluginId as string) ?? "",
+          step: createExecutionStepUpdate({
+            payload,
             status: "skipped",
-            durationMs: payload.durationMs as number | undefined,
             turnId,
-          },
+          }),
         });
         break;
       }

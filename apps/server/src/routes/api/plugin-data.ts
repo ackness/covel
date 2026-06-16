@@ -14,7 +14,9 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
+import { errorBody } from "../../api-error.js";
 import { buildPluginDataIndex } from "./discovery.js";
+import { resolveSessionParam } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -59,12 +61,12 @@ pluginDataRoutes.get("/:id/plugin-data/:pluginId/_index", async (c) => {
   const store = c.get("store");
   const registry = c.get("pluginRegistry");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
   const pluginId = c.req.param("pluginId");
 
   const accessErr = validatePluginAccess(registry, pluginId, sessionId, false);
-  if (accessErr) return c.json({ error: accessErr.error }, accessErr.status);
+  if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
   const records = await store.listPluginData(sessionId, pluginId);
   return c.json({
@@ -79,14 +81,14 @@ pluginDataRoutes.get("/:id/plugin-data/:pluginId/:namespace", async (c) => {
   const store = c.get("store");
   const registry = c.get("pluginRegistry");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
   const pluginId = c.req.param("pluginId");
   const namespace = c.req.param("namespace");
 
   // Read: only require the plugin to be registered (not necessarily active)
   const accessErr = validatePluginAccess(registry, pluginId, sessionId, false);
-  if (accessErr) return c.json({ error: accessErr.error }, accessErr.status);
+  if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
   const records = await store.listPluginData(sessionId, pluginId, namespace);
   return c.json({
@@ -106,8 +108,8 @@ pluginDataRoutes.get(
     const store = c.get("store");
     const registry = c.get("pluginRegistry");
     const sessionId = c.req.param("id");
-    const session = await store.getSession(sessionId);
-    if (!session) return c.json({ error: "Session not found" }, 404);
+    const guard = await resolveSessionParam(c);
+    if (!guard.ok) return guard.response;
     const pluginId = c.req.param("pluginId");
     const namespace = c.req.param("namespace");
     const key = c.req.param("key");
@@ -118,7 +120,7 @@ pluginDataRoutes.get(
       sessionId,
       false,
     );
-    if (accessErr) return c.json({ error: accessErr.error }, accessErr.status);
+    if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
     const record = await store.getPluginData(
       sessionId,
@@ -127,7 +129,7 @@ pluginDataRoutes.get(
       key,
     );
     if (!record) {
-      return c.json({ error: "Not found" }, 404);
+      return c.json(errorBody("Not found"), 404);
     }
     return c.json({
       namespace: record.namespace,
@@ -145,29 +147,29 @@ pluginDataRoutes.put(
     const store = c.get("store");
     const registry = c.get("pluginRegistry");
     const sessionId = c.req.param("id");
-    const session = await store.getSession(sessionId);
-    if (!session) return c.json({ error: "Session not found" }, 404);
+    const guard = await resolveSessionParam(c);
+    if (!guard.ok) return guard.response;
     const pluginId = c.req.param("pluginId");
     const namespace = c.req.param("namespace");
     const key = c.req.param("key");
 
     // Write: require the plugin to be active in this session
     const accessErr = validatePluginAccess(registry, pluginId, sessionId, true);
-    if (accessErr) return c.json({ error: accessErr.error }, accessErr.status);
+    if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
     const raw = await c.req.json<unknown>();
     const bodySchema = z.object({ value: z.unknown() });
     const parsed = bodySchema.safeParse(raw);
     if (!parsed.success) {
-      return c.json({ error: "Invalid body: value field is required" }, 400);
+      return c.json(errorBody("Invalid body: value field is required"), 400);
     }
     if (parsed.data.value === undefined) {
-      return c.json({ error: "Invalid body: value field is required" }, 400);
+      return c.json(errorBody("Invalid body: value field is required"), 400);
     }
     // Guard against oversized payloads (max 64KB serialized)
     const serialized = JSON.stringify(parsed.data.value);
     if (serialized.length > 65_536) {
-      return c.json({ error: "Value too large (max 64KB)" }, 413);
+      return c.json(errorBody("Value too large (max 64KB)"), 413);
     }
     const body = parsed.data;
     const now = new Date().toISOString();
@@ -194,15 +196,15 @@ pluginDataRoutes.delete(
     const store = c.get("store");
     const registry = c.get("pluginRegistry");
     const sessionId = c.req.param("id");
-    const session = await store.getSession(sessionId);
-    if (!session) return c.json({ error: "Session not found" }, 404);
+    const guard = await resolveSessionParam(c);
+    if (!guard.ok) return guard.response;
     const pluginId = c.req.param("pluginId");
     const namespace = c.req.param("namespace");
     const key = c.req.param("key");
 
     // Write: require the plugin to be active in this session
     const accessErr = validatePluginAccess(registry, pluginId, sessionId, true);
-    if (accessErr) return c.json({ error: accessErr.error }, accessErr.status);
+    if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
     await store.deletePluginData(sessionId, pluginId, namespace, key);
     return c.json({ success: true });
@@ -214,12 +216,12 @@ pluginDataRoutes.get("/:id/plugin-data/:pluginId", async (c) => {
   const store = c.get("store");
   const registry = c.get("pluginRegistry");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
   const pluginId = c.req.param("pluginId");
 
   const accessErr = validatePluginAccess(registry, pluginId, sessionId, false);
-  if (accessErr) return c.json({ error: accessErr.error }, accessErr.status);
+  if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
   const records = await store.listPluginData(sessionId, pluginId);
   return c.json({

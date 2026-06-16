@@ -26,7 +26,10 @@ export type {
   StreamMessage,
   SuspensionRecord,
 } from "./session-store/types.js";
-export { mergeGameStateForReplacement } from "./session-store/game-state.js";
+export {
+  mergeGameStateForReplacement,
+  enrichGameStateFromSnapshot,
+} from "./session-store/game-state.js";
 export { useSession, useSessionActions, useSessionState };
 
 export function SessionProvider({ children }: { children: ReactNode }) {

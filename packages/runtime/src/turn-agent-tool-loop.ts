@@ -6,34 +6,17 @@ import type {
   TurnInput,
 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
-import type { SuspensionRecord } from "@covel/store";
 import { isSuspendSentinel, isRuntimeDoneSentinel } from "@covel/tools";
 import type { LLMMessage } from "./llm-adapter.js";
 import type { HookPipeline } from "./hooks/pipeline.js";
 import { buildToolDefinitions } from "./turn-executor-helpers.js";
-import {
-  buildRetryPolicy,
-  callLLMWithRetry,
-  streamLLMWithRetry,
-  detectToolLoop,
-  perturbMessages,
-  LLMRetryError,
-  type RetryInfo,
-} from "./llm-retry.js";
-import {
-  buildLlmCallingPayload,
-  buildLlmRespondedErrorPayload,
-  buildLlmRespondedSuccessPayload,
-} from "./llm-trace-payload.js";
-import {
-  runPostRuntimeHook,
-  runPreToolUseHook,
-  runPostToolUseHook,
-} from "./hooks/wire-helpers.js";
-import { emitSubEvent } from "./turn-runtime-helpers.js";
+import { buildRetryPolicy, type RetryInfo } from "./llm-retry.js";
+import { requestLLMResponse } from "./tool-loop-handler.js";
+import { handleSuspension } from "./suspend-resume-handler.js";
+import { guardAgainstToolLoop, type LoopGuardState } from "./loop-detection.js";
+import { runPreToolUseHook, runPostToolUseHook } from "./hooks/wire-helpers.js";
 import {
   extractToolFailureMessage,
-  shouldRetryMalformedToolArguments,
   type ExecutedToolCallState,
   type FailedToolCallState,
 } from "./turn-output-helpers.js";
@@ -163,7 +146,7 @@ export async function runAgentToolLoop({
   // Count how many times we injected a perturbation into `messages` due to
   // tool-loop detection. Once a loop has been perturbed and reappears, we
   // give up — another perturbation would not help.
-  let loopPerturbations = 0;
+  const loopGuardState: LoopGuardState = { loopPerturbations: 0 };
 
   while (steps < effectiveMaxSteps && Date.now() < deadline) {
     steps++;
@@ -176,180 +159,30 @@ export async function runAgentToolLoop({
       ? deps.resolveModel(manifest, runtimeModelOverride)
       : (runtimeModelOverride ?? manifest.model);
 
-    let response: import("./llm-adapter.js").LLMResponse;
-
-    if (useStreaming) {
-      // Streaming path: helper enforces per-attempt call-timeout + first-
-      // token (TTFB) guard, retries on transient failures, and forwards
-      // text deltas to the caller on the first attempt (avoids duplicate
-      // text in the chat stream when a retry happens). If streaming
-      // exhausts its retries with a transient failure (e.g. provider SSE
-      // never recovered), fall back to a single non-stream call — matches
-      // the pre-helper behaviour for providers whose streaming path is
-      // more fragile than their JSON completion endpoint.
-      try {
-        const streamed = await streamLLMWithRetry({
-          llm: deps.llm,
-          model: effectiveModel,
-          messages,
-          tools: toolDefs,
-          responseFormat,
-          policy: retryPolicy,
-          deadline,
-          onDelta: async (textDelta) => {
-            streamDeltaCount++;
-            try {
-              await deps.onDelta!({
-                runtimeId: manifest.name,
-                pluginId: manifest.pluginId,
-                textDelta,
-              });
-            } catch {
-              // Client disconnected — keep streaming to capture full content.
-            }
-          },
-          onRetry: reportRetry,
-          emitter: deps.emitter,
-          runtimeId: manifest.name,
-          pluginId: manifest.pluginId,
-        });
-        response = streamed.response;
-      } catch (streamError) {
-        if (streamError instanceof LLMRetryError && Date.now() < deadline) {
-          console.warn(
-            `[stream-recovery] ${manifest.name} streaming exhausted (reason=${streamError.reason}); falling back to non-stream generate()`,
-          );
-          response = await callLLMWithRetry({
-            llm: deps.llm,
-            model: effectiveModel,
-            messages,
-            tools: toolDefs,
-            responseFormat,
-            policy: retryPolicy,
-            deadline,
-            onRetry: reportRetry,
-            emitter: deps.emitter,
+    const response = await requestLLMResponse({
+      manifest,
+      deps,
+      messages,
+      effectiveModel,
+      toolDefs,
+      responseFormat,
+      retryPolicy,
+      deadline,
+      useStreaming,
+      reportRetry,
+      onStreamDelta: async (textDelta) => {
+        streamDeltaCount++;
+        try {
+          await deps.onDelta!({
             runtimeId: manifest.name,
             pluginId: manifest.pluginId,
+            textDelta,
           });
-        } else {
-          throw streamError;
+        } catch {
+          // Client disconnected — keep streaming to capture full content.
         }
-      }
-
-      // If the stream finished with tool_calls but our adapter could not
-      // parse structured calls out of delta chunks (some providers don't
-      // deliver them on SSE), fall back to a non-stream call to get the
-      // structured tool_calls payload.
-      if (
-        response.finishReason === "tool_calls" &&
-        response.toolCalls.length === 0 &&
-        toolDefs
-      ) {
-        response = await callLLMWithRetry({
-          llm: deps.llm,
-          model: effectiveModel,
-          messages,
-          tools: toolDefs,
-          responseFormat,
-          policy: retryPolicy,
-          deadline,
-          onRetry: reportRetry,
-          emitter: deps.emitter,
-          runtimeId: manifest.name,
-          pluginId: manifest.pluginId,
-        });
-      }
-    } else {
-      // Non-streaming path: helper handles transient-error + call-timeout
-      // retry. A narrow secondary retry covers the DeepSeek-specific
-      // "function.arguments JSON format" error which isTransientError does
-      // not classify as retriable on its own.
-      try {
-        response = await callLLMWithRetry({
-          llm: deps.llm,
-          model: effectiveModel,
-          messages,
-          tools: toolDefs,
-          responseFormat,
-          policy: retryPolicy,
-          deadline,
-          onRetry: reportRetry,
-          emitter: deps.emitter,
-          runtimeId: manifest.name,
-          pluginId: manifest.pluginId,
-        });
-      } catch (error) {
-        const cause = error instanceof LLMRetryError ? error.cause : error;
-        if (!toolDefs || !shouldRetryMalformedToolArguments(cause)) {
-          throw error;
-        }
-        const fallbackCallStart = Date.now();
-        if (deps.emitter) {
-          // Malformed-tool-arguments fallback bypasses the retry helper, so
-          // provider identity is not available here. Explicit `null` signals
-          // "provider unknown at this call site" and survives JSON serialisation
-          // (unlike `undefined`, which is dropped), keeping the payload schema
-          // uniform across all 4 emit sites.
-          await deps.emitter.emit(
-            "llm.calling",
-            buildLlmCallingPayload({
-              runtimeId: manifest.name,
-              pluginId: manifest.pluginId,
-              slot: effectiveModel,
-              model: effectiveModel,
-              provider: null,
-              messages,
-              tools: toolDefs,
-              attempt: 0,
-            }),
-          );
-        }
-        try {
-          response = await deps.llm.generate({
-            model: effectiveModel,
-            messages,
-            tools: toolDefs,
-            responseFormat,
-            signal: AbortSignal.timeout(
-              Math.max(
-                1000,
-                Math.min(retryPolicy.callTimeoutMs, deadline - Date.now()),
-              ),
-            ),
-          });
-        } catch (fallbackErr) {
-          // Pair every `llm.calling` with an `llm.responded` on the error
-          // path so trace-viewer pairing stays intact when this fallback
-          // generate throws.
-          if (deps.emitter) {
-            await deps.emitter.emit(
-              "llm.responded",
-              buildLlmRespondedErrorPayload({
-                runtimeId: manifest.name,
-                pluginId: manifest.pluginId,
-                error: fallbackErr,
-                durationMs: Date.now() - fallbackCallStart,
-                attempt: 0,
-              }),
-            );
-          }
-          throw fallbackErr;
-        }
-        if (deps.emitter) {
-          await deps.emitter.emit(
-            "llm.responded",
-            buildLlmRespondedSuccessPayload({
-              runtimeId: manifest.name,
-              pluginId: manifest.pluginId,
-              response,
-              durationMs: Date.now() - fallbackCallStart,
-              attempt: 0,
-            }),
-          );
-        }
-      }
-    }
+      },
+    });
 
     if (response.toolCalls.length > 0) {
       // LLM requested tool calls — execute them and feed results back.
@@ -444,111 +277,20 @@ export async function runAgentToolLoop({
           // persist a SuspensionRecord. The tool result is not pushed back to
           // the LLM; instead we exit the loop with status 'suspended'.
           if (isSuspendSentinel(toolResult.parsedResult) && deps.store) {
-            const sentinel = toolResult.parsedResult;
-            const suspensionId = crypto.randomUUID();
-
-            // Messages array currently has the assistant message (with tool_calls)
-            // but not the suspend tool result. We capture the full message
-            // array together with any buffered proposals so resume can
-            // continue with the same mid-turn write set.
-            const pendingContinuation: SuspensionRecord["pendingContinuation"] =
-              {
-                messages: [...messages],
-                partialContent: finalContent ?? undefined,
-                toolCallsSoFar: [...collectedToolCalls],
-                pendingProposals: [...pendingProposals],
-                // Store the suspend tool's call ID so resume can append a proper tool result
-                suspendToolCallId: effectiveTc.id,
-              };
-
-            const suspension: SuspensionRecord = {
-              id: suspensionId,
-              sessionId: input.sessionId,
-              turnId: input.turnId,
-              runtimeId: manifest.name,
-              pluginId: manifest.pluginId,
-              reason: sentinel.reason,
-              resumeSchema: sentinel.resumeSchema,
-              pendingContinuation,
-              createdAt: new Date().toISOString(),
-            };
-
-            await deps.store.saveSuspension(suspension);
-
-            // Emit turn.suspended SSE event via the actions channel.
-            // Include pluginId/runtimeId/suspendedAt so web clients can
-            // render a suspension row without a follow-up REST fetch
-            // (F4 web suspend/resume integration).
-            emitSubEvent(
-              deps.eventBus,
-              "game",
-              "turn.suspended",
-              input.sessionId,
-              {
-                sessionId: input.sessionId,
-                turnId: input.turnId,
-                suspensionId,
-                pluginId: manifest.pluginId,
-                runtimeId: manifest.name,
-                suspendedAt: suspension.createdAt,
-                reason: sentinel.reason,
-                resumeSchema: sentinel.resumeSchema,
-              },
-            );
-
-            const suspendedResult: RuntimeResult = {
-              pluginId: manifest.pluginId,
-              runtimeId: manifest.name,
+            return handleSuspension({
+              sentinel: toolResult.parsedResult,
+              manifest,
+              input,
+              deps,
+              hookPipeline,
+              messages,
+              finalContent,
+              collectedToolCalls,
+              pendingProposals,
+              suspendToolCallId: effectiveTc.id,
+              startTime,
               runId,
-              turnId: input.turnId,
-              status: "suspended",
-              output: {
-                suspended: true,
-                suspensionId,
-                reason: sentinel.reason,
-                resumeSchema: sentinel.resumeSchema,
-              },
-              toolCalls: collectedToolCalls,
-              durationMs: Date.now() - startTime,
-              timestamp: new Date().toISOString(),
-            };
-
-            try {
-              await deps.onRuntimeComplete?.({
-                runtimeId: manifest.name,
-                pluginId: manifest.pluginId,
-                status: "suspended",
-                durationMs: suspendedResult.durationMs,
-              });
-            } catch {
-              /* callback error must not kill runtime */
-            }
-
-            emitSubEvent(
-              deps.eventBus,
-              "runtime",
-              "runtime.completed",
-              input.sessionId,
-              {
-                runtimeId: manifest.name,
-                pluginId: manifest.pluginId,
-                status: "suspended",
-                durationMs: suspendedResult.durationMs,
-              },
-            );
-
-            return runPostRuntimeHook(
-              {
-                pipeline: hookPipeline,
-                sessionId: input.sessionId,
-                turnId: input.turnId,
-                pluginId: manifest.pluginId,
-                runtimeId: manifest.name,
-                eventBus: deps.eventBus,
-                emitter: deps.emitter,
-              },
-              suspendedResult,
-            );
+            });
           }
 
           executedToolCalls.push({
@@ -637,30 +379,13 @@ export async function runAgentToolLoop({
       // almost certainly stuck in a KV-cache echo. Inject a perturbation
       // system message to nudge it onto a different path; on the second
       // detection give up so the loop cannot wedge the runtime forever.
-      if (retryPolicy.loopDetectionThreshold > 0) {
-        const identityCalls = collectedToolCalls.map((c) => ({
-          name: c.toolName,
-          arguments:
-            typeof c.input === "string"
-              ? c.input
-              : JSON.stringify(c.input ?? {}),
-        }));
-        if (detectToolLoop(identityCalls, retryPolicy.loopDetectionThreshold)) {
-          if (loopPerturbations >= 1) {
-            throw new Error(
-              `tool-loop detected for ${manifest.name}: same tool "${identityCalls[identityCalls.length - 1]?.name}" called ${retryPolicy.loopDetectionThreshold}+ times with identical arguments even after perturbation`,
-            );
-          }
-          loopPerturbations++;
-          const [hint] = perturbMessages([], 1, "tool-loop-detected");
-          if (hint) {
-            messages.push(hint);
-            console.warn(
-              `[runtime-loop] ${manifest.name} detected repeated tool call; injected perturbation (attempt ${loopPerturbations})`,
-            );
-          }
-        }
-      }
+      guardAgainstToolLoop({
+        collectedToolCalls,
+        threshold: retryPolicy.loopDetectionThreshold,
+        runtimeName: manifest.name,
+        messages,
+        state: loopGuardState,
+      });
 
       // Continue loop — LLM sees tool results and decides next action
       continue;

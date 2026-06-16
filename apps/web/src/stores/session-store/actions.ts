@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import i18n from "i18next";
 import * as api from "@/services/api";
+import { ignoreError } from "@/lib/ignore-error.js";
 import type { DataService } from "@/services/data-service.js";
 import {
   resetPluginData,
@@ -9,6 +10,7 @@ import {
 import { bootSessionStore } from "./boot.js";
 import type { SessionActions } from "./context.js";
 import { toExecutionStepStatus } from "./execution-steps.js";
+import { enrichGameStateFromSnapshot } from "./game-state.js";
 import { restoreSessionState } from "./restore-session.js";
 import {
   ensureServerThenRun,
@@ -178,7 +180,7 @@ export function useBuildSessionActions({
           role: "user",
           content,
           createdAt: userTimestamp,
-        }).catch(() => {});
+        }).catch(ignoreError("persist user message"));
       }
 
       return new Promise<void>((resolve) => {
@@ -229,9 +231,11 @@ export function useBuildSessionActions({
           const nextValues = values
             ? { ...existingValues, [blockId]: values }
             : existingValues;
-          ds.saveSubmittedBlocks(sid, nextIds, nextValues).catch(() => {});
+          ds.saveSubmittedBlocks(sid, nextIds, nextValues).catch(
+            ignoreError("save submitted blocks"),
+          );
         })
-        .catch(() => {});
+        .catch(ignoreError("load submitted blocks for update"));
     },
     [ds, dispatch, sessionIdRef],
   );
@@ -239,7 +243,7 @@ export function useBuildSessionActions({
   const submitInteraction = useCallback(
     async (
       blockId: string,
-      _turnId: string,
+      turnId: string,
       interactionId: string,
       type: "form" | "choice" | "confirmation",
       values: Record<string, unknown>,
@@ -249,42 +253,56 @@ export function useBuildSessionActions({
       if (!sid) return;
       const echo = submitBehavior?.echoFilledNarrative !== false;
 
+      // Persist the player's input and fill the interaction template. If this
+      // fails we cannot run the turn, so fall back to a plain message so the
+      // player's input is never silently dropped.
+      let filled: string;
       try {
         submitBlock(blockId, values);
-
         const result = await api.submitInputs(sid, {
-          turnId: _turnId,
+          turnId,
           submissions: [{ interactionId, type, values }],
         });
+        filled = result.results?.[0]?.filledNarrative ?? "";
+      } catch (err) {
+        console.error("[submitInteraction] submit-form failed:", err);
+        sendMessage(Object.values(values).join(", "));
+        return;
+      }
 
+      // Run the resulting narrative turn, then re-sync the character snapshot.
+      //
+      // The character panel reads `gameState.characters` (dataSource
+      // `session.characters`), and that slice is only filled incrementally by
+      // the `character.upserted` SSE event — which fires *solely* from the
+      // `character.upsert` proposal path. The primary character-creation paths
+      // (char-creator's create/update-character tools and player-init's
+      // deterministic guard) write straight to the store and mirror to
+      // plugin_data, emitting only `plugin-data.changed`. They never emit
+      // `character.upserted`. `characterSchema` has no SSE carrier at all.
+      //
+      // So after the turn that may have created/updated the player, we pull a
+      // snapshot to refresh both `characters` and `characterSchema`. Done after
+      // the turn (not before) so a just-created character is included.
+      dispatch({ type: "SET_EXECUTING", value: true });
+      dispatch({ type: "SET_EXECUTION_ERROR", error: null });
+      try {
+        await runSingleAction(echo ? filled : "", {
+          echoUserMessage: echo && Boolean(filled),
+        });
         try {
           const snapshot = await api.getSessionSnapshot(sid);
           if (sessionIdRef.current === sid) {
-            const enrichedState: Record<string, unknown> = {
-              characters: snapshot.characters,
-            };
-            if (snapshot.characterSchema) {
-              enrichedState.characterSchema = snapshot.characterSchema;
-            }
-            dispatch({ type: "SET_GAME_STATE", state: enrichedState });
+            dispatch({
+              type: "SET_GAME_STATE",
+              state: enrichGameStateFromSnapshot(snapshot),
+            });
           }
         } catch {
-          // Non-critical: character panel will update on next refresh.
+          // Non-critical: the character panel refreshes on reconnect/restore.
         }
-
-        const filled = result.results?.[0]?.filledNarrative ?? "";
-        dispatch({ type: "SET_EXECUTING", value: true });
-        dispatch({ type: "SET_EXECUTION_ERROR", error: null });
-        try {
-          await runSingleAction(echo ? filled : "", {
-            echoUserMessage: echo && Boolean(filled),
-          });
-        } finally {
-          finalizeActionExecution(dispatch);
-        }
-      } catch (err) {
-        console.error("[submitInteraction] Failed:", err);
-        sendMessage(Object.values(values).join(", "));
+      } finally {
+        finalizeActionExecution(dispatch);
       }
     },
     [dispatch, sessionIdRef, submitBlock, sendMessage, runSingleAction],

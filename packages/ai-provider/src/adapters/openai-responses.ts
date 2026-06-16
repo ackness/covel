@@ -10,7 +10,12 @@ import {
 } from "./http.js";
 import { applyCapabilityFallback } from "./capability-fallback.js";
 import { createOpenAiChatAdapter } from "./openai-chat.js";
-import type { ImagePart, TextMessage, TextMessageContent } from "../types.js";
+import {
+  createMetadataSanitizer,
+  extractParameterOverrides,
+  mediaRefFallbackText,
+} from "./common.js";
+import type { TextMessage, TextMessageContent } from "../types.js";
 
 /** Fields that providerRequestMetadata must never override. */
 const RESPONSES_PROTECTED_KEYS = new Set([
@@ -21,33 +26,21 @@ const RESPONSES_PROTECTED_KEYS = new Set([
   "parameterOverrides",
 ]);
 
-function sanitizeResponsesMetadata(
-  meta: Record<string, unknown> | undefined,
-): Record<string, unknown> {
-  if (!meta) return {};
-  const sanitized: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(meta)) {
-    if (!RESPONSES_PROTECTED_KEYS.has(k)) sanitized[k] = v;
-  }
-  return sanitized;
-}
+/** camelCase override key → OpenAI Responses wire field. */
+const RESPONSES_PARAMETER_FIELD_MAP = {
+  temperature: "temperature",
+  topP: "top_p",
+  maxOutputTokens: "max_output_tokens",
+} as const;
+
+const sanitizeResponsesMetadata = createMetadataSanitizer(
+  RESPONSES_PROTECTED_KEYS,
+);
 
 function extractResponsesParameterOverrides(
   meta: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
-  const overrides = meta?.parameterOverrides;
-  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
-    return {};
-  }
-  const source = overrides as Record<string, unknown>;
-  const result: Record<string, unknown> = {};
-  if (typeof source.temperature === "number")
-    result.temperature = source.temperature;
-  if (typeof source.topP === "number") result.top_p = source.topP;
-  if (typeof source.maxOutputTokens === "number") {
-    result.max_output_tokens = source.maxOutputTokens;
-  }
-  return result;
+  return extractParameterOverrides(meta, RESPONSES_PARAMETER_FIELD_MAP);
 }
 
 /**
@@ -65,14 +58,6 @@ function mapResponseStatus(status: unknown): string {
     default:
       return "stop";
   }
-}
-
-function mediaRefFallbackText(part: ImagePart): string {
-  return JSON.stringify({
-    type: "image_ref",
-    ref: part.image,
-    note: "MediaRef has no resolved URL; provider vision input requires a retrievable image URL.",
-  });
 }
 
 function serializeResponsesContent(content: TextMessageContent): unknown {

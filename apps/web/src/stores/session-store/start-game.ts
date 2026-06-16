@@ -2,6 +2,7 @@ import i18n from "i18next";
 import * as api from "@/services/api";
 import type { DataService } from "@/services/data-service.js";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
+import { enrichGameStateFromSnapshot } from "./game-state.js";
 import { hydratePluginDataForUiSpecs } from "./plugin-data-hydration.js";
 import type { SessionDispatch } from "./types.js";
 
@@ -50,14 +51,10 @@ async function hydrateInitialSnapshot(
     const activeSessionId = sessionIdRef.current ?? sessionId;
     if (activeSessionId !== sessionId) return;
 
-    const enrichedState: Record<string, unknown> = {
-      ...snapshot.gameState,
-      characters: snapshot.characters,
-    };
-    if (snapshot.characterSchema) {
-      enrichedState.characterSchema = snapshot.characterSchema;
-    }
-    dispatch({ type: "SET_GAME_STATE", state: enrichedState });
+    dispatch({
+      type: "SET_GAME_STATE",
+      state: enrichGameStateFromSnapshot(snapshot),
+    });
   } catch {
     // Snapshot hydration is best-effort; reconnect and SSE keep state fresh.
   }

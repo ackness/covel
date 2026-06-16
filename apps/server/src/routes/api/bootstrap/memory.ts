@@ -1,6 +1,7 @@
 import type { ParsedPluginMd } from "@covel/plugin-loader";
 import { createMemorySystem, type MemorySystem } from "@covel/memory";
 import type { LLMAdapter } from "@covel/runtime";
+import { FrameworkCapability } from "@covel/shared";
 import type { RuntimeManifest } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { createMemoryTools, type ToolModule } from "@covel/tools";
@@ -39,7 +40,7 @@ export function createBootstrapMemorySystem({
     console.log(`[bootstrap] Memory panel host plugin: ${memoryPanelPluginId}`);
   } else {
     console.log(
-      '[bootstrap] No plugin declares capability "memory-panel" — mirror disabled',
+      `[bootstrap] No plugin declares capability "${FrameworkCapability.MemoryPanel}" — mirror disabled`,
     );
   }
 
@@ -102,7 +103,9 @@ function findMemoryPanelPluginId(
   // and core memory still works (panel updates via polling).
   for (const [pluginId, manifests] of manifestCache) {
     if (
-      manifests.some((m) => m.manifest.capabilities?.includes("memory-panel"))
+      manifests.some((m) =>
+        m.manifest.capabilities?.includes(FrameworkCapability.MemoryPanel),
+      )
     ) {
       return pluginId;
     }

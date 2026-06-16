@@ -1,3 +1,9 @@
+import {
+  makeProposal,
+  normalizeRequiredString,
+  optionalInteger,
+  optionalString,
+} from "@covel/plugin-handlers-utils";
 import { shortId, withPendingProposals } from "@covel/tools";
 
 const PRESENCE_NAMESPACE = "presence";
@@ -15,25 +21,14 @@ export default async function handler(ctx) {
   );
   const now = new Date().toISOString();
 
-  const proposal = {
-    id: crypto.randomUUID(),
-    type: "plugin.data",
-    source: {
-      pluginId: ctx.pluginId,
-      runtimeId: ctx.runtimeId ?? ctx.pluginId,
+  const proposal = makeProposal(ctx, now, "plugin.data", {
+    namespace: PRESENCE_NAMESPACE,
+    key: presence.characterId,
+    value: {
+      presence,
+      updatedAt: now,
     },
-    turnId: ctx.turnId,
-    sessionId: ctx.sessionId,
-    payload: {
-      namespace: PRESENCE_NAMESPACE,
-      key: presence.characterId,
-      value: {
-        presence,
-        updatedAt: now,
-      },
-    },
-    timestamp: now,
-  };
+  });
 
   return withPendingProposals(
     {
@@ -125,25 +120,6 @@ function mediaRefFromForm(form, prefix) {
 /**
  * @param {unknown} value
  */
-function optionalString(value) {
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : undefined;
-}
-
-/**
- * @param {unknown} value
- */
-function optionalInteger(value) {
-  if (typeof value === "number" && Number.isInteger(value)) return value;
-  if (typeof value !== "string" || value.trim().length === 0) return undefined;
-  const parsed = Number(value);
-  return Number.isInteger(parsed) ? parsed : undefined;
-}
-
-/**
- * @param {unknown} value
- */
 function normalizePresence(value) {
   if (!isRecord(value)) {
     throw new Error("manualPayload.presence must be an object");
@@ -228,13 +204,6 @@ function normalizeMediaRef(value, field) {
       : {}),
     ...(isRecord(value.meta) ? { meta: value.meta } : {}),
   };
-}
-
-function normalizeRequiredString(value, field) {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${field} must be a non-empty string`);
-  }
-  return value.trim();
 }
 
 function isRecord(value) {

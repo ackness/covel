@@ -38,6 +38,7 @@ import { createMiscApiRoutes } from "./routes/misc-api.js";
 import { createConfigApiRoutes } from "./routes/config-api.js";
 import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
 import { createRequestBodyLimitMiddleware } from "./middleware/request-body-limit.js";
+import { errorBody } from "./api-error.js";
 import {
   providerApiKeysFromEnv,
   providerIdToApiKeyEnvName,
@@ -95,7 +96,7 @@ const isDev = env.nodeEnv !== "production";
 app.onError((err, c) => {
   const message = err instanceof Error ? err.message : String(err);
   console.error(`[server] Unhandled error:`, err);
-  return c.json({ error: isDev ? message : "Internal server error" }, 500);
+  return c.json(errorBody(isDev ? message : "Internal server error"), 500);
 });
 
 // ── Middleware ────────────────────────────────────────────────────
@@ -121,8 +122,8 @@ app.use("*", createRequestBodyLimitMiddleware());
 // build. ENABLE_DEBUG_PAGE=1 opts in (e.g. for self-hosted tiers).
 const allowDebugRoutes = isDev || env.debugRoutes;
 if (!allowDebugRoutes) {
-  app.all("/api/debug/*", (c) => c.json({ error: "Not available" }, 403));
-  app.all("/api/internal/*", (c) => c.json({ error: "Not available" }, 403));
+  app.all("/api/debug/*", (c) => c.json(errorBody("Not available"), 403));
+  app.all("/api/internal/*", (c) => c.json(errorBody("Not available"), 403));
 }
 // CORS — default whitelist covers:
 //   - dev Vite server at localhost:5173 / 127.0.0.1:5173

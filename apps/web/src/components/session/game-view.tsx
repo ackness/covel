@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { usePanelCollapse } from "./game-view/use-panel-collapse.js";
+import { useNavTabActivation } from "./game-view/use-nav-tab-activation.js";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +15,6 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable.js";
-import type { PanelImperativeHandle } from "react-resizable-panels";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
@@ -31,7 +32,6 @@ import type {
 } from "@/services/api.js";
 import { LeftPanel } from "./left-panel.js";
 import { RightPanel } from "./right-panel.js";
-import { onNavEvent } from "@/lib/nav-events.js";
 import {
   GameViewHeader,
   type GameViewMode,
@@ -40,6 +40,7 @@ import { MessageComposer } from "./game-view/message-composer.js";
 import { PendingDraftsBar } from "./game-view/pending-drafts-bar.js";
 import { useGameViewComposer } from "./game-view/use-game-view-composer.js";
 import { worldVisual } from "@/lib/world-visuals.js";
+import { ignoreError } from "@/lib/ignore-error.js";
 
 // ── Extracted Panel Components (see left-panel.tsx, right-panel.tsx) ──
 
@@ -135,7 +136,6 @@ export function GameView({
   onLoadWorldSessions,
   onLoadSessionPlugins,
   onTogglePlugin,
-  onTriggerEvent,
 }: GameViewProps) {
   const { t } = useTranslation();
   const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(
@@ -152,8 +152,6 @@ export function GameView({
   const {
     inputValue,
     setInputValue,
-    blockSelections,
-    handleBlockSelect,
     pendingDrafts,
     suspensions,
     composerBlocked,
@@ -174,50 +172,29 @@ export function GameView({
 
   // Load session-scoped plugin list whenever the session changes.
   useEffect(() => {
-    onLoadSessionPlugins().catch(() => {});
+    onLoadSessionPlugins().catch(
+      ignoreError("load session plugins on session change"),
+    );
   }, [session.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isMobile = useMediaQuery("(max-width: 768px)");
   const isTablet = useMediaQuery("(max-width: 1024px)");
 
-  const leftPanelRef = useRef<PanelImperativeHandle>(null);
-  const rightPanelRef = useRef<PanelImperativeHandle>(null);
-  const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
-  const [isRightCollapsed, setIsRightCollapsed] = useState(false);
+  const {
+    leftPanelRef,
+    rightPanelRef,
+    isLeftCollapsed,
+    isRightCollapsed,
+    handleLeftResize,
+    handleRightResize,
+    toggleLeftPanel,
+    toggleRightPanel,
+  } = usePanelCollapse(isMobile, isTablet);
+
   // Sentinel ref for the bottom of the message list. Auto-scroll behaviour
   // (sticky-bottom + jump-to-latest) lives in ChatMessages via useAutoScroll;
   // this ref is shared so external callers can still reach the list tail.
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const isLeftCollapsedRef = useRef(isLeftCollapsed);
-  const isRightCollapsedRef = useRef(isRightCollapsed);
-  isLeftCollapsedRef.current = isLeftCollapsed;
-  isRightCollapsedRef.current = isRightCollapsed;
-
-  useEffect(() => {
-    if (isMobile || isTablet) {
-      if (leftPanelRef.current && !isLeftCollapsedRef.current)
-        leftPanelRef.current.collapse();
-      if (rightPanelRef.current && !isRightCollapsedRef.current)
-        rightPanelRef.current.collapse();
-    }
-  }, [isMobile, isTablet]);
-
-  const toggleLeftPanel = () => {
-    const panel = leftPanelRef.current;
-    if (panel) {
-      if (isLeftCollapsed) panel.expand();
-      else panel.collapse();
-    }
-  };
-
-  const toggleRightPanel = () => {
-    const panel = rightPanelRef.current;
-    if (panel) {
-      if (isRightCollapsed) panel.expand();
-      else panel.collapse();
-    }
-  };
 
   const handleSettingsOpenChange = (v: boolean) => {
     setSettingsOpen(v);
@@ -229,45 +206,14 @@ export function GameView({
 
   // Topbar nav → in-page panel actions. The global topbar dispatches via
   // nav-events because it can't reach this component's local state directly.
-  useEffect(() => {
-    return onNavEvent((event) => {
-      if (event === "open-plugins") {
-        setSettingsInitialKey("plugin");
-        setSettingsOpen(true);
-        return;
-      }
-      if (event === "open-images" || event === "open-database") {
-        // Make sure the right panel is expanded, then activate the requested
-        // activity tab. Radix Tabs use pointerdown to trigger selection
-        // (not click), so a plain programmatic .click() is a no-op — we
-        // dispatch the matching pointerdown sequence instead.
-        const panel = rightPanelRef.current;
-        if (panel && panel.isCollapsed()) panel.expand();
-        // The aria-label is locale-resolved (framework: t(); plugin: i18n
-        // map). Both sides agree on the same translation table, so we resolve
-        // the same key here to match whichever locale is active.
-        const targetLabel =
-          event === "open-images" ? t("nav.images") : t("session.database");
-        const activate = () => {
-          const tab = document.querySelector<HTMLElement>(
-            `button[role="tab"][aria-label="${targetLabel}"]`,
-          );
-          if (!tab) return;
-          // Radix Tabs trigger on the mousedown → mouseup → click sequence;
-          // a plain `tab.click()` alone is a no-op because the trigger only
-          // commits when it sees the pointerdown half. Replay the full
-          // sequence so it matches a real interaction.
-          const opts = { bubbles: true, cancelable: true, button: 0 } as const;
-          tab.dispatchEvent(new MouseEvent("mousedown", opts));
-          tab.dispatchEvent(new MouseEvent("mouseup", opts));
-          tab.click();
-        };
-        // Defer two frames to give the panel time to finish expanding before
-        // dispatching pointer events at the now-visible tab.
-        requestAnimationFrame(() => requestAnimationFrame(activate));
-      }
-    });
-  }, [t]);
+  useNavTabActivation({
+    t,
+    rightPanelRef,
+    onOpenPlugins: () => {
+      setSettingsInitialKey("plugin");
+      setSettingsOpen(true);
+    },
+  });
 
   const direction = isMobile ? "vertical" : "horizontal";
   const visual = worldVisual(world);
@@ -323,9 +269,7 @@ export function GameView({
           maxSize={isMobile ? "80%" : "40%"}
           collapsible={true}
           collapsedSize="0%"
-          onResize={() =>
-            setIsLeftCollapsed(leftPanelRef.current?.isCollapsed() ?? false)
-          }
+          onResize={handleLeftResize}
           className="ui-rail flex flex-col min-h-0 min-w-0"
         >
           <LeftPanel
@@ -367,11 +311,7 @@ export function GameView({
               maxSize="80%"
               collapsible={true}
               collapsedSize="0%"
-              onResize={() =>
-                setIsRightCollapsed(
-                  rightPanelRef.current?.isCollapsed() ?? false,
-                )
-              }
+              onResize={handleRightResize}
               className="ui-rail flex flex-col min-h-0 min-w-0"
             >
               <RightPanel
@@ -454,13 +394,10 @@ export function GameView({
             submittedBlockIds={submittedBlockIds}
             submittedBlockValues={submittedBlockValues}
             viewMode={viewMode}
-            blockSelections={blockSelections}
             onSendMessage={onSendMessage}
             onSubmitBlock={onSubmitBlock}
             onSubmitInteraction={onSubmitInteraction}
             onRetryRuntime={onRetryRuntime}
-            onTriggerEvent={onTriggerEvent}
-            onBlockSelect={handleBlockSelect}
             onBeginAdventure={onBeginAdventure}
             messagesEndRef={messagesEndRef}
           />
@@ -503,11 +440,7 @@ export function GameView({
               maxSize="50%"
               collapsible={true}
               collapsedSize="0%"
-              onResize={() =>
-                setIsRightCollapsed(
-                  rightPanelRef.current?.isCollapsed() ?? false,
-                )
-              }
+              onResize={handleRightResize}
               className="ui-rail flex flex-col min-h-0 min-w-0"
             >
               <RightPanel

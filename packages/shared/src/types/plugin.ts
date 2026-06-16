@@ -117,6 +117,37 @@ export interface InputConfig {
  */
 export type OutputKind = "story" | "plugin" | "system";
 
+// ── Capability discovery ─────────────────────────────────────────
+
+/**
+ * Capability tags the **framework itself** consumes to discover plugins by
+ * capability instead of by hardcoded plugin ID. Use these constants in
+ * framework code (server / runtime) instead of bare string literals so a
+ * typo becomes a compile error rather than a silent `undefined` lookup.
+ *
+ * Plugins may declare arbitrary custom capability tags beyond this set; the
+ * framework only acts on the ones listed here. Keep this in sync with the
+ * capability table in `docs/reference/plugins.md`.
+ */
+export const FrameworkCapability = {
+  /** Main narrative generator — identifies the primary story output source. */
+  Narrative: "narrative",
+  /** World data provider — loads world schema/entries into the turn context. */
+  WorldDataProvider: "world-data-provider",
+  /** Image generation — frontend shows the "generate image" affordance. */
+  ImageGeneration: "image-generation",
+  /** Core-memory panel host — memory system mirrors core blocks here. */
+  MemoryPanel: "memory-panel",
+  /** Player persona provider — supplies the active persona for context. */
+  PersonaProvider: "persona-provider",
+  /** Prompt history rewriter — folds adopted branches into projected history. */
+  PromptHistoryRewriter: "prompt-history-rewriter",
+} as const;
+
+/** Union of the framework-consumed capability tag string values. */
+export type FrameworkCapabilityTag =
+  (typeof FrameworkCapability)[keyof typeof FrameworkCapability];
+
 export interface OutputConfig {
   /** Relative path to output.schema.json. */
   readonly schema?: string;

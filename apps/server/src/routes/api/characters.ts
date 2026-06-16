@@ -8,6 +8,9 @@ import type { DataStore, CharacterRecord } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type { Proposal } from "@covel/shared";
 import type { HookPipeline } from "@covel/runtime";
+import { errorBody } from "../../api-error.js";
+import { frameworkProposalSource } from "../../lib/framework-source.js";
+import { resolveSessionParam } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -21,33 +24,27 @@ export const characterRoutes = new Hono<Env>();
 
 // GET /session/:id/characters
 characterRoutes.get("/:id/characters", async (c) => {
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
   const store = c.get("store");
-  const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json({ error: "Session not found" }, 404);
-  }
-  const characters = await store.listCharacters(sessionId);
+  const characters = await store.listCharacters(guard.session.id);
   return c.json({ items: characters });
 });
 
 // POST /session/:id/characters
 characterRoutes.post("/:id/characters", async (c) => {
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
   const store = c.get("store");
-  const sessionId = c.req.param("id");
-
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json({ error: "Session not found" }, 404);
-  }
+  const sessionId = guard.session.id;
 
   const body = await c.req.json<Record<string, unknown>>();
 
   if (!body.id || typeof body.id !== "string") {
-    return c.json({ error: "id (string) is required" }, 400);
+    return c.json(errorBody("id (string) is required"), 400);
   }
   if (!body.name || typeof body.name !== "string") {
-    return c.json({ error: "name (string) is required" }, 400);
+    return c.json(errorBody("name (string) is required"), 400);
   }
 
   const now = new Date().toISOString();
@@ -65,13 +62,14 @@ characterRoutes.post("/:id/characters", async (c) => {
     updatedAt: now,
   };
 
+  // Framework-originated write: the API itself (not a plugin) emits this
+  // proposal, so `source` uses the reserved `"framework"` sentinel rather than
+  // a hard-coded plugin id (framework↔plugin isolation rule). `character.upsert`
+  // is session-scoped, so `source.pluginId` is never used for data isolation.
   const proposal: Proposal = {
     id: crypto.randomUUID(),
     type: "character.upsert",
-    source: {
-      pluginId: "framework-api",
-      runtimeId: "framework-api/characters",
-    },
+    source: frameworkProposalSource("characters"),
     turnId: `api-character-${crypto.randomUUID()}`,
     sessionId,
     payload: {
@@ -95,7 +93,7 @@ characterRoutes.post("/:id/characters", async (c) => {
   );
   const result = await pipeline.commit(proposal);
   if (!result.committed) {
-    return c.json({ error: result.error ?? "Failed to upsert character" }, 500);
+    return c.json(errorBody(result.error ?? "Failed to upsert character"), 500);
   }
 
   return c.json(record);

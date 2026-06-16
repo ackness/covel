@@ -1,3 +1,10 @@
+import {
+  compactRecord,
+  makeProposal,
+  normalizeRequiredString,
+  optionalString,
+  splitList,
+} from "@covel/plugin-handlers-utils";
 import { playerIdentityToCharacterUpsert } from "@covel/shared";
 import { shortId, withPendingProposals } from "@covel/tools";
 
@@ -144,36 +151,6 @@ function profileFromForm(form, sessionId) {
 /**
  * @param {unknown} value
  */
-function optionalString(value) {
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : undefined;
-}
-
-/**
- * @param {unknown} value
- */
-function splitList(value) {
-  if (typeof value !== "string") return [];
-  return value
-    .split(/[,，\n]/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, 32);
-}
-
-/**
- * @param {Record<string, unknown>} value
- */
-function compactRecord(value) {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined),
-  );
-}
-
-/**
- * @param {unknown} value
- */
 function normalizeProfile(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("manualPayload.profile must be an object");
@@ -205,13 +182,6 @@ function normalizeProfile(value) {
   return profile;
 }
 
-function normalizeRequiredString(value, field) {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${field} must be a non-empty string`);
-  }
-  return value.trim();
-}
-
 async function findExistingPlayer(store, sessionId) {
   if (!store || typeof store !== "object") return undefined;
   const s = /** @type {any} */ (store);
@@ -235,20 +205,5 @@ async function findExistingPlayer(store, sessionId) {
     version: typeof player.version === "number" ? player.version : 1,
     createdAt:
       typeof player.createdAt === "string" ? player.createdAt : undefined,
-  };
-}
-
-function makeProposal(ctx, now, type, payload) {
-  return {
-    id: crypto.randomUUID(),
-    type,
-    source: {
-      pluginId: ctx.pluginId,
-      runtimeId: ctx.runtimeId ?? ctx.pluginId,
-    },
-    turnId: ctx.turnId,
-    sessionId: ctx.sessionId,
-    payload,
-    timestamp: now,
   };
 }

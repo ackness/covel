@@ -17,6 +17,7 @@ import type { LLMAdapter } from "@covel/runtime";
 import type { DataStore, WorldRecord } from "@covel/store";
 import { rateLimiter, singleFlight } from "../../middleware/rate-limit.js";
 import { loadSingleWorld } from "../../world-seed-loader.js";
+import { errorBody } from "../../api-error.js";
 
 type Env = {
   Variables: {
@@ -107,18 +108,17 @@ aiRoutes.post(
 
     const concept = body.concept ?? body.prompt;
     if (typeof concept !== "string" || !concept.trim()) {
-      return c.json({ error: "concept (string) is required" }, 400);
+      return c.json(errorBody("concept (string) is required"), 400);
     }
     if (concept.length > 4000) {
-      return c.json({ error: "concept must be 4000 characters or fewer" }, 400);
+      return c.json(errorBody("concept must be 4000 characters or fewer"), 400);
     }
     const saveTarget = resolveSaveTarget(body.saveTarget);
     if (!saveTarget) {
       return c.json(
-        {
-          error:
-            'saveTarget must be "server-file", "server-store", or "return-only"',
-        },
+        errorBody(
+          'saveTarget must be "server-file", "server-store", or "return-only"',
+        ),
         400,
       );
     }

@@ -1,0 +1,125 @@
+/**
+ * Snapshot and suspension record types (S4-T2 / S4-T4).
+ *
+ * Split out of `../types.ts` by domain; re-exported there for compatibility.
+ */
+
+import type { CharacterRecord, StateEntryRecord } from "./state-records.js";
+import type {
+  LorebookEntryRecord,
+  WorkingMemoryRecord,
+} from "./memory-records.js";
+import type { PluginDataRecord } from "./plugin-records.js";
+
+/**
+ * Materialized state snapshot (S4-T2, §A6).
+ *
+ * Each record captures the full session state at the end of a given turn as a
+ * serialized payload. Snapshots power save / load / fork — every new session
+ * created via `POST /fork` is rebuilt from a snapshot payload.
+ *
+ * `kind`:
+ *  - `auto`   — created at turn commit.
+ *  - `manual` — created explicitly via `POST /api/sessions/:id/snapshot`.
+ *  - `fork`   — created when a fork rebuilds a new session; `parentId`
+ *               points at the origin snapshot.
+ *
+ * `payload.schemaVersion` allows future migrations without requiring a DB
+ * schema change — the envelope stays stable while the payload can evolve.
+ */
+export type SnapshotKind = "auto" | "manual" | "fork";
+
+export interface SnapshotPayload {
+  readonly schemaVersion: 1;
+  readonly turnId: string;
+  readonly characters: readonly CharacterRecord[];
+  readonly stateEntries: readonly StateEntryRecord[];
+  readonly pluginData: readonly PluginDataRecord[];
+  readonly workingMemory: readonly WorkingMemoryRecord[];
+  /**
+   * Session-scoped lorebook entries (S3-T2). Captured from the
+   * `lorebook_entries` table at snapshot time so forks can rehydrate the
+   * session-layer lorebook without re-running world-init plugins.
+   */
+  readonly lorebookEntries: readonly LorebookEntryRecord[];
+  /**
+   * Unresolved suspensions at snapshot time (audit 2026-04-20 finding 7.3).
+   *
+   * Only suspensions whose `resolvedAt` is unset are captured — resolved or
+   * claimed-but-still-executing records are excluded because the target
+   * runtime is either done or in-flight and the child session has no way to
+   * take over mid-flight. Each suspension travels with its full
+   * `pendingContinuation` so the forked session can POST /resume using the
+   * copied id.
+   *
+   * The fork route regenerates each suspension's id and rebinds
+   * `sessionId = childSessionId` before persisting, so the original parent
+   * record is preserved.
+   */
+  readonly suspensions: readonly SuspensionRecord[];
+  /**
+   * Last `turn_messages.id` persisted for this session at snapshot time.
+   * Used by fork to bound how many messages are copied.
+   * Empty string when there are no messages yet.
+   */
+  readonly messagesCursor: string;
+}
+
+export interface SnapshotRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly kind: SnapshotKind;
+  readonly parentId?: string;
+  readonly payload: SnapshotPayload;
+  readonly createdAt: string;
+}
+
+// ── Suspensions (S4-T4) ──────────────────────────────────────────
+
+/**
+ * Persisted state for a suspended runtime (S4-T4 suspend/resume primitive).
+ *
+ * When an agent runtime calls the `suspend` builtin tool, the turn-executor
+ * captures the current LLM message array and tool-call history, writes a
+ * SuspensionRecord, and returns `status: 'suspended'`.
+ *
+ * On `POST /api/sessions/:id/resume { suspensionId, data }`, the resume
+ * handler loads this record, reconstructs the message array, appends a
+ * synthetic message carrying `data`, and re-enters the LLM tool loop.
+ *
+ * NOTE: Provider API keys are NEVER stored here — they must be supplied
+ * again via the `X-Provider-Keys` header on the resume request.
+ */
+export interface SuspensionRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly runtimeId: string;
+  readonly pluginId: string;
+  readonly reason: string;
+  /** Plain JSON schema object { type, properties, required }. Not a live Zod schema. */
+  readonly resumeSchema: unknown;
+  readonly pendingContinuation: {
+    /** Full LLMMessage[] up to the suspend point. */
+    readonly messages: readonly unknown[];
+    /** If the LLM produced narrative text alongside the suspend tool call. */
+    readonly partialContent?: string;
+    /** ToolCallRecord[] accumulated before the suspend point. */
+    readonly toolCallsSoFar: readonly unknown[];
+    /**
+     * Proposals buffered mid-turn at the suspend point.
+     *
+     * Agent tools can queue proposal-backed writes before the runtime
+     * decides to suspend. Resume re-hydrates this array so the buffered
+     * proposals survive the suspend boundary and commit together with the
+     * final runtime output.
+     */
+    readonly pendingProposals: readonly unknown[];
+    /** tool_call_id of the suspend tool call (agent runtime only). Used to append synthetic tool result. */
+    readonly suspendToolCallId?: string;
+  };
+  readonly createdAt: string;
+  /** Set to ISO timestamp when resume completes successfully. */
+  readonly resolvedAt?: string;
+}
