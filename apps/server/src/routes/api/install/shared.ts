@@ -20,6 +20,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import yauzl, { type Entry, type ZipFile } from "yauzl";
+import { errorBody } from "../../../api-error.js";
 
 // ── Limits (defensive against zip bombs) ────────────────────────
 
@@ -59,9 +60,9 @@ export function errorResponse(err: unknown): {
 } {
   if (err instanceof Error) {
     const httpStatus = (err as Error & { httpStatus?: number }).httpStatus;
-    return { status: httpStatus ?? 400, body: { error: err.message } };
+    return { status: httpStatus ?? 400, body: errorBody(err.message) };
   }
-  return { status: 500, body: { error: "unknown error" } };
+  return { status: 500, body: errorBody("unknown error") };
 }
 
 // ── Helpers ─────────────────────────────────────────────────────

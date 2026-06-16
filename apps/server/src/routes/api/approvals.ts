@@ -21,6 +21,7 @@
 import { Hono } from "hono";
 import type { RpcApprovalGate } from "@covel/approval";
 import type { RpcApprovalDecision } from "@covel/shared";
+import { errorBody } from "../../api-error.js";
 
 type Env = {
   Variables: {
@@ -56,11 +57,11 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
   try {
     body = await c.req.json<DecisionBody>();
   } catch {
-    return c.json({ error: "invalid JSON body" }, 400);
+    return c.json(errorBody("invalid JSON body"), 400);
   }
 
   if (body.decision !== "allow" && body.decision !== "deny") {
-    return c.json({ error: 'decision must be "allow" or "deny"' }, 400);
+    return c.json(errorBody('decision must be "allow" or "deny"'), 400);
   }
 
   if (
@@ -70,7 +71,7 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
     body.scope !== "session"
   ) {
     return c.json(
-      { error: 'scope must be "once" or "session" when allowing' },
+      errorBody('scope must be "once" or "session" when allowing'),
       400,
     );
   }
@@ -84,7 +85,7 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
 
   const result = gate.decide(decision);
   if (!result.ok) {
-    return c.json({ error: result.error }, 404);
+    return c.json(errorBody(result.error), 404);
   }
 
   // After an `allow` decision, eagerly activate the plugin's local tools so

@@ -1,6 +1,6 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { readRuntimeEnv } from "@covel/shared";
-import { apiError } from "../api-error.js";
+import { errorBody } from "../api-error.js";
 
 function bearerToken(c: Context): string | undefined {
   const header = c.req.header("authorization") ?? "";
@@ -18,10 +18,9 @@ export function makeDesktopRestTokenGuard(): MiddlewareHandler {
     const provided = bearerToken(c);
     if (!provided || provided !== expected) {
       return c.json(
-        apiError(
-          "desktop_rest_token_invalid",
-          "Desktop REST token missing or invalid",
-        ),
+        errorBody("Desktop REST token missing or invalid", {
+          code: "desktop_rest_token_invalid",
+        }),
         401,
       );
     }
@@ -43,10 +42,9 @@ export function makeInstallApiGuard(): MiddlewareHandler {
       const provided = bearerToken(c);
       if (!provided || provided !== env.desktopRestToken) {
         return c.json(
-          apiError(
-            "desktop_rest_token_invalid",
-            "Desktop REST token missing or invalid",
-          ),
+          errorBody("Desktop REST token missing or invalid", {
+            code: "desktop_rest_token_invalid",
+          }),
           401,
         );
       }
@@ -55,10 +53,9 @@ export function makeInstallApiGuard(): MiddlewareHandler {
 
     if (env.nodeEnv === "production" && !env.installApiEnabled) {
       return c.json(
-        apiError(
-          "install_api_disabled",
-          "Install API is disabled in production",
-        ),
+        errorBody("Install API is disabled in production", {
+          code: "install_api_disabled",
+        }),
         403,
       );
     }

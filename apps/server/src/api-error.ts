@@ -10,32 +10,16 @@
  *               behaviour on a code should always set it).
  * - `details` — structured diagnostics (optional; e.g. Zod validation errors).
  *
- * Builders:
- * - {@link apiError}      — `(code, message)` → `{ error, code }`. The original
- *                           helper, used by config / auth / rate-limit routes
- *                           that always pin a code. Kept for back-compat.
+ * Builder:
  * - {@link errorBody}     — `(message, { code?, details? })` → flexible envelope
- *                           for the common `{ error }` / `{ error, details }`
- *                           cases that previously used ad-hoc object literals.
+ *                           covering the common `{ error }` / `{ error, code }` /
+ *                           `{ error, details }` cases. The single factory all
+ *                           JSON error responses converge on.
  */
 export interface ApiErrorResponse<Code extends string = string> {
   readonly error: string;
   readonly code?: Code;
   readonly details?: unknown;
-}
-
-/** @deprecated Prefer {@link ApiErrorResponse}. */
-export type ApiErrorBody<Code extends string = string> = ApiErrorResponse<Code>;
-
-/**
- * Build `{ error, code }`. Original signature — `code` first — preserved so the
- * existing config / auth / rate-limit call sites keep working unchanged.
- */
-export function apiError<Code extends string>(
-  code: Code,
-  message: string,
-): ApiErrorResponse<Code> {
-  return { error: message, code };
 }
 
 /**

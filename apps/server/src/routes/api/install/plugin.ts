@@ -11,6 +11,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { Hono } from "hono";
 import matter from "gray-matter";
+import { errorBody } from "../../../api-error.js";
 import {
   readRuntimeEnv,
   validatePluginManifest,
@@ -160,7 +161,7 @@ pluginInstallRoutes.post("/plugin", async (c) => {
     const form = await c.req.formData();
     const file = form.get("file");
     if (!isBlobLike(file)) {
-      return c.json({ error: 'multipart field "file" is required' }, 400);
+      return c.json(errorBody('multipart field "file" is required'), 400);
     }
 
     const buffer = await collectUpload(file);

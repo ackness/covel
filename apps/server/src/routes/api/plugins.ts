@@ -11,6 +11,7 @@
 import { Hono } from "hono";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { buildPluginContract, summarizePluginManifests } from "./discovery.js";
+import { errorBody } from "../../api-error.js";
 
 type Env = {
   Variables: {
@@ -50,7 +51,7 @@ pluginRoutes.get("/:id/contract", async (c) => {
   const id = c.req.param("id");
   const entry = registry.get(id);
   if (!entry) {
-    return c.json({ error: `Plugin "${id}" not found` }, 404);
+    return c.json(errorBody(`Plugin "${id}" not found`), 404);
   }
   return c.json(buildPluginContract(entry));
 });
@@ -61,7 +62,7 @@ pluginRoutes.get("/:id", async (c) => {
   const id = c.req.param("id");
   const entry = registry.get(id);
   if (!entry) {
-    return c.json({ error: `Plugin "${id}" not found` }, 404);
+    return c.json(errorBody(`Plugin "${id}" not found`), 404);
   }
   const { capabilities, tags, relations, outputKind } =
     summarizePluginManifests(entry);

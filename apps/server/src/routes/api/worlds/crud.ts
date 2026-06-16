@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import type { WorldRecord } from "@covel/store";
+import { errorBody } from "../../../api-error.js";
 import { resolveContainedPath } from "../../../world-data/safe-path.js";
 import { type WorldEnv, resolveWorldMetadata } from "./shared.js";
 
@@ -24,7 +25,7 @@ worldCrudRoutes.get("/:id", async (c) => {
   const id = c.req.param("id");
   const world = await store.getWorld(id);
   if (!world) {
-    return c.json({ error: "World not found" }, 404);
+    return c.json(errorBody("World not found"), 404);
   }
   return c.json(world);
 });
@@ -35,10 +36,10 @@ worldCrudRoutes.post("/", async (c) => {
   const body = await c.req.json<Record<string, unknown>>();
 
   if (!body.id || typeof body.id !== "string") {
-    return c.json({ error: "id (string) is required" }, 400);
+    return c.json(errorBody("id (string) is required"), 400);
   }
   if (!body.name || typeof body.name !== "string") {
-    return c.json({ error: "name (string) is required" }, 400);
+    return c.json(errorBody("name (string) is required"), 400);
   }
 
   const now = new Date().toISOString();
@@ -68,7 +69,7 @@ worldCrudRoutes.patch("/:id", async (c) => {
   const id = c.req.param("id");
   const existing = await store.getWorld(id);
   if (!existing) {
-    return c.json({ error: "World not found" }, 404);
+    return c.json(errorBody("World not found"), 404);
   }
 
   const body = await c.req.json<Record<string, unknown>>();
@@ -102,11 +103,11 @@ worldCrudRoutes.delete("/:id", async (c) => {
   const id = c.req.param("id");
   const world = await store.getWorld(id);
   if (!world) {
-    return c.json({ error: "World not found" }, 404);
+    return c.json(errorBody("World not found"), 404);
   }
   const meta = world.metadata as Record<string, unknown> | undefined;
   if (meta?.source === "file") {
-    return c.json({ error: "Built-in worlds cannot be deleted" }, 403);
+    return c.json(errorBody("Built-in worlds cannot be deleted"), 403);
   }
   if (meta?.source === "generated-file") {
     const worldsDirs = c.get("worldsDirs") ?? [];

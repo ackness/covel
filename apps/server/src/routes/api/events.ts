@@ -9,6 +9,7 @@ import type { EventBus } from "@covel/events";
 import type { DataStore } from "@covel/store";
 import type { CovelMessage } from "@covel/shared";
 import { isEnvTruthy, readRuntimeEnv } from "@covel/shared";
+import { errorBody } from "../../api-error.js";
 
 type Env = {
   Variables: {
@@ -25,7 +26,7 @@ eventRoutes.post("/emit", async (c) => {
   const debugEnabled = isEnvTruthy("ENABLE_DEBUG_PAGE");
   const isProduction = readRuntimeEnv().nodeEnv === "production";
   if (isProduction && !debugEnabled) {
-    return c.json({ error: "Event injection is disabled in production" }, 403);
+    return c.json(errorBody("Event injection is disabled in production"), 403);
   }
 
   const eventBus = c.get("eventBus");
@@ -37,7 +38,7 @@ eventRoutes.post("/emit", async (c) => {
   }>();
 
   if (!body.topic || !body.sessionId) {
-    return c.json({ error: "topic and sessionId are required" }, 400);
+    return c.json(errorBody("topic and sessionId are required"), 400);
   }
 
   const message: CovelMessage = {

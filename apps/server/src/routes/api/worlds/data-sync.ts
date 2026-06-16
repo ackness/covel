@@ -8,6 +8,7 @@
  */
 
 import { Hono } from "hono";
+import { errorBody } from "../../../api-error.js";
 import {
   syncWorldDataForSession,
   preflightWorldDataForSession,
@@ -34,10 +35,10 @@ worldDataSyncRoutes.post("/:id/world-data/preflight", async (c) => {
       ? await store.getSession(body.sessionId)
       : null;
   if (typeof body.sessionId === "string" && !session) {
-    return c.json({ error: "Session not found" }, 404);
+    return c.json(errorBody("Session not found"), 404);
   }
   if (session && session.worldId !== worldId) {
-    return c.json({ error: "Session world mismatch" }, 400);
+    return c.json(errorBody("Session world mismatch"), 400);
   }
   const plugins = Array.isArray(body.plugins)
     ? body.plugins.filter(
@@ -74,14 +75,14 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
     .catch(() => ({}));
   const sessionId = body.sessionId;
   if (typeof sessionId !== "string") {
-    return c.json({ error: "sessionId (string) is required" }, 400);
+    return c.json(errorBody("sessionId (string) is required"), 400);
   }
   const session = await store.getSession(sessionId);
   if (!session) {
-    return c.json({ error: "Session not found" }, 404);
+    return c.json(errorBody("Session not found"), 404);
   }
   if (session.worldId !== worldId) {
-    return c.json({ error: "Session world mismatch" }, 400);
+    return c.json(errorBody("Session world mismatch"), 400);
   }
 
   const result = await syncWorldDataForSession({
@@ -123,17 +124,17 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
   const body = await c.req.json<Record<string, unknown>>();
   const sessionId = body.sessionId;
   if (typeof sessionId !== "string") {
-    return c.json({ error: "sessionId (string) is required" }, 400);
+    return c.json(errorBody("sessionId (string) is required"), 400);
   }
 
   const world = await store.getWorld(id);
   if (!world) {
-    return c.json({ error: "World not found" }, 404);
+    return c.json(errorBody("World not found"), 404);
   }
 
   const session = await store.getSession(sessionId);
   if (!session || session.worldId !== id) {
-    return c.json({ error: "Session not found or world mismatch" }, 404);
+    return c.json(errorBody("Session not found or world mismatch"), 404);
   }
 
   // Discover world-data-provider plugin by capability (not hardcoded ID)
@@ -143,7 +144,7 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
   );
   if (!worldDataPluginId) {
     return c.json(
-      { error: "No world-data-provider plugin active in session" },
+      errorBody("No world-data-provider plugin active in session"),
       422,
     );
   }
@@ -152,7 +153,7 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
   const dimensions = (meta?.dimensions ?? {}) as Record<string, unknown>;
 
   if (Object.keys(dimensions).length === 0) {
-    return c.json({ error: "World has no dimensions to sync" }, 422);
+    return c.json(errorBody("World has no dimensions to sync"), 422);
   }
 
   const now = new Date().toISOString();

@@ -13,6 +13,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
 import { resolveSessionParam } from "./session/session-guard.js";
+import { errorBody } from "../../api-error.js";
 
 type Env = {
   Variables: {
@@ -73,16 +74,16 @@ workingMemoryRoutes.put("/:id/working-memory/:scope/:key", async (c) => {
   const scope = c.req.param("scope");
   if (!VALID_SCOPES.has(scope)) {
     return c.json(
-      {
-        error: `Invalid scope "${scope}". Must be one of: player, story, shared`,
-      },
+      errorBody(
+        `Invalid scope "${scope}". Must be one of: player, story, shared`,
+      ),
       400,
     );
   }
 
   const key = c.req.param("key");
   if (!key) {
-    return c.json({ error: "Key must not be empty" }, 400);
+    return c.json(errorBody("Key must not be empty"), 400);
   }
 
   const raw = await c.req.json<unknown>();
@@ -92,11 +93,11 @@ workingMemoryRoutes.put("/:id/working-memory/:scope/:key", async (c) => {
   });
   const parsed = bodySchema.safeParse(raw);
   if (!parsed.success) {
-    return c.json({ error: "Invalid body: value field is required" }, 400);
+    return c.json(errorBody("Invalid body: value field is required"), 400);
   }
 
   if (parsed.data.value === undefined) {
-    return c.json({ error: "value must not be undefined" }, 400);
+    return c.json(errorBody("value must not be undefined"), 400);
   }
 
   const now = new Date().toISOString();
@@ -123,9 +124,9 @@ workingMemoryRoutes.delete("/:id/working-memory/:scope/:key", async (c) => {
   const scope = c.req.param("scope");
   if (!VALID_SCOPES.has(scope)) {
     return c.json(
-      {
-        error: `Invalid scope "${scope}". Must be one of: player, story, shared`,
-      },
+      errorBody(
+        `Invalid scope "${scope}". Must be one of: player, story, shared`,
+      ),
       400,
     );
   }

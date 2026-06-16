@@ -18,6 +18,7 @@ import {
 } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
 import type { CompactorRunner } from "@covel/context";
+import { errorBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
 import { syncSessionTurnCount } from "./turn-count.js";
@@ -125,12 +126,12 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     "retry_runtime",
   ];
   if (!SUPPORTED_ACTIONS.includes(type)) {
-    return c.json({ error: `Unsupported action type: ${type}` }, 400);
+    return c.json(errorBody(`Unsupported action type: ${type}`), 400);
   }
 
   const session = await store.getSession(sessionId);
   if (!session) {
-    return c.json({ error: "Session not found" }, 404);
+    return c.json(errorBody("Session not found"), 404);
   }
 
   // Lazy-lock the session's embedding model once per process boot.

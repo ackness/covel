@@ -32,6 +32,7 @@ import {
   verifyMediaToken,
 } from "../../middleware/media-token.js";
 import { singleFlight } from "../../middleware/rate-limit.js";
+import { errorBody } from "../../api-error.js";
 
 /**
  * Module augmentation so `c.get('mediaStore')` / `c.set('mediaStore', ...)`
@@ -58,11 +59,6 @@ export const mediaRoutes = new Hono();
  */
 const STREAM_THRESHOLD_BYTES = 1 * 1024 * 1024;
 
-interface ErrorBody {
-  readonly error: string;
-  readonly code: string;
-}
-
 type ErrorCode =
   | "invalid_request"
   | "invalid_token"
@@ -79,8 +75,7 @@ function jsonError(
   message: string,
   status: ErrorStatus,
 ): Response {
-  const body: ErrorBody = { error: message, code };
-  return new Response(JSON.stringify(body), {
+  return new Response(JSON.stringify(errorBody(message, { code })), {
     status,
     headers: { "content-type": "application/json; charset=utf-8" },
   });

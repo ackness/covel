@@ -9,6 +9,7 @@ import { streamSSE } from "hono/streaming";
 import type { EventBus } from "@covel/events";
 import type { DataStore } from "@covel/store";
 import type { SubscriptionTopic } from "@covel/shared";
+import { errorBody } from "../../api-error.js";
 
 type Env = {
   Variables: {
@@ -45,10 +46,10 @@ subscribeRoutes.get("/stream", async (c) => {
   const eventBus = c.get("eventBus");
 
   const sessionId = c.req.query("sessionId");
-  if (!sessionId) return c.json({ error: "sessionId required" }, 400);
+  if (!sessionId) return c.json(errorBody("sessionId required"), 400);
 
   const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  if (!session) return c.json(errorBody("Session not found"), 404);
 
   const topicsParam = c.req.query("topics");
   // M2: Validate topics parameter against known SubscriptionTopic values
@@ -65,7 +66,7 @@ subscribeRoutes.get("/stream", async (c) => {
     const parsed = topicsParam.split(",").map((t) => t.trim());
     const invalid = parsed.filter((t) => !VALID_TOPICS.has(t));
     if (invalid.length > 0) {
-      return c.json({ error: `Invalid topics: ${invalid.join(", ")}` }, 400);
+      return c.json(errorBody(`Invalid topics: ${invalid.join(", ")}`), 400);
     }
   }
   const topics = topicsParam

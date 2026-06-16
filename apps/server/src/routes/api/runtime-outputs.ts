@@ -18,6 +18,7 @@
 import { Hono } from "hono";
 import type { DataStore } from "@covel/store";
 import { resolveSessionParam } from "./session/session-guard.js";
+import { errorBody } from "../../api-error.js";
 
 type Env = {
   Variables: {
@@ -69,7 +70,7 @@ runtimeOutputRoutes.get("/:id/runtime-outputs/:outputId", async (c) => {
 
   const record = await store.getRuntimeOutput(sessionId, outputId);
   if (!record) {
-    return c.json({ error: `Runtime output not found: ${outputId}` }, 404);
+    return c.json(errorBody(`Runtime output not found: ${outputId}`), 404);
   }
   return c.json(record);
 });
@@ -97,7 +98,7 @@ runtimeOutputRoutes.get(
 
     const record = await store.getRuntimeOutput(sessionId, outputId);
     if (!record) {
-      return c.json({ error: `Runtime output not found: ${outputId}` }, 404);
+      return c.json(errorBody(`Runtime output not found: ${outputId}`), 404);
     }
 
     const turnMessages = await store.listTurnMessages(sessionId);

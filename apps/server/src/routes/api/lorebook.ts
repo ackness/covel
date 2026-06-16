@@ -14,6 +14,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
 import { resolveSessionParam } from "./session/session-guard.js";
+import { errorBody } from "../../api-error.js";
 
 type Env = {
   Variables: {
@@ -62,7 +63,7 @@ lorebookRoutes.post("/:id/lorebook", async (c) => {
   const raw = await c.req.json<unknown>().catch(() => null);
   const parsed = entryBodySchema.safeParse(raw);
   if (!parsed.success) {
-    return c.json({ error: "Invalid lorebook entry body" }, 400);
+    return c.json(errorBody("Invalid lorebook entry body"), 400);
   }
 
   const now = new Date().toISOString();
@@ -85,7 +86,7 @@ lorebookRoutes.put("/:id/lorebook/:entryId", async (c) => {
     id: entryId,
   });
   if (!parsed.success) {
-    return c.json({ error: "Invalid lorebook entry body" }, 400);
+    return c.json(errorBody("Invalid lorebook entry body"), 400);
   }
 
   const existing = (await store.listSessionLorebookEntries(sessionId)).find(
@@ -118,7 +119,7 @@ lorebookRoutes.patch("/:id/lorebook/:entryId", async (c) => {
   const parsed = bodySchema.safeParse(raw);
   if (!parsed.success) {
     return c.json(
-      { error: "Invalid body: expected { enabled: boolean }" },
+      errorBody("Invalid body: expected { enabled: boolean }"),
       400,
     );
   }
@@ -127,7 +128,7 @@ lorebookRoutes.patch("/:id/lorebook/:entryId", async (c) => {
     (e) => e.id === entryId,
   );
   if (!existing) {
-    return c.json({ error: "Lorebook entry not found" }, 404);
+    return c.json(errorBody("Lorebook entry not found"), 404);
   }
 
   const now = new Date().toISOString();
@@ -154,7 +155,7 @@ lorebookRoutes.delete("/:id/lorebook/:entryId", async (c) => {
     (e) => e.id === entryId,
   );
   if (!existing) {
-    return c.json({ error: "Lorebook entry not found" }, 404);
+    return c.json(errorBody("Lorebook entry not found"), 404);
   }
 
   await store.deleteLorebookEntry(sessionId, entryId);

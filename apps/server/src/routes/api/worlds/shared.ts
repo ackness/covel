@@ -8,6 +8,7 @@ import { validateDimensions } from "@covel/shared";
 import type { DataStore, MediaStore } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type { PluginRegistry } from "@covel/plugin-loader";
+import { errorBody, type ApiErrorResponse } from "../../../api-error.js";
 
 export type WorldEnv = {
   Variables: {
@@ -40,7 +41,7 @@ export function resolveWorldMetadata(
 ): {
   metadata?: Record<string, unknown>;
   changedDimensionKeys?: readonly string[];
-  error?: { status: 400 | 422; body: Record<string, unknown> };
+  error?: { status: 400 | 422; body: ApiErrorResponse };
 } {
   const hasMetadataPatch = Object.prototype.hasOwnProperty.call(
     body,
@@ -54,7 +55,7 @@ export function resolveWorldMetadata(
     return {
       error: {
         status: 400,
-        body: { error: "metadata must be an object when provided" },
+        body: errorBody("metadata must be an object when provided"),
       },
     };
   }
@@ -78,7 +79,7 @@ export function resolveWorldMetadata(
     return {
       error: {
         status: 400,
-        body: { error: "dimensions must be an object when provided" },
+        body: errorBody("dimensions must be an object when provided"),
       },
     };
   }
@@ -94,7 +95,7 @@ export function resolveWorldMetadata(
       return {
         error: {
           status: 422,
-          body: { error: "Invalid dimensions", details: validation.errors },
+          body: errorBody("Invalid dimensions", { details: validation.errors }),
         },
       };
     }

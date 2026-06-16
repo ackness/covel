@@ -29,6 +29,7 @@ import {
   createInProcessSessionLock,
   type SessionLock,
 } from "../../lib/session-lock.js";
+import { errorBody } from "../../api-error.js";
 import { sessionRoutes } from "./session.js";
 import { turnRoutes } from "./turn.js";
 import { pluginRoutes } from "./plugins.js";
@@ -346,10 +347,9 @@ export async function bootstrapApi(
   app.onError((err, c) => {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[api] Route error:`, err);
-    return c.json(
-      { error: isDev ? message : "Internal server error" },
-      { status: 500 },
-    );
+    return c.json(errorBody(isDev ? message : "Internal server error"), {
+      status: 500,
+    });
   });
 
   app.use("*", async (c, next) => {
