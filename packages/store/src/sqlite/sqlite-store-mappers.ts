@@ -1,443 +1,189 @@
 /**
  * SQLite row→record mappers and compatibility exports.
+ *
+ * The actual mapping logic lives in the backend-agnostic
+ * `../common/mappers.ts`; this module is only the SQLite serialization
+ * gateway. SQLite stores JSON columns as text, so the canonical mappers are
+ * bound to {@link sqliteJsonReader} which parses them. Each export keeps its
+ * historical single-argument `(row)` signature.
+ *
+ * Suspensions and snapshots are persisted via raw SQL (not drizzle), so they
+ * arrive as snake_case rows and get adapted to the canonical camelCase shape
+ * before mapping.
  */
 
-import type { SessionStatus } from "@covel/shared";
-import * as schema from "./schema.js";
+import { sqliteJsonReader } from "../common/json-readers.js";
+import * as canonical from "../common/mappers.js";
 import type {
-  SessionRecord,
-  TurnResultRecord,
-  RuntimeResultRecord,
-  ToolCallRecordRow,
-  StateSchemaRecord,
-  StateEntryRecord,
-  StateChangeRecord,
-  EventRecord,
   ApprovalRecord,
-  MessageRecord,
   CharacterRecord,
-  PluginDataRecord,
-  PluginConfigRecord,
-  WorldRecord,
-  TraceEventRecord,
-  RuntimeOutputRecord,
+  EventRecord,
   InteractionRecordRow,
-  TurnMessageRecord,
+  LorebookEntryRecord,
+  MessageRecord,
   PlayerInputRecord,
+  PluginConfigRecord,
+  PluginDataRecord,
+  RuntimeOutputRecord,
+  RuntimeResultRecord,
+  SessionRecord,
+  SessionSummaryRecord,
+  SnapshotRecord,
+  StateChangeRecord,
+  StateEntryRecord,
+  StateSchemaRecord,
+  SuspensionRecord,
+  ToolCallRecordRow,
+  TraceEventRecord,
+  TurnMessageRecord,
+  TurnResultRecord,
   WorkingMemoryRecord,
   WorldDataImportLedgerRecord,
-  LorebookEntryRecord,
-  SessionSummaryRecord,
-  SuspensionRecord,
-  SnapshotRecord,
-  SnapshotKind,
-  SnapshotPayload,
+  WorldRecord,
 } from "../types.js";
+import type * as schema from "./schema.js";
 
-import { fromJson, fromJsonRequired } from "./sqlite-json.js";
 export { toJson, fromJson, fromJsonRequired } from "./sqlite-json.js";
 export { createTables } from "./sqlite-schema-ddl.js";
 
-// ── Row → Record mappers ────────────────────────────────────────
+// ── Row → Record mappers (SQLite gateway, JSON columns are text) ──
 
 export function toSessionRecord(
   row: typeof schema.sessions.$inferSelect,
 ): SessionRecord {
-  return {
-    id: row.id,
-    worldId: row.worldId ?? undefined,
-    status: (row.status ?? "active") as SessionStatus,
-    turnCount: row.turnCount,
-    preGameCompleted: row.preGameCompleted
-      ? JSON.parse(row.preGameCompleted)
-      : [],
-    locale: row.locale,
-    activePlugins: row.activePlugins ? JSON.parse(row.activePlugins) : [],
-    ...(() => {
-      const metadata = fromJson(row.metadata) as
-        | Record<string, unknown>
-        | undefined;
-      return {
-        metadata,
-        ...(typeof metadata?.presetId === "string"
-          ? { presetId: metadata.presetId }
-          : {}),
-      };
-    })(),
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    ...(row.embeddingModelId != null
-      ? { embeddingModelId: row.embeddingModelId }
-      : {}),
-    ...(row.embeddingLockedAt != null
-      ? { embeddingLockedAt: row.embeddingLockedAt }
-      : {}),
-    ...(() => {
-      if (!row.runtimeModelOverrides) return {};
-      const parsed = JSON.parse(row.runtimeModelOverrides) as Record<
-        string,
-        string
-      >;
-      return Object.keys(parsed).length > 0
-        ? { runtimeModelOverrides: parsed as Readonly<Record<string, string>> }
-        : {};
-    })(),
-  };
+  return canonical.toSessionRecord(row, sqliteJsonReader);
 }
 
 export function toWorldRecord(
   row: typeof schema.worlds.$inferSelect,
 ): WorldRecord {
-  const metadata = fromJson(row.metadata) as
-    | Record<string, unknown>
-    | undefined;
-  return {
-    id: row.id,
-    name: row.name,
-    description: row.description,
-    lore: row.lore ?? undefined,
-    tags: fromJson(row.tags) as string[] | undefined,
-    locale: row.locale ?? undefined,
-    metadata,
-    dimensions: metadata?.dimensions as WorldRecord["dimensions"],
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt ?? undefined,
-  };
+  return canonical.toWorldRecord(row, sqliteJsonReader);
 }
 
 export function toTurnResultRecord(
   row: typeof schema.turnResults.$inferSelect,
 ): TurnResultRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    turnId: row.turnId,
-    runtimeResults: fromJsonRequired(row.runtimeResults),
-    conflicts: fromJson(row.conflicts),
-    auditResult: fromJson(row.auditResult),
-    durationMs: row.durationMs,
-    createdAt: row.createdAt,
-  };
+  return canonical.toTurnResultRecord(row, sqliteJsonReader);
 }
 
 export function toRuntimeResultRecord(
   row: typeof schema.runtimeResults.$inferSelect,
 ): RuntimeResultRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    turnId: row.turnId,
-    pluginId: row.pluginId,
-    runtimeId: row.runtimeId,
-    status: row.status,
-    output: fromJson(row.output),
-    toolCalls: fromJson(row.toolCalls),
-    durationMs: row.durationMs,
-    tokenUsage: fromJson(row.tokenUsage),
-    error: row.error ?? undefined,
-    createdAt: row.createdAt,
-  };
+  return canonical.toRuntimeResultRecord(row, sqliteJsonReader);
 }
 
 export function toToolCallRecord(
   row: typeof schema.toolCalls.$inferSelect,
 ): ToolCallRecordRow {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    turnId: row.turnId,
-    toolName: row.toolName,
-    pluginId: row.pluginId,
-    runtimeId: row.runtimeId,
-    input: fromJson(row.input),
-    output: fromJson(row.output),
-    durationMs: row.durationMs,
-    approvalStatus: row.approvalStatus,
-    createdAt: row.createdAt,
-  };
+  return canonical.toToolCallRecord(row, sqliteJsonReader);
 }
 
 export function toStateSchemaRecord(
   row: typeof schema.stateSchemas.$inferSelect,
 ): StateSchemaRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    tableName: row.tableName,
-    schema: fromJsonRequired(row.schema),
-    createdAt: row.createdAt,
-  };
+  return canonical.toStateSchemaRecord(row, sqliteJsonReader);
 }
 
 export function toStateEntryRecord(
   row: typeof schema.stateEntries.$inferSelect,
 ): StateEntryRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    tableName: row.tableName,
-    fieldName: row.fieldName,
-    value: fromJson(row.value),
-    updatedAt: row.updatedAt,
-  };
+  return canonical.toStateEntryRecord(row, sqliteJsonReader);
 }
 
 export function toStateChangeRecord(
   row: typeof schema.stateChanges.$inferSelect,
 ): StateChangeRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    tableName: row.tableName,
-    fieldName: row.fieldName,
-    value: fromJson(row.value),
-    changedBy: row.changedBy,
-    turnId: row.turnId,
-    reason: row.reason ?? undefined,
-    createdAt: row.createdAt,
-  };
+  return canonical.toStateChangeRecord(row, sqliteJsonReader);
 }
 
 export function toEventRecord(
   row: typeof schema.events.$inferSelect,
 ): EventRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    type: row.type,
-    topic: row.topic,
-    payload: fromJson(row.payload),
-    targetRuntime: row.targetRuntime ?? undefined,
-    turnId: row.turnId ?? undefined,
-    createdAt: row.createdAt,
-  };
+  return canonical.toEventRecord(row, sqliteJsonReader);
 }
 
 export function toApprovalRecord(
   row: typeof schema.approvals.$inferSelect,
 ): ApprovalRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    toolName: row.toolName,
-    pluginId: row.pluginId,
-    decision: row.decision,
-    turnId: row.turnId,
-    createdAt: row.createdAt,
-  };
+  return canonical.toApprovalRecord(row);
 }
 
 export function toMessageRecord(
   row: typeof schema.messages.$inferSelect,
 ): MessageRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    role: row.role,
-    content: row.content,
-    metadata: fromJson(row.metadata),
-    createdAt: row.createdAt,
-  };
+  return canonical.toMessageRecord(row, sqliteJsonReader);
 }
 
 export function toCharacterRecord(
   row: typeof schema.characters.$inferSelect,
 ): CharacterRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    name: row.name,
-    type: row.type,
-    description: row.description ?? undefined,
-    fields: fromJson(row.fields),
-    version: row.version,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
+  return canonical.toCharacterRecord(row, sqliteJsonReader);
 }
 
 export function toPluginDataRecord(
   row: typeof schema.pluginData.$inferSelect,
 ): PluginDataRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    pluginId: row.pluginId,
-    namespace: row.namespace,
-    key: row.key,
-    value: fromJson(row.value),
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
+  return canonical.toPluginDataRecord(row, sqliteJsonReader);
 }
 
 export function toPluginConfigRecord(
   row: typeof schema.pluginConfigs.$inferSelect,
 ): PluginConfigRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    pluginId: row.pluginId,
-    config: fromJsonRequired(row.config),
-    updatedAt: row.updatedAt,
-  };
+  return canonical.toPluginConfigRecord(row, sqliteJsonReader);
 }
 
 export function toTraceEventRecord(
   row: typeof schema.traceEvents.$inferSelect,
 ): TraceEventRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    type: row.type,
-    traceId: row.traceId,
-    turnId: row.turnId,
-    payload: fromJson(row.payload),
-    createdAt: row.createdAt,
-  };
+  return canonical.toTraceEventRecord(row, sqliteJsonReader);
 }
 
 export function toRuntimeOutputRecord(
   row: typeof schema.runtimeOutputs.$inferSelect,
 ): RuntimeOutputRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    turnId: row.turnId,
-    runtimeResultId: row.runtimeResultId ?? undefined,
-    pluginId: row.pluginId,
-    runtimeId: row.runtimeId,
-    timestamp: row.timestamp,
-    results: fromJsonRequired(row.results),
-    metaData: fromJsonRequired(row.metaData),
-    createdAt: row.createdAt,
-  };
+  return canonical.toRuntimeOutputRecord(row, sqliteJsonReader);
 }
 
 export function toInteractionRecordRow(
   row: typeof schema.interactionRecords.$inferSelect,
 ): InteractionRecordRow {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    turnId: row.turnId ?? undefined,
-    timestamp: row.timestamp,
-    source: row.source,
-    channel: row.channel,
-    type: row.type,
-    targetPluginId: row.targetPluginId ?? undefined,
-    targetRuntimeId: row.targetRuntimeId ?? undefined,
-    payload: fromJsonRequired(row.payload),
-    metaData: fromJson(row.metaData),
-    createdAt: row.createdAt,
-  };
+  return canonical.toInteractionRecordRow(row, sqliteJsonReader);
 }
 
 export function toTurnMessageRecord(
   row: typeof schema.turnMessages.$inferSelect,
 ): TurnMessageRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    turnId: row.turnId,
-    sourceType: row.sourceType,
-    sourcePluginId: row.sourcePluginId ?? undefined,
-    sourceRuntimeId: row.sourceRuntimeId ?? undefined,
-    role: row.role,
-    name: row.name ?? undefined,
-    content: row.content,
-    ui: fromJson(row.ui),
-    pendingInput: fromJson(row.pendingInput),
-    order: row.order,
-    createdAt: row.createdAt,
-    compactedAtTurnId: row.compactedAtTurnId ?? undefined,
-  };
+  return canonical.toTurnMessageRecord(row, sqliteJsonReader);
 }
 
 export function toPlayerInputRecord(
   row: typeof schema.playerInputs.$inferSelect,
 ): PlayerInputRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    turnId: row.turnId,
-    formId: row.formId,
-    values: fromJsonRequired(row.values),
-    createdAt: row.createdAt,
-  };
+  return canonical.toPlayerInputRecord(row, sqliteJsonReader);
 }
 
 export function toWorkingMemoryRecord(
   row: typeof schema.workingMemory.$inferSelect,
 ): WorkingMemoryRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    key: row.key,
-    scope: row.scope as WorkingMemoryRecord["scope"],
-    value: fromJsonRequired(row.value),
-    schemaRef: row.schemaRef ?? undefined,
-    updatedAt: row.updatedAt,
-  };
+  return canonical.toWorkingMemoryRecord(row, sqliteJsonReader);
 }
 
 export function toWorldDataImportLedgerRecord(
   row: typeof schema.worldDataImportLedger.$inferSelect,
 ): WorldDataImportLedgerRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    target: row.target,
-    pluginId: row.pluginId ?? undefined,
-    namespace: row.namespace ?? undefined,
-    key: row.key ?? undefined,
-    sourceWorldId: row.sourceWorldId,
-    sourceId: row.sourceId,
-    sourceDigest: row.sourceDigest,
-    valueHash: row.valueHash,
-    schemaRef: row.schemaRef ?? undefined,
-    derivedFrom:
-      row.derivedFrom == null
-        ? undefined
-        : ((fromJsonRequired(row.derivedFrom) as string[] | null) ?? []),
-    importedAt: row.importedAt,
-    managed: row.managed !== 0,
-  };
+  return canonical.toWorldDataImportLedgerRecord(row, sqliteJsonReader);
 }
 
 export function toLorebookEntryRecord(
   row: typeof schema.lorebookEntries.$inferSelect,
 ): LorebookEntryRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    pluginId: row.pluginId,
-    keys: ((fromJsonRequired(row.keys) as string[] | null) ??
-      []) as readonly string[],
-    content: row.content,
-    strategy: row.strategy as LorebookEntryRecord["strategy"],
-    position: row.position,
-    insertionOrder: row.insertionOrder,
-    enabled: row.enabled !== 0,
-    extra: row.extra == null ? undefined : fromJsonRequired(row.extra),
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
+  return canonical.toLorebookEntryRecord(row, sqliteJsonReader);
 }
 
 export function toSessionSummaryRecord(
   row: typeof schema.sessionSummaries.$inferSelect,
 ): SessionSummaryRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    turnRangeStart: row.turnRangeStart,
-    turnRangeEnd: row.turnRangeEnd,
-    content: row.content,
-    focusSections:
-      (fromJsonRequired(row.focusSections) as string[] | null) ?? [],
-    createdAt: row.createdAt,
-  };
+  return canonical.toSessionSummaryRecord(row, sqliteJsonReader);
 }
 
 // ── Suspension row type (not in drizzle schema, raw sqlite) ─────
@@ -456,20 +202,21 @@ interface SuspensionRow {
 }
 
 export function toSuspensionRecord(row: SuspensionRow): SuspensionRecord {
-  return {
-    id: row.id,
-    sessionId: row.session_id,
-    turnId: row.turn_id,
-    runtimeId: row.runtime_id,
-    pluginId: row.plugin_id,
-    reason: row.reason,
-    resumeSchema: fromJsonRequired(row.resume_schema),
-    pendingContinuation: fromJsonRequired(
-      row.pending_continuation,
-    ) as SuspensionRecord["pendingContinuation"],
-    createdAt: row.created_at,
-    resolvedAt: row.resolved_at ?? undefined,
-  };
+  return canonical.toSuspensionRecord(
+    {
+      id: row.id,
+      sessionId: row.session_id,
+      turnId: row.turn_id,
+      runtimeId: row.runtime_id,
+      pluginId: row.plugin_id,
+      reason: row.reason,
+      resumeSchema: row.resume_schema,
+      pendingContinuation: row.pending_continuation,
+      createdAt: row.created_at,
+      resolvedAt: row.resolved_at,
+    },
+    sqliteJsonReader,
+  );
 }
 
 export type { SuspensionRow };
@@ -487,15 +234,18 @@ interface SnapshotRow {
 }
 
 export function toSnapshotRecord(row: SnapshotRow): SnapshotRecord {
-  return {
-    id: row.id,
-    sessionId: row.session_id,
-    turnId: row.turn_id,
-    kind: row.kind as SnapshotKind,
-    parentId: row.parent_id ?? undefined,
-    payload: fromJsonRequired(row.payload) as SnapshotPayload,
-    createdAt: row.created_at,
-  };
+  return canonical.toSnapshotRecord(
+    {
+      id: row.id,
+      sessionId: row.session_id,
+      turnId: row.turn_id,
+      kind: row.kind,
+      parentId: row.parent_id,
+      payload: row.payload,
+      createdAt: row.created_at,
+    },
+    sqliteJsonReader,
+  );
 }
 
 export type { SnapshotRow };

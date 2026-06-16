@@ -4,383 +4,107 @@
  * All data is session-scoped. Server deployments switch backends through
  * STORE_BACKEND (memory | sqlite | pg). Browser callers can request idb
  * directly through createStore({ backend: "idb" }).
- */
-
-import type { SessionStatus, WorldDimensions } from "@covel/shared";
-
-// ── Record types ─────────────────────────────────────────────────
-
-export interface WorldRecord {
-  readonly id: string;
-  readonly name: string;
-  readonly description: string;
-  readonly lore?: string;
-  readonly tags?: readonly string[];
-  readonly locale?: string;
-  readonly dimensions?: WorldDimensions;
-  readonly metadata?: Readonly<Record<string, unknown>>;
-  readonly createdAt: string;
-  readonly updatedAt?: string;
-}
-
-export interface SessionRecord {
-  readonly id: string;
-  readonly worldId?: string;
-  /** Lifecycle flag — `active` / `paused` / `ended`. */
-  readonly status: SessionStatus;
-  /** Band selector — 0 = Pre-Game (only priority 0-99 scheduled, may iterate);
-   *  >=1 = main loop (only priority 100-1000). Advances from 0 → 1 when all
-   *  Pre-Game runtimes report done. */
-  readonly turnCount: number;
-  /** RuntimeIds of Pre-Game runtimes that have completed. Used to gate the
-   *  turnCount 0 → 1 transition. */
-  readonly preGameCompleted: readonly string[];
-  readonly locale: string;
-  readonly activePlugins: readonly string[];
-  readonly presetId?: string;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly metadata?: Readonly<Record<string, unknown>>;
-  /** FK to vector_models.id; null = RAG disabled */
-  readonly embeddingModelId?: number | null;
-  /** ISO 8601 timestamp; null = not locked */
-  readonly embeddingLockedAt?: string | null;
-  /**
-   * PR-6: Per-runtime model slot overrides. Maps runtime ID
-   * (`pluginId` or `pluginId/runtimeName`) → slot name from `llm.toml`.
-   * Empty/undefined means no overrides — slot resolution falls back to
-   * `manifest.model` then `"default"`.
-   */
-  readonly runtimeModelOverrides?: Readonly<Record<string, string>>;
-}
-
-export function normalizeSessionRecord(session: SessionRecord): SessionRecord {
-  const metadataPresetId = session.metadata?.presetId;
-  if (session.presetId === undefined) {
-    return typeof metadataPresetId === "string"
-      ? { ...session, presetId: metadataPresetId }
-      : session;
-  }
-  return {
-    ...session,
-    metadata: {
-      ...session.metadata,
-      presetId: session.presetId,
-    },
-  };
-}
-
-export function mergeSessionPatch(
-  existing: SessionRecord,
-  patch: Partial<
-    Pick<
-      SessionRecord,
-      | "status"
-      | "turnCount"
-      | "preGameCompleted"
-      | "activePlugins"
-      | "presetId"
-      | "updatedAt"
-      | "metadata"
-      | "embeddingModelId"
-      | "embeddingLockedAt"
-      | "runtimeModelOverrides"
-    >
-  >,
-): SessionRecord {
-  const metadata: Record<string, unknown> = {
-    ...existing.metadata,
-    ...patch.metadata,
-  };
-  if ("presetId" in patch) {
-    if (patch.presetId === undefined) {
-      delete metadata.presetId;
-    } else {
-      metadata.presetId = patch.presetId;
-    }
-  }
-  return normalizeSessionRecord({
-    ...existing,
-    ...patch,
-    metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-  });
-}
-
-export function normalizeWorldRecord(world: WorldRecord): WorldRecord {
-  return {
-    ...world,
-    dimensions:
-      world.dimensions ??
-      (world.metadata?.dimensions as WorldRecord["dimensions"]),
-  };
-}
-
-export interface TurnResultRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly turnId: string;
-  readonly runtimeResults: unknown; // JSON — RuntimeResult[]
-  readonly conflicts?: unknown; // JSON — WriteConflict[]
-  readonly auditResult?: unknown; // JSON — RuntimeResult
-  readonly durationMs: number;
-  readonly createdAt: string;
-}
-
-export interface RuntimeResultRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly turnId: string;
-  readonly pluginId: string;
-  readonly runtimeId: string;
-  readonly status: string;
-  readonly output: unknown; // JSON
-  readonly toolCalls: unknown; // JSON — ToolCallRecord[]
-  readonly durationMs: number;
-  readonly tokenUsage?: unknown; // JSON — { input, output }
-  readonly error?: string;
-  readonly createdAt: string;
-}
-
-export interface ToolCallRecordRow {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly turnId: string;
-  readonly toolName: string;
-  readonly pluginId: string;
-  readonly runtimeId: string;
-  readonly input: unknown; // JSON
-  readonly output: unknown; // JSON
-  readonly durationMs: number;
-  readonly approvalStatus: string;
-  readonly createdAt: string;
-}
-
-export interface StateSchemaRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly tableName: string;
-  readonly schema: unknown; // JSON — StateTableSchema
-  readonly createdAt: string;
-}
-
-export interface StateEntryRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly tableName: string;
-  readonly fieldName: string;
-  readonly value: unknown; // JSON
-  readonly updatedAt: string;
-}
-
-export interface StateChangeRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly tableName: string;
-  readonly fieldName: string;
-  readonly value: unknown; // JSON
-  readonly changedBy: string;
-  readonly turnId: string;
-  readonly reason?: string;
-  readonly createdAt: string;
-}
-
-export interface EventRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly type: string;
-  readonly topic: string;
-  readonly payload: unknown; // JSON
-  readonly targetRuntime?: string;
-  readonly turnId?: string;
-  readonly createdAt: string;
-}
-
-export interface ApprovalRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly toolName: string;
-  readonly pluginId: string;
-  readonly decision: string;
-  readonly turnId: string;
-  readonly createdAt: string;
-}
-
-export interface MessageRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly role: string;
-  readonly content: string;
-  readonly metadata?: unknown; // JSON
-  readonly createdAt: string;
-}
-
-export interface CharacterRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly name: string;
-  readonly type: string;
-  readonly description?: string;
-  readonly fields?: unknown; // JSON
-  readonly version: number;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
-
-export interface PluginDataRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly pluginId: string;
-  readonly namespace: string;
-  readonly key: string;
-  readonly value: unknown; // JSON
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
-
-export interface PluginConfigRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly pluginId: string;
-  readonly config: unknown; // JSON
-  readonly updatedAt: string;
-}
-
-export interface WorkingMemoryRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly key: string;
-  readonly scope: "player" | "story" | "shared";
-  readonly value: unknown; // validated by schema_ref when present
-  readonly schemaRef?: string;
-  readonly updatedAt: string; // ISO
-}
-
-export interface WorldDataImportLedgerRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly target: string;
-  readonly pluginId?: string;
-  readonly namespace?: string;
-  readonly key?: string;
-  readonly sourceWorldId: string;
-  readonly sourceId: string;
-  readonly sourceDigest: string;
-  readonly valueHash: string;
-  readonly schemaRef?: string;
-  readonly derivedFrom?: readonly string[];
-  readonly importedAt: string;
-  readonly managed: boolean;
-}
-
-/**
- * Session-scoped lorebook entry persisted to the store (S3-T2).
  *
- * Plain record shape carrying all lorebook entry fields. The framework
- * routes and runtime/loader handle field-level semantics; the store layer
- * just persists and retrieves these records by (sessionId, id).
- *
- * Only session-source entries land here. World/plugin layer entries are
- * loaded from disk by the lorebook loaders and never persisted via this
- * table — A3 keeps them as authoring artefacts, not session state.
+ * Record type definitions are organised by domain under `./records/*`; this
+ * module re-exports them all so existing `../types.js` imports keep working,
+ * and additionally declares the `DataStore` interface and store config types.
  */
-export interface LorebookEntryRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  /** Plugin that owns this entry. Mirrors lorebook `pluginId` for traceability. */
-  readonly pluginId: string;
-  /** JSON string[] — keys for selective scanning (constant entries can pass `[]`). */
-  readonly keys: readonly string[];
-  readonly content: string;
-  readonly strategy: "constant" | "selective";
-  readonly position: string; // LorebookPosition — keep stringly-typed at the store edge
-  readonly insertionOrder: number;
-  readonly enabled: boolean;
-  /** Free-form JSON for forward-compatible fields (atDepth, budgetCap, etc.). */
-  readonly extra?: unknown;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
 
-export interface TraceEventRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly type: string;
-  readonly traceId: string;
-  readonly turnId: string;
-  readonly payload: unknown; // JSON
-  readonly createdAt: string;
-}
+// ── Record type re-exports (by domain) ───────────────────────────
 
-// ── Translation layer: RuntimeOutput + InteractionRecord (PR-1) ──
+export type { WorldRecord } from "./records/world-records.js";
+export { normalizeWorldRecord } from "./records/world-records.js";
 
-/**
- * Normalised record of one runtime execution's output. Written by
- * `turn-executor` after each runtime finishes. Consumers include downstream
- * runtimes (via `results[].text` as context), frontends (via
- * `results[].structured`), and observability tooling (via `metaData`).
- *
- * Paired with `trace_events` — this table is the normalised/consumable layer,
- * `trace_events` remains the low-level debug timeline.
- */
-export interface RuntimeOutputRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly turnId: string;
-  /** Optional FK back to `runtime_results.id`. */
-  readonly runtimeResultId?: string;
-  readonly pluginId: string;
-  readonly runtimeId: string;
-  readonly timestamp: string;
-  /** JSON — readonly RuntimeOutputResult[] */
-  readonly results: unknown;
-  /** JSON — RuntimeOutputMetaData */
-  readonly metaData: unknown;
-  readonly createdAt: string;
-}
+export type { SessionRecord } from "./records/session-records.js";
+export {
+  normalizeSessionRecord,
+  mergeSessionPatch,
+} from "./records/session-records.js";
 
-/**
- * Normalised record of one external input (player message, plugin UI click,
- * form submit, RPC call, external skill invocation). Complements
- * `RuntimeOutputRecord` — the two together form the complete event stream
- * of a session for observability and replay.
- */
-export interface InteractionRecordRow {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly turnId?: string;
-  readonly timestamp: string;
-  readonly source: string;
-  readonly channel: string;
-  readonly type: string;
-  readonly targetPluginId?: string;
-  readonly targetRuntimeId?: string;
-  readonly payload: unknown; // JSON
-  readonly metaData?: unknown; // JSON
-  readonly createdAt: string;
-}
+export type {
+  TurnResultRecord,
+  RuntimeResultRecord,
+  ToolCallRecordRow,
+  RuntimeOutputRecord,
+  InteractionRecordRow,
+  RuntimeOutputFilters,
+  InteractionRecordFilters,
+} from "./records/runtime-records.js";
 
-export interface RuntimeOutputFilters {
-  readonly runtimeId?: string;
-  readonly pluginId?: string;
-  readonly sinceTimestamp?: string;
-  readonly limit?: number;
-}
+export type {
+  StateSchemaRecord,
+  StateEntryRecord,
+  StateChangeRecord,
+  EventRecord,
+  ApprovalRecord,
+  MessageRecord,
+  CharacterRecord,
+} from "./records/state-records.js";
 
-export interface InteractionRecordFilters {
-  readonly type?: string;
-  readonly source?: string;
-  readonly targetPluginId?: string;
-  readonly limit?: number;
-}
+export type {
+  PluginDataRecord,
+  PluginConfigRecord,
+  TraceEventRecord,
+} from "./records/plugin-records.js";
 
-// ── Pagination ──────────────────────────────────────────────────
+export type {
+  WorkingMemoryRecord,
+  WorldDataImportLedgerRecord,
+  LorebookEntryRecord,
+  TurnMessageRecord,
+  SessionSummaryRecord,
+  PlayerInputRecord,
+} from "./records/memory-records.js";
 
-export interface PaginationOpts {
-  /** Max rows to return. Default varies by method. */
-  readonly limit?: number;
-  /** Number of rows to skip. Default: 0. */
-  readonly offset?: number;
-}
+export type {
+  SnapshotKind,
+  SnapshotPayload,
+  SnapshotRecord,
+  SuspensionRecord,
+} from "./records/snapshot-records.js";
+
+export type { PaginationOpts } from "./records/pagination-records.js";
+
+// ── Local imports for the DataStore interface signatures ─────────
+
+import type { WorldRecord } from "./records/world-records.js";
+import type { SessionRecord } from "./records/session-records.js";
+import type {
+  TurnResultRecord,
+  RuntimeResultRecord,
+  ToolCallRecordRow,
+  RuntimeOutputRecord,
+  InteractionRecordRow,
+  RuntimeOutputFilters,
+  InteractionRecordFilters,
+} from "./records/runtime-records.js";
+import type {
+  StateSchemaRecord,
+  StateEntryRecord,
+  StateChangeRecord,
+  EventRecord,
+  ApprovalRecord,
+  MessageRecord,
+  CharacterRecord,
+} from "./records/state-records.js";
+import type {
+  PluginDataRecord,
+  PluginConfigRecord,
+  TraceEventRecord,
+} from "./records/plugin-records.js";
+import type {
+  WorkingMemoryRecord,
+  WorldDataImportLedgerRecord,
+  LorebookEntryRecord,
+  TurnMessageRecord,
+  SessionSummaryRecord,
+  PlayerInputRecord,
+} from "./records/memory-records.js";
+import type {
+  SnapshotRecord,
+  SuspensionRecord,
+} from "./records/snapshot-records.js";
+import type { PaginationOpts } from "./records/pagination-records.js";
 
 // ── DataStore interface ──────────────────────────────────────────
 
@@ -698,171 +422,6 @@ export interface DataStore {
 
   // ── Lifecycle ──
   close(): Promise<void>;
-}
-
-// ── Turn Messages (append-only conversation history) ─────────────
-
-export interface TurnMessageRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly turnId: string;
-  readonly sourceType: string; // 'system' | 'runtime' | 'player' | 'tool' | 'player-input'
-  readonly sourcePluginId?: string;
-  readonly sourceRuntimeId?: string;
-  readonly role: string; // 'system' | 'user' | 'assistant'
-  readonly name?: string;
-  readonly content: string;
-  readonly ui?: unknown; // JSON — UIRenderInstruction[]
-  readonly pendingInput?: unknown; // JSON — PlayerInputForm
-  readonly order: number;
-  readonly createdAt: string;
-  /**
-   * When set, this message has been compacted into a session summary.
-   * The value is the `SessionSummaryRecord.id` that replaced this message.
-   * The original content is preserved; only the prompt-build path substitutes
-   * the summary in place of the compacted message span (S2-T2 Compactor).
-   */
-  readonly compactedAtTurnId?: string; // summaryId, not a turn ID despite the name
-}
-
-// ── Session Summaries (S2-T2 Compactor) ─────────────────────────
-
-export interface SessionSummaryRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  /** First compacted turnId (inclusive). */
-  readonly turnRangeStart: string;
-  /** Last compacted turnId (inclusive). */
-  readonly turnRangeEnd: string;
-  /** The summary text produced by the fast-slot LLM. */
-  readonly content: string;
-  /** Deduped list from plugin summaryFocus fields. */
-  readonly focusSections: readonly string[];
-  readonly createdAt: string;
-}
-
-export interface PlayerInputRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly turnId: string;
-  readonly formId: string;
-  readonly values: unknown; // JSON — Record<string, unknown>
-  readonly createdAt: string;
-}
-
-// ── Snapshots (S4-T2) ────────────────────────────────────────────
-
-/**
- * Materialized state snapshot (S4-T2, §A6).
- *
- * Each record captures the full session state at the end of a given turn as a
- * serialized payload. Snapshots power save / load / fork — every new session
- * created via `POST /fork` is rebuilt from a snapshot payload.
- *
- * `kind`:
- *  - `auto`   — created at turn commit.
- *  - `manual` — created explicitly via `POST /api/sessions/:id/snapshot`.
- *  - `fork`   — created when a fork rebuilds a new session; `parentId`
- *               points at the origin snapshot.
- *
- * `payload.schemaVersion` allows future migrations without requiring a DB
- * schema change — the envelope stays stable while the payload can evolve.
- */
-export type SnapshotKind = "auto" | "manual" | "fork";
-
-export interface SnapshotPayload {
-  readonly schemaVersion: 1;
-  readonly turnId: string;
-  readonly characters: readonly CharacterRecord[];
-  readonly stateEntries: readonly StateEntryRecord[];
-  readonly pluginData: readonly PluginDataRecord[];
-  readonly workingMemory: readonly WorkingMemoryRecord[];
-  /**
-   * Session-scoped lorebook entries (S3-T2). Captured from the
-   * `lorebook_entries` table at snapshot time so forks can rehydrate the
-   * session-layer lorebook without re-running world-init plugins.
-   */
-  readonly lorebookEntries: readonly LorebookEntryRecord[];
-  /**
-   * Unresolved suspensions at snapshot time (audit 2026-04-20 finding 7.3).
-   *
-   * Only suspensions whose `resolvedAt` is unset are captured — resolved or
-   * claimed-but-still-executing records are excluded because the target
-   * runtime is either done or in-flight and the child session has no way to
-   * take over mid-flight. Each suspension travels with its full
-   * `pendingContinuation` so the forked session can POST /resume using the
-   * copied id.
-   *
-   * The fork route regenerates each suspension's id and rebinds
-   * `sessionId = childSessionId` before persisting, so the original parent
-   * record is preserved.
-   */
-  readonly suspensions: readonly SuspensionRecord[];
-  /**
-   * Last `turn_messages.id` persisted for this session at snapshot time.
-   * Used by fork to bound how many messages are copied.
-   * Empty string when there are no messages yet.
-   */
-  readonly messagesCursor: string;
-}
-
-export interface SnapshotRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly turnId: string;
-  readonly kind: SnapshotKind;
-  readonly parentId?: string;
-  readonly payload: SnapshotPayload;
-  readonly createdAt: string;
-}
-
-// ── Suspensions (S4-T4) ──────────────────────────────────────────
-
-/**
- * Persisted state for a suspended runtime (S4-T4 suspend/resume primitive).
- *
- * When an agent runtime calls the `suspend` builtin tool, the turn-executor
- * captures the current LLM message array and tool-call history, writes a
- * SuspensionRecord, and returns `status: 'suspended'`.
- *
- * On `POST /api/sessions/:id/resume { suspensionId, data }`, the resume
- * handler loads this record, reconstructs the message array, appends a
- * synthetic message carrying `data`, and re-enters the LLM tool loop.
- *
- * NOTE: Provider API keys are NEVER stored here — they must be supplied
- * again via the `X-Provider-Keys` header on the resume request.
- */
-export interface SuspensionRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly turnId: string;
-  readonly runtimeId: string;
-  readonly pluginId: string;
-  readonly reason: string;
-  /** Plain JSON schema object { type, properties, required }. Not a live Zod schema. */
-  readonly resumeSchema: unknown;
-  readonly pendingContinuation: {
-    /** Full LLMMessage[] up to the suspend point. */
-    readonly messages: readonly unknown[];
-    /** If the LLM produced narrative text alongside the suspend tool call. */
-    readonly partialContent?: string;
-    /** ToolCallRecord[] accumulated before the suspend point. */
-    readonly toolCallsSoFar: readonly unknown[];
-    /**
-     * Proposals buffered mid-turn at the suspend point.
-     *
-     * Agent tools can queue proposal-backed writes before the runtime
-     * decides to suspend. Resume re-hydrates this array so the buffered
-     * proposals survive the suspend boundary and commit together with the
-     * final runtime output.
-     */
-    readonly pendingProposals: readonly unknown[];
-    /** tool_call_id of the suspend tool call (agent runtime only). Used to append synthetic tool result. */
-    readonly suspendToolCallId?: string;
-  };
-  readonly createdAt: string;
-  /** Set to ISO timestamp when resume completes successfully. */
-  readonly resolvedAt?: string;
 }
 
 // ── Store config ─────────────────────────────────────────────────

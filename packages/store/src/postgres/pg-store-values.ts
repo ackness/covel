@@ -1,3 +1,14 @@
+/**
+ * PostgreSQL insert/update value builders.
+ *
+ * The shared logic lives in `../common/insert-values.ts`; this module binds it
+ * to the PostgreSQL serialization gateway ({@link pgJsonWriter}, which passes
+ * JSON values through to `jsonb` columns) and re-exposes the historical
+ * per-record function names with PG-specific `$inferInsert` return types.
+ */
+
+import { makeInsertValues } from "../common/insert-values.js";
+import { pgJsonWriter } from "../common/json-writers.js";
 import type {
   LorebookEntryRecord,
   PluginDataRecord,
@@ -6,7 +17,7 @@ import type {
   WorldDataImportLedgerRecord,
   WorldRecord,
 } from "../types.js";
-import * as schema from "./schema.js";
+import type * as schema from "./schema.js";
 
 type PgPluginDataInsert = typeof schema.pluginData.$inferInsert;
 type PgStateEntryInsert = typeof schema.stateEntries.$inferInsert;
@@ -15,176 +26,74 @@ type PgWorldDataLedgerInsert = typeof schema.worldDataImportLedger.$inferInsert;
 type PgLorebookEntryInsert = typeof schema.lorebookEntries.$inferInsert;
 type PgWorldInsert = typeof schema.worlds.$inferInsert;
 
+const builders = makeInsertValues(pgJsonWriter);
+
 export function pgPluginDataInsert(
   record: PluginDataRecord,
 ): PgPluginDataInsert {
-  return {
-    id: record.id,
-    sessionId: record.sessionId,
-    pluginId: record.pluginId,
-    namespace: record.namespace,
-    key: record.key,
-    value: record.value ?? null,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  };
+  return builders.pluginDataInsert(record) as PgPluginDataInsert;
 }
 
 export function pgPluginDataUpdate(
   record: PluginDataRecord,
 ): Partial<PgPluginDataInsert> {
-  return {
-    value: record.value ?? null,
-    updatedAt: record.updatedAt,
-  };
+  return builders.pluginDataUpdate(record) as Partial<PgPluginDataInsert>;
 }
 
 export function pgStateEntryInsert(
   record: StateEntryRecord,
 ): PgStateEntryInsert {
-  return {
-    id: record.id,
-    sessionId: record.sessionId,
-    tableName: record.tableName,
-    fieldName: record.fieldName,
-    value: record.value ?? null,
-    updatedAt: record.updatedAt,
-  };
+  return builders.stateEntryInsert(record) as PgStateEntryInsert;
 }
 
 export function pgStateEntryUpdate(
   record: StateEntryRecord,
 ): Partial<PgStateEntryInsert> {
-  return {
-    value: record.value ?? null,
-    updatedAt: record.updatedAt,
-  };
+  return builders.stateEntryUpdate(record) as Partial<PgStateEntryInsert>;
 }
 
 export function pgWorkingMemoryInsert(
   record: WorkingMemoryRecord,
 ): PgWorkingMemoryInsert {
-  return {
-    id: record.id,
-    sessionId: record.sessionId,
-    key: record.key,
-    scope: record.scope,
-    value: record.value ?? null,
-    schemaRef: record.schemaRef ?? null,
-    updatedAt: record.updatedAt,
-  };
+  return builders.workingMemoryInsert(record) as PgWorkingMemoryInsert;
 }
 
 export function pgWorkingMemoryUpdate(
   record: WorkingMemoryRecord,
 ): Partial<PgWorkingMemoryInsert> {
-  return {
-    id: record.id,
-    value: record.value ?? null,
-    schemaRef: record.schemaRef ?? null,
-    updatedAt: record.updatedAt,
-  };
+  return builders.workingMemoryUpdate(record) as Partial<PgWorkingMemoryInsert>;
 }
 
 export function pgWorldDataLedgerInsert(
   record: WorldDataImportLedgerRecord,
 ): PgWorldDataLedgerInsert {
-  return {
-    id: record.id,
-    sessionId: record.sessionId,
-    target: record.target,
-    pluginId: record.pluginId ?? null,
-    namespace: record.namespace ?? null,
-    key: record.key ?? null,
-    sourceWorldId: record.sourceWorldId,
-    sourceId: record.sourceId,
-    sourceDigest: record.sourceDigest,
-    valueHash: record.valueHash,
-    schemaRef: record.schemaRef ?? null,
-    derivedFrom: (record.derivedFrom ?? null) as unknown,
-    importedAt: record.importedAt,
-    managed: record.managed ? 1 : 0,
-  };
+  return builders.worldDataLedgerInsert(record) as PgWorldDataLedgerInsert;
 }
 
 export function pgWorldDataLedgerUpdate(
   record: WorldDataImportLedgerRecord,
 ): Partial<PgWorldDataLedgerInsert> {
-  return {
-    sessionId: record.sessionId,
-    target: record.target,
-    pluginId: record.pluginId ?? null,
-    namespace: record.namespace ?? null,
-    key: record.key ?? null,
-    sourceWorldId: record.sourceWorldId,
-    sourceId: record.sourceId,
-    sourceDigest: record.sourceDigest,
-    valueHash: record.valueHash,
-    schemaRef: record.schemaRef ?? null,
-    derivedFrom: (record.derivedFrom ?? null) as unknown,
-    importedAt: record.importedAt,
-    managed: record.managed ? 1 : 0,
-  };
+  return builders.worldDataLedgerUpdate(
+    record,
+  ) as Partial<PgWorldDataLedgerInsert>;
 }
 
 export function pgLorebookEntryInsert(
   record: LorebookEntryRecord,
 ): PgLorebookEntryInsert {
-  return {
-    id: record.id,
-    sessionId: record.sessionId,
-    pluginId: record.pluginId,
-    keys: record.keys as unknown as string[],
-    content: record.content,
-    strategy: record.strategy,
-    position: record.position,
-    insertionOrder: record.insertionOrder,
-    enabled: record.enabled ? 1 : 0,
-    extra: (record.extra ?? null) as unknown,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  };
+  return builders.lorebookEntryInsert(record) as PgLorebookEntryInsert;
 }
 
 export function pgLorebookEntryUpdate(
   record: LorebookEntryRecord,
 ): Partial<PgLorebookEntryInsert> {
-  return {
-    sessionId: record.sessionId,
-    pluginId: record.pluginId,
-    keys: record.keys as unknown as string[],
-    content: record.content,
-    strategy: record.strategy,
-    position: record.position,
-    insertionOrder: record.insertionOrder,
-    enabled: record.enabled ? 1 : 0,
-    extra: (record.extra ?? null) as unknown,
-    updatedAt: record.updatedAt,
-  };
+  return builders.lorebookEntryUpdate(record) as Partial<PgLorebookEntryInsert>;
 }
 
 export function pgWorldInsert(record: WorldRecord): PgWorldInsert {
-  return {
-    id: record.id,
-    name: record.name,
-    description: record.description,
-    lore: record.lore ?? null,
-    tags: record.tags ?? null,
-    locale: record.locale ?? null,
-    metadata: record.metadata ?? null,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt ?? null,
-  };
+  return builders.worldInsert(record) as PgWorldInsert;
 }
 
 export function pgWorldUpdate(record: WorldRecord): Partial<PgWorldInsert> {
-  return {
-    name: record.name,
-    description: record.description,
-    lore: record.lore ?? null,
-    tags: record.tags ?? null,
-    locale: record.locale ?? null,
-    metadata: record.metadata ?? null,
-    updatedAt: record.updatedAt ?? null,
-  };
+  return builders.worldUpdate(record) as Partial<PgWorldInsert>;
 }
