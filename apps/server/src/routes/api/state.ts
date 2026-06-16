@@ -12,6 +12,8 @@
 import { Hono } from "hono";
 import type { StateManager } from "@covel/state";
 import type { DataStore } from "@covel/store";
+import { errorBody } from "../../api-error.js";
+import { resolveSessionParam } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -43,10 +45,9 @@ stateRoutes.get("/:id/state", async (c) => {
   const stateManager = c.get("stateManager");
   const id = c.req.param("id");
 
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
 
   const tables: Record<
     string,
@@ -156,10 +157,8 @@ stateRoutes.get("/:id/state-patches", async (c) => {
   const stateManager = c.get("stateManager");
   const id = c.req.param("id");
 
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   // Collect all change logs across all tables into a flat patch list (parallel per field)
   const schemas = await stateManager.getTableSchemas(id);
@@ -206,10 +205,8 @@ stateRoutes.get("/:id/state-snapshot", async (c) => {
   const stateManager = c.get("stateManager");
   const id = c.req.param("id");
 
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const schemas = await stateManager.getTableSchemas(id);
   const snapshot: Record<string, Record<string, unknown>> = {};
@@ -226,24 +223,24 @@ stateRoutes.get("/:id/state-snapshot", async (c) => {
   return c.json(snapshot);
 });
 
-// PUT /sessions/:id/state-snapshot — restore state from snapshot (not yet implemented)
+// PUT /sessions/:id/state-snapshot
+//
+// NOT IMPLEMENTED (v0.0.5). State restoration requires table re-creation in
+// StateManager, which the current state model does not expose. The route is
+// intentionally retained (rather than removed) so the contract stays visible
+// and scheduling for a real implementation is not lost. It returns 501 so
+// callers know the snapshot was NOT applied — returning 200 here would
+// silently discard the posted state. State is instead rebuilt from turn
+// execution / fork-from-snapshot (`POST /sessions/:id/snapshots/:sid/fork`).
 stateRoutes.put("/:id/state-snapshot", async (c) => {
-  const store = c.get("store");
-  const id = c.req.param("id");
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
-
-  // State restoration requires table re-creation in StateManager.
-  // Return 501 so callers know the sync was not applied, rather than
-  // returning 200 and silently discarding the data.
   return c.json(
-    {
-      error:
-        "State snapshot restoration not implemented. State will be rebuilt from turn execution.",
-    },
+    errorBody(
+      "State snapshot restoration not implemented. State will be rebuilt from turn execution.",
+      { code: "not_implemented" },
+    ),
     501,
   );
 });

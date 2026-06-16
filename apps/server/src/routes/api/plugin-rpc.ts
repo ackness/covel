@@ -84,7 +84,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
   //
   // Execution sub-mode comes from `manifest.execution`:
   //   - `'sync'` (default) → await results, commit, return JSON.
-  //   - `'background'` (M4) → not yet implemented, returns 501.
+  //   - `'background'` → enqueue a `_jobs/{jobId}` row, return 202 + {jobId},
+  //     and run the turn off-request (see the background branch below). The
+  //     UI tracks completion via `plugin-data.changed` SSE.
   if (body.runtimeId) {
     const pluginRegistry = c.get("pluginRegistry");
     const llmAdapter = c.get("llmAdapter");

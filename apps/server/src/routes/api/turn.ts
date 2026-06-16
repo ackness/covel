@@ -13,6 +13,7 @@ import type { DataStore, MediaStore } from "@covel/store";
 import type { CompactorRunner } from "@covel/context";
 import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
 import { syncSessionTurnCount } from "./turn-count.js";
+import { resolveSessionParam } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -58,10 +59,9 @@ turnRoutes.post("/:id/turn", rateLimiter({ max: 30 }), async (c) => {
   const mediaStore = c.get("mediaStore");
   const sessionId = c.req.param("id");
 
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json({ error: `Session "${sessionId}" not found` }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
 
   const body = await c.req.json<{
     message: string;

@@ -34,6 +34,7 @@ import type {
 } from "@covel/store";
 import { buildSnapshotPayload } from "@covel/runtime";
 import type { EventBus } from "@covel/events";
+import { SAFE_SESSION_ID_RE } from "../../lib/validators.js";
 
 type Env = {
   Variables: {
@@ -44,8 +45,6 @@ type Env = {
 };
 
 export const snapshotRoutes = new Hono<Env>();
-
-const SAFE_SESSION_ID_RE = /^[a-z0-9_-]{1,128}$/i;
 
 // ── POST /api/sessions/:id/snapshot — manual snapshot ─────────────
 

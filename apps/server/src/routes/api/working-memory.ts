@@ -12,6 +12,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
+import { resolveSessionParam } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -31,8 +32,8 @@ const VALID_SCOPES = new Set(["player", "story", "shared"]);
 workingMemoryRoutes.get("/:id/memory-blocks", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const all = await store.listWorkingMemory(sessionId);
   const blocks = all
@@ -55,8 +56,8 @@ workingMemoryRoutes.get("/:id/memory-blocks", async (c) => {
 workingMemoryRoutes.get("/:id/working-memory", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const entries = await store.listWorkingMemory(sessionId);
   return c.json({ entries });
@@ -66,8 +67,8 @@ workingMemoryRoutes.get("/:id/working-memory", async (c) => {
 workingMemoryRoutes.put("/:id/working-memory/:scope/:key", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const scope = c.req.param("scope");
   if (!VALID_SCOPES.has(scope)) {
@@ -116,8 +117,8 @@ workingMemoryRoutes.put("/:id/working-memory/:scope/:key", async (c) => {
 workingMemoryRoutes.delete("/:id/working-memory/:scope/:key", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const scope = c.req.param("scope");
   if (!VALID_SCOPES.has(scope)) {

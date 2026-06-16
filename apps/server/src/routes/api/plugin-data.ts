@@ -15,6 +15,7 @@ import { z } from "zod";
 import type { DataStore } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { buildPluginDataIndex } from "./discovery.js";
+import { resolveSessionParam } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -59,8 +60,8 @@ pluginDataRoutes.get("/:id/plugin-data/:pluginId/_index", async (c) => {
   const store = c.get("store");
   const registry = c.get("pluginRegistry");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
   const pluginId = c.req.param("pluginId");
 
   const accessErr = validatePluginAccess(registry, pluginId, sessionId, false);
@@ -79,8 +80,8 @@ pluginDataRoutes.get("/:id/plugin-data/:pluginId/:namespace", async (c) => {
   const store = c.get("store");
   const registry = c.get("pluginRegistry");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
   const pluginId = c.req.param("pluginId");
   const namespace = c.req.param("namespace");
 
@@ -106,8 +107,8 @@ pluginDataRoutes.get(
     const store = c.get("store");
     const registry = c.get("pluginRegistry");
     const sessionId = c.req.param("id");
-    const session = await store.getSession(sessionId);
-    if (!session) return c.json({ error: "Session not found" }, 404);
+    const guard = await resolveSessionParam(c);
+    if (!guard.ok) return guard.response;
     const pluginId = c.req.param("pluginId");
     const namespace = c.req.param("namespace");
     const key = c.req.param("key");
@@ -145,8 +146,8 @@ pluginDataRoutes.put(
     const store = c.get("store");
     const registry = c.get("pluginRegistry");
     const sessionId = c.req.param("id");
-    const session = await store.getSession(sessionId);
-    if (!session) return c.json({ error: "Session not found" }, 404);
+    const guard = await resolveSessionParam(c);
+    if (!guard.ok) return guard.response;
     const pluginId = c.req.param("pluginId");
     const namespace = c.req.param("namespace");
     const key = c.req.param("key");
@@ -194,8 +195,8 @@ pluginDataRoutes.delete(
     const store = c.get("store");
     const registry = c.get("pluginRegistry");
     const sessionId = c.req.param("id");
-    const session = await store.getSession(sessionId);
-    if (!session) return c.json({ error: "Session not found" }, 404);
+    const guard = await resolveSessionParam(c);
+    if (!guard.ok) return guard.response;
     const pluginId = c.req.param("pluginId");
     const namespace = c.req.param("namespace");
     const key = c.req.param("key");
@@ -214,8 +215,8 @@ pluginDataRoutes.get("/:id/plugin-data/:pluginId", async (c) => {
   const store = c.get("store");
   const registry = c.get("pluginRegistry");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
   const pluginId = c.req.param("pluginId");
 
   const accessErr = validatePluginAccess(registry, pluginId, sessionId, false);

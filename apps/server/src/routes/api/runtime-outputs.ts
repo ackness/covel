@@ -17,6 +17,7 @@
 
 import { Hono } from "hono";
 import type { DataStore } from "@covel/store";
+import { resolveSessionParam } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -27,21 +28,6 @@ type Env = {
 export const runtimeOutputRoutes = new Hono<Env>();
 
 // ── Helpers ────────────────────────────────────────────────────────
-
-async function ensureSession(
-  store: DataStore,
-  sessionId: string,
-): Promise<{ ok: true } | { ok: false; status: 404; body: { error: string } }> {
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return {
-      ok: false,
-      status: 404,
-      body: { error: `Session not found: ${sessionId}` },
-    };
-  }
-  return { ok: true };
-}
 
 function parseLimit(raw: string | undefined): number | undefined {
   if (!raw) return undefined;
@@ -56,8 +42,8 @@ function parseLimit(raw: string | undefined): number | undefined {
 runtimeOutputRoutes.get("/:id/runtime-outputs", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const check = await ensureSession(store, sessionId);
-  if (!check.ok) return c.json(check.body, check.status);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const runtimeId = c.req.query("runtimeId") || undefined;
   const pluginId = c.req.query("pluginId") || undefined;
@@ -78,8 +64,8 @@ runtimeOutputRoutes.get("/:id/runtime-outputs/:outputId", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
   const outputId = c.req.param("outputId");
-  const check = await ensureSession(store, sessionId);
-  if (!check.ok) return c.json(check.body, check.status);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const record = await store.getRuntimeOutput(sessionId, outputId);
   if (!record) {
@@ -106,8 +92,8 @@ runtimeOutputRoutes.get(
     const store = c.get("store");
     const sessionId = c.req.param("id");
     const outputId = c.req.param("outputId");
-    const check = await ensureSession(store, sessionId);
-    if (!check.ok) return c.json(check.body, check.status);
+    const guard = await resolveSessionParam(c);
+    if (!guard.ok) return guard.response;
 
     const record = await store.getRuntimeOutput(sessionId, outputId);
     if (!record) {
@@ -157,8 +143,8 @@ runtimeOutputRoutes.get(
 runtimeOutputRoutes.get("/:id/interaction-records", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const check = await ensureSession(store, sessionId);
-  if (!check.ok) return c.json(check.body, check.status);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const type = c.req.query("type") || undefined;
   const source = c.req.query("source") || undefined;

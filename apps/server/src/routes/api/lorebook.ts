@@ -13,6 +13,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
+import { resolveSessionParam } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -44,8 +45,8 @@ type EntryBody = z.infer<typeof entryBodySchema>;
 lorebookRoutes.get("/:id/lorebook", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const entries = await store.listSessionLorebookEntries(sessionId);
   return c.json({ entries });
@@ -55,8 +56,8 @@ lorebookRoutes.get("/:id/lorebook", async (c) => {
 lorebookRoutes.post("/:id/lorebook", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const raw = await c.req.json<unknown>().catch(() => null);
   const parsed = entryBodySchema.safeParse(raw);
@@ -74,8 +75,8 @@ lorebookRoutes.post("/:id/lorebook", async (c) => {
 lorebookRoutes.put("/:id/lorebook/:entryId", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const entryId = c.req.param("entryId");
   const raw = await c.req.json<unknown>().catch(() => null);
@@ -108,8 +109,8 @@ lorebookRoutes.put("/:id/lorebook/:entryId", async (c) => {
 lorebookRoutes.patch("/:id/lorebook/:entryId", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const entryId = c.req.param("entryId");
   const raw = await c.req.json<unknown>().catch(() => null);
@@ -145,8 +146,8 @@ lorebookRoutes.patch("/:id/lorebook/:entryId", async (c) => {
 lorebookRoutes.delete("/:id/lorebook/:entryId", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json({ error: "Session not found" }, 404);
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
 
   const entryId = c.req.param("entryId");
   const existing = (await store.listSessionLorebookEntries(sessionId)).find(

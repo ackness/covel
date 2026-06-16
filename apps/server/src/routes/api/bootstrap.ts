@@ -21,21 +21,9 @@ import { createStateManager, type StateManager } from "@covel/state";
 import { createEventBus, type EventBus } from "@covel/events";
 import type { DataStore, StoreBackend } from "@covel/store";
 import type { LLMAdapter } from "@covel/runtime";
-import { createToolExecutor, createModelResolver } from "@covel/runtime";
+import { createModelResolver } from "@covel/runtime";
 import type { CompactorRunner } from "@covel/context";
-import {
-  builtinUITools,
-  createPluginDataTools,
-  createCharacterTools,
-  buildSessionCharacterWriteTools,
-  createWorldDimensionTools,
-  suspendTool,
-  runtimeDoneTool,
-  type ToolModule,
-  type CharacterToolDeps,
-} from "@covel/tools";
-import { createApprovalPipeline } from "@covel/approval";
-import type { PermissionRule } from "@covel/approval";
+import type { ToolModule } from "@covel/tools";
 
 import {
   createInProcessSessionLock,
@@ -71,7 +59,7 @@ export { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-eve
 import { createBootstrapCompactorRunner } from "./bootstrap/compactor.js";
 import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
 import { createBootstrapHookPipeline } from "./bootstrap/plugin-hooks.js";
-import { createBootstrapLocalTools } from "./bootstrap/local-tools.js";
+import { setupPluginTools } from "./bootstrap/tools.js";
 import { createBootstrapMemorySystem } from "./bootstrap/memory.js";
 import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
 import { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
@@ -259,165 +247,23 @@ export async function bootstrapApi(
     return undefined;
   };
 
-  // 6. Create ToolExecutor with builtin + plugin local tools + approval
-  const builtinToolNames = new Set<string>();
-  const localToolNames = new Set<string>();
-  const toolMap = new Map<string, ToolModule>();
-
-  for (const t of builtinUITools) {
-    toolMap.set(t.name, t);
-    builtinToolNames.add(t.name);
-  }
-
-  // Register suspend tool. The sentinel becomes a normal tool result returned
-  // to the LLM when no suspension handler consumes it.
-  toolMap.set(suspendTool.name, suspendTool);
-  builtinToolNames.add(suspendTool.name);
-
-  // Register runtime-done tool. Framework contract: agent runtimes call this
-  // immediately after completing their business tool calls to exit without
-  // burning an extra LLM round-trip on a terminator message. The completion
-  // preamble in buildFrameworkPreamble instructs every runtime how to use it.
-  toolMap.set(runtimeDoneTool.name, runtimeDoneTool);
-  builtinToolNames.add(runtimeDoneTool.name);
-
-  // Register plugin-data tools (store-bound via closure; events emitted by store proxy)
-  for (const t of createPluginDataTools(store)) {
-    toolMap.set(t.name, t);
-    builtinToolNames.add(t.name);
-  }
-
-  // Register character management tools (writes characters table + mirrors to plugin-data).
-  // The turn-band refactor removed session.phase, so the former phase.changed
-  // hook no longer applies — status transitions are driven by turnCount and
-  // status updates, not character creation side effects.
-  //
-  // `findWorldDataPluginId` lets create/update-character locate the schema
-  // produced by whichever plugin declares `capabilities: [world-data-provider]`
-  // (framework/plugin isolation — same pattern as world-dimension tools).
-  // When present, write tools append soft schema warnings to their `_text`
-  // output so the LLM can self-correct.
-  const characterToolDeps: CharacterToolDeps = {
-    findWorldDataPluginId: (sessionId) =>
-      registry.findPluginByCapability(sessionId, "world-data-provider"),
-  };
-  for (const t of createCharacterTools(store, characterToolDeps)) {
-    toolMap.set(t.name, t);
-    builtinToolNames.add(t.name);
-  }
-
-  // ── Per-session tool overrides (Phase 2) ──────────────────────
-  //
-  // Phase 1 made write-tool `fields` validation soft (warnings in `_text`).
-  // Phase 2 lets the LLM see the world-specific schema directly in the tool
-  // parameters: `prepareToolsForSession(sessionId)` loads the active
-  // CharacterAttributeSchema and rebuilds `create-character`/`update-character`
-  // with strongly-typed `fields` Zod, then caches them per session. The
-  // `findTool` resolver below checks this cache before falling back to the
-  // generic toolMap. Action handlers call `prepareToolsForSession` before
-  // every `executeTurn` so the LLM always gets the freshest schema.
-  const sessionToolOverrides = new Map<string, Map<string, ToolModule>>();
-  const SESSION_OVERRIDABLE_TOOLS = new Set([
-    "create-character",
-    "update-character",
-  ]);
-
-  async function prepareToolsForSession(sessionId: string): Promise<void> {
-    if (typeof store.getPluginData !== "function") return;
-    const worldPluginId = characterToolDeps.findWorldDataPluginId?.(sessionId);
-    if (!worldPluginId) {
-      sessionToolOverrides.delete(sessionId);
-      return;
-    }
-    let row: { value: unknown; updatedAt: string } | null = null;
-    try {
-      row = await store.getPluginData(
-        sessionId,
-        worldPluginId,
-        "schema",
-        "character-attributes",
-      );
-    } catch {
-      sessionToolOverrides.delete(sessionId);
-      return;
-    }
-    const value = row?.value;
-    if (!value || typeof value !== "object") {
-      sessionToolOverrides.delete(sessionId);
-      return;
-    }
-    const schemaShape = value as { attributes?: unknown };
-    if (
-      !Array.isArray(schemaShape.attributes) ||
-      schemaShape.attributes.length === 0
-    ) {
-      sessionToolOverrides.delete(sessionId);
-      return;
-    }
-
-    const overrides = new Map<string, ToolModule>();
-    for (const t of buildSessionCharacterWriteTools(
-      store,
-      characterToolDeps,
-      value as Parameters<typeof buildSessionCharacterWriteTools>[2],
-    )) {
-      overrides.set(t.name, t);
-    }
-    sessionToolOverrides.set(sessionId, overrides);
-  }
-
-  // Register world-dimension query tools so agent runtimes can fetch only the
-  // fields they need instead of relying on bulk prompt injection.
-  for (const t of createWorldDimensionTools(store, {
-    findWorldDataPluginId: (sessionId) =>
-      registry.findPluginByCapability(sessionId, "world-data-provider"),
-  })) {
-    toolMap.set(t.name, t);
-    builtinToolNames.add(t.name);
-  }
-
-  const { activatePluginLocalTools, pluginToolAccess } =
-    await createBootstrapLocalTools({
-      discoveryMap,
-      manifestCache,
-      store,
-      toolMap,
-      localToolNames,
-    });
-
-  // Approval: whitelist builtin + known local tools, deny unknown third-party
-  const approvalRules: PermissionRule[] = [
-    { pattern: "builtin:*", action: "allow" },
-    { pattern: "local:*", action: "allow" },
-    { pattern: "third-party:*", action: "deny" },
-  ];
-  const approval = createApprovalPipeline(store, approvalRules);
-
-  const toolExecutor = createToolExecutor({
-    findTool: (name, context) => {
-      // Per-session override (Phase 2): when the active session has a
-      // CharacterAttributeSchema, return the schema-aware variant so both the
-      // LLM-facing JSON schema and the Zod validation reflect typed fields.
-      if (context && SESSION_OVERRIDABLE_TOOLS.has(name)) {
-        const override = sessionToolOverrides.get(context.sessionId)?.get(name);
-        if (override) return override;
-      }
-      // Builtin tools are always accessible
-      if (builtinToolNames.has(name)) return toolMap.get(name);
-      // Local tools: only accessible if declared by the calling plugin
-      if (context) {
-        const allowed = pluginToolAccess.get(context.pluginId);
-        if (!allowed?.has(name)) return undefined; // Cross-plugin call blocked
-      }
-      return toolMap.get(name);
-    },
+  // 6. Create ToolExecutor with builtin + plugin local tools + approval.
+  //    Wiring extracted into `setupPluginTools` (bootstrap/tools.ts). It builds
+  //    the framework tool registry, per-session character-tool overrides, and
+  //    the approval-gated executor. `toolMap` / `builtinToolNames` remain
+  //    mutable here so the memory system can register its tools below.
+  const {
+    toolMap,
+    builtinToolNames,
+    toolExecutor,
+    prepareToolsForSession,
+    activatePluginLocalTools,
+  } = await setupPluginTools({
     store,
-    approval,
-    getToolSource: (name) => {
-      if (builtinToolNames.has(name)) return "builtin";
-      if (localToolNames.has(name)) return "local";
-      return "third-party";
-    },
+    registry,
+    discoveryMap,
+    manifestCache,
+    llmAdapter: config.llmAdapter,
   });
 
   // 6b. Eagerly load runtimes that declare UI specs so /api/ui-specs has data at boot

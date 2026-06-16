@@ -5,6 +5,7 @@
 import { Hono } from "hono";
 import type { DataStore } from "@covel/store";
 import { rateLimiter } from "../../middleware/rate-limit.js";
+import { resolveSessionParam } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -18,10 +19,8 @@ export const messageRoutes = new Hono<Env>();
 messageRoutes.get("/:id/messages", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json({ error: "Session not found" }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
   const messages = await store.listMessages(sessionId);
   // Flatten metadata into top-level fields for frontend consumption
   const flattened = messages.map((m) => {
@@ -48,10 +47,8 @@ messageRoutes.post(
   async (c) => {
     const store = c.get("store");
     const sessionId = c.req.param("id");
-    const session = await store.getSession(sessionId);
-    if (!session) {
-      return c.json({ error: "Session not found" }, 404);
-    }
+    const guard = await resolveSessionParam(c);
+    if (!guard.ok) return guard.response;
     const body = await c.req.json<{
       messages: Array<Record<string, unknown>>;
     }>();

@@ -29,6 +29,7 @@ import {
   decorateSessionList,
   withEmbeddingMetadata,
 } from "./session/embedding.js";
+import { resolveSessionParam } from "./session/session-guard.js";
 import {
   buildAvailablePluginList,
   buildSnapshotPluginList,
@@ -244,10 +245,9 @@ sessionRoutes.get("/:id/media-token", async (c) => {
 sessionRoutes.get("/:id", async (c) => {
   const store = c.get("store");
   const id = c.req.param("id");
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
   return c.json(await withEmbeddingMetadata(store, session));
 });
 
@@ -255,10 +255,9 @@ sessionRoutes.get("/:id", async (c) => {
 sessionRoutes.patch("/:id", async (c) => {
   const store = c.get("store");
   const id = c.req.param("id");
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
 
   const body = await c.req.json<Record<string, unknown>>();
   const now = new Date().toISOString();
@@ -277,10 +276,9 @@ sessionRoutes.patch("/:id", async (c) => {
 sessionRoutes.delete("/:id", async (c) => {
   const store = c.get("store");
   const id = c.req.param("id");
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
   await store.deleteSession(id);
   return c.json({ deleted: true });
 });
@@ -292,10 +290,9 @@ sessionRoutes.get("/:id/plugins", async (c) => {
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
   const id = c.req.param("id");
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
 
   const active = [...(session.activePlugins ?? [])];
   const available = buildAvailablePluginList(active, pluginRegistry);
@@ -308,10 +305,9 @@ sessionRoutes.post("/:id/plugins/enable", async (c) => {
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
   const id = c.req.param("id");
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
 
   const body = await c.req.json<{ pluginId: string }>();
   if (!body.pluginId || !pluginRegistry.get(body.pluginId)) {
@@ -343,10 +339,9 @@ sessionRoutes.post("/:id/plugins/disable", async (c) => {
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
   const id = c.req.param("id");
-  const session = await store.getSession(id);
-  if (!session) {
-    return c.json({ error: `Session not found: ${id}` }, 404);
-  }
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
 
   const body = await c.req.json<{ pluginId: string }>();
   if (!body.pluginId || typeof body.pluginId !== "string") {
