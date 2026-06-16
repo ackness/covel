@@ -6,15 +6,42 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [0.0.5] - 2026-06-16
 
-第五个公开版本。一次以代码质量为核心的内部重构：消除跨后端与插件层重复、拆分巨型文件、统一约定、修复隔离与数据流问题。对外行为保持不变（除有意统一的 API 错误响应信封）。
+Fifth public release. An internal, code-quality-focused refactor: systematic de-duplication across storage backends and the plugin layer, decomposition of oversized files, unified conventions, and isolation/data-flow fixes. No user-facing behavior change (except an intentionally unified API error-response envelope).
 
 ### Added
+
+- New `@covel/plugin-handlers-utils` package providing shared pure-function helpers for plugin function-runtime handlers (eliminates verbatim-duplicated helpers and proposal construction across 5 plugins)
+- New `FrameworkCapability` constant and type in `packages/shared`, consolidating framework-consumed capability tags so bare-string typos can no longer silently disable features
+- Unified API error-response envelope `ApiErrorResponse` with an `errorBody` factory
+
+### Changed
+
+- Bumped all monorepo package versions `0.0.4` → `0.0.5`
+- **Store**: extracted shared cross-backend mappers/insert-values, removing PG/SQLite duplication (~1145 lines); split `types.ts` and `common/mappers` by domain
+- **Runtime/Context**: extracted commit validators and LLM telemetry; split turn-agent-tool-loop / llm-retry / turn-agent-runtime / prompt-assembler
+- **AI-Provider**: de-duplicated adapter parameter extraction / metadata sanitizing; externalized model-capability data from inline TS (950 lines) to JSON; de-duplicated gateway fallback; split env registry and plugin schema by domain
+- **Server**: unified error envelope, replaced 37+ session-404 checks with a `resolveSessionParam` middleware, split the bootstrap/install/worlds mega-routes
+- **Web**: removed dead code, decomposed several oversized components by responsibility, unified silent error-swallowing into a visible `ignoreError`
+
+### Fixed
+
+- Fixed `characters.ts` hardcoding a framework plugin ID in violation of the framework↔plugin isolation rule (now uses `frameworkProposalSource`)
+- Fixed a PG `value`-field NULL-semantics regression introduced by cross-backend de-duplication (restored returning `null`, unified across both backends)
+- Fixed character-panel staleness on the char-creator write path (restored and improved the post-turn snapshot resync)
+- Fixed a React anti-pattern where the confirmation dialog ran side effects inside a setState updater
+
+<details>
+<summary>中文（备份翻译）</summary>
+
+第五个公开版本。一次以代码质量为核心的内部重构：消除跨后端与插件层重复、拆分巨型文件、统一约定、修复隔离与数据流问题。对外行为保持不变（除有意统一的 API 错误响应信封）。
+
+**Added**
 
 - 新增 `@covel/plugin-handlers-utils` 包，为插件 function-runtime handler 提供共享纯函数工具（消除 5 个插件中逐字重复的 helper 与 proposal 构造）
 - `packages/shared` 新增 `FrameworkCapability` 常量与类型，收敛框架消费的 capability 标签，避免裸字符串拼写漂移导致功能静默关闭
 - 统一 API 错误响应信封 `ApiErrorResponse` 与 `errorBody` 工厂
 
-### Changed
+**Changed**
 
 - monorepo 全量版本号 `0.0.4` → `0.0.5`
 - **Store**：抽取跨后端共享 mapper/insert-values，消除 PG/SQLite 重复（约 1145 行）；`types.ts` 与 `common/mappers` 按域拆分
@@ -23,12 +50,14 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **Server**：错误信封统一、`resolveSessionParam` 中间件替换 37+ 处会话 404 检查、bootstrap/install/worlds 大路由拆分
 - **Web**：清理死代码、按职责拆分多个巨型组件、统一静默吞错为可见的 `ignoreError`
 
-### Fixed
+**Fixed**
 
 - 修复 `characters.ts` 硬编码框架插件 ID 违反框架↔插件隔离规则（改用 `frameworkProposalSource`）
 - 修复跨后端去重引入的 PG `value` 字段 NULL 语义回归（恢复返回 `null`，两后端统一）
 - 修复角色面板在 char-creator 写入路径下的同步问题（恢复并改进 turn 完成后的快照重同步）
 - 修复确认对话框在 setState updater 内执行副作用的 React 反模式
+
+</details>
 
 ## [0.0.4] - 2026-05-28
 
