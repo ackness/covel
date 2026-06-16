@@ -4,13 +4,13 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.4-8b5cf6)](https://github.com/AcKnEsS/covel/releases/tag/v0.0.4)
+[![Version](https://img.shields.io/badge/version-v0.0.5-8b5cf6)](https://github.com/AcKnEsS/covel/releases/tag/v0.0.5)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)]()
 
 ![Covel demo](./.assets/images/demo.gif)
 
-> **Current public release: v0.0.4.** Covel is still early access: APIs, data formats, and plugin frontmatter may change between versions. Official prebuilt binaries currently target macOS Apple Silicon.
+> **Current public release: v0.0.5.** Covel is still early access: APIs, data formats, and plugin frontmatter may change between versions. Official prebuilt binaries currently target macOS Apple Silicon.
 
 ---
 
@@ -33,11 +33,11 @@ Every agent is its own plugin. Disable one, swap one, or write your own.
 
 ### Play it
 
-Grab the official **v0.0.4 macOS Apple Silicon** build from [GitHub Releases](https://github.com/AcKnEsS/covel/releases/tag/v0.0.4) — `Covel-electron-0.0.4-mac-arm64.dmg`. The rolling release list is available at [Releases](https://github.com/AcKnEsS/covel/releases).
+Grab the official **v0.0.5 macOS Apple Silicon** build from [GitHub Releases](https://github.com/AcKnEsS/covel/releases/tag/v0.0.5) — `Covel-electron-0.0.5-mac-arm64.dmg`. The rolling release list is available at [Releases](https://github.com/AcKnEsS/covel/releases).
 
 Open Settings, paste an LLM API key, pick one of the four sample worlds (`cloudmere` / `mistport` / `neonridge` / `haruka-academy`), and play.
 
-v0.0.4 focuses on turn-flow hardening, plugin/session resolution, localized framework UI, refreshed plugin templates, and release documentation. Full notes: [`docs/CHANGELOG.md#004---2026-05-28`](./docs/CHANGELOG.md#004---2026-05-28).
+v0.0.5 is an internal code-quality release: cross-backend and plugin-layer de-duplication, large-file decomposition, unified conventions, and isolation/data-flow fixes — no user-facing behavior change. Full notes: [`docs/CHANGELOG.md#005---2026-06-16`](./docs/CHANGELOG.md#005---2026-06-16).
 
 Your data lives at `~/.covel/` — config, keys, SQLite, custom worlds, logs. Full schema → [`docs/guide/desktop-config.en.md`](./docs/guide/desktop-config.en.md).
 
