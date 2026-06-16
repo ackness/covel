@@ -1,3 +1,10 @@
+import {
+  compactRecord,
+  makeProposal,
+  normalizeRequiredString,
+  optionalString,
+  splitList,
+} from "@covel/plugin-handlers-utils";
 import { characterBlueprintToCharacterUpsert } from "@covel/shared";
 import { shortId, withPendingProposals } from "@covel/tools";
 
@@ -115,13 +122,16 @@ function blueprintFromForm(form, includeInstantiate, sessionId) {
   const tags = splitList(form.tagsText);
   const traits = splitList(form.traitsText);
   const goals = splitList(form.goalsText);
-  const persona = compactRecord({
-    summary: optionalString(form.personaSummary),
-    traits,
-    goals,
-    voice: optionalString(form.voice),
-    style: optionalString(form.style),
-  });
+  const persona = compactRecord(
+    {
+      summary: optionalString(form.personaSummary),
+      traits,
+      goals,
+      voice: optionalString(form.voice),
+      style: optionalString(form.style),
+    },
+    { dropEmptyArrays: true },
+  );
   const attributes = compactRecord({
     club: optionalString(form.club),
     class: optionalString(form.className),
@@ -162,40 +172,6 @@ function rolePrefix(value) {
 /**
  * @param {unknown} value
  */
-function optionalString(value) {
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : undefined;
-}
-
-/**
- * @param {unknown} value
- */
-function splitList(value) {
-  if (typeof value !== "string") return [];
-  return value
-    .split(/[,，\n]/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, 32);
-}
-
-/**
- * @param {Record<string, unknown>} value
- */
-function compactRecord(value) {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => {
-      if (entry === undefined) return false;
-      if (Array.isArray(entry)) return entry.length > 0;
-      return true;
-    }),
-  );
-}
-
-/**
- * @param {unknown} value
- */
 function normalizeBlueprint(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("manualPayload.blueprint must be an object");
@@ -228,17 +204,6 @@ function normalizeBlueprint(value) {
 }
 
 /**
- * @param {unknown} value
- * @param {string} field
- */
-function normalizeRequiredString(value, field) {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${field} must be a non-empty string`);
-  }
-  return value.trim();
-}
-
-/**
  * @param {string} sessionId
  * @param {Record<string, unknown>} blueprint
  */
@@ -260,25 +225,4 @@ function scopedCharacterIdForBlueprint(sessionId, blueprint) {
   return scopedId.length <= MAX_SCOPED_CHARACTER_ID_LENGTH
     ? scopedId
     : `${sessionId}-${blueprint.id}`;
-}
-
-/**
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
- * @param {string} now
- * @param {import('@covel/shared').ProposalType} type
- * @param {Record<string, unknown>} payload
- */
-function makeProposal(ctx, now, type, payload) {
-  return {
-    id: crypto.randomUUID(),
-    type,
-    source: {
-      pluginId: ctx.pluginId,
-      runtimeId: ctx.runtimeId ?? ctx.pluginId,
-    },
-    turnId: ctx.turnId,
-    sessionId: ctx.sessionId,
-    payload,
-    timestamp: now,
-  };
 }

@@ -1,3 +1,10 @@
+import {
+  makeProposal,
+  normalizeRequiredString,
+  optionalNumber,
+  optionalString,
+  splitList,
+} from "@covel/plugin-handlers-utils";
 import { shortId, withPendingProposals } from "@covel/tools";
 
 const RULE_NAMESPACE = "rules";
@@ -112,37 +119,6 @@ function ruleFromForm(form, enabled, sessionId) {
 /**
  * @param {unknown} value
  */
-function optionalString(value) {
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : undefined;
-}
-
-/**
- * @param {unknown} value
- */
-function optionalNumber(value) {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value !== "string" || value.trim().length === 0) return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-/**
- * @param {unknown} value
- */
-function splitList(value) {
-  if (typeof value !== "string") return [];
-  return value
-    .split(/[,，\n]/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, 32);
-}
-
-/**
- * @param {unknown} value
- */
 function normalizeRule(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("manualPayload.rule must be an object");
@@ -198,13 +174,6 @@ function normalizeRule(value) {
     throw new Error("rule is too large; max serialized size is 64KB");
   }
   return rule;
-}
-
-function normalizeRequiredString(value, field) {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${field} must be a non-empty string`);
-  }
-  return value.trim();
 }
 
 function normalizeKind(value) {
@@ -284,20 +253,5 @@ function ruleToLorebookEntry(rule, lorebookEntryId) {
       ...(rule.owner ? { owner: rule.owner } : {}),
       sourceRuleId: rule.id,
     },
-  };
-}
-
-function makeProposal(ctx, now, type, payload) {
-  return {
-    id: crypto.randomUUID(),
-    type,
-    source: {
-      pluginId: ctx.pluginId,
-      runtimeId: ctx.runtimeId ?? ctx.pluginId,
-    },
-    turnId: ctx.turnId,
-    sessionId: ctx.sessionId,
-    payload,
-    timestamp: now,
   };
 }

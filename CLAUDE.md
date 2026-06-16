@@ -104,9 +104,11 @@ apps/
   server/           Hono API + Drizzle ORM
   desktop/          Electron shell (sidecar)
 
-packages/           14 internal packages: shared, context, ai-provider,
+packages/           15 internal packages: shared, context, ai-provider,
                     plugin-loader, runtime, store, state, events, tools,
-                    approval, memory, create, plugin-test-utils, test-runtime
+                    approval, memory, create, plugin-test-utils, test-runtime,
+                    plugin-handlers-utils (pure helper utils for plugin
+                    function-runtime handlers)
 
 plugins/            16 bundled plugin packages (see docs/reference/plugins.md)
 prompts/            Externalised prompt templates (locale-aware markdown)
