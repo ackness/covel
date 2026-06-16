@@ -13,6 +13,7 @@ import {
   type PluginDataChange,
 } from "@/stores/plugin-data-store.js";
 import { buildResumedExecutionStep } from "./execution-steps.js";
+import { enrichGameStateFromSnapshot } from "./game-state.js";
 import {
   collectJobTransitions,
   emitJobTransitionToast,
@@ -130,14 +131,10 @@ function refreshAfterReconnect(
   api
     .getSessionSnapshot(sessionId)
     .then((snapshot) => {
-      const enrichedState: Record<string, unknown> = {
-        ...snapshot.gameState,
-        characters: snapshot.characters,
-      };
-      if (snapshot.characterSchema) {
-        enrichedState.characterSchema = snapshot.characterSchema;
-      }
-      dispatch({ type: "SET_GAME_STATE", state: enrichedState });
+      dispatch({
+        type: "SET_GAME_STATE",
+        state: enrichGameStateFromSnapshot(snapshot),
+      });
     })
     .catch(ignoreError("refresh session snapshot after reconnect"));
 }

@@ -3,6 +3,7 @@ import type { DataService } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
 import type { SnapshotMessage, SnapshotTraceEvent } from "@covel/shared";
+import { enrichGameStateFromSnapshot } from "./game-state.js";
 import type { ExecutionStep, SessionDispatch, StreamMessage } from "./types.js";
 
 interface MutableRef<T> {
@@ -85,14 +86,10 @@ async function restoreServerSnapshot(
       Object.keys(snapshot.gameState).length > 0 ||
       snapshot.characterSchema
     ) {
-      const enrichedState: Record<string, unknown> = {
-        ...snapshot.gameState,
-        characters: snapshot.characters,
-      };
-      if (snapshot.characterSchema) {
-        enrichedState.characterSchema = snapshot.characterSchema;
-      }
-      dispatch({ type: "SET_GAME_STATE", state: enrichedState });
+      dispatch({
+        type: "SET_GAME_STATE",
+        state: enrichGameStateFromSnapshot(snapshot),
+      });
     }
 
     const steps = buildSnapshotExecutionSteps(snapshot.executionSteps);

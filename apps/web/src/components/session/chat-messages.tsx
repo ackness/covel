@@ -41,7 +41,6 @@ export interface ChatMessagesProps {
   /** Form values keyed by submitted block id — used to repopulate disabled forms. */
   submittedBlockValues: Readonly<Record<string, Record<string, unknown>>>;
   viewMode: "parsed" | "detailed" | "raw";
-  blockSelections: Record<string, string>;
   onSendMessage: (msg: string) => void;
   onSubmitBlock: (blockId: string) => void;
   onSubmitInteraction?: (
@@ -53,8 +52,6 @@ export interface ChatMessagesProps {
     submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<void>;
   onRetryRuntime?: (runtimeId: string | undefined) => void;
-  onTriggerEvent?: (type: string, data: Record<string, unknown>) => void;
-  onBlockSelect: (blockId: string, value: string) => void;
   onBeginAdventure: () => void;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
 }
@@ -107,12 +104,16 @@ export function ChatMessages({
   const isPlaying = session.status === "active" && session.turnCount > 0;
   const isEnded = session.status === "ended";
 
-  // Confirmation dialog state. A single source of truth: the in-flight request
-  // carries its own `resolve`. `handleConfirmResult` reads + clears it via the
-  // functional updater, so there is no separate ref to keep in sync.
+  // Confirmation dialog state. The in-flight request carries its own `resolve`.
+  // A ref mirrors the latest request so `handleConfirmResult` can resolve it
+  // *outside* the state updater — resolving inside a `setState` updater is a
+  // React anti-pattern (StrictMode invokes updaters twice, double-resolving the
+  // promise). Mirrors the ref pattern used in PluginPanel.
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(
     null,
   );
+  const confirmRequestRef = useRef<ConfirmRequest | null>(null);
+  confirmRequestRef.current = confirmRequest;
   const confirmAsync = useCallback(
     (params: PluginRpcConfirmRequest) =>
       new Promise<boolean>((resolve) => {
@@ -121,10 +122,10 @@ export function ChatMessages({
     [],
   );
   const handleConfirmResult = useCallback((value: boolean) => {
-    setConfirmRequest((current) => {
-      current?.resolve(value);
-      return null;
-    });
+    const current = confirmRequestRef.current;
+    if (!current) return;
+    current.resolve(value);
+    setConfirmRequest(null);
   }, []);
 
   const { isImageGenActive, generatingImage, handleGenerateImage } =

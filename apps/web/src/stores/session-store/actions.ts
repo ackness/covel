@@ -10,6 +10,7 @@ import {
 import { bootSessionStore } from "./boot.js";
 import type { SessionActions } from "./context.js";
 import { toExecutionStepStatus } from "./execution-steps.js";
+import { enrichGameStateFromSnapshot } from "./game-state.js";
 import { restoreSessionState } from "./restore-session.js";
 import {
   ensureServerThenRun,
@@ -269,16 +270,37 @@ export function useBuildSessionActions({
         return;
       }
 
-      // Run the resulting narrative turn. Character / game-state changes from
-      // this turn arrive via SSE (`character.upserted` → SET_GAME_STATE), so we
-      // no longer eagerly pull a snapshot here — submit-form itself mutates
-      // neither characters nor the character schema.
+      // Run the resulting narrative turn, then re-sync the character snapshot.
+      //
+      // The character panel reads `gameState.characters` (dataSource
+      // `session.characters`), and that slice is only filled incrementally by
+      // the `character.upserted` SSE event — which fires *solely* from the
+      // `character.upsert` proposal path. The primary character-creation paths
+      // (char-creator's create/update-character tools and player-init's
+      // deterministic guard) write straight to the store and mirror to
+      // plugin_data, emitting only `plugin-data.changed`. They never emit
+      // `character.upserted`. `characterSchema` has no SSE carrier at all.
+      //
+      // So after the turn that may have created/updated the player, we pull a
+      // snapshot to refresh both `characters` and `characterSchema`. Done after
+      // the turn (not before) so a just-created character is included.
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
       try {
         await runSingleAction(echo ? filled : "", {
           echoUserMessage: echo && Boolean(filled),
         });
+        try {
+          const snapshot = await api.getSessionSnapshot(sid);
+          if (sessionIdRef.current === sid) {
+            dispatch({
+              type: "SET_GAME_STATE",
+              state: enrichGameStateFromSnapshot(snapshot),
+            });
+          }
+        } catch {
+          // Non-critical: the character panel refreshes on reconnect/restore.
+        }
       } finally {
         finalizeActionExecution(dispatch);
       }

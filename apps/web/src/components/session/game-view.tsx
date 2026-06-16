@@ -136,7 +136,6 @@ export function GameView({
   onLoadWorldSessions,
   onLoadSessionPlugins,
   onTogglePlugin,
-  onTriggerEvent,
 }: GameViewProps) {
   const { t } = useTranslation();
   const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(
@@ -153,8 +152,6 @@ export function GameView({
   const {
     inputValue,
     setInputValue,
-    blockSelections,
-    handleBlockSelect,
     pendingDrafts,
     suspensions,
     composerBlocked,
@@ -397,13 +394,10 @@ export function GameView({
             submittedBlockIds={submittedBlockIds}
             submittedBlockValues={submittedBlockValues}
             viewMode={viewMode}
-            blockSelections={blockSelections}
             onSendMessage={onSendMessage}
             onSubmitBlock={onSubmitBlock}
             onSubmitInteraction={onSubmitInteraction}
             onRetryRuntime={onRetryRuntime}
-            onTriggerEvent={onTriggerEvent}
-            onBlockSelect={handleBlockSelect}
             onBeginAdventure={onBeginAdventure}
             messagesEndRef={messagesEndRef}
           />

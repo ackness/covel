@@ -1,6 +1,35 @@
 import { deepMerge } from "@covel/shared";
 import type { SnapshotCharacter } from "./types.js";
 
+interface GameStateSnapshotSlice {
+  readonly gameState?: Record<string, unknown>;
+  readonly characters: readonly SnapshotCharacter[];
+  readonly characterSchema?: unknown;
+}
+
+/**
+ * Build the enriched gameState payload from a server snapshot.
+ *
+ * `characters` and `characterSchema` have no incremental SSE carrier from the
+ * direct-write character path (char-creator tools / player-init guard mirror
+ * to plugin_data and emit only `plugin-data.changed`; `character.upserted`
+ * fires solely from the `character.upsert` proposal path). A snapshot pull is
+ * the only refresh point for `characterSchema` outside start/restore/reconnect.
+ * Centralised here so every resync site stays consistent.
+ */
+export function enrichGameStateFromSnapshot(
+  snapshot: GameStateSnapshotSlice,
+): Record<string, unknown> {
+  const enrichedState: Record<string, unknown> = {
+    ...(snapshot.gameState ?? {}),
+    characters: snapshot.characters,
+  };
+  if (snapshot.characterSchema) {
+    enrichedState.characterSchema = snapshot.characterSchema;
+  }
+  return enrichedState;
+}
+
 export function upsertGameStateCharacter(
   gameState: Record<string, unknown>,
   character: SnapshotCharacter,
