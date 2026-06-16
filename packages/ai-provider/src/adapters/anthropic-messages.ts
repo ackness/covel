@@ -10,6 +10,10 @@ import type { ModelProviderAdapter } from "./adapter.js";
 import type { ProviderConfig, UsageSummary } from "../types.js";
 import { applyCapabilityFallback } from "./capability-fallback.js";
 import {
+  createMetadataSanitizer,
+  extractParameterOverrides,
+} from "./common.js";
+import {
   postJson,
   parseJson,
   iterateSsePayloads,
@@ -53,21 +57,17 @@ interface AnthropicSystemBlock {
   cache_control?: { type: "ephemeral" };
 }
 
+/** camelCase override key → Anthropic Messages wire field. */
+const ANTHROPIC_PARAMETER_FIELD_MAP = {
+  temperature: "temperature",
+  topP: "top_p",
+  maxOutputTokens: "max_tokens",
+} as const;
+
 function extractAnthropicParameterOverrides(
   meta: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
-  const overrides = meta?.parameterOverrides;
-  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
-    return {};
-  }
-  const source = overrides as Record<string, unknown>;
-  const result: Record<string, unknown> = {};
-  if (typeof source.temperature === "number")
-    result.temperature = source.temperature;
-  if (typeof source.topP === "number") result.top_p = source.topP;
-  if (typeof source.maxOutputTokens === "number")
-    result.max_tokens = source.maxOutputTokens;
-  return result;
+  return extractParameterOverrides(meta, ANTHROPIC_PARAMETER_FIELD_MAP);
 }
 
 /**
@@ -171,16 +171,9 @@ function buildAnthropicSystemField(
   return blocks;
 }
 
-function sanitizeAnthropicMetadata(
-  meta: Record<string, unknown> | undefined,
-): Record<string, unknown> {
-  if (!meta) return {};
-  const sanitized: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(meta)) {
-    if (!ANTHROPIC_PROTECTED_KEYS.has(k)) sanitized[k] = v;
-  }
-  return sanitized;
-}
+const sanitizeAnthropicMetadata = createMetadataSanitizer(
+  ANTHROPIC_PROTECTED_KEYS,
+);
 
 function anthropicHeaders(apiKey?: string): Record<string, string> {
   const h: Record<string, string> = { "anthropic-version": ANTHROPIC_VERSION };

@@ -1,0 +1,767 @@
+{
+  "models": {
+    "gpt-4o": {
+      "input": ["text", "image", "audio", "file"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision",
+        "web_search"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "pricing": {
+        "inputPerMToken": 2.5,
+        "outputPerMToken": 10
+      }
+    },
+    "gpt-4o-mini": {
+      "input": ["text", "image", "file"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "pricing": {
+        "inputPerMToken": 0.15,
+        "outputPerMToken": 0.6
+      }
+    },
+    "gpt-4o-audio-preview": {
+      "input": ["text", "image", "audio"],
+      "output": ["text", "audio"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "pricing": {
+        "inputPerMToken": 2.5,
+        "outputPerMToken": 10,
+        "audioInputPerMToken": 100,
+        "audioOutputPerMToken": 200
+      }
+    },
+    "gpt-4-turbo": {
+      "input": ["text", "image"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 4096,
+      "pricing": {
+        "inputPerMToken": 10,
+        "outputPerMToken": 30
+      }
+    },
+    "gpt-4.1": {
+      "input": ["text", "image", "file"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 1047576,
+      "maxOutputTokens": 32768,
+      "pricing": {
+        "inputPerMToken": 2,
+        "outputPerMToken": 8
+      }
+    },
+    "gpt-4.1-mini": {
+      "input": ["text", "image", "file"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 1047576,
+      "maxOutputTokens": 32768,
+      "pricing": {
+        "inputPerMToken": 0.4,
+        "outputPerMToken": 1.6
+      }
+    },
+    "gpt-4.1-nano": {
+      "input": ["text", "image", "file"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 1047576,
+      "maxOutputTokens": 32768,
+      "pricing": {
+        "inputPerMToken": 0.1,
+        "outputPerMToken": 0.4
+      }
+    },
+    "o1": {
+      "input": ["text", "image"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
+      "pricing": {
+        "inputPerMToken": 15,
+        "outputPerMToken": 60
+      }
+    },
+    "o1-mini": {
+      "input": ["text"],
+      "output": ["text"],
+      "features": ["reasoning", "streaming"],
+      "contextWindow": 128000,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMToken": 3,
+        "outputPerMToken": 12
+      }
+    },
+    "o3": {
+      "input": ["text", "image"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
+      "pricing": {
+        "inputPerMToken": 10,
+        "outputPerMToken": 40
+      }
+    },
+    "o3-mini": {
+      "input": ["text"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "reasoning",
+        "streaming"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
+      "pricing": {
+        "inputPerMToken": 1.1,
+        "outputPerMToken": 4.4
+      }
+    },
+    "o4-mini": {
+      "input": ["text", "image"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "reasoning",
+        "vision",
+        "streaming"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
+      "pricing": {
+        "inputPerMToken": 1.1,
+        "outputPerMToken": 4.4
+      }
+    },
+    "dall-e-3": {
+      "input": ["text"],
+      "output": ["image"],
+      "features": [],
+      "contextWindow": 4000,
+      "maxOutputTokens": 0,
+      "pricing": {
+        "perImage": 0.04
+      }
+    },
+    "gpt-image-1": {
+      "input": ["text", "image"],
+      "output": ["image", "text"],
+      "features": [],
+      "contextWindow": 32000,
+      "maxOutputTokens": 0,
+      "pricing": {
+        "inputPerMToken": 5,
+        "outputPerMToken": 40
+      }
+    },
+    "tts-1": {
+      "input": ["text"],
+      "output": ["audio"],
+      "features": [],
+      "contextWindow": 4096,
+      "maxOutputTokens": 0
+    },
+    "tts-1-hd": {
+      "input": ["text"],
+      "output": ["audio"],
+      "features": [],
+      "contextWindow": 4096,
+      "maxOutputTokens": 0
+    },
+    "whisper-1": {
+      "input": ["audio"],
+      "output": ["text"],
+      "features": [],
+      "contextWindow": 0,
+      "maxOutputTokens": 0
+    },
+    "text-embedding-3-small": {
+      "input": ["text"],
+      "output": ["embedding"],
+      "features": [],
+      "contextWindow": 8191,
+      "maxOutputTokens": 0,
+      "pricing": {
+        "inputPerMToken": 0.02
+      }
+    },
+    "text-embedding-3-large": {
+      "input": ["text"],
+      "output": ["embedding"],
+      "features": [],
+      "contextWindow": 8191,
+      "maxOutputTokens": 0,
+      "pricing": {
+        "inputPerMToken": 0.13
+      }
+    },
+    "nomic-embed-text": {
+      "input": ["text"],
+      "output": ["embedding"],
+      "features": [],
+      "contextWindow": 8192,
+      "maxOutputTokens": 0
+    },
+    "nomic-embed-text-v2-moe": {
+      "input": ["text"],
+      "output": ["embedding"],
+      "features": [],
+      "contextWindow": 8192,
+      "maxOutputTokens": 0
+    },
+    "nvidia/llama-nemotron-embed-vl-1b-v2:free": {
+      "input": ["text", "image"],
+      "output": ["embedding"],
+      "features": ["vision"],
+      "contextWindow": 8192,
+      "maxOutputTokens": 0
+    },
+    "claude-sonnet-4-20250514": {
+      "input": ["text", "image", "file"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision",
+        "prompt_caching",
+        "reasoning",
+        "computer_use"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 16000,
+      "pricing": {
+        "inputPerMToken": 3,
+        "outputPerMToken": 15
+      }
+    },
+    "claude-opus-4-20250514": {
+      "input": ["text", "image", "file"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision",
+        "prompt_caching",
+        "reasoning",
+        "computer_use"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "pricing": {
+        "inputPerMToken": 15,
+        "outputPerMToken": 75
+      }
+    },
+    "claude-3-5-sonnet-20241022": {
+      "input": ["text", "image", "file"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision",
+        "prompt_caching",
+        "computer_use"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 3,
+        "outputPerMToken": 15
+      }
+    },
+    "claude-3-5-haiku-20241022": {
+      "input": ["text", "image"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 0.8,
+        "outputPerMToken": 4
+      }
+    },
+    "claude-3-haiku-20240307": {
+      "input": ["text", "image"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 4096,
+      "pricing": {
+        "inputPerMToken": 0.25,
+        "outputPerMToken": 1.25
+      }
+    },
+    "claude-3-opus-20240229": {
+      "input": ["text", "image"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 4096,
+      "pricing": {
+        "inputPerMToken": 15,
+        "outputPerMToken": 75
+      }
+    },
+    "gemini-2.5-pro": {
+      "input": ["text", "image", "audio", "video", "file"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision",
+        "reasoning"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMToken": 1.25,
+        "outputPerMToken": 10
+      }
+    },
+    "gemini-2.5-flash": {
+      "input": ["text", "image", "audio", "video", "file"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision",
+        "reasoning"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMToken": 0.15,
+        "outputPerMToken": 0.6
+      }
+    },
+    "gemini-2.0-flash": {
+      "input": ["text", "image", "audio", "video", "file"],
+      "output": ["text", "image"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision",
+        "web_search"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 0.1,
+        "outputPerMToken": 0.4
+      }
+    },
+    "gemini-1.5-pro": {
+      "input": ["text", "image", "audio", "video", "file"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 2097152,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 1.25,
+        "outputPerMToken": 5
+      }
+    },
+    "gemini-1.5-flash": {
+      "input": ["text", "image", "audio", "video", "file"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 0.075,
+        "outputPerMToken": 0.3
+      }
+    },
+    "deepseek-chat": {
+      "input": ["text"],
+      "output": ["text"],
+      "features": ["function_calling", "structured_output", "streaming"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 0.27,
+        "outputPerMToken": 1.1
+      }
+    },
+    "deepseek-reasoner": {
+      "input": ["text"],
+      "output": ["text"],
+      "features": ["streaming", "reasoning"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 0.55,
+        "outputPerMToken": 2.19
+      }
+    },
+    "qwen-plus": {
+      "input": ["text"],
+      "output": ["text"],
+      "features": ["function_calling", "structured_output", "streaming"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 0.8,
+        "outputPerMToken": 2
+      }
+    },
+    "qwen-turbo": {
+      "input": ["text"],
+      "output": ["text"],
+      "features": ["function_calling", "structured_output", "streaming"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 0.3,
+        "outputPerMToken": 0.6
+      }
+    },
+    "qwen-max": {
+      "input": ["text"],
+      "output": ["text"],
+      "features": ["function_calling", "structured_output", "streaming"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 2.4,
+        "outputPerMToken": 9.6
+      }
+    },
+    "qwen-vl-plus": {
+      "input": ["text", "image", "video"],
+      "output": ["text"],
+      "features": ["function_calling", "streaming", "vision"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 0.8,
+        "outputPerMToken": 2
+      }
+    },
+    "qwen-vl-max": {
+      "input": ["text", "image", "video"],
+      "output": ["text"],
+      "features": ["function_calling", "streaming", "vision"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 3,
+        "outputPerMToken": 6.5
+      }
+    },
+    "qwen3-235b-a22b": {
+      "input": ["text"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 4,
+        "outputPerMToken": 16
+      }
+    },
+    "qwen3-30b-a3b": {
+      "input": ["text"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 0.7,
+        "outputPerMToken": 2.8
+      }
+    },
+    "qwen3.5-flash": {
+      "input": ["text"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 0.14,
+        "outputPerMToken": 0.56
+      }
+    },
+    "qwen-omni-turbo": {
+      "input": ["text", "image", "audio", "video"],
+      "output": ["text", "audio"],
+      "features": ["function_calling", "streaming", "vision"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 0.6,
+        "outputPerMToken": 1.5,
+        "audioInputPerMToken": 1.8,
+        "audioOutputPerMToken": 4
+      }
+    },
+    "qwen2.5-omni-7b": {
+      "input": ["text", "image", "audio", "video"],
+      "output": ["text", "audio"],
+      "features": ["streaming", "vision"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192
+    },
+    "qwen-audio-turbo": {
+      "input": ["text", "audio"],
+      "output": ["text"],
+      "features": ["streaming"],
+      "contextWindow": 8192,
+      "maxOutputTokens": 4096
+    },
+    "mistral-large-latest": {
+      "input": ["text", "image"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 2,
+        "outputPerMToken": 6
+      }
+    },
+    "mistral-small-latest": {
+      "input": ["text", "image"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 0.1,
+        "outputPerMToken": 0.3
+      }
+    },
+    "codestral-latest": {
+      "input": ["text"],
+      "output": ["text"],
+      "features": ["function_calling", "streaming"],
+      "contextWindow": 262144,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 0.3,
+        "outputPerMToken": 0.9
+      }
+    },
+    "pixtral-large-latest": {
+      "input": ["text", "image"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 2,
+        "outputPerMToken": 6
+      }
+    },
+    "groq/llama-3.3-70b-versatile": {
+      "input": ["text"],
+      "output": ["text"],
+      "features": ["function_calling", "structured_output", "streaming"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 32768,
+      "pricing": {
+        "inputPerMToken": 0.59,
+        "outputPerMToken": 0.79
+      }
+    },
+    "groq/llama-3.1-8b-instant": {
+      "input": ["text"],
+      "output": ["text"],
+      "features": ["function_calling", "structured_output", "streaming"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "pricing": {
+        "inputPerMToken": 0.05,
+        "outputPerMToken": 0.08
+      }
+    },
+    "meta-llama/llama-3.1-405b-instruct": {
+      "input": ["text"],
+      "output": ["text"],
+      "features": ["function_calling", "streaming"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 4096
+    },
+    "meta-llama/llama-3.1-70b-instruct": {
+      "input": ["text"],
+      "output": ["text"],
+      "features": ["function_calling", "streaming"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 4096
+    },
+    "stability/stable-diffusion-xl": {
+      "input": ["text"],
+      "output": ["image"],
+      "features": [],
+      "contextWindow": 0,
+      "maxOutputTokens": 0
+    },
+    "flux-1.1-pro": {
+      "input": ["text", "image"],
+      "output": ["image"],
+      "features": [],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "pricing": {
+        "perImage": 0.04
+      }
+    }
+  },
+  "aliases": {
+    "gpt-4o-2024-11-20": "gpt-4o",
+    "gpt-4o-2024-08-06": "gpt-4o",
+    "gpt-4o-2024-05-13": "gpt-4o",
+    "gpt-4o-mini-2024-07-18": "gpt-4o-mini",
+    "chatgpt-4o-latest": "gpt-4o",
+    "gpt-4-turbo-2024-04-09": "gpt-4-turbo",
+    "gpt-4-turbo-preview": "gpt-4-turbo",
+    "claude-sonnet-4-20250514": "claude-sonnet-4-20250514",
+    "claude-3-5-sonnet-latest": "claude-3-5-sonnet-20241022",
+    "claude-3-5-sonnet-v2": "claude-3-5-sonnet-20241022",
+    "claude-3-5-haiku-latest": "claude-3-5-haiku-20241022",
+    "claude-3-haiku": "claude-3-haiku-20240307",
+    "claude-3-opus": "claude-3-opus-20240229",
+    "gemini-2.5-pro-preview-05-06": "gemini-2.5-pro",
+    "gemini-2.5-flash-preview-04-17": "gemini-2.5-flash",
+    "gemini-2.0-flash-001": "gemini-2.0-flash",
+    "gemini-1.5-pro-latest": "gemini-1.5-pro",
+    "gemini-1.5-flash-latest": "gemini-1.5-flash",
+    "deepseek-chat-v3": "deepseek-chat",
+    "deepseek-v3": "deepseek-chat",
+    "deepseek-r1": "deepseek-reasoner",
+    "qwen-plus-latest": "qwen-plus",
+    "qwen-turbo-latest": "qwen-turbo",
+    "qwen-max-latest": "qwen-max",
+    "qwen-vl-plus-latest": "qwen-vl-plus",
+    "qwen-vl-max-latest": "qwen-vl-max",
+    "qwen3-235b": "qwen3-235b-a22b",
+    "qwen3-30b": "qwen3-30b-a3b",
+    "qwen2.5-omni-7b-instruct": "qwen2.5-omni-7b",
+    "qwen-omni-turbo-latest": "qwen-omni-turbo",
+    "qwen3.5-flash-latest": "qwen3.5-flash",
+    "mistral-large-2411": "mistral-large-latest",
+    "mistral-small-2503": "mistral-small-latest",
+    "codestral-2501": "codestral-latest",
+    "pixtral-large-2411": "pixtral-large-latest"
+  }
+}

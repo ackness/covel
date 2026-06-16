@@ -1,0 +1,112 @@
+import type { EnvVarDefinition } from "../types.js";
+
+export const SERVER_ENV_VARS = [
+  {
+    name: "SERVER_PORT",
+    group: "server",
+    type: "integer",
+    status: "active",
+    defaultValue: "3001",
+    description: "HTTP server listen port.",
+  },
+  {
+    name: "NODE_ENV",
+    group: "server",
+    type: "enum",
+    status: "active",
+    values: ["development", "production", "test"],
+    defaultValue: "development",
+    description: "Node runtime mode used by logging and diagnostics.",
+  },
+  {
+    name: "SERVE_STATIC",
+    group: "server",
+    type: "boolean",
+    status: "active",
+    defaultValue: "false",
+    description: "Serve built web assets from the server process.",
+  },
+  {
+    name: "STATIC_DIR",
+    group: "server",
+    type: "path",
+    status: "active",
+    defaultValue: "./web-dist",
+    description: "Directory served when SERVE_STATIC is enabled.",
+  },
+  {
+    name: "DEPLOYMENT_TIER",
+    group: "server",
+    type: "enum",
+    status: "active",
+    values: ["self", "demo", "commercial", "T1"],
+    defaultValue: "self",
+    description: "Deployment posture used by security-sensitive endpoints.",
+  },
+  {
+    name: "CORS_ORIGIN",
+    group: "server",
+    type: "string",
+    status: "active",
+    description: "Comma-separated HTTP origins allowed by CORS.",
+  },
+  {
+    name: "ENABLE_DEBUG_PAGE",
+    group: "server",
+    type: "boolean",
+    status: "active",
+    defaultValue: "false",
+    description: "Enables debug and internal routes in production.",
+  },
+  {
+    name: "RATE_LIMIT_RPM",
+    group: "server",
+    type: "integer",
+    status: "active",
+    defaultValue: "60",
+    description: "Default per-IP requests per minute for rate-limited routes.",
+  },
+  {
+    name: "TRUSTED_PROXY_IPS",
+    group: "server",
+    type: "string",
+    status: "active",
+    description:
+      "Comma-separated proxy IP allowlist used before trusting X-Forwarded-For / X-Real-IP for rate limiting.",
+  },
+  {
+    name: "COVEL_MEDIA_TOKEN_SECRET",
+    group: "server",
+    type: "secret",
+    status: "active",
+    secret: true,
+    description:
+      "HMAC-SHA256 secret used to sign /api/media/:id short-lived URLs (5min TTL). Required in production; dev generates a per-process random secret if absent.",
+  },
+  {
+    name: "COVEL_MEDIA_CLEANUP_ENABLED",
+    group: "server",
+    type: "boolean",
+    status: "active",
+    defaultValue: "false",
+    description:
+      "Enables the destructive POST /api/media/cleanup endpoint. Off by default; never enable in DEPLOYMENT_TIER=commercial without an admin auth layer (the route forces 503 there).",
+  },
+  {
+    name: "COVEL_INSTALL_API_ENABLED",
+    group: "server",
+    type: "boolean",
+    status: "active",
+    defaultValue: "false",
+    description:
+      "Explicit production opt-in for POST /api/install/plugin and POST /api/install/world when no desktop bearer token is configured.",
+  },
+  {
+    name: "APP_PORT",
+    group: "server",
+    type: "integer",
+    status: "active",
+    defaultValue: "3001",
+    description: "Host port for the Docker Compose app service.",
+  },
+] as const satisfies readonly EnvVarDefinition[];
