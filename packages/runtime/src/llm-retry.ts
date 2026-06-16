@@ -35,161 +35,37 @@ import type {
   LLMToolDefinition,
 } from "./llm-adapter.js";
 import {
-  buildLlmCallingPayload,
-  buildLlmRespondedErrorPayload,
-  buildLlmRespondedSuccessPayload,
-} from "./llm-trace-payload.js";
+  emitLlmCalling,
+  emitLlmRespondedError,
+  emitLlmRespondedSuccess,
+} from "./llm-telemetry.js";
+import {
+  LLMRetryError,
+  assertDeadlineNotReached,
+  buildRetryPolicy,
+  computeAttemptBudget,
+  exhaustedError,
+  extractMessage,
+  isTransientError,
+  perturbMessages,
+  type RetryPolicy,
+  type RetryReason,
+} from "./retry-common.js";
 
-// ── Config ──────────────────────────────────────────────────────────
-
-export interface RetryPolicy {
-  /** Total retries (not including the first attempt). */
-  readonly maxRetries: number;
-  /** Per-call total timeout in ms. */
-  readonly callTimeoutMs: number;
-  /** Streaming first-token timeout in ms. */
-  readonly firstTokenTimeoutMs: number;
-  /** Tool-loop threshold (0 disables detection). */
-  readonly loopDetectionThreshold: number;
-}
-
-/** Default threshold constants, also exported so tests can align. */
-export const DEFAULT_MAX_RETRIES = 1;
-export const DEFAULT_FIRST_TOKEN_TIMEOUT_MS = 30_000;
-export const DEFAULT_LOOP_THRESHOLD = 3;
-export const DEFAULT_CALL_TIMEOUT_CAP_MS = 60_000;
-export const MIN_CALL_TIMEOUT_MS = 5_000;
-
-/**
- * Derive a retry policy from manifest fields. The defaults split the
- * runtime budget across (maxRetries + 1) attempts, capped at
- * {@link DEFAULT_CALL_TIMEOUT_CAP_MS} so a single attempt never monopolises
- * a very large budget.
- */
-export function buildRetryPolicy(input: {
-  maxRetries?: number;
-  callTimeoutMs?: number;
-  firstTokenTimeoutMs?: number;
-  loopDetectionThreshold?: number;
-  runtimeTimeoutMs: number;
-}): RetryPolicy {
-  const maxRetries = clamp(input.maxRetries ?? DEFAULT_MAX_RETRIES, 0, 5);
-  const perAttemptShare = Math.floor(input.runtimeTimeoutMs / (maxRetries + 1));
-  // Derived default is capped by DEFAULT_CALL_TIMEOUT_CAP_MS and floored by
-  // MIN_CALL_TIMEOUT_MS so small budgets stay usable. An explicit user value
-  // is honoured verbatim (minimum 1ms) — the caller may need very short
-  // timeouts for tests or ultra-fast health probes.
-  const derivedCall = Math.max(
-    MIN_CALL_TIMEOUT_MS,
-    Math.min(DEFAULT_CALL_TIMEOUT_CAP_MS, perAttemptShare),
-  );
-  const callTimeoutMs =
-    input.callTimeoutMs !== undefined
-      ? Math.max(1, input.callTimeoutMs)
-      : derivedCall;
-  const firstTokenTimeoutMs = Math.max(
-    1_000,
-    input.firstTokenTimeoutMs ?? DEFAULT_FIRST_TOKEN_TIMEOUT_MS,
-  );
-  const loopDetectionThreshold = Math.max(
-    0,
-    input.loopDetectionThreshold ?? DEFAULT_LOOP_THRESHOLD,
-  );
-  return {
-    maxRetries,
-    callTimeoutMs,
-    firstTokenTimeoutMs,
-    loopDetectionThreshold,
-  };
-}
-
-function clamp(n: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, n));
-}
-
-// ── Error classification ────────────────────────────────────────────
-
-/** Internal marker so turn-executor can tell "retry exhausted" apart. */
-export class LLMRetryError extends Error {
-  readonly cause: unknown;
-  readonly reason: RetryReason;
-  readonly attempts: number;
-  constructor(args: {
-    reason: RetryReason;
-    attempts: number;
-    cause: unknown;
-    message?: string;
-  }) {
-    // Surface the underlying cause message in the wrapper error so test
-    // assertions (and user-facing traces) can still match on provider
-    // keywords like "rate limited" or "fetch failed" without having to
-    // unwrap `.cause`.
-    const causeMsg = extractMessage(args.cause);
-    const base = `LLM retry exhausted after ${args.attempts} attempt(s) (${args.reason})`;
-    super(args.message ?? (causeMsg ? `${base}: ${causeMsg}` : base));
-    this.name = "LLMRetryError";
-    this.reason = args.reason;
-    this.attempts = args.attempts;
-    this.cause = args.cause;
-  }
-}
-
-export type RetryReason =
-  | "first-token-timeout"
-  | "call-timeout"
-  | "transient-error"
-  | "tool-loop-detected"
-  | "unknown";
-
-/**
- * Decide whether an error is worth retrying. Errs on the side of retry for
- * timeouts / network / 5xx; never retries client-side (4xx) or schema
- * violations (those will fail identically on retry).
- */
-export function isTransientError(err: unknown): boolean {
-  if (err instanceof LLMRetryError) return true;
-  const msg = extractMessage(err).toLowerCase();
-
-  // Abort / timeout variants across Node, undici, browser fetch.
-  if (
-    msg.includes("abort") ||
-    msg.includes("timeout") ||
-    msg.includes("timed out")
-  ) {
-    return true;
-  }
-  // Network / connection errors.
-  if (
-    msg.includes("econnreset") ||
-    msg.includes("econnrefused") ||
-    msg.includes("socket hang up") ||
-    msg.includes("network") ||
-    msg.includes("fetch failed")
-  ) {
-    return true;
-  }
-  // Provider error payloads that bubble through ai-provider's gateway.
-  // gateway.ts:normalizeError() stringifies retriable flag + statusCode.
-  if (msg.includes("rate_limited") || msg.includes("rate limit")) return true;
-  if (msg.includes("provider_error")) return true;
-  // 5xx upstream.
-  const statusMatch = msg.match(/\bhttp (\d{3})\b/);
-  if (statusMatch) {
-    const code = Number.parseInt(statusMatch[1], 10);
-    if (code >= 500 && code < 600) return true;
-  }
-  return false;
-}
-
-function extractMessage(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  if (typeof err === "string") return err;
-  try {
-    return JSON.stringify(err);
-  } catch {
-    return String(err);
-  }
-}
+// Re-export the shared retry primitives so existing import sites that pull
+// these from `llm-retry.js` keep working unchanged.
+export {
+  LLMRetryError,
+  buildRetryPolicy,
+  isTransientError,
+  perturbMessages,
+  DEFAULT_MAX_RETRIES,
+  DEFAULT_FIRST_TOKEN_TIMEOUT_MS,
+  DEFAULT_LOOP_THRESHOLD,
+  DEFAULT_CALL_TIMEOUT_CAP_MS,
+  MIN_CALL_TIMEOUT_MS,
+} from "./retry-common.js";
+export type { RetryPolicy, RetryReason } from "./retry-common.js";
 
 // ── Tool-loop detection ─────────────────────────────────────────────
 
@@ -211,31 +87,6 @@ export function detectToolLoop(
   return tail.every(
     (c) => c.name === first.name && c.arguments === first.arguments,
   );
-}
-
-// ── Perturbation ────────────────────────────────────────────────────
-
-/**
- * Append a tiny retry hint to break deterministic KV-cache hits. The hint
- * is a `system` message so it does not leak into assistant output; the
- * trailing spaces scale with the attempt number to guarantee a unique byte
- * string per retry even when the provider has aggressive caching.
- *
- * Attempt 0 is the first attempt and produces no perturbation — only the
- * second attempt onward injects a hint.
- */
-export function perturbMessages(
-  messages: readonly LLMMessage[],
-  attempt: number,
-  reason?: RetryReason,
-): readonly LLMMessage[] {
-  if (attempt <= 0) return messages;
-  const padding = " ".repeat(attempt);
-  const hint =
-    reason === "tool-loop-detected"
-      ? `[retry ${attempt}] The previous attempt called the same tool repeatedly. Vary your approach or finish with runtime-done.${padding}`
-      : `[retry ${attempt}] The previous attempt did not complete. Produce a concise reply; call runtime-done when finished.${padding}`;
-  return [...messages, { role: "system" as const, content: hint }];
 }
 
 // ── Non-streaming retry ─────────────────────────────────────────────
@@ -280,39 +131,24 @@ export async function callLLMWithRetry(
   let lastReason: RetryReason = "unknown";
 
   for (let attempt = 0; attempt <= policy.maxRetries; attempt++) {
-    if (Date.now() >= deadline) {
-      throw new LLMRetryError({
-        reason: "call-timeout",
-        attempts: attempt,
-        cause: lastError,
-        message: "Runtime deadline reached before LLM call could be attempted",
-      });
-    }
+    assertDeadlineNotReached(deadline, attempt, lastError);
 
-    const budget = Math.min(
-      policy.callTimeoutMs,
-      Math.max(1_000, deadline - Date.now()),
-    );
+    const budget = computeAttemptBudget(policy, deadline);
     const signal = AbortSignal.timeout(budget);
     const attemptMessages = perturbMessages(messages, attempt, lastReason);
 
     const callStart = Date.now();
     try {
-      if (params.emitter) {
-        await params.emitter.emit(
-          "llm.calling",
-          buildLlmCallingPayload({
-            runtimeId: params.runtimeId,
-            pluginId: params.pluginId,
-            slot: params.model,
-            model: params.model,
-            provider: params.provider,
-            messages: attemptMessages,
-            tools: params.tools,
-            attempt,
-          }),
-        );
-      }
+      await emitLlmCalling(params.emitter, {
+        runtimeId: params.runtimeId,
+        pluginId: params.pluginId,
+        slot: params.model,
+        model: params.model,
+        provider: params.provider,
+        messages: attemptMessages,
+        tools: params.tools,
+        attempt,
+      });
       const response = await llm.generate({
         model,
         messages: attemptMessages,
@@ -320,32 +156,22 @@ export async function callLLMWithRetry(
         responseFormat: params.responseFormat,
         signal,
       });
-      if (params.emitter) {
-        await params.emitter.emit(
-          "llm.responded",
-          buildLlmRespondedSuccessPayload({
-            runtimeId: params.runtimeId,
-            pluginId: params.pluginId,
-            response,
-            durationMs: Date.now() - callStart,
-            attempt,
-          }),
-        );
-      }
+      await emitLlmRespondedSuccess(params.emitter, {
+        runtimeId: params.runtimeId,
+        pluginId: params.pluginId,
+        response,
+        durationMs: Date.now() - callStart,
+        attempt,
+      });
       return response;
     } catch (err) {
-      if (params.emitter) {
-        await params.emitter.emit(
-          "llm.responded",
-          buildLlmRespondedErrorPayload({
-            runtimeId: params.runtimeId,
-            pluginId: params.pluginId,
-            error: err,
-            durationMs: Date.now() - callStart,
-            attempt,
-          }),
-        );
-      }
+      await emitLlmRespondedError(params.emitter, {
+        runtimeId: params.runtimeId,
+        pluginId: params.pluginId,
+        error: err,
+        durationMs: Date.now() - callStart,
+        attempt,
+      });
       lastError = err;
       lastReason = isCallTimeout(err, signal)
         ? "call-timeout"
@@ -364,11 +190,7 @@ export async function callLLMWithRetry(
   }
 
   // Unreachable; the loop either returns or throws.
-  throw new LLMRetryError({
-    reason: lastReason,
-    attempts: policy.maxRetries + 1,
-    cause: lastError,
-  });
+  throw exhaustedError(policy, lastReason, lastError);
 }
 
 function isCallTimeout(err: unknown, signal: AbortSignal): boolean {
@@ -420,19 +242,9 @@ export async function streamLLMWithRetry(
   let lastReason: RetryReason = "unknown";
 
   for (let attempt = 0; attempt <= policy.maxRetries; attempt++) {
-    if (Date.now() >= deadline) {
-      throw new LLMRetryError({
-        reason: "call-timeout",
-        attempts: attempt,
-        cause: lastError,
-        message: "Runtime deadline reached before LLM call could be attempted",
-      });
-    }
+    assertDeadlineNotReached(deadline, attempt, lastError);
 
-    const budget = Math.min(
-      policy.callTimeoutMs,
-      Math.max(1_000, deadline - Date.now()),
-    );
+    const budget = computeAttemptBudget(policy, deadline);
     // Compose three abort sources into one per-attempt signal:
     //   1. overall call budget (per-attempt)
     //   2. first-token (TTFB) guard — armed on attempt start, disarmed on first event
@@ -457,22 +269,17 @@ export async function streamLLMWithRetry(
     const attemptMessages = perturbMessages(messages, attempt, lastReason);
     const forwardDeltas = attempt === 0; // avoid duplicate text on retry
     const streamStart = Date.now();
-    if (params.emitter) {
-      await params.emitter.emit(
-        "llm.calling",
-        buildLlmCallingPayload({
-          runtimeId: params.runtimeId,
-          pluginId: params.pluginId,
-          slot: params.model,
-          model: params.model,
-          provider: params.provider,
-          messages: attemptMessages,
-          tools: params.tools,
-          attempt,
-          streaming: true,
-        }),
-      );
-    }
+    await emitLlmCalling(params.emitter, {
+      runtimeId: params.runtimeId,
+      pluginId: params.pluginId,
+      slot: params.model,
+      model: params.model,
+      provider: params.provider,
+      messages: attemptMessages,
+      tools: params.tools,
+      attempt,
+      streaming: true,
+    });
 
     try {
       for await (const event of llm.stream({
@@ -515,19 +322,14 @@ export async function streamLLMWithRetry(
           ? { reasoningContent: streamedReasoningContent }
           : {}),
       };
-      if (params.emitter) {
-        await params.emitter.emit(
-          "llm.responded",
-          buildLlmRespondedSuccessPayload({
-            runtimeId: params.runtimeId,
-            pluginId: params.pluginId,
-            response: finalResponse,
-            durationMs: Date.now() - streamStart,
-            attempt,
-            streaming: true,
-          }),
-        );
-      }
+      await emitLlmRespondedSuccess(params.emitter, {
+        runtimeId: params.runtimeId,
+        pluginId: params.pluginId,
+        response: finalResponse,
+        durationMs: Date.now() - streamStart,
+        attempt,
+        streaming: true,
+      });
       return {
         response: finalResponse,
         attempt,
@@ -541,19 +343,14 @@ export async function streamLLMWithRetry(
       // Pair every `llm.calling` with an `llm.responded` on the error path.
       // Without this, a streamed turn that fails mid-flight leaves a dangling
       // `llm.calling` in trace_events and breaks trace-viewer pairing.
-      if (params.emitter) {
-        await params.emitter.emit(
-          "llm.responded",
-          buildLlmRespondedErrorPayload({
-            runtimeId: params.runtimeId,
-            pluginId: params.pluginId,
-            error: err,
-            durationMs: Date.now() - streamStart,
-            attempt,
-            streaming: true,
-          }),
-        );
-      }
+      await emitLlmRespondedError(params.emitter, {
+        runtimeId: params.runtimeId,
+        pluginId: params.pluginId,
+        error: err,
+        durationMs: Date.now() - streamStart,
+        attempt,
+        streaming: true,
+      });
 
       // Salvage path: stream died mid-flight but we already received useful
       // content. Always prefer salvaging over retry — perturbation on a
@@ -595,11 +392,7 @@ export async function streamLLMWithRetry(
     }
   }
 
-  throw new LLMRetryError({
-    reason: lastReason,
-    attempts: policy.maxRetries + 1,
-    cause: lastError,
-  });
+  throw exhaustedError(policy, lastReason, lastError);
 }
 
 function classifyStreamError(

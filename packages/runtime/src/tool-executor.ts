@@ -120,26 +120,47 @@ function toolLabel(pluginId: string, toolName: string): string {
   return `${pluginId}/${toolName}`;
 }
 
-async function emitToolCalling(
+/**
+ * Emit a tool trace event (`tool.calling` / `tool.completed` / `tool.failed`).
+ *
+ * No-op when no emitter is configured. The shared identity envelope
+ * (runtimeId / pluginId / toolName / toolCallId / label / approvalStatus) is
+ * always present; event-specific fields are merged from `extra`. This single
+ * helper replaces the three near-identical `emitToolCalling/Completed/Failed`
+ * functions that all unpacked the same context.
+ */
+async function emitToolEvent(
   ctx: ToolCallContext,
   call: ToolCall,
-  source: "builtin" | "local" | "third-party",
+  eventType: "tool.calling" | "tool.completed" | "tool.failed",
   approvalStatus: ApprovalStatus,
+  extra: Record<string, unknown>,
 ): Promise<void> {
   if (!ctx.emitter) return;
-  await ctx.emitter.emit("tool.calling", {
+  await ctx.emitter.emit(eventType, {
     runtimeId: ctx.runtimeId,
     pluginId: ctx.pluginId,
     toolName: call.name,
     toolCallId: call.toolCallId,
     label: toolLabel(ctx.pluginId, call.name),
-    arguments: call.arguments,
-    source,
     approvalStatus,
+    ...extra,
   });
 }
 
-async function emitToolCompleted(
+function emitToolCalling(
+  ctx: ToolCallContext,
+  call: ToolCall,
+  source: "builtin" | "local" | "third-party",
+  approvalStatus: ApprovalStatus,
+): Promise<void> {
+  return emitToolEvent(ctx, call, "tool.calling", approvalStatus, {
+    arguments: call.arguments,
+    source,
+  });
+}
+
+function emitToolCompleted(
   ctx: ToolCallContext,
   call: ToolCall,
   result: string,
@@ -147,22 +168,15 @@ async function emitToolCompleted(
   durationMs: number,
   approvalStatus: ApprovalStatus,
 ): Promise<void> {
-  if (!ctx.emitter) return;
-  await ctx.emitter.emit("tool.completed", {
-    runtimeId: ctx.runtimeId,
-    pluginId: ctx.pluginId,
-    toolName: call.name,
-    toolCallId: call.toolCallId,
-    label: toolLabel(ctx.pluginId, call.name),
+  return emitToolEvent(ctx, call, "tool.completed", approvalStatus, {
     result,
     parsedResult,
     durationMs,
-    approvalStatus,
     success: true,
   });
 }
 
-async function emitToolFailed(
+function emitToolFailed(
   ctx: ToolCallContext,
   call: ToolCall,
   code: ToolErrorCode,
@@ -171,18 +185,11 @@ async function emitToolFailed(
   durationMs: number,
   approvalStatus: ApprovalStatus,
 ): Promise<void> {
-  if (!ctx.emitter) return;
-  await ctx.emitter.emit("tool.failed", {
-    runtimeId: ctx.runtimeId,
-    pluginId: ctx.pluginId,
-    toolName: call.name,
-    toolCallId: call.toolCallId,
-    label: toolLabel(ctx.pluginId, call.name),
+  return emitToolEvent(ctx, call, "tool.failed", approvalStatus, {
     code,
     error,
     ...(details && details.length > 0 ? { details } : {}),
     durationMs,
-    approvalStatus,
     success: false,
   });
 }

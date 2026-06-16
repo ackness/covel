@@ -1,6 +1,6 @@
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
-import { validateOutput, withPendingProposals } from "@covel/tools";
+import { withPendingProposals } from "@covel/tools";
 import {
   buildContext,
   buildContextAsync,
@@ -13,15 +13,23 @@ import { resolveUserSettings } from "./turn-executor-helpers.js";
 import { runPreRuntimeHook, runPostRuntimeHook } from "./hooks/wire-helpers.js";
 import { emitSubEvent } from "./turn-runtime-helpers.js";
 import {
-  extractRequiredFields,
   findLastStructuredToolOutput,
   findPresentableToolOutput,
   formatToolLoopFailure,
-  looksLikeStructuredRuntimeOutput,
   parseFinalOutputEnvelope,
   sanitizeStoryNarrativeText,
   shouldSuppressToolLoopNarrative,
 } from "./turn-output-helpers.js";
+import { filterHistoryForStory } from "./message-filter.js";
+import {
+  checkSchemaProseFailure,
+  checkSchemaValidation,
+} from "./runtime-output-validator.js";
+import {
+  emitMessageCompleted,
+  emitRuntimeCompleted,
+  emitRuntimeFailed,
+} from "./runtime-telemetry.js";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 import { runAgentToolLoop } from "./turn-agent-tool-loop.js";
 
@@ -163,22 +171,10 @@ export async function executeAgentRuntime({
   // Filtering uses sourceRuntimeId to look up the runtime's outputKind
   // from the active manifests. Messages from runtimes not in the active set
   // are kept (conservative — don't drop unknown messages).
-  let filteredHistory = messageHistory;
-  if (manifest.outputKind === "story") {
-    filteredHistory = messageHistory.filter((m) => {
-      if (m.sourceType === "player" || m.sourceType === "system") return true;
-      if (m.sourceType === "runtime") {
-        // Keep own previous outputs.
-        if (m.sourceRuntimeId === manifest.name) return true;
-        // Filter out messages that look like structured tool output so the
-        // narrator doesn't mimic JSON / block / category-list formats.
-        if (looksLikeStructuredRuntimeOutput(m.content)) return false;
-        // Keep narrative-like text from other runtimes.
-        return true;
-      }
-      return true;
-    });
-  }
+  const filteredHistory =
+    manifest.outputKind === "story"
+      ? filterHistoryForStory(messageHistory, manifest.name)
+      : messageHistory;
 
   // Surface player-authored plugin settings to agent prompts as
   // `{{ userSettings.<key> }}`. Merge with manifest defaults so templates
@@ -243,8 +239,21 @@ export async function executeAgentRuntime({
     deadline,
   } = toolLoop;
 
+  // Shared PostRuntime-hook opts for every terminal path of this runtime.
+  const postRuntimeOpts = {
+    pipeline: hookPipeline,
+    sessionId: input.sessionId,
+    turnId: input.turnId,
+    pluginId: manifest.pluginId,
+    runtimeId: manifest.name,
+    eventBus: deps.eventBus,
+    emitter: deps.emitter,
+  };
+  const finalizeFailure = (result: RuntimeResult): Promise<RuntimeResult> =>
+    runPostRuntimeHook(postRuntimeOpts, result);
+
   if (!stoppedWithResponse && !finalContent) {
-    const result: RuntimeResult = {
+    return finalizeFailure({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
       runId,
@@ -260,20 +269,7 @@ export async function executeAgentRuntime({
         failedToolCalls,
       }),
       timestamp: new Date().toISOString(),
-    };
-
-    return runPostRuntimeHook(
-      {
-        pipeline: hookPipeline,
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        pluginId: manifest.pluginId,
-        runtimeId: manifest.name,
-        eventBus: deps.eventBus,
-        emitter: deps.emitter,
-      },
-      result,
-    );
+    });
   }
 
   // Build output from LLM final content + tool call results
@@ -295,71 +291,22 @@ export async function executeAgentRuntime({
       !parsed.parsedAsJson &&
       manifest.outputKind !== "story"
     ) {
-      const preview = finalContent.slice(0, 220).replace(/\s+/g, " ").trim();
-      const requiredFields = extractRequiredFields(loaded.outputSchema);
-      const requiredHint =
-        requiredFields.length > 0
-          ? ` Required fields: {${requiredFields.join(", ")}}.`
-          : "";
-      const failedResult: RuntimeResult = {
-        pluginId: manifest.pluginId,
-        runtimeId: manifest.name,
-        runId,
-        turnId: input.turnId,
-        status: "failed",
-        // Preserve the full LLM output (`narrativeOutput`) plus a structured
-        // diagnostic the task UI can render verbatim. The shape is stable so
-        // a plugin's jobs.json can bind `value/runtimeResults/0/output/diagnostic`
-        // and show the user the schema contract + raw output side-by-side.
-        output: {
-          narrativeOutput: finalContent,
-          diagnostic: {
-            kind: "schema-validation-prose",
-            requiredFields,
-            schemaTitle:
-              typeof loaded.outputSchema.title === "string"
-                ? loaded.outputSchema.title
-                : undefined,
-            llmOutput: finalContent,
-            hint:
-              "Model returned plain prose instead of JSON. Try a model with reliable structured-output mode, " +
-              "tighten the system prompt to enforce JSON, or relax overly strict schema fields.",
-          },
-        },
-        toolCalls: collectedToolCalls,
-        durationMs: Date.now() - startTime,
-        error:
-          `Runtime "${manifest.name}" expected a JSON envelope per output.schema but the model returned plain prose.` +
-          requiredHint +
-          ` Full LLM output preserved in runtimeResults[].output.narrativeOutput.` +
-          ` Preview: "${preview}${finalContent.length > 220 ? "…" : ""}"`,
-        timestamp: new Date().toISOString(),
-      };
-      emitSubEvent(
-        deps.eventBus,
-        "runtime",
-        "runtime.failed",
-        input.sessionId,
+      const failedResult = checkSchemaProseFailure(
         {
-          runtimeId: manifest.name,
-          pluginId: manifest.pluginId,
-          status: failedResult.status,
-          durationMs: failedResult.durationMs,
-          error: failedResult.error,
+          manifest,
+          input,
+          runId,
+          startTime,
+          collectedToolCalls,
+          outputSchema: loaded.outputSchema,
         },
+        finalContent,
+        parsed.parsedAsJson,
       );
-      return runPostRuntimeHook(
-        {
-          pipeline: hookPipeline,
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          pluginId: manifest.pluginId,
-          runtimeId: manifest.name,
-          eventBus: deps.eventBus,
-          emitter: deps.emitter,
-        },
-        failedResult,
-      );
+      if (failedResult) {
+        emitRuntimeFailed(deps, input.sessionId, manifest, failedResult);
+        return finalizeFailure(failedResult);
+      }
     }
     output = shouldSuppressToolLoopNarrative({
       outputKind: manifest.outputKind,
@@ -370,54 +317,24 @@ export async function executeAgentRuntime({
         presentableToolOutput ?? { narrativeOutput: "" })
       : parsed.output;
     if (loaded.outputSchema && manifest.outputKind !== "story") {
-      const validation = validateOutput(output, loaded.outputSchema);
-      if (!validation.valid) {
-        const validationErrors = validation.errors ?? [
-          "unknown schema validation error",
-        ];
-        const failedResult: RuntimeResult = {
-          pluginId: manifest.pluginId,
-          runtimeId: manifest.name,
+      const failedResult = checkSchemaValidation(
+        {
+          manifest,
+          input,
           runId,
-          turnId: input.turnId,
-          status: "failed",
-          output,
-          toolCalls: collectedToolCalls,
-          durationMs: Date.now() - startTime,
-          error:
-            `Runtime "${manifest.name}" output did not match output.schema: ` +
-            validationErrors.slice(0, 5).join("; "),
-          timestamp: new Date().toISOString(),
-        };
-        emitSubEvent(
-          deps.eventBus,
-          "runtime",
-          "runtime.failed",
-          input.sessionId,
-          {
-            runtimeId: manifest.name,
-            pluginId: manifest.pluginId,
-            status: failedResult.status,
-            durationMs: failedResult.durationMs,
-            error: failedResult.error,
-          },
-        );
-        return runPostRuntimeHook(
-          {
-            pipeline: hookPipeline,
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            pluginId: manifest.pluginId,
-            runtimeId: manifest.name,
-            eventBus: deps.eventBus,
-            emitter: deps.emitter,
-          },
-          failedResult,
-        );
+          startTime,
+          collectedToolCalls,
+          outputSchema: loaded.outputSchema,
+        },
+        output,
+      );
+      if (failedResult) {
+        emitRuntimeFailed(deps, input.sessionId, manifest, failedResult);
+        return finalizeFailure(failedResult);
       }
     }
   } else if (failedToolCalls.length > 0) {
-    const result: RuntimeResult = {
+    return finalizeFailure({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
       runId,
@@ -432,20 +349,7 @@ export async function executeAgentRuntime({
         failedToolCalls,
       }),
       timestamp: new Date().toISOString(),
-    };
-
-    return runPostRuntimeHook(
-      {
-        pipeline: hookPipeline,
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        pluginId: manifest.pluginId,
-        runtimeId: manifest.name,
-        eventBus: deps.eventBus,
-        emitter: deps.emitter,
-      },
-      result,
-    );
+    });
   } else {
     output = presentableToolOutput ?? { narrativeOutput: "" };
   }
@@ -562,39 +466,18 @@ export async function executeAgentRuntime({
   }
 
   // Emit a compact `message.completed` trace event for story runtimes that
-  // produced non-empty narrative content. The realtime `message.delta`
-  // channel keeps flowing per-token; this event is the single persisted
-  // record of the final aggregated content and the delta count, so the
-  // `/debug` timeline shows one row per runtime output instead of
-  // thousands of per-token rows.
-  if (deps.emitter && finalContent && manifest.outputKind === "story") {
-    await deps.emitter.emit("message.completed", {
-      runtimeId: manifest.name,
-      pluginId: manifest.pluginId,
-      content: finalContent,
-      len: finalContent.length,
-      deltaCount: streamDeltaCount,
-    });
+  // produced non-empty narrative content.
+  if (finalContent && manifest.outputKind === "story") {
+    await emitMessageCompleted(
+      deps.emitter,
+      manifest,
+      finalContent,
+      streamDeltaCount,
+    );
   }
 
-  emitSubEvent(deps.eventBus, "runtime", "runtime.completed", input.sessionId, {
-    runtimeId: manifest.name,
-    pluginId: manifest.pluginId,
-    status: result.status,
-    durationMs: result.durationMs,
-  });
+  emitRuntimeCompleted(deps, input.sessionId, manifest, result);
 
   // PostRuntime hook — agent success path (S4-T3)
-  return runPostRuntimeHook(
-    {
-      pipeline: hookPipeline,
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      pluginId: manifest.pluginId,
-      runtimeId: manifest.name,
-      eventBus: deps.eventBus,
-      emitter: deps.emitter,
-    },
-    result,
-  );
+  return runPostRuntimeHook(postRuntimeOpts, result);
 }

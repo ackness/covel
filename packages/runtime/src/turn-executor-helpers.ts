@@ -72,6 +72,12 @@ export function makeFailedResult(
   runId: string,
   startTime: number,
   error: string,
+  overrides?: {
+    /** Preserve runtime output (diagnostics, partial envelope). Defaults to null. */
+    readonly output?: RuntimeResult["output"];
+    /** Preserve collected tool calls. Defaults to []. */
+    readonly toolCalls?: RuntimeResult["toolCalls"];
+  },
 ): RuntimeResult {
   return {
     pluginId: manifest.pluginId,
@@ -79,8 +85,8 @@ export function makeFailedResult(
     runId,
     turnId: input.turnId,
     status: "failed",
-    output: null,
-    toolCalls: [],
+    output: overrides?.output ?? null,
+    toolCalls: overrides?.toolCalls ?? [],
     durationMs: Date.now() - startTime,
     error,
     timestamp: new Date().toISOString(),
