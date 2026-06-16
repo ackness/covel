@@ -242,7 +242,7 @@ export function useBuildSessionActions({
   const submitInteraction = useCallback(
     async (
       blockId: string,
-      _turnId: string,
+      turnId: string,
       interactionId: string,
       type: "form" | "choice" | "confirmation",
       values: Record<string, unknown>,
@@ -252,42 +252,35 @@ export function useBuildSessionActions({
       if (!sid) return;
       const echo = submitBehavior?.echoFilledNarrative !== false;
 
+      // Persist the player's input and fill the interaction template. If this
+      // fails we cannot run the turn, so fall back to a plain message so the
+      // player's input is never silently dropped.
+      let filled: string;
       try {
         submitBlock(blockId, values);
-
         const result = await api.submitInputs(sid, {
-          turnId: _turnId,
+          turnId,
           submissions: [{ interactionId, type, values }],
         });
-
-        try {
-          const snapshot = await api.getSessionSnapshot(sid);
-          if (sessionIdRef.current === sid) {
-            const enrichedState: Record<string, unknown> = {
-              characters: snapshot.characters,
-            };
-            if (snapshot.characterSchema) {
-              enrichedState.characterSchema = snapshot.characterSchema;
-            }
-            dispatch({ type: "SET_GAME_STATE", state: enrichedState });
-          }
-        } catch {
-          // Non-critical: character panel will update on next refresh.
-        }
-
-        const filled = result.results?.[0]?.filledNarrative ?? "";
-        dispatch({ type: "SET_EXECUTING", value: true });
-        dispatch({ type: "SET_EXECUTION_ERROR", error: null });
-        try {
-          await runSingleAction(echo ? filled : "", {
-            echoUserMessage: echo && Boolean(filled),
-          });
-        } finally {
-          finalizeActionExecution(dispatch);
-        }
+        filled = result.results?.[0]?.filledNarrative ?? "";
       } catch (err) {
-        console.error("[submitInteraction] Failed:", err);
+        console.error("[submitInteraction] submit-form failed:", err);
         sendMessage(Object.values(values).join(", "));
+        return;
+      }
+
+      // Run the resulting narrative turn. Character / game-state changes from
+      // this turn arrive via SSE (`character.upserted` → SET_GAME_STATE), so we
+      // no longer eagerly pull a snapshot here — submit-form itself mutates
+      // neither characters nor the character schema.
+      dispatch({ type: "SET_EXECUTING", value: true });
+      dispatch({ type: "SET_EXECUTION_ERROR", error: null });
+      try {
+        await runSingleAction(echo ? filled : "", {
+          echoUserMessage: echo && Boolean(filled),
+        });
+      } finally {
+        finalizeActionExecution(dispatch);
       }
     },
     [dispatch, sessionIdRef, submitBlock, sendMessage, runSingleAction],

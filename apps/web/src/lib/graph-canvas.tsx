@@ -9,7 +9,7 @@
 import {
   Suspense,
   lazy,
-  useMemo,
+  useReducer,
   useState,
   useRef,
   useEffect,
@@ -18,34 +18,13 @@ import {
 import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { usePluginNamespace } from "@/stores/plugin-data-store.js";
+import type { ForceLink, ForceNode, MutableForceNode } from "./graph-types.js";
+import { createGraphDataPools, syncGraphData } from "./graph-canvas-sync.js";
 
 const ForceGraph2D = lazy(async () => {
   const mod = await import("react-force-graph-2d");
   return { default: mod.default };
 });
-
-interface ForceNode {
-  id: string;
-  name: string;
-  type: "individual" | "group" | "faction";
-  summary: string;
-  labels: string[];
-  color: string;
-  radius: number;
-  x?: number;
-  y?: number;
-}
-
-interface ForceLink {
-  source: string;
-  target: string;
-  edgeId: string;
-  relation: string;
-  strength: number;
-  fact: string;
-  color: string;
-  width: number;
-}
 
 interface GraphNodeRecord {
   id: string;
@@ -140,24 +119,6 @@ function buildLinks(edges: Record<string, unknown>): ForceLink[] {
     }));
 }
 
-/**
- * A force-graph node after d3-force has had a chance to touch it. The
- * simulation mutates `.x/.y/.vx/.vy` (and `.fx/.fy` when pinned) directly
- * on the object, so reusing the same object across rebuilds is the most
- * reliable way to preserve a node's layout — no copying, no tick-sync,
- * no jitter.
- */
-type MutableForceNode = ForceNode & {
-  x?: number;
-  y?: number;
-  vx?: number;
-  vy?: number;
-  // d3-force treats `undefined` as "not pinned"; a numeric value pins the
-  // node to that coordinate. We never assign `null`.
-  fx?: number;
-  fy?: number;
-};
-
 function nodeRadius(name: string): number {
   const glyphs = Array.from(name ?? "");
   return Math.max(18, Math.min(32, 14 + Math.max(0, glyphs.length - 2) * 2.6));
@@ -238,18 +199,14 @@ const Inner = ({
   //
   // Fix: keep ONE `{nodes, links}` object behind a ref and mutate its
   // arrays in place whenever plugin-data changes. The ref never changes
-  // identity, so force-graph's simulation state is preserved.
+  // identity, so force-graph's simulation state is preserved. The pool
+  // bookkeeping (id → object maps + the diffing) lives in graph-canvas-sync.
   //
   // Canvas width is handled orthogonally: it only flows into the `width`
   // prop of `<ForceGraph2D>` (force-graph handles reflow internally) and
   // into the *initial* seed position of brand-new nodes. It never
   // triggers graphData rebuilds.
-  const graphDataRef = useRef<{
-    nodes: MutableForceNode[];
-    links: ForceLink[];
-  }>({ nodes: [], links: [] });
-  const nodePoolRef = useRef<Map<string, MutableForceNode>>(new Map());
-  const linkPoolRef = useRef<Map<string, ForceLink>>(new Map());
+  const poolsRef = useRef(createGraphDataPools());
   // Latest canvas geometry held in a ref so the data-sync effect can read
   // it without depending on it — the effect deps stay limited to `nodes`
   // and `edges` so width changes never rebuild the graph.
@@ -257,7 +214,10 @@ const Inner = ({
   canvasGeomRef.current.width = width;
   canvasGeomRef.current.height = height;
 
-  const [, setTick] = useState(0);
+  // Re-render trigger for in-place graphData mutations. The stable ref
+  // identity is load-bearing for d3-force, so React can't observe topology
+  // changes by reference — we bump a version counter when the id-set changes.
+  const [, bumpVersion] = useReducer((n: number) => n + 1, 0);
   const lastFitCountRef = useRef<number>(-1);
 
   // Attach the observer through a callback ref so we always connect to
@@ -295,88 +255,17 @@ const Inner = ({
 
   useEffect(() => {
     // Sync plugin-data → in-place mutation of the stable graphData ref.
-    // Only setTick when the id-set actually changed so mid-drag echoes
-    // from other plugins don't force React to re-render this tree.
-    const built = buildNodes(nodes);
-    const pool = nodePoolRef.current;
-    const currentNodes = graphDataRef.current.nodes;
-    const liveNodeIds = new Set<string>();
-    let nodesChanged = false;
-
-    const geom = canvasGeomRef.current;
-    const cx = geom.width / 2;
-    const cy = geom.height / 2;
-    const seedRadius = Math.min(geom.width, geom.height) * 0.28;
-    const newcomerIds = built.map((n) => n.id).filter((id) => !pool.has(id));
-
-    for (const n of built) {
-      liveNodeIds.add(n.id);
-      const existing = pool.get(n.id);
-      if (existing) {
-        // Refresh visuals in place; don't touch x/y/vx/vy/fx/fy.
-        existing.name = n.name;
-        existing.type = n.type;
-        existing.summary = n.summary;
-        existing.labels = n.labels;
-        existing.color = n.color;
-        existing.radius = n.radius;
-        continue;
-      }
-      const idx = newcomerIds.indexOf(n.id);
-      const angle =
-        -Math.PI / 2 + (idx / Math.max(newcomerIds.length, 1)) * 2 * Math.PI;
-      const seeded: MutableForceNode = {
-        ...n,
-        x: cx + Math.cos(angle) * seedRadius,
-        y: cy + Math.sin(angle) * seedRadius,
-      };
-      pool.set(n.id, seeded);
-      currentNodes.push(seeded);
-      nodesChanged = true;
-    }
-    for (let i = currentNodes.length - 1; i >= 0; i -= 1) {
-      if (!liveNodeIds.has(currentNodes[i].id)) {
-        pool.delete(currentNodes[i].id);
-        currentNodes.splice(i, 1);
-        nodesChanged = true;
-      }
-    }
-
-    const linkPool = linkPoolRef.current;
-    const currentLinks = graphDataRef.current.links;
-    const builtLinks = buildLinks(edges);
-    const liveLinkIds = new Set<string>();
-    let linksChanged = false;
-
-    for (const l of builtLinks) {
-      liveLinkIds.add(l.edgeId);
-      const existing = linkPool.get(l.edgeId);
-      if (existing) {
-        existing.relation = l.relation;
-        existing.strength = l.strength;
-        existing.fact = l.fact;
-        existing.color = l.color;
-        existing.width = l.width;
-        continue;
-      }
-      linkPool.set(l.edgeId, l);
-      currentLinks.push(l);
-      linksChanged = true;
-    }
-    for (let i = currentLinks.length - 1; i >= 0; i -= 1) {
-      if (!liveLinkIds.has(currentLinks[i].edgeId)) {
-        linkPool.delete(currentLinks[i].edgeId);
-        currentLinks.splice(i, 1);
-        linksChanged = true;
-      }
-    }
-
-    if (nodesChanged || linksChanged) {
-      setTick((t) => t + 1);
-    }
+    // Only bump the version when the id-set actually changed so mid-drag
+    // echoes from other plugins don't force React to re-render this tree.
+    const changed = syncGraphData(
+      poolsRef.current,
+      { nodes: buildNodes(nodes), links: buildLinks(edges) },
+      canvasGeomRef.current,
+    );
+    if (changed) bumpVersion();
   }, [nodes, edges]);
 
-  const graphData = graphDataRef.current;
+  const graphData = poolsRef.current.graphData;
 
   useEffect(() => {
     if (!graphRef.current) return;
@@ -515,7 +404,7 @@ const Inner = ({
             // force idiom for "layout once, then behave as a static
             // diagram" and is what eliminates the agent-driven drift.
             onEngineStop={() => {
-              for (const node of graphDataRef.current.nodes) {
+              for (const node of poolsRef.current.graphData.nodes) {
                 if (typeof node.x === "number" && node.fx === undefined)
                   node.fx = node.x;
                 if (typeof node.y === "number" && node.fy === undefined)
