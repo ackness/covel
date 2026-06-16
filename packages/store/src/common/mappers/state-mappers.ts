@@ -107,7 +107,9 @@ export function toStateEntryRecord(
     sessionId: row.sessionId,
     tableName: row.tableName,
     fieldName: row.fieldName,
-    value: json.read(row.value),
+    // Required JSON: SQL NULL must round-trip as `null`, not `undefined`,
+    // across both backends (PG jsonb null and SQLite "null" text).
+    value: json.readRequired(row.value),
     updatedAt: row.updatedAt,
   };
 }
@@ -121,7 +123,8 @@ export function toStateChangeRecord(
     sessionId: row.sessionId,
     tableName: row.tableName,
     fieldName: row.fieldName,
-    value: json.read(row.value),
+    // Required JSON: preserve a stored `null` as `null` on both backends.
+    value: json.readRequired(row.value),
     changedBy: row.changedBy,
     turnId: row.turnId,
     reason: row.reason ?? undefined,

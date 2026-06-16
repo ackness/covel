@@ -49,7 +49,9 @@ export function toPluginDataRecord(
     pluginId: row.pluginId,
     namespace: row.namespace,
     key: row.key,
-    value: json.read(row.value),
+    // Required JSON: a stored `null` value must round-trip as `null`
+    // (not `undefined`) on both PG and SQLite.
+    value: json.readRequired(row.value),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
