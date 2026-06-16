@@ -22,21 +22,6 @@ import {
 import { SessionBreadcrumb } from "./session-breadcrumb.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
-import { useRuntimeBindings } from "@/hooks/use-runtime-bindings.js";
-import {
-  applyPluginPackSelection,
-  collectPluginTags,
-  filterPluginPackages,
-  groupPluginPackages,
-  pluginPacksForWorld,
-  selectedPackForWorld,
-} from "@/lib/session-plugin-selection.js";
-import {
-  defaultSelectedPluginIdsForWorld,
-  excludedPluginIdsForWorld,
-  isLockedCorePackage,
-  requiredPluginIdsForWorld,
-} from "./session-prep/plugin-selection-helpers.js";
 import {
   isDeclaredSlotMissing,
   resolveDeclaredSlot,
@@ -54,6 +39,14 @@ import { ModelsCard } from "./session-prep/models-card.js";
 import { PluginSelectionCard } from "./session-prep/plugin-selection-card.js";
 import type { SessionPrepScreenProps } from "./session-prep/types.js";
 import { worldVisual } from "@/lib/world-visuals.js";
+import { usePluginSelection } from "./session-prep/use-plugin-selection.js";
+import { useWorldDataPreflight } from "./session-prep/use-world-data-preflight.js";
+import { usePrepRuntimeBindings } from "./session-prep/use-prep-runtime-bindings.js";
+import { ignoreError } from "@/lib/ignore-error.js";
+import {
+  defaultSelectedPluginIdsForWorld,
+  isLockedCorePackage,
+} from "./session-prep/plugin-selection-helpers.js";
 
 export { defaultSelectedPluginIdsForWorld, isLockedCorePackage };
 
@@ -76,123 +69,35 @@ export function SessionPrepScreen({
     llmConfig,
   );
 
-  const corePluginIds = useMemo(
-    () => new Set(packages.filter(isLockedCorePackage).map((pkg) => pkg.name)),
-    [packages],
-  );
-  const worldRequiredPluginIds = useMemo(
-    () => requiredPluginIdsForWorld(world),
-    [world],
-  );
-  const worldExcludedPluginIds = useMemo(
-    () => excludedPluginIdsForWorld(world),
-    [world],
-  );
-  const lockedPluginIds = useMemo(
-    () =>
-      new Set([
-        ...[...corePluginIds].filter(
-          (pluginId) => !worldExcludedPluginIds.has(pluginId),
-        ),
-        ...worldRequiredPluginIds,
-      ]),
-    [corePluginIds, worldRequiredPluginIds, worldExcludedPluginIds],
-  );
+  const {
+    corePluginIds,
+    lockedPluginIds,
+    selectedPackages,
+    selectedPluginIds,
+    selectedPluginIdSet,
+    pluginPacks,
+    activePluginPack,
+    pluginSearch,
+    activePluginTags,
+    availablePluginTags,
+    pluginGroups,
+    setPluginSearch,
+    togglePluginTag,
+    applyPack,
+    togglePlugin,
+  } = usePluginSelection(world, packages);
 
-  const [selectedPlugins, setSelectedPlugins] = useState<Set<string>>(() =>
-    defaultSelectedPluginIdsForWorld(world, packages),
-  );
-  const selectedPackages = useMemo(
-    () =>
-      packages.filter(
-        (pkg) => selectedPlugins.has(pkg.name) || lockedPluginIds.has(pkg.name),
-      ),
-    [packages, selectedPlugins, lockedPluginIds],
-  );
-  const selectedPluginIds = useMemo(
-    () => [...new Set([...selectedPlugins, ...lockedPluginIds])],
-    [selectedPlugins, lockedPluginIds],
-  );
-  const selectedPluginIdSet = useMemo(
-    () => new Set(selectedPluginIds),
-    [selectedPluginIds],
-  );
-  const pluginPacks = useMemo(() => pluginPacksForWorld(world), [world]);
-  const worldDefaultPack = useMemo(() => selectedPackForWorld(world), [world]);
-  const [activePluginPackId, setActivePluginPackId] = useState<string | null>(
-    () => worldDefaultPack?.id ?? null,
-  );
-  const activePluginPack = useMemo(
-    () => pluginPacks.find((pack) => pack.id === activePluginPackId) ?? null,
-    [pluginPacks, activePluginPackId],
-  );
-  const [pluginSearch, setPluginSearch] = useState("");
-  const [activePluginTags, setActivePluginTags] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const availablePluginTags = useMemo(
-    () => collectPluginTags(packages),
-    [packages],
-  );
-  const visiblePluginPackages = useMemo(
-    () => filterPluginPackages(packages, pluginSearch, activePluginTags),
-    [packages, pluginSearch, activePluginTags],
-  );
-  const pluginGroups = useMemo(
-    () =>
-      groupPluginPackages(visiblePluginPackages, (groupId) =>
-        t(`session.pluginGroups.${groupId}`, groupId),
-      ),
-    [visiblePluginPackages, t],
-  );
+  const {
+    worldDataPreflight,
+    worldDataPreflightStatus,
+    worldDataPreflightError,
+    runWorldDataPreflight,
+  } = useWorldDataPreflight(world.id, selectedPluginIds);
 
-  const [worldDataPreflight, setWorldDataPreflight] =
-    useState<api.WorldDataPreflightResponse | null>(null);
-  const [worldDataPreflightStatus, setWorldDataPreflightStatus] = useState<
-    "idle" | "loading" | "success" | "error"
-  >("idle");
-  const [worldDataPreflightError, setWorldDataPreflightError] = useState<
-    string | null
-  >(null);
-
-  const runWorldDataPreflight = useCallback(async () => {
-    setWorldDataPreflightStatus("loading");
-    setWorldDataPreflightError(null);
-    try {
-      const result = await api.preflightWorldData(world.id, {
-        plugins: selectedPluginIds,
-      });
-      setWorldDataPreflight(result);
-      setWorldDataPreflightStatus("success");
-    } catch (err) {
-      setWorldDataPreflight(null);
-      setWorldDataPreflightError(
-        err instanceof Error ? err.message : String(err),
-      );
-      setWorldDataPreflightStatus("error");
-    }
-  }, [world.id, selectedPluginIds]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void runWorldDataPreflight();
-    }, 250);
-    return () => window.clearTimeout(timer);
-  }, [runWorldDataPreflight]);
-
-  const [prepBindings, setPrepBindingsState] = useState<Record<string, string>>(
-    () => api.getPrepRuntimeBindings(world.id),
-  );
-  const bindingState = useRuntimeBindings(
-    `prep:${world.id}`,
+  const { bindingState } = usePrepRuntimeBindings(
+    world.id,
     selectedPackages,
     resolvedSlots,
-    undefined,
-    prepBindings,
-    (next) => {
-      setPrepBindingsState(next);
-      api.setPrepRuntimeBindings(world.id, next);
-    },
   );
 
   const [flowData, setFlowData] = useState<api.PluginFlowResponse | null>(null);
@@ -200,60 +105,8 @@ export function SessionPrepScreen({
     api
       .fetchPluginFlows()
       .then(setFlowData)
-      .catch(() => {});
+      .catch(ignoreError("fetch plugin flows"));
   }, []);
-
-  useEffect(() => {
-    setSelectedPlugins((prev) => {
-      const next = new Set(prev);
-      let changed = false;
-      for (const id of worldExcludedPluginIds) {
-        if (!lockedPluginIds.has(id) && next.delete(id)) changed = true;
-      }
-      for (const id of lockedPluginIds) {
-        if (!next.has(id)) {
-          next.add(id);
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [lockedPluginIds, worldExcludedPluginIds]);
-
-  const togglePluginTag = useCallback((tag: string) => {
-    setActivePluginTags((prev) => {
-      const next = new Set(prev);
-      if (next.has(tag)) next.delete(tag);
-      else next.add(tag);
-      return next;
-    });
-  }, []);
-
-  const applyPack = useCallback(
-    (packId: string) => {
-      const pack = pluginPacks.find((item) => item.id === packId);
-      if (!pack) return;
-      setActivePluginPackId(pack.id);
-      setSelectedPlugins((prev) =>
-        applyPluginPackSelection(prev, pack, packages, lockedPluginIds),
-      );
-    },
-    [pluginPacks, packages, lockedPluginIds],
-  );
-
-  const togglePlugin = useCallback(
-    (name: string) => {
-      if (lockedPluginIds.has(name)) return;
-      setActivePluginPackId(null);
-      setSelectedPlugins((prev) => {
-        const next = new Set(prev);
-        if (next.has(name)) next.delete(name);
-        else next.add(name);
-        return next;
-      });
-    },
-    [lockedPluginIds],
-  );
 
   const [worldInfoExpanded, setWorldInfoExpanded] = useState(false);
   const [sessionsExpanded, setSessionsExpanded] = useState(true);
@@ -272,7 +125,7 @@ export function SessionPrepScreen({
     api
       .listSessions(world.id)
       .then(setExistingSessions)
-      .catch(() => {});
+      .catch(ignoreError("list existing sessions"));
   }, [world.id]);
 
   const handleConfirmDelete = useCallback(async () => {

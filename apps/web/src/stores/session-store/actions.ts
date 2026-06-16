@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import i18n from "i18next";
 import * as api from "@/services/api";
+import { ignoreError } from "@/lib/ignore-error.js";
 import type { DataService } from "@/services/data-service.js";
 import {
   resetPluginData,
@@ -178,7 +179,7 @@ export function useBuildSessionActions({
           role: "user",
           content,
           createdAt: userTimestamp,
-        }).catch(() => {});
+        }).catch(ignoreError("persist user message"));
       }
 
       return new Promise<void>((resolve) => {
@@ -229,9 +230,11 @@ export function useBuildSessionActions({
           const nextValues = values
             ? { ...existingValues, [blockId]: values }
             : existingValues;
-          ds.saveSubmittedBlocks(sid, nextIds, nextValues).catch(() => {});
+          ds.saveSubmittedBlocks(sid, nextIds, nextValues).catch(
+            ignoreError("save submitted blocks"),
+          );
         })
-        .catch(() => {});
+        .catch(ignoreError("load submitted blocks for update"));
     },
     [ds, dispatch, sessionIdRef],
   );

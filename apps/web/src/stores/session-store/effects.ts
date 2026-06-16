@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import * as api from "@/services/api";
 import type { DataService } from "@/services/data-service.js";
+import { ignoreError } from "@/lib/ignore-error.js";
 import type { SessionDispatch, SessionState } from "./types.js";
 
 export function useBootEffect(
@@ -21,7 +22,9 @@ export function usePersistExecutionStepsEffect(
   useEffect(() => {
     const sid = state.session?.id;
     if (!sid || state.executionSteps.length === 0) return;
-    ds.saveExecutionSteps(sid, state.executionSteps).catch(() => {});
+    ds.saveExecutionSteps(sid, state.executionSteps).catch(
+      ignoreError("save execution steps"),
+    );
   }, [state.executionSteps, state.session?.id, ds]);
 }
 
@@ -59,7 +62,7 @@ export function useMessageUiSpecHydrationEffect(
                 })),
               });
             })
-            .catch(() => {});
+            .catch(ignoreError("load plugin data for message ui spec"));
         }
       })
       .catch(() => {

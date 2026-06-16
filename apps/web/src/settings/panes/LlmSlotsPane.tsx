@@ -24,6 +24,7 @@ import {
   createVisibleSlotIds,
   discoverRuntimeSlotIds,
 } from "./llm-slots-model.js";
+import { ignoreError } from "@/lib/ignore-error.js";
 
 /**
  * Pane that surfaces the `[covel.<slot>]` sections from llm.toml and lets the
@@ -49,7 +50,7 @@ export function LlmSlotsPane() {
   useEffect(() => {
     fetchModelDbInfo()
       .then(setModelDbInfo)
-      .catch(() => {});
+      .catch(ignoreError("fetch model db info"));
   }, []);
 
   const customPresets = getCustomPresets();

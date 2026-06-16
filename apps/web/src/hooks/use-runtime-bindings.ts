@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PackageSummary, SessionPluginInfo } from "@/services/api.js";
 import { updateSession } from "@/services/api.js";
+import { ignoreError } from "@/lib/ignore-error.js";
 import type { ResolvedSlot } from "./use-slot-config.js";
 import {
   autoAssignRuntimeBindings,
@@ -109,7 +110,9 @@ export function useRuntimeBindings(
         return;
       }
       if (sid.startsWith("prep:")) return;
-      void updateSession(sid, { runtimeModelOverrides: next }).catch(() => {});
+      void updateSession(sid, { runtimeModelOverrides: next }).catch(
+        ignoreError("update session model overrides"),
+      );
     },
     [onPersist],
   );

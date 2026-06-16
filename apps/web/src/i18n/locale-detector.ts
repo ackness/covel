@@ -31,8 +31,3 @@ function detectFromNavigator(): SupportedLocale | null {
 export function resolveInitialLocale(): SupportedLocale {
   return detectFromNavigator() ?? DEFAULT_LOCALE;
 }
-
-/** Kept as a no-op for backwards compatibility — storage lives in settings. */
-export function getStoredLocale(): SupportedLocale | null {
-  return null;
-}

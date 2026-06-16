@@ -1,5 +1,6 @@
 import * as api from "@/services/api";
 import type { DataService } from "@/services/data-service.js";
+import { ignoreError } from "@/lib/ignore-error.js";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
 import type { SnapshotMessage, SnapshotTraceEvent } from "@covel/shared";
 import type { ExecutionStep, SessionDispatch, StreamMessage } from "./types.js";
@@ -215,7 +216,7 @@ function refreshSessionSideData(
         dispatch({ type: "LOAD_SESSION_PLUGINS", plugins: res.available });
       }
     })
-    .catch(() => {});
+    .catch(ignoreError("list session plugins on restore"));
 
   api
     .listSuspensions(sessionId)
@@ -224,7 +225,7 @@ function refreshSessionSideData(
         dispatch({ type: "SET_SUSPENSIONS", suspensions });
       }
     })
-    .catch(() => {});
+    .catch(ignoreError("list suspensions on restore"));
 
   ds.syncToServer(sessionId)
     .then(() => {

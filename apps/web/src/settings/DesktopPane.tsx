@@ -36,6 +36,7 @@ import {
 } from "@/lib/desktop-bridge.js";
 import { resetOnboarding } from "@/components/onboarding-wizard.js";
 import { useSession } from "@/stores/session-store.js";
+import { ignoreError } from "@/lib/ignore-error.js";
 
 interface DesktopInfo {
   version: string;
@@ -70,7 +71,7 @@ export function DesktopPane() {
   useEffect(() => {
     getDesktopInfo()
       .then((i) => setInfo(i as DesktopInfo | null))
-      .catch(() => {});
+      .catch(ignoreError("load desktop info"));
   }, []);
 
   async function refreshInfo() {

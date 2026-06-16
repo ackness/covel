@@ -40,6 +40,7 @@ import { MessageComposer } from "./game-view/message-composer.js";
 import { PendingDraftsBar } from "./game-view/pending-drafts-bar.js";
 import { useGameViewComposer } from "./game-view/use-game-view-composer.js";
 import { worldVisual } from "@/lib/world-visuals.js";
+import { ignoreError } from "@/lib/ignore-error.js";
 
 // ── Extracted Panel Components (see left-panel.tsx, right-panel.tsx) ──
 
@@ -174,7 +175,9 @@ export function GameView({
 
   // Load session-scoped plugin list whenever the session changes.
   useEffect(() => {
-    onLoadSessionPlugins().catch(() => {});
+    onLoadSessionPlugins().catch(
+      ignoreError("load session plugins on session change"),
+    );
   }, [session.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isMobile = useMediaQuery("(max-width: 768px)");

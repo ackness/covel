@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as api from "@/services/api";
+import { ignoreError } from "@/lib/ignore-error.js";
 import {
   createSessionSubscription,
   type ConnectionState,
@@ -45,7 +46,7 @@ function createSubscriptionEventHandler(
                 plugins: res.available,
               }),
             )
-            .catch(() => {});
+            .catch(ignoreError("reload session plugins on plugin toggle"));
         }
         break;
       }
@@ -55,7 +56,7 @@ function createSubscriptionEventHandler(
           api
             .getWorld(worldId)
             .then((world) => options.dispatch({ type: "UPDATE_WORLD", world }))
-            .catch(() => {});
+            .catch(ignoreError("refresh world on dimensions changed"));
         }
         break;
       }
@@ -125,7 +126,7 @@ function refreshAfterReconnect(
     .then((res) =>
       dispatch({ type: "LOAD_SESSION_PLUGINS", plugins: res.available }),
     )
-    .catch(() => {});
+    .catch(ignoreError("reload session plugins after reconnect"));
   api
     .getSessionSnapshot(sessionId)
     .then((snapshot) => {
@@ -138,7 +139,7 @@ function refreshAfterReconnect(
       }
       dispatch({ type: "SET_GAME_STATE", state: enrichedState });
     })
-    .catch(() => {});
+    .catch(ignoreError("refresh session snapshot after reconnect"));
 }
 
 export function useSessionSubscription({

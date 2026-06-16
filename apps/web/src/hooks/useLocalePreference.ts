@@ -4,10 +4,6 @@ import { useSetting } from "@/settings/use-settings.js";
 import type { SupportedLocale } from "@/i18n/locale-detector.js";
 
 export type { SupportedLocale } from "@/i18n/locale-detector.js";
-export {
-  getStoredLocale,
-  resolveInitialLocale,
-} from "@/i18n/locale-detector.js";
 
 /**
  * Read and write the current locale through the unified settings store.
