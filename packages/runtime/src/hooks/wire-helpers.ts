@@ -127,6 +127,62 @@ export async function runPostRuntimeHook(
   return result;
 }
 
+// ── PostContextAssembly ──────────────────────────────────────────
+
+/**
+ * Assembled context exposed to PostContextAssembly hooks. Turn-level (once
+ * per runtime, after buildContext, before the agent loop): handlers may
+ * rewrite the assembled system prompt and/or projected history. Distinct from
+ * the per-call PreLLMCall — this shapes the assembled context a single time
+ * (mirrors pi's `before_agent_start`).
+ */
+export interface AssembledContextView {
+  readonly systemPrompt: string;
+  readonly messages: readonly LLMMessage[];
+}
+
+export interface PostContextAssemblyPayload extends AssembledContextView {
+  readonly pluginId: string;
+  readonly runtimeId: string;
+}
+
+export async function runPostContextAssemblyHook(
+  opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
+  assembled: AssembledContextView,
+): Promise<AssembledContextView> {
+  if (!opts.pipeline) return assembled;
+  const payload: PostContextAssemblyPayload = {
+    systemPrompt: assembled.systemPrompt,
+    messages: assembled.messages,
+    pluginId: opts.pluginId,
+    runtimeId: opts.runtimeId,
+  };
+  const hookResult = await opts.pipeline.run(
+    "PostContextAssembly",
+    {
+      event: "PostContextAssembly",
+      sessionId: opts.sessionId,
+      turnId: opts.turnId,
+      pluginId: opts.pluginId,
+      runtimeId: opts.runtimeId,
+    },
+    payload,
+    { eventBus: opts.eventBus, emitter: opts.emitter },
+  );
+  if (
+    hookResult.action === "continue" &&
+    "replace" in hookResult &&
+    hookResult.replace
+  ) {
+    const r = hookResult.replace;
+    return {
+      systemPrompt: r.systemPrompt ?? assembled.systemPrompt,
+      messages: r.messages ?? assembled.messages,
+    };
+  }
+  return assembled;
+}
+
 // ── PreLLMCall ───────────────────────────────────────────────────
 
 /**

@@ -118,9 +118,9 @@ hooks:
     timeoutMs: 3000
 ```
 
-`PreRuntime`、`PreLLMCall`、`PostLLMResponse`、`PreToolUse`、`PostToolUse`、`PreStateCommit` 使用 `sequential` 语义：handler 按顺序执行，`replace` 会成为下一个 handler 的输入，`abort` 会停止该生命周期动作。
+`PreRuntime`、`PostContextAssembly`、`PreLLMCall`、`PostLLMResponse`、`PreToolUse`、`PostToolUse`、`PreStateCommit` 使用 `sequential` 语义：handler 按顺序执行，`replace` 会成为下一个 handler 的输入，`abort` 会停止该生命周期动作。
 
-其中围绕 LLM 调用的两个事件可改写模型交互本身：`PreLLMCall` 在每次调用前非破坏性改写发往模型的 `messages` / `model` / `tools`（不动底层 transcript），`PostLLMResponse` 在响应返回后、工具派发前 patch `content` / `toolCalls`。`PostToolUse` 还可用 `replace.terminate: true` 在记录工具结果后提前结束工具循环。
+围绕上下文与 LLM 调用的几个事件可改写模型交互本身：`PostContextAssembly` 在 `buildContext` 之后、进 loop 之前 turn 级（每 runtime 一次）改写已装配的 `systemPrompt` / 投影历史；`PreLLMCall` 在每次调用前非破坏性改写发往模型的 `messages` / `model` / `tools`（不动底层 transcript）；`PostLLMResponse` 在响应返回后、工具派发前 patch `content` / `toolCalls`。`PostToolUse` 还可用 `replace.terminate: true` 在记录工具结果后提前结束工具循环。
 
 `TurnStart`、`PostRuntime`、`PostStateCommit`、`TurnStop` 使用 `parallel` 语义：handler 并发执行，适合审计、日志、指标和通知这类观察型副作用。返回 `replace` 或 `abort` 会进入 hook trace；主 payload 保持原值。
 

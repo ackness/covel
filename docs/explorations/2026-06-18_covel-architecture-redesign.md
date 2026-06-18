@@ -34,6 +34,7 @@
 
 - ✅ `PreLLMCall` / `PostLLMResponse`(LLM 调用边界,每次调用)
 - ✅ `PostToolUse.terminate`(工具循环提前退出)
+- ✅ `PostContextAssembly`(H1:turn 级改写已装配 systemPrompt / 投影历史)
 
 蓝图新增(按价值排序):
 
@@ -72,7 +73,7 @@ pi 的灵活来自:运行时注册(tool/provider/command)、steering/followUp �
 | P2    | ②①  | `PostToolUse.terminate` + 语义修正      | 低   | ✅ 已交付 |
 | S1    | ④   | capability 解析单一来源                 | 低   | ✅ 已交付 |
 | S2    | ④   | `AgentLoopDeps` 窄依赖接缝              | 中   | ✅ 已交付 |
-| H1    | ②   | `PostContextAssembly` hook              | 中   | 待办      |
+| H1    | ②   | `PostContextAssembly` hook              | 中   | ✅ 已交付 |
 | H2    | ②   | `PreCompaction` / `PostCompaction` hook | 中   | 待办      |
 | F1    | ③   | `RuntimeInvoker` 统一调用门面           | 中高 | 待办      |
 | F2    | ③   | function-runtime 编程式注册门面         | 中高 | 待办      |

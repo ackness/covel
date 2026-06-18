@@ -386,6 +386,30 @@ describe("Turn executor hook wire-in", () => {
     });
   });
 
+  describe("PostContextAssembly hook", () => {
+    it("rewrites the assembled system prompt seen by the LLM", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+      pipeline.register({
+        id: "global:PostContextAssembly:sys",
+        event: "PostContextAssembly",
+        handler: vi.fn().mockResolvedValue({
+          action: "continue",
+          replace: { systemPrompt: "REWRITTEN_SYSTEM_PROMPT" },
+        }),
+      });
+
+      const deps = await makeDeps(llm, pipeline);
+      await executeTurn(makeTurnInput(), [makeManifest()], deps);
+
+      const sent = (
+        llm.calls[0] as { messages: Array<{ role: string; content: string }> }
+      ).messages;
+      const sys = sent.find((m) => m.role === "system");
+      expect(sys?.content).toBe("REWRITTEN_SYSTEM_PROMPT");
+    });
+  });
+
   describe("PreLLMCall hook", () => {
     it("non-destructively rewrites the messages sent to the LLM", async () => {
       const llm = new SimpleMockLLM();

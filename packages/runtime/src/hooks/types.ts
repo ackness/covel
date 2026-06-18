@@ -12,6 +12,7 @@ import type { EventBus } from "@covel/events";
 export type HookEvent =
   | "TurnStart"
   | "PreRuntime"
+  | "PostContextAssembly"
   | "PreLLMCall"
   | "PostLLMResponse"
   | "PostRuntime"
@@ -26,6 +27,9 @@ export type HookSemantic = "first" | "sequential" | "parallel" | "stream";
 export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
   TurnStart: "parallel",
   PreRuntime: "sequential",
+  // Turn-level (once per runtime): rewrite the assembled system prompt /
+  // projected history after buildContext, before the loop. Chained.
+  PostContextAssembly: "sequential",
   // Non-destructively rewrite the request sent to the LLM on each call;
   // chained so each handler sees the previous handler's edits.
   PreLLMCall: "sequential",

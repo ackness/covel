@@ -566,18 +566,19 @@ hooks:
 
 同一事件内先按 `enforce` 分组排序；同组内全局 hook 先执行，插件 hook 保持注册顺序。
 
-| Event             | Semantic     | 行为                                                                                                                                                          |
-| ----------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TurnStart`       | `parallel`   | 并发观察回合开始；返回值只用于日志和 trace                                                                                                                    |
-| `PreRuntime`      | `sequential` | 链式改写 runtime 输入；`replace` 会传给下一个 handler；`abort` 会停止执行                                                                                     |
-| `PreLLMCall`      | `sequential` | 每次 LLM 调用前非破坏性改写发往模型的请求；`replace.{messages,model,tools}` 链式累积。不改写底层 transcript（对齐 pi 的 `context`）。`abort` 无意义、视为不变 |
-| `PostLLMResponse` | `sequential` | LLM 响应返回后、工具派发前；`replace.response` 链式改写 `content`/`toolCalls`（对齐 pi 的 `after_provider_response`）                                         |
-| `PostRuntime`     | `parallel`   | 并发观察 runtime 输出；返回值只用于日志和 trace                                                                                                               |
-| `PreToolUse`      | `sequential` | 链式改写 tool call；`replace` 会传给下一个 handler；`abort` 会跳过该 tool（不中止回合）                                                                       |
-| `PostToolUse`     | `sequential` | 链式 patch tool result：`replace.result` 改写结果、`replace.terminate: true` 在记录该结果后结束工具循环（对齐 pi 的 `tool_result.terminate`）                 |
-| `PreStateCommit`  | `sequential` | 链式改写 commit payload；任一 handler 可用 `abort` 拒绝 commit                                                                                                |
-| `PostStateCommit` | `parallel`   | 并发观察 commit 结果；返回值只用于日志和 trace                                                                                                                |
-| `TurnStop`        | `parallel`   | 并发观察回合结束；返回值只用于日志和 trace                                                                                                                    |
+| Event                 | Semantic     | 行为                                                                                                                                                                               |
+| --------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TurnStart`           | `parallel`   | 并发观察回合开始；返回值只用于日志和 trace                                                                                                                                         |
+| `PreRuntime`          | `sequential` | 链式改写 runtime 输入；`replace` 会传给下一个 handler；`abort` 会停止执行                                                                                                          |
+| `PostContextAssembly` | `sequential` | turn 级（每 runtime 一次，`buildContext` 之后、进 loop 之前）改写已装配的 `systemPrompt` / 投影历史；`replace.{systemPrompt,messages}` 链式累积（对齐 pi 的 `before_agent_start`） |
+| `PreLLMCall`          | `sequential` | 每次 LLM 调用前非破坏性改写发往模型的请求；`replace.{messages,model,tools}` 链式累积。不改写底层 transcript（对齐 pi 的 `context`）。`abort` 无意义、视为不变                      |
+| `PostLLMResponse`     | `sequential` | LLM 响应返回后、工具派发前；`replace.response` 链式改写 `content`/`toolCalls`（对齐 pi 的 `after_provider_response`）                                                              |
+| `PostRuntime`         | `parallel`   | 并发观察 runtime 输出；返回值只用于日志和 trace                                                                                                                                    |
+| `PreToolUse`          | `sequential` | 链式改写 tool call；`replace` 会传给下一个 handler；`abort` 会跳过该 tool（不中止回合）                                                                                            |
+| `PostToolUse`         | `sequential` | 链式 patch tool result：`replace.result` 改写结果、`replace.terminate: true` 在记录该结果后结束工具循环（对齐 pi 的 `tool_result.terminate`）                                      |
+| `PreStateCommit`      | `sequential` | 链式改写 commit payload；任一 handler 可用 `abort` 拒绝 commit                                                                                                                     |
+| `PostStateCommit`     | `parallel`   | 并发观察 commit 结果；返回值只用于日志和 trace                                                                                                                                     |
+| `TurnStop`            | `parallel`   | 并发观察回合结束；返回值只用于日志和 trace                                                                                                                                         |
 
 > `PostToolUse` 为 `sequential`：`parallel` 语义会丢弃 `replace`，因此结果 patch 与 `terminate` 必须在顺序链中累积。
 
