@@ -73,6 +73,51 @@ export async function runTurnStopHook(
   );
 }
 
+// ── PreCompaction / PostCompaction ───────────────────────────────
+
+export interface PreCompactionPayload {
+  /** Number of stored messages eligible for compaction this turn. */
+  readonly messageCount: number;
+}
+
+/**
+ * Veto gate before history compaction. Returns `skip: true` when any handler
+ * aborts — the turn pipeline then leaves history uncompacted this turn
+ * (mirrors pi's `session_before_compact` cancel path).
+ */
+export async function runPreCompactionHook(
+  opts: BaseOpts,
+  payload: PreCompactionPayload,
+): Promise<{ readonly skip: boolean }> {
+  if (!opts.pipeline) return { skip: false };
+  const hookResult = await opts.pipeline.run(
+    "PreCompaction",
+    { event: "PreCompaction", sessionId: opts.sessionId, turnId: opts.turnId },
+    payload,
+    { eventBus: opts.eventBus, emitter: opts.emitter },
+  );
+  return { skip: hookResult.action === "abort" };
+}
+
+export interface PostCompactionPayload {
+  readonly compacted: boolean;
+  readonly summaryId?: string;
+}
+
+/** Observe the compaction outcome (parallel; return value is trace-only). */
+export async function runPostCompactionHook(
+  opts: BaseOpts,
+  payload: PostCompactionPayload,
+): Promise<void> {
+  if (!opts.pipeline) return;
+  await opts.pipeline.run(
+    "PostCompaction",
+    { event: "PostCompaction", sessionId: opts.sessionId, turnId: opts.turnId },
+    payload,
+    { eventBus: opts.eventBus, emitter: opts.emitter },
+  );
+}
+
 // ── PreRuntime ───────────────────────────────────────────────────
 
 export async function runPreRuntimeHook(

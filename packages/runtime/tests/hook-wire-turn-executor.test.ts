@@ -386,6 +386,45 @@ describe("Turn executor hook wire-in", () => {
     });
   });
 
+  describe("PreCompaction hook", () => {
+    it("skips compaction when a PreCompaction hook aborts", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+      pipeline.register({
+        id: "global:PreCompaction:veto",
+        event: "PreCompaction",
+        handler: vi
+          .fn()
+          .mockResolvedValue({ action: "abort", reason: "keep full history" }),
+      });
+      const compactor = {
+        run: vi.fn().mockResolvedValue({ compacted: false }),
+      };
+      const deps: TurnExecutorDeps = {
+        ...(await makeDeps(llm, pipeline)),
+        compactor,
+      };
+
+      await executeTurn(makeTurnInput(), [makeManifest()], deps);
+
+      expect(compactor.run).not.toHaveBeenCalled();
+    });
+
+    it("runs compaction when no PreCompaction hook vetoes", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+      const compactor = { run: vi.fn().mockResolvedValue({ compacted: true }) };
+      const deps: TurnExecutorDeps = {
+        ...(await makeDeps(llm, pipeline)),
+        compactor,
+      };
+
+      await executeTurn(makeTurnInput(), [makeManifest()], deps);
+
+      expect(compactor.run).toHaveBeenCalledOnce();
+    });
+  });
+
   describe("PostContextAssembly hook", () => {
     it("rewrites the assembled system prompt seen by the LLM", async () => {
       const llm = new SimpleMockLLM();

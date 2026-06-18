@@ -35,6 +35,7 @@
 - ✅ `PreLLMCall` / `PostLLMResponse`(LLM 调用边界,每次调用)
 - ✅ `PostToolUse.terminate`(工具循环提前退出)
 - ✅ `PostContextAssembly`(H1:turn 级改写已装配 systemPrompt / 投影历史)
+- ✅ `PreCompaction` / `PostCompaction`(H2:压缩否决门 + 结果观察;顺带把 `CompactorRunner.run` 的 `CompactorResult` 透出)
 
 蓝图新增(按价值排序):
 
@@ -74,7 +75,7 @@ pi 的灵活来自:运行时注册(tool/provider/command)、steering/followUp �
 | S1    | ④   | capability 解析单一来源                 | 低   | ✅ 已交付 |
 | S2    | ④   | `AgentLoopDeps` 窄依赖接缝              | 中   | ✅ 已交付 |
 | H1    | ②   | `PostContextAssembly` hook              | 中   | ✅ 已交付 |
-| H2    | ②   | `PreCompaction` / `PostCompaction` hook | 中   | 待办      |
+| H2    | ②   | `PreCompaction` / `PostCompaction` hook | 中   | ✅ 已交付 |
 | F1    | ③   | `RuntimeInvoker` 统一调用门面           | 中高 | 待办      |
 | F2    | ③   | function-runtime 编程式注册门面         | 中高 | 待办      |
 | D1    | —   | config 即 event(状态溯源一致性)         | 高   | 暂缓      |

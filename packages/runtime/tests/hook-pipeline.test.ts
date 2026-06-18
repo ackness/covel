@@ -221,6 +221,8 @@ describe("HookPipeline", () => {
     it("declares all event semantics", () => {
       const expected: Record<HookEvent, HookSemantic> = {
         TurnStart: "parallel",
+        PreCompaction: "sequential",
+        PostCompaction: "parallel",
         PreRuntime: "sequential",
         PostContextAssembly: "sequential",
         PreLLMCall: "sequential",

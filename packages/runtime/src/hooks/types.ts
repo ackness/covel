@@ -11,6 +11,8 @@ import type { EventBus } from "@covel/events";
 
 export type HookEvent =
   | "TurnStart"
+  | "PreCompaction"
+  | "PostCompaction"
   | "PreRuntime"
   | "PostContextAssembly"
   | "PreLLMCall"
@@ -26,6 +28,10 @@ export type HookSemantic = "first" | "sequential" | "parallel" | "stream";
 
 export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
   TurnStart: "parallel",
+  // Veto gate before history compaction: `abort` skips compaction this turn.
+  PreCompaction: "sequential",
+  // Observe the compaction outcome (compacted? summaryId?).
+  PostCompaction: "parallel",
   PreRuntime: "sequential",
   // Turn-level (once per runtime): rewrite the assembled system prompt /
   // projected history after buildContext, before the loop. Chained.
