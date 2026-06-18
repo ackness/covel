@@ -22,13 +22,13 @@ import type { LLMMessage } from "./llm-adapter.js";
 import type { HookPipeline } from "./hooks/pipeline.js";
 import { runPostRuntimeHook } from "./hooks/wire-helpers.js";
 import { emitSubEvent } from "./turn-runtime-helpers.js";
-import type { TurnExecutorDeps } from "./turn-executor-types.js";
+import type { AgentLoopDeps } from "./turn-executor-types.js";
 
 export interface HandleSuspensionOptions {
   readonly sentinel: SuspendSentinel;
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
-  readonly deps: TurnExecutorDeps;
+  readonly deps: AgentLoopDeps;
   readonly hookPipeline: HookPipeline | undefined;
   readonly messages: readonly LLMMessage[];
   readonly finalContent: string | null;

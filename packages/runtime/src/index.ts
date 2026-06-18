@@ -22,6 +22,7 @@ export type {
 // ── Turn Executor ────────────────────────────────────────────────
 export { executeTurn, resumeSuspendedRuntime } from "./turn-executor.js";
 export type {
+  AgentLoopDeps,
   TurnExecutorDeps,
   TurnExecutorOptions,
   ResumeSuspendedRuntimeOptions,

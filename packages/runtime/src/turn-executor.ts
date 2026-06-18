@@ -54,6 +54,7 @@ export {
 } from "./turn-output-helpers.js";
 export {
   MaxRecursionExceeded,
+  type AgentLoopDeps,
   type TurnExecutorDeps,
   type TurnExecutorOptions,
 } from "./turn-executor-types.js";

@@ -59,24 +59,24 @@ pi 的灵活来自:运行时注册(tool/provider/command)、steering/followUp �
 ## 轴④ 功能分离(结构骨架)
 
 1. **S1 — capability 解析单一来源**(本轮实现):`worldDataPluginId` / `personaPluginId` / `promptHistoryRewriterPluginId` 的发现逻辑在 `turn.ts` / `actions.ts` / `plugin-rpc.ts` 重复三处。收敛成 `resolveTurnCapabilityPluginIds(registry, sessionId)` 单一来源。新增框架消费的 capability 时只改一处。
-2. **S2 — `AgentLoopDeps` 窄依赖**:`turn-agent-tool-loop` 当前吃整个 `TurnExecutorDeps`(20+ 字段)。定义只含 `llm` / `toolExecutor` / `hookPipeline` / 少量回调的窄接口,核心循环不再能触达 store/eventBus/compactor。对应 pi 的 core vs harness。
+2. ✅ **S2 — `AgentLoopDeps` 窄依赖**(已交付):`turn-agent-tool-loop` 及其 helper(`requestLLMResponse` / `handleSuspension`)曾吃整个 `TurnExecutorDeps`(20+ 字段)。抽出 `AgentLoopDeps`(仅 8 个执行/观测字段:`llm` / `toolExecutor` / `resolveModel` / `store` / `eventBus` / `onDelta` / `onRuntimeComplete` / `emitter`),`TurnExecutorDeps extends AgentLoopDeps` 保证全量 deps 仍可赋值。核心循环在类型层面**够不到** compactor / memorySystem / contextBudget / capability-id / loadRuntime 等编排字段。对应 pi 的 core vs harness。纯类型重构,零行为变化(482 测试全绿)。`store` 作为 suspension 持久化的逃生口暂留,标注待 S3 上移。
 3. **S3 — `TurnHarness` 显式化**:把「触发选择 / 调度 / 提案提交 / 落盘 / 事件」聚成 harness 角色(可先是命名与边界,不强搬代码),core 只产出内存提案。
 
 ---
 
 ## 分片路线(执行顺序)
 
-| Slice  | 轴    | 内容                                    | 风险   | 状态       |
-| ------ | ----- | --------------------------------------- | ------ | ---------- |
-| P1     | ②     | `PreLLMCall` / `PostLLMResponse`        | 低     | ✅ 已交付  |
-| P2     | ②①    | `PostToolUse.terminate` + 语义修正      | 低     | ✅ 已交付  |
-| **S1** | **④** | **capability 解析单一来源**             | **低** | **← 本轮** |
-| S2     | ④     | `AgentLoopDeps` 窄依赖接缝              | 中     | 待办       |
-| H1     | ②     | `PostContextAssembly` hook              | 中     | 待办       |
-| H2     | ②     | `PreCompaction` / `PostCompaction` hook | 中     | 待办       |
-| F1     | ③     | `RuntimeInvoker` 统一调用门面           | 中高   | 待办       |
-| F2     | ③     | function-runtime 编程式注册门面         | 中高   | 待办       |
-| D1     | —     | config 即 event(状态溯源一致性)         | 高     | 暂缓       |
+| Slice | 轴  | 内容                                    | 风险 | 状态      |
+| ----- | --- | --------------------------------------- | ---- | --------- |
+| P1    | ②   | `PreLLMCall` / `PostLLMResponse`        | 低   | ✅ 已交付 |
+| P2    | ②①  | `PostToolUse.terminate` + 语义修正      | 低   | ✅ 已交付 |
+| S1    | ④   | capability 解析单一来源                 | 低   | ✅ 已交付 |
+| S2    | ④   | `AgentLoopDeps` 窄依赖接缝              | 中   | ✅ 已交付 |
+| H1    | ②   | `PostContextAssembly` hook              | 中   | 待办      |
+| H2    | ②   | `PreCompaction` / `PostCompaction` hook | 中   | 待办      |
+| F1    | ③   | `RuntimeInvoker` 统一调用门面           | 中高 | 待办      |
+| F2    | ③   | function-runtime 编程式注册门面         | 中高 | 待办      |
+| D1    | —   | config 即 event(状态溯源一致性)         | 高   | 暂缓      |
 
 **做/不做的明确判断**:
 

@@ -17,14 +17,69 @@ import type { ToolExecutor } from "./tool-executor.js";
 import type { HookPipeline } from "./hooks/pipeline.js";
 import type { MediaStoreLike } from "./runtime-media-context.js";
 
-export interface TurnExecutorDeps {
+/**
+ * Narrow dependency surface the **core agent loop** consumes.
+ *
+ * Separation seam (pi's core-loop vs harness): `runAgentToolLoop` and its
+ * helpers (`requestLLMResponse`, `handleSuspension`) depend only on these
+ * execution + observability fields. Orchestration concerns — context
+ * assembly, compaction, memory, capability-provider ids, plugin loading —
+ * live on `TurnExecutorDeps` and are intentionally invisible here, so the
+ * core loop cannot reach into them.
+ *
+ * `TurnExecutorDeps extends AgentLoopDeps`, so the fully-wired deps object is
+ * still assignable wherever `AgentLoopDeps` is expected.
+ */
+export interface AgentLoopDeps {
+  /** LLM adapter for making model calls. */
+  readonly llm: LLMAdapter;
+  /** Optional tool executor for handling LLM tool calls. */
+  readonly toolExecutor?: ToolExecutor;
+  /**
+   * Resolve the effective model for a runtime.
+   * Priority: API modelOverride > plugin llm.toml default > manifest.model > undefined (system default).
+   */
+  readonly resolveModel?: (
+    manifest: RuntimeManifest,
+    apiOverride?: string,
+  ) => string | undefined;
+  /**
+   * Optional DataStore. Within the core loop this is the persistence escape
+   * hatch for suspension records only; broader persistence is orchestrated by
+   * the harness. (Candidate to hoist out of the loop entirely in S3.)
+   */
+  readonly store?: DataStore;
+  /** Optional EventBus for emitting subscription events during turn execution. */
+  readonly eventBus?: EventBus;
+  /** Called for each LLM text delta during streaming (narrative-only runtimes). */
+  readonly onDelta?: (delta: {
+    runtimeId: string;
+    pluginId: string;
+    textDelta: string;
+  }) => Promise<void>;
+  /** Called when a runtime completes execution (e.g. on suspension). */
+  readonly onRuntimeComplete?: (info: {
+    runtimeId: string;
+    pluginId: string;
+    status: string;
+    durationMs: number;
+    error?: string;
+  }) => Promise<void>;
+  /**
+   * Trace emitter for per-turn observability. When present, runtime emits
+   * tool.calling / tool.completed / llm.calling / llm.responded / message.completed
+   * etc. into trace_events and the action SSE stream via eventBus.
+   * Optional for backward compatibility with tests and embedders.
+   */
+  readonly emitter?: import("./turn-emitter.js").TurnEmitter;
+}
+
+export interface TurnExecutorDeps extends AgentLoopDeps {
   /** Resolve a runtime manifest to its fully loaded data. Locale enables localized PLUGIN.md (e.g., PLUGIN.en.md). */
   readonly loadRuntime: (
     manifest: RuntimeManifest,
     locale?: string,
   ) => Promise<LoadedRuntime | undefined>;
-  /** LLM adapter for making model calls. */
-  readonly llm: LLMAdapter;
   /**
    * Optional narrow gateway facade forwarded to function-runtime handlers
    * and guards via `FunctionHandlerContext.gateway`. Agent runtimes go
@@ -58,41 +113,12 @@ export interface TurnExecutorDeps {
     pluginId: string,
     runtimeId: string,
   ) => Readonly<Record<string, unknown>>;
-  /** Optional DataStore for persisting results. */
-  readonly store?: DataStore;
-  /** Optional tool executor for handling LLM tool calls. */
-  readonly toolExecutor?: ToolExecutor;
-  /**
-   * Resolve the effective model for a runtime.
-   * Priority: API modelOverride > plugin llm.toml default > manifest.model > undefined (system default).
-   */
-  readonly resolveModel?: (
-    manifest: RuntimeManifest,
-    apiOverride?: string,
-  ) => string | undefined;
 
-  /** Optional EventBus for emitting subscription events during turn execution. */
-  readonly eventBus?: EventBus;
-
-  /** Called for each LLM text delta during streaming (narrative-only runtimes). */
-  readonly onDelta?: (delta: {
-    runtimeId: string;
-    pluginId: string;
-    textDelta: string;
-  }) => Promise<void>;
   /** Called when a runtime starts execution. */
   readonly onRuntimeStart?: (info: {
     runtimeId: string;
     pluginId: string;
     priority: number | undefined;
-  }) => Promise<void>;
-  /** Called when a runtime completes execution. */
-  readonly onRuntimeComplete?: (info: {
-    runtimeId: string;
-    pluginId: string;
-    status: string;
-    durationMs: number;
-    error?: string;
   }) => Promise<void>;
 
   /**
@@ -111,11 +137,11 @@ export interface TurnExecutorDeps {
   readonly contextBudget?: Omit<BudgetOptions, "estimator">;
 
   /**
-   * Optional hook pipeline. When present, lifecycle hooks fire at 8 points
-   * during turn execution. When absent, all hook sites are pure no-ops —
-   * identical to pre-hook behaviour. Plugin hooks are registered by
-   * bootstrap; callers that build the executor directly (CLI tools, tests)
-   * can pass `undefined` to keep the non-hook fast path.
+   * Optional hook pipeline. When present, lifecycle hooks fire at the turn's
+   * hook sites. When absent, all hook sites are pure no-ops — identical to
+   * pre-hook behaviour. Plugin hooks are registered by bootstrap; callers that
+   * build the executor directly (CLI tools, tests) can pass `undefined` to
+   * keep the non-hook fast path.
    */
   readonly hookPipeline?: HookPipeline;
 
@@ -188,14 +214,6 @@ export interface TurnExecutorDeps {
    * hardcodes a plugin id.
    */
   readonly promptHistoryRewriterPluginId?: string;
-
-  /**
-   * Trace emitter for per-turn observability. When present, runtime emits
-   * tool.calling / tool.completed / llm.calling / llm.responded / message.completed
-   * etc. into trace_events and the action SSE stream via eventBus.
-   * Optional for backward compatibility with tests and embedders.
-   */
-  readonly emitter?: import("./turn-emitter.js").TurnEmitter;
 }
 
 export interface TurnExecutorOptions {

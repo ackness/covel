@@ -31,7 +31,7 @@ import {
   buildToolExecutionUnavailableMessage,
   buildToolResultMessage,
 } from "./turn-agent-tool-loop-messages.js";
-import type { TurnExecutorDeps } from "./turn-executor-types.js";
+import type { AgentLoopDeps } from "./turn-executor-types.js";
 
 export interface AgentToolLoopCompleted {
   readonly finalContent: string | null;
@@ -51,7 +51,7 @@ export interface RunAgentToolLoopOptions {
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   readonly loaded: LoadedRuntime;
-  readonly deps: TurnExecutorDeps;
+  readonly deps: AgentLoopDeps;
   readonly maxSteps: number;
   readonly timeoutMs: number;
   readonly messages: LLMMessage[];
