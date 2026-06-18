@@ -385,4 +385,162 @@ describe("Turn executor hook wire-in", () => {
       expect(executedArgs[0]).toBe('{"name":"rewritten"}');
     });
   });
+
+  describe("PreLLMCall hook", () => {
+    it("non-destructively rewrites the messages sent to the LLM", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+
+      // Append a synthetic system message to whatever the runtime assembled.
+      pipeline.register({
+        id: "global:PreLLMCall:inject",
+        event: "PreLLMCall",
+        handler: vi
+          .fn()
+          .mockImplementation(
+            async (
+              _ctx,
+              payload: { messages: ReadonlyArray<{ role: string }> },
+            ) => ({
+              action: "continue",
+              replace: {
+                messages: [
+                  ...payload.messages,
+                  { role: "system", content: "INJECTED_BY_HOOK" },
+                ],
+              },
+            }),
+          ),
+      });
+
+      const deps = await makeDeps(llm, pipeline);
+      await executeTurn(makeTurnInput(), [makeManifest()], deps);
+
+      // The LLM saw the injected message...
+      const sent = (
+        llm.calls[0] as { messages: Array<{ role: string; content: string }> }
+      ).messages;
+      expect(sent.some((m) => m.content === "INJECTED_BY_HOOK")).toBe(true);
+    });
+
+    it("overrides the model on the LLM request", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+      pipeline.register({
+        id: "global:PreLLMCall:model",
+        event: "PreLLMCall",
+        handler: vi.fn().mockResolvedValue({
+          action: "continue",
+          replace: { model: "hook-chosen-model" },
+        }),
+      });
+
+      const deps = await makeDeps(llm, pipeline);
+      await executeTurn(makeTurnInput(), [makeManifest()], deps);
+
+      expect((llm.calls[0] as { model?: string }).model).toBe(
+        "hook-chosen-model",
+      );
+    });
+  });
+
+  describe("PostLLMResponse hook", () => {
+    it("patches the response content before it becomes the runtime output", async () => {
+      const llm = new SimpleMockLLM();
+      llm.nextResponse({
+        content: "raw model text",
+        toolCalls: [],
+        finishReason: "stop",
+        usage: { inputTokens: 0, outputTokens: 0 },
+      });
+
+      const pipeline = createHookPipeline();
+      pipeline.register({
+        id: "global:PostLLMResponse:patch",
+        event: "PostLLMResponse",
+        handler: vi
+          .fn()
+          .mockImplementation(
+            async (_ctx, payload: { response: LLMResponse }) => ({
+              action: "continue",
+              replace: {
+                response: { ...payload.response, content: "patched by hook" },
+              },
+            }),
+          ),
+      });
+
+      const deps = await makeDeps(llm, pipeline);
+      const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
+
+      expect(result.runtimeResults[0].output).toMatchObject({
+        narrativeOutput: "patched by hook",
+      });
+    });
+  });
+
+  describe("PostToolUse terminate", () => {
+    it("ends the tool loop after the result when a hook returns terminate", async () => {
+      const llm = new SimpleMockLLM();
+      // Step 1: ask for a tool. If the loop did NOT terminate, step 2 would be
+      // consumed and the tool would be requested again.
+      llm.nextResponse({
+        content: null,
+        toolCalls: [{ id: "tc-1", name: "my-tool", arguments: "{}" }],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 0, outputTokens: 0 },
+      });
+      llm.nextResponse({
+        content: null,
+        toolCalls: [{ id: "tc-2", name: "my-tool", arguments: "{}" }],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 0, outputTokens: 0 },
+      });
+
+      const toolExecutor = {
+        execute: vi.fn().mockResolvedValue({
+          result: '{"ok":true}',
+          parsedResult: { ok: true },
+          success: true,
+        }),
+        getToolInfo: vi.fn().mockReturnValue({
+          name: "my-tool",
+          description: "test",
+          jsonSchema: { type: "object" },
+        }),
+      };
+
+      const pipeline = createHookPipeline();
+      pipeline.register({
+        id: "global:PostToolUse:terminate",
+        event: "PostToolUse",
+        handler: vi.fn().mockResolvedValue({
+          action: "continue",
+          replace: { terminate: true },
+        }),
+      });
+
+      const manifest = makeManifest({ tools: { builtin: [], local: [] } });
+      const deps: TurnExecutorDeps = {
+        loadRuntime: async () => ({
+          manifest,
+          promptTemplate: "Use tools.",
+          references: [],
+        }),
+        llm,
+        getConfig: () => ({}),
+        toolExecutor,
+        hookPipeline: pipeline,
+        store: await createMainLoopStore("sess-hook-wire"),
+      };
+
+      const result = await executeTurn(makeTurnInput(), [manifest], deps);
+
+      // Tool executed exactly once and the loop stopped — only the first LLM
+      // call happened, the second queued response was never consumed.
+      expect(toolExecutor.execute).toHaveBeenCalledOnce();
+      expect(llm.calls).toHaveLength(1);
+      expect(result.runtimeResults[0].status).toBe("success");
+    });
+  });
 });

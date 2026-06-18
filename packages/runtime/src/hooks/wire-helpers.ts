@@ -17,6 +17,11 @@ import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import type { HookPipeline } from "./pipeline.js";
 import type { HookResult } from "./types.js";
 import type { TurnEmitter } from "../turn-emitter.js";
+import type {
+  LLMMessage,
+  LLMResponse,
+  LLMToolDefinition,
+} from "../llm-adapter.js";
 
 // ── Shared options ───────────────────────────────────────────────
 
@@ -122,6 +127,103 @@ export async function runPostRuntimeHook(
   return result;
 }
 
+// ── PreLLMCall ───────────────────────────────────────────────────
+
+/**
+ * Request shape exposed to PreLLMCall hooks. Handlers may non-destructively
+ * rewrite the messages / model / tools sent on a single LLM call without
+ * mutating the runtime's canonical transcript (mirrors pi's `context` event).
+ */
+export interface PreLLMCallRequest {
+  readonly messages: readonly LLMMessage[];
+  readonly model: string | undefined;
+  readonly tools: readonly LLMToolDefinition[] | undefined;
+}
+
+export interface PreLLMCallPayload extends PreLLMCallRequest {
+  readonly pluginId: string;
+  readonly runtimeId: string;
+}
+
+export async function runPreLLMCallHook(
+  opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
+  request: PreLLMCallRequest,
+): Promise<PreLLMCallRequest> {
+  if (!opts.pipeline) return request;
+  const payload: PreLLMCallPayload = {
+    ...request,
+    pluginId: opts.pluginId,
+    runtimeId: opts.runtimeId,
+  };
+  const hookResult = await opts.pipeline.run(
+    "PreLLMCall",
+    {
+      event: "PreLLMCall",
+      sessionId: opts.sessionId,
+      turnId: opts.turnId,
+      pluginId: opts.pluginId,
+      runtimeId: opts.runtimeId,
+    },
+    payload,
+    { eventBus: opts.eventBus, emitter: opts.emitter },
+  );
+  // Transform-only: only `replace` is honoured (abort has no meaning here and
+  // is treated as "no change", matching pi's non-destructive `context`).
+  if (
+    hookResult.action === "continue" &&
+    "replace" in hookResult &&
+    hookResult.replace
+  ) {
+    const r = hookResult.replace;
+    return {
+      messages: r.messages ?? request.messages,
+      model: r.model ?? request.model,
+      tools: r.tools ?? request.tools,
+    };
+  }
+  return request;
+}
+
+// ── PostLLMResponse ──────────────────────────────────────────────
+
+export interface PostLLMResponsePayload {
+  readonly response: LLMResponse;
+  readonly pluginId: string;
+  readonly runtimeId: string;
+}
+
+export async function runPostLLMResponseHook(
+  opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
+  response: LLMResponse,
+): Promise<LLMResponse> {
+  if (!opts.pipeline) return response;
+  const payload: PostLLMResponsePayload = {
+    response,
+    pluginId: opts.pluginId,
+    runtimeId: opts.runtimeId,
+  };
+  const hookResult = await opts.pipeline.run(
+    "PostLLMResponse",
+    {
+      event: "PostLLMResponse",
+      sessionId: opts.sessionId,
+      turnId: opts.turnId,
+      pluginId: opts.pluginId,
+      runtimeId: opts.runtimeId,
+    },
+    payload,
+    { eventBus: opts.eventBus, emitter: opts.emitter },
+  );
+  if (
+    hookResult.action === "continue" &&
+    "replace" in hookResult &&
+    hookResult.replace?.response
+  ) {
+    return hookResult.replace.response;
+  }
+  return response;
+}
+
 // ── PreToolUse ───────────────────────────────────────────────────
 
 export interface PreToolUsePayload {
@@ -194,14 +296,25 @@ export interface PostToolUsePayload {
     readonly arguments: string;
   };
   readonly result: unknown;
+  /**
+   * Hooks may set this via `replace` to end the agent tool loop after this
+   * result is recorded (mirrors pi's `tool_result.terminate`). The result is
+   * still pushed back to the transcript; the loop simply stops afterwards.
+   */
+  readonly terminate?: boolean;
+}
+
+export interface PostToolUseOutcome<R> {
+  readonly result: R;
+  readonly terminate: boolean;
 }
 
 export async function runPostToolUseHook<R>(
   opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
   toolCall: { id: string; name: string; arguments: string },
   result: R,
-): Promise<R> {
-  if (!opts.pipeline) return result;
+): Promise<PostToolUseOutcome<R>> {
+  if (!opts.pipeline) return { result, terminate: false };
   const payload: PostToolUsePayload = { toolCall, result };
   const hookResult = await opts.pipeline.run(
     "PostToolUse",
@@ -218,9 +331,13 @@ export async function runPostToolUseHook<R>(
   if (
     hookResult.action === "continue" &&
     "replace" in hookResult &&
-    hookResult.replace?.result !== undefined
+    hookResult.replace
   ) {
-    return hookResult.replace.result as R;
+    const replace = hookResult.replace;
+    return {
+      result: replace.result !== undefined ? (replace.result as R) : result,
+      terminate: replace.terminate === true,
+    };
   }
-  return result;
+  return { result, terminate: false };
 }

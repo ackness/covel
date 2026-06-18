@@ -222,9 +222,11 @@ describe("HookPipeline", () => {
       const expected: Record<HookEvent, HookSemantic> = {
         TurnStart: "parallel",
         PreRuntime: "sequential",
+        PreLLMCall: "sequential",
+        PostLLMResponse: "sequential",
         PostRuntime: "parallel",
         PreToolUse: "sequential",
-        PostToolUse: "parallel",
+        PostToolUse: "sequential",
         PreStateCommit: "sequential",
         PostStateCommit: "parallel",
         TurnStop: "parallel",

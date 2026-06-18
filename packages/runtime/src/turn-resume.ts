@@ -168,6 +168,8 @@ export async function resumeSuspendedRuntime(
   let steps = 0;
   const deadline = Date.now() + timeoutMs;
   let stoppedWithResponse = false;
+  // Set by a PostToolUse hook returning `terminate` — ends the resume loop.
+  let terminatedByHook = false;
 
   const toolContext = {
     sessionId: suspension.sessionId,
@@ -295,15 +297,16 @@ export async function resumeSuspendedRuntime(
             },
           );
 
-          const result = await runPostToolUseHook(
-            preToolOpts,
-            {
-              id: effectiveTc.id,
-              name: effectiveTc.name,
-              arguments: effectiveTc.arguments,
-            },
-            rawResult,
-          );
+          const { result, terminate: terminateAfterTool } =
+            await runPostToolUseHook(
+              preToolOpts,
+              {
+                id: effectiveTc.id,
+                name: effectiveTc.name,
+                arguments: effectiveTc.arguments,
+              },
+              rawResult,
+            );
 
           if (!result.success) {
             failedToolCalls.push({
@@ -361,6 +364,11 @@ export async function resumeSuspendedRuntime(
             content: result.result,
             toolCallId: effectiveTc.id,
           });
+
+          if (terminateAfterTool) {
+            terminatedByHook = true;
+            break;
+          }
         } else {
           messages.push({
             role: "tool",
@@ -368,6 +376,11 @@ export async function resumeSuspendedRuntime(
             toolCallId: toolCall.id,
           });
         }
+      }
+
+      if (terminatedByHook) {
+        stoppedWithResponse = true;
+        break;
       }
       continue;
     }

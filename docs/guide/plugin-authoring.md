@@ -118,9 +118,11 @@ hooks:
     timeoutMs: 3000
 ```
 
-`PreRuntime`、`PreToolUse`、`PreStateCommit` 使用 `sequential` 语义：handler 按顺序执行，`replace` 会成为下一个 handler 的输入，`abort` 会停止该生命周期动作。
+`PreRuntime`、`PreLLMCall`、`PostLLMResponse`、`PreToolUse`、`PostToolUse`、`PreStateCommit` 使用 `sequential` 语义：handler 按顺序执行，`replace` 会成为下一个 handler 的输入，`abort` 会停止该生命周期动作。
 
-`TurnStart`、`PostRuntime`、`PostToolUse`、`PostStateCommit`、`TurnStop` 使用 `parallel` 语义：handler 并发执行，适合审计、日志、指标和通知这类观察型副作用。返回 `replace` 或 `abort` 会进入 hook trace；主 payload 保持原值。
+其中围绕 LLM 调用的两个事件可改写模型交互本身：`PreLLMCall` 在每次调用前非破坏性改写发往模型的 `messages` / `model` / `tools`（不动底层 transcript），`PostLLMResponse` 在响应返回后、工具派发前 patch `content` / `toolCalls`。`PostToolUse` 还可用 `replace.terminate: true` 在记录工具结果后提前结束工具循环。
+
+`TurnStart`、`PostRuntime`、`PostStateCommit`、`TurnStop` 使用 `parallel` 语义：handler 并发执行，适合审计、日志、指标和通知这类观察型副作用。返回 `replace` 或 `abort` 会进入 hook trace；主 payload 保持原值。
 
 排序先看 `enforce: pre | normal | post`，再看全局 hook 与插件 hook 分组，最后保持声明顺序。完整事件表见 [插件参考 / hooks](../reference/plugins.md#hooks)。
 

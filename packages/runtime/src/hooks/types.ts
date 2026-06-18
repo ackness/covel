@@ -12,6 +12,8 @@ import type { EventBus } from "@covel/events";
 export type HookEvent =
   | "TurnStart"
   | "PreRuntime"
+  | "PreLLMCall"
+  | "PostLLMResponse"
   | "PostRuntime"
   | "PreToolUse"
   | "PostToolUse"
@@ -24,9 +26,17 @@ export type HookSemantic = "first" | "sequential" | "parallel" | "stream";
 export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
   TurnStart: "parallel",
   PreRuntime: "sequential",
+  // Non-destructively rewrite the request sent to the LLM on each call;
+  // chained so each handler sees the previous handler's edits.
+  PreLLMCall: "sequential",
+  // Inspect / patch the LLM response before tool dispatch; chained.
+  PostLLMResponse: "sequential",
   PostRuntime: "parallel",
   PreToolUse: "sequential",
-  PostToolUse: "parallel",
+  // Sequential so handlers can patch-accumulate the tool result and signal
+  // `terminate` to end the loop. (Parallel discards `replace`, which made the
+  // prior result-patch path a no-op.)
+  PostToolUse: "sequential",
   PreStateCommit: "sequential",
   PostStateCommit: "parallel",
   TurnStop: "parallel",
