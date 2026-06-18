@@ -1,0 +1,85 @@
+# Covel 架构演进蓝图 — 以 pi 为参照的深度适配
+
+> 探索分支：`claude/pi-architecture-exploration-bw836j`
+> 起草：2026-06-18 · 参照：[earendil-works/pi](https://github.com/earendil-works/pi)
+> 目标：**不照抄 pi**,而是把 pi 的架构原则深度适配进 Covel 现有结构。四条主线:
+> ① 微调 · ② 更多 hook · ③ 更灵活的调用 · ④ 功能分离
+
+本蓝图是「目标结构 + 分片路线」。每一片(slice)独立可交付、独立提交、独立验证。已落地的写 ✅。
+
+---
+
+## 设计原则(从 pi 提炼,按 Covel 约束改写)
+
+| pi 原则                        | Covel 适配后的表述                                                                                                                                   |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| core 循环不碰持久化            | `turn-agent-tool-loop` 只依赖「执行三件套」(llm / toolExecutor / hookPipeline),编排句柄(store / eventBus / compactor / memorySystem)留在外层 harness |
+| 单一 `ExtensionAPI` 命令式注册 | **不照搬**。Covel 保留声明式 PLUGIN.md(信任分级/静态白名单刚需),但为 function-runtime 提供编程式 helper 门面,声明面与实现面分离                      |
+| ~30 个生命周期事件             | 按 Covel 真实管线补 hook,只加**有真实拦截点**的事件,不为对齐而对齐                                                                                   |
+| 每事件独立 mutation 语义       | 已有 `replace`/`abort`;按需补 `terminate`(✅)、`skip` 等 per-event 语义                                                                              |
+| 配置即 append-only event       | Covel 已是 proposal→commit 事件溯源;把旁路配置(`runtime_model_overrides`)也纳入(Phase D,暂缓)                                                        |
+| capability 发现而非硬编码 id   | Covel 已遵守;问题是**发现逻辑在 4 个 route 重复**,需收敛到单一来源                                                                                   |
+
+---
+
+## 轴① 微调(低风险,随手做)
+
+- ✅ **`PostToolUse` 语义修正**:`parallel` 会丢弃 `replace`(latent no-op),改 `sequential`,result patch 与 terminate 才生效。
+- **`hookOpts` 收敛**:工具循环里每个工具迭代曾重建 hook options;已抽成循环级共享(✅,随 Phase 1 一起)。
+- **capability id 解析去重**(见轴④ slice S1)。
+
+## 轴② 更多 hook(对齐 pi,但只加有拦截点的)
+
+已落地:
+
+- ✅ `PreLLMCall` / `PostLLMResponse`(LLM 调用边界,每次调用)
+- ✅ `PostToolUse.terminate`(工具循环提前退出)
+
+蓝图新增(按价值排序):
+
+| 事件                               | 语义                  | 拦截点                            | pi 对应                                      | 价值                                                                                     |
+| ---------------------------------- | --------------------- | --------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `PostContextAssembly`              | sequential            | `buildContext` 之后、进 loop 之前 | `before_agent_start`                         | 让插件改写**已装配的 systemPrompt**(turn 级,一次/runtime,比 per-call 的 PreLLMCall 更省) |
+| `PreCompaction` / `PostCompaction` | sequential / parallel | `compactor.run` 前后              | `session_before_compact` / `session_compact` | 插件可取消压缩 / 提供自定义摘要 / 观察                                                   |
+| `SessionStart` / `SessionEnd`      | parallel              | session 创建 / 结束(server 层)    | `session_start` / `session_shutdown`         | 插件级初始化与清理,session 作用域                                                        |
+| `PreSchedule`                      | sequential            | Trigger Router 选完触发集之后     | (无直接对应)                                 | 让插件影响「本回合跑哪些 runtime」,服务轴③                                               |
+
+> 注意:`PreLLMCall` 已能改写 messages(含 systemPrompt 作为 messages[0]),所以 `PostContextAssembly` 不是为了 message-shaping,而是为了**turn 级、一次性**地塑造 systemPrompt,避免每次循环迭代重复跑重逻辑。两者职责不重叠。
+
+## 轴③ 更灵活的调用(Covel 最弱、最值得补)
+
+pi 的灵活来自:运行时注册(tool/provider/command)、steering/followUp 队列、recursiveCall。Covel 现状与目标:
+
+1. **function-runtime 编程式注册门面**(对应 pi `ExtensionAPI`,但受信任分级约束):
+   - 现状:hook/tool/rpc 全靠 PLUGIN.md frontmatter 声明 + handler 文件,样板多。
+   - 目标:handler 内可用 `ctx.hooks.on(event, fn)` / `ctx.registerProposalShaper(...)` 之类 helper **动态**注册(仅限已在清单声明权限范围内),声明面管「能做什么」,代码面管「具体怎么做」。
+2. **统一调用门面 `RuntimeInvoker`**:现在 agent / function runtime 两条执行路径(`turn-agent-runtime` / `turn-function-runtime`)+ resume 路径各自展开。抽一个窄接口统一「给定 manifest + context → RuntimeResult」,让递归调用 / 重试 / 测试都走同一入口。
+3. **`recursiveCall` 已有**,但深度/预算控制散落;归一到 RuntimeInvoker。
+
+## 轴④ 功能分离(结构骨架)
+
+1. **S1 — capability 解析单一来源**(本轮实现):`worldDataPluginId` / `personaPluginId` / `promptHistoryRewriterPluginId` 的发现逻辑在 `turn.ts` / `actions.ts` / `plugin-rpc.ts` 重复三处。收敛成 `resolveTurnCapabilityPluginIds(registry, sessionId)` 单一来源。新增框架消费的 capability 时只改一处。
+2. **S2 — `AgentLoopDeps` 窄依赖**:`turn-agent-tool-loop` 当前吃整个 `TurnExecutorDeps`(20+ 字段)。定义只含 `llm` / `toolExecutor` / `hookPipeline` / 少量回调的窄接口,核心循环不再能触达 store/eventBus/compactor。对应 pi 的 core vs harness。
+3. **S3 — `TurnHarness` 显式化**:把「触发选择 / 调度 / 提案提交 / 落盘 / 事件」聚成 harness 角色(可先是命名与边界,不强搬代码),core 只产出内存提案。
+
+---
+
+## 分片路线(执行顺序)
+
+| Slice  | 轴    | 内容                                    | 风险   | 状态       |
+| ------ | ----- | --------------------------------------- | ------ | ---------- |
+| P1     | ②     | `PreLLMCall` / `PostLLMResponse`        | 低     | ✅ 已交付  |
+| P2     | ②①    | `PostToolUse.terminate` + 语义修正      | 低     | ✅ 已交付  |
+| **S1** | **④** | **capability 解析单一来源**             | **低** | **← 本轮** |
+| S2     | ④     | `AgentLoopDeps` 窄依赖接缝              | 中     | 待办       |
+| H1     | ②     | `PostContextAssembly` hook              | 中     | 待办       |
+| H2     | ②     | `PreCompaction` / `PostCompaction` hook | 中     | 待办       |
+| F1     | ③     | `RuntimeInvoker` 统一调用门面           | 中高   | 待办       |
+| F2     | ③     | function-runtime 编程式注册门面         | 中高   | 待办       |
+| D1     | —     | config 即 event(状态溯源一致性)         | 高     | 暂缓       |
+
+**做/不做的明确判断**:
+
+- ✅ 做:S1/S2(分离)、H1/H2(更多 hook)、F1/F2(更灵活)。
+- ❌ 不做:把 rewriter「迁移成 hook」——它现在走的是 capability 发现 + plugin-data 读取,是**正确**模式,改成 hook 是平移不是改进。S1 只去重发现逻辑,不改架构。
+- ❌ 不做:照搬 pi 扁平 JSONL 状态、命令式 ExtensionAPI 全替换、jiti 运行时加载 community 插件。

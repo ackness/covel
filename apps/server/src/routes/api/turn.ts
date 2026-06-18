@@ -3,7 +3,6 @@
  */
 
 import { Hono } from "hono";
-import { FrameworkCapability } from "@covel/shared";
 import type { RuntimeManifest } from "@covel/shared";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
 import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
@@ -15,6 +14,7 @@ import type { CompactorRunner } from "@covel/context";
 import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
 import { syncSessionTurnCount } from "./turn-count.js";
 import { resolveSessionParam } from "./session/session-guard.js";
+import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
 
 type Env = {
   Variables: {
@@ -82,21 +82,11 @@ turnRoutes.post("/:id/turn", rateLimiter({ max: 30 }), async (c) => {
   // Get active runtimes for this session (sorted by priority)
   const activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
 
-  // Discover the world data provider plugin by capability (framework never hardcodes plugin IDs)
-  const worldDataPluginId = pluginRegistry.findPluginByCapability(
-    sessionId,
-    FrameworkCapability.WorldDataProvider,
-  );
-  // Persona provider + prompt-history rewriter are likewise discovered by
-  // capability — never by plugin id. Absent capability → feature simply off.
-  const personaPluginId = pluginRegistry.findPluginByCapability(
-    sessionId,
-    FrameworkCapability.PersonaProvider,
-  );
-  const promptHistoryRewriterPluginId = pluginRegistry.findPluginByCapability(
-    sessionId,
-    FrameworkCapability.PromptHistoryRewriter,
-  );
+  // Framework-capability plugin ids (world data / persona / prompt-history
+  // rewriter) discovered by capability — never by plugin id. Single source of
+  // truth in resolveTurnCapabilityPluginIds; absent capability → feature off.
+  const { worldDataPluginId, personaPluginId, promptHistoryRewriterPluginId } =
+    resolveTurnCapabilityPluginIds(pluginRegistry, sessionId);
 
   const hookPipeline = c.get("hookPipeline");
   const eventBus = c.get("eventBus");

@@ -16,12 +16,12 @@ import {
   createTraceRecorder,
   createTurnEmitter,
 } from "@covel/runtime";
-import { FrameworkCapability } from "@covel/shared";
 import type { RuntimeManifest } from "@covel/shared";
 import type { CompactorRunner } from "@covel/context";
 import { errorBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
+import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
 import { syncSessionTurnCount } from "./turn-count.js";
 
 // SSE uses ProtocolEventType names directly — no legacy mapping.
@@ -199,20 +199,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     runtimes: activeRuntimes,
   });
 
-  // Discover the world data provider plugin by capability (framework never hardcodes plugin IDs)
-  const worldDataPluginId = pluginRegistry.findPluginByCapability(
-    sessionId,
-    FrameworkCapability.WorldDataProvider,
-  );
-  // Persona provider + prompt-history rewriter discovered by capability too.
-  const personaPluginId = pluginRegistry.findPluginByCapability(
-    sessionId,
-    FrameworkCapability.PersonaProvider,
-  );
-  const promptHistoryRewriterPluginId = pluginRegistry.findPluginByCapability(
-    sessionId,
-    FrameworkCapability.PromptHistoryRewriter,
-  );
+  // Framework-capability plugin ids discovered by capability — never by id.
+  // Single source of truth in resolveTurnCapabilityPluginIds.
+  const { worldDataPluginId, personaPluginId, promptHistoryRewriterPluginId } =
+    resolveTurnCapabilityPluginIds(pluginRegistry, sessionId);
 
   return streamSSE(c, async (stream) => {
     let seq = 0;
