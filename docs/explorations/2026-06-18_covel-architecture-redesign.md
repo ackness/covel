@@ -55,8 +55,8 @@ pi 的灵活来自:运行时注册(tool/provider/command)、steering/followUp �
 1. **function-runtime 编程式注册门面**(对应 pi `ExtensionAPI`,但受信任分级约束):
    - 现状:hook/tool/rpc 全靠 PLUGIN.md frontmatter 声明 + handler 文件,样板多。
    - 目标:handler 内可用 `ctx.hooks.on(event, fn)` / `ctx.registerProposalShaper(...)` 之类 helper **动态**注册(仅限已在清单声明权限范围内),声明面管「能做什么」,代码面管「具体怎么做」。
-2. **统一调用门面 `RuntimeInvoker`**:现在 agent / function runtime 两条执行路径(`turn-agent-runtime` / `turn-function-runtime`)+ resume 路径各自展开。抽一个窄接口统一「给定 manifest + context → RuntimeResult」,让递归调用 / 重试 / 测试都走同一入口。
-3. **`recursiveCall` 已有**,但深度/预算控制散落;归一到 RuntimeInvoker。
+2. ✅ **统一调用门面 `RuntimeInvoker`**(F1 已交付):`executeOneRuntime` 本就是统一调度器(上游门控 → skip → load → function/agent 分派 → recursiveCall),但曾是 **19 个位置参数**的签名,3 个调用点各自照抄一长串实参。改成单一 `RuntimeInvocation` options 对象 + 调用侧 `invoke(manifest, triggerEvent)` 闭包(`sessionMeta`/`sessionContext` 会被 recordPreGameCompletion 重赋值,故按引用读取)。纯重构零行为变化(485 测试全绿)。resume 路径仍独立 = F1.b 待办。
+3. **`recursiveCall` 已有**,深度/预算控制现已收敛在 `RuntimeInvocation` 内(`turnOptions` + `recursionDepth`)。
 
 ## 轴④ 功能分离(结构骨架)
 
@@ -68,17 +68,18 @@ pi 的灵活来自:运行时注册(tool/provider/command)、steering/followUp �
 
 ## 分片路线(执行顺序)
 
-| Slice | 轴  | 内容                                    | 风险 | 状态      |
-| ----- | --- | --------------------------------------- | ---- | --------- |
-| P1    | ②   | `PreLLMCall` / `PostLLMResponse`        | 低   | ✅ 已交付 |
-| P2    | ②①  | `PostToolUse.terminate` + 语义修正      | 低   | ✅ 已交付 |
-| S1    | ④   | capability 解析单一来源                 | 低   | ✅ 已交付 |
-| S2    | ④   | `AgentLoopDeps` 窄依赖接缝              | 中   | ✅ 已交付 |
-| H1    | ②   | `PostContextAssembly` hook              | 中   | ✅ 已交付 |
-| H2    | ②   | `PreCompaction` / `PostCompaction` hook | 中   | ✅ 已交付 |
-| F1    | ③   | `RuntimeInvoker` 统一调用门面           | 中高 | 待办      |
-| F2    | ③   | function-runtime 编程式注册门面         | 中高 | 待办      |
-| D1    | —   | config 即 event(状态溯源一致性)         | 高   | 暂缓      |
+| Slice | 轴  | 内容                                      | 风险 | 状态      |
+| ----- | --- | ----------------------------------------- | ---- | --------- |
+| P1    | ②   | `PreLLMCall` / `PostLLMResponse`          | 低   | ✅ 已交付 |
+| P2    | ②①  | `PostToolUse.terminate` + 语义修正        | 低   | ✅ 已交付 |
+| S1    | ④   | capability 解析单一来源                   | 低   | ✅ 已交付 |
+| S2    | ④   | `AgentLoopDeps` 窄依赖接缝                | 中   | ✅ 已交付 |
+| H1    | ②   | `PostContextAssembly` hook                | 中   | ✅ 已交付 |
+| H2    | ②   | `PreCompaction` / `PostCompaction` hook   | 中   | ✅ 已交付 |
+| F1    | ③   | `RuntimeInvoker` 统一调用门面(options 化) | 中高 | ✅ 已交付 |
+| F1.b  | ③④  | 把 resume 路径并入同一 invoker            | 中高 | 待办      |
+| F2    | ③   | function-runtime 编程式注册门面           | 中高 | 待办      |
+| D1    | —   | config 即 event(状态溯源一致性)           | 高   | 暂缓      |
 
 **做/不做的明确判断**:
 

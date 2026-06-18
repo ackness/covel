@@ -28,16 +28,24 @@ export type ExecuteTurnFn = (
   options?: TurnExecutorOptions,
 ) => Promise<TurnResult>;
 
-export async function executeOneRuntime(
-  manifest: RuntimeManifest,
-  input: TurnInput,
-  activeRuntimes: readonly RuntimeManifest[],
-  completedResults: ReadonlyMap<string, RuntimeResult>,
-  deps: TurnExecutorDeps,
-  maxSteps: number,
-  defaultTimeoutMs: number,
-  messageHistory: readonly TurnMessageRecord[],
-  sessionMeta:
+/**
+ * Everything needed to invoke a single runtime. Replaces what used to be a
+ * 19-positional-argument call into `executeOneRuntime`: callers now build one
+ * options object, and extending the invoker is a single-field change instead
+ * of touching every call site. This is the `RuntimeInvoker` seam — the one
+ * entry point that dispatches function vs agent runtimes (resume is still a
+ * separate path; folding it in is tracked as F1.b).
+ */
+export interface RuntimeInvocation {
+  readonly manifest: RuntimeManifest;
+  readonly input: TurnInput;
+  readonly activeRuntimes: readonly RuntimeManifest[];
+  readonly completedResults: ReadonlyMap<string, RuntimeResult>;
+  readonly deps: TurnExecutorDeps;
+  readonly maxSteps: number;
+  readonly defaultTimeoutMs: number;
+  readonly messageHistory: readonly TurnMessageRecord[];
+  readonly sessionMeta:
     | {
         turnNumber: number;
         characters: readonly {
@@ -49,32 +57,57 @@ export async function executeOneRuntime(
         lastFormValues?: Record<string, unknown>;
         preGameCompleted?: readonly string[];
       }
-    | undefined,
-  hookPipeline: HookPipeline | undefined,
-  sessionSummaries:
+    | undefined;
+  readonly hookPipeline: HookPipeline | undefined;
+  readonly sessionSummaries:
     | readonly import("@covel/store").SessionSummaryRecord[]
-    | undefined,
-  workingMemory:
+    | undefined;
+  readonly workingMemory:
     | readonly import("@covel/context").WorkingMemoryEntry[]
-    | undefined,
-  coreMemoryBlocks:
+    | undefined;
+  readonly coreMemoryBlocks:
     | readonly {
         label: string;
         content: string;
         updatedAt: string;
       }[]
-    | undefined,
-  sessionContext: SessionContextSnapshot | undefined,
-  triggerEvent:
+    | undefined;
+  readonly sessionContext: SessionContextSnapshot | undefined;
+  readonly triggerEvent:
     | {
         readonly topic: string;
         readonly data: Readonly<Record<string, unknown>>;
       }
-    | undefined,
-  turnOptions: TurnExecutorOptions | undefined,
-  executeTurnFn: ExecuteTurnFn,
-  recursionDepth = 0,
+    | undefined;
+  readonly turnOptions: TurnExecutorOptions | undefined;
+  readonly executeTurnFn: ExecuteTurnFn;
+  /** Internal current recursion depth. Top-level callers omit it (defaults 0). */
+  readonly recursionDepth?: number;
+}
+
+export async function executeOneRuntime(
+  inv: RuntimeInvocation,
 ): Promise<RuntimeResult> {
+  const {
+    manifest,
+    input,
+    activeRuntimes,
+    completedResults,
+    deps,
+    maxSteps,
+    defaultTimeoutMs,
+    messageHistory,
+    sessionMeta,
+    hookPipeline,
+    sessionSummaries,
+    workingMemory,
+    coreMemoryBlocks,
+    sessionContext,
+    triggerEvent,
+    turnOptions,
+    executeTurnFn,
+    recursionDepth = 0,
+  } = inv;
   const startTime = Date.now();
   const runId = crypto.randomUUID();
   const timeoutMs = manifest.timeoutMs ?? defaultTimeoutMs;

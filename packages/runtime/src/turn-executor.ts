@@ -21,6 +21,7 @@ import {
   looksLikeStructuredRuntimeOutput,
 } from "./turn-output-helpers.js";
 import { executeOneRuntime } from "./turn-runtime-execution.js";
+import type { RuntimeInvocation } from "./turn-runtime-execution.js";
 import { runEventChain } from "./turn-event-chain.js";
 import {
   MaxRecursionExceeded,
@@ -276,6 +277,34 @@ export async function executeTurn(
     ? input.manualTrigger?.triggerEvent
     : undefined;
 
+  // Single entry point for invoking one runtime. `sessionMeta` / `sessionContext`
+  // are reassigned by recordPreGameCompletion between call sites, so this reads
+  // them by closure each call rather than snapshotting a base object.
+  const invoke = (
+    manifest: RuntimeManifest,
+    triggerEvent: RuntimeInvocation["triggerEvent"],
+  ): Promise<RuntimeResult> =>
+    executeOneRuntime({
+      manifest,
+      input,
+      activeRuntimes,
+      completedResults,
+      deps,
+      maxSteps,
+      defaultTimeoutMs,
+      messageHistory: projectedPromptHistory,
+      sessionMeta,
+      hookPipeline: deps.hookPipeline,
+      sessionSummaries,
+      workingMemory,
+      coreMemoryBlocks,
+      sessionContext,
+      triggerEvent,
+      turnOptions: options,
+      executeTurnFn: executeTurn,
+      recursionDepth,
+    });
+
   for (const group of groups) {
     const results = await executeParallel(group.runtimes, async (manifest) => {
       const triggerEventForRuntime =
@@ -284,26 +313,7 @@ export async function executeTurn(
         manifest.name === manualTarget.name
           ? manualTriggerEventPayload
           : undefined;
-      return executeOneRuntime(
-        manifest,
-        input,
-        activeRuntimes,
-        completedResults,
-        deps,
-        maxSteps,
-        defaultTimeoutMs,
-        projectedPromptHistory,
-        sessionMeta,
-        deps.hookPipeline,
-        sessionSummaries,
-        workingMemory,
-        coreMemoryBlocks,
-        sessionContext,
-        triggerEventForRuntime,
-        options,
-        executeTurn,
-        recursionDepth,
-      );
+      return invoke(manifest, triggerEventForRuntime);
     });
 
     // Merge results
@@ -328,26 +338,7 @@ export async function executeTurn(
       const results = await executeParallel(
         group.runtimes,
         async (manifest) => {
-          return executeOneRuntime(
-            manifest,
-            input,
-            activeRuntimes,
-            completedResults,
-            deps,
-            maxSteps,
-            defaultTimeoutMs,
-            projectedPromptHistory,
-            sessionMeta,
-            deps.hookPipeline,
-            sessionSummaries,
-            workingMemory,
-            coreMemoryBlocks,
-            sessionContext,
-            undefined,
-            options,
-            executeTurn,
-            recursionDepth,
-          );
+          return invoke(manifest, undefined);
         },
       );
       for (const [name, result] of results) {
@@ -359,27 +350,7 @@ export async function executeTurn(
   const deferredFollowers = await runEventChain({
     activeRuntimes,
     completedResults,
-    executeRuntime: (manifest, triggerEvent) =>
-      executeOneRuntime(
-        manifest,
-        input,
-        activeRuntimes,
-        completedResults,
-        deps,
-        maxSteps,
-        defaultTimeoutMs,
-        projectedPromptHistory,
-        sessionMeta,
-        deps.hookPipeline,
-        sessionSummaries,
-        workingMemory,
-        coreMemoryBlocks,
-        sessionContext,
-        triggerEvent,
-        options,
-        executeTurn,
-        recursionDepth,
-      ),
+    executeRuntime: (manifest, triggerEvent) => invoke(manifest, triggerEvent),
   });
 
   // ── Pre-Game completion tracking ────────────────────────────────
