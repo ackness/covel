@@ -425,6 +425,49 @@ describe("Turn executor hook wire-in", () => {
     });
   });
 
+  describe("PreSchedule hook", () => {
+    it("filters which runtimes run this turn via replace.triggered", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+      const keep = makeManifest({ name: "keep", pluginId: "keep" });
+      const drop = makeManifest({ name: "drop", pluginId: "drop" });
+      pipeline.register({
+        id: "global:PreSchedule:filter",
+        event: "PreSchedule",
+        handler: vi
+          .fn()
+          .mockImplementation(
+            async (
+              _ctx,
+              payload: { triggered: ReadonlyArray<{ name: string }> },
+            ) => ({
+              action: "continue",
+              replace: {
+                triggered: payload.triggered.filter((m) => m.name === "keep"),
+              },
+            }),
+          ),
+      });
+
+      const deps: TurnExecutorDeps = {
+        loadRuntime: async (m) => ({
+          manifest: m,
+          promptTemplate: "Say something.",
+          references: [],
+        }),
+        llm,
+        getConfig: () => ({}),
+        hookPipeline: pipeline,
+        store: await createMainLoopStore("sess-hook-wire"),
+      };
+
+      const result = await executeTurn(makeTurnInput(), [keep, drop], deps);
+      const ran = result.runtimeResults.map((r) => r.runtimeId);
+      expect(ran).toContain("keep");
+      expect(ran).not.toContain("drop");
+    });
+  });
+
   describe("PostContextAssembly hook", () => {
     it("rewrites the assembled system prompt seen by the LLM", async () => {
       const llm = new SimpleMockLLM();

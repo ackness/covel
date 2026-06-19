@@ -14,7 +14,11 @@ import type {
   TurnResult,
 } from "@covel/shared";
 import { executeParallel } from "./parallel-executor.js";
-import { runTurnStartHook, runTurnStopHook } from "./hooks/wire-helpers.js";
+import {
+  runTurnStartHook,
+  runTurnStopHook,
+  runPreScheduleHook,
+} from "./hooks/wire-helpers.js";
 import { emitSubEvent } from "./turn-runtime-helpers.js";
 import {
   __testOnly_parseFinalOutputEnvelope,
@@ -208,6 +212,20 @@ export async function executeTurn(
     };
   }
 
+  // PreSchedule hook — plugins may observe / narrow the set of runtimes that
+  // run this turn (after trigger selection, before scheduling). No-op when no
+  // pipeline or no handler returns a replacement.
+  const scheduledRuntimes = await runPreScheduleHook(
+    {
+      pipeline: deps.hookPipeline,
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      eventBus: deps.eventBus,
+      emitter: deps.emitter,
+    },
+    { triggered },
+  );
+
   // 2. Schedule runtimes.
   //
   // Pre-Game band uses strict priority ordering while setup runtimes are
@@ -227,7 +245,7 @@ export async function executeTurn(
   // See packages/runtime/src/dag-scheduler.ts for the algorithm.
   const groups = scheduleTriggeredRuntimes({
     manualTarget,
-    triggered,
+    triggered: scheduledRuntimes,
     isPreGamePending,
     turnNumber,
   });
@@ -330,7 +348,7 @@ export async function executeTurn(
     // same request, immediately run any already-triggered main-loop runtimes so
     // the player sees the first story beat after submitting setup inputs.
     const followupGroups = scheduleMainLoopFollowups({
-      triggered,
+      triggered: scheduledRuntimes,
       completedRuntimeIds: new Set(completedResults.keys()),
       turnNumber,
     });

@@ -223,6 +223,7 @@ describe("HookPipeline", () => {
         TurnStart: "parallel",
         PreCompaction: "sequential",
         PostCompaction: "parallel",
+        PreSchedule: "sequential",
         PreRuntime: "sequential",
         PostContextAssembly: "sequential",
         PreLLMCall: "sequential",

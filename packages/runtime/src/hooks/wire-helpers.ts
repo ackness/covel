@@ -118,6 +118,41 @@ export async function runPostCompactionHook(
   );
 }
 
+// ── PreSchedule ──────────────────────────────────────────────────
+
+export interface PreSchedulePayload {
+  /** Runtimes selected to run this turn, after trigger selection. */
+  readonly triggered: readonly RuntimeManifest[];
+}
+
+/**
+ * Observe / filter the set of runtimes scheduled this turn (after trigger
+ * selection, before scheduling). Handlers may return `replace.triggered` to
+ * narrow the set (e.g. conditional gating, cost control). Returning a runtime
+ * not in the original set is the author's responsibility — the framework uses
+ * the returned list as-is, consistent with other `replace`-based hooks.
+ */
+export async function runPreScheduleHook(
+  opts: BaseOpts,
+  payload: PreSchedulePayload,
+): Promise<readonly RuntimeManifest[]> {
+  if (!opts.pipeline) return payload.triggered;
+  const hookResult = await opts.pipeline.run(
+    "PreSchedule",
+    { event: "PreSchedule", sessionId: opts.sessionId, turnId: opts.turnId },
+    payload,
+    { eventBus: opts.eventBus, emitter: opts.emitter },
+  );
+  if (
+    hookResult.action === "continue" &&
+    "replace" in hookResult &&
+    hookResult.replace?.triggered
+  ) {
+    return hookResult.replace.triggered;
+  }
+  return payload.triggered;
+}
+
 // ── PreRuntime ───────────────────────────────────────────────────
 
 export async function runPreRuntimeHook(

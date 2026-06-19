@@ -97,7 +97,8 @@ flowchart TB
     Exec --> StartEvt["SSE: execution.started"]
     StartEvt --> Hook1[TurnStart hook]
     Hook1 --> Filter["shouldTrigger 过滤<br/>auto / scheduled / manual / event / error-retry<br/>+ maxTriggerCount / cooldownTurns / startTurn"]
-    Filter --> Band{"turnCount?"}
+    Filter --> PreSched["PreSchedule hook<br/>(可收窄本回合 runtime 集)"]
+    PreSched --> Band{"turnCount?"}
     Band -->|== 0| PreBand["Pre-Game band<br/>scheduleByPriority<br/>priority 0–99"]
     Band -->|>= 1| MainBand["主循环 band<br/>scheduleByDag → priority 回退<br/>priority 100–1000"]
 

@@ -13,6 +13,7 @@ export type HookEvent =
   | "TurnStart"
   | "PreCompaction"
   | "PostCompaction"
+  | "PreSchedule"
   | "PreRuntime"
   | "PostContextAssembly"
   | "PreLLMCall"
@@ -32,6 +33,9 @@ export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
   PreCompaction: "sequential",
   // Observe the compaction outcome (compacted? summaryId?).
   PostCompaction: "parallel",
+  // Observe / filter the set of runtimes that will run this turn, after
+  // trigger selection and before scheduling. Chained via `replace.triggered`.
+  PreSchedule: "sequential",
   PreRuntime: "sequential",
   // Turn-level (once per runtime): rewrite the assembled system prompt /
   // projected history after buildContext, before the loop. Chained.
