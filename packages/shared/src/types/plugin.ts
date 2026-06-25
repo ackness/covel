@@ -259,7 +259,13 @@ export interface PluginUserSettingSpec {
  */
 export type HookEventName =
   | "TurnStart"
+  | "PreCompaction"
+  | "PostCompaction"
+  | "PreSchedule"
   | "PreRuntime"
+  | "PostContextAssembly"
+  | "PreLLMCall"
+  | "PostLLMResponse"
   | "PostRuntime"
   | "PreToolUse"
   | "PostToolUse"

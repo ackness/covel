@@ -502,10 +502,16 @@ describe("parsePluginMd", () => {
       });
     });
 
-    it("parses all 8 valid hook event names", () => {
+    it("parses all 14 valid hook event names", () => {
       const validEvents = [
         "TurnStart",
+        "PreCompaction",
+        "PostCompaction",
+        "PreSchedule",
         "PreRuntime",
+        "PostContextAssembly",
+        "PreLLMCall",
+        "PostLLMResponse",
         "PostRuntime",
         "PreToolUse",
         "PostToolUse",

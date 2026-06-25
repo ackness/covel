@@ -365,13 +365,6 @@ export async function runAgentToolLoop({
         }
       }
 
-      // Hook-driven termination: the response's prose (if any) is already
-      // captured in finalContent; stop here instead of another round-trip.
-      if (terminatedByHook) {
-        stoppedWithResponse = true;
-        break;
-      }
-
       // Runtime-done early exit. If any tool call in this round was the
       // builtin `runtime-done` tool, the LLM has declared completion —
       // break immediately instead of burning another round-trip for a
@@ -408,6 +401,14 @@ export async function runAgentToolLoop({
                 })
               : "";
         }
+        stoppedWithResponse = true;
+        break;
+      }
+
+      // Hook-driven termination (after runtime-done handling, so a same-round
+      // `runtime-done` call still gets its sentinel-strip + envelope cleanup
+      // above). The response's prose, if any, is already in finalContent.
+      if (terminatedByHook) {
         stoppedWithResponse = true;
         break;
       }

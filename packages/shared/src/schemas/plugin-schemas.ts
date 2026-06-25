@@ -204,7 +204,13 @@ export const pluginConfigFieldSchema = z
 
 const VALID_HOOK_EVENTS = [
   "TurnStart",
+  "PreCompaction",
+  "PostCompaction",
+  "PreSchedule",
   "PreRuntime",
+  "PostContextAssembly",
+  "PreLLMCall",
+  "PostLLMResponse",
   "PostRuntime",
   "PreToolUse",
   "PostToolUse",

@@ -648,5 +648,84 @@ describe("Turn executor hook wire-in", () => {
       expect(llm.calls).toHaveLength(1);
       expect(result.runtimeResults[0].status).toBe("success");
     });
+
+    it("still strips runtime-done from output when a hook terminates in the same response (P1-2)", async () => {
+      const llm = new SimpleMockLLM();
+      // Same response: runtime-done is processed first, then a business tool
+      // whose PostToolUse hook terminates. The runtime-done sentinel must still
+      // be stripped from collected tool calls (cleanup must not be skipped).
+      llm.nextResponse({
+        content: null,
+        toolCalls: [
+          { id: "tc-done", name: "runtime-done", arguments: "{}" },
+          { id: "tc-biz", name: "my-tool", arguments: "{}" },
+        ],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 0, outputTokens: 0 },
+      });
+
+      const toolExecutor = {
+        execute: vi
+          .fn()
+          .mockImplementation(async (tc: { name: string }) =>
+            tc.name === "runtime-done"
+              ? {
+                  result: "{}",
+                  parsedResult: { _covelRuntimeDone: true },
+                  success: true,
+                }
+              : {
+                  result: '{"ok":true}',
+                  parsedResult: { ok: true },
+                  success: true,
+                },
+          ),
+        getToolInfo: vi.fn().mockReturnValue({
+          name: "my-tool",
+          description: "test",
+          jsonSchema: { type: "object" },
+        }),
+      };
+
+      const pipeline = createHookPipeline();
+      // Terminate only after the business tool, so runtime-done is already in
+      // executedToolCalls when terminate fires.
+      pipeline.register({
+        id: "global:PostToolUse:terminate-biz",
+        event: "PostToolUse",
+        handler: vi
+          .fn()
+          .mockImplementation(
+            async (_ctx, payload: { toolCall: { name: string } }) =>
+              payload.toolCall.name === "my-tool"
+                ? { action: "continue", replace: { terminate: true } }
+                : { action: "continue" },
+          ),
+      });
+
+      const manifest = makeManifest({ tools: { builtin: [], local: [] } });
+      const deps: TurnExecutorDeps = {
+        loadRuntime: async () => ({
+          manifest,
+          promptTemplate: "Use tools.",
+          references: [],
+        }),
+        llm,
+        getConfig: () => ({}),
+        toolExecutor,
+        hookPipeline: pipeline,
+        store: await createMainLoopStore("sess-hook-wire"),
+      };
+
+      const result = await executeTurn(makeTurnInput(), [manifest], deps);
+      const toolNames = result.runtimeResults[0].toolCalls.map(
+        (t) => t.toolName,
+      );
+
+      // runtime-done stripped despite the terminate; loop stopped after 1 call.
+      expect(toolNames).not.toContain("runtime-done");
+      expect(toolNames).toContain("my-tool");
+      expect(llm.calls).toHaveLength(1);
+    });
   });
 });

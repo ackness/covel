@@ -124,7 +124,13 @@ function formatLoaderError(
 
 const VALID_HOOK_EVENTS = new Set([
   "TurnStart",
+  "PreCompaction",
+  "PostCompaction",
+  "PreSchedule",
   "PreRuntime",
+  "PostContextAssembly",
+  "PreLLMCall",
+  "PostLLMResponse",
   "PostRuntime",
   "PreToolUse",
   "PostToolUse",
