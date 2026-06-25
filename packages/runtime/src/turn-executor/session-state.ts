@@ -158,7 +158,8 @@ export async function buildProjectedPromptHistory(args: {
   // capability (resolved server-side). When no such plugin is active for the
   // session, the projected history passes through unchanged — the framework
   // never assumes a specific plugin id.
-  const rewriterPluginId = deps.promptHistoryRewriterPluginId;
+  const rewriterPluginId =
+    deps.capabilityPluginIds?.promptHistoryRewriterPluginId;
   if (!deps.store || !rewriterPluginId) return promptHistory;
 
   try {

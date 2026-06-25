@@ -188,31 +188,21 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
   };
 
   /**
-   * Optional world data plugin ID (Sprint 1-D). Resolved by the server via
-   * `pluginRegistry.findPluginByCapability(sessionId, 'world-data-provider')`
-   * and passed down so `buildSessionContextSnapshot` can fetch the active
-   * world's plugin_data (schema, dimensions, tone, opening scenario).
-   *
-   * Consulted by `buildSessionContextSnapshot` when a store is available.
+   * Framework-capability plugin ids the turn pipeline consumes, discovered by
+   * the server via `pluginRegistry.findPluginByCapability` (framework never
+   * hardcodes plugin ids). Grouped so the resolver result flows as one object
+   * rather than three loose deps fields. Absent capability → feature off.
    */
+  readonly capabilityPluginIds?: CapabilityPluginIds;
+}
+
+/** Plugin ids discovered by framework capability for the turn pipeline. */
+export interface CapabilityPluginIds {
+  /** `world-data-provider` — world dimensions / lorebook / opening scenario. */
   readonly worldDataPluginId?: string;
-
-  /**
-   * Optional persona provider plugin ID. Resolved by the server via
-   * `pluginRegistry.findPluginByCapability(sessionId, 'persona-provider')`
-   * and passed down so `buildSessionContextSnapshot` can load the active
-   * player persona from that plugin's `session-binding` / `profiles`
-   * namespaces. Framework never hardcodes a plugin id.
-   */
+  /** `persona-provider` — the active player persona. */
   readonly personaPluginId?: string;
-
-  /**
-   * Optional prompt-history rewriter plugin ID. Resolved by the server via
-   * `pluginRegistry.findPluginByCapability(sessionId, 'prompt-history-rewriter')`
-   * and passed down so `buildProjectedPromptHistory` can fold that plugin's
-   * accepted alternate turns into the projected history. Framework never
-   * hardcodes a plugin id.
-   */
+  /** `prompt-history-rewriter` — accepted branch-reply candidate projection. */
   readonly promptHistoryRewriterPluginId?: string;
 }
 

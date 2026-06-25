@@ -201,8 +201,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
 
   // Framework-capability plugin ids discovered by capability — never by id.
   // Single source of truth in resolveTurnCapabilityPluginIds.
-  const { worldDataPluginId, personaPluginId, promptHistoryRewriterPluginId } =
-    resolveTurnCapabilityPluginIds(pluginRegistry, sessionId);
+  const capabilityPluginIds = resolveTurnCapabilityPluginIds(
+    pluginRegistry,
+    sessionId,
+  );
 
   return streamSSE(c, async (stream) => {
     let seq = 0;
@@ -439,9 +441,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           compactor: compactorRunner,
           memorySystem: _memorySystem,
           // Let the turn executor construct a unified SessionContextSnapshot.
-          worldDataPluginId,
-          personaPluginId,
-          promptHistoryRewriterPluginId,
+          capabilityPluginIds,
         }),
       );
 

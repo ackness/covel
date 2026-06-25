@@ -178,11 +178,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
       );
     }
 
-    const {
-      worldDataPluginId,
-      personaPluginId,
-      promptHistoryRewriterPluginId,
-    } = resolveTurnCapabilityPluginIds(pluginRegistry, sessionId);
+    const capabilityPluginIds = resolveTurnCapabilityPluginIds(
+      pluginRegistry,
+      sessionId,
+    );
     const turnGetConfig =
       c.get("getConfigFn") ?? ((_pluginId: string, _runtimeId: string) => ({}));
 
@@ -232,9 +231,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
         // then can't tell the runtime ever finished. Wire it through so
         // manual-trigger turns produce the same trace surface as auto turns.
         compactor: compactorRunner,
-        worldDataPluginId,
-        personaPluginId,
-        promptHistoryRewriterPluginId,
+        capabilityPluginIds,
         ...(hookPipeline ? { hookPipeline } : {}),
       },
       ...(hookPipeline ? { hookPipeline } : {}),

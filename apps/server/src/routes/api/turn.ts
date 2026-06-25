@@ -85,8 +85,10 @@ turnRoutes.post("/:id/turn", rateLimiter({ max: 30 }), async (c) => {
   // Framework-capability plugin ids (world data / persona / prompt-history
   // rewriter) discovered by capability — never by plugin id. Single source of
   // truth in resolveTurnCapabilityPluginIds; absent capability → feature off.
-  const { worldDataPluginId, personaPluginId, promptHistoryRewriterPluginId } =
-    resolveTurnCapabilityPluginIds(pluginRegistry, sessionId);
+  const capabilityPluginIds = resolveTurnCapabilityPluginIds(
+    pluginRegistry,
+    sessionId,
+  );
 
   const hookPipeline = c.get("hookPipeline");
   const eventBus = c.get("eventBus");
@@ -142,9 +144,7 @@ turnRoutes.post("/:id/turn", rateLimiter({ max: 30 }), async (c) => {
         toolExecutor,
         resolveModel,
         compactor: compactorRunner,
-        worldDataPluginId,
-        personaPluginId,
-        promptHistoryRewriterPluginId,
+        capabilityPluginIds,
         emitter,
       },
     );
