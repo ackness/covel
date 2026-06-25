@@ -12,6 +12,16 @@
  * touching each signature, and is race-safe across concurrent sessions (each
  * request runs in its own async context). When no scope is set (e.g. unit
  * tests calling pipeline.run directly), filtering is a no-op.
+ *
+ * CONSTRAINT: any code path that fires hooks or commits proposals outside an
+ * existing scope MUST wrap in `runWithHookScope`, else those hooks run
+ * unfiltered. Current wrap sites (keep this list current when adding entry
+ * points):
+ *   - executeTurn (turn pipeline) — turn + LLM + tool hooks, compaction
+ *   - server session routes — SessionStart / SessionEnd
+ *   - createRuntimeResultProcessor.process — commit (Pre/PostStateCommit)
+ *   - resume route — resume exec + its commit
+ *   - characters route — direct character.upsert commit
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";

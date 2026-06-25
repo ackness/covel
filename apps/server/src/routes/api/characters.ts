@@ -3,7 +3,7 @@
  */
 
 import { Hono } from "hono";
-import { createCommitPipeline } from "@covel/runtime";
+import { createCommitPipeline, runWithHookScope } from "@covel/runtime";
 import type { DataStore, CharacterRecord } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type { Proposal } from "@covel/shared";
@@ -91,7 +91,12 @@ characterRoutes.post("/:id/characters", async (c) => {
     c.get("hookPipeline"),
     c.get("eventBus"),
   );
-  const result = await pipeline.commit(proposal);
+  // Commit fires PreStateCommit / PostStateCommit — scope to this session's
+  // active plugins so only their hooks run (see hooks/hook-scope.ts).
+  const result = await runWithHookScope(
+    { activePluginIds: new Set(guard.session.activePlugins ?? []) },
+    () => pipeline.commit(proposal),
+  );
   if (!result.committed) {
     return c.json(errorBody(result.error ?? "Failed to upsert character"), 500);
   }
