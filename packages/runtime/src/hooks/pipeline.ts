@@ -12,6 +12,7 @@
 
 import type { EventBus } from "@covel/events";
 import { HOOK_SEMANTICS } from "./types.js";
+import { currentActivePluginIds, isHookInScope } from "./hook-scope.js";
 import type {
   HookEvent,
   HookContext,
@@ -70,21 +71,31 @@ export class HookPipeline {
       return { action: "continue" };
     }
 
-    const handlers = orderHandlers(raw);
+    // Session scope: a plugin's hooks fire only for sessions where the plugin
+    // is active (framework hooks always fire). No active scope → run all.
+    const active = currentActivePluginIds();
+    const scoped = raw.filter((reg) => isHookInScope(reg.pluginId, active));
+    if (scoped.length === 0) {
+      return { action: "continue" };
+    }
+    const ctxScoped: HookContext =
+      active === undefined ? ctx : { ...ctx, activePluginIds: active };
+
+    const handlers = orderHandlers(scoped);
     const semantic = HOOK_SEMANTICS[event];
 
     if (semantic === "first") {
-      return this.runFirst(event, ctx, payload, handlers, opts);
+      return this.runFirst(event, ctxScoped, payload, handlers, opts);
     }
     if (semantic === "sequential") {
-      return this.runSequential(event, ctx, payload, handlers, opts);
+      return this.runSequential(event, ctxScoped, payload, handlers, opts);
     }
     if (semantic === "parallel") {
-      return this.runParallel(event, ctx, payload, handlers, opts);
+      return this.runParallel(event, ctxScoped, payload, handlers, opts);
     }
 
     // Stream hooks share sequential behavior until a stream transform hook is added.
-    return this.runSequential(event, ctx, payload, handlers, opts);
+    return this.runSequential(event, ctxScoped, payload, handlers, opts);
   }
 
   private async runFirst<P>(

@@ -27,6 +27,7 @@ import {
 import { executeOneRuntime } from "./turn-runtime-execution.js";
 import type { RuntimeInvocation } from "./turn-runtime-execution.js";
 import { retainPreGameRuntimes } from "./turn-executor-helpers.js";
+import { runWithHookScope } from "./hooks/hook-scope.js";
 import { runEventChain } from "./turn-event-chain.js";
 import {
   MaxRecursionExceeded,
@@ -101,6 +102,22 @@ export {
  * ```
  */
 export async function executeTurn(
+  input: TurnInput,
+  activeRuntimes: readonly RuntimeManifest[],
+  deps: TurnExecutorDeps,
+  options?: TurnExecutorOptions,
+): Promise<TurnResult> {
+  // Publish the session's active plugin set so the global HookPipeline only
+  // fires hooks of plugins active in this session (see hooks/hook-scope.ts).
+  const activePluginIds = new Set<string>(
+    activeRuntimes.map((r) => r.pluginId),
+  );
+  return runWithHookScope({ activePluginIds }, () =>
+    executeTurnImpl(input, activeRuntimes, deps, options),
+  );
+}
+
+async function executeTurnImpl(
   input: TurnInput,
   activeRuntimes: readonly RuntimeManifest[],
   deps: TurnExecutorDeps,

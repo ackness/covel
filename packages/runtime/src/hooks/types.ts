@@ -80,6 +80,12 @@ export interface HookContext {
   readonly pluginId?: string;
   /** Populated for PreRuntime / PostRuntime. */
   readonly runtimeId?: string;
+  /**
+   * Plugin ids active in this session. Populated by the pipeline from the
+   * session hook scope (AsyncLocalStorage). Lets a handler reason about the
+   * active set; the pipeline already filters out hooks of inactive plugins.
+   */
+  readonly activePluginIds?: ReadonlySet<string>;
 }
 
 // ── Hook result ──────────────────────────────────────────────────

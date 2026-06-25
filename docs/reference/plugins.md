@@ -568,7 +568,7 @@ hooks:
 
 | Event                 | Semantic     | 行为                                                                                                                                                                                                                                                   |
 | --------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `SessionStart`        | `parallel`   | 会话级（无回合）：会话创建 + 插件激活后触发，payload `{sessionId, worldId}`。观察型,不能否决创建（对齐 pi 的 `session_start`）。全局 pipeline,handler 需自行按 `sessionId`/激活情况过滤                                                                |
+| `SessionStart`        | `parallel`   | 会话级（无回合）：会话创建 + 插件激活后触发，payload `{sessionId, worldId}`。观察型,不能否决创建（对齐 pi 的 `session_start`）                                                                                                                         |
 | `TurnStart`           | `sequential` | 回合开始的否决门：任一 handler `abort` 则整回合中止(无 runtime 运行,返回带 `abortReason` 的 TurnResult),用于访问控制 / 限流                                                                                                                            |
 | `PreCompaction`       | `sequential` | 历史压缩前的否决门：任一 handler `abort` 则本回合跳过压缩、保留完整历史（对齐 pi 的 `session_before_compact` 取消路径）                                                                                                                                |
 | `PostCompaction`      | `parallel`   | 并发观察压缩结果（`compacted` / `summaryId`）；返回值只用于日志和 trace（对齐 pi 的 `session_compact`）                                                                                                                                                |
@@ -587,6 +587,7 @@ hooks:
 
 > `PostToolUse` 为 `sequential`：`parallel` 语义会丢弃 `replace`，因此结果 patch 与 `terminate` 必须在顺序链中累积。
 > `SessionStart` / `SessionEnd` 是会话级 hook（`turnId` 为空）：在 server 的 session 路由触发,不属于 turn pipeline。
+> **Session 作用域**：hook pipeline 是全局单例,但执行时按当前 session 的激活插件集过滤(`hooks/hook-scope.ts`,经 AsyncLocalStorage)——插件 hook **只对该插件激活的 session 触发**,框架 hook(无 `pluginId`)始终触发。turn hook 的作用域取自 `activeRuntimes`,SessionStart/End 取自 `session.activePlugins`。`HookContext.activePluginIds` 暴露给 handler。
 
 `first` 和 `stream` 已作为框架语义保留：`first` 用于未来的首个命中选择类 hook，`stream` 用于未来的流式 transform hook。
 

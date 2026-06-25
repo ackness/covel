@@ -21,6 +21,7 @@ import {
   buildSessionSnapshot,
   runSessionStartHook,
   runSessionEndHook,
+  runWithHookScope,
 } from "@covel/runtime";
 import { errorBody } from "../../api-error.js";
 import { signMediaTokenForSession } from "../../middleware/media-token.js";
@@ -180,14 +181,22 @@ sessionRoutes.post("/", async (c) => {
 
   // SessionStart hook — session is created and plugins activated. Session
   // lifecycle has no turn, so turnId is empty. Observe-only (cannot veto).
-  await runSessionStartHook(
-    {
-      pipeline: c.get("hookPipeline"),
-      sessionId: id,
-      turnId: "",
-      eventBus: c.get("eventBus"),
-    },
-    { sessionId: id, worldId: rawWorldId },
+  // Scoped to this session's active plugins so only their hooks fire.
+  const startScope = {
+    activePluginIds: new Set(
+      plugins.filter((p): p is string => typeof p === "string"),
+    ),
+  };
+  await runWithHookScope(startScope, () =>
+    runSessionStartHook(
+      {
+        pipeline: c.get("hookPipeline"),
+        sessionId: id,
+        turnId: "",
+        eventBus: c.get("eventBus"),
+      },
+      { sessionId: id, worldId: rawWorldId },
+    ),
   );
 
   return c.json(session);
@@ -293,14 +302,18 @@ sessionRoutes.patch("/:id", async (c) => {
   // SessionEnd hook — fire only on the transition into `ended` (not on repeat
   // patches of an already-ended session).
   if (updates.status === "ended" && session.status !== "ended") {
-    await runSessionEndHook(
-      {
-        pipeline: c.get("hookPipeline"),
-        sessionId: id,
-        turnId: "",
-        eventBus: c.get("eventBus"),
-      },
-      { sessionId: id, reason: "ended" },
+    await runWithHookScope(
+      { activePluginIds: new Set(session.activePlugins ?? []) },
+      () =>
+        runSessionEndHook(
+          {
+            pipeline: c.get("hookPipeline"),
+            sessionId: id,
+            turnId: "",
+            eventBus: c.get("eventBus"),
+          },
+          { sessionId: id, reason: "ended" },
+        ),
     );
   }
 
@@ -319,14 +332,18 @@ sessionRoutes.delete("/:id", async (c) => {
 
   // SessionEnd hook — session removed. `session` is read above for the guard.
   if (session.status !== "ended") {
-    await runSessionEndHook(
-      {
-        pipeline: c.get("hookPipeline"),
-        sessionId: id,
-        turnId: "",
-        eventBus: c.get("eventBus"),
-      },
-      { sessionId: id, reason: "deleted" },
+    await runWithHookScope(
+      { activePluginIds: new Set(session.activePlugins ?? []) },
+      () =>
+        runSessionEndHook(
+          {
+            pipeline: c.get("hookPipeline"),
+            sessionId: id,
+            turnId: "",
+            eventBus: c.get("eventBus"),
+          },
+          { sessionId: id, reason: "deleted" },
+        ),
     );
   }
 
