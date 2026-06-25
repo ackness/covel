@@ -73,6 +73,47 @@ export async function runTurnStopHook(
   );
 }
 
+// ── SessionStart / SessionEnd ────────────────────────────────────
+// Session-lifecycle hooks fire outside any turn, so callers pass an empty
+// `turnId` in BaseOpts. Both are observe-only (parallel): SessionStart cannot
+// veto creation, SessionEnd is cleanup only.
+
+export interface SessionStartPayload {
+  readonly sessionId: string;
+  readonly worldId?: string;
+}
+
+export async function runSessionStartHook(
+  opts: BaseOpts,
+  payload: SessionStartPayload,
+): Promise<void> {
+  if (!opts.pipeline) return;
+  await opts.pipeline.run(
+    "SessionStart",
+    { event: "SessionStart", sessionId: opts.sessionId, turnId: opts.turnId },
+    payload,
+    { eventBus: opts.eventBus, emitter: opts.emitter },
+  );
+}
+
+export interface SessionEndPayload {
+  readonly sessionId: string;
+  readonly reason: "ended" | "deleted";
+}
+
+export async function runSessionEndHook(
+  opts: BaseOpts,
+  payload: SessionEndPayload,
+): Promise<void> {
+  if (!opts.pipeline) return;
+  await opts.pipeline.run(
+    "SessionEnd",
+    { event: "SessionEnd", sessionId: opts.sessionId, turnId: opts.turnId },
+    payload,
+    { eventBus: opts.eventBus, emitter: opts.emitter },
+  );
+}
+
 // ── PreCompaction / PostCompaction ───────────────────────────────
 
 export interface PreCompactionPayload {

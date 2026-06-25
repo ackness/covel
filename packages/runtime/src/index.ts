@@ -131,7 +131,10 @@ export {
   HookPipeline,
   createHookPipeline,
   registerPluginHooks,
+  runSessionStartHook,
+  runSessionEndHook,
 } from "./hooks/index.js";
+export type { SessionStartPayload, SessionEndPayload } from "./hooks/index.js";
 export { HOOK_SEMANTICS } from "./hooks/index.js";
 export type {
   PluginHookSource,

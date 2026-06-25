@@ -502,8 +502,10 @@ describe("parsePluginMd", () => {
       });
     });
 
-    it("parses all 14 valid hook event names", () => {
+    it("parses all 16 valid hook event names", () => {
       const validEvents = [
+        "SessionStart",
+        "SessionEnd",
         "TurnStart",
         "PreCompaction",
         "PostCompaction",

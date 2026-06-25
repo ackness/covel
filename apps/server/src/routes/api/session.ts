@@ -17,7 +17,11 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore, MediaStore, SessionRecord } from "@covel/store";
-import { buildSessionSnapshot } from "@covel/runtime";
+import {
+  buildSessionSnapshot,
+  runSessionStartHook,
+  runSessionEndHook,
+} from "@covel/runtime";
 import { errorBody } from "../../api-error.js";
 import { signMediaTokenForSession } from "../../middleware/media-token.js";
 import {
@@ -174,6 +178,18 @@ sessionRoutes.post("/", async (c) => {
     }
   }
 
+  // SessionStart hook — session is created and plugins activated. Session
+  // lifecycle has no turn, so turnId is empty. Observe-only (cannot veto).
+  await runSessionStartHook(
+    {
+      pipeline: c.get("hookPipeline"),
+      sessionId: id,
+      turnId: "",
+      eventBus: c.get("eventBus"),
+    },
+    { sessionId: id, worldId: rawWorldId },
+  );
+
   return c.json(session);
 });
 
@@ -273,6 +289,21 @@ sessionRoutes.patch("/:id", async (c) => {
   const updates = parsedPatch.updates;
 
   await store.updateSession(id, updates);
+
+  // SessionEnd hook — fire only on the transition into `ended` (not on repeat
+  // patches of an already-ended session).
+  if (updates.status === "ended" && session.status !== "ended") {
+    await runSessionEndHook(
+      {
+        pipeline: c.get("hookPipeline"),
+        sessionId: id,
+        turnId: "",
+        eventBus: c.get("eventBus"),
+      },
+      { sessionId: id, reason: "ended" },
+    );
+  }
+
   // Return merged result to avoid a second DB read
   return c.json({ ...session, ...updates });
 });
@@ -285,6 +316,20 @@ sessionRoutes.delete("/:id", async (c) => {
   if (!guard.ok) return guard.response;
   const session = guard.session;
   await store.deleteSession(id);
+
+  // SessionEnd hook — session removed. `session` is read above for the guard.
+  if (session.status !== "ended") {
+    await runSessionEndHook(
+      {
+        pipeline: c.get("hookPipeline"),
+        sessionId: id,
+        turnId: "",
+        eventBus: c.get("eventBus"),
+      },
+      { sessionId: id, reason: "deleted" },
+    );
+  }
+
   return c.json({ deleted: true });
 });
 

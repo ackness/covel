@@ -10,6 +10,7 @@ import type { EventBus } from "@covel/events";
 // ── Hook event names ─────────────────────────────────────────────
 
 export type HookEvent =
+  | "SessionStart"
   | "TurnStart"
   | "PreCompaction"
   | "PostCompaction"
@@ -23,11 +24,15 @@ export type HookEvent =
   | "PostToolUse"
   | "PreStateCommit"
   | "PostStateCommit"
-  | "TurnStop";
+  | "TurnStop"
+  | "SessionEnd";
 
 export type HookSemantic = "first" | "sequential" | "parallel" | "stream";
 
 export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
+  // Session lifecycle (no turn): observe session creation. Parallel; the
+  // session is already persisted, so handlers cannot veto creation.
+  SessionStart: "parallel",
   TurnStart: "parallel",
   // Veto gate before history compaction: `abort` skips compaction this turn.
   PreCompaction: "sequential",
@@ -54,6 +59,8 @@ export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
   PreStateCommit: "sequential",
   PostStateCommit: "parallel",
   TurnStop: "parallel",
+  // Session lifecycle (no turn): observe session end. Parallel; cleanup only.
+  SessionEnd: "parallel",
 };
 
 export type HookEnforce = "pre" | "normal" | "post";

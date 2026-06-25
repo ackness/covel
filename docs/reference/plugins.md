@@ -568,6 +568,7 @@ hooks:
 
 | Event                 | Semantic     | 行为                                                                                                                                                                                                                                                   |
 | --------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `SessionStart`        | `parallel`   | 会话级（无回合）：会话创建 + 插件激活后触发，payload `{sessionId, worldId}`。观察型,不能否决创建（对齐 pi 的 `session_start`）。全局 pipeline,handler 需自行按 `sessionId`/激活情况过滤                                                                |
 | `TurnStart`           | `parallel`   | 并发观察回合开始；返回值只用于日志和 trace                                                                                                                                                                                                             |
 | `PreCompaction`       | `sequential` | 历史压缩前的否决门：任一 handler `abort` 则本回合跳过压缩、保留完整历史（对齐 pi 的 `session_before_compact` 取消路径）                                                                                                                                |
 | `PostCompaction`      | `parallel`   | 并发观察压缩结果（`compacted` / `summaryId`）；返回值只用于日志和 trace（对齐 pi 的 `session_compact`）                                                                                                                                                |
@@ -582,8 +583,10 @@ hooks:
 | `PreStateCommit`      | `sequential` | 链式改写 commit payload；任一 handler 可用 `abort` 拒绝 commit                                                                                                                                                                                         |
 | `PostStateCommit`     | `parallel`   | 并发观察 commit 结果；返回值只用于日志和 trace                                                                                                                                                                                                         |
 | `TurnStop`            | `parallel`   | 并发观察回合结束；返回值只用于日志和 trace                                                                                                                                                                                                             |
+| `SessionEnd`          | `parallel`   | 会话级（无回合）：会话 PATCH 状态→`ended` 或 DELETE 时触发,payload `{sessionId, reason: "ended"｜"deleted"}`。仅在进入 `ended` 的那次触发(不重复),适合清理（对齐 pi 的 `session_shutdown`）                                                            |
 
 > `PostToolUse` 为 `sequential`：`parallel` 语义会丢弃 `replace`，因此结果 patch 与 `terminate` 必须在顺序链中累积。
+> `SessionStart` / `SessionEnd` 是会话级 hook（`turnId` 为空）：在 server 的 session 路由触发,不属于 turn pipeline。
 
 `first` 和 `stream` 已作为框架语义保留：`first` 用于未来的首个命中选择类 hook，`stream` 用于未来的流式 transform hook。
 

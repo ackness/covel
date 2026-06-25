@@ -9,6 +9,12 @@ export {
   type PluginHookSource,
   type RegisterPluginHooksOptions,
 } from "./register-plugin-hooks.js";
+export {
+  runSessionStartHook,
+  runSessionEndHook,
+  type SessionStartPayload,
+  type SessionEndPayload,
+} from "./wire-helpers.js";
 export type {
   HookEvent,
   HookSemantic,

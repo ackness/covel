@@ -220,6 +220,8 @@ describe("HookPipeline", () => {
   describe("semantic table", () => {
     it("declares all event semantics", () => {
       const expected: Record<HookEvent, HookSemantic> = {
+        SessionStart: "parallel",
+        SessionEnd: "parallel",
         TurnStart: "parallel",
         PreCompaction: "sequential",
         PostCompaction: "parallel",

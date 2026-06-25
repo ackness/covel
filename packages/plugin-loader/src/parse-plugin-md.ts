@@ -123,6 +123,8 @@ function formatLoaderError(
 // ── Valid hook event names ────────────────────────────────────────
 
 const VALID_HOOK_EVENTS = new Set([
+  "SessionStart",
+  "SessionEnd",
   "TurnStart",
   "PreCompaction",
   "PostCompaction",

@@ -258,6 +258,8 @@ export interface PluginUserSettingSpec {
  * reference it from shared types without depending on the runtime package.
  */
 export type HookEventName =
+  | "SessionStart"
+  | "SessionEnd"
   | "TurnStart"
   | "PreCompaction"
   | "PostCompaction"

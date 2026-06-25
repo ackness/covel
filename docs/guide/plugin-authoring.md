@@ -124,6 +124,8 @@ hooks:
 
 回合级还有一对压缩 hook：`PreCompaction`（`sequential`，`abort` 可让本回合跳过历史压缩、保留完整上下文）与 `PostCompaction`（`parallel`，观察压缩结果 `compacted` / `summaryId`）。另有 `PreSchedule`（`sequential`）：在触发选择之后、调度之前用 `replace.triggered` 收窄本回合实际运行的 runtime 集（条件门控 / 成本控制）。
 
+会话级（无回合）有 `SessionStart`（会话创建后,payload `{sessionId, worldId}`）与 `SessionEnd`（状态→`ended` 或 DELETE,payload `{sessionId, reason}`）两个 `parallel` 观察 hook,适合 session 级初始化 / 清理。它们在 server 的 session 路由触发,`turnId` 为空,且走全局 pipeline——handler 需自行按 `sessionId` / 插件激活情况判断是否处理。
+
 `TurnStart`、`PostCompaction`、`PostRuntime`、`PostStateCommit`、`TurnStop` 使用 `parallel` 语义：handler 并发执行，适合审计、日志、指标和通知这类观察型副作用。返回 `replace` 或 `abort` 会进入 hook trace；主 payload 保持原值。
 
 排序先看 `enforce: pre | normal | post`，再看全局 hook 与插件 hook 分组，最后保持声明顺序。完整事件表见 [插件参考 / hooks](../reference/plugins.md#hooks)。

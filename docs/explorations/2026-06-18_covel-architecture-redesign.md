@@ -37,6 +37,8 @@
 - ✅ `PostContextAssembly`(H1:turn 级改写已装配 systemPrompt / 投影历史)
 - ✅ `PreCompaction` / `PostCompaction`(H2:压缩否决门 + 结果观察;顺带把 `CompactorRunner.run` 的 `CompactorResult` 透出)
 - ✅ `PreSchedule`(H3:触发选择后、调度前收窄本回合 runtime 集;服务轴③)
+- ✅ `SessionStart` / `SessionEnd`(H4:会话创建/结束的 server 层观察 hook,`turnId` 空,全局 pipeline 自过滤)
+- ✅ **关键修复**:6 个 turn 级新 hook 曾未加入 3 处加载白名单(parse-plugin-md / plugin-schemas / HookEventName)→ 声明式插件静默丢弃。已补齐(并加 SessionStart/End)。Hook 生命周期现 **16 个**。
 
 蓝图新增(按价值排序):
 
@@ -87,4 +89,7 @@ pi 的灵活来自:运行时注册(tool/provider/command)、steering/followUp �
 
 - ✅ 做:S1/S2(分离)、H1/H2(更多 hook)、F1/F2(更灵活)。
 - ❌ 不做:把 rewriter「迁移成 hook」——它现在走的是 capability 发现 + plugin-data 读取,是**正确**模式,改成 hook 是平移不是改进。S1 只去重发现逻辑,不改架构。
+- ❌ 不做 **`model_select` hook**(pi 对应):**与 `PreLLMCall` 冗余**——`PreLLMCall.replace.model` 已能按调用覆盖模型。再加一个平行 hook 违反「只加有真实拦截点的事件」。
+- ❌ 不做 **`followUp` 队列**(pi 对应):在 Covel 的请求/响应模型下**大部分冗余**——客户端已控制动作序列,自动链式由 event-chain followers + `recursiveCall` 覆盖,server 端队列边际价值低。
+- ❌ 不做 **`steer()` 中途转向**:pi 是进程内 CLI;Covel 的 in-flight turn 是跑着的 async 函数,中途注入需侧信道,**成本高**,暂缓。
 - ❌ 不做:照搬 pi 扁平 JSONL 状态、命令式 ExtensionAPI 全替换、jiti 运行时加载 community 插件。
