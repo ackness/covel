@@ -26,6 +26,7 @@ import {
 } from "./turn-output-helpers.js";
 import { executeOneRuntime } from "./turn-runtime-execution.js";
 import type { RuntimeInvocation } from "./turn-runtime-execution.js";
+import { retainPreGameRuntimes } from "./turn-executor-helpers.js";
 import { runEventChain } from "./turn-event-chain.js";
 import {
   MaxRecursionExceeded,
@@ -215,7 +216,7 @@ export async function executeTurn(
   // PreSchedule hook — plugins may observe / narrow the set of runtimes that
   // run this turn (after trigger selection, before scheduling). No-op when no
   // pipeline or no handler returns a replacement.
-  const scheduledRuntimes = await runPreScheduleHook(
+  const preScheduleResult = await runPreScheduleHook(
     {
       pipeline: deps.hookPipeline,
       sessionId: input.sessionId,
@@ -225,6 +226,16 @@ export async function executeTurn(
     },
     { triggered },
   );
+  // F-1 guard: PreSchedule must not be able to drop Pre-Game runtimes —
+  // removing pregame / schema-gen / player-init would silently break session
+  // initialization (no character, schema never written, Pre-Game never
+  // completes). While Pre-Game is pending, force-retain any triggered Pre-Game
+  // runtime the hook dropped; PreSchedule can only shape main-loop runtimes.
+  // The `!== triggered` check keeps the no-hook fast path byte-identical.
+  const scheduledRuntimes =
+    isPreGamePending && preScheduleResult !== triggered
+      ? retainPreGameRuntimes(preScheduleResult, triggered)
+      : preScheduleResult;
 
   // 2. Schedule runtimes.
   //
