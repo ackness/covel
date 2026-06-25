@@ -33,7 +33,10 @@ export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
   // Session lifecycle (no turn): observe session creation. Parallel; the
   // session is already persisted, so handlers cannot veto creation.
   SessionStart: "parallel",
-  TurnStart: "parallel",
+  // Sequential so `abort` can veto the whole turn before any runtime runs
+  // (access control / rate limit). Parallel discarded abort, leaving the
+  // turn-executor's abort branch dead.
+  TurnStart: "sequential",
   // Veto gate before history compaction: `abort` skips compaction this turn.
   PreCompaction: "sequential",
   // Observe the compaction outcome (compacted? summaryId?).
@@ -50,7 +53,9 @@ export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
   PreLLMCall: "sequential",
   // Inspect / patch the LLM response before tool dispatch; chained.
   PostLLMResponse: "sequential",
-  PostRuntime: "parallel",
+  // Sequential so `replace.result` can rewrite the RuntimeResult. Parallel
+  // discarded replace, leaving runPostRuntimeHook's rewrite path dead.
+  PostRuntime: "sequential",
   PreToolUse: "sequential",
   // Sequential so handlers can patch-accumulate the tool result and signal
   // `terminate` to end the loop. (Parallel discards `replace`, which made the

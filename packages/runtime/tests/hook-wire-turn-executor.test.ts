@@ -131,7 +131,7 @@ describe("Turn executor hook wire-in", () => {
       expect(result.abortReason).toBeUndefined();
     });
 
-    it("keeps executing when TurnStart observer hook returns abort", async () => {
+    it("vetoes the turn when TurnStart hook returns abort (sequential)", async () => {
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();
       pipeline.register({
@@ -145,9 +145,10 @@ describe("Turn executor hook wire-in", () => {
       const deps = await makeDeps(llm, pipeline);
       const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
 
-      expect(result.runtimeResults).toHaveLength(1);
-      expect(result.abortReason).toBeUndefined();
-      expect(llm.calls).toHaveLength(1);
+      // Turn aborted before any runtime ran.
+      expect(result.runtimeResults).toHaveLength(0);
+      expect(result.abortReason).toBe("access denied");
+      expect(llm.calls).toHaveLength(0);
     });
   });
 
@@ -257,7 +258,7 @@ describe("Turn executor hook wire-in", () => {
   });
 
   describe("PostRuntime hook replace", () => {
-    it("keeps RuntimeResult unchanged when PostRuntime observer returns replace", async () => {
+    it("rewrites the RuntimeResult when PostRuntime returns replace (sequential)", async () => {
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();
 
@@ -288,7 +289,8 @@ describe("Turn executor hook wire-in", () => {
       const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
 
       expect(result.runtimeResults[0].output).toMatchObject({
-        narrativeOutput: "default response",
+        narrativeOutput: "rewritten by hook",
+        _hookModified: true,
       });
     });
   });
@@ -665,21 +667,19 @@ describe("Turn executor hook wire-in", () => {
       });
 
       const toolExecutor = {
-        execute: vi
-          .fn()
-          .mockImplementation(async (tc: { name: string }) =>
-            tc.name === "runtime-done"
-              ? {
-                  result: "{}",
-                  parsedResult: { _covelRuntimeDone: true },
-                  success: true,
-                }
-              : {
-                  result: '{"ok":true}',
-                  parsedResult: { ok: true },
-                  success: true,
-                },
-          ),
+        execute: vi.fn().mockImplementation(async (tc: { name: string }) =>
+          tc.name === "runtime-done"
+            ? {
+                result: "{}",
+                parsedResult: { _covelRuntimeDone: true },
+                success: true,
+              }
+            : {
+                result: '{"ok":true}',
+                parsedResult: { ok: true },
+                success: true,
+              },
+        ),
         getToolInfo: vi.fn().mockReturnValue({
           name: "my-tool",
           description: "test",

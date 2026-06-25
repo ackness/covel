@@ -31,6 +31,11 @@ function makeCtx(event: HookEvent = "TurnStart"): HookContext {
 
 // ── Tests ─────────────────────────────────────────────────────────
 
+// Several tests mutate HOOK_SEMANTICS.TurnStart to exercise first/stream/
+// parallel paths; capture the real default at load so afterEach restores it
+// regardless of what that default is.
+const ORIGINAL_TURNSTART_SEMANTIC = HOOK_SEMANTICS.TurnStart;
+
 describe("HookPipeline", () => {
   let pipeline: HookPipeline;
 
@@ -39,7 +44,7 @@ describe("HookPipeline", () => {
   });
 
   afterEach(() => {
-    HOOK_SEMANTICS.TurnStart = "parallel";
+    HOOK_SEMANTICS.TurnStart = ORIGINAL_TURNSTART_SEMANTIC;
   });
 
   describe("ordering", () => {
@@ -222,7 +227,7 @@ describe("HookPipeline", () => {
       const expected: Record<HookEvent, HookSemantic> = {
         SessionStart: "parallel",
         SessionEnd: "parallel",
-        TurnStart: "parallel",
+        TurnStart: "sequential",
         PreCompaction: "sequential",
         PostCompaction: "parallel",
         PreSchedule: "sequential",
@@ -230,7 +235,7 @@ describe("HookPipeline", () => {
         PostContextAssembly: "sequential",
         PreLLMCall: "sequential",
         PostLLMResponse: "sequential",
-        PostRuntime: "parallel",
+        PostRuntime: "sequential",
         PreToolUse: "sequential",
         PostToolUse: "sequential",
         PreStateCommit: "sequential",
@@ -242,6 +247,7 @@ describe("HookPipeline", () => {
     });
 
     it("parallel hooks settle all handlers and keep the payload result unchanged", async () => {
+      HOOK_SEMANTICS.TurnStart = "parallel";
       const h1 = vi
         .fn()
         .mockResolvedValue({ action: "continue", replace: { x: 2 } });
