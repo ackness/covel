@@ -32,6 +32,7 @@ import {
   processRuntimeResult,
   resumeSuspendedRuntime,
   createTurnEmitter,
+  runWithHookScope,
 } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
 import type { EventBus } from "@covel/events";
@@ -250,52 +251,59 @@ resumeRoutes.post("/:id/resume", async (c) => {
     }
   };
 
+  // Resume + commit fire hooks outside executeTurn — establish the session
+  // hook scope so a plugin's hooks only run for sessions where it is active
+  // (see hooks/hook-scope.ts).
+  const activePluginIds = new Set(activeRuntimes.map((r) => r.pluginId));
+
   try {
-    const result = await sessionLock.withLock(sessionId, () =>
-      resumeSuspendedRuntime(suspension, data, effectiveManifest!, {
-        loadRuntime: loadRuntimeFn,
-        llm: llmAdapter,
-        ...(pluginGateway ? { gateway: pluginGateway } : {}),
-        ...(pluginUtils ? { utils: pluginUtils } : {}),
-        getConfig: c.get("getConfigFn") ?? ((_p: string, _r: string) => ({})),
-        store,
-        toolExecutor,
-        resolveModel,
+    return await runWithHookScope({ activePluginIds }, async () => {
+      const result = await sessionLock.withLock(sessionId, () =>
+        resumeSuspendedRuntime(suspension, data, effectiveManifest!, {
+          loadRuntime: loadRuntimeFn,
+          llm: llmAdapter,
+          ...(pluginGateway ? { gateway: pluginGateway } : {}),
+          ...(pluginUtils ? { utils: pluginUtils } : {}),
+          getConfig: c.get("getConfigFn") ?? ((_p: string, _r: string) => ({})),
+          store,
+          toolExecutor,
+          resolveModel,
+          ...(hookPipeline ? { hookPipeline } : {}),
+          ...(eventBus ? { eventBus } : {}),
+          emitter,
+        }),
+      );
+
+      if (result.status !== "success" || !result.output) {
+        await releaseClaim();
+        return c.json(
+          {
+            ...errorBody(
+              `Resume failed: ${result.error ?? `runtime ended with status ${result.status}`}`,
+            ),
+            result,
+          },
+          500,
+        );
+      }
+
+      const outputKind = effectiveManifest.outputKind ?? "plugin";
+      const processOpts = {
         ...(hookPipeline ? { hookPipeline } : {}),
         ...(eventBus ? { eventBus } : {}),
         emitter,
-      }),
-    );
-
-    if (result.status !== "success" || !result.output) {
-      await releaseClaim();
-      return c.json(
-        {
-          ...errorBody(
-            `Resume failed: ${result.error ?? `runtime ended with status ${result.status}`}`,
-          ),
-          result,
-        },
-        500,
+        capabilities: effectiveManifest.capabilities ?? [],
+      };
+      const { events } = await processRuntimeResult(
+        result,
+        store,
+        sessionId,
+        outputKind,
+        processOpts,
       );
-    }
 
-    const outputKind = effectiveManifest.outputKind ?? "plugin";
-    const processOpts = {
-      ...(hookPipeline ? { hookPipeline } : {}),
-      ...(eventBus ? { eventBus } : {}),
-      emitter,
-      capabilities: effectiveManifest.capabilities ?? [],
-    };
-    const { events } = await processRuntimeResult(
-      result,
-      store,
-      sessionId,
-      outputKind,
-      processOpts,
-    );
-
-    return c.json({ result, events });
+      return c.json({ result, events });
+    });
   } catch (err: unknown) {
     // Release the claim so legitimate retries can attempt again. The
     // runtime error propagates to the caller; the suspension is back to

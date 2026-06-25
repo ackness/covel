@@ -2,6 +2,7 @@ import type { EventBus } from "@covel/events";
 import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
 import {
   processRuntimeResult,
+  runWithHookScope,
   type HookPipeline,
   type KernelStore,
   type ProcessRuntimeResultOutput,
@@ -10,7 +11,7 @@ import {
 
 type RuntimeResultManifest = Pick<
   RuntimeManifest,
-  "name" | "outputKind" | "capabilities"
+  "name" | "pluginId" | "outputKind" | "capabilities"
 >;
 
 export interface RuntimeResultProcessorOptions {
@@ -48,20 +49,29 @@ export function createRuntimeResultProcessor(
   const getCapabilities = (runtimeId: string): readonly string[] =>
     capabilitiesByRuntime.get(runtimeId) ?? [];
 
+  // Commit (PreStateCommit / PostStateCommit) fires server-side, outside
+  // executeTurn's hook scope — re-establish it here so those hooks are
+  // session-scoped too (see hooks/hook-scope.ts).
+  const activePluginIds = new Set(options.runtimes.map((rt) => rt.pluginId));
+
   const process = (
     result: RuntimeResult,
   ): Promise<ProcessRuntimeResultOutput> =>
-    processRuntimeResult(
-      result,
-      options.store,
-      options.sessionId,
-      getOutputKind(result.runtimeId),
-      {
-        ...(options.hookPipeline ? { hookPipeline: options.hookPipeline } : {}),
-        ...(options.eventBus ? { eventBus: options.eventBus } : {}),
-        ...(options.emitter ? { emitter: options.emitter } : {}),
-        capabilities: getCapabilities(result.runtimeId),
-      },
+    runWithHookScope({ activePluginIds }, () =>
+      processRuntimeResult(
+        result,
+        options.store,
+        options.sessionId,
+        getOutputKind(result.runtimeId),
+        {
+          ...(options.hookPipeline
+            ? { hookPipeline: options.hookPipeline }
+            : {}),
+          ...(options.eventBus ? { eventBus: options.eventBus } : {}),
+          ...(options.emitter ? { emitter: options.emitter } : {}),
+          capabilities: getCapabilities(result.runtimeId),
+        },
+      ),
     );
 
   return {
