@@ -31,6 +31,15 @@ export interface EventBus {
   getEventsAfter(sessionId: string, afterSeq: number): SubscriptionEvent[];
   /** Register a callback for every emitted event (as SubscriptionEvent). Returns unsubscribe function. */
   onEmit(callback: (event: SubscriptionEvent) => void): () => void;
+  /**
+   * Await all in-flight audit-event persistence. `emit()` is intentionally
+   * non-blocking (audit trail is best-effort; authoritative state is durably
+   * committed via the commit pipeline). Call `flush()` at a durability barrier
+   * — graceful shutdown, test teardown, or before asserting audit rows — to
+   * ensure every emitted event has been persisted. No-op when there is no
+   * store. Never rejects (per-event failures are already logged).
+   */
+  flush(): Promise<void>;
 }
 
 const RING_BUFFER_MAX = 1000;
@@ -49,6 +58,8 @@ export function createEventBus(store?: DataStore): EventBus {
   const sessionEventBuffers = new Map<string, SubscriptionEvent[]>();
   // Global onEmit callbacks
   const emitCallbacks = new Set<(event: SubscriptionEvent) => void>();
+  // In-flight audit-event persistence promises, awaited by flush().
+  const pendingSaves = new Set<Promise<void>>();
 
   function nextSeq(sessionId: string): number {
     const current = sessionSeqCounters.get(sessionId) ?? 0;
@@ -126,10 +137,21 @@ export function createEventBus(store?: DataStore): EventBus {
       createdAt: message.timestamp,
     };
 
-    // Fire-and-forget: persistence is for audit trail, not blocking emit
-    store.saveEvent(record).catch((err) => {
-      console.error(`[EventBus] Failed to persist event "${record.id}":`, err);
-    });
+    // Non-blocking: persistence is for the audit trail, not on the emit hot
+    // path. The promise is tracked in `pendingSaves` so flush() can await a
+    // durability barrier; per-event failures are logged, never thrown.
+    const save = store
+      .saveEvent(record)
+      .catch((err) => {
+        console.error(
+          `[EventBus] Failed to persist event "${record.id}":`,
+          err,
+        );
+      })
+      .finally(() => {
+        pendingSaves.delete(save);
+      });
+    pendingSaves.add(save);
   }
 
   const bus: EventBus = {
@@ -264,6 +286,12 @@ export function createEventBus(store?: DataStore): EventBus {
       return () => {
         emitCallbacks.delete(callback);
       };
+    },
+
+    async flush(): Promise<void> {
+      // Snapshot: saves that settle during the await remove themselves from
+      // the set via `finally`, which is safe while we await a copy.
+      await Promise.all([...pendingSaves]);
     },
   };
 
