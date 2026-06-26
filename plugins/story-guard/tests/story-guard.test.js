@@ -83,6 +83,19 @@ describe("story-guard rules: menu stripping", () => {
     expect(stripMenuLines(text)).toBe(text);
   });
 
+  it("does not strip lone option-like lines (prose abbreviations / initials)", () => {
+    // A real menu is >= 2 consecutive option lines; a lone sentence that starts
+    // with a letter + dot must survive (regression for the single-line over-match).
+    const text = [
+      "他停下脚步。",
+      "I. went to the store alone.",
+      "夜色渐深，远处灯火摇曳。",
+      "C. S. Lewis 的旧书躺在桌上。",
+      "他叹了口气。",
+    ].join("\n");
+    expect(stripMenuLines(text)).toBe(text);
+  });
+
   it("leaves plain narrative untouched (identical reference)", () => {
     const text = "夜风穿过废墟，远处传来钟声。";
     expect(stripMenuLines(text)).toBe(text);

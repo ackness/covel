@@ -127,9 +127,24 @@ const CHOICE_PROMPT =
 export function stripMenuLines(text) {
   if (typeof text !== "string" || text === "") return text;
   const lines = text.split(/\r?\n/);
-  const kept = lines.filter(
-    (line) => !OPTION_LINE.test(line) && !CHOICE_PROMPT.test(line),
-  );
+  const isOption = lines.map((line) => OPTION_LINE.test(line));
+  const isPrompt = lines.map((line) => CHOICE_PROMPT.test(line));
+  // An option line is stripped only when it sits in a run of >= 2 consecutive
+  // option lines (a real menu). A lone "I. went home." / "C. S. Lewis wrote…"
+  // is ordinary prose — a sentence that happens to start with a letter + dot —
+  // and is left untouched, so the guard never mauls narrative. Explicit menu
+  // headers (trailing colon) are unambiguous and are always stripped on their
+  // own.
+  const kept = lines.filter((_line, i) => {
+    if (isPrompt[i]) return false;
+    if (
+      isOption[i] &&
+      ((i > 0 && isOption[i - 1]) || isOption[i + 1] === true)
+    ) {
+      return false;
+    }
+    return true;
+  });
   if (kept.length === lines.length) return text;
   return kept.join("\n");
 }

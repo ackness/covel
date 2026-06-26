@@ -276,7 +276,7 @@ export interface AssembledContextView {
    * purely informational. Absent when the caller does not supply it, keeping
    * the field a non-breaking addition.
    */
-  readonly outputKind?: string;
+  readonly outputKind?: "story" | "plugin" | "system";
 }
 
 export interface PostContextAssemblyPayload extends AssembledContextView {

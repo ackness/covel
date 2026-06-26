@@ -131,8 +131,22 @@ export async function executeTurn(
  * For each active runtime, resolves its `userSettings` (manifest defaults
  * merged with the player's saved values) and merges the result into the
  * owning plugin's bucket. Plugins without declared settings are omitted.
- * Buckets and the top-level map are frozen so hooks can never mutate them.
+ * Buckets and the top-level map are deep-frozen so hooks can never mutate the
+ * snapshot — including nested values. (Current `PluginUserSettingSpec` types
+ * only yield scalars, but `spec.default` is typed `unknown`, so a plugin could
+ * declare an object default; deep-freezing keeps the read-only contract honest
+ * regardless.)
  */
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === "object") {
+    for (const inner of Object.values(value as Record<string, unknown>)) {
+      deepFreeze(inner);
+    }
+    Object.freeze(value);
+  }
+  return value;
+}
+
 function buildHookSettings(
   activeRuntimes: readonly RuntimeManifest[],
   allUserSettings: TurnInput["userSettings"],
@@ -146,7 +160,7 @@ function buildHookSettings(
     snapshot[manifest.pluginId] = bucket;
   }
   for (const pluginId of Object.keys(snapshot)) {
-    Object.freeze(snapshot[pluginId]);
+    deepFreeze(snapshot[pluginId]);
   }
   return Object.freeze(snapshot);
 }
