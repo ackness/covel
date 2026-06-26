@@ -38,6 +38,42 @@ describe("parsePluginMd", () => {
     });
   });
 
+  describe("i18n description + hooks coexistence (regression)", () => {
+    // A plugin that declares BOTH an object i18n `description` and `hooks` must
+    // still have its description collapsed to a string. The hooks-rebuild step
+    // previously spread from the raw frontmatter and clobbered the normalized
+    // description back to an object, failing schema validation. cost-gate was
+    // the first plugin to hit this (object description + hooks).
+    it("normalizes object description to a string when hooks are also present", () => {
+      const content = md(
+        [
+          "name: cost-gate",
+          "description:",
+          "  zh: 中文描述",
+          "  en: English description",
+          "runtimeType: function",
+          "trigger:",
+          "  type: manual",
+          "hooks:",
+          "  - event: TurnStart",
+          "    handler: ./hooks/a.js",
+          "  - event: SessionEnd",
+          "    handler: ./hooks/b.js",
+        ].join("\n"),
+        "\nbody\n",
+      );
+
+      const result = parsePluginMd(content, "plugins/cost-gate/PLUGIN.md");
+
+      // Prefer English (ASCII-friendly for traces), per the normalizer.
+      expect(result.manifest.description).toBe("English description");
+      expect(result.manifest.hooks).toEqual([
+        { event: "TurnStart", handler: "./hooks/a.js" },
+        { event: "SessionEnd", handler: "./hooks/b.js" },
+      ]);
+    });
+  });
+
   describe("full frontmatter", () => {
     it("should parse all optional fields", () => {
       const content = md(

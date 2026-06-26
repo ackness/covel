@@ -262,8 +262,14 @@ export function parsePluginMd(
           entry as { event: string; handler: string; [k: string]: unknown },
         );
       }
-      // Replace hooks in data with the filtered valid ones for strict schema validation.
-      const { hooks: _omitted, ...dataWithoutHooks } = data as Record<
+      // Replace hooks with the filtered valid ones for strict schema
+      // validation. Spread from `dataToValidate` (not the raw `data`) so the
+      // i18n `description` normalization above is preserved — otherwise a
+      // plugin that declares BOTH an object `description` and `hooks` would
+      // have its normalized description clobbered back to an object here and
+      // fail schema validation. (authorsNote/postHistory/rpc below already
+      // chain off `dataToValidate`; this site was the lone exception.)
+      const { hooks: _omitted, ...dataWithoutHooks } = dataToValidate as Record<
         string,
         unknown
       >;
