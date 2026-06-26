@@ -17,6 +17,8 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore, MediaStore, SessionRecord } from "@covel/store";
+import type { EventBus } from "@covel/events";
+import type { HookPipeline } from "@covel/runtime";
 import {
   buildSessionSnapshot,
   runSessionStartHook,
@@ -62,6 +64,39 @@ type Env = {
 };
 
 export const sessionRoutes = new Hono<Env>();
+
+/**
+ * Fire the SessionEnd lifecycle hook under the session's plugin scope, then
+ * await an EventBus durability barrier.
+ *
+ * SessionEnd is observe-only: the DB mutation (end / delete) has already
+ * happened, so a handler failure must never surface as a 500. We swallow and
+ * log. `flush()` guarantees any audit events the handlers emitted are
+ * persisted before we return — there is no later flush for a session that is
+ * ending or already gone.
+ */
+async function fireSessionEnd(
+  pipeline: HookPipeline | undefined,
+  eventBus: EventBus | undefined,
+  sessionId: string,
+  activePlugins: readonly string[],
+  reason: "ended" | "deleted",
+): Promise<void> {
+  try {
+    await runWithHookScope({ activePluginIds: new Set(activePlugins) }, () =>
+      runSessionEndHook(
+        { pipeline, sessionId, turnId: "", eventBus },
+        { sessionId, reason },
+      ),
+    );
+    await eventBus?.flush();
+  } catch (err) {
+    console.warn(
+      "[sessions] SessionEnd hook failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
 
 // ── Collection endpoints ────────────────────────────────────────
 
@@ -187,17 +222,26 @@ sessionRoutes.post("/", async (c) => {
       plugins.filter((p): p is string => typeof p === "string"),
     ),
   };
-  await runWithHookScope(startScope, () =>
-    runSessionStartHook(
-      {
-        pipeline: c.get("hookPipeline"),
-        sessionId: id,
-        turnId: "",
-        eventBus: c.get("eventBus"),
-      },
-      { sessionId: id, worldId: rawWorldId },
-    ),
-  );
+  try {
+    await runWithHookScope(startScope, () =>
+      runSessionStartHook(
+        {
+          pipeline: c.get("hookPipeline"),
+          sessionId: id,
+          turnId: "",
+          eventBus: c.get("eventBus"),
+        },
+        { sessionId: id, worldId: rawWorldId },
+      ),
+    );
+  } catch (err) {
+    // SessionStart is observe-only — a handler failure must never fail session
+    // creation (the session is already committed). Log and continue.
+    console.warn(
+      "[sessions] SessionStart hook failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
 
   return c.json(session);
 });
@@ -302,18 +346,12 @@ sessionRoutes.patch("/:id", async (c) => {
   // SessionEnd hook — fire only on the transition into `ended` (not on repeat
   // patches of an already-ended session).
   if (updates.status === "ended" && session.status !== "ended") {
-    await runWithHookScope(
-      { activePluginIds: new Set(session.activePlugins ?? []) },
-      () =>
-        runSessionEndHook(
-          {
-            pipeline: c.get("hookPipeline"),
-            sessionId: id,
-            turnId: "",
-            eventBus: c.get("eventBus"),
-          },
-          { sessionId: id, reason: "ended" },
-        ),
+    await fireSessionEnd(
+      c.get("hookPipeline"),
+      c.get("eventBus"),
+      id,
+      session.activePlugins ?? [],
+      "ended",
     );
   }
 
@@ -332,18 +370,12 @@ sessionRoutes.delete("/:id", async (c) => {
 
   // SessionEnd hook — session removed. `session` is read above for the guard.
   if (session.status !== "ended") {
-    await runWithHookScope(
-      { activePluginIds: new Set(session.activePlugins ?? []) },
-      () =>
-        runSessionEndHook(
-          {
-            pipeline: c.get("hookPipeline"),
-            sessionId: id,
-            turnId: "",
-            eventBus: c.get("eventBus"),
-          },
-          { sessionId: id, reason: "deleted" },
-        ),
+    await fireSessionEnd(
+      c.get("hookPipeline"),
+      c.get("eventBus"),
+      id,
+      session.activePlugins ?? [],
+      "deleted",
     );
   }
 

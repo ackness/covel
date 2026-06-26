@@ -110,4 +110,33 @@ describe("Session lifecycle hooks", () => {
       reason: "deleted",
     });
   });
+
+  it("does not fire SessionEnd again when DELETE-ing an already-ended session", async () => {
+    const { app, hookPipeline } = build();
+    const handler = vi.fn().mockResolvedValue({ action: "continue" });
+    hookPipeline.register({
+      id: "test:SessionEnd:ended-then-deleted",
+      event: "SessionEnd",
+      handler,
+    });
+
+    const id = await createSession(app);
+
+    // End the session — fires SessionEnd once (reason: ended).
+    await app.request(`/api/sessions/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "ended" }),
+    });
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    // DELETE the already-ended session — the `status !== "ended"` guard means
+    // no second SessionEnd, so a single session never emits two end signals.
+    await app.request(`/api/sessions/${id}`, { method: "DELETE" });
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler.mock.calls[0][1]).toMatchObject({
+      sessionId: id,
+      reason: "ended",
+    });
+  });
 });
