@@ -84,6 +84,8 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/scheduler.ts` 强制
 | char-creator/character-tracker | core-plugin | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：NPC 发现 + 角色状态跟踪                                          |
 | memory                         | core-plugin | —      | UI-only（无 runtime）                     | —         | 长期记忆摘要面板（UI 呈现，无独立 runtime）                                              |
 | cost-gate                      | plugin      | —      | hook-only（opt-in，默认禁用）             | —         | 跨切面：每会话 token 预算门控（hooks：PostLLMResponse/PreSchedule/TurnStart/SessionEnd） |
+| director                       | plugin      | —      | hook-only（opt-in，默认禁用）             | —         | 跨切面：用 PostContextAssembly 给本局所有 story runtime 统一注入导演前言                 |
+| story-guard                    | plugin      | —      | hook-only（opt-in，默认禁用）             | —         | 跨切面：故事文本红线净化（PostLLMResponse）+ 高危工具拦截（PreToolUse）                  |
 
 ---
 
@@ -404,6 +406,59 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 **配置（env）**: `COST_GATE_SOFT_TOKENS`（默认 150000）软上限 · `COST_GATE_HARD_TOKENS`（默认 200000）硬上限。hook 读不到 SettingsStore，故阈值走环境变量。
 
 **限制**: 计数为进程内、非持久——重启清零，多进程（PG / T3）不共享（单进程 T1/T2 是硬上限，T3 为每进程软信号）。详见 `plugins/cost-gate/README.md`。
+
+---
+
+## director
+
+⚪ optional · ⚙ hook-only（无可调度 runtime）
+
+**Quick use**：想让本局所有叙事（narrator / chat-mode-narrator 等所有 story runtime）共享一致的语气 / 安全 / 风格前言，而不必逐个改它们的 postHistory——启用这个插件。
+
+**路径**: `plugins/director/`
+
+| 字段         | 值                                                       |
+| ------------ | -------------------------------------------------------- |
+| pluginType   | `plugin`（可禁用，默认不启用）                           |
+| runtimeType  | `function`（no-op handler，`trigger: manual`，永不调度） |
+| outputKind   | `system`                                                 |
+| capabilities | `narration-director`                                     |
+| hooks        | `PostContextAssembly`（turn 级、每 runtime 一次）        |
+
+**职责**: 用 `PostContextAssembly` 在每个 story runtime 的系统提示末尾追加统一的「导演前言」。仅对 `payload.outputKind === "story"` 的 runtime 注入（按字段判定，不硬编码插件 ID）；非 story runtime 原样放行。前言文本为插件自带静态常量。
+
+为支持这种「只塑形 story」的判定，框架给 `PostContextAssembly` 的 payload 增加了只读 `outputKind` 字段（`AssembledContextView.outputKind`，可选、纯增量、hook 不可改写）。
+
+**限制**: 前言来自插件包内静态资源；若要「每会话可调」，可配合 `HookContext.getOwnSettings()`（见 [plugin-authoring](../guide/plugin-authoring.md) hooks 段）。详见 `plugins/director/README.md`。
+
+---
+
+## story-guard
+
+⚪ optional · ⚙ hook-only（无可调度 runtime）
+
+**Quick use**：托管 / 多人环境想要一层可插拔的内容安全——对故事文本做确定性红线净化、剥离模型自我暴露 / 选项菜单，并拦截高危工具调用——启用这个插件。
+
+**路径**: `plugins/story-guard/`
+
+| 字段         | 值                                                       |
+| ------------ | -------------------------------------------------------- |
+| pluginType   | `plugin`（可禁用，默认不启用）                           |
+| runtimeType  | `function`（no-op handler，`trigger: manual`，永不调度） |
+| outputKind   | `system`                                                 |
+| capabilities | `content-safety`                                         |
+| hooks        | `PostLLMResponse`（净化）· `PreToolUse`（拦高危工具）    |
+
+**职责**: 两道确定性、保守的守卫：
+
+- `PostLLMResponse` 对 `response.content` 做红线净化（剥离 AI/模型自我暴露样板、Llama 模板标记、部署配置的红线词）+ 选项菜单剥离（连续 ≥2 行的枚举选项 / 带尾冒号的菜单头；孤立的行首缩写如 `C. S. Lewis` 不误伤）。完整回填 `LLMResponse`（仅换 content）；净化为空时保守放行（绝不把真实叙事清成空白）。
+- `PreToolUse` 对高危工具名（`delete-everything` / `drop-database` 等 deny-list，可经 env 扩展）返回 `abort`，仅跳过该工具不中断回合。
+
+> 注意：PreToolUse 的工具名嵌在 `payload.toolCall.name`，而 frontmatter `match` 只对顶层 payload key 等值，故 deny-list 判定在 handler 内完成。
+
+**配置（env）**: `STORY_GUARD_REDACT_TERMS`（额外红线词，逗号分隔）· `STORY_GUARD_REDACT_MARK`（替换标记，默认 `[redacted]`）· `STORY_GUARD_BLOCKED_TOOLS`（额外拦截工具名）。
+
+**限制**: 净化是确定性正则，不替代模型层安全；依赖 M1（resume 路径已接 `PostLLMResponse`，本批审计已修）才能覆盖挂起→恢复的输出。详见 `plugins/story-guard/README.md`。
 
 ---
 
