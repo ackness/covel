@@ -541,6 +541,12 @@ export function createSseEventHandler(
       case "connection.restored":
       case "state.snapshot.created":
       case "session.forked":
+      // `working_memory.changed` rides the action stream as a commit event but
+      // is intentionally not rendered here — the UI reflects working-memory
+      // mutations via `state.changed`. Explicit so the exhaustiveness guard
+      // stays green (previously this fell through to `assertNeverEvent` and
+      // warned on every commit).
+      case "working_memory.changed":
       case "tool.calling":
       case "tool.completed":
       case "tool.failed":
@@ -551,6 +557,11 @@ export function createSseEventHandler(
       case "hook.fired":
       case "hook.rewrote":
       case "hook.aborted":
+      // Recursive-runtime trace events: subscription-channel only, never
+      // forwarded to this action stream — listed for exhaustiveness only.
+      case "recursive.calling":
+      case "recursive.completed":
+      case "recursive.failed":
         break;
       default:
         assertNeverEvent(eventType);

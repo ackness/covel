@@ -8,14 +8,22 @@
 import { isAssetGeneratePayload } from "@covel/shared";
 import type {
   AssetGeneratePayload,
+  CovelEventType,
   Proposal,
   ProposalSource,
   ProposalType,
   SessionEvent,
 } from "@covel/shared";
 
+/**
+ * Build a post-commit `SessionEvent`. `type` is constrained to the closed
+ * `CovelEventType` union: a commit handler that returns an event is written
+ * straight onto the action SSE stream, so emitting a name outside the union
+ * would silently reach the frontend `assertNeverEvent` guard. Constraining the
+ * param turns that drift into a compile error at the emission site.
+ */
 export function makeEvent(
-  type: string,
+  type: CovelEventType,
   proposal: Proposal,
   payload: Record<string, unknown>,
 ): SessionEvent {

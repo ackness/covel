@@ -166,6 +166,14 @@ export interface TurnResumedPayload {
   readonly pluginId?: string;
 }
 
+export interface WorkingMemoryChangedPayload {
+  /** Working-memory scope mirrored from the committed `working_memory.set`. */
+  readonly scope: "player" | "story" | "shared";
+  readonly key: string;
+  readonly runtimeId?: string;
+  readonly pluginId?: string;
+}
+
 export type CovelEvent =
   // Narrative
   | {
@@ -241,6 +249,15 @@ export type CovelEvent =
       readonly type: "character.upserted";
       readonly payload: CharacterUpsertedPayload;
     }
+  // Working memory. Emitted as a commit event (`working_memory.set` commit) and
+  // written straight onto the action stream — so it MUST be a union member even
+  // though the frontend action handler does not render it (UI reflects working
+  // memory via `state.changed`). Was previously emitted but absent from the
+  // union → hit the frontend `assertNeverEvent` guard on every commit.
+  | {
+      readonly type: "working_memory.changed";
+      readonly payload: WorkingMemoryChangedPayload;
+    }
   // System
   | { readonly type: "error.occurred"; readonly payload: ErrorOccurredPayload }
   | {
@@ -268,7 +285,18 @@ export type CovelEvent =
   | { readonly type: "block.emitted"; readonly payload: CovelEventPayload }
   | { readonly type: "hook.fired"; readonly payload: CovelEventPayload }
   | { readonly type: "hook.rewrote"; readonly payload: CovelEventPayload }
-  | { readonly type: "hook.aborted"; readonly payload: CovelEventPayload };
+  | { readonly type: "hook.aborted"; readonly payload: CovelEventPayload }
+  // Recursive-runtime trace events (TurnEmitter). Subscription-channel only —
+  // NOT forwarded to the action stream (forwardToActionStream: false), so they
+  // never reach the frontend action handler. Listed here so every framework
+  // TurnEmitter emit type is a closed-union member and `emit()` can be typed
+  // `CovelEventType`.
+  | { readonly type: "recursive.calling"; readonly payload: CovelEventPayload }
+  | {
+      readonly type: "recursive.completed";
+      readonly payload: CovelEventPayload;
+    }
+  | { readonly type: "recursive.failed"; readonly payload: CovelEventPayload };
 
 /** The closed vocabulary of every server→client event name. */
 export type CovelEventType = CovelEvent["type"];
@@ -318,6 +346,10 @@ export const COVEL_EVENT_META = {
   "world.dimensions.changed": { forwardToActionStream: true },
   "plugin-data.changed": { forwardToActionStream: true },
   "character.upserted": { forwardToActionStream: true },
+  // Commit event written directly onto the action stream (not via the eventBus
+  // forward path), so forwardToActionStream stays false — the flag only governs
+  // eventBus→action-stream forwarding, which this event does not use.
+  "working_memory.changed": { forwardToActionStream: false },
   "error.occurred": { forwardToActionStream: false },
   "connection.restored": { forwardToActionStream: false },
   "turn.suspended": { forwardToActionStream: true },
@@ -334,6 +366,11 @@ export const COVEL_EVENT_META = {
   "hook.fired": { forwardToActionStream: true },
   "hook.rewrote": { forwardToActionStream: true },
   "hook.aborted": { forwardToActionStream: true },
+  // Subscription-channel-only trace events — intentionally NOT forwarded to the
+  // action stream (behaviour preserved from before they joined the union).
+  "recursive.calling": { forwardToActionStream: false },
+  "recursive.completed": { forwardToActionStream: false },
+  "recursive.failed": { forwardToActionStream: false },
 } satisfies Record<CovelEventType, CovelEventMeta>;
 
 /**

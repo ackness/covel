@@ -183,14 +183,18 @@ Provider 图片输入矩阵：
 
 > 前端若要接收上述事件，需在 `apps/web/src/services/subscription.ts` 的 topic 路由里为 `state.snapshot.created` / `session.forked` 显式分发。当前尚未挂载这两个监听；在 fork / save UI 真正落地前，服务端已经在 SSE 通道上发送，前端订阅即生效。
 
-### Working Memory / 上下文压缩事件（kernel-only by design）
+### Working Memory / 上下文压缩事件
 
-下列事件由 commit chain / Compactor 内部发出，**保留为内核内部事件**，**不进入 `ProtocolEventType` 枚举**，**没有 SSE 推送计划**。它们的设计意图是让 runtime / hook 内部消费，而非驱动 UI。如果将来确实需要前端实时反应，需要先评审：①是否真的需要实时？还是可以靠 `state.changed` / 轮询拿到？②若需要再把对应 type promote 到 `ProtocolEventType` 并接 SSE forwarder。
+`working_memory.changed` 由 commit chain 在提交 `working_memory.set` proposal 后通过 `makeEvent` 产出，作为 commit event **直接写入 `/api/actions` 流**（与 `narrative.completed` 等同走 commit-direct 路径，不经 `FORWARDED_EVENT_TYPES` 白名单）。因此它**是 `CovelEvent` union 的成员**（`COVEL_EVENT_META` 中 `forwardToActionStream: false`——该 flag 只管 eventBus→action-stream 转发，对 commit-direct 事件无效）。前端 actions handler **显式不渲染**它（UI 通过 `state.changed` 感知 working memory 变化），但因它已在闭合 union 内，新增同类事件会被前端穷尽校验强制做出「处理或忽略」的决定。此前它被发射却缺席 union，每次提交都落到前端 `assertNeverEvent` 并 `console.warn`——已修复。
 
-| 事件                     | 触发点                                             | 当前出口                          | payload                                                         | 备注                                                             |
-| ------------------------ | -------------------------------------------------- | --------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `working_memory.changed` | commit chain 提交 `working_memory.set` proposal 后 | `KernelEvent`（runtime 内部事件） | `{ scope, key }`（顶层带有 sessionId/turnId/source）            | kernel-only by design，UI 应通过 `state.changed` 感知            |
-| `context.compacted`      | Compactor 完成摘要写入后                           | `trace_events` 表                 | `{ summaryId, messagesCompacted, tokenSavings, focusSections }` | trace-only by design，仅可通过 `/api/traces/:sessionId` 离线查询 |
+`context.compacted` 仍为 **trace-only by design**：由 Compactor 完成摘要写入后写入 `trace_events` 表，不进入 `CovelEvent` union，也没有 SSE 推送计划，仅可通过 `/api/traces/:sessionId` 离线查询。
+
+`recursive.calling` / `recursive.completed` / `recursive.failed` 为递归 runtime 的 TurnEmitter trace 事件，**仅经订阅通道（topic `trace`）下发**，`forwardToActionStream: false`，不进入 `/api/actions`。它们现在也是 `CovelEvent` union 成员——使框架所有 `TurnEmitter.emit` / `makeEvent` 的事件名都受闭合 union 约束（发射端 `type` 已收紧为 `CovelEventType`，发射 union 外事件即编译错误）。
+
+| 事件                     | 触发点                                             | 当前出口                                          | payload                                                         | 备注                                                                   |
+| ------------------------ | -------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `working_memory.changed` | commit chain 提交 `working_memory.set` proposal 后 | commit event → `/api/actions`（CovelEvent union） | `{ scope, key }`（顶层带有 sessionId/turnId/source）            | union 成员；前端显式忽略，UI 通过 `state.changed` 感知                 |
+| `context.compacted`      | Compactor 完成摘要写入后                           | `trace_events` 表                                 | `{ summaryId, messagesCompacted, tokenSavings, focusSections }` | trace-only by design，不进 union，仅可通过 `/api/traces/:sessionId` 查 |
 
 ### SSE 帧格式按通道区分
 

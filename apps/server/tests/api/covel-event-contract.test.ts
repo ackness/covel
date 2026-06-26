@@ -15,6 +15,7 @@ import {
   SUBSCRIPTION_TOPICS,
 } from "@covel/shared";
 import type { CovelEventType } from "@covel/shared";
+import { buildFrameworkCapabilities } from "../../src/routes/api/discovery.js";
 
 describe("CovelEvent contract", () => {
   it("server forwarding whitelist equals the set flagged forwardToActionStream", () => {
@@ -65,6 +66,31 @@ describe("CovelEvent contract", () => {
     const keys = Object.keys(COVEL_EVENT_META);
     expect(keys.length).toBeGreaterThan(0);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("discovery advertised protocol.events equal the CovelEvent union (M1 drift lock)", () => {
+    // discovery.ts used to hand-maintain a parallel PROTOCOL_EVENT_TYPES array
+    // that drifted from the union (missing tool.*/llm.*/hook.* etc.). It now
+    // derives `protocol.events` from COVEL_EVENT_META; this locks the equality
+    // so the discovery advertisement can never lie to clients again.
+    const framework = buildFrameworkCapabilities().framework as {
+      protocol: { events: readonly string[] };
+    };
+    const advertised = [...framework.protocol.events].sort();
+    const union = Object.keys(COVEL_EVENT_META).sort();
+    expect(advertised).toEqual(union);
+  });
+
+  it("working_memory.changed is a CovelEvent union member (H1 drift fix)", () => {
+    // Emitted as a commit event and written straight onto the action stream;
+    // was previously absent from the union → hit the frontend assertNeverEvent
+    // guard on every working_memory.set commit.
+    const wm: CovelEventType = "working_memory.changed";
+    expect(COVEL_EVENT_META[wm]).toBeDefined();
+    // Commit-direct delivery, not eventBus-forwarded → stays out of the
+    // forwarding whitelist.
+    expect(COVEL_EVENT_META[wm].forwardToActionStream).toBe(false);
+    expect(FORWARDED_EVENT_TYPES.has(wm)).toBe(false);
   });
 
   it("trace and hooks are subscribable topics (drift fix)", () => {

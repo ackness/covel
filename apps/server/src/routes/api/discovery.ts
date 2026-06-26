@@ -1,4 +1,5 @@
 import {
+  COVEL_EVENT_META,
   PROPOSAL_TYPES,
   outputKindSchema,
   triggerTypeSchema,
@@ -151,33 +152,11 @@ const DEFAULT_BUILTIN_TOOLS = [
 // commit-handler registry. Discovery therefore advertises exactly what the
 // kernel can commit — no hand-maintained list, no drift.
 
-const PROTOCOL_EVENT_TYPES = [
-  "narrative.delta",
-  "narrative.completed",
-  "interaction.requested",
-  "interaction.completed",
-  "ui.rendered",
-  "ui.part.update",
-  "state.changed",
-  "state.snapshot",
-  "execution.started",
-  "runtime.started",
-  "runtime.completed",
-  "runtime.failed",
-  "execution.completed",
-  "asset.progress",
-  "asset.generated",
-  "record.updated",
-  "event.emitted",
-  "world.dimensions.changed",
-  "plugin-data.changed",
-  "error.occurred",
-  "connection.restored",
-  "turn.suspended",
-  "turn.resumed",
-  "state.snapshot.created",
-  "session.forked",
-] as const;
+// The advertised protocol event vocabulary is DERIVED from the single source
+// of truth in @covel/shared (`COVEL_EVENT_META`, exhaustiveness-checked against
+// the `CovelEvent` union). Discovery therefore advertises exactly the closed
+// event set the kernel can emit — no hand-maintained list, no drift. (Asserted
+// by apps/server/tests/api/covel-event-contract.test.ts.)
 
 const WORLD_DATA_TARGET_URIS = [
   "world:metadata.<path>",
@@ -418,7 +397,7 @@ export function buildFrameworkCapabilities(
         pluginDataTypes: ["plugin.data", "plugin.data.batch"],
       },
       protocol: {
-        events: PROTOCOL_EVENT_TYPES,
+        events: uniqueSorted(Object.keys(COVEL_EVENT_META)),
       },
       worldData: {
         sourceKinds: enumValues(worldDataSourceKindSchema),
