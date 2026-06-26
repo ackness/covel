@@ -110,3 +110,70 @@ export function readResponsesOutputText(
   if (typeof payload.output_text === "string") return payload.output_text;
   return String(asAny(payload).output?.[0]?.content?.[0]?.text ?? "");
 }
+
+// ── OpenAI Responses API — streaming function calls ─────────────────
+//
+// The Responses API streams tool calls through semantic events that are
+// distinct from Chat Completions' `delta.tool_calls`:
+//   - `response.output_item.added` announces a `function_call` item that
+//     carries the canonical `call_id`, `name`, and the (empty) `arguments`,
+//     keyed by the item `id`.
+//   - `response.function_call_arguments.delta` streams the JSON argument
+//     string in chunks, keyed by `item_id`.
+//   - `response.function_call_arguments.done` carries the final, complete
+//     `arguments` string, keyed by `item_id`.
+
+/**
+ * Read a `function_call` item announced by `response.output_item.added`.
+ * Returns null for any other event or item type.
+ */
+export function readResponsesStreamFunctionCallAdded(
+  payload: Record<string, unknown>,
+): {
+  id: string;
+  callId: string | null;
+  name: string | null;
+  arguments: string;
+} | null {
+  if (payload.type !== "response.output_item.added") return null;
+  const item = asAny(payload).item;
+  if (!item || item.type !== "function_call") return null;
+  const id = typeof item.id === "string" ? item.id : null;
+  if (!id) return null;
+  return {
+    id,
+    callId: typeof item.call_id === "string" ? item.call_id : null,
+    name: typeof item.name === "string" ? item.name : null,
+    arguments: typeof item.arguments === "string" ? item.arguments : "",
+  };
+}
+
+/**
+ * Read an arguments delta from `response.function_call_arguments.delta`.
+ * Returns null for any other event or a malformed payload.
+ */
+export function readResponsesStreamFunctionCallArgsDelta(
+  payload: Record<string, unknown>,
+): { itemId: string; delta: string } | null {
+  if (payload.type !== "response.function_call_arguments.delta") return null;
+  const p = asAny(payload);
+  if (typeof p.item_id !== "string" || typeof p.delta !== "string") return null;
+  return { itemId: p.item_id, delta: p.delta };
+}
+
+/**
+ * Read the finalized arguments from `response.function_call_arguments.done`.
+ * The `arguments` field is authoritative and supersedes accumulated deltas.
+ */
+export function readResponsesStreamFunctionCallArgsDone(
+  payload: Record<string, unknown>,
+): { itemId: string; name: string | null; arguments: string } | null {
+  if (payload.type !== "response.function_call_arguments.done") return null;
+  const p = asAny(payload);
+  if (typeof p.item_id !== "string") return null;
+  return {
+    itemId: p.item_id,
+    name: typeof p.name === "string" ? p.name : null,
+    arguments: typeof p.arguments === "string" ? p.arguments : "",
+  };
+}

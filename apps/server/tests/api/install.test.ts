@@ -42,6 +42,21 @@ function createBodyLimitedTestApp(): Hono {
   return app;
 }
 
+/**
+ * App that wires `reservedPluginIds` the way `bootstrapApi()` does (via DI
+ * middleware) so we can assert the install route consumes the injected,
+ * directory-derived reservation set instead of a module-level constant.
+ */
+function createReservedTestApp(reserved: ReadonlySet<string>): Hono {
+  const app = new Hono();
+  app.use("*", async (c, next) => {
+    c.set("reservedPluginIds", reserved);
+    await next();
+  });
+  app.route("/api/install", installRoutes);
+  return app;
+}
+
 function zipToBuffer(zip: yazl.ZipFile): Promise<Buffer> {
   return new Promise((resolveFn, rejectFn) => {
     const chunks: Buffer[] = [];
@@ -465,6 +480,40 @@ describe("POST /api/install/plugin", () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toMatch(/mismatch|plugin id/i);
+  });
+
+  it("rejects a third-party package that claims a reserved builtin id (409)", async () => {
+    // `reservedPluginIds` is derived at boot from the bundled `plugins/` set; a
+    // package.json whose bare name matches a builtin would install into the same
+    // directory id and shadow that plugin's plugin_data namespace.
+    const app = createReservedTestApp(new Set(["narrator"]));
+    const zip = await buildZip({
+      "PLUGIN.md": VALID_PLUGIN_MD.replace(
+        "name: test-plugin",
+        "name: narrator",
+      ),
+      "package.json": JSON.stringify({
+        name: "narrator",
+        version: "0.0.1",
+        type: "module",
+      }),
+    });
+    const res = await postZip(app, "/api/install/plugin", zip);
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/reserved/i);
+  });
+
+  it("still accepts a non-reserved id when the reserved set is wired", async () => {
+    const app = createReservedTestApp(new Set(["narrator"]));
+    const zip = await buildZip({
+      "PLUGIN.md": VALID_PLUGIN_MD,
+      "package.json": VALID_PACKAGE_JSON,
+    });
+    const res = await postZip(app, "/api/install/plugin", zip);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { id: string };
+    expect(body.id).toBe("plugin-test-plugin");
   });
 
   it("rejects symlink entries", async () => {

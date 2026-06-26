@@ -25,6 +25,9 @@ export {
   readOpenAiChatToolCalls,
   readOpenAiChatUsage,
   readResponsesOutputText,
+  readResponsesStreamFunctionCallAdded,
+  readResponsesStreamFunctionCallArgsDelta,
+  readResponsesStreamFunctionCallArgsDone,
 } from "./http/openai-readers.js";
 export {
   readAnthropicText,

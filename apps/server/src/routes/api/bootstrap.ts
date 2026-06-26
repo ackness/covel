@@ -11,6 +11,7 @@ import { readRuntimeEnv } from "@covel/shared";
 import {
   loadRuntime as loadRuntimeFromDisk,
   loadPluginLlmConfig,
+  deriveBuiltinPluginIds,
   type PluginRegistry,
   type LoadedRuntime,
   type PluginLlmConfig,
@@ -212,6 +213,13 @@ export async function bootstrapApi(
       eventBus,
     });
 
+  // Reserved plugin IDs for install-time shadow protection — derived from the
+  // bundled plugins just discovered (those tagged `source: 'builtin'`), so the
+  // reservation list tracks the `plugins/` directory automatically instead of a
+  // hand-edited array. Injected via middleware below and consumed by the plugin
+  // install route to reject third-party packages that claim a builtin id.
+  const reservedPluginIds = deriveBuiltinPluginIds(discoveryMap.values());
+
   // 3. Load plugin-level llm.toml configs for model resolution
   const pluginLlmConfigs = new Map<string, PluginLlmConfig>();
   for (const [pluginId, discovery] of discoveryMap) {
@@ -378,6 +386,7 @@ export async function bootstrapApi(
     c.set("prepareToolsForSession", prepareToolsForSession);
     c.set("getPluginSource", getPluginSource);
     c.set("activatePluginLocalTools", activatePluginLocalTools);
+    c.set("reservedPluginIds", reservedPluginIds);
     if (config.worldsDirs) {
       c.set("worldsDirs", config.worldsDirs);
     }

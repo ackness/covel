@@ -1,5 +1,29 @@
+import { fileURLToPath } from "node:url";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { describe, it, expect } from "vitest";
-import { getPluginTrustInfo, BUILTIN_PLUGIN_IDS } from "../src/trust.js";
+import { getPluginTrustInfo, deriveBuiltinPluginIds } from "../src/trust.js";
+import { discoverPluginsMulti } from "../src/discover.js";
+
+/** Repo-root `plugins/` directory (…/packages/plugin-loader/tests → ../../../). */
+const PLUGINS_DIR = fileURLToPath(new URL("../../../plugins", import.meta.url));
+
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await fs.stat(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function isDir(p: string): Promise<boolean> {
+  try {
+    return (await fs.stat(p)).isDirectory();
+  } catch {
+    return false;
+  }
+}
 
 describe("getPluginTrustInfo", () => {
   describe("source-based classification", () => {
@@ -43,18 +67,41 @@ describe("getPluginTrustInfo", () => {
     });
   });
 
-  describe("BUILTIN_PLUGIN_IDS reservation list", () => {
-    it("contains the IDs of every plugin shipped under plugins/", () => {
-      // If you add or remove a plugin under plugins/, update BUILTIN_PLUGIN_IDS
-      // in trust.ts so install.ts rejects third-party shadowing.
-      expect(BUILTIN_PLUGIN_IDS.has("narrator")).toBe(true);
-      expect(BUILTIN_PLUGIN_IDS.has("pregame")).toBe(true);
-      expect(BUILTIN_PLUGIN_IDS.has("memory")).toBe(true);
-      expect(BUILTIN_PLUGIN_IDS.has("codex")).toBe(true);
-      expect(BUILTIN_PLUGIN_IDS.has("guide")).toBe(true);
-      expect(BUILTIN_PLUGIN_IDS.has("char-creator")).toBe(true);
-      expect(BUILTIN_PLUGIN_IDS.has("world-init")).toBe(true);
-      expect(BUILTIN_PLUGIN_IDS.has("npc-graph")).toBe(true);
+  describe("deriveBuiltinPluginIds — reservation list consistency", () => {
+    it("filters a discovered set down to exactly the `source: 'builtin'` ids", () => {
+      const derived = deriveBuiltinPluginIds([
+        { id: "narrator", source: "builtin" },
+        { id: "user-mod", source: "community" },
+        { id: "blessed", source: "official" },
+        { id: "no-source" }, // unclassified → not reserved
+      ]);
+
+      expect([...derived].sort()).toEqual(["narrator"]);
+    });
+
+    it("equals the actual `plugins/` directory contents (auto-syncs, no hand-maintained list)", async () => {
+      // Derivation pipeline: discover the bundled directory (index 0 → 'builtin')
+      // then filter via deriveBuiltinPluginIds — exactly what server bootstrap does.
+      const discovered = await discoverPluginsMulti([PLUGINS_DIR]);
+      const derived = deriveBuiltinPluginIds(discovered);
+
+      // Independent ground truth: read the directory ourselves and keep only the
+      // real plugin folders (a dir holding a PLUGIN.md or a runtimes/ subdir).
+      // Non-plugin entries such as the `.gitignore` file are dropped by isDirectory().
+      const dirents = await fs.readdir(PLUGINS_DIR, { withFileTypes: true });
+      const expected = new Set<string>();
+      for (const d of dirents) {
+        if (!d.isDirectory()) continue;
+        const root = path.join(PLUGINS_DIR, d.name);
+        const hasManifest = await pathExists(path.join(root, "PLUGIN.md"));
+        const hasRuntimes = await isDir(path.join(root, "runtimes"));
+        if (hasManifest || hasRuntimes) expected.add(d.name);
+      }
+
+      expect([...derived].sort()).toEqual([...expected].sort());
+      // Sanity floor: every bundled plugin is reserved (catches an empty derive).
+      expect(derived.size).toBeGreaterThanOrEqual(expected.size);
+      expect(derived.size).toBeGreaterThan(0);
     });
   });
 });

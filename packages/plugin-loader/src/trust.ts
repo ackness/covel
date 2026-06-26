@@ -10,23 +10,42 @@
 import type { PluginSource, PluginTrustInfo } from "./types.js";
 
 /**
- * Reserved IDs for plugins shipped under `plugins/`. Third-party plugins
- * (loaded from `~/.covel/plugins/`) must not declare these names — the
- * install endpoint rejects them in `validatePluginBundle()` so a community
- * plugin can never shadow a builtin's `plugin_data` namespace.
+ * Derive the set of reserved plugin IDs from an already-discovered plugin
+ * collection. The reserved set is exactly the bundled plugins — those the
+ * loader tagged `source: 'builtin'` because they were discovered in the
+ * first (shipped `plugins/`) directory passed to `discoverPluginsMulti`.
  *
- * Keep this list in sync with the directory contents under `plugins/`.
+ * Third-party plugins (loaded from `~/.covel/plugins/`) must not declare one
+ * of these names — the install endpoint rejects them in
+ * `validatePluginBundle()` so a community plugin can never shadow a builtin's
+ * `plugin_data` namespace.
+ *
+ * Why derive instead of hand-maintaining a constant array:
+ *  - It stays in lock-step with the directory contents under `plugins/`
+ *    automatically — adding/removing a bundled plugin needs no edit here, so
+ *    the reservation list can never silently drift out of sync.
+ *  - It honours the framework↔plugin isolation rule: no concrete plugin ID is
+ *    hardcoded in framework control flow. The IDs are *data* read from the
+ *    discovered plugin set.
+ *  - It survives repackaging: discovery resolves the real plugins directory at
+ *    boot, so this function never depends on a fixed on-disk path. The caller
+ *    (server bootstrap) computes the set once from the live discovery result
+ *    and injects it where the install route can consume it.
  */
-export const BUILTIN_PLUGIN_IDS = new Set<string>([
-  "narrator",
-  "pregame",
-  "memory",
-  "codex",
-  "guide",
-  "char-creator",
-  "world-init",
-  "npc-graph",
-]);
+export function deriveBuiltinPluginIds(
+  discovered: Iterable<{
+    readonly id: string;
+    readonly source?: PluginSource;
+  }>,
+): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const entry of discovered) {
+    if (entry.source === "builtin") {
+      ids.add(entry.id);
+    }
+  }
+  return ids;
+}
 
 /** Officially blessed but not shipped with the framework — empty for now. */
 const OFFICIAL_IDS = new Set<string>([]);

@@ -41,7 +41,7 @@ export const CREATE_MEDIA_TABLES_SQL = `
     created_at TEXT NOT NULL,
     UNIQUE (session_id, media_id)
   );
-  CREATE UNIQUE INDEX IF NOT EXISTS pg_media_refs_unique_session_media_idx
+  CREATE UNIQUE INDEX IF NOT EXISTS pg_media_refs_unique_idx
     ON media_refs(session_id, media_id);
   CREATE INDEX IF NOT EXISTS pg_media_refs_session_id_idx ON media_refs(session_id);
   CREATE INDEX IF NOT EXISTS pg_media_refs_media_id_idx ON media_refs(media_id);
@@ -264,6 +264,8 @@ export const CREATE_TABLES_SQL = `
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS pg_trace_events_session_id_idx ON trace_events(session_id);
+  CREATE INDEX IF NOT EXISTS pg_trace_events_trace_id_idx ON trace_events(session_id, trace_id);
+  CREATE INDEX IF NOT EXISTS pg_trace_events_turn_id_idx ON trace_events(session_id, turn_id);
 
   -- Runtime Outputs (PR-1 translation layer)
   CREATE TABLE IF NOT EXISTS runtime_outputs (
@@ -317,6 +319,7 @@ export const CREATE_TABLES_SQL = `
     compacted_at_turn_id TEXT
   );
   CREATE INDEX IF NOT EXISTS pg_turn_messages_session_id_idx ON turn_messages(session_id);
+  CREATE INDEX IF NOT EXISTS pg_turn_messages_turn_id_idx ON turn_messages(session_id, turn_id);
 
   CREATE TABLE IF NOT EXISTS player_inputs (
     id TEXT PRIMARY KEY,
