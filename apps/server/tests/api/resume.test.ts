@@ -6,7 +6,7 @@
  * GET    /api/sessions/:id/suspensions
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import {
@@ -14,6 +14,7 @@ import {
   type PluginRegistry,
 } from "@covel/plugin-loader";
 import type { RuntimeManifest } from "@covel/shared";
+import { createHookPipeline, type HookPipeline } from "@covel/runtime";
 import { resumeRoutes } from "../../src/routes/api/resume.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
@@ -30,6 +31,7 @@ type Deps = {
   };
   getConfigFn: () => Record<string, unknown>;
   resolveModel: () => undefined;
+  hookPipeline?: HookPipeline;
 };
 
 function createTestApp(deps: Deps) {
@@ -59,6 +61,9 @@ function createTestApp(deps: Deps) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     c.set("resolveModel", deps.resolveModel as any);
     c.set("sessionLock", sessionLock);
+    if (deps.hookPipeline) {
+      c.set("hookPipeline", deps.hookPipeline);
+    }
     await next();
   });
 
@@ -215,6 +220,65 @@ describe("Resume Routes", () => {
       expect(res.status).toBe(400);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toMatch(/X-Provider-Keys/);
+    });
+
+    it("scopes the resumed plugin's own hooks when it was inactive at snapshot time (review M2)", async () => {
+      // The plugin is registered but never activated for the session, so the
+      // resume route activates it on demand (resume.ts ~L189-204). Its own
+      // hooks must therefore be in scope. Before the fix, activePluginIds was
+      // built from the pre-activation snapshot and silently filtered them out.
+      const hookPipeline = createHookPipeline();
+      const preToolUse = vi.fn().mockResolvedValue({ action: "continue" });
+      hookPipeline.register({
+        id: "test-plugin:PreToolUse",
+        event: "PreToolUse",
+        pluginId: "test-plugin",
+        handler: preToolUse,
+      });
+
+      // First LLM response asks for a tool call (fires PreToolUse); the second
+      // finalizes the runtime.
+      let llmCalls = 0;
+      const llmAdapter = {
+        generate: async () => {
+          llmCalls++;
+          if (llmCalls === 1) {
+            return {
+              content: "",
+              toolCalls: [{ id: "tc-1", name: "noop", arguments: "{}" }],
+              finishReason: "tool_calls",
+              usage: { inputTokens: 1, outputTokens: 1 },
+            };
+          }
+          return {
+            content: '{"narrativeOutput": "done"}',
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 1, outputTokens: 1 },
+          };
+        },
+      };
+
+      await createSuspension(store);
+      const app = createTestApp(
+        makeDefaultDeps(store, { llmAdapter, hookPipeline }),
+      );
+
+      const res = await app.request("/api/sessions/sess-1/resume", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Provider-Keys": "dGVzdA==",
+        },
+        body: JSON.stringify({
+          suspensionId: "susp-1",
+          data: { name: "Alice" },
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      // The resumed plugin's own PreToolUse hook fired — it was in hook scope.
+      expect(preToolUse).toHaveBeenCalledTimes(1);
     });
 
     it("returns 400 when body is not valid JSON", async () => {

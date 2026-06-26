@@ -253,8 +253,14 @@ resumeRoutes.post("/:id/resume", async (c) => {
 
   // Resume + commit fire hooks outside executeTurn — establish the session
   // hook scope so a plugin's hooks only run for sessions where it is active
-  // (see hooks/hook-scope.ts).
-  const activePluginIds = new Set(activeRuntimes.map((r) => r.pluginId));
+  // (see hooks/hook-scope.ts). Include the resumed runtime's own pluginId:
+  // `activeRuntimes` was snapshotted (L184) before the on-demand `activate()`
+  // above, so a runtime that was inactive at snapshot time — then activated to
+  // be resumed — would otherwise have its own hooks filtered out of scope.
+  const activePluginIds = new Set([
+    ...activeRuntimes.map((r) => r.pluginId),
+    effectiveManifest.pluginId,
+  ]);
 
   try {
     return await runWithHookScope({ activePluginIds }, async () => {
