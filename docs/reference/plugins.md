@@ -730,11 +730,18 @@ execution: background # wan2.x 文生图需要几十秒,不阻塞 UI
 | `persona-provider`        | 玩家人设提供者    | `buildSessionContextSnapshot` 从该插件的 `session-binding` / `profiles` 命名空间加载 `activePersona`（由 `player-identity` 声明）。未发现时不加载人设。 |
 | `prompt-history-rewriter` | prompt 历史改写者 | `buildProjectedPromptHistory` 读取该插件的 `turns` 命名空间，把已采纳的备选回合折叠进投影历史（由 `branch-reply` 声明）。未发现时历史原样透传。         |
 
+上表是**插件级**能力（匹配整个插件 manifest，对应 `FrameworkCapability`）。框架还消费一组**runtime 级**能力（匹配插件内某个具体子 runtime，对应 `FrameworkRuntimeCapability`），用于多步图像插件的链路发现：
+
+| 能力标签（runtime 级） | 含义                   | 框架用途                                                                                                                 |
+| ---------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `image-prompt`         | 图像提示词入口 runtime | 前端「生成配图」入口：发现声明该能力且 `trigger.type === manual` 的入口 runtime，经 plugin-rpc 触发并交给后台 follower。 |
+| `image-generator`      | 图像生成后台 runtime   | 图像面板「重跑」：发现声明该能力的后台 runtime，把提示词转成图像 asset。                                                 |
+
 > `dataSchemas.<namespace>.acceptsWorldData: true` 同样是一种能力声明：世界角色蓝图导入（`blueprintStorageTargets` / `characterMirrorTargets`）据此发现「接受世界蓝图 / 角色镜像」的插件（如 `character-blueprint`），框架不再硬编码 `character-blueprint` / `char-creator`。
 
 声明 `image-generation` 的 runtime 在完成态返回 `assetGenerations[]`，每一项包含 `{ ref: MediaRef, modality: "image", meta? }`。图像画廊索引写入 `plugin_data.images` 时保存 `{ status, ref, prompt, ... }`，运行时会把旧 `url` / `base64` / `dataUrl` 字段记录为 `image.generate.plugin_data_inline_media` error。
 
-插件可以声明任意自定义能力标签。框架仅依赖上述已定义标签。框架代码（server / runtime / web）引用这些标签时**不得**使用裸字符串字面量，而应使用 `@covel/shared` 导出的 `FrameworkCapability` 常量（如 `FrameworkCapability.WorldDataProvider`），这样拼写漂移会变成编译错误而非静默 `undefined`。新增框架消费的能力标签时，需同时更新 `FrameworkCapability`（`packages/shared/src/types/plugin.ts`）与本表。
+插件可以声明任意自定义能力标签。框架仅依赖上述已定义标签。框架代码（server / runtime / web）引用这些标签时**不得**使用裸字符串字面量，而应使用 `@covel/shared` 导出的常量：插件级用 `FrameworkCapability`（如 `FrameworkCapability.WorldDataProvider`），runtime 级用 `FrameworkRuntimeCapability`（如 `FrameworkRuntimeCapability.ImageGenerator`），这样拼写漂移会变成编译错误而非静默 `undefined`。两组常量的并集导出为 `FRAMEWORK_KNOWN_CAPABILITIES`（单一事实源）；plugin-loader 在加载 PLUGIN.md 时，对「形似某个框架已知能力但拼错」的声明发 dev 警告（不阻断、不丢弃，自定义能力仍自由声明）。新增框架消费的能力标签时，需同时更新对应常量（`packages/shared/src/types/plugin.ts`）与本表。
 
 **API 暴露**: Session plugins API（`GET /api/sessions/:id/plugins`）在响应中返回每个插件的 `capabilities` 字段（从所有子 runtime 的 manifest 中聚合），前端可据此发现插件能力。示例响应片段：
 

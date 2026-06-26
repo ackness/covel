@@ -32,6 +32,7 @@ export type {
 export type {
   PluginType,
   FrameworkCapabilityTag,
+  FrameworkRuntimeCapabilityTag,
   RuntimeType,
   TriggerType,
   TriggerConfig,
@@ -60,7 +61,11 @@ export type {
   PostHistoryDecl,
 } from "./plugin.js";
 
-export { FrameworkCapability } from "./plugin.js";
+export {
+  FrameworkCapability,
+  FrameworkRuntimeCapability,
+  FRAMEWORK_KNOWN_CAPABILITIES,
+} from "./plugin.js";
 export { HOOK_EVENTS } from "./plugin.js";
 
 export type {

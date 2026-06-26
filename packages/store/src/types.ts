@@ -420,9 +420,46 @@ export interface DataStore {
    */
   rollbackTx(): Promise<void>;
 
+  /**
+   * Run `fn` inside a scoped transaction and return its result.
+   *
+   * `fn` receives a transaction-bound store view ({@link StoreTransaction}).
+   * All writes made through that view commit atomically when `fn` resolves and
+   * roll back if it throws (the error is re-thrown to the caller).
+   *
+   * Unlike the imperative {@link DataStore.beginTx}/{@link DataStore.commitTx}/
+   * {@link DataStore.rollbackTx} shim — which routes writes through a
+   * store-level handle for the duration of the begin/commit window —
+   * `withTransaction` never mutates a shared/global handle. The tx scope is
+   * bound to the single `fn` invocation, so concurrent `withTransaction` calls
+   * are isolated and never swallow each other's writes:
+   *
+   * - PostgreSQL runs each call on an independent pooled connection (Drizzle's
+   *   native `db.transaction`), giving true concurrency.
+   * - Single-connection backends (SQLite / Memory / IndexedDB) serialize
+   *   concurrent calls so neither loses writes.
+   *
+   * This is the preferred transaction API; the imperative trio is retained as a
+   * compatibility shim for existing callers. Optional so partial mock stores
+   * and legacy backends remain assignable; all bundled backends implement it.
+   */
+  withTransaction?: <T>(fn: (tx: StoreTransaction) => Promise<T>) => Promise<T>;
+
   // ── Lifecycle ──
   close(): Promise<void>;
 }
+
+/**
+ * The transaction-scoped store view passed to {@link DataStore.withTransaction}.
+ *
+ * Exposes every data read/write method but omits the transaction-control and
+ * lifecycle methods — a transaction body must not begin/commit/close from
+ * inside the scope.
+ */
+export type StoreTransaction = Omit<
+  DataStore,
+  "beginTx" | "commitTx" | "rollbackTx" | "withTransaction" | "close"
+>;
 
 // ── Store config ─────────────────────────────────────────────────
 

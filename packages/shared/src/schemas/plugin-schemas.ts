@@ -451,6 +451,13 @@ export const runtimeManifestSchema = z
     maxRecursionDepth: z.number().int().min(0).max(50).optional(),
     pluginType: z.enum(["core-plugin", "plugin"]).optional(),
     outputKind: outputKindSchema.optional(),
+    /**
+     * Capability tags for framework discovery. Free-form by design: plugins
+     * may declare arbitrary custom tags. The framework only acts on the tags in
+     * `FRAMEWORK_KNOWN_CAPABILITIES` (plugin-level `FrameworkCapability` +
+     * runtime-level `FrameworkRuntimeCapability`); the plugin-loader emits a dev
+     * warning when a declared tag looks like a misspelled framework-known one.
+     */
     capabilities: z.array(z.string().min(1)).optional(),
     tags: z.array(pluginTagSchema).optional(),
     relations: pluginRelationsSchema.optional(),

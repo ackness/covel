@@ -1,21 +1,30 @@
 /**
- * PgStore transaction adapter.
+ * PgStore imperative-transaction adapter (compatibility shim).
+ *
+ * The scoped, isolation-correct transaction API is `DataStore.withTransaction`
+ * (see pg-store.ts) — it runs each transaction on its own pooled connection via
+ * Drizzle's native `db.transaction(cb)` and never mutates a shared handle. This
+ * adapter exists only to keep the legacy imperative
+ * `beginTx / commitTx / rollbackTx` contract working for existing callers.
  *
  * postgres.js is a connection pool, so a bare `unsafe('BEGIN')` does not bind
- * to a specific connection. Drizzle's own `db.transaction(async (tx) => ...)`
- * API handles reservation + BEGIN/COMMIT/ROLLBACK correctly, but it is
+ * to a specific connection. Drizzle's `db.transaction(async (tx) => ...)` API
+ * reserves a connection and runs BEGIN/COMMIT/ROLLBACK correctly, but it is
  * callback-shaped. This module adapts that callback API to the imperative
- * `beginTx / commitTx / rollbackTx` contract that the `DataStore` interface
- * requires by spawning `pooledDb.transaction` in the background and gating
- * its completion on a manually-resolved promise:
+ * contract by spawning `pooledDb.transaction` in the background and gating its
+ * completion on a manually-resolved promise:
  *
  * - `commitTx()` resolves the gate → the callback returns cleanly → drizzle COMMITs
  * - `rollbackTx()` rejects the gate with a sentinel → the callback throws →
  *   drizzle issues ROLLBACK and rethrows → we swallow the sentinel
  *
- * While a transaction is active, the adapter pushes the drizzle tx handle
- * back into the caller's closure via `setDb` so every data method routes
- * through the transaction. On completion it restores the pooled handle.
+ * While an imperative transaction is active, the adapter publishes the drizzle
+ * tx handle via `setDb`, which the store records in a dedicated
+ * `imperativeTxDb` holder (NOT the shared pooled handle). The root data methods
+ * resolve `imperativeTxDb ?? pooledDb`, so during the begin/commit window the
+ * imperative caller's writes route to the tx while `withTransaction` callers,
+ * which use their own private connection, stay isolated. On completion the
+ * holder is cleared back to the pool.
  */
 
 import type { drizzle } from "drizzle-orm/postgres-js";

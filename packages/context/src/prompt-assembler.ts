@@ -12,7 +12,7 @@
  * [6 WorldInfo: after-plugin]   ← keyword-triggered (S3-T1)
  * ---- messages ----
  * [7 history (after pruning)]   ← dynamic (handled as messages)
- * [8 WorldInfo: at-depth:N]     ← placed before Nth-from-last message (S3-T1)
+ * [8 WorldInfo: at-depth:N]     ← placed before Nth-from-last message (depthContributions)
  * [9 Author's Note]             ← depth-4 instruction (S3-T4)
  * [10 Post-History Instructions]← director-grade high-weight (S3-T4)
  * ```
@@ -57,28 +57,27 @@ import type {
 } from "./types.js";
 
 /**
- * Structured view of the 10 system-prompt segments.
+ * Structured view of the system-prompt segments.
  *
- * Segments 1, 3, 5 carry the pre-history system prompt body. Segments 9 and
- * 10 are populated in S3-T4 and render as extra messages (not part of the
- * system prompt string). Remaining placeholders (2, 4, 6, 8) are reserved
- * for earlier tickets (S3-T1 Lorebook, S3-T3 Working Memory).
+ * Segments 1, 3, 5 carry the pre-history system prompt body; segments 4 and 6
+ * carry lorebook `before-plugin` / `after-plugin` world info. Segments 9 and
+ * 10 render as extra messages (not part of the system prompt string), as do
+ * the at-depth (segment 8) contributions, which are inserted into the message
+ * stack via {@link depthContributions} rather than the system prompt string.
  */
 export interface PromptSegments {
   /** Segment 1 — framework preamble (session-stable header). */
   readonly frameworkPreamble: string;
-  /** Segment 2 — working memory (reserved for S3-T3). */
+  /** Segment 2 — core memory + working memory. */
   readonly workingMemory: string;
-  /** Segment 3 — interpolated PLUGIN.md body. */
+  /** Segment 3 — interpolated PLUGIN.md body (with persona prepend/append). */
   readonly pluginInstructions: string;
-  /** Segment 4 — lorebook `before-plugin` position (reserved for S3-T1). */
+  /** Segment 4 — lorebook `before-plugin` position. */
   readonly worldInfoBeforePlugin: string;
   /** Segment 5 — upstream runtime injects (XML-wrapped). */
   readonly upstreamInjects: string;
-  /** Segment 6 — lorebook `after-plugin` position (reserved for S3-T1). */
+  /** Segment 6 — lorebook `after-plugin` position. */
   readonly worldInfoAfterPlugin: string;
-  /** Segment 8 — lorebook `at-depth` position (reserved for S3-T1). */
-  readonly worldInfoAtDepth: string;
   /**
    * Segment 9 — Author's notes aggregated across active plugins (S3-T4).
    * Grouped by `(role, depth)`; each bundle is inserted before
@@ -202,7 +201,6 @@ function buildPromptSegmentsCommon(
     worldInfoBeforePlugin,
     upstreamInjects,
     worldInfoAfterPlugin,
-    worldInfoAtDepth: "",
     authorsNotes,
     postHistoryInstructions,
     depthContributions: collectDepthContributions(contributions),

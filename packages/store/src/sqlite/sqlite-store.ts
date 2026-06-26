@@ -10,7 +10,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-import type { DataStore } from "../types.js";
+import type { DataStore, StoreTransaction } from "../types.js";
 import type { VectorModelOps, VectorStoreCapability } from "../vector-store.js";
 import * as schema from "./schema.js";
 import { createSqliteDataCrud } from "./sqlite-data-crud.js";
@@ -58,7 +58,9 @@ export function createSqliteStore(
   // will return false — callers fall back to structured retrieval.
   const vectorCapability = createSqliteVectorCapability(sqlite);
 
-  const baseStore: DataStore = {
+  // Data methods first; the transaction scope is the same single-connection
+  // store, so `withTransaction` hands `fn` these data methods.
+  const data = {
     ...createSqliteSessions(sqlite, db),
     ...createSqliteRuntimeRecords(db),
     ...createSqliteState(db),
@@ -68,7 +70,14 @@ export function createSqliteStore(
     ...createSqliteWorlds(db),
     ...createSqliteSuspensions(sqlite),
     ...createSqliteSnapshots(sqlite),
-    ...createSqliteTransactions(sqlite),
+  };
+
+  const baseStore: DataStore = {
+    ...data,
+    ...createSqliteTransactions(
+      sqlite,
+      () => data as unknown as StoreTransaction,
+    ),
 
     async close(): Promise<void> {
       sqlite.close();

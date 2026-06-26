@@ -232,7 +232,6 @@ describe("prompt-assembler", () => {
               "[Player Persona]\nName: Wanderer\nDescription: A cautious outsider.",
             position: "seg3_prepend",
             order: 0,
-            budgetClass: "sticky",
           },
         ],
       }),

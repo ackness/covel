@@ -148,6 +148,54 @@ export const FrameworkCapability = {
 export type FrameworkCapabilityTag =
   (typeof FrameworkCapability)[keyof typeof FrameworkCapability];
 
+/**
+ * Runtime-level capability tags the **framework itself** consumes to discover a
+ * specific *runtime within* a plugin — as opposed to {@link FrameworkCapability},
+ * which is matched against the plugin manifest as a whole.
+ *
+ * These are used by the frontend image pipeline: a multi-step image plugin tags
+ * its manual entry runtime `image-prompt` (prompt generator) and its background
+ * follower runtime `image-generator` (turns a prompt into an image asset). The
+ * framework discovers each runtime by these tags instead of a runtime-name
+ * convention. Reference these constants in framework code (web / server) instead
+ * of bare string literals so a typo becomes a compile error rather than a silent
+ * `?.includes` miss that disables the feature.
+ *
+ * Plugins may declare arbitrary custom runtime capability tags beyond this set;
+ * the framework only acts on the ones listed here.
+ */
+export const FrameworkRuntimeCapability = {
+  /**
+   * Entry runtime of a multi-step image plugin — manual trigger, generates the
+   * image prompt and hands off to its background `image-generator` follower.
+   */
+  ImagePrompt: "image-prompt",
+  /**
+   * Background generator runtime that turns an image prompt into an image asset.
+   */
+  ImageGenerator: "image-generator",
+} as const;
+
+/** Union of the framework-consumed runtime-level capability tag string values. */
+export type FrameworkRuntimeCapabilityTag =
+  (typeof FrameworkRuntimeCapability)[keyof typeof FrameworkRuntimeCapability];
+
+/**
+ * Every capability tag the framework itself acts on — the union of the
+ * plugin-level {@link FrameworkCapability} and runtime-level
+ * {@link FrameworkRuntimeCapability} values. Single source of truth for:
+ *  - the plugin-loader's load-time typo detection (warns when a declared
+ *    capability looks like a misspelled framework-known one), and
+ *  - keeping the capability table in `docs/reference/plugins.md` honest.
+ *
+ * Plugins may still declare arbitrary custom capability tags beyond this set;
+ * this list only enumerates the tags the framework discovers and dispatches on.
+ */
+export const FRAMEWORK_KNOWN_CAPABILITIES: readonly string[] = Object.freeze([
+  ...Object.values(FrameworkCapability),
+  ...Object.values(FrameworkRuntimeCapability),
+]);
+
 export interface OutputConfig {
   /** Relative path to output.schema.json. */
   readonly schema?: string;

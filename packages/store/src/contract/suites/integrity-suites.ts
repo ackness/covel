@@ -194,6 +194,105 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
     });
   });
 
+  describe("withTransaction (T12 scoped transactions)", () => {
+    it("is implemented by every bundled backend", () => {
+      expect(typeof store.withTransaction).toBe("function");
+    });
+
+    it("commits all writes when the callback resolves", async () => {
+      const s1 = makeSession();
+      const s2 = makeSession();
+
+      await store.withTransaction!(async (tx) => {
+        await tx.createSession(s1);
+        await tx.createSession(s2);
+      });
+
+      expect(await store.getSession(s1.id)).not.toBeNull();
+      expect(await store.getSession(s2.id)).not.toBeNull();
+    });
+
+    it("rolls back all writes and rethrows when the callback throws", async () => {
+      const before = await store.listSessions();
+      const baselineIds = new Set(before.map((s) => s.id));
+
+      const s1 = makeSession();
+      const s2 = makeSession();
+      const boom = new Error("withTransaction boom");
+
+      await expect(
+        store.withTransaction!(async (tx) => {
+          await tx.createSession(s1);
+          await tx.createSession(s2);
+          throw boom;
+        }),
+      ).rejects.toThrow("withTransaction boom");
+
+      const after = await store.listSessions();
+      const afterIds = after.map((s) => s.id);
+      expect(afterIds).not.toContain(s1.id);
+      expect(afterIds).not.toContain(s2.id);
+      // Rollback must not delete pre-existing rows either.
+      for (const keep of baselineIds) {
+        expect(afterIds).toContain(keep);
+      }
+    });
+
+    it("returns the callback result", async () => {
+      const s1 = makeSession();
+      const result = await store.withTransaction!(async (tx) => {
+        await tx.createSession(s1);
+        return 42;
+      });
+      expect(result).toBe(42);
+    });
+
+    it("does not swallow writes across concurrent transactions", async () => {
+      // PG runs these on independent pooled connections (true concurrency);
+      // single-connection backends serialize them. Either way, BOTH writes must
+      // survive — proving no shared/global handle is clobbered mid-transaction.
+      const s1 = makeSession();
+      const s2 = makeSession();
+      const s3 = makeSession();
+
+      await Promise.all([
+        store.withTransaction!(async (tx) => {
+          await tx.createSession(s1);
+        }),
+        store.withTransaction!(async (tx) => {
+          await tx.createSession(s2);
+        }),
+        store.withTransaction!(async (tx) => {
+          await tx.createSession(s3);
+        }),
+      ]);
+
+      expect(await store.getSession(s1.id)).not.toBeNull();
+      expect(await store.getSession(s2.id)).not.toBeNull();
+      expect(await store.getSession(s3.id)).not.toBeNull();
+    });
+
+    it("rolls back only the failing concurrent transaction", async () => {
+      const ok = makeSession();
+      const bad = makeSession();
+
+      const results = await Promise.allSettled([
+        store.withTransaction!(async (tx) => {
+          await tx.createSession(ok);
+        }),
+        store.withTransaction!(async (tx) => {
+          await tx.createSession(bad);
+          throw new Error("only this one fails");
+        }),
+      ]);
+
+      expect(results[0]!.status).toBe("fulfilled");
+      expect(results[1]!.status).toBe("rejected");
+      expect(await store.getSession(ok.id)).not.toBeNull();
+      expect(await store.getSession(bad.id)).toBeNull();
+    });
+  });
+
   describe("Lifecycle", () => {
     it("should close without throwing", async () => {
       await expect(store.close()).resolves.not.toThrow();

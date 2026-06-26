@@ -7,7 +7,7 @@
  * mode from the frontend's data-service layer.
  */
 
-import type { DataStore } from "../types.js";
+import type { DataStore, StoreTransaction } from "../types.js";
 import { openBrowserIdb } from "./idb-db.js";
 import { createIdbMutationTracker } from "./idb-transaction.js";
 import { createIdbSessionStore } from "./idb-session-store.js";
@@ -37,7 +37,9 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
   const mutations = createIdbMutationTracker(db);
   const ctx = { db, mutations };
 
-  return {
+  // Data methods first; the transaction scope is the same store (writes go
+  // through the snapshot-tracking mutation layer).
+  const data = {
     ...createIdbSessionStore(ctx),
     ...createIdbRuntimeStore(ctx),
     ...createIdbPluginStore(ctx),
@@ -45,10 +47,39 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     ...createIdbPlayerStore(ctx),
     ...createIdbWorldDataStore(ctx),
     ...createIdbPersistenceStore(ctx),
+  };
+  const scope = data as unknown as StoreTransaction;
+
+  // The mutation tracker holds a single snapshot at a time, so serialize
+  // concurrent withTransaction calls through a promise chain — each runs its
+  // full begin…commit/rollback before the next, so neither loses writes.
+  let chain: Promise<unknown> = Promise.resolve();
+
+  return {
+    ...data,
 
     beginTx: mutations.beginTx,
     commitTx: mutations.commitTx,
     rollbackTx: mutations.rollbackTx,
+
+    withTransaction<T>(fn: (tx: StoreTransaction) => Promise<T>): Promise<T> {
+      const task = chain.then(async () => {
+        await mutations.beginTx();
+        try {
+          const result = await fn(scope);
+          await mutations.commitTx();
+          return result;
+        } catch (err) {
+          await mutations.rollbackTx();
+          throw err;
+        }
+      });
+      chain = task.then(
+        () => undefined,
+        () => undefined,
+      );
+      return task;
+    },
 
     async close(): Promise<void> {
       db.close();

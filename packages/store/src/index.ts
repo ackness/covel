@@ -75,6 +75,7 @@ export type {
 } from "./vector-store.js";
 export type {
   DataStore,
+  StoreTransaction,
   StoreBackend,
   StoreConfig,
   WorldRecord,

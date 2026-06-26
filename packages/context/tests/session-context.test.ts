@@ -362,7 +362,6 @@ describe("buildSessionContextSnapshot — player identity wiring", () => {
         ].join("\n"),
         position: "seg3_prepend",
         order: 2,
-        budgetClass: "sticky",
       },
     ]);
   });
@@ -425,7 +424,6 @@ describe("buildSessionContextSnapshot — lorebook contributions", () => {
       content: "[World Rule: Rain Market]\n雨市里没人会直接说出真实姓名。",
       position: "before_plugin",
       order: 20,
-      budgetClass: "sticky",
       debugTrace: {
         pluginId: "living-world-rules",
         strategy: "constant",

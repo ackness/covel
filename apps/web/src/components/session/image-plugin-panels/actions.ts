@@ -4,19 +4,21 @@ import type { SessionPluginInfo } from "@/services/api.js";
 import { resolveMediaSrc } from "@/lib/media-resolve.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { compactJobId } from "@/lib/job-ui.js";
+import { FrameworkRuntimeCapability } from "@covel/shared";
 import type { MediaRef } from "@covel/shared";
 import type { ImagePromptPayload } from "./image-records.js";
 
 // Discover the image-generator runtime by capability rather than baking in a
 // runtime-name convention. The contract: any plugin that ships an image
-// generator runtime tags it with `image-generator` capability — same shape as
-// the `image-prompt` discovery used in chat-messages.tsx.
+// generator runtime tags it with the `image-generator` capability — same shape
+// as the `image-prompt` discovery used in chat-messages.tsx. Both tags live in
+// FrameworkRuntimeCapability so a typo is a compile error, not a silent miss.
 export function findImageGeneratorRuntimeId(
   plugin: SessionPluginInfo | undefined,
 ): string | null {
   if (!plugin) return null;
   const rt = plugin.runtimes?.find((r) =>
-    r.capabilities?.includes("image-generator"),
+    r.capabilities?.includes(FrameworkRuntimeCapability.ImageGenerator),
   );
   return rt?.id ?? null;
 }
@@ -30,7 +32,7 @@ export async function triggerImageFromPrompt(
   if (!sessionId) throw new Error("session unavailable");
   if (!runtimeId) {
     throw new Error(
-      `plugin ${pluginId} has no runtime declaring \`image-generator\` capability`,
+      `plugin ${pluginId} has no runtime declaring \`${FrameworkRuntimeCapability.ImageGenerator}\` capability`,
     );
   }
   const req = { pluginId, runtimeId, payload };

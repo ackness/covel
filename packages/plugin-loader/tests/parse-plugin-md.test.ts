@@ -1,4 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
+import {
+  FrameworkCapability,
+  FrameworkRuntimeCapability,
+  FRAMEWORK_KNOWN_CAPABILITIES,
+} from "@covel/shared";
 import { parsePluginMd } from "../src/parse-plugin-md.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -1181,6 +1186,114 @@ describe("parsePluginMd", () => {
 
       const result = parsePluginMd(content, "plugins/narrator/PLUGIN.md");
       expect(result.manifest.summaryFocus).toEqual([]);
+    });
+  });
+
+  describe("framework-known capability registry", () => {
+    it("collects both plugin-level and runtime-level framework capabilities", () => {
+      // Plugin-level tags
+      expect(FRAMEWORK_KNOWN_CAPABILITIES).toContain(
+        FrameworkCapability.ImageGeneration,
+      );
+      expect(FRAMEWORK_KNOWN_CAPABILITIES).toContain(
+        FrameworkCapability.WorldDataProvider,
+      );
+      // Runtime-level tags (the previously bare-string image pipeline)
+      expect(FrameworkRuntimeCapability.ImagePrompt).toBe("image-prompt");
+      expect(FrameworkRuntimeCapability.ImageGenerator).toBe("image-generator");
+      expect(FRAMEWORK_KNOWN_CAPABILITIES).toContain(
+        FrameworkRuntimeCapability.ImagePrompt,
+      );
+      expect(FRAMEWORK_KNOWN_CAPABILITIES).toContain(
+        FrameworkRuntimeCapability.ImageGenerator,
+      );
+      // Registry is the union of both sets (no missing / extra entries)
+      expect(new Set(FRAMEWORK_KNOWN_CAPABILITIES).size).toBe(
+        Object.values(FrameworkCapability).length +
+          Object.values(FrameworkRuntimeCapability).length,
+      );
+    });
+  });
+
+  describe("capability typo detection (dev warning)", () => {
+    function withCaps(name: string, caps: readonly string[]): string {
+      return md(
+        [
+          `name: ${name}`,
+          "description: Capability typo test",
+          "priority: 500",
+          "capabilities:",
+          ...caps.map((c) => `  - ${c}`),
+        ].join("\n"),
+        "\nBody.\n",
+      );
+    }
+
+    it("warns on a single-char typo of a runtime-level capability and keeps it", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const result = parsePluginMd(
+        withCaps("image-typo", ["image-genrator"]),
+        "plugins/image-typo/PLUGIN.md",
+      );
+
+      expect(warnSpy).toHaveBeenCalledOnce();
+      const msg = warnSpy.mock.calls[0][0] as string;
+      expect(msg).toContain("image-genrator");
+      expect(msg).toContain("image-generator");
+      expect(msg).toContain("plugins/image-typo/PLUGIN.md");
+      // Capability is NOT dropped — it stays free-form
+      expect(result.manifest.capabilities).toEqual(["image-genrator"]);
+
+      warnSpy.mockRestore();
+    });
+
+    it("warns on case / separator drift of a framework capability", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      parsePluginMd(
+        withCaps("image-case", ["Image_Generator"]),
+        "plugins/image-case/PLUGIN.md",
+      );
+
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(warnSpy.mock.calls[0][0]).toContain("image-generator");
+
+      warnSpy.mockRestore();
+    });
+
+    it("does not warn on exact framework capabilities", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      parsePluginMd(
+        withCaps("image-ok", [
+          FrameworkCapability.ImageGeneration,
+          FrameworkRuntimeCapability.ImagePrompt,
+          FrameworkRuntimeCapability.ImageGenerator,
+        ]),
+        "plugins/image-ok/PLUGIN.md",
+      );
+
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it("does not warn on genuine custom capabilities", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      parsePluginMd(
+        withCaps("custom-caps", [
+          "npc-graph",
+          "graph-rag",
+          "cost-control",
+          "narration-director",
+          "content-safety",
+        ]),
+        "plugins/custom-caps/PLUGIN.md",
+      );
+
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
     });
   });
 });

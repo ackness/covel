@@ -1,159 +1,99 @@
+import type { StoreTransaction } from "../types.js";
+import { SESSION_SCOPED_TABLES } from "../table-registry.js";
+import type { MemoryCollectionKind } from "../table-registry.js";
 import {
   replaceArrayContents,
   replaceMapContents,
 } from "./collection-helpers.js";
-import type {
-  MemoryState,
-  MemoryStoreMethods,
-  MemoryVectorRow,
-} from "./memory-types.js";
-import type {
-  ApprovalRecord,
-  CharacterRecord,
-  EventRecord,
-  InteractionRecordRow,
-  LorebookEntryRecord,
-  MessageRecord,
-  PlayerInputRecord,
-  PluginConfigRecord,
-  PluginDataRecord,
-  RuntimeOutputRecord,
-  RuntimeResultRecord,
-  SessionRecord,
-  SessionSummaryRecord,
-  SnapshotRecord,
-  StateChangeRecord,
-  StateEntryRecord,
-  StateSchemaRecord,
-  SuspensionRecord,
-  ToolCallRecordRow,
-  TraceEventRecord,
-  TurnMessageRecord,
-  TurnResultRecord,
-  WorkingMemoryRecord,
-  WorldDataImportLedgerRecord,
-  WorldRecord,
-} from "../types.js";
+import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
 
-interface MemorySnapshot {
-  readonly sessions: Map<string, SessionRecord>;
-  readonly turnResults: TurnResultRecord[];
-  readonly runtimeResults: RuntimeResultRecord[];
-  readonly toolCalls: ToolCallRecordRow[];
-  readonly stateSchemas: StateSchemaRecord[];
-  readonly stateEntries: Map<string, StateEntryRecord>;
-  readonly stateChanges: StateChangeRecord[];
-  readonly events: EventRecord[];
-  readonly approvals: ApprovalRecord[];
-  readonly messages: MessageRecord[];
-  readonly characters: Map<string, CharacterRecord>;
-  readonly pluginData: Map<string, PluginDataRecord>;
-  readonly pluginConfigs: Map<string, PluginConfigRecord>;
-  readonly vectorRows: Map<string, MemoryVectorRow>;
-  readonly worlds: Map<string, WorldRecord>;
-  readonly traceEvents: TraceEventRecord[];
-  readonly runtimeOutputs: RuntimeOutputRecord[];
-  readonly interactionRecords: InteractionRecordRow[];
-  readonly turnMessages: TurnMessageRecord[];
-  readonly playerInputs: PlayerInputRecord[];
-  readonly workingMemoryEntries: Map<string, WorkingMemoryRecord>;
-  readonly worldDataImportLedger: Map<string, WorldDataImportLedgerRecord>;
-  readonly lorebookEntries: Map<string, LorebookEntryRecord>;
-  readonly sessionSummaries: SessionSummaryRecord[];
-  readonly suspensions: Map<string, SuspensionRecord>;
-  readonly snapshots: Map<string, SnapshotRecord>;
-}
+/**
+ * The MemoryState collections captured by a transaction snapshot.
+ *
+ * Derived from {@link SESSION_SCOPED_TABLES} (so a newly-registered session
+ * table is snapshotted automatically) plus the parent `sessions` map and the
+ * non-session-scoped mutable collections (`worlds`, `vectorRows`) a transaction
+ * may also touch. `tests/table-registry-consistency.test.ts` pins this list
+ * against the registry.
+ */
+export const MEMORY_SNAPSHOT_COLLECTIONS: ReadonlyArray<{
+  readonly key: keyof MemoryState;
+  readonly kind: MemoryCollectionKind;
+}> = [
+  { key: "sessions", kind: "map" },
+  ...SESSION_SCOPED_TABLES.map((t) => ({
+    key: t.memoryKey as keyof MemoryState,
+    kind: t.memoryKind,
+  })),
+  // Non-session-scoped mutable collections a transaction may also write.
+  { key: "worlds", kind: "map" },
+  { key: "vectorRows", kind: "map" },
+];
+
+/** A captured snapshot: collection key → shallow copy of its contents. */
+type MemorySnapshot = Map<keyof MemoryState, unknown>;
 
 /**
  * Capture a transaction snapshot.
  *
  * Performance (audit 2026-06-04 finding H3): instead of `structuredClone`-ing
- * every collection (O(total-bytes) per `beginTx`, run on every commit path), we
- * take a *shallow* copy of each collection — a fresh `Map`/array containing the
- * same record references. This is O(row-count) reference copy, not byte deep
- * clone.
+ * every collection (O(total-bytes) per `beginTx`), we take a *shallow* copy of
+ * each collection — a fresh `Map`/array holding the same record references. This
+ * is O(row-count) reference copy, not a byte deep clone.
  *
  * Correctness invariant this relies on: MemoryStore methods never mutate a
  * stored record object in place. Every write path either pushes a new object,
  * `.set(key, newObject)`, replaces an array slot with a spread copy
- * (`arr[i] = { ...arr[i], ... }`), or `.delete()`s. Patches go through
- * `mergeSessionPatch` which returns a new object. A `Map`/array shallow copy
+ * (`arr[i] = { ...arr[i], ... }`), or `.delete()`s. A `Map`/array shallow copy
  * therefore preserves the exact membership at `beginTx`, and `restoreSnapshot`
  * rewinds structure (insertions, deletions, slot replacements) faithfully — the
  * shared record references it restores were never mutated, so isolation and
  * rollback semantics are unchanged.
  *
- * If a future method mutates a stored record in place, that invariant breaks
- * for both this shallow snapshot *and* any reference-sharing reader — the fix
- * is to keep replacing whole records, not to reintroduce a blanket deep clone.
+ * If a future method mutates a stored record in place, that invariant breaks for
+ * both this shallow snapshot *and* any reference-sharing reader — the fix is to
+ * keep replacing whole records, not to reintroduce a blanket deep clone.
  */
 function captureSnapshot(state: MemoryState): MemorySnapshot {
-  return {
-    sessions: new Map(state.sessions),
-    turnResults: [...state.turnResults],
-    runtimeResults: [...state.runtimeResults],
-    toolCalls: [...state.toolCalls],
-    stateSchemas: [...state.stateSchemas],
-    stateEntries: new Map(state.stateEntries),
-    stateChanges: [...state.stateChanges],
-    events: [...state.events],
-    approvals: [...state.approvals],
-    messages: [...state.messages],
-    characters: new Map(state.characters),
-    pluginData: new Map(state.pluginData),
-    pluginConfigs: new Map(state.pluginConfigs),
-    vectorRows: new Map(state.vectorRows),
-    worlds: new Map(state.worlds),
-    traceEvents: [...state.traceEvents],
-    runtimeOutputs: [...state.runtimeOutputs],
-    interactionRecords: [...state.interactionRecords],
-    turnMessages: [...state.turnMessages],
-    playerInputs: [...state.playerInputs],
-    workingMemoryEntries: new Map(state.workingMemoryEntries),
-    worldDataImportLedger: new Map(state.worldDataImportLedger),
-    lorebookEntries: new Map(state.lorebookEntries),
-    sessionSummaries: [...state.sessionSummaries],
-    suspensions: new Map(state.suspensions),
-    snapshots: new Map(state.snapshots),
-  };
+  const snapshot: MemorySnapshot = new Map();
+  for (const { key, kind } of MEMORY_SNAPSHOT_COLLECTIONS) {
+    const value = state[key];
+    snapshot.set(
+      key,
+      kind === "map"
+        ? new Map(value as Map<unknown, unknown>)
+        : [...(value as readonly unknown[])],
+    );
+  }
+  return snapshot;
 }
 
 function restoreSnapshot(state: MemoryState, snapshot: MemorySnapshot): void {
-  replaceMapContents(state.sessions, snapshot.sessions);
-  replaceArrayContents(state.turnResults, snapshot.turnResults);
-  replaceArrayContents(state.runtimeResults, snapshot.runtimeResults);
-  replaceArrayContents(state.toolCalls, snapshot.toolCalls);
-  replaceArrayContents(state.stateSchemas, snapshot.stateSchemas);
-  replaceMapContents(state.stateEntries, snapshot.stateEntries);
-  replaceArrayContents(state.stateChanges, snapshot.stateChanges);
-  replaceArrayContents(state.events, snapshot.events);
-  replaceArrayContents(state.approvals, snapshot.approvals);
-  replaceArrayContents(state.messages, snapshot.messages);
-  replaceMapContents(state.characters, snapshot.characters);
-  replaceMapContents(state.pluginData, snapshot.pluginData);
-  replaceMapContents(state.pluginConfigs, snapshot.pluginConfigs);
-  replaceMapContents(state.vectorRows, snapshot.vectorRows);
-  replaceMapContents(state.worlds, snapshot.worlds);
-  replaceArrayContents(state.traceEvents, snapshot.traceEvents);
-  replaceArrayContents(state.runtimeOutputs, snapshot.runtimeOutputs);
-  replaceArrayContents(state.interactionRecords, snapshot.interactionRecords);
-  replaceArrayContents(state.turnMessages, snapshot.turnMessages);
-  replaceArrayContents(state.playerInputs, snapshot.playerInputs);
-  replaceMapContents(state.workingMemoryEntries, snapshot.workingMemoryEntries);
-  replaceMapContents(
-    state.worldDataImportLedger,
-    snapshot.worldDataImportLedger,
-  );
-  replaceMapContents(state.lorebookEntries, snapshot.lorebookEntries);
-  replaceArrayContents(state.sessionSummaries, snapshot.sessionSummaries);
-  replaceMapContents(state.suspensions, snapshot.suspensions);
-  replaceMapContents(state.snapshots, snapshot.snapshots);
+  for (const { key, kind } of MEMORY_SNAPSHOT_COLLECTIONS) {
+    const saved = snapshot.get(key);
+    if (kind === "map") {
+      replaceMapContents(
+        state[key] as unknown as Map<unknown, unknown>,
+        saved as Map<unknown, unknown>,
+      );
+    } else {
+      replaceArrayContents(
+        state[key] as unknown as unknown[],
+        saved as unknown[],
+      );
+    }
+  }
 }
 
 export function createTransactionMethods(
   state: MemoryState,
+  getScope: () => StoreTransaction,
 ): MemoryStoreMethods {
+  // Imperative shim state — a single active snapshot (nested tx unsupported).
   let snapshot: MemorySnapshot | null = null;
+  // Serialize withTransaction calls so two concurrent transactions snapshot /
+  // restore against a stable state rather than interleaving on shared Maps.
+  let chain: Promise<unknown> = Promise.resolve();
 
   return {
     async beginTx() {
@@ -182,6 +122,32 @@ export function createTransactionMethods(
       }
       restoreSnapshot(state, snapshot);
       snapshot = null;
+    },
+
+    async withTransaction<T>(
+      fn: (tx: StoreTransaction) => Promise<T>,
+    ): Promise<T> {
+      const task = chain.then(async () => {
+        if (snapshot !== null) {
+          throw new Error(
+            "MemoryStore: withTransaction cannot start while an imperative transaction is active",
+          );
+        }
+        const snap = captureSnapshot(state);
+        try {
+          // Resolve on success = commit (discard snapshot).
+          return await fn(getScope());
+        } catch (err) {
+          restoreSnapshot(state, snap);
+          throw err;
+        }
+      });
+      // Keep the chain alive regardless of this call's outcome.
+      chain = task.then(
+        () => undefined,
+        () => undefined,
+      );
+      return task;
     },
   };
 }

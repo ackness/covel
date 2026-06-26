@@ -102,7 +102,7 @@ export function createSqliteSessions(
     },
 
     async deleteSession(id: string): Promise<void> {
-      deleteSqliteSessionCascade(sqlite, db, id);
+      deleteSqliteSessionCascade(sqlite, id);
     },
   };
 }
