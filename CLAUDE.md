@@ -110,7 +110,7 @@ packages/           15 internal packages: shared, context, ai-provider,
                     plugin-handlers-utils (pure helper utils for plugin
                     function-runtime handlers)
 
-plugins/            16 bundled plugin packages (see docs/reference/plugins.md)
+plugins/            19 bundled plugin packages (see docs/reference/plugins.md)
 prompts/            Externalised prompt templates (locale-aware markdown)
 worlds/             4 file-based sample world packages
                     (cloudmere / mistport / neonridge / haruka-academy)
@@ -142,7 +142,7 @@ Input/Event → Trigger Router → Priority Scheduler → [per priority group:]
 - **Trigger modes**: `auto`, `manual`, `scheduled`, `conditional`, `event`, `error-retry` (see `TriggerType` in `packages/shared/src/types/plugin.ts`). `scheduled` carries `interval` / `maxTriggerCount` / `cooldownTurns` / `startTurn`.
 - **Runtime types**: `agent` (default, loads PLUGIN.md and drives LLM tool-calls) or `function` (pure JS handler, no LLM).
 - **Proposal envelopes** (registered `ProposalType`s): `narrative.append`, `narrative.template`, `state.patch`, `event.emit`, `record.upsert`, `interaction.request`, `ui.render`, `asset.generate`, `plugin.data`, `plugin.data.batch`, `character.upsert`, `working_memory.set`, `lorebook.upsert`. Full reference in [docs/reference/tools.md](./docs/reference/tools.md#proposal-类型). **All writes flow through validate → commit — plugins never touch the DB directly.**
-- **Hook lifecycle**: `TurnStart`, `PreToolUse`, `PostToolUse`, `PreStateCommit`, `PostStateCommit`, `TurnStop`.
+- **Hook lifecycle** (16 events; full table in [docs/reference/plugins.md](./docs/reference/plugins.md)): `SessionStart` · `TurnStart` · `PreCompaction` / `PostCompaction` · `PreSchedule` · `PreRuntime` / `PostRuntime` · `PostContextAssembly` · `PreLLMCall` / `PostLLMResponse` · `PreToolUse` / `PostToolUse` · `PreStateCommit` / `PostStateCommit` · `TurnStop` · `SessionEnd`. Registered hooks are session-scoped (a plugin's hooks fire only for sessions where it is active, via `AsyncLocalStorage`); `HookContext.getOwnSettings()` exposes the plugin's own per-session `userSettings`.
 
 ### Priority bands (kernel-enforced)
 
