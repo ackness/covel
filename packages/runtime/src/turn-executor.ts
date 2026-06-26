@@ -445,6 +445,8 @@ async function executeTurnImpl(
     activeRuntimes,
     completedResults,
     executeRuntime: (manifest, triggerEvent) => invoke(manifest, triggerEvent),
+    sessionId: input.sessionId,
+    turnNumber,
   });
 
   // ── Pre-Game completion tracking ────────────────────────────────

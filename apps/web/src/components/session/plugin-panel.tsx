@@ -338,9 +338,28 @@ export function PluginPanel({
     : defaultHandlers;
 
   if (!flatSpec) {
+    // Name the offending spec and the concrete reason instead of a generic
+    // "Invalid panel spec". Server-side Zod validation already drops most
+    // malformed specs (see /api/ui-specs diagnostics); this client-side path
+    // only fires for specs that passed the envelope check but whose `view`
+    // still cannot be converted to a json-render tree.
+    const specLabel =
+      resolveEmptyMessage(spec.label) ||
+      (typeof spec.id === "string" ? spec.id : pluginId);
+    const view = spec.view;
+    const reason =
+      view === undefined || view === null
+        ? t("plugin.invalidPanelSpec.missingView", "missing `view`")
+        : typeof view !== "object" || Array.isArray(view)
+          ? t("plugin.invalidPanelSpec.badView", "`view` must be an object")
+          : t(
+              "plugin.invalidPanelSpec.conversionFailed",
+              "could not render `view`",
+            );
     return (
       <p className="text-xs text-muted-foreground italic">
-        {t("plugin.invalidPanelSpec", "Invalid panel spec")}
+        {t("plugin.invalidPanelSpec", "Invalid panel spec")}: {specLabel} —{" "}
+        {reason}
       </p>
     );
   }

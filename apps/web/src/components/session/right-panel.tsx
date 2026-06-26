@@ -152,6 +152,23 @@ export function RightPanel({
     fetchUiSpecs(sessionId)
       .then((specs) => {
         if (cancelled) return;
+
+        // Surface server-side validation diagnostics for rejected specs so a
+        // plugin author sees the exact plugin/field/problem in dev instead of
+        // a panel silently missing its tab.
+        if (import.meta.env.DEV && specs.diagnostics?.length) {
+          for (const diag of specs.diagnostics) {
+            const where = `${diag.pluginId} (${diag.runtimeId}) ${diag.slot}[${diag.specIndex}]${
+              diag.specId ? ` "${diag.specId}"` : ""
+            }`;
+            const why = diag.issues
+              .map((issue) => `${issue.path}: ${issue.message}`)
+              .join("; ");
+            // eslint-disable-next-line no-console
+            console.warn(`[ui-specs] dropped invalid spec — ${where}: ${why}`);
+          }
+        }
+
         setPluginTabGroups(
           aggregateSpecsIntoGroups(specs.right, i18n.language, {
             warn: (message) => {

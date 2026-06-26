@@ -453,6 +453,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
     {
       "pluginId": "codex",
       "specs": [{
+        "specVersion": 1,
         "id": "codex",
         "group": "codex",
         "label": { "zh": "知识图鉴", "en": "Codex" },
@@ -463,11 +464,16 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
     }
   ],
   "message": [...],
-  "left": [...]
+  "left": [...],
+  "diagnostics": []
 }
 ```
 
 每个 slot 包含一个数组，元素为 `{ pluginId, specs[] }`。`specs` 中每项是一个 json-render spec（从插件 `ui/*.json` 文件加载）。
+
+**校验与 `specVersion`**：聚合时对每个 spec 执行 Zod 校验（结构包络 + `specVersion`）。`specVersion` 可省略（按 v1 处理），声明高于服务端支持版本（当前 `CURRENT_UI_SPEC_VERSION = 1`）会被拒绝。校验失败的 spec **不污染整个响应**——只从对应 slot 中剔除，并在顶层 `diagnostics[]` 中按 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }` 给出具体诊断（哪个插件、哪个字段、什么问题）。带 `sessionId` 时 `diagnostics` 仅包含该会话激活集中的插件。
+
+**缓存**：插件发现 + UI spec 加载/校验结果按插件目录布局缓存，失效信号为 `PLUGIN.md` 与 `ui/*` 文件的 mtime/size 内容签名（仅 `stat`，不读文件）。会话级 `plugin_data` 物化（delete + rewrite）只在签名变化或该会话首次访问时触发，避免每请求扫盘与 DB 重写。spec 文件变更后下次请求会正确重新物化。
 
 ### Runtime 调用
 
@@ -1617,6 +1623,8 @@ rpc:
   }
 }
 ```
+
+> **`triggerTypes` 中的 reserved 项**：`triggerTypes` 列出的是 **schema 接受**的全部取值。其中 `conditional` 与 `error-retry` 目前是 **reserved——生产中永不触发**（无条件表达式引擎；调度器恒置 `hasUpstreamFailure: false`），声明它们的 runtime 会被 `shouldTrigger` 静默跳过并打印一次性 warning。生产可用的仅 `auto` / `manual` / `scheduled` / `event` 四种。详见 [reference/plugins.md → trigger 类型](./plugins.md#trigger-类型)。
 
 #### `GET /api/plugins`
 

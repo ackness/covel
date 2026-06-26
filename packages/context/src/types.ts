@@ -4,6 +4,7 @@
 
 import type {
   ContentPart,
+  I18nText,
   RuntimeManifest,
   RuntimeResult,
   TurnInput,
@@ -176,6 +177,12 @@ export interface ContextBuildParams {
   readonly coreMemoryBlocks?: readonly {
     readonly label: string;
     readonly content: string;
+    /**
+     * Localized display name, attached by `@covel/memory`'s manager from the
+     * active block schema. Used by the prompt renderer for the block heading;
+     * falls back to the raw label when absent.
+     */
+    readonly displayName?: I18nText;
   }[];
   /**
    * Pre-assembled session context. When provided, prompt assembly reads
@@ -225,6 +232,12 @@ export interface CoreMemoryBlockView {
   readonly label: string;
   readonly content: string;
   readonly updatedAt?: string;
+  /**
+   * Localized display name, attached by `@covel/memory`'s manager from the
+   * active block schema. Lets the prompt renderer and panels show a friendly
+   * heading without `@covel/context` depending on `@covel/memory`.
+   */
+  readonly displayName?: I18nText;
 }
 
 /**

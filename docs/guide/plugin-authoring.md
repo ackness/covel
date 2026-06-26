@@ -62,6 +62,22 @@ sources:
 
 完整 target URI、override 目录、preflight 和 sync API 见 [World Data reference](../reference/world-data.md)。
 
+## 声明核心记忆块（`memoryBlocks`）
+
+核心记忆（Letta 式 in-context memory）是框架原语：`@covel/memory` 负责「按块定义跑一次 LLM 抽取 + 持久化 + 渲染」，**块的语义（标签、显示名、抽取提示词）由插件以数据声明**，框架不硬编码任何块。插件在 `PLUGIN.md` frontmatter 用 `memoryBlocks` 声明自己的块，框架会聚合所有插件的声明来驱动每轮记忆更新。
+
+```yaml
+memoryBlocks:
+  - label: suspects
+    displayName: { zh: 嫌疑人, en: Suspects }
+    icon: UserSearch
+    extractionHint:
+      zh: 已知嫌疑人、其动机、不在场证明与可信度变化。
+      en: Known suspects, their motives, alibis, and shifts in credibility.
+```
+
+builtin `memory` 插件声明默认四块（`story_state` / `character_relationships` / `scene` / `player_profile`）。换一种游戏类型只需声明你自己的块，无需改动框架。字段规则（`label` / `displayName` / `extractionHint` / `icon` / `maxChars`）见 [plugins.md #memoryblocks核心记忆块](../reference/plugins.md#memoryblocks核心记忆块)。
+
 ## 程序化发现能力
 
 第三方开发者和 AI Agent 可以先调用 discovery API，再决定该读哪份文档或写哪个字段：

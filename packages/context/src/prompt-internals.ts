@@ -15,10 +15,12 @@
  */
 
 import type {
+  I18nText,
   InputInjectDecl,
   PluginDataInjectDecl,
   RuntimeInjectDecl,
 } from "@covel/shared";
+import { resolveI18nText } from "@covel/shared";
 import type { PluginDataRecord } from "./session-context-store.js";
 import type { ContextBuildParams } from "./types.js";
 
@@ -509,7 +511,9 @@ export function renderWorkingMemory(
  * Returns an empty string when no non-empty blocks exist.
  */
 export function renderCoreMemory(
-  blocks: readonly { label: string; content: string }[] | undefined,
+  blocks:
+    | readonly { label: string; content: string; displayName?: I18nText }[]
+    | undefined,
   locale?: string,
 ): string {
   if (!blocks || blocks.length === 0) return "";
@@ -517,23 +521,13 @@ export function renderCoreMemory(
   const nonEmpty = blocks.filter((b) => b.content.trim());
   if (nonEmpty.length === 0) return "";
 
-  const labels: Record<string, string> = locale?.startsWith("en")
-    ? {
-        story_state: "Story State",
-        scene: "Current Scene",
-        character_relationships: "Character Relationships",
-        player_profile: "Player Profile",
-      }
-    : {
-        story_state: "剧情状态",
-        scene: "当前场景",
-        character_relationships: "角色关系",
-        player_profile: "玩家状态",
-      };
-
+  // Display names are schema-driven: each block carries its localized
+  // `displayName` (attached by `@covel/memory`'s manager from the active block
+  // schema). `@covel/context` intentionally does not depend on `@covel/memory`,
+  // so no block vocabulary is hardcoded here — the raw label is the fallback.
   const header = locale?.startsWith("en") ? "[Core Memory]" : "[核心记忆]";
   const sections = nonEmpty.map((b) => {
-    const label = labels[b.label] ?? b.label;
+    const label = resolveI18nText(b.displayName, locale) ?? b.label;
     return `<${b.label}>\n# ${label}\n${b.content}\n</${b.label}>`;
   });
 

@@ -19,25 +19,51 @@ export type RuntimeType = "agent" | "function";
 
 // ── Trigger system ───────────────────────────────────────────────
 
+/**
+ * Runtime trigger modes.
+ *
+ * Production-active modes (the scheduler actually fires them):
+ * - `auto`      — every turn.
+ * - `manual`    — only on an explicit `POST /plugin-rpc` request.
+ * - `scheduled` — every N turns (`interval`), bounded by `maxTriggerCount`.
+ * - `event`     — when a subscribed `topic` is emitted within the turn's
+ *                 event fan-out (see `turn-event-chain.ts`).
+ *
+ * RESERVED modes (schema-accepted for forward-compat, but **never fire** —
+ * `shouldTrigger` / the scheduler do not implement them yet; a runtime that
+ * declares one stays permanently inactive):
+ * - `conditional` — no condition-expression engine is wired (audit P2-9).
+ *                   `shouldTrigger` returns false and warns once.
+ * - `error-retry` — depends on `hasUpstreamFailure`, which the scheduling path
+ *                   (`turn-executor/scheduling.ts`) hardcodes to `false`, so
+ *                   this branch is unreachable in production. `shouldTrigger`
+ *                   warns once and never fires it under the real scheduler.
+ *
+ * Prefer `auto` / `manual` / `scheduled` / `event` until the reserved modes
+ * are implemented.
+ */
 export type TriggerType =
   | "auto"
   | "manual"
   | "scheduled"
-  | "conditional"
   | "event"
+  // ── reserved (never fires in production) ──
+  | "conditional"
   | "error-retry";
 
 export interface TriggerConfig {
   readonly type: TriggerType;
   /** Interval in turns for `scheduled` mode. */
   readonly interval?: number;
-  /** Condition expression for `conditional` mode. */
+  /** RESERVED — condition expression for `conditional` mode. No engine
+   *  evaluates this yet, so a `conditional` runtime never triggers. */
   readonly condition?: string;
   /** Event topic for `event` mode. */
   readonly topic?: string;
   /** Max trigger count within a session. */
   readonly maxTriggerCount?: number;
-  /** Max retry count for `error-retry` mode. */
+  /** RESERVED — max retry count for `error-retry` mode. The scheduler never
+   *  surfaces upstream failures, so `error-retry` does not fire in production. */
   readonly maxRetryCount?: number;
   /** Min turns between two triggers. */
   readonly cooldownTurns?: number;
@@ -195,6 +221,41 @@ export const FRAMEWORK_KNOWN_CAPABILITIES: readonly string[] = Object.freeze([
   ...Object.values(FrameworkCapability),
   ...Object.values(FrameworkRuntimeCapability),
 ]);
+
+// ── Core-memory block schema (Letta-style memory) ───────────────
+
+/**
+ * Declarative definition of a single core-memory block.
+ *
+ * Core memory (the `@covel/memory` framework primitive) is **schema-driven**:
+ * the framework owns the mechanism (run an LLM extraction, persist, render)
+ * but the *meaning* of each block — its label, display name and the
+ * extraction guidance handed to the summarizer LLM — is plain data declared
+ * by a plugin via the `memoryBlocks` manifest field (or by a world package).
+ *
+ * This is what lets a detective game declare `clues` / `suspects` / `timeline`
+ * and a business sim declare `deals` / `rivals` without forking the framework:
+ * the kernel never hardcodes block labels or their extraction prompts.
+ */
+export interface MemoryBlockSchema {
+  /**
+   * Stable machine label. Used as the `working_memory` key, the prompt XML
+   * tag, and the mirror plugin-data key. Lowercase snake_case by convention.
+   */
+  readonly label: string;
+  /** Localized display name for UI panels and the prompt block heading. */
+  readonly displayName: import("./world.js").I18nText;
+  /**
+   * Per-block guidance injected into the memory summarizer's system prompt —
+   * tells the LLM what kind of information belongs in this block. Keep it
+   * world-agnostic; world-specific detail comes from the narrative itself.
+   */
+  readonly extractionHint: import("./world.js").I18nText;
+  /** Lucide icon name for UI panels. Defaults to `Info` when omitted. */
+  readonly icon?: string;
+  /** Optional per-block character cap, overriding the manager default. */
+  readonly maxChars?: number;
+}
 
 export interface OutputConfig {
   /** Relative path to output.schema.json. */
@@ -524,6 +585,18 @@ export interface RuntimeManifest {
    * by the loader.
    */
   readonly rpc?: import("./rpc.js").RpcDeclMap;
+  /**
+   * Core-memory block definitions contributed by this plugin (or world).
+   *
+   * The framework's memory system (`@covel/memory`) aggregates `memoryBlocks`
+   * across all loaded plugins to drive post-turn extraction and prompt
+   * rendering — block labels and extraction prompts are therefore plain data,
+   * not hardcoded kernel behavior. The builtin `memory` plugin declares the
+   * default narrative blocks (`story_state` / `scene` /
+   * `character_relationships` / `player_profile`); any plugin or world can add
+   * its own (e.g. `clues` / `suspects` / `timeline`).
+   */
+  readonly memoryBlocks?: readonly MemoryBlockSchema[];
 }
 
 // ── Author's note / Post-history declarations (S3-T4) ───────────

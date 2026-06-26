@@ -11,64 +11,104 @@
  *   Core memory blocks are updated simultaneously so key information survives.
  */
 
+import type { I18nText, MemoryBlockSchema } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 
 // ── Core Memory Blocks ──────────────────────────────────────────
 
 /**
- * Well-known core memory block labels.
+ * A core-memory block label.
  *
- * - `story_state`: Plot summary, active quests, revealed secrets, unresolved threads
- * - `scene`: Current location, time of day, atmosphere, immediate environment
- * - `character_relationships`: Key NPC relationships and attitudes toward player
- * - `player_profile`: Player character summary, abilities, current status
+ * **Open by design.** Labels are plain strings, not a closed union — the set
+ * of blocks is driven by the {@link CoreMemoryBlockSchema} the framework is
+ * configured with (declared by plugins/worlds via the `memoryBlocks` manifest
+ * field). A detective game can use `clues` / `suspects` / `timeline`; the
+ * kernel never hardcodes the label set.
  */
-export type CoreMemoryLabel =
-  | "story_state"
-  | "character_relationships"
-  | "scene"
-  | "player_profile";
-
-export const CORE_MEMORY_LABELS: readonly CoreMemoryLabel[] = [
-  "story_state",
-  "character_relationships",
-  "scene",
-  "player_profile",
-] as const;
+export type CoreMemoryLabel = string;
 
 /**
- * Display metadata for each core memory label. Owned by the memory
- * framework (same level as CORE_MEMORY_LABELS) — not by any specific
- * plugin. UI panels (whether json-render specs or React) consume this
- * to render friendly labels and icons.
- *
- * Icons use Lucide icon names. UI layers map them to actual components.
+ * Declarative definition of a core-memory block: its label, display name, and
+ * the extraction guidance handed to the summarizer LLM. Canonical shape lives
+ * in `@covel/shared` ({@link MemoryBlockSchema}); re-exported here as the
+ * memory package's API vocabulary.
+ */
+export type CoreMemoryBlockSchema = MemoryBlockSchema;
+
+/**
+ * Generic, world-agnostic default blocks used as a fallback when no schema is
+ * injected (standalone use, tests, or a boot where no plugin declared
+ * `memoryBlocks`). In production the builtin `memory` plugin declares the
+ * authoritative copy and the server injects it — see
+ * `apps/server/src/routes/api/bootstrap/memory.ts`. Kept de-coupled from any
+ * specific world: no genre- or setting-specific vocabulary belongs here.
+ */
+export const DEFAULT_CORE_MEMORY_BLOCKS: readonly CoreMemoryBlockSchema[] = [
+  {
+    label: "story_state",
+    displayName: { zh: "剧情状态", en: "Story State" },
+    icon: "BookOpen",
+    extractionHint: {
+      zh: "主线剧情摘要、已揭示的秘密、未解决的悬念、已完成的关键事件。",
+      en: "Main plot summary, revealed secrets, unresolved threads, key completed events.",
+    },
+  },
+  {
+    label: "character_relationships",
+    displayName: { zh: "角色关系", en: "Character Relationships" },
+    icon: "Users",
+    extractionHint: {
+      zh: "关键角色与玩家之间的关系状态、态度变化、重要互动与承诺。",
+      en: "Key characters' relationships with the player, attitude shifts, important interactions and commitments.",
+    },
+  },
+  {
+    label: "scene",
+    displayName: { zh: "当前场景", en: "Current Scene" },
+    icon: "MapPin",
+    extractionHint: {
+      zh: "当前所在位置、时间、氛围与环境描写要点。",
+      en: "Current location, time, atmosphere, and salient environmental details.",
+    },
+  },
+  {
+    label: "player_profile",
+    displayName: { zh: "玩家状态", en: "Player Profile" },
+    icon: "User",
+    extractionHint: {
+      zh: "玩家角色的当前状态摘要：能力、所持之物、处境与当前目标。",
+      en: "Player character status summary: abilities, possessions, situation, and current objectives.",
+    },
+  },
+];
+
+/**
+ * Display metadata for a core memory label, consumed by UI layers that prefer
+ * a flat `{ displayName, icon }` lookup. Icons use Lucide icon names.
  */
 export interface CoreMemoryLabelInfo {
-  readonly displayName: { readonly zh: string; readonly en: string };
+  readonly displayName: I18nText;
   readonly icon: string;
 }
 
+/** Ordered list of the default block labels. Derived — single source of truth. */
+export const CORE_MEMORY_LABELS: readonly CoreMemoryLabel[] =
+  DEFAULT_CORE_MEMORY_BLOCKS.map((b) => b.label);
+
+/**
+ * Flat display registry for the default blocks. Derived from
+ * {@link DEFAULT_CORE_MEMORY_BLOCKS} so display names live in exactly one
+ * place. UI/back-compat consumers read this; the runtime path reads the
+ * injected schema instead.
+ */
 export const CORE_MEMORY_LABEL_INFO: Readonly<
-  Record<CoreMemoryLabel, CoreMemoryLabelInfo>
-> = {
-  story_state: {
-    displayName: { zh: "剧情状态", en: "Story State" },
-    icon: "BookOpen",
-  },
-  scene: {
-    displayName: { zh: "当前场景", en: "Current Scene" },
-    icon: "MapPin",
-  },
-  character_relationships: {
-    displayName: { zh: "角色关系", en: "Character Relationships" },
-    icon: "Users",
-  },
-  player_profile: {
-    displayName: { zh: "玩家状态", en: "Player Profile" },
-    icon: "User",
-  },
-};
+  Record<string, CoreMemoryLabelInfo>
+> = Object.fromEntries(
+  DEFAULT_CORE_MEMORY_BLOCKS.map((b) => [
+    b.label,
+    { displayName: b.displayName, icon: b.icon ?? "Info" },
+  ]),
+);
 
 /** Default max characters per block (not tokens — char count is cheaper to check). */
 export const DEFAULT_MAX_BLOCK_CHARS = 2000;
@@ -77,13 +117,26 @@ export interface CoreMemoryBlock {
   readonly label: CoreMemoryLabel;
   readonly content: string;
   readonly updatedAt: string;
+  /**
+   * Localized display name for this block, resolved from the active block
+   * schema by the manager. Rides along with the block so the prompt renderer
+   * and UI panels need not re-derive it (`@covel/context` cannot depend on
+   * `@covel/memory`). Optional: absent for blocks outside the active schema.
+   */
+  readonly displayName?: I18nText;
+  /** Lucide icon name for this block, resolved from the active block schema. */
+  readonly icon?: string;
 }
 
 export interface CoreMemoryConfig {
   /** Max characters per block. Default: 2000. */
   readonly maxBlockChars?: number;
-  /** Subset of labels to manage. Default: all. */
-  readonly labels?: readonly CoreMemoryLabel[];
+  /**
+   * Block schema this manager governs — labels, display names, icons, and
+   * per-block char caps. Defaults to {@link DEFAULT_CORE_MEMORY_BLOCKS}.
+   * Injected by the bootstrap layer from aggregated plugin `memoryBlocks`.
+   */
+  readonly blocks?: readonly CoreMemoryBlockSchema[];
   /**
    * Plugin ID used when mirroring core memory blocks to plugin_data for
    * real-time UI panel updates. Injected by the bootstrap layer so the
@@ -137,6 +190,13 @@ export interface MemoryUpdaterConfig {
   readonly modelSlot?: string;
   /** Locale for the updater prompt. Default: zh-CN. */
   readonly locale?: string;
+  /**
+   * Block schema driving the extraction prompt and label validation. The
+   * summarizer's system prompt is assembled from each block's
+   * `extractionHint`; only these labels are accepted in the LLM response.
+   * Defaults to {@link DEFAULT_CORE_MEMORY_BLOCKS}.
+   */
+  readonly blocks?: readonly CoreMemoryBlockSchema[];
 }
 
 export interface MemoryUpdateResult {
@@ -223,6 +283,12 @@ export interface CompactionConfig {
   /** Model slot for the summarizer. Resolution: memory → story. */
   readonly modelSlot?: string;
   readonly locale?: string;
+  /**
+   * Block schema forwarded to the post-compaction core-memory refresh so the
+   * compactor uses the same labels/hints as the main updater. Defaults to
+   * {@link DEFAULT_CORE_MEMORY_BLOCKS}.
+   */
+  readonly blocks?: readonly CoreMemoryBlockSchema[];
 }
 
 export interface CompactionResult {

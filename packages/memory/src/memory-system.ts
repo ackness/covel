@@ -23,6 +23,7 @@ import { createMemoryUpdater } from "./updater.js";
 import { createKeywordRecallSearcher } from "./recall-search.js";
 import { createKeywordArchivalSearcher } from "./archival-search.js";
 import { createCompactor } from "./compactor.js";
+import { DEFAULT_CORE_MEMORY_BLOCKS } from "./types.js";
 
 export interface CreateMemorySystemOptions {
   readonly coreMemory?: CoreMemoryConfig;
@@ -46,13 +47,18 @@ export function createMemorySystem(
     options?.updater?.modelSlot ?? options?.compaction?.modelSlot;
   const modelSlot = explicitModelSlot ?? resolveModelSlot(resolveSlot);
 
-  const manager: MemoryManager = createMemoryManager(
-    store,
-    options?.coreMemory,
-  );
+  // Single source of truth for the block schema across manager/updater/compactor
+  // so post-turn extraction, rendering, and post-compaction refresh all agree.
+  const blocks = options?.coreMemory?.blocks ?? DEFAULT_CORE_MEMORY_BLOCKS;
+
+  const manager: MemoryManager = createMemoryManager(store, {
+    ...options?.coreMemory,
+    blocks,
+  });
 
   const updaterInstance = createMemoryUpdater(manager, llm, {
     ...options?.updater,
+    blocks,
     modelSlot,
   });
 
@@ -61,7 +67,7 @@ export function createMemorySystem(
 
   const compactor = createCompactor(
     { store, llm, memoryManager: manager },
-    { ...options?.compaction, modelSlot },
+    { ...options?.compaction, blocks, modelSlot },
   );
 
   return {

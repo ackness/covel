@@ -377,6 +377,9 @@ importers:
 
   packages/memory:
     dependencies:
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@covel/store':
         specifier: workspace:*
         version: link:../store

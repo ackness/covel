@@ -96,7 +96,7 @@ flowchart TB
     In(["POST /api/actions<br/>玩家输入 / 开始游戏"]) --> Exec[executeTurn]
     Exec --> StartEvt["SSE: execution.started"]
     StartEvt --> Hook1[TurnStart hook]
-    Hook1 --> Filter["shouldTrigger 过滤<br/>auto / scheduled / manual / event / error-retry<br/>+ maxTriggerCount / cooldownTurns / startTurn"]
+    Hook1 --> Filter["shouldTrigger 过滤<br/>auto / scheduled / manual / event（生产可用）<br/>conditional / error-retry = reserved（永不触发）<br/>+ maxTriggerCount / cooldownTurns / startTurn"]
     Filter --> PreSched["PreSchedule hook<br/>(可收窄本回合 runtime 集)"]
     PreSched --> Band{"turnCount?"}
     Band -->|== 0| PreBand["Pre-Game band<br/>scheduleByPriority<br/>priority 0–99"]
@@ -316,7 +316,10 @@ plugins/my-plugin/
                     │ manual  → isManual │
                     │ scheduled → turn % interval == 0 │
                     │ event   → topic in pendingEvents  │
-                    │ error-retry → hasUpstreamFailure  │
+                    │ ── reserved（永不触发）──         │
+                    │ conditional → false（无引擎，warn）│
+                    │ error-retry → hasUpstreamFailure   │
+                    │   （调度器恒为 false，不可达）     │
                     └────────────────────┘
 ```
 

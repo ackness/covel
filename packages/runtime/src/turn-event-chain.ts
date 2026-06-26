@@ -1,5 +1,7 @@
 import type { RuntimeManifest, RuntimeResult, TurnResult } from "@covel/shared";
 import { executeParallel } from "./parallel-executor.js";
+import { shouldTrigger } from "./trigger.js";
+import type { TriggerContext } from "./types.js";
 
 export type DeferredFollower = NonNullable<
   TurnResult["deferredFollowers"]
@@ -17,6 +19,42 @@ export interface RunEventChainParams {
   readonly completedResults: Map<string, RuntimeResult>;
   readonly executeRuntime: EventChainRuntimeExecutor;
   readonly maxDepth?: number;
+  /** Current session id — threaded into the `TriggerContext` fed to
+   *  `shouldTrigger` when re-evaluating event subscribers. */
+  readonly sessionId: string;
+  /** Current main-loop turn number — same purpose as `sessionId`. */
+  readonly turnNumber: number;
+}
+
+/**
+ * Build the `TriggerContext` used to re-evaluate event subscribers during a
+ * single turn's event fan-out, delegating the actual topic-match (and trigger
+ * gates) to the single authority, `shouldTrigger`.
+ *
+ * The per-session throttles (`maxTriggerCount` / `cooldownTurns`) are applied
+ * **once per turn** by the main scheduler (`selectTriggeredRuntimes`). Within
+ * a turn, event fan-out is bounded instead by `maxDepth`, so those fields are
+ * set to non-blocking sentinels here — re-applying per-session throttles to a
+ * within-turn reaction would be semantically wrong. `hasUpstreamFailure` /
+ * `isManualTrigger` are irrelevant to the `event` branch, and
+ * `preGameCompleted` gating is a Pre-Game (turn 0) concern, not a main-loop
+ * fan-out concern.
+ */
+function eventFanoutTriggerContext(
+  sessionId: string,
+  turnNumber: number,
+  pendingEventTopics: readonly string[],
+): TriggerContext {
+  return {
+    sessionId,
+    turnNumber,
+    triggerCount: 0,
+    turnsSinceLastTrigger: Number.MAX_SAFE_INTEGER,
+    pendingEventTopics,
+    hasUpstreamFailure: false,
+    isManualTrigger: false,
+    preGameCompleted: [],
+  };
 }
 
 /**
@@ -44,6 +82,8 @@ export async function runEventChain({
   completedResults,
   executeRuntime,
   maxDepth = 8,
+  sessionId,
+  turnNumber,
 }: RunEventChainParams): Promise<DeferredFollower[]> {
   const emittedEvents = new Map<string, Record<string, unknown>>();
   for (const [, result] of completedResults) {
@@ -54,11 +94,21 @@ export async function runEventChain({
   let chainDepth = 0;
   while (emittedEvents.size > 0 && chainDepth < maxDepth) {
     chainDepth += 1;
+    const pendingEventTopics = [...emittedEvents.keys()];
     const nextBatch = activeRuntimes.filter((rt) => {
+      // Chain-local dedup: never re-run a runtime that already produced a
+      // result this turn.
       if (completedResults.has(rt.name)) return false;
+      // The chain only fans out event-subscriber runtimes — this is the
+      // chain's *scope* (which runtimes it re-evaluates), not a duplicate of
+      // trigger semantics. Without this guard, `shouldTrigger` would return
+      // true for an `auto` runtime and wrongly re-execute it.
       if (rt.trigger?.type !== "event") return false;
-      return (
-        rt.trigger.topic !== undefined && emittedEvents.has(rt.trigger.topic)
+      // Single source of truth for the event topic-match (+ gates): delegate
+      // to `shouldTrigger`, feeding it the freshly-emitted topics.
+      return shouldTrigger(
+        rt,
+        eventFanoutTriggerContext(sessionId, turnNumber, pendingEventTopics),
       );
     });
     if (nextBatch.length === 0) break;

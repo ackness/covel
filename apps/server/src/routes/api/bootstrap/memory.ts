@@ -2,7 +2,7 @@ import type { ParsedPluginMd } from "@covel/plugin-loader";
 import { createMemorySystem, type MemorySystem } from "@covel/memory";
 import type { LLMAdapter } from "@covel/runtime";
 import { FrameworkCapability } from "@covel/shared";
-import type { RuntimeManifest } from "@covel/shared";
+import type { MemoryBlockSchema, RuntimeManifest } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { createMemoryTools, type ToolModule } from "@covel/tools";
 
@@ -44,6 +44,23 @@ export function createBootstrapMemorySystem({
     );
   }
 
+  // Core-memory block schema is plugin/world data, not kernel-hardcoded: collect
+  // every plugin's declared `memoryBlocks` and let the memory system drive
+  // extraction/rendering off it. When none are declared the memory package
+  // falls back to its generic DEFAULT_CORE_MEMORY_BLOCKS.
+  const memoryBlocks = collectMemoryBlockSchemas(manifestCache);
+  if (memoryBlocks.length > 0) {
+    console.log(
+      `[bootstrap] Core memory blocks (${memoryBlocks.length}): ${memoryBlocks
+        .map((b) => b.label)
+        .join(", ")}`,
+    );
+  } else {
+    console.log(
+      "[bootstrap] No plugin declares memoryBlocks — using framework default blocks",
+    );
+  }
+
   const memoryLlm = {
     async complete(params: {
       systemPrompt: string;
@@ -72,9 +89,10 @@ export function createBootstrapMemorySystem({
         resolveModel({ name: slot, model: slot } as RuntimeManifest),
     },
     {
-      coreMemory: memoryPanelPluginId
-        ? { pluginId: memoryPanelPluginId }
-        : undefined,
+      coreMemory: {
+        ...(memoryPanelPluginId ? { pluginId: memoryPanelPluginId } : {}),
+        ...(memoryBlocks.length > 0 ? { blocks: memoryBlocks } : {}),
+      },
       updater: { modelSlot: resolvedMemorySlot },
     },
   );
@@ -111,4 +129,33 @@ function findMemoryPanelPluginId(
     }
   }
   return undefined;
+}
+
+/**
+ * Aggregate `memoryBlocks` declared across all loaded plugin manifests.
+ *
+ * Block definitions are plain plugin/world data — the framework discovers them
+ * here and feeds them to the memory system, never hardcoding a block
+ * vocabulary. The builtin `memory` plugin supplies the default narrative
+ * blocks; any plugin or world can contribute additional ones (e.g. a detective
+ * pack adding `clues` / `suspects` / `timeline`). Manifests are validated at
+ * load time, so each entry already matches `MemoryBlockSchema`. Duplicate
+ * labels resolve first-declaration-wins to keep defaults stable.
+ */
+function collectMemoryBlockSchemas(
+  manifestCache: ReadonlyMap<string, readonly ParsedPluginMd[]>,
+): readonly MemoryBlockSchema[] {
+  const byLabel = new Map<string, MemoryBlockSchema>();
+  for (const [, manifests] of manifestCache) {
+    for (const m of manifests) {
+      const blocks = m.manifest.memoryBlocks;
+      if (!blocks) continue;
+      for (const block of blocks) {
+        if (!byLabel.has(block.label)) {
+          byLabel.set(block.label, block);
+        }
+      }
+    }
+  }
+  return [...byLabel.values()];
 }

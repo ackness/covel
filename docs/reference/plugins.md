@@ -29,7 +29,7 @@
 
 ### UI-only（无 runtime，仅出现在[概览表](#概览)）
 
-- `memory` — 长期记忆摘要面板，不占调度槽位
+- `memory` — 长期记忆摘要面板 + 声明默认核心记忆块（`memoryBlocks`），不占调度槽位
 
 ### 参考章节
 
@@ -82,7 +82,7 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/scheduler.ts` 强制
 | codex                          | plugin      | 600    | auto（每轮，紧跟 narrator 之后）          | `plugin`  | Narrator-downstream 层：知识图鉴系统（agent runtime）                                    |
 | npc-graph/extractor            | plugin      | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：NPC 关系图抽取器                                                 |
 | char-creator/character-tracker | core-plugin | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：NPC 发现 + 角色状态跟踪                                          |
-| memory                         | core-plugin | —      | UI-only（无 runtime）                     | —         | 长期记忆摘要面板（UI 呈现，无独立 runtime）                                              |
+| memory                         | core-plugin | —      | UI-only（无 runtime）                     | —         | 长期记忆摘要面板 + 通过 `memoryBlocks` 声明默认核心记忆块（剧情/角色关系/场景/玩家状态） |
 | cost-gate                      | plugin      | —      | hook-only（opt-in，默认禁用）             | —         | 跨切面：每会话 token 预算门控（hooks：PostLLMResponse/PreSchedule/TurnStart/SessionEnd） |
 | director                       | plugin      | —      | hook-only（opt-in，默认禁用）             | —         | 跨切面：用 PostContextAssembly 给本局所有 story runtime 统一注入导演前言                 |
 | story-guard                    | plugin      | —      | hook-only（opt-in，默认禁用）             | —         | 跨切面：故事文本红线净化（PostLLMResponse）+ 高危工具拦截（PreToolUse）                  |
@@ -627,6 +627,30 @@ Guard 函数接收与 function runtime 相同��� `FunctionHandlerContext`�
 
 Guard 适用于"先检查再决定是否需要 LLM"的场景，替代了之前需要独立 function runtime 做门控的模式。
 
+### memoryBlocks（核心记忆块）
+
+声明该插件/世界贡献的**核心记忆块**（Letta 式 in-context memory）。框架的记忆系统（`@covel/memory`）会**聚合所有已加载插件的 `memoryBlocks`**，据此驱动每轮结束后的 LLM 抽取、持久化与 prompt 渲染——块定义因此是纯数据，而非内核硬编码。这正是「插件承载玩法、内核提供原语」在记忆维度的落地：侦探局可声明 `clues` / `suspects` / `timeline`，商战局可声明 `deals` / `rivals`，无需 fork 框架包。
+
+builtin `memory` 插件声明默认的四个通用块（`story_state` / `character_relationships` / `scene` / `player_profile`）。任意插件或世界包都可追加自己的块；标签重复时取**首次声明**，默认块保持稳定。未声明任何 `memoryBlocks` 时，框架回退到 `@covel/memory` 内置的同名通用默认块。
+
+| 字段             | 类型                     | 说明                                                                   |
+| ---------------- | ------------------------ | ---------------------------------------------------------------------- |
+| `label`          | `string`（snake_case）   | 块机器标签：`working_memory` key、prompt XML tag、镜像 plugin-data key |
+| `displayName`    | `I18nText`               | UI 面板与 prompt 块标题的本地化显示名                                  |
+| `extractionHint` | `I18nText`               | 注入摘要 LLM system prompt 的逐块抽取指引（保持世界中立）              |
+| `icon`           | `string`（可选，Lucide） | UI 面板图标，缺省 `Info`                                               |
+| `maxChars`       | `number`（可选）         | 该块字符上限，覆盖管理器默认值（2000）                                 |
+
+```yaml
+memoryBlocks:
+  - label: clues
+    displayName: { zh: 线索, en: Clues }
+    icon: Search
+    extractionHint:
+      zh: 已发现的线索、物证及其与嫌疑人的关联。
+      en: Discovered clues, physical evidence, and their links to suspects.
+```
+
 ### hooks
 
 `hooks` 声明生命周期处理器。`handler` 路径相对插件目录解析，首次触发时懒加载。
@@ -980,14 +1004,16 @@ input:
 
 ### trigger 类型
 
-| 类型          | 说明                                                           |
-| ------------- | -------------------------------------------------------------- |
-| `auto`        | 每个 Turn 自动触发                                             |
-| `manual`      | 仅玩家手动触发；启用插件只表示该能力可用，不会自动进入每轮调度 |
-| `scheduled`   | 每 N 轮触发一次（配合 `interval` + `maxTriggerCount`）         |
-| `conditional` | reserved：未来条件触发能力                                     |
-| `event`       | 监听特定事件触发                                               |
-| `error-retry` | 前序 Runtime 出错时触发                                        |
+| 类型          | 状态        | 说明                                                                                                                                                                     |
+| ------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `auto`        | ✅ 生产可用 | 每个 Turn 自动触发                                                                                                                                                       |
+| `manual`      | ✅ 生产可用 | 仅玩家手动触发；启用插件只表示该能力可用，不会自动进入每轮调度                                                                                                           |
+| `scheduled`   | ✅ 生产可用 | 每 N 轮触发一次（配合 `interval` + `maxTriggerCount`）                                                                                                                   |
+| `event`       | ✅ 生产可用 | 监听特定事件触发（在 Turn 内的事件 fan-out 中由 `shouldTrigger` 判定）                                                                                                   |
+| `conditional` | ⚠️ reserved | **当前永不触发**：schema 接受该值，但没有条件表达式引擎，`shouldTrigger` 直接返回 false 并打印一次性 warning（audit P2-9）。条件引擎落地前请勿使用                       |
+| `error-retry` | ⚠️ reserved | **当前永不触发**：依赖 `hasUpstreamFailure`，而调度路径（`turn-executor/scheduling.ts`）将其硬编码为 `false`，该分支在生产中不可达，`shouldTrigger` 会打印一次性 warning |
+
+> **可用 vs reserved**：生产实际可用的只有 `auto` / `manual` / `scheduled` / `event` 四种。`conditional` 与 `error-retry` 是为未来能力预留的占位类型，声明它们的 Runtime 会被静默跳过（并在 console 提示一次）。在对应能力落地前请使用上面四种之一。
 
 ### trigger 字段速查
 

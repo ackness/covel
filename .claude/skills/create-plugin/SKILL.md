@@ -26,7 +26,7 @@ description: 创建 Covel 插件。通过对话了解需求，直接生成 PLUGI
 - **Runtime 类型**
   - `agent`（默认）：LLM 驱动，正文就是 system prompt。支持 `model` slot。
   - `function`：纯 JS handler，不跑 LLM，由 `handler: ./handler.js` 指向入口。可访问 `ctx`（详见 [`runtime-context.md`](references/runtime-context.md)）。
-- **触发**：`auto`（每轮）/ `manual`（仅 `POST /plugin-rpc`）/ `scheduled` / `event` / `error-retry`。
+- **触发**：生产可用 `auto`（每轮）/ `manual`（仅 `POST /plugin-rpc`）/ `scheduled` / `event`。`conditional` 与 `error-retry` 为 **reserved，当前永不触发**（无条件引擎；调度器恒置 `hasUpstreamFailure: false`），声明后会被静默跳过并打印一次性 warning。
 - **手动触发按钮**：UI JSON 里设 `on.click.action: "invokeRuntime"` + `params.runtimeId`，框架默认 handler 会自动 POST `/plugin-rpc`，插件**不需要**写 React 代码。所有 `on.click.action` 见 [`ui-components-quickref.md`](references/ui-components-quickref.md)。
 - **同步 / 后台执行**（仅手动触发）：`execution: sync`（默认，阻塞 turn）/ `background`（202 + `jobId`，框架在 `_jobs/<jobId>` 写状态，前端通过 `plugin-data.changed` SSE 感知）。
   - 插件**禁止**主动写 `_jobs/*` / `_logs/*`，框架会覆盖。

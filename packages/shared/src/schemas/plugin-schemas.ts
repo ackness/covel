@@ -305,6 +305,30 @@ export const rpcDeclMapSchema = z.record(
 
 const i18nTextLoose = z.union([z.string(), z.record(z.string(), z.string())]);
 
+// ── Core-memory block schema ────────────────────────────────────
+
+/**
+ * Declarative core-memory block definition for `RuntimeManifest.memoryBlocks`.
+ * Validates the per-block shape declared in PLUGIN.md frontmatter so the
+ * memory system can drive extraction/rendering off plugin data instead of
+ * hardcoded block labels. See {@link MemoryBlockSchema}.
+ */
+export const memoryBlockDeclSchema = z
+  .object({
+    label: z
+      .string()
+      .min(1)
+      .regex(/^[a-z][a-z0-9_]*$/, {
+        message:
+          "memory block label must be lowercase snake_case (letters, digits, underscores)",
+      }),
+    displayName: i18nTextLoose,
+    extractionHint: i18nTextLoose,
+    icon: z.string().min(1).optional(),
+    maxChars: z.number().int().positive().optional(),
+  })
+  .strict();
+
 // ── Plugin catalogue metadata ───────────────────────────────────
 
 const pluginTagSchema = z
@@ -491,5 +515,6 @@ export const runtimeManifestSchema = z
     authorsNote: authorsNoteDeclSchema.optional(),
     postHistory: postHistoryDeclSchema.optional(),
     rpc: rpcDeclMapSchema.optional(),
+    memoryBlocks: z.array(memoryBlockDeclSchema).optional(),
   })
   .strict();

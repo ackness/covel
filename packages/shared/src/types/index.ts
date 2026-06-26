@@ -59,6 +59,7 @@ export type {
   PluginManifest,
   AuthorsNoteDecl,
   PostHistoryDecl,
+  MemoryBlockSchema,
 } from "./plugin.js";
 
 export {

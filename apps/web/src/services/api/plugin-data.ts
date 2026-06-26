@@ -59,9 +59,22 @@ export interface UISlotEntry {
   specs: UISlotSpec[];
 }
 
+/** A spec rejected by server-side validation, with concrete per-field issues. */
+export interface UiSpecDiagnostic {
+  pluginId: string;
+  runtimeId: string;
+  slot: "right" | "message" | "left";
+  specIndex: number;
+  specId?: string;
+  issues: { path: string; message: string; code: string }[];
+}
+
 export interface UISpecsResponse {
   right: UISlotEntry[];
   message?: UISlotEntry[];
+  left?: UISlotEntry[];
+  /** Specs dropped from the slots above because they failed validation. */
+  diagnostics?: UiSpecDiagnostic[];
 }
 
 export async function fetchUiSpecs(
