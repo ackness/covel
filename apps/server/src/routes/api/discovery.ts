@@ -1,4 +1,5 @@
 import {
+  PROPOSAL_TYPES,
   outputKindSchema,
   triggerTypeSchema,
   worldDataEffectSchema,
@@ -145,21 +146,10 @@ const DEFAULT_BUILTIN_TOOLS = [
   "get-world-dimensions",
 ] as const;
 
-const PROPOSAL_TYPES = [
-  "narrative.append",
-  "narrative.template",
-  "state.patch",
-  "event.emit",
-  "record.upsert",
-  "interaction.request",
-  "ui.render",
-  "asset.generate",
-  "plugin.data",
-  "plugin.data.batch",
-  "character.upsert",
-  "working_memory.set",
-  "lorebook.upsert",
-] as const;
+// Proposal type list is derived from the single source of truth in
+// @covel/shared (`PROPOSAL_TYPES`), which is exhaustiveness-checked against the
+// commit-handler registry. Discovery therefore advertises exactly what the
+// kernel can commit — no hand-maintained list, no drift.
 
 const PROTOCOL_EVENT_TYPES = [
   "narrative.delta",

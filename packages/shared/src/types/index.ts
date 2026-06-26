@@ -141,22 +141,27 @@ export type {
 } from "./subscription-events.js";
 
 export type {
+  ProposalPayloadMap,
   ProposalType,
+  ProposalFor,
   ProposalSource,
   Proposal,
   NarrativeAppendPayload,
   InteractionRequestPayload,
   StatePatchPayload,
   EventEmitPayload,
-  RecordUpsertPayload,
   UIRenderPayload,
   AssetGeneratePayload,
   PluginDataPayload,
   PluginDataBatchPayload,
   CharacterUpsertPayload,
+  WorkingMemorySetPayload,
+  LorebookUpsertPayload,
+  LorebookUpsertEntry,
   SessionEvent,
   CommitResult,
 } from "./proposal.js";
+export { PROPOSAL_TYPES } from "./proposal.js";
 
 export type {
   ClientCapabilities,

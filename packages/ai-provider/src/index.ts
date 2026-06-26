@@ -1,4 +1,5 @@
 // Types
+export { PROVIDER_PROTOCOLS } from "./types.js";
 export type {
   ProviderProtocol,
   OperationMode,
@@ -77,6 +78,16 @@ export { createAnthropicMessagesAdapter } from "./adapters/anthropic-messages.js
 export { createProviderRegistry } from "./provider-registry.js";
 export { createPresetRegistry } from "./preset-registry.js";
 export { createSlotRegistry, type SlotRegistry } from "./slot-registry.js";
+
+// Protocol registry (single registration point for a new wire protocol)
+export {
+  registerProtocol,
+  getProtocolDefinition,
+  listRegisteredProtocols,
+  assertProtocolRegistryComplete,
+  BASE_CAPABILITY_DEFAULTS,
+  type ProtocolDefinition,
+} from "./protocol-registry.js";
 
 // Gateway
 export { createGateway, type GatewayOptions } from "./gateway.js";

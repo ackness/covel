@@ -1,15 +1,20 @@
 /**
  * Proposal-specific commit handlers.
+ *
+ * The handler registry is keyed by `ProposalType` via `CommitHandlerMap`, so
+ * adding a proposal type to `ProposalPayloadMap` (in @covel/shared) forces a
+ * matching handler here — a missing handler is a compile error, never a
+ * silent `unknown proposal type` failure at runtime. Each handler receives a
+ * `ProposalFor<K>`, so `proposal.payload` is already the precise payload type
+ * (no `as XxxPayload` casts required).
  */
 
 import { assetGenerateToView, isAssetGeneratePayload } from "@covel/shared";
 import type {
-  CharacterUpsertPayload,
   CommitResult,
-  PluginDataBatchPayload,
-  PluginDataPayload,
   Proposal,
-  UIRenderPayload,
+  ProposalFor,
+  ProposalType,
 } from "@covel/shared";
 import type { KernelStore } from "./session-kernel-store.js";
 import { makeEvent, resolveBlockType } from "./session-kernel-helpers.js";
@@ -24,11 +29,29 @@ import {
   requireStoreCapability,
 } from "./commit-validators.js";
 
+/** A commit handler narrowed to a single proposal type. */
+export type CommitHandlerFor<K extends ProposalType> = (
+  proposal: ProposalFor<K>,
+) => Promise<CommitResult>;
+
+/**
+ * Exhaustive registry shape: every `ProposalType` must have a handler.
+ * `createCommitHandlers` returns this type, so omitting a handler fails to
+ * compile.
+ */
+export type CommitHandlerMap = {
+  [K in ProposalType]: CommitHandlerFor<K>;
+};
+
+/**
+ * Type-erased handler used at the dispatch site. The pipeline looks a handler
+ * up by `proposal.type` and invokes it with the full `Proposal` union; this is
+ * the canonical correlated-union escape hatch (a single cast in the pipeline,
+ * never inside individual handlers).
+ */
 export type CommitHandler = (proposal: Proposal) => Promise<CommitResult>;
 
-export function createCommitHandlers(
-  store: KernelStore,
-): Record<string, CommitHandler> {
+export function createCommitHandlers(store: KernelStore): CommitHandlerMap {
   return {
     "narrative.append": commitNarrative,
     "interaction.request": commitInteraction,
@@ -43,11 +66,10 @@ export function createCommitHandlers(
     "asset.generate": commitAssetGenerate,
   };
 
-  async function commitNarrative(proposal: Proposal): Promise<CommitResult> {
-    const { content, kind } = proposal.payload as {
-      content: string;
-      kind: string;
-    };
+  async function commitNarrative(
+    proposal: ProposalFor<"narrative.append">,
+  ): Promise<CommitResult> {
+    const { content, kind } = proposal.payload;
     await store.addMessage({
       id: proposal.id,
       sessionId: proposal.sessionId,
@@ -70,8 +92,10 @@ export function createCommitHandlers(
     };
   }
 
-  async function commitInteraction(proposal: Proposal): Promise<CommitResult> {
-    const payload = proposal.payload as Record<string, unknown>;
+  async function commitInteraction(
+    proposal: ProposalFor<"interaction.request">,
+  ): Promise<CommitResult> {
+    const payload = { ...proposal.payload };
     const block = {
       id: proposal.id,
       type: resolveBlockType(payload),
@@ -104,8 +128,10 @@ export function createCommitHandlers(
     };
   }
 
-  async function commitUIRender(proposal: Proposal): Promise<CommitResult> {
-    const payload = proposal.payload as unknown as UIRenderPayload;
+  async function commitUIRender(
+    proposal: ProposalFor<"ui.render">,
+  ): Promise<CommitResult> {
+    const payload = proposal.payload;
     const invalid = requireNonEmptyArray(
       payload.parts,
       "ui.render: parts must be a non-empty array",
@@ -143,12 +169,10 @@ export function createCommitHandlers(
     };
   }
 
-  async function commitStatePatch(proposal: Proposal): Promise<CommitResult> {
-    const { table, field, value } = proposal.payload as {
-      table: string;
-      field: string;
-      value: unknown;
-    };
+  async function commitStatePatch(
+    proposal: ProposalFor<"state.patch">,
+  ): Promise<CommitResult> {
+    const { table, field, value } = proposal.payload;
     await store.addStateChange({
       id: proposal.id,
       sessionId: proposal.sessionId,
@@ -161,15 +185,14 @@ export function createCommitHandlers(
     });
     return {
       committed: true,
-      event: makeEvent("state.changed", proposal, proposal.payload),
+      event: makeEvent("state.changed", proposal, { ...proposal.payload }),
     };
   }
 
-  async function commitEvent(proposal: Proposal): Promise<CommitResult> {
-    const { topic, data } = proposal.payload as {
-      topic: string;
-      data: Record<string, unknown>;
-    };
+  async function commitEvent(
+    proposal: ProposalFor<"event.emit">,
+  ): Promise<CommitResult> {
+    const { topic, data } = proposal.payload;
     await store.saveEvent({
       id: proposal.id,
       sessionId: proposal.sessionId,
@@ -180,12 +203,12 @@ export function createCommitHandlers(
     });
     return {
       committed: true,
-      event: makeEvent("event.emitted", proposal, proposal.payload),
+      event: makeEvent("event.emitted", proposal, { ...proposal.payload }),
     };
   }
 
   async function commitAssetGenerate(
-    proposal: Proposal,
+    proposal: ProposalFor<"asset.generate">,
   ): Promise<CommitResult> {
     if (!isAssetGeneratePayload(proposal.payload)) {
       return commitError(
@@ -225,8 +248,10 @@ export function createCommitHandlers(
     };
   }
 
-  async function commitPluginData(proposal: Proposal): Promise<CommitResult> {
-    const payload = proposal.payload as unknown as PluginDataPayload;
+  async function commitPluginData(
+    proposal: ProposalFor<"plugin.data">,
+  ): Promise<CommitResult> {
+    const payload = proposal.payload;
     const invalid = firstFailure(
       requireStoreCapability(
         store.setPluginData,
@@ -258,9 +283,9 @@ export function createCommitHandlers(
   }
 
   async function commitPluginDataBatch(
-    proposal: Proposal,
+    proposal: ProposalFor<"plugin.data.batch">,
   ): Promise<CommitResult> {
-    const payload = proposal.payload as unknown as PluginDataBatchPayload;
+    const payload = proposal.payload;
     const invalid = firstFailure(
       requireStoreCapability(
         store.setPluginDataBatch,
@@ -303,9 +328,9 @@ export function createCommitHandlers(
   }
 
   async function commitCharacterUpsert(
-    proposal: Proposal,
+    proposal: ProposalFor<"character.upsert">,
   ): Promise<CommitResult> {
-    const payload = proposal.payload as unknown as CharacterUpsertPayload;
+    const payload = proposal.payload;
     const invalid = firstFailure(
       requireStoreCapability(
         store.upsertCharacter,
@@ -400,14 +425,9 @@ export function createCommitHandlers(
   }
 
   async function commitWorkingMemory(
-    proposal: Proposal,
+    proposal: ProposalFor<"working_memory.set">,
   ): Promise<CommitResult> {
-    const payload = proposal.payload as {
-      scope?: unknown;
-      key?: unknown;
-      value?: unknown;
-      schemaRef?: unknown;
-    };
+    const payload = proposal.payload;
 
     const validScopes = new Set(["player", "story", "shared"]);
     const scopeInvalid =
@@ -439,15 +459,14 @@ export function createCommitHandlers(
     );
     if (invalid) return invalid;
 
-    const scope = payload.scope as "player" | "story" | "shared";
-    const key = payload.key as string;
+    const { scope, key } = payload;
     await store.upsertWorkingMemory!({
       id: crypto.randomUUID(),
       sessionId: proposal.sessionId,
       key,
       scope,
       value: payload.value,
-      schemaRef: payload.schemaRef as string | undefined,
+      schemaRef: payload.schemaRef,
       updatedAt: new Date().toISOString(),
     });
 
@@ -461,9 +480,9 @@ export function createCommitHandlers(
   }
 
   async function commitLorebookUpsert(
-    proposal: Proposal,
+    proposal: ProposalFor<"lorebook.upsert">,
   ): Promise<CommitResult> {
-    const payload = proposal.payload as { entries?: unknown };
+    const payload = proposal.payload;
     const invalid = firstFailure(
       requireNonEmptyArray(
         payload.entries,
@@ -492,6 +511,8 @@ export function createCommitHandlers(
       updatedAt: string;
     }> = [];
 
+    // Entries may arrive from untyped (.js) plugin tools, so each field is
+    // validated defensively rather than trusting the declared payload type.
     for (const raw of payload.entries as readonly unknown[]) {
       const entry = raw as Record<string, unknown>;
       const idInvalid = requireNonEmptyString(

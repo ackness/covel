@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { createProviderRegistry } from "../src/provider-registry.js";
+import { PROVIDER_PROTOCOLS } from "../src/types.js";
+import {
+  assertProtocolRegistryComplete,
+  getProtocolDefinition,
+} from "../src/protocol-registry.js";
 
 describe("provider-registry", () => {
   it("resolves a registered provider with defaults", () => {
@@ -168,6 +173,45 @@ describe("provider-registry", () => {
         { mode: "text" },
       );
       expect(result.config.cacheStrategy).toBe("none");
+    });
+  });
+
+  // ── ProtocolRegistry coverage (T9) ──────────────────────────────
+
+  describe("ProtocolRegistry coverage", () => {
+    it("registers an adapter + cacheStrategy + capabilityDefaults for every protocol", () => {
+      for (const protocol of PROVIDER_PROTOCOLS) {
+        const def = getProtocolDefinition(protocol);
+        expect(def, `protocol "${protocol}" must be registered`).toBeDefined();
+        // Each protocol bundles all three protocol-scoped concerns.
+        expect(def?.createAdapter()).toBeDefined();
+        expect(def?.cacheStrategy).toBeTruthy();
+        expect(def?.capabilityDefaults.input.length).toBeGreaterThan(0);
+        expect(def?.capabilityDefaults.output.length).toBeGreaterThan(0);
+      }
+    });
+
+    it("assertProtocolRegistryComplete passes for the built-in set", () => {
+      expect(() => assertProtocolRegistryComplete()).not.toThrow();
+    });
+
+    it("resolves each protocol to a working adapter through the registry", () => {
+      for (const protocol of PROVIDER_PROTOCOLS) {
+        const registry = createProviderRegistry({
+          providerDefaults: { p: { baseUrl: "https://x" } },
+        });
+        // Protocol flows through the resolve target (the preset path), the
+        // same way the gateway routes it.
+        const result = registry.resolve(
+          { provider: "p", protocol },
+          { mode: "text" },
+        );
+        expect(result.protocol).toBe(protocol);
+        expect(result.adapter).toBeDefined();
+        expect(result.config.cacheStrategy).toBe(
+          getProtocolDefinition(protocol)?.cacheStrategy,
+        );
+      }
     });
   });
 });

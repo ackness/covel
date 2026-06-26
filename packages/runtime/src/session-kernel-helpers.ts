@@ -85,6 +85,16 @@ export function resolveBlockType(payload: Record<string, unknown>): string {
   return type || "interactive_block";
 }
 
+/**
+ * Construct a proposal envelope from loosely-typed runtime output.
+ *
+ * `Proposal` is a discriminated union, but this factory deliberately accepts a
+ * generic `Record<string, unknown>` payload: most proposals are built from
+ * untrusted runtime/tool output whose shape is only validated later by the
+ * commit handlers. The single cast here is the construction boundary — callers
+ * with a known-good payload pass it straight through; commit handlers validate
+ * at commit time.
+ */
 export function makeProposal(
   type: ProposalType,
   source: ProposalSource,
@@ -100,5 +110,5 @@ export function makeProposal(
     sessionId,
     payload,
     timestamp: new Date().toISOString(),
-  };
+  } as unknown as Proposal;
 }
