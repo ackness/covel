@@ -760,6 +760,65 @@ describe("resumeSuspendedRuntime", () => {
     );
   });
 
+  it("retries a transient LLM failure on resume (goes through requestLLMResponse / retry policy)", async () => {
+    const suspensionId = await createTestSuspension("tc-retry");
+
+    // Adapter that throws a transient (retriable) error on the first attempt,
+    // then succeeds. Regression guard for F1.b: the pre-refactor resume called
+    // deps.llm.generate() directly with NO retry, so this first transient
+    // error would have propagated straight out of resumeSuspendedRuntime and
+    // the resume would have thrown. Re-using the shared agent tool loop routes
+    // resume through requestLLMResponse + the manifest-derived retry policy, so
+    // the same hiccup the main loop already tolerated is now tolerated here.
+    let attempts = 0;
+    const llm: LLMAdapter = {
+      async generate() {
+        attempts++;
+        if (attempts === 1) {
+          throw new Error("fetch failed");
+        }
+        return {
+          content: '{"narrativeOutput": "Recovered after retry."}',
+          toolCalls: [],
+          finishReason: "stop",
+          usage: { inputTokens: 5, outputTokens: 5 },
+        };
+      },
+    };
+
+    const manifest = makeManifest({ maxRetries: 2 });
+    const loaded: LoadedRuntime = {
+      manifest,
+      promptTemplate: "",
+      references: [],
+    };
+    const suspension = await store.getSuspension(suspensionId);
+
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => loaded,
+      llm,
+      getConfig: () => ({}),
+      store,
+      toolExecutor: mockToolExecutor,
+      eventBus,
+    };
+
+    const result = await resumeSuspendedRuntime(
+      suspension!,
+      { name: "Frank" },
+      manifest,
+      deps,
+    );
+
+    // First attempt threw, the retry loop retried once and the second call
+    // succeeded — proving resume now exercises the retry machinery.
+    expect(attempts).toBe(2);
+    expect(result.status).toBe("success");
+    expect((result.output as Record<string, unknown>).narrativeOutput).toBe(
+      "Recovered after retry.",
+    );
+  });
+
   it("fires PreLLMCall / PostLLMResponse hooks on the resume path", async () => {
     const suspensionId = await createTestSuspension("tc-resume-hooks");
 

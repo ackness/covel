@@ -33,8 +33,11 @@ export type ExecuteTurnFn = (
  * 19-positional-argument call into `executeOneRuntime`: callers now build one
  * options object, and extending the invoker is a single-field change instead
  * of touching every call site. This is the `RuntimeInvoker` seam — the one
- * entry point that dispatches function vs agent runtimes (resume is still a
- * separate path; folding it in is tracked as F1.b).
+ * entry point that dispatches function vs agent runtimes. Resume
+ * (`resumeSuspendedRuntime`) stays a distinct entry point because it is driven
+ * by the resume API outside the scheduler, but it now shares the same tool loop
+ * (`runAgentToolLoop`) and output finalization (`finalizeAgentOutput`) as the
+ * normal agent path — the duplicated loop/finalize clone was removed in F1.b.
  */
 export interface RuntimeInvocation {
   readonly manifest: RuntimeManifest;
