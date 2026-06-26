@@ -38,9 +38,11 @@ The counter is **in-process and non-persistent**:
 
 ## Enabling
 
-Add `cost-gate` to a world's plugin set, or enable it for a session via
-`POST /api/sessions/:id/plugins/enable`. Its hooks then scope to that session
-only (framework hook scoping); other sessions are unaffected.
+cost-gate ships in the built-in **Low Cost** plugin pack, so choosing that pack
+in the prep screen enables it by default. You can also add `cost-gate` to a
+world's plugin set or enable it per session via
+`POST /api/sessions/:id/plugins/enable`. Its hooks scope to that session only
+(framework hook scoping); other sessions are unaffected.
 
 ## Tests
 

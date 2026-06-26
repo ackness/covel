@@ -90,7 +90,7 @@ export const BUILTIN_PLUGIN_PACKS: readonly PluginPack[] = [
     label: "Low Cost",
     labelKey: "session.pluginPacks.low-cost.label",
     description:
-      "Keeps the core loop and function plugins while reducing downstream LLM calls.",
+      "Keeps the core loop and function plugins while reducing downstream LLM calls; cost-gate caps per-session token spend.",
     descriptionKey: "session.pluginPacks.low-cost.description",
     plugins: [
       "pregame",
@@ -98,6 +98,7 @@ export const BUILTIN_PLUGIN_PACKS: readonly PluginPack[] = [
       "char-creator",
       "narrator",
       "living-world-rules",
+      "cost-gate",
     ],
     optionalPlugins: ["memory", "player-identity"],
     excludedPlugins: ["guide", "codex", "scene-prompts"],

@@ -257,7 +257,7 @@
       },
       "low-cost": {
         "label": "Low Cost",
-        "description": "Keeps the core loop and function plugins while reducing downstream LLM calls."
+        "description": "Keeps the core loop and function plugins while reducing downstream LLM calls; cost-gate caps per-session token spend."
       }
     },
     "recommendationReasons": {

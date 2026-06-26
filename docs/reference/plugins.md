@@ -388,7 +388,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 | 字段         | 值                                                                                                   |
 | ------------ | ---------------------------------------------------------------------------------------------------- |
-| pluginType   | `plugin`（可禁用，默认不启用）                                                                       |
+| pluginType   | `plugin`（可禁用；前端 `low-cost` 组合包默认启用, 其它包 / 世界需手动启用）                          |
 | runtimeType  | `function`（无 LLM；`trigger: manual` 的 no-op handler，永不调度）                                   |
 | outputKind   | `system`                                                                                             |
 | capabilities | `cost-control`                                                                                       |

@@ -257,7 +257,7 @@
       },
       "low-cost": {
         "label": "低成本",
-        "description": "保留核心流程和函数型插件，减少下游 LLM 调用。"
+        "description": "保留核心流程和函数型插件，减少下游 LLM 调用；cost-gate 为每局设置 token 花费上限。"
       }
     },
     "recommendationReasons": {
