@@ -379,17 +379,24 @@ execution.completed   → executing = false
 error.occurred        → executionError
 ```
 
-## 六、Transport 抽象
+## 六、传输层（真实形态）
 
-协议设计为 transport-agnostic。当前实现使用 HTTP + SSE，但所有通讯都通过 `SessionTransport` 接口抽象，支持未来适配：
+> 本节描述真实实现，不是设想。早期类型里曾有一个 `SessionTransport` 接口，注释宣称「所有通讯都通过它抽象」，并列出 `SSETransport` / `WebSocketTransport` / `StdioTransport` / `HTTPTransport` / `LocalTransport` 等实现——但**没有任何实现存在**（全仓零 `implements`、零工厂）。该接口已随本次清理删除。请勿据此以为「换个 Transport 即可上 WebSocket」。
 
-| Transport          | 上行       | 下行         | 场景             |
-| ------------------ | ---------- | ------------ | ---------------- |
-| SSETransport       | HTTP POST  | SSE stream   | Web 前端（当前） |
-| WebSocketTransport | WS message | WS message   | Web 升级路径     |
-| StdioTransport     | stdin JSON | stdout JSON  | TUI / CLI        |
-| HTTPTransport      | HTTP POST  | HTTP polling | REST API 集成    |
-| LocalTransport     | 函数调用   | 回调         | 测试             |
+当前没有统一的 transport 抽象层。通讯由以下几条**具体**路径承载（见「架构总览」的三类划分）：
+
+| 方向            | 真实实现                                                                                                                                         |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Command（上行） | REST `POST`，硬编码 `fetch('/api/...')`（`apps/web/src/services/`）                                                                              |
+| 回合内 Event    | `POST /api/actions` 的 data-only SSE，`fetch` + `ReadableStream` 解析（`apps/web/src/services/sse.ts` / `api/actions.ts`，信封 = `SseEnvelope`） |
+| 辅助 Event      | `GET /api/events/stream` 的命名 SSE，`EventSource` + `lastEventId` 重连（`apps/web/src/services/subscription.ts`，信封 = `ProtocolEvent`）       |
+| Query（只读）   | REST `GET`，标准 JSON                                                                                                                            |
+
+唯一真正的部署抽象在**数据层**，不在传输层：`apps/web/src/services/data-service.ts` 的 `DataService` 区分 `local`（浏览器 IndexedDB）与 `remote`（服务器 API）。但它**只覆盖数据 CRUD**——回合执行与上述两条 SSE 流即便在 `local` 模式下也仍然硬连服务器。
+
+### WebSocket 升级路径
+
+升级到 WebSocket **不是**「替换一个 Transport 实现」那么简单：上行/下行目前直接绑定在上述 `fetch` / `EventSource` 调用点上，需要在服务器与前端两侧分别新增 WS 处理与帧编解码。本文档不再承诺一个不存在的可插拔 transport 层。
 
 ## 七、Debug trace events
 

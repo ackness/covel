@@ -2,7 +2,7 @@
  * Types for the @covel/create package.
  */
 
-import type { LLMAdapter } from "@covel/runtime";
+import type { LLMAdapter } from "@covel/shared";
 
 export interface CreateWorldLogger {
   info(...args: unknown[]): void;

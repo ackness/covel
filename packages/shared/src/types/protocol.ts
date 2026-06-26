@@ -1,86 +1,16 @@
 /**
- * Covel Session Protocol — transport-agnostic command/event definitions.
+ * Covel Session Protocol — server→client event vocabulary + session snapshot.
  *
- * Inspired by: LSP (JSON-RPC + capability negotiation), LangGraph Agent Protocol
- * (Thread/Run/Store), A2A (Task lifecycle), Colyseus (reconnection + delta sync).
+ * `CovelEvent` is the authoritative discriminated union for every server→client
+ * event on the SSE streams; `SessionSnapshot` is the restore/reconnection shape.
  *
- * Commands flow client → server. Events flow server → client.
- * Both are transport-agnostic — SSE, WebSocket, stdio, HTTP polling all work.
+ * Transport is concrete, not abstract. Events ride two SSE streams (the per-turn
+ * `POST /api/actions` action stream parsed via fetch + ReadableStream, and the
+ * out-of-band `GET /api/events/stream` subscription channel via EventSource);
+ * client→server requests go through the REST API (see docs/reference/api.md).
+ * There is no transport-agnostic command layer — an earlier `SessionTransport`
+ * command/capability abstraction was never implemented and has been removed.
  */
-
-// ── Client Capabilities (negotiated at connection) ──────────────
-
-export interface ClientCapabilities {
-  /** Supports streaming narrative deltas (token-by-token). */
-  readonly streaming: boolean;
-  /** Supports rich interactive blocks (forms, choices, confirmations). */
-  readonly richBlocks: boolean;
-  /** Supports markdown rendering. */
-  readonly markdown: boolean;
-  /** Supports image display. */
-  readonly images: boolean;
-}
-
-export interface ServerCapabilities {
-  /** Protocol version (semver). */
-  readonly protocolVersion: string;
-  /** Available event types. */
-  readonly eventTypes: readonly string[];
-  /** Supported command types. */
-  readonly commandTypes: readonly string[];
-}
-
-// ── Commands (client → server) ──────────────────────────────────
-
-export type CommandType =
-  | "session.create"
-  | "session.restore"
-  | "session.fork"
-  | "session.get"
-  | "session.snapshot"
-  | "turn.submit"
-  | "turn.retry"
-  | "input.submit"
-  | "messages.list"
-  | "characters.list"
-  | "state.get"
-  | "trace.list"
-  | "plugin-data.get";
-
-export interface SessionCommand {
-  readonly id: string;
-  readonly type: CommandType;
-  readonly sessionId?: string;
-  readonly payload: Readonly<Record<string, unknown>>;
-  readonly timestamp: string;
-}
-
-// ── Command Payloads ────────────────────────────────────────────
-
-export interface SessionCreatePayload {
-  readonly worldId: string;
-  readonly locale?: string;
-  readonly plugins?: readonly string[];
-}
-
-export interface SessionRestorePayload {
-  readonly sessionId: string;
-  readonly lastEventId?: string;
-}
-
-export interface TurnSubmitPayload {
-  readonly sessionId: string;
-  readonly playerMessage: string;
-  readonly locale?: string;
-}
-
-export interface InputSubmitPayload {
-  readonly sessionId: string;
-  readonly turnId: string;
-  readonly interactionId: string;
-  readonly type: "form" | "choice" | "confirmation";
-  readonly values: Readonly<Record<string, unknown>>;
-}
 
 // ── Covel Event Union (server → client) — single source of truth ─
 //
@@ -480,29 +410,4 @@ export interface SnapshotPluginStatus {
   readonly name: string;
   readonly isActive: boolean;
   readonly priority: number;
-}
-
-// ── Transport Interface ─────────────────────────────────────────
-
-/**
- * Transport-agnostic interface for session communication.
- *
- * Implementations: SSETransport, WebSocketTransport, StdioTransport, HTTPTransport.
- * Each transport handles the wire protocol details; the session logic
- * only interacts through this interface.
- */
-export interface SessionTransport {
-  /** Send a single event to the connected client. */
-  sendEvent(event: ProtocolEvent): Promise<void>;
-  /** Register handler for incoming commands. */
-  onCommand(handler: (cmd: SessionCommand) => Promise<unknown>): void;
-  /** Connection lifecycle. */
-  onConnect?(handler: (info: ClientInfo) => void): void;
-  onDisconnect?(handler: () => void): void;
-}
-
-export interface ClientInfo {
-  readonly clientType: "web" | "tui" | "api" | "ws";
-  readonly capabilities: ClientCapabilities;
-  readonly lastEventId?: string;
 }

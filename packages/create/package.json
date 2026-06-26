@@ -17,7 +17,6 @@
   },
   "dependencies": {
     "@covel/context": "workspace:*",
-    "@covel/runtime": "workspace:*",
     "@covel/shared": "workspace:*",
     "yaml": "^2.8.3"
   },
