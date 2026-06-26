@@ -61,6 +61,7 @@ export type {
 } from "./plugin.js";
 
 export { FrameworkCapability } from "./plugin.js";
+export { HOOK_EVENTS } from "./plugin.js";
 
 export type {
   RuntimeStatus,
@@ -140,6 +141,8 @@ export type {
   SubscriptionFilter,
 } from "./subscription-events.js";
 
+export { SUBSCRIPTION_TOPICS } from "./subscription-events.js";
+
 export type {
   ProposalPayloadMap,
   ProposalType,
@@ -182,6 +185,15 @@ export type {
   SessionTransport,
   ClientInfo,
 } from "./protocol.js";
+
+export type {
+  CovelEvent,
+  CovelEventType,
+  CovelEventMeta,
+  CovelEventPayload,
+} from "./protocol.js";
+
+export { COVEL_EVENT_META, FORWARDED_EVENT_TYPES } from "./protocol.js";
 
 export type {
   AttributeFieldType,

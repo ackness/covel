@@ -5,6 +5,7 @@
  */
 
 import { z } from "zod";
+import { HOOK_EVENTS } from "../types/hooks.js";
 
 // ── Trigger ──────────────────────────────────────────────────────
 
@@ -202,28 +203,11 @@ export const pluginConfigFieldSchema = z
 
 // ── Hook declarations ────────────────────────────────────────────
 
-const VALID_HOOK_EVENTS = [
-  "SessionStart",
-  "SessionEnd",
-  "TurnStart",
-  "PreCompaction",
-  "PostCompaction",
-  "PreSchedule",
-  "PreRuntime",
-  "PostContextAssembly",
-  "PreLLMCall",
-  "PostLLMResponse",
-  "PostRuntime",
-  "PreToolUse",
-  "PostToolUse",
-  "PreStateCommit",
-  "PostStateCommit",
-  "TurnStop",
-] as const;
-
+// Validation set derived from the single source of truth (./types/hooks.ts),
+// never re-listed by hand — adding an event there extends this schema for free.
 export const hookDeclarationSchema = z
   .object({
-    event: z.enum(VALID_HOOK_EVENTS),
+    event: z.enum(HOOK_EVENTS),
     handler: z.string().min(1),
     match: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
     timeoutMs: z.number().int().positive().optional(),

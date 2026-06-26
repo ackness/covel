@@ -251,47 +251,15 @@ export interface PluginUserSettingSpec {
 }
 
 // ── Hook declarations ────────────────────────────────────────────
-
-/**
- * Hook event names a plugin runtime can register handlers for.
- * Mirrors HookEvent in @covel/runtime — kept here so plugin authors can
- * reference it from shared types without depending on the runtime package.
- */
-export type HookEventName =
-  | "SessionStart"
-  | "SessionEnd"
-  | "TurnStart"
-  | "PreCompaction"
-  | "PostCompaction"
-  | "PreSchedule"
-  | "PreRuntime"
-  | "PostContextAssembly"
-  | "PreLLMCall"
-  | "PostLLMResponse"
-  | "PostRuntime"
-  | "PreToolUse"
-  | "PostToolUse"
-  | "PreStateCommit"
-  | "PostStateCommit"
-  | "TurnStop";
-
-export type HookEnforce = "pre" | "normal" | "post";
-
-/**
- * Single hook declaration in PLUGIN.md frontmatter.
- * Handler files are resolved lazily — no eager import at parse time.
- */
-export interface HookDeclaration {
-  readonly event: HookEventName;
-  /** Relative path to the handler module inside the plugin package. */
-  readonly handler: string;
-  /** Optional simple equality filter: { tool: "my-tool" } etc. */
-  readonly match?: Readonly<Record<string, string | number>>;
-  /** Per-handler timeout in ms. Default 5000. */
-  readonly timeoutMs?: number;
-  /** Ordering group. Default normal. */
-  readonly enforce?: HookEnforce;
-}
+//
+// The hook event tuple, its derived union, the enforce group, and the
+// declaration shape now live in ./hooks.ts (single source of truth). They are
+// re-exported here so existing `@covel/shared` consumers and the types barrel
+// keep importing them from the same place. `HookDeclaration` is also imported
+// locally below because `RuntimeManifest.hooks` references it.
+import type { HookDeclaration } from "./hooks.js";
+export { HOOK_EVENTS } from "./hooks.js";
+export type { HookEventName, HookEnforce, HookDeclaration } from "./hooks.js";
 
 // ── UI declarations ─────────────────────────────────────────────
 

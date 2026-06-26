@@ -10,12 +10,21 @@
  * Keeping these helpers here lets us extract pipeline-plumbing boilerplate
  * and HookContext construction out of turn-executor.ts to keep it
  * under the 1000-line budget.
+ *
+ * Boilerplate convergence (T10): every helper used to repeat the same
+ * `if (!opts.pipeline) … pipeline.run(event, { event, sessionId, turnId, … },
+ * payload, { eventBus, emitter })` block. That plumbing now lives once in
+ * `runHook()` (+ `buildHookCtx`/`hookReplace`); each helper only keeps its
+ * distinct *result interpretation*. The four observe-only events that share an
+ * identical shape are produced by the generic `makeObserveHook` factory. The
+ * HookPipeline engine itself (semantic dispatch, enforce ordering, per-handler
+ * timeout, session-scope filtering) is untouched — see `./pipeline.ts`.
  */
 
 import type { EventBus } from "@covel/events";
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import type { HookPipeline } from "./pipeline.js";
-import type { HookResult } from "./types.js";
+import type { HookContext, HookEvent, HookResult } from "./types.js";
 import type { TurnEmitter } from "../turn-emitter.js";
 import type {
   LLMMessage,
@@ -33,6 +42,77 @@ interface BaseOpts {
   readonly emitter?: TurnEmitter;
 }
 
+/** Optional per-runtime identity threaded into the HookContext. */
+interface HookCtxExtra {
+  readonly pluginId?: string;
+  readonly runtimeId?: string;
+}
+
+// ── Pipeline plumbing (single source of the run() boilerplate) ───
+
+/** Build the per-call HookContext from the shared options + event identity. */
+function buildHookCtx(
+  opts: BaseOpts,
+  event: HookEvent,
+  extra?: HookCtxExtra,
+): HookContext {
+  return {
+    event,
+    sessionId: opts.sessionId,
+    turnId: opts.turnId,
+    ...extra,
+  };
+}
+
+/**
+ * Run the pipeline for `event` with a freshly-built HookContext, or return
+ * `undefined` when the caller opted out of hooks (`pipeline: undefined`).
+ *
+ * This is the one place that constructs the HookContext and forwards
+ * eventBus/emitter, so the no-op gate and the `pipeline.run(...)` call stay
+ * byte-identical across every event.
+ */
+async function runHook<P>(
+  opts: BaseOpts,
+  event: HookEvent,
+  payload: P,
+  extra?: HookCtxExtra,
+): Promise<HookResult<P> | undefined> {
+  if (!opts.pipeline) return undefined;
+  return opts.pipeline.run(event, buildHookCtx(opts, event, extra), payload, {
+    eventBus: opts.eventBus,
+    emitter: opts.emitter,
+  });
+}
+
+/**
+ * Extract the accumulated `replace` patch from a sequential hook result, or
+ * `undefined` when the pipeline was absent or no handler rewrote the payload.
+ */
+function hookReplace<P>(
+  result: HookResult<P> | undefined,
+): Partial<P> | undefined {
+  if (result && result.action === "continue" && "replace" in result) {
+    return result.replace;
+  }
+  return undefined;
+}
+
+/**
+ * Factory for observe-only wire-helpers — the parallel, fire-and-forget events
+ * whose (continue-only) result carries no payload rewrite. SessionStart /
+ * SessionEnd / TurnStop / PostCompaction share this exact shape and differ only
+ * in event name + payload type, so one generic factory replaces four
+ * near-identical bodies with zero behaviour change.
+ */
+function makeObserveHook<P>(
+  event: HookEvent,
+): (opts: BaseOpts, payload: P) => Promise<void> {
+  return async (opts, payload) => {
+    await runHook(opts, event, payload);
+  };
+}
+
 // ── TurnStart ────────────────────────────────────────────────────
 
 export interface TurnStartPayload {
@@ -44,34 +124,17 @@ export async function runTurnStartHook(
   opts: BaseOpts,
   payload: TurnStartPayload,
 ): Promise<HookResult<TurnStartPayload>> {
-  if (!opts.pipeline) {
-    return { action: "continue" };
-  }
-  return opts.pipeline.run(
-    "TurnStart",
-    { event: "TurnStart", sessionId: opts.sessionId, turnId: opts.turnId },
-    payload,
-    { eventBus: opts.eventBus, emitter: opts.emitter },
-  );
+  return (await runHook(opts, "TurnStart", payload)) ?? { action: "continue" };
 }
 
 // ── TurnStop ─────────────────────────────────────────────────────
 
-export async function runTurnStopHook(
-  opts: BaseOpts,
-  payload: {
-    readonly runtimeResults: readonly RuntimeResult[];
-    readonly durationMs: number;
-  },
-): Promise<void> {
-  if (!opts.pipeline) return;
-  await opts.pipeline.run(
-    "TurnStop",
-    { event: "TurnStop", sessionId: opts.sessionId, turnId: opts.turnId },
-    payload,
-    { eventBus: opts.eventBus, emitter: opts.emitter },
-  );
+interface TurnStopPayload {
+  readonly runtimeResults: readonly RuntimeResult[];
+  readonly durationMs: number;
 }
+
+export const runTurnStopHook = makeObserveHook<TurnStopPayload>("TurnStop");
 
 // ── SessionStart / SessionEnd ────────────────────────────────────
 // Session-lifecycle hooks fire outside any turn, so callers pass an empty
@@ -83,36 +146,16 @@ export interface SessionStartPayload {
   readonly worldId?: string;
 }
 
-export async function runSessionStartHook(
-  opts: BaseOpts,
-  payload: SessionStartPayload,
-): Promise<void> {
-  if (!opts.pipeline) return;
-  await opts.pipeline.run(
-    "SessionStart",
-    { event: "SessionStart", sessionId: opts.sessionId, turnId: opts.turnId },
-    payload,
-    { eventBus: opts.eventBus, emitter: opts.emitter },
-  );
-}
+export const runSessionStartHook =
+  makeObserveHook<SessionStartPayload>("SessionStart");
 
 export interface SessionEndPayload {
   readonly sessionId: string;
   readonly reason: "ended" | "deleted";
 }
 
-export async function runSessionEndHook(
-  opts: BaseOpts,
-  payload: SessionEndPayload,
-): Promise<void> {
-  if (!opts.pipeline) return;
-  await opts.pipeline.run(
-    "SessionEnd",
-    { event: "SessionEnd", sessionId: opts.sessionId, turnId: opts.turnId },
-    payload,
-    { eventBus: opts.eventBus, emitter: opts.emitter },
-  );
-}
+export const runSessionEndHook =
+  makeObserveHook<SessionEndPayload>("SessionEnd");
 
 // ── PreCompaction / PostCompaction ───────────────────────────────
 
@@ -130,14 +173,8 @@ export async function runPreCompactionHook(
   opts: BaseOpts,
   payload: PreCompactionPayload,
 ): Promise<{ readonly skip: boolean }> {
-  if (!opts.pipeline) return { skip: false };
-  const hookResult = await opts.pipeline.run(
-    "PreCompaction",
-    { event: "PreCompaction", sessionId: opts.sessionId, turnId: opts.turnId },
-    payload,
-    { eventBus: opts.eventBus, emitter: opts.emitter },
-  );
-  return { skip: hookResult.action === "abort" };
+  const result = await runHook(opts, "PreCompaction", payload);
+  return { skip: result?.action === "abort" };
 }
 
 export interface PostCompactionPayload {
@@ -146,18 +183,8 @@ export interface PostCompactionPayload {
 }
 
 /** Observe the compaction outcome (parallel; return value is trace-only). */
-export async function runPostCompactionHook(
-  opts: BaseOpts,
-  payload: PostCompactionPayload,
-): Promise<void> {
-  if (!opts.pipeline) return;
-  await opts.pipeline.run(
-    "PostCompaction",
-    { event: "PostCompaction", sessionId: opts.sessionId, turnId: opts.turnId },
-    payload,
-    { eventBus: opts.eventBus, emitter: opts.emitter },
-  );
-}
+export const runPostCompactionHook =
+  makeObserveHook<PostCompactionPayload>("PostCompaction");
 
 // ── PreSchedule ──────────────────────────────────────────────────
 
@@ -182,23 +209,11 @@ export async function runPreScheduleHook(
   opts: BaseOpts,
   payload: PreSchedulePayload,
 ): Promise<readonly RuntimeManifest[]> {
-  if (!opts.pipeline) return payload.triggered;
-  const hookResult = await opts.pipeline.run(
-    "PreSchedule",
-    { event: "PreSchedule", sessionId: opts.sessionId, turnId: opts.turnId },
-    payload,
-    { eventBus: opts.eventBus, emitter: opts.emitter },
-  );
-  if (
-    hookResult.action === "continue" &&
-    "replace" in hookResult &&
-    hookResult.replace?.triggered
-  ) {
-    return hookResult.replace.triggered;
-  }
-  // `abort` (or continue without replace) falls through here: the original
-  // triggered set runs unchanged.
-  return payload.triggered;
+  const result = await runHook(opts, "PreSchedule", payload);
+  // `?? payload.triggered` covers both the no-pipeline path and the
+  // `abort`/continue-without-replace paths. An explicit `replace: { triggered:
+  // [] }` correctly returns the empty array (nullish, not falsy, coalescing).
+  return hookReplace(result)?.triggered ?? payload.triggered;
 }
 
 // ── PreRuntime ───────────────────────────────────────────────────
@@ -209,20 +224,13 @@ export async function runPreRuntimeHook(
     readonly input: TurnInput;
   },
 ): Promise<HookResult<{ manifest: RuntimeManifest; input: TurnInput }>> {
-  if (!opts.pipeline) {
-    return { action: "continue" };
-  }
-  return opts.pipeline.run(
-    "PreRuntime",
-    {
-      event: "PreRuntime",
-      sessionId: opts.sessionId,
-      turnId: opts.turnId,
-      pluginId: opts.manifest.pluginId,
-      runtimeId: opts.manifest.name,
-    },
-    { manifest: opts.manifest, input: opts.input },
-    { eventBus: opts.eventBus, emitter: opts.emitter },
+  return (
+    (await runHook(
+      opts,
+      "PreRuntime",
+      { manifest: opts.manifest, input: opts.input },
+      { pluginId: opts.manifest.pluginId, runtimeId: opts.manifest.name },
+    )) ?? { action: "continue" }
   );
 }
 
@@ -232,27 +240,13 @@ export async function runPostRuntimeHook(
   opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
   result: RuntimeResult,
 ): Promise<RuntimeResult> {
-  if (!opts.pipeline) return result;
-  const hookResult = await opts.pipeline.run(
+  const hookResult = await runHook(
+    opts,
     "PostRuntime",
-    {
-      event: "PostRuntime",
-      sessionId: opts.sessionId,
-      turnId: opts.turnId,
-      pluginId: opts.pluginId,
-      runtimeId: opts.runtimeId,
-    },
     { result },
-    { eventBus: opts.eventBus, emitter: opts.emitter },
+    { pluginId: opts.pluginId, runtimeId: opts.runtimeId },
   );
-  if (
-    hookResult.action === "continue" &&
-    "replace" in hookResult &&
-    hookResult.replace?.result
-  ) {
-    return hookResult.replace.result as RuntimeResult;
-  }
-  return result;
+  return hookReplace(hookResult)?.result ?? result;
 }
 
 // ── PostContextAssembly ──────────────────────────────────────────
@@ -288,7 +282,6 @@ export async function runPostContextAssemblyHook(
   opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
   assembled: AssembledContextView,
 ): Promise<AssembledContextView> {
-  if (!opts.pipeline) return assembled;
   const payload: PostContextAssemblyPayload = {
     systemPrompt: assembled.systemPrompt,
     messages: assembled.messages,
@@ -296,27 +289,15 @@ export async function runPostContextAssemblyHook(
     pluginId: opts.pluginId,
     runtimeId: opts.runtimeId,
   };
-  const hookResult = await opts.pipeline.run(
-    "PostContextAssembly",
-    {
-      event: "PostContextAssembly",
-      sessionId: opts.sessionId,
-      turnId: opts.turnId,
-      pluginId: opts.pluginId,
-      runtimeId: opts.runtimeId,
-    },
-    payload,
-    { eventBus: opts.eventBus, emitter: opts.emitter },
-  );
-  if (
-    hookResult.action === "continue" &&
-    "replace" in hookResult &&
-    hookResult.replace
-  ) {
-    const r = hookResult.replace;
+  const hookResult = await runHook(opts, "PostContextAssembly", payload, {
+    pluginId: opts.pluginId,
+    runtimeId: opts.runtimeId,
+  });
+  const replace = hookReplace(hookResult);
+  if (replace) {
     return {
-      systemPrompt: r.systemPrompt ?? assembled.systemPrompt,
-      messages: r.messages ?? assembled.messages,
+      systemPrompt: replace.systemPrompt ?? assembled.systemPrompt,
+      messages: replace.messages ?? assembled.messages,
       outputKind: assembled.outputKind,
     };
   }
@@ -345,36 +326,23 @@ export async function runPreLLMCallHook(
   opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
   request: PreLLMCallRequest,
 ): Promise<PreLLMCallRequest> {
-  if (!opts.pipeline) return request;
   const payload: PreLLMCallPayload = {
     ...request,
     pluginId: opts.pluginId,
     runtimeId: opts.runtimeId,
   };
-  const hookResult = await opts.pipeline.run(
-    "PreLLMCall",
-    {
-      event: "PreLLMCall",
-      sessionId: opts.sessionId,
-      turnId: opts.turnId,
-      pluginId: opts.pluginId,
-      runtimeId: opts.runtimeId,
-    },
-    payload,
-    { eventBus: opts.eventBus, emitter: opts.emitter },
-  );
+  const hookResult = await runHook(opts, "PreLLMCall", payload, {
+    pluginId: opts.pluginId,
+    runtimeId: opts.runtimeId,
+  });
   // Transform-only: only `replace` is honoured (abort has no meaning here and
   // is treated as "no change", matching pi's non-destructive `context`).
-  if (
-    hookResult.action === "continue" &&
-    "replace" in hookResult &&
-    hookResult.replace
-  ) {
-    const r = hookResult.replace;
+  const replace = hookReplace(hookResult);
+  if (replace) {
     return {
-      messages: r.messages ?? request.messages,
-      model: r.model ?? request.model,
-      tools: r.tools ?? request.tools,
+      messages: replace.messages ?? request.messages,
+      model: replace.model ?? request.model,
+      tools: replace.tools ?? request.tools,
     };
   }
   return request;
@@ -392,32 +360,16 @@ export async function runPostLLMResponseHook(
   opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
   response: LLMResponse,
 ): Promise<LLMResponse> {
-  if (!opts.pipeline) return response;
   const payload: PostLLMResponsePayload = {
     response,
     pluginId: opts.pluginId,
     runtimeId: opts.runtimeId,
   };
-  const hookResult = await opts.pipeline.run(
-    "PostLLMResponse",
-    {
-      event: "PostLLMResponse",
-      sessionId: opts.sessionId,
-      turnId: opts.turnId,
-      pluginId: opts.pluginId,
-      runtimeId: opts.runtimeId,
-    },
-    payload,
-    { eventBus: opts.eventBus, emitter: opts.emitter },
-  );
-  if (
-    hookResult.action === "continue" &&
-    "replace" in hookResult &&
-    hookResult.replace?.response
-  ) {
-    return hookResult.replace.response;
-  }
-  return response;
+  const hookResult = await runHook(opts, "PostLLMResponse", payload, {
+    pluginId: opts.pluginId,
+    runtimeId: opts.runtimeId,
+  });
+  return hookReplace(hookResult)?.response ?? response;
 }
 
 // ── PreToolUse ───────────────────────────────────────────────────
@@ -447,39 +399,24 @@ export async function runPreToolUseHook(
   opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
   toolCall: { id: string; name: string; arguments: string },
 ): Promise<PreToolUseOutcome> {
-  if (!opts.pipeline) return { skipped: false, toolCall };
   const payload: PreToolUsePayload = {
     toolCall,
     pluginId: opts.pluginId,
     runtimeId: opts.runtimeId,
   };
-  const hookResult = await opts.pipeline.run(
-    "PreToolUse",
-    {
-      event: "PreToolUse",
-      sessionId: opts.sessionId,
-      turnId: opts.turnId,
-      pluginId: opts.pluginId,
-      runtimeId: opts.runtimeId,
-    },
-    payload,
-    { eventBus: opts.eventBus, emitter: opts.emitter },
-  );
-  if (hookResult.action === "abort")
+  const hookResult = await runHook(opts, "PreToolUse", payload, {
+    pluginId: opts.pluginId,
+    runtimeId: opts.runtimeId,
+  });
+  if (hookResult?.action === "abort") {
     return { skipped: true, reason: hookResult.reason };
-
-  // Accumulate any toolCall replacement from the hook result
-  let effectiveToolCall = toolCall;
-  if (
-    hookResult.action === "continue" &&
-    "replace" in hookResult &&
-    hookResult.replace?.toolCall
-  ) {
-    effectiveToolCall = {
-      ...effectiveToolCall,
-      ...(hookResult.replace.toolCall as Partial<typeof toolCall>),
-    };
   }
+
+  // Accumulate any toolCall replacement from the hook result.
+  const replace = hookReplace(hookResult);
+  const effectiveToolCall = replace?.toolCall
+    ? { ...toolCall, ...(replace.toolCall as Partial<typeof toolCall>) }
+    : toolCall;
   return { skipped: false, toolCall: effectiveToolCall };
 }
 
@@ -510,26 +447,13 @@ export async function runPostToolUseHook<R>(
   toolCall: { id: string; name: string; arguments: string },
   result: R,
 ): Promise<PostToolUseOutcome<R>> {
-  if (!opts.pipeline) return { result, terminate: false };
   const payload: PostToolUsePayload = { toolCall, result };
-  const hookResult = await opts.pipeline.run(
-    "PostToolUse",
-    {
-      event: "PostToolUse",
-      sessionId: opts.sessionId,
-      turnId: opts.turnId,
-      pluginId: opts.pluginId,
-      runtimeId: opts.runtimeId,
-    },
-    payload,
-    { eventBus: opts.eventBus, emitter: opts.emitter },
-  );
-  if (
-    hookResult.action === "continue" &&
-    "replace" in hookResult &&
-    hookResult.replace
-  ) {
-    const replace = hookResult.replace;
+  const hookResult = await runHook(opts, "PostToolUse", payload, {
+    pluginId: opts.pluginId,
+    runtimeId: opts.runtimeId,
+  });
+  const replace = hookReplace(hookResult);
+  if (replace) {
     return {
       result: replace.result !== undefined ? (replace.result as R) : result,
       terminate: replace.terminate === true,

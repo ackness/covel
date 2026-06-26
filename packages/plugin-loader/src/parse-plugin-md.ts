@@ -6,6 +6,7 @@ import matter from "gray-matter";
 import { z } from "zod";
 import {
   authorsNoteDeclSchema,
+  HOOK_EVENTS,
   postHistoryDeclSchema,
   rpcDeclMapSchema,
   runtimeManifestSchema,
@@ -122,24 +123,9 @@ function formatLoaderError(
 
 // ── Valid hook event names ────────────────────────────────────────
 
-const VALID_HOOK_EVENTS = new Set([
-  "SessionStart",
-  "SessionEnd",
-  "TurnStart",
-  "PreCompaction",
-  "PostCompaction",
-  "PreSchedule",
-  "PreRuntime",
-  "PostContextAssembly",
-  "PreLLMCall",
-  "PostLLMResponse",
-  "PostRuntime",
-  "PreToolUse",
-  "PostToolUse",
-  "PreStateCommit",
-  "PostStateCommit",
-  "TurnStop",
-]);
+// Built from the single source of truth (@covel/shared HOOK_EVENTS) so the
+// loader's accept-list can never drift from the framework's hook contract.
+const VALID_HOOK_EVENTS = new Set<string>(HOOK_EVENTS);
 
 /**
  * Lenient hook schema that accepts any string for `event`, used to

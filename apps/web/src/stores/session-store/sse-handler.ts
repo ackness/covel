@@ -1,4 +1,4 @@
-import { isAssetGenerateView } from "@covel/shared";
+import { isAssetGenerateView, type CovelEventType } from "@covel/shared";
 import * as api from "@/services/api";
 import type { DataService } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
@@ -203,14 +203,20 @@ export function createSseEventHandler(
   deps: SseEventHandlerDeps,
 ): SseEventHandler {
   return (envelope) => {
-    const { type, payload, turnId } = envelope;
+    const { payload, turnId } = envelope;
+    // `SseEnvelope.type` is the raw, untrusted wire string. Narrow it to the
+    // closed `CovelEventType` union so the switch below is exhaustiveness-
+    // checked: every union member must be either handled or explicitly
+    // ignored, and genuinely unknown wire strings fall through to
+    // `assertNeverEvent` (warn — never silently dropped).
+    const eventType: CovelEventType = envelope.type as CovelEventType;
 
     if (turnId && turnId !== deps.lastBackfilledTurnIdRef.current) {
       deps.lastBackfilledTurnIdRef.current = turnId;
       deps.dispatch({ type: "BACKFILL_TURN_ID", turnId });
     }
 
-    switch (type) {
+    switch (eventType) {
       case "narrative.delta": {
         const delta = (payload.delta as string) ?? "";
         const runtimeId = (payload.runtimeId as string) ?? "unknown";
@@ -520,8 +526,47 @@ export function createSseEventHandler(
         });
         break;
       }
+      // Known CovelEvents that the action-stream handler intentionally does
+      // NOT render: runtime-internal trace events forwarded onto this stream
+      // (consumed by the /debug timeline via the subscription channel) plus
+      // reserved lifecycle events handled elsewhere. Listed explicitly so the
+      // `assertNeverEvent` exhaustiveness guard below stays green — adding a
+      // new CovelEvent forces a conscious decision here (handle or ignore).
+      case "interaction.completed":
+      case "ui.part.update":
+      case "state.snapshot":
+      case "state.patch.applied":
+      case "record.updated":
+      case "world.dimensions.changed":
+      case "connection.restored":
+      case "state.snapshot.created":
+      case "session.forked":
+      case "tool.calling":
+      case "tool.completed":
+      case "tool.failed":
+      case "llm.calling":
+      case "llm.responded":
+      case "message.completed":
+      case "block.emitted":
+      case "hook.fired":
+      case "hook.rewrote":
+      case "hook.aborted":
+        break;
+      default:
+        assertNeverEvent(eventType);
     }
   };
+}
+
+/**
+ * Exhaustiveness guard for the SSE event switch. `eventType` is typed `never`
+ * here only when every `CovelEventType` is handled or explicitly ignored
+ * above — adding a new event without a case fails compilation. At runtime a
+ * malformed / future wire string reaches this branch; warn instead of
+ * silently dropping it (the old switch had no default).
+ */
+function assertNeverEvent(eventType: never): void {
+  console.warn(`[sse-handler] unhandled SSE event type: ${String(eventType)}`);
 }
 
 export function applyResumeEvents(
