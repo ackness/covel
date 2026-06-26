@@ -492,6 +492,36 @@ describe("Turn executor hook wire-in", () => {
       const sys = sent.find((m) => m.role === "system");
       expect(sys?.content).toBe("REWRITTEN_SYSTEM_PROMPT");
     });
+
+    it("threads the runtime's outputKind into the payload (read-only)", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+      let seenPayload: Record<string, unknown> | undefined;
+      pipeline.register({
+        id: "global:PostContextAssembly:capture",
+        event: "PostContextAssembly",
+        handler: vi
+          .fn()
+          .mockImplementation(
+            async (_ctx, payload: Record<string, unknown>) => {
+              seenPayload = payload;
+              return { action: "continue" };
+            },
+          ),
+      });
+
+      const deps = await makeDeps(llm, pipeline);
+      await executeTurn(
+        makeTurnInput(),
+        [makeManifest({ outputKind: "story" })],
+        deps,
+      );
+
+      expect(seenPayload?.outputKind).toBe("story");
+      // The payload still carries the assembled prompt/messages it always did.
+      expect(typeof seenPayload?.systemPrompt).toBe("string");
+      expect(Array.isArray(seenPayload?.messages)).toBe(true);
+    });
   });
 
   describe("PreLLMCall hook", () => {

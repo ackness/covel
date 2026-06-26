@@ -225,7 +225,11 @@ export async function executeAgentRuntime({
       eventBus: deps.eventBus,
       emitter: deps.emitter,
     },
-    { systemPrompt: assembled.systemPrompt, messages: assembled.messages },
+    {
+      systemPrompt: assembled.systemPrompt,
+      messages: assembled.messages,
+      outputKind: manifest.outputKind,
+    },
   );
 
   // Build LLM messages

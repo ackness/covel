@@ -267,6 +267,16 @@ export async function runPostRuntimeHook(
 export interface AssembledContextView {
   readonly systemPrompt: string;
   readonly messages: readonly LLMMessage[];
+  /**
+   * Read-only `outputKind` of the runtime whose context was assembled
+   * (`story` / `plugin` / `system`). Surfaced so PostContextAssembly handlers
+   * can shape only the runtimes they care about (e.g. a narration director
+   * that only touches story prompts) without hardcoding plugin ids — the
+   * framework/plugin isolation rule. Optional and never rewritten by the hook;
+   * purely informational. Absent when the caller does not supply it, keeping
+   * the field a non-breaking addition.
+   */
+  readonly outputKind?: string;
 }
 
 export interface PostContextAssemblyPayload extends AssembledContextView {
@@ -282,6 +292,7 @@ export async function runPostContextAssemblyHook(
   const payload: PostContextAssemblyPayload = {
     systemPrompt: assembled.systemPrompt,
     messages: assembled.messages,
+    outputKind: assembled.outputKind,
     pluginId: opts.pluginId,
     runtimeId: opts.runtimeId,
   };
@@ -306,6 +317,7 @@ export async function runPostContextAssemblyHook(
     return {
       systemPrompt: r.systemPrompt ?? assembled.systemPrompt,
       messages: r.messages ?? assembled.messages,
+      outputKind: assembled.outputKind,
     };
   }
   return assembled;
