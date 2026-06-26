@@ -71,18 +71,19 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/scheduler.ts` 强制
 
 ## 概览
 
-| ID                             | 类型        | 优先级 | 触发方式                                  | 模型 slot | 描述                                                                 |
-| ------------------------------ | ----------- | ------ | ----------------------------------------- | --------- | -------------------------------------------------------------------- |
-| pregame                        | core-plugin | 10     | scheduled（仅首轮）                       | —         | 游戏初始化（function runtime）                                       |
-| world-init/schema-gen          | core-plugin | 40     | scheduled（仅首轮）                       | `plugin`  | 世界维度初始化（guard + agent，Pre-Game 第二步）                     |
-| char-creator/player-init       | core-plugin | 50     | auto（guard 门控）                        | `plugin`  | 玩家角色创建（agent runtime；依赖 schema-gen 写出的 worldSchema）    |
-| npc-graph/rag-retriever        | plugin      | 400    | scheduled（interval=1，function runtime） | —         | Narrator-prep 层：NPC 图谱结构化检索器，向 narrator 注入相关关系事实 |
-| narrator                       | core-plugin | 500    | auto                                      | `story`   | Narrator 层：主叙事生成器                                            |
-| guide                          | plugin      | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：行动引导 + 聊天内建议面                      |
-| codex                          | plugin      | 600    | auto（每轮，紧跟 narrator 之后）          | `plugin`  | Narrator-downstream 层：知识图鉴系统（agent runtime）                |
-| npc-graph/extractor            | plugin      | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：NPC 关系图抽取器                             |
-| char-creator/character-tracker | core-plugin | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：NPC 发现 + 角色状态跟踪                      |
-| memory                         | core-plugin | —      | UI-only（无 runtime）                     | —         | 长期记忆摘要面板（UI 呈现，无独立 runtime）                          |
+| ID                             | 类型        | 优先级 | 触发方式                                  | 模型 slot | 描述                                                                                     |
+| ------------------------------ | ----------- | ------ | ----------------------------------------- | --------- | ---------------------------------------------------------------------------------------- |
+| pregame                        | core-plugin | 10     | scheduled（仅首轮）                       | —         | 游戏初始化（function runtime）                                                           |
+| world-init/schema-gen          | core-plugin | 40     | scheduled（仅首轮）                       | `plugin`  | 世界维度初始化（guard + agent，Pre-Game 第二步）                                         |
+| char-creator/player-init       | core-plugin | 50     | auto（guard 门控）                        | `plugin`  | 玩家角色创建（agent runtime；依赖 schema-gen 写出的 worldSchema）                        |
+| npc-graph/rag-retriever        | plugin      | 400    | scheduled（interval=1，function runtime） | —         | Narrator-prep 层：NPC 图谱结构化检索器，向 narrator 注入相关关系事实                     |
+| narrator                       | core-plugin | 500    | auto                                      | `story`   | Narrator 层：主叙事生成器                                                                |
+| guide                          | plugin      | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：行动引导 + 聊天内建议面                                          |
+| codex                          | plugin      | 600    | auto（每轮，紧跟 narrator 之后）          | `plugin`  | Narrator-downstream 层：知识图鉴系统（agent runtime）                                    |
+| npc-graph/extractor            | plugin      | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：NPC 关系图抽取器                                                 |
+| char-creator/character-tracker | core-plugin | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：NPC 发现 + 角色状态跟踪                                          |
+| memory                         | core-plugin | —      | UI-only（无 runtime）                     | —         | 长期记忆摘要面板（UI 呈现，无独立 runtime）                                              |
+| cost-gate                      | plugin      | —      | hook-only（opt-in，默认禁用）             | —         | 跨切面：每会话 token 预算门控（hooks：PostLLMResponse/PreSchedule/TurnStart/SessionEnd） |
 
 ---
 
@@ -372,6 +373,37 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 **触发逻辑**: `cooldownTurns: 1` 确保首轮不触发（避免与角色创建冲突）。位于 After-Turn 带，每轮 narrator 之后执行。如果叙事中没有明显决策点，LLM 不会调用工具。
 
 **UI 渲染**: 当前 `generate-guide` 会把 `topic` 与三组建议写入 `plugin_data[message]`。`ui/action-guide-block.json` 读取这些字段，渲染三组策略卡和自定义输入；玩家点击建议后进入待发送区，由底部输入栏统一发送。
+
+---
+
+## cost-gate
+
+⚪ optional · ⚙ hook-only（无可调度 runtime）
+
+**Quick use**：想给每局对话设一个 token 花费上限——接近上限时自动停掉后台生成（codex / guide / 抽取器），到上限时暂停本回合——启用这个插件。它完全靠生命周期 hook 工作，不进调度、不写库。
+
+**路径**: `plugins/cost-gate/`
+
+| 字段         | 值                                                                                                   |
+| ------------ | ---------------------------------------------------------------------------------------------------- |
+| pluginType   | `plugin`（可禁用，默认不启用）                                                                       |
+| runtimeType  | `function`（无 LLM；`trigger: manual` 的 no-op handler，永不调度）                                   |
+| outputKind   | `system`                                                                                             |
+| capabilities | `cost-control`                                                                                       |
+| hooks        | `PostLLMResponse`(计量) · `PreSchedule`(软上限收窄) · `TurnStart`(硬上限 abort) · `SessionEnd`(清理) |
+
+**职责**: Covel 首个消费 hook 生命周期的「跨切面框架能力插件」示例。维护每会话的进程内 token 计数：
+
+- `PostLLMResponse`（`enforce: post`）累加每次 LLM 调用的 `usage`，纯观察不改写；
+- `PreSchedule` 在软上限后把本回合 runtime 收窄为仅 `outputKind: "story"`（按字段判定，不硬编码插件 ID），跳过后台 LLM 生成；
+- `TurnStart`（`enforce: pre`）在硬上限 abort 整回合，`abortReason` 透传前端；
+- `SessionEnd` 清理该会话的计数桶，防止进程内 Map 泄漏。
+
+Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收窄只影响主循环。
+
+**配置（env）**: `COST_GATE_SOFT_TOKENS`（默认 150000）软上限 · `COST_GATE_HARD_TOKENS`（默认 200000）硬上限。hook 读不到 SettingsStore，故阈值走环境变量。
+
+**限制**: 计数为进程内、非持久——重启清零，多进程（PG / T3）不共享（单进程 T1/T2 是硬上限，T3 为每进程软信号）。详见 `plugins/cost-gate/README.md`。
 
 ---
 
