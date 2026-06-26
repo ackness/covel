@@ -195,6 +195,7 @@ Correct approach:
 - Discover via `RuntimeManifest.capabilities` (e.g. `narrative`, `world-data-provider`, `image-generation`).
 - Use `pluginType` to gate on core vs third-party.
 - Test files may use real plugin IDs as fixtures; production code must not.
+- **UI curation/preset data may list concrete plugin IDs as _data_** (e.g. the front-end plugin packs in `apps/web/src/lib/session-plugin-selection.ts`, which a player picks from). The rule bans hardcoded IDs in **dispatch/control flow** — `if`/`switch` on a plugin ID to change behavior — not curated, user-overridable selection lists. The runtime still discovers and dispatches by `outputKind`/`capabilities`.
 
 **Block submission convention**: plugin blocks trigger kernel events via a `_eventType` field — the framework does not hardcode block types.
 

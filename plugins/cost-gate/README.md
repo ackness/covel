@@ -25,6 +25,9 @@ Pre-Game runtimes (priority ≤ 99) are framework-protected and never trimmed.
 | `COST_GATE_HARD_TOKENS` | `200000` | Hard cap — pause the turn.                       |
 
 Thresholds are read lazily, so a deployment can change them without a restart.
+Keep the soft cap **below** the hard cap: if `COST_GATE_SOFT_TOKENS >=
+COST_GATE_HARD_TOKENS`, trimming has no window before the hard cap aborts the
+turn (cost-gate logs a one-time warning in that case).
 
 ## Limitations
 

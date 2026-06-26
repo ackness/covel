@@ -131,4 +131,33 @@ describe("cost-gate hooks", () => {
     expect((await enforceCap({ sessionId: "a" })).action).toBe("continue");
     expect((await enforceCap({ sessionId: "b" })).action).toBe("abort");
   });
+
+  it("degrades gracefully when misconfigured (soft >= hard): hard cap still enforced", async () => {
+    // Operator error: soft cap not below hard cap. trim-downstream then has no
+    // window before enforce-cap, but the hard cap must still protect spend and
+    // nothing should crash.
+    process.env.COST_GATE_SOFT_TOKENS = "100";
+    process.env.COST_GATE_HARD_TOKENS = "100";
+    const triggered = [
+      { name: "narrator", outputKind: "story" },
+      { name: "codex", outputKind: "plugin" },
+    ];
+
+    await accumulateUsage(
+      { sessionId: SID },
+      { response: { usage: { inputTokens: 99, outputTokens: 0 } } },
+    );
+    // Below both caps: turn proceeds untouched.
+    expect(
+      (await trimDownstream({ sessionId: SID }, { triggered })).action,
+    ).toBe("continue");
+    expect((await enforceCap({ sessionId: SID })).action).toBe("continue");
+
+    // Reaching the hard cap still aborts the turn.
+    await accumulateUsage(
+      { sessionId: SID },
+      { response: { usage: { inputTokens: 1, outputTokens: 0 } } },
+    );
+    expect((await enforceCap({ sessionId: SID })).action).toBe("abort");
+  });
 });
