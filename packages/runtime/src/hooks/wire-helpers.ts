@@ -172,6 +172,11 @@ export interface PreSchedulePayload {
  * narrow the set (e.g. conditional gating, cost control). Returning a runtime
  * not in the original set is the author's responsibility — the framework uses
  * the returned list as-is, consistent with other `replace`-based hooks.
+ *
+ * Filter-only: only `replace.triggered` is honoured. `abort` has no defined
+ * meaning for PreSchedule and is treated as "no change" — the original
+ * `triggered` set runs. To schedule no runtimes, return
+ * `replace: { triggered: [] }`, not `abort`.
  */
 export async function runPreScheduleHook(
   opts: BaseOpts,
@@ -191,6 +196,8 @@ export async function runPreScheduleHook(
   ) {
     return hookResult.replace.triggered;
   }
+  // `abort` (or continue without replace) falls through here: the original
+  // triggered set runs unchanged.
   return payload.triggered;
 }
 
