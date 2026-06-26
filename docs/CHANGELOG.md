@@ -4,6 +4,66 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-06-26
+
+Sixth public release. Expands the runtime hook system from 8 to 16 lifecycle events, ships the first plugins that consume them, and lands a batch of runtime-architecture refactors and static-audit fixes. The default world and bundled plugins are behavior-unchanged — the new hooks are dormant infrastructure and the three new plugins are opt-in.
+
+### Added
+
+- Hook lifecycle expanded 8 → 16 events: `PreLLMCall` / `PostLLMResponse` (non-destructively rewrite a per-call request / patch the response before tool dispatch), `PostContextAssembly` (turn-level system-prompt / history shaping), `PreSchedule` (narrow which runtimes run this turn), `PreCompaction` / `PostCompaction` (veto / observe history compaction), `SessionStart` / `SessionEnd` (session lifecycle), and `PostToolUse.terminate` (end the tool loop after recording a result)
+- Session-scoped hook pipeline: the global pipeline now filters hooks by the session's active plugins via `AsyncLocalStorage`, so a plugin's hooks only fire for sessions where it is active
+- `HookContext.getOwnSettings()`: a hook can read its own plugin's per-session `userSettings` (turn-level, read-only, deep-frozen snapshot)
+- Three new opt-in plugins — the first hook consumers: `cost-gate` (per-session token budget; included by default in the front-end **Low Cost** pack), `director` (`PostContextAssembly` — one consistent narration preamble across all story runtimes), and `story-guard` (`PostLLMResponse` content sanitisation + `PreToolUse` high-risk-tool deny-list)
+- `EventBus.flush()` durability barrier for the best-effort audit-event stream
+- `PostContextAssembly` payload carries a read-only `outputKind` so handlers can target specific runtime kinds without hardcoding plugin ids
+
+### Changed
+
+- Bumped all monorepo package versions `0.0.5` → `0.0.6`
+- `TurnStart` / `PostRuntime` / `PostToolUse` hooks are now `sequential`, so their abort / replace paths actually take effect (previously dead code under `parallel`)
+- Runtime refactors (behavior-preserving): `AgentLoopDeps` narrow seam isolating the core agent loop from orchestration deps; `RuntimeInvocation` options object replacing `executeOneRuntime`'s 19 positional args; a single `resolveTurnCapabilityPluginIds` source for capability-discovered plugin ids
+- Registered all new hook events in the three plugin-loader whitelists (a plugin declaring them was previously dropped at parse time)
+
+### Fixed
+
+- Session-scoped every server commit / hook entry point (turn, actions, plugin-rpc, the commit processor, resume, characters, and session routes) so a plugin's hooks never fire for sessions where it is inactive
+- `PreSchedule` can no longer drop Pre-Game runtimes while Pre-Game is pending — a hook can shape main-loop scheduling but not break session initialization
+- Resume path now fires `PreLLMCall` / `PostLLMResponse` and scopes the resumed plugin's own hooks (both were silently skipped for a suspended-then-resumed runtime)
+- `SessionStart` / `SessionEnd` hardened with local try/catch so a handler failure can never turn a committed create / end / delete into a 500
+- Plugin loader: an object i18n `description` is preserved when a plugin also declares `hooks` (the combination previously failed frontmatter validation)
+- Added unit coverage for `computeSessionTurnCount` (the turn-count module had none) and clarified that an empty main-loop turn counts as a player turn
+
+<details>
+<summary>中文（备份翻译）</summary>
+
+第六个公开版本。将运行时 hook 生命周期从 8 个扩展到 16 个事件，交付首批消费这些 hook 的插件，并落地一批运行时架构重构与静态审计修复。默认世界与内置插件行为不变——新 hook 是休眠基础设施，三个新插件均为可选启用。
+
+**Added**
+
+- hook 生命周期 8 → 16：`PreLLMCall`/`PostLLMResponse`（按调用非破坏性改写请求 / 在工具分发前改写响应）、`PostContextAssembly`（回合级系统提示/历史塑形）、`PreSchedule`（收窄本回合运行的 runtime 集）、`PreCompaction`/`PostCompaction`（否决/观察历史压缩）、`SessionStart`/`SessionEnd`（会话生命周期）、`PostToolUse.terminate`（记录结果后结束工具循环）
+- 会话作用域 hook 管线：全局管线经 `AsyncLocalStorage` 按会话激活插件过滤，插件 hook 只对其激活的会话触发
+- `HookContext.getOwnSettings()`：hook 可读本插件本会话的只读 `userSettings`（回合级、只读、深冻结快照）
+- 三个新的可选插件（首批 hook 消费者）：`cost-gate`（每会话 token 预算，默认进前端 **Low Cost** 组合包）、`director`（`PostContextAssembly` 给全部 story runtime 注入统一导演前言）、`story-guard`（`PostLLMResponse` 内容净化 + `PreToolUse` 高危工具拦截）
+- `EventBus.flush()` 持久化屏障；`PostContextAssembly` payload 增加只读 `outputKind`
+
+**Changed**
+
+- 所有 monorepo 包版本 `0.0.5` → `0.0.6`
+- `TurnStart`/`PostRuntime`/`PostToolUse` 改为 `sequential`，其 abort/replace 分支才真正生效（此前在 `parallel` 下是死代码）
+- 运行时重构（行为保持）：`AgentLoopDeps` 窄接缝隔离核心 agent 循环、`RuntimeInvocation` 选项对象替代 19 个位置参数、`resolveTurnCapabilityPluginIds` 单一来源
+- 三个 loader 白名单注册全部新 hook 事件
+
+**Fixed**
+
+- 会话作用域覆盖所有 server commit/hook 入口（turn/actions/plugin-rpc/提交处理器/resume/characters/session 路由）
+- `PreSchedule` 在 Pre-Game pending 时不能丢弃 Pre-Game runtime
+- resume 路径接入 `PreLLMCall`/`PostLLMResponse` 并修正 resume 时被恢复插件自身 hook 的作用域
+- `SessionStart`/`SessionEnd` 本地 try/catch 固化 observe-only
+- 插件加载器：i18n 对象 `description` 与 `hooks` 并存不再校验失败
+- 补 `computeSessionTurnCount` 单测，并澄清空主循环回合计为玩家回合
+
+</details>
+
 ## [0.0.5] - 2026-06-16
 
 Fifth public release. An internal, code-quality-focused refactor: systematic de-duplication across storage backends and the plugin layer, decomposition of oversized files, unified conventions, and isolation/data-flow fixes. No user-facing behavior change (except an intentionally unified API error-response envelope).
