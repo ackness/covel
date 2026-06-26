@@ -14,7 +14,12 @@ import { buildRetryPolicy, type RetryInfo } from "./llm-retry.js";
 import { requestLLMResponse } from "./tool-loop-handler.js";
 import { handleSuspension } from "./suspend-resume-handler.js";
 import { guardAgainstToolLoop, type LoopGuardState } from "./loop-detection.js";
-import { runPreToolUseHook, runPostToolUseHook } from "./hooks/wire-helpers.js";
+import {
+  runPreToolUseHook,
+  runPostToolUseHook,
+  runPreLLMCallHook,
+  runPostLLMResponseHook,
+} from "./hooks/wire-helpers.js";
 import {
   extractToolFailureMessage,
   type ExecutedToolCallState,
@@ -26,7 +31,7 @@ import {
   buildToolExecutionUnavailableMessage,
   buildToolResultMessage,
 } from "./turn-agent-tool-loop-messages.js";
-import type { TurnExecutorDeps } from "./turn-executor-types.js";
+import type { AgentLoopDeps } from "./turn-executor-types.js";
 
 export interface AgentToolLoopCompleted {
   readonly finalContent: string | null;
@@ -46,7 +51,7 @@ export interface RunAgentToolLoopOptions {
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   readonly loaded: LoadedRuntime;
-  readonly deps: TurnExecutorDeps;
+  readonly deps: AgentLoopDeps;
   readonly maxSteps: number;
   readonly timeoutMs: number;
   readonly messages: LLMMessage[];
@@ -148,6 +153,20 @@ export async function runAgentToolLoop({
   // give up — another perturbation would not help.
   const loopGuardState: LoopGuardState = { loopPerturbations: 0 };
 
+  // Shared hook wiring reused across the LLM-call and tool-call sites below.
+  const hookOpts = {
+    pipeline: hookPipeline,
+    sessionId: input.sessionId,
+    turnId: input.turnId,
+    pluginId: manifest.pluginId,
+    runtimeId: manifest.name,
+    eventBus: deps.eventBus,
+    emitter: deps.emitter,
+  };
+  // Set by a PostToolUse hook returning `terminate` — ends the loop after the
+  // current response's tool calls are recorded.
+  let terminatedByHook = false;
+
   while (steps < effectiveMaxSteps && Date.now() < deadline) {
     steps++;
 
@@ -159,12 +178,21 @@ export async function runAgentToolLoop({
       ? deps.resolveModel(manifest, runtimeModelOverride)
       : (runtimeModelOverride ?? manifest.model);
 
-    const response = await requestLLMResponse({
+    // ── PreLLMCall hook ──────────────────────────────────────────
+    // Lets plugins non-destructively rewrite the request sent on THIS call
+    // (messages / model / tools) without mutating the canonical transcript.
+    const llmRequest = await runPreLLMCallHook(hookOpts, {
+      messages,
+      model: effectiveModel,
+      tools: toolDefs,
+    });
+
+    let response = await requestLLMResponse({
       manifest,
       deps,
-      messages,
-      effectiveModel,
-      toolDefs,
+      messages: llmRequest.messages as LLMMessage[],
+      effectiveModel: llmRequest.model,
+      toolDefs: llmRequest.tools,
       responseFormat,
       retryPolicy,
       deadline,
@@ -183,6 +211,10 @@ export async function runAgentToolLoop({
         }
       },
     });
+
+    // ── PostLLMResponse hook ─────────────────────────────────────
+    // Inspect / patch the response (content, toolCalls) before tool dispatch.
+    response = await runPostLLMResponseHook(hookOpts, response);
 
     if (response.toolCalls.length > 0) {
       // LLM requested tool calls — execute them and feed results back.
@@ -203,16 +235,7 @@ export async function runAgentToolLoop({
           const tcStart = Date.now();
 
           // ── PreToolUse hook (S4-T3) ──────────────────────────
-          const preToolOpts = {
-            pipeline: hookPipeline,
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            pluginId: manifest.pluginId,
-            runtimeId: manifest.name,
-            eventBus: deps.eventBus,
-            emitter: deps.emitter,
-          };
-          const preToolOutcome = await runPreToolUseHook(preToolOpts, {
+          const preToolOutcome = await runPreToolUseHook(hookOpts, {
             id: tc.id,
             name: tc.name,
             arguments: tc.arguments,
@@ -248,15 +271,16 @@ export async function runAgentToolLoop({
           );
 
           // ── PostToolUse hook (S4-T3) ─────────────────────────
-          const toolResult = await runPostToolUseHook(
-            preToolOpts,
-            {
-              id: effectiveTc.id,
-              name: effectiveTc.name,
-              arguments: effectiveTc.arguments,
-            },
-            result,
-          );
+          const { result: toolResult, terminate: terminateAfterTool } =
+            await runPostToolUseHook(
+              hookOpts,
+              {
+                id: effectiveTc.id,
+                name: effectiveTc.name,
+                arguments: effectiveTc.arguments,
+              },
+              result,
+            );
 
           if (!toolResult.success) {
             failedToolCalls.push({
@@ -329,6 +353,13 @@ export async function runAgentToolLoop({
               content: toolResult.result,
             }),
           );
+
+          // PostToolUse hook requested loop termination. Stop processing
+          // further tool calls in this response and exit the loop below.
+          if (terminateAfterTool) {
+            terminatedByHook = true;
+            break;
+          }
         } else {
           messages.push(buildToolExecutionUnavailableMessage(tc.id));
         }
@@ -370,6 +401,14 @@ export async function runAgentToolLoop({
                 })
               : "";
         }
+        stoppedWithResponse = true;
+        break;
+      }
+
+      // Hook-driven termination (after runtime-done handling, so a same-round
+      // `runtime-done` call still gets its sentinel-strip + envelope cleanup
+      // above). The response's prose, if any, is already in finalContent.
+      if (terminatedByHook) {
         stoppedWithResponse = true;
         break;
       }

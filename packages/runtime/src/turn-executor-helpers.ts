@@ -7,6 +7,42 @@ import type { ToolCallContext, ToolExecutor } from "./tool-executor.js";
 import type { LLMToolDefinition } from "./llm-adapter.js";
 
 /**
+ * Force-retain Pre-Game runtimes a PreSchedule hook tried to drop.
+ *
+ * A `PreSchedule` handler may narrow the per-turn runtime set, but it must not
+ * be able to remove Pre-Game runtimes (priority ≤ 99) while Pre-Game is still
+ * pending — dropping `pregame` / `schema-gen` / `player-init` would silently
+ * break session initialization. Any triggered Pre-Game runtime missing from
+ * `scheduled` is appended back (scheduling re-sorts the Pre-Game band by
+ * priority, so append order is irrelevant). Emits a dev warning naming the
+ * runtimes it rescued. Pure; safe to unit-test directly.
+ *
+ * The Pre-Game band test (`priority !== undefined && priority <= 99`) is kept
+ * identical to `getPreGameRuntimeState` in session-state.ts — the single
+ * source of truth for what counts as Pre-Game. A runtime that omits `priority`
+ * is, by that definition, NOT a Pre-Game runtime: it never gates Pre-Game
+ * completion (`isPreGamePending` ignores it too), so it is intentionally not
+ * rescued here. Rescuing it would diverge from the gate and could pin a
+ * non-Pre-Game runtime a hook deliberately dropped.
+ */
+export function retainPreGameRuntimes(
+  scheduled: readonly RuntimeManifest[],
+  triggered: readonly RuntimeManifest[],
+): readonly RuntimeManifest[] {
+  const present = new Set(scheduled.map((r) => r.name));
+  // Same Pre-Game predicate as getPreGameRuntimeState — see JSDoc above.
+  const droppedPreGame = triggered.filter(
+    (r) => r.priority !== undefined && r.priority <= 99 && !present.has(r.name),
+  );
+  if (droppedPreGame.length === 0) return scheduled;
+  console.warn(
+    `[PreSchedule] force-retaining Pre-Game runtime(s) a hook tried to drop ` +
+      `while Pre-Game is pending: ${droppedPreGame.map((r) => r.name).join(", ")}`,
+  );
+  return [...scheduled, ...droppedPreGame];
+}
+
+/**
  * Build LLM tool definitions from a runtime's manifest declarations.
  * Looks up each declared tool in the ToolExecutor's registry to get its JSON schema.
  *

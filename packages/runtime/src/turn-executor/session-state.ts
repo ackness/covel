@@ -2,6 +2,10 @@ import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { applyBranchReplyAcceptedCandidates } from "@covel/context";
 import type { TurnMessageRecord } from "@covel/store";
 import type { TurnExecutorDeps } from "../turn-executor-types.js";
+import {
+  runPreCompactionHook,
+  runPostCompactionHook,
+} from "../hooks/wire-helpers.js";
 
 export interface TurnSessionCharacter {
   readonly name: string;
@@ -67,8 +71,29 @@ export async function loadTurnSessionState(args: {
 
   if (deps.compactor && deps.store && shouldAppendPlayerMessage) {
     const freshMessages = await deps.store.listTurnMessages(input.sessionId);
-    await deps.compactor.run(input.sessionId, "", freshMessages);
-    messageHistory = await deps.store.listTurnMessages(input.sessionId);
+    const hookOpts = {
+      pipeline: deps.hookPipeline,
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      eventBus: deps.eventBus,
+      emitter: deps.emitter,
+    };
+    // PreCompaction veto gate — a plugin can keep full history this turn.
+    const pre = await runPreCompactionHook(hookOpts, {
+      messageCount: freshMessages.length,
+    });
+    if (!pre.skip) {
+      const result = await deps.compactor.run(
+        input.sessionId,
+        "",
+        freshMessages,
+      );
+      await runPostCompactionHook(hookOpts, {
+        compacted: result.compacted,
+        ...(result.summaryId ? { summaryId: result.summaryId } : {}),
+      });
+      messageHistory = await deps.store.listTurnMessages(input.sessionId);
+    }
   }
 
   const runtimeTriggerCounts = buildRuntimeTriggerCounts(messageHistory);
@@ -133,7 +158,8 @@ export async function buildProjectedPromptHistory(args: {
   // capability (resolved server-side). When no such plugin is active for the
   // session, the projected history passes through unchanged — the framework
   // never assumes a specific plugin id.
-  const rewriterPluginId = deps.promptHistoryRewriterPluginId;
+  const rewriterPluginId =
+    deps.capabilityPluginIds?.promptHistoryRewriterPluginId;
   if (!deps.store || !rewriterPluginId) return promptHistory;
 
   try {

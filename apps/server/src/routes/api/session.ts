@@ -17,7 +17,14 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore, MediaStore, SessionRecord } from "@covel/store";
-import { buildSessionSnapshot } from "@covel/runtime";
+import type { EventBus } from "@covel/events";
+import type { HookPipeline } from "@covel/runtime";
+import {
+  buildSessionSnapshot,
+  runSessionStartHook,
+  runSessionEndHook,
+  runWithHookScope,
+} from "@covel/runtime";
 import { errorBody } from "../../api-error.js";
 import { signMediaTokenForSession } from "../../middleware/media-token.js";
 import {
@@ -57,6 +64,39 @@ type Env = {
 };
 
 export const sessionRoutes = new Hono<Env>();
+
+/**
+ * Fire the SessionEnd lifecycle hook under the session's plugin scope, then
+ * await an EventBus durability barrier.
+ *
+ * SessionEnd is observe-only: the DB mutation (end / delete) has already
+ * happened, so a handler failure must never surface as a 500. We swallow and
+ * log. `flush()` guarantees any audit events the handlers emitted are
+ * persisted before we return — there is no later flush for a session that is
+ * ending or already gone.
+ */
+async function fireSessionEnd(
+  pipeline: HookPipeline | undefined,
+  eventBus: EventBus | undefined,
+  sessionId: string,
+  activePlugins: readonly string[],
+  reason: "ended" | "deleted",
+): Promise<void> {
+  try {
+    await runWithHookScope({ activePluginIds: new Set(activePlugins) }, () =>
+      runSessionEndHook(
+        { pipeline, sessionId, turnId: "", eventBus },
+        { sessionId, reason },
+      ),
+    );
+    await eventBus?.flush();
+  } catch (err) {
+    console.warn(
+      "[sessions] SessionEnd hook failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
 
 // ── Collection endpoints ────────────────────────────────────────
 
@@ -174,6 +214,35 @@ sessionRoutes.post("/", async (c) => {
     }
   }
 
+  // SessionStart hook — session is created and plugins activated. Session
+  // lifecycle has no turn, so turnId is empty. Observe-only (cannot veto).
+  // Scoped to this session's active plugins so only their hooks fire.
+  const startScope = {
+    activePluginIds: new Set(
+      plugins.filter((p): p is string => typeof p === "string"),
+    ),
+  };
+  try {
+    await runWithHookScope(startScope, () =>
+      runSessionStartHook(
+        {
+          pipeline: c.get("hookPipeline"),
+          sessionId: id,
+          turnId: "",
+          eventBus: c.get("eventBus"),
+        },
+        { sessionId: id, worldId: rawWorldId },
+      ),
+    );
+  } catch (err) {
+    // SessionStart is observe-only — a handler failure must never fail session
+    // creation (the session is already committed). Log and continue.
+    console.warn(
+      "[sessions] SessionStart hook failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+
   return c.json(session);
 });
 
@@ -273,6 +342,19 @@ sessionRoutes.patch("/:id", async (c) => {
   const updates = parsedPatch.updates;
 
   await store.updateSession(id, updates);
+
+  // SessionEnd hook — fire only on the transition into `ended` (not on repeat
+  // patches of an already-ended session).
+  if (updates.status === "ended" && session.status !== "ended") {
+    await fireSessionEnd(
+      c.get("hookPipeline"),
+      c.get("eventBus"),
+      id,
+      session.activePlugins ?? [],
+      "ended",
+    );
+  }
+
   // Return merged result to avoid a second DB read
   return c.json({ ...session, ...updates });
 });
@@ -285,6 +367,18 @@ sessionRoutes.delete("/:id", async (c) => {
   if (!guard.ok) return guard.response;
   const session = guard.session;
   await store.deleteSession(id);
+
+  // SessionEnd hook — session removed. `session` is read above for the guard.
+  if (session.status !== "ended") {
+    await fireSessionEnd(
+      c.get("hookPipeline"),
+      c.get("eventBus"),
+      id,
+      session.activePlugins ?? [],
+      "deleted",
+    );
+  }
+
   return c.json({ deleted: true });
 });
 

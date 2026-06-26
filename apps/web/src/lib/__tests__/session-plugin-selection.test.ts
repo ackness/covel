@@ -135,6 +135,7 @@ describe("session plugin selection helpers", () => {
     expect(traditional?.plugins).toContain("living-world-rules");
     expect(lowCost?.plugins).not.toContain("player-identity");
     expect(lowCost?.optionalPlugins).toContain("player-identity");
+    expect(lowCost?.plugins).toContain("cost-gate");
     expect(dialogue?.plugins).toContain("player-identity");
   });
 

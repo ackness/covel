@@ -490,7 +490,7 @@ function setupRuntimeTestEnv(args: {
 
   const compactorRunner = {
     async run() {
-      /* noop */
+      return { compacted: false };
     },
   };
 
@@ -672,7 +672,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       c.set("eventBus", eventBus);
       c.set("compactorRunner", {
         async run() {
-          /* noop */
+          return { compacted: false };
         },
       });
       c.set("sessionLock", sessionLock);
@@ -1381,7 +1381,11 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     };
     const loadRuntimeFn = async (m: RuntimeManifest) =>
       m.name === SYNC_RUNTIME ? loaded : undefined;
-    const compactorRunner = { async run() {} };
+    const compactorRunner = {
+      async run() {
+        return { compacted: false };
+      },
+    };
 
     const app = new Hono();
     app.use("*", async (c, next) => {
@@ -1534,7 +1538,11 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
         : m.name === FOLLOWER
           ? followerLoaded
           : undefined;
-    const compactorRunner = { async run() {} };
+    const compactorRunner = {
+      async run() {
+        return { compacted: false };
+      },
+    };
 
     const app = new Hono();
     app.use("*", async (c, next) => {
@@ -1721,7 +1729,11 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
         : m.name === FOLLOWER
           ? followerLoaded
           : undefined;
-    const compactorRunner = { async run() {} };
+    const compactorRunner = {
+      async run() {
+        return { compacted: false };
+      },
+    };
 
     const app = new Hono();
     app.use("*", async (c, next) => {

@@ -65,6 +65,14 @@ export async function computeSessionTurnCount(args: {
   }
 
   const turnResults = await store.listTurnResults(sessionId);
+  // Counting rule (Pre-Game-pending turns never reach here — early-returned above):
+  //  - An EMPTY turn_result counts. It represents a main-loop player turn where
+  //    the player advanced but no runtime fired; the player still took a turn.
+  //    (2026-04-12 audit Finding 3 — see turn-commit-pipeline.test.ts
+  //    "counts main-loop turns even when no runtime fires". This is intentional;
+  //    do not "optimise" it away.)
+  //  - A NON-EMPTY turn_result counts only when it carries at least one
+  //    non-Pre-Game runtime result, so Pre-Game-only setup requests are excluded.
   const mainLoopResultCount = turnResults.filter((turnResult) => {
     const runtimeResults = runtimeResultsOf(turnResult);
     if (runtimeResults.length === 0) return true;

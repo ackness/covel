@@ -37,13 +37,13 @@ import { Hono } from "hono";
 import { createRpcHandlerStoreView } from "@covel/runtime";
 import { RpcDispatchError, RpcValidationError } from "@covel/runtime";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
-import { FrameworkCapability } from "@covel/shared";
 import {
   decodePluginUserSettingsHeader,
   validatePluginRpcBody,
 } from "./plugin-rpc/body.js";
 import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
+import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
 
 export const pluginRpcRoutes = new Hono();
 
@@ -178,17 +178,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
       );
     }
 
-    const worldDataPluginId = pluginRegistry.findPluginByCapability(
+    const capabilityPluginIds = resolveTurnCapabilityPluginIds(
+      pluginRegistry,
       sessionId,
-      FrameworkCapability.WorldDataProvider,
-    );
-    const personaPluginId = pluginRegistry.findPluginByCapability(
-      sessionId,
-      FrameworkCapability.PersonaProvider,
-    );
-    const promptHistoryRewriterPluginId = pluginRegistry.findPluginByCapability(
-      sessionId,
-      FrameworkCapability.PromptHistoryRewriter,
     );
     const turnGetConfig =
       c.get("getConfigFn") ?? ((_pluginId: string, _runtimeId: string) => ({}));
@@ -239,9 +231,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
         // then can't tell the runtime ever finished. Wire it through so
         // manual-trigger turns produce the same trace surface as auto turns.
         compactor: compactorRunner,
-        worldDataPluginId,
-        personaPluginId,
-        promptHistoryRewriterPluginId,
+        capabilityPluginIds,
         ...(hookPipeline ? { hookPipeline } : {}),
       },
       ...(hookPipeline ? { hookPipeline } : {}),

@@ -195,6 +195,47 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
     );
   });
 
+  it("skips a PreStateCommit hook whose plugin is not active in the session (scope)", async () => {
+    const inactiveFired: string[] = [];
+    const frameworkFired: string[] = [];
+    hookPipeline.register({
+      id: "test:PreStateCommit:inactive",
+      event: "PreStateCommit",
+      pluginId: "some-inactive-plugin", // not among the session's active runtimes
+      handler: async () => {
+        inactiveFired.push("x");
+        return { action: "continue" };
+      },
+    });
+    hookPipeline.register({
+      id: "test:PreStateCommit:framework",
+      event: "PreStateCommit",
+      // no pluginId → framework hook, always fires
+      handler: async () => {
+        frameworkFired.push("x");
+        return { action: "continue" };
+      },
+    });
+
+    const res = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-scope",
+        type: "send_message",
+        sessionId,
+        payload: { content: "scope test" },
+      }),
+    });
+    expect(res.status).toBe(200);
+    await drainActionStream(res);
+
+    // Commit path is session-scoped: the inactive plugin's hook is filtered,
+    // the framework hook still fires.
+    expect(frameworkFired.length).toBeGreaterThanOrEqual(1);
+    expect(inactiveFired).toHaveLength(0);
+  });
+
   it("aborts the commit when the hook returns { action: abort }", async () => {
     hookPipeline.register({
       id: "test:PreStateCommit:abort",

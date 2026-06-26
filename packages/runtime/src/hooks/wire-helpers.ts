@@ -17,6 +17,11 @@ import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import type { HookPipeline } from "./pipeline.js";
 import type { HookResult } from "./types.js";
 import type { TurnEmitter } from "../turn-emitter.js";
+import type {
+  LLMMessage,
+  LLMResponse,
+  LLMToolDefinition,
+} from "../llm-adapter.js";
 
 // ── Shared options ───────────────────────────────────────────────
 
@@ -66,6 +71,134 @@ export async function runTurnStopHook(
     payload,
     { eventBus: opts.eventBus, emitter: opts.emitter },
   );
+}
+
+// ── SessionStart / SessionEnd ────────────────────────────────────
+// Session-lifecycle hooks fire outside any turn, so callers pass an empty
+// `turnId` in BaseOpts. Both are observe-only (parallel): SessionStart cannot
+// veto creation, SessionEnd is cleanup only.
+
+export interface SessionStartPayload {
+  readonly sessionId: string;
+  readonly worldId?: string;
+}
+
+export async function runSessionStartHook(
+  opts: BaseOpts,
+  payload: SessionStartPayload,
+): Promise<void> {
+  if (!opts.pipeline) return;
+  await opts.pipeline.run(
+    "SessionStart",
+    { event: "SessionStart", sessionId: opts.sessionId, turnId: opts.turnId },
+    payload,
+    { eventBus: opts.eventBus, emitter: opts.emitter },
+  );
+}
+
+export interface SessionEndPayload {
+  readonly sessionId: string;
+  readonly reason: "ended" | "deleted";
+}
+
+export async function runSessionEndHook(
+  opts: BaseOpts,
+  payload: SessionEndPayload,
+): Promise<void> {
+  if (!opts.pipeline) return;
+  await opts.pipeline.run(
+    "SessionEnd",
+    { event: "SessionEnd", sessionId: opts.sessionId, turnId: opts.turnId },
+    payload,
+    { eventBus: opts.eventBus, emitter: opts.emitter },
+  );
+}
+
+// ── PreCompaction / PostCompaction ───────────────────────────────
+
+export interface PreCompactionPayload {
+  /** Number of stored messages eligible for compaction this turn. */
+  readonly messageCount: number;
+}
+
+/**
+ * Veto gate before history compaction. Returns `skip: true` when any handler
+ * aborts — the turn pipeline then leaves history uncompacted this turn
+ * (mirrors pi's `session_before_compact` cancel path).
+ */
+export async function runPreCompactionHook(
+  opts: BaseOpts,
+  payload: PreCompactionPayload,
+): Promise<{ readonly skip: boolean }> {
+  if (!opts.pipeline) return { skip: false };
+  const hookResult = await opts.pipeline.run(
+    "PreCompaction",
+    { event: "PreCompaction", sessionId: opts.sessionId, turnId: opts.turnId },
+    payload,
+    { eventBus: opts.eventBus, emitter: opts.emitter },
+  );
+  return { skip: hookResult.action === "abort" };
+}
+
+export interface PostCompactionPayload {
+  readonly compacted: boolean;
+  readonly summaryId?: string;
+}
+
+/** Observe the compaction outcome (parallel; return value is trace-only). */
+export async function runPostCompactionHook(
+  opts: BaseOpts,
+  payload: PostCompactionPayload,
+): Promise<void> {
+  if (!opts.pipeline) return;
+  await opts.pipeline.run(
+    "PostCompaction",
+    { event: "PostCompaction", sessionId: opts.sessionId, turnId: opts.turnId },
+    payload,
+    { eventBus: opts.eventBus, emitter: opts.emitter },
+  );
+}
+
+// ── PreSchedule ──────────────────────────────────────────────────
+
+export interface PreSchedulePayload {
+  /** Runtimes selected to run this turn, after trigger selection. */
+  readonly triggered: readonly RuntimeManifest[];
+}
+
+/**
+ * Observe / filter the set of runtimes scheduled this turn (after trigger
+ * selection, before scheduling). Handlers may return `replace.triggered` to
+ * narrow the set (e.g. conditional gating, cost control). Returning a runtime
+ * not in the original set is the author's responsibility — the framework uses
+ * the returned list as-is, consistent with other `replace`-based hooks.
+ *
+ * Filter-only: only `replace.triggered` is honoured. `abort` has no defined
+ * meaning for PreSchedule and is treated as "no change" — the original
+ * `triggered` set runs. To schedule no runtimes, return
+ * `replace: { triggered: [] }`, not `abort`.
+ */
+export async function runPreScheduleHook(
+  opts: BaseOpts,
+  payload: PreSchedulePayload,
+): Promise<readonly RuntimeManifest[]> {
+  if (!opts.pipeline) return payload.triggered;
+  const hookResult = await opts.pipeline.run(
+    "PreSchedule",
+    { event: "PreSchedule", sessionId: opts.sessionId, turnId: opts.turnId },
+    payload,
+    { eventBus: opts.eventBus, emitter: opts.emitter },
+  );
+  if (
+    hookResult.action === "continue" &&
+    "replace" in hookResult &&
+    hookResult.replace?.triggered
+  ) {
+    return hookResult.replace.triggered;
+  }
+  // `abort` (or continue without replace) falls through here: the original
+  // triggered set runs unchanged.
+  return payload.triggered;
 }
 
 // ── PreRuntime ───────────────────────────────────────────────────
@@ -120,6 +253,171 @@ export async function runPostRuntimeHook(
     return hookResult.replace.result as RuntimeResult;
   }
   return result;
+}
+
+// ── PostContextAssembly ──────────────────────────────────────────
+
+/**
+ * Assembled context exposed to PostContextAssembly hooks. Turn-level (once
+ * per runtime, after buildContext, before the agent loop): handlers may
+ * rewrite the assembled system prompt and/or projected history. Distinct from
+ * the per-call PreLLMCall — this shapes the assembled context a single time
+ * (mirrors pi's `before_agent_start`).
+ */
+export interface AssembledContextView {
+  readonly systemPrompt: string;
+  readonly messages: readonly LLMMessage[];
+  /**
+   * Read-only `outputKind` of the runtime whose context was assembled
+   * (`story` / `plugin` / `system`). Surfaced so PostContextAssembly handlers
+   * can shape only the runtimes they care about (e.g. a narration director
+   * that only touches story prompts) without hardcoding plugin ids — the
+   * framework/plugin isolation rule. Optional and never rewritten by the hook;
+   * purely informational. Absent when the caller does not supply it, keeping
+   * the field a non-breaking addition.
+   */
+  readonly outputKind?: "story" | "plugin" | "system";
+}
+
+export interface PostContextAssemblyPayload extends AssembledContextView {
+  readonly pluginId: string;
+  readonly runtimeId: string;
+}
+
+export async function runPostContextAssemblyHook(
+  opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
+  assembled: AssembledContextView,
+): Promise<AssembledContextView> {
+  if (!opts.pipeline) return assembled;
+  const payload: PostContextAssemblyPayload = {
+    systemPrompt: assembled.systemPrompt,
+    messages: assembled.messages,
+    outputKind: assembled.outputKind,
+    pluginId: opts.pluginId,
+    runtimeId: opts.runtimeId,
+  };
+  const hookResult = await opts.pipeline.run(
+    "PostContextAssembly",
+    {
+      event: "PostContextAssembly",
+      sessionId: opts.sessionId,
+      turnId: opts.turnId,
+      pluginId: opts.pluginId,
+      runtimeId: opts.runtimeId,
+    },
+    payload,
+    { eventBus: opts.eventBus, emitter: opts.emitter },
+  );
+  if (
+    hookResult.action === "continue" &&
+    "replace" in hookResult &&
+    hookResult.replace
+  ) {
+    const r = hookResult.replace;
+    return {
+      systemPrompt: r.systemPrompt ?? assembled.systemPrompt,
+      messages: r.messages ?? assembled.messages,
+      outputKind: assembled.outputKind,
+    };
+  }
+  return assembled;
+}
+
+// ── PreLLMCall ───────────────────────────────────────────────────
+
+/**
+ * Request shape exposed to PreLLMCall hooks. Handlers may non-destructively
+ * rewrite the messages / model / tools sent on a single LLM call without
+ * mutating the runtime's canonical transcript (mirrors pi's `context` event).
+ */
+export interface PreLLMCallRequest {
+  readonly messages: readonly LLMMessage[];
+  readonly model: string | undefined;
+  readonly tools: readonly LLMToolDefinition[] | undefined;
+}
+
+export interface PreLLMCallPayload extends PreLLMCallRequest {
+  readonly pluginId: string;
+  readonly runtimeId: string;
+}
+
+export async function runPreLLMCallHook(
+  opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
+  request: PreLLMCallRequest,
+): Promise<PreLLMCallRequest> {
+  if (!opts.pipeline) return request;
+  const payload: PreLLMCallPayload = {
+    ...request,
+    pluginId: opts.pluginId,
+    runtimeId: opts.runtimeId,
+  };
+  const hookResult = await opts.pipeline.run(
+    "PreLLMCall",
+    {
+      event: "PreLLMCall",
+      sessionId: opts.sessionId,
+      turnId: opts.turnId,
+      pluginId: opts.pluginId,
+      runtimeId: opts.runtimeId,
+    },
+    payload,
+    { eventBus: opts.eventBus, emitter: opts.emitter },
+  );
+  // Transform-only: only `replace` is honoured (abort has no meaning here and
+  // is treated as "no change", matching pi's non-destructive `context`).
+  if (
+    hookResult.action === "continue" &&
+    "replace" in hookResult &&
+    hookResult.replace
+  ) {
+    const r = hookResult.replace;
+    return {
+      messages: r.messages ?? request.messages,
+      model: r.model ?? request.model,
+      tools: r.tools ?? request.tools,
+    };
+  }
+  return request;
+}
+
+// ── PostLLMResponse ──────────────────────────────────────────────
+
+export interface PostLLMResponsePayload {
+  readonly response: LLMResponse;
+  readonly pluginId: string;
+  readonly runtimeId: string;
+}
+
+export async function runPostLLMResponseHook(
+  opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
+  response: LLMResponse,
+): Promise<LLMResponse> {
+  if (!opts.pipeline) return response;
+  const payload: PostLLMResponsePayload = {
+    response,
+    pluginId: opts.pluginId,
+    runtimeId: opts.runtimeId,
+  };
+  const hookResult = await opts.pipeline.run(
+    "PostLLMResponse",
+    {
+      event: "PostLLMResponse",
+      sessionId: opts.sessionId,
+      turnId: opts.turnId,
+      pluginId: opts.pluginId,
+      runtimeId: opts.runtimeId,
+    },
+    payload,
+    { eventBus: opts.eventBus, emitter: opts.emitter },
+  );
+  if (
+    hookResult.action === "continue" &&
+    "replace" in hookResult &&
+    hookResult.replace?.response
+  ) {
+    return hookResult.replace.response;
+  }
+  return response;
 }
 
 // ── PreToolUse ───────────────────────────────────────────────────
@@ -194,14 +492,25 @@ export interface PostToolUsePayload {
     readonly arguments: string;
   };
   readonly result: unknown;
+  /**
+   * Hooks may set this via `replace` to end the agent tool loop after this
+   * result is recorded (mirrors pi's `tool_result.terminate`). The result is
+   * still pushed back to the transcript; the loop simply stops afterwards.
+   */
+  readonly terminate?: boolean;
+}
+
+export interface PostToolUseOutcome<R> {
+  readonly result: R;
+  readonly terminate: boolean;
 }
 
 export async function runPostToolUseHook<R>(
   opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
   toolCall: { id: string; name: string; arguments: string },
   result: R,
-): Promise<R> {
-  if (!opts.pipeline) return result;
+): Promise<PostToolUseOutcome<R>> {
+  if (!opts.pipeline) return { result, terminate: false };
   const payload: PostToolUsePayload = { toolCall, result };
   const hookResult = await opts.pipeline.run(
     "PostToolUse",
@@ -218,9 +527,13 @@ export async function runPostToolUseHook<R>(
   if (
     hookResult.action === "continue" &&
     "replace" in hookResult &&
-    hookResult.replace?.result !== undefined
+    hookResult.replace
   ) {
-    return hookResult.replace.result as R;
+    const replace = hookResult.replace;
+    return {
+      result: replace.result !== undefined ? (replace.result as R) : result,
+      terminate: replace.terminate === true,
+    };
   }
-  return result;
+  return { result, terminate: false };
 }

@@ -49,7 +49,7 @@ export function createBootstrapCompactorRunner({
 
   return {
     async run(sessionId, systemPromptPreview, messages) {
-      await maybeCompact(
+      return await maybeCompact(
         sessionId,
         systemPromptPreview,
         messages,

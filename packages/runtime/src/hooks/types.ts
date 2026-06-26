@@ -10,26 +10,62 @@ import type { EventBus } from "@covel/events";
 // ── Hook event names ─────────────────────────────────────────────
 
 export type HookEvent =
+  | "SessionStart"
   | "TurnStart"
+  | "PreCompaction"
+  | "PostCompaction"
+  | "PreSchedule"
   | "PreRuntime"
+  | "PostContextAssembly"
+  | "PreLLMCall"
+  | "PostLLMResponse"
   | "PostRuntime"
   | "PreToolUse"
   | "PostToolUse"
   | "PreStateCommit"
   | "PostStateCommit"
-  | "TurnStop";
+  | "TurnStop"
+  | "SessionEnd";
 
 export type HookSemantic = "first" | "sequential" | "parallel" | "stream";
 
 export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
-  TurnStart: "parallel",
+  // Session lifecycle (no turn): observe session creation. Parallel; the
+  // session is already persisted, so handlers cannot veto creation.
+  SessionStart: "parallel",
+  // Sequential so `abort` can veto the whole turn before any runtime runs
+  // (access control / rate limit). Parallel discarded abort, leaving the
+  // turn-executor's abort branch dead.
+  TurnStart: "sequential",
+  // Veto gate before history compaction: `abort` skips compaction this turn.
+  PreCompaction: "sequential",
+  // Observe the compaction outcome (compacted? summaryId?).
+  PostCompaction: "parallel",
+  // Observe / filter the set of runtimes that will run this turn, after
+  // trigger selection and before scheduling. Chained via `replace.triggered`.
+  PreSchedule: "sequential",
   PreRuntime: "sequential",
-  PostRuntime: "parallel",
+  // Turn-level (once per runtime): rewrite the assembled system prompt /
+  // projected history after buildContext, before the loop. Chained.
+  PostContextAssembly: "sequential",
+  // Non-destructively rewrite the request sent to the LLM on each call;
+  // chained so each handler sees the previous handler's edits.
+  PreLLMCall: "sequential",
+  // Inspect / patch the LLM response before tool dispatch; chained.
+  PostLLMResponse: "sequential",
+  // Sequential so `replace.result` can rewrite the RuntimeResult. Parallel
+  // discarded replace, leaving runPostRuntimeHook's rewrite path dead.
+  PostRuntime: "sequential",
   PreToolUse: "sequential",
-  PostToolUse: "parallel",
+  // Sequential so handlers can patch-accumulate the tool result and signal
+  // `terminate` to end the loop. (Parallel discards `replace`, which made the
+  // prior result-patch path a no-op.)
+  PostToolUse: "sequential",
   PreStateCommit: "sequential",
   PostStateCommit: "parallel",
   TurnStop: "parallel",
+  // Session lifecycle (no turn): observe session end. Parallel; cleanup only.
+  SessionEnd: "parallel",
 };
 
 export type HookEnforce = "pre" | "normal" | "post";
@@ -44,6 +80,31 @@ export interface HookContext {
   readonly pluginId?: string;
   /** Populated for PreRuntime / PostRuntime. */
   readonly runtimeId?: string;
+  /**
+   * Plugin ids active in this session. Populated by the pipeline from the
+   * session hook scope (AsyncLocalStorage). Lets a handler reason about the
+   * active set; the pipeline already filters out hooks of inactive plugins.
+   */
+  readonly activePluginIds?: ReadonlySet<string>;
+  /**
+   * Read-only accessor for the handler's *own* plugin settings this turn.
+   *
+   * The pipeline injects this (from the same session hook scope that carries
+   * `activePluginIds`) just before invoking each handler, bound to that
+   * handler's `pluginId`. It returns a frozen snapshot of the plugin's
+   * resolved `userSettings` (manifest defaults merged with the player's saved
+   * values) — unlocking per-session-configurable hooks with no write path.
+   *
+   * Semantics:
+   * - Frozen / read-only — never a mutable reference to shared state.
+   * - Scoped to the handler's own plugin only — no cross-plugin reads.
+   * - Returns `{}` for framework / global hooks (no `pluginId`), or when the
+   *   plugin declared no settings, or when the scope carries no settings.
+   * - Absent (`undefined`) when invoked outside an active hook scope (e.g.
+   *   direct `pipeline.run` unit calls) — handlers should use
+   *   `ctx.getOwnSettings?.() ?? {}`.
+   */
+  readonly getOwnSettings?: () => Readonly<Record<string, unknown>>;
 }
 
 // ── Hook result ──────────────────────────────────────────────────

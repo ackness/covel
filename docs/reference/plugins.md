@@ -71,18 +71,21 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/scheduler.ts` 强制
 
 ## 概览
 
-| ID                             | 类型        | 优先级 | 触发方式                                  | 模型 slot | 描述                                                                 |
-| ------------------------------ | ----------- | ------ | ----------------------------------------- | --------- | -------------------------------------------------------------------- |
-| pregame                        | core-plugin | 10     | scheduled（仅首轮）                       | —         | 游戏初始化（function runtime）                                       |
-| world-init/schema-gen          | core-plugin | 40     | scheduled（仅首轮）                       | `plugin`  | 世界维度初始化（guard + agent，Pre-Game 第二步）                     |
-| char-creator/player-init       | core-plugin | 50     | auto（guard 门控）                        | `plugin`  | 玩家角色创建（agent runtime；依赖 schema-gen 写出的 worldSchema）    |
-| npc-graph/rag-retriever        | plugin      | 400    | scheduled（interval=1，function runtime） | —         | Narrator-prep 层：NPC 图谱结构化检索器，向 narrator 注入相关关系事实 |
-| narrator                       | core-plugin | 500    | auto                                      | `story`   | Narrator 层：主叙事生成器                                            |
-| guide                          | plugin      | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：行动引导 + 聊天内建议面                      |
-| codex                          | plugin      | 600    | auto（每轮，紧跟 narrator 之后）          | `plugin`  | Narrator-downstream 层：知识图鉴系统（agent runtime）                |
-| npc-graph/extractor            | plugin      | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：NPC 关系图抽取器                             |
-| char-creator/character-tracker | core-plugin | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：NPC 发现 + 角色状态跟踪                      |
-| memory                         | core-plugin | —      | UI-only（无 runtime）                     | —         | 长期记忆摘要面板（UI 呈现，无独立 runtime）                          |
+| ID                             | 类型        | 优先级 | 触发方式                                  | 模型 slot | 描述                                                                                     |
+| ------------------------------ | ----------- | ------ | ----------------------------------------- | --------- | ---------------------------------------------------------------------------------------- |
+| pregame                        | core-plugin | 10     | scheduled（仅首轮）                       | —         | 游戏初始化（function runtime）                                                           |
+| world-init/schema-gen          | core-plugin | 40     | scheduled（仅首轮）                       | `plugin`  | 世界维度初始化（guard + agent，Pre-Game 第二步）                                         |
+| char-creator/player-init       | core-plugin | 50     | auto（guard 门控）                        | `plugin`  | 玩家角色创建（agent runtime；依赖 schema-gen 写出的 worldSchema）                        |
+| npc-graph/rag-retriever        | plugin      | 400    | scheduled（interval=1，function runtime） | —         | Narrator-prep 层：NPC 图谱结构化检索器，向 narrator 注入相关关系事实                     |
+| narrator                       | core-plugin | 500    | auto                                      | `story`   | Narrator 层：主叙事生成器                                                                |
+| guide                          | plugin      | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：行动引导 + 聊天内建议面                                          |
+| codex                          | plugin      | 600    | auto（每轮，紧跟 narrator 之后）          | `plugin`  | Narrator-downstream 层：知识图鉴系统（agent runtime）                                    |
+| npc-graph/extractor            | plugin      | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：NPC 关系图抽取器                                                 |
+| char-creator/character-tracker | core-plugin | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：NPC 发现 + 角色状态跟踪                                          |
+| memory                         | core-plugin | —      | UI-only（无 runtime）                     | —         | 长期记忆摘要面板（UI 呈现，无独立 runtime）                                              |
+| cost-gate                      | plugin      | —      | hook-only（opt-in，默认禁用）             | —         | 跨切面：每会话 token 预算门控（hooks：PostLLMResponse/PreSchedule/TurnStart/SessionEnd） |
+| director                       | plugin      | —      | hook-only（opt-in，默认禁用）             | —         | 跨切面：用 PostContextAssembly 给本局所有 story runtime 统一注入导演前言                 |
+| story-guard                    | plugin      | —      | hook-only（opt-in，默认禁用）             | —         | 跨切面：故事文本红线净化（PostLLMResponse）+ 高危工具拦截（PreToolUse）                  |
 
 ---
 
@@ -375,6 +378,90 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 ---
 
+## cost-gate
+
+⚪ optional · ⚙ hook-only（无可调度 runtime）
+
+**Quick use**：想给每局对话设一个 token 花费上限——接近上限时自动停掉后台生成（codex / guide / 抽取器），到上限时暂停本回合——启用这个插件。它完全靠生命周期 hook 工作，不进调度、不写库。
+
+**路径**: `plugins/cost-gate/`
+
+| 字段         | 值                                                                                                   |
+| ------------ | ---------------------------------------------------------------------------------------------------- |
+| pluginType   | `plugin`（可禁用；前端 `low-cost` 组合包默认启用, 其它包 / 世界需手动启用）                          |
+| runtimeType  | `function`（无 LLM；`trigger: manual` 的 no-op handler，永不调度）                                   |
+| outputKind   | `system`                                                                                             |
+| capabilities | `cost-control`                                                                                       |
+| hooks        | `PostLLMResponse`(计量) · `PreSchedule`(软上限收窄) · `TurnStart`(硬上限 abort) · `SessionEnd`(清理) |
+
+**职责**: Covel 首个消费 hook 生命周期的「跨切面框架能力插件」示例。维护每会话的进程内 token 计数：
+
+- `PostLLMResponse`（`enforce: post`）累加每次 LLM 调用的 `usage`，纯观察不改写；
+- `PreSchedule` 在软上限后把本回合 runtime 收窄为仅 `outputKind: "story"`（按字段判定，不硬编码插件 ID），跳过后台 LLM 生成；
+- `TurnStart`（`enforce: pre`）在硬上限 abort 整回合，`abortReason` 透传前端；
+- `SessionEnd` 清理该会话的计数桶，防止进程内 Map 泄漏。
+
+Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收窄只影响主循环。
+
+**配置（env）**: `COST_GATE_SOFT_TOKENS`（默认 150000）软上限 · `COST_GATE_HARD_TOKENS`（默认 200000）硬上限。hook 读不到 SettingsStore，故阈值走环境变量。
+
+**限制**: 计数为进程内、非持久——重启清零，多进程（PG / T3）不共享（单进程 T1/T2 是硬上限，T3 为每进程软信号）。详见 `plugins/cost-gate/README.md`。
+
+---
+
+## director
+
+⚪ optional · ⚙ hook-only（无可调度 runtime）
+
+**Quick use**：想让本局所有叙事（narrator / chat-mode-narrator 等所有 story runtime）共享一致的语气 / 安全 / 风格前言，而不必逐个改它们的 postHistory——启用这个插件。
+
+**路径**: `plugins/director/`
+
+| 字段         | 值                                                       |
+| ------------ | -------------------------------------------------------- |
+| pluginType   | `plugin`（可禁用，默认不启用）                           |
+| runtimeType  | `function`（no-op handler，`trigger: manual`，永不调度） |
+| outputKind   | `system`                                                 |
+| capabilities | `narration-director`                                     |
+| hooks        | `PostContextAssembly`（turn 级、每 runtime 一次）        |
+
+**职责**: 用 `PostContextAssembly` 在每个 story runtime 的系统提示末尾追加统一的「导演前言」。仅对 `payload.outputKind === "story"` 的 runtime 注入（按字段判定，不硬编码插件 ID）；非 story runtime 原样放行。前言文本为插件自带静态常量。
+
+为支持这种「只塑形 story」的判定，框架给 `PostContextAssembly` 的 payload 增加了只读 `outputKind` 字段（`AssembledContextView.outputKind`，可选、纯增量、hook 不可改写）。
+
+**限制**: 前言来自插件包内静态资源；若要「每会话可调」，可配合 `HookContext.getOwnSettings()`（见 [plugin-authoring](../guide/plugin-authoring.md) hooks 段）。详见 `plugins/director/README.md`。
+
+---
+
+## story-guard
+
+⚪ optional · ⚙ hook-only（无可调度 runtime）
+
+**Quick use**：托管 / 多人环境想要一层可插拔的内容安全——对故事文本做确定性红线净化、剥离模型自我暴露 / 选项菜单，并拦截高危工具调用——启用这个插件。
+
+**路径**: `plugins/story-guard/`
+
+| 字段         | 值                                                       |
+| ------------ | -------------------------------------------------------- |
+| pluginType   | `plugin`（可禁用，默认不启用）                           |
+| runtimeType  | `function`（no-op handler，`trigger: manual`，永不调度） |
+| outputKind   | `system`                                                 |
+| capabilities | `content-safety`                                         |
+| hooks        | `PostLLMResponse`（净化）· `PreToolUse`（拦高危工具）    |
+
+**职责**: 两道确定性、保守的守卫：
+
+- `PostLLMResponse` 对 `response.content` 做红线净化（剥离 AI/模型自我暴露样板、Llama 模板标记、部署配置的红线词）+ 选项菜单剥离（连续 ≥2 行的枚举选项 / 带尾冒号的菜单头；孤立的行首缩写如 `C. S. Lewis` 不误伤）。完整回填 `LLMResponse`（仅换 content）；净化为空时保守放行（绝不把真实叙事清成空白）。
+- `PreToolUse` 对高危工具名（`delete-everything` / `drop-database` 等 deny-list，可经 env 扩展）返回 `abort`，仅跳过该工具不中断回合。
+
+> 注意：PreToolUse 的工具名嵌在 `payload.toolCall.name`，而 frontmatter `match` 只对顶层 payload key 等值，故 deny-list 判定在 handler 内完成。
+
+**配置（env）**: `STORY_GUARD_REDACT_TERMS`（额外红线词，逗号分隔）· `STORY_GUARD_REDACT_MARK`（替换标记，默认 `[redacted]`）· `STORY_GUARD_BLOCKED_TOOLS`（额外拦截工具名）。
+
+**限制**: 净化是确定性正则，不替代模型层安全；依赖 M1（resume 路径已接 `PostLLMResponse`，本批审计已修）才能覆盖挂起→恢复的输出。详见 `plugins/story-guard/README.md`。
+
+---
+
 ## 规划中插件（待开发）
 
 | 插件       | 预期优先级 | 描述          |
@@ -566,16 +653,28 @@ hooks:
 
 同一事件内先按 `enforce` 分组排序；同组内全局 hook 先执行，插件 hook 保持注册顺序。
 
-| Event             | Semantic     | 行为                                                                      |
-| ----------------- | ------------ | ------------------------------------------------------------------------- |
-| `TurnStart`       | `parallel`   | 并发观察回合开始；返回值只用于日志和 trace                                |
-| `PreRuntime`      | `sequential` | 链式改写 runtime 输入；`replace` 会传给下一个 handler；`abort` 会停止执行 |
-| `PostRuntime`     | `parallel`   | 并发观察 runtime 输出；返回值只用于日志和 trace                           |
-| `PreToolUse`      | `sequential` | 链式改写 tool call；`replace` 会传给下一个 handler；`abort` 会跳过 tool   |
-| `PostToolUse`     | `parallel`   | 并发观察 tool result；返回值只用于日志和 trace                            |
-| `PreStateCommit`  | `sequential` | 链式改写 commit payload；任一 handler 可用 `abort` 拒绝 commit            |
-| `PostStateCommit` | `parallel`   | 并发观察 commit 结果；返回值只用于日志和 trace                            |
-| `TurnStop`        | `parallel`   | 并发观察回合结束；返回值只用于日志和 trace                                |
+| Event                 | Semantic     | 行为                                                                                                                                                                                                                                                   |
+| --------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `SessionStart`        | `parallel`   | 会话级（无回合）：会话创建 + 插件激活后触发，payload `{sessionId, worldId}`。观察型,不能否决创建（对齐 pi 的 `session_start`）                                                                                                                         |
+| `TurnStart`           | `sequential` | 回合开始的否决门：任一 handler `abort` 则整回合中止(无 runtime 运行,返回带 `abortReason` 的 TurnResult),用于访问控制 / 限流                                                                                                                            |
+| `PreCompaction`       | `sequential` | 历史压缩前的否决门：任一 handler `abort` 则本回合跳过压缩、保留完整历史（对齐 pi 的 `session_before_compact` 取消路径）                                                                                                                                |
+| `PostCompaction`      | `parallel`   | 并发观察压缩结果（`compacted` / `summaryId`）；返回值只用于日志和 trace（对齐 pi 的 `session_compact`）                                                                                                                                                |
+| `PreSchedule`         | `sequential` | 触发选择之后、调度之前观察 / 收窄本回合要跑的 runtime 集；`replace.triggered` 链式改写（如条件门控 / 成本控制）。**仅能影响主循环 runtime**：Pre-Game 未完成时，框架强制保留被 hook 删掉的 Pre-Game（priority ≤ 99）runtime，避免静默中断会话初始化    |
+| `PreRuntime`          | `sequential` | 链式改写 runtime 输入；`replace` 会传给下一个 handler；`abort` 会停止执行                                                                                                                                                                              |
+| `PostContextAssembly` | `sequential` | turn 级（每 runtime 一次，`buildContext` 之后、进 loop 之前）改写已装配的 `systemPrompt` / 投影历史；`replace.{systemPrompt,messages}` 链式累积（对齐 pi 的 `before_agent_start`）                                                                     |
+| `PreLLMCall`          | `sequential` | 每次 LLM 调用前非破坏性改写发往模型的请求；`replace.{messages,model,tools}` 链式累积。不改写底层 transcript（对齐 pi 的 `context`）。`abort` 无意义、视为不变                                                                                          |
+| `PostLLMResponse`     | `sequential` | LLM 响应返回后、工具派发前；`replace.response` 链式改写 `content`/`toolCalls`（对齐 pi 的 `after_provider_response`）                                                                                                                                  |
+| `PostRuntime`         | `sequential` | 链式改写 runtime 输出：`replace.result` 重写该 runtime 的 `RuntimeResult`(链式累积),不改则原样                                                                                                                                                         |
+| `PreToolUse`          | `sequential` | 链式改写 tool call；`replace` 会传给下一个 handler；`abort` 会跳过该 tool（不中止回合）                                                                                                                                                                |
+| `PostToolUse`         | `sequential` | 链式 patch tool result：`replace.result` 改写结果、`replace.terminate: true` 在记录该结果后结束工具循环（对齐 pi 的 `tool_result.terminate`）。**结束循环用 `replace.terminate`，不要用 `abort`**（PostToolUse 的 `abort` 不生效，结果原样、循环继续） |
+| `PreStateCommit`      | `sequential` | 链式改写 commit payload；任一 handler 可用 `abort` 拒绝 commit                                                                                                                                                                                         |
+| `PostStateCommit`     | `parallel`   | 并发观察 commit 结果；返回值只用于日志和 trace                                                                                                                                                                                                         |
+| `TurnStop`            | `parallel`   | 并发观察回合结束；返回值只用于日志和 trace                                                                                                                                                                                                             |
+| `SessionEnd`          | `parallel`   | 会话级（无回合）：会话 PATCH 状态→`ended` 或 DELETE 时触发,payload `{sessionId, reason: "ended"｜"deleted"}`。仅在进入 `ended` 的那次触发(不重复),适合清理（对齐 pi 的 `session_shutdown`）                                                            |
+
+> `PostToolUse` 为 `sequential`：`parallel` 语义会丢弃 `replace`，因此结果 patch 与 `terminate` 必须在顺序链中累积。
+> `SessionStart` / `SessionEnd` 是会话级 hook（`turnId` 为空）：在 server 的 session 路由触发,不属于 turn pipeline。
+> **Session 作用域**：hook pipeline 是全局单例,但执行时按当前 session 的激活插件集过滤(`hooks/hook-scope.ts`,经 AsyncLocalStorage)——插件 hook **只对该插件激活的 session 触发**,框架 hook(无 `pluginId`)始终触发。turn hook 的作用域取自 `activeRuntimes`,SessionStart/End 取自 `session.activePlugins`。`HookContext.activePluginIds` 暴露给 handler。
 
 `first` 和 `stream` 已作为框架语义保留：`first` 用于未来的首个命中选择类 hook，`stream` 用于未来的流式 transform hook。
 

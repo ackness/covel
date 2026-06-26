@@ -80,7 +80,7 @@ export interface CompactorRunner {
     sessionId: string,
     systemPromptPreview: string,
     messages: readonly TurnMessageRecord[],
-  ): Promise<void>;
+  ): Promise<CompactorResult>;
 }
 
 // ── Internal helpers ─────────────────────────────────────────────

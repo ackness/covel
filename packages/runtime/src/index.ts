@@ -22,6 +22,7 @@ export type {
 // ── Turn Executor ────────────────────────────────────────────────
 export { executeTurn, resumeSuspendedRuntime } from "./turn-executor.js";
 export type {
+  AgentLoopDeps,
   TurnExecutorDeps,
   TurnExecutorOptions,
   ResumeSuspendedRuntimeOptions,
@@ -130,7 +131,11 @@ export {
   HookPipeline,
   createHookPipeline,
   registerPluginHooks,
+  runSessionStartHook,
+  runSessionEndHook,
+  runWithHookScope,
 } from "./hooks/index.js";
+export type { SessionStartPayload, SessionEndPayload } from "./hooks/index.js";
 export { HOOK_SEMANTICS } from "./hooks/index.js";
 export type {
   PluginHookSource,

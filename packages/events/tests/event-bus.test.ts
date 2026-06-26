@@ -217,4 +217,31 @@ describe("EventBus", () => {
       expect(events[0]!.topic).toBe("quest.completed");
     });
   });
+
+  describe("flush (durability barrier)", () => {
+    it("awaits in-flight audit-event persistence", async () => {
+      const store = createMemoryStore();
+      const storeBus = createEventBus(store);
+      storeBus.emit(
+        makeMessage({
+          id: "msg-flush",
+          sessionId: "sess-f",
+          topic: "quest.completed",
+        }),
+      );
+
+      // flush() resolves only after the save settles — no timeout race.
+      await storeBus.flush();
+
+      const events = await store.listEvents("sess-f");
+      expect(events).toHaveLength(1);
+      expect(events[0]!.id).toBe("msg-flush");
+    });
+
+    it("resolves as a no-op when there is no store", async () => {
+      const noStoreBus = createEventBus();
+      noStoreBus.emit(makeMessage({ topic: "x" }));
+      await expect(noStoreBus.flush()).resolves.toBeUndefined();
+    });
+  });
 });

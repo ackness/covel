@@ -14,13 +14,23 @@ import type {
   TurnResult,
 } from "@covel/shared";
 import { executeParallel } from "./parallel-executor.js";
-import { runTurnStartHook, runTurnStopHook } from "./hooks/wire-helpers.js";
+import {
+  runTurnStartHook,
+  runTurnStopHook,
+  runPreScheduleHook,
+} from "./hooks/wire-helpers.js";
 import { emitSubEvent } from "./turn-runtime-helpers.js";
 import {
   __testOnly_parseFinalOutputEnvelope,
   looksLikeStructuredRuntimeOutput,
 } from "./turn-output-helpers.js";
 import { executeOneRuntime } from "./turn-runtime-execution.js";
+import type { RuntimeInvocation } from "./turn-runtime-execution.js";
+import {
+  retainPreGameRuntimes,
+  resolveUserSettings,
+} from "./turn-executor-helpers.js";
+import { runWithHookScope } from "./hooks/hook-scope.js";
 import { runEventChain } from "./turn-event-chain.js";
 import {
   MaxRecursionExceeded,
@@ -54,6 +64,7 @@ export {
 } from "./turn-output-helpers.js";
 export {
   MaxRecursionExceeded,
+  type AgentLoopDeps,
   type TurnExecutorDeps,
   type TurnExecutorOptions,
 } from "./turn-executor-types.js";
@@ -94,6 +105,67 @@ export {
  * ```
  */
 export async function executeTurn(
+  input: TurnInput,
+  activeRuntimes: readonly RuntimeManifest[],
+  deps: TurnExecutorDeps,
+  options?: TurnExecutorOptions,
+): Promise<TurnResult> {
+  // Publish the session's active plugin set so the global HookPipeline only
+  // fires hooks of plugins active in this session (see hooks/hook-scope.ts).
+  const activePluginIds = new Set<string>(
+    activeRuntimes.map((r) => r.pluginId),
+  );
+  // Capture a turn-level, per-plugin read-only settings snapshot alongside the
+  // active set, so hooks can read their own plugin's `userSettings` via
+  // `HookContext.getOwnSettings`. Purely additive: when no plugin declares
+  // settings the snapshot is empty and behaviour is unchanged.
+  const settings = buildHookSettings(activeRuntimes, input.userSettings);
+  return runWithHookScope({ activePluginIds, settings }, () =>
+    executeTurnImpl(input, activeRuntimes, deps, options),
+  );
+}
+
+/**
+ * Build the turn-level per-plugin settings snapshot consumed by hooks.
+ *
+ * For each active runtime, resolves its `userSettings` (manifest defaults
+ * merged with the player's saved values) and merges the result into the
+ * owning plugin's bucket. Plugins without declared settings are omitted.
+ * Buckets and the top-level map are deep-frozen so hooks can never mutate the
+ * snapshot — including nested values. (Current `PluginUserSettingSpec` types
+ * only yield scalars, but `spec.default` is typed `unknown`, so a plugin could
+ * declare an object default; deep-freezing keeps the read-only contract honest
+ * regardless.)
+ */
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === "object") {
+    for (const inner of Object.values(value as Record<string, unknown>)) {
+      deepFreeze(inner);
+    }
+    Object.freeze(value);
+  }
+  return value;
+}
+
+function buildHookSettings(
+  activeRuntimes: readonly RuntimeManifest[],
+  allUserSettings: TurnInput["userSettings"],
+): Readonly<Record<string, Readonly<Record<string, unknown>>>> {
+  const snapshot: Record<string, Record<string, unknown>> = {};
+  for (const manifest of activeRuntimes) {
+    const resolved = resolveUserSettings(manifest, allUserSettings);
+    if (!resolved) continue;
+    const bucket = snapshot[manifest.pluginId] ?? {};
+    Object.assign(bucket, resolved);
+    snapshot[manifest.pluginId] = bucket;
+  }
+  for (const pluginId of Object.keys(snapshot)) {
+    deepFreeze(snapshot[pluginId]);
+  }
+  return Object.freeze(snapshot);
+}
+
+async function executeTurnImpl(
   input: TurnInput,
   activeRuntimes: readonly RuntimeManifest[],
   deps: TurnExecutorDeps,
@@ -206,6 +278,30 @@ export async function executeTurn(
     };
   }
 
+  // PreSchedule hook — plugins may observe / narrow the set of runtimes that
+  // run this turn (after trigger selection, before scheduling). No-op when no
+  // pipeline or no handler returns a replacement.
+  const preScheduleResult = await runPreScheduleHook(
+    {
+      pipeline: deps.hookPipeline,
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      eventBus: deps.eventBus,
+      emitter: deps.emitter,
+    },
+    { triggered },
+  );
+  // F-1 guard: PreSchedule must not be able to drop Pre-Game runtimes —
+  // removing pregame / schema-gen / player-init would silently break session
+  // initialization (no character, schema never written, Pre-Game never
+  // completes). While Pre-Game is pending, force-retain any triggered Pre-Game
+  // runtime the hook dropped; PreSchedule can only shape main-loop runtimes.
+  // The `!== triggered` check keeps the no-hook fast path byte-identical.
+  const scheduledRuntimes =
+    isPreGamePending && preScheduleResult !== triggered
+      ? retainPreGameRuntimes(preScheduleResult, triggered)
+      : preScheduleResult;
+
   // 2. Schedule runtimes.
   //
   // Pre-Game band uses strict priority ordering while setup runtimes are
@@ -225,7 +321,7 @@ export async function executeTurn(
   // See packages/runtime/src/dag-scheduler.ts for the algorithm.
   const groups = scheduleTriggeredRuntimes({
     manualTarget,
-    triggered,
+    triggered: scheduledRuntimes,
     isPreGamePending,
     turnNumber,
   });
@@ -275,6 +371,34 @@ export async function executeTurn(
     ? input.manualTrigger?.triggerEvent
     : undefined;
 
+  // Single entry point for invoking one runtime. `sessionMeta` / `sessionContext`
+  // are reassigned by recordPreGameCompletion between call sites, so this reads
+  // them by closure each call rather than snapshotting a base object.
+  const invoke = (
+    manifest: RuntimeManifest,
+    triggerEvent: RuntimeInvocation["triggerEvent"],
+  ): Promise<RuntimeResult> =>
+    executeOneRuntime({
+      manifest,
+      input,
+      activeRuntimes,
+      completedResults,
+      deps,
+      maxSteps,
+      defaultTimeoutMs,
+      messageHistory: projectedPromptHistory,
+      sessionMeta,
+      hookPipeline: deps.hookPipeline,
+      sessionSummaries,
+      workingMemory,
+      coreMemoryBlocks,
+      sessionContext,
+      triggerEvent,
+      turnOptions: options,
+      executeTurnFn: executeTurn,
+      recursionDepth,
+    });
+
   for (const group of groups) {
     const results = await executeParallel(group.runtimes, async (manifest) => {
       const triggerEventForRuntime =
@@ -283,26 +407,7 @@ export async function executeTurn(
         manifest.name === manualTarget.name
           ? manualTriggerEventPayload
           : undefined;
-      return executeOneRuntime(
-        manifest,
-        input,
-        activeRuntimes,
-        completedResults,
-        deps,
-        maxSteps,
-        defaultTimeoutMs,
-        projectedPromptHistory,
-        sessionMeta,
-        deps.hookPipeline,
-        sessionSummaries,
-        workingMemory,
-        coreMemoryBlocks,
-        sessionContext,
-        triggerEventForRuntime,
-        options,
-        executeTurn,
-        recursionDepth,
-      );
+      return invoke(manifest, triggerEventForRuntime);
     });
 
     // Merge results
@@ -319,7 +424,7 @@ export async function executeTurn(
     // same request, immediately run any already-triggered main-loop runtimes so
     // the player sees the first story beat after submitting setup inputs.
     const followupGroups = scheduleMainLoopFollowups({
-      triggered,
+      triggered: scheduledRuntimes,
       completedRuntimeIds: new Set(completedResults.keys()),
       turnNumber,
     });
@@ -327,26 +432,7 @@ export async function executeTurn(
       const results = await executeParallel(
         group.runtimes,
         async (manifest) => {
-          return executeOneRuntime(
-            manifest,
-            input,
-            activeRuntimes,
-            completedResults,
-            deps,
-            maxSteps,
-            defaultTimeoutMs,
-            projectedPromptHistory,
-            sessionMeta,
-            deps.hookPipeline,
-            sessionSummaries,
-            workingMemory,
-            coreMemoryBlocks,
-            sessionContext,
-            undefined,
-            options,
-            executeTurn,
-            recursionDepth,
-          );
+          return invoke(manifest, undefined);
         },
       );
       for (const [name, result] of results) {
@@ -358,27 +444,7 @@ export async function executeTurn(
   const deferredFollowers = await runEventChain({
     activeRuntimes,
     completedResults,
-    executeRuntime: (manifest, triggerEvent) =>
-      executeOneRuntime(
-        manifest,
-        input,
-        activeRuntimes,
-        completedResults,
-        deps,
-        maxSteps,
-        defaultTimeoutMs,
-        projectedPromptHistory,
-        sessionMeta,
-        deps.hookPipeline,
-        sessionSummaries,
-        workingMemory,
-        coreMemoryBlocks,
-        sessionContext,
-        triggerEvent,
-        options,
-        executeTurn,
-        recursionDepth,
-      ),
+    executeRuntime: (manifest, triggerEvent) => invoke(manifest, triggerEvent),
   });
 
   // ── Pre-Game completion tracking ────────────────────────────────

@@ -10,7 +10,11 @@ import type { SessionContextSnapshot } from "@covel/context";
 import type { LLMMessage } from "./llm-adapter.js";
 import type { HookPipeline } from "./hooks/pipeline.js";
 import { resolveUserSettings } from "./turn-executor-helpers.js";
-import { runPreRuntimeHook, runPostRuntimeHook } from "./hooks/wire-helpers.js";
+import {
+  runPreRuntimeHook,
+  runPostRuntimeHook,
+  runPostContextAssemblyHook,
+} from "./hooks/wire-helpers.js";
 import { emitSubEvent } from "./turn-runtime-helpers.js";
 import {
   findLastStructuredToolOutput,
@@ -207,10 +211,31 @@ export async function executeAgentRuntime({
     ? await buildContextAsync({ ...buildParams, store: deps.store })
     : buildContext(buildParams);
 
+  // ── PostContextAssembly hook ─────────────────────────────────
+  // Turn-level, once per runtime: lets plugins rewrite the assembled system
+  // prompt and/or projected history before the loop. Distinct from the
+  // per-call PreLLMCall — this shapes the assembled context a single time.
+  const shapedContext = await runPostContextAssemblyHook(
+    {
+      pipeline: hookPipeline,
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      pluginId: manifest.pluginId,
+      runtimeId: manifest.name,
+      eventBus: deps.eventBus,
+      emitter: deps.emitter,
+    },
+    {
+      systemPrompt: assembled.systemPrompt,
+      messages: assembled.messages,
+      outputKind: manifest.outputKind,
+    },
+  );
+
   // Build LLM messages
   const messages: LLMMessage[] = [
-    { role: "system", content: assembled.systemPrompt },
-    ...assembled.messages,
+    { role: "system", content: shapedContext.systemPrompt },
+    ...shapedContext.messages,
   ];
 
   const toolLoop = await runAgentToolLoop({

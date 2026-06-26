@@ -27,12 +27,12 @@ import {
   emitLlmRespondedSuccess,
 } from "./llm-telemetry.js";
 import { shouldRetryMalformedToolArguments } from "./turn-output-helpers.js";
-import type { TurnExecutorDeps } from "./turn-executor-types.js";
+import type { AgentLoopDeps } from "./turn-executor-types.js";
 import type { LLMToolDefinition, LLMResponseFormat } from "./llm-adapter.js";
 
 export interface RequestLLMResponseOptions {
   readonly manifest: RuntimeManifest;
-  readonly deps: TurnExecutorDeps;
+  readonly deps: AgentLoopDeps;
   readonly messages: LLMMessage[];
   readonly effectiveModel: string | undefined;
   readonly toolDefs: readonly LLMToolDefinition[] | undefined;
@@ -170,7 +170,7 @@ async function requestNonStreaming(
 
 async function malformedToolArgsFallback(args: {
   manifest: RuntimeManifest;
-  deps: TurnExecutorDeps;
+  deps: AgentLoopDeps;
   messages: LLMMessage[];
   effectiveModel: string | undefined;
   toolDefs: readonly LLMToolDefinition[];
