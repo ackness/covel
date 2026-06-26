@@ -14,8 +14,10 @@ import {
   buildLlmRespondedSuccessPayload,
 } from "./llm-trace-payload.js";
 import {
+  runPostLLMResponseHook,
   runPostRuntimeHook,
   runPostToolUseHook,
+  runPreLLMCallHook,
   runPreRuntimeHook,
   runPreToolUseHook,
 } from "./hooks/wire-helpers.js";
@@ -181,12 +183,38 @@ export async function resumeSuspendedRuntime(
     ? buildToolDefinitions(manifest, deps.toolExecutor, toolContext)
     : undefined;
 
+  // Shared hook wiring reused across the LLM-call and tool-call sites below,
+  // mirroring runAgentToolLoop. The resume path must fire the same LLM-boundary
+  // (PreLLMCall / PostLLMResponse) and tool (Pre/PostToolUse) hooks as the main
+  // loop — otherwise a plugin's handlers are silently skipped for any runtime
+  // that happens to suspend-and-resume.
+  const hookOpts = {
+    pipeline: hookPipeline,
+    sessionId: suspension.sessionId,
+    turnId: suspension.turnId,
+    pluginId: manifest.pluginId,
+    runtimeId: manifest.name,
+    eventBus: deps.eventBus,
+    emitter: deps.emitter,
+  };
+
   while (steps < maxSteps && Date.now() < deadline) {
     steps++;
 
     const effectiveModel = deps.resolveModel
       ? deps.resolveModel(manifest, undefined)
       : manifest.model;
+
+    // ── PreLLMCall hook ──────────────────────────────────────────
+    // Non-destructively rewrite the request sent on THIS call (messages /
+    // model / tools) without mutating the canonical transcript — mirrors the
+    // main agent loop so a suspended-then-resumed runtime honours the same
+    // PreLLMCall handlers (model routing, request audit, token budgeting).
+    const llmRequest = await runPreLLMCallHook(hookOpts, {
+      messages,
+      model: effectiveModel,
+      tools: toolDefs,
+    });
 
     const llmCallStart = Date.now();
     if (deps.emitter) {
@@ -195,11 +223,11 @@ export async function resumeSuspendedRuntime(
         buildLlmCallingPayload({
           runtimeId: manifest.name,
           pluginId: manifest.pluginId,
-          slot: effectiveModel,
-          model: effectiveModel,
+          slot: llmRequest.model,
+          model: llmRequest.model,
           provider: null,
-          messages,
-          tools: toolDefs,
+          messages: llmRequest.messages,
+          tools: llmRequest.tools,
           attempt: 0,
         }),
       );
@@ -207,9 +235,9 @@ export async function resumeSuspendedRuntime(
     let response;
     try {
       response = await deps.llm.generate({
-        model: effectiveModel,
-        messages,
-        tools: toolDefs,
+        model: llmRequest.model,
+        messages: llmRequest.messages,
+        tools: llmRequest.tools,
         signal: AbortSignal.timeout(Math.max(1000, deadline - Date.now())),
       });
     } catch (err) {
@@ -240,6 +268,12 @@ export async function resumeSuspendedRuntime(
       );
     }
 
+    // ── PostLLMResponse hook ─────────────────────────────────────
+    // Inspect / patch the response (content, toolCalls) before tool dispatch,
+    // mirroring the main loop. The trace above records the raw response; the
+    // hook shapes what the resume loop actually dispatches on.
+    response = await runPostLLMResponseHook(hookOpts, response);
+
     if (response.toolCalls.length > 0) {
       if (response.content) finalContent = response.content;
 
@@ -255,16 +289,7 @@ export async function resumeSuspendedRuntime(
       for (const toolCall of response.toolCalls) {
         if (deps.toolExecutor) {
           const tcStart = Date.now();
-          const preToolOpts = {
-            pipeline: hookPipeline,
-            sessionId: suspension.sessionId,
-            turnId: suspension.turnId,
-            pluginId: manifest.pluginId,
-            runtimeId: manifest.name,
-            eventBus: deps.eventBus,
-            emitter: deps.emitter,
-          };
-          const preToolOutcome = await runPreToolUseHook(preToolOpts, {
+          const preToolOutcome = await runPreToolUseHook(hookOpts, {
             id: toolCall.id,
             name: toolCall.name,
             arguments: toolCall.arguments,
@@ -299,7 +324,7 @@ export async function resumeSuspendedRuntime(
 
           const { result, terminate: terminateAfterTool } =
             await runPostToolUseHook(
-              preToolOpts,
+              hookOpts,
               {
                 id: effectiveTc.id,
                 name: effectiveTc.name,

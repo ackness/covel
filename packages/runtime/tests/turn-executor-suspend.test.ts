@@ -21,6 +21,7 @@ import type { DataStore } from "@covel/store";
 import { createEventBus } from "@covel/events";
 import type { EventBus } from "@covel/events";
 import { getPendingProposals } from "@covel/tools";
+import { createHookPipeline } from "../src/index.js";
 import { executeTurn, resumeSuspendedRuntime } from "../src/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm-adapter.js";
@@ -72,13 +73,15 @@ function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
 class MockLLM implements LLMAdapter {
   responses: LLMResponse[] = [];
   callCount = 0;
+  lastModel: string | undefined;
 
   setResponses(responses: LLMResponse[]) {
     this.responses = responses;
     this.callCount = 0;
   }
 
-  async generate(): Promise<LLMResponse> {
+  async generate(params?: { readonly model?: string }): Promise<LLMResponse> {
+    this.lastModel = params?.model;
     const response =
       this.responses[this.callCount] ??
       this.responses[this.responses.length - 1];
@@ -754,6 +757,84 @@ describe("resumeSuspendedRuntime", () => {
     expect(result.status).toBe("success");
     expect((result.output as Record<string, unknown>).narrativeOutput).toBe(
       "Resume successful!",
+    );
+  });
+
+  it("fires PreLLMCall / PostLLMResponse hooks on the resume path", async () => {
+    const suspensionId = await createTestSuspension("tc-resume-hooks");
+
+    mockLLM.setResponses([
+      {
+        content: '{"narrativeOutput": "original"}',
+        toolCalls: [],
+        finishReason: "stop",
+        usage: { inputTokens: 4, outputTokens: 4 },
+      },
+    ]);
+
+    const hookPipeline = createHookPipeline();
+    const preLLM = vi.fn().mockResolvedValue({
+      action: "continue",
+      replace: { model: "rerouted-model" },
+    });
+    const postLLM = vi.fn().mockResolvedValue({
+      action: "continue",
+      replace: {
+        response: {
+          content: '{"narrativeOutput": "patched by hook"}',
+          toolCalls: [],
+          finishReason: "stop",
+          usage: { inputTokens: 4, outputTokens: 4 },
+        },
+      },
+    });
+    hookPipeline.register({
+      id: "t:resume:PreLLMCall",
+      event: "PreLLMCall",
+      handler: preLLM,
+    });
+    hookPipeline.register({
+      id: "t:resume:PostLLMResponse",
+      event: "PostLLMResponse",
+      handler: postLLM,
+    });
+
+    const manifest = makeManifest();
+    const loaded: LoadedRuntime = {
+      manifest,
+      promptTemplate: "",
+      references: [],
+    };
+    const suspension = await store.getSuspension(suspensionId);
+
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => loaded,
+      llm: mockLLM,
+      getConfig: () => ({}),
+      store,
+      toolExecutor: mockToolExecutor,
+      eventBus,
+      hookPipeline,
+    };
+
+    const result = await resumeSuspendedRuntime(
+      suspension!,
+      { name: "Alice" },
+      manifest,
+      deps,
+    );
+
+    // Both LLM-boundary hooks fired on the resume path. Regression guard: they
+    // were originally wired only into the main agent loop, so a runtime that
+    // suspended-and-resumed silently skipped them (PR #6 review M1).
+    expect(preLLM).toHaveBeenCalledTimes(1);
+    expect(postLLM).toHaveBeenCalledTimes(1);
+    // PreLLMCall.replace.model is honoured — the resumed call used the rerouted model.
+    expect(mockLLM.lastModel).toBe("rerouted-model");
+    // PostLLMResponse.replace.response is honoured — output reflects the patch.
+    expect(result.status).toBe("success");
+    expect((result.output as Record<string, unknown>).narrativeOutput).toBe(
+      "patched by hook",
     );
   });
 
