@@ -86,6 +86,25 @@ export interface HookContext {
    * active set; the pipeline already filters out hooks of inactive plugins.
    */
   readonly activePluginIds?: ReadonlySet<string>;
+  /**
+   * Read-only accessor for the handler's *own* plugin settings this turn.
+   *
+   * The pipeline injects this (from the same session hook scope that carries
+   * `activePluginIds`) just before invoking each handler, bound to that
+   * handler's `pluginId`. It returns a frozen snapshot of the plugin's
+   * resolved `userSettings` (manifest defaults merged with the player's saved
+   * values) — unlocking per-session-configurable hooks with no write path.
+   *
+   * Semantics:
+   * - Frozen / read-only — never a mutable reference to shared state.
+   * - Scoped to the handler's own plugin only — no cross-plugin reads.
+   * - Returns `{}` for framework / global hooks (no `pluginId`), or when the
+   *   plugin declared no settings, or when the scope carries no settings.
+   * - Absent (`undefined`) when invoked outside an active hook scope (e.g.
+   *   direct `pipeline.run` unit calls) — handlers should use
+   *   `ctx.getOwnSettings?.() ?? {}`.
+   */
+  readonly getOwnSettings?: () => Readonly<Record<string, unknown>>;
 }
 
 // ── Hook result ──────────────────────────────────────────────────

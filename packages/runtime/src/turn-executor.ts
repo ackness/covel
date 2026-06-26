@@ -26,7 +26,10 @@ import {
 } from "./turn-output-helpers.js";
 import { executeOneRuntime } from "./turn-runtime-execution.js";
 import type { RuntimeInvocation } from "./turn-runtime-execution.js";
-import { retainPreGameRuntimes } from "./turn-executor-helpers.js";
+import {
+  retainPreGameRuntimes,
+  resolveUserSettings,
+} from "./turn-executor-helpers.js";
 import { runWithHookScope } from "./hooks/hook-scope.js";
 import { runEventChain } from "./turn-event-chain.js";
 import {
@@ -112,9 +115,40 @@ export async function executeTurn(
   const activePluginIds = new Set<string>(
     activeRuntimes.map((r) => r.pluginId),
   );
-  return runWithHookScope({ activePluginIds }, () =>
+  // Capture a turn-level, per-plugin read-only settings snapshot alongside the
+  // active set, so hooks can read their own plugin's `userSettings` via
+  // `HookContext.getOwnSettings`. Purely additive: when no plugin declares
+  // settings the snapshot is empty and behaviour is unchanged.
+  const settings = buildHookSettings(activeRuntimes, input.userSettings);
+  return runWithHookScope({ activePluginIds, settings }, () =>
     executeTurnImpl(input, activeRuntimes, deps, options),
   );
+}
+
+/**
+ * Build the turn-level per-plugin settings snapshot consumed by hooks.
+ *
+ * For each active runtime, resolves its `userSettings` (manifest defaults
+ * merged with the player's saved values) and merges the result into the
+ * owning plugin's bucket. Plugins without declared settings are omitted.
+ * Buckets and the top-level map are frozen so hooks can never mutate them.
+ */
+function buildHookSettings(
+  activeRuntimes: readonly RuntimeManifest[],
+  allUserSettings: TurnInput["userSettings"],
+): Readonly<Record<string, Readonly<Record<string, unknown>>>> {
+  const snapshot: Record<string, Record<string, unknown>> = {};
+  for (const manifest of activeRuntimes) {
+    const resolved = resolveUserSettings(manifest, allUserSettings);
+    if (!resolved) continue;
+    const bucket = snapshot[manifest.pluginId] ?? {};
+    Object.assign(bucket, resolved);
+    snapshot[manifest.pluginId] = bucket;
+  }
+  for (const pluginId of Object.keys(snapshot)) {
+    Object.freeze(snapshot[pluginId]);
+  }
+  return Object.freeze(snapshot);
 }
 
 async function executeTurnImpl(

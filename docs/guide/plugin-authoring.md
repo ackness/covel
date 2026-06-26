@@ -128,6 +128,26 @@ hooks:
 
 **所有 hook 都是 session 作用域的**：pipeline 虽是全局单例,但执行时按当前 session 的激活插件集过滤——你的 hook **只对启用了你插件的 session 触发**(框架 hook 始终触发)。无需在 handler 里自行判断插件是否激活;`HookContext.activePluginIds` 可读当前激活集。
 
+**读取本插件的会话级设置（`ctx.getOwnSettings`）**：hook handler 的 `ctx` 上有一个只读取数器 `getOwnSettings`，让 hook 行为可以「每会话可配」——无需声明 inject、也无需做工具调用往返。它复用了上面的 session 作用域（与 `activePluginIds` 同一个 ALS scope），由 pipeline 在调用每个 handler 前按其 `pluginId` 注入：
+
+```ts
+// hooks/validate-tool.ts
+export default async function validateTool(ctx, payload) {
+  const settings = ctx.getOwnSettings?.() ?? {};
+  if (settings.strictMode === true) {
+    // 按玩家保存的设置改变 hook 行为
+    return { action: "abort", reason: "strict mode blocks this tool" };
+  }
+  return { action: "continue" };
+}
+```
+
+约定与边界：
+
+- **只读**：返回的是冻结快照（`Object.freeze`），不能写；hook 仍然只能 guard / rewrite / audit，没有任何写库或 eventBus 通道。
+- **只看自己**：仅暴露 handler 所属插件的 `userSettings`（manifest 默认值与玩家保存值合并后的结果，回合起始拍一次），读不到其它插件的设置。
+- **安全降级**：框架 / 全局 hook（无 `pluginId`）返回 `{}`；非回合作用域（session / resume / commit / characters 等只带 `activePluginIds`、不带 settings 的 scope）也返回 `{}`；在完全无作用域（例如单测直接调 `pipeline.run`）时 `ctx.getOwnSettings` 可能为 `undefined`——务必写成 `ctx.getOwnSettings?.() ?? {}`。
+
 `TurnStart`、`PostCompaction`、`PostRuntime`、`PostStateCommit`、`TurnStop` 使用 `parallel` 语义：handler 并发执行，适合审计、日志、指标和通知这类观察型副作用。返回 `replace` 或 `abort` 会进入 hook trace；主 payload 保持原值。
 
 排序先看 `enforce: pre | normal | post`，再看全局 hook 与插件 hook 分组，最后保持声明顺序。完整事件表见 [插件参考 / hooks](../reference/plugins.md#hooks)。

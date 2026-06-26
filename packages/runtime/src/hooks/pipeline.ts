@@ -12,7 +12,12 @@
 
 import type { EventBus } from "@covel/events";
 import { HOOK_SEMANTICS } from "./types.js";
-import { currentActivePluginIds, isHookInScope } from "./hook-scope.js";
+import {
+  currentActivePluginIds,
+  currentOwnSettings,
+  isHookInScope,
+  isHookScopeActive,
+} from "./hook-scope.js";
 import type {
   HookEvent,
   HookContext,
@@ -219,9 +224,18 @@ export class HookPipeline {
     let result: HookResult<P>;
     const timeoutMessage = `hook ${reg.id} timed out after ${timeoutMs}ms`;
 
+    // Inject a read-only, per-plugin settings accessor bound to *this* handler's
+    // plugin, reusing the same session hook scope that carries activePluginIds.
+    // Only attached when a scope is active — mirrors the run()-level ctxScoped
+    // gate so scope-less `pipeline.run` calls forward the context untouched
+    // (behaviour-preserving). Framework hooks (no pluginId) get a getter → `{}`.
+    const ctxForHandler: HookContext = isHookScopeActive()
+      ? { ...ctx, getOwnSettings: () => currentOwnSettings(reg.pluginId) }
+      : ctx;
+
     try {
       result = await withTimeout(
-        handler(ctx, payload),
+        handler(ctxForHandler, payload),
         timeoutMs,
         timeoutMessage,
       );

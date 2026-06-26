@@ -29,9 +29,22 @@ import { AsyncLocalStorage } from "node:async_hooks";
 export interface HookScope {
   /** Plugin ids active in the current session. */
   readonly activePluginIds: ReadonlySet<string>;
+  /**
+   * Per-plugin, read-only `userSettings` snapshot for this turn, keyed by
+   * `pluginId`. Each bucket is the plugin's resolved settings (manifest
+   * defaults merged with the player's saved values), already frozen. The turn
+   * pipeline populates this; other scope sites (session / resume / commit /
+   * characters) omit it, in which case `getOwnSettings` degrades to `{}`.
+   */
+  readonly settings?: Readonly<
+    Record<string, Readonly<Record<string, unknown>>>
+  >;
 }
 
 const storage = new AsyncLocalStorage<HookScope>();
+
+/** Shared frozen empty bucket — returned whenever a plugin has no settings. */
+const EMPTY_SETTINGS: Readonly<Record<string, unknown>> = Object.freeze({});
 
 /** Run `fn` with the given active-plugin scope visible to the hook pipeline. */
 export function runWithHookScope<T>(scope: HookScope, fn: () => T): T {
@@ -41,6 +54,30 @@ export function runWithHookScope<T>(scope: HookScope, fn: () => T): T {
 /** Active plugin ids for the current async context, or undefined if unscoped. */
 export function currentActivePluginIds(): ReadonlySet<string> | undefined {
   return storage.getStore()?.activePluginIds;
+}
+
+/** Whether a hook scope is active in the current async context. */
+export function isHookScopeActive(): boolean {
+  return storage.getStore() !== undefined;
+}
+
+/**
+ * Read the current turn's resolved settings for a single plugin.
+ *
+ * Returns a frozen, read-only bucket. Returns the shared empty bucket when:
+ * - there is no active scope,
+ * - `pluginId` is undefined (framework / global hook), or
+ * - the scope carries no settings, or the plugin declared / saved none.
+ *
+ * This is the data source behind `HookContext.getOwnSettings`. It never
+ * exposes another plugin's bucket — callers pass only their own `pluginId`.
+ */
+export function currentOwnSettings(
+  pluginId: string | undefined,
+): Readonly<Record<string, unknown>> {
+  if (!pluginId) return EMPTY_SETTINGS;
+  const settings = storage.getStore()?.settings;
+  return settings?.[pluginId] ?? EMPTY_SETTINGS;
 }
 
 /**
