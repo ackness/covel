@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { characterBlueprintToCharacterUpsert } from "@covel/shared";
 import type { CharacterBlueprint } from "@covel/shared";
-import type { CharacterRecord, DataStore } from "@covel/store";
+import type { CharacterRecord, StoreTransaction } from "@covel/store";
 import {
   blueprintStorageTargets,
   characterMirrorTargets,
@@ -30,7 +30,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * a plugin never makes this path throw.
  */
 export async function importWorldCharacterBlueprints(
-  store: DataStore,
+  store: StoreTransaction,
   sessionId: string,
   worldId: string | undefined,
   now: string,

@@ -1,17 +1,17 @@
 /**
  * Schema ↔ DDL index-consistency guard.
  *
- * The store defines each table's shape twice per SQL backend:
- *   - hand-written DDL (`sqlite/sqlite-schema-ddl.ts`, `postgres/pg-schema-ddl.ts`)
- *     — this is what actually runs at boot (`createTables` / `client.unsafe`).
- *   - Drizzle ORM schema (`sqlite/schema.ts`, `postgres/schema.ts`)
- *     — the design-intent source consumed by tooling / migrations.
+ * The boot DDL (`sqlite/sqlite-schema-ddl.ts`, `postgres/pg-schema-ddl.ts`,
+ * executed at boot via `createTables` / `client.unsafe`) is now DERIVED from the
+ * Drizzle ORM schema (`sqlite/schema.ts`, `postgres/schema.ts`) via
+ * `common/ddl-codegen.ts` — the schema is the single source of truth.
  *
- * These two drifted historically (PG `trace_events` was missing its
- * `trace_id` / `turn_id` indexes; several SQLite indexes used an
- * `idx_<table>_session` name while Drizzle used `<table>_<col>_idx`).
- *
- * This test pins the two representations together so future drift fails CI:
+ * The two representations drifted historically when the DDL was hand-written
+ * (PG `trace_events` was missing its `trace_id` / `turn_id` indexes; several
+ * SQLite indexes used an `idx_<table>_session` name while Drizzle used
+ * `<table>_<col>_idx`). Now the DDL is generated, but this test still earns its
+ * keep: it pins the emitter so a codegen regression (a dropped/renamed index)
+ * fails CI.
  *   1. Coverage parity — the set of `(unique, ordered-columns)` indexes per
  *      table must be identical. Catches a missing/extra index regardless of
  *      its name (this is what guards the PG `trace_events` regression).

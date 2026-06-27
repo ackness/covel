@@ -477,12 +477,29 @@ describe("[HIGH] Session creation rolls back when world-data import fails", () =
     // when a world ships character blueprints. (The blueprint plugin-data batch
     // is now capability-gated and skipped when no blueprint plugin is active,
     // so it is no longer a reliable failure-injection point.)
+    //
+    // The session-create route runs the import inside `store.withTransaction`,
+    // so writes flow through the tx-bound view — NOT the outer store. We
+    // therefore wrap `withTransaction` to hand the callback a tx whose
+    // `upsertCharacter` throws, while the real transaction still drives the
+    // atomic rollback.
     const failingStore = new Proxy(store, {
       get(target, prop, receiver) {
-        if (prop === "upsertCharacter") {
-          return vi.fn(async () => {
-            throw new Error("simulated import failure");
-          });
+        if (prop === "withTransaction") {
+          return <T>(fn: (tx: DataStore) => Promise<T>): Promise<T> =>
+            target.withTransaction!((tx) => {
+              const failingTx = new Proxy(tx, {
+                get(txTarget, txProp, txReceiver) {
+                  if (txProp === "upsertCharacter") {
+                    return vi.fn(async () => {
+                      throw new Error("simulated import failure");
+                    });
+                  }
+                  return Reflect.get(txTarget, txProp, txReceiver);
+                },
+              }) as DataStore;
+              return fn(failingTx);
+            });
         }
         return Reflect.get(target, prop, receiver);
       },

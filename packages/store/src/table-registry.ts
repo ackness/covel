@@ -24,14 +24,15 @@
  * MemoryState shape is pinned by `tests/table-registry-consistency.test.ts`, so
  * a schema table with a `session_id` column that is missing here fails CI.
  *
- * FOLLOW-UP (deferred — schema single source of truth): this registry unifies
- * the *table-name* level (cascade / drop list / snapshot). It deliberately does
- * NOT yet drive the four column-level schema definitions
- * (`postgres/schema.ts`, `sqlite/schema.ts`, `postgres/pg-schema-ddl.ts`,
- * `sqlite/sqlite-schema-ddl.ts`), which carry backend-specific column types,
- * JSON handling, indexes, and PG triggers. T3 already pinned index drift with a
- * consistency test; collapsing the four column definitions into one source is a
- * larger, higher-risk change tracked as a separate task.
+ * Schema single source of truth: this registry unifies the *table-name* level
+ * (cascade / drop list / snapshot). The *column-level* schema is now unified
+ * too — the boot DDL in `sqlite/sqlite-schema-ddl.ts` and
+ * `postgres/pg-schema-ddl.ts` is DERIVED from the two Drizzle schemas
+ * (`sqlite/schema.ts`, `postgres/schema.ts`) via `common/ddl-codegen.ts`, so a
+ * column is declared exactly once (in Drizzle). Only Drizzle-unmodelable pieces
+ * (PG/SQLite triggers, idempotent in-place column migrations) remain
+ * hand-written next to the boot path. Parity is pinned by
+ * `tests/schema-ddl-codegen.test.ts` + `tests/schema-index-consistency.test.ts`.
  */
 
 import type { MemoryState } from "./memory/memory-types.js";

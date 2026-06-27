@@ -1,9 +1,12 @@
 /**
  * Session kernel commit-atomicity tests (S4-T1).
  *
- * Verifies that `commitAll()` wraps the proposal chain in a transaction
- * by default, and falls back to the legacy non-transactional path when
- * Stores with transaction hooks use atomic commitAll by default.
+ * Verifies that `commitAll()` wraps the proposal chain in a single scoped
+ * `withTransaction` callback by default (writes flow through the tx-bound store
+ * view), and falls back to the legacy non-transactional loop when the store
+ * does not expose `withTransaction`. The begin/commit/rollback counters track
+ * the transaction lifecycle: entry → begin, clean return → commit, thrown
+ * error → rollback (auto-restore).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -94,28 +97,35 @@ function createRecordingStore(): RecordingStore {
     async addTraceEvent(record) {
       traceEvents.push(record as Record<string, unknown>);
     },
-    async beginTx() {
+    // Scoped transaction: snapshot on entry, restore on throw. The tx-bound
+    // store view is the store itself (writes land in the shared arrays), which
+    // mirrors how single-connection backends fold writes into the open
+    // transaction. A clean return commits (snapshot discarded); a thrown error
+    // rolls back (arrays restored) and re-throws to the caller.
+    async withTransaction(fn) {
       beginCalls.count++;
       snapshot = {
         messages: [...messages],
         stateChanges: [...stateChanges],
         events: [...events],
       };
-    },
-    async commitTx() {
-      commitCalls.count++;
-      snapshot = null;
-    },
-    async rollbackTx() {
-      rollbackCalls.count++;
-      if (snapshot) {
-        messages.length = 0;
-        messages.push(...snapshot.messages);
-        stateChanges.length = 0;
-        stateChanges.push(...snapshot.stateChanges);
-        events.length = 0;
-        events.push(...snapshot.events);
+      try {
+        const result = await fn(store);
+        commitCalls.count++;
         snapshot = null;
+        return result;
+      } catch (err) {
+        rollbackCalls.count++;
+        if (snapshot) {
+          messages.length = 0;
+          messages.push(...snapshot.messages);
+          stateChanges.length = 0;
+          stateChanges.push(...snapshot.stateChanges);
+          events.length = 0;
+          events.push(...snapshot.events);
+          snapshot = null;
+        }
+        throw err;
       }
     },
   };

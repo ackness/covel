@@ -17,6 +17,7 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "generate-ddl": "tsx scripts/print-ddl.ts",
     "clean": "node ../../scripts/remove-paths.mjs dist"
   },
   "dependencies": {

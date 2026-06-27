@@ -8,7 +8,10 @@ import type { HookPipeline } from "./hooks/pipeline.js";
 import type { HookContext } from "./hooks/types.js";
 import type { TurnEmitter } from "./turn-emitter.js";
 import { createCommitHandlers } from "./session-commit-handlers.js";
-import type { CommitHandler } from "./session-commit-handlers.js";
+import type {
+  CommitHandler,
+  CommitHandlerMap,
+} from "./session-commit-handlers.js";
 import { emitCommittedProposal } from "./session-commit-emitter.js";
 export type { KernelStore } from "./session-kernel-store.js";
 import type { KernelStore } from "./session-kernel-store.js";
@@ -32,13 +35,29 @@ export function createCommitPipeline(
 ): CommitPipeline {
   const handlers = createCommitHandlers(store);
 
-  async function commit(proposal: Proposal): Promise<CommitResult> {
-    // `handlers` is a correlated map (each value expects its own proposal
+  function commit(proposal: Proposal): Promise<CommitResult> {
+    return commitWith(handlers, store, proposal);
+  }
+
+  /**
+   * Commit a single proposal through `handlerMap`, recording the trace event
+   * via `writeStore`. The non-transactional path passes the outer `store`; the
+   * transactional path passes the `tx`-scoped store view (and tx-bound
+   * handlers) so every write lands inside the open transaction — critical on
+   * PostgreSQL, where `withTransaction` runs on an isolated connection and a
+   * write through the outer store would escape the transaction.
+   */
+  async function commitWith(
+    handlerMap: CommitHandlerMap,
+    writeStore: KernelStore,
+    proposal: Proposal,
+  ): Promise<CommitResult> {
+    // `handlerMap` is a correlated map (each value expects its own proposal
     // variant). Dispatch by `proposal.type` is sound at runtime, so we erase
     // to the uniform `CommitHandler` here — the single, localized cast for the
     // whole commit chain. `| undefined` guards runtime-only invalid types
     // (e.g. a stale or malformed proposal whose type has no handler).
-    const handler = (handlers as Record<string, CommitHandler | undefined>)[
+    const handler = (handlerMap as Record<string, CommitHandler | undefined>)[
       proposal.type
     ];
     if (!handler) {
@@ -83,7 +102,7 @@ export function createCommitPipeline(
     const result = await handler(effectiveProposal);
 
     if (result.committed) {
-      await store.addTraceEvent({
+      await writeStore.addTraceEvent({
         id: crypto.randomUUID(),
         sessionId: effectiveProposal.sessionId,
         type: "proposal.committed",
@@ -122,56 +141,51 @@ export function createCommitPipeline(
   async function commitAll(
     proposals: readonly Proposal[],
   ): Promise<CommitResult[]> {
-    const supportsTx =
-      typeof store.beginTx === "function" &&
-      typeof store.commitTx === "function" &&
-      typeof store.rollbackTx === "function";
-
-    if (!supportsTx) {
-      const results: CommitResult[] = [];
-      for (const p of proposals) {
-        results.push(await commit(p));
-      }
-
-      const committed = results.filter((r) => r.committed);
-      const failed = results.filter((r) => !r.committed);
-      if (committed.length > 0 && failed.length > 0) {
-        const failureDetails = failed.map((r) => {
-          const idx = results.indexOf(r);
-          return {
-            index: idx,
-            type: proposals[idx].type,
-            id: proposals[idx].id,
-            error: r.error,
-          };
-        });
-        console.warn(
-          "[session-kernel] commitAll: partial commit detected (non-transactional mode) — %d committed, %d failed. Failures: %s",
-          committed.length,
-          failed.length,
-          JSON.stringify(failureDetails),
-        );
-      }
-
-      return results;
+    // Preferred path: a single scoped transaction. The callback writes through
+    // the tx-bound store view (and tx-bound handlers), so the whole proposal
+    // chain commits atomically and a thrown store error auto-rolls-back. On
+    // PostgreSQL each `withTransaction` runs on its own pooled connection, so
+    // concurrent turns no longer serialize behind a shared begin/commit window.
+    if (typeof store.withTransaction === "function") {
+      return store.withTransaction(async (tx) => {
+        const txHandlers = createCommitHandlers(tx);
+        const results: CommitResult[] = [];
+        for (const p of proposals) {
+          results.push(await commitWith(txHandlers, tx, p));
+        }
+        return results;
+      });
     }
 
-    await store.beginTx!();
-    try {
-      const results: CommitResult[] = [];
-      for (const p of proposals) {
-        results.push(await commit(p));
-      }
-      await store.commitTx!();
-      return results;
-    } catch (err) {
-      try {
-        await store.rollbackTx!();
-      } catch {
-        // Surface the original failure to the caller.
-      }
-      throw err;
+    // Fallback: stores without scoped transactions (thin mocks / legacy
+    // backends) commit one proposal at a time. A mid-chain failure can leave a
+    // partial commit, so surface it loudly.
+    const results: CommitResult[] = [];
+    for (const p of proposals) {
+      results.push(await commit(p));
     }
+
+    const committed = results.filter((r) => r.committed);
+    const failed = results.filter((r) => !r.committed);
+    if (committed.length > 0 && failed.length > 0) {
+      const failureDetails = failed.map((r) => {
+        const idx = results.indexOf(r);
+        return {
+          index: idx,
+          type: proposals[idx].type,
+          id: proposals[idx].id,
+          error: r.error,
+        };
+      });
+      console.warn(
+        "[session-kernel] commitAll: partial commit detected (non-transactional mode) — %d committed, %d failed. Failures: %s",
+        committed.length,
+        failed.length,
+        JSON.stringify(failureDetails),
+      );
+    }
+
+    return results;
   }
 
   return { commit, commitAll };

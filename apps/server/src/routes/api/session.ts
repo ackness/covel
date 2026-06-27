@@ -31,7 +31,6 @@ import {
   cleanupWorldDataMediaRefs,
   finalizeWorldDataMediaRefs,
   importWorldDataForSession,
-  type WorldDataImportedMediaRef,
 } from "../../world-data/session-import.js";
 import {
   decorateSessionList,
@@ -164,12 +163,14 @@ sessionRoutes.post("/", async (c) => {
     updatedAt: now,
   };
 
-  let importedMediaRefs: readonly WorldDataImportedMediaRef[] = [];
-  await store.beginTx();
-  try {
-    await store.createSession(session);
+  // Scoped transaction: createSession + world-data import + blueprint fallback
+  // commit atomically. Writes flow through the tx-bound view (`tx`), so a
+  // mid-import failure auto-rolls-back the session row — and on PostgreSQL the
+  // import runs on an isolated connection instead of serializing the store.
+  const importedMediaRefs = await store.withTransaction!(async (tx) => {
+    await tx.createSession(session);
     const importedWorldData = await importWorldDataForSession({
-      store,
+      store: tx,
       mediaStore: c.get("mediaStore"),
       sessionId: id,
       worldId: rawWorldId,
@@ -182,18 +183,14 @@ sessionRoutes.post("/", async (c) => {
       },
       deferMediaFinalize: true,
     });
-    importedMediaRefs = importedWorldData.mediaRefs;
     if (!importedWorldData.imported) {
-      await importWorldCharacterBlueprints(store, id, rawWorldId, now, {
+      await importWorldCharacterBlueprints(tx, id, rawWorldId, now, {
         activePlugins: plugins,
         registry: pluginRegistry,
       });
     }
-    await store.commitTx();
-  } catch (err) {
-    await store.rollbackTx();
-    throw err;
-  }
+    return importedWorldData.mediaRefs;
+  });
   try {
     await finalizeWorldDataMediaRefs({
       mediaStore: c.get("mediaStore"),

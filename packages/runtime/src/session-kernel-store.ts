@@ -107,9 +107,24 @@ export interface KernelStore {
     }>,
   ): Promise<void>;
   /**
-   * Optional transaction hooks. When present, `commitAll()` wraps the whole
-   * proposal chain in begin/commit/rollback so a mid-chain failure leaves no
-   * partial state in the store.
+   * Scoped transaction API (preferred). When present, `commitAll()` runs the
+   * whole proposal chain inside a single `withTransaction` callback so a
+   * mid-chain failure auto-rolls-back and leaves no partial state. The callback
+   * receives a transaction-bound store view — commit handlers write through
+   * that `tx`, not the outer store, so on PostgreSQL the chain runs on an
+   * isolated pooled connection instead of serializing the whole store behind a
+   * shared begin/commit window.
+   *
+   * Optional so thin mock stores (and any backend without scoped transactions)
+   * remain assignable; `commitAll()` falls back to a non-transactional loop
+   * when it is absent.
+   */
+  withTransaction?<T>(fn: (tx: KernelStore) => Promise<T>): Promise<T>;
+
+  /**
+   * Imperative transaction shim — retained for backward compatibility and thin
+   * mock stores. The commit pipeline no longer drives these directly; it
+   * prefers {@link KernelStore.withTransaction}.
    */
   beginTx?(): Promise<void>;
   commitTx?(): Promise<void>;
