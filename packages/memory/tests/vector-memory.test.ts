@@ -332,3 +332,110 @@ describe("graceful degradation", () => {
     expect(results.some((r) => r.content.includes("dragon"))).toBe(true);
   });
 });
+
+describe("audit fixes (W3 vector recall)", () => {
+  let store: DataStore;
+  const sessionId = "sess-vec-fixes";
+
+  beforeEach(async () => {
+    order = 0;
+    store = createMemoryStore();
+    await lockModel(store, sessionId);
+  });
+
+  it("does not advance the recall cursor past a message that got an empty embedding", async () => {
+    await addMessage(store, sessionId, "assistant", "first message");
+    await addMessage(store, sessionId, "assistant", "second message");
+    await addMessage(store, sessionId, "assistant", "third message");
+
+    // Embed returns empty for the 2nd item → ingestion must stop at the 1st and
+    // leave the cursor before the gap so 2nd/3rd are retried, never dropped.
+    let failOnce = true;
+    const flaky: EmbedFn = async (texts) =>
+      texts.map((t, i) => {
+        if (failOnce && i === 1) return new Float32Array(0);
+        return embedText(t);
+      });
+
+    const ingestor = createVectorIngestor({ store, embed: flaky });
+    const first = await ingestor.ingest(sessionId);
+    expect(first.recall).toBe(1); // only the 1st landed
+
+    // Provider recovers → the skipped 2nd and the 3rd are both still ingested.
+    failOnce = false;
+    const second = await ingestor.ingest(sessionId);
+    expect(second.recall).toBe(2);
+
+    const hits = await (
+      store as DataStore & {
+        searchVectors: NonNullable<DataStore["searchVectors"]>;
+      }
+    ).searchVectors({
+      sessionId,
+      query: embedText("message"),
+      topK: 10,
+      pluginId: MEMORY_VECTOR_PLUGIN_ID,
+      namespace: RECALL_NAMESPACE,
+    });
+    expect(hits.length).toBe(3); // nothing silently dropped
+  });
+
+  it("tops up short vector results with keyword hits during backfill", async () => {
+    // 3 messages live, but only the oldest is in the vector index (backfill lag).
+    await addMessage(store, sessionId, "assistant", "the dragon breathed fire");
+    await addMessage(store, sessionId, "assistant", "the dragon flew higher");
+    await addMessage(store, sessionId, "assistant", "the dragon roared loud");
+
+    // Seed only the first message into the vector table by hand.
+    const s = store as DataStore & {
+      upsertVector: NonNullable<DataStore["upsertVector"]>;
+    };
+    await s.upsertVector({
+      sessionId,
+      pluginId: MEMORY_VECTOR_PLUGIN_ID,
+      namespace: RECALL_NAMESPACE,
+      key: "m-1",
+      embedding: embedText("the dragon breathed fire"),
+      payload: JSON.stringify({
+        turnId: "t-1",
+        role: "assistant",
+        content: "the dragon breathed fire",
+        createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 1)).toISOString(),
+      }),
+    });
+
+    const system = createMemorySystem({ store, llm, embed });
+    const results = await system.recall.search(sessionId, "dragon", 3);
+    // Vector had 1 hit; keyword tops it up to cover the un-indexed recent ones.
+    expect(results.length).toBeGreaterThan(1);
+    const contents = results.map((r) => r.content);
+    expect(new Set(contents).size).toBe(contents.length); // deduped
+  });
+
+  it("purges archival vectors for a deleted record and bounds the hash map", async () => {
+    await addCharacter(store, sessionId, "c1", "Aldric", "a blacksmith");
+    await addLorebook(store, sessionId, "l1", "forge", "the ancient forge");
+    const ingestor = createVectorIngestor({ store, embed });
+    expect((await ingestor.ingest(sessionId)).archival).toBe(2);
+
+    // Delete the character → next sweep must purge its stale vector.
+    await store.deleteCharacter(sessionId, "c1");
+    await ingestor.ingest(sessionId);
+
+    const hits = await (
+      store as DataStore & {
+        searchVectors: NonNullable<DataStore["searchVectors"]>;
+      }
+    ).searchVectors({
+      sessionId,
+      query: embedText("blacksmith"),
+      topK: 10,
+      pluginId: MEMORY_VECTOR_PLUGIN_ID,
+      namespace: ARCHIVAL_NAMESPACE,
+    });
+    // Only the surviving lorebook entry remains; the deleted character's vector
+    // is gone (not returned as a stale hit).
+    expect(hits.length).toBe(1);
+    expect(hits.every((h) => !h.payload?.includes("Aldric"))).toBe(true);
+  });
+});

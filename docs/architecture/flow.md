@@ -125,7 +125,7 @@ flowchart TB
     Keep --> End
 ```
 
-**优先级 band**（`packages/runtime/src/scheduler.ts` 硬性约束）：
+**优先级 band**（`packages/runtime/src/schedule/scheduler.ts` 硬性约束）：
 
 | turnCount | 可调度 priority 区间 | 语义                                                                                                                                                                                           |
 | --------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -584,7 +584,7 @@ turn_messages (追加式，永不删除):
 ### 6.4 Observability — TurnEmitter
 
 Per-turn observability is fanned out through a small `TurnEmitter`
-abstraction (`packages/runtime/src/turn-emitter.ts`). One `emit(type, payload)`
+abstraction (`packages/runtime/src/trace/turn-emitter.ts`). One `emit(type, payload)`
 call writes a row into `trace_events` AND broadcasts through the global
 `EventBus`, where the `/actions` SSE route re-forwards it to the connected
 client. New events include: `tool.calling` / `tool.completed` / `tool.failed`,

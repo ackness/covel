@@ -234,9 +234,9 @@ Node-only and is never pulled into the IdbStore browser bundle.
 
 ## Kernel integration
 
-Turn commit (`packages/runtime/src/session-commit-pipeline.ts`) uses a
+Turn commit (`packages/runtime/src/commit/session-commit-pipeline.ts`) uses a
 transaction whenever the underlying store implements `beginTx`, `commitTx`,
-and `rollbackTx`. `packages/runtime/src/session-kernel.ts` remains the public
+and `rollbackTx`. `packages/runtime/src/session/session-kernel.ts` remains the public
 facade for processing runtime results. Store adapters that do not expose the
 transaction trio still execute proposals sequentially and warn on partial
 commit failure.
@@ -321,5 +321,5 @@ reference doc.
 - Contract tests: `packages/store/src/contract/store-contract.ts` and `packages/store/src/contract/suites/`
 - PgStore adapter: `packages/store/src/postgres/pg-store-tx.ts`
 - `withTransaction` nesting guard: `packages/store/src/tx-nesting-guard.ts` (Node-only AsyncLocalStorage) and `packages/store/src/tx-nesting-error.ts` (browser-safe error builder)
-- Kernel commit path: `packages/runtime/src/session-commit-pipeline.ts`, `packages/runtime/src/session-commit-handlers.ts`
+- Kernel commit path: `packages/runtime/src/commit/session-commit-pipeline.ts`, `packages/runtime/src/commit/session-commit-handlers.ts`
 - MediaStore schema + S3 metadata adapter: [`media-store.md`](./media-store.md)

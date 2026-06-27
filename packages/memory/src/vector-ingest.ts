@@ -137,10 +137,15 @@ async function ingestRecall(
   const vectors = await embed(batch.map((m) => String(m.content)));
 
   let written = 0;
+  // Only advance the cursor past messages we actually persisted. If `embed`
+  // returns an empty/short array for some entry, we skip it WITHOUT moving the
+  // cursor beyond it, so the next sweep retries it — otherwise a transient empty
+  // embedding would silently drop that message from recall forever.
+  let lastWritten: { createdAt: string; id: string } | null = null;
   for (let i = 0; i < batch.length; i += 1) {
     const msg = batch[i];
     const embedding = vectors[i];
-    if (!embedding || embedding.length === 0) continue;
+    if (!embedding || embedding.length === 0) break;
     await store.upsertVector({
       sessionId,
       pluginId: MEMORY_VECTOR_PLUGIN_ID,
@@ -155,13 +160,18 @@ async function ingestRecall(
       }),
     });
     written += 1;
+    lastWritten = { createdAt: msg.createdAt, id: msg.id };
   }
 
-  const last = batch[batch.length - 1];
-  await writePluginJson<RecallCursor>(store, sessionId, CURSOR_NS, CURSOR_KEY, {
-    createdAt: last.createdAt,
-    id: last.id,
-  });
+  if (lastWritten) {
+    await writePluginJson<RecallCursor>(
+      store,
+      sessionId,
+      CURSOR_NS,
+      CURSOR_KEY,
+      lastWritten,
+    );
+  }
   return written;
 }
 
@@ -192,15 +202,45 @@ async function ingestArchival(
   sessionId: string,
 ): Promise<number> {
   const items = await collectArchivalItems(store, sessionId);
-  if (items.length === 0) return 0;
 
-  const hashes =
+  let hashes =
     (await readPluginJson<ArchivalHashes>(
       store,
       sessionId,
       HASHES_NS,
       HASHES_KEY,
     )) ?? {};
+
+  // Purge vectors for archival records that no longer exist (deleted lorebook
+  // entries / characters). `deleteVectors` is scope-only (no per-key delete), so
+  // on any detected deletion we wipe the whole archival namespace and reset the
+  // hash map — the surviving items are then re-embedded below. This keeps stale
+  // vectors from being returned by search and bounds the hash map (it would
+  // otherwise grow forever). Deletions are rare and the archival set is small
+  // (lorebook + characters, not turn messages), so the re-embed cost is fine.
+  const liveKeys = new Set(items.map((it) => it.vecKey));
+  const hasDeletion = Object.keys(hashes).some((k) => !liveKeys.has(k));
+  if (hasDeletion) {
+    await store.deleteVectors({
+      sessionId,
+      pluginId: MEMORY_VECTOR_PLUGIN_ID,
+      namespace: ARCHIVAL_NAMESPACE,
+    });
+    hashes = {};
+  }
+
+  if (items.length === 0) {
+    if (hasDeletion) {
+      await writePluginJson<ArchivalHashes>(
+        store,
+        sessionId,
+        HASHES_NS,
+        HASHES_KEY,
+        {},
+      );
+    }
+    return 0;
+  }
 
   // Embed only items whose content fingerprint is new or changed.
   const changed = items.filter(
