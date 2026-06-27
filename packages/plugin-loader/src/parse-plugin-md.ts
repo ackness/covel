@@ -122,6 +122,96 @@ function formatLoaderError(
   return `[plugin-loader] ${location}: ${problem}\nFix: ${fix}`;
 }
 
+// ── Lenient whole-field parsing ───────────────────────────────────
+
+/**
+ * Minimal structural shape of a Zod-like schema. Matched structurally (not via
+ * `instanceof`) so it survives multiple `zod` versions coexisting in the
+ * monorepo — same reasoning as `asZodErrorLike`.
+ */
+interface LenientSchema {
+  safeParse(value: unknown):
+    | { readonly success: true }
+    | {
+        readonly success: false;
+        readonly error: { readonly issues: ReadonlyArray<{ message: string }> };
+      };
+}
+
+/**
+ * Declarative description of an optional frontmatter field that is parsed
+ * leniently: a single malformed declaration drops only that field with a
+ * warning instead of crashing the whole plugin load.
+ */
+interface LenientFieldSpec {
+  /** Top-level frontmatter key (also used for `findYamlKeyLine`). */
+  readonly key: string;
+  /** Schema validating the field value. */
+  readonly schema: LenientSchema;
+  /** Problem prefix, e.g. `"malformed authorsNote skipped"`. */
+  readonly problem: string;
+  /** Author-facing `Fix:` hint. */
+  readonly fix: string;
+}
+
+/**
+ * Validate one lenient frontmatter field. On success returns `data` unchanged.
+ * On failure: warn with the canonical `file:line` + Fix layout (identical to
+ * the per-field blocks this replaces), drop the offending key, and return a new
+ * object so the rest of the manifest still loads. Never throws, never mutates.
+ */
+function parseLenientField(
+  data: Record<string, unknown>,
+  spec: LenientFieldSpec,
+  content: string,
+  filePath: string,
+): Record<string, unknown> {
+  if (!(spec.key in data)) return data;
+  const parsed = spec.schema.safeParse(data[spec.key]);
+  if (parsed.success) return data;
+  console.warn(
+    formatLoaderError(
+      filePath,
+      findYamlKeyLine(content, spec.key),
+      `${spec.problem} — ${parsed.error.issues.map((i) => i.message).join("; ")}`,
+      spec.fix,
+    ),
+  );
+  const { [spec.key]: _omitted, ...rest } = data;
+  return rest;
+}
+
+/**
+ * Optional decorative / structural metadata fields validated leniently in
+ * declaration order. Mirrors the per-entry lenient handling used for `hooks`:
+ * one bad field drops itself with a warning, the rest of the plugin still
+ * loads. Adding a new lenient field is a one-line entry here, not a new block.
+ */
+const LENIENT_FIELDS: readonly LenientFieldSpec[] = [
+  {
+    // S3-T4: author's note — wrong type on e.g. `depth` should not crash load.
+    key: "authorsNote",
+    schema: authorsNoteDeclSchema,
+    problem: "malformed authorsNote skipped",
+    fix: 'An authorsNote must have `content: string` and optional `depth: number` / `role: "system" | "user" | "assistant"`.',
+  },
+  {
+    // S3-T4: post-history note.
+    key: "postHistory",
+    schema: postHistoryDeclSchema,
+    problem: "malformed postHistory skipped",
+    fix: 'A postHistory entry must have `content: string` and optional `role: "system" | "user" | "assistant"`.',
+  },
+  {
+    // PR-3: rpc declarations — drop the whole rpc block on structural error so
+    // a typo in one action doesn't crash the load.
+    key: "rpc",
+    schema: rpcDeclMapSchema,
+    problem: "malformed rpc declaration skipped",
+    fix: "Each rpc action needs a lowercase kebab-case name and a `handler` path ending in .js/.mjs/.cjs, relative to the plugin root.",
+  },
+];
+
 // ── Valid hook event names ────────────────────────────────────────
 
 // Built from the single source of truth (@covel/shared HOOK_EVENTS) so the
@@ -356,84 +446,16 @@ export function parsePluginMd(
           : dataWithoutHooks;
     }
 
-    // S3-T4: author's note / post-history lenient parsing.
-    // These fields are optional decorative metadata. A single malformed
-    // declaration (e.g. wrong type on `depth`) should not crash the entire
-    // plugin load — drop the bad field with a warning and continue, mirroring
-    // the per-entry lenient handling used for `hooks`.
-    if (
-      dataToValidate &&
-      typeof dataToValidate === "object" &&
-      "authorsNote" in dataToValidate
-    ) {
-      const parsedNote = authorsNoteDeclSchema.safeParse(
-        (dataToValidate as Record<string, unknown>).authorsNote,
-      );
-      if (!parsedNote.success) {
-        console.warn(
-          formatLoaderError(
-            filePath,
-            findYamlKeyLine(content, "authorsNote"),
-            `malformed authorsNote skipped — ${parsedNote.error.issues.map((i) => i.message).join("; ")}`,
-            'An authorsNote must have `content: string` and optional `depth: number` / `role: "system" | "user" | "assistant"`.',
-          ),
-        );
-        const { authorsNote: _omitted, ...rest } = dataToValidate as Record<
-          string,
-          unknown
-        >;
-        dataToValidate = rest;
+    // Optional decorative / structural metadata fields parsed leniently in
+    // declaration order. A single malformed declaration drops only that field
+    // with a warning instead of crashing the whole plugin load, mirroring the
+    // per-entry lenient handling used for `hooks` above. See LENIENT_FIELDS.
+    if (dataToValidate && typeof dataToValidate === "object") {
+      let lenientData = dataToValidate as Record<string, unknown>;
+      for (const spec of LENIENT_FIELDS) {
+        lenientData = parseLenientField(lenientData, spec, content, filePath);
       }
-    }
-    if (
-      dataToValidate &&
-      typeof dataToValidate === "object" &&
-      "postHistory" in dataToValidate
-    ) {
-      const parsedPost = postHistoryDeclSchema.safeParse(
-        (dataToValidate as Record<string, unknown>).postHistory,
-      );
-      if (!parsedPost.success) {
-        console.warn(
-          formatLoaderError(
-            filePath,
-            findYamlKeyLine(content, "postHistory"),
-            `malformed postHistory skipped — ${parsedPost.error.issues.map((i) => i.message).join("; ")}`,
-            'A postHistory entry must have `content: string` and optional `role: "system" | "user" | "assistant"`.',
-          ),
-        );
-        const { postHistory: _omitted, ...rest } = dataToValidate as Record<
-          string,
-          unknown
-        >;
-        dataToValidate = rest;
-      }
-    }
-    // PR-3: rpc declarations. Lenient — drop the whole rpc block on
-    // structural error so a typo in one action doesn't crash the load.
-    if (
-      dataToValidate &&
-      typeof dataToValidate === "object" &&
-      "rpc" in dataToValidate
-    ) {
-      const parsedRpc = rpcDeclMapSchema.safeParse(
-        (dataToValidate as Record<string, unknown>).rpc,
-      );
-      if (!parsedRpc.success) {
-        console.warn(
-          formatLoaderError(
-            filePath,
-            findYamlKeyLine(content, "rpc"),
-            `malformed rpc declaration skipped — ${parsedRpc.error.issues.map((i: { message: string }) => i.message).join("; ")}`,
-            "Each rpc action needs a lowercase kebab-case name and a `handler` path ending in .js/.mjs/.cjs, relative to the plugin root.",
-          ),
-        );
-        const { rpc: _omitted, ...rest } = dataToValidate as Record<
-          string,
-          unknown
-        >;
-        dataToValidate = rest;
-      }
+      dataToValidate = lenientData;
     }
 
     const parsed = runtimeManifestSchema.parse(dataToValidate);
