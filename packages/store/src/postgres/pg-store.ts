@@ -60,13 +60,25 @@ export async function createPgStore(
   const client = postgres(databaseUrl);
   const pooledDb = drizzle(client, { schema });
 
-  if (options?.freshSchema) {
-    await client.unsafe(DROP_ALL_SQL);
-  }
-
   // The pgvector extension is enabled lazily by pg-vector.ts on first vector
   // operation, so non-vector PG deployments can boot on plain postgres.
-  await client.unsafe(CREATE_TABLES_SQL);
+  if (options?.freshSchema) {
+    // Run the destructive DROP+CREATE on a single dedicated connection so the
+    // two statements cannot land on different pool connections and race the
+    // system catalog — concurrent/stale-catalog DROP+CREATE otherwise trips
+    // `pg_type_typname_nsp_index` duplicate-key under rapid schema recreation
+    // (the test harness rebuilds the schema once per test). Production boots
+    // with `freshSchema: false` and is unaffected.
+    const ddl = postgres(databaseUrl, { max: 1 });
+    try {
+      await ddl.unsafe(DROP_ALL_SQL);
+      await ddl.unsafe(CREATE_TABLES_SQL);
+    } finally {
+      await ddl.end();
+    }
+  } else {
+    await client.unsafe(CREATE_TABLES_SQL);
+  }
 
   // `imperativeTxDb` is null except while an imperative beginTx/commitTx window
   // is open, in which case the root data methods route through that tx handle.
