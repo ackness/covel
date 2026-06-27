@@ -19,9 +19,15 @@ try {
 
 if (pgAvailable) {
   const { createPgStore } = await import("../src/postgres/pg-store.js");
+  const { createIsolatedPgUrl } = await import("./pg-test-db.js");
+  // Own database so this file never races concurrent PG test files on schema DDL.
+  const isolatedUrl = await createIsolatedPgUrl(
+    DATABASE_URL,
+    "covel_test_pgstore",
+  );
 
   runStoreContractTests("PgStore", async () => {
-    const store = await createPgStore(DATABASE_URL, { freshSchema: true });
+    const store = await createPgStore(isolatedUrl, { freshSchema: true });
     return store;
   });
 } else {
