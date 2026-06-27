@@ -1,162 +1,30 @@
-import { and, eq } from "drizzle-orm";
+/**
+ * SQLite state records (schemas / entries / changes) — a thin adapter over the
+ * shared `common/sql-state-records.ts` query layer. Supplies the SQLite runner,
+ * SQLite tables, and SQLite JSON read/write gateways; all query logic is shared
+ * with the PostgreSQL backend.
+ */
 
-import type {
-  DataStore,
-  StateChangeRecord,
-  StateEntryRecord,
-  StateSchemaRecord,
-} from "../types.js";
+import { makeInsertValues } from "../common/insert-values.js";
+import { sqliteJsonReader } from "../common/json-readers.js";
+import { sqliteJsonWriter } from "../common/json-writers.js";
+import { createSqlStateRecords } from "../common/sql-state-records.js";
+import type { SqlStateRecords } from "../common/sql-state-records.js";
 import * as schema from "./schema.js";
-import {
-  toJson,
-  toStateChangeRecord,
-  toStateEntryRecord,
-  toStateSchemaRecord,
-} from "./sqlite-store-mappers.js";
-import {
-  sqliteStateEntryInsert,
-  sqliteStateEntryUpdate,
-} from "./sqlite-store-values.js";
+import { createSqliteSqlRunner } from "./sqlite-sql-runner.js";
 import type { SqliteDb } from "./sqlite-types.js";
 
-export type SqliteState = Pick<
-  DataStore,
-  | "saveStateSchema"
-  | "listStateSchemas"
-  | "deleteStateSchema"
-  | "getStateEntry"
-  | "upsertStateEntry"
-  | "listStateEntries"
-  | "addStateChange"
-  | "listStateChanges"
->;
+export type SqliteState = SqlStateRecords;
 
 export function createSqliteState(db: SqliteDb): SqliteState {
-  return {
-    async saveStateSchema(record: StateSchemaRecord): Promise<void> {
-      db.insert(schema.stateSchemas)
-        .values({
-          id: record.id,
-          sessionId: record.sessionId,
-          tableName: record.tableName,
-          schema: toJson(record.schema),
-          createdAt: record.createdAt,
-        })
-        .onConflictDoUpdate({
-          target: schema.stateSchemas.id,
-          set: {
-            schema: toJson(record.schema),
-          },
-        })
-        .run();
+  return createSqlStateRecords({
+    runner: createSqliteSqlRunner(db),
+    tables: {
+      stateSchemas: schema.stateSchemas,
+      stateEntries: schema.stateEntries,
+      stateChanges: schema.stateChanges,
     },
-
-    async listStateSchemas(sessionId: string): Promise<StateSchemaRecord[]> {
-      const rows = db
-        .select()
-        .from(schema.stateSchemas)
-        .where(eq(schema.stateSchemas.sessionId, sessionId))
-        .all();
-      return rows.map(toStateSchemaRecord);
-    },
-
-    async deleteStateSchema(
-      sessionId: string,
-      tableName: string,
-    ): Promise<void> {
-      db.delete(schema.stateSchemas)
-        .where(
-          and(
-            eq(schema.stateSchemas.sessionId, sessionId),
-            eq(schema.stateSchemas.tableName, tableName),
-          ),
-        )
-        .run();
-    },
-
-    async getStateEntry(
-      sessionId: string,
-      tableName: string,
-      fieldName: string,
-    ): Promise<StateEntryRecord | null> {
-      const row = db
-        .select()
-        .from(schema.stateEntries)
-        .where(
-          and(
-            eq(schema.stateEntries.sessionId, sessionId),
-            eq(schema.stateEntries.tableName, tableName),
-            eq(schema.stateEntries.fieldName, fieldName),
-          ),
-        )
-        .get();
-      return row ? toStateEntryRecord(row) : null;
-    },
-
-    async upsertStateEntry(record: StateEntryRecord): Promise<void> {
-      db.insert(schema.stateEntries)
-        .values(sqliteStateEntryInsert(record))
-        .onConflictDoUpdate({
-          target: [
-            schema.stateEntries.sessionId,
-            schema.stateEntries.tableName,
-            schema.stateEntries.fieldName,
-          ],
-          set: sqliteStateEntryUpdate(record),
-        })
-        .run();
-    },
-
-    async listStateEntries(
-      sessionId: string,
-      tableName: string,
-    ): Promise<StateEntryRecord[]> {
-      const rows = db
-        .select()
-        .from(schema.stateEntries)
-        .where(
-          and(
-            eq(schema.stateEntries.sessionId, sessionId),
-            eq(schema.stateEntries.tableName, tableName),
-          ),
-        )
-        .all();
-      return rows.map(toStateEntryRecord);
-    },
-
-    async addStateChange(record: StateChangeRecord): Promise<void> {
-      db.insert(schema.stateChanges)
-        .values({
-          id: record.id,
-          sessionId: record.sessionId,
-          tableName: record.tableName,
-          fieldName: record.fieldName,
-          value: toJson(record.value),
-          changedBy: record.changedBy,
-          turnId: record.turnId,
-          reason: record.reason ?? null,
-          createdAt: record.createdAt,
-        })
-        .run();
-    },
-
-    async listStateChanges(
-      sessionId: string,
-      tableName: string,
-      fieldName: string,
-    ): Promise<StateChangeRecord[]> {
-      const rows = db
-        .select()
-        .from(schema.stateChanges)
-        .where(
-          and(
-            eq(schema.stateChanges.sessionId, sessionId),
-            eq(schema.stateChanges.tableName, tableName),
-            eq(schema.stateChanges.fieldName, fieldName),
-          ),
-        )
-        .all();
-      return rows.map(toStateChangeRecord);
-    },
-  };
+    json: sqliteJsonReader,
+    values: makeInsertValues(sqliteJsonWriter),
+  });
 }

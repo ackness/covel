@@ -6,38 +6,31 @@
  * gateway. PG `jsonb` columns arrive already deserialized, so the canonical
  * mappers are bound to {@link pgJsonReader} (an identity/`null`-collapse
  * reader). Each export keeps its historical single-argument `(row)` signature.
+ *
+ * Scope note: this gateway only covers the record domains that are NOT yet
+ * routed through the shared `common/sql-*-records.ts` query layer (session,
+ * session content/journal, snapshot, suspension). The world / plugin-data /
+ * working-memory / lorebook / state / runtime mappers moved to direct canonical
+ * calls inside the shared query modules, so their PG wrappers were removed.
  */
 
-import * as canonical from "../common/mappers.js";
 import { pgJsonReader } from "../common/json-readers.js";
-import type * as schema from "./schema.js";
+import * as canonical from "../common/mappers.js";
 import type {
   ApprovalRecord,
   CharacterRecord,
   EventRecord,
-  InteractionRecordRow,
-  LorebookEntryRecord,
   MessageRecord,
   PlayerInputRecord,
   PluginConfigRecord,
-  PluginDataRecord,
-  RuntimeOutputRecord,
-  RuntimeResultRecord,
   SessionRecord,
   SessionSummaryRecord,
   SnapshotRecord,
-  StateChangeRecord,
-  StateEntryRecord,
-  StateSchemaRecord,
   SuspensionRecord,
-  ToolCallRecordRow,
   TraceEventRecord,
   TurnMessageRecord,
-  TurnResultRecord,
-  WorkingMemoryRecord,
-  WorldDataImportLedgerRecord,
-  WorldRecord,
 } from "../types.js";
+import type * as schema from "./schema.js";
 
 export {
   CREATE_MEDIA_TABLES_SQL,
@@ -52,48 +45,6 @@ export function toSessionRecord(
   row: typeof schema.sessions.$inferSelect,
 ): SessionRecord {
   return canonical.toSessionRecord(row, pgJsonReader);
-}
-
-export function toWorldRecord(
-  row: typeof schema.worlds.$inferSelect,
-): WorldRecord {
-  return canonical.toWorldRecord(row, pgJsonReader);
-}
-
-export function toTurnResultRecord(
-  row: typeof schema.turnResults.$inferSelect,
-): TurnResultRecord {
-  return canonical.toTurnResultRecord(row, pgJsonReader);
-}
-
-export function toRuntimeResultRecord(
-  row: typeof schema.runtimeResults.$inferSelect,
-): RuntimeResultRecord {
-  return canonical.toRuntimeResultRecord(row, pgJsonReader);
-}
-
-export function toToolCallRecord(
-  row: typeof schema.toolCalls.$inferSelect,
-): ToolCallRecordRow {
-  return canonical.toToolCallRecord(row, pgJsonReader);
-}
-
-export function toStateSchemaRecord(
-  row: typeof schema.stateSchemas.$inferSelect,
-): StateSchemaRecord {
-  return canonical.toStateSchemaRecord(row, pgJsonReader);
-}
-
-export function toStateEntryRecord(
-  row: typeof schema.stateEntries.$inferSelect,
-): StateEntryRecord {
-  return canonical.toStateEntryRecord(row, pgJsonReader);
-}
-
-export function toStateChangeRecord(
-  row: typeof schema.stateChanges.$inferSelect,
-): StateChangeRecord {
-  return canonical.toStateChangeRecord(row, pgJsonReader);
 }
 
 export function toEventRecord(
@@ -120,12 +71,6 @@ export function toCharacterRecord(
   return canonical.toCharacterRecord(row, pgJsonReader);
 }
 
-export function toPluginDataRecord(
-  row: typeof schema.pluginData.$inferSelect,
-): PluginDataRecord {
-  return canonical.toPluginDataRecord(row, pgJsonReader);
-}
-
 export function toPluginConfigRecord(
   row: typeof schema.pluginConfigs.$inferSelect,
 ): PluginConfigRecord {
@@ -138,18 +83,6 @@ export function toTraceEventRecord(
   return canonical.toTraceEventRecord(row, pgJsonReader);
 }
 
-export function toRuntimeOutputRecord(
-  row: typeof schema.runtimeOutputs.$inferSelect,
-): RuntimeOutputRecord {
-  return canonical.toRuntimeOutputRecord(row, pgJsonReader);
-}
-
-export function toInteractionRecordRow(
-  row: typeof schema.interactionRecords.$inferSelect,
-): InteractionRecordRow {
-  return canonical.toInteractionRecordRow(row, pgJsonReader);
-}
-
 export function toTurnMessageRecord(
   row: typeof schema.turnMessages.$inferSelect,
 ): TurnMessageRecord {
@@ -160,24 +93,6 @@ export function toPlayerInputRecord(
   row: typeof schema.playerInputs.$inferSelect,
 ): PlayerInputRecord {
   return canonical.toPlayerInputRecord(row, pgJsonReader);
-}
-
-export function toWorkingMemoryRecord(
-  row: typeof schema.workingMemory.$inferSelect,
-): WorkingMemoryRecord {
-  return canonical.toWorkingMemoryRecord(row, pgJsonReader);
-}
-
-export function toWorldDataImportLedgerRecord(
-  row: typeof schema.worldDataImportLedger.$inferSelect,
-): WorldDataImportLedgerRecord {
-  return canonical.toWorldDataImportLedgerRecord(row, pgJsonReader);
-}
-
-export function toLorebookEntryRecord(
-  row: typeof schema.lorebookEntries.$inferSelect,
-): LorebookEntryRecord {
-  return canonical.toLorebookEntryRecord(row, pgJsonReader);
 }
 
 export function toSessionSummaryRecord(

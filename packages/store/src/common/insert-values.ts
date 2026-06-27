@@ -14,9 +14,16 @@
  */
 
 import type {
+  InteractionRecordRow,
   LorebookEntryRecord,
   PluginDataRecord,
+  RuntimeOutputRecord,
+  RuntimeResultRecord,
+  StateChangeRecord,
   StateEntryRecord,
+  StateSchemaRecord,
+  ToolCallRecordRow,
+  TurnResultRecord,
   WorkingMemoryRecord,
   WorldDataImportLedgerRecord,
   WorldRecord,
@@ -44,6 +51,16 @@ export interface InsertValueBuilders {
   pluginDataUpdate(record: PluginDataRecord): Record<string, unknown>;
   stateEntryInsert(record: StateEntryRecord): Record<string, unknown>;
   stateEntryUpdate(record: StateEntryRecord): Record<string, unknown>;
+  stateSchemaInsert(record: StateSchemaRecord): Record<string, unknown>;
+  stateSchemaUpdate(record: StateSchemaRecord): Record<string, unknown>;
+  stateChangeInsert(record: StateChangeRecord): Record<string, unknown>;
+  turnResultInsert(record: TurnResultRecord): Record<string, unknown>;
+  runtimeResultInsert(record: RuntimeResultRecord): Record<string, unknown>;
+  toolCallInsert(record: ToolCallRecordRow): Record<string, unknown>;
+  runtimeOutputInsert(record: RuntimeOutputRecord): Record<string, unknown>;
+  interactionRecordInsert(
+    record: InteractionRecordRow,
+  ): Record<string, unknown>;
   workingMemoryInsert(record: WorkingMemoryRecord): Record<string, unknown>;
   workingMemoryUpdate(record: WorkingMemoryRecord): Record<string, unknown>;
   worldDataLedgerInsert(
@@ -93,6 +110,118 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
       return {
         value: json.writeJson(record.value),
         updatedAt: record.updatedAt,
+      };
+    },
+
+    stateSchemaInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        tableName: record.tableName,
+        schema: json.writeJson(record.schema),
+        createdAt: record.createdAt,
+      };
+    },
+    stateSchemaUpdate(record) {
+      return {
+        schema: json.writeJson(record.schema),
+      };
+    },
+
+    stateChangeInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        tableName: record.tableName,
+        fieldName: record.fieldName,
+        value: json.writeJson(record.value),
+        changedBy: record.changedBy,
+        turnId: record.turnId,
+        reason: record.reason ?? null,
+        createdAt: record.createdAt,
+      };
+    },
+
+    // ── Runtime-domain tables (no upsert; plain inserts) ──────────
+    // The JSON column nullability below mirrors the legacy inline builders
+    // exactly: `writeJson` columns are always serialized (PG `value ?? null`,
+    // SQLite `toJson`), `writeNullableJson` columns keep SQL NULL when absent.
+
+    turnResultInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        turnId: record.turnId,
+        runtimeResults: json.writeJson(record.runtimeResults),
+        conflicts: json.writeNullableJson(record.conflicts),
+        auditResult: json.writeNullableJson(record.auditResult),
+        durationMs: record.durationMs,
+        createdAt: record.createdAt,
+      };
+    },
+
+    runtimeResultInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        turnId: record.turnId,
+        pluginId: record.pluginId,
+        runtimeId: record.runtimeId,
+        status: record.status,
+        output: json.writeNullableJson(record.output),
+        toolCalls: json.writeNullableJson(record.toolCalls),
+        durationMs: record.durationMs,
+        tokenUsage: json.writeNullableJson(record.tokenUsage),
+        error: record.error ?? null,
+        createdAt: record.createdAt,
+      };
+    },
+
+    toolCallInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        turnId: record.turnId,
+        toolName: record.toolName,
+        pluginId: record.pluginId,
+        runtimeId: record.runtimeId,
+        input: json.writeNullableJson(record.input),
+        output: json.writeNullableJson(record.output),
+        durationMs: record.durationMs,
+        approvalStatus: record.approvalStatus,
+        createdAt: record.createdAt,
+      };
+    },
+
+    runtimeOutputInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        turnId: record.turnId,
+        runtimeResultId: record.runtimeResultId ?? null,
+        pluginId: record.pluginId,
+        runtimeId: record.runtimeId,
+        timestamp: record.timestamp,
+        results: json.writeJson(record.results ?? []),
+        metaData: json.writeJson(record.metaData ?? {}),
+        createdAt: record.createdAt,
+      };
+    },
+
+    interactionRecordInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        turnId: record.turnId ?? null,
+        timestamp: record.timestamp,
+        source: record.source,
+        channel: record.channel,
+        type: record.type,
+        targetPluginId: record.targetPluginId ?? null,
+        targetRuntimeId: record.targetRuntimeId ?? null,
+        payload: json.writeJson(record.payload ?? null),
+        metaData: json.writeNullableJson(record.metaData),
+        createdAt: record.createdAt,
       };
     },
 
