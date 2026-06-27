@@ -14,15 +14,23 @@
  */
 
 import type {
+  ApprovalRecord,
+  CharacterRecord,
+  EventRecord,
   InteractionRecordRow,
   LorebookEntryRecord,
+  MessageRecord,
+  PlayerInputRecord,
+  PluginConfigRecord,
   PluginDataRecord,
   RuntimeOutputRecord,
   RuntimeResultRecord,
+  SessionSummaryRecord,
   StateChangeRecord,
   StateEntryRecord,
   StateSchemaRecord,
   ToolCallRecordRow,
+  TraceEventRecord,
   TurnResultRecord,
   WorkingMemoryRecord,
   WorldDataImportLedgerRecord,
@@ -73,6 +81,16 @@ export interface InsertValueBuilders {
   lorebookEntryUpdate(record: LorebookEntryRecord): Record<string, unknown>;
   worldInsert(record: WorldRecord): Record<string, unknown>;
   worldUpdate(record: WorldRecord): Record<string, unknown>;
+  eventInsert(record: EventRecord): Record<string, unknown>;
+  approvalInsert(record: ApprovalRecord): Record<string, unknown>;
+  messageInsert(record: MessageRecord): Record<string, unknown>;
+  characterInsert(record: CharacterRecord): Record<string, unknown>;
+  characterUpdate(record: CharacterRecord): Record<string, unknown>;
+  pluginConfigInsert(record: PluginConfigRecord): Record<string, unknown>;
+  pluginConfigUpdate(record: PluginConfigRecord): Record<string, unknown>;
+  traceEventInsert(record: TraceEventRecord): Record<string, unknown>;
+  playerInputInsert(record: PlayerInputRecord): Record<string, unknown>;
+  sessionSummaryInsert(record: SessionSummaryRecord): Record<string, unknown>;
 }
 
 export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
@@ -334,6 +352,124 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         locale: record.locale ?? null,
         metadata: json.writeNullableJson(record.metadata),
         updatedAt: record.updatedAt ?? null,
+      };
+    },
+
+    // ── Session content/journal tables ────────────────────────────
+    // JSON column nullability mirrors the legacy inline builders exactly:
+    //  - `payload`/`metadata`/`fields` were `?? null` (PG) / `!= null ? toJson
+    //    : null` (SQLite) → `writeNullableJson`.
+    //  - `config`/`values`/`focusSections` were `?? null` (PG) / `toJson`
+    //    (SQLite, no null-guard) → `writeJson`.
+
+    eventInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        type: record.type,
+        topic: record.topic,
+        payload: json.writeNullableJson(record.payload),
+        targetRuntime: record.targetRuntime ?? null,
+        turnId: record.turnId ?? null,
+        createdAt: record.createdAt,
+      };
+    },
+
+    approvalInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        toolName: record.toolName,
+        pluginId: record.pluginId,
+        decision: record.decision,
+        turnId: record.turnId,
+        createdAt: record.createdAt,
+      };
+    },
+
+    messageInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        role: record.role,
+        content: record.content,
+        metadata: json.writeNullableJson(record.metadata),
+        createdAt: record.createdAt,
+      };
+    },
+
+    characterInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        name: record.name,
+        type: record.type,
+        description: record.description ?? null,
+        fields: json.writeNullableJson(record.fields),
+        version: record.version,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+      };
+    },
+    characterUpdate(record) {
+      return {
+        name: record.name,
+        type: record.type,
+        description: record.description ?? null,
+        fields: json.writeNullableJson(record.fields),
+        version: record.version,
+        updatedAt: record.updatedAt,
+      };
+    },
+
+    pluginConfigInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        pluginId: record.pluginId,
+        config: json.writeJson(record.config),
+        updatedAt: record.updatedAt,
+      };
+    },
+    pluginConfigUpdate(record) {
+      return {
+        config: json.writeJson(record.config),
+        updatedAt: record.updatedAt,
+      };
+    },
+
+    traceEventInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        type: record.type,
+        traceId: record.traceId,
+        turnId: record.turnId,
+        payload: json.writeNullableJson(record.payload),
+        createdAt: record.createdAt,
+      };
+    },
+
+    playerInputInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        turnId: record.turnId,
+        formId: record.formId,
+        values: json.writeJson(record.values),
+        createdAt: record.createdAt,
+      };
+    },
+
+    sessionSummaryInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        turnRangeStart: record.turnRangeStart,
+        turnRangeEnd: record.turnRangeEnd,
+        content: record.content,
+        focusSections: json.writeJson(record.focusSections),
+        createdAt: record.createdAt,
       };
     },
   };

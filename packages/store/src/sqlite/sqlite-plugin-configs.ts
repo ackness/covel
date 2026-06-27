@@ -1,51 +1,26 @@
-import { and, eq } from "drizzle-orm";
+/**
+ * SQLite plugin-config records (save / get) — a thin adapter over the shared
+ * `common/sql-plugin-config-records.ts` query layer. Supplies the SQLite runner,
+ * SQLite tables, and SQLite JSON read/write gateways; all query logic is shared
+ * with the PostgreSQL backend.
+ */
 
-import type { DataStore, PluginConfigRecord } from "../types.js";
+import { makeInsertValues } from "../common/insert-values.js";
+import { sqliteJsonReader } from "../common/json-readers.js";
+import { sqliteJsonWriter } from "../common/json-writers.js";
+import { createSqlPluginConfigRecords } from "../common/sql-plugin-config-records.js";
+import type { SqlPluginConfigRecords } from "../common/sql-plugin-config-records.js";
 import * as schema from "./schema.js";
-import { toJson, toPluginConfigRecord } from "./sqlite-store-mappers.js";
+import { createSqliteSqlRunner } from "./sqlite-sql-runner.js";
 import type { SqliteDb } from "./sqlite-types.js";
 
-export type SqlitePluginConfigs = Pick<
-  DataStore,
-  "savePluginConfig" | "getPluginConfig"
->;
+export type SqlitePluginConfigs = SqlPluginConfigRecords;
 
 export function createSqlitePluginConfigs(db: SqliteDb): SqlitePluginConfigs {
-  return {
-    async savePluginConfig(record: PluginConfigRecord): Promise<void> {
-      db.insert(schema.pluginConfigs)
-        .values({
-          id: record.id,
-          sessionId: record.sessionId,
-          pluginId: record.pluginId,
-          config: toJson(record.config),
-          updatedAt: record.updatedAt,
-        })
-        .onConflictDoUpdate({
-          target: schema.pluginConfigs.id,
-          set: {
-            config: toJson(record.config),
-            updatedAt: record.updatedAt,
-          },
-        })
-        .run();
-    },
-
-    async getPluginConfig(
-      sessionId: string,
-      pluginId: string,
-    ): Promise<PluginConfigRecord | null> {
-      const row = db
-        .select()
-        .from(schema.pluginConfigs)
-        .where(
-          and(
-            eq(schema.pluginConfigs.sessionId, sessionId),
-            eq(schema.pluginConfigs.pluginId, pluginId),
-          ),
-        )
-        .get();
-      return row ? toPluginConfigRecord(row) : null;
-    },
-  };
+  return createSqlPluginConfigRecords({
+    runner: createSqliteSqlRunner(db),
+    json: sqliteJsonReader,
+    values: makeInsertValues(sqliteJsonWriter),
+    tables: { pluginConfigs: schema.pluginConfigs },
+  });
 }
