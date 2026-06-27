@@ -88,6 +88,21 @@ export interface SqlRunner {
     where?: SQL,
   ): Promise<void>;
 
+  /**
+   * Conditional UPDATE used for atomic compare-and-swap (e.g. claim a
+   * suspension): applies `set` to rows matching `where` and returns the number
+   * of rows actually affected. This is the one place the two backends report a
+   * mutation count through different driver surfaces — PG via `RETURNING`,
+   * better-sqlite3 via the `changes` field of the run result — and the adapters
+   * normalise both to a plain count. The single serialized write per dialect
+   * keeps the swap atomic, so two concurrent claims cannot both observe `1`.
+   */
+  updateReturningCount(
+    table: Table,
+    set: Record<string, unknown>,
+    where?: SQL,
+  ): Promise<number>;
+
   /** DELETE rows matching `where` (all rows when omitted). */
   delete(table: Table, where?: SQL): Promise<void>;
 }

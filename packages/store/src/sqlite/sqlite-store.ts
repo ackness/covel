@@ -18,10 +18,9 @@ import { createSqlitePluginConfigs } from "./sqlite-plugin-configs.js";
 import { createSqliteRuntimeRecords } from "./sqlite-runtime-records.js";
 import { createSqliteSessionRecords } from "./sqlite-session-records.js";
 import { createSqliteSessions } from "./sqlite-sessions.js";
-import { createSqliteSnapshots } from "./sqlite-snapshots.js";
+import { createSqliteSnapshotRecords } from "./sqlite-snapshot-records.js";
 import { createTables } from "./sqlite-store-mappers.js";
 import { createSqliteState } from "./sqlite-state.js";
-import { createSqliteSuspensions } from "./sqlite-suspensions.js";
 import { createSqliteTransactions } from "./sqlite-transactions.js";
 import { createSqliteVectorCapability } from "./sqlite-vector.js";
 import { createSqliteWorlds } from "./sqlite-worlds.js";
@@ -68,8 +67,7 @@ export function createSqliteStore(
     ...createSqliteDataCrud(db),
     ...createSqlitePluginConfigs(db),
     ...createSqliteWorlds(db),
-    ...createSqliteSuspensions(sqlite),
-    ...createSqliteSnapshots(sqlite),
+    ...createSqliteSnapshotRecords(db),
   };
 
   const baseStore: DataStore = {

@@ -100,6 +100,18 @@ export function createPgSqlRunner(getDb: () => PgDb): SqlRunner {
       await (where ? stmt.where(where) : stmt);
     },
 
+    async updateReturningCount(
+      table: Table,
+      set: Record<string, unknown>,
+      where?: SQL,
+    ): Promise<number> {
+      const stmt = getDb()
+        .update(table as PgTable)
+        .set(set);
+      const rows = await (where ? stmt.where(where) : stmt).returning();
+      return rows.length;
+    },
+
     async delete(table: Table, where?: SQL): Promise<void> {
       const stmt = getDb().delete(table as PgTable);
       await (where ? stmt.where(where) : stmt);

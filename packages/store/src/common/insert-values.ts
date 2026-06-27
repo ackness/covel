@@ -27,9 +27,11 @@ import type {
   RuntimeResultRecord,
   SessionRecord,
   SessionSummaryRecord,
+  SnapshotRecord,
   StateChangeRecord,
   StateEntryRecord,
   StateSchemaRecord,
+  SuspensionRecord,
   ToolCallRecordRow,
   TraceEventRecord,
   TurnMessageRecord,
@@ -119,6 +121,10 @@ export interface InsertValueBuilders {
     patch: SessionUpdatePatch,
     merged: SessionRecord,
   ): Record<string, unknown>;
+  snapshotInsert(record: SnapshotRecord): Record<string, unknown>;
+  snapshotUpdate(record: SnapshotRecord): Record<string, unknown>;
+  suspensionInsert(record: SuspensionRecord): Record<string, unknown>;
+  suspensionUpdate(record: SuspensionRecord): Record<string, unknown>;
 }
 
 export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
@@ -576,6 +582,58 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         );
       }
       return values;
+    },
+
+    // ── Snapshots / Suspensions ───────────────────────────────────
+    // `payload`/`resumeSchema`/`pendingContinuation` are required (`notNull`)
+    // JSON columns → `writeJson` (PG passthrough / SQLite `toJson`), matching the
+    // legacy raw-SQL `toJson(...)` (SQLite) and direct passthrough (PG). The
+    // upsert builders return ONLY the ON CONFLICT DO UPDATE SET column set:
+    //  - snapshots: {turnId, kind, parentId, payload} (not id/sessionId/createdAt)
+    //  - suspensions: {reason, resumeSchema, pendingContinuation, resolvedAt}
+    // `parentId`/`resolvedAt` keep their `?? null` coercion (plain text columns).
+
+    snapshotInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        turnId: record.turnId,
+        kind: record.kind,
+        parentId: record.parentId ?? null,
+        payload: json.writeJson(record.payload),
+        createdAt: record.createdAt,
+      };
+    },
+    snapshotUpdate(record) {
+      return {
+        turnId: record.turnId,
+        kind: record.kind,
+        parentId: record.parentId ?? null,
+        payload: json.writeJson(record.payload),
+      };
+    },
+
+    suspensionInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        turnId: record.turnId,
+        runtimeId: record.runtimeId,
+        pluginId: record.pluginId,
+        reason: record.reason,
+        resumeSchema: json.writeJson(record.resumeSchema),
+        pendingContinuation: json.writeJson(record.pendingContinuation),
+        createdAt: record.createdAt,
+        resolvedAt: record.resolvedAt ?? null,
+      };
+    },
+    suspensionUpdate(record) {
+      return {
+        reason: record.reason,
+        resumeSchema: json.writeJson(record.resumeSchema),
+        pendingContinuation: json.writeJson(record.pendingContinuation),
+        resolvedAt: record.resolvedAt ?? null,
+      };
     },
   };
 }

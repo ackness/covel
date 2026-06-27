@@ -9,9 +9,10 @@
  *
  * Scope note: this gateway only covers the record domains that are NOT yet
  * routed through the shared `common/sql-*-records.ts` query layer (session,
- * session content/journal, snapshot, suspension). The world / plugin-data /
- * working-memory / lorebook / state / runtime mappers moved to direct canonical
- * calls inside the shared query modules, so their PG wrappers were removed.
+ * session content/journal). The world / plugin-data / working-memory /
+ * lorebook / state / runtime / snapshot / suspension mappers moved to direct
+ * canonical calls inside the shared query modules, so their PG wrappers were
+ * removed.
  */
 
 import { pgJsonReader } from "../common/json-readers.js";
@@ -25,8 +26,6 @@ import type {
   PluginConfigRecord,
   SessionRecord,
   SessionSummaryRecord,
-  SnapshotRecord,
-  SuspensionRecord,
   TraceEventRecord,
   TurnMessageRecord,
 } from "../types.js";
@@ -99,16 +98,4 @@ export function toSessionSummaryRecord(
   row: typeof schema.sessionSummaries.$inferSelect,
 ): SessionSummaryRecord {
   return canonical.toSessionSummaryRecord(row, pgJsonReader);
-}
-
-export function toSnapshotRecord(
-  row: typeof schema.stateSnapshots.$inferSelect,
-): SnapshotRecord {
-  return canonical.toSnapshotRecord(row, pgJsonReader);
-}
-
-export function toSuspensionRecord(
-  row: typeof schema.suspensions.$inferSelect,
-): SuspensionRecord {
-  return canonical.toSuspensionRecord(row, pgJsonReader);
 }

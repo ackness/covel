@@ -114,6 +114,16 @@ export function createSqliteSqlRunner(db: SqliteDb): SqlRunner {
       return Promise.resolve();
     },
 
+    updateReturningCount(
+      table: Table,
+      set: Record<string, unknown>,
+      where?: SQL,
+    ): Promise<number> {
+      const stmt = db.update(table as SQLiteTable).set(set);
+      const result = where ? stmt.where(where).run() : stmt.run();
+      return Promise.resolve(result.changes);
+    },
+
     delete(table: Table, where?: SQL): Promise<void> {
       const stmt = db.delete(table as SQLiteTable);
       if (where) {
