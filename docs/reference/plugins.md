@@ -403,7 +403,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收窄只影响主循环。
 
-**配置（env）**: `COST_GATE_SOFT_TOKENS`（默认 150000）软上限 · `COST_GATE_HARD_TOKENS`（默认 200000）硬上限。hook 读不到 SettingsStore，故阈值走环境变量。
+**配置（per-session userSettings，env 兜底）**: 两个阈值现已 per-session 可配——hook 经 `HookContext.getOwnSettings()` 读取本插件解析后的 `userSettings`（manifest 默认值与玩家保存值合并的冻结快照），玩家可在 `设置 > Plugins > cost-gate` 按局调整。`softTokens`（默认 150000）软上限 · `hardTokens`（默认 200000）硬上限。每次 hook 调用按三级回退链解析：**per-session `userSettings` → env（`COST_GATE_SOFT_TOKENS` / `COST_GATE_HARD_TOKENS`）→ 硬编码默认**，故只设 env 的旧部署照常工作。软上限须低于硬上限，否则收窄无窗口（cost-gate 一次性告警）。
 
 **限制**: 计数为进程内、非持久——重启清零，多进程（PG / T3）不共享（单进程 T1/T2 是硬上限，T3 为每进程软信号）。详见 `plugins/cost-gate/README.md`。
 

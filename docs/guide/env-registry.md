@@ -56,4 +56,5 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 - `TRUSTED_PROXY_IPS`、`COVEL_LLM_REPLAY`、`COVEL_LLM_REPLAY_DIR`、`COVEL_ALLOWED_LLM_HOSTS` 目前标记为 `documented`，后续实现可以直接提升为 `active`。
 - `COVEL_TRACE_TRUNCATE` 标记为 `planned`，对应 debug trace 设计文档中的未来开关。
 - `COVEL_MEDIA_CLEANUP_ENABLED` 默认 `false`，控制 `POST /api/media/cleanup` 的可用性。即使设为 `true`，`DEPLOYMENT_TIER=commercial` 时该端点仍强制 503，等待管理员鉴权中间件接入。详见 [`docs/reference/api.md`](../reference/api.md) 媒体管理章节。
-- 插件自带的运行期开关——如 cost-gate 的 `COST_GATE_SOFT_TOKENS` / `COST_GATE_HARD_TOKENS`，story-guard 的 `STORY_GUARD_REDACT_TERMS` / `STORY_GUARD_REDACT_MARK` / `STORY_GUARD_BLOCKED_TOOLS`——由插件自身经 `process.env` 读取（hook 读不到 SettingsStore），并在各自 `PLUGIN.md` / `README.md` 文档化。它们不经框架 env helper，也不在本 registry 的分组表内：这是「插件作者可读自己 env」的既定边界，与框架运行期开关分离管理。
+- 插件自带的运行期开关——如 story-guard 的 `STORY_GUARD_REDACT_TERMS` / `STORY_GUARD_REDACT_MARK` / `STORY_GUARD_BLOCKED_TOOLS`——由插件自身经 `process.env` 读取，并在各自 `PLUGIN.md` / `README.md` 文档化。它们不经框架 env helper，也不在本 registry 的分组表内：这是「插件作者可读自己 env」的既定边界，与框架运行期开关分离管理。
+- cost-gate 的 `COST_GATE_SOFT_TOKENS` / `COST_GATE_HARD_TOKENS` 现已降级为**兜底**：阈值优先取 per-session `userSettings`（hook 经 `HookContext.getOwnSettings()` 读取本插件解析后的设置），回退链为 **per-session `userSettings` → env → 硬编码默认（150000 / 200000）**。只设 env 的旧部署照常工作；详见 `plugins/cost-gate/PLUGIN.md`。

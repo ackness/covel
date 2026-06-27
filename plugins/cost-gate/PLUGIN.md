@@ -25,6 +25,31 @@ hooks:
     enforce: pre
   - event: SessionEnd
     handler: ./hooks/cleanup.js
+userSettings:
+  - key: softTokens
+    type: number
+    default: 150000
+    min: 1000
+    max: 10000000
+    step: 1000
+    label:
+      zh: 软上限（token）
+      en: Soft cap (tokens)
+    description:
+      zh: 本局累计 token 达到此值后，自动停掉后台生成，只保留主线叙事。
+      en: Once the session's accumulated tokens reach this value, background generation is trimmed and only story output keeps running.
+  - key: hardTokens
+    type: number
+    default: 200000
+    min: 1000
+    max: 10000000
+    step: 1000
+    label:
+      zh: 硬上限（token）
+      en: Hard cap (tokens)
+    description:
+      zh: 本局累计 token 达到此值后，暂停本回合（abort）。应大于软上限。
+      en: Once the session's accumulated tokens reach this value, the turn is aborted. Keep it above the soft cap.
 relations: {}
 ---
 
@@ -49,12 +74,29 @@ so `PreSchedule` trimming only ever affects the main loop.
 
 ## Configuration
 
-Hooks cannot read SettingsStore, so thresholds come from environment variables:
+Both thresholds are **per-session configurable**. The hooks read this plugin's
+own resolved `userSettings` in-hook via `HookContext.getOwnSettings()` (the
+runtime hook pipeline injects a frozen snapshot of the manifest defaults merged
+with the player's saved values), so each session / player can set its own budget
+from the Settings UI under `Plugins > cost-gate`.
 
-| Env                     | Default  | Meaning                                                       |
-| ----------------------- | -------- | ------------------------------------------------------------- |
-| `COST_GATE_SOFT_TOKENS` | `150000` | At/above this total, `PreSchedule` trims background runtimes. |
-| `COST_GATE_HARD_TOKENS` | `200000` | At/above this total, `TurnStart` aborts the turn.             |
+| Setting (`userSettings`) | Default  | Meaning                                                       |
+| ------------------------ | -------- | ------------------------------------------------------------- |
+| `softTokens`             | `150000` | At/above this total, `PreSchedule` trims background runtimes. |
+| `hardTokens`             | `200000` | At/above this total, `TurnStart` aborts the turn.             |
+
+Each threshold is resolved per hook invocation through a three-tier fallback
+chain — **per-session `userSettings` → env var → hardcoded default** — so
+existing deployments that set only the env keep working unchanged:
+
+| Env (fallback)          | Default  | Used when the matching `userSettings` value is unset |
+| ----------------------- | -------- | ---------------------------------------------------- |
+| `COST_GATE_SOFT_TOKENS` | `150000` | falls back for `softTokens`                          |
+| `COST_GATE_HARD_TOKENS` | `200000` | falls back for `hardTokens`                          |
+
+Keep the soft cap **below** the hard cap: if the resolved soft cap `>=` the hard
+cap, trimming has no window before the hard cap aborts the turn (cost-gate logs
+a one-time warning in that case).
 
 ## Limitations
 
