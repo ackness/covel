@@ -260,13 +260,6 @@ snapshotRoutes.post("/:id/fork", async (c) => {
         await tx.setPluginDataBatch(pluginDataBatch);
       }
 
-      if (mediaStore) {
-        const mediaIds = collectMediaRefIds(snapshot.payload);
-        for (const mediaId of mediaIds) {
-          await mediaStore.addRef(mediaId, childSessionId);
-        }
-      }
-
       // Copy working memory
       for (const wm of snapshot.payload.workingMemory) {
         const record: WorkingMemoryRecord = {
@@ -347,6 +340,26 @@ snapshotRoutes.post("/:id/fork", async (c) => {
       errorBody(`Fork failed: ${message}`, { code: "fork_failed" }),
       500,
     );
+  }
+
+  // Post-commit: the fork is durable. Add media refs now, OUT of the DataStore
+  // transaction — MediaStore is a separate store whose writes a rollback could
+  // not undo, so doing this only after the fork commits guarantees we never
+  // leave an orphaned media ref pointing at a child session that was rolled
+  // back (e.g. the cursor-missing 409 path). addRef is idempotent; a failure
+  // here is logged but does not fail an already-durable fork.
+  if (mediaStore) {
+    const mediaIds = collectMediaRefIds(snapshot.payload);
+    for (const mediaId of mediaIds) {
+      try {
+        await mediaStore.addRef(mediaId, childSessionId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(
+          `[fork] media addRef failed for ${mediaId} -> ${childSessionId}: ${message}`,
+        );
+      }
+    }
   }
 
   // Post-commit: the fork is durable. Emit session.forked on the event bus
