@@ -2,7 +2,7 @@ import type {
   SettingEntry,
   SettingGroup,
   SettingsStoreApi,
-} from "@covel/shared";
+} from "@covel/settings";
 
 export type NavNodeKind = "group" | "plugin" | "subgroup";
 

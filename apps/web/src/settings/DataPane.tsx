@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Download, RotateCw, Upload } from "lucide-react";
-import type { SettingsExportBundle } from "@covel/shared";
+import type { SettingsExportBundle } from "@covel/settings";
 import { Button } from "@/components/ui/button.js";
 import { useSettingsStore } from "./use-settings.js";
 

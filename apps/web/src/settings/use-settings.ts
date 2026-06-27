@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from "react";
-import type { SettingKey, SettingsStoreApi } from "@covel/shared";
+import type { SettingKey, SettingsStoreApi } from "@covel/settings";
 import { getSettings } from "./store.js";
 
 /**

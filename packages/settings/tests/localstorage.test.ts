@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createLocalStorageBackend } from "../../src/settings/backends/localstorage.js";
+import { createLocalStorageBackend } from "../src/backends/localstorage.js";
 
 function makeFakeStorage(): Storage {
   const map = new Map<string, string>();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { SettingsStore } from "../../src/settings/store.js";
+import { SettingsStore } from "../src/store.js";
 import { createMemoryAdapter } from "./test-adapter.js";
 
 function makeStore(

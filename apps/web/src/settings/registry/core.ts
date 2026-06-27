@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { SettingsStoreApi } from "@covel/shared";
+import type { SettingsStoreApi } from "@covel/settings";
 import { registerThemeSettings } from "@/theme-system/settings.js";
 
 /**

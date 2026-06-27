@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { I18nText, SettingOption, SettingsStoreApi } from "@covel/shared";
+import type { I18nText } from "@covel/shared";
+import type { SettingOption, SettingsStoreApi } from "@covel/settings";
 import { getBuiltinThemes } from "./builtins.js";
 import {
   applyAppearance,

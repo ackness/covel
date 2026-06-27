@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { SettingsStore, type SettingsBackendAdapter } from "@covel/shared";
+import { SettingsStore, type SettingsBackendAdapter } from "@covel/settings";
 import { applyAppearance } from "@/lib/appearance.js";
 import {
   deleteCustomTheme,

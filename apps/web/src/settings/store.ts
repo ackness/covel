@@ -2,8 +2,8 @@ import {
   createJsonFileBackend,
   createLocalStorageBackend,
   SettingsStore,
-} from "@covel/shared";
-import type { SettingsStoreApi } from "@covel/shared";
+} from "@covel/settings";
+import type { SettingsStoreApi } from "@covel/settings";
 import {
   registerCoreSettings,
   registerLlmSettings,

@@ -104,11 +104,13 @@ apps/
   server/           Hono API + Drizzle ORM
   desktop/          Electron shell (sidecar)
 
-packages/           15 internal packages: shared, context, ai-provider,
+packages/           16 internal packages: shared, settings, context, ai-provider,
                     plugin-loader, runtime, store, state, events, tools,
                     approval, memory, create, plugin-test-utils, test-runtime,
                     plugin-handlers-utils (pure helper utils for plugin
-                    function-runtime handlers)
+                    function-runtime handlers). `settings` carries the unified
+                    SettingsStore + localStorage/json-file backends, split out of
+                    `shared` so pure-type consumers avoid browser/Electron code.
 
 plugins/            19 bundled plugin packages (see docs/reference/plugins.md)
 prompts/            Externalised prompt templates (locale-aware markdown)
@@ -120,7 +122,7 @@ Dependency flow (rough):
 
 ```
 shared ← context ← runtime ← server (composes all)
-shared ← web
+shared ← settings ← web
 ```
 
 All feature packages (`ai-provider`, `plugin-loader`, `store`, `state`, `events`, `tools`, `approval`, `memory`, `create`) are composed by `@covel/server`. See any package's own `package.json` for exact edges.

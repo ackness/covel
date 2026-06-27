@@ -1,7 +1,4 @@
-import type {
-  SettingKey,
-  SettingsBackendAdapter,
-} from "../../src/settings/types.js";
+import type { SettingKey, SettingsBackendAdapter } from "../src/types.js";
 
 export function createMemoryAdapter(
   initial: Record<SettingKey, unknown> = {},

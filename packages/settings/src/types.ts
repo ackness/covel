@@ -1,5 +1,5 @@
 import type { ZodType } from "zod";
-import type { I18nText } from "../types/world.js";
+import type { I18nText } from "@covel/shared";
 
 export type SettingKey = string;
 
