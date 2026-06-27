@@ -2,6 +2,7 @@
 const ANTHROPIC_JSON_DIRECTIVE = "Respond with JSON only.";
 
 import {
+  MAX_CACHE_BREAKPOINTS,
   PROMPT_CACHE_BREAKPOINT_MARKER,
   stripPromptCacheMarkers,
 } from "@covel/shared";
@@ -28,13 +29,16 @@ const ANTHROPIC_DEFAULT_MAX_TOKENS = 1024;
 const ANTHROPIC_VERSION = "2023-06-01";
 
 /**
- * Anthropic Messages API caps explicit prompt cache breakpoints at 4 per
- * request. The context assembler (S2-T3) currently emits at most 3
- * breakpoints inside the system prompt (segments 1, 3, 6). We defensively
- * clamp here so we never exceed the limit even if a future assembler
- * change adds more sentinels.
+ * Anthropic Messages API caps explicit prompt cache breakpoints per request.
+ * We defensively clamp the number of `cache_control` hints we attach so we
+ * never exceed the limit even if the context assembler ever emits more
+ * sentinels than expected.
+ *
+ * The cap lives in `@covel/shared` (`MAX_CACHE_BREAKPOINTS`) as the single
+ * source of truth shared with the assembler's emission budget; a cross-package
+ * contract test keeps the two from drifting apart. See that constant's doc for
+ * the full contract.
  */
-const ANTHROPIC_MAX_CACHE_BREAKPOINTS = 4;
 
 /** Fields that providerRequestMetadata must never override. */
 const ANTHROPIC_PROTECTED_KEYS = new Set([
@@ -146,7 +150,7 @@ function buildAnthropicSystemField(
   const segmentCount = nonEmpty.length + (suffixBecomesTail ? 1 : 0);
   const cacheableCount = Math.min(
     hasOpenTail ? segmentCount - 1 : segmentCount,
-    ANTHROPIC_MAX_CACHE_BREAKPOINTS,
+    MAX_CACHE_BREAKPOINTS,
   );
 
   const blocks: AnthropicSystemBlock[] = [];

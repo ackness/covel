@@ -6,6 +6,7 @@ export { deepMerge } from "./utils/deep-merge.js";
 export { resolveI18nText } from "./utils/i18n.js";
 export { collectMediaRefIds } from "./utils/media-ref-scan.js";
 export {
+  MAX_CACHE_BREAKPOINTS,
   PROMPT_CACHE_BREAKPOINT_MARKER,
   splitPromptCacheSegments,
   stripPromptCacheMarkers,

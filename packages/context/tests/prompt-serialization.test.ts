@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_CACHE_BREAKPOINTS,
   PROMPT_CACHE_BREAKPOINT_MARKER,
   splitPromptCacheSegments,
 } from "@covel/shared";
 import { serializeSystemPrompt } from "../src/prompt-serialization.js";
+
+/** Count `PROMPT_CACHE_BREAKPOINT_MARKER` sentinels in a serialized prompt. */
+function countCacheMarkers(prompt: string): number {
+  return prompt.split(PROMPT_CACHE_BREAKPOINT_MARKER).length - 1;
+}
 
 function makeSegments(
   overrides?: Partial<Parameters<typeof serializeSystemPrompt>[0]>,
@@ -86,5 +92,64 @@ describe("serializeSystemPrompt", () => {
     );
 
     expect(splitPromptCacheSegments(result)).toEqual(["memory\n\nplugin"]);
+  });
+});
+
+/**
+ * Cross-package drift guard (audit H3 / A4).
+ *
+ * The Anthropic Messages adapter clamps the number of `cache_control` hints to
+ * `MAX_CACHE_BREAKPOINTS` (the API's per-request cap). If the assembler emits
+ * MORE sentinels than that, the surplus is silently truncated on the wire —
+ * cache-hit rate quietly drops with no warning. This suite pins the contract
+ * by running the REAL `serializeSystemPrompt` and asserting it never exceeds
+ * the shared cap, so any future change that adds a cacheable segment beyond the
+ * budget turns red here instead of degrading caching in production.
+ */
+describe("serializeSystemPrompt — cache-breakpoint budget contract", () => {
+  it("emits no more markers than MAX_CACHE_BREAKPOINTS when every segment is populated", () => {
+    // Every segment populated = the maximum number of sentinels the assembler
+    // can produce in a single prompt.
+    const fullyPopulated = serializeSystemPrompt(
+      makeSegments({
+        frameworkPreamble: "framework",
+        workingMemory: "memory",
+        pluginInstructions: "plugin",
+        worldInfoBeforePlugin: "before",
+        upstreamInjects: "injects",
+        worldInfoAfterPlugin: "after",
+      }),
+      true,
+    );
+
+    expect(countCacheMarkers(fullyPopulated)).toBeLessThanOrEqual(
+      MAX_CACHE_BREAKPOINTS,
+    );
+  });
+
+  it("keeps every cacheable segment within the adapter's clamp budget", () => {
+    // The adapter caps cacheable segments at MAX_CACHE_BREAKPOINTS. The number
+    // of cacheable segments equals the marker count (each marker closes one
+    // cacheable segment), so the assembler must stay within the same budget to
+    // avoid silent truncation.
+    const fullyPopulated = serializeSystemPrompt(
+      makeSegments({
+        frameworkPreamble: "framework",
+        workingMemory: "memory",
+        pluginInstructions: "plugin",
+        worldInfoBeforePlugin: "before",
+        upstreamInjects: "injects",
+        worldInfoAfterPlugin: "after",
+      }),
+      true,
+    );
+
+    const markerCount = countCacheMarkers(fullyPopulated);
+    // splitPromptCacheSegments drops the trailing open tail, so cacheable
+    // segments == marker count. Both must fit the adapter's clamp.
+    expect(markerCount).toBeLessThanOrEqual(MAX_CACHE_BREAKPOINTS);
+    expect(splitPromptCacheSegments(fullyPopulated).length).toBeLessThanOrEqual(
+      MAX_CACHE_BREAKPOINTS,
+    );
   });
 });

@@ -9,7 +9,7 @@
  *   1. Uses an array `system` field (not a plain string)
  *   2. Places a `cache_control: { type: 'ephemeral' }` hint on every
  *      segment that preceded a sentinel
- *   3. Never emits more than ANTHROPIC_MAX_CACHE_BREAKPOINTS (4) hints
+ *   3. Never emits more than MAX_CACHE_BREAKPOINTS (4) hints
  *   4. Leaves the trailing open segment uncached
  *
  * It also pins the flag-off regression path: when `cacheStrategy` is
