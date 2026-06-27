@@ -4,8 +4,8 @@
  * Memory tiers:
  *   1. Core Memory Blocks — Editable text segments inside the context window.
  *      Updated post-turn by a framework-driven LLM summarizer.
- *   2. Recall Memory — Searchable conversation history (keyword / vector).
- *   3. Archival Memory — Long-term cross-plugin knowledge (plugin_data + lorebook).
+ *   2. Recall Memory — Searchable conversation history (keyword search).
+ *   3. Archival Memory — Long-term cross-plugin knowledge (lorebook + characters).
  *
  * Compaction — Older messages are summarized and replaced in prompts.
  *   Core memory blocks are updated simultaneously so key information survives.
@@ -240,10 +240,24 @@ export interface RecallSearchResult {
   readonly turnId: string;
   readonly role: string;
   readonly content: string;
+  /**
+   * Relevance score (higher = more relevant). Currently a lexical term-overlap
+   * score from the keyword searcher — NOT vector similarity. A future
+   * vector-backed searcher would populate this with a normalized cosine score
+   * while keeping the same field contract.
+   */
   readonly score: number;
   readonly timestamp: string;
 }
 
+/**
+ * Conversation-history search. The active implementation is keyword-based
+ * (`createKeywordRecallSearcher`); this interface is also the **extension seam**
+ * for a future semantic (vector) searcher — `createMemorySystem` picks the
+ * concrete implementation, so callers (tools, prompt assembly) are unaffected
+ * by the swap. Vector recall additionally needs an embed-on-write ingestion
+ * path (not yet built); see recall-search.ts.
+ */
 export interface RecallSearcher {
   search(
     sessionId: string,
@@ -257,12 +271,23 @@ export interface RecallSearcher {
 export interface ArchivalSearchResult {
   readonly key: string;
   readonly content: string;
+  /** Lexical term-overlap score (higher = more relevant); see {@link RecallSearchResult.score}. */
   readonly score: number;
+  /**
+   * Origin of the matched record. `"plugin_data"` is reserved for a future
+   * vector path — the current keyword searcher only emits `"lorebook"` and
+   * `"character"` (see archival-search.ts).
+   */
   readonly source: "plugin_data" | "lorebook" | "character";
   readonly pluginId?: string;
   readonly namespace?: string;
 }
 
+/**
+ * Cross-plugin knowledge search. Keyword-based today
+ * (`createKeywordArchivalSearcher`); same **extension seam** as
+ * {@link RecallSearcher} for a future vector implementation.
+ */
 export interface ArchivalSearcher {
   search(
     sessionId: string,

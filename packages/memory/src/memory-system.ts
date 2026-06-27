@@ -35,7 +35,14 @@ export interface CreateMemorySystemOptions {
  * Create a fully wired memory system.
  *
  * Model slot resolution for the updater/compactor:
- *   explicit option → memory → story.
+ *   explicit option (set by the bootstrap layer in production) → canonical
+ *   "memory" slot → gateway default. See {@link resolveModelSlot}.
+ *
+ * Recall and archival are **keyword** searchers (see recall-search.ts /
+ * archival-search.ts — vector search is a documented follow-up, not yet
+ * wired). They are constructed behind the {@link RecallSearcher} /
+ * {@link ArchivalSearcher} interfaces, which are the swap seam for a future
+ * vector implementation — see the note at the `recall`/`archival` site below.
  */
 export function createMemorySystem(
   deps: MemorySystemDeps,
@@ -62,6 +69,15 @@ export function createMemorySystem(
     modelSlot,
   });
 
+  // Keyword searchers. EXTENSION POINT: to enable semantic (vector) recall,
+  // swap these for vector-backed implementations behind the same
+  // RecallSearcher / ArchivalSearcher interfaces. That requires two things the
+  // codebase does not yet have: (1) an injected embed function (env keys are
+  // available at bootstrap, so a `deps.embed` seam is the natural place), and
+  // (2) an embed-on-write ingestion path that populates the store's per-session
+  // vector tables — `searchVectors` exists but nothing fills the tables today.
+  // Until both land, keyword search is the honest, dependency-free default and
+  // works on every backend (including IdbStore, which has no vector capability).
   const recall: RecallSearcher = createKeywordRecallSearcher(store);
   const archival: ArchivalSearcher = createKeywordArchivalSearcher(store);
 
@@ -83,18 +99,29 @@ export function createMemorySystem(
 }
 
 /**
- * Resolve model slot with fallback chain: memory → story → undefined.
+ * Canonical memory model slot name. The only slot this package probes by name —
+ * all other slot routing is the bootstrap layer's responsibility, not the
+ * memory package's.
+ */
+const MEMORY_SLOT = "memory";
+
+/**
+ * Standalone/test fallback slot resolution.
+ *
+ * Production never reaches this: the bootstrap layer always passes an explicit
+ * `updater.modelSlot` (it resolves the preferred memory slot itself), so
+ * `createMemorySystem` short-circuits on `explicitModelSlot`. This helper only
+ * runs for a bare standalone boot or a test that omits the slot.
+ *
+ * It probes the single canonical `"memory"` slot; when that is unconfigured it
+ * returns `undefined` and the updater/compactor fall back to the gateway's
+ * default slot. No other slot names are hardcoded here — a prior `"story"`
+ * fallback was removed because it baked an unrelated magic slot id into the
+ * memory package (the gateway's own default-slot resolution covers that case).
  */
 function resolveModelSlot(
   resolveSlot?: (slot: string) => string | undefined,
 ): string | undefined {
   if (!resolveSlot) return undefined;
-
-  const memoryModel = resolveSlot("memory");
-  if (memoryModel) return "memory";
-
-  const storyModel = resolveSlot("story");
-  if (storyModel) return "story";
-
-  return undefined;
+  return resolveSlot(MEMORY_SLOT) ? MEMORY_SLOT : undefined;
 }

@@ -96,4 +96,24 @@ describe("createMemorySystem slot resolution", () => {
 
     expect(calls[0]?.model).toBe("memory");
   });
+
+  it("does NOT hardcode a 'story' slot fallback — leaves the slot undefined", async () => {
+    // Regression guard: the prior implementation baked a magic "story" slot id
+    // into the memory package. When only an unrelated slot resolves and the
+    // canonical "memory" slot is absent, the model slot must be left undefined
+    // so the gateway's own default-slot resolution applies.
+    const system = createMemorySystem({
+      store: store as any,
+      llm,
+      resolveSlot: (slot) => (slot === "story" ? "story" : undefined),
+    });
+
+    await system.updater.updateAfterTurn({
+      sessionId: "sess-no-story",
+      narrativeText: "玩家在原地等待。",
+      currentBlocks,
+    });
+
+    expect(calls[0]?.model).toBeUndefined();
+  });
 });

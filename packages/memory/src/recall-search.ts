@@ -1,9 +1,19 @@
 /**
- * Recall Memory — Searchable conversation history.
+ * Recall Memory — Searchable conversation history (keyword search).
  *
- * Like Letta's `conversation_search` tool. Provides keyword-based search
- * over turn messages with TF-IDF-lite scoring. Vector search is an optional
- * upgrade when the store supports pgvector.
+ * Like Letta's `conversation_search` tool, but **keyword-only**: term-overlap
+ * scoring over recent turn messages (TF-IDF-lite, with a CJK substring path).
+ * The `score` field is a lexical-overlap score, not vector similarity.
+ *
+ * Semantic (vector) recall is NOT wired yet — and deliberately not faked here.
+ * The store's vector capability (`searchVectors`, sqlite-vec / pgvector) and the
+ * `gateway.embed` operation both exist, but **nothing populates the per-session
+ * vector tables**: there is no embed-on-write ingestion path for turn messages,
+ * so a vector searcher would query empty tables and silently return nothing —
+ * strictly worse than keyword. Turning this on is a cross-cutting follow-up
+ * (embed turn messages on write + backfill existing sessions, then drop in a
+ * `createVectorRecallSearcher` via the {@link RecallSearcher} interface — the
+ * swap seam memory-system.ts already routes through). See memory-system.ts.
  */
 
 import type { DataStore } from "@covel/store";
