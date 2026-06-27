@@ -1,44 +1,26 @@
-import { eq } from "drizzle-orm";
+/**
+ * SQLite world records — a thin adapter over the shared
+ * `common/sql-world-records.ts` query layer. Supplies the SQLite runner, the
+ * SQLite `worlds` table, and the SQLite JSON read/write gateways; all query
+ * logic is shared with the PostgreSQL backend.
+ */
 
-import type { DataStore, WorldRecord } from "../types.js";
+import { makeInsertValues } from "../common/insert-values.js";
+import { sqliteJsonReader } from "../common/json-readers.js";
+import { sqliteJsonWriter } from "../common/json-writers.js";
+import { createSqlWorldRecords } from "../common/sql-world-records.js";
+import type { SqlWorldRecords } from "../common/sql-world-records.js";
 import * as schema from "./schema.js";
-import { toWorldRecord } from "./sqlite-store-mappers.js";
-import { sqliteWorldInsert, sqliteWorldUpdate } from "./sqlite-store-values.js";
+import { createSqliteSqlRunner } from "./sqlite-sql-runner.js";
 import type { SqliteDb } from "./sqlite-types.js";
 
-export type SqliteWorlds = Pick<
-  DataStore,
-  "listWorlds" | "getWorld" | "upsertWorld" | "deleteWorld"
->;
+export type SqliteWorlds = SqlWorldRecords;
 
 export function createSqliteWorlds(db: SqliteDb): SqliteWorlds {
-  return {
-    async listWorlds(): Promise<WorldRecord[]> {
-      const rows = db.select().from(schema.worlds).all();
-      return rows.map(toWorldRecord);
-    },
-
-    async getWorld(id: string): Promise<WorldRecord | null> {
-      const row = db
-        .select()
-        .from(schema.worlds)
-        .where(eq(schema.worlds.id, id))
-        .get();
-      return row ? toWorldRecord(row) : null;
-    },
-
-    async upsertWorld(record: WorldRecord): Promise<void> {
-      db.insert(schema.worlds)
-        .values(sqliteWorldInsert(record))
-        .onConflictDoUpdate({
-          target: schema.worlds.id,
-          set: sqliteWorldUpdate(record),
-        })
-        .run();
-    },
-
-    async deleteWorld(id: string): Promise<void> {
-      db.delete(schema.worlds).where(eq(schema.worlds.id, id)).run();
-    },
-  };
+  return createSqlWorldRecords({
+    runner: createSqliteSqlRunner(db),
+    worlds: schema.worlds,
+    json: sqliteJsonReader,
+    values: makeInsertValues(sqliteJsonWriter),
+  });
 }

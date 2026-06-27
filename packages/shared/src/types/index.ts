@@ -18,6 +18,20 @@ export type {
 } from "./llm-content-parts.js";
 
 export type {
+  LLMTextPart,
+  LLMImagePart,
+  LLMContentPart,
+  LLMMessageContent,
+  LLMMessage,
+  LLMToolCall,
+  LLMResponse,
+  LLMToolDefinition,
+  LLMResponseFormat,
+  LLMStreamEvent,
+  LLMAdapter,
+} from "./llm-adapter.js";
+
+export type {
   WorldDataSourceKind,
   WorldDataMergeMode,
   WorldDataEffect,
@@ -32,6 +46,7 @@ export type {
 export type {
   PluginType,
   FrameworkCapabilityTag,
+  FrameworkRuntimeCapabilityTag,
   RuntimeType,
   TriggerType,
   TriggerConfig,
@@ -58,9 +73,15 @@ export type {
   PluginManifest,
   AuthorsNoteDecl,
   PostHistoryDecl,
+  MemoryBlockSchema,
 } from "./plugin.js";
 
-export { FrameworkCapability } from "./plugin.js";
+export {
+  FrameworkCapability,
+  FrameworkRuntimeCapability,
+  FRAMEWORK_KNOWN_CAPABILITIES,
+} from "./plugin.js";
+export { HOOK_EVENTS } from "./plugin.js";
 
 export type {
   RuntimeStatus,
@@ -140,33 +161,32 @@ export type {
   SubscriptionFilter,
 } from "./subscription-events.js";
 
+export { SUBSCRIPTION_TOPICS } from "./subscription-events.js";
+
 export type {
+  ProposalPayloadMap,
   ProposalType,
+  ProposalFor,
   ProposalSource,
   Proposal,
   NarrativeAppendPayload,
   InteractionRequestPayload,
   StatePatchPayload,
   EventEmitPayload,
-  RecordUpsertPayload,
   UIRenderPayload,
   AssetGeneratePayload,
   PluginDataPayload,
   PluginDataBatchPayload,
   CharacterUpsertPayload,
+  WorkingMemorySetPayload,
+  LorebookUpsertPayload,
+  LorebookUpsertEntry,
   SessionEvent,
   CommitResult,
 } from "./proposal.js";
+export { PROPOSAL_TYPES } from "./proposal.js";
 
 export type {
-  ClientCapabilities,
-  ServerCapabilities,
-  CommandType,
-  SessionCommand,
-  SessionCreatePayload,
-  SessionRestorePayload,
-  TurnSubmitPayload,
-  InputSubmitPayload,
   ProtocolEventType,
   ProtocolEvent,
   SessionSnapshot,
@@ -174,9 +194,16 @@ export type {
   SnapshotCharacter,
   SnapshotTraceEvent,
   SnapshotPluginStatus,
-  SessionTransport,
-  ClientInfo,
 } from "./protocol.js";
+
+export type {
+  CovelEvent,
+  CovelEventType,
+  CovelEventMeta,
+  CovelEventPayload,
+} from "./protocol.js";
+
+export { COVEL_EVENT_META, FORWARDED_EVENT_TYPES } from "./protocol.js";
 
 export type {
   AttributeFieldType,

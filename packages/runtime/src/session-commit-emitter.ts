@@ -3,7 +3,7 @@
  */
 
 import { assetGenerateToView } from "@covel/shared";
-import type { CommitResult, Proposal, UIRenderPayload } from "@covel/shared";
+import type { CommitResult, Proposal } from "@covel/shared";
 import type { TurnEmitter } from "./turn-emitter.js";
 import { resolveBlockType } from "./session-kernel-helpers.js";
 
@@ -15,7 +15,7 @@ export async function emitCommittedProposal(
   if (!result.committed || !emitter) return;
 
   if (proposal.type === "interaction.request") {
-    const payloadAny = proposal.payload as Record<string, unknown>;
+    const payloadAny = { ...proposal.payload };
     await emitter.emit("block.emitted", {
       runtimeId: proposal.source.runtimeId,
       pluginId: proposal.source.pluginId,
@@ -29,7 +29,7 @@ export async function emitCommittedProposal(
       },
     });
   } else if (proposal.type === "ui.render") {
-    const payload = proposal.payload as unknown as UIRenderPayload;
+    const payload = proposal.payload;
     await emitter.emit("ui.rendered", {
       runtimeId: proposal.source.runtimeId,
       pluginId: proposal.source.pluginId,
@@ -46,7 +46,7 @@ export async function emitCommittedProposal(
       });
     }
   } else if (proposal.type === "state.patch") {
-    const p = proposal.payload as Record<string, unknown>;
+    const p = proposal.payload;
     await emitter.emit("state.patch.applied", {
       runtimeId: proposal.source.runtimeId,
       pluginId: proposal.source.pluginId,

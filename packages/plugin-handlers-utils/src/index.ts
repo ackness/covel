@@ -127,6 +127,10 @@ export function makeProposal(
   type: ProposalType,
   payload: Record<string, unknown>,
 ): Proposal {
+  // `Proposal` is a discriminated union; this factory accepts a generic
+  // payload because plugin handlers build proposals from loosely-typed data
+  // that the commit handlers validate at commit time. The single cast is the
+  // construction boundary.
   return {
     id: crypto.randomUUID(),
     type,
@@ -138,5 +142,5 @@ export function makeProposal(
     sessionId: ctx.sessionId,
     payload,
     timestamp: now,
-  };
+  } as unknown as Proposal;
 }

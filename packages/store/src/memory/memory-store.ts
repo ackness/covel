@@ -20,11 +20,14 @@ import {
 } from "./working-memory-methods.js";
 import { createWorldMethods } from "./world-methods.js";
 import type { MemoryStore } from "./memory-types.js";
+import type { StoreTransaction } from "../types.js";
 
 export function createMemoryStore(): MemoryStore {
   const state = createMemoryState();
 
-  return {
+  // Data methods first; the transaction scope is the same store (single shared
+  // state), so `withTransaction` hands `fn` these data methods.
+  const data = {
     ...createSessionMethods(state),
     ...createRuntimeMethods(state),
     ...createPluginDataMethods(state),
@@ -35,7 +38,14 @@ export function createMemoryStore(): MemoryStore {
     ...createSuspensionMethods(state),
     ...createSnapshotMethods(state),
     ...createVectorMethods(state),
-    ...createTransactionMethods(state),
+  };
+
+  return {
+    ...data,
+    ...createTransactionMethods(
+      state,
+      () => data as unknown as StoreTransaction,
+    ),
 
     async close() {
       // No-op for in-memory store.

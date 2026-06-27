@@ -33,9 +33,13 @@
 
 > 关键差异：`/api/actions` **没有** `event:` 命名头，因此 `EventSource.addEventListener('narrative.delta', …)` 在 actions 流上**永远不会**触发。回合内事件请使用 `apps/web/src/services/api/actions.ts: sendAction` 的 ReadableStream 解析路径，或自行用 `fetch()` 读取 `data:` 行；命名事件订阅只对 `/api/events/stream` 有效。
 
-## 一、事件类型（ProtocolEventType）
+## 一、事件类型（CovelEvent）
 
-下表列出 `ProtocolEventType` enum 中的稳定事件类型。`/api/events/stream` 始终以命名事件帧（`event: <type>\ndata: ...`）发送；`/api/actions` 也使用同一组 `type` 字符串，但作为 `SseEnvelope.type` 包在 data-only 帧里。除此之外 `/api/actions` 还会转发若干**实现私有事件**（见末尾「实现私有事件」小节），它们暂未进 enum。
+所有 server→client 事件现在收口为 `packages/shared/src/types/protocol.ts` 中的**单一 discriminated union** `CovelEvent`（`{ type; payload }`），它是事件名、转发白名单、前端穷尽校验的唯一真相。`ProtocolEventType` 现为 `CovelEvent['type']` 的历史别名（保留向后兼容）。
+
+新增一个 SSE 事件 = 在 `CovelEvent` 加一个成员 + 在 `COVEL_EVENT_META` 加一条元数据，二者由 `satisfies Record<CovelEventType, CovelEventMeta>` 互相约束——漏改任一处即编译失败。
+
+下表列出稳定事件类型。`/api/events/stream` 始终以命名事件帧（`event: <type>\ndata: ...`）发送；`/api/actions` 也使用同一组 `type` 字符串，但作为 `SseEnvelope.type` 包在 data-only 帧里。`/api/actions` 转发的若干**运行时内部 / trace 事件**（见末尾「转发的运行时内部事件」小节）现已纳入同一个 `CovelEvent` union，并通过 `COVEL_EVENT_META[type].forwardToActionStream` 标记是否转发。
 
 ### 叙事事件
 
@@ -179,14 +183,18 @@ Provider 图片输入矩阵：
 
 > 前端若要接收上述事件，需在 `apps/web/src/services/subscription.ts` 的 topic 路由里为 `state.snapshot.created` / `session.forked` 显式分发。当前尚未挂载这两个监听；在 fork / save UI 真正落地前，服务端已经在 SSE 通道上发送，前端订阅即生效。
 
-### Working Memory / 上下文压缩事件（kernel-only by design）
+### Working Memory / 上下文压缩事件
 
-下列事件由 commit chain / Compactor 内部发出，**保留为内核内部事件**，**不进入 `ProtocolEventType` 枚举**，**没有 SSE 推送计划**。它们的设计意图是让 runtime / hook 内部消费，而非驱动 UI。如果将来确实需要前端实时反应，需要先评审：①是否真的需要实时？还是可以靠 `state.changed` / 轮询拿到？②若需要再把对应 type promote 到 `ProtocolEventType` 并接 SSE forwarder。
+`working_memory.changed` 由 commit chain 在提交 `working_memory.set` proposal 后通过 `makeEvent` 产出，作为 commit event **直接写入 `/api/actions` 流**（与 `narrative.completed` 等同走 commit-direct 路径，不经 `FORWARDED_EVENT_TYPES` 白名单）。因此它**是 `CovelEvent` union 的成员**（`COVEL_EVENT_META` 中 `forwardToActionStream: false`——该 flag 只管 eventBus→action-stream 转发，对 commit-direct 事件无效）。前端 actions handler **显式不渲染**它（UI 通过 `state.changed` 感知 working memory 变化），但因它已在闭合 union 内，新增同类事件会被前端穷尽校验强制做出「处理或忽略」的决定。此前它被发射却缺席 union，每次提交都落到前端 `assertNeverEvent` 并 `console.warn`——已修复。
 
-| 事件                     | 触发点                                             | 当前出口                          | payload                                                         | 备注                                                             |
-| ------------------------ | -------------------------------------------------- | --------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `working_memory.changed` | commit chain 提交 `working_memory.set` proposal 后 | `KernelEvent`（runtime 内部事件） | `{ scope, key }`（顶层带有 sessionId/turnId/source）            | kernel-only by design，UI 应通过 `state.changed` 感知            |
-| `context.compacted`      | Compactor 完成摘要写入后                           | `trace_events` 表                 | `{ summaryId, messagesCompacted, tokenSavings, focusSections }` | trace-only by design，仅可通过 `/api/traces/:sessionId` 离线查询 |
+`context.compacted` 仍为 **trace-only by design**：由 Compactor 完成摘要写入后写入 `trace_events` 表，不进入 `CovelEvent` union，也没有 SSE 推送计划，仅可通过 `/api/traces/:sessionId` 离线查询。
+
+`recursive.calling` / `recursive.completed` / `recursive.failed` 为递归 runtime 的 TurnEmitter trace 事件，**仅经订阅通道（topic `trace`）下发**，`forwardToActionStream: false`，不进入 `/api/actions`。它们现在也是 `CovelEvent` union 成员——使框架所有 `TurnEmitter.emit` / `makeEvent` 的事件名都受闭合 union 约束（发射端 `type` 已收紧为 `CovelEventType`，发射 union 外事件即编译错误）。
+
+| 事件                     | 触发点                                             | 当前出口                                          | payload                                                         | 备注                                                                   |
+| ------------------------ | -------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `working_memory.changed` | commit chain 提交 `working_memory.set` proposal 后 | commit event → `/api/actions`（CovelEvent union） | `{ scope, key }`（顶层带有 sessionId/turnId/source）            | union 成员；前端显式忽略，UI 通过 `state.changed` 感知                 |
+| `context.compacted`      | Compactor 完成摘要写入后                           | `trace_events` 表                                 | `{ summaryId, messagesCompacted, tokenSavings, focusSections }` | trace-only by design，不进 union，仅可通过 `/api/traces/:sessionId` 查 |
 
 ### SSE 帧格式按通道区分
 
@@ -197,13 +205,13 @@ Provider 图片输入矩阵：
 
 `/api/events/stream` 在连接建立时先发一条 `system.connected`，每 30s 发 `system.heartbeat`；带 `lastEventId` 时会先回放 EventBus 缓存中 `seq > lastEventId` 的事件再切到实时。
 
-`apps/web/src/services/subscription.ts` 默认订阅 topic `runtime / state / game / plugin / session / system`（不含 `store`），并按 `event.topic` 路由分发；新增 topic 或 enum 事件时**必须同步更新该文件**。`/api/actions` 的回合内事件（`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）在 actions 流里以 data-only 帧推送，由 `apps/web/src/services/api/actions.ts: sendAction` 的回调消费，不经过 `subscription.ts`。
+`apps/web/src/services/subscription.ts` 默认订阅 topic `runtime / state / game / plugin / session / system`（不含 `store`），并按 `event.topic` 路由分发；新增 topic 或 enum 事件时**必须同步更新该文件**。`/api/events/stream` 接受的合法 topic 由 `@covel/shared` 的 `SUBSCRIPTION_TOPICS` 单一真相派生（`subscribe.ts` 的 `VALID_TOPICS` 从中生成）：`runtime / state / game / plugin / session / store / system / trace / hooks`。其中 `trace`（TurnEmitter）与 `hooks`（hook pipeline）为运行时内部可观测性 topic——此前被运行时发出却被 `VALID_TOPICS` 拒绝（`topics=trace` 返回 400），现已纳入 union 并对齐。`/api/actions` 的回合内事件（`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）在 actions 流里以 data-only 帧推送，由 `apps/web/src/services/api/actions.ts: sendAction` 的回调消费，不经过 `subscription.ts`。
 
 > S4-T5 注意：`state.snapshot.created` / `session.forked` 服务端已经发出但前端尚未挂载 listener（FU-6 / 等 fork & save UI 落地）。此 follow-up 是已知的，与 framework 实现无关。
 
-### 实现私有事件（仅 `/api/actions` 转发，**未进入 `ProtocolEventType`**）
+### 转发的运行时内部事件（`/api/actions` 转发，已纳入 `CovelEvent`）
 
-下列事件由 server 透过 actions SSE 流转发用于 debug / trace，但当前**不**在 `packages/shared/src/types/protocol.ts` 的 `ProtocolEventType` 枚举中。TS 客户端如果只接受 `ProtocolEventType`，需要单独放宽或定义私有 union；未来 enum 化前不建议生产消费方依赖。
+下列事件由 server 透过 actions SSE 流转发用于 debug / trace。它们现在**已经是 `CovelEvent` union 的成员**（不再是「未进 enum 的私有事件」），并在 `COVEL_EVENT_META` 中标记 `forwardToActionStream: true`。server 的转发白名单 `FORWARDED_EVENT_TYPES` 完全从该元数据**派生**（不再手写 Set）。web 的 actions handler 对这些类型显式 no-op（它们经订阅通道驱动 `/debug` 时间线），但因已在 union 内，新增同类事件会被前端穷尽校验强制做出「处理或忽略」的决定。
 
 | 事件                                                  | 来源                                                                                    | 用途                                                     |
 | ----------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------- |
@@ -375,21 +383,28 @@ execution.completed   → executing = false
 error.occurred        → executionError
 ```
 
-## 六、Transport 抽象
+## 六、传输层（真实形态）
 
-协议设计为 transport-agnostic。当前实现使用 HTTP + SSE，但所有通讯都通过 `SessionTransport` 接口抽象，支持未来适配：
+> 本节描述真实实现，不是设想。早期类型里曾有一个 `SessionTransport` 接口，注释宣称「所有通讯都通过它抽象」，并列出 `SSETransport` / `WebSocketTransport` / `StdioTransport` / `HTTPTransport` / `LocalTransport` 等实现——但**没有任何实现存在**（全仓零 `implements`、零工厂）。该接口已随本次清理删除。请勿据此以为「换个 Transport 即可上 WebSocket」。
 
-| Transport          | 上行       | 下行         | 场景             |
-| ------------------ | ---------- | ------------ | ---------------- |
-| SSETransport       | HTTP POST  | SSE stream   | Web 前端（当前） |
-| WebSocketTransport | WS message | WS message   | Web 升级路径     |
-| StdioTransport     | stdin JSON | stdout JSON  | TUI / CLI        |
-| HTTPTransport      | HTTP POST  | HTTP polling | REST API 集成    |
-| LocalTransport     | 函数调用   | 回调         | 测试             |
+当前没有统一的 transport 抽象层。通讯由以下几条**具体**路径承载（见「架构总览」的三类划分）：
+
+| 方向            | 真实实现                                                                                                                                         |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Command（上行） | REST `POST`，硬编码 `fetch('/api/...')`（`apps/web/src/services/`）                                                                              |
+| 回合内 Event    | `POST /api/actions` 的 data-only SSE，`fetch` + `ReadableStream` 解析（`apps/web/src/services/sse.ts` / `api/actions.ts`，信封 = `SseEnvelope`） |
+| 辅助 Event      | `GET /api/events/stream` 的命名 SSE，`EventSource` + `lastEventId` 重连（`apps/web/src/services/subscription.ts`，信封 = `ProtocolEvent`）       |
+| Query（只读）   | REST `GET`，标准 JSON                                                                                                                            |
+
+唯一真正的部署抽象在**数据层**，不在传输层：`apps/web/src/services/data-service.ts` 的 `DataService` 区分 `local`（浏览器 IndexedDB）与 `remote`（服务器 API）。但它**只覆盖数据 CRUD**——回合执行与上述两条 SSE 流即便在 `local` 模式下也仍然硬连服务器。
+
+### WebSocket 升级路径
+
+升级到 WebSocket **不是**「替换一个 Transport 实现」那么简单：上行/下行目前直接绑定在上述 `fetch` / `EventSource` 调用点上，需要在服务器与前端两侧分别新增 WS 处理与帧编解码。本文档不再承诺一个不存在的可插拔 transport 层。
 
 ## 七、Debug trace events
 
-These events ride the standard SSE envelope and are also persisted into `trace_events`. They are emitted by the runtime's `TurnEmitter` (`packages/runtime/src/turn-emitter.ts`), fanned out both to `trace_events` (for the `/api/traces` read API and the `/debug` inspector) and to the global `EventBus` (where the `/api/actions` SSE route re-forwards them through `FORWARDED_SUBTYPES`).
+These events ride the standard SSE envelope and are also persisted into `trace_events`. They are emitted by the runtime's `TurnEmitter` (`packages/runtime/src/turn-emitter.ts`), fanned out both to `trace_events` (for the `/api/traces` read API and the `/debug` inspector) and to the global `EventBus` (where the `/api/actions` SSE route re-forwards them through `FORWARDED_EVENT_TYPES` — the set derived from `COVEL_EVENT_META[type].forwardToActionStream`, replacing the former hand-written `FORWARDED_SUBTYPES`).
 
 | Type                  | Payload                                                                                                                                                                                                                                                                                                                                    |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

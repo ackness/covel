@@ -48,6 +48,31 @@
 export const PROMPT_CACHE_BREAKPOINT_MARKER = "\uE000COVEL_CACHE_BREAK\uE000";
 
 /**
+ * Single source of truth for the maximum number of explicit prompt-cache
+ * breakpoints allowed inside one system prompt.
+ *
+ * This is a **cross-package contract** between two collaborators that never
+ * import each other:
+ *
+ *   - The context assembler (`@covel/context` `serializeSystemPrompt`) emits
+ *     at most this many `PROMPT_CACHE_BREAKPOINT_MARKER` sentinels (today it
+ *     emits 3 \u2014 after the framework preamble, the plugin instructions, and the
+ *     after-plugin world info).
+ *   - The Anthropic Messages adapter (`@covel/ai-provider`) attaches
+ *     `cache_control: { type: 'ephemeral' }` to each sentinel-preceded segment
+ *     and **clamps** to this value, because the Anthropic Messages API rejects
+ *     requests carrying more than 4 cache breakpoints.
+ *
+ * Keeping the cap here means the adapter's clamp and the assembler's emission
+ * budget can never silently drift apart: a cross-package contract test
+ * (`packages/context/tests/prompt-serialization.test.ts`) asserts the real
+ * `serializeSystemPrompt` output never exceeds this many markers, so adding a
+ * fourth-plus cacheable segment that would be silently truncated on the wire
+ * turns the test red instead.
+ */
+export const MAX_CACHE_BREAKPOINTS = 4;
+
+/**
  * Split a cached system prompt on breakpoint markers.
  *
  * Returns one segment per marker-delimited span. When the input string

@@ -8,14 +8,22 @@
 import { isAssetGeneratePayload } from "@covel/shared";
 import type {
   AssetGeneratePayload,
+  CovelEventType,
   Proposal,
   ProposalSource,
   ProposalType,
   SessionEvent,
 } from "@covel/shared";
 
+/**
+ * Build a post-commit `SessionEvent`. `type` is constrained to the closed
+ * `CovelEventType` union: a commit handler that returns an event is written
+ * straight onto the action SSE stream, so emitting a name outside the union
+ * would silently reach the frontend `assertNeverEvent` guard. Constraining the
+ * param turns that drift into a compile error at the emission site.
+ */
 export function makeEvent(
-  type: string,
+  type: CovelEventType,
   proposal: Proposal,
   payload: Record<string, unknown>,
 ): SessionEvent {
@@ -85,6 +93,16 @@ export function resolveBlockType(payload: Record<string, unknown>): string {
   return type || "interactive_block";
 }
 
+/**
+ * Construct a proposal envelope from loosely-typed runtime output.
+ *
+ * `Proposal` is a discriminated union, but this factory deliberately accepts a
+ * generic `Record<string, unknown>` payload: most proposals are built from
+ * untrusted runtime/tool output whose shape is only validated later by the
+ * commit handlers. The single cast here is the construction boundary — callers
+ * with a known-good payload pass it straight through; commit handlers validate
+ * at commit time.
+ */
 export function makeProposal(
   type: ProposalType,
   source: ProposalSource,
@@ -100,5 +118,5 @@ export function makeProposal(
     sessionId,
     payload,
     timestamp: new Date().toISOString(),
-  };
+  } as unknown as Proposal;
 }

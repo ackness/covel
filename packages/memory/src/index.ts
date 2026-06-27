@@ -12,6 +12,7 @@
 export type {
   CoreMemoryLabel,
   CoreMemoryLabelInfo,
+  CoreMemoryBlockSchema,
   CoreMemoryBlock,
   CoreMemoryConfig,
   MemoryManager,
@@ -32,6 +33,7 @@ export type {
 export {
   CORE_MEMORY_LABELS,
   CORE_MEMORY_LABEL_INFO,
+  DEFAULT_CORE_MEMORY_BLOCKS,
   DEFAULT_MAX_BLOCK_CHARS,
 } from "./types.js";
 

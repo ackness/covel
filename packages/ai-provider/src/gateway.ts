@@ -5,8 +5,6 @@ import type { ProviderResolution } from "./provider-registry.js";
 import type { SlotRegistry } from "./slot-registry.js";
 import { applySlotOverlay } from "./slot-overlay.js";
 import {
-  normalizeError,
-  notifyError,
   notifyStart,
   notifySuccess,
   targetModel,
@@ -18,6 +16,7 @@ import {
 } from "./gateway-fallback-chain.js";
 import { createGatewaySlotResolution } from "./gateway-slot-resolution.js";
 import type { GatewayOptions } from "./gateway-slot-resolution.js";
+import { createRunOperation } from "./gateway-run-operation.js";
 import type {
   EmbeddingResult,
   OperationMode,
@@ -90,6 +89,8 @@ export function createGateway(deps: GatewayDependencies) {
     resolveSlot,
   } = createGatewaySlotResolution(deps, warnedFallbacks);
 
+  const { runOperation } = createRunOperation(deps, resolveSlotOrPassthrough);
+
   async function generateText(
     input: {
       presetId?: string;
@@ -99,27 +100,32 @@ export function createGateway(deps: GatewayDependencies) {
     },
     options?: GatewayOptions,
   ) {
-    return runWithFallback(
-      { presetId: input.presetId },
-      "text",
+    return runOperation(
+      {
+        presetId: input.presetId,
+        mode: "text",
+        fallbackTag: "text",
+        resolveTargets: (presetId) =>
+          deps.presetRegistry.resolveTextTargetChain({ presetId }),
+        execute: async (target, resolved) =>
+          resolved.adapter.generateText(
+            configWithSignal(resolved.config, options),
+            {
+              model: targetModel(target),
+              messages: input.messages,
+              tools: input.tools,
+              providerRequestMetadata: withPresetMetadata(
+                target,
+                input.providerRequestMetadata,
+                input.presetId,
+                options,
+              ),
+            },
+            { profile: target.profile, preset: target.preset, mode: "text" },
+          ),
+        resolveUsage: (r) => r.usage,
+      },
       options,
-      async (target, resolved) =>
-        resolved.adapter.generateText(
-          configWithSignal(resolved.config, options),
-          {
-            model: targetModel(target),
-            messages: input.messages,
-            tools: input.tools,
-            providerRequestMetadata: withPresetMetadata(
-              target,
-              input.providerRequestMetadata,
-              input.presetId,
-              options,
-            ),
-          },
-          { profile: target.profile, preset: target.preset, mode: "text" },
-        ),
-      (r) => r.usage,
     );
   }
 
@@ -132,33 +138,40 @@ export function createGateway(deps: GatewayDependencies) {
     },
     options?: GatewayOptions,
   ) {
-    return runWithFallback(
-      { presetId: input.presetId },
-      "object",
-      options,
-      async (target, resolved) => {
-        const result = await resolved.adapter.generateObject(
-          configWithSignal(resolved.config, options),
-          {
-            model: targetModel(target),
-            schema: input.schema,
-            messages: input.messages,
-            providerRequestMetadata: withPresetMetadata(
-              target,
-              input.providerRequestMetadata,
-              input.presetId,
-              options,
-            ),
-          },
-          { profile: target.profile, preset: target.preset, mode: "object" },
-        );
-        return result as {
-          object: TObject;
-          finishReason: string;
-          usage: UsageSummary;
-        };
+    return runOperation(
+      {
+        presetId: input.presetId,
+        // Object generation shares the text slot's fallback tag — the slot
+        // resolver has no separate "object" tag.
+        mode: "object",
+        fallbackTag: "text",
+        resolveTargets: (presetId) =>
+          deps.presetRegistry.resolveTextTargetChain({ presetId }),
+        execute: async (target, resolved) => {
+          const result = await resolved.adapter.generateObject(
+            configWithSignal(resolved.config, options),
+            {
+              model: targetModel(target),
+              schema: input.schema,
+              messages: input.messages,
+              providerRequestMetadata: withPresetMetadata(
+                target,
+                input.providerRequestMetadata,
+                input.presetId,
+                options,
+              ),
+            },
+            { profile: target.profile, preset: target.preset, mode: "object" },
+          );
+          return result as {
+            object: TObject;
+            finishReason: string;
+            usage: UsageSummary;
+          };
+        },
+        resolveUsage: (r) => r.usage,
       },
-      (r) => r.usage,
+      options,
     );
   }
 
@@ -288,62 +301,56 @@ export function createGateway(deps: GatewayDependencies) {
       });
     }
 
-    const cleanup = applySlotOverlay(deps, options?.slotOverrides);
-    try {
-      return await embedInner(input, options);
-    } finally {
-      cleanup();
-    }
-  }
-
-  async function embedInner(
-    input: {
-      presetId?: string;
-      values: string[];
-      providerRequestMetadata?: Record<string, unknown>;
-    },
-    options?: GatewayOptions,
-  ): Promise<EmbeddingResult> {
-    const target = deps.presetRegistry.resolveEmbeddingTarget({
-      presetId: resolveSlotOrPassthrough(input.presetId, "embedding", options),
-    });
-
-    // Route via the preset (carries baseUrl/protocol) when available, else
-    // via the embed profile's provider name — the provider registry fills
-    // in baseUrl/protocol from its registered provider defaults.
-    const routingTarget = target.preset ?? {
-      provider: target.profile.provider,
-    };
-    let resolved = deps.providerRegistry.resolve(routingTarget, {
-      mode: "embed",
-    });
-    if (options?.apiKeys) {
-      resolved = deps.providerRegistry.withApiKeys(
-        resolved,
-        options.apiKeys,
-        target.profile.provider,
-      );
-    }
-
-    // Merge slot-level embeddingFormat into the per-call metadata so the
-    // adapter can dispatch (e.g. Nemotron multimodal wrapping).
-    const providerRequestMetadata: Record<string, unknown> = {
-      ...(target.preset?.embeddingFormat !== undefined
-        ? { embeddingFormat: target.preset.embeddingFormat }
-        : {}),
-      ...input.providerRequestMetadata,
-    };
-
-    return runSingle(target, "embed", resolved, options, async () =>
-      resolved.adapter.embed(
-        configWithSignal(resolved.config, options),
-        {
-          model: target.profile.model,
-          values: input.values,
-          providerRequestMetadata,
+    return runOperation(
+      {
+        presetId: input.presetId,
+        mode: "embed",
+        fallbackTag: "embedding",
+        resolveTargets: (presetId) => [
+          deps.presetRegistry.resolveEmbeddingTarget({ presetId }),
+        ],
+        // Embed routes differently from the text path: via the preset (which
+        // carries baseUrl/protocol) when available, else via the embed
+        // profile's bare provider name — the provider registry fills in
+        // baseUrl/protocol from its registered defaults. Request keys bind to
+        // the profile provider.
+        prepare: (target, opts) => {
+          const routingTarget = target.preset ?? {
+            provider: target.profile.provider,
+          };
+          let resolved = deps.providerRegistry.resolve(routingTarget, {
+            mode: "embed",
+          });
+          if (opts?.apiKeys) {
+            resolved = deps.providerRegistry.withApiKeys(
+              resolved,
+              opts.apiKeys,
+              target.profile.provider,
+            );
+          }
+          return { provider: targetProvider(target), resolved };
         },
-        { profile: target.profile, preset: target.preset, mode: "embed" },
-      ),
+        execute: async (target, resolved) => {
+          // Merge slot-level embeddingFormat into the per-call metadata so the
+          // adapter can dispatch (e.g. Nemotron multimodal wrapping).
+          const providerRequestMetadata: Record<string, unknown> = {
+            ...(target.preset?.embeddingFormat !== undefined
+              ? { embeddingFormat: target.preset.embeddingFormat }
+              : {}),
+            ...input.providerRequestMetadata,
+          };
+          return resolved.adapter.embed(
+            configWithSignal(resolved.config, options),
+            {
+              model: target.profile.model,
+              values: input.values,
+              providerRequestMetadata,
+            },
+            { profile: target.profile, preset: target.preset, mode: "embed" },
+          );
+        },
+      },
+      options,
     );
   }
 
@@ -357,22 +364,28 @@ export function createGateway(deps: GatewayDependencies) {
     },
     options?: GatewayOptions,
   ): Promise<SpeechSynthesisResult> {
-    return runSingleFromPreset(
-      input.presetId,
-      "speech",
+    return runOperation(
+      {
+        presetId: input.presetId,
+        mode: "speech",
+        fallbackTag: "speech",
+        resolveTargets: (presetId) => [
+          deps.presetRegistry.resolveTextTarget({ presetId }),
+        ],
+        execute: async (target, resolved) =>
+          resolved.adapter.synthesizeSpeech(
+            configWithSignal(resolved.config, options),
+            {
+              model: targetModel(target),
+              text: input.text,
+              ...(input.voice ? { voice: input.voice } : {}),
+              ...(input.format ? { format: input.format } : {}),
+              providerRequestMetadata: input.providerRequestMetadata,
+            },
+            { profile: target.profile, preset: target.preset, mode: "speech" },
+          ),
+      },
       options,
-      (target, resolved) =>
-        resolved.adapter.synthesizeSpeech(
-          configWithSignal(resolved.config, options),
-          {
-            model: targetModel(target),
-            text: input.text,
-            ...(input.voice ? { voice: input.voice } : {}),
-            ...(input.format ? { format: input.format } : {}),
-            providerRequestMetadata: input.providerRequestMetadata,
-          },
-          { profile: target.profile, preset: target.preset, mode: "speech" },
-        ),
     );
   }
 
@@ -384,24 +397,30 @@ export function createGateway(deps: GatewayDependencies) {
     },
     options?: GatewayOptions,
   ): Promise<TranscriptionResult> {
-    return runSingleFromPreset(
-      input.presetId,
-      "transcription",
+    return runOperation(
+      {
+        presetId: input.presetId,
+        mode: "transcription",
+        fallbackTag: "transcription",
+        resolveTargets: (presetId) => [
+          deps.presetRegistry.resolveTextTarget({ presetId }),
+        ],
+        execute: async (target, resolved) =>
+          resolved.adapter.transcribeAudio(
+            configWithSignal(resolved.config, options),
+            {
+              model: targetModel(target),
+              audio: input.audio,
+              providerRequestMetadata: input.providerRequestMetadata,
+            },
+            {
+              profile: target.profile,
+              preset: target.preset,
+              mode: "transcription",
+            },
+          ),
+      },
       options,
-      (target, resolved) =>
-        resolved.adapter.transcribeAudio(
-          configWithSignal(resolved.config, options),
-          {
-            model: targetModel(target),
-            audio: input.audio,
-            providerRequestMetadata: input.providerRequestMetadata,
-          },
-          {
-            profile: target.profile,
-            preset: target.preset,
-            mode: "transcription",
-          },
-        ),
     );
   }
 
@@ -425,191 +444,5 @@ export function createGateway(deps: GatewayDependencies) {
     options?: GatewayOptions,
   ): ProviderConfig {
     return options?.signal ? { ...config, signal: options.signal } : config;
-  }
-
-  async function runWithFallback<TResult>(
-    input: { presetId?: string },
-    mode: "text" | "object",
-    options: GatewayOptions | undefined,
-    execute: (
-      target: ResolvedTarget,
-      resolved: ProviderResolution,
-    ) => Promise<TResult>,
-    resolveUsage: (result: TResult) => UsageSummary | null,
-  ): Promise<TResult> {
-    const cleanup = applySlotOverlay(deps, options?.slotOverrides);
-    try {
-      return await runWithFallbackInner(
-        input,
-        mode,
-        options,
-        execute,
-        resolveUsage,
-      );
-    } finally {
-      cleanup();
-    }
-  }
-
-  async function runWithFallbackInner<TResult>(
-    input: { presetId?: string },
-    mode: "text" | "object",
-    options: GatewayOptions | undefined,
-    execute: (
-      target: ResolvedTarget,
-      resolved: ProviderResolution,
-    ) => Promise<TResult>,
-    resolveUsage: (result: TResult) => UsageSummary | null,
-  ): Promise<TResult> {
-    const targets = deps.presetRegistry.resolveTextTargetChain({
-      presetId: resolveSlotOrPassthrough(input.presetId, "text", options),
-    });
-    let lastError: AiProviderError | null = null;
-
-    for (const [index, target] of targets.entries()) {
-      const { provider, resolved } = prepareTarget(
-        deps.providerRegistry,
-        target,
-        mode,
-        options,
-      );
-
-      const startTime = Date.now();
-
-      try {
-        await notifyStart(
-          resolved.hooks,
-          provider,
-          resolved.protocol,
-          mode,
-          targetModel(target),
-          options?.traceId,
-        );
-        const result = await execute(target, resolved);
-        await notifySuccess(
-          resolved.hooks,
-          provider,
-          resolved.protocol,
-          mode,
-          targetModel(target),
-          resolveUsage(result),
-          Date.now() - startTime,
-          options?.traceId,
-        );
-        return result;
-      } catch (error) {
-        lastError = await handleTargetFailure({
-          error,
-          resolved,
-          provider,
-          mode,
-          target,
-          startTime,
-          options,
-          canFallback: index < targets.length - 1,
-        });
-      }
-    }
-
-    throw (
-      lastError ??
-      new AiProviderError({
-        code: "PROVIDER_ERROR",
-        message: "No model target resolved.",
-        provider: "unknown",
-        retriable: false,
-      })
-    );
-  }
-
-  async function runSingleFromPreset<TResult>(
-    presetId: string | undefined,
-    mode: OperationMode,
-    options: GatewayOptions | undefined,
-    execute: (
-      target: ResolvedTarget,
-      resolved: ProviderResolution,
-    ) => Promise<TResult>,
-    fallbackTag?: string,
-  ): Promise<TResult> {
-    const cleanup = applySlotOverlay(deps, options?.slotOverrides);
-    try {
-      // Map mode → default fallback tag when the caller didn't pick one.
-      // image/audio/speech operations must NOT silently fall back to text.
-      const tag =
-        fallbackTag ??
-        (mode === "image"
-          ? "image"
-          : mode === "speech" || mode === "transcription"
-            ? mode
-            : "text");
-      const target = deps.presetRegistry.resolveTextTarget({
-        presetId: resolveSlotOrPassthrough(presetId, tag, options),
-      });
-      let resolved = deps.providerRegistry.resolve(
-        target.preset ?? target.profile,
-        { mode },
-      );
-      if (options?.apiKeys) {
-        resolved = deps.providerRegistry.withApiKeys(
-          resolved,
-          options.apiKeys,
-          targetProvider(target),
-        );
-      }
-
-      return await runSingle(target, mode, resolved, options, () =>
-        execute(target, resolved),
-      );
-    } finally {
-      cleanup();
-    }
-  }
-
-  async function runSingle<TResult>(
-    target: ResolvedTarget,
-    mode: OperationMode,
-    resolved: ProviderResolution,
-    options: GatewayOptions | undefined,
-    execute: () => Promise<TResult>,
-  ): Promise<TResult> {
-    const provider = targetProvider(target);
-    const model = targetModel(target);
-    const startTime = Date.now();
-
-    try {
-      await notifyStart(
-        resolved.hooks,
-        provider,
-        resolved.protocol,
-        mode,
-        model,
-        options?.traceId,
-      );
-      const result = await execute();
-      await notifySuccess(
-        resolved.hooks,
-        provider,
-        resolved.protocol,
-        mode,
-        model,
-        null,
-        Date.now() - startTime,
-        options?.traceId,
-      );
-      return result;
-    } catch (error) {
-      await notifyError(
-        resolved.hooks,
-        provider,
-        resolved.protocol,
-        mode,
-        model,
-        error,
-        Date.now() - startTime,
-        options?.traceId,
-      );
-      throw normalizeError(error, provider);
-    }
   }
 }

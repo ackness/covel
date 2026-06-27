@@ -4,6 +4,75 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-06-27
+
+Seventh public release. An architecture-optimization pass over the kernel and store: duplicated contracts collapse to single, compile-time-enforced sources of truth; the SQLite and Postgres store query layers unify behind one shared adapter with cross-backend parity verified against a real Postgres; and a batch of latent correctness bugs are fixed. The default world and bundled plugins are behavior-unchanged.
+
+### Added
+
+- `memoryBlocks` manifest field + `MemoryBlockSchema`: core memory blocks are now declared as data by a plugin or world package (the default four — story state / relationships / scene / player profile — ship on the builtin `memory` plugin and are aggregated at bootstrap by trust tier). A new game genre can define its own blocks (`clues` / `suspects` / …) without forking the framework core
+- cost-gate per-session token budget via `userSettings`, read in-hook through `HookContext.getOwnSettings()`, with a `COST_GATE_SOFT/HARD_TOKENS` env fallback for env-only deployments
+- `/api/ui-specs` now validates each panel spec against a Zod schema with a `specVersion`, returns per-spec diagnostics instead of a generic error, and caches discovery by content signature instead of re-scanning + rewriting on every request
+- A real-Postgres-verified store contract run (713 cases) plus new parity / drift-guard tests: proposal-type ↔ commit-handler ↔ discovery alignment, the SSE event union, hook events, DDL ↔ Drizzle index consistency, table-registry coverage, cross-backend null / `compactedAtTurnId` round-trip, and the prompt cache-breakpoint limit
+
+### Changed
+
+- **Single sources of truth (compile-time exhaustive).** Proposal types (payload map + discriminated union, handlers `satisfies Record<ProposalType, …>`), SSE events (one `CovelEvent` union driving the forward whitelist + an exhaustive frontend switch), hook events (`HOOK_EVENTS`), framework capabilities (typed registry), and provider protocols (`ProtocolRegistry`) each now live in one place — adding one is a single edit and a missing handler/case is a compile error
+- **Store query layer unified.** The mirrored SQLite/Postgres record modules collapse behind one async `SqlRunner` (better-sqlite3's sync driver wrapped awaitable, postgres-js already async); SQLite snapshots / suspensions converted from hand-written SQL to drizzle, so the SQLite backend now has zero hand-written record SQL. Cascade-delete / drop-list / memory-snapshot table sets derive from a single table-registry, and `withTransaction(fn)` scopes a transaction to one commit (real pooled Postgres transaction; nesting on serial backends is rejected, not deadlocked)
+- `DataStore`'s 82-method god-interface split into 21 domain sub-interfaces composed back into `DataStore` (shape unchanged); `gateway.ts`'s 7 operations collapse into one `runOperation`; `parsePluginMd`'s repeated lenient-field blocks become a data-driven table
+- `LLMAdapter` / `LLMResponse` moved to `@covel/shared`, removing the only wrong-layer edge in the dependency graph (`create → runtime`)
+- Trigger modes `conditional` / `error-retry` are explicitly marked **reserved** (they never fire in production); in-turn event fan-out reuses the single `shouldTrigger` authority
+- Deleted the never-implemented `SessionTransport` interface and unused command-protocol types; pruned unwired prompt-assembler stubs; hoisted the Anthropic cache-breakpoint cap to a single shared `MAX_CACHE_BREAKPOINTS`
+- memory recall / archival are now honestly documented as keyword-based — the vector primitives exist but the embed-on-write ingestion path does not, so a vector searcher would query empty tables; the swap seam is reserved and documented
+- Bumped all monorepo package versions `0.0.6` → `0.0.7`; refreshed the README bundled-plugin table (16 → 19, adding `cost-gate` / `director` / `story-guard`)
+
+### Fixed
+
+- **Resume lost runtime resilience.** A suspended-then-resumed agent runtime bypassed retry / loop-detection / streaming (it called the LLM directly); resume now folds into the shared tool loop and goes through the same retry policy as a normal turn
+- **Cross-backend data loss.** SQLite `appendTurnMessage` dropped `compactedAtTurnId` on insert while Postgres / memory / IDB persisted it; all backends now agree (pinned by a parity contract test). `createSession` / `updateSession` also serialize optional fields uniformly across backends
+- Production Postgres now creates the `trace_events` `trace_id` / `turn_id` indexes (declared in Drizzle but absent from the runtime DDL); a DDL ↔ Drizzle consistency test guards the drift
+- `openai-responses` streaming now accumulates function-call deltas — agent runtimes on that protocol previously lost every tool call silently
+- `/api/discovery` no longer advertises proposal types with no commit handler (`record.upsert` / `narrative.template`, removed); the `working_memory.changed` SSE event is in the shared union and is no longer dropped by the frontend
+- The reserved builtin plugin-id list is derived from the bundled plugins instead of a hand-kept list that had drifted to 8/19 (it guards third-party name-squatting)
+- cost-gate's env-var budget fallback is reachable again — a declared `userSettings` default silently shadowed it, so a custom env value was ignored
+- The Postgres contract suite no longer races the system catalog under parallel runs (per-file database isolation + single-connection `freshSchema` DDL)
+
+<details>
+<summary>中文（备份翻译）</summary>
+
+第七个公开版本。对内核与存储层的一次架构优化：把重复的契约收口为单一、编译期强制的真相源；将 SQLite 与 Postgres 的存储查询层统一到一个共享适配器之后，并用真实 Postgres 验证跨后端行为一致；并修复一批潜在的正确性 bug。默认世界与内置插件行为不变。
+
+**Added**
+
+- `memoryBlocks` manifest 字段 + `MemoryBlockSchema`：核心记忆块现由插件/世界包以数据形式声明（默认四块——剧情状态/关系/场景/玩家档案——随内置 `memory` 插件提供，启动时按信任层级聚合）。新游戏类型可定义自己的记忆块（`clues`/`suspects`…）而无需 fork 框架
+- cost-gate 每会话 token 预算改用 `userSettings`，hook 内经 `HookContext.getOwnSettings()` 读取，并保留 `COST_GATE_SOFT/HARD_TOKENS` 环境变量兜底
+- `/api/ui-specs` 现按 Zod schema（含 `specVersion`）校验每个面板 spec、返回逐 spec 诊断、并按内容签名缓存发现结果（不再每次请求扫盘重写）
+- 一次真实 Postgres 验证的 store 契约（713 用例），以及新增的 parity / 防漂移测试：proposal 类型↔commit handler↔discovery 对齐、SSE 事件 union、hook 事件、DDL↔Drizzle 索引一致性、表注册表覆盖、跨后端 null / `compactedAtTurnId` 往返、prompt 缓存断点上限
+
+**Changed**
+
+- **单一真相源（编译期穷尽）**：Proposal 类型、SSE 事件（单一 `CovelEvent` union）、hook 事件（`HOOK_EVENTS`）、框架 capability（typed registry）、provider 协议（`ProtocolRegistry`）各自收口到一处——新增一个只改一处，漏一个 handler/case 即编译失败
+- **存储查询层统一**：镜像的 SQLite/Postgres record 模块收敛到一个异步 `SqlRunner` 之后；SQLite snapshots/suspensions 从裸 SQL 转为 drizzle，SQLite 后端现已零手写 record SQL。级联删除/落表清单/记忆快照的表集由单一表注册表派生；`withTransaction(fn)` 将事务作用域绑定到单次提交（真实 Postgres 池化事务；串行后端的嵌套会被拒绝而非死锁）
+- `DataStore` 的 82 方法上帝接口拆成 21 个领域子接口再组合（形状不变）；`gateway.ts` 的 7 个操作收敛为一个 `runOperation`；`parsePluginMd` 的重复 lenient 块改为数据驱动的表
+- `LLMAdapter`/`LLMResponse` 移到 `@covel/shared`，消除依赖图里唯一的错位边（`create → runtime`）
+- 触发模式 `conditional`/`error-retry` 明确标注为 **reserved**（生产从不触发）；回合内事件 fan-out 复用单一 `shouldTrigger`
+- 删除从未实现的 `SessionTransport` 接口与未用的命令协议类型；清理未接线的 prompt-assembler 残桩；把 Anthropic 缓存断点上限提成单一共享的 `MAX_CACHE_BREAKPOINTS`
+- memory recall/archival 现诚实记录为关键词检索——向量原语存在但缺少写入时 embedding 的 ingestion，向量检索会查空表；扩展点已预留并文档化
+- 所有 monorepo 包版本 `0.0.6` → `0.0.7`；刷新 README 内置插件表（16 → 19，补 `cost-gate`/`director`/`story-guard`）
+
+**Fixed**
+
+- **Resume 丢失运行时韧性**：挂起后恢复的 agent runtime 绕过了重试/循环检测/流式（它直接调 LLM）；resume 现在并入共享工具循环，走与正常回合相同的重试策略
+- **跨后端数据丢失**：SQLite `appendTurnMessage` 在 insert 时丢掉 `compactedAtTurnId`，而 Postgres/memory/IDB 保留；现所有后端一致（由 parity 契约测试钉住）。`createSession`/`updateSession` 的可选字段序列化也跨后端统一
+- 生产 Postgres 现会创建 `trace_events` 的 `trace_id`/`turn_id` 索引（Drizzle 声明了但运行时 DDL 缺失）；DDL↔Drizzle 一致性测试守护漂移
+- `openai-responses` 流式现累积 function-call 增量——此前该协议下的 agent runtime 会静默丢掉每一次工具调用
+- `/api/discovery` 不再广告没有 commit handler 的 proposal 类型（已删除 `record.upsert`/`narrative.template`）；`working_memory.changed` SSE 事件已纳入共享 union，前端不再丢弃
+- 保留的内置 plugin-id 名单改为从内置插件派生，取代漂移到 8/19 的手维护列表（它用于防第三方占名）
+- cost-gate 的环境变量预算兜底重新可达——一个声明的 `userSettings` 默认值曾静默压过它，导致自定义 env 值被忽略
+- Postgres 契约套件在并行运行下不再竞争系统目录（每文件独立库隔离 + 单连接 `freshSchema` DDL）
+
+</details>
+
 ## [0.0.6] - 2026-06-26
 
 Sixth public release. Expands the runtime hook system from 8 to 16 lifecycle events, ships the first plugins that consume them, and lands a batch of runtime-architecture refactors and static-audit fixes. The default world and bundled plugins are behavior-unchanged — the new hooks are dormant infrastructure and the three new plugins are opt-in.
@@ -250,7 +319,10 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.7...HEAD
+[0.0.7]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.7
+[0.0.6]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.6
+[0.0.5]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.5
 [0.0.4]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.4
 [0.0.3]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.3
 [0.0.2]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.2

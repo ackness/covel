@@ -1,5 +1,6 @@
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { applyBranchReplyAcceptedCandidates } from "@covel/context";
+import type { CoreMemoryBlockView } from "@covel/context";
 import type { TurnMessageRecord } from "@covel/store";
 import type { TurnExecutorDeps } from "../turn-executor-types.js";
 import {
@@ -21,11 +22,20 @@ export interface TurnSessionMeta {
   readonly preGameCompleted: readonly string[];
 }
 
-export interface CoreMemoryBlock {
-  readonly label: string;
-  readonly content: string;
-  readonly updatedAt: string;
-}
+/**
+ * Runtime-local name for the authoritative core-memory block view.
+ *
+ * Aliases `@covel/context`'s {@link CoreMemoryBlockView} so the whole turn
+ * pipeline threads a single named type — crucially one that carries the
+ * schema-driven `displayName` (attached by `@covel/memory`'s manager) all the
+ * way to `renderCoreMemory`. Previously this was a narrowed
+ * `{ label; content; updatedAt }` shape, which erased `displayName` from the
+ * type at the source: the value only survived by object reference, and any
+ * explicit `.map()` reconstruction would silently drop it with no type error.
+ * Keeping the name re-exported (rather than inlined) means `session-context.ts`
+ * and `post-turn-memory.ts` keep their existing import unchanged.
+ */
+export type CoreMemoryBlock = CoreMemoryBlockView;
 
 export interface LoadedTurnSessionState {
   readonly messageHistory: readonly TurnMessageRecord[];

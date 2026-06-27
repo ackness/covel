@@ -170,6 +170,7 @@ export function createCompactor(
           const updater = createMemoryUpdater(deps.memoryManager, deps.llm, {
             modelSlot: config?.modelSlot,
             locale,
+            ...(config?.blocks ? { blocks: config.blocks } : {}),
           });
           await updater.updateAfterTurn({
             sessionId,

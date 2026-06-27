@@ -5,6 +5,7 @@
  */
 
 import { z } from "zod";
+import { HOOK_EVENTS } from "../types/hooks.js";
 
 // ── Trigger ──────────────────────────────────────────────────────
 
@@ -202,28 +203,11 @@ export const pluginConfigFieldSchema = z
 
 // ── Hook declarations ────────────────────────────────────────────
 
-const VALID_HOOK_EVENTS = [
-  "SessionStart",
-  "SessionEnd",
-  "TurnStart",
-  "PreCompaction",
-  "PostCompaction",
-  "PreSchedule",
-  "PreRuntime",
-  "PostContextAssembly",
-  "PreLLMCall",
-  "PostLLMResponse",
-  "PostRuntime",
-  "PreToolUse",
-  "PostToolUse",
-  "PreStateCommit",
-  "PostStateCommit",
-  "TurnStop",
-] as const;
-
+// Validation set derived from the single source of truth (./types/hooks.ts),
+// never re-listed by hand — adding an event there extends this schema for free.
 export const hookDeclarationSchema = z
   .object({
-    event: z.enum(VALID_HOOK_EVENTS),
+    event: z.enum(HOOK_EVENTS),
     handler: z.string().min(1),
     match: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
     timeoutMs: z.number().int().positive().optional(),
@@ -320,6 +304,30 @@ export const rpcDeclMapSchema = z.record(
 );
 
 const i18nTextLoose = z.union([z.string(), z.record(z.string(), z.string())]);
+
+// ── Core-memory block schema ────────────────────────────────────
+
+/**
+ * Declarative core-memory block definition for `RuntimeManifest.memoryBlocks`.
+ * Validates the per-block shape declared in PLUGIN.md frontmatter so the
+ * memory system can drive extraction/rendering off plugin data instead of
+ * hardcoded block labels. See {@link MemoryBlockSchema}.
+ */
+export const memoryBlockDeclSchema = z
+  .object({
+    label: z
+      .string()
+      .min(1)
+      .regex(/^[a-z][a-z0-9_]*$/, {
+        message:
+          "memory block label must be lowercase snake_case (letters, digits, underscores)",
+      }),
+    displayName: i18nTextLoose,
+    extractionHint: i18nTextLoose,
+    icon: z.string().min(1).optional(),
+    maxChars: z.number().int().positive().optional(),
+  })
+  .strict();
 
 // ── Plugin catalogue metadata ───────────────────────────────────
 
@@ -467,6 +475,13 @@ export const runtimeManifestSchema = z
     maxRecursionDepth: z.number().int().min(0).max(50).optional(),
     pluginType: z.enum(["core-plugin", "plugin"]).optional(),
     outputKind: outputKindSchema.optional(),
+    /**
+     * Capability tags for framework discovery. Free-form by design: plugins
+     * may declare arbitrary custom tags. The framework only acts on the tags in
+     * `FRAMEWORK_KNOWN_CAPABILITIES` (plugin-level `FrameworkCapability` +
+     * runtime-level `FrameworkRuntimeCapability`); the plugin-loader emits a dev
+     * warning when a declared tag looks like a misspelled framework-known one.
+     */
     capabilities: z.array(z.string().min(1)).optional(),
     tags: z.array(pluginTagSchema).optional(),
     relations: pluginRelationsSchema.optional(),
@@ -500,5 +515,6 @@ export const runtimeManifestSchema = z
     authorsNote: authorsNoteDeclSchema.optional(),
     postHistory: postHistoryDeclSchema.optional(),
     rpc: rpcDeclMapSchema.optional(),
+    memoryBlocks: z.array(memoryBlockDeclSchema).optional(),
   })
   .strict();

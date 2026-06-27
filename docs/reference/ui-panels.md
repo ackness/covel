@@ -94,6 +94,7 @@ ui:
 
 ```json
 {
+  "specVersion": 1,
   "id": "world-entries",
   "group": "world-data",
   "groupLabel": { "zh": "世界维度", "en": "World Data" },
@@ -127,6 +128,7 @@ ui:
 
 关键字段：
 
+- `specVersion` — UI spec schema 版本（可选，省略按 v1 处理）；声明高于服务端支持版本会被拒绝，见下方「Spec 校验与版本」
 - `id` — 面板唯一标识
 - `group` — 同 group 的面板合并为一个外层 Tab
 - `groupLabel` — 合并后外层 Tab 的显示名（可选，省略时用第一个 spec 的 `label`）
@@ -135,7 +137,18 @@ ui:
 - `icon` — Lucide 图标名（kebab-case）
 - `dataSource.namespace` — 从 `pluginData[pluginId][namespace]` 读取数据
 - `emptyState.message` — 数据为空时显示的提示文字（见下方"空状态渲染"章节）
-- `view` — json-render nested spec，使用框架 catalog 中的组件
+- `view` — json-render nested spec，使用框架 catalog 中的组件（与 `_componentPath` 二选一：`.tsx`/`.js` 自定义组件由 loader 写入 `_componentPath`）
+
+### Spec 校验与版本
+
+`/api/ui-specs` 聚合时对每个 spec 执行 Zod 校验（结构包络 + `specVersion`），spec 是**不可信的插件输入**：
+
+- `specVersion` 可省略（按 v1 处理）。声明高于服务端支持版本（当前 `CURRENT_UI_SPEC_VERSION = 1`，见 `apps/server/src/routes/misc-api/ui-spec-schema.ts`）会被拒绝，旧服务端遇到新插件包时显式报错而非渲染坏面板。
+- 每个 spec 必须声明 `view`（对象）或 `_componentPath`（自定义组件）之一，否则校验失败。
+- **单个坏 spec 不污染整个响应**：校验失败的 spec 从对应 slot 中剔除，并在响应顶层 `diagnostics[]` 中给出具体诊断（`{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`）——指明哪个插件、哪个字段、什么问题，而非泛泛的 "Invalid panel spec"。
+- 前端（`right-panel.tsx`）在 dev 模式下把这些诊断打到 console；`plugin-panel.tsx` 的本地兜底消息也会带上 spec 名与具体原因（缺 `view` / `view` 非对象 / 转换失败）。
+
+加载与校验结果按插件目录布局缓存，失效信号为 `PLUGIN.md` 与 `ui/*` 文件的 mtime/size 内容签名；会话级 `plugin_data` 物化仅在签名变化或首次访问时触发（详见 [api.md](./api.md#get-apiui-specs)）。
 
 ### activity-bar 短标签
 

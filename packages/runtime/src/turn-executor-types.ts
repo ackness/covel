@@ -9,6 +9,7 @@ import type { DataStore } from "@covel/store";
 import type {
   BudgetOptions,
   CompactorRunner,
+  CoreMemoryBlockView,
   TokenEstimator,
 } from "@covel/context";
 import type { EventBus } from "@covel/events";
@@ -159,11 +160,10 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
    */
   readonly memorySystem?: {
     readonly manager: {
-      loadBlocks(
-        sessionId: string,
-      ): Promise<
-        readonly { label: string; content: string; updatedAt: string }[]
-      >;
+      // Carries the schema-driven `displayName` (see CoreMemoryBlockView) so it
+      // is not erased at the deps boundary — the turn pipeline threads it intact
+      // through to renderCoreMemory.
+      loadBlocks(sessionId: string): Promise<readonly CoreMemoryBlockView[]>;
       initializeDefaults(sessionId: string): Promise<void>;
     };
     readonly updater: {
@@ -171,11 +171,7 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
         sessionId: string;
         narrativeText: string;
         toolCallSummaries?: readonly string[];
-        currentBlocks: readonly {
-          label: string;
-          content: string;
-          updatedAt: string;
-        }[];
+        currentBlocks: readonly CoreMemoryBlockView[];
         locale?: string;
       }): Promise<{
         updated: boolean;

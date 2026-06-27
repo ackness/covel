@@ -7,7 +7,11 @@
  * mode from the frontend's data-service layer.
  */
 
-import type { DataStore } from "../types.js";
+import type { DataStore, StoreTransaction } from "../types.js";
+import {
+  nestedWithTransactionError,
+  SERIALIZED_NESTING_REASON,
+} from "../tx-nesting-error.js";
 import { openBrowserIdb } from "./idb-db.js";
 import { createIdbMutationTracker } from "./idb-transaction.js";
 import { createIdbSessionStore } from "./idb-session-store.js";
@@ -37,7 +41,9 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
   const mutations = createIdbMutationTracker(db);
   const ctx = { db, mutations };
 
-  return {
+  // Data methods first; the transaction scope is the same store (writes go
+  // through the snapshot-tracking mutation layer).
+  const data = {
     ...createIdbSessionStore(ctx),
     ...createIdbRuntimeStore(ctx),
     ...createIdbPluginStore(ctx),
@@ -45,10 +51,67 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     ...createIdbPlayerStore(ctx),
     ...createIdbWorldDataStore(ctx),
     ...createIdbPersistenceStore(ctx),
+  };
+  const scope = data as unknown as StoreTransaction;
+
+  // The mutation tracker holds a single snapshot at a time, so serialize
+  // concurrent withTransaction calls through a promise chain — each runs its
+  // full begin…commit/rollback before the next, so neither loses writes. As with
+  // the other single-connection backends, a concurrent non-tx write made while a
+  // transaction's callback is mid-flight is captured by that snapshot and rolled
+  // back with it.
+  let chain: Promise<unknown> = Promise.resolve();
+
+  // Nesting guard. AsyncLocalStorage is unavailable in the browser bundle, so
+  // IdbStore uses a coarse synchronous flag: it reliably rejects a nested
+  // withTransaction (the deadlock case — the inner call would queue behind the
+  // outer one on `chain`), and may also reject a genuinely concurrent call that
+  // is issued while another transaction's callback is mid-flight. That
+  // false-positive edge is irrelevant for IdbStore's single-user local mode.
+  // The Node backends (Sqlite/Memory/Pg) use the precise AsyncLocalStorage guard.
+  let withTxActive = false;
+
+  return {
+    ...data,
 
     beginTx: mutations.beginTx,
     commitTx: mutations.commitTx,
     rollbackTx: mutations.rollbackTx,
+
+    withTransaction<T>(fn: (tx: StoreTransaction) => Promise<T>): Promise<T> {
+      // Checked at CALL time (before chaining) so a nested call rejects instead
+      // of deadlocking behind the outer transaction on the chain.
+      if (withTxActive) {
+        return Promise.reject(
+          nestedWithTransactionError(
+            "IdbStore",
+            "idb",
+            SERIALIZED_NESTING_REASON,
+          ),
+        );
+      }
+      const task = chain.then(async () => {
+        withTxActive = true;
+        try {
+          await mutations.beginTx();
+          try {
+            const result = await fn(scope);
+            await mutations.commitTx();
+            return result;
+          } catch (err) {
+            await mutations.rollbackTx();
+            throw err;
+          }
+        } finally {
+          withTxActive = false;
+        }
+      });
+      chain = task.then(
+        () => undefined,
+        () => undefined,
+      );
+      return task;
+    },
 
     async close(): Promise<void> {
       db.close();

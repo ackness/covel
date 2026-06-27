@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { LLMAdapter, LLMResponse } from "@covel/runtime";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import { createWorld } from "./create-world.js";
 import { buildWorldPrompt } from "./prompts.js";
 

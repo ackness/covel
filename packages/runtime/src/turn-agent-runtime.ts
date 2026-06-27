@@ -1,12 +1,14 @@
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
-import { withPendingProposals } from "@covel/tools";
 import {
   buildContext,
   buildContextAsync,
   needsAsyncBuild,
 } from "@covel/context";
-import type { SessionContextSnapshot } from "@covel/context";
+import type {
+  CoreMemoryBlockView,
+  SessionContextSnapshot,
+} from "@covel/context";
 import type { LLMMessage } from "./llm-adapter.js";
 import type { HookPipeline } from "./hooks/pipeline.js";
 import { resolveUserSettings } from "./turn-executor-helpers.js";
@@ -16,14 +18,8 @@ import {
   runPostContextAssemblyHook,
 } from "./hooks/wire-helpers.js";
 import { emitSubEvent } from "./turn-runtime-helpers.js";
-import {
-  findLastStructuredToolOutput,
-  findPresentableToolOutput,
-  formatToolLoopFailure,
-  parseFinalOutputEnvelope,
-  sanitizeStoryNarrativeText,
-  shouldSuppressToolLoopNarrative,
-} from "./turn-output-helpers.js";
+import { formatToolLoopFailure } from "./turn-output-helpers.js";
+import { finalizeAgentOutput } from "./finalize-agent-output.js";
 import { filterHistoryForStory } from "./message-filter.js";
 import {
   checkSchemaProseFailure,
@@ -66,13 +62,7 @@ export interface ExecuteAgentRuntimeOptions {
   readonly workingMemory:
     | readonly import("@covel/context").WorkingMemoryEntry[]
     | undefined;
-  readonly coreMemoryBlocks:
-    | readonly {
-        label: string;
-        content: string;
-        updatedAt: string;
-      }[]
-    | undefined;
+  readonly coreMemoryBlocks: readonly CoreMemoryBlockView[] | undefined;
   readonly sessionContext: SessionContextSnapshot | undefined;
   readonly startTime: number;
   readonly runId: string;
@@ -297,68 +287,51 @@ export async function executeAgentRuntime({
     });
   }
 
-  // Build output from LLM final content + tool call results
-  let output: Record<string, unknown>;
-  const presentableToolOutput = findPresentableToolOutput(executedToolCalls);
-  const structuredToolOutput = findLastStructuredToolOutput(executedToolCalls);
-  if (finalContent) {
-    const parsed = parseFinalOutputEnvelope(finalContent);
-    // Schema-declared runtimes (manifest.output.schema → loaded.outputSchema)
-    // promised the framework a structured envelope. When the LLM ignores the
-    // contract and produces unparseable prose, the silent narrativeOutput
-    // fallback below would mask the failure: downstream event-chain followers
-    // would never wake (no events[] array), and the player would see a stuck
-    // job with no signal. Surface a real `failed` result with a diagnostic
-    // pointing at the prose preamble — the toast / debug timeline can then
-    // tell the user the model went off-script instead of timing out.
-    if (
-      loaded.outputSchema &&
-      !parsed.parsedAsJson &&
-      manifest.outputKind !== "story"
-    ) {
-      const failedResult = checkSchemaProseFailure(
-        {
-          manifest,
-          input,
-          runId,
-          startTime,
-          collectedToolCalls,
-          outputSchema: loaded.outputSchema,
-        },
-        finalContent,
-        parsed.parsedAsJson,
-      );
-      if (failedResult) {
-        emitRuntimeFailed(deps, input.sessionId, manifest, failedResult);
-        return finalizeFailure(failedResult);
-      }
-    }
-    output = shouldSuppressToolLoopNarrative({
-      outputKind: manifest.outputKind,
-      executedToolCalls,
-      parsedAsJson: parsed.parsedAsJson,
-    })
-      ? (structuredToolOutput ??
-        presentableToolOutput ?? { narrativeOutput: "" })
-      : parsed.output;
-    if (loaded.outputSchema && manifest.outputKind !== "story") {
-      const failedResult = checkSchemaValidation(
-        {
-          manifest,
-          input,
-          runId,
-          startTime,
-          collectedToolCalls,
-          outputSchema: loaded.outputSchema,
-        },
-        output,
-      );
-      if (failedResult) {
-        emitRuntimeFailed(deps, input.sessionId, manifest, failedResult);
-        return finalizeFailure(failedResult);
-      }
-    }
-  } else if (failedToolCalls.length > 0) {
+  // Build the runtime output from final content + tool results. This shares the
+  // exact transform with the resume path (finalizeAgentOutput). The schema gate
+  // below runs the two schema-declared-runtime checks — prose-instead-of-JSON
+  // and schema validation — that the resume path intentionally skips. A
+  // schema-declared runtime that returns unparseable prose or a non-conforming
+  // envelope surfaces a real `failed` result with a diagnostic instead of
+  // silently falling back to narrativeOutput.
+  const finalized = finalizeAgentOutput({
+    manifest,
+    finalContent,
+    executedToolCalls,
+    failedToolCalls,
+    pendingProposals,
+    dedupeInteractions: true,
+    schemaGate:
+      loaded.outputSchema && manifest.outputKind !== "story"
+        ? ({ output: built, parsedAsJson, finalContent: content }) => {
+            const ctx = {
+              manifest,
+              input,
+              runId,
+              startTime,
+              collectedToolCalls,
+              outputSchema: loaded.outputSchema!,
+            };
+            const proseFailure = checkSchemaProseFailure(
+              ctx,
+              content,
+              parsedAsJson,
+            );
+            if (proseFailure) {
+              emitRuntimeFailed(deps, input.sessionId, manifest, proseFailure);
+              return proseFailure;
+            }
+            const schemaFailure = checkSchemaValidation(ctx, built);
+            if (schemaFailure) {
+              emitRuntimeFailed(deps, input.sessionId, manifest, schemaFailure);
+              return schemaFailure;
+            }
+            return undefined;
+          }
+        : undefined,
+  });
+
+  if (finalized.kind === "tool-failed") {
     return finalizeFailure({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
@@ -375,58 +348,11 @@ export async function executeAgentRuntime({
       }),
       timestamp: new Date().toISOString(),
     });
-  } else {
-    output = presentableToolOutput ?? { narrativeOutput: "" };
   }
-
-  // Extract interactions from all tool call results (generic interaction protocol).
-  // Dedupe by `interactionId` — the LLM sometimes calls the same UI tool twice
-  // (e.g. `create-form` with identical formId) in a single agent loop. Keeping
-  // both would render two identical forms/choices in the chat, confusing the
-  // player. We keep the first occurrence so the earliest presented UI wins.
-  // Different interactionIds in the same turn stay independent.
-  const interactions: Array<Record<string, unknown>> = [];
-  const seenInteractionIds = new Set<string>();
-  for (const tc of executedToolCalls) {
-    if (tc.success && tc.result && typeof tc.result === "object") {
-      const r = tc.result as Record<string, unknown>;
-      if (r.interaction && typeof r.interaction === "object") {
-        const inter = r.interaction as Record<string, unknown>;
-        const id =
-          typeof inter.interactionId === "string" ? inter.interactionId : "";
-        // No id → pass through (UI tools should always set one; belt-and-suspenders).
-        if (id && seenInteractionIds.has(id)) {
-          console.warn(
-            `[runtime] ${manifest.name} produced duplicate interactionId="${id}" via tool "${tc.name}"; keeping the first occurrence`,
-          );
-          continue;
-        }
-        if (id) seenInteractionIds.add(id);
-        interactions.push(inter);
-      }
-    }
+  if (finalized.kind === "short-circuit") {
+    return finalizeFailure(finalized.result);
   }
-
-  if (interactions.length > 0) {
-    output.interactions = interactions;
-    if (finalContent && !output.narrativeOutput) {
-      output.narrativeOutput = finalContent;
-    }
-  }
-
-  if (
-    manifest.outputKind === "story" &&
-    typeof output.narrativeOutput === "string"
-  ) {
-    output.narrativeOutput = sanitizeStoryNarrativeText(output.narrativeOutput);
-  }
-
-  if (pendingProposals.length > 0) {
-    output = withPendingProposals(output, pendingProposals) as Record<
-      string,
-      unknown
-    >;
-  }
+  const output = finalized.output;
 
   const result: RuntimeResult = {
     pluginId: manifest.pluginId,

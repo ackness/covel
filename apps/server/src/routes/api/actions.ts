@@ -16,7 +16,8 @@ import {
   createTraceRecorder,
   createTurnEmitter,
 } from "@covel/runtime";
-import type { RuntimeManifest } from "@covel/shared";
+import type { CovelEventType, RuntimeManifest } from "@covel/shared";
+import { FORWARDED_EVENT_TYPES } from "@covel/shared";
 import type { CompactorRunner } from "@covel/context";
 import { errorBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
@@ -239,31 +240,16 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     // than through the `onRuntimeStart` / `onRuntimeComplete` callbacks, so
     // without this the action stream never delivers them to the web client
     // and the suspend/resume panel in the UI stays empty.
-    const FORWARDED_SUBTYPES = new Set([
-      // existing
-      "plugin-data.changed",
-      "world.dimensions.changed",
-      "turn.suspended",
-      "turn.resumed",
-      // new — runtime internals from TurnEmitter
-      "tool.calling",
-      "tool.completed",
-      "tool.failed",
-      "llm.calling",
-      "llm.responded",
-      "message.completed",
-      "block.emitted",
-      "ui.rendered",
-      "state.patch.applied",
-      "character.upserted",
-      "hook.fired",
-      "hook.rewrote",
-      "hook.aborted",
-      "asset.progress",
-    ]);
+    //
+    // The whitelist is DERIVED from the `CovelEvent` union via
+    // `COVEL_EVENT_META[type].forwardToActionStream` (see
+    // packages/shared/src/types/protocol.ts) — never hand-maintained here. Add
+    // a forwarded event by flipping its meta flag; this Set updates for free.
+    // `ev.type` is an untrusted runtime string, so it is narrowed at this
+    // boundary before the membership check.
     const eventBusUnsubscribe = eventBus.onEmit((ev) => {
       if (ev.sessionId !== sessionId) return;
-      if (!FORWARDED_SUBTYPES.has(ev.type)) return;
+      if (!FORWARDED_EVENT_TYPES.has(ev.type as CovelEventType)) return;
       const payload = { ...(ev.payload as Record<string, unknown>) };
       stream
         .writeSSE({ data: JSON.stringify(makeEnvelope(ev.type, payload)) })

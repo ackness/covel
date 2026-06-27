@@ -1,43 +1,26 @@
-import { eq } from "drizzle-orm";
+/**
+ * PostgreSQL world records — a thin adapter over the shared
+ * `common/sql-world-records.ts` query layer. Supplies the PG runner, the PG
+ * `worlds` table, and the PG JSON read/write gateways; all query logic is
+ * shared with the SQLite backend.
+ */
 
-import type { DataStore, WorldRecord } from "../types.js";
+import { makeInsertValues } from "../common/insert-values.js";
+import { pgJsonReader } from "../common/json-readers.js";
+import { pgJsonWriter } from "../common/json-writers.js";
+import { createSqlWorldRecords } from "../common/sql-world-records.js";
+import type { SqlWorldRecords } from "../common/sql-world-records.js";
 import type { PgDb } from "./pg-db.js";
-import { toWorldRecord } from "./pg-store-mappers.js";
-import { pgWorldInsert, pgWorldUpdate } from "./pg-store-values.js";
+import { createPgSqlRunner } from "./pg-sql-runner.js";
 import * as schema from "./schema.js";
 
-export type PgWorldRecords = Pick<
-  DataStore,
-  "listWorlds" | "getWorld" | "upsertWorld" | "deleteWorld"
->;
+export type PgWorldRecords = SqlWorldRecords;
 
 export function createPgWorldRecords(getDb: () => PgDb): PgWorldRecords {
-  return {
-    async listWorlds(): Promise<WorldRecord[]> {
-      const rows = await getDb().select().from(schema.worlds);
-      return rows.map(toWorldRecord);
-    },
-
-    async getWorld(id: string): Promise<WorldRecord | null> {
-      const rows = await getDb()
-        .select()
-        .from(schema.worlds)
-        .where(eq(schema.worlds.id, id));
-      return rows.length > 0 ? toWorldRecord(rows[0]) : null;
-    },
-
-    async upsertWorld(record: WorldRecord): Promise<void> {
-      await getDb()
-        .insert(schema.worlds)
-        .values(pgWorldInsert(record))
-        .onConflictDoUpdate({
-          target: schema.worlds.id,
-          set: pgWorldUpdate(record),
-        });
-    },
-
-    async deleteWorld(id: string): Promise<void> {
-      await getDb().delete(schema.worlds).where(eq(schema.worlds.id, id));
-    },
-  };
+  return createSqlWorldRecords({
+    runner: createPgSqlRunner(getDb),
+    worlds: schema.worlds,
+    json: pgJsonReader,
+    values: makeInsertValues(pgJsonWriter),
+  });
 }

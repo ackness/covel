@@ -5,7 +5,10 @@ import type {
   TurnResult,
 } from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
-import type { SessionContextSnapshot } from "@covel/context";
+import type {
+  CoreMemoryBlockView,
+  SessionContextSnapshot,
+} from "@covel/context";
 import type { HookPipeline } from "./hooks/pipeline.js";
 import { makeFailedResult } from "./turn-executor-helpers.js";
 import { runPostRuntimeHook } from "./hooks/wire-helpers.js";
@@ -33,8 +36,11 @@ export type ExecuteTurnFn = (
  * 19-positional-argument call into `executeOneRuntime`: callers now build one
  * options object, and extending the invoker is a single-field change instead
  * of touching every call site. This is the `RuntimeInvoker` seam — the one
- * entry point that dispatches function vs agent runtimes (resume is still a
- * separate path; folding it in is tracked as F1.b).
+ * entry point that dispatches function vs agent runtimes. Resume
+ * (`resumeSuspendedRuntime`) stays a distinct entry point because it is driven
+ * by the resume API outside the scheduler, but it now shares the same tool loop
+ * (`runAgentToolLoop`) and output finalization (`finalizeAgentOutput`) as the
+ * normal agent path — the duplicated loop/finalize clone was removed in F1.b.
  */
 export interface RuntimeInvocation {
   readonly manifest: RuntimeManifest;
@@ -65,13 +71,7 @@ export interface RuntimeInvocation {
   readonly workingMemory:
     | readonly import("@covel/context").WorkingMemoryEntry[]
     | undefined;
-  readonly coreMemoryBlocks:
-    | readonly {
-        label: string;
-        content: string;
-        updatedAt: string;
-      }[]
-    | undefined;
+  readonly coreMemoryBlocks: readonly CoreMemoryBlockView[] | undefined;
   readonly sessionContext: SessionContextSnapshot | undefined;
   readonly triggerEvent:
     | {

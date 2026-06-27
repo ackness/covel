@@ -1,4 +1,6 @@
 import {
+  COVEL_EVENT_META,
+  PROPOSAL_TYPES,
   outputKindSchema,
   triggerTypeSchema,
   worldDataEffectSchema,
@@ -145,49 +147,16 @@ const DEFAULT_BUILTIN_TOOLS = [
   "get-world-dimensions",
 ] as const;
 
-const PROPOSAL_TYPES = [
-  "narrative.append",
-  "narrative.template",
-  "state.patch",
-  "event.emit",
-  "record.upsert",
-  "interaction.request",
-  "ui.render",
-  "asset.generate",
-  "plugin.data",
-  "plugin.data.batch",
-  "character.upsert",
-  "working_memory.set",
-  "lorebook.upsert",
-] as const;
+// Proposal type list is derived from the single source of truth in
+// @covel/shared (`PROPOSAL_TYPES`), which is exhaustiveness-checked against the
+// commit-handler registry. Discovery therefore advertises exactly what the
+// kernel can commit — no hand-maintained list, no drift.
 
-const PROTOCOL_EVENT_TYPES = [
-  "narrative.delta",
-  "narrative.completed",
-  "interaction.requested",
-  "interaction.completed",
-  "ui.rendered",
-  "ui.part.update",
-  "state.changed",
-  "state.snapshot",
-  "execution.started",
-  "runtime.started",
-  "runtime.completed",
-  "runtime.failed",
-  "execution.completed",
-  "asset.progress",
-  "asset.generated",
-  "record.updated",
-  "event.emitted",
-  "world.dimensions.changed",
-  "plugin-data.changed",
-  "error.occurred",
-  "connection.restored",
-  "turn.suspended",
-  "turn.resumed",
-  "state.snapshot.created",
-  "session.forked",
-] as const;
+// The advertised protocol event vocabulary is DERIVED from the single source
+// of truth in @covel/shared (`COVEL_EVENT_META`, exhaustiveness-checked against
+// the `CovelEvent` union). Discovery therefore advertises exactly the closed
+// event set the kernel can emit — no hand-maintained list, no drift. (Asserted
+// by apps/server/tests/api/covel-event-contract.test.ts.)
 
 const WORLD_DATA_TARGET_URIS = [
   "world:metadata.<path>",
@@ -428,7 +397,7 @@ export function buildFrameworkCapabilities(
         pluginDataTypes: ["plugin.data", "plugin.data.batch"],
       },
       protocol: {
-        events: PROTOCOL_EVENT_TYPES,
+        events: uniqueSorted(Object.keys(COVEL_EVENT_META)),
       },
       worldData: {
         sourceKinds: enumValues(worldDataSourceKindSchema),

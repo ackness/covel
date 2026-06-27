@@ -60,7 +60,7 @@ function makePluginDataProposal(
     source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
     turnId: context.turnId,
     sessionId: context.sessionId,
-    payload: payload as unknown as Record<string, unknown>,
+    payload,
     timestamp,
   };
 }
@@ -81,7 +81,7 @@ function makePluginDataBatchProposal(
     source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
     turnId: context.turnId,
     sessionId: context.sessionId,
-    payload: payload as unknown as Record<string, unknown>,
+    payload,
     timestamp,
   };
 }

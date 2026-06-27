@@ -4,24 +4,21 @@
  * Renders core memory blocks as XML-tagged sections that the LLM can
  * read as part of its system context. Placed in the prompt between
  * framework preamble and plugin instructions.
+ *
+ * Display names are schema-driven: each block carries its localized
+ * `displayName` (attached by the manager from the active block schema). For
+ * blocks lacking one, this falls back to the default block schema, then to the
+ * raw label — never a hardcoded per-label map.
  */
 
+import { resolveI18nText } from "@covel/shared";
 import type { CoreMemoryBlock } from "./types.js";
+import { DEFAULT_CORE_MEMORY_BLOCKS } from "./types.js";
 
-/** Human-readable labels for each block in Chinese. */
-const BLOCK_LABELS_ZH: Record<string, string> = {
-  story_state: "剧情状态",
-  scene: "当前场景",
-  character_relationships: "角色关系",
-  player_profile: "玩家状态",
-};
-
-const BLOCK_LABELS_EN: Record<string, string> = {
-  story_state: "Story State",
-  scene: "Current Scene",
-  character_relationships: "Character Relationships",
-  player_profile: "Player Profile",
-};
+/** Default display-name lookup, derived from the default block schema. */
+const DEFAULT_DISPLAY_NAMES = new Map(
+  DEFAULT_CORE_MEMORY_BLOCKS.map((b) => [b.label, b.displayName] as const),
+);
 
 /**
  * Render core memory blocks as a `[Core Memory]` prompt section.
@@ -30,11 +27,9 @@ const BLOCK_LABELS_EN: Record<string, string> = {
  * ```
  * [Core Memory]
  * <story_state>
- * 主线：...
- * </story_state>
- * <scene>
+ * # Story State
  * ...
- * </scene>
+ * </story_state>
  * ```
  *
  * Empty blocks are omitted. Returns empty string if all blocks are empty.
@@ -48,11 +43,11 @@ export function renderCoreMemory(
   const nonEmpty = blocks.filter((b) => b.content.trim());
   if (nonEmpty.length === 0) return "";
 
-  const labels = locale?.startsWith("en") ? BLOCK_LABELS_EN : BLOCK_LABELS_ZH;
   const header = locale?.startsWith("en") ? "[Core Memory]" : "[核心记忆]";
 
   const sections = nonEmpty.map((b) => {
-    const label = labels[b.label] ?? b.label;
+    const displayName = b.displayName ?? DEFAULT_DISPLAY_NAMES.get(b.label);
+    const label = resolveI18nText(displayName, locale) ?? b.label;
     return `<${b.label}>\n# ${label}\n${b.content}\n</${b.label}>`;
   });
 

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import type { TFunction } from "i18next";
-import { FrameworkCapability } from "@covel/shared";
+import { FrameworkCapability, FrameworkRuntimeCapability } from "@covel/shared";
 import type { PluginRpcRequest } from "@covel/shared";
 import type { SessionPluginInfo } from "@/services/api.js";
 import { emitToast } from "@/lib/toast-channel.js";
@@ -51,7 +51,7 @@ export function useImageGeneration({
       const entry = p.runtimes?.find(
         (r) =>
           r.trigger?.type === "manual" &&
-          r.capabilities?.includes("image-prompt"),
+          r.capabilities?.includes(FrameworkRuntimeCapability.ImagePrompt),
       );
       if (entry) return { pluginId: p.id, runtimeId: entry.id };
     }

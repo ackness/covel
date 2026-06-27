@@ -8,28 +8,50 @@
  *   4. Parses the JSON response to get block updates
  *   5. Writes only the changed blocks
  *
+ * The extraction prompt and the set of valid block labels are **schema-driven**
+ * (see {@link MemoryUpdaterConfig.blocks}): each block's `extractionHint` is
+ * composed into the summarizer's system prompt. The framework owns the
+ * mechanism; plugins/worlds own the block vocabulary. No world-specific
+ * content lives here.
+ *
  * Inspired by Letta's `memory_rethink` tool, but framework-controlled
  * rather than free-form LLM editing.
  */
 
+import { resolveI18nText } from "@covel/shared";
 import type {
   CoreMemoryBlock,
+  CoreMemoryBlockSchema,
   CoreMemoryLabel,
   MemoryLLMAdapter,
   MemoryManager,
   MemoryUpdateResult,
   MemoryUpdaterConfig,
 } from "./types.js";
-import { CORE_MEMORY_LABELS } from "./types.js";
+import { DEFAULT_CORE_MEMORY_BLOCKS } from "./types.js";
 
-const SYSTEM_PROMPT_ZH = `你是一个记忆管理器。你的任务是根据本轮新发生的故事事件，更新游戏的核心记忆块。
+/**
+ * Build the memory-manager system prompt for a given block schema + locale.
+ * The per-block descriptions come from each block's `extractionHint`, so the
+ * prompt carries no hardcoded, setting-specific vocabulary.
+ */
+function buildSystemPrompt(
+  blocks: readonly CoreMemoryBlockSchema[],
+  lang: "zh" | "en",
+  locale: string,
+): string {
+  if (lang === "zh") {
+    const descriptions = blocks
+      .map(
+        (b) =>
+          `- **${b.label}**：${resolveI18nText(b.extractionHint, locale) ?? ""}`,
+      )
+      .join("\n");
+    return `你是一个记忆管理器。你的任务是根据本轮新发生的故事事件，更新游戏的核心记忆块。
 
 ## 记忆块说明
 
-- **story_state**：主线剧情摘要、已揭示的秘密、未解决的悬念、已完成的关键事件
-- **scene**：当前场景位置、时间、氛围、环境描写要点
-- **character_relationships**：关键 NPC 与玩家的关系状态、态度变化、重要对话
-- **player_profile**：玩家角色当前状态摘要（等级、装备、能力、当前目标）
+${descriptions}
 
 ## 输出格式
 
@@ -38,29 +60,38 @@ const SYSTEM_PROMPT_ZH = `你是一个记忆管理器。你的任务是根据本
 
 每个块内容控制在 300-500 字以内，使用简洁的事实陈述，不要用文学化的描写。
 
-示例输出：
-\`\`\`json
-{
-  "scene": "青萍宗外门坊市西侧巷子里的废弃灵植仓库。午后，光线昏暗。苏婉正在向玩家展示百灵沼泽的兽皮地图。",
-  "story_state": "主线：苏婉发现百灵沼泽深处有未登记的二等灵脉，灵脉旁有不明古代结构在吸收灵气。她邀请玩家在试炼大会前同去探查。\\n悬念：古代结构的来源和目的不明。陆沉渊在研究未知阵法。"
-}
-\`\`\``;
+示例输出（用实际的块标签替换）：
 
-const SYSTEM_PROMPT_EN = `You are a memory manager. Your task is to update the game's core memory blocks based on new story events from the current turn.
+\`\`\`json
+{ "<块标签>": "<该块的完整新内容>" }
+\`\`\``;
+  }
+
+  const descriptions = blocks
+    .map(
+      (b) =>
+        `- **${b.label}**: ${resolveI18nText(b.extractionHint, locale) ?? ""}`,
+    )
+    .join("\n");
+  return `You are a memory manager. Your task is to update the game's core memory blocks based on new story events from the current turn.
 
 ## Memory Block Descriptions
 
-- **story_state**: Main plot summary, revealed secrets, unresolved threads, key completed events
-- **scene**: Current location, time, atmosphere, key environmental details
-- **character_relationships**: Key NPC relationships with the player, attitude changes, important conversations
-- **player_profile**: Player character current status summary (level, equipment, abilities, current objectives)
+${descriptions}
 
 ## Output Format
 
 Output a single JSON object where keys are block labels that need updating and values are the **complete new content** (not incremental).
 Only output blocks that changed. If nothing worth updating happened, output \`{}\`.
 
-Keep each block under 300-500 words. Use concise factual statements, not literary descriptions.`;
+Keep each block under 300-500 words. Use concise factual statements, not literary descriptions.
+
+Example output (replace with actual block labels):
+
+\`\`\`json
+{ "<block_label>": "<complete new content for that block>" }
+\`\`\``;
+}
 
 export function createMemoryUpdater(
   manager: MemoryManager,
@@ -77,6 +108,8 @@ export function createMemoryUpdater(
   awaitPending(sessionId: string): Promise<void>;
 } {
   const resolvedLocale = config?.locale ?? "zh-CN";
+  const schema = config?.blocks ?? DEFAULT_CORE_MEMORY_BLOCKS;
+  const validLabels = new Set<string>(schema.map((b) => b.label));
 
   // Per-session pending-promise map. Tracks the most recent in-flight
   // updateAfterTurn() call so the next turn can await it before reading
@@ -98,7 +131,8 @@ export function createMemoryUpdater(
       currentBlocks,
       locale,
     } = params;
-    const lang = (locale ?? resolvedLocale).startsWith("zh") ? "zh" : "en";
+    const effectiveLocale = locale ?? resolvedLocale;
+    const lang = effectiveLocale.startsWith("zh") ? "zh" : "en";
 
     // Build user prompt with current blocks + new events
     const blockSection = currentBlocks
@@ -114,12 +148,12 @@ export function createMemoryUpdater(
 
     try {
       const response = await llm.complete({
-        systemPrompt: lang === "zh" ? SYSTEM_PROMPT_ZH : SYSTEM_PROMPT_EN,
+        systemPrompt: buildSystemPrompt(schema, lang, effectiveLocale),
         messages: [{ role: "user", content: userPrompt }],
         model: config?.modelSlot,
       });
 
-      const parsed = parseBlockUpdates(response.content);
+      const parsed = parseBlockUpdates(response.content, validLabels);
       if (parsed.size === 0) {
         return { updated: false, blocksChanged: [] };
       }
@@ -177,8 +211,12 @@ export function createMemoryUpdater(
 /**
  * Parse the LLM response into a map of block updates.
  * Handles: raw JSON, markdown-wrapped JSON, partial responses.
+ * Only labels present in {@link validLabels} are accepted.
  */
-function parseBlockUpdates(raw: string): Map<CoreMemoryLabel, string> {
+function parseBlockUpdates(
+  raw: string,
+  validLabels: ReadonlySet<string>,
+): Map<CoreMemoryLabel, string> {
   const result = new Map<CoreMemoryLabel, string>();
 
   // Strip markdown code fences if present
@@ -204,10 +242,9 @@ function parseBlockUpdates(raw: string): Map<CoreMemoryLabel, string> {
   }
 
   // Extract valid block updates
-  const validLabels = new Set<string>(CORE_MEMORY_LABELS);
   for (const [key, value] of Object.entries(obj)) {
     if (validLabels.has(key) && typeof value === "string" && value.trim()) {
-      result.set(key as CoreMemoryLabel, value.trim());
+      result.set(key, value.trim());
     }
   }
 

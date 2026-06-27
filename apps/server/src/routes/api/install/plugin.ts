@@ -17,7 +17,6 @@ import {
   validatePluginManifest,
   formatValidationErrors,
 } from "@covel/shared";
-import { BUILTIN_PLUGIN_IDS } from "@covel/plugin-loader";
 import {
   collectUpload,
   errorResponse,
@@ -84,6 +83,7 @@ function pluginIdsConsistent(pkgId: string, manifestRoot: string): boolean {
 
 function validatePluginBundle(
   entries: readonly ExtractedEntry[],
+  reservedPluginIds: ReadonlySet<string>,
 ): PluginManifestSummary {
   const pkgId = readPackageId(entries);
   if (!pkgId) {
@@ -96,11 +96,12 @@ function validatePluginBundle(
     );
   }
   // Reserve builtin plugin IDs — third-party installs cannot shadow a shipped
-  // plugin's `plugin_data` namespace by claiming the same name. The list lives
-  // in `@covel/plugin-loader` (BUILTIN_PLUGIN_IDS) so it stays in sync with
-  // the directory contents under `plugins/`.
+  // plugin's `plugin_data` namespace by claiming the same name. The reserved
+  // set is derived at boot from the discovered bundled plugins (via
+  // `deriveBuiltinPluginIds` in `@covel/plugin-loader`) and injected on the
+  // request context, so it tracks the `plugins/` directory automatically.
   const pkgRoot = manifestRootId(pkgId);
-  if (BUILTIN_PLUGIN_IDS.has(pkgRoot)) {
+  if (reservedPluginIds.has(pkgRoot)) {
     throw httpError(
       409,
       `plugin id "${pkgRoot}" is reserved for a builtin plugin`,
@@ -171,7 +172,11 @@ pluginInstallRoutes.post("/plugin", async (c) => {
       buffer,
       "/covel-plugin-install-sentinel",
     );
-    const summary = validatePluginBundle(entries);
+    // Reserved builtin ids are injected by the bootstrap DI middleware. Absent
+    // only in bare test harnesses that mount the install routes directly — fall
+    // back to an empty set so the route still functions there.
+    const reservedPluginIds = c.get("reservedPluginIds") ?? new Set<string>();
+    const summary = validatePluginBundle(entries, reservedPluginIds);
 
     const env = readRuntimeEnv();
     const root =

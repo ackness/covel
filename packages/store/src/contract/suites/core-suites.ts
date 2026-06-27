@@ -161,6 +161,32 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       });
     });
 
+    it("parity: createSession with undefined runtimeModelOverrides reads back absent", async () => {
+      // Backend-parity guard: an absent override map must round-trip as absent
+      // on every backend. Legacy SQL writers coerced `undefined → {}` (inline
+      // `JSON.stringify({})` / `?? {}`); the read mapper collapsed empty back to
+      // undefined, but the storage-level coercion was inconsistent. Lock the
+      // public contract: no overrides in → no overrides out.
+      const session = makeSession({ runtimeModelOverrides: undefined });
+      await store.createSession(session);
+      const result = await store.getSession(session.id);
+      expect(result?.runtimeModelOverrides).toBeUndefined();
+    });
+
+    it("parity: updateSession clearing runtimeModelOverrides to undefined reads back absent", async () => {
+      const session = makeSession();
+      await store.createSession({
+        ...session,
+        runtimeModelOverrides: { narrator: "fast" },
+      });
+      await store.updateSession(session.id, {
+        runtimeModelOverrides: undefined,
+        updatedAt: ts(),
+      });
+      const result = await store.getSession(session.id);
+      expect(result?.runtimeModelOverrides).toBeUndefined();
+    });
+
     it("PR-6: clearing runtimeModelOverrides with empty object removes it", async () => {
       const session = makeSession();
       await store.createSession({

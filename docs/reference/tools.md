@@ -827,7 +827,7 @@ tools:
 
 ## Proposal 类型
 
-Runtime 输出最终都被规范化为 `Proposal[]`（定义见 `packages/shared/src/types/proposal.ts`），由 commit chain 顺序提交、写入 store、再以 SessionEvent 形式广播。已注册的 `ProposalType` 包括：`narrative.append`、`narrative.template`、`state.patch`、`event.emit`、`record.upsert`、`interaction.request`、`ui.render`、`asset.generate`、`plugin.data`、`plugin.data.batch`、`character.upsert`、`working_memory.set`、`lorebook.upsert`。（历史上的 `phase.transition` 已随 turn-band 迁移移除；状态机改由 `status + turnCount + preGameCompleted` 描述。）
+Runtime 输出最终都被规范化为 `Proposal[]`（定义见 `packages/shared/src/types/proposal.ts`），由 commit chain 顺序提交、写入 store、再以 SessionEvent 形式广播。`ProposalType` 由单一真相源 `ProposalPayloadMap` 派生，commit handler 注册表（`satisfies CommitHandlerMap`）与 discovery 广告（`PROPOSAL_TYPES`）均与之编译期对齐——新增 proposal 类型只改 `ProposalPayloadMap` 一处，漏注册 handler 即编译失败。当前已注册类型：`narrative.append`、`state.patch`、`event.emit`、`interaction.request`、`ui.render`、`asset.generate`、`plugin.data`、`plugin.data.batch`、`character.upsert`、`working_memory.set`、`lorebook.upsert`。（历史上的 `phase.transition` 已随 turn-band 迁移移除；从未实装的 `narrative.template`、`record.upsert` 也已移除——它们曾被声明并对外广告但无 commit handler，提交即以 `unknown proposal type` 失败。）
 
 ### `ui.render`
 

@@ -167,8 +167,15 @@ try {
 }
 
 if (pgAvailable) {
+  const { createIsolatedPgUrl } = await import("./pg-test-db.js");
+  // Own database so this file never races concurrent PG test files on schema DDL.
+  const isolatedUrl = await createIsolatedPgUrl(
+    DATABASE_URL,
+    "covel_test_media",
+  );
+
   runMediaStoreContractTests("PgMediaStore", () =>
-    createPgMediaStore(DATABASE_URL, { freshSchema: true }),
+    createPgMediaStore(isolatedUrl, { freshSchema: true }),
   );
 } else {
   describe("PgMediaStore (skipped)", () => {

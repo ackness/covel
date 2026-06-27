@@ -330,6 +330,22 @@ export function registerRuntimeRecordStoreSuites(
       expect(list[2].id).toBe(m1.id);
     });
 
+    it("parity: appendTurnMessage persists a non-null compactedAtTurnId", async () => {
+      // Backend-divergence regression guard: every backend must round-trip a
+      // turn message that already carries `compactedAtTurnId`. The legacy
+      // SQLite `appendTurnMessage` silently dropped the column (NULL default),
+      // while PG/memory/idb preserved it — a real data-loss bug.
+      const m = makeTurnMessage({
+        sessionId: "sess-compacted",
+        id: id(),
+        compactedAtTurnId: "summary-preexisting",
+      });
+      await store.appendTurnMessage(m);
+      const list = await store.listTurnMessages("sess-compacted");
+      expect(list).toHaveLength(1);
+      expect(list[0].compactedAtTurnId).toBe("summary-preexisting");
+    });
+
     it("should support pagination with limit and offset", async () => {
       const m1 = makeTurnMessage({ sessionId: "sess-pg", createdAt: ts(10) });
       const m2 = makeTurnMessage({ sessionId: "sess-pg", createdAt: ts(20) });
@@ -742,6 +758,22 @@ export function registerRuntimeRecordStoreSuites(
       for (const msg of messages) {
         expect(msg.compactedAtTurnId).toBe(summaryId);
       }
+    });
+
+    it("parity: tagTurnMessagesCompacted with no messageIds is a no-op", async () => {
+      // Every backend must treat an empty id list as a no-op (no error, no
+      // mutation). Guards the shared early-return that previously existed only
+      // in the PG backend.
+      const m = makeTurnMessage({ sessionId: "sess-tag-empty", id: id() });
+      await store.appendTurnMessage(m);
+      await store.tagTurnMessagesCompacted(
+        "sess-tag-empty",
+        [],
+        "summary-noop",
+      );
+      const messages = await store.listTurnMessages("sess-tag-empty");
+      expect(messages).toHaveLength(1);
+      expect(messages[0].compactedAtTurnId).toBeUndefined();
     });
 
     it("should not tag messages from other sessions", async () => {

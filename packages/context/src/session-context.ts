@@ -269,17 +269,11 @@ function normalizePersonaProfile(
   const description =
     typeof profile.description === "string" ? profile.description : undefined;
   const coordinate = normalizePersonaCoordinate(profile.promptCoordinate);
-  const loreEntryIds = Array.isArray(profile.loreEntryIds)
-    ? profile.loreEntryIds.filter(
-        (entryId): entryId is string => typeof entryId === "string",
-      )
-    : undefined;
   return {
     id,
     name,
     ...(description ? { description } : {}),
     ...(coordinate ? { promptCoordinate: coordinate } : {}),
-    ...(loreEntryIds && loreEntryIds.length > 0 ? { loreEntryIds } : {}),
   };
 }
 
@@ -332,7 +326,6 @@ function compilePersonaContribution(
     position: coordinate?.position ?? "seg3_prepend",
     ...(coordinate?.depth !== undefined ? { depth: coordinate.depth } : {}),
     order: coordinate?.order ?? 0,
-    budgetClass: "sticky",
   };
 }
 
@@ -361,7 +354,6 @@ function compileLorebookContributions(
         position: coordinate.position,
         ...(coordinate.depth !== undefined ? { depth: coordinate.depth } : {}),
         order: record.insertionOrder,
-        budgetClass: extra.budgetClass ?? "flexible",
         debugTrace: {
           pluginId: record.pluginId,
           strategy: record.strategy,
@@ -390,7 +382,6 @@ interface NormalizedLorebookExtra {
     readonly position?: unknown;
     readonly depth?: unknown;
   };
-  readonly budgetClass?: "sticky" | "flexible" | "droppable";
   readonly sourceRuleId?: string;
 }
 
@@ -402,7 +393,6 @@ function normalizeLorebookExtra(value: unknown): NormalizedLorebookExtra {
       ? (root.extra as Record<string, unknown>)
       : undefined;
   const source = nestedExtra ?? root;
-  const budgetClass = source.budgetClass;
   return {
     ...(typeof source.title === "string" && source.title.length > 0
       ? { title: source.title }
@@ -414,11 +404,6 @@ function normalizeLorebookExtra(value: unknown): NormalizedLorebookExtra {
           coordinate:
             source.coordinate as NormalizedLorebookExtra["coordinate"],
         }
-      : {}),
-    ...(budgetClass === "sticky" ||
-    budgetClass === "flexible" ||
-    budgetClass === "droppable"
-      ? { budgetClass }
       : {}),
     ...(typeof source.sourceRuleId === "string"
       ? { sourceRuleId: source.sourceRuleId }

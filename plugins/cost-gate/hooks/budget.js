@@ -9,9 +9,18 @@
  *   - bounded to MAX_TRACKED_SESSIONS so sessions that never reach SessionEnd
  *     (abandoned / paused) cannot grow the map without limit.
  *
- * Thresholds come from env because hooks cannot read SettingsStore /
- * userSettings. They are read lazily (getters) so a deployment can change them
- * without restarting and tests can override per-case.
+ * Thresholds resolve through a three-tier fallback chain, evaluated per hook
+ * invocation:
+ *   1. per-session userSettings — the plugin's own resolved `userSettings`,
+ *      read in-hook via `HookContext.getOwnSettings()` (the runtime hook
+ *      pipeline injects a frozen snapshot of manifest defaults merged with the
+ *      player's saved values). Lets the budget be configured per-session /
+ *      per-player.
+ *   2. env var — `COST_GATE_SOFT_TOKENS` / `COST_GATE_HARD_TOKENS`. Kept as a
+ *      deployment-wide fallback so installs that set only the env keep working.
+ *   3. hardcoded default — 150000 / 200000.
+ * The env and defaults are read lazily (per call) so a deployment can change
+ * them without restarting and tests can override per-case.
  */
 
 /** @type {Map<string, { input: number, output: number }>} */
@@ -25,52 +34,80 @@ const buckets = new Map();
  */
 const MAX_TRACKED_SESSIONS = 10_000;
 
+/** Last-resort thresholds when neither userSettings nor env supply a value. */
+const DEFAULT_SOFT_TOKENS = 150_000;
+const DEFAULT_HARD_TOKENS = 200_000;
+
 let warnedMisconfig = false;
 
 /**
- * @param {string} name
- * @param {number} fallback
- * @returns {number}
+ * Coerce a candidate to a strictly-positive finite number, or `undefined` when
+ * it is absent / blank / non-numeric / non-positive. Shared by every tier of
+ * the fallback chain so userSettings, env, and defaults are validated
+ * identically.
+ *
+ * @param {unknown} value
+ * @returns {number | undefined}
  */
-function readLimit(name, fallback) {
-  const raw = process.env[name];
-  const n = raw === undefined ? Number.NaN : Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
+function positiveNumber(value) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
 /**
- * Resolve both thresholds together and warn once if misconfigured: when the soft
- * cap is not strictly below the hard cap, `trim-downstream` can never fire before
- * `enforce-cap` aborts the turn, so graceful downstream trimming is effectively
- * disabled. The hard cap still protects spend — this surfaces the misconfig
- * instead of degrading silently.
+ * Resolve a single threshold through the fallback chain:
+ *   per-session userSettings → env var → hardcoded default.
  *
+ * @param {unknown} settingValue  per-session userSettings value (may be undefined)
+ * @param {string} envName
+ * @param {number} fallback
+ * @returns {number}
+ */
+function resolveOne(settingValue, envName, fallback) {
+  return (
+    positiveNumber(settingValue) ??
+    positiveNumber(process.env[envName]) ??
+    fallback
+  );
+}
+
+/**
+ * Resolve both thresholds together for a single hook invocation and warn once
+ * if misconfigured: when the soft cap is not strictly below the hard cap,
+ * `trim-downstream` can never fire before `enforce-cap` aborts the turn, so
+ * graceful downstream trimming is effectively disabled. The hard cap still
+ * protects spend — this surfaces the misconfig instead of degrading silently.
+ *
+ * `ownSettings` is the plugin's per-session resolved `userSettings`, i.e. the
+ * value of `ctx.getOwnSettings?.()` inside a hook. Pass `undefined` (or omit)
+ * to resolve from env + defaults only — the path tests and scope-less callers
+ * exercise.
+ *
+ * @param {Record<string, unknown>} [ownSettings]
  * @returns {{ soft: number, hard: number }}
  */
-function resolveLimits() {
-  const hard = readLimit("COST_GATE_HARD_TOKENS", 200_000);
-  const soft = readLimit("COST_GATE_SOFT_TOKENS", 150_000);
+export function resolveLimits(ownSettings) {
+  const hard = resolveOne(
+    ownSettings?.hardTokens,
+    "COST_GATE_HARD_TOKENS",
+    DEFAULT_HARD_TOKENS,
+  );
+  const soft = resolveOne(
+    ownSettings?.softTokens,
+    "COST_GATE_SOFT_TOKENS",
+    DEFAULT_SOFT_TOKENS,
+  );
   if (!warnedMisconfig && soft >= hard) {
     warnedMisconfig = true;
     console.warn(
-      `[cost-gate] COST_GATE_SOFT_TOKENS (${soft}) >= COST_GATE_HARD_TOKENS (${hard}); ` +
+      `[cost-gate] soft cap (${soft}) >= hard cap (${hard}); ` +
         "the soft cap will never trim before the hard cap aborts the turn. " +
         "Set the soft cap below the hard cap to enable graceful downstream trimming.",
     );
   }
   return { soft, hard };
 }
-
-export const limits = {
-  /** TurnStart aborts the turn at/above this total. */
-  get hard() {
-    return resolveLimits().hard;
-  },
-  /** PreSchedule trims background runtimes at/above this total. */
-  get soft() {
-    return resolveLimits().soft;
-  },
-};
 
 /**
  * @param {string} sessionId

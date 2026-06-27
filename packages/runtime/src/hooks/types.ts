@@ -1,31 +1,25 @@
 /**
  * Hook lifecycle pipeline types.
  *
- * Defines the 8 hook events, handler contracts, and registration structures
- * for the HookPipeline. All types are framework-level — no plugin IDs here.
+ * Defines handler contracts and registration structures for the HookPipeline
+ * across the 16 hook events. All types are framework-level — no plugin IDs here.
+ *
+ * The event names themselves are NOT defined here: `HookEvent` is re-derived
+ * from the single source of truth `HOOK_EVENTS` in `@covel/shared`, so the
+ * runtime and the plugin-facing `HookEventName` can never drift apart.
  */
 
 import type { EventBus } from "@covel/events";
+import type { HookEnforce, HookEventName } from "@covel/shared";
 
 // ── Hook event names ─────────────────────────────────────────────
 
-export type HookEvent =
-  | "SessionStart"
-  | "TurnStart"
-  | "PreCompaction"
-  | "PostCompaction"
-  | "PreSchedule"
-  | "PreRuntime"
-  | "PostContextAssembly"
-  | "PreLLMCall"
-  | "PostLLMResponse"
-  | "PostRuntime"
-  | "PreToolUse"
-  | "PostToolUse"
-  | "PreStateCommit"
-  | "PostStateCommit"
-  | "TurnStop"
-  | "SessionEnd";
+/**
+ * The 16 framework hook events. Alias of `@covel/shared`'s `HookEventName`,
+ * which is itself `typeof HOOK_EVENTS[number]` — keep this name local because
+ * the runtime/pipeline code references `HookEvent` throughout.
+ */
+export type HookEvent = HookEventName;
 
 export type HookSemantic = "first" | "sequential" | "parallel" | "stream";
 
@@ -68,7 +62,10 @@ export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
   SessionEnd: "parallel",
 };
 
-export type HookEnforce = "pre" | "normal" | "post";
+// `HookEnforce` and `HookDeclaration` are owned by @covel/shared (single
+// source of truth) and re-exported here so the runtime hooks barrel keeps a
+// stable surface for existing importers.
+export type { HookEnforce, HookDeclaration } from "@covel/shared";
 
 // ── Hook context (read-only metadata about the current hook site) ──
 
@@ -160,20 +157,5 @@ export interface HookPipelineRun<P> {
   ): Promise<HookResult<Q>>;
 }
 
-// ── Hook declaration (for PLUGIN.md frontmatter) ─────────────────
-
-/**
- * Hook declaration as it appears in a plugin's PLUGIN.md frontmatter.
- * Handler resolution is deferred (lazy import on first invocation).
- */
-export interface HookDeclaration {
-  readonly event: HookEvent;
-  /** Relative path to the handler module inside the plugin package. */
-  readonly handler: string;
-  /** Optional simple equality filter: { tool: "create-character" } etc. */
-  readonly match?: Readonly<Record<string, string | number>>;
-  /** Per-handler timeout in ms. Default 5000. */
-  readonly timeoutMs?: number;
-  /** Ordering group. Default normal. */
-  readonly enforce?: HookEnforce;
-}
+// `HookDeclaration` (the PLUGIN.md frontmatter shape) is re-exported from
+// @covel/shared at the top of this file — see the `export type` there.

@@ -10,7 +10,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-import type { DataStore } from "../types.js";
+import type { DataStore, StoreTransaction } from "../types.js";
 import type { VectorModelOps, VectorStoreCapability } from "../vector-store.js";
 import * as schema from "./schema.js";
 import { createSqliteDataCrud } from "./sqlite-data-crud.js";
@@ -18,10 +18,9 @@ import { createSqlitePluginConfigs } from "./sqlite-plugin-configs.js";
 import { createSqliteRuntimeRecords } from "./sqlite-runtime-records.js";
 import { createSqliteSessionRecords } from "./sqlite-session-records.js";
 import { createSqliteSessions } from "./sqlite-sessions.js";
-import { createSqliteSnapshots } from "./sqlite-snapshots.js";
+import { createSqliteSnapshotRecords } from "./sqlite-snapshot-records.js";
 import { createTables } from "./sqlite-store-mappers.js";
 import { createSqliteState } from "./sqlite-state.js";
-import { createSqliteSuspensions } from "./sqlite-suspensions.js";
 import { createSqliteTransactions } from "./sqlite-transactions.js";
 import { createSqliteVectorCapability } from "./sqlite-vector.js";
 import { createSqliteWorlds } from "./sqlite-worlds.js";
@@ -58,7 +57,9 @@ export function createSqliteStore(
   // will return false — callers fall back to structured retrieval.
   const vectorCapability = createSqliteVectorCapability(sqlite);
 
-  const baseStore: DataStore = {
+  // Data methods first; the transaction scope is the same single-connection
+  // store, so `withTransaction` hands `fn` these data methods.
+  const data = {
     ...createSqliteSessions(sqlite, db),
     ...createSqliteRuntimeRecords(db),
     ...createSqliteState(db),
@@ -66,9 +67,15 @@ export function createSqliteStore(
     ...createSqliteDataCrud(db),
     ...createSqlitePluginConfigs(db),
     ...createSqliteWorlds(db),
-    ...createSqliteSuspensions(sqlite),
-    ...createSqliteSnapshots(sqlite),
-    ...createSqliteTransactions(sqlite),
+    ...createSqliteSnapshotRecords(db),
+  };
+
+  const baseStore: DataStore = {
+    ...data,
+    ...createSqliteTransactions(
+      sqlite,
+      () => data as unknown as StoreTransaction,
+    ),
 
     async close(): Promise<void> {
       sqlite.close();

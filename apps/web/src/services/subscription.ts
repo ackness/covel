@@ -9,6 +9,7 @@
  * The subscription handles lifecycle events: runtime.*, state.*, game.*, plugin.*, session.*, system.*.
  */
 
+import type { SubscriptionEvent, SubscriptionTopic } from "@covel/shared";
 import { parseJsonSseData, readSseStream } from "./sse.js";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -19,14 +20,11 @@ export type ConnectionState =
   | "reconnecting"
   | "closed";
 
-export interface SubscriptionEvent {
-  id: string;
-  topic: string;
-  type: string;
-  sessionId: string;
-  timestamp: string;
-  payload: Record<string, unknown>;
-}
+// Single source of truth for the subscription event shape lives in
+// `@covel/shared` (topic: SubscriptionTopic, payload: Readonly<Record<...>>).
+// Re-exported here so existing `@/services/subscription` importers keep their
+// import path while consuming the shared, type-safe definition.
+export type { SubscriptionEvent } from "@covel/shared";
 
 export type SubscriptionEventHandler = (event: SubscriptionEvent) => void;
 export type ConnectionStateHandler = (state: ConnectionState) => void;
@@ -163,7 +161,9 @@ export function createSessionSubscription(
 
           const eventType =
             message.event || (parsed.type as string) || "unknown";
-          const topic = extractTopic(eventType);
+          // The topic prefix is derived from an untrusted wire event name, so
+          // it is narrowed to SubscriptionTopic at this boundary.
+          const topic = extractTopic(eventType) as SubscriptionTopic;
 
           return {
             id: message.id || (parsed.id as string) || "",

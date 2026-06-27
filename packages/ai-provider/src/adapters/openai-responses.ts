@@ -7,6 +7,9 @@ import {
   assertSuccess,
   createStructuredOutputError,
   readResponsesOutputText,
+  readResponsesStreamFunctionCallAdded,
+  readResponsesStreamFunctionCallArgsDelta,
+  readResponsesStreamFunctionCallArgsDone,
 } from "./http.js";
 import { applyCapabilityFallback } from "./capability-fallback.js";
 import { createOpenAiChatAdapter } from "./openai-chat.js";
@@ -15,7 +18,11 @@ import {
   extractParameterOverrides,
   mediaRefFallbackText,
 } from "./common.js";
-import type { TextMessage, TextMessageContent } from "../types.js";
+import type {
+  TextMessage,
+  TextMessageContent,
+  ToolDefinition,
+} from "../types.js";
 
 /** Fields that providerRequestMetadata must never override. */
 const RESPONSES_PROTECTED_KEYS = new Set([
@@ -23,6 +30,8 @@ const RESPONSES_PROTECTED_KEYS = new Set([
   "input",
   "stream",
   "text",
+  "tools",
+  "tool_choice",
   "parameterOverrides",
 ]);
 
@@ -70,10 +79,81 @@ function serializeResponsesContent(content: TextMessageContent): unknown {
   });
 }
 
-function serializeResponsesInput(messages: TextMessage[]): unknown {
-  return messages.map((msg) => ({
-    role: msg.role,
-    content: serializeResponsesContent(msg.content),
+/**
+ * Flatten message content down to a plain string. Used for tool results,
+ * which the Responses API carries as a `function_call_output.output` string
+ * rather than a structured content array.
+ */
+function responsesContentToText(content: TextMessageContent): string {
+  if (content == null) return "";
+  if (typeof content === "string") return content;
+  return content
+    .map((part) =>
+      part.type === "text" ? part.text : mediaRefFallbackText(part),
+    )
+    .join("");
+}
+
+/**
+ * Serialize TextMessage[] into the Responses API `input` array.
+ *
+ * Most messages map to `{ role, content }`. Tool-loop messages are
+ * different: the Responses API does not accept Chat-style `role: "tool"`
+ * messages or assistant `tool_calls`. Instead it expects standalone input
+ * items — `function_call` (the assistant's request, keyed by `call_id`) and
+ * `function_call_output` (the result, keyed by the same `call_id`). Without
+ * this round-trip the multi-turn tool loop breaks on the follow-up turn.
+ */
+function serializeResponsesInput(messages: TextMessage[]): unknown[] {
+  const items: unknown[] = [];
+  for (const msg of messages) {
+    if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
+      const text = responsesContentToText(msg.content);
+      if (text.length > 0) {
+        items.push({
+          role: "assistant",
+          content: serializeResponsesContent(msg.content),
+        });
+      }
+      for (const tc of msg.toolCalls) {
+        items.push({
+          type: "function_call",
+          call_id: tc.id,
+          name: tc.name,
+          arguments: tc.arguments,
+        });
+      }
+      continue;
+    }
+    if (msg.role === "tool" && msg.toolCallId) {
+      items.push({
+        type: "function_call_output",
+        call_id: msg.toolCallId,
+        output: responsesContentToText(msg.content),
+      });
+      continue;
+    }
+    items.push({
+      role: msg.role,
+      content: serializeResponsesContent(msg.content),
+    });
+  }
+  return items;
+}
+
+/**
+ * Convert Chat-style `ToolDefinition[]` into the Responses API tool shape.
+ * The Responses API flattens the `function` envelope: `name`, `description`,
+ * and `parameters` live at the top level of each tool object.
+ */
+function serializeResponsesTools(tools: ToolDefinition[]): unknown[] {
+  return tools.map((tool) => ({
+    type: "function",
+    name: tool.function.name,
+    ...(tool.function.description
+      ? { description: tool.function.description }
+      : {}),
+    parameters: tool.function.parameters ?? {},
   }));
 }
 
@@ -144,13 +224,18 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
 
     async *streamText(config, params, context) {
       const messages = applyCapabilityFallback(params.messages, context);
-      const response = await postJson(config, "/responses", {
+      const body: Record<string, unknown> = {
         model: params.model,
         input: serializeResponsesInput(messages),
         stream: true,
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
         ...extractResponsesParameterOverrides(params.providerRequestMetadata),
-      });
+      };
+      if (params.tools && params.tools.length > 0) {
+        body.tools = serializeResponsesTools(params.tools);
+        body.tool_choice = "auto";
+      }
+      const response = await postJson(config, "/responses", body);
 
       if (!response.ok) {
         const payload = await parseJson(response);
@@ -159,6 +244,12 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
 
       let usage: UsageSummary = { inputTokens: 0, outputTokens: 0 };
       let streamFinishReason = "stop";
+      // Accumulate streaming function-call items keyed by the Responses item
+      // id. Insertion order (first `output_item.added`) drives emission order.
+      const toolCallAcc = new Map<
+        string,
+        { callId: string | null; name: string | null; arguments: string }
+      >();
 
       for await (const payload of iterateSsePayloads(response)) {
         if (
@@ -166,6 +257,40 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
           typeof payload.delta === "string"
         ) {
           yield { type: "text-delta", textDelta: payload.delta as string };
+        }
+
+        const added = readResponsesStreamFunctionCallAdded(payload);
+        if (added) {
+          const existing = toolCallAcc.get(added.id);
+          toolCallAcc.set(added.id, {
+            callId: added.callId ?? existing?.callId ?? null,
+            name: added.name ?? existing?.name ?? null,
+            arguments: added.arguments || existing?.arguments || "",
+          });
+        }
+
+        const argsDelta = readResponsesStreamFunctionCallArgsDelta(payload);
+        if (argsDelta) {
+          const existing = toolCallAcc.get(argsDelta.itemId) ?? {
+            callId: null,
+            name: null,
+            arguments: "",
+          };
+          existing.arguments += argsDelta.delta;
+          toolCallAcc.set(argsDelta.itemId, existing);
+        }
+
+        const argsDone = readResponsesStreamFunctionCallArgsDone(payload);
+        if (argsDone) {
+          const existing = toolCallAcc.get(argsDone.itemId) ?? {
+            callId: null,
+            name: null,
+            arguments: "",
+          };
+          // The `done` event carries the authoritative full argument string.
+          existing.arguments = argsDone.arguments;
+          if (argsDone.name) existing.name = argsDone.name;
+          toolCallAcc.set(argsDone.itemId, existing);
         }
 
         if (payload.type === "response.completed") {
@@ -181,6 +306,19 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
           };
           streamFinishReason = mapResponseStatus(responseObj?.status);
         }
+      }
+
+      // Emit accumulated tool calls before done. The Responses API references
+      // tool results by `call_id`, so that is the canonical id we surface;
+      // fall back to the item id if the provider omitted call_id.
+      for (const [itemId, tc] of toolCallAcc) {
+        if (!tc.name) continue;
+        yield {
+          type: "tool-call",
+          id: tc.callId ?? itemId,
+          name: tc.name,
+          arguments: tc.arguments || "{}",
+        };
       }
 
       yield { type: "done", finishReason: streamFinishReason, usage };

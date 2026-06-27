@@ -342,9 +342,6 @@ importers:
       '@covel/context':
         specifier: workspace:*
         version: link:../context
-      '@covel/runtime':
-        specifier: workspace:*
-        version: link:../runtime
       '@covel/shared':
         specifier: workspace:*
         version: link:../shared
@@ -377,6 +374,9 @@ importers:
 
   packages/memory:
     dependencies:
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@covel/store':
         specifier: workspace:*
         version: link:../store

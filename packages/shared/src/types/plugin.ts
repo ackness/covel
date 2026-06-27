@@ -19,25 +19,51 @@ export type RuntimeType = "agent" | "function";
 
 // ── Trigger system ───────────────────────────────────────────────
 
+/**
+ * Runtime trigger modes.
+ *
+ * Production-active modes (the scheduler actually fires them):
+ * - `auto`      — every turn.
+ * - `manual`    — only on an explicit `POST /plugin-rpc` request.
+ * - `scheduled` — every N turns (`interval`), bounded by `maxTriggerCount`.
+ * - `event`     — when a subscribed `topic` is emitted within the turn's
+ *                 event fan-out (see `turn-event-chain.ts`).
+ *
+ * RESERVED modes (schema-accepted for forward-compat, but **never fire** —
+ * `shouldTrigger` / the scheduler do not implement them yet; a runtime that
+ * declares one stays permanently inactive):
+ * - `conditional` — no condition-expression engine is wired (audit P2-9).
+ *                   `shouldTrigger` returns false and warns once.
+ * - `error-retry` — depends on `hasUpstreamFailure`, which the scheduling path
+ *                   (`turn-executor/scheduling.ts`) hardcodes to `false`, so
+ *                   this branch is unreachable in production. `shouldTrigger`
+ *                   warns once and never fires it under the real scheduler.
+ *
+ * Prefer `auto` / `manual` / `scheduled` / `event` until the reserved modes
+ * are implemented.
+ */
 export type TriggerType =
   | "auto"
   | "manual"
   | "scheduled"
-  | "conditional"
   | "event"
+  // ── reserved (never fires in production) ──
+  | "conditional"
   | "error-retry";
 
 export interface TriggerConfig {
   readonly type: TriggerType;
   /** Interval in turns for `scheduled` mode. */
   readonly interval?: number;
-  /** Condition expression for `conditional` mode. */
+  /** RESERVED — condition expression for `conditional` mode. No engine
+   *  evaluates this yet, so a `conditional` runtime never triggers. */
   readonly condition?: string;
   /** Event topic for `event` mode. */
   readonly topic?: string;
   /** Max trigger count within a session. */
   readonly maxTriggerCount?: number;
-  /** Max retry count for `error-retry` mode. */
+  /** RESERVED — max retry count for `error-retry` mode. The scheduler never
+   *  surfaces upstream failures, so `error-retry` does not fire in production. */
   readonly maxRetryCount?: number;
   /** Min turns between two triggers. */
   readonly cooldownTurns?: number;
@@ -148,6 +174,89 @@ export const FrameworkCapability = {
 export type FrameworkCapabilityTag =
   (typeof FrameworkCapability)[keyof typeof FrameworkCapability];
 
+/**
+ * Runtime-level capability tags the **framework itself** consumes to discover a
+ * specific *runtime within* a plugin — as opposed to {@link FrameworkCapability},
+ * which is matched against the plugin manifest as a whole.
+ *
+ * These are used by the frontend image pipeline: a multi-step image plugin tags
+ * its manual entry runtime `image-prompt` (prompt generator) and its background
+ * follower runtime `image-generator` (turns a prompt into an image asset). The
+ * framework discovers each runtime by these tags instead of a runtime-name
+ * convention. Reference these constants in framework code (web / server) instead
+ * of bare string literals so a typo becomes a compile error rather than a silent
+ * `?.includes` miss that disables the feature.
+ *
+ * Plugins may declare arbitrary custom runtime capability tags beyond this set;
+ * the framework only acts on the ones listed here.
+ */
+export const FrameworkRuntimeCapability = {
+  /**
+   * Entry runtime of a multi-step image plugin — manual trigger, generates the
+   * image prompt and hands off to its background `image-generator` follower.
+   */
+  ImagePrompt: "image-prompt",
+  /**
+   * Background generator runtime that turns an image prompt into an image asset.
+   */
+  ImageGenerator: "image-generator",
+} as const;
+
+/** Union of the framework-consumed runtime-level capability tag string values. */
+export type FrameworkRuntimeCapabilityTag =
+  (typeof FrameworkRuntimeCapability)[keyof typeof FrameworkRuntimeCapability];
+
+/**
+ * Every capability tag the framework itself acts on — the union of the
+ * plugin-level {@link FrameworkCapability} and runtime-level
+ * {@link FrameworkRuntimeCapability} values. Single source of truth for:
+ *  - the plugin-loader's load-time typo detection (warns when a declared
+ *    capability looks like a misspelled framework-known one), and
+ *  - keeping the capability table in `docs/reference/plugins.md` honest.
+ *
+ * Plugins may still declare arbitrary custom capability tags beyond this set;
+ * this list only enumerates the tags the framework discovers and dispatches on.
+ */
+export const FRAMEWORK_KNOWN_CAPABILITIES: readonly string[] = Object.freeze([
+  ...Object.values(FrameworkCapability),
+  ...Object.values(FrameworkRuntimeCapability),
+]);
+
+// ── Core-memory block schema (Letta-style memory) ───────────────
+
+/**
+ * Declarative definition of a single core-memory block.
+ *
+ * Core memory (the `@covel/memory` framework primitive) is **schema-driven**:
+ * the framework owns the mechanism (run an LLM extraction, persist, render)
+ * but the *meaning* of each block — its label, display name and the
+ * extraction guidance handed to the summarizer LLM — is plain data declared
+ * by a plugin via the `memoryBlocks` manifest field (or by a world package).
+ *
+ * This is what lets a detective game declare `clues` / `suspects` / `timeline`
+ * and a business sim declare `deals` / `rivals` without forking the framework:
+ * the kernel never hardcodes block labels or their extraction prompts.
+ */
+export interface MemoryBlockSchema {
+  /**
+   * Stable machine label. Used as the `working_memory` key, the prompt XML
+   * tag, and the mirror plugin-data key. Lowercase snake_case by convention.
+   */
+  readonly label: string;
+  /** Localized display name for UI panels and the prompt block heading. */
+  readonly displayName: import("./world.js").I18nText;
+  /**
+   * Per-block guidance injected into the memory summarizer's system prompt —
+   * tells the LLM what kind of information belongs in this block. Keep it
+   * world-agnostic; world-specific detail comes from the narrative itself.
+   */
+  readonly extractionHint: import("./world.js").I18nText;
+  /** Lucide icon name for UI panels. Defaults to `Info` when omitted. */
+  readonly icon?: string;
+  /** Optional per-block character cap, overriding the manager default. */
+  readonly maxChars?: number;
+}
+
 export interface OutputConfig {
   /** Relative path to output.schema.json. */
   readonly schema?: string;
@@ -251,47 +360,15 @@ export interface PluginUserSettingSpec {
 }
 
 // ── Hook declarations ────────────────────────────────────────────
-
-/**
- * Hook event names a plugin runtime can register handlers for.
- * Mirrors HookEvent in @covel/runtime — kept here so plugin authors can
- * reference it from shared types without depending on the runtime package.
- */
-export type HookEventName =
-  | "SessionStart"
-  | "SessionEnd"
-  | "TurnStart"
-  | "PreCompaction"
-  | "PostCompaction"
-  | "PreSchedule"
-  | "PreRuntime"
-  | "PostContextAssembly"
-  | "PreLLMCall"
-  | "PostLLMResponse"
-  | "PostRuntime"
-  | "PreToolUse"
-  | "PostToolUse"
-  | "PreStateCommit"
-  | "PostStateCommit"
-  | "TurnStop";
-
-export type HookEnforce = "pre" | "normal" | "post";
-
-/**
- * Single hook declaration in PLUGIN.md frontmatter.
- * Handler files are resolved lazily — no eager import at parse time.
- */
-export interface HookDeclaration {
-  readonly event: HookEventName;
-  /** Relative path to the handler module inside the plugin package. */
-  readonly handler: string;
-  /** Optional simple equality filter: { tool: "my-tool" } etc. */
-  readonly match?: Readonly<Record<string, string | number>>;
-  /** Per-handler timeout in ms. Default 5000. */
-  readonly timeoutMs?: number;
-  /** Ordering group. Default normal. */
-  readonly enforce?: HookEnforce;
-}
+//
+// The hook event tuple, its derived union, the enforce group, and the
+// declaration shape now live in ./hooks.ts (single source of truth). They are
+// re-exported here so existing `@covel/shared` consumers and the types barrel
+// keep importing them from the same place. `HookDeclaration` is also imported
+// locally below because `RuntimeManifest.hooks` references it.
+import type { HookDeclaration } from "./hooks.js";
+export { HOOK_EVENTS } from "./hooks.js";
+export type { HookEventName, HookEnforce, HookDeclaration } from "./hooks.js";
 
 // ── UI declarations ─────────────────────────────────────────────
 
@@ -508,6 +585,18 @@ export interface RuntimeManifest {
    * by the loader.
    */
   readonly rpc?: import("./rpc.js").RpcDeclMap;
+  /**
+   * Core-memory block definitions contributed by this plugin (or world).
+   *
+   * The framework's memory system (`@covel/memory`) aggregates `memoryBlocks`
+   * across all loaded plugins to drive post-turn extraction and prompt
+   * rendering — block labels and extraction prompts are therefore plain data,
+   * not hardcoded kernel behavior. The builtin `memory` plugin declares the
+   * default narrative blocks (`story_state` / `scene` /
+   * `character_relationships` / `player_profile`); any plugin or world can add
+   * its own (e.g. `clues` / `suspects` / `timeline`).
+   */
+  readonly memoryBlocks?: readonly MemoryBlockSchema[];
 }
 
 // ── Author's note / Post-history declarations (S3-T4) ───────────

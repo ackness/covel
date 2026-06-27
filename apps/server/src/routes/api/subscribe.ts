@@ -9,6 +9,7 @@ import { streamSSE } from "hono/streaming";
 import type { EventBus } from "@covel/events";
 import type { DataStore } from "@covel/store";
 import type { SubscriptionTopic } from "@covel/shared";
+import { SUBSCRIPTION_TOPICS } from "@covel/shared";
 import { errorBody } from "../../api-error.js";
 
 type Env = {
@@ -52,16 +53,12 @@ subscribeRoutes.get("/stream", async (c) => {
   if (!session) return c.json(errorBody("Session not found"), 404);
 
   const topicsParam = c.req.query("topics");
-  // M2: Validate topics parameter against known SubscriptionTopic values
-  const VALID_TOPICS = new Set<string>([
-    "runtime",
-    "state",
-    "game",
-    "plugin",
-    "session",
-    "store",
-    "system",
-  ]);
+  // M2: Validate topics parameter against known SubscriptionTopic values.
+  // Derived from the shared `SUBSCRIPTION_TOPICS` source of truth so the guard
+  // can never drift from the `SubscriptionTopic` union (which now includes the
+  // runtime-internal `trace` / `hooks` topics emitted by TurnEmitter and the
+  // hook pipeline).
+  const VALID_TOPICS = new Set<string>(SUBSCRIPTION_TOPICS);
   if (topicsParam) {
     const parsed = topicsParam.split(",").map((t) => t.trim());
     const invalid = parsed.filter((t) => !VALID_TOPICS.has(t));

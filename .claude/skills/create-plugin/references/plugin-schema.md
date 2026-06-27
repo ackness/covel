@@ -40,16 +40,17 @@ Schema 使用 Zod **strict** 模式（`runtimeManifestSchema`）— 不允许未
 
 ```yaml
 trigger:
-  type: auto|manual|scheduled|event|error-retry   # 必需
+  type: auto|manual|scheduled|event   # 必需（生产可用的四种）
+                                       # conditional / error-retry = reserved，见下
   interval: <int>              # scheduled 时每隔 N 轮(正整数)
   maxTriggerCount: <int>       # 整个 session 最多触发次数
   startTurn: <int>             # 从第 N 主循环 turn 起介入(0-based)
   topic: <string>              # event 时订阅的事件 topic
-  maxRetryCount: <int>         # error-retry 时
+  maxRetryCount: <int>         # error-retry 时(reserved)
   cooldownTurns: <int>         # 上次触发后多少轮内不再触发
 ```
 
-> **`conditional` is reserved (audit P2-9)**: schema 仍接受这个值，但 `packages/runtime/src/trigger.ts` 不解析任何条件表达式，runtime 永远不会被触发，并会在 console 打印一次性 warning。在条件表达式引擎落地前请使用 `auto`/`scheduled`/`event` 等替代。
+> **`conditional` / `error-retry` are reserved（当前永不触发）**：schema 仍接受这两个值，但 `packages/runtime/src/trigger.ts` 既没有条件表达式引擎，调度路径（`turn-executor/scheduling.ts`）又把 `hasUpstreamFailure` 硬编码为 `false`——声明它们的 runtime 永远不会被触发，并会在 console 打印一次性 warning（audit P2-9）。落地前请使用 `auto`/`manual`/`scheduled`/`event`。
 
 **手动触发常用组合:**
 

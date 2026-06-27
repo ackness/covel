@@ -1,7 +1,8 @@
 import type { ModelProviderAdapter } from "./adapters/adapter.js";
-import { createOpenAiChatAdapter } from "./adapters/openai-chat.js";
-import { createOpenAiResponsesAdapter } from "./adapters/openai-responses.js";
-import { createAnthropicMessagesAdapter } from "./adapters/anthropic-messages.js";
+import {
+  assertProtocolRegistryComplete,
+  getProtocolDefinition,
+} from "./protocol-registry.js";
 import type {
   CacheStrategy,
   OperationMode,
@@ -11,25 +12,36 @@ import type {
   ProviderProtocol,
 } from "./types.js";
 
+// Fail fast at module load if a known protocol lost its registration.
+assertProtocolRegistryComplete();
+
+/**
+ * Provider-name → default protocol when the target doesn't pin one.
+ *
+ * Data table replacing the old `if (provider === "anthropic")` special
+ * case in `resolveProtocol`. OpenAI-compatible providers need no entry —
+ * they fall through to {@link FALLBACK_PROTOCOL}. A genuinely new
+ * native-wire provider adds one line here.
+ */
+const PROVIDER_PROTOCOL_DEFAULTS: Record<string, ProviderProtocol> = {
+  anthropic: "anthropic-messages-v1",
+};
+
+/** Protocol assumed for any provider without a {@link PROVIDER_PROTOCOL_DEFAULTS} entry. */
+const FALLBACK_PROTOCOL: ProviderProtocol = "openai-chat-v1";
+
 /**
  * Resolve the default prompt-cache strategy for a given provider protocol.
  *
- * §A15 of the improvement plan: Anthropic requires explicit `cache_control`
- * markers, OpenAI-family APIs auto-cache on prefix match, and anything
- * else falls through to `none`. Individual callers can override the
- * chosen strategy by setting `ProviderConfig.cacheStrategy` explicitly
- * on the registered defaults or protocol route.
+ * §A15 of the improvement plan: each protocol declares its own strategy in
+ * the protocol registry (Anthropic → explicit `cache_control` markers,
+ * OpenAI-family → `auto-prefix`); an unregistered protocol falls through to
+ * `none`. Individual callers can still override the chosen strategy by
+ * setting `ProviderConfig.cacheStrategy` explicitly on the registered
+ * defaults or protocol route.
  */
 function defaultCacheStrategyFor(protocol: ProviderProtocol): CacheStrategy {
-  switch (protocol) {
-    case "anthropic-messages-v1":
-      return "anthropic-explicit";
-    case "openai-chat-v1":
-    case "openai-responses-v1":
-      return "auto-prefix";
-    default:
-      return "none";
-  }
+  return getProtocolDefinition(protocol)?.cacheStrategy ?? "none";
 }
 
 interface ProtocolRoute {
@@ -185,21 +197,11 @@ function resolveProtocol(target: {
   protocol?: ProviderProtocol;
 }): ProviderProtocol {
   if (target.protocol) return target.protocol;
-  if (target.provider === "anthropic") return "anthropic-messages-v1";
-  return "openai-chat-v1";
+  return PROVIDER_PROTOCOL_DEFAULTS[target.provider] ?? FALLBACK_PROTOCOL;
 }
 
 function builtinAdapter(
   protocol: ProviderProtocol,
 ): ModelProviderAdapter | null {
-  switch (protocol) {
-    case "openai-chat-v1":
-      return createOpenAiChatAdapter();
-    case "openai-responses-v1":
-      return createOpenAiResponsesAdapter();
-    case "anthropic-messages-v1":
-      return createAnthropicMessagesAdapter();
-    default:
-      return null;
-  }
+  return getProtocolDefinition(protocol)?.createAdapter() ?? null;
 }

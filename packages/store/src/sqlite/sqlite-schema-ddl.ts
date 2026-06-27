@@ -210,6 +210,8 @@ export function createTables(sqlite: Database.Database): void {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS trace_events_session_id_idx ON trace_events(session_id);
+    CREATE INDEX IF NOT EXISTS trace_events_trace_id_idx ON trace_events(session_id, trace_id);
+    CREATE INDEX IF NOT EXISTS trace_events_turn_id_idx ON trace_events(session_id, turn_id);
 
     -- Runtime Outputs (PR-1 translation layer)
     CREATE TABLE IF NOT EXISTS runtime_outputs (
@@ -262,7 +264,8 @@ export function createTables(sqlite: Database.Database): void {
       created_at TEXT NOT NULL,
       compacted_at_turn_id TEXT
     );
-    CREATE INDEX IF NOT EXISTS idx_turn_messages_session ON turn_messages(session_id);
+    CREATE INDEX IF NOT EXISTS turn_messages_session_id_idx ON turn_messages(session_id);
+    CREATE INDEX IF NOT EXISTS turn_messages_turn_id_idx ON turn_messages(session_id, turn_id);
 
     CREATE TABLE IF NOT EXISTS session_summaries (
       id TEXT PRIMARY KEY,
@@ -273,7 +276,7 @@ export function createTables(sqlite: Database.Database): void {
       focus_sections TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_session_summaries_session ON session_summaries(session_id);
+    CREATE INDEX IF NOT EXISTS session_summaries_session_id_idx ON session_summaries(session_id);
 
     CREATE TABLE IF NOT EXISTS player_inputs (
       id TEXT PRIMARY KEY,
@@ -283,7 +286,7 @@ export function createTables(sqlite: Database.Database): void {
       "values" TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_player_inputs_session ON player_inputs(session_id);
+    CREATE INDEX IF NOT EXISTS player_inputs_session_id_idx ON player_inputs(session_id);
 
     CREATE TABLE IF NOT EXISTS working_memory (
       id TEXT PRIMARY KEY,
@@ -295,7 +298,7 @@ export function createTables(sqlite: Database.Database): void {
       updated_at TEXT NOT NULL,
       UNIQUE (session_id, scope, key)
     );
-    CREATE INDEX IF NOT EXISTS idx_working_memory_session ON working_memory(session_id);
+    CREATE INDEX IF NOT EXISTS working_memory_session_id_idx ON working_memory(session_id);
 
     CREATE TABLE IF NOT EXISTS media_assets (
       id TEXT PRIMARY KEY,
@@ -341,7 +344,7 @@ export function createTables(sqlite: Database.Database): void {
     -- media_id) constraint via plain re-boot. Sites with legacy duplicate
     -- rows must dedupe first; this index simply errors during creation,
     -- surfacing the migration requirement loudly instead of silently.
-    CREATE UNIQUE INDEX IF NOT EXISTS media_refs_unique_session_media_idx
+    CREATE UNIQUE INDEX IF NOT EXISTS media_refs_unique_idx
       ON media_refs(session_id, media_id);
     CREATE INDEX IF NOT EXISTS media_refs_session_id_idx ON media_refs(session_id);
     CREATE INDEX IF NOT EXISTS media_refs_media_id_idx ON media_refs(media_id);
@@ -360,8 +363,8 @@ export function createTables(sqlite: Database.Database): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_lorebook_entries_session ON lorebook_entries(session_id);
-    CREATE INDEX IF NOT EXISTS idx_lorebook_entries_plugin ON lorebook_entries(session_id, plugin_id);
+    CREATE INDEX IF NOT EXISTS lorebook_entries_session_id_idx ON lorebook_entries(session_id);
+    CREATE INDEX IF NOT EXISTS lorebook_entries_plugin_id_idx ON lorebook_entries(session_id, plugin_id);
 
     CREATE TABLE IF NOT EXISTS state_snapshots (
       id TEXT PRIMARY KEY,
@@ -372,7 +375,7 @@ export function createTables(sqlite: Database.Database): void {
       payload TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_state_snapshots_session ON state_snapshots(session_id);
+    CREATE INDEX IF NOT EXISTS state_snapshots_session_id_idx ON state_snapshots(session_id);
 
     CREATE TABLE IF NOT EXISTS suspensions (
       id TEXT PRIMARY KEY,
@@ -386,7 +389,7 @@ export function createTables(sqlite: Database.Database): void {
       created_at TEXT NOT NULL,
       resolved_at TEXT
     );
-    CREATE INDEX IF NOT EXISTS idx_suspensions_session ON suspensions(session_id);
+    CREATE INDEX IF NOT EXISTS suspensions_session_id_idx ON suspensions(session_id);
 
     CREATE TABLE IF NOT EXISTS vector_models (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

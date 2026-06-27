@@ -6,6 +6,8 @@ import matter from "gray-matter";
 import { z } from "zod";
 import {
   authorsNoteDeclSchema,
+  FRAMEWORK_KNOWN_CAPABILITIES,
+  HOOK_EVENTS,
   postHistoryDeclSchema,
   rpcDeclMapSchema,
   runtimeManifestSchema,
@@ -120,26 +122,191 @@ function formatLoaderError(
   return `[plugin-loader] ${location}: ${problem}\nFix: ${fix}`;
 }
 
+// ── Lenient whole-field parsing ───────────────────────────────────
+
+/**
+ * Minimal structural shape of a Zod-like schema. Matched structurally (not via
+ * `instanceof`) so it survives multiple `zod` versions coexisting in the
+ * monorepo — same reasoning as `asZodErrorLike`.
+ */
+interface LenientSchema {
+  safeParse(value: unknown):
+    | { readonly success: true }
+    | {
+        readonly success: false;
+        readonly error: { readonly issues: ReadonlyArray<{ message: string }> };
+      };
+}
+
+/**
+ * Declarative description of an optional frontmatter field that is parsed
+ * leniently: a single malformed declaration drops only that field with a
+ * warning instead of crashing the whole plugin load.
+ */
+interface LenientFieldSpec {
+  /** Top-level frontmatter key (also used for `findYamlKeyLine`). */
+  readonly key: string;
+  /** Schema validating the field value. */
+  readonly schema: LenientSchema;
+  /** Problem prefix, e.g. `"malformed authorsNote skipped"`. */
+  readonly problem: string;
+  /** Author-facing `Fix:` hint. */
+  readonly fix: string;
+}
+
+/**
+ * Validate one lenient frontmatter field. On success returns `data` unchanged.
+ * On failure: warn with the canonical `file:line` + Fix layout (identical to
+ * the per-field blocks this replaces), drop the offending key, and return a new
+ * object so the rest of the manifest still loads. Never throws, never mutates.
+ */
+function parseLenientField(
+  data: Record<string, unknown>,
+  spec: LenientFieldSpec,
+  content: string,
+  filePath: string,
+): Record<string, unknown> {
+  if (!(spec.key in data)) return data;
+  const parsed = spec.schema.safeParse(data[spec.key]);
+  if (parsed.success) return data;
+  console.warn(
+    formatLoaderError(
+      filePath,
+      findYamlKeyLine(content, spec.key),
+      `${spec.problem} — ${parsed.error.issues.map((i) => i.message).join("; ")}`,
+      spec.fix,
+    ),
+  );
+  const { [spec.key]: _omitted, ...rest } = data;
+  return rest;
+}
+
+/**
+ * Optional decorative / structural metadata fields validated leniently in
+ * declaration order. Mirrors the per-entry lenient handling used for `hooks`:
+ * one bad field drops itself with a warning, the rest of the plugin still
+ * loads. Adding a new lenient field is a one-line entry here, not a new block.
+ */
+const LENIENT_FIELDS: readonly LenientFieldSpec[] = [
+  {
+    // S3-T4: author's note — wrong type on e.g. `depth` should not crash load.
+    key: "authorsNote",
+    schema: authorsNoteDeclSchema,
+    problem: "malformed authorsNote skipped",
+    fix: 'An authorsNote must have `content: string` and optional `depth: number` / `role: "system" | "user" | "assistant"`.',
+  },
+  {
+    // S3-T4: post-history note.
+    key: "postHistory",
+    schema: postHistoryDeclSchema,
+    problem: "malformed postHistory skipped",
+    fix: 'A postHistory entry must have `content: string` and optional `role: "system" | "user" | "assistant"`.',
+  },
+  {
+    // PR-3: rpc declarations — drop the whole rpc block on structural error so
+    // a typo in one action doesn't crash the load.
+    key: "rpc",
+    schema: rpcDeclMapSchema,
+    problem: "malformed rpc declaration skipped",
+    fix: "Each rpc action needs a lowercase kebab-case name and a `handler` path ending in .js/.mjs/.cjs, relative to the plugin root.",
+  },
+];
+
 // ── Valid hook event names ────────────────────────────────────────
 
-const VALID_HOOK_EVENTS = new Set([
-  "SessionStart",
-  "SessionEnd",
-  "TurnStart",
-  "PreCompaction",
-  "PostCompaction",
-  "PreSchedule",
-  "PreRuntime",
-  "PostContextAssembly",
-  "PreLLMCall",
-  "PostLLMResponse",
-  "PostRuntime",
-  "PreToolUse",
-  "PostToolUse",
-  "PreStateCommit",
-  "PostStateCommit",
-  "TurnStop",
-]);
+// Built from the single source of truth (@covel/shared HOOK_EVENTS) so the
+// loader's accept-list can never drift from the framework's hook contract.
+const VALID_HOOK_EVENTS = new Set<string>(HOOK_EVENTS);
+
+// ── Framework-known capability typo detection ─────────────────────
+
+// Capability tags the framework itself discovers / dispatches on, from the
+// single source of truth in @covel/shared (plugin-level FrameworkCapability +
+// runtime-level FrameworkRuntimeCapability). Plugins may declare arbitrary
+// custom capabilities — we do NOT reject unknown ones. We only warn when a
+// declared tag looks like a *misspelled* framework-known capability, so the
+// typo surfaces at load time instead of as a silent `?.includes` miss that
+// disables a feature (e.g. an image plugin tagging `image-genrator`).
+const KNOWN_CAPABILITIES: readonly string[] = FRAMEWORK_KNOWN_CAPABILITIES;
+const KNOWN_CAPABILITY_SET = new Set<string>(KNOWN_CAPABILITIES);
+
+/** Normalize a capability tag for case/separator-insensitive comparison. */
+function normalizeCapability(cap: string): string {
+  return cap
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-")
+    .replace(/-+/g, "-");
+}
+
+/** Levenshtein edit distance between two short strings. */
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i += 1) {
+    const curr: number[] = [i];
+    for (let j = 1; j <= n; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+    }
+    prev = curr;
+  }
+  return prev[n];
+}
+
+/**
+ * Find the framework-known capability a declared tag most likely *meant* to be
+ * when it is not an exact match. Catches case/separator drift (`Image_Generator`)
+ * and one/two-character typos (`image-genrator`, `memory-pannel`). Returns null
+ * for genuinely-custom tags so plugins keep full freedom to invent their own
+ * capabilities.
+ */
+function suspectedCapabilityTypo(cap: string): string | null {
+  if (KNOWN_CAPABILITY_SET.has(cap)) return null;
+  const normalized = normalizeCapability(cap);
+  // 1. Case / separator drift maps onto a known tag exactly.
+  for (const known of KNOWN_CAPABILITIES) {
+    if (normalizeCapability(known) === normalized) return known;
+  }
+  // 2. A short edit away from a known tag of similar length.
+  for (const known of KNOWN_CAPABILITIES) {
+    if (
+      Math.abs(cap.length - known.length) <= 2 &&
+      levenshtein(cap, known) <= 2
+    )
+      return known;
+  }
+  return null;
+}
+
+/**
+ * Emit a dev warning for each declared capability that looks like a misspelled
+ * framework-known capability. Mirrors the lenient hook-event validation style:
+ * never throws, never drops the tag — capabilities stay free-form — it only
+ * nudges the author toward the intended spelling.
+ */
+function warnOnSuspectedCapabilityTypos(
+  capabilities: readonly string[] | undefined,
+  content: string,
+  filePath: string,
+): void {
+  if (!capabilities || capabilities.length === 0) return;
+  const line = findYamlKeyLine(content, "capabilities");
+  for (const cap of capabilities) {
+    const suggestion = suspectedCapabilityTypo(cap);
+    if (suggestion === null) continue;
+    console.warn(
+      formatLoaderError(
+        filePath,
+        line,
+        `capability "${cap}" looks like a misspelled framework capability "${suggestion}" — the framework will not discover this plugin by it`,
+        `Did you mean "${suggestion}"? If "${cap}" is an intentional custom capability, ignore this. Framework-known capabilities: ${KNOWN_CAPABILITIES.join(", ")}.`,
+      ),
+    );
+  }
+}
 
 /**
  * Lenient hook schema that accepts any string for `event`, used to
@@ -279,84 +446,16 @@ export function parsePluginMd(
           : dataWithoutHooks;
     }
 
-    // S3-T4: author's note / post-history lenient parsing.
-    // These fields are optional decorative metadata. A single malformed
-    // declaration (e.g. wrong type on `depth`) should not crash the entire
-    // plugin load — drop the bad field with a warning and continue, mirroring
-    // the per-entry lenient handling used for `hooks`.
-    if (
-      dataToValidate &&
-      typeof dataToValidate === "object" &&
-      "authorsNote" in dataToValidate
-    ) {
-      const parsedNote = authorsNoteDeclSchema.safeParse(
-        (dataToValidate as Record<string, unknown>).authorsNote,
-      );
-      if (!parsedNote.success) {
-        console.warn(
-          formatLoaderError(
-            filePath,
-            findYamlKeyLine(content, "authorsNote"),
-            `malformed authorsNote skipped — ${parsedNote.error.issues.map((i) => i.message).join("; ")}`,
-            'An authorsNote must have `content: string` and optional `depth: number` / `role: "system" | "user" | "assistant"`.',
-          ),
-        );
-        const { authorsNote: _omitted, ...rest } = dataToValidate as Record<
-          string,
-          unknown
-        >;
-        dataToValidate = rest;
+    // Optional decorative / structural metadata fields parsed leniently in
+    // declaration order. A single malformed declaration drops only that field
+    // with a warning instead of crashing the whole plugin load, mirroring the
+    // per-entry lenient handling used for `hooks` above. See LENIENT_FIELDS.
+    if (dataToValidate && typeof dataToValidate === "object") {
+      let lenientData = dataToValidate as Record<string, unknown>;
+      for (const spec of LENIENT_FIELDS) {
+        lenientData = parseLenientField(lenientData, spec, content, filePath);
       }
-    }
-    if (
-      dataToValidate &&
-      typeof dataToValidate === "object" &&
-      "postHistory" in dataToValidate
-    ) {
-      const parsedPost = postHistoryDeclSchema.safeParse(
-        (dataToValidate as Record<string, unknown>).postHistory,
-      );
-      if (!parsedPost.success) {
-        console.warn(
-          formatLoaderError(
-            filePath,
-            findYamlKeyLine(content, "postHistory"),
-            `malformed postHistory skipped — ${parsedPost.error.issues.map((i) => i.message).join("; ")}`,
-            'A postHistory entry must have `content: string` and optional `role: "system" | "user" | "assistant"`.',
-          ),
-        );
-        const { postHistory: _omitted, ...rest } = dataToValidate as Record<
-          string,
-          unknown
-        >;
-        dataToValidate = rest;
-      }
-    }
-    // PR-3: rpc declarations. Lenient — drop the whole rpc block on
-    // structural error so a typo in one action doesn't crash the load.
-    if (
-      dataToValidate &&
-      typeof dataToValidate === "object" &&
-      "rpc" in dataToValidate
-    ) {
-      const parsedRpc = rpcDeclMapSchema.safeParse(
-        (dataToValidate as Record<string, unknown>).rpc,
-      );
-      if (!parsedRpc.success) {
-        console.warn(
-          formatLoaderError(
-            filePath,
-            findYamlKeyLine(content, "rpc"),
-            `malformed rpc declaration skipped — ${parsedRpc.error.issues.map((i: { message: string }) => i.message).join("; ")}`,
-            "Each rpc action needs a lowercase kebab-case name and a `handler` path ending in .js/.mjs/.cjs, relative to the plugin root.",
-          ),
-        );
-        const { rpc: _omitted, ...rest } = dataToValidate as Record<
-          string,
-          unknown
-        >;
-        dataToValidate = rest;
-      }
+      dataToValidate = lenientData;
     }
 
     const parsed = runtimeManifestSchema.parse(dataToValidate);
@@ -366,6 +465,10 @@ export function parsePluginMd(
     const pluginId =
       slashIdx >= 0 ? parsed.name.slice(0, slashIdx) : parsed.name;
     manifest = { ...parsed, pluginId };
+    // Lenient capability typo detection — warn-only, after strict validation
+    // so we have the final capability list. Covers both plugin-level and
+    // runtime-level tags (each runtime PLUGIN.md is parsed independently).
+    warnOnSuspectedCapabilityTypos(manifest.capabilities, content, filePath);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     // Best-effort: attach the source line for the first failing key so the

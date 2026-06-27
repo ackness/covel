@@ -63,6 +63,16 @@ behavioral test suite that every backend runs:
 - `throws on commitTx without an active transaction`
 - `throws on rollbackTx without an active transaction`
 
+It also covers the scoped `withTransaction` API (see below):
+
+- `commits all writes when the callback resolves`
+- `rolls back all writes and rethrows when the callback throws`
+- `returns the callback result`
+- `does not swallow writes across concurrent transactions`
+- `rolls back only the failing concurrent transaction`
+- `rejects a nested withTransaction with a clear error instead of deadlocking`
+- `recovers and accepts a fresh withTransaction after a nested rejection`
+
 Any new store backend MUST pass this suite.
 
 ## Backend implementations
@@ -143,6 +153,84 @@ be mistaken for a cooperative rollback.
 - Files:
   - `packages/store/src/postgres/pg-store.ts` — factory, wires the adapter
   - `packages/store/src/postgres/pg-store-tx.ts` — adapter implementation
+
+## Scoped transactions (`withTransaction`)
+
+Alongside the imperative trio, `DataStore` exposes a scoped, callback-shaped
+transaction API:
+
+```ts
+interface DataStore {
+  withTransaction?: <T>(fn: (tx: StoreTransaction) => Promise<T>) => Promise<T>;
+}
+```
+
+`fn` receives a transaction-bound store view (`StoreTransaction` — every
+read/write method, minus the tx-control and lifecycle methods). Writes through
+that view commit atomically when `fn` resolves and roll back if it throws (the
+error is re-thrown to the caller). Unlike the imperative shim, `withTransaction`
+never mutates a shared/global handle, so the tx scope is bound to the single
+`fn` invocation.
+
+This is the **preferred** transaction API. The imperative
+`beginTx / commitTx / rollbackTx` trio is retained as a compatibility shim for
+existing callers (the kernel commit path still uses it). As of this writing
+`withTransaction` has no production callers — it is wired and contract-tested,
+ready for adoption.
+
+### Cross-backend semantics (read before adopting)
+
+The four backends honor the same observable contract (atomic commit / rollback,
+nested-call rejection) but differ in concurrency and isolation:
+
+| Backend                                  | Concurrency model                                                                                                                                                                       | Concurrent non-tx write during a callback                                 |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **PgStore**                              | Each call runs on its **own pooled connection** (Drizzle `db.transaction`) — true parallel transactions.                                                                                | Isolated on its own connection; not folded in.                            |
+| **SqliteStore / MemoryStore / IdbStore** | **Single connection / single snapshot.** Concurrent calls are **serialized** through a promise chain — each runs its full BEGIN…COMMIT before the next starts, so neither loses writes. | **Folded into the open transaction** and committed / rolled back with it. |
+
+> ⚠️ **Serialized-backend caveat.** On SQLite / Memory / IndexedDB there is one
+> connection (or one in-flight snapshot) at a time, so **any** other write
+> issued on the same store while a `withTransaction` callback is mid-flight —
+> including writes that do **not** go through `withTransaction` — runs on the
+> open transaction and is committed or rolled back with it. Do not interleave
+> unrelated writes with a serialized transaction; if you need an isolated
+> concurrent write, use PgStore or a second store instance.
+
+### Nesting is rejected on every backend
+
+Calling `withTransaction` from inside another `withTransaction` callback is a
+programming error and is **rejected synchronously with a clear error** on all
+four backends:
+
+- **Serialized backends (SQLite / Memory / IndexedDB):** the inner call would
+  queue behind the outer transaction _on the serialization chain_ — and the
+  outer call is awaiting the inner — a permanent **deadlock**. The guard turns
+  that silent hang into an immediate rejection.
+- **PgStore:** nesting would not deadlock (independent connection), but the
+  inner call would run as a **separate, non-atomic transaction** — an outer
+  rollback would not undo the inner commit. It is rejected anyway, for a uniform
+  contract and to prevent that silent atomicity surprise.
+
+The error message: `"<Store>: nested withTransaction is not supported on the
+<backend> backend; <reason>. Flatten the nested call, or perform the inner
+writes directly through the outer callback's tx scope."`
+
+#### How nesting is detected
+
+- **SqliteStore / MemoryStore / PgStore (Node):** an `AsyncLocalStorage` scope
+  (`packages/store/src/tx-nesting-guard.ts`) marks the running callback's async
+  context. `isNested()` — checked synchronously when a new `withTransaction` is
+  entered — returns `true` only for a re-entrant (nested) call and `false` for an
+  independent concurrent caller, so legitimate concurrency is never misflagged.
+- **IdbStore (browser):** `AsyncLocalStorage` is unavailable in the browser
+  bundle, so it uses a coarser synchronous boolean. It reliably rejects nesting
+  (the deadlock case) but may also reject a genuinely concurrent call issued
+  while another callback is mid-flight — an edge that is irrelevant for IdbStore's
+  single-user local mode.
+
+The shared error builder lives in `packages/store/src/tx-nesting-error.ts`
+(browser-safe; imported by every backend). The AsyncLocalStorage guard is
+Node-only and is never pulled into the IdbStore browser bundle.
 
 ## Kernel integration
 
@@ -232,5 +320,6 @@ reference doc.
 - Contract type: `packages/store/src/types.ts` (`DataStore` interface)
 - Contract tests: `packages/store/src/contract/store-contract.ts` and `packages/store/src/contract/suites/`
 - PgStore adapter: `packages/store/src/postgres/pg-store-tx.ts`
+- `withTransaction` nesting guard: `packages/store/src/tx-nesting-guard.ts` (Node-only AsyncLocalStorage) and `packages/store/src/tx-nesting-error.ts` (browser-safe error builder)
 - Kernel commit path: `packages/runtime/src/session-commit-pipeline.ts`, `packages/runtime/src/session-commit-handlers.ts`
 - MediaStore schema + S3 metadata adapter: [`media-store.md`](./media-store.md)

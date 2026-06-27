@@ -1,3 +1,8 @@
+import {
+  SESSIONS_TABLE,
+  SESSION_SCOPED_TABLE_NAMES,
+} from "../table-registry.js";
+
 export const CREATE_MEDIA_TABLES_SQL = `
   CREATE TABLE IF NOT EXISTS media_assets (
     id TEXT PRIMARY KEY,
@@ -41,7 +46,7 @@ export const CREATE_MEDIA_TABLES_SQL = `
     created_at TEXT NOT NULL,
     UNIQUE (session_id, media_id)
   );
-  CREATE UNIQUE INDEX IF NOT EXISTS pg_media_refs_unique_session_media_idx
+  CREATE UNIQUE INDEX IF NOT EXISTS pg_media_refs_unique_idx
     ON media_refs(session_id, media_id);
   CREATE INDEX IF NOT EXISTS pg_media_refs_session_id_idx ON media_refs(session_id);
   CREATE INDEX IF NOT EXISTS pg_media_refs_media_id_idx ON media_refs(media_id);
@@ -264,6 +269,8 @@ export const CREATE_TABLES_SQL = `
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS pg_trace_events_session_id_idx ON trace_events(session_id);
+  CREATE INDEX IF NOT EXISTS pg_trace_events_trace_id_idx ON trace_events(session_id, trace_id);
+  CREATE INDEX IF NOT EXISTS pg_trace_events_turn_id_idx ON trace_events(session_id, turn_id);
 
   -- Runtime Outputs (PR-1 translation layer)
   CREATE TABLE IF NOT EXISTS runtime_outputs (
@@ -317,6 +324,7 @@ export const CREATE_TABLES_SQL = `
     compacted_at_turn_id TEXT
   );
   CREATE INDEX IF NOT EXISTS pg_turn_messages_session_id_idx ON turn_messages(session_id);
+  CREATE INDEX IF NOT EXISTS pg_turn_messages_turn_id_idx ON turn_messages(session_id, turn_id);
 
   CREATE TABLE IF NOT EXISTS player_inputs (
     id TEXT PRIMARY KEY,
@@ -431,35 +439,16 @@ export const CREATE_TABLES_SQL = `
 
 // ── Table names for cleanup ─────────────────────────────────────
 
-export const ALL_TABLE_NAMES = [
+// Session-scoped child tables come from the single-source registry; the
+// non-session tables (worlds, media) are listed explicitly. Adding a session
+// table to the registry extends the DROP list automatically.
+export const ALL_TABLE_NAMES: readonly string[] = [
   "worlds",
-  "sessions",
-  "turn_results",
-  "runtime_results",
-  "tool_calls",
-  "state_schemas",
-  "state_entries",
-  "state_changes",
-  "events",
-  "approvals",
-  "messages",
-  "characters",
-  "plugin_data",
-  "world_data_import_ledger",
-  "plugin_configs",
-  "trace_events",
-  "turn_messages",
-  "player_inputs",
-  "working_memory",
-  "lorebook_entries",
-  "session_summaries",
-  "suspensions",
-  "state_snapshots",
-  "runtime_outputs",
-  "interaction_records",
+  SESSIONS_TABLE,
+  ...SESSION_SCOPED_TABLE_NAMES,
   "media_refs",
   "media_assets",
-] as const;
+];
 
 export const DROP_ALL_SQL = ALL_TABLE_NAMES.map(
   (t) => `DROP TABLE IF EXISTS ${t} CASCADE;`,

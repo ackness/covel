@@ -17,6 +17,10 @@ import type {
   ProviderProtocol,
 } from "../types.js";
 import {
+  BASE_CAPABILITY_DEFAULTS,
+  getProtocolDefinition,
+} from "../protocol-registry.js";
+import {
   KNOWN_MODELS,
   MODEL_ALIASES,
   type KnownModelEntry,
@@ -98,51 +102,30 @@ export function lookupKnownModel(
 
 // ── Protocol Defaults ────────────────────────────────────────────
 
-/** Sensible defaults when no data source matches. */
-function getProtocolDefaults(protocol?: ProviderProtocol): ModelCapability {
-  const base: ModelCapability = {
-    input: ["text"],
-    output: ["text"],
-    features: ["streaming"],
-    contextWindow: 8_192,
-    maxOutputTokens: 4_096,
+/** Deep-ish copy so callers can freely treat the result as their own. */
+function cloneCapability(cap: ModelCapability): ModelCapability {
+  const clone: ModelCapability = {
+    ...cap,
+    input: [...cap.input],
+    output: [...cap.output],
   };
+  if (cap.features) clone.features = [...cap.features];
+  if (cap.pricing) clone.pricing = { ...cap.pricing };
+  return clone;
+}
 
-  switch (protocol) {
-    case "openai-chat-v1":
-      return {
-        ...base,
-        features: ["function_calling", "structured_output", "streaming"],
-        contextWindow: 32_768,
-        maxOutputTokens: 4_096,
-      };
-    case "openai-responses-v1":
-      return {
-        ...base,
-        features: [
-          "function_calling",
-          "structured_output",
-          "streaming",
-          "web_search",
-        ],
-        contextWindow: 128_000,
-        maxOutputTokens: 16_384,
-      };
-    case "anthropic-messages-v1":
-      return {
-        ...base,
-        features: [
-          "function_calling",
-          "structured_output",
-          "streaming",
-          "prompt_caching",
-        ],
-        contextWindow: 200_000,
-        maxOutputTokens: 8_192,
-      };
-    default:
-      return base;
-  }
+/**
+ * Sensible defaults when no data source matches.
+ *
+ * Per-protocol capability defaults live in the protocol registry; an
+ * unknown/unset protocol falls back to the shared base. Returns a fresh
+ * copy each call so downstream mutation never leaks into the registry.
+ */
+function getProtocolDefaults(protocol?: ProviderProtocol): ModelCapability {
+  const defaults =
+    (protocol ? getProtocolDefinition(protocol)?.capabilityDefaults : null) ??
+    BASE_CAPABILITY_DEFAULTS;
+  return cloneCapability(defaults);
 }
 
 // ── Resolver ─────────────────────────────────────────────────────

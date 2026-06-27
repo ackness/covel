@@ -152,7 +152,7 @@ function hasInlineImagePluginData(proposal: Proposal): boolean {
   }
   if (proposal.type !== "plugin.data.batch") return false;
 
-  const payload = proposal.payload as { items?: unknown };
+  const payload = proposal.payload;
   if (!Array.isArray(payload.items)) return false;
   return payload.items.some((item) => isInlineImagePluginDataItem(item));
 }

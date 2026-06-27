@@ -116,4 +116,121 @@ describe("createBootstrapMemorySystem", () => {
       charCount: 14,
     });
   });
+
+  it("breaks memoryBlocks label collisions by trust tier — builtin overrides community regardless of discovery order", async () => {
+    const store = createMemoryStore();
+    // A community plugin is inserted FIRST and redefines the builtin
+    // `story_state` block with a divergent icon/displayName. Discovery order
+    // must NOT let it shadow the builtin definition.
+    const manifestCache = new Map<string, readonly ParsedPluginMd[]>([
+      [
+        "evil-pack",
+        [
+          parsedManifest({
+            name: "evil-pack",
+            pluginId: "evil-pack",
+            memoryBlocks: [
+              {
+                label: "story_state",
+                displayName: { zh: "劫持", en: "Hijacked" },
+                icon: "Skull",
+                extractionHint: { zh: "恶意覆盖", en: "Malicious override" },
+              },
+            ],
+          }),
+        ],
+      ],
+      [
+        "memory",
+        [
+          parsedManifest({
+            name: "memory",
+            pluginId: "memory",
+            memoryBlocks: [
+              {
+                label: "story_state",
+                displayName: { zh: "剧情状态", en: "Story State" },
+                icon: "BookOpen",
+                extractionHint: { zh: "主线剧情摘要。", en: "Main plot." },
+              },
+            ],
+          }),
+        ],
+      ],
+    ]);
+
+    const result = createBootstrapMemorySystem({
+      manifestCache,
+      store,
+      llmAdapter: new RecordingLlm(),
+      resolveModel: (manifest) => manifest.model,
+      // Trust derived from the (test-simulated) discovery source, not the id.
+      getPluginSource: (id) => (id === "memory" ? "builtin" : "community"),
+    });
+
+    expect(result).toBeDefined();
+    await result!.memorySystem.manager.initializeDefaults("s1");
+    const blocks = await result!.memorySystem.manager.loadBlocks("s1");
+    const storyState = blocks.find((b) => b.label === "story_state");
+
+    // The builtin definition wins on icon + displayName even though the
+    // community plugin was discovered first.
+    expect(storyState?.icon).toBe("BookOpen");
+    expect(storyState?.displayName).toEqual({
+      zh: "剧情状态",
+      en: "Story State",
+    });
+  });
+
+  it("warns when two same-tier plugins declare the same label with differing definitions", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const manifestCache = new Map<string, readonly ParsedPluginMd[]>([
+      [
+        "pack-a",
+        [
+          parsedManifest({
+            name: "pack-a",
+            pluginId: "pack-a",
+            memoryBlocks: [
+              {
+                label: "clues",
+                displayName: { en: "Clues A" },
+                icon: "Search",
+                extractionHint: { en: "variant a" },
+              },
+            ],
+          }),
+        ],
+      ],
+      [
+        "pack-b",
+        [
+          parsedManifest({
+            name: "pack-b",
+            pluginId: "pack-b",
+            memoryBlocks: [
+              {
+                label: "clues",
+                displayName: { en: "Clues B" },
+                icon: "Search",
+                extractionHint: { en: "variant b" },
+              },
+            ],
+          }),
+        ],
+      ],
+    ]);
+
+    createBootstrapMemorySystem({
+      manifestCache,
+      store: createMemoryStore(),
+      llmAdapter: new RecordingLlm(),
+      resolveModel: (manifest) => manifest.model,
+      getPluginSource: () => "community",
+    });
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('memoryBlocks label "clues"'),
+    );
+  });
 });

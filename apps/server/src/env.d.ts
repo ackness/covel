@@ -103,6 +103,15 @@ declare module "hono" {
     prepareToolsForSession?: PrepareToolsForSessionFn;
     getPluginSource?: GetPluginSourceFn;
     /**
+     * Reserved plugin IDs (the bundled `plugins/` set, derived at boot from
+     * the discovery result via `deriveBuiltinPluginIds`). The plugin install
+     * route rejects any third-party package whose id collides with one of
+     * these so a community plugin can never shadow a builtin's `plugin_data`
+     * namespace. Optional so test harnesses that mount the install routes
+     * without the bootstrap DI middleware don't have to wire it.
+     */
+    reservedPluginIds?: ReadonlySet<string>;
+    /**
      * Activates a community plugin's `tools.local` modules. Called from the
      * plugin-rpc executor right before a runtime runs (so the tools resolve)
      * and from the approvals decision route after `allow` (so the tools are

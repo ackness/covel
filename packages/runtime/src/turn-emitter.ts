@@ -13,6 +13,7 @@
  */
 
 import type { EventBus } from "@covel/events";
+import type { CovelEventType } from "@covel/shared";
 
 export interface TurnEmitterStore {
   addTraceEvent(record: {
@@ -29,7 +30,16 @@ export interface TurnEmitterStore {
 export interface TurnEmitter {
   readonly sessionId: string;
   readonly turnId: string;
-  emit(type: string, payload: Record<string, unknown>): Promise<void>;
+  /**
+   * Emit a trace event. `type` is constrained to the closed `CovelEventType`
+   * union so a framework emit site cannot invent a name that is absent from the
+   * protocol contract (and therefore from the action-stream forwarding
+   * whitelist / frontend exhaustiveness). Plugin-authored custom events do NOT
+   * flow through here — they ride the `event.emitted` commit event, whose
+   * arbitrary topic/type lives in the payload as data, not as a wire event
+   * name.
+   */
+  emit(type: CovelEventType, payload: Record<string, unknown>): Promise<void>;
 }
 
 export interface CreateTurnEmitterOptions {

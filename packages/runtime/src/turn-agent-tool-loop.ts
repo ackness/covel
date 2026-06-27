@@ -47,6 +47,19 @@ export interface AgentToolLoopCompleted {
 
 export type AgentToolLoopResult = AgentToolLoopCompleted | RuntimeResult;
 
+/**
+ * Mid-loop state seeded into {@link runAgentToolLoop}. The normal execution
+ * path leaves this empty (fresh loop); the resume path rebuilds it from a
+ * persisted {@link import("@covel/store").SuspensionRecord} so a
+ * suspended-then-resumed runtime continues with the same write set it had when
+ * it suspended.
+ */
+export interface AgentToolLoopInitialState {
+  readonly finalContent?: string | null;
+  readonly collectedToolCalls?: readonly ToolCallRecord[];
+  readonly pendingProposals?: readonly Proposal[];
+}
+
 export interface RunAgentToolLoopOptions {
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
@@ -58,6 +71,14 @@ export interface RunAgentToolLoopOptions {
   readonly hookPipeline: HookPipeline | undefined;
   readonly startTime: number;
   readonly runId: string;
+  /** Seed mid-turn state — used by the resume path. Omitted = fresh loop. */
+  readonly initialState?: AgentToolLoopInitialState;
+  /**
+   * Whether a suspend sentinel may suspend this loop. The normal path allows it
+   * (`true`, default); the resume path forbids re-suspending mid-resume and
+   * instead feeds the LLM a "Nested suspend is not supported" tool result.
+   */
+  readonly allowSuspend?: boolean;
 }
 
 export async function runAgentToolLoop({
@@ -71,13 +92,21 @@ export async function runAgentToolLoop({
   hookPipeline,
   startTime,
   runId,
+  initialState,
+  allowSuspend = true,
 }: RunAgentToolLoopOptions): Promise<AgentToolLoopResult> {
-  // LLM call with tool-calling loop
-  let finalContent: string | null = null;
-  const collectedToolCalls: ToolCallRecord[] = [];
+  // LLM call with tool-calling loop. State is seeded from `initialState` so the
+  // resume path continues from the persisted suspension; the normal path passes
+  // nothing and starts fresh.
+  let finalContent: string | null = initialState?.finalContent ?? null;
+  const collectedToolCalls: ToolCallRecord[] = [
+    ...(initialState?.collectedToolCalls ?? []),
+  ];
   const executedToolCalls: ExecutedToolCallState[] = [];
   const failedToolCalls: FailedToolCallState[] = [];
-  const pendingProposals: Proposal[] = [];
+  const pendingProposals: Proposal[] = [
+    ...(initialState?.pendingProposals ?? []),
+  ];
   let steps = 0;
   // Count streaming text deltas so the `message.completed` trace event can
   // report how many chunks the narrative was assembled from. Non-streaming
@@ -300,21 +329,40 @@ export async function runAgentToolLoop({
           // When the suspend tool is called, capture the current loop state and
           // persist a SuspensionRecord. The tool result is not pushed back to
           // the LLM; instead we exit the loop with status 'suspended'.
-          if (isSuspendSentinel(toolResult.parsedResult) && deps.store) {
-            return handleSuspension({
-              sentinel: toolResult.parsedResult,
-              manifest,
-              input,
-              deps,
-              hookPipeline,
-              messages,
-              finalContent,
-              collectedToolCalls,
-              pendingProposals,
-              suspendToolCallId: effectiveTc.id,
-              startTime,
-              runId,
-            });
+          //
+          // The resume path runs the same loop with `allowSuspend: false`: a
+          // nested suspend mid-resume is unsupported, so the sentinel is fed
+          // back to the LLM as an error tool result and the loop continues.
+          if (isSuspendSentinel(toolResult.parsedResult)) {
+            if (!allowSuspend) {
+              messages.push(
+                buildToolResultMessage({
+                  toolCallId: effectiveTc.id,
+                  content: JSON.stringify({
+                    error: "Nested suspend is not supported",
+                  }),
+                }),
+              );
+              continue;
+            }
+            if (deps.store) {
+              return handleSuspension({
+                sentinel: toolResult.parsedResult,
+                manifest,
+                input,
+                deps,
+                hookPipeline,
+                messages,
+                finalContent,
+                collectedToolCalls,
+                pendingProposals,
+                suspendToolCallId: effectiveTc.id,
+                startTime,
+                runId,
+              });
+            }
+            // allowSuspend but no store: fall through and treat the sentinel as
+            // an ordinary tool result (unchanged pre-suspend-feature behaviour).
           }
 
           executedToolCalls.push({

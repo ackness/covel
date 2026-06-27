@@ -8,6 +8,7 @@ import type { HookPipeline } from "./hooks/pipeline.js";
 import type { HookContext } from "./hooks/types.js";
 import type { TurnEmitter } from "./turn-emitter.js";
 import { createCommitHandlers } from "./session-commit-handlers.js";
+import type { CommitHandler } from "./session-commit-handlers.js";
 import { emitCommittedProposal } from "./session-commit-emitter.js";
 export type { KernelStore } from "./session-kernel-store.js";
 import type { KernelStore } from "./session-kernel-store.js";
@@ -32,7 +33,14 @@ export function createCommitPipeline(
   const handlers = createCommitHandlers(store);
 
   async function commit(proposal: Proposal): Promise<CommitResult> {
-    const handler = handlers[proposal.type];
+    // `handlers` is a correlated map (each value expects its own proposal
+    // variant). Dispatch by `proposal.type` is sound at runtime, so we erase
+    // to the uniform `CommitHandler` here — the single, localized cast for the
+    // whole commit chain. `| undefined` guards runtime-only invalid types
+    // (e.g. a stale or malformed proposal whose type has no handler).
+    const handler = (handlers as Record<string, CommitHandler | undefined>)[
+      proposal.type
+    ];
     if (!handler) {
       return {
         committed: false,

@@ -547,6 +547,41 @@ export const lorebookEntries = sqliteTable(
   ],
 );
 
+// ── State Snapshots (S4-T2) ────────────────────────────────────
+
+export const stateSnapshots = sqliteTable(
+  "state_snapshots",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id").notNull(),
+    turnId: text("turn_id").notNull(),
+    kind: text("kind").notNull(), // 'auto' | 'manual' | 'fork'
+    parentId: text("parent_id"), // null except for kind='fork'
+    payload: text("payload").notNull(), // JSON — SnapshotPayload
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [index("state_snapshots_session_id_idx").on(table.sessionId)],
+);
+
+// ── Suspensions (S4-T4) ────────────────────────────────────────
+
+export const suspensions = sqliteTable(
+  "suspensions",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id").notNull(),
+    turnId: text("turn_id").notNull(),
+    runtimeId: text("runtime_id").notNull(),
+    pluginId: text("plugin_id").notNull(),
+    reason: text("reason").notNull(),
+    resumeSchema: text("resume_schema").notNull(), // JSON schema object
+    pendingContinuation: text("pending_continuation").notNull(), // serialized continuation state
+    createdAt: text("created_at").notNull(),
+    resolvedAt: text("resolved_at"), // nullable — set on resume
+  },
+  (table) => [index("suspensions_session_id_idx").on(table.sessionId)],
+);
+
 // ── Vector Models (per-model embedding isolation) ──────────────
 
 export const vectorModels = sqliteTable(

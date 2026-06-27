@@ -1,12 +1,18 @@
 /**
- * Archival Memory — Long-term cross-plugin knowledge search.
+ * Archival Memory — Long-term cross-plugin knowledge search (keyword search).
  *
- * Like Letta's `archival_memory_search`. Aggregates data from:
- *   - plugin_data (codex entries, npc-graph, world entries)
+ * Like Letta's `archival_memory_search`, but **keyword-only**. Aggregates and
+ * scores by term overlap across:
  *   - lorebook entries
  *   - character records
  *
- * Uses keyword matching by default. Vector search when pgvector is available.
+ * (plugin_data is intentionally not iterated — see the note inside `search`.)
+ *
+ * Semantic (vector) archival search is NOT wired yet — same gap as recall: the
+ * store vector capability and `gateway.embed` exist, but no ingestion path
+ * embeds archival sources into the vector tables, so a vector searcher would
+ * find nothing. The swap seam is the {@link ArchivalSearcher} interface. See
+ * recall-search.ts / memory-system.ts for the follow-up plan.
  */
 
 import type { DataStore } from "@covel/store";
@@ -34,19 +40,15 @@ export function createKeywordArchivalSearcher(
 
       if (queryTerms.length === 0) return [];
 
-      // 1. Search plugin_data — all plugins, all namespaces
-      try {
-        // listPluginData is scoped per-plugin, so we need to iterate.
-        // For now, search the well-known plugin namespaces that contain
-        // searchable knowledge. The framework doesn't hardcode plugin IDs
-        // in production, but the memory system can iterate over all known
-        // plugin_data for the session if the store supports it.
-        // Fallback: search characters + lorebook only.
-      } catch {
-        // Non-fatal
-      }
+      // NOTE: plugin_data is intentionally NOT searched here. `listPluginData`
+      // is scoped per-(plugin, namespace), and the framework must not iterate a
+      // hardcoded plugin-ID list (isolation rule), so there is no plugin-agnostic
+      // way to scan every plugin's data for a session via the keyword path.
+      // Archival keyword search is therefore limited to lorebook + character
+      // records below. A future vector path would index plugin_data on write
+      // (under each plugin's own namespace) and lift this limitation.
 
-      // 2. Search lorebook entries
+      // 1. Search lorebook entries
       if (typeof store.listSessionLorebookEntries === "function") {
         try {
           const entries = await store.listSessionLorebookEntries(sessionId);
@@ -68,7 +70,7 @@ export function createKeywordArchivalSearcher(
         }
       }
 
-      // 3. Search character records
+      // 2. Search character records
       try {
         const characters = await store.listCharacters(sessionId);
         for (const char of characters) {

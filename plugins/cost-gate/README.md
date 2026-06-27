@@ -19,15 +19,32 @@ Pre-Game runtimes (priority ≤ 99) are framework-protected and never trimmed.
 
 ## Configuration
 
-| Env                     | Default  | Meaning                                          |
-| ----------------------- | -------- | ------------------------------------------------ |
-| `COST_GATE_SOFT_TOKENS` | `150000` | Soft cap — start trimming background generation. |
-| `COST_GATE_HARD_TOKENS` | `200000` | Hard cap — pause the turn.                       |
+Both thresholds are **per-session configurable** via `userSettings`. The hooks
+read this plugin's resolved settings in-hook through
+`HookContext.getOwnSettings()` (the runtime hook pipeline injects a frozen
+snapshot of the manifest defaults merged with the player's saved values), so
+each session / player can set its own budget from the Settings UI under
+`Plugins > cost-gate`.
 
-Thresholds are read lazily, so a deployment can change them without a restart.
-Keep the soft cap **below** the hard cap: if `COST_GATE_SOFT_TOKENS >=
-COST_GATE_HARD_TOKENS`, trimming has no window before the hard cap aborts the
-turn (cost-gate logs a one-time warning in that case).
+| Setting (`userSettings`) | Default  | Meaning                                          |
+| ------------------------ | -------- | ------------------------------------------------ |
+| `softTokens`             | `150000` | Soft cap — start trimming background generation. |
+| `hardTokens`             | `200000` | Hard cap — pause the turn.                       |
+
+Each threshold is resolved per hook invocation through a three-tier fallback
+chain — **per-session `userSettings` → env var → hardcoded default**. The env
+vars below remain a deployment-wide fallback so installs that set only the env
+keep working unchanged:
+
+| Env (fallback)          | Default  | Falls back for |
+| ----------------------- | -------- | -------------- |
+| `COST_GATE_SOFT_TOKENS` | `150000` | `softTokens`   |
+| `COST_GATE_HARD_TOKENS` | `200000` | `hardTokens`   |
+
+Settings and env are read lazily (per call), so a deployment can change either
+without a restart. Keep the soft cap **below** the hard cap: if the resolved
+soft cap `>=` the hard cap, trimming has no window before the hard cap aborts
+the turn (cost-gate logs a one-time warning in that case).
 
 ## Limitations
 
