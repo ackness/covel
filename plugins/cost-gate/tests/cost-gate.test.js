@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import path from "node:path";
+import fs from "node:fs";
 import accumulateUsage from "../hooks/accumulate-usage.js";
 import trimDownstream from "../hooks/trim-downstream.js";
 import enforceCap from "../hooks/enforce-cap.js";
@@ -180,8 +182,19 @@ describe("cost-gate hooks", () => {
   it("falls back to env when getOwnSettings omits a key or returns empty", async () => {
     // Empty bucket → both thresholds resolve from env (100 / 50).
     expect(resolveLimits({})).toEqual({ soft: 50, hard: 100 });
+    // Production-shaped bucket: because the userSettings specs declare NO default,
+    // the runtime fills unset keys with `undefined` (not the old 150000/200000),
+    // so the env layer stays reachable. Regression guard for the dead-env-fallback
+    // bug where declared defaults silently shadowed the env.
+    expect(
+      resolveLimits({ softTokens: undefined, hardTokens: undefined }),
+    ).toEqual({ soft: 50, hard: 100 });
     // Partial bucket → provided key wins, missing key falls back to env.
     expect(resolveLimits({ hardTokens: 999 })).toEqual({ soft: 50, hard: 999 });
+    expect(resolveLimits({ softTokens: undefined, hardTokens: 999 })).toEqual({
+      soft: 50,
+      hard: 999,
+    });
     // Absent accessor (scope-less / framework hook) → env.
     expect(resolveLimits(undefined)).toEqual({ soft: 50, hard: 100 });
   });
@@ -237,5 +250,28 @@ describe("cost-gate hooks", () => {
       { response: { usage: { inputTokens: 1, outputTokens: 0 } } },
     );
     expect((await enforceCap({ sessionId: SID })).action).toBe("abort");
+  });
+
+  it("PLUGIN.md userSettings declares NO default (keeps env fallback reachable)", () => {
+    // The runtime fills a declared default for any unset userSettings key, which
+    // would permanently shadow the env layer. The userSettings block must stay
+    // default-less so an unset field resolves to undefined → env → hardcoded
+    // default. (Structural guard; dependency-free to keep this a leaf plugin.)
+    const mdPath = path.resolve(import.meta.dirname, "../PLUGIN.md");
+    const md = fs.readFileSync(mdPath, "utf8");
+    const frontmatter = md.split(/^---$/m)[1] ?? "";
+    const lines = frontmatter.split("\n");
+    const start = lines.findIndex((l) => l.startsWith("userSettings:"));
+    expect(start).toBeGreaterThanOrEqual(0);
+    // The block runs until the next top-level (non-indented) key.
+    let end = lines.length;
+    for (let i = start + 1; i < lines.length; i++) {
+      if (/^[A-Za-z]/.test(lines[i])) {
+        end = i;
+        break;
+      }
+    }
+    const block = lines.slice(start, end);
+    expect(block.some((l) => /^\s*default:/.test(l))).toBe(false);
   });
 });

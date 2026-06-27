@@ -28,7 +28,6 @@ hooks:
 userSettings:
   - key: softTokens
     type: number
-    default: 150000
     min: 1000
     max: 10000000
     step: 1000
@@ -36,11 +35,10 @@ userSettings:
       zh: 软上限（token）
       en: Soft cap (tokens)
     description:
-      zh: 本局累计 token 达到此值后，自动停掉后台生成，只保留主线叙事。
-      en: Once the session's accumulated tokens reach this value, background generation is trimmed and only story output keeps running.
+      zh: 本局累计 token 达到此值后，自动停掉后台生成，只保留主线叙事。留空则回退到 COST_GATE_SOFT_TOKENS 环境变量或默认 150000。
+      en: Once the session's accumulated tokens reach this value, background generation is trimmed and only story output keeps running. Leave unset to fall back to the COST_GATE_SOFT_TOKENS env var or the 150000 default.
   - key: hardTokens
     type: number
-    default: 200000
     min: 1000
     max: 10000000
     step: 1000
@@ -48,8 +46,8 @@ userSettings:
       zh: 硬上限（token）
       en: Hard cap (tokens)
     description:
-      zh: 本局累计 token 达到此值后，暂停本回合（abort）。应大于软上限。
-      en: Once the session's accumulated tokens reach this value, the turn is aborted. Keep it above the soft cap.
+      zh: 本局累计 token 达到此值后，暂停本回合（abort）。应大于软上限。留空则回退到 COST_GATE_HARD_TOKENS 环境变量或默认 200000。
+      en: Once the session's accumulated tokens reach this value, the turn is aborted. Keep it above the soft cap. Leave unset to fall back to the COST_GATE_HARD_TOKENS env var or the 200000 default.
 relations: {}
 ---
 
@@ -75,19 +73,22 @@ so `PreSchedule` trimming only ever affects the main loop.
 ## Configuration
 
 Both thresholds are **per-session configurable**. The hooks read this plugin's
-own resolved `userSettings` in-hook via `HookContext.getOwnSettings()` (the
-runtime hook pipeline injects a frozen snapshot of the manifest defaults merged
-with the player's saved values), so each session / player can set its own budget
-from the Settings UI under `Plugins > cost-gate`.
+own resolved `userSettings` in-hook via `HookContext.getOwnSettings()`, so each
+session / player can set its own budget from the Settings UI under
+`Plugins > cost-gate`. The `userSettings` specs declare **no default on purpose**:
+an unset field resolves to `undefined`, which is what makes the env-var fallback
+below reachable (a declared default would always shadow the env). Leaving a field
+blank therefore means "don't override — use the env var or hardcoded default".
 
-| Setting (`userSettings`) | Default  | Meaning                                                       |
-| ------------------------ | -------- | ------------------------------------------------------------- |
-| `softTokens`             | `150000` | At/above this total, `PreSchedule` trims background runtimes. |
-| `hardTokens`             | `200000` | At/above this total, `TurnStart` aborts the turn.             |
+| Setting (`userSettings`) | Meaning                                                       |
+| ------------------------ | ------------------------------------------------------------- |
+| `softTokens`             | At/above this total, `PreSchedule` trims background runtimes. |
+| `hardTokens`             | At/above this total, `TurnStart` aborts the turn.             |
 
 Each threshold is resolved per hook invocation through a three-tier fallback
 chain — **per-session `userSettings` → env var → hardcoded default** — so
-existing deployments that set only the env keep working unchanged:
+existing deployments that set only the env (including a _custom_ env value) keep
+working unchanged:
 
 | Env (fallback)          | Default  | Used when the matching `userSettings` value is unset |
 | ----------------------- | -------- | ---------------------------------------------------- |
