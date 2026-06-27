@@ -9,6 +9,11 @@ import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 
 import type { DataStore, StoreTransaction } from "../types.js";
+import {
+  INDEPENDENT_CONNECTION_NESTING_REASON,
+  nestedWithTransactionError,
+} from "../tx-nesting-error.js";
+import { createTxNestingGuard } from "../tx-nesting-guard.js";
 import type { VectorModelOps, VectorStoreCapability } from "../vector-store.js";
 import type { PgDb } from "./pg-db.js";
 import { createPgDataCrud } from "./pg-data-crud.js";
@@ -79,6 +84,14 @@ export async function createPgStore(
   });
   const getDb = (): PgDb => imperativeTxDb ?? pooledDb;
 
+  // PgStore runs each withTransaction on its own pooled connection, so nesting
+  // does not deadlock (unlike the serialized backends). It is still rejected for
+  // a uniform cross-backend contract and to prevent a silent atomicity surprise:
+  // a nested call would run on a *separate* connection, so an outer rollback
+  // would not undo the inner commit. The guard rejects only true re-entrant
+  // nesting; independent concurrent calls still run on their own connections.
+  const nesting = createTxNestingGuard();
+
   const baseStore: DataStore = {
     ...buildPgData(getDb),
 
@@ -91,11 +104,23 @@ export async function createPgStore(
      * pooled connection for the callback; the tx-scoped store view routes every
      * write to that connection. Returns on commit, rolls back + rethrows on
      * error. No shared handle is mutated, so concurrent calls run on
-     * independent connections.
+     * independent connections. Nested calls (from inside a callback) are
+     * rejected — see the `nesting` guard above.
      */
     withTransaction<T>(fn: (tx: StoreTransaction) => Promise<T>): Promise<T> {
-      return pooledDb.transaction(async (tx) =>
-        fn(buildPgData(() => tx as unknown as PgDb)),
+      if (nesting.isNested()) {
+        return Promise.reject(
+          nestedWithTransactionError(
+            "PgStore",
+            "pg",
+            INDEPENDENT_CONNECTION_NESTING_REASON,
+          ),
+        );
+      }
+      return nesting.runScoped(() =>
+        pooledDb.transaction(async (tx) =>
+          fn(buildPgData(() => tx as unknown as PgDb)),
+        ),
       );
     },
 

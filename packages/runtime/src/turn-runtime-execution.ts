@@ -5,7 +5,10 @@ import type {
   TurnResult,
 } from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
-import type { SessionContextSnapshot } from "@covel/context";
+import type {
+  CoreMemoryBlockView,
+  SessionContextSnapshot,
+} from "@covel/context";
 import type { HookPipeline } from "./hooks/pipeline.js";
 import { makeFailedResult } from "./turn-executor-helpers.js";
 import { runPostRuntimeHook } from "./hooks/wire-helpers.js";
@@ -68,13 +71,7 @@ export interface RuntimeInvocation {
   readonly workingMemory:
     | readonly import("@covel/context").WorkingMemoryEntry[]
     | undefined;
-  readonly coreMemoryBlocks:
-    | readonly {
-        label: string;
-        content: string;
-        updatedAt: string;
-      }[]
-    | undefined;
+  readonly coreMemoryBlocks: readonly CoreMemoryBlockView[] | undefined;
   readonly sessionContext: SessionContextSnapshot | undefined;
   readonly triggerEvent:
     | {

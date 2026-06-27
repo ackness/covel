@@ -339,6 +339,10 @@ export async function bootstrapApi(
     llmAdapter: config.llmAdapter,
     preferredMemorySlot: config.preferredMemorySlot,
     resolveModel,
+    // Break memoryBlocks label collisions by trust tier (builtin > official >
+    // community), using the non-forgeable discovery source rather than load
+    // order — keeps a community plugin from shadowing a builtin default block.
+    getPluginSource,
   });
   if (bootstrapMemory) {
     for (const t of bootstrapMemory.tools) {

@@ -2,6 +2,11 @@ import type { StoreTransaction } from "../types.js";
 import { SESSION_SCOPED_TABLES } from "../table-registry.js";
 import type { MemoryCollectionKind } from "../table-registry.js";
 import {
+  nestedWithTransactionError,
+  SERIALIZED_NESTING_REASON,
+} from "../tx-nesting-error.js";
+import { createTxNestingGuard } from "../tx-nesting-guard.js";
+import {
   replaceArrayContents,
   replaceMapContents,
 } from "./collection-helpers.js";
@@ -93,7 +98,13 @@ export function createTransactionMethods(
   let snapshot: MemorySnapshot | null = null;
   // Serialize withTransaction calls so two concurrent transactions snapshot /
   // restore against a stable state rather than interleaving on shared Maps.
+  // Because a single in-flight snapshot covers the whole store, a concurrent
+  // non-withTransaction write made while a transaction's callback is mid-flight
+  // is captured by that snapshot and rolled back with it. Nesting would queue
+  // the inner call behind the outer one on this chain and deadlock, so it is
+  // rejected synchronously via the AsyncLocalStorage nesting guard.
   let chain: Promise<unknown> = Promise.resolve();
+  const nesting = createTxNestingGuard();
 
   return {
     async beginTx() {
@@ -127,21 +138,32 @@ export function createTransactionMethods(
     async withTransaction<T>(
       fn: (tx: StoreTransaction) => Promise<T>,
     ): Promise<T> {
-      const task = chain.then(async () => {
-        if (snapshot !== null) {
-          throw new Error(
-            "MemoryStore: withTransaction cannot start while an imperative transaction is active",
-          );
-        }
-        const snap = captureSnapshot(state);
-        try {
-          // Resolve on success = commit (discard snapshot).
-          return await fn(getScope());
-        } catch (err) {
-          restoreSnapshot(state, snap);
-          throw err;
-        }
-      });
+      // Synchronous nesting guard — checked at CALL time (before chaining), so a
+      // nested call rejects instead of deadlocking behind the outer transaction.
+      if (nesting.isNested()) {
+        throw nestedWithTransactionError(
+          "MemoryStore",
+          "memory",
+          SERIALIZED_NESTING_REASON,
+        );
+      }
+      const task = chain.then(() =>
+        nesting.runScoped(async () => {
+          if (snapshot !== null) {
+            throw new Error(
+              "MemoryStore: withTransaction cannot start while an imperative transaction is active",
+            );
+          }
+          const snap = captureSnapshot(state);
+          try {
+            // Resolve on success = commit (discard snapshot).
+            return await fn(getScope());
+          } catch (err) {
+            restoreSnapshot(state, snap);
+            throw err;
+          }
+        }),
+      );
       // Keep the chain alive regardless of this call's outcome.
       chain = task.then(
         () => undefined,

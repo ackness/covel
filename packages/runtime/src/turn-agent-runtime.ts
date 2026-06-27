@@ -5,7 +5,10 @@ import {
   buildContextAsync,
   needsAsyncBuild,
 } from "@covel/context";
-import type { SessionContextSnapshot } from "@covel/context";
+import type {
+  CoreMemoryBlockView,
+  SessionContextSnapshot,
+} from "@covel/context";
 import type { LLMMessage } from "./llm-adapter.js";
 import type { HookPipeline } from "./hooks/pipeline.js";
 import { resolveUserSettings } from "./turn-executor-helpers.js";
@@ -59,13 +62,7 @@ export interface ExecuteAgentRuntimeOptions {
   readonly workingMemory:
     | readonly import("@covel/context").WorkingMemoryEntry[]
     | undefined;
-  readonly coreMemoryBlocks:
-    | readonly {
-        label: string;
-        content: string;
-        updatedAt: string;
-      }[]
-    | undefined;
+  readonly coreMemoryBlocks: readonly CoreMemoryBlockView[] | undefined;
   readonly sessionContext: SessionContextSnapshot | undefined;
   readonly startTime: number;
   readonly runId: string;

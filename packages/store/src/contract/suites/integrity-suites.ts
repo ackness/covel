@@ -291,6 +291,46 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
       expect(await store.getSession(ok.id)).not.toBeNull();
       expect(await store.getSession(bad.id)).toBeNull();
     });
+
+    it("rejects a nested withTransaction with a clear error instead of deadlocking", async () => {
+      // A withTransaction call issued from INSIDE another withTransaction
+      // callback is a programming error: on the serialized backends it would
+      // queue behind the outer transaction that is awaiting it (deadlock); on PG
+      // it would run on an independent connection, not atomic with the outer.
+      // Every backend must reject it synchronously rather than hang. `rejects`
+      // (not a timeout) is what proves there is no deadlock.
+      const outer = makeSession();
+      const inner = makeSession();
+
+      await expect(
+        store.withTransaction!(async (tx) => {
+          await tx.createSession(outer);
+          await store.withTransaction!(async (innerTx) => {
+            await innerTx.createSession(inner);
+          });
+        }),
+      ).rejects.toThrow(/nested withTransaction is not supported/);
+
+      // The nested rejection propagated out of the outer callback, so the outer
+      // transaction rolled back and neither session was committed.
+      expect(await store.getSession(outer.id)).toBeNull();
+      expect(await store.getSession(inner.id)).toBeNull();
+    });
+
+    it("recovers and accepts a fresh withTransaction after a nested rejection", async () => {
+      // Guard against the nesting rejection corrupting the serialization chain.
+      await expect(
+        store.withTransaction!(async () => {
+          await store.withTransaction!(async () => {});
+        }),
+      ).rejects.toThrow(/nested withTransaction is not supported/);
+
+      const after = makeSession();
+      await store.withTransaction!(async (tx) => {
+        await tx.createSession(after);
+      });
+      expect(await store.getSession(after.id)).not.toBeNull();
+    });
   });
 
   describe("Lifecycle", () => {
