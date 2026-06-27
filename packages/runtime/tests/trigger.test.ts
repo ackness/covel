@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { RuntimeManifest } from "@covel/shared";
 import type { TriggerContext } from "../src/types.js";
-import { shouldTrigger } from "../src/trigger.js";
+import { shouldTrigger } from "../src/trigger/trigger.js";
 
 function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   return {

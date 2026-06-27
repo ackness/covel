@@ -12,7 +12,7 @@
 
 import { describe, it, expect } from "vitest";
 import type { RuntimeManifest } from "@covel/shared";
-import { scheduleByPriority } from "../src/scheduler.js";
+import { scheduleByPriority } from "../src/schedule/scheduler.js";
 
 function rt(name: string, priority?: number): RuntimeManifest {
   return {

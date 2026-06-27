@@ -15,13 +15,13 @@ import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
-import { executeTurn } from "../src/turn-executor.js";
-import type { TurnExecutorDeps } from "../src/turn-executor.js";
+import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type {
   LLMAdapter,
   LLMRequest,
   LLMResponse,
-} from "../src/llm-adapter.js";
+} from "../src/llm/llm-adapter.js";
 
 // ── Fixtures ─────────────────────────────────────────────────────
 

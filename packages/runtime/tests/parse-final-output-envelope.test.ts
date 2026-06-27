@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { __testOnly_parseFinalOutputEnvelope as parse } from "../src/turn-executor.js";
+import { __testOnly_parseFinalOutputEnvelope as parse } from "../src/turn-executor/turn-executor.js";
 
 describe("parseFinalOutputEnvelope", () => {
   it("parses a clean JSON object directly", () => {

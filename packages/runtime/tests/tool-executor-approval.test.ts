@@ -9,12 +9,12 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { createToolExecutor } from "../src/tool-executor.js";
+import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import type {
   ToolCall,
   ToolCallContext,
   ToolExecutor,
-} from "../src/tool-executor.js";
+} from "../src/agent-loop/tool-executor.js";
 import { createApprovalPipeline } from "@covel/approval";
 import type { PermissionRule } from "@covel/approval";
 import { createMemoryStore } from "@covel/store";

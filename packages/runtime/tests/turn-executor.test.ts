@@ -16,9 +16,9 @@ import {
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store";
 import { tool } from "@covel/tools";
-import { executeTurn } from "../src/turn-executor.js";
-import type { TurnExecutorDeps } from "../src/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm-adapter.js";
+import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
+import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 import { z } from "zod";
 
 // ── Mock LLM ─────────────────────────────────────────────────────
@@ -294,7 +294,8 @@ describe("TurnExecutor E2E", () => {
 
   it("retries once when the provider rejects malformed tool-call arguments", async () => {
     const store = await createMainLoopStore("sess-1");
-    const { createToolExecutor } = await import("../src/tool-executor.js");
+    const { createToolExecutor } =
+      await import("../src/agent-loop/tool-executor.js");
     const presentableTool = tool({
       name: "generate-guide",
       description: "Builds a guide UI block",
@@ -484,7 +485,8 @@ describe("TurnExecutor E2E", () => {
         ],
       }),
     });
-    const { createToolExecutor } = await import("../src/tool-executor.js");
+    const { createToolExecutor } =
+      await import("../src/agent-loop/tool-executor.js");
 
     const guideManifest: RuntimeManifest = {
       name: "test-guide",
@@ -563,7 +565,8 @@ describe("TurnExecutor E2E", () => {
         categories: [{ style: "safe", suggestions: ["先观察周围环境"] }],
       }),
     });
-    const { createToolExecutor } = await import("../src/tool-executor.js");
+    const { createToolExecutor } =
+      await import("../src/agent-loop/tool-executor.js");
 
     const manifest: RuntimeManifest = {
       name: "test-system-guide",
@@ -643,7 +646,8 @@ describe("TurnExecutor E2E", () => {
         found: true,
       }),
     });
-    const { createToolExecutor } = await import("../src/tool-executor.js");
+    const { createToolExecutor } =
+      await import("../src/agent-loop/tool-executor.js");
 
     const lookupManifest: RuntimeManifest = {
       name: "test-narrator",
@@ -711,7 +715,8 @@ describe("TurnExecutor E2E", () => {
       }),
       execute: async ({ topic, suggestions }) => ({ topic, suggestions }),
     });
-    const { createToolExecutor } = await import("../src/tool-executor.js");
+    const { createToolExecutor } =
+      await import("../src/agent-loop/tool-executor.js");
 
     const manifest: RuntimeManifest = {
       name: "test-guide-invalid",
@@ -904,7 +909,8 @@ describe("TurnExecutor _interaction protocol", () => {
       };
     };
 
-    const { createToolExecutor } = await import("../src/tool-executor.js");
+    const { createToolExecutor } =
+      await import("../src/agent-loop/tool-executor.js");
     const { builtinUITools } = await import("@covel/tools");
     const toolMap = new Map();
     for (const t of builtinUITools) toolMap.set(t.name, t);

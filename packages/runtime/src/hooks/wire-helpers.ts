@@ -25,12 +25,12 @@ import type { EventBus } from "@covel/events";
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import type { HookPipeline } from "./pipeline.js";
 import type { HookContext, HookEvent, HookResult } from "./types.js";
-import type { TurnEmitter } from "../turn-emitter.js";
+import type { TurnEmitter } from "../trace/turn-emitter.js";
 import type {
   LLMMessage,
   LLMResponse,
   LLMToolDefinition,
-} from "../llm-adapter.js";
+} from "../llm/llm-adapter.js";
 
 // ── Shared options ───────────────────────────────────────────────
 

@@ -22,14 +22,17 @@ import { createEventBus } from "@covel/events";
 import type { EventBus } from "@covel/events";
 import { getPendingProposals } from "@covel/tools";
 import { createHookPipeline } from "../src/index.js";
-import { executeTurn, resumeSuspendedRuntime } from "../src/turn-executor.js";
-import type { TurnExecutorDeps } from "../src/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm-adapter.js";
+import {
+  executeTurn,
+  resumeSuspendedRuntime,
+} from "../src/turn-executor/turn-executor.js";
+import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
+import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 import type {
   ToolExecutor,
   ToolCallContext,
   ToolCallResult,
-} from "../src/tool-executor.js";
+} from "../src/agent-loop/tool-executor.js";
 
 // ── Fixtures ─────────────────────────────────────────────────────
 

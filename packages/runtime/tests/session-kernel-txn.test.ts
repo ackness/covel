@@ -14,7 +14,7 @@ import type { Proposal } from "@covel/shared";
 import {
   createCommitPipeline,
   type KernelStore,
-} from "../src/session-kernel.js";
+} from "../src/session/session-kernel.js";
 
 const SOURCE = { pluginId: "txn-test", runtimeId: "txn-test" };
 const TURN_ID = "turn-txn";

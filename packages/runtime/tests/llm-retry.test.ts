@@ -23,13 +23,13 @@ import {
   DEFAULT_MAX_RETRIES,
   DEFAULT_LOOP_THRESHOLD,
   DEFAULT_FIRST_TOKEN_TIMEOUT_MS,
-} from "../src/llm-retry.js";
+} from "../src/retry/llm-retry.js";
 import type {
   LLMAdapter,
   LLMMessage,
   LLMResponse,
   LLMStreamEvent,
-} from "../src/llm-adapter.js";
+} from "../src/llm/llm-adapter.js";
 
 // ── Mock LLM builders ───────────────────────────────────────────────
 

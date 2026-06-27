@@ -4,7 +4,7 @@ import {
   buildPreToolAbortMessage,
   buildToolExecutionUnavailableMessage,
   buildToolResultMessage,
-} from "../src/turn-agent-tool-loop-messages.js";
+} from "../src/agent-loop/turn-agent-tool-loop-messages.js";
 
 describe("turn-agent-tool-loop message helpers", () => {
   it("builds the assistant tool-call message required by the follow-up LLM call", () => {

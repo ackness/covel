@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
-import { executeTurn } from "../src/turn-executor.js";
-import type { TurnExecutorDeps } from "../src/turn-executor.js";
+import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type {
   LLMAdapter,
   LLMRequest,
   LLMResponse,
-} from "../src/llm-adapter.js";
+} from "../src/llm/llm-adapter.js";
 import playerInitGuard from "../../../plugins/char-creator/runtimes/player-init/guard.js";
 
 class CapturingLLM implements LLMAdapter {

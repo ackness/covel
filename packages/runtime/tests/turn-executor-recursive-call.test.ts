@@ -5,7 +5,7 @@ import {
   executeTurn,
   MaxRecursionExceeded,
   type TurnExecutorDeps,
-} from "../src/turn-executor.js";
+} from "../src/turn-executor/turn-executor.js";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 
 const input = {

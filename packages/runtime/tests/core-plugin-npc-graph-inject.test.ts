@@ -3,14 +3,14 @@ import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
 import { getPendingProposals, shortIdBatch, tool, z } from "@covel/tools";
-import { createCommitPipeline } from "../src/session-kernel.js";
-import { executeTurn } from "../src/turn-executor.js";
-import type { TurnExecutorDeps } from "../src/turn-executor.js";
+import { createCommitPipeline } from "../src/session/session-kernel.js";
+import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type {
   LLMAdapter,
   LLMRequest,
   LLMResponse,
-} from "../src/llm-adapter.js";
+} from "../src/llm/llm-adapter.js";
 import createUpsertNpcGraph from "../../../plugins/npc-graph/tools/upsert-npc-graph.js";
 import ragRetrieverHandler from "../../../plugins/npc-graph/runtimes/rag-retriever/handler.js";
 

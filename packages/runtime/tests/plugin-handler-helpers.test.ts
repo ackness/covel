@@ -12,7 +12,7 @@ import {
   createFunctionStoreView,
   createPluginDataWriter,
   createPluginLogger,
-} from "../src/plugin-handler-helpers.js";
+} from "../src/function-runtime/plugin-handler-helpers.js";
 
 const SESSION_ID = "sess-hh-1";
 const PLUGIN_ID = "my-plugin";

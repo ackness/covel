@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { scheduleByDag } from "../src/dag-scheduler.js";
+import { scheduleByDag } from "../src/schedule/dag-scheduler.js";
 import type { RuntimeManifest } from "@covel/shared";
 
 function mk(

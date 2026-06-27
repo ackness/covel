@@ -26,9 +26,9 @@ import {
 } from "../src/hooks/hook-scope.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { HookContext } from "../src/hooks/types.js";
-import { executeTurn } from "../src/turn-executor.js";
-import type { TurnExecutorDeps } from "../src/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm-adapter.js";
+import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
+import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 
 // ── hook-scope primitives ──────────────────────────────────────────
 

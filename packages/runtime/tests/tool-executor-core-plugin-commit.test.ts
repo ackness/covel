@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store";
 import { tool, z } from "@covel/tools";
-import { createToolExecutor } from "../src/tool-executor.js";
-import { createCommitPipeline } from "../src/session-kernel.js";
+import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
+import { createCommitPipeline } from "../src/session/session-kernel.js";
 import setWorldSchema from "../../../plugins/world-init/tools/set-world-schema.js";
 import setWorldEntriesBatch from "../../../plugins/world-init/tools/set-world-entries-batch.js";
 

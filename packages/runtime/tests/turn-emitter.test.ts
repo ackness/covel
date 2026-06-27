@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   createTurnEmitter,
   createNoopTurnEmitter,
-} from "../src/turn-emitter.js";
+} from "../src/trace/turn-emitter.js";
 import type { EventBus } from "@covel/events";
 
 function makeStoreSpy() {

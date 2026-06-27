@@ -11,8 +11,11 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { createToolExecutor } from "../src/tool-executor.js";
-import type { ToolCall, ToolCallContext } from "../src/tool-executor.js";
+import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
+import type {
+  ToolCall,
+  ToolCallContext,
+} from "../src/agent-loop/tool-executor.js";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
 import { InMemoryToolClient, tool, withPendingProposals } from "@covel/tools";

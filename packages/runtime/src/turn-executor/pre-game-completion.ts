@@ -1,8 +1,8 @@
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import type { SessionContextSnapshot } from "@covel/context";
-import type { TurnExecutorDeps } from "../turn-executor-types.js";
+import type { TurnExecutorDeps } from "./turn-executor-types.js";
 import type { TurnSessionMeta } from "./session-state.js";
-import { isPreGamePriority } from "../scheduler.js";
+import { isPreGamePriority } from "../schedule/scheduler.js";
 
 export interface MarkPreGameCompletionResult {
   readonly allDone: boolean;

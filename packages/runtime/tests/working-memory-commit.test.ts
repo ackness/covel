@@ -10,7 +10,7 @@ import type { Proposal } from "@covel/shared";
 import {
   createCommitPipeline,
   type KernelStore,
-} from "../src/session-kernel.js";
+} from "../src/session/session-kernel.js";
 
 const SOURCE = { pluginId: "wm-test", runtimeId: "wm-test" };
 const TURN_ID = "turn-wm";

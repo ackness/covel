@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scheduleByPriority } from "../src/scheduler.js";
+import { scheduleByPriority } from "../src/schedule/scheduler.js";
 import type { RuntimeManifest } from "@covel/shared";
 
 const mk = (name: string, priority: number): RuntimeManifest =>

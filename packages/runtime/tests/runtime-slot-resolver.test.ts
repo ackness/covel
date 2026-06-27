@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RuntimeManifest } from "@covel/shared";
-import { resolveRuntimeSlot } from "../src/runtime-slot-resolver.js";
+import { resolveRuntimeSlot } from "../src/llm/runtime-slot-resolver.js";
 
 function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   return {

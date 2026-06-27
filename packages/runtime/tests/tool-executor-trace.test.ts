@@ -6,8 +6,8 @@
 
 import { describe, it, expect } from "vitest";
 import { ZodError, z } from "zod";
-import { createToolExecutor } from "../src/tool-executor.js";
-import type { ToolCallContext } from "../src/tool-executor.js";
+import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
+import type { ToolCallContext } from "../src/agent-loop/tool-executor.js";
 import { ToolValidationError } from "@covel/tools";
 import type { ToolModule } from "@covel/tools";
 import type { ApprovalPipeline } from "@covel/approval";

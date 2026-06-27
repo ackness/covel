@@ -6,7 +6,7 @@
  * `{ pluginId: "framework", action: "submit-form" }`.
  */
 
-import type { RpcHandler, RpcHandlerContext } from "../rpc-registry.js";
+import type { RpcHandler, RpcHandlerContext } from "../rpc/rpc-registry.js";
 
 interface Submission {
   readonly interactionId: string;

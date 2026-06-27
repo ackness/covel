@@ -3,7 +3,7 @@ import {
   computePromptDelta,
   applyPromptDelta,
   type PromptMessage,
-} from "../src/prompt-delta.js";
+} from "../src/llm/prompt-delta.js";
 
 describe("computePromptDelta", () => {
   const sys: PromptMessage = {
