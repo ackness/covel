@@ -8,11 +8,13 @@
  *
  * (plugin_data is intentionally not iterated — see the note inside `search`.)
  *
- * Semantic (vector) archival search is NOT wired yet — same gap as recall: the
- * store vector capability and `gateway.embed` exist, but no ingestion path
- * embeds archival sources into the vector tables, so a vector searcher would
- * find nothing. The swap seam is the {@link ArchivalSearcher} interface. See
- * recall-search.ts / memory-system.ts for the follow-up plan.
+ * This keyword searcher is now the **fallback** under the semantic (vector)
+ * path: `createMemorySystem` wraps it with `createVectorArchivalSearcher` when
+ * an `embed` function is injected and the store supports vectors (the ingestor
+ * embeds lorebook + character records on write — see vector-archival-search.ts
+ * / vector-ingest.ts). The vector searcher falls back here per-session when no
+ * embedding model is locked, the index is empty, or embedding fails. Both
+ * implement the {@link ArchivalSearcher} swap seam. See memory-system.ts.
  */
 
 import type { DataStore } from "@covel/store";

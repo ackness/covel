@@ -330,11 +330,28 @@ export interface CompactionResult {
 
 // ── Unified Memory System ───────────────────────────────────────
 
+/**
+ * Inject-only embedding function for the semantic (vector) memory tier. The
+ * memory package never imports a concrete provider; the server bootstrap layer
+ * builds this from `@covel/ai-provider`'s gateway and passes it in, exactly as
+ * it does for the {@link MemoryLLMAdapter}. Returns one embedding per input, in
+ * order. Aliased from the vector-tier primitives so the public type surface
+ * lives in one place.
+ */
+export type { EmbedFn } from "./vector-common.js";
+
 export interface MemorySystemDeps {
   readonly store: DataStore;
   readonly llm: MemoryLLMAdapter;
   /** Resolve a slot name to a model identifier. */
   readonly resolveSlot?: (slot: string) => string | undefined;
+  /**
+   * Optional embedding function. When present AND the store supports vectors,
+   * recall/archival upgrade from keyword to semantic (vector) search and the
+   * memory system gains a real embed-on-write {@link MemorySystem.ingest} path.
+   * When absent, the system stays keyword-only (every existing deployment).
+   */
+  readonly embed?: import("./vector-common.js").EmbedFn;
 }
 
 /**
@@ -346,6 +363,22 @@ export interface MemorySystem {
   readonly updater: MemoryUpdater;
   readonly recall: RecallSearcher;
   readonly archival: ArchivalSearcher;
+
+  /**
+   * Embed-on-write ingestion sweep for the semantic memory tier. Embeds turn
+   * messages (recall) and lorebook + character records (archival) that are new
+   * or changed since the last sweep, and upserts them into the session's vector
+   * space. Idempotent, incremental, and best-effort: callers fire-and-forget it
+   * post-turn (never on the hot path), and it never throws on a store/embed
+   * failure. A no-op (returns `skipped: true`) when no embedding model is
+   * configured or the store has no vector capability — so keyword-only
+   * deployments are unaffected.
+   */
+  ingest(sessionId: string): Promise<{
+    readonly skipped: boolean;
+    readonly recall: number;
+    readonly archival: number;
+  }>;
 
   /**
    * Run compaction if needed.

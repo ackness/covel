@@ -5,15 +5,15 @@
  * scoring over recent turn messages (TF-IDF-lite, with a CJK substring path).
  * The `score` field is a lexical-overlap score, not vector similarity.
  *
- * Semantic (vector) recall is NOT wired yet — and deliberately not faked here.
- * The store's vector capability (`searchVectors`, sqlite-vec / pgvector) and the
- * `gateway.embed` operation both exist, but **nothing populates the per-session
- * vector tables**: there is no embed-on-write ingestion path for turn messages,
- * so a vector searcher would query empty tables and silently return nothing —
- * strictly worse than keyword. Turning this on is a cross-cutting follow-up
- * (embed turn messages on write + backfill existing sessions, then drop in a
- * `createVectorRecallSearcher` via the {@link RecallSearcher} interface — the
- * swap seam memory-system.ts already routes through). See memory-system.ts.
+ * This keyword searcher is now the **fallback** under the semantic (vector)
+ * path: `createMemorySystem` wraps it with `createVectorRecallSearcher` when an
+ * `embed` function is injected and the store supports vectors (see
+ * vector-recall-search.ts / vector-ingest.ts). The vector searcher falls back
+ * here per-session whenever a session has no embedding model locked, its vector
+ * index is empty, or embedding fails — so this path keeps every deployment
+ * without embeddings (and IdbStore, which has no vector capability) working
+ * exactly as before. Both implement the {@link RecallSearcher} swap seam, so
+ * callers are agnostic to which is wired. See memory-system.ts.
  */
 
 import type { DataStore } from "@covel/store";
