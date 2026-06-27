@@ -58,33 +58,14 @@ interface TableSpec {
 }
 
 /**
- * SQL reserved words that must be quoted when used as an identifier. Kept small
- * and focused on words the schema actually uses (or is likely to). Quoting a
- * non-reserved identifier is harmless, so over-inclusion is safe.
+ * Quote an identifier (table / column / index name) unconditionally. Quoting a
+ * non-reserved identifier is a no-op in both PG and SQLite (and our schema names
+ * are all lowercase, so `"session_id"` and `session_id` resolve identically), so
+ * quoting everything is always safe and removes any need to track which words
+ * happen to be reserved. A double-quote inside a name is escaped by doubling.
  */
-const RESERVED_IDENTIFIERS = new Set<string>([
-  "order",
-  "values",
-  "user",
-  "group",
-  "select",
-  "from",
-  "where",
-  "table",
-  "default",
-  "check",
-  "column",
-  "constraint",
-  "primary",
-  "foreign",
-  "unique",
-  "index",
-  "limit",
-  "offset",
-]);
-
 function quoteIdent(name: string): string {
-  return RESERVED_IDENTIFIERS.has(name.toLowerCase()) ? `"${name}"` : name;
+  return `"${name.replace(/"/g, '""')}"`;
 }
 
 function quoteString(value: string): string {
@@ -128,13 +109,15 @@ function renderColumn(col: ColumnSpec, dialect: Dialect): string {
 }
 
 function renderTable(spec: TableSpec, dialect: Dialect): string {
+  const table = quoteIdent(spec.name);
   const cols = spec.columns
     .map((c) => `  ${renderColumn(c, dialect)}`)
     .join(",\n");
-  const create = `CREATE TABLE IF NOT EXISTS ${spec.name} (\n${cols}\n);`;
+  const create = `CREATE TABLE IF NOT EXISTS ${table} (\n${cols}\n);`;
   const indexes = spec.indexes.map((idx) => {
     const kw = idx.unique ? "CREATE UNIQUE INDEX" : "CREATE INDEX";
-    return `${kw} IF NOT EXISTS ${idx.name} ON ${spec.name}(${idx.columns.join(", ")});`;
+    const cols = idx.columns.map(quoteIdent).join(", ");
+    return `${kw} IF NOT EXISTS ${quoteIdent(idx.name)} ON ${table}(${cols});`;
   });
   return [create, ...indexes].join("\n");
 }

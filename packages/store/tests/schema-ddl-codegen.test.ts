@@ -80,7 +80,9 @@ describe("DDL codegen ↔ Drizzle parity", () => {
     expect(a).toBe(b);
     // Every generated CREATE TABLE statement must appear in the composed boot
     // DDL (which also carries the hand-written migrations + trigger).
-    const createStmts = a.match(/CREATE TABLE IF NOT EXISTS \w+/g) ?? [];
+    // Identifiers are quoted in the generated DDL (`"sessions"`); the boot DDL
+    // is the same derived string, so the quoted statement is matched verbatim.
+    const createStmts = a.match(/CREATE TABLE IF NOT EXISTS "?\w+"?/g) ?? [];
     expect(createStmts.length).toBeGreaterThan(0);
     for (const stmt of createStmts) {
       expect(PG_DDL.includes(stmt), `boot DDL missing: ${stmt}`).toBe(true);

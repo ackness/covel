@@ -118,10 +118,9 @@ async function ingestRecall(
 
   // Deterministic order (createdAt, id) so a same-millisecond tie cannot make
   // the cursor skip a message across backends with different secondary sorts.
-  const sorted = [...messages].sort(
-    (a, b) =>
-      a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
-  );
+  // Uses the SAME comparator as `isAfterCursor` so sort order and cursor
+  // advancement can never disagree.
+  const sorted = [...messages].sort(compareByCursor);
 
   const cursor = await readPluginJson<RecallCursor>(
     store,
@@ -175,15 +174,25 @@ async function ingestRecall(
   return written;
 }
 
+/**
+ * Total order on `(createdAt, id)` — the single comparator used for both the
+ * ingest sort and the cursor "is this after the cursor?" check, so the two can
+ * never disagree. `localeCompare` (not raw `<`/`>`) keeps the ordering stable
+ * regardless of field contents.
+ */
+function compareByCursor(
+  a: { createdAt: string; id: string },
+  b: { createdAt: string; id: string },
+): number {
+  return a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
+}
+
 function isAfterCursor(
   msg: { createdAt: string; id: string },
   cursor: RecallCursor | null,
 ): boolean {
   if (!cursor) return true;
-  if (msg.createdAt !== cursor.createdAt) {
-    return msg.createdAt > cursor.createdAt;
-  }
-  return msg.id > cursor.id;
+  return compareByCursor(msg, cursor) > 0;
 }
 
 // ── Archival (lorebook + characters, hash-incremental) ───────────

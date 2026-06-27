@@ -342,12 +342,14 @@ snapshotRoutes.post("/:id/fork", async (c) => {
     );
   }
 
-  // Post-commit: the fork is durable. Add media refs now, OUT of the DataStore
-  // transaction — MediaStore is a separate store whose writes a rollback could
-  // not undo, so doing this only after the fork commits guarantees we never
-  // leave an orphaned media ref pointing at a child session that was rolled
-  // back (e.g. the cursor-missing 409 path). addRef is idempotent; a failure
-  // here is logged but does not fail an already-durable fork.
+  // Post-commit side effects: the fork is durable, so the following run OUT of
+  // the DataStore transaction.
+  //
+  // Media refs first — MediaStore is a separate store whose writes a rollback
+  // could not undo, so adding them only after the fork commits guarantees we
+  // never leave an orphaned media ref pointing at a child session that was
+  // rolled back (e.g. the cursor-missing 409 path). addRef is idempotent; a
+  // failure here is logged but does not fail an already-durable fork.
   if (mediaStore) {
     const mediaIds = collectMediaRefIds(snapshot.payload);
     for (const mediaId of mediaIds) {
@@ -362,9 +364,9 @@ snapshotRoutes.post("/:id/fork", async (c) => {
     }
   }
 
-  // Post-commit: the fork is durable. Emit session.forked on the event bus
-  // (out-of-band SSE listeners pick it up and update any session lists they
-  // show). Kernel-only when eventBus is absent in tests.
+  // Then emit session.forked on the event bus (out-of-band SSE listeners pick
+  // it up and update any session lists they show). Kernel-only when eventBus is
+  // absent in tests.
   const eventBus = c.get("eventBus");
   if (eventBus) {
     // S4-T5: also publish state.snapshot.created (kind='fork') so a

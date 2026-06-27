@@ -226,9 +226,17 @@ function sqliteActualIndexes(): TableIndexes {
 function pgActualIndexes(sql: string): TableIndexes {
   const map: TableIndexes = new Map();
 
+  // Identifiers in the generated DDL are double-quoted (`"sessions"`); strip the
+  // optional quotes so parsed names match the bare Drizzle names.
+  const unquote = (s: string): string =>
+    s
+      .trim()
+      .replace(/^"(.*)"$/, "$1")
+      .replace(/""/g, '"');
+
   // CREATE TABLE blocks → register table + inline UNIQUE (...) constraints.
   const tableRe =
-    /CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+(\w+)\s*\(([\s\S]*?)\);/gi;
+    /CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+"?(\w+)"?\s*\(([\s\S]*?)\);/gi;
   let tm: RegExpExecArray | null;
   while ((tm = tableRe.exec(sql)) !== null) {
     const table = tm[1];
@@ -237,7 +245,7 @@ function pgActualIndexes(sql: string): TableIndexes {
     const uniqueRe = /\bUNIQUE\s*\(([^)]+)\)/gi;
     let um: RegExpExecArray | null;
     while ((um = uniqueRe.exec(body)) !== null) {
-      const cols = um[1].split(",").map((c) => c.trim());
+      const cols = um[1].split(",").map(unquote);
       map.get(table)!.push({
         name: `<inline_unique:${table}>`,
         unique: true,
@@ -248,13 +256,13 @@ function pgActualIndexes(sql: string): TableIndexes {
 
   // CREATE [UNIQUE] INDEX statements (live outside CREATE TABLE bodies).
   const indexRe =
-    /CREATE\s+(UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s+ON\s+(\w+)\s*\(([^)]+)\)/gi;
+    /CREATE\s+(UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?"?(\w+)"?\s+ON\s+"?(\w+)"?\s*\(([^)]+)\)/gi;
   let im: RegExpExecArray | null;
   while ((im = indexRe.exec(sql)) !== null) {
     const unique = Boolean(im[1]);
     const name = im[2];
     const table = im[3];
-    const cols = im[4].split(",").map((c) => c.trim());
+    const cols = im[4].split(",").map(unquote);
     if (!map.has(table)) map.set(table, []);
     map.get(table)!.push({ name, unique, columns: cols });
   }
