@@ -9,17 +9,15 @@
  * serialization, both injected here via the {@link SqlRunner}, {@link JsonReader},
  * and the value builders ({@link InsertValueBuilders}).
  *
- * Two turn-message writers are intentionally NOT shared and remain inline in
- * each backend adapter:
- *  - `appendTurnMessage` — the two backends genuinely diverge at the source
- *    level: PG persists `compactedAtTurnId ?? null` on insert, SQLite omits the
- *    column entirely (relying on its nullable default). The rows are identical
- *    for the only path that calls it (compactedAtTurnId is always absent on a
- *    fresh append), but unifying would silently change SQLite's behaviour in the
- *    hypothetical non-null case, so it is left untouched.
- *  - `tagTurnMessagesCompacted` — an UPDATE, which the insert/select/delete-only
- *    {@link SqlRunner} does not model. Migrating it would require widening the
- *    shared runner primitive, out of scope for this pass.
+ * The two turn-message writers are now shared as well:
+ *  - `appendTurnMessage` persists `compactedAtTurnId ?? null` on every backend
+ *    via the {@link InsertValueBuilders.turnMessageInsert} builder. The legacy
+ *    SQLite insert omitted the column entirely (relying on its nullable
+ *    default), silently dropping a non-null `compactedAtTurnId` — a real
+ *    data-loss divergence the shared builder fixes.
+ *  - `tagTurnMessagesCompacted` is an UPDATE, now modelled by the shared
+ *    {@link SqlRunner.update} primitive, with the empty-`messageIds` early
+ *    return unified across both backends.
  */
 
 import { and, asc, eq } from "drizzle-orm";
@@ -50,7 +48,11 @@ import type {
 } from "../types.js";
 
 type TraceEventsTable = Table & { sessionId: Column };
-type TurnMessagesTable = Table & { sessionId: Column; createdAt: Column };
+type TurnMessagesTable = Table & {
+  sessionId: Column;
+  createdAt: Column;
+  id: Column;
+};
 type PlayerInputsTable = Table & { sessionId: Column; formId: Column };
 type SessionSummariesTable = Table & { sessionId: Column };
 
@@ -67,7 +69,10 @@ export interface SqlSessionJournalDeps {
   readonly json: JsonReader;
   readonly values: Pick<
     InsertValueBuilders,
-    "traceEventInsert" | "playerInputInsert" | "sessionSummaryInsert"
+    | "traceEventInsert"
+    | "playerInputInsert"
+    | "sessionSummaryInsert"
+    | "turnMessageInsert"
   >;
 }
 
@@ -75,7 +80,9 @@ export type SqlSessionJournalRecords = Pick<
   DataStore,
   | "addTraceEvent"
   | "listTraceEvents"
+  | "appendTurnMessage"
   | "listTurnMessages"
+  | "tagTurnMessagesCompacted"
   | "savePlayerInput"
   | "getPlayerInput"
   | "listPlayerInputs"
@@ -107,6 +114,10 @@ export function createSqlSessionJournalRecords(
       return rows.map((row) => toTraceEventRecord(row, json));
     },
 
+    async appendTurnMessage(record: TurnMessageRecord): Promise<void> {
+      await runner.insert(turnMessages, values.turnMessageInsert(record));
+    },
+
     async listTurnMessages(
       sessionId: string,
       pagination?: PaginationOpts,
@@ -118,6 +129,24 @@ export function createSqlSessionJournalRecords(
         offset: pagination?.offset,
       });
       return rows.map((row) => toTurnMessageRecord(row, json));
+    },
+
+    async tagTurnMessagesCompacted(
+      sessionId: string,
+      messageIds: readonly string[],
+      summaryId: string,
+    ): Promise<void> {
+      if (messageIds.length === 0) return;
+      for (const msgId of messageIds) {
+        await runner.update(
+          turnMessages,
+          { compactedAtTurnId: summaryId },
+          and(
+            eq(turnMessages.sessionId, sessionId),
+            eq(turnMessages.id, msgId),
+          ),
+        );
+      }
     },
 
     async savePlayerInput(record: PlayerInputRecord): Promise<void> {

@@ -100,6 +100,20 @@ export function createSqliteSqlRunner(db: SqliteDb): SqlRunner {
       return Promise.resolve();
     },
 
+    update(
+      table: Table,
+      set: Record<string, unknown>,
+      where?: SQL,
+    ): Promise<void> {
+      const stmt = db.update(table as SQLiteTable).set(set);
+      if (where) {
+        stmt.where(where).run();
+      } else {
+        stmt.run();
+      }
+      return Promise.resolve();
+    },
+
     delete(table: Table, where?: SQL): Promise<void> {
       const stmt = db.delete(table as SQLiteTable);
       if (where) {

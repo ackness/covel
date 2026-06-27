@@ -89,6 +89,17 @@ export function createPgSqlRunner(getDb: () => PgDb): SqlRunner {
       });
     },
 
+    async update(
+      table: Table,
+      set: Record<string, unknown>,
+      where?: SQL,
+    ): Promise<void> {
+      const stmt = getDb()
+        .update(table as PgTable)
+        .set(set);
+      await (where ? stmt.where(where) : stmt);
+    },
+
     async delete(table: Table, where?: SQL): Promise<void> {
       const stmt = getDb().delete(table as PgTable);
       await (where ? stmt.where(where) : stmt);

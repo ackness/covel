@@ -25,17 +25,39 @@ import type {
   PluginDataRecord,
   RuntimeOutputRecord,
   RuntimeResultRecord,
+  SessionRecord,
   SessionSummaryRecord,
   StateChangeRecord,
   StateEntryRecord,
   StateSchemaRecord,
   ToolCallRecordRow,
   TraceEventRecord,
+  TurnMessageRecord,
   TurnResultRecord,
   WorkingMemoryRecord,
   WorldDataImportLedgerRecord,
   WorldRecord,
 } from "../types.js";
+
+/**
+ * The mutable subset of {@link SessionRecord} accepted by `updateSession`.
+ * Mirrors `DataStore["updateSession"]`'s patch parameter.
+ */
+export type SessionUpdatePatch = Partial<
+  Pick<
+    SessionRecord,
+    | "status"
+    | "turnCount"
+    | "preGameCompleted"
+    | "activePlugins"
+    | "presetId"
+    | "updatedAt"
+    | "metadata"
+    | "embeddingModelId"
+    | "embeddingLockedAt"
+    | "runtimeModelOverrides"
+  >
+>;
 
 /**
  * Per-backend JSON serialization gateway injected into the value builders.
@@ -91,6 +113,12 @@ export interface InsertValueBuilders {
   traceEventInsert(record: TraceEventRecord): Record<string, unknown>;
   playerInputInsert(record: PlayerInputRecord): Record<string, unknown>;
   sessionSummaryInsert(record: SessionSummaryRecord): Record<string, unknown>;
+  turnMessageInsert(record: TurnMessageRecord): Record<string, unknown>;
+  sessionInsert(record: SessionRecord): Record<string, unknown>;
+  sessionUpdate(
+    patch: SessionUpdatePatch,
+    merged: SessionRecord,
+  ): Record<string, unknown>;
 }
 
 export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
@@ -471,6 +499,83 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         focusSections: json.writeJson(record.focusSections),
         createdAt: record.createdAt,
       };
+    },
+
+    // ── Turn messages ─────────────────────────────────────────────
+    // `ui`/`pendingInput` are nullable JSON (PG passthrough / SQLite toJson with
+    // a null-guard) → `writeNullableJson`. `compactedAtTurnId` is persisted on
+    // every backend (the legacy SQLite insert omitted it — a data-loss bug).
+
+    turnMessageInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        turnId: record.turnId,
+        sourceType: record.sourceType,
+        sourcePluginId: record.sourcePluginId ?? null,
+        sourceRuntimeId: record.sourceRuntimeId ?? null,
+        role: record.role,
+        name: record.name ?? null,
+        content: record.content,
+        ui: json.writeNullableJson(record.ui),
+        pendingInput: json.writeNullableJson(record.pendingInput),
+        order: record.order,
+        createdAt: record.createdAt,
+        compactedAtTurnId: record.compactedAtTurnId ?? null,
+      };
+    },
+
+    // ── Sessions ──────────────────────────────────────────────────
+    // `preGameCompleted`/`activePlugins` are required JSON arrays → `writeJson`
+    // (no `?? []`/`?? {}` coercion — the field is always present). `metadata`
+    // and `runtimeModelOverrides` are optional → `writeNullableJson`, so an
+    // absent override map is stored as SQL NULL on every backend rather than an
+    // empty-object literal.
+
+    sessionInsert(record) {
+      return {
+        id: record.id,
+        worldId: record.worldId ?? null,
+        status: record.status,
+        turnCount: record.turnCount,
+        preGameCompleted: json.writeJson(record.preGameCompleted),
+        locale: record.locale,
+        activePlugins: json.writeJson(record.activePlugins),
+        metadata: json.writeNullableJson(record.metadata),
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+        runtimeModelOverrides: json.writeNullableJson(
+          record.runtimeModelOverrides,
+        ),
+      };
+    },
+
+    sessionUpdate(patch, merged) {
+      const values: Record<string, unknown> = {};
+      if (patch.status !== undefined) values.status = patch.status;
+      if (patch.turnCount !== undefined) values.turnCount = patch.turnCount;
+      if (patch.preGameCompleted !== undefined) {
+        values.preGameCompleted = json.writeJson(patch.preGameCompleted);
+      }
+      if (patch.activePlugins !== undefined) {
+        values.activePlugins = json.writeJson(patch.activePlugins);
+      }
+      if ("metadata" in patch || "presetId" in patch) {
+        values.metadata = json.writeNullableJson(merged.metadata);
+      }
+      if (patch.updatedAt !== undefined) values.updatedAt = patch.updatedAt;
+      if ("embeddingModelId" in patch) {
+        values.embeddingModelId = patch.embeddingModelId ?? null;
+      }
+      if ("embeddingLockedAt" in patch) {
+        values.embeddingLockedAt = patch.embeddingLockedAt ?? null;
+      }
+      if ("runtimeModelOverrides" in patch) {
+        values.runtimeModelOverrides = json.writeNullableJson(
+          patch.runtimeModelOverrides,
+        );
+      }
+      return values;
     },
   };
 }

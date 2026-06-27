@@ -81,6 +81,13 @@ export interface SqlRunner {
    */
   insertManyAtomic(table: Table, rows: readonly UpsertRow[]): Promise<void>;
 
+  /** UPDATE rows matching `where` (all rows when omitted) with `set`. */
+  update(
+    table: Table,
+    set: Record<string, unknown>,
+    where?: SQL,
+  ): Promise<void>;
+
   /** DELETE rows matching `where` (all rows when omitted). */
   delete(table: Table, where?: SQL): Promise<void>;
 }
