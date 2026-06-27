@@ -32,6 +32,7 @@ import {
 } from "./runtime-telemetry.js";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 import { runAgentToolLoop } from "./turn-agent-tool-loop.js";
+import { NARRATOR_PRIORITY } from "./scheduler.js";
 
 export interface ExecuteAgentRuntimeOptions {
   readonly manifest: RuntimeManifest;
@@ -398,7 +399,7 @@ export async function executeAgentRuntime({
       role: "assistant",
       name: manifest.name,
       content: narrativeContent,
-      order: manifest.priority ?? 500,
+      order: manifest.priority ?? NARRATOR_PRIORITY,
       pendingInput,
       ui,
       createdAt: new Date().toISOString(),

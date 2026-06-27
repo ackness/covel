@@ -1,5 +1,6 @@
 import type { RuntimeManifest, RuntimeResult, TurnResult } from "@covel/shared";
 import { executeParallel } from "./parallel-executor.js";
+import { NARRATOR_PRIORITY } from "./scheduler.js";
 import { shouldTrigger } from "./trigger.js";
 import type { TriggerContext } from "./types.js";
 
@@ -114,7 +115,8 @@ export async function runEventChain({
     if (nextBatch.length === 0) break;
 
     const ordered = [...nextBatch].sort(
-      (a, b) => (a.priority ?? 500) - (b.priority ?? 500),
+      (a, b) =>
+        (a.priority ?? NARRATOR_PRIORITY) - (b.priority ?? NARRATOR_PRIORITY),
     );
 
     const currentDepthEvents = new Map(emittedEvents);

@@ -5,6 +5,7 @@
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import type { ToolCallContext, ToolExecutor } from "./tool-executor.js";
 import type { LLMToolDefinition } from "./llm-adapter.js";
+import { isPreGamePriority } from "./scheduler.js";
 
 /**
  * Force-retain Pre-Game runtimes a PreSchedule hook tried to drop.
@@ -17,9 +18,9 @@ import type { LLMToolDefinition } from "./llm-adapter.js";
  * priority, so append order is irrelevant). Emits a dev warning naming the
  * runtimes it rescued. Pure; safe to unit-test directly.
  *
- * The Pre-Game band test (`priority !== undefined && priority <= 99`) is kept
- * identical to `getPreGameRuntimeState` in session-state.ts — the single
- * source of truth for what counts as Pre-Game. A runtime that omits `priority`
+ * The Pre-Game band test (`isPreGamePriority`) is shared with
+ * `getPreGameRuntimeState` in session-state.ts — the single source of truth
+ * for what counts as Pre-Game. A runtime that omits `priority`
  * is, by that definition, NOT a Pre-Game runtime: it never gates Pre-Game
  * completion (`isPreGamePending` ignores it too), so it is intentionally not
  * rescued here. Rescuing it would diverge from the gate and could pin a
@@ -32,7 +33,7 @@ export function retainPreGameRuntimes(
   const present = new Set(scheduled.map((r) => r.name));
   // Same Pre-Game predicate as getPreGameRuntimeState — see JSDoc above.
   const droppedPreGame = triggered.filter(
-    (r) => r.priority !== undefined && r.priority <= 99 && !present.has(r.name),
+    (r) => isPreGamePriority(r.priority) && !present.has(r.name),
   );
   if (droppedPreGame.length === 0) return scheduled;
   console.warn(

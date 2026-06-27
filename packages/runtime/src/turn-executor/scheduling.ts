@@ -4,6 +4,7 @@ import { scheduleByDag } from "../dag-scheduler.js";
 import {
   isMainLoopPriority,
   isPreGamePriority,
+  NARRATOR_PRIORITY,
   scheduleByPriority,
 } from "../scheduler.js";
 import { shouldTrigger } from "../trigger.js";
@@ -80,7 +81,7 @@ export function scheduleTriggeredRuntimes(args: {
   if (manualTarget) {
     return [
       {
-        priority: manualTarget.priority ?? 500,
+        priority: manualTarget.priority ?? NARRATOR_PRIORITY,
         runtimes: [manualTarget],
       },
     ];

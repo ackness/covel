@@ -24,6 +24,7 @@ import {
   isTrustedPluginSource,
 } from "./turn-runtime-helpers.js";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
+import { NARRATOR_PRIORITY } from "./scheduler.js";
 
 export interface ExecuteFunctionRuntimeOptions {
   readonly manifest: RuntimeManifest;
@@ -271,7 +272,7 @@ export async function executeFunctionRuntime({
       role: "assistant",
       name: manifest.name,
       content: narrativeContent,
-      order: manifest.priority ?? 500,
+      order: manifest.priority ?? NARRATOR_PRIORITY,
       createdAt: new Date().toISOString(),
     });
   }

@@ -11,7 +11,11 @@
  *   Core memory blocks are updated simultaneously so key information survives.
  */
 
-import type { I18nText, MemoryBlockSchema } from "@covel/shared";
+import type {
+  I18nText,
+  MemoryBlockSchema,
+  SimpleCompletionAdapter,
+} from "@covel/shared";
 import type { DataStore } from "@covel/store";
 
 // ── Core Memory Blocks ──────────────────────────────────────────
@@ -176,14 +180,14 @@ export interface MemoryManager {
 
 // ── Memory Updater (post-turn LLM-driven refresh) ───────────────
 
-/** Minimal LLM adapter for the memory updater. */
-export interface MemoryLLMAdapter {
-  complete(params: {
-    systemPrompt: string;
-    messages: readonly { role: "user" | "assistant"; content: string }[];
-    model?: string;
-  }): Promise<{ content: string }>;
-}
+/**
+ * Minimal LLM adapter for the memory updater/compactor. Aliased to the shared
+ * {@link SimpleCompletionAdapter} (single source of truth in `@covel/shared`)
+ * with the default `"user" | "assistant"` role union, since the core-memory
+ * layer models both player and assistant turns. Re-exported under this name
+ * for backward compatibility.
+ */
+export type MemoryLLMAdapter = SimpleCompletionAdapter;
 
 export interface MemoryUpdaterConfig {
   /** Model slot name for the summarizer. Resolution: memory → story. */

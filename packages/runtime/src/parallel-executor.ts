@@ -3,6 +3,7 @@
  */
 
 import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
+import { NARRATOR_PRIORITY } from "./scheduler.js";
 
 /** A function that executes a single runtime and returns its result. */
 export type RuntimeExecuteFn = (
@@ -88,7 +89,7 @@ export function resolveFailure(
 
     if (dependsOnFailed) {
       // Narrator (priority 500) always continues in degraded mode
-      if (rt.priority === 500) {
+      if (rt.priority === NARRATOR_PRIORITY) {
         cont.push({ manifest: rt, degraded: true });
       } else {
         skip.push({

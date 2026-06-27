@@ -35,6 +35,15 @@ export interface SlotOverridesInput {
 /**
  * Minimal gateway interface — only the parts we need.
  * Matches the shape returned by @covel/ai-provider's createGateway().
+ *
+ * Intentionally NOT folded into the shared LLM-adapter contracts
+ * (`LLMAdapter` / `SimpleCompletionAdapter` in `@covel/shared`): this is a
+ * structural duck-type of the *ai-provider gateway* (provider-protocol shape:
+ * `generateText` / `streamText`, `presetId`, OpenAI-style `function` tools),
+ * declared here so `@covel/runtime` does not take a build/type dependency on
+ * `@covel/ai-provider` (which already depends on runtime's sibling). It is the
+ * thing `createGatewayAdapter` adapts *into* an `LLMAdapter`, not another copy
+ * of the LLM-call contract — merging the two would re-couple the packages.
  */
 export interface GatewayLike {
   generateText(

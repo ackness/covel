@@ -15,6 +15,13 @@ const PRE_GAME_BAND_MAX = 99;
 const MAIN_BAND_MIN = 100;
 const MAIN_BAND_MAX = 1000;
 
+/**
+ * Narrator band priority (500, per the kernel band table). Also the implicit
+ * default for any runtime that omits `priority` — used when ordering narrative
+ * messages and when sorting a priority-less runtime within the main loop.
+ */
+export const NARRATOR_PRIORITY = 500;
+
 export function isPreGamePriority(
   priority: number | undefined,
 ): priority is number {

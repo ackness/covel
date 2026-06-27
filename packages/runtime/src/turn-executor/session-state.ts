@@ -3,6 +3,7 @@ import { applyBranchReplyAcceptedCandidates } from "@covel/context";
 import type { CoreMemoryBlockView } from "@covel/context";
 import type { TurnMessageRecord } from "@covel/store";
 import type { TurnExecutorDeps } from "../turn-executor-types.js";
+import { isPreGamePriority } from "../scheduler.js";
 import {
   runPreCompactionHook,
   runPostCompactionHook,
@@ -191,8 +192,8 @@ export function getPreGameRuntimeState(
   readonly preGameRuntimes: readonly RuntimeManifest[];
   readonly isPreGamePending: boolean;
 } {
-  const preGameRuntimes = activeRuntimes.filter(
-    (rt) => rt.priority !== undefined && rt.priority <= 99,
+  const preGameRuntimes = activeRuntimes.filter((rt) =>
+    isPreGamePriority(rt.priority),
   );
   return {
     preGameRuntimes,

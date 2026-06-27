@@ -2,6 +2,7 @@ import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import type { SessionContextSnapshot } from "@covel/context";
 import type { TurnExecutorDeps } from "../turn-executor-types.js";
 import type { TurnSessionMeta } from "./session-state.js";
+import { isPreGamePriority } from "../scheduler.js";
 
 export interface MarkPreGameCompletionResult {
   readonly allDone: boolean;
@@ -111,7 +112,7 @@ function collectNewlyDoneRuntimes(args: {
   }
 
   for (const rt of activeRuntimes) {
-    if (rt.priority === undefined || rt.priority > 99) continue;
+    if (!isPreGamePriority(rt.priority)) continue;
     if (preGameCompleted.includes(rt.name)) continue;
     if (newlyDone.includes(rt.name)) continue;
     const max = rt.trigger?.maxTriggerCount;
