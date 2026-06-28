@@ -4,6 +4,7 @@ import type {
   DataStore,
   LorebookEntryRecord,
   MediaStore,
+  StoreTransaction,
   WorldDataImportLedgerRecord,
 } from "@covel/store";
 import { canonicalJson, sha256Hex } from "../digest.js";
@@ -143,7 +144,9 @@ export async function currentHashForLedger(options: {
 }
 
 export async function deleteLedgerTarget(options: {
-  store: DataStore;
+  // Runs inside `syncWorldDataForSession`'s `withTransaction`, so it accepts a
+  // tx-scoped view. A full `DataStore` remains assignable.
+  store: StoreTransaction;
   mediaStore?: MediaStore;
   sessionId: string;
   ledger: WorldDataImportLedgerRecord;

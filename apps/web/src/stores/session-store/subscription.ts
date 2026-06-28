@@ -9,16 +9,12 @@ import {
 } from "@/services/subscription.js";
 import { setConnectionState } from "@/stores/connection-store.js";
 import {
-  applyChanges as applyPluginDataStoreChanges,
-  type PluginDataChange,
-} from "@/stores/plugin-data-store.js";
-import { buildResumedExecutionStep } from "./execution-steps.js";
+  reducePluginDataChanged,
+  reduceTurnResumed,
+  reduceTurnSuspended,
+} from "./event-reducers.js";
 import { enrichGameStateFromSnapshot } from "./game-state.js";
-import {
-  collectJobTransitions,
-  emitJobTransitionToast,
-} from "./job-transitions.js";
-import type { SessionAction, SuspensionRecord } from "./types.js";
+import type { SessionAction } from "./types.js";
 
 interface MutableRef<T> {
   current: T;
@@ -62,48 +58,21 @@ function createSubscriptionEventHandler(
         break;
       }
       case "plugin-data.changed": {
-        const pluginId = event.payload?.pluginId as string;
-        const changes = event.payload?.changes as readonly PluginDataChange[];
-        if (pluginId && changes) {
-          const transitions = collectJobTransitions(pluginId, changes);
-          options.dispatch({ type: "PLUGIN_DATA_CHANGED", pluginId, changes });
-          applyPluginDataStoreChanges(pluginId, changes);
-          for (const tr of transitions) emitJobTransitionToast(tr);
-        }
+        reducePluginDataChanged(options.dispatch, event.payload ?? {});
         break;
       }
       case "turn.suspended": {
-        const p = event.payload ?? {};
-        const id = p.suspensionId as string | undefined;
-        if (!id) break;
-        const suspension: SuspensionRecord = {
-          id,
-          sessionId: (p.sessionId as string) ?? event.sessionId,
-          turnId: (p.turnId as string) ?? "",
-          runtimeId: (p.runtimeId as string) ?? "",
-          pluginId: (p.pluginId as string) ?? "",
-          suspendedAt: (p.suspendedAt as string) ?? event.timestamp,
-          reason: p.reason as string | undefined,
-          resumeSchema: p.resumeSchema,
-        };
-        options.dispatch({ type: "ADD_SUSPENSION", suspension });
+        reduceTurnSuspended(options.dispatch, event.payload ?? {}, {
+          sessionId: event.sessionId,
+          timestamp: event.timestamp,
+        });
         break;
       }
       case "turn.resumed": {
-        const payload = event.payload ?? {};
-        const id = payload.suspensionId as string | undefined;
-        if (!id) break;
-        const resumedStep = buildResumedExecutionStep(
-          payload,
-          typeof payload.turnId === "string" ? payload.turnId : undefined,
-        );
-        if (resumedStep) {
-          options.dispatch({
-            type: "UPSERT_EXECUTION_STEP",
-            step: resumedStep,
-          });
-        }
-        options.dispatch({ type: "REMOVE_SUSPENSION", suspensionId: id });
+        reduceTurnResumed(options.dispatch, event.payload ?? {}, {
+          sessionId: event.sessionId,
+          timestamp: event.timestamp,
+        });
         break;
       }
       default:

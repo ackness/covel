@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { normalizeOutput } from "../src/session-kernel.js";
+import { normalizeOutput } from "../src/session/session-kernel.js";
 
 const SOURCE = { pluginId: "codex", runtimeId: "codex/unlocker" };
 const TURN_ID = "turn-X-001";

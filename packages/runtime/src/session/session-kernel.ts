@@ -1,0 +1,17 @@
+/**
+ * Session Kernel — public facade for runtime output processing.
+ *
+ * Public imports stay stable through this file while the implementation is
+ * split across focused adjacent modules.
+ */
+
+export { normalizeOutput } from "../commit/session-output-normalizer.js";
+export { createCommitPipeline } from "../commit/session-commit-pipeline.js";
+export type {
+  CommitPipeline,
+  KernelStore,
+} from "../commit/session-commit-pipeline.js";
+export { processRuntimeResult } from "./session-runtime-result.js";
+export type { ProcessRuntimeResultOutput } from "./session-runtime-result.js";
+export { createTraceRecorder } from "../trace/session-trace-recorder.js";
+export type { TraceRecorder } from "../trace/session-trace-recorder.js";

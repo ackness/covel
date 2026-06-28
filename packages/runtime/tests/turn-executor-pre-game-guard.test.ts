@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import type { RuntimeManifest } from "@covel/shared";
-import { retainPreGameRuntimes } from "../src/turn-executor-helpers.js";
+import { retainPreGameRuntimes } from "../src/turn-executor/turn-executor-helpers.js";
 
 function rt(name: string, priority: number): RuntimeManifest {
   return {

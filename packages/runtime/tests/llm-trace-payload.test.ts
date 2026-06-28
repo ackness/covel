@@ -12,12 +12,12 @@ import {
   buildLlmCallingPayload,
   buildLlmRespondedErrorPayload,
   buildLlmRespondedSuccessPayload,
-} from "../src/llm-trace-payload.js";
+} from "../src/llm/llm-trace-payload.js";
 import type {
   LLMMessage,
   LLMResponse,
   LLMToolDefinition,
-} from "../src/llm-adapter.js";
+} from "../src/llm/llm-adapter.js";
 
 const baseIdentity = {
   runtimeId: "narrator/main",

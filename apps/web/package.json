@@ -1,6 +1,6 @@
 {
   "name": "@covel/web",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "private": true,
   "deprecated": false,
   "type": "module",
@@ -16,6 +16,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@covel/settings": "workspace:*",
     "@covel/shared": "workspace:*",
     "@covel/store": "workspace:*",
     "@json-render/core": "^0.18.0",

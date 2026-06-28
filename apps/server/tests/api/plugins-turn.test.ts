@@ -1,5 +1,5 @@
 /**
- * Plugin and Turn route tests.
+ * Plugin route tests (`/api/plugins`, `/api/framework`).
  *
  * Uses Hono's app.request() for lightweight HTTP testing without a running server.
  */
@@ -8,7 +8,6 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
 import { pluginRoutes } from "../../src/routes/api/plugins.js";
 import { frameworkRoutes } from "../../src/routes/api/framework.js";
-import { turnRoutes } from "../../src/routes/api/turn.js";
 import {
   createPluginRegistry,
   type PluginRegistry,
@@ -85,7 +84,6 @@ function createTestApp(vars: AppVariables): Hono {
 
   app.route("/api/plugins", pluginRoutes);
   app.route("/api/framework", frameworkRoutes);
-  app.route("/api/session", turnRoutes);
   return app;
 }
 
@@ -298,35 +296,6 @@ describe("Plugin Routes", () => {
       });
       // Hono returns 404 for unmatched routes
       expect(res.status).toBe(404);
-    });
-  });
-});
-
-// ── Turn route tests ─────────────────────────────────────────────
-
-describe("Turn Routes", () => {
-  let registry: PluginRegistry;
-  let sessionScopes: Map<string, SessionPluginScope>;
-  let store: DataStore;
-  let app: Hono;
-
-  beforeEach(() => {
-    registry = createPluginRegistry();
-    sessionScopes = new Map();
-    store = createMemoryStore();
-    app = createTestApp({ pluginRegistry: registry, sessionScopes, store });
-  });
-
-  describe("POST /api/session/:id/turn", () => {
-    it("should return 404 for unknown session", async () => {
-      const res = await app.request("/api/session/unknown-sess/turn", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: "hello" }),
-      });
-      expect(res.status).toBe(404);
-      const body = await res.json();
-      expect(body.error).toBeDefined();
     });
   });
 });

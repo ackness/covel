@@ -6,7 +6,7 @@
  * or eventBus implementation.
  */
 
-import type { TurnEmitter } from "../../src/turn-emitter.js";
+import type { TurnEmitter } from "../../src/trace/turn-emitter.js";
 
 export interface EmitterSpy extends TurnEmitter {
   readonly events: Array<{ type: string; payload: Record<string, unknown> }>;

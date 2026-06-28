@@ -5,7 +5,7 @@ import {
 } from "@covel/context";
 import type { SessionSummaryRecord } from "@covel/store";
 import type { TurnInput } from "@covel/shared";
-import type { TurnExecutorDeps } from "../turn-executor-types.js";
+import type { TurnExecutorDeps } from "./turn-executor-types.js";
 import type { CoreMemoryBlock } from "./session-state.js";
 
 export async function loadSessionSummaries(args: {

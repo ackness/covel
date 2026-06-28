@@ -3,18 +3,12 @@ import * as api from "@/services/api";
 import type { DataService } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import {
-  applyChanges as applyPluginDataStoreChanges,
-  type PluginDataChange,
-} from "@/stores/plugin-data-store.js";
-import {
-  buildResumedExecutionStep,
-  createExecutionStepUpdate,
-} from "./execution-steps.js";
+  reducePluginDataChanged,
+  reduceTurnResumed,
+  reduceTurnSuspended,
+} from "./event-reducers.js";
+import { createExecutionStepUpdate } from "./execution-steps.js";
 import { upsertGameStateCharacter } from "./game-state.js";
-import {
-  collectJobTransitions,
-  emitJobTransitionToast,
-} from "./job-transitions.js";
 import type {
   AssetProgressEvent,
   ExecutionStep,
@@ -22,7 +16,6 @@ import type {
   SessionState,
   SnapshotCharacter,
   StreamMessage,
-  SuspensionRecord,
 } from "./types.js";
 
 interface MutableRef<T> {
@@ -404,29 +397,19 @@ export function createSseEventHandler(
         break;
       }
       case "turn.suspended": {
-        const id = payload.suspensionId as string | undefined;
-        if (!id) break;
-        const suspension: SuspensionRecord = {
-          id,
-          sessionId: (payload.sessionId as string) ?? envelope.sessionId,
-          turnId: (payload.turnId as string) ?? turnId ?? "",
-          runtimeId: (payload.runtimeId as string) ?? "",
-          pluginId: (payload.pluginId as string) ?? "",
-          suspendedAt: (payload.suspendedAt as string) ?? envelope.timestamp,
-          reason: payload.reason as string | undefined,
-          resumeSchema: payload.resumeSchema,
-        };
-        deps.dispatch({ type: "ADD_SUSPENSION", suspension });
+        reduceTurnSuspended(deps.dispatch, payload, {
+          sessionId: envelope.sessionId,
+          timestamp: envelope.timestamp,
+          turnId,
+        });
         break;
       }
       case "turn.resumed": {
-        const id = payload.suspensionId as string | undefined;
-        if (!id) break;
-        const resumedStep = buildResumedExecutionStep(payload, turnId);
-        if (resumedStep) {
-          deps.dispatch({ type: "UPSERT_EXECUTION_STEP", step: resumedStep });
-        }
-        deps.dispatch({ type: "REMOVE_SUSPENSION", suspensionId: id });
+        reduceTurnResumed(deps.dispatch, payload, {
+          sessionId: envelope.sessionId,
+          timestamp: envelope.timestamp,
+          turnId,
+        });
         break;
       }
       case "event.emitted": {
@@ -462,16 +445,7 @@ export function createSseEventHandler(
         break;
       }
       case "plugin-data.changed": {
-        const pluginId = payload.pluginId as string | undefined;
-        const changes = payload.changes as
-          | readonly PluginDataChange[]
-          | undefined;
-        if (pluginId && changes) {
-          const transitions = collectJobTransitions(pluginId, changes);
-          deps.dispatch({ type: "PLUGIN_DATA_CHANGED", pluginId, changes });
-          applyPluginDataStoreChanges(pluginId, changes);
-          for (const tr of transitions) emitJobTransitionToast(tr);
-        }
+        reducePluginDataChanged(deps.dispatch, payload);
         break;
       }
       case "character.upserted": {

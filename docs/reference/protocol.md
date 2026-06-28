@@ -175,11 +175,11 @@ Provider 图片输入矩阵：
 
 发射点对照：
 
-| 触发路径                          | 事件序列                                                | 来源                                            |
-| --------------------------------- | ------------------------------------------------------- | ----------------------------------------------- |
-| `executeTurn` 自动捕获            | `state.snapshot.created` (kind=auto)                    | `packages/runtime/src/turn-result-finalizer.ts` |
-| `POST /api/sessions/:id/snapshot` | `state.snapshot.created` (kind=manual)                  | `apps/server/src/routes/api/snapshots.ts`       |
-| `POST /api/sessions/:id/fork`     | `state.snapshot.created` (kind=fork) → `session.forked` | `apps/server/src/routes/api/snapshots.ts`       |
+| 触发路径                          | 事件序列                                                | 来源                                                          |
+| --------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------- |
+| `executeTurn` 自动捕获            | `state.snapshot.created` (kind=auto)                    | `packages/runtime/src/turn-executor/turn-result-finalizer.ts` |
+| `POST /api/sessions/:id/snapshot` | `state.snapshot.created` (kind=manual)                  | `apps/server/src/routes/api/snapshots.ts`                     |
+| `POST /api/sessions/:id/fork`     | `state.snapshot.created` (kind=fork) → `session.forked` | `apps/server/src/routes/api/snapshots.ts`                     |
 
 > 前端若要接收上述事件，需在 `apps/web/src/services/subscription.ts` 的 topic 路由里为 `state.snapshot.created` / `session.forked` 显式分发。当前尚未挂载这两个监听；在 fork / save UI 真正落地前，服务端已经在 SSE 通道上发送，前端订阅即生效。
 
@@ -213,14 +213,14 @@ Provider 图片输入矩阵：
 
 下列事件由 server 透过 actions SSE 流转发用于 debug / trace。它们现在**已经是 `CovelEvent` union 的成员**（不再是「未进 enum 的私有事件」），并在 `COVEL_EVENT_META` 中标记 `forwardToActionStream: true`。server 的转发白名单 `FORWARDED_EVENT_TYPES` 完全从该元数据**派生**（不再手写 Set）。web 的 actions handler 对这些类型显式 no-op（它们经订阅通道驱动 `/debug` 时间线），但因已在 union 内，新增同类事件会被前端穷尽校验强制做出「处理或忽略」的决定。
 
-| 事件                                                  | 来源                                                                                    | 用途                                                     |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `runtime.skipped`                                     | `apps/server/src/routes/api/actions.ts`                                                 | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过 |
-| `character.upserted`                                  | `packages/runtime/src/session-commit-handlers.ts`（`character.upsert` proposal commit） | 与 `record.updated` 平行的角色快照事件                   |
-| `tool.calling` / `tool.completed` / `tool.failed`     | TurnEmitter                                                                             | LLM 工具调用 trace                                       |
-| `llm.calling` / `llm.responded` / `message.completed` | TurnEmitter                                                                             | LLM 调用 trace                                           |
-| `block.emitted` / `state.patch.applied`               | TurnEmitter                                                                             | 块发出 / state patch 应用 trace                          |
-| `hook.fired` / `hook.rewrote` / `hook.aborted`        | TurnEmitter                                                                             | Hook 行为 trace                                          |
+| 事件                                                  | 来源                                                                                           | 用途                                                     |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `runtime.skipped`                                     | `apps/server/src/routes/api/actions.ts`                                                        | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过 |
+| `character.upserted`                                  | `packages/runtime/src/commit/session-commit-handlers.ts`（`character.upsert` proposal commit） | 与 `record.updated` 平行的角色快照事件                   |
+| `tool.calling` / `tool.completed` / `tool.failed`     | TurnEmitter                                                                                    | LLM 工具调用 trace                                       |
+| `llm.calling` / `llm.responded` / `message.completed` | TurnEmitter                                                                                    | LLM 调用 trace                                           |
+| `block.emitted` / `state.patch.applied`               | TurnEmitter                                                                                    | 块发出 / state patch 应用 trace                          |
+| `hook.fired` / `hook.rewrote` / `hook.aborted`        | TurnEmitter                                                                                    | Hook 行为 trace                                          |
 
 ## 二、命令类型（CommandType）
 
@@ -404,7 +404,7 @@ error.occurred        → executionError
 
 ## 七、Debug trace events
 
-These events ride the standard SSE envelope and are also persisted into `trace_events`. They are emitted by the runtime's `TurnEmitter` (`packages/runtime/src/turn-emitter.ts`), fanned out both to `trace_events` (for the `/api/traces` read API and the `/debug` inspector) and to the global `EventBus` (where the `/api/actions` SSE route re-forwards them through `FORWARDED_EVENT_TYPES` — the set derived from `COVEL_EVENT_META[type].forwardToActionStream`, replacing the former hand-written `FORWARDED_SUBTYPES`).
+These events ride the standard SSE envelope and are also persisted into `trace_events`. They are emitted by the runtime's `TurnEmitter` (`packages/runtime/src/trace/turn-emitter.ts`), fanned out both to `trace_events` (for the `/api/traces` read API and the `/debug` inspector) and to the global `EventBus` (where the `/api/actions` SSE route re-forwards them through `FORWARDED_EVENT_TYPES` — the set derived from `COVEL_EVENT_META[type].forwardToActionStream`, replacing the former hand-written `FORWARDED_SUBTYPES`).
 
 | Type                  | Payload                                                                                                                                                                                                                                                                                                                                    |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { RuntimeManifest } from "@covel/shared";
 import type { PluginLlmConfig } from "@covel/plugin-loader";
-import { createModelResolver } from "../src/model-resolver.js";
+import { createModelResolver } from "../src/llm/model-resolver.js";
 
 function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   return { name: "test-rt", description: "test", priority: 500, ...overrides };

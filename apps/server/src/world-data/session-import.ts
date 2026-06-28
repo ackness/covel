@@ -226,6 +226,9 @@ export async function syncWorldDataForSession(
       mediaRefs: [],
     };
   }
+  // Capture the narrowed (non-undefined) worldId so it stays `string` inside
+  // the nested `withTransaction` callback, where property narrowing is lost.
+  const worldId = options.worldId;
   const worldRoot = await resolveWorldRoot(options.worldId, options.worldsDirs);
   if (!worldRoot) {
     return {
@@ -403,34 +406,34 @@ export async function syncWorldDataForSession(
 
   const mediaRefs: WorldDataImportedMediaRef[] = [];
   try {
-    await options.store.beginTx();
-    for (const ledger of ledgersToDelete) {
-      await deleteLedgerTarget({
-        store: options.store,
-        mediaStore: options.mediaStore,
-        sessionId: options.sessionId,
-        ledger,
-      });
-      await options.store.deleteWorldDataImportLedger(
-        options.sessionId,
-        ledger.id,
-      );
-    }
-    if (writesToApply.length > 0) {
-      const writeResult = await writeImportPlan({
-        store: options.store,
-        mediaStore: options.mediaStore,
-        sessionId: options.sessionId,
-        worldId: options.worldId,
-        now: options.now,
-        plan: { writes: writesToApply, diagnostics: [], mergeEvents: [] },
-        deferMediaFinalize: options.deferMediaFinalize,
-      });
-      mediaRefs.push(...writeResult.mediaRefs);
-    }
-    await options.store.commitTx();
+    // Scoped transaction: ledger deletes + plan writes commit atomically and a
+    // throw auto-rolls-back the DB. `mediaRefs` is collected on the outer array
+    // so the catch below can still clean up media written before the failure
+    // (media files live outside the DB transaction).
+    await options.store.withTransaction!(async (tx) => {
+      for (const ledger of ledgersToDelete) {
+        await deleteLedgerTarget({
+          store: tx,
+          mediaStore: options.mediaStore,
+          sessionId: options.sessionId,
+          ledger,
+        });
+        await tx.deleteWorldDataImportLedger(options.sessionId, ledger.id);
+      }
+      if (writesToApply.length > 0) {
+        const writeResult = await writeImportPlan({
+          store: tx,
+          mediaStore: options.mediaStore,
+          sessionId: options.sessionId,
+          worldId,
+          now: options.now,
+          plan: { writes: writesToApply, diagnostics: [], mergeEvents: [] },
+          deferMediaFinalize: options.deferMediaFinalize,
+        });
+        mediaRefs.push(...writeResult.mediaRefs);
+      }
+    });
   } catch (err) {
-    await options.store.rollbackTx();
     await cleanupWorldDataMediaRefs({
       mediaStore: options.mediaStore,
       refs: mediaRefs,

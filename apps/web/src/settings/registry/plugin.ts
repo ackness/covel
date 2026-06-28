@@ -1,5 +1,9 @@
 import { z } from "zod";
-import type { SettingEntry, SettingsStoreApi, WidgetKind } from "@covel/shared";
+import type {
+  SettingEntry,
+  SettingsStoreApi,
+  WidgetKind,
+} from "@covel/settings";
 
 /**
  * Specification for a user-editable setting declared by a plugin in its

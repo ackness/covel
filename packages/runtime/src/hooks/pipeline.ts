@@ -31,7 +31,7 @@ const ENFORCE_ORDER = { pre: 0, normal: 1, post: 2 } as const;
 
 interface HookPipelineRunOptions {
   readonly eventBus?: EventBus;
-  readonly emitter?: import("../turn-emitter.js").TurnEmitter;
+  readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
 }
 
 export class HookPipeline {

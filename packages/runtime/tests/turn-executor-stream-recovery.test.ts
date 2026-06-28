@@ -14,13 +14,13 @@ import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
-import { executeTurn } from "../src/turn-executor.js";
-import type { TurnExecutorDeps } from "../src/turn-executor.js";
+import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type {
   LLMAdapter,
   LLMResponse,
   LLMStreamEvent,
-} from "../src/llm-adapter.js";
+} from "../src/llm/llm-adapter.js";
 
 // Prime a store with one prior player message so turnNumber >= 1 and
 // main-loop priority runtimes survive the Pre-Game band filter.

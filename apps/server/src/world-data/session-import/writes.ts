@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type {
-  DataStore,
   LorebookEntryRecord,
   MediaStore,
   PluginDataRecord,
+  StoreTransaction,
 } from "@covel/store";
 import {
   cleanupWorldDataMediaRefs,
@@ -21,7 +21,7 @@ import { isRecord } from "./utils.js";
 import { lorebookPosition, lorebookStrategy } from "./validation.js";
 
 async function existingKeySet(options: {
-  store: DataStore;
+  store: StoreTransaction;
   sessionId: string;
   writes: readonly PlannedWrite[];
 }): Promise<ReadonlySet<string>> {
@@ -102,7 +102,7 @@ function toLorebookRecord(
 }
 
 export async function writeImportPlan(options: {
-  store: DataStore;
+  store: StoreTransaction;
   mediaStore?: MediaStore;
   sessionId: string;
   worldId: string;

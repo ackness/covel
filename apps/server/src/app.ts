@@ -236,6 +236,19 @@ if (userPluginsDir && userPluginsDir !== bundledPluginsDir) {
   pluginsDirs.push(userPluginsDir);
 }
 const ensureEmbeddingLock = createEmbeddingLockHelper({ store, ai, apiKeys });
+// Embedding seam for the semantic memory tier. The memory package never
+// imports a provider — it gets this injected (mirrors the LLM adapter). Routes
+// through the same gateway embed slot the embedding-lock probe uses, so the
+// produced dimension always matches the session's locked vector model.
+const memoryEmbed = async (
+  texts: readonly string[],
+): Promise<Float32Array[]> => {
+  const res = await ai.gateway.embed(
+    { values: [...texts] },
+    apiKeys ? { apiKeys } : undefined,
+  );
+  return res.embeddings.map((e) => Float32Array.from(e));
+};
 const perRequestLlm = createPerRequestLlmMiddleware({
   ai,
   envApiKeys: apiKeys,
@@ -268,6 +281,7 @@ const api = await bootstrapApi({
   mediaBackend: env.mediaBackend,
   vectorBackend: env.vectorBackend,
   ensureEmbeddingLock,
+  memoryEmbed,
   preferredMemorySlot,
   perRequestMiddleware: [perRequestLlm],
   sessionLock,

@@ -1,5 +1,5 @@
 import type { TurnInput, TurnResult } from "@covel/shared";
-import type { TurnExecutorDeps } from "../turn-executor-types.js";
+import type { TurnExecutorDeps } from "./turn-executor-types.js";
 import type { CoreMemoryBlock } from "./session-state.js";
 
 export function schedulePostTurnMemoryUpdate(args: {

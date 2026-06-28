@@ -104,11 +104,13 @@ apps/
   server/           Hono API + Drizzle ORM
   desktop/          Electron shell (sidecar)
 
-packages/           15 internal packages: shared, context, ai-provider,
+packages/           16 internal packages: shared, settings, context, ai-provider,
                     plugin-loader, runtime, store, state, events, tools,
                     approval, memory, create, plugin-test-utils, test-runtime,
                     plugin-handlers-utils (pure helper utils for plugin
-                    function-runtime handlers)
+                    function-runtime handlers). `settings` carries the unified
+                    SettingsStore + localStorage/json-file backends, split out of
+                    `shared` so pure-type consumers avoid browser/Electron code.
 
 plugins/            19 bundled plugin packages (see docs/reference/plugins.md)
 prompts/            Externalised prompt templates (locale-aware markdown)
@@ -120,7 +122,7 @@ Dependency flow (rough):
 
 ```
 shared ← context ← runtime ← server (composes all)
-shared ← web
+shared ← settings ← web
 ```
 
 All feature packages (`ai-provider`, `plugin-loader`, `store`, `state`, `events`, `tools`, `approval`, `memory`, `create`) are composed by `@covel/server`. See any package's own `package.json` for exact edges.
@@ -139,7 +141,7 @@ Input/Event → Trigger Router → Priority Scheduler → [per priority group:]
 → Follow-up Events (may re-enter Router)
 ```
 
-- **Trigger modes**: production-active are `auto`, `manual`, `scheduled`, `event` (see `TriggerType` in `packages/shared/src/types/plugin.ts`). `scheduled` carries `interval` / `maxTriggerCount` / `cooldownTurns` / `startTurn`. `conditional` and `error-retry` are **reserved — they never fire in production** (no condition engine; scheduler hardcodes `hasUpstreamFailure: false`); `shouldTrigger` skips them and warns once. The single authority for trigger decisions is `shouldTrigger` (`packages/runtime/src/trigger.ts`) — the in-turn event fan-out in `turn-event-chain.ts` re-uses it too.
+- **Trigger modes**: production-active are `auto`, `manual`, `scheduled`, `event` (see `TriggerType` in `packages/shared/src/types/plugin.ts`). `scheduled` carries `interval` / `maxTriggerCount` / `cooldownTurns` / `startTurn`. `conditional` and `error-retry` are **reserved — they never fire in production** (no condition engine; scheduler hardcodes `hasUpstreamFailure: false`); `shouldTrigger` skips them and warns once. The single authority for trigger decisions is `shouldTrigger` (`packages/runtime/src/trigger/trigger.ts`) — the in-turn event fan-out in `turn-event-chain.ts` re-uses it too.
 - **Runtime types**: `agent` (default, loads PLUGIN.md and drives LLM tool-calls) or `function` (pure JS handler, no LLM).
 - **Proposal envelopes** (registered `ProposalType`s, derived from the single source of truth `ProposalPayloadMap` in `packages/shared/src/types/proposal.ts`; commit-handler registry and discovery advert are compile-time aligned to it): `narrative.append`, `state.patch`, `event.emit`, `interaction.request`, `ui.render`, `asset.generate`, `plugin.data`, `plugin.data.batch`, `character.upsert`, `working_memory.set`, `lorebook.upsert`. Full reference in [docs/reference/tools.md](./docs/reference/tools.md#proposal-类型). **All writes flow through validate → commit — plugins never touch the DB directly.**
 - **Hook lifecycle** (16 events; full table in [docs/reference/plugins.md](./docs/reference/plugins.md)): `SessionStart` · `TurnStart` · `PreCompaction` / `PostCompaction` · `PreSchedule` · `PreRuntime` / `PostRuntime` · `PostContextAssembly` · `PreLLMCall` / `PostLLMResponse` · `PreToolUse` / `PostToolUse` · `PreStateCommit` / `PostStateCommit` · `TurnStop` · `SessionEnd`. Registered hooks are session-scoped (a plugin's hooks fire only for sessions where it is active, via `AsyncLocalStorage`); `HookContext.getOwnSettings()` exposes the plugin's own per-session `userSettings`.

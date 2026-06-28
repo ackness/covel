@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
-import { executeTurn } from "../src/turn-executor.js";
-import type { TurnExecutorDeps } from "../src/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm-adapter.js";
-import type { ToolExecutor } from "../src/tool-executor.js";
+import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
+import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { ToolExecutor } from "../src/agent-loop/tool-executor.js";
 
 class CapturingLLM implements LLMAdapter {
   responseFormat: unknown;

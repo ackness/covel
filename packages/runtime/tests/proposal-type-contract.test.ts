@@ -13,8 +13,8 @@
 
 import { describe, it, expect } from "vitest";
 import { PROPOSAL_TYPES } from "@covel/shared";
-import type { KernelStore } from "../src/session-kernel.js";
-import { createCommitHandlers } from "../src/session-commit-handlers.js";
+import type { KernelStore } from "../src/session/session-kernel.js";
+import { createCommitHandlers } from "../src/commit/session-commit-handlers.js";
 
 const sorted = (values: readonly string[]): string[] => [...values].sort();
 
@@ -37,7 +37,8 @@ describe("proposal type contract", () => {
   });
 
   it("committing a removed/unknown proposal type is rejected, not silently dropped", async () => {
-    const { createCommitPipeline } = await import("../src/session-kernel.js");
+    const { createCommitPipeline } =
+      await import("../src/session/session-kernel.js");
     const pipeline = createCommitPipeline({
       async addTraceEvent() {},
     } as unknown as KernelStore);

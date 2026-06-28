@@ -29,6 +29,7 @@ export type {
   LLMResponseFormat,
   LLMStreamEvent,
   LLMAdapter,
+  SimpleCompletionAdapter,
 } from "./llm-adapter.js";
 
 export type {

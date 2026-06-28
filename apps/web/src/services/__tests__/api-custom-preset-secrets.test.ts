@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   LOCAL_STORAGE_KEYS_KEY,
   LOCAL_STORAGE_SETTINGS_KEY,
-} from "@covel/shared";
+} from "@covel/settings";
 
 const localStorageMock = (() => {
   let store: Record<string, string> = {};

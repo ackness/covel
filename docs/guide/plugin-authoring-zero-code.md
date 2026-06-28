@@ -101,7 +101,7 @@ trigger:
 - 重试总数不会让整个 runtime 超过 `timeoutMs`。
 - `llm.toml` 中的 `fallback = "story"` 仍然生效：同 preset 重试完再沿 gateway fallback chain 尝试。
 
-**优先级参考区间（与 `packages/runtime/src/scheduler.ts` 实际边界一致）：**
+**优先级参考区间（与 `packages/runtime/src/schedule/scheduler.ts` 实际边界一致）：**
 
 | 区间     | 用途                                            | 示例                                                                    |
 | -------- | ----------------------------------------------- | ----------------------------------------------------------------------- |

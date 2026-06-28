@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { looksLikeStructuredRuntimeOutput } from "../src/turn-executor.js";
+import { looksLikeStructuredRuntimeOutput } from "../src/turn-executor/turn-executor.js";
 
 describe("looksLikeStructuredRuntimeOutput", () => {
   it.each([

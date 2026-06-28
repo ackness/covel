@@ -32,7 +32,6 @@ import {
 } from "../../lib/session-lock.js";
 import { errorBody } from "../../api-error.js";
 import { sessionRoutes } from "./session.js";
-import { turnRoutes } from "./turn.js";
 import { pluginRoutes } from "./plugins.js";
 import { frameworkRoutes } from "./framework.js";
 import { stateRoutes } from "./state.js";
@@ -115,6 +114,14 @@ export interface ApiBootstrapConfig {
    * no embed slot is configured.
    */
   readonly ensureEmbeddingLock?: (sessionId: string) => Promise<void>;
+  /**
+   * Optional embedding function for the semantic (vector) memory tier. When
+   * provided AND the store supports vectors, the memory system upgrades
+   * recall/archival from keyword to vector search and gains a real embed-on-
+   * write ingestion path. The composition root builds it from
+   * `createAiStack().gateway.embed`. Absent → keyword-only memory (unchanged).
+   */
+  readonly memoryEmbed?: (texts: readonly string[]) => Promise<Float32Array[]>;
   /** Optional pre-created state manager. */
   readonly stateManager?: StateManager;
   /**
@@ -303,7 +310,7 @@ export async function bootstrapApi(
   }
 
   // 7. getConfigFn — per-request config injection
-  //    Actual config pre-loading happens in route handlers (actions.ts, turn.ts)
+  //    Actual config pre-loading happens in the actions.ts route handler
   //    before calling executeTurn, bridging async store reads to sync getConfig interface.
   const getConfigFn =
     config.getConfigFn ??
@@ -337,6 +344,7 @@ export async function bootstrapApi(
     manifestCache,
     store,
     llmAdapter: config.llmAdapter,
+    ...(config.memoryEmbed ? { embed: config.memoryEmbed } : {}),
     preferredMemorySlot: config.preferredMemorySlot,
     resolveModel,
     // Break memoryBlocks label collisions by trust tier (builtin > official >
@@ -420,7 +428,6 @@ export async function bootstrapApi(
   // 9. Mount routes — all under /api/ prefix
   // Session routes: frontend uses /api/sessions (plural) for all session operations
   app.route("/api/sessions", sessionRoutes);
-  app.route("/api/sessions", turnRoutes);
   app.route("/api/sessions", stateRoutes);
   app.route("/api/sessions", messageRoutes);
   app.route("/api/sessions", characterRoutes);

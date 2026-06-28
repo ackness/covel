@@ -4,13 +4,13 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.7-8b5cf6)](https://github.com/AcKnEsS/covel/releases/tag/v0.0.7)
+[![Version](https://img.shields.io/badge/version-v0.0.8-8b5cf6)](https://github.com/AcKnEsS/covel/releases/tag/v0.0.8)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)]()
 
 ![Covel demo](./.assets/images/demo.gif)
 
-> **Current public release: v0.0.7.** Covel is still early access: APIs, data formats, and plugin frontmatter may change between versions. Official prebuilt binaries currently target macOS Apple Silicon.
+> **Current public release: v0.0.8.** Covel is still early access: APIs, data formats, and plugin frontmatter may change between versions. Official prebuilt binaries currently target macOS Apple Silicon.
 
 ---
 
@@ -33,11 +33,11 @@ Every agent is its own plugin. Disable one, swap one, or write your own.
 
 ### Play it
 
-Grab the official **v0.0.7 macOS Apple Silicon** build from [GitHub Releases](https://github.com/AcKnEsS/covel/releases/tag/v0.0.7) — `Covel-electron-0.0.7-mac-arm64.dmg`. The rolling release list is available at [Releases](https://github.com/AcKnEsS/covel/releases).
+Grab the official **v0.0.8 macOS Apple Silicon** build from [GitHub Releases](https://github.com/AcKnEsS/covel/releases/tag/v0.0.8) — `Covel-electron-0.0.8-mac-arm64.dmg`. The rolling release list is available at [Releases](https://github.com/AcKnEsS/covel/releases).
 
 Open Settings, paste an LLM API key, pick one of the four sample worlds (`cloudmere` / `mistport` / `neonridge` / `haruka-academy`), and play.
 
-v0.0.7 is an architecture-optimization release: duplicated kernel contracts collapse to single, compile-time-enforced sources of truth, the SQLite/Postgres store query layer unifies behind one shared adapter with cross-backend parity verified against a real Postgres, plus a batch of latent correctness fixes — no user-facing behavior change. Full notes: [`docs/CHANGELOG.md#007---2026-06-27`](./docs/CHANGELOG.md#007---2026-06-27).
+v0.0.8 finishes the v0.0.7 architecture pass and adds **semantic (vector) memory recall**: the store schema and transactions become single-source-of-truth, the SQLite/Postgres vector path reaches cross-backend parity verified against a real pgvector Postgres, and memory now embeds-on-write for KNN recall (keyword fallback when no embedding model is configured) — no user-facing behavior change for the default world. Full notes: [`docs/CHANGELOG.md#008---2026-06-28`](./docs/CHANGELOG.md#008---2026-06-28).
 
 Your data lives at `~/.covel/` — config, keys, SQLite, custom worlds, logs. Full schema → [`docs/guide/desktop-config.en.md`](./docs/guide/desktop-config.en.md).
 

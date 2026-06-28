@@ -233,4 +233,69 @@ describe("createBootstrapMemorySystem", () => {
       expect.stringContaining('memoryBlocks label "clues"'),
     );
   });
+
+  it("fires embed-on-write ingestion from the post-turn updater when embed is injected", async () => {
+    const DIM = 8;
+    const store = createMemoryStore();
+    const sessionId = "session-ingest";
+
+    // Lock an embedding model so the session has a vector target.
+    const target = await store.ensureVectorModel!({
+      provider: "test",
+      modelName: "fake",
+      dim: DIM,
+      modelId: "test/fake",
+    });
+    await store.lockSessionEmbeddingModel!(sessionId, target);
+
+    // Seed a turn message for ingestion to pick up.
+    await store.appendTurnMessage({
+      id: "msg-1",
+      sessionId,
+      turnId: "turn-1",
+      sourceType: "runtime",
+      role: "assistant",
+      content: "the king summoned the council",
+      order: 1,
+      createdAt: new Date().toISOString(),
+    });
+
+    const embedCalls: string[][] = [];
+    const embed = async (texts: readonly string[]): Promise<Float32Array[]> => {
+      embedCalls.push([...texts]);
+      return texts.map(() => new Float32Array(DIM).fill(0.1));
+    };
+
+    const result = createBootstrapMemorySystem({
+      manifestCache: new Map(),
+      store,
+      llmAdapter: new RecordingLlm(),
+      embed,
+      preferredMemorySlot: "memory",
+      resolveModel: (manifest) => manifest.model,
+    });
+    expect(result).toBeDefined();
+
+    // The turn executor fires this post-turn; the bootstrap wrapper must also
+    // kick a best-effort ingest sweep (fire-and-forget).
+    await result!.memorySystem.updater.updateAfterTurn({
+      sessionId,
+      narrativeText: "the king summoned the council",
+      currentBlocks: [],
+    });
+
+    // Ingestion is fired without await — give the microtask queue a tick.
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(embedCalls.length).toBeGreaterThan(0);
+    // The seeded message must now be searchable as a recall vector.
+    const hits = await store.searchVectors!({
+      sessionId,
+      query: new Float32Array(DIM).fill(0.1),
+      topK: 5,
+      pluginId: "__memory__",
+      namespace: "recall",
+    });
+    expect(hits.map((h) => h.key)).toContain("msg-1");
+  });
 });

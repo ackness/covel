@@ -39,7 +39,7 @@ Covel 是一个插件驱动的 AI 交互式叙事引擎。根目录 [`README.md`
 | 某个 HTTP endpoint 的真实行为        | `apps/server/src/routes/api/`, `docs/reference/api.md`                                                                                                                                 |
 | SSE / action 事件怎么消费            | `packages/shared/src/types/protocol.ts`, `apps/web/src/services/api/actions.ts`, `apps/web/src/services/subscription.ts`, `docs/reference/protocol.md`                                 |
 | LLM tool 从哪里注册                  | `packages/tools/src/`, `docs/reference/tools.md`                                                                                                                                       |
-| prompt 注入和 cache_control 怎么工作 | `packages/context/src/`, `packages/runtime/src/turn-executor.ts`, `packages/runtime/src/turn-runtime-execution.ts`, `docs/reference/prompt-structure.md`                               |
+| prompt 注入和 cache_control 怎么工作 | `packages/context/src/`, `packages/runtime/src/turn-executor/turn-executor.ts`, `packages/runtime/src/turn-executor/turn-runtime-execution.ts`, `docs/reference/prompt-structure.md`   |
 | 插件 UI 组件可用 props               | `apps/web/src/lib/catalog/`, `apps/web/src/components/session/plugin-panel.tsx`, `apps/web/src/components/session/chat-messages/message-blocks.tsx`, `docs/reference/ui-components.md` |
 | 存储事务、media、ledger 行为         | `packages/store/src/`, `packages/store/src/media-store/`, `apps/server/src/world-data/session-import/`, `docs/reference/transactions.md`, `docs/reference/media-store.md`              |
 

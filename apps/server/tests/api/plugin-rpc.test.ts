@@ -31,7 +31,7 @@ import type { RuntimeManifest } from "@covel/shared";
 import { createEventBus } from "@covel/events";
 import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
 import { sessionRoutes } from "../../src/routes/api/session.js";
-import { turnRoutes } from "../../src/routes/api/turn.js";
+import { actionRoutes } from "../../src/routes/api/actions.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import branchReplyHandler from "../../../../plugins/branch-reply/handler.js";
 
@@ -681,7 +681,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     });
     app.route("/api/sessions", sessionRoutes);
     app.route("/api/sessions", pluginRpcRoutes);
-    app.route("/api/sessions", turnRoutes);
+    app.route("/api/actions", actionRoutes);
 
     const createSession = await app.request("/api/sessions", {
       method: "POST",
@@ -774,12 +774,36 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       acceptedText: "Accepted branch text.",
     });
 
-    const nextTurn = await app.request(`/api/sessions/${session.id}/turn`, {
+    // Advance out of the Pre-Game band so a send_message schedules the
+    // main-loop narrator (priority 500). /api/actions enforces band gating;
+    // without this the narrator would not run and no LLM call would be made.
+    await store.updateSession(session.id, {
+      turnCount: 1,
+      preGameCompleted: ["pregame"],
+      updatedAt: new Date().toISOString(),
+    });
+
+    const nextTurn = await app.request(`/api/actions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message: "Continue from there." }),
+      body: JSON.stringify({
+        requestId: "req-branch-next",
+        type: "send_message",
+        sessionId: session.id,
+        locale: "zh-CN",
+        payload: { content: "Continue from there." },
+      }),
     });
     expect(nextTurn.status).toBe(200);
+    // /api/actions runs executeTurn inside the SSE stream generator, so the turn
+    // only executes as the body is consumed — drain to completion first.
+    const reader = nextTurn.body?.getReader();
+    if (reader) {
+      while (true) {
+        const { done } = await reader.read();
+        if (done) break;
+      }
+    }
 
     const lastCall = llm.calls[llm.calls.length - 1] ?? [];
     const assistantHistory = lastCall.filter(

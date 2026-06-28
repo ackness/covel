@@ -14,7 +14,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import type { RuntimeManifest } from "@covel/shared";
 import type { TriggerContext } from "../src/types.js";
-import { shouldTrigger } from "../src/trigger.js";
+import { shouldTrigger } from "../src/trigger/trigger.js";
 
 function manifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   return {

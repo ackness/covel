@@ -88,6 +88,36 @@ export type LLMStreamEvent =
       readonly reasoningContent?: string;
     };
 
+/**
+ * Narrow single-call completion adapter.
+ *
+ * A minimal LLM-call contract for framework internals that only need a
+ * one-shot text completion: feed a system prompt plus a list of same-shape
+ * messages and get back a string. It is deliberately *narrower* than
+ * {@link LLMAdapter} — no tools, no streaming, no structured response format,
+ * no usage/finishReason. The compaction summarizer (`@covel/context`) and the
+ * core-memory updater/compactor (`@covel/memory`) never tool-call, so widening
+ * them to the full adapter would be pure noise. Concrete implementations wrap a
+ * full {@link LLMAdapter} (or the ai-provider gateway) and map `complete()`
+ * onto `generate()` — see the server bootstrap `fastSlotLlm` / `memoryLlm`.
+ *
+ * `Role` is parameterised so each consumer keeps its exact accepted message
+ * set: the compactor only ever emits `user` messages
+ * (`SimpleCompletionAdapter<"user">`), while the core-memory layer also models
+ * `assistant` turns (the default full union). This makes the two previously
+ * duplicated `CompactorLLMAdapter` / `MemoryLLMAdapter` definitions one source
+ * of truth without loosening either's contract.
+ */
+export interface SimpleCompletionAdapter<
+  Role extends "user" | "assistant" = "user" | "assistant",
+> {
+  complete(params: {
+    systemPrompt: string;
+    messages: readonly { role: Role; content: string }[];
+    model?: string;
+  }): Promise<{ content: string }>;
+}
+
 export interface LLMAdapter {
   /**
    * Call the LLM with messages and optional tools.

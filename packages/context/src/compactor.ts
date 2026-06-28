@@ -22,6 +22,7 @@
  * a `compactedAtTurnId` set, the whole compaction is skipped for this round.
  */
 
+import type { SimpleCompletionAdapter } from "@covel/shared";
 import type {
   SessionContextStore,
   SessionSummaryRecord,
@@ -32,14 +33,13 @@ import { loadPrompt, interpolate } from "./prompts-loader.js";
 
 // ── Public types ────────────────────────────────────────────────
 
-/** A minimal LLM adapter interface — same shape as `@covel/runtime`'s LLMAdapter. */
-export interface CompactorLLMAdapter {
-  complete(params: {
-    systemPrompt: string;
-    messages: readonly { role: "user"; content: string }[];
-    model?: string;
-  }): Promise<{ content: string }>;
-}
+/**
+ * Minimal single-call LLM adapter the compactor needs. Aliased to the shared
+ * {@link SimpleCompletionAdapter} (single source of truth in `@covel/shared`),
+ * pinned to `"user"` messages because compaction only ever sends a user-role
+ * prompt. Re-exported under this name for backward compatibility.
+ */
+export type CompactorLLMAdapter = SimpleCompletionAdapter<"user">;
 
 export interface CompactorDeps {
   readonly store: SessionContextStore;

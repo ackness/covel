@@ -8,7 +8,7 @@ import {
   createCommitPipeline,
   processRuntimeResult,
   createTraceRecorder,
-} from "../src/session-kernel.js";
+} from "../src/session/session-kernel.js";
 import { withPendingProposals } from "@covel/tools";
 import type { Proposal, SessionEvent, RuntimeResult } from "@covel/shared";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";

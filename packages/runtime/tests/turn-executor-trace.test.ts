@@ -21,10 +21,10 @@ import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store";
 import { tool } from "@covel/tools";
 import { z } from "zod";
-import { executeTurn } from "../src/turn-executor.js";
-import type { TurnExecutorDeps } from "../src/turn-executor.js";
-import type { LLMAdapter } from "../src/llm-adapter.js";
-import { createToolExecutor } from "../src/tool-executor.js";
+import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
+import type { LLMAdapter } from "../src/llm/llm-adapter.js";
+import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 
 async function createMainLoopStore(sessionId = "sess-1") {

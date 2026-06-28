@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Eye, EyeOff } from "lucide-react";
-import type { SettingEntry, WidgetKind } from "@covel/shared";
+import type { SettingEntry, WidgetKind } from "@covel/settings";
 import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
 import { ThemeManagerWidget } from "@/components/theme-manager.js";

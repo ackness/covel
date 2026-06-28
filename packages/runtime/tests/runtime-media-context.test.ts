@@ -3,7 +3,7 @@ import type { PluginRuntimeUtils } from "@covel/plugin-loader";
 import {
   createRuntimeMediaContext,
   type MediaStoreLike,
-} from "../src/runtime-media-context.js";
+} from "../src/function-runtime/runtime-media-context.js";
 
 function pngBytes(extra = 0): Uint8Array {
   const header = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];

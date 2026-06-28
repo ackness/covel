@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
-import { executeParallel, resolveFailure } from "../src/parallel-executor.js";
+import {
+  executeParallel,
+  resolveFailure,
+} from "../src/schedule/parallel-executor.js";
 
 function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   return { name: "test-rt", description: "test", priority: 500, ...overrides };

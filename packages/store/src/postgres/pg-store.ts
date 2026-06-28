@@ -71,6 +71,20 @@ export async function createPgStore(
     // with `freshSchema: false` and is unaffected.
     const ddl = postgres(databaseUrl, { max: 1 });
     try {
+      // Also drop the dynamically-created per-model vector tables
+      // (`vec_mem_m{id}`, created lazily by pg-vector.ts). They are NOT in
+      // ALL_TABLE_NAMES, so DROP_ALL_SQL alone would leave them behind — and
+      // since `vector_models.id` is a SERIAL that resets to 1 after the static
+      // schema is recreated, a fresh store would resolve back to `vec_mem_m1`
+      // and find stale rows. A fresh PG store must start empty, exactly like a
+      // fresh MemoryStore/SqliteStore — backend behaviour has to be identical.
+      const vecTables = await ddl<{ tablename: string }[]>`
+        SELECT tablename FROM pg_tables
+        WHERE schemaname = 'public' AND tablename LIKE 'vec_mem_%'
+      `;
+      for (const { tablename } of vecTables) {
+        await ddl.unsafe(`DROP TABLE IF EXISTS ${tablename} CASCADE`);
+      }
       await ddl.unsafe(DROP_ALL_SQL);
       await ddl.unsafe(CREATE_TABLES_SQL);
     } finally {

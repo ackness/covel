@@ -4,6 +4,61 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.8] - 2026-06-28
+
+Eighth public release. Finishes the v0.0.7 architecture pass — clears the remaining audit debt, makes the schema and transaction layers single-source-of-truth, and ships **semantic (vector) memory recall**, all verified end-to-end against a real pgvector Postgres. New game genres can declare their own memory blocks, and a session can switch storage backends without any behaviour change. The default world and bundled plugins are behavior-unchanged.
+
+### Added
+
+- **Semantic (vector) memory recall.** The memory tier now embeds turn messages (recall) and lorebook + character records (archival) on write — a post-turn, best-effort sweep that never blocks the turn — and serves KNN recall over them, falling back to keyword search per-session when no embedding model is locked. Embed-on-write ingestion is incremental (a persisted cursor + content hashes) and self-heals deleted records; backfill of existing sessions runs in the same path. Wired through a single injected `embed` seam so `@covel/memory` still depends only on `shared` + `store`. Verified end-to-end on real pgvector Postgres.
+- A real-pgvector `vector-store` contract branch (PgStore) — the production vector path (`upsertVector` / `searchVectors` / `deleteVectors` via the `vector` type + pgvector operators) now has automated coverage it previously lacked, plus a memory-vector × PgStore integration test.
+- `@covel/settings` package — the unified `SettingsStore` + its platform backends (browser localStorage, Electron-IPC json-file) split out of `@covel/shared`, so pure-types consumers no longer pull in browser/Electron code.
+
+### Changed
+
+- **Store schema is now single-source-of-truth.** The boot DDL is derived at module load from the Drizzle schema (`buildCreateTablesSql`), so a column or index is declared once and the executed DDL can never drift from it; only the bits Drizzle can't model (triggers, idempotent column migrations) stay hand-written. Identifiers are quoted uniformly.
+- **Transactions are scoped to a single commit.** Production turn-commit / session-create / world-data-sync / snapshot-fork callers moved from the global imperative `beginTx`/`commitTx` shim to `withTransaction(fn)` (real pooled-Postgres transactions; nested calls on serial backends are rejected, not deadlocked), removing the all-database serialization window.
+- `runtime/src`'s 56 flat files are organized into 13 sub-domain directories (trigger / schedule / agent-loop / commit / session / trace / snapshot / rpc / resume / llm / retry / function-runtime); the public barrel is byte-identical.
+- Cleared remaining v0.0.7 audit debt: priority-band literals collapse to `isPreGamePriority()` / `NARRATOR_PRIORITY`; the two frontend SSE channels share one event reducer; `CompactorLLMAdapter` + `MemoryLLMAdapter` converge into a shared `SimpleCompletionAdapter`; the Anthropic cache-breakpoint cap is one shared constant.
+- **Removed the duplicate turn entrypoint.** `POST /api/sessions/:id/turn` was a mounted-but-frontend-unreachable second turn pipeline; `/api/actions` is now the single turn-execution route. Its tests migrated to `/api/actions`.
+- Bumped all monorepo package versions `0.0.7` → `0.0.8`.
+
+### Fixed
+
+- **Cross-backend vector parity.** A real-PG vector contract immediately surfaced two PgStore-only bugs the Memory/SQLite backends hid: a `freshSchema` store kept stale rows because the dynamic `vec_mem_*` tables were not dropped, and the upsert/delete paths were untested. A fresh store now starts empty on every backend — the same data, the same API, switch backend freely.
+- **memory recall data-loss / staleness.** The recall cursor no longer advances past a message that got an empty embedding (which would drop it from recall forever); short vector results during backfill are topped up with keyword hits so the most recent messages aren't missed; deleted lorebook/character vectors are purged instead of returned as stale hits.
+- **Snapshot-fork orphaned media refs.** `mediaStore.addRef` (a cross-store write the DataStore transaction can't roll back) moved to run after the fork commits, so a rolled-back fork (e.g. the cursor-missing 409 path) can no longer leave an orphan ref.
+- Postgres contract suite no longer races the system catalog under parallel runs (per-file database isolation + single-connection `freshSchema` DDL).
+
+<details>
+<summary>中文（备份翻译）</summary>
+
+第八个公开版本。收尾 v0.0.7 的架构整理——清掉剩余审计债，让 schema 与事务层成为单一真相源，并交付**向量语义记忆召回**，全部用真实 pgvector Postgres 端到端验证。新游戏类型可声明自己的记忆块；一个会话可在不改变任何行为的前提下切换存储后端。默认世界与内置插件行为不变。
+
+**Added**
+
+- **向量语义记忆召回**：记忆层在写入时把 turn 消息（recall）与 lorebook + 角色记录（archival）embedding（回合后 best-effort sweep，绝不阻塞回合），并对其做 KNN 召回；未锁定 embedding 模型时按会话回退关键词检索。写入时 ingestion 增量（持久游标 + 内容哈希）、自愈已删记录、历史会话回填走同一路径。经单一注入的 `embed` seam 接入，`@covel/memory` 仍只依赖 `shared` + `store`。真实 pgvector Postgres 端到端验证。
+- `vector-store` 契约新增 PgStore（真 pgvector）分支——生产向量路径此前零自动化覆盖，现已补上，外加 memory 向量 × PgStore 集成测试。
+- `@covel/settings` 包——统一 `SettingsStore` 及平台后端（浏览器 localStorage、Electron-IPC json-file）从 `@covel/shared` 拆出，纯类型消费方不再被迫拖入浏览器/Electron 代码。
+
+**Changed**
+
+- **存储 schema 单一真相源**：boot DDL 在模块加载时由 Drizzle schema 派生（`buildCreateTablesSql`），列/索引只声明一次、执行的 DDL 不可能漂移；只有 Drizzle 无法建模的部分（触发器、幂等列迁移）保留手写。标识符统一加引号。
+- **事务作用域绑定到单次提交**：生产的回合提交/建会话/world-data 同步/快照 fork 调用方从全局命令式 `beginTx`/`commitTx` 垫片迁到 `withTransaction(fn)`（真实 Postgres 池化事务；串行后端的嵌套被拒绝而非死锁），消除全库串行化窗口。
+- `runtime/src` 的 56 个扁平文件整理进 13 个子领域目录；公开 barrel 逐字节不变。
+- 清掉剩余 v0.0.7 审计债：priority band 字面量收成 `isPreGamePriority()`/`NARRATOR_PRIORITY`；前端两条 SSE 通道共用一个事件 reducer；`CompactorLLMAdapter` + `MemoryLLMAdapter` 合并为共享 `SimpleCompletionAdapter`；Anthropic 缓存断点上限收成单一常量。
+- **移除重复的回合入口**：`POST /api/sessions/:id/turn` 是已挂载但前端不可达的第二条回合管线；`/api/actions` 现为唯一回合执行路由，其测试已迁移。
+- 所有 monorepo 包版本 `0.0.7` → `0.0.8`。
+
+**Fixed**
+
+- **跨后端向量一致性**：真 PG 向量契约立刻暴露两个 Memory/SQLite 后端掩盖的 PgStore 专属 bug——`freshSchema` 的 store 因动态 `vec_mem_*` 表未被 drop 而残留旧数据，且 upsert/delete 路径未测。现在 fresh store 在每个后端都从空开始——同样的数据、同样的 API、自由切换后端。
+- **memory 召回数据丢失/陈旧**：召回游标不再越过 embedding 为空的消息（否则永久丢失）；回填期向量结果不足时用关键词补足，不漏最近消息；已删 lorebook/角色向量被清除而非作为陈旧命中返回。
+- **快照 fork 孤儿 media ref**：`mediaStore.addRef`（DataStore 事务回滚不了的跨 store 写）挪到 fork 提交后执行，回滚的 fork（如 cursor-missing 409）不再留下孤儿 ref。
+- Postgres 契约套件在并行下不再竞争系统目录（每文件独立库 + 单连接 `freshSchema` DDL）。
+
+</details>
+
 ## [0.0.7] - 2026-06-27
 
 Seventh public release. An architecture-optimization pass over the kernel and store: duplicated contracts collapse to single, compile-time-enforced sources of truth; the SQLite and Postgres store query layers unify behind one shared adapter with cross-backend parity verified against a real Postgres; and a batch of latent correctness bugs are fixed. The default world and bundled plugins are behavior-unchanged.
@@ -319,7 +374,8 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.7...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.8...HEAD
+[0.0.8]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.8
 [0.0.7]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.7
 [0.0.6]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.6
 [0.0.5]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.5

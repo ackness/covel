@@ -13,7 +13,7 @@ import { createEventBus } from "@covel/events";
 import {
   createCommitPipeline,
   type KernelStore,
-} from "../src/session-kernel.js";
+} from "../src/session/session-kernel.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 
 // ── Store factory ─────────────────────────────────────────────────

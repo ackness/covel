@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { SettingsStoreApi } from "@covel/shared";
+import type { SettingsStoreApi } from "@covel/settings";
 
 /**
  * Register a setting entry per known provider so the Settings UI shows a

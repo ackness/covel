@@ -1,4 +1,4 @@
-import type { SettingsStoreApi } from "@covel/shared";
+import type { SettingsStoreApi } from "@covel/settings";
 import type { StoredCustomTheme } from "./types.js";
 
 export const CUSTOM_THEMES_KEY = "ui.customThemes";

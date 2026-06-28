@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { buildSessionSnapshot } from "../src/snapshot-builder.js";
+import { buildSessionSnapshot } from "../src/snapshot/snapshot-builder.js";
 
 describe("buildSessionSnapshot", () => {
   function createMockStore() {

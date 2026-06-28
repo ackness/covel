@@ -42,6 +42,21 @@ export { createMemoryManager } from "./core-memory.js";
 export { createMemoryUpdater } from "./updater.js";
 export { createKeywordRecallSearcher } from "./recall-search.js";
 export { createKeywordArchivalSearcher } from "./archival-search.js";
+export { createVectorRecallSearcher } from "./vector-recall-search.js";
+export { createVectorArchivalSearcher } from "./vector-archival-search.js";
+export {
+  createVectorIngestor,
+  createNoopIngestor,
+  type VectorIngestor,
+  type IngestResult,
+} from "./vector-ingest.js";
+export {
+  MEMORY_VECTOR_PLUGIN_ID,
+  RECALL_NAMESPACE,
+  ARCHIVAL_NAMESPACE,
+  distanceToScore,
+} from "./vector-common.js";
+export type { EmbedFn } from "./vector-common.js";
 export { createCompactor } from "./compactor.js";
 export { createMemorySystem } from "./memory-system.js";
 export type { CreateMemorySystemOptions } from "./memory-system.js";

@@ -1,12 +1,13 @@
 import type { RuntimeManifest } from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
-import { scheduleByDag } from "../dag-scheduler.js";
+import { scheduleByDag } from "../schedule/dag-scheduler.js";
 import {
   isMainLoopPriority,
   isPreGamePriority,
+  NARRATOR_PRIORITY,
   scheduleByPriority,
-} from "../scheduler.js";
-import { shouldTrigger } from "../trigger.js";
+} from "../schedule/scheduler.js";
+import { shouldTrigger } from "../trigger/trigger.js";
 import type { ScheduledGroup, TriggerContext } from "../types.js";
 
 export interface TriggeredRuntimeSelection {
@@ -80,7 +81,7 @@ export function scheduleTriggeredRuntimes(args: {
   if (manualTarget) {
     return [
       {
-        priority: manualTarget.priority ?? 500,
+        priority: manualTarget.priority ?? NARRATOR_PRIORITY,
         runtimes: [manualTarget],
       },
     ];

@@ -1,6 +1,10 @@
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import type { ParsedPluginMd, PluginSource } from "@covel/plugin-loader";
-import { createMemorySystem, type MemorySystem } from "@covel/memory";
+import {
+  createMemorySystem,
+  type EmbedFn,
+  type MemorySystem,
+} from "@covel/memory";
 import type { LLMAdapter } from "@covel/runtime";
 import { FrameworkCapability } from "@covel/shared";
 import type { MemoryBlockSchema, RuntimeManifest } from "@covel/shared";
@@ -11,6 +15,12 @@ export interface CreateBootstrapMemorySystemParams {
   readonly manifestCache: ReadonlyMap<string, readonly ParsedPluginMd[]>;
   readonly store: DataStore;
   readonly llmAdapter: LLMAdapter;
+  /**
+   * Optional embedding function for the semantic (vector) memory tier. When
+   * provided (and the store supports vectors) recall/archival upgrade to vector
+   * search and embed-on-write ingestion is wired onto the post-turn path.
+   */
+  readonly embed?: EmbedFn;
   readonly preferredMemorySlot?: string;
   readonly resolveModel: (
     manifest: RuntimeManifest,
@@ -37,6 +47,7 @@ export function createBootstrapMemorySystem({
   manifestCache,
   store,
   llmAdapter,
+  embed,
   preferredMemorySlot,
   resolveModel,
   getPluginSource,
@@ -96,10 +107,11 @@ export function createBootstrapMemorySystem({
     },
   };
 
-  const memorySystem = createMemorySystem(
+  const baseSystem = createMemorySystem(
     {
       store,
       llm: memoryLlm,
+      ...(embed ? { embed } : {}),
       resolveSlot: (slot: string) =>
         resolveModel({ name: slot, model: slot } as RuntimeManifest),
     },
@@ -112,8 +124,20 @@ export function createBootstrapMemorySystem({
     },
   );
 
+  // Wire embed-on-write ingestion onto the post-turn path WITHOUT touching the
+  // commit core or the turn executor. The turn executor already fires
+  // `updater.updateAfterTurn(...)` fire-and-forget after each narrative turn; we
+  // wrap that injected method so it ALSO kicks a best-effort `ingest(sessionId)`
+  // on the same post-commit tick. Ingestion is itself fire-and-forget and never
+  // throws, so it cannot block or fail the turn. No-op when vectors are disabled.
+  const memorySystem: MemorySystem = embed
+    ? withPostTurnIngestion(baseSystem)
+    : baseSystem;
+
   console.log(
-    "[bootstrap] Memory system initialized — core memory blocks + recall/archival search",
+    `[bootstrap] Memory system initialized — core memory blocks + ${
+      embed ? "semantic (vector) + keyword" : "keyword"
+    } recall/archival search`,
   );
 
   return {
@@ -124,6 +148,33 @@ export function createBootstrapMemorySystem({
       blocks: memorySystem.manager,
     }),
   };
+}
+
+/**
+ * Wrap a memory system so its `updater.updateAfterTurn` also triggers a
+ * best-effort vector ingestion sweep. The wrapper preserves the exact updater
+ * contract the turn executor depends on (`updateAfterTurn` + optional
+ * `awaitPending`); ingestion is fired without awaiting so the post-turn memory
+ * refresh is never delayed by embedding latency.
+ */
+function withPostTurnIngestion(system: MemorySystem): MemorySystem {
+  const realUpdater = system.updater;
+  const wrappedUpdater: MemorySystem["updater"] = {
+    ...realUpdater,
+    async updateAfterTurn(params) {
+      // Fire ingestion first (does not await embeddings) then run the real
+      // core-memory update. Both are post-turn best-effort.
+      void system.ingest(params.sessionId).catch((err: unknown) => {
+        console.warn(
+          `[bootstrap] memory ingest failed for ${params.sessionId}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      });
+      return realUpdater.updateAfterTurn(params);
+    },
+  };
+  return { ...system, updater: wrappedUpdater };
 }
 
 function findMemoryPanelPluginId(

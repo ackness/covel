@@ -144,6 +144,3 @@ export type {
   AssetGenerateLLMTextPart,
   AssetGenerateView,
 } from "./proposals/asset-generate.js";
-
-// ── Unified Settings Store ─────────────────────────────────────────
-export * from "./settings/index.js";

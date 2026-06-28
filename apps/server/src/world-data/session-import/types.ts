@@ -1,4 +1,9 @@
-import type { CharacterRecord, DataStore, MediaStore } from "@covel/store";
+import type {
+  CharacterRecord,
+  DataStore,
+  MediaStore,
+  StoreTransaction,
+} from "@covel/store";
 import type { PluginRegistry, PluginRegistryEntry } from "@covel/plugin-loader";
 import type { ParsedWorldDataTarget } from "../target-uri.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "../types.js";
@@ -81,7 +86,10 @@ export interface WorldDataImportPreflightDeps {
 }
 
 export interface ImportWorldDataForSessionOptions {
-  readonly store: DataStore;
+  // Accepts a transaction-scoped view so the session-create route can run the
+  // whole import inside `store.withTransaction`. A full `DataStore` is still
+  // assignable (it is a superset of `StoreTransaction`).
+  readonly store: StoreTransaction;
   readonly mediaStore?: MediaStore;
   readonly sessionId: string;
   readonly worldId: string | undefined;
