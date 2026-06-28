@@ -112,14 +112,31 @@ export function createIdbPersistenceStore(ctx: IdbStoreContext): IdbStoreSlice {
     async deleteExpiredSuspensions(olderThanIso: string): Promise<number> {
       await mutations.ensureStoreSnapshot("suspensions");
       const all = (await db.getAll("suspensions")) as SuspensionRecord[];
-      const expired = all.filter(
-        (r) => !r.resolvedAt && r.createdAt < olderThanIso,
-      );
-      for (const record of expired) {
+      let deleted = 0;
+      for (const record of all) {
+        if (record.resolvedAt || record.createdAt >= olderThanIso) continue;
+        // Re-read immediately before delete so a concurrent claimSuspension
+        // (which sets resolvedAt to "claimed:<iso>") between the initial getAll
+        // and now is never swept. SQL backends get this for free via the
+        // DELETE … WHERE isNull(resolvedAt) re-evaluation; IDB deletes by key,
+        // so the predicate must be re-checked here. (Best-effort — the residual
+        // get→delete gap is negligible under browser local-mode's serial use;
+        // a fully atomic read-check-delete would need a native IDB transaction.)
+        const current = (await db.get("suspensions", record.id)) as
+          | SuspensionRecord
+          | undefined;
+        if (
+          !current ||
+          current.resolvedAt ||
+          current.createdAt >= olderThanIso
+        ) {
+          continue;
+        }
         // deleteAndTrack keeps the sweep within the IDB tx-rollback model.
         await mutations.deleteAndTrack("suspensions", record.id);
+        deleted += 1;
       }
-      return expired.length;
+      return deleted;
     },
 
     async saveSnapshot(record: SnapshotRecord): Promise<void> {

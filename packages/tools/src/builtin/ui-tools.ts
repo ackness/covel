@@ -25,7 +25,7 @@ const uiRenderPartSchema = z.object({
   id: z.string().min(1).describe("稳定 part id"),
   type: z.string().min(1).describe("part 类型，如 text/image/audio/video/card"),
   status: uiPartStatusSchema.default("success").describe("part 独立状态"),
-  content: z.unknown().describe("part 内容，由 type 决定结构"),
+  content: z.unknown().optional().describe("part 内容，由 type 决定结构"),
   retry: z
     .object({
       count: z.number().int().min(0),

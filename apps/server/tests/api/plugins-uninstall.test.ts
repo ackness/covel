@@ -90,4 +90,27 @@ describe("DELETE /api/plugins/:id (uninstall)", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it("rejects path-traversal ids and never deletes outside the plugins root", async () => {
+    // A sibling directory outside the user plugins root — must survive.
+    const outside = path.join(path.dirname(pluginsDir), "OUTSIDE-SECRET");
+    await mkdir(outside, { recursive: true });
+    const app = createTestApp();
+
+    // Each id contains "/" and/or "." which PLUGIN_ID_RE rejects before any
+    // filesystem access; the path.relative() guard is the second line. Whether
+    // Hono decodes %2F or not, the param never satisfies the id regex.
+    for (const id of [
+      encodeURIComponent("../OUTSIDE-SECRET"),
+      encodeURIComponent("../../OUTSIDE-SECRET"),
+      "..%2F..%2FOUTSIDE-SECRET",
+    ]) {
+      const res = await app.request(`/api/plugins/${id}`, { method: "DELETE" });
+      expect(res.status, `id=${id}`).toBe(400);
+    }
+
+    // The outside directory is untouched.
+    await access(outside);
+    await rm(outside, { recursive: true, force: true });
+  });
 });

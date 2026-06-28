@@ -88,7 +88,9 @@ workingMemoryRoutes.put("/:id/working-memory/:scope/:key", async (c) => {
 
   const raw = await c.req.json<unknown>();
   const bodySchema = z.object({
-    value: z.unknown(),
+    // zod 4.4: a bare z.unknown() field is required; .optional() preserves the
+    // 4.3 behaviour (a missing value parsed as undefined) — don't 400 callers.
+    value: z.unknown().optional(),
     schemaRef: z.string().optional(),
   });
   const parsed = bodySchema.safeParse(raw);

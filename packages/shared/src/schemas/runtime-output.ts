@@ -15,8 +15,8 @@ export const runtimeOutputResultSchema = z.object({
 
 export const runtimeOutputToolCallSchema = z.object({
   tool: z.string().min(1),
-  input: z.unknown(),
-  output: z.unknown(),
+  input: z.unknown().optional(),
+  output: z.unknown().optional(),
   status: z.enum(["success", "error"]),
   durationMs: z.number().int().nonnegative(),
 });

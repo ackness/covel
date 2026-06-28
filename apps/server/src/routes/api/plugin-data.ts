@@ -158,7 +158,8 @@ pluginDataRoutes.put(
     if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
     const raw = await c.req.json<unknown>();
-    const bodySchema = z.object({ value: z.unknown() });
+    // zod 4.4: bare z.unknown() is required; .optional() keeps 4.3 behaviour.
+    const bodySchema = z.object({ value: z.unknown().optional() });
     const parsed = bodySchema.safeParse(raw);
     if (!parsed.success) {
       return c.json(errorBody("Invalid body: value field is required"), 400);

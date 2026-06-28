@@ -215,14 +215,14 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 全局插件
 
-| 方法   | 路径                                    | 描述                                                                                                          |
-| ------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| GET    | `/api/framework/capabilities`           | 框架级能力索引：manifest 枚举、工具、proposal、world-data URI                                                 |
-| GET    | `/api/plugins`                          | 列出所有已加载插件                                                                                            |
-| GET    | `/api/plugins/:id`                      | 获取插件详情                                                                                                  |
-| DELETE | `/api/plugins/:id`                      | 卸载第三方插件（删除 `~/.covel/plugins/<id>`，拒绝内置 ID 返回 409，返回 `{ ok, id, restartRequired:true }`） |
-| GET    | `/api/plugins/:id/contract`             | 获取插件完整开发契约                                                                                          |
-| GET    | `/api/plugins/:id/plugin-data-contract` | 获取插件数据 namespace/schema 契约                                                                            |
+| 方法   | 路径                                    | 描述                                                                                                                                                |
+| ------ | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/framework/capabilities`           | 框架级能力索引：manifest 枚举、工具、proposal、world-data URI                                                                                       |
+| GET    | `/api/plugins`                          | 列出所有已加载插件                                                                                                                                  |
+| GET    | `/api/plugins/:id`                      | 获取插件详情                                                                                                                                        |
+| DELETE | `/api/plugins/:id`                      | 卸载第三方插件（删除 `~/.covel/plugins/<id>`）。错误码：id 格式非法 `400`、内置 ID `409`、未安装 `404`；成功返回 `{ ok, id, restartRequired:true }` |
+| GET    | `/api/plugins/:id/contract`             | 获取插件完整开发契约                                                                                                                                |
+| GET    | `/api/plugins/:id/plugin-data-contract` | 获取插件数据 namespace/schema 契约                                                                                                                  |
 
 ### 状态查询
 
