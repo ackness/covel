@@ -483,7 +483,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
         action,
         payload: body.payload,
       },
-      { sessionId, store: rpcStore },
+      // session.locale lets framework defaults (submit-form) localize their
+      // produced narrative; resolution order request → session → world → app.
+      { sessionId, store: rpcStore, locale: session.locale },
     );
     return c.json({ status: "ok", result: dispatch.result });
   } catch (err) {
