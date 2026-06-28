@@ -344,4 +344,71 @@ describe("Plugin RPC approval flow (PR-7)", () => {
       expect(body.ok).toBe(true);
     });
   });
+
+  describe("DELETE /api/sessions/:id/approvals (revoke)", () => {
+    function grant(
+      gate: RpcApprovalGate,
+      sessionId: string,
+      pluginId: string,
+    ): void {
+      const ev = gate.evaluate({
+        sessionId,
+        pluginId,
+        action: "do-thing",
+        payload: null,
+        trustLevel: "community",
+      });
+      if (ev.status !== "pending") throw new Error("unreachable");
+      gate.decide({
+        approvalId: ev.approvalId,
+        decision: "allow",
+        scope: "session",
+        decidedAt: new Date().toISOString(),
+      });
+    }
+    const allowed = (
+      gate: RpcApprovalGate,
+      sessionId: string,
+      pluginId: string,
+    ): boolean =>
+      gate.evaluate({
+        sessionId,
+        pluginId,
+        action: "do-thing",
+        payload: null,
+        trustLevel: "community",
+      }).status === "allow";
+
+    it("revokes all session grants and returns the cleared count", async () => {
+      const { app, gate } = setup();
+      grant(gate, "s1", "untrusted");
+      grant(gate, "s1", "other");
+      expect(allowed(gate, "s1", "untrusted")).toBe(true);
+
+      const res = await app.request("/api/sessions/s1/approvals", {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { ok: boolean; cleared: number };
+      expect(body).toMatchObject({ ok: true, cleared: 2 });
+      expect(allowed(gate, "s1", "untrusted")).toBe(false);
+    });
+
+    it("scopes the revoke to one plugin via ?pluginId=", async () => {
+      const { app, gate } = setup();
+      grant(gate, "s1", "untrusted");
+      grant(gate, "s1", "other");
+
+      const res = await app.request(
+        "/api/sessions/s1/approvals?pluginId=untrusted",
+        { method: "DELETE" },
+      );
+
+      const body = (await res.json()) as { cleared: number };
+      expect(body.cleared).toBe(1);
+      expect(allowed(gate, "s1", "untrusted")).toBe(false);
+      expect(allowed(gate, "s1", "other")).toBe(true);
+    });
+  });
 });

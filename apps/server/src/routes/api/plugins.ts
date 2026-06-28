@@ -8,8 +8,12 @@
  * Runtime config now comes from explicit runtime/plugin settings.
  */
 
+import { homedir } from "node:os";
+import path from "node:path";
+import { rm, stat } from "node:fs/promises";
 import { Hono } from "hono";
 import type { PluginRegistry } from "@covel/plugin-loader";
+import { readRuntimeEnv } from "@covel/shared";
 import { buildPluginContract, summarizePluginManifests } from "./discovery.js";
 import { errorBody } from "../../api-error.js";
 
@@ -18,6 +22,19 @@ type Env = {
     pluginRegistry: PluginRegistry;
   };
 };
+
+/** Resolve the user plugins directory the same way the install route does. */
+function resolveUserPluginsDir(): string {
+  const env = readRuntimeEnv();
+  return (
+    env.userPluginsDir ??
+    (env.covelHome
+      ? path.join(env.covelHome, "plugins")
+      : path.join(homedir(), ".covel", "plugins"))
+  );
+}
+
+const PLUGIN_ID_RE = /^[a-z0-9][a-z0-9-_]{0,63}$/i;
 
 export const pluginRoutes = new Hono<Env>();
 
@@ -79,4 +96,39 @@ pluginRoutes.get("/:id", async (c) => {
     ...(relations ? { relations } : {}),
     outputKind,
   });
+});
+
+// DELETE /plugins/:id — uninstall a third-party plugin from the user plugins
+// dir. Builtin plugins cannot be removed. Mirrors the install route's id rules
+// and returns restartRequired:true (the loader only re-scans the dir at boot).
+pluginRoutes.delete("/:id", async (c) => {
+  const id = c.req.param("id");
+  // Format guard — also blocks path traversal (no `/`, `.`, `..`).
+  if (!PLUGIN_ID_RE.test(id)) {
+    return c.json(errorBody(`invalid plugin id: ${id}`), 400);
+  }
+
+  // A builtin plugin always loads (autoLoad), so registry.source is the
+  // authoritative builtin check; never delete a shipped plugin.
+  const entry = c.get("pluginRegistry").get(id);
+  if (entry?.source === "builtin") {
+    return c.json(errorBody(`cannot uninstall builtin plugin "${id}"`), 409);
+  }
+
+  const root = resolveUserPluginsDir();
+  const finalDir = path.join(root, id);
+  // Defense in depth: the resolved dir must stay strictly under the root.
+  const rel = path.relative(root, finalDir);
+  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) {
+    return c.json(errorBody("invalid plugin path"), 400);
+  }
+
+  try {
+    await stat(finalDir);
+  } catch {
+    return c.json(errorBody(`plugin "${id}" is not installed`), 404);
+  }
+
+  await rm(finalDir, { recursive: true, force: true });
+  return c.json({ ok: true, id, restartRequired: true });
 });

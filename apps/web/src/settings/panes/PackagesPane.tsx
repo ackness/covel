@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Package, Upload, Globe, Puzzle, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
@@ -18,6 +18,13 @@ interface ToastState {
   tone: "success" | "error";
 }
 
+interface InstalledPlugin {
+  id: string;
+  name?: string;
+  source: string;
+  pluginType?: string;
+}
+
 /**
  * Drag-and-drop install pane for plugin + world .zip packages.
  *
@@ -29,7 +36,24 @@ export function PackagesPane() {
   const [busy, setBusy] = useState<InstallKind | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [lastResult, setLastResult] = useState<InstallResult | null>(null);
+  const [installed, setInstalled] = useState<InstalledPlugin[]>([]);
+  const [removing, setRemoving] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
+
+  const refreshInstalled = useCallback(async () => {
+    try {
+      const res = await fetch("/api/plugins");
+      const body = (await res.json()) as { plugins?: InstalledPlugin[] };
+      // Only third-party (non-builtin) plugins can be uninstalled.
+      setInstalled((body.plugins ?? []).filter((p) => p.source !== "builtin"));
+    } catch {
+      /* non-fatal — the list just stays as-is */
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshInstalled();
+  }, [refreshInstalled]);
 
   useEffect(
     () => () => {
@@ -80,6 +104,45 @@ export function PackagesPane() {
       });
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function uninstall(id: string) {
+    setRemoving(id);
+    try {
+      const res = await fetch(`/api/plugins/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const body = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+      };
+      if (!res.ok || !body.ok) {
+        flash({
+          message:
+            body.error ??
+            t("settings.packages.uninstallFailed", "Uninstall failed"),
+          tone: "error",
+        });
+        return;
+      }
+      flash({
+        message: t("settings.packages.uninstalledRestart", { id }),
+        tone: "success",
+      });
+      // Uninstall takes effect after a restart, same as install.
+      setLastResult({ ok: true, kind: "plugin", id, restartRequired: true });
+      await refreshInstalled();
+    } catch (err) {
+      flash({
+        message:
+          err instanceof Error
+            ? err.message
+            : t("settings.packages.uninstallFailed", "Uninstall failed"),
+        tone: "error",
+      });
+    } finally {
+      setRemoving(null);
     }
   }
 
@@ -163,6 +226,42 @@ export function PackagesPane() {
         busy={busy === "world"}
         onFile={(f) => uploadZip("world", f)}
       />
+
+      {installed.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-xs font-semibold text-muted-foreground">
+            {t("settings.packages.installedTitle", "Installed plugins")}
+          </h3>
+          <ul className="divide-y divide-border border border-border rounded">
+            {installed.map((p) => (
+              <li
+                key={p.id}
+                className="flex items-center justify-between gap-3 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <div className="text-xs font-medium truncate">
+                    {p.name || p.id}
+                  </div>
+                  <div className="text-[10px] font-mono text-muted-foreground truncate">
+                    {p.id}
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs shrink-0 text-destructive border-destructive/30 hover:border-destructive"
+                  disabled={removing === p.id}
+                  onClick={() => void uninstall(p.id)}
+                >
+                  {removing === p.id
+                    ? t("settings.packages.uninstalling", "Removing…")
+                    : t("settings.packages.uninstall", "Uninstall")}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {lastResult && (
         <div className="text-xs font-mono text-muted-foreground border border-border rounded p-2 space-y-0.5">

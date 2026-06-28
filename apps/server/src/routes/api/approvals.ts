@@ -49,6 +49,17 @@ sessionApprovalRoutes.get("/:id/approvals", (c) => {
   return c.json({ pending: gate.listPending(sessionId) });
 });
 
+// Revoke cached grants for a session, optionally scoped to one plugin via
+// ?pluginId= — withdraws a previously approved community plugin mid-session so
+// its next RPC re-prompts for approval. Returns the number of grants cleared.
+sessionApprovalRoutes.delete("/:id/approvals", (c) => {
+  const gate = c.get("rpcApprovalGate");
+  const sessionId = c.req.param("id");
+  const pluginId = c.req.query("pluginId");
+  const cleared = gate.revoke(sessionId, pluginId || undefined);
+  return c.json({ ok: true, cleared });
+});
+
 approvalRoutes.post("/:approvalId/decision", async (c) => {
   const gate = c.get("rpcApprovalGate");
   const approvalId = c.req.param("approvalId");
