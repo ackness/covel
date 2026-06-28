@@ -1,5 +1,5 @@
 /**
- * Plugin and Turn route tests.
+ * Plugin route tests (`/api/plugins`, `/api/framework`).
  *
  * Uses Hono's app.request() for lightweight HTTP testing without a running server.
  */
