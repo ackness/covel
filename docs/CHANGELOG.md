@@ -20,10 +20,13 @@ A playability-loop pass — function runtimes become visible in the trace timeli
 
 - **`submit-form` is now locale-aware.** The `confirmation` `{{confirmed}}` value (确认/取消) and the fallback-narrative prefixes (`[玩家输入]` / `[玩家选择]` / `[玩家确认]` / `[玩家取消]`) were hardcoded Chinese; they now resolve by **session locale** (threaded in via a new `RpcHandlerContext.locale`, sourced from `session.locale` in the plugin-rpc dispatch — no executor change). `en-US` yields `Confirm`/`Cancel` + `[Player input]`/…; unknown locales fall back to zh-CN, byte-for-byte identical to the previous output. `submit-form`'s `Submission.type` now references the single-source `InteractionType` union.
 - **Dependencies bumped to latest stable.** All workspace dependencies updated to their latest stable under the existing `minimumReleaseAge: 10080` (1-week) gate — including the major bumps `@hono/node-server` 1→2, `electron` 41→42, `@types/node` 25→26, `@json-render/*` 0.18→0.19, and `zod` 4.3→4.4. One breaking change handled: zod 4.4 treats a bare `z.unknown()` inside a `.strict()` object as a required key, so the plugin user-setting `default` field gained an explicit `.optional()`. Verified across the full workspace lint + test (incl. real Postgres), server boot, API e2e, and the desktop (electron 42) typecheck.
+- **Dependency-hygiene gate + scaffold alignment.** Added `knip` as a CI `deps:check` gate (catches unused/missing workspace deps; understands JSDoc type imports + test files, so type-only/test-only deps aren't false-flagged), cleaned 12 stale plugin devDeps, and aligned the `@covel/create` scaffold to emit correctly-layered minimal deps per template. The authoring guide gains a dependency-layering + extraction-threshold section.
 
 ### Fixed
 
 - Function runtimes no longer leave a hanging `runtime.started` when the handler is missing or throws — a terminal `runtime.failed` (and `function.completed{status:failed}`) is emitted on every exit path.
+- **`/api/ui-specs` no longer 500s when one plugin's runtime fails to load.** A single bad runtime (corrupt UI spec, missing handler dep) used to take down the whole response on every world open; it is now logged and skipped while healthy plugins still resolve. `app.onError` additionally logs request context (method + full URL) for every 500.
+- **Desktop packaging now stages plugin-only workspace deps.** 5 bundled function plugins depend on `@covel/plugin-handlers-utils` (used by plugins, never by `@covel/server`), which `pnpm deploy --filter @covel/server` left out — so every packaged build shipped them broken with `ERR_MODULE_NOT_FOUND`. The desktop build now scans each plugin's `@covel/*` runtime deps and stages any the server deploy missed; the post-staging smoke test fails on plugin-load errors instead of swallowing them.
 
 <details>
 <summary>中文（备份翻译）</summary>
@@ -42,10 +45,13 @@ A playability-loop pass — function runtimes become visible in the trace timeli
 
 - **`submit-form` 现按 locale 本地化**：`confirmation` 的 `{{confirmed}}` 取值（确认/取消）与回退叙事前缀（`[玩家输入]` / `[玩家选择]` / `[玩家确认]` / `[玩家取消]`）此前写死中文；现按**会话 locale** 解析（经新增的 `RpcHandlerContext.locale` 注入，来源是 plugin-rpc dispatch 的 `session.locale`，无需改 executor）。`en-US` 产出 `Confirm`/`Cancel` + `[Player input]`/…；未知 locale 回落 zh-CN，与改前输出逐字一致。`submit-form` 的 `Submission.type` 现引用单一真相 `InteractionType` union。
 - **依赖升级到最新 stable**：全部 workspace 依赖在既有 `minimumReleaseAge: 10080`（1 周）门控下升到最新 stable——含跨 major 的 `@hono/node-server` 1→2、`electron` 41→42、`@types/node` 25→26、`@json-render/*` 0.18→0.19、`zod` 4.3→4.4。处理了一处 breaking：zod 4.4 把 `.strict()` object 内裸 `z.unknown()` 当作必填 key,故插件 user-setting 的 `default` 字段显式加 `.optional()`。已通过全 workspace lint + test（含真实 Postgres）、server 启动、API e2e 与 desktop（electron 42）typecheck 验证。
+- **依赖卫生 gate + 脚手架对齐**：新增 `knip` 作为 CI `deps:check` 关卡（拦截 unused/missing workspace 依赖；识别 JSDoc 类型引用与测试文件，不误杀 type-only/test-only 依赖），清理 12 个 stale 插件 devDep，并让 `@covel/create` 脚手架按 template 生成正确分层的最小依赖。插件指南新增"依赖分层与复用规范"章节。
 
 **Fixed**
 
 - function runtime 在 handler 缺失或抛错时不再留悬空 `runtime.started`——每条退出路径都发终结 `runtime.failed`（及 `function.completed{status:failed}`）。
+- **`/api/ui-specs` 不再因单个插件 runtime 加载失败而 500**：一个坏 runtime（损坏的 UI spec、缺失的 handler 依赖）此前会在每次打开世界时拖垮整个响应；现在记录并跳过,健康插件照常返回。`app.onError` 还会为每个 500 记录请求上下文（method + 完整 URL）。
+- **桌面打包现在 stage 插件专属的 workspace 依赖**：5 个内置 function 插件依赖 `@covel/plugin-handlers-utils`（只被插件用、不被 `@covel/server` 用），`pnpm deploy --filter @covel/server` 把它漏掉了——导致每个打包版本都带着 `ERR_MODULE_NOT_FOUND` 的坏插件。桌面构建现在扫描每个插件的 `@covel/*` 运行时依赖并补 stage server deploy 漏掉的；打包后的 smoke test 现在会因插件加载失败而失败,不再静默吞掉。
 
 </details>
 
