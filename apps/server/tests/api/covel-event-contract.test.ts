@@ -34,6 +34,9 @@ describe("CovelEvent contract", () => {
       "asset.progress",
       "block.emitted",
       "character.upserted",
+      "gateway.calling",
+      "gateway.failed",
+      "gateway.responded",
       "hook.aborted",
       "hook.fired",
       "hook.rewrote",
@@ -51,6 +54,35 @@ describe("CovelEvent contract", () => {
       "world.dimensions.changed",
     ];
     expect([...FORWARDED_EVENT_TYPES].sort()).toEqual(expected);
+  });
+
+  it("function.* trace events are union members, trace-only (not forwarded)", () => {
+    const executing: CovelEventType = "function.executing";
+    const completed: CovelEventType = "function.completed";
+    for (const t of [executing, completed]) {
+      expect(COVEL_EVENT_META[t].forwardToActionStream).toBe(false);
+      expect(FORWARDED_EVENT_TYPES.has(t)).toBe(false);
+    }
+  });
+
+  it("gateway.* trace events are union members forwarded for llm.* parity", () => {
+    const calling: CovelEventType = "gateway.calling";
+    const responded: CovelEventType = "gateway.responded";
+    const failed: CovelEventType = "gateway.failed";
+    for (const t of [calling, responded, failed]) {
+      expect(COVEL_EVENT_META[t].forwardToActionStream).toBe(true);
+      expect(FORWARDED_EVENT_TYPES.has(t)).toBe(true);
+    }
+  });
+
+  it("utils.fetch.* trace events are union members, trace-only (not forwarded)", () => {
+    const calling: CovelEventType = "utils.fetch.calling";
+    const responded: CovelEventType = "utils.fetch.responded";
+    const failed: CovelEventType = "utils.fetch.failed";
+    for (const t of [calling, responded, failed]) {
+      expect(COVEL_EVENT_META[t].forwardToActionStream).toBe(false);
+      expect(FORWARDED_EVENT_TYPES.has(t)).toBe(false);
+    }
   });
 
   it("runtime.skipped is a member of the CovelEvent union (drift fix)", () => {

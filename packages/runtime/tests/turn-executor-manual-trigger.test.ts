@@ -424,7 +424,10 @@ describe("executeTurn: manual trigger", () => {
     );
 
     expect(result.runtimeResults[0]!.status).toBe("success");
-    expect(emitted).toEqual([
+    // A2-P1-5: function.executing / function.completed now bracket the handler,
+    // so assert the asset.progress payload precisely via filter and pin the
+    // full trace sequence separately.
+    expect(emitted.filter((e) => e.type === "asset.progress")).toEqual([
       {
         type: "asset.progress",
         payload: {
@@ -439,6 +442,11 @@ describe("executeTurn: manual trigger", () => {
           message: "halfway",
         },
       },
+    ]);
+    expect(emitted.map((e) => e.type)).toEqual([
+      "function.executing",
+      "asset.progress",
+      "function.completed",
     ]);
   });
 

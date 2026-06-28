@@ -536,6 +536,19 @@ export function createSseEventHandler(
       case "recursive.calling":
       case "recursive.completed":
       case "recursive.failed":
+      // Function-runtime trace events: drive the /debug timeline via the
+      // subscription channel / trace_events, not this action renderer.
+      // gateway.* forward to the action stream (llm.* parity) but the action
+      // handler ignores them here, same as tool.*/llm.*.
+      case "function.executing":
+      case "function.completed":
+      case "gateway.calling":
+      case "gateway.responded":
+      case "gateway.failed":
+      // Plugin-utils provider-call trace (A2-P1-5): /debug-only, same as gateway.*
+      case "utils.fetch.calling":
+      case "utils.fetch.responded":
+      case "utils.fetch.failed":
         break;
       default:
         assertNeverEvent(eventType);

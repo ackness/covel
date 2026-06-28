@@ -25,10 +25,19 @@ export type EventCategory =
 export function categorize(type: string): EventCategory {
   if (type.startsWith("flow.")) return "flow";
   if (type.startsWith("runtime.")) return "runtime";
+  // function.executing / function.completed are function-runtime lifecycle —
+  // same lane as runtime.* in the timeline.
+  if (type.startsWith("function.")) return "runtime";
   if (type.startsWith("hook.")) return "hook";
   if (type.startsWith("message.")) return "message";
   if (type.startsWith("block.")) return "block";
   if (type.startsWith("state.")) return "state";
+  // gateway.* are function-runtime provider calls — group with llm.* so a
+  // function runtime's calls surface alongside an agent's LLM calls.
+  if (type.startsWith("gateway.")) return "llm";
+  // utils.fetch.* are plugin-owned provider HTTP calls (image gen wire) — same
+  // provider-call lane as gateway.*/llm.*.
+  if (type.startsWith("utils.")) return "llm";
   if (type.startsWith("llm.") || type.includes("llm")) return "llm";
   if (type.includes("tool")) return "tool";
   return "flow";

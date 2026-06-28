@@ -84,11 +84,16 @@ describe("executeTurn recursiveCall", () => {
       depth: 0,
       nestedDepth: 1,
     });
-    expect(emitter.events.map((event) => event.type)).toEqual([
+    // A2-P1-5: function.executing/completed now also flow through the emitter;
+    // filter to the recursive.* trace events this test pins.
+    const recursiveEvents = emitter.events.filter((event) =>
+      event.type.startsWith("recursive."),
+    );
+    expect(recursiveEvents.map((event) => event.type)).toEqual([
       "recursive.calling",
       "recursive.completed",
     ]);
-    expect(emitter.events.map((event) => event.payload.reason)).toEqual([
+    expect(recursiveEvents.map((event) => event.payload.reason)).toEqual([
       "delegate leaf pass",
       "delegate leaf pass",
     ]);
