@@ -420,7 +420,10 @@ export const pluginUserSettingSpecSchema = z
           "key must start with a letter and contain only letters/digits/underscore/hyphen",
       }),
     type: z.enum(["text", "number", "toggle", "select", "textarea"]),
-    default: z.unknown(),
+    // zod 4.4: a bare `z.unknown()` inside a `.strict()` object is now treated
+    // as a required key (4.3 treated it as optional); `.optional()` keeps the
+    // field omittable so plugins can declare a setting with no default.
+    default: z.unknown().optional(),
     label: i18nTextLoose,
     description: i18nTextLoose.optional(),
     min: z.number().optional(),

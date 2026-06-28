@@ -9,9 +9,9 @@
   },
   "dependencies": {
     "@covel/tools": "workspace:*",
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.9"
   }
 }

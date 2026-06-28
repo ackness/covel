@@ -10,6 +10,6 @@
   "devDependencies": {
     "@covel/plugin-loader": "workspace:*",
     "@covel/shared": "workspace:*",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.9"
   }
 }

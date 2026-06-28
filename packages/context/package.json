@@ -19,6 +19,6 @@
   "devDependencies": {
     "@covel/store": "workspace:*",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.9"
   }
 }
