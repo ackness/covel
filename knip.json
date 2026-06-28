@@ -1,0 +1,16 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreBinaries": ["only-allow", "ps", "which", "actionlint"],
+  "workspaces": {
+    ".": {
+      "ignoreDependencies": [
+        "better-sqlite3",
+        "sqlite-vec",
+        "@types/better-sqlite3"
+      ]
+    },
+    "apps/desktop": {
+      "ignoreDependencies": ["tsx", "electron-updater"]
+    }
+  }
+}
