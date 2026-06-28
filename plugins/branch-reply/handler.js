@@ -169,6 +169,10 @@ function normalizeTurnId(value) {
   return turnId;
 }
 
+// Intentionally local — NOT @covel/plugin-handlers-utils' normalizeRequiredString.
+// This variant additionally enforces MAX_TEXT_LENGTH and uses a `manualPayload.`
+// error prefix; the shared helper has no length cap. (makeProposal IS reused from
+// the shared package — see the import at the top.)
 function normalizeRequiredString(value, field) {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`manualPayload.${field} must be a non-empty string`);

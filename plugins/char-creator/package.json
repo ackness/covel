@@ -8,12 +8,9 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "@covel/context": "workspace:*",
     "@covel/plugin-loader": "workspace:*",
     "@covel/plugin-test-utils": "workspace:*",
-    "@covel/runtime": "workspace:*",
     "@covel/shared": "workspace:*",
-    "@covel/store": "workspace:*",
     "@covel/tools": "workspace:*",
     "vitest": "^4.1.9"
   }
