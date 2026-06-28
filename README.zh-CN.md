@@ -4,13 +4,13 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.7-8b5cf6)](https://github.com/AcKnEsS/covel/releases/tag/v0.0.7)
+[![Version](https://img.shields.io/badge/version-v0.0.8-8b5cf6)](https://github.com/AcKnEsS/covel/releases/tag/v0.0.8)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)]()
 
 ![Covel demo](./.assets/images/demo.gif)
 
-> **当前公开版本：v0.0.7。** Covel 仍处于早期阶段：API、数据格式、插件 frontmatter 可能随版本变化。官方预编译包当前面向 macOS Apple Silicon。
+> **当前公开版本：v0.0.8。** Covel 仍处于早期阶段：API、数据格式、插件 frontmatter 可能随版本变化。官方预编译包当前面向 macOS Apple Silicon。
 
 ---
 
@@ -33,11 +33,11 @@ Covel 是一款由 AI 驱动的角色扮演游戏 —— 叙事、NPC 关系、�
 
 ### 直接玩
 
-到 [GitHub Releases](https://github.com/AcKnEsS/covel/releases/tag/v0.0.7) 下载官方 **v0.0.7 macOS Apple Silicon** 安装包 —— `Covel-electron-0.0.7-mac-arm64.dmg`。滚动版本列表在 [Releases](https://github.com/AcKnEsS/covel/releases)。
+到 [GitHub Releases](https://github.com/AcKnEsS/covel/releases/tag/v0.0.8) 下载官方 **v0.0.8 macOS Apple Silicon** 安装包 —— `Covel-electron-0.0.8-mac-arm64.dmg`。滚动版本列表在 [Releases](https://github.com/AcKnEsS/covel/releases)。
 
 打开 Settings 填一个 LLM API Key，从四个示例世界（`cloudmere` / `mistport` / `neonridge` / `haruka-academy`）里挑一个，就能开始玩。
 
-v0.0.7 是一次架构优化版本：把重复的内核契约收口为单一、编译期强制的真相源，将 SQLite/Postgres 存储查询层统一到一个共享适配器之后并用真实 Postgres 验证跨后端一致，外加一批潜在的正确性修复 —— 对外行为不变。完整记录见 [`docs/CHANGELOG.md#007---2026-06-27`](./docs/CHANGELOG.md#007---2026-06-27)。
+v0.0.8 收尾 v0.0.7 的架构整理并新增**向量语义记忆召回**：存储 schema 与事务成为单一真相源，SQLite/Postgres 向量路径达成跨后端一致并用真实 pgvector Postgres 验证，记忆层现在写入时 embedding 以做 KNN 召回（未配 embedding 模型时回退关键词）—— 默认世界对外行为不变。完整记录见 [`docs/CHANGELOG.md#008---2026-06-28`](./docs/CHANGELOG.md#008---2026-06-28)。
 
 数据存放在 `~/.covel/` —— 配置、Key、SQLite、自定义世界、日志都在这。完整字段 → [`docs/guide/desktop-config.md`](./docs/guide/desktop-config.md)。
 
