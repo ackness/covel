@@ -32,7 +32,6 @@ import {
 } from "../../lib/session-lock.js";
 import { errorBody } from "../../api-error.js";
 import { sessionRoutes } from "./session.js";
-import { turnRoutes } from "./turn.js";
 import { pluginRoutes } from "./plugins.js";
 import { frameworkRoutes } from "./framework.js";
 import { stateRoutes } from "./state.js";
@@ -311,7 +310,7 @@ export async function bootstrapApi(
   }
 
   // 7. getConfigFn — per-request config injection
-  //    Actual config pre-loading happens in route handlers (actions.ts, turn.ts)
+  //    Actual config pre-loading happens in the actions.ts route handler
   //    before calling executeTurn, bridging async store reads to sync getConfig interface.
   const getConfigFn =
     config.getConfigFn ??
@@ -429,7 +428,6 @@ export async function bootstrapApi(
   // 9. Mount routes — all under /api/ prefix
   // Session routes: frontend uses /api/sessions (plural) for all session operations
   app.route("/api/sessions", sessionRoutes);
-  app.route("/api/sessions", turnRoutes);
   app.route("/api/sessions", stateRoutes);
   app.route("/api/sessions", messageRoutes);
   app.route("/api/sessions", characterRoutes);

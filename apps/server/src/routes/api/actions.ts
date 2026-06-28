@@ -361,7 +361,11 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           ...(pluginGateway ? { gateway: pluginGateway } : {}),
           ...(pluginUtils ? { utils: pluginUtils } : {}),
           ...(getPluginSource ? { getPluginSource } : {}),
-          getConfig: getConfigFn,
+          // bootstrapApi always supplies getConfigFn; default to a no-op so a
+          // minimal harness (or any caller that omits it) can't crash the turn
+          // executor's `deps.getConfig(...)` call. Preserves the defensiveness
+          // the removed /:id/turn route carried.
+          getConfig: getConfigFn ?? (() => ({})),
           store,
           ...(mediaStore ? { mediaStore } : {}),
           toolExecutor,

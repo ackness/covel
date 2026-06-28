@@ -2,9 +2,16 @@
  * E2E test: Complete narrator game flow through the API.
  *
  * Flow:
- *   POST /api/sessions           → create session, activate narrator
- *   POST /api/sessions/:id/turn  → execute turn with narrator
- *   store assertions             → verify narrative output and turn history
+ *   POST /api/sessions   → create session, activate narrator
+ *   POST /api/actions    → execute a player turn (send_message) over the SSE
+ *                          stream; we drain it to completion, then read the
+ *                          committed store rows for assertions
+ *   store assertions     → verify narrative output and turn history
+ *
+ * `/api/actions` is the single turn-execution entrypoint (the old non-streaming
+ * `POST /:id/turn` route was removed); a send_message only schedules the
+ * main-loop narrator once the session is out of the Pre-Game band, so each test
+ * advances `turnCount`/`preGameCompleted` first.
  */
 
 import { describe, it, expect, beforeAll } from "vitest";
@@ -13,6 +20,38 @@ import type { Hono } from "hono";
 import type { LLMAdapter, LLMResponse } from "@covel/runtime";
 import { createMemoryStore } from "@covel/store";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
+
+// ── SSE drain helper ─────────────────────────────────────────────
+
+interface ActionEnvelope {
+  readonly type: string;
+  readonly requestId: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly payload: Record<string, unknown>;
+}
+
+/** Read an `/api/actions` SSE response to completion, returning its events. */
+async function drainActionStream(res: Response): Promise<ActionEnvelope[]> {
+  const envelopes: ActionEnvelope[] = [];
+  if (!res.body) return envelopes;
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        envelopes.push(JSON.parse(line.slice(6)) as ActionEnvelope);
+      }
+    }
+  }
+  return envelopes;
+}
 
 // ── Mock LLM that returns narrative text ─────────────────────────
 
@@ -102,35 +141,39 @@ describe("E2E: Narrator game flow", () => {
 
     await markPreGameComplete(sessionId);
 
-    // 2. Execute a turn
-    const turnRes = await app.request(`/api/sessions/${sessionId}/turn`, {
+    // 2. Execute a turn over /api/actions (drain the SSE stream to completion).
+    const turnRes = await app.request("/api/actions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "走进了黑暗的森林" }),
+      body: JSON.stringify({
+        requestId: "req-narrator-1",
+        type: "send_message",
+        sessionId,
+        locale: "zh-CN",
+        payload: { content: "走进了黑暗的森林" },
+      }),
     });
     expect(turnRes.status).toBe(200);
 
-    const turnBody = (await turnRes.json()) as {
-      turnId: string;
-      runtimeResults: Array<{
-        pluginId: string;
-        status: string;
-        output: { narrativeOutput?: string };
-      }>;
-    };
+    const events = await drainActionStream(turnRes);
+    expect(events.map((e) => e.type)).not.toContain("error.occurred");
+    const turnId = events.find((e) => e.type === "execution.started")?.turnId;
+    expect(turnId).toBeDefined();
 
-    expect(turnBody.turnId).toBeDefined();
+    // The committed rows are the source of truth (the route no longer returns a
+    // turn-result body). Narrator runtime succeeded for this turn:
+    const runtimeRows = await store.listRuntimeResults(sessionId, turnId!);
+    const narratorRow = runtimeRows.find((r) => r.runtimeId === "narrator");
+    expect(narratorRow).toBeDefined();
+    expect(narratorRow!.status).toBe("success");
 
-    const narratorResult = turnBody.runtimeResults.find(
-      (result) => result.pluginId === "narrator",
-    );
-    expect(narratorResult).toBeDefined();
-    expect(narratorResult!.pluginId).toBe("narrator");
-    expect(narratorResult!.status).toBe("success");
-    expect(narratorResult!.output.narrativeOutput).toContain(
-      "走进了黑暗的森林",
-    );
-    expect(narratorResult!.output.narrativeOutput).toContain("泥土气息");
+    // …and its narrative landed in the messages table:
+    const messages = await store.listTurnMessages(sessionId);
+    const narratorNarrative = messages
+      .filter((m) => m.sourceRuntimeId === "narrator")
+      .at(-1);
+    expect(narratorNarrative?.content).toContain("走进了黑暗的森林");
+    expect(narratorNarrative?.content).toContain("泥土气息");
 
     // 3. Verify LLM was called with correct context
     expect(mockLLM.callCount).toBeGreaterThanOrEqual(1);
@@ -156,27 +199,51 @@ describe("E2E: Narrator game flow", () => {
     await markPreGameComplete(session.id);
 
     // Turn 1
-    const turn1Res = await app.request(`/api/sessions/${session.id}/turn`, {
+    const turn1Res = await app.request("/api/actions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "拔出长剑" }),
+      body: JSON.stringify({
+        requestId: "req-multi-1",
+        type: "send_message",
+        sessionId: session.id,
+        locale: "zh-CN",
+        payload: { content: "拔出长剑" },
+      }),
     });
     expect(turn1Res.status).toBe(200);
+    expect(
+      (await drainActionStream(turn1Res)).map((e) => e.type),
+    ).not.toContain("error.occurred");
 
     // Turn 2
-    const turn2Res = await app.request(`/api/sessions/${session.id}/turn`, {
+    const turn2Res = await app.request("/api/actions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "向巨龙发起攻击" }),
+      body: JSON.stringify({
+        requestId: "req-multi-2",
+        type: "send_message",
+        sessionId: session.id,
+        locale: "zh-CN",
+        payload: { content: "向巨龙发起攻击" },
+      }),
     });
     expect(turn2Res.status).toBe(200);
+    expect(
+      (await drainActionStream(turn2Res)).map((e) => e.type),
+    ).not.toContain("error.occurred");
   });
 
-  it("should return 404 for turn on non-existent session", async () => {
-    const res = await app.request("/api/sessions/nonexistent/turn", {
+  it("should return 404 for a turn on a non-existent session", async () => {
+    const res = await app.request("/api/actions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "test" }),
+      body: JSON.stringify({
+        requestId: "req-missing",
+        type: "send_message",
+        sessionId: "nonexistent",
+        locale: "zh-CN",
+        payload: { content: "test" },
+      }),
     });
     expect(res.status).toBe(404);
   });
