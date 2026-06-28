@@ -198,11 +198,12 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 玩家交互
 
-| 方法 | 路径                                  | 描述                                                        |
-| ---- | ------------------------------------- | ----------------------------------------------------------- |
-| POST | `/api/sessions/:id/plugin-rpc`        | 统一插件 RPC 通道(action 级 / runtime 级，含 `submit-form`) |
-| GET  | `/api/sessions/:id/approvals`         | **PR-7** 列出该 session 的待批准 RPC 请求                   |
-| POST | `/api/approvals/:approvalId/decision` | **PR-7** 提交玩家批准决定(allow/deny + once/session)        |
+| 方法   | 路径                                  | 描述                                                                                                        |
+| ------ | ------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| POST   | `/api/sessions/:id/plugin-rpc`        | 统一插件 RPC 通道(action 级 / runtime 级，含 `submit-form`)                                                 |
+| GET    | `/api/sessions/:id/approvals`         | **PR-7** 列出该 session 的待批准 RPC 请求                                                                   |
+| DELETE | `/api/sessions/:id/approvals`         | **PR-7** 撤销该 session 的已缓存授权（`?pluginId=` 限定单插件），返回 `{ ok, cleared }`；下次调用重新弹审批 |
+| POST   | `/api/approvals/:approvalId/decision` | **PR-7** 提交玩家批准决定(allow/deny + once/session)                                                        |
 
 ### 会话插件管理
 
@@ -214,13 +215,14 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 全局插件
 
-| 方法 | 路径                                    | 描述                                                          |
-| ---- | --------------------------------------- | ------------------------------------------------------------- |
-| GET  | `/api/framework/capabilities`           | 框架级能力索引：manifest 枚举、工具、proposal、world-data URI |
-| GET  | `/api/plugins`                          | 列出所有已加载插件                                            |
-| GET  | `/api/plugins/:id`                      | 获取插件详情                                                  |
-| GET  | `/api/plugins/:id/contract`             | 获取插件完整开发契约                                          |
-| GET  | `/api/plugins/:id/plugin-data-contract` | 获取插件数据 namespace/schema 契约                            |
+| 方法   | 路径                                    | 描述                                                                                                          |
+| ------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/framework/capabilities`           | 框架级能力索引：manifest 枚举、工具、proposal、world-data URI                                                 |
+| GET    | `/api/plugins`                          | 列出所有已加载插件                                                                                            |
+| GET    | `/api/plugins/:id`                      | 获取插件详情                                                                                                  |
+| DELETE | `/api/plugins/:id`                      | 卸载第三方插件（删除 `~/.covel/plugins/<id>`，拒绝内置 ID 返回 409，返回 `{ ok, id, restartRequired:true }`） |
+| GET    | `/api/plugins/:id/contract`             | 获取插件完整开发契约                                                                                          |
+| GET    | `/api/plugins/:id/plugin-data-contract` | 获取插件数据 namespace/schema 契约                                                                            |
 
 ### 状态查询
 
@@ -1214,6 +1216,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 - 该文本作为玩家消息追加到对话历史，供叙事者在下一轮 Turn 中参考（**不再生成合成的 assistant-role 消息**）
 - 模板由插件提供，使用 `{{fieldName}}` 占位符语法
 - 如果找不到模板，会生成一条简单的回退叙事（如 `[玩家输入] name: 艾尔文, class: 战士`）
+- **本地化**：`confirmation` 的 `{{confirmed}}` 取值（确认/取消）与回退叙事前缀（`[玩家输入]`/`[玩家选择]`/`[玩家确认]`/`[玩家取消]`）按**会话 locale** 解析——框架据 `session.locale` 把这些文案注入 handler（resolution order：请求 → 会话 → world → app 默认 `zh-CN`）。`en-US` 会产出 `Confirm`/`Cancel` 与 `[Player input]`/`[Player choice]`/`[Player confirmed]`/`[Player cancelled]`；未知 locale 回落 `zh-CN`（与历史输出逐字一致）。
 
 ---
 
@@ -2109,6 +2112,8 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 ---
 
 ### Suspend / Resume（S4-T4）
+
+> **过期清理（S4-T4.c）**：`POST /api/sessions/:id/resume` 与 `GET /api/sessions/:id/suspensions` 在处理前会机会式触发一次**时间门控**（最多每小时一次）、**best-effort**、**全局**的过期挂起项清理 —— 删除 `resolvedAt` 未设置且 `createdAt` 早于 `now - COVEL_SUSPENSION_TTL_MS`（默认 7 天）的记录。清理是 fire-and-forget，**不阻塞**本次响应。此外服务**启动时**会执行一次强制 sweep，清掉停机期间堆积的陈旧记录。**claimed（恢复进行中，`resolvedAt = "claimed:<iso>"`）与已成功解决的记录永不被清理。** 设 `COVEL_SUSPENSION_TTL_MS=0` 关闭清理。详见 [`docs/guide/env-registry.md`](../guide/env-registry.md)。
 
 #### `POST /api/sessions/:id/resume`
 
