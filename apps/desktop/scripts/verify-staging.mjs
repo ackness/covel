@@ -182,9 +182,32 @@ function assertNoStartupPathErrors() {
   }
 }
 
+// A bundled plugin whose handler/guard fails to load (e.g. a workspace dep that
+// staging forgot to copy) is logged at boot but SWALLOWED — the server still
+// answers /api/health, so a packaged build would silently ship broken plugins
+// that only fail when the user triggers them. Fail the smoke test here, where
+// it is cheap to catch, instead of in the field.
+function assertNoPluginLoadErrors() {
+  const isFailureLine = (line) =>
+    /ERR_MODULE_NOT_FOUND|Cannot find package|\[bootstrap\] Failed to load|\[ui-specs\] Failed to load runtime/.test(
+      line,
+    );
+  const offending = stderrBuf.filter(isFailureLine);
+  if (offending.length > 0) {
+    throw new Error(
+      `staged server logged plugin-load failures — a packaged build must not ` +
+        `ship plugins that fail to load:\n${offending.slice(-40).join("")}`,
+    );
+  }
+}
+
 try {
   await poll(`http://127.0.0.1:${port}/api/health`, TIMEOUT_MS);
+  // Give the boot-time eager plugin load a moment to flush its stderr before we
+  // inspect it (the health endpoint can answer a hair before the last warn).
+  await new Promise((r) => setTimeout(r, 500));
   assertNoStartupPathErrors();
+  assertNoPluginLoadErrors();
   booted = true;
   console.log("[smoke] ✓ /api/health OK");
 } catch (err) {
