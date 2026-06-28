@@ -377,7 +377,12 @@ export async function bootstrapApi(
   const isDev = runtimeEnv.nodeEnv !== "production";
   app.onError((err, c) => {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[api] Route error:`, err);
+    // Log every unhandled route error WITH request context (method + full URL)
+    // so any 500 is greppable and locatable from the logs — not just this one.
+    console.error(
+      `[api] Route error: ${c.req.method} ${c.req.url} — ${message}`,
+      err,
+    );
     return c.json(errorBody(isDev ? message : "Internal server error"), {
       status: 500,
     });
