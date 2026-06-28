@@ -14,6 +14,7 @@
 
 import type { PluginRuntimeGateway } from "@covel/plugin-loader";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
+import { summarizeTraceError } from "./trace-error.js";
 
 export interface GatewayTraceContext {
   readonly sessionId: string;
@@ -86,7 +87,7 @@ export function withGatewayTrace(
       await emitter.emit("gateway.failed", {
         ...ctx,
         method,
-        error: err instanceof Error ? err.message : String(err),
+        error: summarizeTraceError(err),
         durationMs: Date.now() - start,
       });
       throw err;

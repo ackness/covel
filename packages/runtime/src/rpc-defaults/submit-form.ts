@@ -82,7 +82,12 @@ const SUBMIT_FORM_LABELS: Record<string, SubmitFormLabels> = {
 
 /** Resolve labels for a locale, falling back to zh-CN (byte-compatible default). */
 function resolveLabels(locale?: string): SubmitFormLabels {
-  return (locale && SUBMIT_FORM_LABELS[locale]) || SUBMIT_FORM_LABELS["zh-CN"]!;
+  // `??` (nullish) not `||`: only an absent/unknown locale falls back, and the
+  // locale guard avoids indexing the record with `undefined`.
+  return (
+    (locale ? SUBMIT_FORM_LABELS[locale] : undefined) ??
+    SUBMIT_FORM_LABELS["zh-CN"]!
+  );
 }
 
 function findTemplateMessage(

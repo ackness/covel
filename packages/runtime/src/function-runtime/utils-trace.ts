@@ -17,6 +17,7 @@
 import type { PluginRuntimeUtils } from "@covel/plugin-loader";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
 import type { GatewayTraceContext } from "./gateway-trace.js";
+import { summarizeTraceError } from "./trace-error.js";
 
 /** Extract just the host (no path/query/credentials) for a PII-safe label. */
 function hostOf(input: string | URL): string {
@@ -61,7 +62,7 @@ export function withUtilsTrace(
           ...ctx,
           host,
           method,
-          error: err instanceof Error ? err.message : String(err),
+          error: summarizeTraceError(err),
           durationMs: Date.now() - start,
         });
         throw err;

@@ -66,39 +66,41 @@ export function aggregate(turns: readonly VisibleTurn[]): CostModel {
   let totalOutput = 0;
 
   for (const { turn, turnIndex } of turns) {
-    const turnAgg: TurnAgg = {
-      turnIndex,
-      turnId: turn.turnId,
-      calls: 0,
-      inputTokens: 0,
-      outputTokens: 0,
-    };
+    let turnCalls = 0;
+    let turnInput = 0;
+    let turnOutput = 0;
     for (const event of turn.events) {
       const usage = readUsage(event);
       if (!usage) continue;
       const payload = event.payload as Record<string, unknown>;
       const runtimeId = (payload.runtimeId as string) || "(unknown)";
       const pluginId = (payload.pluginId as string) || "";
-      const agg = runtimeMap.get(runtimeId) ?? {
+      // Immutable accumulate: replace the map entry with a fresh object
+      // rather than mutating the stored one in place.
+      const prev = runtimeMap.get(runtimeId);
+      runtimeMap.set(runtimeId, {
         runtimeId,
-        pluginId,
-        calls: 0,
-        inputTokens: 0,
-        outputTokens: 0,
-      };
-      agg.calls += 1;
-      agg.inputTokens += usage.inputTokens;
-      agg.outputTokens += usage.outputTokens;
-      runtimeMap.set(runtimeId, agg);
-
-      turnAgg.calls += 1;
-      turnAgg.inputTokens += usage.inputTokens;
-      turnAgg.outputTokens += usage.outputTokens;
+        pluginId: prev?.pluginId || pluginId,
+        calls: (prev?.calls ?? 0) + 1,
+        inputTokens: (prev?.inputTokens ?? 0) + usage.inputTokens,
+        outputTokens: (prev?.outputTokens ?? 0) + usage.outputTokens,
+      });
+      turnCalls += 1;
+      turnInput += usage.inputTokens;
+      turnOutput += usage.outputTokens;
       totalCalls += 1;
       totalInput += usage.inputTokens;
       totalOutput += usage.outputTokens;
     }
-    if (turnAgg.calls > 0) byTurn.push(turnAgg);
+    if (turnCalls > 0) {
+      byTurn.push({
+        turnIndex,
+        turnId: turn.turnId,
+        calls: turnCalls,
+        inputTokens: turnInput,
+        outputTokens: turnOutput,
+      });
+    }
   }
 
   const byRuntime = [...runtimeMap.values()].sort(
