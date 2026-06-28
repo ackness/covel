@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "../../packages/store/src/index.ts";
 import { getPendingProposals, tool, z } from "@covel/tools";
-import { createCommitPipeline } from "../../packages/runtime/src/session-kernel.ts";
+import { createCommitPipeline } from "../../packages/runtime/src/session/session-kernel.ts";
 import setWorldSchema from "./tools/set-world-schema.js";
 import setWorldEntriesBatch from "./tools/set-world-entries-batch.js";
 
