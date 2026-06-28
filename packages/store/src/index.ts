@@ -31,6 +31,11 @@ export {
   createSqliteMediaStore,
 } from "./media-store.js";
 export { createSqliteS3MetadataAdapter } from "./sqlite/sqlite-s3-metadata-adapter.js";
+export {
+  createPgS3MetadataAdapter,
+  createPgS3MetadataAdapterFromClient,
+  type PgS3MetadataAdapterOptions,
+} from "./postgres/pg-s3-metadata-adapter.js";
 export { supportsVector } from "./vector-store.js";
 export type {
   MediaAssetLookup,

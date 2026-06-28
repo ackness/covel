@@ -90,7 +90,8 @@ export interface S3MediaStoreOptions {
  * stores opaque bytes; everything else (owner, refs, mime, size, meta,
  * createdAt) flows through this adapter so it can survive restarts and span
  * multiple server instances. Implementations live alongside the SQL backends
- * (`createSqliteS3MetadataAdapter`, `createPgS3MetadataAdapter` — TODO).
+ * (`createSqliteS3MetadataAdapter` for single-node, `createPgS3MetadataAdapter`
+ * for multi-node).
  */
 export interface S3MediaMetadataAdapter {
   /** Idempotent insert of an asset row. First writer wins for mime/size/meta. */
