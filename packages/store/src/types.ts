@@ -436,6 +436,22 @@ export interface SuspensionStore {
    * `resolvedAt` unset) — see resume route for the policy.
    */
   claimSuspension(id: string): Promise<boolean>;
+  /**
+   * Global maintenance sweep of stale suspensions (TODO S4-T4.c).
+   *
+   * Deletes ONLY records that are still unresolved (`resolvedAt` unset) AND
+   * whose `createdAt` is strictly older than `olderThanIso`. Claimed
+   * (in-flight, `"claimed:<iso>"`) and successfully-resolved records are never
+   * touched — an in-progress or completed resume must survive the sweep.
+   *
+   * Not session-scoped: a single call sweeps every session. `olderThanIso` is
+   * an ISO-8601 UTC timestamp compared lexicographically (chronologically
+   * correct for normalized ISO strings). Returns the number of records deleted.
+   *
+   * Best-effort: callers (startup + opportunistic route sweep) treat any error
+   * as non-fatal. See `apps/server/src/routes/api/suspension-sweep.ts`.
+   */
+  deleteExpiredSuspensions(olderThanIso: string): Promise<number>;
 }
 
 /** Materialized state snapshots (S4-T2). Part of `sql-snapshot-records`. */

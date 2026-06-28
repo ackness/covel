@@ -109,6 +109,19 @@ export function createIdbPersistenceStore(ctx: IdbStoreContext): IdbStoreSlice {
       await mutations.deleteAndTrack("suspensions", id);
     },
 
+    async deleteExpiredSuspensions(olderThanIso: string): Promise<number> {
+      await mutations.ensureStoreSnapshot("suspensions");
+      const all = (await db.getAll("suspensions")) as SuspensionRecord[];
+      const expired = all.filter(
+        (r) => !r.resolvedAt && r.createdAt < olderThanIso,
+      );
+      for (const record of expired) {
+        // deleteAndTrack keeps the sweep within the IDB tx-rollback model.
+        await mutations.deleteAndTrack("suspensions", record.id);
+      }
+      return expired.length;
+    },
+
     async saveSnapshot(record: SnapshotRecord): Promise<void> {
       await mutations.putAndTrack("state_snapshots", structuredClone(record));
     },

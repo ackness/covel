@@ -41,6 +41,18 @@ export function createSuspensionMethods(
     async deleteSuspension(id) {
       state.suspensions.delete(id);
     },
+
+    async deleteExpiredSuspensions(olderThanIso) {
+      let deleted = 0;
+      // Snapshot the entries before mutating the map.
+      for (const [id, record] of [...state.suspensions.entries()]) {
+        if (!record.resolvedAt && record.createdAt < olderThanIso) {
+          state.suspensions.delete(id);
+          deleted += 1;
+        }
+      }
+      return deleted;
+    },
   };
 }
 
