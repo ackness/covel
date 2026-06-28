@@ -1,7 +1,7 @@
 import type * as api from "@/services/api.js";
 import { categorize, type EventCategory } from "./-debug-helpers.js";
 
-export type DebugView = "traces" | "data";
+export type DebugView = "traces" | "data" | "cost";
 
 export interface VisibleTurn {
   turn: api.TurnTrace;

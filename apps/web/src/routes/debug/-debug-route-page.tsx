@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button.js";
 import { useDebugPageData } from "./-debug-page-data.js";
 import { DebugToolbar } from "./-debug-toolbar.js";
 import { EventDetailPanel } from "./-event-detail-panel.js";
+import { CostPanel } from "./-cost-panel.js";
 import { SessionDataView } from "./-session-data-view.js";
 import { SessionSidebar } from "./-session-sidebar.js";
 import { TraceTimeline } from "./-trace-timeline.js";
@@ -166,6 +167,8 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
                 snapshotData={snapshotData}
                 traceDiscovery={traceDiscovery}
               />
+            ) : debugView === "cost" ? (
+              <CostPanel turns={visibleTurns} />
             ) : (
               <>
                 <TraceTimeline

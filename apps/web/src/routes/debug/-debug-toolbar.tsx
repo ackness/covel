@@ -39,6 +39,16 @@ export function DebugToolbar({
         >
           {t("debugger.sessionData")}
         </button>
+        <button
+          onClick={() => onDebugViewChange("cost")}
+          className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors ${
+            debugView === "cost"
+              ? "border-primary/40 bg-primary/10 text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {t("debugger.cost.tab", "Cost")}
+        </button>
       </div>
       {debugView === "traces" && (
         <>
