@@ -26,6 +26,28 @@ function grantSession(
   });
 }
 
+function grantOnce(
+  gate: RpcApprovalGate,
+  sessionId: string,
+  pluginId: string,
+  action = "a",
+): void {
+  const r = gate.evaluate({
+    sessionId,
+    pluginId,
+    action,
+    payload: null,
+    trustLevel: "community",
+  });
+  if (r.status !== "pending") throw new Error("expected pending");
+  gate.decide({
+    approvalId: r.approvalId,
+    decision: "allow",
+    scope: "once",
+    decidedAt: new Date().toISOString(),
+  });
+}
+
 function isAllowed(
   gate: RpcApprovalGate,
   sessionId: string,
@@ -82,5 +104,25 @@ describe("gate.revoke (PR-7 — withdraw community grants mid-session)", () => {
   it("returns 0 for a session with no grants", () => {
     const gate = createRpcApprovalGate();
     expect(gate.revoke("nope")).toBe(0);
+  });
+
+  it("clears an un-consumed one-time grant so the next call re-prompts", () => {
+    const gate = createRpcApprovalGate();
+    grantOnce(gate, "sess-1", "p");
+    // Revoke before any evaluate consumes the grant — exercises the
+    // oneTimeGrants branch of revoke, not just sessionCache.
+    expect(gate.revoke("sess-1", "p")).toBe(1);
+    // The grant is gone: the next evaluate is pending, not a one-time allow.
+    expect(isAllowed(gate, "sess-1", "p")).toBe(false);
+  });
+
+  it("counts and clears both a session-cached and a one-time grant together", () => {
+    const gate = createRpcApprovalGate();
+    grantSession(gate, "sess-1", "p", "act-session");
+    grantOnce(gate, "sess-1", "p", "act-once");
+    // revoke spans both the sessionCache and oneTimeGrants maps for the
+    // (session, plugin) prefix.
+    expect(gate.revoke("sess-1", "p")).toBe(2);
+    expect(isAllowed(gate, "sess-1", "p", "act-session")).toBe(false);
   });
 });

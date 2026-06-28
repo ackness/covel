@@ -653,5 +653,25 @@ describe("Resume Routes", () => {
       // Claimed records (a resume in flight) must survive the sweep.
       expect(await store.getSuspension("susp-claimed")).not.toBeNull();
     });
+
+    it("POST /:id/resume opportunistically sweeps an expired unresolved suspension", async () => {
+      await createSuspension(store, { id: "susp-old-post", createdAt: OLD });
+      await createSuspension(store, { id: "susp-fresh-post" });
+      const app = createTestApp(makeDefaultDeps(store));
+
+      // The sweep fires at the very top of the POST handler, before the
+      // X-Provider-Keys guard — so even a 400 (missing keys) request still
+      // exercises the wiring. We assert the sweep, not the resume outcome.
+      const res = await app.request("/api/sessions/sess-1/resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ suspensionId: "irrelevant" }),
+      });
+      expect(res.status).toBe(400); // missing X-Provider-Keys
+      await flush();
+
+      expect(await store.getSuspension("susp-old-post")).toBeNull();
+      expect(await store.getSuspension("susp-fresh-post")).not.toBeNull();
+    });
   });
 });
