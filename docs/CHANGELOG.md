@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.9] - 2026-06-28
+
 A playability-loop pass — function runtimes become visible in the trace timeline, stale suspensions expire, and player-input narrative localizes by session locale — plus a follow-up engineering batch: multi-node S3 media metadata on Postgres, plugin-utils provider-call tracing, a `/debug` cost panel, and community plugin uninstall/revoke. The default world and bundled plugins are behavior-unchanged.
 
 ### Added
@@ -417,7 +419,8 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.8...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.9...HEAD
+[0.0.9]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.9
 [0.0.8]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.8
 [0.0.7]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.7
 [0.0.6]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.6
