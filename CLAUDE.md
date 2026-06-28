@@ -319,7 +319,7 @@ Trace chain: `traceId → runId → branchId → turnId → runtimeId → plugin
 - **Runtime trace** (DB `trace_events`): structured turn hierarchy — LLM delta messages, tool calls, proposals, hooks, provider binding, context fragments. Delta recording avoids duplicating prompt history.
 - **Infrastructure log** (pino): startup, plugin loading, DB, SSE connections.
 - **Consumption**: `/api/traces/*`, `TraceExporter` interface (e.g. Langfuse), JSON export for players.
-- **Frontend `/debug`**: Session Timeline · Runtime Inspector · Prompt Viewer (full reconstruction + diff) · Data Explorer.
+- **Frontend `/debug`**: Session Timeline · Runtime Inspector · Prompt Viewer (full reconstruction + diff) · Data Explorer · Cost (token-usage aggregation from `llm.responded` / `gateway.responded` trace usage).
 
 ## Deployment Tiers
 

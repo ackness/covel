@@ -1557,6 +1557,24 @@ rpc:
 | 400    | `decision` 字段缺失 / 非 `allow` 或 `deny` / `scope` 非法 |
 | 404    | `approvalId` 不存在或已被消费                             |
 
+#### `DELETE /api/sessions/:id/approvals`
+
+撤销该 session 已缓存的授权（community 插件 mid-session 收回）。可选 `?pluginId=<id>` 只撤销该插件的授权；省略则撤销整个 session 的全部授权。被撤销后，该插件下次 RPC 调用会重新弹出 approval 对话框。
+
+**查询参数:**
+
+| 参数       | 必需 | 说明                                         |
+| ---------- | ---- | -------------------------------------------- |
+| `pluginId` | 否   | 限定撤销范围到单个插件；省略撤销整个 session |
+
+**响应 200:**
+
+```json
+{ "ok": true, "cleared": 2 }
+```
+
+`cleared` 为清除的授权条目数（session-cached 与 one-time 授权合计）。
+
 #### 信任等级与 approval 行为
 
 | 信任等级    | 来源                        | Approval 行为                              |
@@ -2131,21 +2149,22 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 }
 ```
 
-服务器会用 `suspension.resumeSchema` 对 `data` 做最小 JSON Schema 校验（type / required / 顶层 properties type）；不匹配返回 `400`。
+服务器会用 `suspension.resumeSchema` 对 `data` 做完整 JSON Schema 校验（经 Ajv：enum、嵌套对象、min/max、minLength/maxLength、pattern、array items、oneOf/anyOf 等）；不匹配返回 `400`。
 
 **响应:**
 
 ```json
-{ "result": <ResumeResult> }
+{ "result": <ResumeResult>, "events": [ /* 本次 resume 产生的事件 */ ] }
 ```
 
 **错误码:**
 
-| 状态  | 触发条件                                                                          |
-| ----- | --------------------------------------------------------------------------------- |
-| `400` | 缺少 `X-Provider-Keys`、JSON body 错误、`suspensionId` 缺失或 schema 校验失败     |
-| `404` | session、suspension 不存在，或 suspension 已 resolved，或 runtime manifest 找不到 |
-| `500` | `resumeSuspendedRuntime()` 抛出错误                                               |
+| 状态  | 触发条件                                                                      |
+| ----- | ----------------------------------------------------------------------------- |
+| `400` | 缺少 `X-Provider-Keys`、JSON body 错误、`suspensionId` 缺失或 schema 校验失败 |
+| `404` | session、suspension 不存在，或 runtime manifest 找不到                        |
+| `409` | suspension 已 resolved（含并发 claim 竞争的失败方）                           |
+| `500` | `resumeSuspendedRuntime()` 抛出错误                                           |
 
 #### `GET /api/sessions/:id/suspensions`
 

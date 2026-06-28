@@ -9,7 +9,7 @@
  *     approval, or one-time approval that was issued moments ago)
  *   - **demands** explicit player approval — returns
  *     `{ status: 'approval-required', approvalId }`. The caller (HTTP layer)
- *     persists the pending request and returns 200 with that envelope so the
+ *     persists the pending request and returns 202 with that envelope so the
  *     frontend can surface a dialog and POST a decision back.
  *
  * The gate is intentionally in-process and ephemeral. Pending approvals do
