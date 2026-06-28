@@ -51,6 +51,7 @@ import { mediaRoutes } from "./media.js";
 import type { MediaStore } from "@covel/store";
 import type { MediaStoreBackend, VectorBackend } from "@covel/store";
 import { resumeRoutes } from "./resume.js";
+import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
 import { snapshotRoutes } from "./snapshots.js";
 import { lorebookRoutes } from "./lorebook.js";
 import { runtimeOutputRoutes } from "./runtime-outputs.js";
@@ -213,6 +214,16 @@ export async function bootstrapApi(
   // on every setPluginData / setPluginDataBatch call, regardless of caller.
   const store = wrapStoreWithPluginDataEvents(config.store, eventBus);
 
+  // One-time startup sweep of stale suspensions accumulated while the server
+  // was down (TODO S4-T4.c). Fire-and-forget — never blocks boot.
+  void maybeSweepExpiredSuspensions(store, { force: true }).catch(
+    (err: unknown) =>
+      console.warn(
+        "[suspension-sweep] startup sweep failed:",
+        err instanceof Error ? err.message : String(err),
+      ),
+  );
+
   const { registry, discoveryMap, manifestCache } =
     await discoverAndRegisterPlugins({
       pluginsDir: config.pluginsDir,
@@ -366,7 +377,12 @@ export async function bootstrapApi(
   const isDev = runtimeEnv.nodeEnv !== "production";
   app.onError((err, c) => {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[api] Route error:`, err);
+    // Log every unhandled route error WITH request context (method + full URL)
+    // so any 500 is greppable and locatable from the logs — not just this one.
+    console.error(
+      `[api] Route error: ${c.req.method} ${c.req.url} — ${message}`,
+      err,
+    );
     return c.json(errorBody(isDev ? message : "Internal server error"), {
       status: 500,
     });

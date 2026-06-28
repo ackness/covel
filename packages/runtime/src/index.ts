@@ -96,6 +96,8 @@ export type {
   FullGatewayLike,
   PluginRuntimeGatewayConfig,
 } from "./function-runtime/plugin-runtime-gateway.js";
+export { withGatewayTrace } from "./function-runtime/gateway-trace.js";
+export type { GatewayTraceContext } from "./function-runtime/gateway-trace.js";
 
 // ── Session Kernel ──────────────────────────────────────────────
 export {

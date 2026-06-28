@@ -1,6 +1,6 @@
 {
   "name": "@covel/plugin-npc-graph",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,12 +8,11 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@covel/plugin-loader": "workspace:*",
-    "@covel/plugin-test-utils": "workspace:*",
     "@covel/tools": "workspace:*",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.9"
   }
 }

@@ -15,7 +15,7 @@
  * `changes`).
  */
 
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, lt } from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
 
 import type { InsertValueBuilders } from "./insert-values.js";
@@ -67,6 +67,7 @@ export type SqlSnapshotRecords = Pick<
   | "claimSuspension"
   | "listSuspensions"
   | "deleteSuspension"
+  | "deleteExpiredSuspensions"
 >;
 
 export function createSqlSnapshotRecords(
@@ -149,6 +150,23 @@ export function createSqlSnapshotRecords(
 
     async deleteSuspension(id: string): Promise<void> {
       await runner.delete(suspensions, eq(suspensions.id, id));
+    },
+
+    async deleteExpiredSuspensions(olderThanIso: string): Promise<number> {
+      // Unresolved-only: `resolvedAt IS NULL` reuses the same predicate
+      // `claimSuspension` relies on, so claimed (`claimed:<iso>`) and resolved
+      // records are excluded. `SqlRunner.delete` returns void, so the count
+      // comes from a prior select — acceptable for a best-effort sweep run
+      // serially; a concurrent claim between select and delete only skews the
+      // returned count, never deletes a claimed/resolved row.
+      const where = and(
+        isNull(suspensions.resolvedAt),
+        lt(suspensions.createdAt, olderThanIso),
+      );
+      const rows = await runner.select<SuspensionRow>(suspensions, { where });
+      if (rows.length === 0) return 0;
+      await runner.delete(suspensions, where);
+      return rows.length;
     },
   };
 }

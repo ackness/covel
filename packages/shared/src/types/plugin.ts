@@ -347,7 +347,9 @@ export interface PluginConfigField {
 export interface PluginUserSettingSpec {
   readonly key: string;
   readonly type: "text" | "number" | "toggle" | "select" | "textarea";
-  readonly default: unknown;
+  // Optional: a setting may declare no default (e.g. cost-gate). Mirrors the
+  // schema's `z.unknown().optional()` so the parsed manifest type-checks.
+  readonly default?: unknown;
   readonly label: import("./world.js").I18nText;
   readonly description?: import("./world.js").I18nText;
   readonly min?: number;

@@ -95,7 +95,12 @@ const env = readRuntimeEnv();
 const isDev = env.nodeEnv !== "production";
 app.onError((err, c) => {
   const message = err instanceof Error ? err.message : String(err);
-  console.error(`[server] Unhandled error:`, err);
+  // Log every unhandled error WITH request context (method + full URL) so any
+  // 500 is greppable and locatable from the logs.
+  console.error(
+    `[server] Unhandled error: ${c.req.method} ${c.req.url} — ${message}`,
+    err,
+  );
   return c.json(errorBody(isDev ? message : "Internal server error"), 500);
 });
 

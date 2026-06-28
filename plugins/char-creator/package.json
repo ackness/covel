@@ -1,6 +1,6 @@
 {
   "name": "@covel/plugin-char-creator",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,13 +8,8 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "@covel/context": "workspace:*",
     "@covel/plugin-loader": "workspace:*",
-    "@covel/plugin-test-utils": "workspace:*",
-    "@covel/runtime": "workspace:*",
-    "@covel/shared": "workspace:*",
-    "@covel/store": "workspace:*",
     "@covel/tools": "workspace:*",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.9"
   }
 }

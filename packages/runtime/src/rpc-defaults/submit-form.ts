@@ -6,11 +6,13 @@
  * `{ pluginId: "framework", action: "submit-form" }`.
  */
 
+import type { InteractionType } from "@covel/shared";
 import type { RpcHandler, RpcHandlerContext } from "../rpc/rpc-registry.js";
 
 interface Submission {
   readonly interactionId: string;
-  readonly type: "form" | "choice" | "confirmation";
+  // Single source of truth: InteractionType (packages/shared execution.ts).
+  readonly type: InteractionType;
   readonly values: Record<string, unknown>;
 }
 
@@ -37,7 +39,56 @@ interface MessageLike {
   readonly order: number;
 }
 
-const VALID_TYPES = new Set(["form", "choice", "confirmation"]);
+// Exported for the alignment test that pins this Set against InteractionType.
+export const VALID_TYPES = new Set<InteractionType>([
+  "form",
+  "choice",
+  "confirmation",
+]);
+
+/**
+ * Localized labels for player-input narrative filling. The confirmation values
+ * and fallback prefixes were previously hardcoded Chinese; they now resolve by
+ * locale. Unknown / missing locale falls back to zh-CN so existing zh-CN output
+ * stays byte-for-byte identical.
+ */
+interface SubmitFormLabels {
+  readonly confirm: string;
+  readonly cancel: string;
+  readonly formPrefix: string;
+  readonly choicePrefix: string;
+  readonly confirmedPrefix: string;
+  readonly cancelledPrefix: string;
+}
+
+const SUBMIT_FORM_LABELS: Record<string, SubmitFormLabels> = {
+  "zh-CN": {
+    confirm: "确认",
+    cancel: "取消",
+    formPrefix: "[玩家输入]",
+    choicePrefix: "[玩家选择]",
+    confirmedPrefix: "[玩家确认]",
+    cancelledPrefix: "[玩家取消]",
+  },
+  "en-US": {
+    confirm: "Confirm",
+    cancel: "Cancel",
+    formPrefix: "[Player input]",
+    choicePrefix: "[Player choice]",
+    confirmedPrefix: "[Player confirmed]",
+    cancelledPrefix: "[Player cancelled]",
+  },
+};
+
+/** Resolve labels for a locale, falling back to zh-CN (byte-compatible default). */
+function resolveLabels(locale?: string): SubmitFormLabels {
+  // `??` (nullish) not `||`: only an absent/unknown locale falls back, and the
+  // locale guard avoids indexing the record with `undefined`.
+  return (
+    (locale ? SUBMIT_FORM_LABELS[locale] : undefined) ??
+    SUBMIT_FORM_LABELS["zh-CN"]!
+  );
+}
 
 function findTemplateMessage(
   messages: readonly MessageLike[],
@@ -56,7 +107,10 @@ function findTemplateMessage(
   });
 }
 
-function buildReplacements(sub: Submission): Record<string, unknown> {
+function buildReplacements(
+  sub: Submission,
+  labels: SubmitFormLabels,
+): Record<string, unknown> {
   switch (sub.type) {
     case "form":
       return sub.values;
@@ -69,31 +123,32 @@ function buildReplacements(sub: Submission): Record<string, unknown> {
     case "confirmation":
       return {
         ...sub.values,
-        confirmed: sub.values.confirmed ? "确认" : "取消",
+        confirmed: sub.values.confirmed ? labels.confirm : labels.cancel,
       };
   }
 }
 
-function fallbackNarrative(sub: Submission): string {
+function fallbackNarrative(sub: Submission, labels: SubmitFormLabels): string {
   switch (sub.type) {
     case "form": {
       const entries = Object.entries(sub.values)
         .map(([k, v]) => `${k}: ${String(v)}`)
         .join(", ");
-      return `[玩家输入] ${entries}`;
+      return `${labels.formPrefix} ${entries}`;
     }
     case "choice":
-      return `[玩家选择] ${String(sub.values.selectedLabel ?? sub.values.selectedId)}`;
+      return `${labels.choicePrefix} ${String(sub.values.selectedLabel ?? sub.values.selectedId)}`;
     case "confirmation":
-      return `[玩家${sub.values.confirmed ? "确认" : "取消"}] ${String(sub.values.prompt ?? "")}`;
+      return `${sub.values.confirmed ? labels.confirmedPrefix : labels.cancelledPrefix} ${String(sub.values.prompt ?? "")}`;
   }
 }
 
 function fillTemplate(
   sub: Submission,
   templateMessage: MessageLike | undefined,
+  labels: SubmitFormLabels,
 ): string {
-  if (!templateMessage) return fallbackNarrative(sub);
+  if (!templateMessage) return fallbackNarrative(sub, labels);
 
   let template = templateMessage.content;
   if (Array.isArray(templateMessage.pendingInput)) {
@@ -108,7 +163,7 @@ function fillTemplate(
     }
   }
 
-  const replacements = buildReplacements(sub);
+  const replacements = buildReplacements(sub, labels);
   return template.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, key: string) => {
     const value = replacements[key.trim()];
     return value !== undefined && value !== null ? String(value) : "";
@@ -126,7 +181,8 @@ export const submitFormHandler: RpcHandler = async (
   payload: unknown,
   context: RpcHandlerContext,
 ): Promise<SubmitFormResult> => {
-  const { sessionId, store } = context;
+  const { sessionId, store, locale } = context;
+  const labels = resolveLabels(locale);
 
   if (!payload || typeof payload !== "object") {
     throw new RpcValidationError("payload must be an object");
@@ -188,7 +244,7 @@ export const submitFormHandler: RpcHandler = async (
       body.turnId,
       sub.interactionId,
     );
-    const filledNarrative = fillTemplate(sub, templateMessage);
+    const filledNarrative = fillTemplate(sub, templateMessage, labels);
 
     out.push({
       submissionId,

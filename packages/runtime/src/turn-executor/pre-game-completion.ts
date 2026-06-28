@@ -65,6 +65,12 @@ export async function markPreGameCompletion(args: {
     preGameCompleted = updated;
     await deps.store.updateSession(input.sessionId, {
       preGameCompleted: updated,
+      // The `turnCount:1` write is the atomic 0→1 band signal: setting it in the
+      // SAME updateSession as `preGameCompleted` avoids a transient state where
+      // setup is complete but the counter still reads 0. It is NOT the sole
+      // turnCount owner — `syncSessionTurnCount` (apps/server/.../turn-count.ts)
+      // is the authoritative re-compute that owns main-loop increments and
+      // reconciles this value afterwards (it recomputes to the same floor of 1).
       ...(allDone ? { turnCount: 1 } : {}),
       updatedAt: new Date().toISOString(),
     });

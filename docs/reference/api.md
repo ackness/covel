@@ -198,11 +198,12 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 玩家交互
 
-| 方法 | 路径                                  | 描述                                                        |
-| ---- | ------------------------------------- | ----------------------------------------------------------- |
-| POST | `/api/sessions/:id/plugin-rpc`        | 统一插件 RPC 通道(action 级 / runtime 级，含 `submit-form`) |
-| GET  | `/api/sessions/:id/approvals`         | **PR-7** 列出该 session 的待批准 RPC 请求                   |
-| POST | `/api/approvals/:approvalId/decision` | **PR-7** 提交玩家批准决定(allow/deny + once/session)        |
+| 方法   | 路径                                  | 描述                                                                                                        |
+| ------ | ------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| POST   | `/api/sessions/:id/plugin-rpc`        | 统一插件 RPC 通道(action 级 / runtime 级，含 `submit-form`)                                                 |
+| GET    | `/api/sessions/:id/approvals`         | **PR-7** 列出该 session 的待批准 RPC 请求                                                                   |
+| DELETE | `/api/sessions/:id/approvals`         | **PR-7** 撤销该 session 的已缓存授权（`?pluginId=` 限定单插件），返回 `{ ok, cleared }`；下次调用重新弹审批 |
+| POST   | `/api/approvals/:approvalId/decision` | **PR-7** 提交玩家批准决定(allow/deny + once/session)                                                        |
 
 ### 会话插件管理
 
@@ -214,13 +215,14 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 全局插件
 
-| 方法 | 路径                                    | 描述                                                          |
-| ---- | --------------------------------------- | ------------------------------------------------------------- |
-| GET  | `/api/framework/capabilities`           | 框架级能力索引：manifest 枚举、工具、proposal、world-data URI |
-| GET  | `/api/plugins`                          | 列出所有已加载插件                                            |
-| GET  | `/api/plugins/:id`                      | 获取插件详情                                                  |
-| GET  | `/api/plugins/:id/contract`             | 获取插件完整开发契约                                          |
-| GET  | `/api/plugins/:id/plugin-data-contract` | 获取插件数据 namespace/schema 契约                            |
+| 方法   | 路径                                    | 描述                                                                                                                                                |
+| ------ | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/framework/capabilities`           | 框架级能力索引：manifest 枚举、工具、proposal、world-data URI                                                                                       |
+| GET    | `/api/plugins`                          | 列出所有已加载插件                                                                                                                                  |
+| GET    | `/api/plugins/:id`                      | 获取插件详情                                                                                                                                        |
+| DELETE | `/api/plugins/:id`                      | 卸载第三方插件（删除 `~/.covel/plugins/<id>`）。错误码：id 格式非法 `400`、内置 ID `409`、未安装 `404`；成功返回 `{ ok, id, restartRequired:true }` |
+| GET    | `/api/plugins/:id/contract`             | 获取插件完整开发契约                                                                                                                                |
+| GET    | `/api/plugins/:id/plugin-data-contract` | 获取插件数据 namespace/schema 契约                                                                                                                  |
 
 ### 状态查询
 
@@ -1214,6 +1216,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 - 该文本作为玩家消息追加到对话历史，供叙事者在下一轮 Turn 中参考（**不再生成合成的 assistant-role 消息**）
 - 模板由插件提供，使用 `{{fieldName}}` 占位符语法
 - 如果找不到模板，会生成一条简单的回退叙事（如 `[玩家输入] name: 艾尔文, class: 战士`）
+- **本地化**：`confirmation` 的 `{{confirmed}}` 取值（确认/取消）与回退叙事前缀（`[玩家输入]`/`[玩家选择]`/`[玩家确认]`/`[玩家取消]`）按**会话 locale** 解析——框架据 `session.locale` 把这些文案注入 handler（resolution order：请求 → 会话 → world → app 默认 `zh-CN`）。`en-US` 会产出 `Confirm`/`Cancel` 与 `[Player input]`/`[Player choice]`/`[Player confirmed]`/`[Player cancelled]`；未知 locale 回落 `zh-CN`（与历史输出逐字一致）。
 
 ---
 
@@ -1553,6 +1556,24 @@ rpc:
 | ------ | --------------------------------------------------------- |
 | 400    | `decision` 字段缺失 / 非 `allow` 或 `deny` / `scope` 非法 |
 | 404    | `approvalId` 不存在或已被消费                             |
+
+#### `DELETE /api/sessions/:id/approvals`
+
+撤销该 session 已缓存的授权（community 插件 mid-session 收回）。可选 `?pluginId=<id>` 只撤销该插件的授权；省略则撤销整个 session 的全部授权。被撤销后，该插件下次 RPC 调用会重新弹出 approval 对话框。
+
+**查询参数:**
+
+| 参数       | 必需 | 说明                                         |
+| ---------- | ---- | -------------------------------------------- |
+| `pluginId` | 否   | 限定撤销范围到单个插件；省略撤销整个 session |
+
+**响应 200:**
+
+```json
+{ "ok": true, "cleared": 2 }
+```
+
+`cleared` 为清除的授权条目数（session-cached 与 one-time 授权合计）。
 
 #### 信任等级与 approval 行为
 
@@ -2110,6 +2131,8 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 ### Suspend / Resume（S4-T4）
 
+> **过期清理（S4-T4.c）**：`POST /api/sessions/:id/resume` 与 `GET /api/sessions/:id/suspensions` 在处理前会机会式触发一次**时间门控**（最多每小时一次）、**best-effort**、**全局**的过期挂起项清理 —— 删除 `resolvedAt` 未设置且 `createdAt` 早于 `now - COVEL_SUSPENSION_TTL_MS`（默认 7 天）的记录。清理是 fire-and-forget，**不阻塞**本次响应。此外服务**启动时**会执行一次强制 sweep，清掉停机期间堆积的陈旧记录。**claimed（恢复进行中，`resolvedAt = "claimed:<iso>"`）与已成功解决的记录永不被清理。** 设 `COVEL_SUSPENSION_TTL_MS=0` 关闭清理。详见 [`docs/guide/env-registry.md`](../guide/env-registry.md)。
+
 #### `POST /api/sessions/:id/resume`
 
 用玩家提交的数据重新启动一个被 `suspend` 工具暂停的 runtime。
@@ -2126,21 +2149,22 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 }
 ```
 
-服务器会用 `suspension.resumeSchema` 对 `data` 做最小 JSON Schema 校验（type / required / 顶层 properties type）；不匹配返回 `400`。
+服务器会用 `suspension.resumeSchema` 对 `data` 做完整 JSON Schema 校验（经 Ajv：enum、嵌套对象、min/max、minLength/maxLength、pattern、array items、oneOf/anyOf 等）；不匹配返回 `400`。
 
 **响应:**
 
 ```json
-{ "result": <ResumeResult> }
+{ "result": <ResumeResult>, "events": [ /* 本次 resume 产生的事件 */ ] }
 ```
 
 **错误码:**
 
-| 状态  | 触发条件                                                                          |
-| ----- | --------------------------------------------------------------------------------- |
-| `400` | 缺少 `X-Provider-Keys`、JSON body 错误、`suspensionId` 缺失或 schema 校验失败     |
-| `404` | session、suspension 不存在，或 suspension 已 resolved，或 runtime manifest 找不到 |
-| `500` | `resumeSuspendedRuntime()` 抛出错误                                               |
+| 状态  | 触发条件                                                                      |
+| ----- | ----------------------------------------------------------------------------- |
+| `400` | 缺少 `X-Provider-Keys`、JSON body 错误、`suspensionId` 缺失或 schema 校验失败 |
+| `404` | session、suspension 不存在，或 runtime manifest 找不到                        |
+| `409` | suspension 已 resolved（含并发 claim 竞争的失败方）                           |
+| `500` | `resumeSuspendedRuntime()` 抛出错误                                           |
 
 #### `GET /api/sessions/:id/suspensions`
 

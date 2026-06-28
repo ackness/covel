@@ -86,6 +86,13 @@ export interface RpcHandlerContext {
   readonly action?: string;
   readonly runtimeId?: string;
   readonly store: RpcHandlerStore;
+  /**
+   * Resolved locale for the session (request → session → world → app default).
+   * Framework default handlers (e.g. `submit-form`) use it to localize the
+   * narrative text they produce. Optional: undefined falls back to zh-CN.
+   * Flows in via `...context` spread in the rpc-executor — no executor change.
+   */
+  readonly locale?: string;
   /** SSE push (no-op for sync mode). */
   readonly emit?: (event: { type: string; data: unknown }) => void;
 }

@@ -213,14 +213,19 @@ Provider 图片输入矩阵：
 
 下列事件由 server 透过 actions SSE 流转发用于 debug / trace。它们现在**已经是 `CovelEvent` union 的成员**（不再是「未进 enum 的私有事件」），并在 `COVEL_EVENT_META` 中标记 `forwardToActionStream: true`。server 的转发白名单 `FORWARDED_EVENT_TYPES` 完全从该元数据**派生**（不再手写 Set）。web 的 actions handler 对这些类型显式 no-op（它们经订阅通道驱动 `/debug` 时间线），但因已在 union 内，新增同类事件会被前端穷尽校验强制做出「处理或忽略」的决定。
 
-| 事件                                                  | 来源                                                                                           | 用途                                                     |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `runtime.skipped`                                     | `apps/server/src/routes/api/actions.ts`                                                        | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过 |
-| `character.upserted`                                  | `packages/runtime/src/commit/session-commit-handlers.ts`（`character.upsert` proposal commit） | 与 `record.updated` 平行的角色快照事件                   |
-| `tool.calling` / `tool.completed` / `tool.failed`     | TurnEmitter                                                                                    | LLM 工具调用 trace                                       |
-| `llm.calling` / `llm.responded` / `message.completed` | TurnEmitter                                                                                    | LLM 调用 trace                                           |
-| `block.emitted` / `state.patch.applied`               | TurnEmitter                                                                                    | 块发出 / state patch 应用 trace                          |
-| `hook.fired` / `hook.rewrote` / `hook.aborted`        | TurnEmitter                                                                                    | Hook 行为 trace                                          |
+| 事件                                                       | 来源                                                                                           | 用途                                                                           |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                        | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过                       |
+| `character.upserted`                                       | `packages/runtime/src/commit/session-commit-handlers.ts`（`character.upsert` proposal commit） | 与 `record.updated` 平行的角色快照事件                                         |
+| `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                    | LLM 工具调用 trace                                                             |
+| `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                    | LLM 调用 trace                                                                 |
+| `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                    | 块发出 / state patch 应用 trace                                                |
+| `hook.fired` / `hook.rewrote` / `hook.aborted`             | TurnEmitter                                                                                    | Hook 行为 trace                                                                |
+| `gateway.calling` / `gateway.responded` / `gateway.failed` | TurnEmitter（`withGatewayTrace`）                                                              | function-runtime `ctx.gateway` provider 调用 trace（与 `llm.*` 对等，A2-P1-5） |
+
+> `function.executing` / `function.completed` 为 function-runtime 的 handler 边界 trace 事件（TurnEmitter），`forwardToActionStream: false`——**仅经订阅通道 / trace_events 下发**，与 `recursive.*` 同类，不进入 `/api/actions`。`gateway.*` 则 `forwardToActionStream: true`（对齐 `llm.calling/responded`），故列在上表。两组都已纳入 `CovelEvent` union（发射端受 `CovelEventType` 闭合约束）。
+>
+> `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed`（A2-P1-5 follow-up）trace 插件自带 wire 的 provider HTTP 调用（`ctx.utils.fetchWithRetry`，图像生成插件走的路径，由 `withUtilsTrace` 在 function-runtime / agent-guard 注入处包裹）。`forwardToActionStream: false`——polling 可能高频，故仅经 trace_events + 订阅通道驱动 `/debug`，不进 action 流。负载仅含 host / method / status / durationMs（**绝不含完整 URL、query、api key**，PII 保护）。
 
 ## 二、命令类型（CommandType）
 

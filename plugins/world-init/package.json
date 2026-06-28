@@ -1,6 +1,6 @@
 {
   "name": "@covel/plugin-world-init",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,9 +9,9 @@
   },
   "dependencies": {
     "@covel/tools": "workspace:*",
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.9"
   }
 }

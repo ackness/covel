@@ -135,6 +135,116 @@ export function registerPersistenceStoreSuites(
       const result = await store.getSuspension(suspension.id);
       expect(result!.resumeSchema).toEqual(complexSchema);
     });
+
+    // ── deleteExpiredSuspensions (S4-T4.c TTL sweep) ──────────────
+    // A global maintenance sweep: deletes ONLY records that are still
+    // unresolved (resolvedAt unset) AND older than the supplied cutoff.
+    // Claimed (in-flight, `claimed:<iso>`) and successfully-resolved
+    // records must never be touched. Must behave identically on every
+    // backend (store-backend-parity rule).
+    describe("deleteExpiredSuspensions (S4-T4.c TTL sweep)", () => {
+      const CUTOFF = "2025-06-01T00:00:00.000Z";
+      const OLD = "2020-01-01T00:00:00.000Z";
+      const FRESH = "2099-01-01T00:00:00.000Z";
+
+      it("deletes unresolved suspensions older than the cutoff", async () => {
+        const old = makeSuspension({ sessionId: "sess-ttl", createdAt: OLD });
+        await store.saveSuspension(old);
+
+        const deleted = await store.deleteExpiredSuspensions(CUTOFF);
+
+        expect(deleted).toBe(1);
+        expect(await store.getSuspension(old.id)).toBeNull();
+      });
+
+      it("keeps unresolved suspensions newer than the cutoff", async () => {
+        const fresh = makeSuspension({
+          sessionId: "sess-ttl",
+          createdAt: FRESH,
+        });
+        await store.saveSuspension(fresh);
+
+        const deleted = await store.deleteExpiredSuspensions(CUTOFF);
+
+        expect(deleted).toBe(0);
+        expect(await store.getSuspension(fresh.id)).not.toBeNull();
+      });
+
+      it("never deletes claimed (in-flight) suspensions even when old", async () => {
+        const old = makeSuspension({ sessionId: "sess-ttl", createdAt: OLD });
+        await store.saveSuspension(old);
+        expect(await store.claimSuspension(old.id)).toBe(true);
+
+        const deleted = await store.deleteExpiredSuspensions(CUTOFF);
+
+        expect(deleted).toBe(0);
+        expect(await store.getSuspension(old.id)).not.toBeNull();
+      });
+
+      it("never deletes successfully-resolved suspensions even when old", async () => {
+        const old = makeSuspension({ sessionId: "sess-ttl", createdAt: OLD });
+        await store.saveSuspension(old);
+        await store.markSuspensionResolved(old.id);
+
+        const deleted = await store.deleteExpiredSuspensions(CUTOFF);
+
+        expect(deleted).toBe(0);
+        expect(await store.getSuspension(old.id)).not.toBeNull();
+      });
+
+      it("returns the exact number of records deleted", async () => {
+        await store.saveSuspension(
+          makeSuspension({ sessionId: "sess-ttl", createdAt: OLD }),
+        );
+        await store.saveSuspension(
+          makeSuspension({ sessionId: "sess-ttl", createdAt: OLD }),
+        );
+        await store.saveSuspension(
+          makeSuspension({ sessionId: "sess-ttl", createdAt: FRESH }),
+        );
+
+        const deleted = await store.deleteExpiredSuspensions(CUTOFF);
+
+        expect(deleted).toBe(2);
+      });
+
+      it("is a no-op returning 0 when nothing is expired", async () => {
+        await store.saveSuspension(
+          makeSuspension({ sessionId: "sess-ttl", createdAt: FRESH }),
+        );
+
+        expect(await store.deleteExpiredSuspensions(CUTOFF)).toBe(0);
+      });
+
+      it("sweeps globally across sessions in one call", async () => {
+        await store.saveSuspension(
+          makeSuspension({ sessionId: "sess-ttl-A", createdAt: OLD }),
+        );
+        await store.saveSuspension(
+          makeSuspension({ sessionId: "sess-ttl-B", createdAt: OLD }),
+        );
+
+        const deleted = await store.deleteExpiredSuspensions(CUTOFF);
+
+        expect(deleted).toBe(2);
+        expect(await store.listSuspensions("sess-ttl-A")).toHaveLength(0);
+        expect(await store.listSuspensions("sess-ttl-B")).toHaveLength(0);
+      });
+
+      it("rolls back the sweep on rollbackTx", async () => {
+        const old = makeSuspension({
+          sessionId: "sess-ttl-tx",
+          createdAt: OLD,
+        });
+        await store.saveSuspension(old);
+
+        await store.beginTx();
+        await store.deleteExpiredSuspensions(CUTOFF);
+        await store.rollbackTx();
+
+        expect(await store.getSuspension(old.id)).not.toBeNull();
+      });
+    });
   });
 
   describe("LorebookEntries (S3-T2)", () => {

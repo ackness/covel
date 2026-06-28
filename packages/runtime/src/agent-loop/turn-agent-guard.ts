@@ -12,6 +12,7 @@ import {
   createPluginLogger,
 } from "../function-runtime/plugin-handler-helpers.js";
 import { createRuntimeMediaContext } from "../function-runtime/runtime-media-context.js";
+import { withUtilsTrace } from "../function-runtime/utils-trace.js";
 import { runPostRuntimeHook } from "../hooks/wire-helpers.js";
 import { resolveUserSettings } from "../turn-executor/turn-executor-helpers.js";
 import {
@@ -77,6 +78,11 @@ export async function executeAgentGuard({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
     });
+    // Trace plugin-owned provider HTTP calls from the guard handler too.
+    const guardTracedUtils =
+      deps.utils && deps.emitter
+        ? withUtilsTrace(deps.utils, deps.emitter, guardHelperCtx)
+        : deps.utils;
     const guardStore = deps.store
       ? isTrustedPluginSource(deps, manifest)
         ? deps.store
@@ -101,7 +107,7 @@ export async function executeAgentGuard({
       recursiveCall: createRecursiveCall(),
       recursionDepth,
       ...(deps.gateway ? { gateway: deps.gateway } : {}),
-      ...(deps.utils ? { utils: deps.utils } : {}),
+      ...(guardTracedUtils ? { utils: guardTracedUtils } : {}),
       ...(deps.mediaStore
         ? {
             media: createRuntimeMediaContext(deps.mediaStore, deps.utils, {

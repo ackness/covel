@@ -653,7 +653,16 @@ Bootstrap 时自动分类：
 
 ### 第三方插件 local tool 现状（audit P0-4 gap）
 
-社区插件（位于 `~/.covel/plugins/` 或后续添加的非 first-dir 来源）会被 `getPluginTrustInfo` 标记为 `community`，bootstrap 在 `discovery → import` 阶段**跳过这些插件的 `tools.local` 加载**（见 `apps/server/src/routes/api/bootstrap.ts` 中 `if (!trust.autoLoad) continue;` 的注释）。完整的"approval 后再 import"生命周期（discovered → approved → import → active → revoked）目前**尚未实现**。
+社区插件（位于 `~/.covel/plugins/` 或后续添加的非 first-dir 来源）会被 `getPluginTrustInfo` 标记为 `community`，bootstrap 在启动阶段**跳过这些插件的 `tools.local` 急加载**（见 `apps/server/src/routes/api/bootstrap/local-tools.ts` 中 `if (!trust.autoLoad) continue;`）。
+
+完整的 approval 生命周期 **discovered → approved → import → active → revoked / uninstalled 现已实现**：
+
+- **discovered**：拖拽 zip 经 `POST /api/install/plugin` 安装（含反 shadow 校验：保留内置 ID、强制 package.json 与 PLUGIN.md 名一致）。
+- **approved**：真实的 `createRpcApprovalGate`——community 调用首次走到 `plugin-rpc` 时返回 `202 approval-required` + `approvalId`，前端弹确认框，`POST /api/approvals/:id/decision`（allow/deny，once/session）。
+- **import**：approve 后经 `activatePluginLocalTools` JIT 懒加载该插件 `tools.local`（allow 决定时 + RPC 派发时各触发一次）。
+- **active**：运行期工具调用受真实审批规则门控（builtin allow / local allow / third-party deny）。
+- **revoked**：`DELETE /api/sessions/:id/approvals[?pluginId=]` 调 `gate.revoke` 清除该会话（可选某插件）的缓存授权，下次调用重新弹审批。
+- **uninstalled**：`DELETE /api/plugins/:id` 删除 `~/.covel/plugins/<id>` 目录（拒绝内置 ID，返回 `restartRequired:true`）；前端 Settings → Packages 面板列出已安装第三方插件并提供卸载按钮。
 
 实际影响：
 

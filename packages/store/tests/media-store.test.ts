@@ -15,6 +15,7 @@ import {
   type S3CompatibleObjectInfo,
 } from "../src/media-store.js";
 import { createSqliteS3MetadataAdapter } from "../src/sqlite/sqlite-s3-metadata-adapter.js";
+import { createPgS3MetadataAdapter } from "../src/postgres/pg-s3-metadata-adapter.js";
 
 runMediaStoreContractTests("MemoryMediaStore", () => createMemoryMediaStore());
 
@@ -177,6 +178,24 @@ if (pgAvailable) {
   runMediaStoreContractTests("PgMediaStore", () =>
     createPgMediaStore(isolatedUrl, { freshSchema: true }),
   );
+
+  // S3 store backed by the PG metadata adapter — same contract as the SQLite
+  // adapter run above, proving multi-node parity. Own isolated DB so it never
+  // races the PgMediaStore suite's media-table DDL.
+  const isolatedS3Url = await createIsolatedPgUrl(
+    DATABASE_URL,
+    "covel_test_media_s3",
+  );
+  runMediaStoreContractTests("S3MediaStore (PG adapter)", async () => {
+    const adapter = await createPgS3MetadataAdapter(isolatedS3Url, {
+      freshSchema: true,
+    });
+    return createS3MediaStore(new FakeS3Client(), {
+      bucket: "covel-test",
+      keyPrefix: "media",
+      metadataAdapter: adapter,
+    });
+  });
 } else {
   describe("PgMediaStore (skipped)", () => {
     it("skipped — PostgreSQL not available", () => {

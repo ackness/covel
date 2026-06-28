@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
 import { createMemoryStore, type DataStore } from "@covel/store";
+import { __resetSweepClockForTests } from "../../src/routes/api/suspension-sweep.js";
 import {
   createPluginRegistry,
   type PluginRegistry,
@@ -90,6 +91,7 @@ async function createSuspension(
     sessionId: string;
     resolvedAt: string;
     resumeSchema: unknown;
+    createdAt: string;
   }>,
 ) {
   const suspension = {
@@ -110,7 +112,7 @@ async function createSuspension(
       pendingProposals: [],
       suspendToolCallId: "tc-suspend-1",
     },
-    createdAt: new Date().toISOString(),
+    createdAt: overrides?.createdAt ?? new Date().toISOString(),
     resolvedAt: overrides?.resolvedAt,
   };
   await store.saveSuspension(suspension);
@@ -611,6 +613,65 @@ describe("Resume Routes", () => {
       const suspensions = body.suspensions as Array<Record<string, unknown>>;
       expect(suspensions).toHaveLength(1);
       expect(suspensions[0]!.id).toBe("susp-mine");
+    });
+  });
+
+  describe("TTL sweep wiring (S4-T4.c)", () => {
+    const OLD = "2020-01-01T00:00:00.000Z";
+
+    // The sweep is fired-and-forgotten inside the handler; let it settle.
+    const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+    beforeEach(() => {
+      __resetSweepClockForTests();
+    });
+
+    it("GET /:id/suspensions opportunistically sweeps an expired unresolved suspension", async () => {
+      await createSuspension(store, { id: "susp-old", createdAt: OLD });
+      await createSuspension(store, { id: "susp-fresh" });
+      const app = createTestApp(makeDefaultDeps(store));
+
+      const res = await app.request("/api/sessions/sess-1/suspensions");
+      expect(res.status).toBe(200);
+      await flush();
+
+      expect(await store.getSuspension("susp-old")).toBeNull();
+      expect(await store.getSuspension("susp-fresh")).not.toBeNull();
+    });
+
+    it("GET /:id/suspensions never sweeps a claimed (in-flight) suspension even if old", async () => {
+      await createSuspension(store, {
+        id: "susp-claimed",
+        createdAt: OLD,
+        resolvedAt: `claimed:${OLD}`,
+      });
+      const app = createTestApp(makeDefaultDeps(store));
+
+      await app.request("/api/sessions/sess-1/suspensions");
+      await flush();
+
+      // Claimed records (a resume in flight) must survive the sweep.
+      expect(await store.getSuspension("susp-claimed")).not.toBeNull();
+    });
+
+    it("POST /:id/resume opportunistically sweeps an expired unresolved suspension", async () => {
+      await createSuspension(store, { id: "susp-old-post", createdAt: OLD });
+      await createSuspension(store, { id: "susp-fresh-post" });
+      const app = createTestApp(makeDefaultDeps(store));
+
+      // The sweep fires at the very top of the POST handler, before the
+      // X-Provider-Keys guard — so even a 400 (missing keys) request still
+      // exercises the wiring. We assert the sweep, not the resume outcome.
+      const res = await app.request("/api/sessions/sess-1/resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ suspensionId: "irrelevant" }),
+      });
+      expect(res.status).toBe(400); // missing X-Provider-Keys
+      await flush();
+
+      expect(await store.getSuspension("susp-old-post")).toBeNull();
+      expect(await store.getSuspension("susp-fresh-post")).not.toBeNull();
     });
   });
 });

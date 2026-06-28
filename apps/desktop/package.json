@@ -1,6 +1,6 @@
 {
   "name": "@covel/desktop",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "private": true,
   "type": "module",
   "main": "dist/main.mjs",
@@ -20,12 +20,12 @@
   },
   "dependencies": {
     "smol-toml": "^1.6.1",
-    "tsx": "^4.21.0"
+    "tsx": "^4.22.4"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.0.3",
-    "electron": "^41.2.1",
-    "electron-builder": "^26.8.1",
-    "esbuild": "^0.28.0"
+    "@electron/rebuild": "^4.0.4",
+    "electron": "^42.4.1",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.1"
   }
 }

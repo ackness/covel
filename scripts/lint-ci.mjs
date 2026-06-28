@@ -38,3 +38,8 @@ fs.rmSync(path.join(repoRoot, "apps/web/src/routeTree.gen.ts"), {
 await run(pnpmCommand, ["install", "--frozen-lockfile"]);
 await run(pnpmCommand, ["clean"]);
 await run(pnpmCommand, ["lint"]);
+// Dependency hygiene: fail CI on unused / missing workspace dependencies so the
+// stale-declaration drift this codebase accumulated cannot silently return.
+// knip understands JSDoc `import()` type refs + test files, so it does not flag
+// type-only or test-only deps as unused (which a naive depcheck would).
+await run(pnpmCommand, ["deps:check"]);

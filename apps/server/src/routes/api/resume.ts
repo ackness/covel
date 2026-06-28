@@ -15,9 +15,11 @@
  *   - The pipeline also runs under `withSessionLock(sessionId)` so sequential
  *     resumes for the same session do not interleave with turn execution.
  *
- * TODO(S4-T4.c): Suspension expiration / TTL cleanup is not implemented.
- * Open suspensions remain until explicitly resumed or deleted. A future
- * ticket should add a background job to expire stale suspensions.
+ * Expiry (S4-T4.c): the suspension-touching routes opportunistically fire a
+ * time-gated, best-effort global sweep of stale (unresolved, older-than-TTL)
+ * suspensions via `maybeSweepExpiredSuspensions`; a one-time forced sweep also
+ * runs at server startup (see bootstrap). Claimed / resolved records are never
+ * swept. TTL via `COVEL_SUSPENSION_TTL_MS` (default 7d, 0 disables).
  */
 
 import { Hono } from "hono";
@@ -38,6 +40,7 @@ import type { RuntimeManifest } from "@covel/shared";
 import type { EventBus } from "@covel/events";
 import { errorBody } from "../../api-error.js";
 import { resolveSessionParam } from "./session/session-guard.js";
+import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
 
 type Env = {
   Variables: {
@@ -118,6 +121,8 @@ function validateAgainstJsonSchema(
 resumeRoutes.post("/:id/resume", async (c) => {
   const sessionId = c.req.param("id");
   const store = c.get("store");
+  // Opportunistic, time-gated, best-effort: never blocks the resume.
+  void maybeSweepExpiredSuspensions(store);
   const pluginRegistry = c.get("pluginRegistry");
   const llmAdapter = c.get("llmAdapter");
   const pluginGateway = c.get("pluginGateway");
@@ -342,6 +347,8 @@ resumeRoutes.delete("/:id/suspensions/:suspensionId", async (c) => {
 resumeRoutes.get("/:id/suspensions", async (c) => {
   const sessionId = c.req.param("id");
   const store = c.get("store");
+  // Opportunistic, time-gated, best-effort: never blocks the listing.
+  void maybeSweepExpiredSuspensions(store);
 
   const guard = await resolveSessionParam(c);
   if (!guard.ok) return guard.response;

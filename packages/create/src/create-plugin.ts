@@ -157,27 +157,41 @@ without writing.
   );
 }
 
-function renderPackageJson(name: string): string {
-  return `${JSON.stringify(
-    {
-      name: `@covel/plugin-${name}`,
-      version: "0.0.1-beta",
-      private: true,
-      type: "module",
-      scripts: {
-        test: "vitest run --passWithNoTests",
-        "test:watch": "vitest",
-      },
-      devDependencies: {
-        "@covel/plugin-test-utils": "workspace:*",
-        "@covel/shared": "workspace:*",
-        "@covel/tools": "workspace:*",
-        vitest: "^4.1.4",
-      },
+function renderPackageJson(name: string, template: PluginTemplate): string {
+  // Minimal, correctly-LAYERED deps per template (see plugin-authoring.md §F).
+  // The starter handler returns a plain object that the runtime normalizer
+  // commits, so it imports NOTHING at runtime — hence no `dependencies`. When
+  // you later import a shared helper at runtime (e.g. @covel/plugin-handlers-utils'
+  // makeProposal), add it to `dependencies` (NOT devDependencies) so the desktop
+  // packager stages it for players who enable the plugin.
+  const devDependencies =
+    template === "function"
+      ? {
+          // JSDoc `FunctionHandlerContext` type ref in handler.js (type-only).
+          "@covel/plugin-loader": "workspace:*",
+          "@covel/plugin-test-utils": "workspace:*",
+          vitest: "^4.1.4",
+        }
+      : {
+          // agent / zero-code starter templates import no @covel package — the
+          // agent's local tool is plain JS — so they declare only test
+          // scaffolding. Add @covel/tools etc. to `dependencies` once your tool
+          // or handler grows to import them (see plugin-authoring.md §F).
+          "@covel/plugin-test-utils": "workspace:*",
+          vitest: "^4.1.4",
+        };
+  const pkg = {
+    name: `@covel/plugin-${name}`,
+    version: "0.0.1-beta",
+    private: true,
+    type: "module",
+    scripts: {
+      test: "vitest run --passWithNoTests",
+      "test:watch": "vitest",
     },
-    null,
-    2,
-  )}\n`;
+    devDependencies,
+  };
+  return `${JSON.stringify(pkg, null, 2)}\n`;
 }
 
 function renderReadme(
@@ -272,7 +286,12 @@ function renderFunctionRuntime(name: string): string {
  * ${name} — pure function runtime.
  *
  * Return a plain object. The runtime normalizer turns supported fields such as
- * pluginData[] into proposals during commit.
+ * pluginData[] into proposals during commit. To build proposals by hand, import
+ * makeProposal from "@covel/plugin-handlers-utils" and add that package to the
+ * "dependencies" field — runtime deps belong in dependencies, not
+ * devDependencies (see docs/guide/plugin-authoring.md section F).
+ *
+ * @param {import('@covel/plugin-loader').FunctionHandlerContext} context
  */
 
 export default async function run(context) {
@@ -328,7 +347,7 @@ export async function createPlugin(
   const writes: Array<[string, string]> = [
     ["README.md", renderReadme({ name, template, description })],
     ["PLUGIN.md", renderPluginMd({ name, template, priority, description })],
-    ["package.json", renderPackageJson(name)],
+    ["package.json", renderPackageJson(name, template)],
   ];
 
   if (template === "agent") {

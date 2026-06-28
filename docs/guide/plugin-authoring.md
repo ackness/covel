@@ -216,3 +216,30 @@ minimum-release-age=10080
   ```ini
   minimum-release-age-exclude[]=@covel/*
   ```
+
+### F. 依赖分层与复用规范
+
+插件依赖声明的位置不是随意的——它由两条硬约束决定：**插件由玩家按需启用**，且**桌面打包只 stage 插件的 `dependencies`**（`apps/desktop/scripts/build.mjs` 的 `ensurePluginWorkspaceDeps`）。声明错位置 = 玩家启用该插件时 `ERR_MODULE_NOT_FOUND`。
+
+**依赖分层（哪些进 `dependencies`、哪些进 `devDependencies`）：**
+
+| 用途                                    | 位置              | 例子                                               |
+| --------------------------------------- | ----------------- | -------------------------------------------------- |
+| handler.js / guard.js **运行时 import** | `dependencies`    | `@covel/plugin-handlers-utils`、`@covel/tools`     |
+| 仅 JSDoc / `import type` 引用的类型     | `devDependencies` | `@covel/plugin-loader`（`FunctionHandlerContext`） |
+| 仅测试用                                | `devDependencies` | `@covel/plugin-test-utils`、`vitest`               |
+
+- `function` runtime 必须把 handler 运行时依赖放 `dependencies`；`agent` / `zero-code` 没有 handler.js，通常不声明任何 `@covel` 运行时依赖。
+- 脚手架（`@covel/create`）已按模板生成正确分层；从已有插件 fork 时手动核对，**不要把运行时依赖留在 `devDependencies`**（dev 能跑、打包后会缺）。
+
+**共用包提取阈值（避免过度抽象）：**
+
+`@covel/plugin-handlers-utils` 收纳 function-runtime handler 的纯函数 helper（输入规范化 + `makeProposal`）。提取门槛是经验法则：
+
+- **≥3 个插件真实复用** → 提取到 `plugin-handlers-utils`。
+- **1–2 个插件用** → 内联在插件本地，接受少量重复——去重收益只有在 3 个以上调用方时才盖过"多一条依赖边 + 多一处声明"的成本（YAGNI）。
+- 有合法定制需求时（例如 `branch-reply` 的本地 `normalizeRequiredString` 额外强制长度上限）→ 本地定义优先，加一行注释说明为何不用共用版本。
+
+**类型依赖显式化：** 只用到类型的 `@covel` 包，`.ts` 里用 `import type`、`.js` 里用 JSDoc `@param {import('@covel/...').Type}`，并放 `devDependencies`。这样 `package.json` 自我说明：`dependencies` = 运行时真需要，`devDependencies` = 开发期才需要。
+
+**依赖卫生（自动对账）：** CI 的 `pnpm deps:check`（knip）拦截 unused / missing 依赖——声明了不用、或用了没声明都会让 CI 失败。knip 能识别 JSDoc 类型引用和测试文件，type-only / test-only 依赖不会被误判。本地可随时 `pnpm deps:check` 自查。

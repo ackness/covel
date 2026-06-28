@@ -9,7 +9,7 @@
  *     approval, or one-time approval that was issued moments ago)
  *   - **demands** explicit player approval — returns
  *     `{ status: 'approval-required', approvalId }`. The caller (HTTP layer)
- *     persists the pending request and returns 200 with that envelope so the
+ *     persists the pending request and returns 202 with that envelope so the
  *     frontend can surface a dialog and POST a decision back.
  *
  * The gate is intentionally in-process and ephemeral. Pending approvals do
@@ -61,6 +61,12 @@ export interface RpcApprovalGate {
   getPending(approvalId: string): RpcApprovalPending | undefined;
   /** List all pending approvals for a session. */
   listPending(sessionId: string): readonly RpcApprovalPending[];
+  /**
+   * Revoke cached session grants + fresh one-time grants for a session,
+   * optionally scoped to one plugin. Returns the number of grants cleared.
+   * Withdraws a previously approved community plugin mid-session.
+   */
+  revoke(sessionId: string, pluginId?: string): number;
 }
 
 interface InternalState {
@@ -244,6 +250,28 @@ export function createRpcApprovalGate(): RpcApprovalGate {
       return [...state.pending.values()].filter(
         (p) => p.sessionId === sessionId,
       );
+    },
+
+    revoke(sessionId, pluginId) {
+      // Keys are `${sessionId}::${pluginId}::${action}`; the `::` delimiter and
+      // the enumeration-resistant session id make this prefix match exact.
+      const prefix = pluginId
+        ? `${sessionId}::${pluginId}::`
+        : `${sessionId}::`;
+      let cleared = 0;
+      for (const key of [...state.sessionCache]) {
+        if (key.startsWith(prefix)) {
+          state.sessionCache.delete(key);
+          cleared += 1;
+        }
+      }
+      for (const key of [...state.oneTimeGrants.keys()]) {
+        if (key.startsWith(prefix)) {
+          state.oneTimeGrants.delete(key);
+          cleared += 1;
+        }
+      }
+      return cleared;
     },
   };
 }

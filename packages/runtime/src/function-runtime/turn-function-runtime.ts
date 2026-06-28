@@ -23,6 +23,8 @@ import {
   emitSubEvent,
   isTrustedPluginSource,
 } from "../turn-executor/turn-runtime-helpers.js";
+import { withGatewayTrace } from "./gateway-trace.js";
+import { withUtilsTrace } from "./utils-trace.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { NARRATOR_PRIORITY } from "../schedule/scheduler.js";
 
@@ -76,13 +78,54 @@ export async function executeFunctionRuntime({
     pluginId: manifest.pluginId,
     priority: manifest.priority,
   });
+
+  const helperCtx = {
+    sessionId: input.sessionId,
+    turnId: input.turnId,
+    pluginId: manifest.pluginId,
+    runtimeId: manifest.name,
+  };
+
   if (!loaded.handler) {
-    return makeFailedResult(
+    // A missing handler returns (never throws), so it would bypass the dispatch
+    // catch and leave the runtime.started above with no terminal event. Emit a
+    // terminal runtime.failed + run the PostRuntime hook to close that gap.
+    const failed = makeFailedResult(
       manifest,
       input,
       runId,
       startTime,
       "Function runtime missing handler",
+    );
+    try {
+      await deps.onRuntimeComplete?.({
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        status: failed.status,
+        durationMs: failed.durationMs,
+        error: "Function runtime missing handler",
+      });
+    } catch {
+      /* callback error must not kill runtime */
+    }
+    emitSubEvent(deps.eventBus, "runtime", "runtime.failed", input.sessionId, {
+      runtimeId: manifest.name,
+      pluginId: manifest.pluginId,
+      status: failed.status,
+      durationMs: failed.durationMs,
+      error: "Function runtime missing handler",
+    });
+    return runPostRuntimeHook(
+      {
+        pipeline: hookPipeline,
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        pluginId: manifest.pluginId,
+        runtimeId: manifest.name,
+        eventBus: deps.eventBus,
+        emitter: deps.emitter,
+      },
+      failed,
     );
   }
   const config = deps.getConfig(manifest.pluginId, manifest.name);
@@ -94,12 +137,6 @@ export async function executeFunctionRuntime({
     manifest,
     input.userSettings,
   );
-  const helperCtx = {
-    sessionId: input.sessionId,
-    turnId: input.turnId,
-    pluginId: manifest.pluginId,
-    runtimeId: manifest.name,
-  };
   const assetProgress = createAssetProgressEmitter(deps.emitter, helperCtx);
   const pluginDataHandle = deps.store
     ? createPluginDataWriter(deps.store, helperCtx)
@@ -119,29 +156,72 @@ export async function executeFunctionRuntime({
       ? deps.store
       : createFunctionStoreView(deps.store, helperCtx)
     : undefined;
-  const output = await loaded.handler({
-    sessionId: input.sessionId,
-    turnId: input.turnId,
-    pluginId: manifest.pluginId,
-    runtimeId: manifest.name,
-    playerMessage: input.playerMessage,
-    locale: input.locale,
-    store: handlerStore,
-    completedResults,
-    config,
-    recursiveCall: createRecursiveCall(),
+
+  // Trace function-runtime provider calls when a turn emitter is present. The
+  // wrapper persists gateway.calling/responded/failed to trace_events; without
+  // an emitter (tests, third-party direct callers) the raw gateway passes
+  // through and no function.*/gateway.* events are emitted.
+  const tracedGateway =
+    deps.gateway && deps.emitter
+      ? withGatewayTrace(deps.gateway, deps.emitter, helperCtx)
+      : deps.gateway;
+  // Trace plugin-owned provider HTTP calls (ctx.utils.fetchWithRetry — the wire
+  // image plugins use) when an emitter is present; raw passthrough otherwise.
+  const tracedUtils =
+    deps.utils && deps.emitter
+      ? withUtilsTrace(deps.utils, deps.emitter, helperCtx)
+      : deps.utils;
+
+  await deps.emitter?.emit("function.executing", {
+    ...helperCtx,
     recursionDepth,
-    ...(deps.gateway ? { gateway: deps.gateway } : {}),
-    ...(deps.utils ? { utils: deps.utils } : {}),
-    ...(mediaHandle ? { media: mediaHandle } : {}),
-    ...(assetProgress ? { assetProgress } : {}),
-    ...(manualPayloadForRuntime
-      ? { manualPayload: manualPayloadForRuntime }
-      : {}),
-    ...(triggerEvent ? { triggerEvent } : {}),
-    ...(userSettingsForRuntime ? { userSettings: userSettingsForRuntime } : {}),
-    ...(pluginDataHandle ? { pluginData: pluginDataHandle } : {}),
-    ...(loggerHandle ? { logger: loggerHandle } : {}),
+    hasGateway: !!deps.gateway,
+  });
+
+  let output: Awaited<ReturnType<NonNullable<typeof loaded.handler>>>;
+  try {
+    output = await loaded.handler({
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      pluginId: manifest.pluginId,
+      runtimeId: manifest.name,
+      playerMessage: input.playerMessage,
+      locale: input.locale,
+      store: handlerStore,
+      completedResults,
+      config,
+      recursiveCall: createRecursiveCall(),
+      recursionDepth,
+      ...(tracedGateway ? { gateway: tracedGateway } : {}),
+      ...(tracedUtils ? { utils: tracedUtils } : {}),
+      ...(mediaHandle ? { media: mediaHandle } : {}),
+      ...(assetProgress ? { assetProgress } : {}),
+      ...(manualPayloadForRuntime
+        ? { manualPayload: manualPayloadForRuntime }
+        : {}),
+      ...(triggerEvent ? { triggerEvent } : {}),
+      ...(userSettingsForRuntime
+        ? { userSettings: userSettingsForRuntime }
+        : {}),
+      ...(pluginDataHandle ? { pluginData: pluginDataHandle } : {}),
+      ...(loggerHandle ? { logger: loggerHandle } : {}),
+    });
+  } catch (err) {
+    // Function-layer terminal marker; rethrow so the dispatch catch emits the
+    // single runtime.failed (avoids a double terminal event).
+    await deps.emitter?.emit("function.completed", {
+      ...helperCtx,
+      status: "failed",
+      durationMs: Date.now() - startTime,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
+
+  await deps.emitter?.emit("function.completed", {
+    ...helperCtx,
+    status: output.status === "suspended" ? "suspended" : "success",
+    durationMs: Date.now() - startTime,
   });
 
   // ── Suspend detection for function runtimes (S4-T4) ────────────

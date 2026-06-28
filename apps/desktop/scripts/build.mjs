@@ -126,6 +126,73 @@ function ensureRuntimePackages() {
   }
 }
 
+// Plugins' handler.js / guard.js import workspace packages that are NOT in
+// @covel/server's dependency tree — e.g. @covel/plugin-handlers-utils is used
+// only by plugin handlers, never by the server. `pnpm deploy --filter
+// @covel/server` therefore omits them, and the staged plugins fail to load at
+// runtime with ERR_MODULE_NOT_FOUND. Collect every @covel/* runtime dep
+// declared by a bundled plugin (plus their transitive @covel deps) and copy any
+// the server deploy didn't already provide.
+function ensurePluginWorkspaceDeps() {
+  const nodeModulesDir = path.join(serverStaging, "node_modules");
+  const pluginsDir = path.join(projectRoot, "plugins");
+  if (!fs.existsSync(pluginsDir)) return;
+
+  const covelDepsOf = (pkgJsonPath) => {
+    if (!fs.existsSync(pkgJsonPath)) return [];
+    const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, "utf-8"));
+    // Runtime deps only — devDependencies (e.g. @covel/plugin-test-utils) never
+    // load in the packaged sidecar.
+    return Object.keys(pkg.dependencies ?? {}).filter((name) =>
+      name.startsWith("@covel/"),
+    );
+  };
+
+  // @covel/* are workspace packages — resolve to their source dir. A package
+  // depended on ONLY by plugins (e.g. @covel/plugin-handlers-utils) has no
+  // root/server node_modules symlink, so resolveInstalledPackagePath misses it;
+  // the source under packages/<name> (or apps/<name>) is the reliable origin.
+  const resolveWorkspaceSource = (name) => {
+    const short = name.slice("@covel/".length);
+    for (const dir of ["packages", "apps"]) {
+      const candidate = path.join(projectRoot, dir, short);
+      if (fs.existsSync(path.join(candidate, "package.json"))) return candidate;
+    }
+    return resolveInstalledPackagePath(name);
+  };
+
+  const SKIP = new Set(["node_modules", "dist", ".turbo", "coverage", "tests"]);
+
+  const queue = [];
+  for (const entry of fs.readdirSync(pluginsDir)) {
+    queue.push(...covelDepsOf(path.join(pluginsDir, entry, "package.json")));
+  }
+
+  const seen = new Set();
+  while (queue.length > 0) {
+    const name = queue.shift();
+    if (seen.has(name)) continue;
+    seen.add(name);
+
+    const source = resolveWorkspaceSource(name);
+    if (!source) {
+      console.warn(`  ⚠ plugin workspace dep not resolvable: ${name}`);
+      continue;
+    }
+    // Follow this package's own @covel deps so transitive ones are staged too.
+    queue.push(...covelDepsOf(path.join(source, "package.json")));
+
+    const target = path.join(nodeModulesDir, ...name.split("/"));
+    if (fs.existsSync(target)) continue; // server deploy already provided it
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.cpSync(fs.realpathSync(source), target, {
+      recursive: true,
+      filter: (src) => !SKIP.has(path.basename(src)),
+    });
+    console.log(`  ✓ staged plugin workspace dep: ${name}`);
+  }
+}
+
 async function rebuildNativeForElectron(stagingDir) {
   const electronPkgPath = path.join(
     desktopRoot,
@@ -210,6 +277,11 @@ console.log("  ✓ pnpm deploy → staging/server/ (hoisted)");
 // runtime packages. Restore the critical tsx/esbuild tree explicitly so the
 // packaged app always has a bootable server sidecar.
 ensureRuntimePackages();
+
+// Plugins import workspace packages outside @covel/server's dependency tree
+// (e.g. @covel/plugin-handlers-utils) — stage them so handler/guard imports
+// resolve in the packaged sidecar instead of ERR_MODULE_NOT_FOUND.
+ensurePluginWorkspaceDeps();
 
 // 拷贝 server 运行所需的仓库级资源（这些不在 @covel/server 依赖图里）。
 // 注意：plugins/*/node_modules 来自 pnpm workspace 安装，内部是层层嵌套的

@@ -126,8 +126,25 @@ async function loadValidatedSpecs(): Promise<ValidatedSpecs> {
     const runtimes: RuntimeSlotSpecs[] = [];
 
     for (const [runtimeIndex, parsed] of manifests.entries()) {
-      const loaded = await loadRuntime(discovery, parsed.manifest.name);
-      if (!loaded.uiSpecs) continue;
+      // Only runtimes that declare a `ui:` block can contribute specs. Skipping
+      // the rest mirrors the boot-time eager-load gate (bootstrap.ts) and avoids
+      // loading — and possibly throwing on — the handler / guard / output-schema
+      // of UI-irrelevant runtimes.
+      if (!parsed.manifest.ui) continue;
+
+      // A single bad runtime must never 500 the whole /api/ui-specs response.
+      // Log with full context for fast triage, then skip it (mirrors the boot
+      // eager-load try/catch).
+      const loaded = await loadRuntime(discovery, parsed.manifest.name).catch(
+        (err: unknown) => {
+          console.error(
+            `[ui-specs] Failed to load runtime "${discovery.id}/${parsed.manifest.name}" for UI specs:`,
+            err,
+          );
+          return null;
+        },
+      );
+      if (!loaded || !loaded.uiSpecs) continue;
 
       const slots: SlotSpecs = {};
       for (const slot of UI_SLOTS) {

@@ -4,6 +4,57 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.9] - 2026-06-28
+
+A playability-loop pass — function runtimes become visible in the trace timeline, stale suspensions expire, and player-input narrative localizes by session locale — plus a follow-up engineering batch: multi-node S3 media metadata on Postgres, plugin-utils provider-call tracing, a `/debug` cost panel, and community plugin uninstall/revoke. The default world and bundled plugins are behavior-unchanged.
+
+### Added
+
+- **Function-runtime trace coverage (A2-P1-5).** Function runtimes were near-invisible in `/debug` — nothing between `runtime.started`/`completed`, and zero rows for `ctx.gateway` provider calls. They now emit `function.executing` / `function.completed` (handler boundary) and, via a `withGatewayTrace` wrapper applied at execution time, `gateway.calling` / `gateway.responded` / `gateway.failed` for `generateText`/`generateObject` — all persisted to `trace_events` and broadcast, so a function runtime's LLM usage is as visible as an agent runtime's. The five events join the single-source `CovelEvent` union (compile-time exhaustive over `COVEL_EVENT_META` + the frontend switch). A missing handler now emits a terminal `runtime.failed` instead of leaving a hanging `runtime.started`.
+- **Plugin-utils provider-call trace.** Closes the A2-P1-5 follow-up: image plugins (and any plugin owning its wire) call providers via `ctx.utils.fetchWithRetry`, which a `withUtilsTrace` wrapper now traces as `utils.fetch.calling` / `responded` / `failed` (trace-only, `forwardToActionStream:false`) at both the function-runtime and agent-guard injection sites. PII-safe — payloads carry only host / method / status / durationMs, never the full URL, query, or API key.
+- **Multi-node S3 media metadata on Postgres.** `createPgS3MetadataAdapter` (+ `…FromClient`) implements the `S3MediaMetadataAdapter` interface over the shared `media_assets` / `media_refs` PG tables, so S3-backed media survives restarts and is shared across nodes — the SQLite adapter only covered a single node. Mirrors the SQLite adapter 1:1 and passes the same media-store contract suite against a real Postgres.
+- **`/debug` token cost panel.** A new Cost view aggregates `usage` from `llm.responded` / `gateway.responded` trace events by runtime, by turn, and session-total (zero-dependency CSS bars), aggregating generically by event type + runtime id. _USD cost is a pending follow-up — `llm.responded` payloads don't yet carry the model id needed for `usage × pricing`._
+- **Community plugin uninstall + approval revoke.** `DELETE /api/plugins/:id` removes a third-party plugin from the user plugins dir (rejects builtin ids, returns `restartRequired:true`); `DELETE /api/sessions/:id/approvals[?pluginId=]` revokes cached approval grants via the new `gate.revoke`. The Settings → Packages pane lists installed third-party plugins with an uninstall button. Closes the only missing stage of the community discover→approve→import→active lifecycle (the import stage was already live; docs were stale).
+
+### Changed
+
+- **`submit-form` is now locale-aware.** The `confirmation` `{{confirmed}}` value (确认/取消) and the fallback-narrative prefixes (`[玩家输入]` / `[玩家选择]` / `[玩家确认]` / `[玩家取消]`) were hardcoded Chinese; they now resolve by **session locale** (threaded in via a new `RpcHandlerContext.locale`, sourced from `session.locale` in the plugin-rpc dispatch — no executor change). `en-US` yields `Confirm`/`Cancel` + `[Player input]`/…; unknown locales fall back to zh-CN, byte-for-byte identical to the previous output. `submit-form`'s `Submission.type` now references the single-source `InteractionType` union.
+- **Dependencies bumped to latest stable.** All workspace dependencies updated to their latest stable under the existing `minimumReleaseAge: 10080` (1-week) gate — including the major bumps `@hono/node-server` 1→2, `electron` 41→42, `@types/node` 25→26, `@json-render/*` 0.18→0.19, and `zod` 4.3→4.4. One breaking change handled: zod 4.4 treats a bare `z.unknown()` inside a `.strict()` object as a required key, so the plugin user-setting `default` field gained an explicit `.optional()`. Verified across the full workspace lint + test (incl. real Postgres), server boot, API e2e, and the desktop (electron 42) typecheck.
+- **Dependency-hygiene gate + scaffold alignment.** Added `knip` as a CI `deps:check` gate (catches unused/missing workspace deps; understands JSDoc type imports + test files, so type-only/test-only deps aren't false-flagged), cleaned 12 stale plugin devDeps, and aligned the `@covel/create` scaffold to emit correctly-layered minimal deps per template. The authoring guide gains a dependency-layering + extraction-threshold section.
+
+### Fixed
+
+- Function runtimes no longer leave a hanging `runtime.started` when the handler is missing or throws — a terminal `runtime.failed` (and `function.completed{status:failed}`) is emitted on every exit path.
+- **`/api/ui-specs` no longer 500s when one plugin's runtime fails to load.** A single bad runtime (corrupt UI spec, missing handler dep) used to take down the whole response on every world open; it is now logged and skipped while healthy plugins still resolve. `app.onError` additionally logs request context (method + full URL) for every 500.
+- **Desktop packaging now stages plugin-only workspace deps.** 5 bundled function plugins depend on `@covel/plugin-handlers-utils` (used by plugins, never by `@covel/server`), which `pnpm deploy --filter @covel/server` left out — so every packaged build shipped them broken with `ERR_MODULE_NOT_FOUND`. The desktop build now scans each plugin's `@covel/*` runtime deps and stages any the server deploy missed; the post-staging smoke test fails on plugin-load errors instead of swallowing them.
+
+<details>
+<summary>中文（备份翻译）</summary>
+
+一次可玩性闭环整理（function runtime 在 trace 时间线可见、陈旧挂起项过期、玩家输入叙事按会话 locale 本地化），外加一批工程收尾：Postgres 上的多节点 S3 媒体元数据、plugin-utils provider 调用 trace、`/debug` 成本面板、社区插件卸载/撤销。默认世界与内置插件行为不变。
+
+**Added**
+
+- **Function-runtime trace 覆盖（A2-P1-5）**：function runtime 此前在 `/debug` 几乎不可见——`runtime.started`/`completed` 之间空白，`ctx.gateway` provider 调用零记录。现在发射 `function.executing` / `function.completed`（handler 边界），并经执行期 `withGatewayTrace` 包裹对 `generateText`/`generateObject` 发 `gateway.calling` / `gateway.responded` / `gateway.failed`——全部持久化到 `trace_events` 并广播，使 function runtime 的 LLM 用量与 agent runtime 同等可见。五个事件纳入单一真相 `CovelEvent` union（对 `COVEL_EVENT_META` 与前端 switch 编译期穷尽）。缺失 handler 现在发终结 `runtime.failed`，不再留悬空 `runtime.started`。
+- **Plugin-utils provider 调用 trace**：收尾 A2-P1-5 follow-up。图像插件（及任何自带 wire 的插件）经 `ctx.utils.fetchWithRetry` 调 provider，现由 `withUtilsTrace` 包裹器在 function-runtime 与 agent-guard 注入处 trace 为 `utils.fetch.calling` / `responded` / `failed`（trace-only，`forwardToActionStream:false`）。PII 安全——负载仅含 host / method / status / durationMs，绝不含完整 URL、query、api key。
+- **Postgres 上的多节点 S3 媒体元数据**：`createPgS3MetadataAdapter`（+ `…FromClient`）在共享 `media_assets` / `media_refs` PG 表上实现 `S3MediaMetadataAdapter` 接口，使 S3 媒体跨重启存活、跨节点共享——此前 SQLite 适配器只覆盖单节点。1:1 镜像 SQLite 版，并对真实 Postgres 通过同一 media-store 契约套件。
+- **`/debug` token 成本面板**：新增 Cost 视图，按 runtime / turn / 会话总计聚合 `llm.responded` / `gateway.responded` 的 `usage`（零依赖 CSS 条形），按事件类型 + runtime id 通用聚合。_美元成本为待办 follow-up——`llm.responded` 负载尚未携带 `usage × pricing` 所需的 model id。_
+- **社区插件卸载 + 审批撤销**：`DELETE /api/plugins/:id` 从用户插件目录删除第三方插件（拒绝内置 id，返回 `restartRequired:true`）；`DELETE /api/sessions/:id/approvals[?pluginId=]` 经新增 `gate.revoke` 撤销缓存授权。Settings → Packages 面板列出已安装第三方插件并提供卸载按钮。收尾社区 discover→approve→import→active 生命周期唯一缺失的阶段（import 阶段早已实现，文档此前陈旧）。
+
+**Changed**
+
+- **`submit-form` 现按 locale 本地化**：`confirmation` 的 `{{confirmed}}` 取值（确认/取消）与回退叙事前缀（`[玩家输入]` / `[玩家选择]` / `[玩家确认]` / `[玩家取消]`）此前写死中文；现按**会话 locale** 解析（经新增的 `RpcHandlerContext.locale` 注入，来源是 plugin-rpc dispatch 的 `session.locale`，无需改 executor）。`en-US` 产出 `Confirm`/`Cancel` + `[Player input]`/…；未知 locale 回落 zh-CN，与改前输出逐字一致。`submit-form` 的 `Submission.type` 现引用单一真相 `InteractionType` union。
+- **依赖升级到最新 stable**：全部 workspace 依赖在既有 `minimumReleaseAge: 10080`（1 周）门控下升到最新 stable——含跨 major 的 `@hono/node-server` 1→2、`electron` 41→42、`@types/node` 25→26、`@json-render/*` 0.18→0.19、`zod` 4.3→4.4。处理了一处 breaking：zod 4.4 把 `.strict()` object 内裸 `z.unknown()` 当作必填 key,故插件 user-setting 的 `default` 字段显式加 `.optional()`。已通过全 workspace lint + test（含真实 Postgres）、server 启动、API e2e 与 desktop（electron 42）typecheck 验证。
+- **依赖卫生 gate + 脚手架对齐**：新增 `knip` 作为 CI `deps:check` 关卡（拦截 unused/missing workspace 依赖；识别 JSDoc 类型引用与测试文件，不误杀 type-only/test-only 依赖），清理 12 个 stale 插件 devDep，并让 `@covel/create` 脚手架按 template 生成正确分层的最小依赖。插件指南新增"依赖分层与复用规范"章节。
+
+**Fixed**
+
+- function runtime 在 handler 缺失或抛错时不再留悬空 `runtime.started`——每条退出路径都发终结 `runtime.failed`（及 `function.completed{status:failed}`）。
+- **`/api/ui-specs` 不再因单个插件 runtime 加载失败而 500**：一个坏 runtime（损坏的 UI spec、缺失的 handler 依赖）此前会在每次打开世界时拖垮整个响应；现在记录并跳过,健康插件照常返回。`app.onError` 还会为每个 500 记录请求上下文（method + 完整 URL）。
+- **桌面打包现在 stage 插件专属的 workspace 依赖**：5 个内置 function 插件依赖 `@covel/plugin-handlers-utils`（只被插件用、不被 `@covel/server` 用），`pnpm deploy --filter @covel/server` 把它漏掉了——导致每个打包版本都带着 `ERR_MODULE_NOT_FOUND` 的坏插件。桌面构建现在扫描每个插件的 `@covel/*` 运行时依赖并补 stage server deploy 漏掉的；打包后的 smoke test 现在会因插件加载失败而失败,不再静默吞掉。
+
+</details>
+
 ## [0.0.8] - 2026-06-28
 
 Eighth public release. Finishes the v0.0.7 architecture pass — clears the remaining audit debt, makes the schema and transaction layers single-source-of-truth, and ships **semantic (vector) memory recall**, all verified end-to-end against a real pgvector Postgres. New game genres can declare their own memory blocks, and a session can switch storage backends without any behaviour change. The default world and bundled plugins are behavior-unchanged.
@@ -374,7 +425,8 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.8...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.9...HEAD
+[0.0.9]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.9
 [0.0.8]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.8
 [0.0.7]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.7
 [0.0.6]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.6

@@ -1,6 +1,6 @@
 {
   "name": "@covel/plugin-director",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,6 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.9"
   }
 }

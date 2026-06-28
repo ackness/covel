@@ -102,6 +102,15 @@ export const SERVER_ENV_VARS = [
       "Explicit production opt-in for POST /api/install/plugin and POST /api/install/world when no desktop bearer token is configured.",
   },
   {
+    name: "COVEL_SUSPENSION_TTL_MS",
+    group: "server",
+    type: "integer",
+    status: "active",
+    defaultValue: "604800000",
+    description:
+      "TTL (ms) after which an UNRESOLVED suspension is swept by the startup + opportunistic cleanup (TODO S4-T4.c). Default 604800000 (7 days). Set to 0 (or negative) to disable sweeping. Claimed (in-flight) and successfully-resolved suspensions are never swept.",
+  },
+  {
     name: "APP_PORT",
     group: "server",
     type: "integer",

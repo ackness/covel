@@ -44,7 +44,7 @@ export const interactionRecordSchema = z.object({
   type: interactionRecordTypeSchema,
   targetPluginId: z.string().min(1).optional(),
   targetRuntimeId: z.string().min(1).optional(),
-  payload: z.unknown(),
+  payload: z.unknown().optional(),
   metaData: interactionRecordMetaDataSchema.optional(),
 });
 

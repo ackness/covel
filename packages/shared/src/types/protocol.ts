@@ -296,7 +296,34 @@ export type CovelEvent =
       readonly type: "recursive.completed";
       readonly payload: CovelEventPayload;
     }
-  | { readonly type: "recursive.failed"; readonly payload: CovelEventPayload };
+  | { readonly type: "recursive.failed"; readonly payload: CovelEventPayload }
+  // Function-runtime trace events (TurnEmitter). `function.*` mark the handler
+  // boundary (forward:false, like runtime.started/completed); `gateway.*` wrap
+  // the function-runtime `ctx.gateway` provider calls (forward:true, mirroring
+  // llm.calling/responded) so a function runtime's LLM usage is as visible in
+  // the timeline as an agent runtime's. Emitted from
+  // packages/runtime/src/function-runtime/gateway-trace.ts + turn-function-runtime.ts.
+  | { readonly type: "function.executing"; readonly payload: CovelEventPayload }
+  | { readonly type: "function.completed"; readonly payload: CovelEventPayload }
+  | { readonly type: "gateway.calling"; readonly payload: CovelEventPayload }
+  | { readonly type: "gateway.responded"; readonly payload: CovelEventPayload }
+  | { readonly type: "gateway.failed"; readonly payload: CovelEventPayload }
+  // Plugin-utils provider-call trace (A2-P1-5 follow-up). Wraps
+  // ctx.utils.fetchWithRetry — the wire image plugins own. Trace-only
+  // (forward:false): polling can be high-frequency, so keep it off the action
+  // stream; /debug reads it from trace_events + the subscription channel.
+  | {
+      readonly type: "utils.fetch.calling";
+      readonly payload: CovelEventPayload;
+    }
+  | {
+      readonly type: "utils.fetch.responded";
+      readonly payload: CovelEventPayload;
+    }
+  | {
+      readonly type: "utils.fetch.failed";
+      readonly payload: CovelEventPayload;
+    };
 
 /** The closed vocabulary of every server→client event name. */
 export type CovelEventType = CovelEvent["type"];
@@ -371,6 +398,18 @@ export const COVEL_EVENT_META = {
   "recursive.calling": { forwardToActionStream: false },
   "recursive.completed": { forwardToActionStream: false },
   "recursive.failed": { forwardToActionStream: false },
+  // Function-runtime trace events (see CovelEvent union). function.* mark the
+  // handler boundary (trace-only); gateway.* wrap provider calls and forward to
+  // the action stream for agent/function parity with llm.calling/responded.
+  "function.executing": { forwardToActionStream: false },
+  "function.completed": { forwardToActionStream: false },
+  "gateway.calling": { forwardToActionStream: true },
+  "gateway.responded": { forwardToActionStream: true },
+  "gateway.failed": { forwardToActionStream: true },
+  // Plugin-utils fetch trace — trace-only (not forwarded; can be high-frequency).
+  "utils.fetch.calling": { forwardToActionStream: false },
+  "utils.fetch.responded": { forwardToActionStream: false },
+  "utils.fetch.failed": { forwardToActionStream: false },
 } satisfies Record<CovelEventType, CovelEventMeta>;
 
 /**
