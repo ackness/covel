@@ -140,4 +140,10 @@ export interface MediaStore {
    * `get()` when this is undefined (e.g. tests with hand-rolled mocks).
    */
   openReadStream?(ref: MediaRef): Promise<ReadableStream<Uint8Array>>;
+  /**
+   * Optional resource release. Backends that hold a connection (e.g. the
+   * SQLite mirror store, which shares the DataStore's connection) release it
+   * here. Absent on stateless/in-memory backends.
+   */
+  close?(): void | Promise<void>;
 }
