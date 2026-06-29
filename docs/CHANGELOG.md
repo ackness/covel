@@ -25,6 +25,7 @@ A plugin-configuration pass: worlds can now preset any plugin's player-tunable s
 
 - **Player per-plugin settings now actually reach the main turn loop.** `POST /api/actions` (and the resume / plugin-rpc paths) never decoded `X-Plugin-User-Settings`, so in the scheduled loop every runtime's `userSettings` collapsed to manifest defaults — a player's UI-tuned values (chat-mode-narrator's `dialogueRatio`, cost-gate's token caps) were silently ignored while only the manual plugin-rpc path honored them. The main route now decodes the header and merges it with the world defaults.
 - **The settings header no longer masks world defaults.** `X-Plugin-User-Settings` was built from every _registered_ plugin setting (`store.get()` returns the manifest default for untouched keys), so it always carried a full bucket of defaults that, sent as "player overrides," overrode the new world `pluginSettings` layer. It now carries only the keys a player explicitly set (`store.has()`).
+- **Archived bundled worlds no longer linger in existing users' databases.** `seedWorlds` only ever upserts, so a sample world removed from the bundle (e.g. `cloudmere` / `neonridge`) stayed seeded in every existing user's DB and kept showing in the world list. The server now runs a reconciliation pass after seeding that drops file-seeded worlds no longer present in any world source. Three safety rails keep it from ever removing real data: it only touches `metadata.source === "file"` worlds (AI-generated `generated` / `generated-file` worlds are never touched), it keeps any stale world that still has saved sessions (warned, never silently deleted), and it skips entirely when nothing seeded so a transient load failure can't wipe worlds. See [`docs/reference/world-data.md`](./reference/world-data.md).
 
 <details>
 <summary>中文（备份翻译）</summary>
@@ -48,6 +49,7 @@ A plugin-configuration pass: worlds can now preset any plugin's player-tunable s
 
 - **玩家 per-plugin 设置现在真正进入主回合循环**：`POST /api/actions`（及 resume / plugin-rpc 路径）此前从不解码 `X-Plugin-User-Settings`，主循环里每个 runtime 的 `userSettings` 退化为 manifest 默认——玩家在 UI 调的值（chat-mode-narrator 的 `dialogueRatio`、cost-gate 的 token 上限）被静默忽略，仅手动 plugin-rpc 路径生效。主路由现在解码 header 并与世界默认合并。
 - **设置 header 不再掩盖世界默认**：`X-Plugin-User-Settings` 此前由**全部已注册**插件设置构建（`store.get()` 对未设项返回 manifest 默认），所以总是携带一堆默认值，当作"玩家覆盖"盖掉新的世界 `pluginSettings` 层。现在只携带玩家显式设过的键（`store.has()`）。
+- **被归档的内建世界不再残留在老用户库里**：`seedWorlds` 只 upsert，从包里移除的示例世界（如 `cloudmere` / `neonridge`）会在每个老用户库里继续 seed 并出现在世界列表。服务器现在在 seed 后跑一次收敛，删除"已不在任何世界源里"的文件 seed 世界。三重安全栏确保绝不误删真实数据：仅触碰 `metadata.source === "file"` 的世界（AI 生成的 `generated` / `generated-file` 永不触碰）、仍有存档的陈旧世界保留（打 warn、绝不静默删）、本次没 seed 成任何世界时整体跳过，使瞬时加载故障无法清空世界。见 [`docs/reference/world-data.md`](./reference/world-data.md)。
 
 </details>
 

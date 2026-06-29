@@ -31,7 +31,7 @@ import {
   type SessionLock,
 } from "./lib/session-lock.js";
 import { createPgAdvisorySessionLock } from "./lib/pg-session-lock.js";
-import { seedWorlds } from "./world-seed-loader.js";
+import { seedWorlds, reconcileSeededWorlds } from "./world-seed-loader.js";
 import { createWorldFileWatcher } from "./world-file-watcher.js";
 import { createModelDbRoutes } from "./routes/model-db.js";
 import { createMiscApiRoutes } from "./routes/misc-api.js";
@@ -292,11 +292,41 @@ const api = await bootstrapApi({
   sessionLock,
 });
 
+const seededWorldIds = new Set<string>();
 for (const dir of worldsDirs) {
   try {
-    await seedWorlds(store, dir);
+    for (const id of await seedWorlds(store, dir)) seededWorldIds.add(id);
   } catch (err) {
     console.warn(`[server] Could not seed worlds from ${dir}:`, err);
+  }
+}
+
+// Drop DB worlds that were file-seeded from a now-removed package (e.g. an
+// archived sample world) so they stop appearing in every existing user's world
+// list. Skip entirely when nothing seeded — a transient load failure must not
+// wipe worlds — and keep any stale world that still has saved sessions.
+if (seededWorldIds.size === 0) {
+  console.warn(
+    "[world-seed] No worlds seeded — skipping reconciliation to avoid removing worlds on a load failure.",
+  );
+} else {
+  try {
+    const { removed, keptWithSessions } = await reconcileSeededWorlds(
+      store,
+      seededWorldIds,
+    );
+    if (removed.length > 0) {
+      console.log(
+        `[world-seed] Reconciled — removed ${removed.length} stale file-seeded world(s) no longer in any package: ${removed.join(", ")}`,
+      );
+    }
+    if (keptWithSessions.length > 0) {
+      console.warn(
+        `[world-seed] ${keptWithSessions.length} world(s) removed from packages still have saved sessions and were kept: ${keptWithSessions.join(", ")}. Delete them explicitly to clear.`,
+      );
+    }
+  } catch (err) {
+    console.warn("[server] World reconciliation failed:", err);
   }
 }
 

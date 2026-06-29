@@ -58,6 +58,18 @@ worldData: data/world.data.yaml
 | `excludedPlugins`     | 额外默认关闭的插件。                                                                                                         |
 | `packs`               | 自定义组合包列表，每项可含 `id`、`label`、`description`、`plugins`、`optionalPlugins`、`excludedPlugins`、`tags`、`reason`。 |
 
+### 启动加载与收敛（seed & reconcile）
+
+服务器启动时按目录顺序 seed 世界：先 bundled（`COVEL_WORLDS_DIR`，默认仓库 `worlds/`），再 user（桌面版 `COVEL_USER_WORLDS_DIR=<data_root>/worlds`）。seed 是 **idempotent upsert**——每个世界包的 `WorldRecord` 写入 DB，`metadata.source = "file"`。
+
+seed 本身**只新增/更新、从不删除**，所以一个曾经内建、后被归档（从包里移除）的世界会**残留在所有老用户的 DB 里**并继续出现在世界列表。为此 seed 完所有目录后会跑一次 **收敛（reconcile）**，删除"已不在任何世界源里"的陈旧 seed 记录。三重安全栏，确保只清死 seed、绝不误删用户数据：
+
+1. **来源闸门**：仅 `metadata.source === "file"`（纯文件 seed）的世界可被清理。AI 生成的世界（`generated` / `generated-file`）及其它任何来源**永不触碰**，即便它不在当前世界源里。
+2. **存档保护**：陈旧世界若仍有存档（session），**保留不删**并打 `warn` 日志；删除带存档的世界属于显式操作，不会由启动时的静默收敛执行。
+3. **空集护栏**：本次一个世界都没 seed 成功时，**整体跳过收敛**——避免 seed 路径瞬时故障把 DB 里的世界一扫而空。
+
+> 想清掉一个**仍有存档**的内建世界（收敛会因安全栏保留它），需显式删除其世界记录与关联 session。
+
 ### 插件配置默认值（`pluginSettings`）
 
 `world.yaml` 顶层（与 `pluginPolicy` 平级）可声明 `pluginSettings`，为插件 `userSettings` 预置**世界默认值**，键为 `pluginId → settingKey → value`：
