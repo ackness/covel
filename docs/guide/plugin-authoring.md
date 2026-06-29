@@ -16,6 +16,7 @@
 
 | 你想做的事                                                  | 看这里                                                                                                                                                                 |
 | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 先理解为什么这么设计、agent/function/组合三种写法怎么选     | [docs/architecture/design-principles.md](../architecture/design-principles.md)                                                                                         |
 | 看所有已实现插件的 frontmatter、调度层级、capabilities 标签 | [docs/reference/plugins.md](../reference/plugins.md)                                                                                                                   |
 | 写 json-render UI 面板（`ui.right` / `ui.message`）         | [docs/guide/plugin-ui-runtime-guidelines.md](./plugin-ui-runtime-guidelines.md)                                                                                        |
 | 写生命周期 hook（工具调用前校验、commit 前审批、审计日志）  | [docs/reference/plugins.md#hooks](../reference/plugins.md#hooks)                                                                                                       |

@@ -14,6 +14,24 @@
 
 ---
 
+## 0. 三种写法：agent / function / 两者组合（掷骰范例）
+
+零代码插件只能用 **agent runtime**（纯 `PLUGIN.md` 提示词）。进了本层，你多了两种选择：
+
+- **function runtime** —— 一段 JS handler，确定地算。要公平 / 精确 / 可复现 / 零成本的事用它，典型是掷骰的随机数、计数、伤害公式（交给 LLM 不靠谱）。声明 `runtimeType: function` + `handler`。
+- **两者组合**（创作者常叫"混合模式"）—— 一个玩法里，确定的部分用 function，要叙述 / 判断的部分用 agent。Covel 没有 "hybrid" 这种东西，"组合"就是把现有积木拼起来。
+
+**掷骰范例**：玩家掷骰，点数要公平（function 的活），结果要 DM 口吻叙述（agent 的活）。有两种拼法：
+
+- **拼法 A · 一个 agent + 一个工具**（最简单）：写一个 agent runtime，提示词说"先调 `roll-dice` 工具拿点数，再按点数和当前剧情用 DM 口吻叙述这次掷骰"。`roll-dice` 是个本地工具（见 §1），内部用随机数——agent 通过**调用工具**稳定触发那段确定逻辑，而不是靠它"自己掷"。
+- **拼法 B · 一个 function + 一个 agent**（掷骰逻辑复杂、想单独复用时）：function runtime 掷骰并把点数作为 output；agent runtime 用 `input.inject`（见 §3）拿到点数，负责叙述。`plugins/npc-graph`、`plugins/char-creator` 就是这种"function + agent 协作"的真实例子。
+
+怎么选：能容忍 LLM 偶尔换花样 / 判错 → agent；要确定 → function；两者都要 → 组合，确定的交 function / 工具、叙述的交 agent。
+
+> 这里说的"写法 / 模式"是**执行方式**；和 frontmatter 的 `trigger`（[Trigger mode](../glossary.md)：runtime 何时运行）不是一回事。背后的设计理念见 [architecture/design-principles.md](../architecture/design-principles.md)。
+
+---
+
 ## 1. 创建本地工具
 
 当内置工具不够用时，可以用 JS/TS 编写自定义工具。一个工具就是一个文件，使用 `tool()` 包装函数：
