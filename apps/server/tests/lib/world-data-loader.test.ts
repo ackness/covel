@@ -68,6 +68,107 @@ pluginSettings:
     });
   });
 
+  it("passes world memoryBlocks into world metadata", async () => {
+    const root = await makeTempWorld();
+    await writeFile(
+      path.join(root, "world.yaml"),
+      `schemaVersion: "1.0"
+id: detective-world
+name: Detective World
+summary: World declaring genre-specific memory blocks
+defaultLocale: zh-CN
+supportedLocales: [zh-CN]
+memoryBlocks:
+  - label: clues
+    displayName: { zh-CN: 线索, en-US: Clues }
+    extractionHint: { zh-CN: 已发现的线索, en-US: Discovered clues }
+    icon: Search
+  - label: suspects
+    displayName: { zh-CN: 嫌疑人, en-US: Suspects }
+    extractionHint: { zh-CN: 嫌疑人及动机, en-US: Suspects and motives }
+`,
+    );
+    await writeFile(path.join(root, "WORLD.md"), "# Detective World");
+
+    const record = await loadSingleWorld(root);
+
+    expect(record?.metadata?.memoryBlocks).toEqual([
+      {
+        label: "clues",
+        displayName: { "zh-CN": "线索", "en-US": "Clues" },
+        extractionHint: {
+          "zh-CN": "已发现的线索",
+          "en-US": "Discovered clues",
+        },
+        icon: "Search",
+      },
+      {
+        label: "suspects",
+        displayName: { "zh-CN": "嫌疑人", "en-US": "Suspects" },
+        extractionHint: {
+          "zh-CN": "嫌疑人及动机",
+          "en-US": "Suspects and motives",
+        },
+      },
+    ]);
+  });
+
+  it("folds deprecated top-level selection into pluginPolicy (deduped union)", async () => {
+    const root = await makeTempWorld();
+    await writeFile(
+      path.join(root, "world.yaml"),
+      `schemaVersion: "1.0"
+id: fold-world
+name: Fold World
+summary: Top-level selection folds into pluginPolicy
+defaultLocale: zh-CN
+supportedLocales: [zh-CN]
+requiredPlugins: [pregame, world-init]
+excludedPlugins: [narrator]
+pluginPolicy:
+  preset: dialogue-mode
+  requiredPlugins: [world-init, char-creator]
+`,
+    );
+    await writeFile(path.join(root, "WORLD.md"), "# Fold World");
+
+    const record = await loadSingleWorld(root);
+
+    expect(record?.metadata?.pluginPolicy).toEqual({
+      preset: "dialogue-mode",
+      requiredPlugins: ["world-init", "char-creator", "pregame"],
+      excludedPlugins: ["narrator"],
+    });
+    // No separate top-level copies remain in metadata — pluginPolicy is the
+    // single source of truth.
+    expect(record?.metadata?.requiredPlugins).toBeUndefined();
+    expect(record?.metadata?.recommendedPlugins).toBeUndefined();
+    expect(record?.metadata?.excludedPlugins).toBeUndefined();
+  });
+
+  it("creates pluginPolicy from top-level-only selection (no pluginPolicy block)", async () => {
+    const root = await makeTempWorld();
+    await writeFile(
+      path.join(root, "world.yaml"),
+      `schemaVersion: "1.0"
+id: legacy-world
+name: Legacy World
+summary: Only top-level requiredPlugins, no pluginPolicy
+defaultLocale: zh-CN
+supportedLocales: [zh-CN]
+requiredPlugins: [pregame, world-init, char-creator]
+`,
+    );
+    await writeFile(path.join(root, "WORLD.md"), "# Legacy World");
+
+    const record = await loadSingleWorld(root);
+
+    expect(record?.metadata?.pluginPolicy).toEqual({
+      requiredPlugins: ["pregame", "world-init", "char-creator"],
+    });
+    expect(record?.metadata?.requiredPlugins).toBeUndefined();
+  });
+
   it("builds a lightweight metadata summary and projects world metadata", async () => {
     const root = await makeTempWorld();
     await mkdir(path.join(root, "data"), { recursive: true });

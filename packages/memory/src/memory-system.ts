@@ -76,6 +76,12 @@ export function createMemorySystem(
   const updaterInstance = createMemoryUpdater(manager, llm, {
     ...options?.updater,
     blocks,
+    // The per-session block resolver lives on the coreMemory config (single
+    // source); thread it onto the updater so post-turn extraction agrees with
+    // the manager on which world-declared blocks exist for the session.
+    ...(options?.coreMemory?.resolveBlocks
+      ? { resolveBlocks: options.coreMemory.resolveBlocks }
+      : {}),
     modelSlot,
   });
 

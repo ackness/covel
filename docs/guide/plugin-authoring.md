@@ -77,7 +77,7 @@ memoryBlocks:
       en: Known suspects, their motives, alibis, and shifts in credibility.
 ```
 
-builtin `memory` 插件声明默认四块（`story_state` / `character_relationships` / `scene` / `player_profile`）。换一种游戏类型只需声明你自己的块，无需改动框架。字段规则（`label` / `displayName` / `extractionHint` / `icon` / `maxChars`）见 [plugins.md #memoryblocks核心记忆块](../reference/plugins.md#memoryblocks核心记忆块)。
+builtin `memory` 插件声明默认四块（`story_state` / `character_relationships` / `scene` / `player_profile`）。换一种游戏类型只需声明你自己的块，无需改动框架。字段规则（`label` / `displayName` / `extractionHint` / `icon` / `maxChars`）见 [plugins.md #memoryblocks核心记忆块](../reference/plugins.md#memoryblocks核心记忆块)。**世界包**也能在 `world.yaml` 顶层声明 `memoryBlocks`（按 session 合并到插件块之上），让题材专属的记忆维度随世界走——见 [world-data.md #世界记忆块memoryblocks](../reference/world-data.md#世界记忆块memoryblocks)。
 
 ## 程序化发现能力
 

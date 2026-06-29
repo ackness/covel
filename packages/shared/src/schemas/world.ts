@@ -322,6 +322,25 @@ export const worldManifestSchema = z
     pluginSettings: z
       .record(z.string(), z.record(z.string(), z.unknown()))
       .optional(),
+    /**
+     * World-authored core-memory blocks (same shape as a plugin's
+     * `memoryBlocks`). Lets a world declare genre-specific memory dimensions
+     * (e.g. a detective world adding `clues` / `suspects`) without forking a
+     * plugin. Merged with plugin-declared blocks per session at memory time.
+     */
+    memoryBlocks: z
+      .array(
+        z
+          .object({
+            label: z.string().min(1),
+            displayName: i18nTextSchema,
+            extractionHint: i18nTextSchema,
+            icon: z.string().optional(),
+            maxChars: z.number().optional(),
+          })
+          .strict(),
+      )
+      .optional(),
   })
   .strict();
 

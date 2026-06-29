@@ -24,6 +24,7 @@ import {
   formatValidationErrors,
   DIMENSION_KEYS,
 } from "@covel/shared";
+import type { MemoryBlockSchema } from "@covel/shared";
 import type { DataStore, WorldRecord } from "@covel/store";
 import { resolveContainedPath } from "./world-data/safe-path.js";
 import { loadWorldDataSummary } from "./world-data/world-load.js";
@@ -200,6 +201,40 @@ async function loadExternalDimensions(
 }
 
 /**
+ * Fold the deprecated top-level `requiredPlugins` / `recommendedPlugins` /
+ * `excludedPlugins` into `pluginPolicy` (union, de-duplicated) so metadata
+ * carries plugin selection in exactly one place — the prep page reads selection
+ * only through `pluginPolicy`. The top-level fields stay valid in `world.yaml`
+ * for back-compat but are no longer stored as separate metadata keys.
+ * Returns undefined when neither source declares anything.
+ */
+function foldSelectionIntoPluginPolicy(
+  manifest: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const rawPolicy = manifest.pluginPolicy as
+    | Record<string, unknown>
+    | undefined;
+  const folded: Record<string, unknown> = { ...rawPolicy };
+  let hasSelection = rawPolicy !== undefined;
+  for (const key of [
+    "requiredPlugins",
+    "recommendedPlugins",
+    "excludedPlugins",
+  ] as const) {
+    const top = Array.isArray(manifest[key]) ? (manifest[key] as string[]) : [];
+    const inPolicy = Array.isArray(rawPolicy?.[key])
+      ? (rawPolicy![key] as string[])
+      : [];
+    const merged = [...new Set([...inPolicy, ...top])];
+    if (merged.length > 0) {
+      folded[key] = merged;
+      hasSelection = true;
+    }
+  }
+  return hasSelection ? folded : undefined;
+}
+
+/**
  * Load a single world package from its directory.
  * Returns a WorldRecord ready for upsert, or null if invalid/missing.
  */
@@ -233,11 +268,12 @@ export async function loadSingleWorld(
     | Record<string, string>
     | undefined;
   const worldDataPath = manifest.worldData as string | undefined;
-  const pluginPolicy = manifest.pluginPolicy as
-    | Record<string, unknown>
-    | undefined;
+  const pluginPolicy = foldSelectionIntoPluginPolicy(manifest);
   const pluginSettings = manifest.pluginSettings as
     | Record<string, Record<string, unknown>>
+    | undefined;
+  const memoryBlocks = manifest.memoryBlocks as
+    | readonly MemoryBlockSchema[]
     | undefined;
 
   // Merge inline + external dimensions (external wins for same key)
@@ -271,11 +307,9 @@ export async function loadSingleWorld(
     dimensions:
       Object.keys(mergedDimensions).length > 0 ? mergedDimensions : undefined,
     dimensionSources: dimensionSources,
-    requiredPlugins: manifest.requiredPlugins as string[] | undefined,
-    recommendedPlugins: manifest.recommendedPlugins as string[] | undefined,
-    excludedPlugins: manifest.excludedPlugins as string[] | undefined,
     pluginPolicy,
     pluginSettings,
+    memoryBlocks,
     worldDataPath,
     characterBlueprintSources,
     characterBlueprints,

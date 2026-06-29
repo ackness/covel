@@ -142,6 +142,15 @@ export interface CoreMemoryConfig {
    */
   readonly blocks?: readonly CoreMemoryBlockSchema[];
   /**
+   * Per-session block schema resolver. When provided, methods resolve the
+   * schema for a given `sessionId` (e.g. plugin blocks merged with the
+   * session's world-declared blocks) instead of using the static `blocks`.
+   * Returning undefined falls back to `blocks`. Injected by the bootstrap layer.
+   */
+  readonly resolveBlocks?: (
+    sessionId: string,
+  ) => Promise<readonly CoreMemoryBlockSchema[] | undefined>;
+  /**
    * Plugin ID used when mirroring core memory blocks to plugin_data for
    * real-time UI panel updates. Injected by the bootstrap layer so the
    * memory package never hardcodes a specific plugin name.
@@ -201,6 +210,14 @@ export interface MemoryUpdaterConfig {
    * Defaults to {@link DEFAULT_CORE_MEMORY_BLOCKS}.
    */
   readonly blocks?: readonly CoreMemoryBlockSchema[];
+  /**
+   * Per-session block schema resolver (see {@link CoreMemoryConfig.resolveBlocks}).
+   * When provided, the updater builds its extraction prompt from the resolved
+   * schema for the turn's session. Returning undefined falls back to `blocks`.
+   */
+  readonly resolveBlocks?: (
+    sessionId: string,
+  ) => Promise<readonly CoreMemoryBlockSchema[] | undefined>;
 }
 
 export interface MemoryUpdateResult {

@@ -41,7 +41,9 @@ pluginPolicy:
 worldData: data/world.data.yaml
 ```
 
-`worldData` path 相对 world root。旧的 `requiredPlugins`、`recommendedPlugins`、`excludedPlugins` 仍兼容；新 `pluginPolicy` 用于表达场景意图和组合包。
+`worldData` path 相对 world root。
+
+> **@deprecated 顶层 `requiredPlugins` / `recommendedPlugins` / `excludedPlugins`**：仍可用（向后兼容），但**请改用 `pluginPolicy` 下的同名字段**。加载时框架会把顶层这三个字段**折叠进 `pluginPolicy`（去重合并）**，`WorldRecord.metadata` 只保留 `pluginPolicy` 作为插件选择的唯一来源。`pluginPolicy` 还能表达 `preset` / `packs` / `preferTags` 等场景意图，顶层字段无法表达。
 
 `pluginPolicy` 字段：
 
@@ -70,6 +72,27 @@ pluginSettings:
 ```
 
 它是配置解析链的中间层：**玩家覆盖（`X-Plugin-User-Settings` header）→ 世界默认（`pluginSettings`）→ manifest 默认（`userSettings[].default`）**。玩家仍可在设置里覆盖每个值；未声明的 key 无害——runtime 只读插件真正声明过的 key。加载后写入 `WorldRecord.metadata.pluginSettings`，并在 `/api/actions` 回合边界与玩家 header 合并后注入 `TurnInput.userSettings`（供 agent 的 `{{ userSettings.* }}`、guard、hook 共用）。`pluginSettings` 只设默认值，不影响[插件选择](#world-package)（选择仍由 `pluginPolicy` 决定）。
+
+### 世界记忆块（`memoryBlocks`）
+
+`world.yaml` 顶层可声明 `memoryBlocks`，让世界添加**题材特有的核心记忆维度**（如侦探世界的 `clues` / `suspects`），无需 fork 插件。字段形状与插件 `PLUGIN.md` 的 `memoryBlocks` 完全一致（`label` / `displayName` / `extractionHint` / `icon?` / `maxChars?`）：
+
+```yaml
+memoryBlocks:
+  - label: clues
+    displayName: { zh-CN: 线索, en-US: Clues }
+    extractionHint:
+      zh-CN: 已发现的线索、物证及其与嫌疑人的关联。
+      en-US: Discovered clues, evidence, and links to suspects.
+    icon: Search
+  - label: suspects
+    displayName: { zh-CN: 嫌疑人, en-US: Suspects }
+    extractionHint:
+      zh-CN: 已知嫌疑人、动机与可信度变化。
+      en-US: Known suspects, their motives, and credibility shifts.
+```
+
+加载后写入 `WorldRecord.metadata.memoryBlocks`。记忆系统**按 session 解析**块 schema：把该 session 所属世界的块**合并到**全局插件块之上——基础块（插件 / 框架默认）在标签冲突时优先（builtin 默认受保护），世界只**新增**未占用的标签。这样侦探世界的会话才会出现 `clues` / `suspects`，其它题材的会话不受影响。完整块字段见 [plugins.md #memoryblocks核心记忆块](plugins.md#memoryblocks核心记忆块)。
 
 ## Descriptor
 

@@ -2,6 +2,7 @@ import { getPluginTrustInfo } from "@covel/plugin-loader";
 import type { ParsedPluginMd, PluginSource } from "@covel/plugin-loader";
 import {
   createMemorySystem,
+  DEFAULT_CORE_MEMORY_BLOCKS,
   type EmbedFn,
   type MemorySystem,
 } from "@covel/memory";
@@ -87,6 +88,55 @@ export function createBootstrapMemorySystem({
     );
   }
 
+  // The effective base schema (plugin blocks, or the framework defaults when no
+  // plugin declares any). The per-session resolver merges a session's world
+  // blocks on top of this base.
+  const baseBlocks: readonly MemoryBlockSchema[] =
+    memoryBlocks.length > 0 ? memoryBlocks : DEFAULT_CORE_MEMORY_BLOCKS;
+
+  // Per-session block resolver: merge the global (plugin) blocks with the
+  // session's world-declared `memoryBlocks`. Base blocks win on label collision
+  // (builtin defaults stay protected); the world only ADDS new genre-specific
+  // labels (e.g. a detective world's `clues` / `suspects`). Cached per session —
+  // a session's world is fixed for its lifetime — so the two store reads happen
+  // once per session, then resolve from memory.
+  const sessionBlockCache = new Map<string, readonly MemoryBlockSchema[]>();
+  const resolveBlocks = async (
+    sessionId: string,
+  ): Promise<readonly MemoryBlockSchema[] | undefined> => {
+    const cached = sessionBlockCache.get(sessionId);
+    if (cached) return cached;
+    let resolved: readonly MemoryBlockSchema[] = baseBlocks;
+    try {
+      const session = await store.getSession(sessionId);
+      const world = session?.worldId
+        ? await store.getWorld(session.worldId)
+        : null;
+      const worldBlocks = (
+        world?.metadata as Record<string, unknown> | undefined
+      )?.memoryBlocks;
+      if (Array.isArray(worldBlocks)) {
+        const taken = new Set(baseBlocks.map((b) => b.label));
+        const additions = (worldBlocks as MemoryBlockSchema[]).filter(
+          (b) =>
+            Boolean(b) &&
+            typeof b.label === "string" &&
+            b.label.length > 0 &&
+            !taken.has(b.label),
+        );
+        if (additions.length > 0) resolved = [...baseBlocks, ...additions];
+      }
+    } catch (err) {
+      console.warn(
+        `[bootstrap] world memoryBlocks resolve failed for ${sessionId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+    sessionBlockCache.set(sessionId, resolved);
+    return resolved;
+  };
+
   const memoryLlm = {
     async complete(params: {
       systemPrompt: string;
@@ -118,7 +168,8 @@ export function createBootstrapMemorySystem({
     {
       coreMemory: {
         ...(memoryPanelPluginId ? { pluginId: memoryPanelPluginId } : {}),
-        ...(memoryBlocks.length > 0 ? { blocks: memoryBlocks } : {}),
+        blocks: baseBlocks,
+        resolveBlocks,
       },
       updater: { modelSlot: resolvedMemorySlot },
     },

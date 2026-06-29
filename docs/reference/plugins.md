@@ -633,6 +633,8 @@ Guard 适用于"先检查再决定是否需要 LLM"的场景，替代了之前�
 
 builtin `memory` 插件声明默认的四个通用块（`story_state` / `character_relationships` / `scene` / `player_profile`）。任意插件或世界包都可追加自己的块；**标签重复时按信任层级决胜（builtin > official > community）：高信任声明覆盖低信任声明，与发现顺序无关**——因此 community 插件无法靠抢先加载来静默覆盖 builtin 默认块的定义（如改写 `story_state` 的 `extractionHint`）。同一信任层级内取首次声明（稳定）；当同层级的多个插件以**不同定义**声明同一标签时，框架打印一条 dev 警告。信任层级取自插件的发现来源（加载路径，不可伪造），框架不按具体插件 id 决胜。未声明任何 `memoryBlocks` 时，框架回退到 `@covel/memory` 内置的同名通用默认块。
 
+**世界包**在 `world.yaml` 顶层（而非 `PLUGIN.md`）声明 `memoryBlocks`（字段形状相同）。与插件块的全局聚合不同，世界块**按 session 解析**：记忆系统把该 session 所属世界的块合并到全局插件块之上——基础块（插件 / 框架默认）在标签冲突时优先（builtin 默认受保护），世界只**新增**未占用的标签。因此侦探世界的会话才会出现 `clues` / `suspects`，其它题材会话不受影响。世界侧声明与示例见 [world-data.md #世界记忆块memoryblocks](world-data.md#世界记忆块memoryblocks)。
+
 | 字段             | 类型                     | 说明                                                                   |
 | ---------------- | ------------------------ | ---------------------------------------------------------------------- |
 | `label`          | `string`（snake_case）   | 块机器标签：`working_memory` key、prompt XML tag、镜像 plugin-data key |
