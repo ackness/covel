@@ -17,7 +17,7 @@
 
 ## Covel 是什么
 
-Covel 是一款由 AI 驱动的角色扮演游戏 —— 叙事、NPC 关系、世界知识、角色创建、记忆，每一个玩法机制都是一个**自主 agent**，一个回合可以多个 agent 串联协作。每个 agent 都是一个插件：装一个、换一个、或者自己写一个。
+Covel 是一款由 AI 驱动的角色扮演游戏，回合之间世界仍在运转 —— NPC 记录着对你的态度、世界典籍随游玩积累、记忆贯穿整局。让这一切发生的每一个玩法机制 —— 叙事、NPC 关系、世界知识、角色创建、记忆 —— 都是一个**自主 agent**，一个回合可以多个 agent 串联协作。每个 agent 都是一个插件：装一个、换一个、或者自己写一个。
 
 ## 玩起来是什么样
 
@@ -30,13 +30,22 @@ Covel 是一款由 AI 驱动的角色扮演游戏 —— 叙事、NPC 关系、�
 
 每个 agent 都是独立插件。可以禁用、可以替换、可以自己写。
 
+## 内置世界
+
+四个示例世界开箱即玩 —— 直接玩，或拿它当模板改写出自己的世界：
+
+- **云梦泽（Cloudmere）** —— 修仙。灵气复苏、宗门林立的世界，你是偏僻小宗的外门弟子。
+- **雾港·裂潮纪（Mistport）** —— 黑暗奇幻悬疑。被浓雾包裹的港口，每一次潮汐都带来古老遗物与危险。
+- **霓虹脊·2087（Neonridge）** —— 赛博朋克黑色电影。义体与企业战争之间，你是街头的无名小卒。
+- **遥风学园（Haruka Academy）** —— 校园恋爱日常，对话模式。社团、考试、传闻，和未说出口的喜欢。
+
 ## 快速开始
 
 ### 直接玩
 
 到 [GitHub Releases](https://github.com/ackness/covel/releases/tag/v0.0.10) 下载官方 **v0.0.10 macOS Apple Silicon** 安装包 —— `Covel-electron-0.0.10-mac-arm64.dmg`。滚动版本列表在 [Releases](https://github.com/ackness/covel/releases)。
 
-打开 Settings 填一个 LLM API Key，从四个示例世界（`cloudmere` / `mistport` / `neonridge` / `haruka-academy`）里挑一个，就能开始玩。
+打开 Settings 填一个 LLM API Key，从上面的世界里挑一个，就能开始玩。
 
 每个版本的更新记录见 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)。
 

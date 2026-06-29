@@ -17,7 +17,7 @@
 
 ## What is Covel
 
-Covel is an AI-driven role-playing game where every gameplay mechanic — narration, NPC relationships, world lore, character creation, memory — runs as its own **autonomous agent**. A single turn can chain several agents together. Each agent is a plugin: install one, swap one, or write your own.
+Covel is an AI-driven RPG where the world keeps running between your turns — NPCs track how they feel about you, lore builds up as you play, and memory carries the thread across a session. Each mechanic that makes that happen — narration, NPC relationships, world lore, character creation, memory — runs as its own **autonomous agent**, and a single turn chains several together. Each agent is a plugin: install one, swap one, or write your own.
 
 ## See it in action
 
@@ -30,13 +30,22 @@ The gif above is one normal turn. While the narrator writes the scene, four othe
 
 Every agent is its own plugin. Disable one, swap one, or write your own.
 
+## Worlds in the box
+
+Four sample worlds ship in the box — play one as-is, or fork it as a starting template:
+
+- **Cloudmere** (云梦泽) — xianxia cultivation. An outer-sect disciple in a world of reawakening qi and warring sects.
+- **Mistport Chronicles** — dark-fantasy mystery. A fog-shrouded port where each tide reveals ancient ruins and dangers.
+- **Neonridge 2087** — cyberpunk noir. A street nobody amid cyberware and corporate war.
+- **Haruka Academy** — school romance and slice-of-life, in dialogue mode. Clubs, exams, rumors, and quiet crushes at a seaside high school.
+
 ## Quick start
 
 ### Play it
 
 Grab the official **v0.0.10 macOS Apple Silicon** build from [GitHub Releases](https://github.com/ackness/covel/releases/tag/v0.0.10) — `Covel-electron-0.0.10-mac-arm64.dmg`. The rolling release list is available at [Releases](https://github.com/ackness/covel/releases).
 
-Open Settings, paste an LLM API key, pick one of the four sample worlds (`cloudmere` / `mistport` / `neonridge` / `haruka-academy`), and play.
+Open Settings, paste an LLM API key, pick one of the worlds above, and play.
 
 Per-release notes live in [`docs/CHANGELOG.md`](./docs/CHANGELOG.md).
 
