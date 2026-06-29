@@ -1,20 +1,20 @@
 {
   "id": "character-presence",
   "label": {
-    "zh": "角色展示",
-    "en": "Character Display"
+    "zh": "角色立绘",
+    "en": "Character Portraits"
   },
   "shortLabel": {
-    "zh": "展示",
-    "en": "Display"
+    "zh": "立绘",
+    "en": "Art"
   },
-  "icon": "image-plus",
-  "group": "chat-mode",
+  "icon": "image",
+  "group": "character-art",
   "groupLabel": {
-    "zh": "对话",
-    "en": "Chat Mode"
+    "zh": "角色立绘",
+    "en": "Portraits"
   },
-  "groupOrder": 430,
+  "groupOrder": 150,
   "dataSource": { "namespace": "presence" },
   "alwaysRender": true,
   "view": {
@@ -27,6 +27,51 @@
           "content": {
             "zh": "保存角色的头像、立绘和声音，让人物在故事中更鲜明。",
             "en": "Save portraits, character art, and voice details so the character feels more vivid in the story."
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "Grid",
+        "props": { "cols": 3 },
+        "repeat": { "statePath": "/entries", "key": "key" },
+        "children": [
+          {
+            "component": "Stack",
+            "props": { "gap": "xs" },
+            "children": [
+              {
+                "component": "Image",
+                "props": {
+                  "ref": { "$item": "value/avatar" },
+                  "alt": { "$item": "value/displayName" },
+                  "aspectRatio": "3/4",
+                  "rounded": "md",
+                  "fit": "cover"
+                }
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "$item": "value/displayName" },
+                  "size": "xs",
+                  "variant": "muted"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "component": "Separator"
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "手动管理（可选）",
+            "en": "Manual management (optional)"
           },
           "variant": "muted",
           "size": "xs"
@@ -256,51 +301,6 @@
             }
           }
         }
-      },
-      {
-        "component": "Separator"
-      },
-      {
-        "component": "Text",
-        "props": {
-          "content": {
-            "zh": "已保存立绘",
-            "en": "Saved portraits"
-          },
-          "variant": "muted",
-          "size": "xs"
-        }
-      },
-      {
-        "component": "Grid",
-        "props": { "cols": 3 },
-        "repeat": { "statePath": "/entries", "key": "key" },
-        "children": [
-          {
-            "component": "Stack",
-            "props": { "gap": "xs" },
-            "children": [
-              {
-                "component": "Image",
-                "props": {
-                  "ref": { "$item": "value/avatar" },
-                  "alt": { "$item": "value/displayName" },
-                  "aspectRatio": "3/4",
-                  "rounded": "md",
-                  "fit": "cover"
-                }
-              },
-              {
-                "component": "Text",
-                "props": {
-                  "content": { "$item": "value/displayName" },
-                  "size": "xs",
-                  "variant": "muted"
-                }
-              }
-            ]
-          }
-        ]
       }
     ]
   }
