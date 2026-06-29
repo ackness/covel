@@ -4,9 +4,10 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.9-8b5cf6)](https://github.com/AcKnEsS/covel/releases/tag/v0.0.9)
+[![Version](https://img.shields.io/badge/version-v0.0.9-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.9)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)]()
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
 
 ![Covel demo](./.assets/images/demo.gif)
 
@@ -33,7 +34,7 @@ Covel 是一款由 AI 驱动的角色扮演游戏 —— 叙事、NPC 关系、�
 
 ### 直接玩
 
-到 [GitHub Releases](https://github.com/AcKnEsS/covel/releases/tag/v0.0.9) 下载官方 **v0.0.9 macOS Apple Silicon** 安装包 —— `Covel-electron-0.0.9-mac-arm64.dmg`。滚动版本列表在 [Releases](https://github.com/AcKnEsS/covel/releases)。
+到 [GitHub Releases](https://github.com/ackness/covel/releases/tag/v0.0.9) 下载官方 **v0.0.9 macOS Apple Silicon** 安装包 —— `Covel-electron-0.0.9-mac-arm64.dmg`。滚动版本列表在 [Releases](https://github.com/ackness/covel/releases)。
 
 打开 Settings 填一个 LLM API Key，从四个示例世界（`cloudmere` / `mistport` / `neonridge` / `haruka-academy`）里挑一个，就能开始玩。
 

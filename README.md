@@ -4,9 +4,10 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.9-8b5cf6)](https://github.com/AcKnEsS/covel/releases/tag/v0.0.9)
+[![Version](https://img.shields.io/badge/version-v0.0.9-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.9)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)]()
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
 
 ![Covel demo](./.assets/images/demo.gif)
 
@@ -33,7 +34,7 @@ Every agent is its own plugin. Disable one, swap one, or write your own.
 
 ### Play it
 
-Grab the official **v0.0.9 macOS Apple Silicon** build from [GitHub Releases](https://github.com/AcKnEsS/covel/releases/tag/v0.0.9) — `Covel-electron-0.0.9-mac-arm64.dmg`. The rolling release list is available at [Releases](https://github.com/AcKnEsS/covel/releases).
+Grab the official **v0.0.9 macOS Apple Silicon** build from [GitHub Releases](https://github.com/ackness/covel/releases/tag/v0.0.9) — `Covel-electron-0.0.9-mac-arm64.dmg`. The rolling release list is available at [Releases](https://github.com/ackness/covel/releases).
 
 Open Settings, paste an LLM API key, pick one of the four sample worlds (`cloudmere` / `mistport` / `neonridge` / `haruka-academy`), and play.
 
