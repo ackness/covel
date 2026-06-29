@@ -40,6 +40,15 @@
                 "props": { "gap": "sm" },
                 "children": [
                   {
+                    "component": "CharacterAvatar",
+                    "props": {
+                      "characterId": { "$item": "value/id" },
+                      "sourcePlugin": "character-presence",
+                      "sourceNamespace": "presence",
+                      "size": 28
+                    }
+                  },
+                  {
                     "component": "Icon",
                     "props": { "name": "user", "size": "sm" }
                   },
