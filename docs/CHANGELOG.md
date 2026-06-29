@@ -4,6 +4,49 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.10] - 2026-06-29
+
+A plugin-configuration pass: worlds can now preset any plugin's player-tunable settings and declare genre-specific memory dimensions, the player's per-plugin settings finally reach the scheduled turn loop, and the plugin config layer is consolidated onto a single declaration with server-enforced constraints. Behavior-unchanged for worlds and plugins that don't adopt the new fields.
+
+### Added
+
+- **World-preset plugin settings (`pluginSettings`).** A `world.yaml` can now declare per-plugin defaults for any plugin's `userSettings`, keyed `pluginId → settingKey → value`. They form the middle layer of a three-tier resolution chain — **player override → world default → manifest default** — merged at the turn boundary into `TurnInput.userSettings` and consumed by agent `{{ userSettings.* }}` templates, guards, and hooks. A dialogue world can ship "70% dialogue, short replies" as its default while players keep the freedom to override. See [`docs/reference/world-data.md`](./reference/world-data.md).
+- **World-declared core-memory blocks (`memoryBlocks`).** A world can add genre-specific memory dimensions (a detective world's `clues` / `suspects`, a business sim's `deals` / `rivals`) without forking a plugin — same shape as a plugin's `memoryBlocks`. The memory system resolves the block schema **per session**, merging a session's world blocks onto the global plugin blocks (base wins on label collision; the world only adds new labels), so the extra dimensions render and extract only for the worlds that declare them. Closes the long-documented "(or by a world package)" gap.
+- **`integer` / `slider` user-setting types**, and a consolidated **design-principles** page ([`docs/architecture/design-principles.md`](./architecture/design-principles.md)) that roots the framework's "kernel provides primitives, plugins carry gameplay" contract, the agent / function / composition writing styles, and the plug-vs-appliance test.
+
+### Changed
+
+- **One plugin-config declaration.** `userSettings` is now the single source for player-tunable plugin settings; the dead, never-consumed `config` manifest field is removed. A straggler `PLUGIN.md` that still declares `config:` is stripped with a deprecation warning rather than failing to load. The `PluginUserSettingSpec` type is single-sourced in `@covel/shared` (two divergent copies removed), and its declared constraints (`min` / `max` / `options` / type) are now enforced — client-side in the SettingsStore **and server-side** in `resolveUserSettings`, so an out-of-range world or header value degrades to the manifest default instead of reaching a guard or hook.
+- **Plugin selection consolidated into `pluginPolicy`.** The deprecated top-level `requiredPlugins` / `recommendedPlugins` / `excludedPlugins` now fold (de-duplicated) into `pluginPolicy` at world-load time, so `WorldRecord.metadata` carries plugin selection in one place. The top-level fields remain valid in `world.yaml` for back-compat. Per-turn world reads are served from a short-TTL per-`worldId` cache.
+
+### Fixed
+
+- **Player per-plugin settings now actually reach the main turn loop.** `POST /api/actions` (and the resume / plugin-rpc paths) never decoded `X-Plugin-User-Settings`, so in the scheduled loop every runtime's `userSettings` collapsed to manifest defaults — a player's UI-tuned values (chat-mode-narrator's `dialogueRatio`, cost-gate's token caps) were silently ignored while only the manual plugin-rpc path honored them. The main route now decodes the header and merges it with the world defaults.
+- **The settings header no longer masks world defaults.** `X-Plugin-User-Settings` was built from every _registered_ plugin setting (`store.get()` returns the manifest default for untouched keys), so it always carried a full bucket of defaults that, sent as "player overrides," overrode the new world `pluginSettings` layer. It now carries only the keys a player explicitly set (`store.has()`).
+
+<details>
+<summary>中文（备份翻译）</summary>
+
+一次插件配置整理：世界现在能为任意插件预置玩家可调设置、声明题材专属的记忆维度，玩家的 per-plugin 设置终于进入主回合循环，插件配置层收敛为单一声明并在服务端强制约束。未采用新字段的世界与插件行为不变。
+
+**Added**
+
+- **世界预置插件设置（`pluginSettings`）**：`world.yaml` 现在可为任意插件的 `userSettings` 声明默认值，键为 `pluginId → settingKey → value`。它是三层解析链的中间层——**玩家覆盖 → 世界默认 → manifest 默认**——在回合边界合并进 `TurnInput.userSettings`，供 agent `{{ userSettings.* }}`、guard、hook 共用。对话世界能把"70% 对话、短回复"作为默认，玩家仍可覆盖。见 [`docs/reference/world-data.md`](./reference/world-data.md)。
+- **世界声明核心记忆块（`memoryBlocks`）**：世界可添加题材专属记忆维度（侦探世界的 `clues` / `suspects`、商战的 `deals` / `rivals`），无需 fork 插件——字段形状与插件 `memoryBlocks` 一致。记忆系统**按 session** 解析块 schema，把该会话所属世界的块合并到全局插件块之上（标签冲突基础块优先、世界只新增），使额外维度只在声明它的世界里渲染与抽取。兑现长期文档承诺的 "(or by a world package)"。
+- **`integer` / `slider` 用户设置类型**，以及一页收敛的**设计原则**（[`docs/architecture/design-principles.md`](./architecture/design-principles.md)），确立"内核提供原语、插件承载玩法"的契约、agent / function / 组合三种写法、以及"插头 vs 电器"裁决测试。
+
+**Changed**
+
+- **单一插件配置声明**：`userSettings` 现为玩家可调设置的唯一来源；死的、从未被消费的 `config` manifest 字段被移除。仍声明 `config:` 的旧 `PLUGIN.md` 会被 strip + 弃用警告，而非加载失败。`PluginUserSettingSpec` 类型在 `@covel/shared` 单一来源（移除两份发散副本），其声明的约束（`min` / `max` / `options` / type）现已强制——前端 SettingsStore **与服务端** `resolveUserSettings`，越界的世界 / header 值降级为 manifest 默认而非进入 guard 或 hook。
+- **插件选择收敛进 `pluginPolicy`**：过期的顶层 `requiredPlugins` / `recommendedPlugins` / `excludedPlugins` 在加载时折叠（去重）进 `pluginPolicy`，使 `WorldRecord.metadata` 的插件选择单一来源。顶层字段在 `world.yaml` 仍兼容。每回合的世界读取由短 TTL 的 per-`worldId` 缓存服务。
+
+**Fixed**
+
+- **玩家 per-plugin 设置现在真正进入主回合循环**：`POST /api/actions`（及 resume / plugin-rpc 路径）此前从不解码 `X-Plugin-User-Settings`，主循环里每个 runtime 的 `userSettings` 退化为 manifest 默认——玩家在 UI 调的值（chat-mode-narrator 的 `dialogueRatio`、cost-gate 的 token 上限）被静默忽略，仅手动 plugin-rpc 路径生效。主路由现在解码 header 并与世界默认合并。
+- **设置 header 不再掩盖世界默认**：`X-Plugin-User-Settings` 此前由**全部已注册**插件设置构建（`store.get()` 对未设项返回 manifest 默认），所以总是携带一堆默认值，当作"玩家覆盖"盖掉新的世界 `pluginSettings` 层。现在只携带玩家显式设过的键（`store.has()`）。
+
+</details>
+
 ## [0.0.9] - 2026-06-28
 
 A playability-loop pass — function runtimes become visible in the trace timeline, stale suspensions expire, and player-input narrative localizes by session locale — plus a follow-up engineering batch: multi-node S3 media metadata on Postgres, plugin-utils provider-call tracing, a `/debug` cost panel, and community plugin uninstall/revoke. The default world and bundled plugins are behavior-unchanged.

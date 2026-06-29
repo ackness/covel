@@ -4,14 +4,14 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.9-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.9)
+[![Version](https://img.shields.io/badge/version-v0.0.10-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.10)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)]()
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
 
 ![Covel demo](./.assets/images/demo.gif)
 
-> **当前公开版本：v0.0.9。** Covel 仍处于早期阶段：API、数据格式、插件 frontmatter 可能随版本变化。官方预编译包当前面向 macOS Apple Silicon。
+> **当前公开版本：v0.0.10。** Covel 仍处于早期阶段：API、数据格式、插件 frontmatter 可能随版本变化。官方预编译包当前面向 macOS Apple Silicon。
 
 ---
 
@@ -34,11 +34,11 @@ Covel 是一款由 AI 驱动的角色扮演游戏 —— 叙事、NPC 关系、�
 
 ### 直接玩
 
-到 [GitHub Releases](https://github.com/ackness/covel/releases/tag/v0.0.9) 下载官方 **v0.0.9 macOS Apple Silicon** 安装包 —— `Covel-electron-0.0.9-mac-arm64.dmg`。滚动版本列表在 [Releases](https://github.com/ackness/covel/releases)。
+到 [GitHub Releases](https://github.com/ackness/covel/releases/tag/v0.0.10) 下载官方 **v0.0.10 macOS Apple Silicon** 安装包 —— `Covel-electron-0.0.10-mac-arm64.dmg`。滚动版本列表在 [Releases](https://github.com/ackness/covel/releases)。
 
 打开 Settings 填一个 LLM API Key，从四个示例世界（`cloudmere` / `mistport` / `neonridge` / `haruka-academy`）里挑一个，就能开始玩。
 
-v0.0.9 是一次**可玩性闭环整理** —— function runtime 在 trace 时间线可见、陈旧挂起项按 TTL 过期清理、玩家输入叙事按会话 locale 本地化 —— 外加一批工程收尾：Postgres 上的多节点 S3 媒体元数据、plugin-utils provider 调用 trace、`/debug` token 成本面板、社区插件卸载/撤销。所有 workspace 依赖升级到最新 stable（含 zod 4.4、electron 42）。默认世界与内置插件行为不变。完整记录见 [`docs/CHANGELOG.md#009---2026-06-28`](./docs/CHANGELOG.md#009---2026-06-28)。
+每个版本的更新记录见 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)。
 
 数据存放在 `~/.covel/` —— 配置、Key、SQLite、自定义世界、日志都在这。完整字段 → [`docs/guide/desktop-config.md`](./docs/guide/desktop-config.md)。
 
