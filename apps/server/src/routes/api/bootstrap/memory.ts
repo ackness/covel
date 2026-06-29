@@ -11,6 +11,7 @@ import { FrameworkCapability } from "@covel/shared";
 import type { MemoryBlockSchema, RuntimeManifest } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { createMemoryTools, type ToolModule } from "@covel/tools";
+import { getCachedWorld } from "../../../world-cache.js";
 
 export interface CreateBootstrapMemorySystemParams {
   readonly manifestCache: ReadonlyMap<string, readonly ParsedPluginMd[]>;
@@ -97,44 +98,34 @@ export function createBootstrapMemorySystem({
   // Per-session block resolver: merge the global (plugin) blocks with the
   // session's world-declared `memoryBlocks`. Base blocks win on label collision
   // (builtin defaults stay protected); the world only ADDS new genre-specific
-  // labels (e.g. a detective world's `clues` / `suspects`). Cached per session —
-  // a session's world is fixed for its lifetime — so the two store reads happen
-  // once per session, then resolve from memory.
-  const sessionBlockCache = new Map<string, readonly MemoryBlockSchema[]>();
+  // labels (e.g. a detective world's `clues` / `suspects`). The world record is
+  // served from a short-TTL per-`worldId` cache (`getCachedWorld`), so this
+  // never accumulates per session and a re-imported world refreshes on its own.
+  // The merge is cheap and re-run per call. On any store error we fall back to
+  // base blocks (and don't pin them — the next turn retries via the world cache).
   const resolveBlocks = async (
     sessionId: string,
   ): Promise<readonly MemoryBlockSchema[] | undefined> => {
-    const cached = sessionBlockCache.get(sessionId);
-    if (cached) return cached;
     try {
-      let resolved: readonly MemoryBlockSchema[] = baseBlocks;
       const session = await store.getSession(sessionId);
-      const world = session?.worldId
-        ? await store.getWorld(session.worldId)
-        : null;
+      if (!session?.worldId) return baseBlocks;
+      const world = await getCachedWorld(store, session.worldId);
       const worldBlocks = (
         world?.metadata as Record<string, unknown> | undefined
       )?.memoryBlocks;
-      if (Array.isArray(worldBlocks)) {
-        const taken = new Set(baseBlocks.map((b) => b.label));
-        const additions = (worldBlocks as MemoryBlockSchema[]).filter(
-          (b) =>
-            Boolean(b) &&
-            typeof b.label === "string" &&
-            b.label.length > 0 &&
-            !taken.has(b.label),
-        );
-        if (additions.length > 0) resolved = [...baseBlocks, ...additions];
-      }
-      // Cache only on a successful resolve — a transient store error must not
-      // permanently pin this session to base-only blocks (it would otherwise be
-      // cached for the process lifetime). On error we return base blocks without
-      // caching so a later turn retries.
-      sessionBlockCache.set(sessionId, resolved);
-      return resolved;
+      if (!Array.isArray(worldBlocks)) return baseBlocks;
+      const taken = new Set(baseBlocks.map((b) => b.label));
+      const additions = (worldBlocks as MemoryBlockSchema[]).filter(
+        (b) =>
+          Boolean(b) &&
+          typeof b.label === "string" &&
+          b.label.length > 0 &&
+          !taken.has(b.label),
+      );
+      return additions.length > 0 ? [...baseBlocks, ...additions] : baseBlocks;
     } catch (err) {
       console.warn(
-        `[bootstrap] world memoryBlocks resolve failed for ${sessionId} (retrying next turn): ${
+        `[bootstrap] world memoryBlocks resolve failed for ${sessionId} (using base blocks): ${
           err instanceof Error ? err.message : String(err)
         }`,
       );

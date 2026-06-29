@@ -29,6 +29,7 @@ import {
   mergePluginUserSettings,
   readWorldPluginSettings,
 } from "./plugin-user-settings.js";
+import { getCachedWorld } from "../../world-cache.js";
 
 // SSE uses ProtocolEventType names directly — no legacy mapping.
 // Frontend handleSseEvent handles these standard types.
@@ -353,7 +354,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       // manifest defaults — player + world tuning were silently dropped on the
       // main route (only plugin-rpc read the header).
       const world = session.worldId
-        ? await store.getWorld(session.worldId)
+        ? await getCachedWorld(store, session.worldId)
         : null;
       const userSettings = mergePluginUserSettings(
         readWorldPluginSettings(world?.metadata),
