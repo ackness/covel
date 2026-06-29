@@ -1,16 +1,16 @@
 geography:
   overview:
-    zh-CN: 悬崖与海面之间的港口城市，永恒灰白浓雾笼罩，能见度不超过五十步。
+    zh-CN: 悬崖与海面之间的港口城市，永恒灰白浓雾笼罩，能见度不超过五十步。城市垂直分上城、中港、下潮区三层。
     en-US:
       A port city wedged between sea cliffs and the ocean, shrouded in perpetual grey fog that limits visibility to
-      fifty paces.
+      fifty paces. It rises in three vertical tiers — Upper City, Mid-Harbor, and the Undertow.
   regions:
     - name:
         zh-CN: 上城
         en-US: Upper City
       description:
-        zh-CN: 议会与商会所在地，位于悬崖顶部，建筑以石砌为主。
-        en-US: Seat of the Council and trade guilds, perched atop the cliffs with stone-built halls.
+        zh-CN: 议会与商会所在地，位于悬崖顶部，建筑以石砌为主，是合法遗物贸易的中枢。
+        en-US: Seat of the Council and trade guilds atop the cliffs, stone-built, hub of the legal relic trade.
       climate:
         zh-CN: 雾气稀薄，偶见天光
         en-US: Thinner fog, occasional glimpses of sky
@@ -19,20 +19,20 @@ geography:
             zh-CN: 议事厅
             en-US: Council Hall
           description:
-            zh-CN: 议会权力中枢，穹顶嵌有远古潮石灯。
-            en-US: The political nerve center, its dome set with ancient tide-stone lamps.
+            zh-CN: 议会权力中枢，穹顶嵌有远古潮石灯——全城唯一不靠火焰的光源。
+            en-US: The political nerve center, its dome set with an ancient tide-stone lamp — the only flameless light in the city.
         - name:
             zh-CN: 验潮师公会塔
             en-US: Tide-Reader Guild Tower
           description:
-            zh-CN: 鉴定远古遗物的学术要地。
-            en-US: Academy and appraisal center for ancient relics.
+            zh-CN: 鉴定远古遗物的学术要地，也是雾港唯一的图书馆与档案库。
+            en-US: Academy and appraisal center for ancient relics; also Mistport's only library and archive.
     - name:
         zh-CN: 中港
         en-US: Mid-Harbor
       description:
-        zh-CN: 码头、工坊和旅店聚集地，城市的经济心脏。
-        en-US: Docks, workshops, and inns — the economic heart of Mistport.
+        zh-CN: 码头、工坊和旅店聚集地，城市的经济心脏，也是各方势力公开与暗中交锋的舞台。
+        en-US: Docks, workshops, and inns — the economic heart of Mistport, and the stage where every faction clashes openly and in shadow.
       climate:
         zh-CN: 浓雾常驻，潮湿闷热
         en-US: Perpetual fog, humid and warm
@@ -41,20 +41,26 @@ geography:
             zh-CN: 主栈桥
             en-US: Main Pier
           description:
-            zh-CN: 雾港唯一的大型泊位，渡船与货船在此停靠。
-            en-US: The only large berth; ferries and cargo ships dock here.
+            zh-CN: 雾港唯一的大型泊位，渡船与货船在此停靠，新来者从这里踏入雾港。
+            en-US: The only large berth; ferries and cargo ships dock here, and newcomers first set foot in Mistport.
         - name:
             zh-CN: 钟塔
             en-US: Tide-Bell Tower
           description:
-            zh-CN: 以潮汐驱动的机械钟，标记退潮与涨潮。
-            en-US: A tide-driven clocktower marking ebb and flow.
+            zh-CN: 以潮汐驱动的机械钟，每六小时鸣响一次；三连击代表深退潮预警。
+            en-US: A tide-driven clocktower tolling every six hours; a triple strike signals a deep-withdrawal alert.
+        - name:
+            zh-CN: 盐市
+            en-US: The Salt Market
+          description:
+            zh-CN: 中港背巷里半公开的市集，盐牙会在此放货与招募；持盐牙筹者才听得到真正的价。
+            en-US: A half-open bazaar in Mid-Harbor's back alleys where the Salt Fangs move goods and recruit; only Salt Chips hear the real prices.
     - name:
         zh-CN: 下潮区
         en-US: The Undertow
       description:
-        zh-CN: 潮退后暴露的远古遗迹区域，地形每次退潮都会改变。
-        en-US: Ancient ruins exposed at low tide; the layout changes with every withdrawal.
+        zh-CN: 潮退后暴露的远古遗迹区域，地形每次退潮都会改变，无图可循；最深处从未有人到达。
+        en-US: Ancient ruins exposed at low tide; the layout changes with every withdrawal, no map ever valid, and its deepest reaches never reached.
       climate:
         zh-CN: 阴冷，弥漫盐雾与腐蚀气息
         en-US: Cold and briny, corrosive salt mist
@@ -63,20 +69,34 @@ geography:
             zh-CN: 骨拱门
             en-US: Bone Arch
           description:
-            zh-CN: 半淹没的巨大拱形结构，来源不明。
-            en-US: A half-submerged colossal archway of unknown origin.
+            zh-CN: 半淹没的巨大拱形结构，来源不明；六年前的深退潮中暴露，带走了十七条人命。
+            en-US: A half-submerged colossal archway of unknown origin, exposed in the deep withdrawal six years ago that took seventeen lives.
+        - name:
+            zh-CN: 沉钟堂
+            en-US: The Sunken Bell Hall
+          description:
+            zh-CN: 退潮时才露出的半沉建筑，雾中教会在此聚会礼拜，相信这里离"雾之主"最近。
+            en-US: A half-sunken structure bared only at ebb, where the Congregation of the Mist gathers, believing it lies closest to the Mist Lord.
+        - name:
+            zh-CN: 隐潮窟
+            en-US: The Hidden Grotto
+          description:
+            zh-CN: 涨潮也淹不到的洞窟群，盐牙会的根据地，铁姑在此存放她搜集的遗物碎片。
+            en-US: A cave network the flood never reaches, the Salt Fangs' stronghold, where Iron Meg keeps the relic fragments she gathers.
 factions:
   - id: council
     name:
       zh-CN: 雾港议会
       en-US: Mistport Council
     description:
-      zh-CN: 统治上城的政治实体，试图以'封潮令'限制平民进入下潮区。
-      en-US: The ruling political body of the Upper City, pushing the 'Seal Tide Decree' to restrict Undertow access.
+      zh-CN: 统治上城的政治实体，试图以"封潮令"限制平民进入下潮区，垄断合法遗物贸易；内部鸽鹰两派分裂。
+      en-US:
+        The ruling political body of the Upper City, pushing the 'Seal Tide Decree' to restrict Undertow access and
+        monopolize the legal relic trade; split between doves and hawks within.
     type: political
     influence: major
     leader:
-      zh-CN: 陈议长
+      zh-CN: 议长・陈远山
       en-US: Councilor Chen
     headquarters:
       zh-CN: 上城・议事厅
@@ -85,15 +105,27 @@ factions:
       - targetId: salt-fangs
         type: hostile
         description:
-          zh-CN: 视盐牙会为非法组织
-          en-US: Views the Salt Fangs as an outlaw syndicate
+          zh-CN: 视盐牙会为非法组织，长期冷战
+          en-US: Views the Salt Fangs as an outlaw syndicate; locked in a cold war
+      - targetId: tide-readers
+        type: patron
+        description:
+          zh-CN: 拨款资助公会，也借此施加影响
+          en-US: Funds the Guild, and leverages that funding for influence
+      - targetId: fog-church
+        type: hostile
+        description:
+          zh-CN: 斥雾中教会为邪教，警惕其在底层迅速扩张
+          en-US: Brands the Congregation a cult and fears its swift growth in the lower city
   - id: tide-readers
     name:
       zh-CN: 验潮师公会
       en-US: Tide-Reader Guild
     description:
-      zh-CN: 负责鉴定远古遗物、研究潮汐规律的学术组织。
-      en-US: Scholars who appraise ancient relics and study tidal patterns.
+      zh-CN: 唯一有资质鉴定远古遗物、研究裂潮规律的学术组织；高层刻意压制某些鉴定报告，年轻验潮师日渐不安。
+      en-US:
+        The only body qualified to appraise ancient relics and study the Riftide; its leadership buries certain
+        reports, and its younger members grow uneasy.
     type: guild
     influence: major
     leader:
@@ -106,19 +138,26 @@ factions:
       - targetId: council
         type: allied
         description:
-          zh-CN: 依赖议会资金，提供遗物鉴定
-          en-US: Funded by the Council, provides appraisal services
+          zh-CN: 依赖议会资金，提供遗物鉴定，保持名义独立
+          en-US: Funded by the Council, provides appraisal, keeps nominal independence
+      - targetId: salt-fangs
+        type: complicated
+        description:
+          zh-CN: 公开敌对走私，私下铁姑曾是公会学徒，旧情难断
+          en-US: Publicly opposes the smugglers, yet Iron Meg was once a Guild apprentice — old ties linger
   - id: salt-fangs
     name:
       zh-CN: 盐牙会
       en-US: Salt Fangs
     description:
-      zh-CN: 控制下潮区遗物黑市的走私帮派，势力在底层根深蒂固。
-      en-US: A smuggler syndicate controlling the relic black market in the Undertow.
+      zh-CN: 控制下潮区遗物黑市的走私帮派，势力深植底层；二当家铁姑守信，暗中搜集遗物碎片。
+      en-US:
+        A smuggler syndicate controlling the relic black market in the Undertow; its second, Iron Meg, keeps her word
+        and quietly gathers relic fragments.
     type: criminal
     influence: major
     leader:
-      zh-CN: 铁姑
+      zh-CN: 二当家・铁姑
       en-US: Iron Meg
     headquarters:
       zh-CN: 下潮区・隐潮窟
@@ -129,25 +168,62 @@ factions:
         description:
           zh-CN: 长期对抗议会封锁政策
           en-US: Openly defies Council blockade policies
+      - targetId: fog-church
+        type: neutral
+        description:
+          zh-CN: 不信其教义，但容许信徒在下潮区借道，偶尔交易情报
+          en-US: Disbelieves the doctrine but lets the faithful pass through the Undertow, trading intel now and then
+  - id: fog-church
+    name:
+      zh-CN: 雾中教会
+      en-US: Congregation of the Mist
+    description:
+      zh-CN: 崇拜"雾之主"的新兴教团，相信雾是有意识的存在、遗迹是其身体，宣讲"雾蚀是升华"；信众在底层激增。
+      en-US:
+        A rising order worshipping the 'Mist Lord', holding that the fog is conscious and the ruins are its body, and
+        preaching that 'fog-rot is ascension'; its numbers swell in the lower city.
+    type: religious
+    influence: minor
+    leader:
+      zh-CN: 雾使・小霜
+      en-US: Mist-Speaker Frost
+    headquarters:
+      zh-CN: 下潮区・沉钟堂
+      en-US: The Undertow — Sunken Bell Hall
+    relations:
+      - targetId: council
+        type: defiant
+        description:
+          zh-CN: 被议会列为邪教，却以底层信众为盾顽强生长
+          en-US: Outlawed by the Council, yet shielded by its lower-city flock
+      - targetId: tide-readers
+        type: rival
+        description:
+          zh-CN: 以"信仰"解释潮力与雾蚀，与公会的"科学"立场针锋相对
+          en-US: Explains Tide-Force and fog-rot through faith, clashing with the Guild's 'scientific' stance
 powerSystem:
   name:
     zh-CN: 潮力
     en-US: Tide-Force
   type: magic
   description:
-    zh-CN: 远古遗物蕴含的不可预测能量，与潮汐周期共振。验潮师可引导并稳定其效果。
+    zh-CN: 远古遗物蕴含的不可预测能量，与潮汐周期共振，退潮时最强。验潮师以"潮纹"引导稳定，过度使用招致雾蚀。
     en-US:
-      Unpredictable energy stored in ancient relics, resonating with tidal cycles. Tide-Readers can channel and
-      stabilize its effects.
+      Unpredictable energy stored in ancient relics, resonating with the tidal cycle and strongest at ebb.
+      Tide-Readers channel and stabilize it through 'tide-marks'; overuse brings fog-rot.
   rules:
-    - zh-CN: 遗物效果因潮汐相位而异，满潮时最强、退潮时最稳
+    - zh-CN: 遗物效果因潮汐相位而异——满潮时最强、退潮时最稳
       en-US: Relic effects vary with tidal phase — strongest at high tide, most stable at low tide
-    - zh-CN: 未经鉴定的遗物直接使用可能产生反噬
-      en-US: Using an unappraised relic may trigger dangerous backlash
+    - zh-CN: 未经鉴定的遗物直接使用可能产生反噬，轻则失能、重则致命
+      en-US: Using an unappraised relic may trigger backlash — disabling at best, fatal at worst
     - zh-CN: 雾兽被潮力波动吸引，大规模使用遗物会引来雾兽群
       en-US: Fog beasts are drawn to Tide-Force fluctuations; large-scale relic use attracts swarms
-    - zh-CN: 验潮师通过'潮纹'手法引导能量，需要长期训练
-      en-US: Tide-Readers channel energy through 'tide-marks' — patterns requiring years of training
+    - zh-CN: 验潮师通过"潮纹"手法引导能量，需要长期训练，官方却否认潮力存在
+      en-US: Tide-Readers channel energy through 'tide-marks', a skill of years — yet the Guild denies Tide-Force exists
+    - zh-CN: 过度使用潮力引发"雾蚀"：身体逐渐半透明，最终溶入雾中，不可逆
+      en-US: Overusing Tide-Force causes 'fog-rot' — the body turning translucent and dissolving into the mist, irreversibly
+    - zh-CN: 极少数人无需遗物也能感知潮力，这种天赋被公会视为危险，被教会奉为神迹
+      en-US: A rare few sense Tide-Force without any relic — a gift the Guild deems dangerous and the Congregation calls a miracle
   tiers:
     - name:
         zh-CN: 学徒
@@ -168,8 +244,8 @@ powerSystem:
         en-US: Tide-Warden
       rank: 3
       description:
-        zh-CN: 能主动引导潮力，极为罕见
-        en-US: Can actively direct Tide-Force — exceedingly rare
+        zh-CN: 能主动引导潮力，极为罕见，多已显雾蚀
+        en-US: Can actively direct Tide-Force — exceedingly rare, and most already show fog-rot
 history:
   - era:
       zh-CN: 远古
@@ -178,8 +254,8 @@ history:
       zh-CN: 造者时代
       en-US: The Builders' Era
     description:
-      zh-CN: 下潮区遗迹的建造者文明，已无文字记录，仅余建筑残骸。
-      en-US: The civilization that created the Undertow ruins; no written records survive, only structural remnants.
+      zh-CN: 下潮区遗迹的建造者文明，已无文字记录，仅余建筑残骸；其碑文比雾港古老一万年。
+      en-US: The civilization that built the Undertow ruins; no records survive, only remnants — its inscriptions ten thousand years older than Mistport.
     significance: major
   - era:
       zh-CN: 建城纪
@@ -198,6 +274,42 @@ history:
       zh-CN: 当代
       en-US: Modern
     year:
+      zh-CN: 六年前
+      en-US: Six years ago
+    name:
+      zh-CN: 骨拱门深退潮
+      en-US: The Bone Arch Withdrawal
+    description:
+      zh-CN: 上一次深退潮暴露出"骨拱门"，多支探险队涌入，十七人葬身涨潮，至今为忌讳。
+      en-US: The last deep withdrawal bared the Bone Arch; expeditions rushed in and seventeen drowned in the returning tide — a tragedy still spoken of in whispers.
+    significance: major
+  - era:
+      zh-CN: 当代
+      en-US: Modern
+    year:
+      zh-CN: 三年前
+      en-US: Three years ago
+    name:
+      zh-CN: 失踪的探险队
+      en-US: The Vanished Expedition
+    description:
+      zh-CN: 一支议会探险队深入下潮区后全队失踪，唯一幸存者发疯，反复念叨"它在下面醒了"。
+      en-US: A Council expedition vanished in the deep Undertow; its lone survivor went mad, repeating "It woke up down there."
+    significance: major
+  - era:
+      zh-CN: 近年
+      en-US: Recent years
+    name:
+      zh-CN: 雾中教会兴起
+      en-US: Rise of the Congregation
+    description:
+      zh-CN: 雾蚀患者激增，雾中教会以"升华"教义吸纳底层贫民，雾使小霜的预言屡屡应验。
+      en-US: As fog-rot cases surged, the Congregation drew in the poor with its doctrine of 'ascension', and Mist-Speaker Frost's prophecies kept coming true.
+    significance: minor
+  - era:
+      zh-CN: 当代
+      en-US: Modern
+    year:
       zh-CN: 去年
       en-US: Last year
     name:
@@ -207,6 +319,16 @@ history:
       zh-CN: 陈议长提出封潮令，禁止无证者进入下潮区，引发底层激烈反对。
       en-US: Councilor Chen proposed banning unlicensed civilians from the Undertow, sparking unrest in the lower tiers.
     significance: minor
+  - era:
+      zh-CN: 当下
+      en-US: Now
+    name:
+      zh-CN: 雾在变浓
+      en-US: The Thickening Fog
+    description:
+      zh-CN: 最敏感的验潮师察觉雾正逐月变浓、退潮间隔拉长；齐老的笔记称之为"周期的临界点"。
+      en-US: The keenest Tide-Readers feel the fog thickening month by month and the ebbs stretching apart; Qi's notes call it "the critical point of the cycle."
+    significance: major
 economy:
   currencies:
     - name:
@@ -220,11 +342,13 @@ economy:
         zh-CN: 盐牙筹
         en-US: Salt Chip
       description:
-        zh-CN: 盐牙会在黑市流通的代币
-        en-US: Untraceable token used in Salt Fangs black market
+        zh-CN: 盐牙会在黑市流通的不可追踪代币
+        en-US: Untraceable token used in the Salt Fangs black market
   resources:
     - zh-CN: 远古遗物
       en-US: Ancient relics
+    - zh-CN: 遗物碎片
+      en-US: Relic fragments
     - zh-CN: 潮盐
       en-US: Tide salt
     - zh-CN: 雾菌（可食用真菌）
@@ -232,10 +356,10 @@ economy:
     - zh-CN: 崖铁
       en-US: Cliff iron
   tradeNotes:
-    zh-CN: 遗物交易是雾港经济的核心。合法渠道走验潮师公会鉴定后拍卖，黑市走盐牙会。
+    zh-CN: 遗物交易是雾港经济的核心。合法渠道走验潮师公会鉴定后拍卖，黑市走盐牙会；遗物碎片在黑市价格离奇，因为有人在高价收购。
     en-US:
-      The relic trade is Mistport's economic backbone. Legal relics go through Guild appraisal and auction; the black
-      market runs through the Salt Fangs.
+      The relic trade is Mistport's backbone. Legal relics go through Guild appraisal and auction; the black market
+      runs through the Salt Fangs — and relic fragments fetch strange prices, because someone is buying them up.
 socialStructure:
   classes:
     - name:
@@ -257,11 +381,11 @@ socialStructure:
         en-US: Undertow Dwellers
       rank: 3
       description:
-        zh-CN: 下潮区居民，靠拾荒和走私为生
-        en-US: Scavengers and smugglers living at the city's edge
+        zh-CN: 下潮区边缘居民，靠拾荒和走私为生，也是雾中教会的主要信众
+        en-US: Scavengers and smugglers at the city's edge — and the Congregation's main flock
   notes:
-    zh-CN: 验潮师公会成员不受阶层限制，凭技术获得跨阶层通行权。
-    en-US: Tide-Reader Guild members hold cross-tier passage rights regardless of social class.
+    zh-CN: 验潮师公会成员不受阶层限制，凭技术获得跨阶层通行权；雾蚀患者则被各阶层排斥，逐渐流向教会。
+    en-US: Tide-Reader Guild members hold cross-tier passage regardless of class; the fog-rotted are shunned by all tiers and drift toward the Congregation.
 tone:
   genres:
     - dark-fantasy
@@ -269,15 +393,21 @@ tone:
     - exploration
   contentRating: teen
   narrativeStyle:
-    zh-CN: 雾气氤氲的哥特悬疑风格，节奏舒缓但暗流涌动。
-    en-US: Gothic suspense shrouded in fog — slow-paced on the surface, with dangerous undercurrents.
+    zh-CN: 雾气氤氲的哥特悬疑风格，节奏舒缓但暗流涌动，真相一层层剥开、代价一点点累积。
+    en-US: Gothic suspense shrouded in fog — slow on the surface, with dangerous undercurrents, truth peeled back layer by layer and the cost mounting bit by bit.
   themes:
     - zh-CN: 阶层对立
       en-US: class divide
     - zh-CN: 未知探索
       en-US: the unknown
-    - zh-CN: 权力与秩序
+    - zh-CN: 秩序与自由
       en-US: order vs. freedom
+    - zh-CN: 信仰与异化
+      en-US: faith and alienation
+    - zh-CN: 真相的代价
+      en-US: the price of truth
+    - zh-CN: 身体的边界
+      en-US: the boundary of the body
 mechanics:
   combatStyle: narrative
   skillSystem:
@@ -291,18 +421,22 @@ mechanics:
       en-US: Fog actions require sound/light checks — failure attracts fog beasts
     - zh-CN: 遗物使用前必须鉴定，否则触发随机效果表
       en-US: Relics must be appraised before use, or trigger a random-effect table
-    - zh-CN: 潮汐周期影响下潮区可探索范围
-      en-US: Tidal cycle determines explorable range in the Undertow
+    - zh-CN: 潮汐周期影响下潮区可探索范围，涨潮预警必须撤退
+      en-US: The tidal cycle determines the explorable range; a flood warning forces retreat
+    - zh-CN: 引导潮力或使用活性遗物会累积雾蚀值，过线则身体不可逆地变化
+      en-US: Channeling Tide-Force or using active relics accrues fog-rot; past a threshold the body changes irreversibly
+    - zh-CN: 四方势力（议会/公会/盐牙会/教会）对玩家的遗物与下潮区行动各有反应，立场此消彼长
+      en-US: The four powers (Council/Guild/Salt Fangs/Congregation) each react to the player's relic and Undertow actions, standings shifting against one another
 startingConditions:
   openingScenario:
-    zh-CN: 你刚抵达雾港中港的主栈桥。潮汐钟敲响——一次罕见的深退潮即将发生。码头上有人在招募深潮探险队，也有人在发放封潮令传单。
+    zh-CN: 黄昏，你刚抵达中港主栈桥。潮汐钟敲响罕见的三连击——深退潮预警。码头上盐牙会在招募探险者，议会在张贴封潮令；验潮师苏窈挤过人群告诉你：公会长齐老今早留信走进了下潮区，而那时正是涨潮期。
     en-US:
-      You step off the ferry onto Mid-Harbor's main pier. The fog is thick today. A deep tide-bell rings — signaling a
-      rare 'deep withdrawal' that will expose deeper ruins than usual. The dock buzzes with expedition recruiters and
-      Council officers handing out Seal Tide Decree leaflets.
+      Dusk on Mid-Harbor's main pier. The tide-bell rings a rare triple strike — a deep-withdrawal alert. Salt Fangs
+      recruit explorers while Council officers post the Seal Tide Decree; Tide-Reader Su Yao pushes through the crowd to
+      tell you Guildmaster Qi left a note this morning and walked into the Undertow — at high tide, when no one can.
   openingHook:
-    zh-CN: 潮钟已鸣，下潜还是封港？
-    en-US: The bell has rung — dive, or seal?
+    zh-CN: 潮钟三鸣，齐老失踪，下潜还是封港？
+    en-US: The bell tolls thrice, Qi is gone — dive, or seal?
   openingChips:
     - zh-CN: 中港主栈桥
       en-US: Mid-Harbor pier
@@ -310,11 +444,17 @@ startingConditions:
       en-US: Deep withdrawal
     - zh-CN: 封潮令
       en-US: Seal Tide Decree
+    - zh-CN: 齐老失踪
+      en-US: Qi's disappearance
+    - zh-CN: 验潮师学徒
+      en-US: Tide-Reader apprentice
   playerConstraints:
     - zh-CN: 初始为验潮师学徒或普通潮民
       en-US: Start as a Tide-Reader apprentice or common Undertow dweller
     - zh-CN: 不可携带明火进入雾区
       en-US: No open flames permitted in the fog
+    - zh-CN: 无证进入下潮区违反封潮令，会被议会追责
+      en-US: Entering the Undertow unlicensed violates the Seal Tide Decree and draws Council reprisal
   startingLocation:
     zh-CN: 中港・主栈桥
     en-US: Mid-Harbor — Main Pier

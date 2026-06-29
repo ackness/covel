@@ -18,6 +18,7 @@ A plugin-configuration pass: worlds can now preset any plugin's player-tunable s
 
 - **One plugin-config declaration.** `userSettings` is now the single source for player-tunable plugin settings; the dead, never-consumed `config` manifest field is removed. A straggler `PLUGIN.md` that still declares `config:` is stripped with a deprecation warning rather than failing to load. The `PluginUserSettingSpec` type is single-sourced in `@covel/shared` (two divergent copies removed), and its declared constraints (`min` / `max` / `options` / type) are now enforced — client-side in the SettingsStore **and server-side** in `resolveUserSettings`, so an out-of-range world or header value degrades to the manifest default instead of reaching a guard or hook.
 - **Plugin selection consolidated into `pluginPolicy`.** The deprecated top-level `requiredPlugins` / `recommendedPlugins` / `excludedPlugins` now fold (de-duplicated) into `pluginPolicy` at world-load time, so `WorldRecord.metadata` carries plugin selection in one place. The top-level fields remain valid in `world.yaml` for back-compat. Per-turn world reads are served from a short-TTL per-`worldId` cache.
+- **Sample worlds curated to two deeply-built flagships.** The bundled set is now **Mistport** (traditional-story / dark-fantasy mystery) and **Haruka Academy** (dialogue / GalGame-style), each greatly expanded and doubling as the canonical example of the new fields. Mistport gains a seven-character seed cast, a fourth faction, bilingual lore, and `clues` / `relics` / `tides` memory blocks; Haruka grows to eight characters across five routes with `relationships` / `promises` / `rumors` / `festival` memory. The redundant `cloudmere` and `neonridge` story worlds move to `worlds/_archive/` (kept for reference, not loaded).
 
 ### Fixed
 
@@ -39,6 +40,7 @@ A plugin-configuration pass: worlds can now preset any plugin's player-tunable s
 
 - **单一插件配置声明**：`userSettings` 现为玩家可调设置的唯一来源；死的、从未被消费的 `config` manifest 字段被移除。仍声明 `config:` 的旧 `PLUGIN.md` 会被 strip + 弃用警告，而非加载失败。`PluginUserSettingSpec` 类型在 `@covel/shared` 单一来源（移除两份发散副本），其声明的约束（`min` / `max` / `options` / type）现已强制——前端 SettingsStore **与服务端** `resolveUserSettings`，越界的世界 / header 值降级为 manifest 默认而非进入 guard 或 hook。
 - **插件选择收敛进 `pluginPolicy`**：过期的顶层 `requiredPlugins` / `recommendedPlugins` / `excludedPlugins` 在加载时折叠（去重）进 `pluginPolicy`，使 `WorldRecord.metadata` 的插件选择单一来源。顶层字段在 `world.yaml` 仍兼容。每回合的世界读取由短 TTL 的 per-`worldId` 缓存服务。
+- **示例世界精选为两个深度打磨的旗舰**：内置世界现为 **Mistport（雾港·裂潮纪，传统叙事 / 黑暗奇幻悬疑）** 与 **Haruka Academy（遥风学园，对话 / GalGame 类）**，各自大幅扩充，并成为新字段的范例。Mistport 新增七名种子角色、第四派系、双语 lore 与 `clues` / `relics` / `tides` 记忆块；Haruka 扩到八名角色、五条线，配 `relationships` / `promises` / `rumors` / `festival` 记忆块。冗余的 `cloudmere` 与 `neonridge` 故事世界移入 `worlds/_archive/`（保留参考，不加载）。
 
 **Fixed**
 

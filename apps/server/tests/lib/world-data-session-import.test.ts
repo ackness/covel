@@ -1125,48 +1125,54 @@ sources: {}
     const worldsDir = path.resolve(import.meta.dirname, "../../../../worlds");
     const pluginRegistry = await builtinPluginRegistry();
 
-    for (const [worldId, ruleSourceId] of [
-      ["cloudmere", "cultivationRules"],
-      ["mistport", "tideRules"],
-      ["neonridge", "streetRules"],
-    ] as const) {
-      const sessionId = `sess-${worldId}`;
-      const store = createMemoryStore();
-      await store.createSession({
-        id: sessionId,
-        worldId,
-        status: "active",
-        turnCount: 0,
-        preGameCompleted: [],
-        locale: "zh-CN",
-        activePlugins: ["living-world-rules"],
-        createdAt: NOW,
-        updatedAt: NOW,
-      });
+    // mistport ships a living-world-rules rule set, a character-blueprint cast,
+    // and character-presence portraits (media + presence); activate the plugins
+    // all its sources target so the import is clean.
+    const worldId = "mistport";
+    const ruleSourceId = "tideRules";
+    const activePlugins = [
+      "living-world-rules",
+      "character-blueprint",
+      "char-creator",
+      "character-presence",
+    ];
+    const sessionId = `sess-${worldId}`;
+    const store = createMemoryStore();
+    await store.createSession({
+      id: sessionId,
+      worldId,
+      status: "active",
+      turnCount: 0,
+      preGameCompleted: [],
+      locale: "zh-CN",
+      activePlugins,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
 
-      const result = await importWorldDataForSession({
-        store,
-        sessionId,
-        worldId,
-        worldsDirs: [worldsDir],
-        now: NOW,
-        preflight: {
-          activePlugins: ["living-world-rules"],
-          registry: pluginRegistry,
-        },
-      });
+    const result = await importWorldDataForSession({
+      store,
+      sessionId,
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      preflight: {
+        activePlugins,
+        registry: pluginRegistry,
+      },
+    });
 
-      expect(result.diagnostics.filter((d) => d.level === "error")).toEqual([]);
-      expect(result.written).toBeGreaterThanOrEqual(6);
-      expect(
-        await store.listPluginData(sessionId, "living-world-rules", "rules"),
-      ).toHaveLength(3);
-      expect(await store.listSessionLorebookEntries(sessionId)).toHaveLength(3);
-      expect(
-        (await store.listWorldDataImportLedger(sessionId)).map(
-          (row) => row.sourceId,
-        ),
-      ).toContain(ruleSourceId);
-    }
+    expect(result.diagnostics.filter((d) => d.level === "error")).toEqual([]);
+    expect(result.written).toBeGreaterThanOrEqual(6);
+    expect(
+      await store.listPluginData(sessionId, "living-world-rules", "rules"),
+    ).toHaveLength(6);
+    expect(await store.listSessionLorebookEntries(sessionId)).toHaveLength(6);
+    expect(
+      (await store.listWorldDataImportLedger(sessionId)).map(
+        (row) => row.sourceId,
+      ),
+    ).toContain(ruleSourceId);
+    expect(await store.listCharacters(sessionId)).not.toHaveLength(0);
   });
 });

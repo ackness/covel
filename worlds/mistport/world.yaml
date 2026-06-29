@@ -26,6 +26,9 @@ recommendedPlugins:
   - npc-graph
   - player-identity
   - living-world-rules
+  - character-blueprint
+  - character-presence
+  - cost-gate
 excludedPlugins:
   - chat-mode-narrator
   - scene-cast
@@ -40,4 +43,40 @@ pluginPolicy:
     - role:world-rules
   avoidTags:
     - mode:dialogue
+# World-authored plugin setting defaults. mistport is the heaviest world (narrator
+# + codex + guide + npc-graph + character-tracker + per-turn memory extraction), so
+# it ships cost-gate with GENEROUS caps as a silent budget guardrail — it never
+# trims normal sessions, only runaway ones. Players can disable / retune in Settings.
+pluginSettings:
+  cost-gate:
+    softTokens: 400000
+    hardTokens: 600000
+# World-authored core-memory blocks for a mystery / investigation story. The
+# memory system merges these on top of plugin/framework blocks for this world's
+# sessions only (genre-specific dimensions without forking a plugin).
+memoryBlocks:
+  - label: clues
+    displayName:
+      zh-CN: 线索
+      en-US: Clues
+    extractionHint:
+      zh-CN: 已发现的线索、物证、矛盾证词，及其与齐老失踪、"钥匙"和裂潮真相的关联。
+      en-US: Discovered clues, evidence, and contradictions, and how they tie to Qi's disappearance, the "key", and the truth of the Riftide.
+    icon: Search
+  - label: relics
+    displayName:
+      zh-CN: 遗物
+      en-US: Relics
+    extractionHint:
+      zh-CN: 已获得或见识过的远古遗物、其鉴定结果、效果、风险与归属。
+      en-US: Ancient relics obtained or seen, their appraisals, effects, risks, and ownership.
+    icon: Gem
+  - label: tides
+    displayName:
+      zh-CN: 潮讯
+      en-US: Tide Lore
+    extractionHint:
+      zh-CN: 关于退潮时间、深退潮预警、雾兽出没、雾蚀进展与安全/危险窗口的观察。
+      en-US: Observations on ebb timing, deep-withdrawal alerts, fog-beast sightings, fog-rot progression, and safe/danger windows.
+    icon: Waves
 worldData: data/world.data.yaml

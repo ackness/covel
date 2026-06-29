@@ -45,7 +45,7 @@ test.describe("Game Session — 3 Round Flow", () => {
 
     // ── Start Game ───────────────────────────────────────────
     await page.goto("/session");
-    await selectWorldByText(page, /cloudmere|九州・云梦泽/i);
+    await selectWorldByText(page, /mistport|雾港/i);
 
     const startButton = page.locator("button", {
       hasText: /start game|开始游戏/i,

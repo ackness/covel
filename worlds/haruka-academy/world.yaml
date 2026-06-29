@@ -24,6 +24,7 @@ recommendedPlugins:
   - player-identity
   - living-world-rules
   - branch-reply
+  - npc-graph
 excludedPlugins:
   - narrator
   - guide
@@ -43,4 +44,43 @@ pluginSettings:
   chat-mode-narrator:
     dialogueRatio: 80
     proseLength: short
+    # 8-character ensemble — keep 2 speakers on stage per beat for intimate focus.
+    activeSpeakerCount: 2
+# World-authored core-memory blocks for a dialogue / slice-of-life romance.
+# Merged on top of plugin/framework blocks for this world's sessions only, so a
+# GalGame-style world tracks relationships, promises, rumors and the festival
+# countdown without forking a plugin.
+memoryBlocks:
+  - label: relationships
+    displayName:
+      zh-CN: 人物关系
+      en-US: Relationships
+    extractionHint:
+      zh-CN: 每名主要角色当前的关系阶段，以及好感、信任、压力、公开亲密度的变化与原因。
+      en-US: Each main character's current relationship stage, plus shifts in affection, trust, pressure, and public closeness, and why.
+    icon: Heart
+  - label: promises
+    displayName:
+      zh-CN: 约定
+      en-US: Promises
+    extractionHint:
+      zh-CN: 玩家对角色许下的承诺与约定（放学同行、帮忙、保密、赴约等）及其兑现情况。
+      en-US: Promises and commitments the player made to characters (walking home, helping out, keeping secrets, meeting up) and whether they were kept.
+    icon: Handshake
+  - label: rumors
+    displayName:
+      zh-CN: 传闻
+      en-US: Rumors
+    extractionHint:
+      zh-CN: 当前在班级或校内流传的传闻、热度、源头，以及它对哪些角色造成了压力。
+      en-US: Rumors circulating in class or school, their heat and source, and which characters they pressure.
+    icon: Megaphone
+  - label: festival
+    displayName:
+      zh-CN: 学园祭
+      en-US: Festival
+    extractionHint:
+      zh-CN: 学园祭倒计时、各社团的准备进度、玩家承担的筹备任务与未决的关键节点。
+      en-US: The festival countdown, each club's prep progress, the player's assigned tasks, and unresolved milestones.
+    icon: CalendarDays
 worldData: data/world.data.yaml

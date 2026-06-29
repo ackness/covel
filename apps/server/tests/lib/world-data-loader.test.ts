@@ -639,12 +639,7 @@ sources:
 
   it("loads bundled worlds through worldData descriptors", async () => {
     const worldsRoot = path.resolve(import.meta.dirname, "../../../../worlds");
-    for (const worldId of [
-      "cloudmere",
-      "haruka-academy",
-      "mistport",
-      "neonridge",
-    ]) {
+    for (const worldId of ["haruka-academy", "mistport"]) {
       const record = await loadSingleWorld(path.join(worldsRoot, worldId));
       expect(record?.metadata?.dimensions).toBeTruthy();
       expect(record?.metadata?.worldData).toMatchObject({
@@ -659,9 +654,8 @@ sources:
     }
 
     for (const [worldId, ruleSourceId] of [
-      ["cloudmere", "cultivationRules"],
       ["mistport", "tideRules"],
-      ["neonridge", "streetRules"],
+      ["haruka-academy", "campusRules"],
     ] as const) {
       const record = await loadSingleWorld(path.join(worldsRoot, worldId));
       expect(record?.metadata?.worldData).toMatchObject({

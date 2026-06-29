@@ -32,12 +32,10 @@ Every agent is its own plugin. Disable one, swap one, or write your own.
 
 ## Worlds in the box
 
-Four sample worlds ship in the box — play one as-is, or fork it as a starting template:
+Two sample worlds ship in the box — each a complete, hand-built showcase of a different play style. Play one as-is, or fork it as a starting template:
 
-- **Cloudmere** (云梦泽) — xianxia cultivation. An outer-sect disciple in a world of reawakening qi and warring sects.
-- **Mistport Chronicles** — dark-fantasy mystery. A fog-shrouded port where each tide reveals ancient ruins and dangers.
-- **Neonridge 2087** — cyberpunk noir. A street nobody amid cyberware and corporate war.
-- **Haruka Academy** — school romance and slice-of-life, in dialogue mode. Clubs, exams, rumors, and quiet crushes at a seaside high school.
+- **Mistport Chronicles** (雾港·裂潮纪) — a dark-fantasy mystery in traditional-story mode. A fog-shrouded port where every ebb bares different ruins; a guildmaster vanishes, and four powers race for a key to what sleeps in the deep. Ships with a seed cast, a four-faction map, and investigation-flavored memory. Bilingual (English + 中文).
+- **Haruka Academy** (遥风学园) — school romance and slice-of-life in dialogue mode, GalGame-style. Clubs, exams, rumors, and quiet crushes at a seaside high school in the weeks before the spring festival, told through a cast of eight.
 
 ## Quick start
 

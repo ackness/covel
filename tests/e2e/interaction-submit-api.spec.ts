@@ -16,9 +16,9 @@ async function createSession(
   locale: string,
 ): Promise<string> {
   const res = await request.post("/api/sessions", {
-    // cloudmere's worldData targets living-world-rules, so it must be active.
+    // mistport's worldData targets living-world-rules, so it must be active.
     data: {
-      worldId: "cloudmere",
+      worldId: "mistport",
       locale,
       plugins: [
         "pregame",
@@ -30,6 +30,7 @@ async function createSession(
         "npc-graph",
         "player-identity",
         "living-world-rules",
+        "character-blueprint",
       ],
     },
   });

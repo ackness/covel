@@ -82,13 +82,13 @@ curl http://localhost:3001/api/plugins
 curl -X POST http://localhost:3001/api/sessions \
   -H "Content-Type: application/json" \
   -d '{
-    "worldId": "cloudmere",
+    "worldId": "mistport",
     "locale": "zh-CN",
     "plugins": ["pregame", "narrator", "codex"]
   }'
 ```
 
-记下返回的 `id`（格式为 `{worldId}-{uuid8}`，如 `cloudmere-a1b2c3d4`），后续请求都需要它。
+记下返回的 `id`（格式为 `{worldId}-{uuid8}`，如 `mistport-a1b2c3d4`），后续请求都需要它。
 
 ### 6. 执行第一个 Turn（玩家发言）
 
@@ -565,7 +565,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 {
   "items": [
     {
-      "id": "cloudmere",
+      "id": "mistport",
       "name": "云溟界",
       "description": "一个漂浮于云层之上的奇幻世界...",
       "locale": "zh-CN",
@@ -607,15 +607,15 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 **参数:**
 
-| 参数 | 位置 | 说明                      |
-| ---- | ---- | ------------------------- |
-| `id` | 路径 | 世界 ID（如 `cloudmere`） |
+| 参数 | 位置 | 说明                     |
+| ---- | ---- | ------------------------ |
+| `id` | 路径 | 世界 ID（如 `mistport`） |
 
 **响应 200:**
 
 ```json
 {
-  "id": "cloudmere",
+  "id": "mistport",
   "name": "云溟界",
   "description": "一个漂浮于云层之上的奇幻世界...",
   "locale": "zh-CN",
@@ -755,7 +755,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 **请求体:**
 
 ```json
-{ "sessionId": "neonridge-abcd1234" }
+{ "sessionId": "mistport-abcd1234" }
 ```
 
 **响应:**
@@ -858,8 +858,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 {
   "items": [
     {
-      "id": "cloudmere-a1b2c3d4",
-      "worldId": "cloudmere",
+      "id": "mistport-a1b2c3d4",
+      "worldId": "mistport",
       "status": "active",
       "turnCount": 0,
       "preGameCompleted": [],
@@ -880,7 +880,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ```json
 {
-  "worldId": "cloudmere",
+  "worldId": "mistport",
   "locale": "zh-CN",
   "plugins": ["pregame", "narrator", "codex"]
 }
@@ -905,8 +905,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ```json
 {
-  "id": "cloudmere-a1b2c3d4",
-  "worldId": "cloudmere",
+  "id": "mistport-a1b2c3d4",
+  "worldId": "mistport",
   "locale": "zh-CN",
   "status": "active",
   "turnCount": 0,
@@ -923,7 +923,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 - `turnCount`(number) — 主循环轮数计数（从 0 开始，每次成功 turn +1）
 - `preGameCompleted`(string[]) — 已完成 Pre-Game 初始化的 runtime id 集合，框架据此跳过后续轮次的 Pre-Game 调度
 
-> **Session ID 格式**: 自动生成的 ID 格式为 `{worldId}-{uuid8}`（如 `cloudmere-a1b2c3d4`），使用 `crypto.randomUUID()` 后缀防止枚举。如未提供 worldId 则前缀为 `session`。
+> **Session ID 格式**: 自动生成的 ID 格式为 `{worldId}-{uuid8}`（如 `mistport-a1b2c3d4`），使用 `crypto.randomUUID()` 后缀防止枚举。如未提供 worldId 则前缀为 `session`。
 
 #### `GET /api/sessions/:id`
 
@@ -939,8 +939,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ```json
 {
-  "id": "cloudmere-a1b2c3d4",
-  "worldId": "cloudmere",
+  "id": "mistport-a1b2c3d4",
+  "worldId": "mistport",
   "status": "active",
   "turnCount": 3,
   "preGameCompleted": [
@@ -1066,7 +1066,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 ```json
 {
   "turnId": "a1b2c3d4-...",
-  "sessionId": "cloudmere-a1b2c3d4",
+  "sessionId": "mistport-a1b2c3d4",
   "runtimeResults": [
     {
       "pluginId": "narrator",
@@ -1956,14 +1956,14 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
   "items": [
     {
       "id": "msg-001",
-      "sessionId": "cloudmere-a1b2c3d4",
+      "sessionId": "mistport-a1b2c3d4",
       "role": "user",
       "content": "我环顾四周",
       "createdAt": "2025-01-15T10:00:00.000Z"
     },
     {
       "id": "msg-002",
-      "sessionId": "cloudmere-a1b2c3d4",
+      "sessionId": "mistport-a1b2c3d4",
       "role": "assistant",
       "content": "你发现自己站在一片广阔的草原上...",
       "createdAt": "2025-01-15T10:00:05.000Z"
@@ -2011,7 +2011,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 ```json
 {
-  "sessionId": "cloudmere-a1b2c3d4",
+  "sessionId": "mistport-a1b2c3d4",
   "pluginId": "codex",
   "namespaces": [
     {
@@ -2225,7 +2225,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 {
   "snapshot": {
     "id": "<uuid>",
-    "sessionId": "cloudmere-a1b2c3d4",
+    "sessionId": "mistport-a1b2c3d4",
     "turnId": "turn-42",
     "kind": "manual",
     "payload": {
@@ -2291,8 +2291,8 @@ session 不存在时返回 `404`。
 
 ```json
 {
-  "sessionId": "cloudmere-<new-uuid8>",
-  "parentSessionId": "cloudmere-a1b2c3d4",
+  "sessionId": "mistport-<new-uuid8>",
+  "parentSessionId": "mistport-a1b2c3d4",
   "fromSnapshotId": "<parent-snapshot-id>",
   "forkSnapshotId": "<child-fork-snapshot-id>"
 }
@@ -2325,7 +2325,7 @@ session 不存在时返回 `404`。
   "items": [
     {
       "id": "char-001",
-      "sessionId": "cloudmere-a1b2c3d4",
+      "sessionId": "mistport-a1b2c3d4",
       "name": "艾尔文",
       "type": "player",
       "description": "一名孤儿出身的流浪剑客",
@@ -2375,7 +2375,7 @@ session 不存在时返回 `404`。
 ```json
 {
   "id": "char-001",
-  "sessionId": "cloudmere-a1b2c3d4",
+  "sessionId": "mistport-a1b2c3d4",
   "name": "艾尔文",
   "type": "player",
   "description": "一名孤儿出身的流浪剑客",
@@ -2416,7 +2416,7 @@ curl -N "http://localhost:3001/api/events/stream?sessionId=<sessionId>"
 
 ```
 event: connected
-data: {"sessionId":"cloudmere-a1b2c3d4","timestamp":"2025-01-15T10:00:00.000Z"}
+data: {"sessionId":"mistport-a1b2c3d4","timestamp":"2025-01-15T10:00:00.000Z"}
 ```
 
 后续事件：
@@ -2456,7 +2456,7 @@ id: evt-002
 {
   "topic": "combat.start",
   "payload": { "enemyId": "goblin-01", "terrain": "forest" },
-  "sessionId": "cloudmere-a1b2c3d4",
+  "sessionId": "mistport-a1b2c3d4",
   "targetRuntime": "combat"
 }
 ```
@@ -2499,7 +2499,7 @@ id: evt-002
 {
   "requestId": "req-001",
   "type": "send_message",
-  "sessionId": "cloudmere-a1b2c3d4",
+  "sessionId": "mistport-a1b2c3d4",
   "locale": "zh-CN",
   "payload": {
     "content": "我拔出剑，准备迎战"
@@ -2635,14 +2635,14 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
 
 ```json
 {
-  "sessionId": "cloudmere-a1b2c3d4",
+  "sessionId": "mistport-a1b2c3d4",
   "count": 42,
   "events": [
     {
       "type": "runtime.started",
       "requestId": "req-001",
       "traceId": "trace-001",
-      "sessionId": "cloudmere-a1b2c3d4",
+      "sessionId": "mistport-a1b2c3d4",
       "turnId": "turn-001",
       "flowId": "flow-001",
       "seq": 0,
@@ -2661,7 +2661,7 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
 
 ```json
 {
-  "sessionId": "cloudmere-a1b2c3d4",
+  "sessionId": "mistport-a1b2c3d4",
   "turnCount": 3,
   "turns": [
     {

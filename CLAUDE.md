@@ -114,8 +114,8 @@ packages/           16 internal packages: shared, settings, context, ai-provider
 
 plugins/            19 bundled plugin packages (see docs/reference/plugins.md)
 prompts/            Externalised prompt templates (locale-aware markdown)
-worlds/             4 file-based sample world packages
-                    (cloudmere / mistport / neonridge / haruka-academy)
+worlds/             2 curated sample world packages (mistport / haruka-academy);
+                    archived worlds in worlds/_archive/ are not loaded
 ```
 
 Dependency flow (rough):
