@@ -106,8 +106,8 @@ export function createBootstrapMemorySystem({
   ): Promise<readonly MemoryBlockSchema[] | undefined> => {
     const cached = sessionBlockCache.get(sessionId);
     if (cached) return cached;
-    let resolved: readonly MemoryBlockSchema[] = baseBlocks;
     try {
+      let resolved: readonly MemoryBlockSchema[] = baseBlocks;
       const session = await store.getSession(sessionId);
       const world = session?.worldId
         ? await store.getWorld(session.worldId)
@@ -126,15 +126,20 @@ export function createBootstrapMemorySystem({
         );
         if (additions.length > 0) resolved = [...baseBlocks, ...additions];
       }
+      // Cache only on a successful resolve — a transient store error must not
+      // permanently pin this session to base-only blocks (it would otherwise be
+      // cached for the process lifetime). On error we return base blocks without
+      // caching so a later turn retries.
+      sessionBlockCache.set(sessionId, resolved);
+      return resolved;
     } catch (err) {
       console.warn(
-        `[bootstrap] world memoryBlocks resolve failed for ${sessionId}: ${
+        `[bootstrap] world memoryBlocks resolve failed for ${sessionId} (retrying next turn): ${
           err instanceof Error ? err.message : String(err)
         }`,
       );
+      return baseBlocks;
     }
-    sessionBlockCache.set(sessionId, resolved);
-    return resolved;
   };
 
   const memoryLlm = {

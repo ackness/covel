@@ -122,7 +122,14 @@ export function createMemorySystem(
 
   const compactor = createCompactor(
     { store, llm, memoryManager: manager },
-    { ...options?.compaction, blocks, modelSlot },
+    {
+      ...options?.compaction,
+      blocks,
+      ...(options?.coreMemory?.resolveBlocks
+        ? { resolveBlocks: options.coreMemory.resolveBlocks }
+        : {}),
+      modelSlot,
+    },
   );
 
   return {

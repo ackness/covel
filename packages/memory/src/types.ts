@@ -335,6 +335,14 @@ export interface CompactionConfig {
    * {@link DEFAULT_CORE_MEMORY_BLOCKS}.
    */
   readonly blocks?: readonly CoreMemoryBlockSchema[];
+  /**
+   * Per-session block resolver (see {@link CoreMemoryConfig.resolveBlocks}).
+   * Forwarded to the post-compaction updater so world-declared blocks are also
+   * refreshed during compaction, not just on the normal post-turn path.
+   */
+  readonly resolveBlocks?: (
+    sessionId: string,
+  ) => Promise<readonly CoreMemoryBlockSchema[] | undefined>;
 }
 
 export interface CompactionResult {

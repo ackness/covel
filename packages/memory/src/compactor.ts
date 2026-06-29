@@ -171,6 +171,11 @@ export function createCompactor(
             modelSlot: config?.modelSlot,
             locale,
             ...(config?.blocks ? { blocks: config.blocks } : {}),
+            // Forward the per-session resolver so world-declared blocks are
+            // also refreshed during compaction (not just on the post-turn path).
+            ...(config?.resolveBlocks
+              ? { resolveBlocks: config.resolveBlocks }
+              : {}),
           });
           await updater.updateAfterTurn({
             sessionId,
