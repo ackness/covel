@@ -264,18 +264,43 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "已保存展示",
-            "en": "Saved display"
+            "zh": "已保存立绘",
+            "en": "Saved portraits"
           },
           "variant": "muted",
           "size": "xs"
         }
       },
       {
-        "component": "JsonView",
-        "props": {
-          "value": { "$state": "/entries" }
-        }
+        "component": "Grid",
+        "props": { "cols": 3 },
+        "repeat": { "statePath": "/entries", "key": "key" },
+        "children": [
+          {
+            "component": "Stack",
+            "props": { "gap": "xs" },
+            "children": [
+              {
+                "component": "Image",
+                "props": {
+                  "ref": { "$item": "value/avatar" },
+                  "alt": { "$item": "value/displayName" },
+                  "aspectRatio": "3/4",
+                  "rounded": "md",
+                  "fit": "cover"
+                }
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "$item": "value/displayName" },
+                  "size": "xs",
+                  "variant": "muted"
+                }
+              }
+            ]
+          }
+        ]
       }
     ]
   }
