@@ -65,6 +65,10 @@ server 会按 `*_API_KEY` 扫描所有条目注入 provider 运行时。Key 名 
 
 见仓库根 [`llm.toml.example`](../../llm.toml.example) 示例；每个 slot 对应一个 provider / 模型组合。app 自带兜底 `story` slot 指向 DeepSeek —— 填好 `keys.env` 的 `DEEPSEEK_API_KEY` 就能跑。
 
+**热重载**：改完 `llm.toml` 不必重启 app —— 到 **Settings → LLM** 点「重载配置」即可。后端会重读文件并原地应用到运行中的 gateway（`POST /api/llm-config/reload`），新增/删除的 slot 立即生效。桌面版该接口受一次性 bearer token 保护（同其他写接口），前端自动附带；dev/web tier 无 token 时开放。
+
+**解析失败可见**：若 `llm.toml` 有语法错误（如某个 key 写了 `=` 却没值），整份文件会解析失败并**回退到内置默认**（只剩一个 `story` slot）。此时 `GET /api/llm-config` 会带 `error` 字段，**Settings → LLM** 顶部显示红色提示（含具体错误），不再静默回退让你摸不着头脑。改好后点「重载配置」即可恢复。
+
 ## 前端入口
 
 **Settings → Desktop** tab 暴露所有路径、一键打开目录、切换 `data_root`。不想改文件就在 UI 里点。

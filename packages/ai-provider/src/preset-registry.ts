@@ -23,6 +23,22 @@ export function createPresetRegistry(options: {
   for (const p of options.profiles) profiles.set(p.id, p);
   for (const p of options.presets) presets.set(p.id, p);
 
+  /**
+   * Replace all profiles + presets with a fresh config — used by llm.toml
+   * hot-reload. Clears both maps and repopulates, so a preset removed from
+   * llm.toml stops resolving without rebuilding the registry object (the
+   * gateway holds this registry by reference and reads it live).
+   */
+  function reconfigure(next: {
+    profiles: ModelProfile[];
+    presets: PresetConfig[];
+  }): void {
+    profiles.clear();
+    presets.clear();
+    for (const p of next.profiles) profiles.set(p.id, p);
+    for (const p of next.presets) presets.set(p.id, p);
+  }
+
   /** List all registered profiles. */
   function listProfiles(): ModelProfile[] {
     return Array.from(profiles.values());
@@ -245,5 +261,6 @@ export function createPresetRegistry(options: {
     addPreset,
     removePreset,
     hasPreset,
+    reconfigure,
   };
 }

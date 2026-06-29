@@ -74,27 +74,49 @@ export function createProviderRegistry(options?: {
 }) {
   const providers = new Map<string, ProviderRegistration>();
 
-  // Register programmatic providers
-  if (options?.providers) {
-    for (const [name, entry] of Object.entries(options.providers)) {
-      providers.set(name, entry);
+  function populate(opts?: {
+    providers?: Record<string, ProviderRegistration>;
+    providerDefaults?: Record<string, ProviderDefaults>;
+  }): void {
+    // Register programmatic providers
+    if (opts?.providers) {
+      for (const [name, entry] of Object.entries(opts.providers)) {
+        providers.set(name, entry);
+      }
     }
-  }
 
-  // Merge TOML provider defaults
-  if (options?.providerDefaults) {
-    for (const [name, defaults] of Object.entries(options.providerDefaults)) {
-      const existing = providers.get(name);
-      if (existing) {
-        providers.set(name, {
-          ...existing,
-          defaults: { ...defaults, ...existing.defaults },
-        });
-      } else {
-        providers.set(name, { defaults });
+    // Merge TOML provider defaults
+    if (opts?.providerDefaults) {
+      for (const [name, defaults] of Object.entries(opts.providerDefaults)) {
+        const existing = providers.get(name);
+        if (existing) {
+          providers.set(name, {
+            ...existing,
+            defaults: { ...defaults, ...existing.defaults },
+          });
+        } else {
+          providers.set(name, { defaults });
+        }
       }
     }
   }
+
+  /**
+   * Replace all registrations with a fresh config — used by llm.toml
+   * hot-reload. Clears every provider (programmatic + TOML-derived) and
+   * repopulates from `opts`, so a provider removed from llm.toml stops
+   * resolving without rebuilding the registry object (the gateway holds
+   * this registry by reference and reads it live).
+   */
+  function reconfigure(opts?: {
+    providers?: Record<string, ProviderRegistration>;
+    providerDefaults?: Record<string, ProviderDefaults>;
+  }): void {
+    providers.clear();
+    populate(opts);
+  }
+
+  populate(options);
 
   function resolve(
     target: {
@@ -189,7 +211,14 @@ export function createProviderRegistry(options?: {
     return providers.has(name);
   }
 
-  return { resolve, withApiKeys, addProvider, removeProvider, hasProvider };
+  return {
+    resolve,
+    withApiKeys,
+    addProvider,
+    removeProvider,
+    hasProvider,
+    reconfigure,
+  };
 }
 
 function resolveProtocol(target: {

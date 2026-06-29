@@ -6,7 +6,7 @@
 
 import { Hono } from "hono";
 import { readEnvString, readRuntimeEnv } from "@covel/shared";
-import type { AiStack } from "../ai-setup.js";
+import { reloadAiStack, type AiStack } from "../ai-setup.js";
 import { applySlotOverlay, type SlotOverridesInput } from "@covel/ai-provider";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
@@ -159,7 +159,24 @@ export function createMiscApiRoutes(
       providers: [
         ...new Set(ai.presetRegistry.listPresets().map((p) => p.provider)),
       ],
+      // Present only when the last llm.toml load failed to parse and fell back
+      // to the built-in default — lets the UI explain why slots are missing.
+      ...(ai.lastLoadError ? { error: ai.lastLoadError } : {}),
     });
+  });
+
+  // POST /api/llm-config/reload — re-read llm.toml and apply it to the live
+  // gateway in place (no restart). Mirrors the desktop write-endpoint auth:
+  // when a desktop REST token is configured the request must carry it; dev/web
+  // tiers (no token) stay open, matching the rest of misc-api. Always returns
+  // 200 on a completed reload — the body's `ok` / `error` conveys whether the
+  // file parsed (a broken file falls back to the default, reported via `error`).
+  app.post("/api/llm-config/reload", (c) => {
+    const env = readRuntimeEnv();
+    if (env.desktopRestToken && bearerToken(c) !== env.desktopRestToken) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    return c.json(reloadAiStack(ai));
   });
 
   // GET /api/provider-keys — return server-configured API keys to desktop bearer clients only.
