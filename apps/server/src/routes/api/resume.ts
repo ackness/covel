@@ -41,6 +41,11 @@ import type { EventBus } from "@covel/events";
 import { errorBody } from "../../api-error.js";
 import { resolveSessionParam } from "./session/session-guard.js";
 import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
+import { decodePluginUserSettingsHeader } from "./plugin-rpc/body.js";
+import {
+  mergePluginUserSettings,
+  readWorldPluginSettings,
+} from "./plugin-user-settings.js";
 
 type Env = {
   Variables: {
@@ -267,22 +272,40 @@ resumeRoutes.post("/:id/resume", async (c) => {
     effectiveManifest.pluginId,
   ]);
 
+  // Resolve userSettings for the resumed runtime the same way the main turn
+  // route does: world-authored defaults under the player's header overrides.
+  // Without this a resumed agent would fall back to manifest defaults.
+  const resumeWorld = guard.session.worldId
+    ? await store.getWorld(guard.session.worldId)
+    : null;
+  const resumeUserSettings = mergePluginUserSettings(
+    readWorldPluginSettings(resumeWorld?.metadata),
+    decodePluginUserSettingsHeader(c.req.header("X-Plugin-User-Settings")),
+  );
+
   try {
     return await runWithHookScope({ activePluginIds }, async () => {
       const result = await sessionLock.withLock(sessionId, () =>
-        resumeSuspendedRuntime(suspension, data, effectiveManifest!, {
-          loadRuntime: loadRuntimeFn,
-          llm: llmAdapter,
-          ...(pluginGateway ? { gateway: pluginGateway } : {}),
-          ...(pluginUtils ? { utils: pluginUtils } : {}),
-          getConfig: c.get("getConfigFn") ?? ((_p: string, _r: string) => ({})),
-          store,
-          toolExecutor,
-          resolveModel,
-          ...(hookPipeline ? { hookPipeline } : {}),
-          ...(eventBus ? { eventBus } : {}),
-          emitter,
-        }),
+        resumeSuspendedRuntime(
+          suspension,
+          data,
+          effectiveManifest!,
+          {
+            loadRuntime: loadRuntimeFn,
+            llm: llmAdapter,
+            ...(pluginGateway ? { gateway: pluginGateway } : {}),
+            ...(pluginUtils ? { utils: pluginUtils } : {}),
+            getConfig:
+              c.get("getConfigFn") ?? ((_p: string, _r: string) => ({})),
+            store,
+            toolExecutor,
+            resolveModel,
+            ...(hookPipeline ? { hookPipeline } : {}),
+            ...(eventBus ? { eventBus } : {}),
+            emitter,
+          },
+          resumeUserSettings ? { userSettings: resumeUserSettings } : undefined,
+        ),
       );
 
       if (result.status !== "success" || !result.output) {

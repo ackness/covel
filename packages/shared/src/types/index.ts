@@ -58,9 +58,8 @@ export type {
   InputConfig,
   OutputConfig,
   PluginDataSchemaDecl,
+  PluginUserSettingSpec,
   ToolsConfig,
-  ConfigFieldType,
-  PluginConfigField,
   PluginRelation,
   PluginRelations,
   PluginRelationTarget,
@@ -340,4 +339,5 @@ export type {
   WorldDimensions,
   WorldPluginPack,
   WorldPluginPolicy,
+  WorldPluginSettings,
 } from "./world.js";

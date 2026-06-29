@@ -20,6 +20,13 @@ import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 export interface ResumeSuspendedRuntimeOptions {
   readonly maxSteps?: number;
   readonly timeoutMs?: number;
+  /**
+   * Plugin userSettings for the resumed runtime, already merged at the route
+   * boundary (player override → world default → manifest default). Threaded
+   * into the minimal TurnInput so a resumed agent's `{{ userSettings.* }}`,
+   * guards, and hooks see the same values they would on a fresh turn.
+   */
+  readonly userSettings?: TurnInput["userSettings"];
 }
 
 /**
@@ -57,6 +64,7 @@ export async function resumeSuspendedRuntime(
     sessionId: suspension.sessionId,
     turnId: suspension.turnId,
     playerMessage: "",
+    ...(options?.userSettings ? { userSettings: options.userSettings } : {}),
   };
 
   const postRuntimeOpts = {

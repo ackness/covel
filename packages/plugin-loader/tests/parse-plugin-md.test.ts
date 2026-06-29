@@ -120,16 +120,6 @@ describe("parsePluginMd", () => {
           "    - narrative-engine",
           "  conflicts:",
           "    - chat-mode-narrator",
-          "config:",
-          "  difficulty:",
-          "    type: enum",
-          "    default: normal",
-          "    options:",
-          "      - easy",
-          "      - normal",
-          "      - hard",
-          "    label: Difficulty",
-          "    description: Combat difficulty level",
         ].join("\n"),
         "\nHandle combat encounters.\n",
       );
@@ -173,15 +163,6 @@ describe("parsePluginMd", () => {
           acceptsWorldData: true,
           schema: "./schemas/relationships.schema.json",
           description: "Relationship graph",
-        },
-      });
-      expect(result.manifest.config).toEqual({
-        difficulty: {
-          type: "enum",
-          default: "normal",
-          options: ["easy", "normal", "hard"],
-          label: "Difficulty",
-          description: "Combat difficulty level",
         },
       });
     });

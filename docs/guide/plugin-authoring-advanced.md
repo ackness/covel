@@ -39,9 +39,8 @@ import type {
   // 工具
   ToolsConfig, // { builtin?, local? }
 
-  // 配置
-  ConfigFieldType, // 'string' | 'integer' | 'number' | 'boolean' | 'enum'
-  PluginConfigField, // { type, default?, min?, max?, options?, label?, description? }
+  // 玩家可调设置（PLUGIN.md `userSettings`）
+  PluginUserSettingSpec, // { key, type, default?, label, min?, max?, options? }
 
   // 运行时数据
   TurnInput, // 每轮输入
@@ -261,7 +260,6 @@ interface PluginManifest {
   readonly runtime?: RuntimeManifest;
   /** 多 runtime 插件 */
   readonly runtimes?: readonly RuntimeManifest[];
-  readonly config?: Readonly<Record<string, PluginConfigField>>;
 }
 ```
 

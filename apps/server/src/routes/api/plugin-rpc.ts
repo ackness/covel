@@ -41,6 +41,10 @@ import {
   decodePluginUserSettingsHeader,
   validatePluginRpcBody,
 } from "./plugin-rpc/body.js";
+import {
+  mergePluginUserSettings,
+  readWorldPluginSettings,
+} from "./plugin-user-settings.js";
 import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
 import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
@@ -192,8 +196,15 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
     // bucket. Invalid JSON / bad base64 are silently ignored — settings
     // degrade gracefully to manifest defaults rather than failing the
     // turn. Never persisted server-side; request-scoped only.
-    const userSettingsMap = decodePluginUserSettingsHeader(
-      c.req.header("X-Plugin-User-Settings"),
+    // Merge the world's authored defaults (WorldRecord.metadata.pluginSettings)
+    // under the player's header overrides — same resolution chain as the main
+    // turn route (player override → world default → manifest default).
+    const world = session.worldId
+      ? await store.getWorld(session.worldId)
+      : null;
+    const userSettingsMap = mergePluginUserSettings(
+      readWorldPluginSettings(world?.metadata),
+      decodePluginUserSettingsHeader(c.req.header("X-Plugin-User-Settings")),
     );
 
     await prepareToolsForSession?.(sessionId);

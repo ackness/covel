@@ -40,6 +40,34 @@ pluginPolicy:
     });
   });
 
+  it("passes pluginSettings from world.yaml into world metadata", async () => {
+    const root = await makeTempWorld();
+    await writeFile(
+      path.join(root, "world.yaml"),
+      `schemaVersion: "1.0"
+id: settings-world
+name: Settings World
+summary: World with plugin settings
+defaultLocale: zh-CN
+supportedLocales: [zh-CN]
+pluginSettings:
+  cost-gate:
+    softTokens: 120000
+    hardTokens: 160000
+  chat-mode-narrator:
+    dialogueRatio: 70
+`,
+    );
+    await writeFile(path.join(root, "WORLD.md"), "# Settings World");
+
+    const record = await loadSingleWorld(root);
+
+    expect(record?.metadata?.pluginSettings).toEqual({
+      "cost-gate": { softTokens: 120000, hardTokens: 160000 },
+      "chat-mode-narrator": { dialogueRatio: 70 },
+    });
+  });
+
   it("builds a lightweight metadata summary and projects world metadata", async () => {
     const root = await makeTempWorld();
     await mkdir(path.join(root, "data"), { recursive: true });

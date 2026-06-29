@@ -56,6 +56,21 @@ worldData: data/world.data.yaml
 | `excludedPlugins`     | 额外默认关闭的插件。                                                                                                         |
 | `packs`               | 自定义组合包列表，每项可含 `id`、`label`、`description`、`plugins`、`optionalPlugins`、`excludedPlugins`、`tags`、`reason`。 |
 
+### 插件配置默认值（`pluginSettings`）
+
+`world.yaml` 顶层（与 `pluginPolicy` 平级）可声明 `pluginSettings`，为插件 `userSettings` 预置**世界默认值**，键为 `pluginId → settingKey → value`：
+
+```yaml
+pluginSettings:
+  cost-gate:
+    softTokens: 120000
+    hardTokens: 160000
+  chat-mode-narrator:
+    dialogueRatio: 70
+```
+
+它是配置解析链的中间层：**玩家覆盖（`X-Plugin-User-Settings` header）→ 世界默认（`pluginSettings`）→ manifest 默认（`userSettings[].default`）**。玩家仍可在设置里覆盖每个值；未声明的 key 无害——runtime 只读插件真正声明过的 key。加载后写入 `WorldRecord.metadata.pluginSettings`，并在 `/api/actions` 回合边界与玩家 header 合并后注入 `TurnInput.userSettings`（供 agent 的 `{{ userSettings.* }}`、guard、hook 共用）。`pluginSettings` 只设默认值，不影响[插件选择](#world-package)（选择仍由 `pluginPolicy` 决定）。
+
 ## Descriptor
 
 `data/world.data.yaml` 使用 `sources` map：

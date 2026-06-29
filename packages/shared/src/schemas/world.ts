@@ -312,6 +312,16 @@ export const worldManifestSchema = z
     dimensions: worldDimensionsSchema.optional(),
     /** Map of dimension key → relative file path for external dimension files. */
     dimensionSources: z.record(z.string(), z.string().min(1)).optional(),
+    /**
+     * World-authored default values for plugins' declared `userSettings`,
+     * keyed `pluginId → settingKey → value`. Middle layer of the resolution
+     * chain (player override → world default → manifest default); players can
+     * still override each value. Unknown keys are harmless — the runtime only
+     * reads keys a plugin actually declares.
+     */
+    pluginSettings: z
+      .record(z.string(), z.record(z.string(), z.unknown()))
+      .optional(),
   })
   .strict();
 

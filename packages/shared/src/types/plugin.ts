@@ -317,25 +317,6 @@ export interface ToolsConfig {
   readonly local?: readonly string[];
 }
 
-// ── Plugin config fields ─────────────────────────────────────────
-
-export type ConfigFieldType =
-  | "string"
-  | "integer"
-  | "number"
-  | "boolean"
-  | "enum";
-
-export interface PluginConfigField {
-  readonly type: ConfigFieldType;
-  readonly default?: unknown;
-  readonly min?: number;
-  readonly max?: number;
-  readonly options?: readonly string[];
-  readonly label?: string;
-  readonly description?: string;
-}
-
 // ── User-declared plugin settings ────────────────────────────────
 
 /**
@@ -346,7 +327,18 @@ export interface PluginConfigField {
  */
 export interface PluginUserSettingSpec {
   readonly key: string;
-  readonly type: "text" | "number" | "toggle" | "select" | "textarea";
+  // `integer` is a `number` constrained to whole values; `slider` is a
+  // `number` rendered as a range control (declare `min`/`max`). `secret` is
+  // intentionally not yet supported — its keys.env storage + transport channel
+  // are unresolved (see the configurable-surface spec, Open Question #4).
+  readonly type:
+    | "text"
+    | "textarea"
+    | "number"
+    | "integer"
+    | "toggle"
+    | "select"
+    | "slider";
   // Optional: a setting may declare no default (e.g. cost-gate). Mirrors the
   // schema's `z.unknown().optional()` so the parsed manifest type-checks.
   readonly default?: unknown;
@@ -526,7 +518,6 @@ export interface RuntimeManifest {
   readonly input?: InputConfig;
   readonly output?: OutputConfig;
   readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
-  readonly config?: Readonly<Record<string, PluginConfigField>>;
   readonly i18n?: Readonly<Record<string, string>>;
   readonly ui?: UISpec;
   /**
@@ -644,5 +635,4 @@ export interface PluginManifest {
   readonly runtime?: RuntimeManifest;
   /** Multi-runtime plugin: list of runtimes. */
   readonly runtimes?: readonly RuntimeManifest[];
-  readonly config?: Readonly<Record<string, PluginConfigField>>;
 }

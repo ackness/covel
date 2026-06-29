@@ -24,6 +24,11 @@ import { rateLimiter } from "../../middleware/rate-limit.js";
 import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
 import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
 import { syncSessionTurnCount } from "./turn-count.js";
+import { decodePluginUserSettingsHeader } from "./plugin-rpc/body.js";
+import {
+  mergePluginUserSettings,
+  readWorldPluginSettings,
+} from "./plugin-user-settings.js";
 
 // SSE uses ProtocolEventType names directly — no legacy mapping.
 // Frontend handleSseEvent handles these standard types.
@@ -340,12 +345,28 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       // is backed by `pg_advisory_lock` so mutual exclusion extends across
       // Node pods; memory/sqlite use the in-process chain lock (audit
       // 2026-04-21 F5).
+      // Resolve plugin userSettings for this turn: world-authored defaults
+      // (WorldRecord.metadata.pluginSettings) merged under the player's
+      // per-session overrides (X-Plugin-User-Settings header). The runtime's
+      // resolveUserSettings fills any still-missing declared key from the
+      // manifest default. Without this the scheduled loop only ever saw
+      // manifest defaults — player + world tuning were silently dropped on the
+      // main route (only plugin-rpc read the header).
+      const world = session.worldId
+        ? await store.getWorld(session.worldId)
+        : null;
+      const userSettings = mergePluginUserSettings(
+        readWorldPluginSettings(world?.metadata),
+        decodePluginUserSettingsHeader(c.req.header("X-Plugin-User-Settings")),
+      );
+
       const turnInput = {
         sessionId,
         turnId,
         playerMessage,
         locale: effectiveLocale,
         modelOverride: model,
+        ...(userSettings ? { userSettings } : {}),
         // PR-6: snapshot session-level per-runtime slot overrides so the
         // turn executor can consult them when resolving each runtime's
         // model. The session record was loaded above (line ~67).

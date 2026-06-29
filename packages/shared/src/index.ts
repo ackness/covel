@@ -34,8 +34,6 @@ export {
   pluginDataSchemaDeclSchema,
   pluginDataSchemaMapSchema,
   toolsConfigSchema,
-  configFieldTypeSchema,
-  pluginConfigFieldSchema,
   hookDeclarationSchema,
   authorsNoteDeclSchema,
   postHistoryDeclSchema,

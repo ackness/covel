@@ -36,4 +36,11 @@ pluginPolicy:
     - role:world-rules
   avoidTags:
     - mode:traditional-story
+# World-authored defaults for plugin userSettings (players can still override
+# these in Settings). A slice-of-life school world leans dialogue-heavy and
+# keeps replies short and snappy.
+pluginSettings:
+  chat-mode-narrator:
+    dialogueRatio: 80
+    proseLength: short
 worldData: data/world.data.yaml

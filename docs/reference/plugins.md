@@ -863,7 +863,7 @@ Agent runtime 默认使用 segment-based prompt assembler。插件正文进入 `
 authorsNote:
   content: |
     Keep scenes tense and grounded.
-    Do not reveal {{ config.spoilerName }}.
+    Do not reveal {{ userSettings.spoilerName }}.
   depth: 4
   role: system
 ```
