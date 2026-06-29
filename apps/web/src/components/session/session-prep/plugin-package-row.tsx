@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Cpu, KeyRound, Lock, Wrench } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
@@ -85,6 +85,20 @@ export function PluginPackageRow({
       ? store.get<string>(providerSlotKey)
       : undefined;
   });
+  // Reflect out-of-band edits to this setting (e.g. from Settings > Plugins)
+  // while the prep screen is open. The initializer above only reads once, so
+  // without this an external change would leave the picker stale.
+  useEffect(() => {
+    const store = getSettings();
+    const read = () =>
+      store.has(providerSlotKey)
+        ? store.get<string>(providerSlotKey)
+        : undefined;
+    setProviderSlotOverride(read());
+    return store.subscribe<string>(providerSlotKey, () => {
+      setProviderSlotOverride(read());
+    });
+  }, [providerSlotKey]);
   const {
     effectiveSlot: effectiveProviderSlot,
     missing: providerSlotMissing,
