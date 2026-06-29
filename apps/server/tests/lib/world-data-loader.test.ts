@@ -680,6 +680,19 @@ sources:
         }),
       ]),
     });
+
+    // Each flagship world declares its own genre-specific core-memory blocks.
+    const memoryBlocksByWorld = {
+      mistport: ["clues", "relics", "tides"],
+      "haruka-academy": ["festival", "promises", "relationships", "rumors"],
+    } as const;
+    for (const [worldId, labels] of Object.entries(memoryBlocksByWorld)) {
+      const record = await loadSingleWorld(path.join(worldsRoot, worldId));
+      const blocks = (record?.metadata?.memoryBlocks ?? []) as {
+        label: string;
+      }[];
+      expect(blocks.map((b) => b.label).sort()).toEqual([...labels].sort());
+    }
   });
 
   it("rejects dangerous metadata targets", () => {

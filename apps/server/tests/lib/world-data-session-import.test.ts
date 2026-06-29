@@ -1175,4 +1175,70 @@ sources: {}
     ).toContain(ruleSourceId);
     expect(await store.listCharacters(sessionId)).not.toHaveLength(0);
   });
+
+  it("materializes bundled world portraits into the media store and links presence", async () => {
+    const worldsDir = path.resolve(import.meta.dirname, "../../../../worlds");
+    const pluginRegistry = await builtinPluginRegistry();
+    const activePlugins = [
+      "living-world-rules",
+      "character-blueprint",
+      "char-creator",
+      "character-presence",
+    ];
+
+    for (const [worldId, portraitCount] of [
+      ["mistport", 7],
+      ["haruka-academy", 8],
+    ] as const) {
+      const sessionId = `sess-portraits-${worldId}`;
+      const store = createMemoryStore();
+      const mediaStore = createMemoryMediaStore();
+      await store.createSession({
+        id: sessionId,
+        worldId,
+        status: "active",
+        turnCount: 0,
+        preGameCompleted: [],
+        locale: "zh-CN",
+        activePlugins,
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
+
+      const result = await importWorldDataForSession({
+        store,
+        mediaStore,
+        sessionId,
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+        preflight: { activePlugins, registry: pluginRegistry },
+      });
+
+      expect(result.diagnostics.filter((d) => d.level === "error")).toEqual([]);
+
+      // Every portrait is content-addressed into the media store.
+      const assetIds = new Set(
+        (await mediaStore.listAssets()).map((a) => a.id),
+      );
+      expect(assetIds.size).toBe(portraitCount);
+
+      // Every character has a presence record whose avatar + sprite resolve to a
+      // stored asset — i.e. the portrait actually displays for that character.
+      const presence = await store.listPluginData(
+        sessionId,
+        "character-presence",
+        "presence",
+      );
+      expect(presence).toHaveLength(portraitCount);
+      for (const rec of presence) {
+        const value = rec.value as {
+          avatar?: { id?: string };
+          sprite?: { id?: string };
+        };
+        expect(assetIds.has(value.avatar?.id ?? "")).toBe(true);
+        expect(assetIds.has(value.sprite?.id ?? "")).toBe(true);
+      }
+    }
+  });
 });

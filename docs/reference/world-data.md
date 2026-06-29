@@ -209,6 +209,49 @@ sources:
 
 `effects: [characters]` 也接受简洁角色记录，例如 `{ "id": "mio", "name": "Mio", "type": "npc" }`。这种记录会直接生成 session character，并镜像到当前启用且声明 `dataSchemas.characters.acceptsWorldData: true` 的插件。
 
+## Character Presence Portraits
+
+给角色配头像 / 立绘并在 `character-presence` 面板与对话中显示，world 包用两条 source 交付：
+
+```yaml
+sources:
+  portraits:
+    kind: media
+    path: media/portraits # 一层目录，放 <id>.png
+    to: media
+    indexTo: plugin:character-presence/assets
+    key: filename
+    after: cast
+  presence:
+    kind: json
+    path: media/presence.json
+    schema: plugin://character-presence/presence
+    to: plugin:character-presence/presence
+    key: characterId
+    after: portraits
+```
+
+- `media` source 把 `media/portraits/` 下的图导入媒体库，按 **`sha256(内容)`** 寻址（与 `@covel/store` media-store 的 `sha256(bytes)` 一致），并把索引写进 `plugin_data[character-presence][assets]`。
+- `presence.json` 是 presence 记录数组，每条把 `characterId`（对上角色卡 `instantiate.characterId`，如 `npc-<id>`）的 `avatar` / `sprite` 指向那张图：
+
+```json
+[
+  {
+    "schemaVersion": 1,
+    "characterId": "npc-kamishiro-mio",
+    "displayName": "神代澪",
+    "avatar": { "id": "<sha256-of-png>", "mime": "image/png", "size": 2155557 },
+    "sprite": { "id": "<sha256-of-png>", "mime": "image/png", "size": 2155557 }
+  }
+]
+```
+
+`mediaRef.id` 必须是该图内容的 **64 位小写 sha256**——media source 导入后媒体库以同一 sha256 寻址，二者相等才能解析到资产。手算易错，仓库提供 `scripts/emit-presence.mjs <world>`，从 `media/portraits/` 自动生成 `presence.json`（**重生成立绘后必须重跑刷新哈希**）。
+
+preflight 要求：`character-presence` 在 session 最终启用插件列表中（放进 `recommendedPlugins`），其 `assets` / `presence` namespace 已声明 `acceptsWorldData: true`（builtin 默认满足）。媒体受 v1 限制：单文件 ≤ 20 MB、单 source ≤ 100 MB、扩展名 allowlist（含 `.png` / `.webp`）。
+
+实际范例见 `worlds/mistport` 与 `worlds/haruka-academy`（`data/world.data.yaml` + `media/`），提示词与生成流程见 `worlds/PORTRAITS.md`。
+
 ## Third-Party Extension
 
 第三方库可以以 world 包或 override 包交付数据。插件作者推荐把数据契约写成 `plugin://<pluginId>/<namespace>` schema URI，再在 world 包里引用这个 schema。
