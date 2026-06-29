@@ -14,7 +14,7 @@
 
 import { app, BrowserWindow, Menu } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
 
@@ -124,6 +124,15 @@ const MAX_RESTART_ATTEMPTS = 3;
 // Regenerated only on a full app relaunch.
 const desktopRestToken = randomUUID();
 
+// Per-launch secret for signing short-lived media access tokens
+// (`/api/sessions/:id/media-token`). The sidecar runs with NODE_ENV=production,
+// where the server refuses to issue tokens with an ephemeral per-process
+// secret — so without this, every `<Media>` (character portraits, generated
+// images) fails to load. Tokens are 5-minute TTL and the renderer re-requests
+// them, so a fresh secret per launch is fine. A user-provided
+// COVEL_MEDIA_TOKEN_SECRET (process env or a repo .env file) still wins.
+const desktopMediaTokenSecret = randomBytes(32).toString("base64url");
+
 function broadcastProgress(label: string): void {
   writeLog("info", `progress: ${label}`);
   for (const win of BrowserWindow.getAllWindows()) {
@@ -175,6 +184,10 @@ async function startServer(
     COVEL_DATA_ROOT: paths.dataRoot,
     COVEL_DESKTOP_REST: "1",
     COVEL_DESKTOP_REST_TOKEN: desktopRestToken,
+    COVEL_MEDIA_TOKEN_SECRET:
+      envOverrides.COVEL_MEDIA_TOKEN_SECRET ??
+      process.env.COVEL_MEDIA_TOKEN_SECRET ??
+      desktopMediaTokenSecret,
     COVEL_PLUGINS_DIR: paths.pluginsDirs[0] ?? "",
     COVEL_WORLDS_DIR: paths.worldsDirs[0] ?? "",
     COVEL_USER_WORLDS_DIR: paths.userWorldsDir,
