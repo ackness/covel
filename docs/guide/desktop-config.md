@@ -69,6 +69,8 @@ server 会按 `*_API_KEY` 扫描所有条目注入 provider 运行时。Key 名 
 
 **解析失败可见**：若 `llm.toml` 有语法错误（如某个 key 写了 `=` 却没值），整份文件会解析失败并**回退到内置默认**（只剩一个 `story` slot）。此时 `GET /api/llm-config` 会带 `error` 字段，**Settings → LLM** 顶部显示红色提示（含具体错误），不再静默回退让你摸不着头脑。改好后点「重载配置」即可恢复。
 
+**插件 provider slot 就地覆盖**：有些插件（如图像生成）通过 `modelPresetId` 设置指定要用哪个 `[covel.<slot>]`（如 `openai-image`）。如果你没配那个 slot 名、但配了别的同类 slot（如 `gpt-image`），可在**开局准备**界面该插件那一行的「提供方 slot」下拉里直接选你已有的 slot —— 不必去 Settings > Plugins 改、也不必照搬插件默认的 slot 名。选中后红色「缺少」提示即消失，覆盖值会随回合下发给该插件的 function runtime。
+
 ## 前端入口
 
 **Settings → Desktop** tab 暴露所有路径、一键打开目录、切换 `data_root`。不想改文件就在 UI 里点。
