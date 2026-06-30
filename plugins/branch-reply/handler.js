@@ -58,13 +58,21 @@ export default async function handler(ctx) {
 async function seedFromNarrative(ctx) {
   const now = new Date().toISOString();
   const targetTurnId = normalizeTurnId(ctx.turnId);
-  const baseText = extractNarrativeText(ctx.completedResults);
+  const narrative = extractNarrativeText(ctx.completedResults);
 
   // Skip empty / system turns — nothing to seed, so the block stays hidden
   // rather than rendering an empty swipe widget.
-  if (!baseText) {
+  if (!narrative) {
     return { action: "seed", turnId: targetTurnId, seeded: false };
   }
+  const baseText = narrative.text;
+  // The runtime that produced the narrative this turn. Stored on the turn
+  // record so the prompt-history rewriter (`normalizeAcceptedBranchReply` →
+  // `isReplaceableAssistantMessage`) targets the narrator's assistant message,
+  // not branch-reply's OWN auto-appended seed message (which also lands in the
+  // turn's history with sourceRuntimeId="branch-reply"). Discovered, never
+  // hardcoded.
+  const narrativeRuntimeId = narrative.runtimeId;
 
   // Idempotency: never seed a turnId twice. A pre-existing record means either
   // a prior seed or a player regenerate/accept already owns this turn.
@@ -90,6 +98,7 @@ async function seedFromNarrative(ctx) {
     candidates,
     selectedCandidateId: candidates[0]?.id,
     status: "ready",
+    runtimeId: narrativeRuntimeId,
     now,
   });
   const messageState = makeMessageState({
@@ -101,6 +110,13 @@ async function seedFromNarrative(ctx) {
     updatedAt: now,
   });
 
+  // NOTE: as an auto/scheduled system function runtime, branch-reply's return
+  // value is also appended to conversation history as an assistant TurnMessage
+  // (turn-function-runtime.ts) — same as scene-prompts / guide / codex. This
+  // compact `{action:"seed",…}` marker carries no `narrativeOutput`/`content`,
+  // so it serialises to JSON and the story prompt filters it via
+  // `looksLikeStructuredRuntimeOutput`. The prompt-history rewriter ignores it
+  // because the turn record's `runtimeId` points at the narrator, not us.
   return withPendingProposals(
     {
       action: "seed",
@@ -133,6 +149,19 @@ async function createCandidates(ctx, payload) {
     "candidates",
   );
 
+  // Carry the seeded narrator runtimeId forward so regenerate keeps targeting
+  // the narrator's message (not branch-reply's auto-seed message) when the
+  // player later accepts a variant. Read it back from the existing turn record
+  // rather than trusting the click payload, which never carries it.
+  const existing = await readTurnRecord(
+    ctx.store,
+    ctx.sessionId,
+    ctx.pluginId,
+    targetTurnId,
+  );
+  const narrativeRuntimeId =
+    typeof existing?.runtimeId === "string" ? existing.runtimeId : undefined;
+
   // Candidate composition, in priority order:
   //   1. explicit `candidates` payload (programmatic / API) — that array IS the
   //      full candidate list (candidate[0] = candidates[0]), no LLM.
@@ -164,6 +193,7 @@ async function createCandidates(ctx, payload) {
     candidates,
     selectedCandidateId: selectCandidateId(candidates, selectedCandidateId),
     status: "ready",
+    runtimeId: narrativeRuntimeId,
     now,
   });
   const messageState = makeMessageState({
@@ -433,6 +463,7 @@ function makeTurnRecord({
   candidates,
   selectedCandidateId,
   status,
+  runtimeId,
   now,
 }) {
   return {
@@ -442,6 +473,10 @@ function makeTurnRecord({
     candidates,
     selectedCandidateId,
     status,
+    // The narrating runtime this turn record projects onto. Consumed by the
+    // prompt-history rewriter to target the narrator's message rather than
+    // branch-reply's own seed message. Omitted when unknown.
+    ...(runtimeId ? { runtimeId } : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -473,14 +508,27 @@ function makePluginDataBatchProposal(ctx, now, items) {
 }
 
 /**
- * Find the active story engine's narrative for this turn, engine-agnostically.
+ * Find the active story engine's narrative for this turn, engine-agnostically,
+ * together with the runtime id that produced it.
  *
  * `completedResults` is keyed by runtime name and accumulates across priority
  * groups, so by the time branch-reply (priority ~700) runs, the narrative
- * engine (priority 500) is present. Only `story` runtimes preserve a non-empty
- * `narrativeOutput`; tool-only `system` runtimes are suppressed to `""`. We
- * therefore pick the longest non-empty `narrativeOutput` among successful
- * results — no plugin id, no capability table lookup needed.
+ * engine (priority 500) is present. We pick the longest non-empty
+ * `narrativeOutput` among successful results — no plugin id, no capability
+ * lookup (the active narrator is discovered, not hardcoded).
+ *
+ * Limitation (stated honestly): non-story `narrativeOutput` is suppressed at
+ * the PROPOSAL layer (session-output-normalizer), NOT in `completedResults`,
+ * which exposes raw `RuntimeResult.output`. `RuntimeResult` carries no
+ * `outputKind`, so a function handler cannot filter the scan to
+ * `outputKind === "story"`. In practice every bundled non-story downstream is
+ * tool-driven (its narrative finalizes to `""`), so only the real story engine
+ * has non-empty `narrativeOutput`; a hypothetical schema-less prose plugin that
+ * emits longer text without tool calls could be mispicked. The returned
+ * `runtimeId` bounds that risk — accept/regenerate rewrite exactly the runtime
+ * we seeded from, so seed and accept always agree on a single message.
+ *
+ * @returns {{ text: string, runtimeId?: string } | undefined}
  */
 function extractNarrativeText(completedResults) {
   if (!completedResults || typeof completedResults.values !== "function") {
@@ -498,10 +546,19 @@ function extractNarrativeText(completedResults) {
         ? output.narrativeOutput.trim()
         : "";
     if (!narrative) continue;
-    if (!best || narrative.length > best.length) best = narrative;
+    if (!best || narrative.length > best.text.length) {
+      best = {
+        text: narrative,
+        runtimeId:
+          typeof result.runtimeId === "string" ? result.runtimeId : undefined,
+      };
+    }
   }
   if (!best) return undefined;
-  return best.slice(0, MAX_TEXT_LENGTH);
+  return {
+    text: best.text.slice(0, MAX_TEXT_LENGTH),
+    ...(best.runtimeId ? { runtimeId: best.runtimeId } : {}),
+  };
 }
 
 async function readTurnRecord(store, sessionId, pluginId, turnId) {

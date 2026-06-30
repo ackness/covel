@@ -679,10 +679,10 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 
 **生命周期（两条路径，按 `manualPayload` 是否存在区分）**：
 
-1. **自动播种（seed，无 `manualPayload`）**：作为 `trigger: auto`、`priority: 700` 的 runtime，每个故事回合在叙事引擎（priority 500）之后运行，从 `ctx.completedResults` 读取**当前激活叙事引擎**的 `narrativeOutput`，把它作为 candidate[0]（"原文"）写入 `message`/`turns` namespace。发现方式**与引擎无关**：按 `narrativeOutput` 非空这一叙事契约识别（系统类 runtime 的 narrative 会被抑制为空），**不硬编码任何叙事插件 id**，因此 `narrator` 与 `chat-mode-narrator` 通用。播种**按 `turnId` 幂等**（不会重复播种），空回合 / 系统回合不播种。这是该 block 能出现的前提——`ui.message` block 只有在其 `message` namespace 被写入后才渲染，纯手动写入者无法自举（这是它此前完全不显示的根因）。
-2. **手动动作（`manualPayload` 存在，经 plugin-rpc）**：`createCandidates` / `acceptCandidate`。其中 `createCandidates`（前端"重生成"按钮）通过 `ctx.gateway` 调用**快速文本 slot** 生成 1-2 条同一剧情节拍的真实改写（语言跟随 `ctx.locale` 与原文）；当宿主无 gateway / 无 slot 或调用失败时，仅返回原文，**绝不编造英文填充近似句**。
+1. **自动播种（seed，无 `manualPayload`）**：作为 `trigger: auto`、`priority: 700` 的 runtime，每个故事回合在叙事引擎（priority 500）之后运行，从 `ctx.completedResults` 读取**当前激活叙事引擎**的 `narrativeOutput`，把它作为 candidate[0]（"原文"）写入 `message`/`turns` namespace，并把产出该叙事的 `runtimeId` 一并记入 `turns` 记录。发现方式**与引擎无关**：按 `narrativeOutput` 非空这一叙事契约识别，**不硬编码任何叙事插件 id**，因此 `narrator` 与 `chat-mode-narrator` 通用。播种**按 `turnId` 幂等**（不会重复播种），空回合 / 系统回合不播种。这是该 block 能出现的前提——`ui.message` block 只有在其 `message` namespace 被写入后才渲染，纯手动写入者无法自举（这是它此前完全不显示的根因）。
+2. **手动动作（`manualPayload` 存在，经 plugin-rpc）**：`createCandidates` / `acceptCandidate`。其中 `createCandidates`（前端"重生成"按钮）通过 `ctx.gateway` 调用**快速文本 slot** 生成 1-2 条同一剧情节拍的真实改写（语言跟随 `ctx.locale` 与原文）；当宿主无 gateway / 无 slot 或调用失败时，仅返回原文，**绝不编造英文填充近似句**。`createCandidates` / `acceptCandidate` 都会把播种时记录的叙事 `runtimeId` 透传到 `turns` 记录。
 
-**职责**：`buildProjectedPromptHistory` 读其 `turns` namespace，把采纳的备选回合折叠进投影历史；未发现时历史原样透传。
+**职责**：`buildProjectedPromptHistory` 读其 `turns` namespace，把采纳的备选回合折叠进投影历史；未发现时历史原样透传。由于自动播种本身也会在历史里追加一条 `sourceRuntimeId="branch-reply"` 的 assistant 消息，改写器用 `turns` 记录里的 `runtimeId` 精确命中**叙事引擎**那条消息，而非 branch-reply 自己的播种消息（`runtimeId` 由播种时发现得到，非硬编码）。
 
 ---
 

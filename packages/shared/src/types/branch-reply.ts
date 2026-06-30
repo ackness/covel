@@ -21,6 +21,14 @@ export interface BranchReplyTurnRecord {
   readonly selectedCandidateId?: string;
   readonly acceptedCandidateId?: string;
   readonly acceptedText?: string;
+  /**
+   * Runtime id of the narrating engine this record projects onto (discovered
+   * from the seed turn's `completedResults`, never hardcoded). The
+   * prompt-history rewriter uses it to rewrite the narrator's assistant message
+   * rather than branch-reply's own auto-appended seed message. Absent on
+   * records seeded/created without a known narrator runtime.
+   */
+  readonly runtimeId?: string;
   readonly status: "ready" | "accepted";
   readonly createdAt: string;
   readonly updatedAt: string;

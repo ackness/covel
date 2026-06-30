@@ -68,6 +68,9 @@ describe("branch-reply seed path (auto, no manualPayload)", () => {
         schemaVersion: 1,
         turnId: "turn-branch",
         status: "ready",
+        // Stores WHICH runtime produced the narrative so the prompt-history
+        // rewriter targets the narrator's message, not branch-reply's own seed.
+        runtimeId: "chat-mode-narrator",
         candidates: [
           {
             id: "turn-branch-candidate-1",
@@ -167,6 +170,53 @@ describe("branch-reply createCandidates (regenerate)", () => {
     ]);
     expect(candidates[0].source).toBe("original");
     expect(candidates[1].source).toBe("regenerated");
+  });
+
+  it("carries the seeded narrator runtimeId forward through regenerate", async () => {
+    // The block was seeded earlier with runtimeId = the narrator. Regenerate
+    // must read it back and re-store it so a later accept still targets the
+    // narrator's message, not branch-reply's own seed message.
+    const store = {
+      async getPluginData(namespace, key) {
+        expect([namespace, key]).toEqual(["turns", "turn-42"]);
+        return {
+          value: {
+            schemaVersion: 1,
+            turnId: "turn-42",
+            runtimeId: "chat-mode-narrator",
+            status: "ready",
+            candidates: [
+              { id: "turn-42-candidate-1", index: 0, text: "Seeded original." },
+            ],
+          },
+        };
+      },
+    };
+    const gateway = {
+      generateText: vi.fn().mockResolvedValue({
+        text: "A fresh rephrasing.",
+        finishReason: "stop",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      }),
+    };
+
+    const result = await handler(
+      ctx({
+        manualPayload: {
+          action: "createCandidates",
+          turnId: "turn-42",
+          baseText: "Seeded original.",
+          count: 3,
+        },
+        store,
+        gateway,
+      }),
+    );
+
+    const [proposal] = getPendingProposals(result);
+    expect(proposal.payload.items[0].value.runtimeId).toBe(
+      "chat-mode-narrator",
+    );
   });
 
   it("returns only the base text (no English filler) when no gateway is wired", async () => {
@@ -269,6 +319,7 @@ describe("branch-reply acceptCandidate", () => {
       schemaVersion: 1,
       turnId: "turn-42",
       baseText: "I test the lock.",
+      runtimeId: "chat-mode-narrator",
       candidates: [
         {
           id: "turn-42-candidate-1",
@@ -325,6 +376,8 @@ describe("branch-reply acceptCandidate", () => {
       key: "turn-42",
       value: {
         status: "accepted",
+        // runtimeId survives accept so the rewriter targets the narrator.
+        runtimeId: "chat-mode-narrator",
         selectedCandidateId: "turn-42-candidate-2",
         acceptedCandidateId: "turn-42-candidate-2",
         acceptedText: "I test the lock. I listen.",
