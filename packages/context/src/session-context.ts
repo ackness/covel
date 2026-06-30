@@ -119,6 +119,7 @@ export async function buildSessionContextSnapshot(
       worldRecord,
       schemaMap: worldSchema,
       entriesMap: worldEntriesMap,
+      locale: opts.locale,
     }),
     characters,
     workingMemory,

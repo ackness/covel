@@ -5,6 +5,7 @@
  * I/O and guard semantics.
  */
 
+import { resolveI18nDeep } from "@covel/shared";
 import type { WorldRecord } from "./session-context-store.js";
 import type { WorldContextView } from "./types.js";
 
@@ -13,6 +14,8 @@ export interface BuildViewInput {
   readonly worldRecord: WorldRecord | null;
   readonly schemaMap: Record<string, unknown> | undefined;
   readonly entriesMap: Record<string, unknown> | undefined;
+  /** Session locale — used to localize i18n dimensions before injection. */
+  readonly locale?: string;
 }
 
 export function buildWorldContextView(input: BuildViewInput): WorldContextView {
@@ -41,7 +44,15 @@ export function buildWorldContextView(input: BuildViewInput): WorldContextView {
   if (metadata) {
     const dims = metadata.dimensions;
     if (dims && typeof dims === "object") {
-      dimensions = dims as Record<string, unknown>;
+      // Localize i18n (`{ zh, en }`) leaves to the session locale BEFORE the
+      // dimensions reach the prompt, so the narrator sees one language instead
+      // of a raw bilingual blob (mirrors how `lore` is resolved at load time).
+      // This also lets `tone` / `openingScenario` below extract cleanly when
+      // they were authored as i18n records.
+      dimensions = resolveI18nDeep(dims, input.locale) as Record<
+        string,
+        unknown
+      >;
       const t = dimensions.tone;
       if (typeof t === "string") tone = t;
       const sc = dimensions.startingConditions;
