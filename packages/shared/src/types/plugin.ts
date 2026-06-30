@@ -392,6 +392,17 @@ export interface UISpec {
 
 // ── Runtime manifest ─────────────────────────────────────────────
 
+/**
+ * One entry in `upstreamRequired`. Either:
+ *  • a runtime id (string) — that exact runtime must have succeeded; an absent
+ *    (disabled) upstream still skips this runtime, never counts as success.
+ *  • `{ capability }` — at least one in-scope runtime declaring that capability
+ *    must have succeeded. Lets a runtime depend on "the active provider of X"
+ *    (e.g. `narrative`) without naming a concrete plugin, so the same downstream
+ *    works across modes that swap the provider (narrator ↔ chat-mode-narrator).
+ */
+export type UpstreamRequirement = string | { readonly capability: string };
+
 export interface RuntimeManifest {
   readonly name: string;
   /**
@@ -491,15 +502,17 @@ export interface RuntimeManifest {
    */
   readonly relations?: PluginRelations;
   /**
-   * Runtime IDs this runtime depends on for a successful upstream output.
-   * When any listed upstream ran with `status !== 'success'` in the same
-   * turn, the framework short-circuits this runtime with `status: 'skipped'`
-   * before the guard / LLM pipeline. Prevents downstream LLMs from being
-   * invoked with empty inject blocks when their upstream failed.
+   * Upstreams this runtime depends on for a successful output. Each entry is a
+   * runtime id or a `{ capability }` requirement (see {@link UpstreamRequirement}).
+   * When a required upstream ran with `status !== 'success'` in the same turn —
+   * or, for a capability entry, no in-scope provider succeeded — the framework
+   * short-circuits this runtime with `status: 'skipped'` before the guard / LLM
+   * pipeline. Prevents downstream LLMs from being invoked with empty inject
+   * blocks when their upstream failed.
    *
    * Implemented in packages/runtime/src/turn-executor.ts (executeOneRuntime).
    */
-  readonly upstreamRequired?: readonly string[];
+  readonly upstreamRequired?: readonly UpstreamRequirement[];
   readonly trigger?: TriggerConfig;
   /**
    * Execution mode when this runtime is activated via a manual plugin-rpc call

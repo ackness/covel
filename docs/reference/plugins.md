@@ -70,6 +70,8 @@
 
 主循环每一轮的调度图由 **DAG 调度器** 依据每个 runtime 的 `input.inject[].from` 和 `upstreamRequired` 推导 —— 无环依赖的 runtime 自动归入同一层并发执行。下面的 priority 仅作同层内部的稳定排序 tiebreaker，调度的真正依据是依赖声明：
 
+`upstreamRequired` 的每一项可以是 **runtime id 字符串**（该 runtime 必须本回合成功，缺席=skip，绝不当作成功），或 **`{ capability: <name> }`**（本回合在场的某个声明该 capability 的 runtime 成功即满足；零个在场提供者=不满足→skip）。capability 形态让一个下游插件按 capability 发现"当前模式的提供者"，无需写死具体插件名 —— 例如 `guide`/`scene-prompts` 用 `{ capability: narrative-engine }` 同时适配 `narrator`（传统模式）与 `chat-mode-narrator`（对话模式）。两个叙事引擎都在 `capabilities` 里声明了 `narrative-engine`。
+
 | 层                  | priority | Runtime                                                                      | 说明                                               |
 | ------------------- | -------- | ---------------------------------------------------------------------------- | -------------------------------------------------- |
 | Narrator-prep       | 400      | `npc-graph/rag-retriever`                                                    | narrator 的依赖上游（function runtime，无 LLM）    |
@@ -382,18 +384,18 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 **路径**: `plugins/guide/`
 
-| 字段             | 值                                                                           |
-| ---------------- | ---------------------------------------------------------------------------- |
-| pluginType       | `plugin`（可禁用）                                                           |
-| priority         | 600（Narrator-downstream 层，与 codex / extractor / character-tracker 并行） |
-| trigger          | `scheduled`，`interval: 1`，`cooldownTurns: 1`                               |
-| model            | `plugin`                                                                     |
-| tools.local      | `generate-guide`                                                             |
-| ui.message       | `./ui/action-guide-block.json`                                               |
-| input.inject     | `narrator` → `narrativeOutput` → `<narrator-output>`                         |
-| upstreamRequired | `[narrator]`                                                                 |
+| 字段             | 值                                                                                                                                                                                                                |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pluginType       | `plugin`（可禁用）                                                                                                                                                                                                |
+| priority         | 600（Narrator-downstream 层，与 codex / extractor / character-tracker 并行）                                                                                                                                      |
+| trigger          | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                                                                                                                    |
+| model            | `plugin`                                                                                                                                                                                                          |
+| tools.local      | `generate-guide`                                                                                                                                                                                                  |
+| ui.message       | `./ui/action-guide-block.json`                                                                                                                                                                                    |
+| input.inject     | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（列出两个已知叙事引擎，缺席的解析为空，由在场的那个填充）                                                                             |
+| upstreamRequired | `[{ capability: narrative-engine }]` — 按 capability 发现当前模式的叙事引擎，传统模式下解析为 `narrator`、对话模式下解析为 `chat-mode-narrator`；该引擎失败时仍 skip。**引擎无关**，因此 guide 在两种模式下都可用 |
 
-**职责**: 在叙事推进后，分析当前情境，为玩家生成分风格的行动建议。让 narrator 专注叙事，选择引导交由本插件。
+**职责**: 在叙事推进后，分析当前情境，为玩家生成分风格的行动建议。让 narrator 专注叙事，选择引导交由本插件。引导按 capability 发现叙事引擎，因此在传统模式与对话模式下都能工作（默认仅传统模式启用，玩家可在对话模式手动开启）。
 
 **风格分类**:
 
@@ -562,17 +564,18 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 
 **路径**: `plugins/scene-prompts/`
 
-| 字段             | 值                                             |
-| ---------------- | ---------------------------------------------- |
-| pluginType       | `plugin`                                       |
-| priority         | 600（Narrator-downstream）                     |
-| runtimeType      | `agent`（model `plugin`）                      |
-| trigger          | `scheduled`，`interval: 1`，`cooldownTurns: 1` |
-| outputKind       | `system`                                       |
-| tags             | `mode:dialogue` · `role:quick-reply`           |
-| upstreamRequired | `chat-mode-narrator`                           |
-| tools.local      | `generate-scene-prompts`                       |
-| ui.message       | `scene-prompts-block.json`                     |
+| 字段             | 值                                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------------- |
+| pluginType       | `plugin`                                                                                                |
+| priority         | 600（Narrator-downstream）                                                                              |
+| runtimeType      | `agent`（model `plugin`）                                                                               |
+| trigger          | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                          |
+| outputKind       | `system`                                                                                                |
+| tags             | `mode:dialogue` · `role:quick-reply`                                                                    |
+| input.inject     | `chat-mode-narrator` + `narrator` → `narrativeOutput` → `<narrator-output>`                             |
+| upstreamRequired | `[{ capability: narrative-engine }]` — 引擎无关，按 capability 发现当前模式的叙事引擎；两种模式下都可用 |
+| tools.local      | `generate-scene-prompts`                                                                                |
+| ui.message       | `scene-prompts-block.json`                                                                              |
 
 ---
 

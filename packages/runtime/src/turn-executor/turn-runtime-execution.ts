@@ -194,11 +194,34 @@ export async function executeOneRuntime(
     // so the frontend shows the runtime as skipped rather than hanging.
     const required = manifest.upstreamRequired ?? [];
     if (required.length > 0) {
-      const missing = required.filter((id) => {
-        const up = completedResults.get(id);
-        if (!up && sessionMeta?.preGameCompleted?.includes(id)) return false;
-        return !isRequiredUpstreamSatisfied(up);
-      });
+      // Two upstream-entry shapes (see UpstreamRequirement):
+      //  • string        — that exact runtime must have produced a successful
+      //                     result. An absent (disabled) upstream stays a skip,
+      //                     never treated as success.
+      //  • {capability}   — at least one in-scope runtime providing that
+      //                     capability must have succeeded. Lets a guidance
+      //                     plugin depend on "the active narrative engine"
+      //                     without naming narrator / chat-mode-narrator; the
+      //                     gate resolves whichever engine the current mode
+      //                     loaded. Zero in-scope providers ⇒ unsatisfied (a
+      //                     guidance runtime with no narrative engine to act on
+      //                     should skip, not run blind).
+      const missing: string[] = [];
+      for (const entry of required) {
+        if (typeof entry === "string") {
+          const up = completedResults.get(entry);
+          if (!up && sessionMeta?.preGameCompleted?.includes(entry)) continue;
+          if (!isRequiredUpstreamSatisfied(up)) missing.push(entry);
+          continue;
+        }
+        const providers = activeRuntimes
+          .filter((r) => r.capabilities?.includes(entry.capability))
+          .map((r) => r.name);
+        const satisfied = providers.some((name) =>
+          isRequiredUpstreamSatisfied(completedResults.get(name)),
+        );
+        if (!satisfied) missing.push(`capability:${entry.capability}`);
+      }
       if (missing.length > 0) {
         const reason = `upstream not success: ${missing.join(", ")}`;
         const skipResult: RuntimeResult = {

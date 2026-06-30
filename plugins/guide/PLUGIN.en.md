@@ -4,7 +4,7 @@ description:
   zh: 在每轮故事后给出几种行动建议，帮你更快决定下一步。
   en: Suggests a few possible actions after each story beat so you can choose your next move faster.
 pluginType: plugin
-priority: 550
+priority: 600
 model: plugin
 outputKind: system
 timeoutMs: 120000
@@ -12,10 +12,21 @@ trigger:
   type: scheduled
   interval: 1
   cooldownTurns: 1
+# Engine-agnostic guidance — the upstream gate discovers the active narrative
+# engine by capability (narrative-engine → narrator in traditional,
+# chat-mode-narrator in dialogue). The inject lists both known engines; the
+# absent one resolves to nothing, so the active engine's output fills
+# <narrator-output> either way.
+upstreamRequired:
+  - capability: narrative-engine
 input:
   inject:
     - kind: runtime
       from: narrator
+      field: narrativeOutput
+      as: "<narrator-output>"
+    - kind: runtime
+      from: chat-mode-narrator
       field: narrativeOutput
       as: "<narrator-output>"
 tools:
@@ -37,7 +48,7 @@ You are the Action Guide agent. After each narrative turn you provide the player
 
 ## Current narrative result
 
-<narrator-output>{{ inputs.narrator.narrator.narrativeOutput }}</narrator-output>
+The latest narrative beat is in the `<narrator-output>` block above (injected by the current mode's narrative engine).
 
 ## Your task (strict two-step flow)
 

@@ -483,7 +483,14 @@ export const runtimeManifestSchema = z
      * (guide, codex, char-creator/character-tracker, npc-graph/extractor
      * all depend on narrator succeeding).
      */
-    upstreamRequired: z.array(z.string().min(1)).optional(),
+    upstreamRequired: z
+      .array(
+        z.union([
+          z.string().min(1),
+          z.object({ capability: z.string().min(1) }).strict(),
+        ]),
+      )
+      .optional(),
     trigger: triggerConfigSchema.optional(),
     /**
      * Execution mode when activated via manual plugin-rpc (`sync` awaits,

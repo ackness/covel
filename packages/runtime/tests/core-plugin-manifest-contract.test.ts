@@ -123,6 +123,27 @@ describe("core plugin manifest contract", () => {
 
     for (const downstream of downstreams) {
       expect(downstream.priority).toBe(600);
+    }
+
+    // guide is engine-agnostic: it gates on the `narrative-engine` capability
+    // (discovering whichever narrative engine the current mode loaded) and
+    // injects from both known engines so it works under narrator OR
+    // chat-mode-narrator.
+    const guide = requireRuntime(manifests, "guide");
+    expect(guide.upstreamRequired).toEqual([
+      { capability: "narrative-engine" },
+    ]);
+    for (const engine of ["narrator", "chat-mode-narrator"]) {
+      expect(guide.input?.inject).toContainEqual({
+        kind: "runtime",
+        from: engine,
+        field: "narrativeOutput",
+        as: expect.any(String),
+      });
+    }
+
+    // The remaining downstreams stay bound to narrator by name.
+    for (const downstream of downstreams.filter((m) => m.name !== "guide")) {
       expect(downstream.upstreamRequired).toEqual(["narrator"]);
       expect(downstream.input?.inject).toContainEqual({
         kind: "runtime",

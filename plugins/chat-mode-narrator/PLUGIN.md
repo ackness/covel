@@ -9,7 +9,7 @@ model: story
 timeoutMs: 240000
 callTimeoutMs: 120000
 outputKind: story
-capabilities: [narrative, chat-mode]
+capabilities: [narrative, chat-mode, narrative-engine]
 tags:
   - mode:dialogue
   - role:narrator
