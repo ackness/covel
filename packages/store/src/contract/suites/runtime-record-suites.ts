@@ -465,6 +465,23 @@ export function registerRuntimeRecordStoreSuites(
       expect(keys).toContain("c");
     });
 
+    it("parity: lists entries in semantic scope order (player → story → shared)", async () => {
+      // Insert scrambled; every backend must return semantic scope order then
+      // key. Alphabetical scope ordering ([player, shared, story]) would fail
+      // here, catching the SQL-vs-Memory/IDB divergence.
+      await store.upsertWorkingMemory(
+        makeWorkingMemory({ sessionId: "wm-order", scope: "shared", key: "s" }),
+      );
+      await store.upsertWorkingMemory(
+        makeWorkingMemory({ sessionId: "wm-order", scope: "story", key: "t" }),
+      );
+      await store.upsertWorkingMemory(
+        makeWorkingMemory({ sessionId: "wm-order", scope: "player", key: "p" }),
+      );
+      const list = await store.listWorkingMemory("wm-order");
+      expect(list.map((r) => r.scope)).toEqual(["player", "story", "shared"]);
+    });
+
     it("upsert-on-conflict replaces the record (same sessionId+scope+key)", async () => {
       const wm = makeWorkingMemory({
         sessionId: "wm-upsert",

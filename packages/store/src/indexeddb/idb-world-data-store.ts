@@ -3,6 +3,7 @@ import type {
   WorkingMemoryRecord,
   WorldDataImportLedgerRecord,
 } from "../types.js";
+import { compareWorkingMemoryEntries } from "../records/memory-records.js";
 import type { IdbStoreContext, IdbStoreSlice } from "./idb-context.js";
 
 export function createIdbWorldDataStore(ctx: IdbStoreContext): IdbStoreSlice {
@@ -42,17 +43,7 @@ export function createIdbWorldDataStore(ctx: IdbStoreContext): IdbStoreSlice {
         "sessionId",
         sessionId,
       );
-      const scopeOrder: Record<string, number> = {
-        player: 0,
-        story: 1,
-        shared: 2,
-      };
-      entries.sort((a, b) => {
-        const scopeDiff =
-          (scopeOrder[a.scope] ?? 99) - (scopeOrder[b.scope] ?? 99);
-        if (scopeDiff !== 0) return scopeDiff;
-        return a.key.localeCompare(b.key);
-      });
+      entries.sort(compareWorkingMemoryEntries);
       return entries;
     },
 
