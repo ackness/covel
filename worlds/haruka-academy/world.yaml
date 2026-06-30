@@ -90,6 +90,15 @@ memoryBlocks:
 # fallback), so the right panel shows authored bilingual labels that match the
 # fields on this world's cast cards (club / affection / trust / …).
 characterAttributes:
+  # 性格是角色卡的属性、在创角时设定（口吻由性格而来）——取代了被退役的
+  # player-identity 口吻编辑器。bio 类 + freeform，char-creator 创角表单会优先纳入它。
+  - id: persona
+    name: { zh-CN: 性格, en-US: Personality }
+    type: string
+    category: bio
+    description:
+      zh-CN: 主角的性格与说话方式（口吻由性格而来）——如「谨慎内向，紧张时话少，礼貌但有主见」。影响叙事如何刻画你的角色与对白。
+      en-US: The hero's personality and how they speak (voice follows from personality) — e.g. "cautious and reserved, terse when nervous, polite but opinionated." Shapes how the narrator portrays the character and their dialogue.
   - id: club
     name: { zh-CN: 社团, en-US: Club }
     type: string
