@@ -12,6 +12,7 @@ export * from "./api/worlds.js";
 export * from "./api/sessions.js";
 export * from "./api/packages.js";
 export * from "./api/llm.js";
+export * from "./api/media.js";
 export * from "./api/actions.js";
 export {
   addCustomPreset,

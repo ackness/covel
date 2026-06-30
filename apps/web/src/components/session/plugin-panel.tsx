@@ -374,7 +374,8 @@ export function PluginPanel({
   const alwaysRender =
     spec.alwaysRender === true ||
     specUsesComponent(spec.view, "ImageGallery") ||
-    specUsesComponent(spec.view, "ImageJobs");
+    specUsesComponent(spec.view, "ImageJobs") ||
+    specUsesComponent(spec.view, "PortraitGallery");
   const isEmpty = !alwaysRender && Object.keys(data).length === 0;
   if (isEmpty) {
     const emptySpec = spec.emptyState as Record<string, unknown> | undefined;

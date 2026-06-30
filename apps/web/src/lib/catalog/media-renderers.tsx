@@ -8,6 +8,7 @@ import {
   ImageGalleryPanel,
   ImageJobsPanel,
 } from "@/components/session/image-plugin-panels.js";
+import { PortraitGalleryPanel } from "@/components/session/portrait-gallery-panel.js";
 import type { MediaRef } from "@covel/shared";
 import { isMediaRef } from "@/lib/media-ref-utils.js";
 import { useActiveSessionId } from "./session-context.js";
@@ -239,6 +240,11 @@ export const ImageGallery: ComponentRenderer = ({ element }) => {
 export const ImageJobs: ComponentRenderer = ({ element }) => {
   const pluginId = element.props?.pluginId as string | undefined;
   return pluginId ? <ImageJobsPanel pluginId={pluginId} /> : null;
+};
+
+export const PortraitGallery: ComponentRenderer = ({ element }) => {
+  const pluginId = element.props?.pluginId as string | undefined;
+  return pluginId ? <PortraitGalleryPanel pluginId={pluginId} /> : null;
 };
 
 export const Source: ComponentRenderer = ({ element }) => {

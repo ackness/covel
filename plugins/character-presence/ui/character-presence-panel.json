@@ -18,53 +18,7 @@
   "dataSource": { "namespace": "presence" },
   "alwaysRender": true,
   "view": {
-    "component": "Stack",
-    "props": { "gap": "md" },
-    "children": [
-      {
-        "component": "Text",
-        "props": {
-          "content": {
-            "zh": "本世界角色的立绘，点击任意一张可放大查看。",
-            "en": "Character portraits for this world — click any to enlarge."
-          },
-          "variant": "muted",
-          "size": "xs"
-        }
-      },
-      {
-        "component": "Grid",
-        "props": { "cols": 3 },
-        "repeat": { "statePath": "/entries", "key": "key" },
-        "children": [
-          {
-            "component": "Stack",
-            "props": { "gap": "xs" },
-            "children": [
-              {
-                "component": "Image",
-                "props": {
-                  "ref": { "$item": "value/avatar" },
-                  "alt": { "$item": "value/displayName" },
-                  "aspectRatio": "3/4",
-                  "rounded": "none",
-                  "fit": "cover",
-                  "framed": true,
-                  "zoom": true
-                }
-              },
-              {
-                "component": "Text",
-                "props": {
-                  "content": { "$item": "value/displayName" },
-                  "size": "xs",
-                  "variant": "muted"
-                }
-              }
-            ]
-          }
-        ]
-      }
-    ]
+    "component": "PortraitGallery",
+    "props": { "pluginId": "character-presence" }
   }
 }

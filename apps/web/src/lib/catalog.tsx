@@ -65,6 +65,7 @@ import {
   ImageGallery,
   ImageJobs,
   MediaCatalogComponent,
+  PortraitGallery,
   Source,
 } from "./catalog/media-renderers.js";
 import { BranchReplyCandidates } from "./catalog/branch-reply-renderer.js";
@@ -112,6 +113,7 @@ export const covelRegistry: Record<string, ComponentRenderer> = {
   AudioPlayer: AudioPlayerCatalogComponent,
   ImageGallery,
   ImageJobs,
+  PortraitGallery,
   // Data
   Card,
   CardList,

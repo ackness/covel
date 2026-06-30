@@ -11,7 +11,11 @@ export function createRequestBodyLimitMiddleware(): MiddlewareHandler {
   return (c, next) => {
     if (
       c.req.path === "/api/install" ||
-      c.req.path.startsWith("/api/install/")
+      c.req.path.startsWith("/api/install/") ||
+      // Player image uploads (POST /api/media) — content-addressed portraits
+      // are a few MB. GET /api/media/:id has no body, so the wider cap there
+      // is harmless.
+      c.req.path === "/api/media"
     ) {
       return installBodyLimit(c, next);
     }

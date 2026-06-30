@@ -413,10 +413,11 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ### 媒体管理
 
-| 方法 | 路径                            | 描述                                                                                                             |
-| ---- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| GET  | `/api/media/:id?token=<signed>` | 内容寻址媒体下载（HMAC token + 会话引用校验）                                                                    |
-| POST | `/api/media/cleanup`            | 破坏性维护端点：默认禁用 (`COVEL_MEDIA_CLEANUP_ENABLED`)，商业层 503，`dryRun:false` 需 `X-Confirm-Cleanup: yes` |
+| 方法 | 路径                            | 描述                                                                                                                                       |
+| ---- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET  | `/api/media/:id?token=<signed>` | 内容寻址媒体下载（HMAC token + 会话引用校验）                                                                                              |
+| POST | `/api/media?sessionId=<id>`     | 玩家图片上传：原始字节 body（`Content-Type` = 文件 MIME，仅 `image/*`，≤20MB），内容寻址入库 + 记会话 owner/ref，返回 `{ id, mime, size }` |
+| POST | `/api/media/cleanup`            | 破坏性维护端点：默认禁用 (`COVEL_MEDIA_CLEANUP_ENABLED`)，商业层 503，`dryRun:false` 需 `X-Confirm-Cleanup: yes`                           |
 
 ### 配置信息
 
