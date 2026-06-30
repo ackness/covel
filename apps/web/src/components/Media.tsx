@@ -34,6 +34,13 @@ export interface MediaProps {
   readonly rounded?: "none" | "sm" | "md" | "lg";
   readonly fit?: "cover" | "contain";
   readonly className?: string;
+  /**
+   * When set (e.g. `"80vh"`), the image scales to its natural ratio bounded by
+   * this height and the container width, instead of being forced to
+   * `aspectRatio`. Used by the enlarge preview so a tall portrait fits the
+   * viewport instead of overflowing it.
+   */
+  readonly maxHeight?: string;
   /** Override mime sniff (rare; e.g. force <audio> for octet-stream). */
   readonly as?: "image" | "audio" | "video" | "auto";
 }
@@ -83,6 +90,7 @@ export function Media(props: MediaProps): ReactElement {
     rounded = "md",
     fit = "cover",
     className,
+    maxHeight,
     as = "auto",
   } = props;
 
@@ -139,7 +147,9 @@ export function Media(props: MediaProps): ReactElement {
   );
 
   const radius = radiusClass(rounded);
-  const baseStyle = { aspectRatio } as const;
+  // In maxHeight mode the placeholders keep the aspect ratio but never exceed
+  // the bound, so a tall portrait's loading/error tile doesn't overflow either.
+  const baseStyle = maxHeight ? { aspectRatio, maxHeight } : { aspectRatio };
 
   if (state.status === "loading") {
     return (
@@ -177,6 +187,22 @@ export function Media(props: MediaProps): ReactElement {
   }
 
   if (kind === "image") {
+    // Preview/enlarge mode: scale to the image's natural ratio, bounded by the
+    // container width and `maxHeight`, centred — instead of forcing aspectRatio.
+    if (maxHeight) {
+      return (
+        <img
+          src={state.url}
+          alt={alt}
+          className={clsx(
+            "block mx-auto max-w-full object-contain",
+            radius,
+            className,
+          )}
+          style={{ maxHeight }}
+        />
+      );
+    }
     return (
       <img
         src={state.url}

@@ -45,7 +45,7 @@ export function MediaPreviewDialog({
       open={mediaRef !== null}
       onOpenChange={(open) => !open && onClose()}
     >
-      <DialogContent className="max-w-5xl">
+      <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-sm">{title ?? ""}</DialogTitle>
         </DialogHeader>
@@ -58,6 +58,7 @@ export function MediaPreviewDialog({
               aspectRatio={aspectRatio}
               rounded="md"
               fit="contain"
+              maxHeight="80vh"
             />
             <div className="flex justify-end">
               <Button
