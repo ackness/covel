@@ -7,6 +7,7 @@ import {
   autoAssignRuntimeBindings,
   filterRuntimeBindingsForKnownRuntimes,
 } from "../lib/runtime-binding-utils.js";
+import { text } from "@/components/world/editor-helpers.js";
 
 export interface RuntimeBindingEntry {
   /** Qualified runtime ID: `pluginId` or `pluginId/runtimeName`. */
@@ -64,12 +65,7 @@ export function useRuntimeBindings(
           pluginId: sp.id.includes("/")
             ? sp.id.slice(0, sp.id.indexOf("/"))
             : sp.id,
-          pluginDisplayName:
-            typeof sp.displayName === "string"
-              ? sp.displayName
-              : typeof sp.displayName === "object"
-                ? Object.values(sp.displayName)[0]
-                : sp.id,
+          pluginDisplayName: text(sp.displayName) || sp.id,
           defaultSlot,
         });
       }
@@ -84,12 +80,7 @@ export function useRuntimeBindings(
         result.push({
           qualifiedId: rt.id,
           pluginId: pkg.name,
-          pluginDisplayName:
-            typeof pkg.displayName === "string"
-              ? pkg.displayName
-              : typeof pkg.displayName === "object"
-                ? Object.values(pkg.displayName)[0]
-                : pkg.name,
+          pluginDisplayName: text(pkg.displayName) || pkg.name,
           defaultSlot,
         });
       }
