@@ -1,5 +1,8 @@
 ---
 name: character-blueprint
+displayName:
+  zh: 角色蓝图
+  en: Character Blueprints
 description:
   zh: 保存预设人物资料，方便在故事中快速加入重要角色。
   en: Saves preset character profiles so important people can be added to the story quickly.

@@ -1,5 +1,8 @@
 ---
 name: player-identity
+displayName:
+  zh: 玩家身份
+  en: Player Identity
 description:
   zh: 让你在游玩中调整主角的口吻、目标和行事边界。
   en: Lets you adjust your hero's voice, goals, and boundaries during play.

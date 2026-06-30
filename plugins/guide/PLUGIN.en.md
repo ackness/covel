@@ -1,5 +1,8 @@
 ---
 name: guide
+displayName:
+  zh: 行动引导
+  en: Action Guide
 description:
   zh: 在每轮故事后给出几种行动建议，帮你更快决定下一步。
   en: Suggests a few possible actions after each story beat so you can choose your next move faster.

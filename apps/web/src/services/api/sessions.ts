@@ -96,7 +96,9 @@ export async function listSessionPlugins(
   const available: SessionPluginInfo[] = raw.available.map((p) => ({
     ...p,
     id: p.id as string,
-    displayName: (p.name ?? p.id) as I18nText,
+    // Prefer the friendly manifest displayName; fall back to name (which is the
+    // plugin id today) then the id. Resolved to the UI locale at render time.
+    displayName: (p.displayName ?? p.name ?? p.id) as I18nText,
     isActive: Boolean(p.active),
     capabilities: p.capabilities as string[] | undefined,
     tags: p.tags as string[] | undefined,

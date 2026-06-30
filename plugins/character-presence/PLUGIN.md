@@ -1,5 +1,8 @@
 ---
 name: character-presence
+displayName:
+  zh: 角色形象
+  en: Character Presence
 description:
   zh: 保存角色头像、立绘和声音，让人物展示更有存在感。
   en: Saves character portraits, images, and voices so characters feel more present.

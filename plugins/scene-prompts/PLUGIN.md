@@ -1,5 +1,8 @@
 ---
 name: scene-prompts
+displayName:
+  zh: 场景快捷回复
+  en: Scene Prompts
 description:
   zh: 根据当前场景给出几句可直接采用的行动短句。
   en: Suggests short actions that fit the current scene and can be used right away.

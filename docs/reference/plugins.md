@@ -753,23 +753,25 @@ plugins/<plugin-id>/
 - 主要文件：`handler.js`、`tools/`、`ui/`、`schemas/`、`tests/`
 - 测试方式、已知限制和后续计划
 
-#### 包级 PLUGIN.md（可选，用于 displayName）
+#### displayName（友好展示名）
 
-多 runtime 插件可以在根目录放置一个**仅含摘要 frontmatter** 的 `PLUGIN.md`，框架会用它作为整个插件的展示信息（在插件列表、provider 切换器等地方显示）。该文件**不**作为 runtime 加载，只读取以下三个字段：
+`displayName` 是 frontmatter 顶层的 **I18nText** 字段，作为插件在插件列表、provider 切换器等 UI 处的**友好展示名**——与 `name`（runtime id，用于数据隔离 / 工具作用域 / trace）解耦。单 runtime 与多 runtime 插件都适用；服务器经 `PluginSummary.displayName` 下发，前端按 locale 解析（缺失时回落到 `name`，再回落到 plugin id）。
 
 ```yaml
 ---
-name: # I18nText：插件展示名（不是 runtime name）
-  zh-CN: "DashScope"
-  en-US: "DashScope"
-description: # I18nText：包级简介
-  zh-CN: "阿里云 DashScope 图像生成插件。"
-  en-US: "Aliyun DashScope image generation plugin."
-pluginType: plugin # core-plugin | plugin
+name: guide # runtime id（保持小写短横线）
+displayName: # I18nText：玩家可见的友好名
+  zh: 行动引导
+  en: Action Guide
+description: # I18nText：一句话简介
+  zh: 在每轮故事后给出几种行动建议。
+  en: Suggests a few actions after each story beat.
 ---
 ```
 
-**没有**这个文件时，框架强制把展示名设为 plugin id（如 `dashscope-image-gen`），UI 上会显得冗长且不直观。第三方插件作者**强烈建议**提供该文件；内置核心插件由前端 i18n 翻译键兜底，可以省略。
+**没有** `displayName` 时，UI 退回显示 plugin id（如 `dashscope-image-gen`），冗长且不直观。所有插件（含内置与第三方）都**建议**声明 `displayName`；19 个内置插件均已声明中英文名。
+
+> 兼容：多 runtime 插件的**包级 PLUGIN.md**（根目录仅含摘要 frontmatter、不作为 runtime 加载）若把 `name` 写成 I18nText 对象，仍会作为展示名的回落来源；但新代码应优先用 `displayName`，不要重载 `name`。
 
 ### pluginType
 

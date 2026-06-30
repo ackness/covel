@@ -1,5 +1,8 @@
 ---
 name: memory
+displayName:
+  zh: 故事记忆
+  en: Story Memory
 description:
   zh: 展示故事记住的重点，包括剧情、场景、人物关系和主角状态。
   en: Shows what the story remembers, including plot, scene, relationships, and hero status.

@@ -204,6 +204,41 @@ describe("loadPluginSummary", () => {
     });
   });
 
+  it("loads i18n displayName from the root summary", async () => {
+    const pluginDir = path.join(tmpDir, "summary-display");
+    await fs.mkdir(pluginDir, { recursive: true });
+    await fs.writeFile(
+      path.join(pluginDir, "PLUGIN.md"),
+      makeFrontmatter({
+        name: "summary-display",
+        displayName: { "zh-CN": "行动引导", "en-US": "Action Guide" },
+        description: "x",
+      }),
+    );
+
+    const [discovery] = await discoverPlugins(tmpDir);
+    const summary = await loadPluginSummary(discovery);
+
+    expect(summary.displayName).toEqual({
+      "zh-CN": "行动引导",
+      "en-US": "Action Guide",
+    });
+  });
+
+  it("leaves displayName undefined when the frontmatter omits it", async () => {
+    const pluginDir = path.join(tmpDir, "summary-nodisplay");
+    await fs.mkdir(pluginDir, { recursive: true });
+    await fs.writeFile(
+      path.join(pluginDir, "PLUGIN.md"),
+      makeFrontmatter({ name: "summary-nodisplay", description: "x" }),
+    );
+
+    const [discovery] = await discoverPlugins(tmpDir);
+    const summary = await loadPluginSummary(discovery);
+
+    expect(summary.displayName).toBeUndefined();
+  });
+
   it("loads summary for multi-runtime plugin from root PLUGIN.md", async () => {
     const pluginDir = path.join(tmpDir, "summary-multi");
     await fs.mkdir(path.join(pluginDir, "runtimes", "rt-a"), {

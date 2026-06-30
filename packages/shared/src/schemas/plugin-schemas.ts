@@ -438,6 +438,9 @@ export const runtimeManifestSchema = z
           'name must be lowercase with hyphens, optional slash separators (e.g. "my-runtime" or "my-plugin/sub-runtime")',
       }),
     description: z.string().min(1),
+    // Friendly, player-facing name (I18nText). Distinct from `name`, which is
+    // the runtime id. Surfaced via PluginSummary.displayName for plugin lists.
+    displayName: i18nTextLoose.optional(),
     priority: z.number().int().min(0).max(1000).optional(),
     version: z.string().optional(),
     runtimeType: z.enum(["agent", "function"]).optional(),

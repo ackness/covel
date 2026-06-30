@@ -66,6 +66,12 @@ export type I18nText = string | Readonly<Record<string, string>>;
 export interface PluginSummary {
   readonly id: string;
   readonly name: I18nText;
+  /**
+   * Friendly, player-facing name (I18nText) from the `displayName` frontmatter
+   * field. Falls back to `name`/`id` at the UI layer when absent. Lets plugin
+   * lists show e.g. "行动引导 / Action Guide" instead of the raw id "guide".
+   */
+  readonly displayName?: I18nText;
   readonly description: I18nText;
   readonly pluginType: PluginType;
   readonly runtimeCount: number;

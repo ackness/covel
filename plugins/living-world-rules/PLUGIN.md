@@ -1,5 +1,8 @@
 ---
 name: living-world-rules
+displayName:
+  zh: 世界规则
+  en: World Rules
 description:
   zh: 让你添加会长期生效的世界规则，比如禁忌、风俗和特殊设定。
   en: Lets you add lasting world rules, such as taboos, customs, and special setting details.

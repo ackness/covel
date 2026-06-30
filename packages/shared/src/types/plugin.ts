@@ -413,6 +413,12 @@ export interface RuntimeManifest {
    */
   readonly pluginId: string;
   readonly description: string;
+  /**
+   * Friendly, player-facing name (I18nText). Distinct from `name` (the runtime
+   * id). Surfaced via `PluginSummary.displayName` for plugin-list UIs so a
+   * non-Chinese player sees e.g. "Action Guide" instead of the id "guide".
+   */
+  readonly displayName?: import("./world.js").I18nText;
   readonly priority?: number;
   readonly version?: string;
   /**

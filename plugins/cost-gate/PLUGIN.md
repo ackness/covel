@@ -1,5 +1,8 @@
 ---
 name: cost-gate
+displayName:
+  zh: 花费上限
+  en: Cost Gate
 description:
   zh: 给每局设置 token 花费上限：接近上限时自动减少后台生成，达到上限时暂停本回合。
   en: Caps token spend per session — trims background generation near the cap and pauses the turn at the cap.
