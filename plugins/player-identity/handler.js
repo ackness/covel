@@ -38,12 +38,28 @@ export default async function handler(ctx) {
       value: {
         profile,
         updatedAt: now,
+        // Mirror the active/bound state INTO the profiles namespace so the
+        // single-namespace panel can mark which voice is currently driving the
+        // model (the binding itself lives in BINDING_NAMESPACE, which the panel
+        // can't read). Exactly one profile carries active:true at a time.
+        active: shouldActivate,
         ...(shouldBindToPlayer ? { boundCharacterId: characterId } : {}),
       },
     }),
   ];
 
   if (shouldActivate) {
+    // Clear active on every other saved profile so the panel shows a single
+    // active voice. Best-effort: skips silently if the store can't list.
+    for (const other of await listOtherProfiles(ctx, profile.id)) {
+      proposals.push(
+        makeProposal(ctx, now, "plugin.data", {
+          namespace: PROFILE_NAMESPACE,
+          key: other.key,
+          value: { ...other.value, active: false },
+        }),
+      );
+    }
     proposals.push(
       makeProposal(ctx, now, "plugin.data", {
         namespace: BINDING_NAMESPACE,
@@ -88,6 +104,38 @@ export default async function handler(ctx) {
 
 function playerCharacterIdForProfile(profileId) {
   return profileId.startsWith("player-") ? profileId : `player-${profileId}`;
+}
+
+/**
+ * List saved profile rows other than `activeId`, so activation can clear their
+ * `active` flag. Best-effort — returns [] when the store can't list.
+ * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @param {string} activeId
+ * @returns {Promise<Array<{ key: string; value: Record<string, unknown> }>>}
+ */
+async function listOtherProfiles(ctx, activeId) {
+  const s = /** @type {any} */ (ctx.store);
+  if (!s || typeof s.listPluginData !== "function") return [];
+  try {
+    const rows = await s.listPluginData(
+      ctx.sessionId,
+      ctx.pluginId,
+      PROFILE_NAMESPACE,
+    );
+    if (!Array.isArray(rows)) return [];
+    return rows
+      .filter(
+        (r) =>
+          r &&
+          r.key !== activeId &&
+          r.value &&
+          typeof r.value === "object" &&
+          r.value.active === true,
+      )
+      .map((r) => ({ key: String(r.key), value: r.value }));
+  } catch {
+    return [];
+  }
 }
 
 function readProfilePayload(payload, sessionId) {

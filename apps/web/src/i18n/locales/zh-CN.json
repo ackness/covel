@@ -985,6 +985,7 @@
     "copy": "复制",
     "new": "新增",
     "newUpper": "新增",
+    "active": "生效中",
     "retry": "重试"
   },
   "debugger": {

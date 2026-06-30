@@ -30,8 +30,6 @@ tools:
 ui:
   right:
     - ./ui/codex-panel.json
-  message:
-    - ./ui/codex-message.json
 postHistory:
   role: system
   content: |

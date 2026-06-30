@@ -16,7 +16,6 @@ tags:
   - data:lorebook
   - cost:llm
   - ui:right-panel
-  - ui:message-block
 trigger:
   type: auto
 # Codex registers discoveries from the latest narrative — skip when narrator
@@ -41,8 +40,6 @@ tools:
 ui:
   right:
     - ./ui/codex-panel.json
-  message:
-    - ./ui/codex-message.json
 relations: {}
 postHistory:
   role: system

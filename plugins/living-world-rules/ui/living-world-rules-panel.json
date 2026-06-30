@@ -252,57 +252,6 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "完整规则导入",
-            "en": "Full rule import"
-          },
-          "variant": "muted",
-          "size": "xs"
-        }
-      },
-      {
-        "component": "Textarea",
-        "props": {
-          "label": {
-            "zh": "完整规则",
-            "en": "Full rule"
-          },
-          "placeholder": {
-            "zh": "{ \"schemaVersion\": 1, \"id\": \"rain-market\", \"content\": \"雨市里没人会直接说出真实姓名。\", \"kind\": \"constant\", \"coordinate\": { \"position\": \"before_plugin\" } }",
-            "en": "{ \"schemaVersion\": 1, \"id\": \"rain-market\", \"content\": \"No one in the rain market says their true name directly.\", \"kind\": \"constant\", \"coordinate\": { \"position\": \"before_plugin\" } }"
-          },
-          "value": { "$bindState": "/draftJson" },
-          "rows": 10
-        }
-      },
-      {
-        "component": "Button",
-        "props": {
-          "label": {
-            "zh": "从完整规则导入",
-            "en": "Import full rule"
-          },
-          "variant": "primary",
-          "size": "compact"
-        },
-        "on": {
-          "click": {
-            "action": "invokeRuntime",
-            "params": {
-              "runtimeId": "living-world-rules",
-              "payload": {
-                "ruleJson": { "$bindState": "/draftJson" }
-              }
-            }
-          }
-        }
-      },
-      {
-        "component": "Separator"
-      },
-      {
-        "component": "Text",
-        "props": {
-          "content": {
             "zh": "已保存规则",
             "en": "Saved rules"
           },
@@ -311,9 +260,24 @@
         }
       },
       {
-        "component": "JsonView",
+        "component": "FilterContainer",
         "props": {
-          "value": { "$state": "/entries" }
+          "items": { "$state": "/entries" },
+          "itemComponent": "EntryCard",
+          "itemKeyField": "key",
+          "itemPropMap": {
+            "title": "value/rule/title",
+            "content": "value/rule/content",
+            "category": "value/rule/kind"
+          },
+          "itemLiteralProps": {
+            "collapsible": true,
+            "defaultExpanded": false
+          },
+          "emptyMessage": {
+            "zh": "还没有保存的规则",
+            "en": "No saved rules yet"
+          }
         }
       }
     ]

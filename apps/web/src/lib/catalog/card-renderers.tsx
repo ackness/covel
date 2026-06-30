@@ -102,6 +102,9 @@ export const EntryCard: ComponentRenderer = ({ element }) => {
   const collapsible = (element.props?.collapsible as boolean) ?? false;
   const defaultExpanded = (element.props?.defaultExpanded as boolean) ?? true;
   const isNew = (element.props?.isNew as boolean) ?? false;
+  // isActive renders a green "active" chip — generic, any plugin can map it
+  // (e.g. the currently-bound player voice). Distinct from isNew.
+  const isActive = (element.props?.isActive as boolean) ?? false;
 
   const { expanded, toggle } = useCollapsible(defaultExpanded);
 
@@ -113,6 +116,7 @@ export const EntryCard: ComponentRenderer = ({ element }) => {
     : "text-primary";
   const Chevron = expanded ? Icons.ChevronDown : Icons.ChevronRight;
   const SparkleIcon = Icons.Sparkles;
+  const ActiveIcon = Icons.CircleCheck ?? Icons.Check;
 
   const showBody = !collapsible || expanded;
   const titleRowClass = clsx(
@@ -157,6 +161,12 @@ export const EntryCard: ComponentRenderer = ({ element }) => {
         <span className="ui-entry-title text-[13px] font-medium flex-1 truncate text-foreground">
           {title}
         </span>
+        {isActive && (
+          <span className="ui-chip inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600 dark:text-emerald-300 bg-emerald-500/10 border border-emerald-500/30">
+            {ActiveIcon && <ActiveIcon className="w-2.5 h-2.5" />}
+            {t("common.active", "Active")}
+          </span>
+        )}
         {isNew && (
           <span
             className="ui-chip inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-semibold tracking-wider uppercase text-purple-600 dark:text-purple-300 bg-purple-500/10 border border-purple-500/30"
@@ -166,14 +176,16 @@ export const EntryCard: ComponentRenderer = ({ element }) => {
             {t("common.newUpper", "NEW")}
           </span>
         )}
-        <span
-          className={clsx(
-            "ui-chip inline-flex items-center px-1.5 py-0.5 text-[10px] border",
-            rarityBadgeColors[rarity],
-          )}
-        >
-          {category}
-        </span>
+        {category && (
+          <span
+            className={clsx(
+              "ui-chip inline-flex items-center px-1.5 py-0.5 text-[10px] border",
+              rarityBadgeColors[rarity],
+            )}
+          >
+            {category}
+          </span>
+        )}
       </div>
       {showBody && content && (
         <p className="text-[12.5px] text-muted-foreground leading-[1.6]">

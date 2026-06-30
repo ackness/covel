@@ -263,55 +263,6 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "完整资料导入",
-            "en": "Full profile import"
-          },
-          "variant": "muted",
-          "size": "xs"
-        }
-      },
-      {
-        "component": "Textarea",
-        "props": {
-          "label": {
-            "zh": "完整资料",
-            "en": "Full profile"
-          },
-          "placeholder": "{ \"schemaVersion\": 1, \"id\": \"mentor-lin\", \"name\": \"Lin Yue\", \"role\": \"npc\" }",
-          "value": { "$bindState": "/draftJson" },
-          "rows": 6
-        }
-      },
-      {
-        "component": "Button",
-        "props": {
-          "label": {
-            "zh": "从完整资料导入",
-            "en": "Import full profile"
-          },
-          "variant": "primary",
-          "size": "compact"
-        },
-        "on": {
-          "click": {
-            "action": "invokeRuntime",
-            "params": {
-              "runtimeId": "character-blueprint",
-              "payload": {
-                "blueprintJson": { "$bindState": "/draftJson" },
-                "instantiate": { "$bindState": "/instantiate" }
-              }
-            }
-          }
-        }
-      },
-      {
-        "component": "Separator"
-      },
-      {
-        "component": "Text",
-        "props": {
-          "content": {
             "zh": "已保存预设角色",
             "en": "Saved preset characters"
           },

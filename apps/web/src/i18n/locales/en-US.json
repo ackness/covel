@@ -985,6 +985,7 @@
     "copy": "Copy",
     "new": "new",
     "newUpper": "NEW",
+    "active": "Active",
     "retry": "Retry"
   },
   "debugger": {

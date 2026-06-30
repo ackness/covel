@@ -200,56 +200,6 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "完整资料导入",
-            "en": "Full profile import"
-          },
-          "variant": "muted",
-          "size": "xs"
-        }
-      },
-      {
-        "component": "Textarea",
-        "props": {
-          "label": {
-            "zh": "完整资料",
-            "en": "Full profile"
-          },
-          "placeholder": "{ \"schemaVersion\": 1, \"id\": \"wanderer\", \"name\": \"Wanderer\", \"description\": \"A cautious outsider.\" }",
-          "value": { "$bindState": "/draftJson" },
-          "rows": 9
-        }
-      },
-      {
-        "component": "Button",
-        "props": {
-          "label": {
-            "zh": "从完整资料导入",
-            "en": "Import full profile"
-          },
-          "variant": "primary",
-          "size": "compact"
-        },
-        "on": {
-          "click": {
-            "action": "invokeRuntime",
-            "params": {
-              "runtimeId": "player-identity",
-              "payload": {
-                "profileJson": { "$bindState": "/draftJson" },
-                "activate": true,
-                "bindToPlayer": true
-              }
-            }
-          }
-        }
-      },
-      {
-        "component": "Separator"
-      },
-      {
-        "component": "Text",
-        "props": {
-          "content": {
             "zh": "已保存口吻",
             "en": "Saved voices"
           },
@@ -258,9 +208,24 @@
         }
       },
       {
-        "component": "JsonView",
+        "component": "FilterContainer",
         "props": {
-          "value": { "$state": "/entries" }
+          "items": { "$state": "/entries" },
+          "itemComponent": "EntryCard",
+          "itemKeyField": "key",
+          "itemPropMap": {
+            "title": "value/profile/name",
+            "content": "value/profile/description",
+            "isActive": "value/active"
+          },
+          "itemLiteralProps": {
+            "collapsible": true,
+            "defaultExpanded": false
+          },
+          "emptyMessage": {
+            "zh": "还没有保存的口吻",
+            "en": "No saved voices yet"
+          }
         }
       }
     ]
