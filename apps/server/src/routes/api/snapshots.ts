@@ -36,6 +36,7 @@ import { buildSnapshotPayload } from "@covel/runtime";
 import type { EventBus } from "@covel/events";
 import { errorBody } from "../../api-error.js";
 import { SAFE_SESSION_ID_RE } from "../../lib/validators.js";
+import { resolveSessionParam } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -60,10 +61,9 @@ snapshotRoutes.post("/:id/snapshot", async (c) => {
   const sessionId = c.req.param("id");
   const store = c.get("store");
 
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json(errorBody("Session not found", { code: "not_found" }), 404);
-  }
+  const resolved = await resolveSessionParam(c);
+  if (!resolved.ok) return resolved.response;
+  const session = resolved.session;
 
   // Derive a turnId for the snapshot — use the latest turn_result we can
   // find, or fall back to the session's turnCount so fresh sessions still
@@ -128,10 +128,8 @@ snapshotRoutes.get("/:id/snapshots", async (c) => {
   const sessionId = c.req.param("id");
   const store = c.get("store");
 
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json(errorBody("Session not found", { code: "not_found" }), 404);
-  }
+  const resolved = await resolveSessionParam(c);
+  if (!resolved.ok) return resolved.response;
 
   const snapshots = await store.listSnapshots(sessionId);
   return c.json({ snapshots });
@@ -163,13 +161,9 @@ snapshotRoutes.post("/:id/fork", async (c) => {
     );
   }
 
-  const parentSession = await store.getSession(parentSessionId);
-  if (!parentSession) {
-    return c.json(
-      errorBody("Parent session not found", { code: "not_found" }),
-      404,
-    );
-  }
+  const resolved = await resolveSessionParam(c);
+  if (!resolved.ok) return resolved.response;
+  const parentSession = resolved.session;
 
   const snapshot = await store.getSnapshot(fromSnapshotId);
   if (!snapshot || snapshot.sessionId !== parentSessionId) {

@@ -36,7 +36,10 @@ import {
   decorateSessionList,
   withEmbeddingMetadata,
 } from "./session/embedding.js";
-import { resolveSessionParam } from "./session/session-guard.js";
+import {
+  resolveSessionParam,
+  SESSION_NOT_FOUND_CODE,
+} from "./session/session-guard.js";
 import {
   buildAvailablePluginList,
   buildSnapshotPluginList,
@@ -474,9 +477,15 @@ sessionRoutes.get("/:id/snapshot", async (c) => {
   const pluginRegistry = c.get("pluginRegistry");
   const id = c.req.param("id");
 
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+
   const snapshot = await buildSessionSnapshot(store, id);
   if (!snapshot) {
-    return c.json(errorBody("Session not found"), 404);
+    return c.json(
+      errorBody(`Session not found: ${id}`, { code: SESSION_NOT_FOUND_CODE }),
+      404,
+    );
   }
 
   // Populate plugins from registry + session activePlugins

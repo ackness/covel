@@ -4,6 +4,7 @@
  * Tests use Hono's `app.request()` with dependency injection via context variables.
  */
 
+import { createRequire } from "node:module";
 import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
 import { createStateManager, type StateManager } from "@covel/state";
@@ -59,7 +60,14 @@ describe("Health Route", () => {
 
     const body = (await json(res)) as Record<string, unknown>;
     expect(body.status).toBe("ok");
-    expect(body.version).toBe("0.0.4");
+    // Health reports the running @covel/server package version (tracks releases),
+    // not a hardcoded literal — assert it matches the manifest.
+    const pkgVersion = (
+      createRequire(import.meta.url)("../../package.json") as {
+        version: string;
+      }
+    ).version;
+    expect(body.version).toBe(pkgVersion);
   });
 
   it("returns structured storage capabilities", async () => {

@@ -144,6 +144,9 @@ describe("Snapshot routes", () => {
         method: "POST",
       });
       expect(res.status).toBe(404);
+      expect(((await res.json()) as { code?: string }).code).toBe(
+        "session_not_found",
+      );
     });
 
     it("returns 201 with a manual snapshot", async () => {
@@ -212,6 +215,9 @@ describe("Snapshot routes", () => {
       const app = createTestApp(store);
       const res = await app.request("/api/sessions/nonexistent/snapshots");
       expect(res.status).toBe(404);
+      expect(((await res.json()) as { code?: string }).code).toBe(
+        "session_not_found",
+      );
     });
 
     it("returns empty list for a session with no snapshots", async () => {
@@ -293,6 +299,9 @@ describe("Snapshot routes", () => {
         body: JSON.stringify({ fromSnapshotId: "snap-x" }),
       });
       expect(res.status).toBe(404);
+      expect(((await res.json()) as { code?: string }).code).toBe(
+        "session_not_found",
+      );
     });
 
     it("returns 404 when snapshot does not exist", async () => {
