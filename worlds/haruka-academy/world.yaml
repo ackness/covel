@@ -83,4 +83,67 @@ memoryBlocks:
       zh-CN: 学园祭倒计时、各社团的准备进度、玩家承担的筹备任务与未决的关键节点。
       en-US: The festival countdown, each club's prep progress, the player's assigned tasks, and unresolved milestones.
     icon: CalendarDays
+# World-declared character attributes. world-init writes these verbatim as the
+# session's `character-attributes` schema (no LLM, no dimension-derived
+# fallback), so the right panel shows authored bilingual labels that match the
+# fields on this world's cast cards (club / affection / trust / …).
+characterAttributes:
+  - id: club
+    name: { zh-CN: 社团, en-US: Club }
+    type: string
+    category: social
+    description: { zh-CN: 所属社团, en-US: Club membership }
+  - id: class
+    name: { zh-CN: 班级, en-US: Class }
+    type: string
+    category: bio
+    description: { zh-CN: 所在班级, en-US: Homeroom class }
+  - id: relationshipStage
+    name: { zh-CN: 关系阶段, en-US: Relationship }
+    type: string
+    category: social
+    description:
+      zh-CN: 与玩家的当前关系阶段
+      en-US: Current relationship stage with the player
+  - id: affection
+    name: { zh-CN: 好感度, en-US: Affection }
+    type: number
+    min: 0
+    max: 100
+    defaultValue: 0
+    category: social
+    description: { zh-CN: 对玩家的好感, en-US: Affection toward the player }
+  - id: trust
+    name: { zh-CN: 信任, en-US: Trust }
+    type: number
+    min: 0
+    max: 100
+    defaultValue: 0
+    category: social
+    description: { zh-CN: 对玩家的信任, en-US: Trust toward the player }
+  - id: pressure
+    name: { zh-CN: 压力, en-US: Pressure }
+    type: number
+    min: 0
+    max: 100
+    defaultValue: 0
+    category: stats
+    description:
+      { zh-CN: 当前承受的心理压力, en-US: Current psychological pressure }
+  - id: publicCloseness
+    name: { zh-CN: 公开亲密度, en-US: Public Closeness }
+    type: number
+    min: 0
+    max: 100
+    defaultValue: 0
+    category: social
+    description:
+      zh-CN: 在他人面前与玩家的亲密程度
+      en-US: How close to the player in public
+  - id: favoriteTopic
+    name: { zh-CN: 喜欢的话题, en-US: Favorite Topic }
+    type: string
+    category: bio
+    description:
+      { zh-CN: 感兴趣或容易聊开的话题, en-US: Topics they enjoy talking about }
 worldData: data/world.data.yaml

@@ -301,6 +301,12 @@ export async function loadSingleWorld(
       ? await loadCharacterBlueprints(worldDir, characterBlueprintSources)
       : undefined;
 
+  // World-declared character attribute schema (optional). Carried into
+  // metadata so `world-init`'s guard can write it verbatim and skip the LLM.
+  const characterAttributes = Array.isArray(manifest.characterAttributes)
+    ? (manifest.characterAttributes as unknown[])
+    : undefined;
+
   const baseMetadata: Record<string, unknown> = {
     source: options?.source ?? "file",
     ...(options?.storage ? { storage: options.storage } : {}),
@@ -313,6 +319,7 @@ export async function loadSingleWorld(
     worldDataPath,
     characterBlueprintSources,
     characterBlueprints,
+    characterAttributes,
   };
   const worldData = await loadWorldDataSummary({
     worldRoot: worldDir,

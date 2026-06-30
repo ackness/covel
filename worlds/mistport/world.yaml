@@ -78,4 +78,49 @@ memoryBlocks:
       zh-CN: 关于退潮时间、深退潮预警、雾兽出没、雾蚀进展与安全/危险窗口的观察。
       en-US: Observations on ebb timing, deep-withdrawal alerts, fog-beast sightings, fog-rot progression, and safe/danger windows.
     icon: Waves
+# World-declared character attributes. world-init writes these verbatim as the
+# session's `character-attributes` schema (no LLM, no dimension-derived
+# fallback), so the right panel shows authored bilingual labels that match the
+# fields on this world's cast cards (faction / role / tideSense / fogRot / …).
+characterAttributes:
+  - id: faction
+    name: { zh-CN: 势力, en-US: Faction }
+    type: string
+    category: social
+    description: { zh-CN: 所属势力或公会, en-US: Affiliated faction or guild }
+  - id: role
+    name: { zh-CN: 身份, en-US: Role }
+    type: string
+    category: bio
+    description:
+      { zh-CN: 在势力中的身份或职务, en-US: Role or rank within the faction }
+  - id: location
+    name: { zh-CN: 所在地, en-US: Location }
+    type: string
+    category: bio
+    description: { zh-CN: 当前所在地点, en-US: Current whereabouts }
+  - id: tideSense
+    name: { zh-CN: 潮感, en-US: Tide Sense }
+    type: string
+    category: abilities
+    description:
+      { zh-CN: 感知潮汐与雾的能力, en-US: Sensitivity to the tide and fog }
+  - id: fogRot
+    name: { zh-CN: 雾蚀, en-US: Fog Rot }
+    type: string
+    category: stats
+    description: { zh-CN: 受雾侵蚀的程度, en-US: Degree of fog corruption }
+  - id: trust
+    name: { zh-CN: 信任, en-US: Trust }
+    type: number
+    min: 0
+    max: 100
+    defaultValue: 0
+    category: social
+    description: { zh-CN: 对玩家的信任, en-US: Trust toward the player }
+  - id: dispositionToPlayer
+    name: { zh-CN: 对你的态度, en-US: Disposition }
+    type: string
+    category: social
+    description: { zh-CN: 对玩家的态度, en-US: Attitude toward the player }
 worldData: data/world.data.yaml

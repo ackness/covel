@@ -155,7 +155,15 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 | tools.builtin | `plugin-data-get`, `plugin-data-list`                         |
 | ui.right      | `./ui/world-entries.json`, `./ui/world-schema.json`           |
 
-**Guard 门控**: `guard.js` 在 LLM 调用前执行（纯函数，零 LLM 开销）。检查 plugin_data 中是否已有世界维度数据，或从 world.yaml 导入 dimensions。若数据已存在，返回 `{ skip: true }` 跳过 LLM。
+**Guard 门控**: `guard.js` 在 LLM 调用前执行（纯函数，零 LLM 开销），按优先级决定角色属性 schema，命中任一即返回 `{ skip: true }` 跳过 LLM：
+
+1. **当前 session 已有 schema + 词条** → 直接复用。
+2. **世界声明了 `world.yaml` 的 `characterAttributes`**（→ `metadata.characterAttributes`，兼容旧 `metadata.schemas`）→ **原样写入**该 schema（并从 dimensions 导入词条）。这是权威来源：即使存在同世界的旧 session，也以世界声明为准，因此编辑 `characterAttributes` 会在新 session 生效。
+3. **同世界历史 session 有可复用数据** → 跨 session 复用 schema + 词条（省去 ~30s LLM）。
+4. **世界有 dimensions 但未声明属性** → `deriveSchema(dimensions)` 从世界数据推断通用属性。
+5. 以上都没有 → 才进入 `schema-gen` agent，由 LLM 生成。
+
+`characterAttributes[*].name` / `description` 支持 `I18nText`（`{ "zh-CN": …, "en-US": … }`），右栏与 prompt 注入按 locale 解析显示。
 
 **Agent 职责**: 读取世界观文档，通过专用 local tools 批量生成角色属性 schema 和世界词条。只需 2 次工具调用（`set-world-schema` + `set-world-entries-batch`）。
 

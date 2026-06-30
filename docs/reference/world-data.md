@@ -191,9 +191,40 @@ world load 阶段只强校验内置 schema 和本地 schema；`plugin://...` sch
 
 ## World-Init Schema Fast Path
 
-`world-init/schema-gen` 会优先复用 `WorldRecord.metadata.dimensions`。当 dimensions 存在时，guard 会把每个 dimension key 导入 `world-init/entries`，然后跳过 LLM schema 生成；这样启动更快，且世界包数据成为权威来源。
+`world-init` 的 guard（LLM 调用前的纯函数）按优先级决定角色属性 schema，命中即跳过 LLM。完整优先级见 [plugins.md #world-initschema-gen](plugins.md#world-initschema-gen)，要点：
 
-如需精细控制玩家/角色字段，world metadata 可以提供 `schemas` 数组。`world-init` 会直接写入这些显式 schema；缺省时才从 dimensions 推导通用属性（生命值、体力、货币、势力声望、能力阶层等）。因此高设定密度世界应优先提供显式 `schemas`，把世界独特机制写成稳定字段，而不是依赖 LLM 在开局时临场生成。
+1. 当前 session 已有数据 → 复用。
+2. **世界声明的 `characterAttributes`（权威）** → 原样写入。
+3. 同世界历史 session → 跨 session 复用。
+4. 有 dimensions、无声明 → `deriveSchema(dimensions)` 推导通用属性（生命值、体力、货币、声望、能力阶层等）。
+5. 都没有 → 才由 `schema-gen` agent 用 LLM 生成。
+
+### 在 `world.yaml` 声明 `characterAttributes`（推荐）
+
+高设定密度世界应**显式声明**角色属性，把世界独特机制写成稳定字段，而不是依赖 dimensions 推导或 LLM 临场生成。在 `world.yaml` 顶层（与 `pluginPolicy` 平级）声明 `characterAttributes` 数组（形状镜像 `AttributeDefinition`）：
+
+```yaml
+characterAttributes:
+  - id: affection # CharacterRecord.fields 的机器键，需与角色卡 attributes 的键一致
+    name: # 显示名，支持 I18nText（字符串或 { "zh-CN": …, "en-US": … }）
+      zh-CN: 好感度
+      en-US: Affection
+    type: number # string | number | boolean | enum | array | object | map
+    min: 0
+    max: 100
+    defaultValue: 0
+    category: social # stats | bio | abilities | equipment | social
+    description: # 可选，同样支持 I18nText
+      zh-CN: 对玩家的好感
+      en-US: Affection toward the player
+```
+
+- 加载后写入 `WorldRecord.metadata.characterAttributes`（兼容旧字段名 `metadata.schemas`）。
+- guard 把它**原样**写成 session 的 `(world-init, schema, character-attributes)`，**优先于跨 session 复用**——因此编辑 `characterAttributes` 会在**新 session** 生效（已开局的旧 session 在 Pre-Game 时已锁定 schema，不会回溯更新）。
+- `name` / `description` 的 `I18nText` 由框架按 locale 解析：右栏 `CharacterFieldsView` 按当前界面语言显示，注入 prompt 的 `<world-schema>` 也会先解析成单一语言。
+- `id` 必须与角色卡（`character-blueprint`）`attributes` 里的键一致，否则字段会落到右栏的「其他」分组里显示原始键名。
+
+自带世界 `mistport` / `haruka-academy` 已按此声明（见各自 `world.yaml`），可作模板。
 
 ## Character Blueprint Import
 

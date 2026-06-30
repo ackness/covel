@@ -177,10 +177,61 @@ export default async function guard(ctx) {
       }
     }
 
-    // 2. Check previous sessions of the same world for reusable data
+    // Resolve the world once for the remaining paths.
     const session = await s.getSession(sessionId);
     const worldId = session?.worldId;
+    const world = worldId ? await s.getWorld(worldId) : undefined;
 
+    // 2a. A world that DECLARES character attributes is authoritative: write
+    //     them verbatim (+ import dimension entries) and skip — even when an
+    //     older session of this world exists, whose schema may predate the
+    //     declaration. No LLM, and no cross-session reuse of a stale schema, so
+    //     editing `world.yaml characterAttributes` takes effect on new sessions.
+    const declaredAttributes =
+      world?.metadata?.characterAttributes ?? world?.metadata?.schemas;
+    if (Array.isArray(declaredAttributes) && declaredAttributes.length > 0) {
+      const now = new Date().toISOString();
+      const dimensions = /** @type {Record<string, unknown> | undefined} */ (
+        world?.metadata?.dimensions
+      );
+      const entryRecords =
+        dimensions && Object.keys(dimensions).length > 0
+          ? Object.entries(dimensions).map(([key, value]) => ({
+              id: crypto.randomUUID(),
+              sessionId,
+              pluginId,
+              namespace: "entries",
+              key,
+              value,
+              createdAt: now,
+              updatedAt: now,
+            }))
+          : [];
+      if (entryRecords.length > 0) {
+        await s.setPluginDataBatch(entryRecords);
+      }
+      await s.setPluginData({
+        id: crypto.randomUUID(),
+        sessionId,
+        pluginId,
+        namespace: "schema",
+        key: "character-attributes",
+        value: { version: 1, attributes: declaredAttributes },
+        createdAt: now,
+        updatedAt: now,
+      });
+      return {
+        skip: true,
+        initialized: true,
+        importedDimensions: entryRecords.length > 0,
+        entryCount: entryRecords.length,
+        schemaCount: declaredAttributes.length,
+        narrativeOutput: `[系统] 从世界包导入角色属性 Schema（${declaredAttributes.length} 个属性${entryRecords.length ? `，${entryRecords.length} 个维度词条` : ""}）`,
+        preGameDone: true,
+      };
+    }
+
+    // 2b. Check previous sessions of the same world for reusable data
     if (worldId) {
       const allSessions = await s.listSessions();
       const previousSessions = allSessions.filter(
@@ -261,11 +312,10 @@ export default async function guard(ctx) {
       }
     }
 
-    // 3. Check if the world has pre-built dimensions in metadata.
-    //    When dimensions exist, import entries + derive schema from world data,
-    //    then skip the LLM entirely — no generation needed.
-    if (worldId) {
-      const world = await s.getWorld(worldId);
+    // 3. World has pre-built dimensions but no declared attributes: import
+    //    entries + derive a generic schema from world data, then skip the LLM.
+    //    (The declared-attributes case is handled authoritatively in 2a above.)
+    if (worldId && world) {
       const dimensions = /** @type {Record<string, unknown> | undefined} */ (
         world?.metadata?.dimensions
       );
@@ -286,12 +336,9 @@ export default async function guard(ctx) {
         }));
         await s.setPluginDataBatch(entryRecords);
 
-        // Derive character attribute schema from world data (no LLM needed)
-        const explicitSchemas = world?.metadata?.schemas;
-        const attributes =
-          Array.isArray(explicitSchemas) && explicitSchemas.length > 0
-            ? explicitSchemas
-            : deriveSchema(dimensions);
+        // No declared attributes (2a would have returned) — infer generic
+        // attributes from world data so no LLM call is needed.
+        const attributes = deriveSchema(dimensions);
 
         await s.setPluginData({
           id: crypto.randomUUID(),

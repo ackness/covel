@@ -54,6 +54,7 @@ export type {
 // ── World Schemas ───────────────────────────────────────────────
 export {
   i18nTextSchema,
+  attributeDefinitionSchema,
   worldManifestSchema,
   worldDimensionsSchema,
   worldGeographySchema,
