@@ -659,6 +659,14 @@
     "desktopLlmMissingTitle": "No LLM slots configured yet",
     "desktopLlmMissingHint": "Click below to open ~/.covel/llm.toml and add at least one [covel.<slot>] section.",
     "autoBindSlots": "Auto-bind",
+    "llm": {
+      "reloadConfig": "Reload config",
+      "reloadHint": "Edited llm.toml? Reload to apply your slots without restarting the app.",
+      "reloadOk": "Configuration reloaded",
+      "reloadOkDetail": "{{count}} slot(s) active: {{slots}}",
+      "reloadFailed": "llm.toml could not be parsed",
+      "parseError": "llm.toml could not be parsed — using the built-in default. Fix it and reload: {{error}}"
+    },
     "runtimeSlotsDiscovered": "Runtime-requested slots",
     "temperature": "Temperature",
     "topP": "Top P",
@@ -729,6 +737,10 @@
     "useRuntimeDefault": "Runtime default: {{slot}}",
     "useRuntimeDefaultWith": "Runtime default: {{slot}} ({{value}})",
     "providerSlot": "provider slot",
+    "providerSlotOverridden": "overridden",
+    "providerSlotOverrideAria": "Override which configured slot this plugin's provider uses. Leave at default unless you have a reason to change it.",
+    "providerSlotDefaultOption": "default · [covel.{{slot}}]",
+    "providerSlotNoDefault": "default",
     "providerSlotMissingTitle": "Add [covel.{{slot}}] to llm.toml, or change {{plugin}}.modelPresetId in Settings > Plugins.",
     "providerSlotMissingDetail": "Configure [covel.{{slot}}] in llm.toml, or change modelPresetId in Settings > Plugins > {{plugin}}.",
     "providerSlotSettingDetail": "from plugin setting modelPresetId; edit in Settings > Plugins > {{plugin}}",
@@ -937,7 +949,15 @@
       "reload": "Reload app"
     }
   },
+  "characterPresence": {
+    "hint": "Click a portrait to enlarge, or hover and pick an image to replace it.",
+    "empty": "This world ships no character portraits yet.",
+    "replace": "Replace",
+    "uploading": "Uploading…",
+    "enlarge": "Enlarge portrait"
+  },
   "common": {
+    "preview": "Preview",
     "loading": "Loading...",
     "error": "Something went wrong",
     "save": "Save",

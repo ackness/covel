@@ -659,6 +659,14 @@
     "desktopLlmMissingTitle": "尚未配置任何 LLM slot",
     "desktopLlmMissingHint": "点击下方按钮打开 ~/.covel/llm.toml，至少添加一个 [covel.<slot>] 片段。",
     "autoBindSlots": "自动绑定",
+    "llm": {
+      "reloadConfig": "重载配置",
+      "reloadHint": "改过 llm.toml？点这里重载即可应用新 slot，无需重启。",
+      "reloadOk": "配置已重载",
+      "reloadOkDetail": "已激活 {{count}} 个 slot：{{slots}}",
+      "reloadFailed": "llm.toml 解析失败",
+      "parseError": "llm.toml 解析失败 —— 已回退到内置默认。修好后重载：{{error}}"
+    },
     "runtimeSlotsDiscovered": "运行时声明的 Slot",
     "temperature": "温度",
     "topP": "Top P",
@@ -729,6 +737,10 @@
     "useRuntimeDefault": "运行时默认: {{slot}}",
     "useRuntimeDefaultWith": "运行时默认: {{slot}} ({{value}})",
     "providerSlot": "提供方 slot",
+    "providerSlotOverridden": "已覆盖",
+    "providerSlotOverrideAria": "覆盖该插件 provider 使用的已配置 slot。无特殊原因请保持默认。",
+    "providerSlotDefaultOption": "默认 · [covel.{{slot}}]",
+    "providerSlotNoDefault": "默认",
     "providerSlotMissingTitle": "请在 llm.toml 添加 [covel.{{slot}}]，或在 设置 > 插件 中修改 {{plugin}}.modelPresetId。",
     "providerSlotMissingDetail": "请在 llm.toml 配置 [covel.{{slot}}]，或在 设置 > 插件 > {{plugin}} 中修改 modelPresetId。",
     "providerSlotSettingDetail": "来自插件设置 modelPresetId；可在 设置 > 插件 > {{plugin}} 修改",
@@ -937,7 +949,15 @@
       "reload": "重新加载"
     }
   },
+  "characterPresence": {
+    "hint": "点击立绘可放大，鼠标悬停可替换成你自己的图片。",
+    "empty": "本世界暂未提供角色立绘。",
+    "replace": "替换",
+    "uploading": "上传中…",
+    "enlarge": "放大立绘"
+  },
   "common": {
+    "preview": "预览",
     "loading": "加载中...",
     "error": "出错了",
     "save": "保存",
