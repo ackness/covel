@@ -79,14 +79,22 @@ export const ImageComponent: ComponentRenderer = ({ element }) => {
         as="image"
       />
     );
+    // `framed: true` wraps the image in a card frame (rounded border + hover),
+    // matching the image-generation gallery's thumbnail cards.
+    const frameCls =
+      props.framed === true
+        ? "block w-full overflow-hidden rounded-[var(--radius-card)] border border-border bg-card/60 transition-colors hover:border-primary/40"
+        : "";
     // `zoom: true` makes the image click-to-enlarge via the shared preview.
-    if (props.zoom !== true) return media;
+    if (props.zoom !== true) {
+      return frameCls ? <div className={frameCls}>{media}</div> : media;
+    }
     return (
       <>
         <button
           type="button"
           onClick={() => setZoomed(true)}
-          className="block w-full cursor-zoom-in"
+          className={clsx("block w-full cursor-zoom-in", frameCls || undefined)}
           aria-label={alt || "enlarge image"}
         >
           {media}

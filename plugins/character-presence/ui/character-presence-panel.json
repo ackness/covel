@@ -47,8 +47,9 @@
                   "ref": { "$item": "value/avatar" },
                   "alt": { "$item": "value/displayName" },
                   "aspectRatio": "3/4",
-                  "rounded": "md",
+                  "rounded": "none",
                   "fit": "cover",
+                  "framed": true,
                   "zoom": true
                 }
               },
