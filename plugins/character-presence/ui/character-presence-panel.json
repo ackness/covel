@@ -48,7 +48,8 @@
                   "alt": { "$item": "value/displayName" },
                   "aspectRatio": "3/4",
                   "rounded": "md",
-                  "fit": "cover"
+                  "fit": "cover",
+                  "zoom": true
                 }
               },
               {

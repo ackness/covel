@@ -1,6 +1,8 @@
+import { useState } from "react";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
 import { Media as MediaComponent } from "@/components/Media.js";
+import { MediaPreviewDialog } from "@/components/MediaPreviewDialog.js";
 import { AudioPlayer as AudioPlayerComponent } from "@/components/AudioPlayer.js";
 import {
   ImageGalleryPanel,
@@ -53,6 +55,7 @@ function extractMediaRef(
 
 export const ImageComponent: ComponentRenderer = ({ element }) => {
   const sessionId = useActiveSessionId();
+  const [zoomed, setZoomed] = useState(false);
   const props = element.props ?? {};
   const alt = (props.alt as string | undefined) ?? "";
   const aspectRatio = (props.aspectRatio as string | undefined) ?? "1/1";
@@ -65,7 +68,7 @@ export const ImageComponent: ComponentRenderer = ({ element }) => {
       typeof props.sessionId === "string" && props.sessionId.length > 0
         ? (props.sessionId as string)
         : sessionId;
-    return (
+    const media = (
       <MediaComponent
         src={ref}
         sessionId={overrideSession}
@@ -75,6 +78,27 @@ export const ImageComponent: ComponentRenderer = ({ element }) => {
         fit={fit}
         as="image"
       />
+    );
+    // `zoom: true` makes the image click-to-enlarge via the shared preview.
+    if (props.zoom !== true) return media;
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setZoomed(true)}
+          className="block w-full cursor-zoom-in"
+          aria-label={alt || "enlarge image"}
+        >
+          {media}
+        </button>
+        <MediaPreviewDialog
+          mediaRef={zoomed ? ref : null}
+          sessionId={overrideSession}
+          title={alt || undefined}
+          aspectRatio={aspectRatio}
+          onClose={() => setZoomed(false)}
+        />
+      </>
     );
   }
 

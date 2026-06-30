@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { ComponentRenderer } from "@json-render/react";
 import type { MediaRef } from "@covel/shared";
 import { Media } from "@/components/Media.js";
+import { MediaPreviewDialog } from "@/components/MediaPreviewDialog.js";
 import { isMediaRef } from "@/lib/media-ref-utils.js";
 import { usePluginNamespace } from "@/stores/plugin-data-store.js";
 import { useActiveSessionId } from "./session-context.js";
@@ -59,6 +60,7 @@ export const CharacterAvatar: ComponentRenderer = ({ element }) => {
   const size = typeof props.size === "number" ? props.size : 28;
 
   const sessionId = useActiveSessionId();
+  const [zoomed, setZoomed] = useState(false);
   const records = usePluginNamespace(sourcePlugin, sourceNamespace);
   const avatar = useMemo(
     () => resolveCharacterAvatar(records, characterId, idField, refField),
@@ -67,18 +69,33 @@ export const CharacterAvatar: ComponentRenderer = ({ element }) => {
 
   if (!avatar) return null;
   return (
-    <span
-      className="inline-block shrink-0 overflow-hidden rounded-md border border-border"
-      style={{ width: size, height: size }}
-    >
-      <Media
-        src={avatar}
+    <>
+      <button
+        type="button"
+        // Stop the click from also toggling the surrounding (collapsible) card.
+        onClick={(e) => {
+          e.stopPropagation();
+          setZoomed(true);
+        }}
+        className="inline-block shrink-0 overflow-hidden rounded-md border border-border cursor-zoom-in"
+        style={{ width: size, height: size }}
+        aria-label="enlarge portrait"
+      >
+        <Media
+          src={avatar}
+          sessionId={sessionId}
+          alt=""
+          aspectRatio="1/1"
+          rounded="md"
+          fit="cover"
+        />
+      </button>
+      <MediaPreviewDialog
+        mediaRef={zoomed ? avatar : null}
         sessionId={sessionId}
-        alt=""
-        aspectRatio="1/1"
-        rounded="md"
-        fit="cover"
+        aspectRatio="3/4"
+        onClose={() => setZoomed(false)}
       />
-    </span>
+    </>
   );
 };
