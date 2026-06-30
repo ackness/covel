@@ -620,9 +620,9 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 
 ## player-identity
 
-⚪ optional · ⚙ pure function
+⚪ 已从默认选择退役 · ⚙ pure function · 无 UI
 
-**Quick use**：声明主角的口吻 / 目标 / 边界（人设）；作为 `persona-provider`，框架 `buildSessionContextSnapshot` 据此加载 `activePersona` 注入上下文。
+**Quick use**：UI-less `persona-provider`。**已从所有 preset / world recommendedPlugins / chat-mode-narrator requires 退役**——按"口吻属于角色卡、在创建时设定，不在游玩中编辑"的原则，它的玩家编辑面板已删除。`handler.js` 仅供程序化调用保留；没有 persona 时框架优雅降级到 `{{ player.character }}`（角色卡本身）。
 
 **路径**: `plugins/player-identity/`
 
@@ -632,9 +632,9 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 | runtimeType  | `function`，`trigger: manual`         |
 | outputKind   | `system`                              |
 | capabilities | `[player-identity, persona-provider]` |
-| ui.right     | `player-identity-panel.json`          |
+| ui           | 无（玩家面板已移除）                  |
 
-**职责**：未发现 `persona-provider` 时框架不加载人设——要主角有稳定口吻就启用它。两个 preset 默认都建议启用。
+**职责**：玩家的口吻 / persona 现在属于**角色卡**——char-creator 创建时设定、character-tracker（agent）演化、角色名册只读展示。要让玩家在创建时显式设定口吻，可在世界 `characterAttributes` 里声明一个口吻属性（通用做法，随世界文档走）。
 
 ---
 

@@ -24,7 +24,6 @@ recommendedPlugins:
   - guide
   - codex
   - npc-graph
-  - player-identity
   - living-world-rules
   - character-presence
   - cost-gate

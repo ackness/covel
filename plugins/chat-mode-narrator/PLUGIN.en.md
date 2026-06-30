@@ -38,7 +38,6 @@ relations:
     - scene-prompts
     - character-blueprint
     - character-presence
-    - player-identity
     - living-world-rules
     - branch-reply
 userSettings:

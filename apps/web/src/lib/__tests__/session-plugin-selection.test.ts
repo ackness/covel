@@ -119,24 +119,23 @@ describe("session plugin selection helpers", () => {
     expect(selected.has("chat-mode-narrator")).toBe(true);
   });
 
-  it("keeps player persona optional outside dialogue mode", () => {
-    const traditional = pluginPacksForWorld(world({})).find(
-      (item) => item.id === "traditional-story",
-    );
-    const lowCost = pluginPacksForWorld(world({})).find(
-      (item) => item.id === "low-cost",
-    );
-    const dialogue = pluginPacksForWorld(world({})).find(
-      (item) => item.id === "dialogue-mode",
-    );
+  it("retires player-identity from every pack (voice belongs on the card, not a mid-play editor)", () => {
+    const packs = pluginPacksForWorld(world({}));
+    const traditional = packs.find((item) => item.id === "traditional-story");
+    const lowCost = packs.find((item) => item.id === "low-cost");
+    const dialogue = packs.find((item) => item.id === "dialogue-mode");
 
-    expect(traditional?.plugins).not.toContain("player-identity");
-    expect(traditional?.optionalPlugins).toContain("player-identity");
+    // player-identity (the mid-play persona editor) is retired — its voice/persona
+    // belongs on the character card (set at creation), so it is in no pack's
+    // plugins OR optionalPlugins.
+    for (const pack of packs) {
+      expect(pack.plugins).not.toContain("player-identity");
+      expect(pack.optionalPlugins).not.toContain("player-identity");
+    }
+    // The other selections are unchanged.
     expect(traditional?.plugins).toContain("living-world-rules");
-    expect(lowCost?.plugins).not.toContain("player-identity");
-    expect(lowCost?.optionalPlugins).toContain("player-identity");
     expect(lowCost?.plugins).toContain("cost-gate");
-    expect(dialogue?.plugins).toContain("player-identity");
+    expect(dialogue?.plugins).toContain("chat-mode-narrator");
   });
 
   it("filters and groups packages by tags", () => {
