@@ -64,13 +64,13 @@
 
 ### 执行生命周期事件
 
-| 事件类型              | 方向 | 描述              | 负载                                        |
-| --------------------- | ---- | ----------------- | ------------------------------------------- |
-| `execution.started`   | S→C  | 回合执行开始      | `{ runtimeCount }`                          |
-| `runtime.started`     | S→C  | 单个 runtime 开始 | `{ runtimeId, pluginId, label }`            |
-| `runtime.completed`   | S→C  | 单个 runtime 完成 | `{ runtimeId, pluginId, durationMs }`       |
-| `runtime.failed`      | S→C  | 单个 runtime 失败 | `{ runtimeId, pluginId, error }`            |
-| `execution.completed` | S→C  | 回合执行完成      | `{ runtimeCount, resultCount, durationMs }` |
+| 事件类型              | 方向 | 描述              | 负载                                                                                                                                                             |
+| --------------------- | ---- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execution.started`   | S→C  | 回合执行开始      | `{ runtimeCount }`                                                                                                                                               |
+| `runtime.started`     | S→C  | 单个 runtime 开始 | `{ runtimeId, pluginId, label }`                                                                                                                                 |
+| `runtime.completed`   | S→C  | 单个 runtime 完成 | `{ runtimeId, pluginId, durationMs }`                                                                                                                            |
+| `runtime.failed`      | S→C  | 单个 runtime 失败 | `{ runtimeId, pluginId, error }`                                                                                                                                 |
+| `execution.completed` | S→C  | 回合执行完成      | `{ runtimeCount, resultCount, durationMs, abortReason? }`（`abortReason` 仅在回合于产出前被中止时出现，如 cost-gate 硬预算上限——前端据此提示玩家而非静默空回合） |
 
 ### 会话生命周期事件
 

@@ -87,6 +87,49 @@ describe("char-creator/player-init guard character mirror", () => {
     });
   });
 
+  it("merges declared schema defaults into the stored player fields", async () => {
+    const store = createStore();
+    // Schema discoverable by its well-known namespace/key under any pluginId.
+    store.pluginData.push({
+      sessionId: "sess-1",
+      pluginId: "world-init",
+      namespace: "schema",
+      key: "character-attributes",
+      value: {
+        version: 1,
+        attributes: [
+          {
+            id: "hp",
+            name: "HP",
+            type: "number",
+            defaultValue: 100,
+            category: "stats",
+          },
+          {
+            id: "trust",
+            name: "Trust",
+            type: "number",
+            defaultValue: 0,
+            category: "social",
+          },
+          { id: "club", name: "Club", type: "string", category: "social" },
+        ],
+      },
+    });
+    store.listPluginDataSessionScope = vi.fn(async () => store.pluginData);
+    store.playerInputs.push({
+      id: "input-1",
+      sessionId: "sess-1",
+      values: { characterName: "神代澪", club: "文艺部", trust: 30 },
+    });
+
+    await guard({ sessionId: "sess-1", store });
+
+    const character = store.characters[0];
+    // Player-set values kept; missing-default (hp) filled; no-default (club) kept; club kept.
+    expect(character.fields).toEqual({ club: "文艺部", trust: 30, hp: 100 });
+  });
+
   it("mirrors an existing player while keeping one character row", async () => {
     const store = createStore();
     store.characters.push({

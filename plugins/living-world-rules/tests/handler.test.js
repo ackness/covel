@@ -122,6 +122,43 @@ describe("living-world-rules handler", () => {
     });
   });
 
+  it("maps an evolving rule to an always-on constant entry (not keyword-gated)", async () => {
+    const result = await handler(
+      ctx({
+        rule: {
+          schemaVersion: 1,
+          id: "tide-shift",
+          content: "潮汐每过一章就会更危险一分。",
+          kind: "evolving",
+        },
+      }),
+    );
+    const proposals = getPendingProposals(result);
+    // evolving has no keyword semantics — it must reach the prompt every turn.
+    expect(proposals[1].payload.entries[0]).toMatchObject({
+      strategy: "constant",
+      extra: { kind: "evolving" },
+    });
+  });
+
+  it("falls a keyless triggered rule back to constant instead of silently dropping it", async () => {
+    const result = await handler(
+      ctx({
+        rule: {
+          schemaVersion: 1,
+          id: "no-keys",
+          content: "这条规则忘了填关键词。",
+          kind: "triggered",
+        },
+      }),
+    );
+    const proposals = getPendingProposals(result);
+    const entry = proposals[1].payload.entries[0];
+    // A selective entry with empty keys would never activate — fall back to constant.
+    expect(entry.strategy).toBe("constant");
+    expect(entry.keys).toEqual([]);
+  });
+
   it("accepts structured rule form payloads", async () => {
     const result = await handler(
       ctx({

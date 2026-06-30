@@ -505,6 +505,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             runtimeCount: activeRuntimes.length,
             resultCount: result.runtimeResults.length,
             durationMs: result.durationMs,
+            // Surface a turn that was aborted before producing output (e.g.
+            // cost-gate's hard budget cap) so the player gets a visible reason
+            // instead of a silent empty turn.
+            ...(result.abortReason ? { abortReason: result.abortReason } : {}),
           }),
         ),
       });

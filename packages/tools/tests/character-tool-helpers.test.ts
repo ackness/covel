@@ -5,6 +5,7 @@ import {
   formatFields,
   formatFieldValue,
   loadCharacterSchema,
+  mergeSchemaDefaults,
   mirrorCharacterToPluginData,
   sortByFrequencyThenRecency,
   toSnapshot,
@@ -160,6 +161,42 @@ describe("character tool helpers", () => {
         "session-1",
       ),
     ).resolves.toBeNull();
+  });
+
+  it("merges declared schema defaults into stored fields without mutating input", () => {
+    const schema: CharacterAttributeSchema = {
+      version: 1,
+      attributes: [
+        {
+          id: "hp",
+          name: "HP",
+          type: "number",
+          defaultValue: 100,
+          category: "stats",
+        },
+        {
+          id: "trust",
+          name: "Trust",
+          type: "number",
+          defaultValue: 0,
+          category: "social",
+        },
+        { id: "club", name: "Club", type: "string", category: "social" }, // no default
+      ],
+    };
+    const input = { trust: 42 };
+    const merged = mergeSchemaDefaults(input, schema);
+
+    // Player-set value wins; missing default filled; no-default attr untouched.
+    expect(merged).toEqual({ trust: 42, hp: 100 });
+    // Input not mutated.
+    expect(input).toEqual({ trust: 42 });
+  });
+
+  it("returns a plain copy when schema is null or fields are non-object", () => {
+    expect(mergeSchemaDefaults({ a: 1 }, null)).toEqual({ a: 1 });
+    expect(mergeSchemaDefaults(undefined, null)).toEqual({});
+    expect(mergeSchemaDefaults("nope", sampleSchema)).toEqual({});
   });
 
   it("builds generic or schema-aware fields zod shapes", () => {

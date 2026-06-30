@@ -348,7 +348,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
    - 直接写入 `characters` 表与 `plugin_data[characters]`
    - 输出 `preGameDone: true`，标记本 runtime 已完成 Pre-Game 初始化（框架将其累加到 `session.preGameCompleted`）
 
-**当前代码状态**: 这一条路径已经保持在插件包内部，实现位于 `runtimes/player-init/handler.js`。如果后续希望统一 deterministic runtime 的 trace 与工具链，可以把这条流程收敛到 builtin character tools。
+**当前代码状态**: 这一条路径保持在插件包内部，实现位于 `runtimes/player-init/guard.js`（deterministic 提交分支）。schema `defaultValue` 在写入边界合并进存库 `fields`（与 builtin `create-character` 一致），使右栏显示、模型 `get-character` 与 prompt 注入读到同一份字段，schema 通过 well-known namespace/key 发现而非硬编码 world-data 插件 id。如果后续希望统一 deterministic runtime 的 trace 与工具链，可以把这条流程收敛到 builtin character tools。
 
 ### char-creator/character-tracker
 
@@ -511,11 +511,12 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 
 **userSettings**（世界用 `pluginSettings.chat-mode-narrator` 预置，玩家可覆盖）：
 
-| key                  | 类型   | 默认     | 范围 / 选项                          |
-| -------------------- | ------ | -------- | ------------------------------------ |
-| `dialogueRatio`      | number | 70       | 30–90（step 5）——对话 / 角色反应占比 |
-| `proseLength`        | select | `medium` | `short` / `medium` / `long`          |
-| `activeSpeakerCount` | number | 2        | 1–4（step 1）——每个节拍的上场角色数  |
+| key             | 类型   | 默认     | 范围 / 选项                          |
+| --------------- | ------ | -------- | ------------------------------------ |
+| `dialogueRatio` | number | 70       | 30–90（step 5）——对话 / 角色反应占比 |
+| `proseLength`   | select | `medium` | `short` / `medium` / `long`          |
+
+> 上场角色数由 **scene-cast** 的 `activeSpeakerCount` 控制（它是实际裁剪 cast 的插件）——userSettings 按声明插件作用域隔离，所以这个旋钮必须挂在 scene-cast 上。chat-mode-narrator 的 prompt 以注入的 `<active-cast>` 实际人数为准，不再自带该设置（修复了"narrator 被告知 N、cast 却恒为 2"的分裂大脑）。
 
 **职责**：启用时 `relations.conflicts` 自动顶替 `narrator`，`relations.requires` 自动拉起整套对话子系统。是 `dialogue-mode` preset 的核心。
 
@@ -541,7 +542,13 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 | output       | `activeCastContext` → 注入 `<active-cast>`              |
 | ui.right     | `scene-cast-panel.json`                                 |
 
-**职责**：每轮从 `characters`（含 world-data 导入的角色卡）选出当前场景演员，给对话叙事提供"谁在场"。是 `chat-mode-narrator` 的上游依赖。
+**userSettings**：
+
+| key                  | 类型   | 默认 | 范围 / 选项                         |
+| -------------------- | ------ | ---- | ----------------------------------- |
+| `activeSpeakerCount` | number | 2    | 1–4（step 1）——每个节拍的上场角色数 |
+
+**职责**：每轮从 `characters`（含 world-data 导入的角色卡）选出当前场景演员，给对话叙事提供"谁在场"。是 `chat-mode-narrator` 的上游依赖。上场角色数由本插件的 `activeSpeakerCount` 决定（声明在真正裁剪 cast 的插件上，避免跨插件 userSettings 无法生效的陷阱）。
 
 ---
 
@@ -647,6 +654,8 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 | ui.right     | `living-world-rules-panel.json`    |
 
 **职责**：规则 schema 见 `schemas/rules.schema.json`（`kind` / `category` / `budgetClass` / `coordinate` / `keys` / `insertionOrder`）。world 包用 `to: plugin:living-world-rules/rules+lorebook` 同时写规则与 lorebook。
+
+**`kind` → lorebook strategy 映射**：只有**带关键词的 `triggered`** 规则映射为 `selective`（按 `keys` 命中才注入）；`evolving` 与 `constant` 是常驻（`constant` strategy，每轮注入）。一条 `triggered` 规则若**未填关键词**会回退为常驻 `constant`，而不是静默永不生效——避免"面板显示 enabled、却从不进 prompt"的分裂。
 
 ---
 

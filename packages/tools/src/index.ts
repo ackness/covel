@@ -50,6 +50,7 @@ export {
   createCharacterTools,
   buildSessionCharacterWriteTools,
   mirrorCharacterToPluginData,
+  mergeSchemaDefaults,
 } from "./builtin/character-tools.js";
 export type {
   CharacterStore,

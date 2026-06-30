@@ -234,7 +234,14 @@ function lorebookIdForRule(ruleId) {
 
 function ruleToLorebookEntry(rule, lorebookEntryId) {
   const coordinate = rule.coordinate ?? { position: "after_plugin" };
-  const strategy = rule.kind === "constant" ? "constant" : "selective";
+  // Only KEYWORD-gated `triggered` rules become `selective` (the framework
+  // drops a selective lorebook entry whose keys are empty). `evolving` and
+  // `constant` are always-on; a `triggered` rule saved WITHOUT keywords would
+  // otherwise persist as enabled yet never reach the prompt — a silent drop —
+  // so it falls back to always-on `constant` instead.
+  const keys = Array.isArray(rule.keys) ? rule.keys : [];
+  const strategy =
+    rule.kind === "triggered" && keys.length > 0 ? "selective" : "constant";
   return {
     id: lorebookEntryId,
     content: rule.content,
@@ -243,7 +250,7 @@ function ruleToLorebookEntry(rule, lorebookEntryId) {
     insertionOrder:
       typeof rule.insertionOrder === "number" ? rule.insertionOrder : 500,
     enabled: rule.enabled !== false,
-    keys: Array.isArray(rule.keys) ? rule.keys : [],
+    keys,
     extra: {
       kind: rule.kind ?? "constant",
       ...(rule.title ? { title: rule.title } : {}),

@@ -389,6 +389,13 @@ export function createSseEventHandler(
         break;
       }
       case "execution.completed": {
+        // A turn aborted before producing output (e.g. cost-gate's hard budget
+        // cap) carries an abortReason — surface it so the player isn't left with
+        // a silent empty turn.
+        const abortReason = payload.abortReason as string | undefined;
+        if (abortReason) {
+          deps.dispatch({ type: "SET_EXECUTION_ERROR", error: abortReason });
+        }
         deps.dispatch({ type: "SET_EXECUTING", value: false });
         deps.dispatch({
           type: "FINALIZE_HANGING_RUNTIMES",

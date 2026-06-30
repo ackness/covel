@@ -73,15 +73,6 @@ userSettings:
         label:
           zh: 长
           en: Long
-  - key: activeSpeakerCount
-    type: number
-    default: 2
-    min: 1
-    max: 4
-    step: 1
-    label:
-      zh: 活跃说话人数
-      en: Active speakers
 summaryFocus:
   - character-intent
   - relationship-change
@@ -134,7 +125,7 @@ postHistory:
 
 - 对话占比：{{ userSettings.dialogueRatio }}%
 - 回复长度：{{ userSettings.proseLength }}
-- 目标活跃说话人数：{{ userSettings.activeSpeakerCount }}
+- 目标活跃说话人数：以 `<active-cast>` 中实际列出的角色为准（由 scene-cast 按玩家设置决定）
 
 ## 写作规则
 
