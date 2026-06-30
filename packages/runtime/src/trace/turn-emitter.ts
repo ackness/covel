@@ -58,7 +58,10 @@ export function createTurnEmitter(opts: CreateTurnEmitterOptions): TurnEmitter {
     sessionId: opts.sessionId,
     turnId: opts.turnId,
     async emit(type, payload) {
-      const enriched = { ...payload, seq: seq++ };
+      // flowId mirrors traceId (protocol.md: `flowId = traceId`) so the
+      // /api/traces payload carries a populated correlation id instead of "".
+      // A payload that already sets flowId wins (spread after).
+      const enriched = { flowId: traceId, ...payload, seq: seq++ };
       const createdAt = new Date().toISOString();
 
       const persist = opts.store

@@ -52,6 +52,27 @@ describe("TurnEmitter", () => {
     expect(bus.emitted).toHaveLength(2);
     expect(bus.emitted[0].type).toBe("tool.calling");
     expect(bus.emitted[1].type).toBe("tool.completed");
+    // flowId defaults to the (fallback) traceId so /api/traces never returns "".
+    expect((first.payload as { flowId?: string }).flowId).toBe("T");
+  });
+
+  it("uses the explicit traceId for trace_events and sets payload.flowId = traceId", async () => {
+    const store = makeStoreSpy();
+    const emitter = createTurnEmitter({
+      store,
+      sessionId: "S",
+      turnId: "T",
+      traceId: "trace-xyz",
+    });
+
+    await emitter.emit("tool.calling", { toolName: "a" });
+
+    const row = store.addTraceEvent.mock.calls[0][0];
+    // Persisted traceId is the explicit one (not the turnId fallback), so an
+    // SSE envelope built from the same traceId correlates with /api/traces rows.
+    expect(row.traceId).toBe("trace-xyz");
+    expect(row.turnId).toBe("T");
+    expect((row.payload as { flowId?: string }).flowId).toBe("trace-xyz");
   });
 
   it("tolerates store failure (warns but does not throw)", async () => {

@@ -2639,14 +2639,17 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
 {
   "sessionId": "mistport-a1b2c3d4",
   "count": 42,
+  "discovery": {
+    /* plugin/runtime discovery snapshot for this session (buildSessionDiscoverySnapshot) */
+  },
   "events": [
     {
       "type": "runtime.started",
-      "requestId": "req-001",
-      "traceId": "trace-001",
+      "requestId": "",
+      "traceId": "8f1c2d3e-…",
       "sessionId": "mistport-a1b2c3d4",
       "turnId": "turn-001",
-      "flowId": "flow-001",
+      "flowId": "8f1c2d3e-…",
       "seq": 0,
       "timestamp": "2025-01-15T10:00:00.000Z",
       "payload": {}
@@ -2654,6 +2657,12 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
   ]
 }
 ```
+
+- `discovery` — top-level plugin/runtime discovery snapshot (same shape the
+  `/debug` page consumes); present on both trace endpoints.
+- `flowId` equals `traceId` for the event (protocol.md `flowId = traceId`).
+- `requestId` is reserved and currently emitted as `""` (no per-turn request id
+  is threaded yet).
 
 #### `GET /api/traces/:sessionId/turns`
 
@@ -2665,11 +2674,14 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
 {
   "sessionId": "mistport-a1b2c3d4",
   "turnCount": 3,
+  "discovery": {
+    /* plugin/runtime discovery snapshot (same as /api/traces/:sessionId) */
+  },
   "turns": [
     {
       "turnId": "turn-001",
-      "flowId": "flow-001",
-      "traceId": "trace-001",
+      "flowId": "8f1c2d3e-…",
+      "traceId": "8f1c2d3e-…",
       "startedAt": "2025-01-15T10:00:00.000Z",
       "completedAt": "2025-01-15T10:00:05.000Z",
       "eventCount": 12,

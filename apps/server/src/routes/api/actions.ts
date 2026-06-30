@@ -317,11 +317,15 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
 
       // Per-turn trace emitter — fans emit() into trace_events + eventBus. Threaded
       // down into ToolCallContext / llm-retry / hooks etc. via executeTurn deps.
+      // Pass the SSE envelope's traceId so persisted trace_events.traceId matches
+      // the live-streamed traceId/flowId (without it the emitter falls back to
+      // turnId, breaking traceId correlation between SSE and /api/traces).
       const emitter = createTurnEmitter({
         store,
         eventBus,
         sessionId,
         turnId,
+        traceId,
       });
 
       // NOTE: Session `phase` is no longer a first-class field. The state
