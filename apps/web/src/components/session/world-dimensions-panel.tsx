@@ -17,22 +17,8 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
-import type { WorldDimensions, I18nText } from "@covel/shared";
-import i18n from "@/i18n/index.js";
-
-function text(v: I18nText | undefined): string {
-  if (!v) return "";
-  if (typeof v === "string") return v;
-  const lang = i18n.language;
-  if (lang) {
-    const r = v as Record<string, string>;
-    if (r[lang]) return r[lang];
-    const prefix = lang.split("-")[0];
-    const fallback = Object.keys(r).find((k) => k.startsWith(prefix));
-    if (fallback) return r[fallback];
-  }
-  return Object.values(v)[0] ?? "";
-}
+import type { WorldDimensions } from "@covel/shared";
+import { text } from "@/components/world/editor-helpers.js";
 
 function Section({
   title,
