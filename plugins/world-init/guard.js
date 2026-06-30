@@ -22,75 +22,87 @@
  */
 function deriveSchema(dimensions) {
   /** @type {Array<Record<string, unknown>>} */
+  // Attribute name/description are I18nText ({ "zh-CN", "en-US" }) so the
+  // display layer resolves them per session locale (character-schema.ts types
+  // them as I18nText). Worlds with declared characterAttributes override this.
   const attrs = [
     {
       id: "hp",
-      name: "生命值",
+      name: { "zh-CN": "生命值", "en-US": "Health" },
       type: "number",
       min: 0,
       max: 100,
       defaultValue: 100,
       category: "stats",
-      description: "当前生命值",
+      description: { "zh-CN": "当前生命值", "en-US": "Current health" },
     },
     {
       id: "stamina",
-      name: "体力",
+      name: { "zh-CN": "体力", "en-US": "Stamina" },
       type: "number",
       min: 0,
       max: 100,
       defaultValue: 100,
       category: "stats",
-      description: "行动耐力",
+      description: { "zh-CN": "行动耐力", "en-US": "Action endurance" },
     },
     {
       id: "name",
-      name: "姓名",
+      name: { "zh-CN": "姓名", "en-US": "Name" },
       type: "string",
       category: "bio",
-      description: "角色名称",
+      description: { "zh-CN": "角色名称", "en-US": "Character name" },
     },
     {
       id: "background",
-      name: "背景",
+      name: { "zh-CN": "背景", "en-US": "Background" },
       type: "string",
       category: "bio",
-      description: "出身与经历",
+      description: { "zh-CN": "出身与经历", "en-US": "Origin and history" },
     },
     {
       id: "occupation",
-      name: "职业",
+      name: { "zh-CN": "职业", "en-US": "Occupation" },
       type: "string",
       category: "bio",
-      description: "当前职业或身份",
+      description: {
+        "zh-CN": "当前职业或身份",
+        "en-US": "Current occupation or identity",
+      },
     },
     {
       id: "reputation",
-      name: "声望",
+      name: { "zh-CN": "声望", "en-US": "Reputation" },
       type: "number",
       min: -100,
       max: 100,
       defaultValue: 0,
       category: "social",
-      description: "社会评价",
+      description: { "zh-CN": "社会评价", "en-US": "Social standing" },
     },
     {
       id: "skills",
-      name: "技能",
+      name: { "zh-CN": "技能", "en-US": "Skills" },
       type: "array",
       itemType: "string",
       category: "abilities",
       defaultValue: [],
-      description: "掌握的技能列表",
+      description: {
+        "zh-CN": "掌握的技能列表",
+        "en-US": "List of learned skills",
+      },
     },
     {
       id: "traits",
-      name: "特征",
+      name: { "zh-CN": "特征", "en-US": "Traits" },
       type: "array",
       itemType: "string",
       category: "abilities",
       defaultValue: [],
-      description: "性格/身体特征",
+      description: {
+        "zh-CN": "性格/身体特征",
+        "en-US": "Personality and physical traits",
+      },
     },
   ];
 
@@ -114,7 +126,7 @@ function deriveSchema(dimensions) {
   } else {
     attrs.push({
       id: "gold",
-      name: "金币",
+      name: { "zh-CN": "金币", "en-US": "Gold" },
       type: "number",
       min: 0,
       defaultValue: 0,
@@ -155,8 +167,21 @@ function deriveSchema(dimensions) {
   return attrs;
 }
 
+/**
+ * Pick a string for the session locale (prefix match), defaulting to English.
+ * The [系统] narrative lines are written into the story at runtime, so the
+ * guard resolves them via ctx.locale instead of emitting fixed Chinese.
+ * @param {string | undefined} locale
+ * @param {string} zh
+ * @param {string} en
+ */
+function pick(locale, zh, en) {
+  const lang = typeof locale === "string" ? locale.split("-")[0] : "";
+  return lang === "zh" ? zh : en;
+}
+
 export default async function guard(ctx) {
-  const { sessionId, store, pluginId } = ctx;
+  const { sessionId, store, pluginId, locale } = ctx;
   const s = /** @type {any} */ (store);
 
   try {
@@ -171,7 +196,11 @@ export default async function guard(ctx) {
           initialized: true,
           schemaCount: existing.length,
           entryCount: entries?.length ?? 0,
-          narrativeOutput: `[系统] 世界维度数据已加载（${existing.length} 个 schema, ${entries?.length ?? 0} 个词条）`,
+          narrativeOutput: pick(
+            locale,
+            `[系统] 世界维度数据已加载（${existing.length} 个 schema, ${entries?.length ?? 0} 个词条）`,
+            `[System] World dimension data loaded (${existing.length} schema, ${entries?.length ?? 0} entries)`,
+          ),
           preGameDone: true,
         };
       }
@@ -226,7 +255,11 @@ export default async function guard(ctx) {
         importedDimensions: entryRecords.length > 0,
         entryCount: entryRecords.length,
         schemaCount: declaredAttributes.length,
-        narrativeOutput: `[系统] 从世界包导入角色属性 Schema（${declaredAttributes.length} 个属性${entryRecords.length ? `，${entryRecords.length} 个维度词条` : ""}）`,
+        narrativeOutput: pick(
+          locale,
+          `[系统] 从世界包导入角色属性 Schema（${declaredAttributes.length} 个属性${entryRecords.length ? `，${entryRecords.length} 个维度词条` : ""}）`,
+          `[System] Imported character attribute schema from world package (${declaredAttributes.length} attributes${entryRecords.length ? `, ${entryRecords.length} dimension entries` : ""})`,
+        ),
         preGameDone: true,
       };
     }
@@ -306,7 +339,11 @@ export default async function guard(ctx) {
           reusedFrom: bestReuse.prev.id,
           schemaCount: bestReuse.prevSchema.length,
           entryCount: bestReuse.prevEntries.length,
-          narrativeOutput: `[系统] 从历史会话复用世界维度数据（${bestReuse.prevSchema.length} 个 schema, ${bestReuse.prevEntries.length} 个词条）`,
+          narrativeOutput: pick(
+            locale,
+            `[系统] 从历史会话复用世界维度数据（${bestReuse.prevSchema.length} 个 schema, ${bestReuse.prevEntries.length} 个词条）`,
+            `[System] Reused world dimension data from a prior session (${bestReuse.prevSchema.length} schema, ${bestReuse.prevEntries.length} entries)`,
+          ),
           preGameDone: true,
         };
       }
@@ -357,7 +394,11 @@ export default async function guard(ctx) {
           importedDimensions: true,
           entryCount: entryRecords.length,
           schemaCount: attributes.length,
-          narrativeOutput: `[系统] 从世界包全量导入：${entryRecords.length} 个维度词条，${attributes.length} 个角色属性`,
+          narrativeOutput: pick(
+            locale,
+            `[系统] 从世界包全量导入：${entryRecords.length} 个维度词条，${attributes.length} 个角色属性`,
+            `[System] Full import from world package: ${entryRecords.length} dimension entries, ${attributes.length} character attributes`,
+          ),
           preGameDone: true,
         };
       }

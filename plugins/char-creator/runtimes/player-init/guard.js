@@ -3,6 +3,19 @@ import { mergeSchemaDefaults, mirrorCharacterToPluginData } from "@covel/tools";
 const CHARACTER_PLUGIN_ID = "char-creator";
 
 /**
+ * Pick a string for the session locale (prefix match), defaulting to English.
+ * The narrative line is written into the story at runtime, so the guard
+ * resolves it via ctx.locale instead of emitting a fixed-language string.
+ * @param {string | undefined} locale
+ * @param {string} zh
+ * @param {string} en
+ */
+function pick(locale, zh, en) {
+  const lang = typeof locale === "string" ? locale.split("-")[0] : "";
+  return lang === "zh" ? zh : en;
+}
+
+/**
  * guard.js — Pre-execution gate for player-init runtime.
  *
  * Three branches:
@@ -21,7 +34,7 @@ const CHARACTER_PLUGIN_ID = "char-creator";
  * @returns {Promise<Record<string, unknown>>}
  */
 export default async function guard(ctx) {
-  const { logger, sessionId, store } = ctx;
+  const { logger, sessionId, store, locale } = ctx;
   const s = /** @type {any} */ (store);
 
   try {
@@ -89,7 +102,11 @@ export default async function guard(ctx) {
             playerExists: true,
             playerId: id,
             playerName: name,
-            narrativeOutput: `[系统] 已登记弟子 ${name}，宗门生活即将开始……`,
+            narrativeOutput: pick(
+              locale,
+              `[系统] 已创建角色 ${name}，冒险即将开始……`,
+              `[System] Character ${name} created — your adventure is about to begin…`,
+            ),
             preGameDone: true,
           };
         } catch (err) {
