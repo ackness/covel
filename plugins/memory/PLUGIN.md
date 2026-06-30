@@ -28,8 +28,8 @@ memoryBlocks:
     displayName: { zh: 角色关系, en: Character Relationships }
     icon: Users
     extractionHint:
-      zh: 关键角色与玩家之间的关系状态、态度变化、重要互动与承诺。
-      en: Key characters' relationships with the player, attitude shifts, important interactions and commitments.
+      zh: 主角（玩家）与关键角色之间的羁绊：好感、信任、压力、承诺与态度变化，以及对玩家的重要互动。只记录与玩家相关的关系；NPC 之间的结构性关系由关系图谱（npc-graph）负责，不在此重复。
+      en: The player character's bonds with key characters — affection, trust, pressure, promises, attitude shifts, and interactions toward the player. Track only player-centric bonds; NPC↔NPC structural relationships are owned by the relationship graph (npc-graph) and are not duplicated here.
   - label: scene
     displayName: { zh: 当前场景, en: Current Scene }
     icon: MapPin

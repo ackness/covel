@@ -256,6 +256,8 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 
 **职责**: 维护一张会话级的人物-关系图。从叙事文本中抽取 NPC 节点（individual / group / faction）、它们的关系（信任、结盟、欠债、背叛等）以及每条关系的自然语言事实，持久化到 `plugin_data` 的 `nodes`、`edges`、`index`、`meta` 四个 namespace。
 
+> **与 `memory.character_relationships` 的分工（不是重复）**：npc-graph 负责 **NPC↔NPC** 的结构化、带类型的有向图（玩家通常不是图中节点）；memory 的 `character_relationships` 块负责 **主角（玩家）↔NPC** 的散文式羁绊（好感 / 信任 / 承诺 / 态度）。两者抽取的是不同信号、互补存在——memory 的 extractionHint 已显式限定为「只记录与玩家相关的关系」，避免两套系统重复抽取同一信号。一次只合并（抑制其一）会丢失玩家中心的羁绊连续性，故保留两者、以边界澄清替代合并。
+
 **数据模型**（`packages/shared/src/types/npc-graph.ts`）:
 
 - `NpcNode`: `{id, name, aliases?, type, labels, summary ≤200 字符, firstSeenTurn, lastSeenTurn, attributes?}`
