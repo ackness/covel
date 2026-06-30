@@ -16,7 +16,6 @@ tags:
 trigger:
   type: scheduled
   interval: 1
-  cooldownTurns: 1
 upstreamRequired:
   - chat-mode-narrator
 input:

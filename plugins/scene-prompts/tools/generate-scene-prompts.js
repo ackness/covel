@@ -80,11 +80,6 @@ export default function ({ tool, z }) {
           },
           {
             namespace: "message",
-            key: `prompt${slot}Kind`,
-            value: prompt?.kind ?? "",
-          },
-          {
-            namespace: "message",
             key: `prompt${slot}Label`,
             value: prompt?.label ?? "",
           },

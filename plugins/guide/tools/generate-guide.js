@@ -36,9 +36,11 @@ export default function ({ tool, z }) {
       topic: z.string().min(1).describe("当前决策点的简要描述"),
       categories: z
         .array(categorySchema)
+        // Capped at 3: the message block has exactly 3 strategy slots and the
+        // handler slices to 3, so a 4th category would be silently dropped.
         .min(2)
-        .max(4)
-        .describe("2-4 个风格分类，每个包含 1-3 个建议"),
+        .max(3)
+        .describe("2-3 个风格分类，每个包含 1-3 个建议"),
     }),
     execute: async (params, context) => {
       const { topic, categories } = params;

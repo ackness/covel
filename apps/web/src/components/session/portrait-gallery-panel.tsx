@@ -14,6 +14,8 @@ interface PresenceRecord {
   readonly characterId?: string;
   readonly displayName?: string;
   readonly avatar?: unknown;
+  /** Optional full-body 立绘; rendered in preference to avatar when present. */
+  readonly sprite?: unknown;
 }
 
 interface PresenceEntry {
@@ -100,9 +102,14 @@ export function PortraitGalleryPanel({ pluginId }: { pluginId: string }) {
       </p>
       <div className="grid grid-cols-3 gap-2">
         {entries.map((entry) => {
-          const ref = isMediaRef(entry.value.avatar)
-            ? entry.value.avatar
-            : null;
+          // Prefer the dedicated full-body 立绘 (sprite) when a world ships one,
+          // else fall back to the avatar — so the panel's "立绘" name is truthful
+          // and the sprite field a world may provide is actually rendered.
+          const ref = isMediaRef(entry.value.sprite)
+            ? entry.value.sprite
+            : isMediaRef(entry.value.avatar)
+              ? entry.value.avatar
+              : null;
           const busy = uploadingKey === entry.key;
           return (
             <div key={entry.key} className="space-y-1">
