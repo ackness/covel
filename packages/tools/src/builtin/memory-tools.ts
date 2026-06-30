@@ -182,8 +182,11 @@ export function createMemoryTools(deps: MemoryToolDeps): ToolModule[] {
   );
 
   // ── memory-update-block ───────────────────────────────────────
-  // Restricted: only runtimes with 'memory-write' capability can use this.
-  // The tool scoping system handles access control.
+  // Unrestricted builtin write tool: per the framework's tool-scoping model
+  // (builtin = available to every plugin, local = declaring plugin only) there
+  // is no capability-gated builtin tier. A runtime gets this tool by listing it
+  // in `tools.builtin`; access is opt-in but not capability-checked. See
+  // docs/reference/tools.md.
   tools.push(
     tool({
       name: "memory-update-block",
