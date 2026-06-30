@@ -8,10 +8,24 @@
  * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
  * @returns {Promise<Record<string, unknown>>}
  */
-export default async function pregameHandler(ctx) {
-  const { sessionId, store } = ctx;
+/**
+ * Pick a string for the session locale (prefix match), defaulting to English.
+ * The welcome strings are written into notifications/narrative at runtime, so
+ * the handler resolves them here using ctx.locale instead of emitting a fixed
+ * language.
+ * @param {string | undefined} locale
+ * @param {string} zh
+ * @param {string} en
+ */
+function pick(locale, zh, en) {
+  const lang = typeof locale === "string" ? locale.split("-")[0] : "";
+  return lang === "zh" ? zh : en;
+}
 
-  let worldName = "未知世界";
+export default async function pregameHandler(ctx) {
+  const { sessionId, store, locale } = ctx;
+
+  let worldName = pick(locale, "未知世界", "Unknown World");
   let worldSummary = "";
 
   if (store && typeof store === "object") {
@@ -30,18 +44,35 @@ export default async function pregameHandler(ctx) {
     }
   }
 
+  const welcomeTitle = pick(
+    locale,
+    `🌍 欢迎来到${worldName}`,
+    `🌍 Welcome to ${worldName}`,
+  );
   const notifications = [
     {
       level: "info",
-      title: `🌍 欢迎来到${worldName}`,
-      message: worldSummary || "你的冒险即将开始...",
+      title: welcomeTitle,
+      message:
+        worldSummary ||
+        pick(
+          locale,
+          "你的冒险即将开始...",
+          "Your adventure is about to begin…",
+        ),
     },
   ];
 
+  const narrativeOutput = worldSummary
+    ? `【${worldName}】${worldSummary}`
+    : pick(
+        locale,
+        `游戏初始化完成，欢迎来到${worldName}。`,
+        `Game initialized. Welcome to ${worldName}.`,
+      );
+
   return {
-    narrativeOutput: worldSummary
-      ? `【${worldName}】${worldSummary}`
-      : `游戏初始化完成，欢迎来到${worldName}。`,
+    narrativeOutput,
     notifications,
     initialized: true,
     preGameDone: true,

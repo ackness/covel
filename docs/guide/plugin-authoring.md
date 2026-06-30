@@ -79,6 +79,14 @@ memoryBlocks:
 
 builtin `memory` 插件声明默认四块（`story_state` / `character_relationships` / `scene` / `player_profile`）。换一种游戏类型只需声明你自己的块，无需改动框架。字段规则（`label` / `displayName` / `extractionHint` / `icon` / `maxChars`）见 [plugins.md #memoryblocks核心记忆块](../reference/plugins.md#memoryblocks核心记忆块)。**世界包**也能在 `world.yaml` 顶层声明 `memoryBlocks`（按 session 合并到插件块之上），让题材专属的记忆维度随世界走——见 [world-data.md #世界记忆块memoryblocks](../reference/world-data.md#世界记忆块memoryblocks)。
 
+## 运行时文案的 i18n（重要）
+
+CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，**以及** 工具/hook handler `.js` 里 `label:` / `title:` / `placeholder:` 的裸 CJK 字面量。但工具/handler **写入 plugin_data 或 prompt 的运行时文案**仍需作者自觉处理，否则 en 会话会看到中文：
+
+- **写给前端展示的标签**（如徽标 label）：存成 `I18nText` 对象 `{ zh, en }`，前端的 `Badge`/`Text` 等组件经 `resolveI18n` 按 locale 解析。例：`scene-prompts` 的 `prompt{N}Label`、`guide` 的 `category{N}Label`。
+- **写给模型 / 通知的纯文本**（如 prompt 前言、欢迎通知）：用 `ctx.locale`（function runtime）或 hook payload 的 `locale` 在写入时解析成单一语言。例：`director` 的导演前言、`pregame` 的欢迎语。
+- **agent runtime 的 `PLUGIN.md` 正文**（agent skill prompt）按 locale 解析 `PLUGIN.<locale>.md` → `PLUGIN.md`。正文含 CJK 的 agent 插件应配套提供 `PLUGIN.en.md`（如 `narrator` / `chat-mode-narrator`），否则 en 会话喂给模型的是中文指令。
+
 ## 程序化发现能力
 
 第三方开发者和 AI Agent 可以先调用 discovery API，再决定该读哪份文档或写哪个字段：

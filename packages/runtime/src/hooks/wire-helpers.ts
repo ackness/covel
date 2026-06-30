@@ -271,6 +271,13 @@ export interface AssembledContextView {
    * the field a non-breaking addition.
    */
   readonly outputKind?: "story" | "plugin" | "system";
+  /**
+   * Resolved session locale for this turn. Surfaced so PostContextAssembly
+   * handlers that inject prose (e.g. a narration director's preamble) can
+   * localize it instead of hardcoding one language. Optional / non-breaking —
+   * absent when the caller does not supply it; handlers fall back to a default.
+   */
+  readonly locale?: string;
 }
 
 export interface PostContextAssemblyPayload extends AssembledContextView {

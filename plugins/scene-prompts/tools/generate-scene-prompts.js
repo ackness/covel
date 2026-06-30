@@ -1,10 +1,18 @@
 import { withPendingProposals } from "@covel/tools";
 
+// Labels are stored as I18nText into plugin_data so the Badge renderer resolves
+// them to the session locale (a bare zh string would render Chinese for en
+// players). The CI i18n gate doesn't scan tool-written values, so keep these
+// bilingual by hand.
 const KIND_CONFIG = {
-  observe: { label: "观察", icon: "eye", color: "blue" },
-  ask: { label: "追问", icon: "lightbulb", color: "purple" },
-  act: { label: "行动", icon: "zap", color: "green" },
-  social: { label: "交涉", icon: "user", color: "amber" },
+  observe: { label: { zh: "观察", en: "Observe" }, icon: "eye", color: "blue" },
+  ask: { label: { zh: "追问", en: "Ask" }, icon: "lightbulb", color: "purple" },
+  act: { label: { zh: "行动", en: "Act" }, icon: "zap", color: "green" },
+  social: {
+    label: { zh: "交涉", en: "Negotiate" },
+    icon: "user",
+    color: "amber",
+  },
 };
 
 function makePluginDataBatchProposal(context, items, timestamp) {

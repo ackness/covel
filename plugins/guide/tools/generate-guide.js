@@ -48,7 +48,11 @@ export default function ({ tool, z }) {
         return {
           slot: index + 1,
           style: cat.style,
-          label: cat.label ?? config.zh,
+          // Store an I18nText label so the block resolves it to the session
+          // locale. An LLM-supplied `cat.label` is a single string in the
+          // session language; otherwise fall back to the bilingual config
+          // (previously only the zh half was used → en players saw Chinese).
+          label: cat.label ?? { zh: config.zh, en: config.en },
           icon: config.icon,
           color: config.color,
           suggestions: cat.suggestions,

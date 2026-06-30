@@ -109,17 +109,8 @@ postHistory:
 
 {{ player.message }}
 
-## 活跃演员
-
-<active-cast>
-{{ inputs.scene-cast.scene-cast.activeCastContext }}
-</active-cast>
-
-## NPC 关系上下文
-
-<npc-relationships>
-{{ inputs.npc-graph.rag-retriever.npcContext }}
-</npc-relationships>
+<!-- <active-cast> 与 <npc-relationships> 由 input.inject（frontmatter）在 segment 5
+     自动追加，正文不再重复内联，避免每回合双份注入。下方写作规则直接引用这两个标签。 -->
 
 ## 用户设置
 

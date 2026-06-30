@@ -220,6 +220,7 @@ export async function executeAgentRuntime({
       systemPrompt: assembled.systemPrompt,
       messages: assembled.messages,
       outputKind: manifest.outputKind,
+      locale: input.locale,
     },
   );
 

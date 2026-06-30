@@ -78,9 +78,19 @@ function pathToString(pathStack) {
   return pathStack.length > 0 ? pathStack.join(".") : "(root)";
 }
 
+const SKIP_DIRS = new Set([
+  "node_modules",
+  "dist",
+  "build",
+  ".vendor",
+  "coverage",
+  ".git",
+]);
+
 function* walkFiles(dir) {
   if (!existsSync(dir)) return;
   for (const entry of readdirSync(dir).sort()) {
+    if (SKIP_DIRS.has(entry)) continue;
     const fullPath = join(dir, entry);
     const stat = statSync(fullPath);
     if (stat.isDirectory()) {
@@ -111,6 +121,44 @@ function isPluginMarkdownFile(rel) {
     (parts[0] === "plugins" || parts[0] === "templates") &&
     basename(rel) === "PLUGIN.md"
   );
+}
+
+function isPluginHandlerJsFile(rel) {
+  const parts = rel.split(sep);
+  if (parts[0] !== "plugins" && parts[0] !== "templates") return false;
+  if (!rel.endsWith(".js")) return false;
+  if (rel.endsWith(".test.js")) return false;
+  return true;
+}
+
+// A UI-label-ish object key assigned a bare quoted string literal. Catches
+// `label: "观察"` written into plugin_data by a tool/handler (which bypasses
+// the JSON/frontmatter scans above and renders untranslated for en players),
+// without matching I18nText objects (`label: { zh: … }` — the value starts with
+// `{`, not a quote) or prose constants (not a `label:` assignment).
+const HANDLER_LABEL_RE =
+  /\b(label|title|placeholder|tooltip)\s*:\s*(["'`])((?:(?!\2).)*)\2/g;
+
+function checkHandlerJsFiles() {
+  const files = collectFiles(isPluginHandlerJsFile);
+  let totalViolations = 0;
+
+  for (const rel of files) {
+    const text = readFileSync(resolve(REPO_ROOT, rel), "utf8");
+    HANDLER_LABEL_RE.lastIndex = 0;
+    let match;
+    while ((match = HANDLER_LABEL_RE.exec(text)) !== null) {
+      const key = match[1];
+      const literal = match[3];
+      if (!CJK_REGEX.test(literal)) continue;
+      totalViolations += 1;
+      console.error(
+        `${rel}: \`${key}: "${literal.slice(0, 60)}"\` is a bare-CJK display label written from a handler - store it as an I18nText object { zh, en } so the frontend resolves the locale.`,
+      );
+    }
+  }
+
+  return { files, totalViolations };
 }
 
 function collectFiles(predicate) {
@@ -302,16 +350,19 @@ function checkPluginMarkdownFiles() {
 
 const jsonResult = checkJsonFiles();
 const pluginMdResult = checkPluginMarkdownFiles();
+const handlerJsResult = checkHandlerJsFiles();
 const totalViolations =
-  jsonResult.totalViolations + pluginMdResult.totalViolations;
+  jsonResult.totalViolations +
+  pluginMdResult.totalViolations +
+  handlerJsResult.totalViolations;
 
 if (totalViolations > 0) {
   console.error(
-    `\ncheck-plugin-i18n: ${totalViolations} violation(s) across ${jsonResult.files.length} plugin/template UI file(s) and ${pluginMdResult.files.length} PLUGIN.md file(s)`,
+    `\ncheck-plugin-i18n: ${totalViolations} violation(s) across ${jsonResult.files.length} plugin/template UI file(s), ${pluginMdResult.files.length} PLUGIN.md file(s), and ${handlerJsResult.files.length} handler .js file(s)`,
   );
   process.exit(1);
 }
 
 console.log(
-  `check-plugin-i18n: OK (${jsonResult.files.length} plugin/template UI file(s), ${pluginMdResult.files.length} PLUGIN.md file(s) scanned)`,
+  `check-plugin-i18n: OK (${jsonResult.files.length} plugin/template UI file(s), ${pluginMdResult.files.length} PLUGIN.md file(s), ${handlerJsResult.files.length} handler .js file(s) scanned)`,
 );
