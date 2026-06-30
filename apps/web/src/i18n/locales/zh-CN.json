@@ -1109,6 +1109,7 @@
     "send": "发送",
     "accept": "采纳",
     "regenerate": "重新生成",
+    "regenerateHint": "点「重新生成」获取这条回复的其他说法。",
     "jobSubmitted": "已提交 branch-reply 任务: {{jobId}}",
     "approvalRequired": "Branch reply 操作需要授权。",
     "actionFailed": "Branch reply 操作失败"

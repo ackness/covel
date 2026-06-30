@@ -306,6 +306,8 @@ ui:
     - ./ui/action-guide-block.json
 ```
 
+> **Bootstrap 注意（重要）**：`ui.message` block 只有在其声明的 `message` namespace 被写入数据后才会渲染。因此一个**只能由 block 内部按钮触发的纯手动写入者无法自举**——首屏没有数据，block 不出现，按钮也就永远点不到（典型死锁：`branch-reply` 早期即如此完全不显示）。让 block 首次出现的写入必须来自一个**非手动**路径：`scheduled` / `auto` runtime（读取叙事引擎输出后播种）、上游 runtime 的 `plugin.data` 提案，或 world-data 导入。`branch-reply` 用 `trigger: auto`（priority 700，叙事引擎之后）播种 candidate[0]，详见 [plugins.md#branch-reply](./plugins.md#branch-reply)。
+
 ### 表单提交流程
 
 ```

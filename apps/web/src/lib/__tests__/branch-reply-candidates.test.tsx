@@ -122,10 +122,29 @@ describe("BranchReplyCandidates", () => {
           action: "createCandidates",
           turnId: "turn-42",
           baseText: "Ask about the sealed door.",
-          count: 2,
+          count: 3,
         },
       });
     });
+  });
+
+  it("does not re-render the seeded original as a card (no duplicate reply)", () => {
+    renderBranchReply({
+      turnId: "turn-7",
+      candidates: [
+        {
+          id: "turn-7-candidate-1",
+          text: "The seeded narrator reply text.",
+          source: "original",
+        },
+      ],
+    });
+
+    // The original IS the narrative message above — it must NOT appear as a
+    // candidate card here. Regenerate stays available; the hint is shown.
+    expect(screen.queryByText("The seeded narrator reply text.")).toBeNull();
+    expect(screen.getByRole("button", { name: "Regenerate" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
   });
 
   it("disables runtime actions when the message state has no turn id", () => {

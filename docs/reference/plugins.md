@@ -82,29 +82,29 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 
 ## 概览
 
-| ID                             | 类型        | 优先级 | 触发方式                                  | 模型 slot | 描述                                                                                        |
-| ------------------------------ | ----------- | ------ | ----------------------------------------- | --------- | ------------------------------------------------------------------------------------------- |
-| pregame                        | core-plugin | 10     | scheduled（仅首轮）                       | —         | 游戏初始化（function runtime）                                                              |
-| world-init/schema-gen          | core-plugin | 40     | scheduled（仅首轮）                       | `plugin`  | 世界维度初始化（guard + agent，Pre-Game 第二步）                                            |
-| char-creator/player-init       | core-plugin | 50     | auto（guard 门控）                        | `plugin`  | 玩家角色创建（agent runtime；依赖 schema-gen 写出的 worldSchema）                           |
-| npc-graph/rag-retriever        | plugin      | 400    | scheduled（interval=1，function runtime） | —         | Narrator-prep 层：NPC 图谱结构化检索器，向 narrator 注入相关关系事实                        |
-| scene-cast                     | plugin      | 450    | scheduled（interval=1，function）         | —         | Narrator-prep 层：对话模式当前场景演员，注入 `activeCastContext`                            |
-| narrator                       | core-plugin | 500    | auto                                      | `story`   | Narrator 层：主叙事生成器                                                                   |
-| chat-mode-narrator             | plugin      | 500    | auto                                      | `story`   | Narrator 层：对话 / GalGame 模式叙事器（`conflicts: narrator`，`requires` 场景/角色子系统） |
-| guide                          | plugin      | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：行动引导 + 聊天内建议面                                             |
-| codex                          | plugin      | 600    | auto（每轮，紧跟 narrator 之后）          | `plugin`  | Narrator-downstream 层：知识图鉴系统（agent runtime）                                       |
-| npc-graph/extractor            | plugin      | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：NPC 关系图抽取器                                                    |
-| char-creator/character-tracker | core-plugin | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：NPC 发现 + 角色状态跟踪                                             |
-| scene-prompts                  | plugin      | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：对话模式玩家口吻短回复                                              |
-| character-blueprint            | plugin      | —      | manual（按需 / world-data 导入）          | —         | 可复用角色蓝图；`dataSchemas` blueprints/characters 接收世界导入                            |
-| character-presence             | plugin      | —      | manual（按需 / world-data 导入）          | —         | 角色头像 / 立绘 / 语音媒体；`dataSchemas` presence/assets                                   |
-| player-identity                | plugin      | —      | manual（按需）                            | —         | 玩家人设（`persona-provider`，注入 activePersona）                                          |
-| living-world-rules             | plugin      | —      | manual（按需 / world-data 导入）          | —         | 长期世界规则 → `lorebook.upsert` 注入叙事；`dataSchemas` rules                              |
-| branch-reply                   | plugin      | —      | manual（按需）                            | —         | 回复候选 + `prompt-history-rewriter`（投影历史折叠已采纳回合）                              |
-| memory                         | core-plugin | —      | UI-only（无 runtime）                     | —         | 长期记忆摘要面板 + 通过 `memoryBlocks` 声明默认核心记忆块（剧情/角色关系/场景/玩家状态）    |
-| cost-gate                      | plugin      | —      | hook-only（opt-in，默认禁用）             | —         | 跨切面：每会话 token 预算门控（hooks：PostLLMResponse/PreSchedule/TurnStart/SessionEnd）    |
-| director                       | plugin      | —      | hook-only（opt-in，默认禁用）             | —         | 跨切面：用 PostContextAssembly 给本局所有 story runtime 统一注入导演前言                    |
-| story-guard                    | plugin      | —      | hook-only（opt-in，默认禁用）             | —         | 跨切面：故事文本红线净化（PostLLMResponse）+ 高危工具拦截（PreToolUse）                     |
+| ID                             | 类型        | 优先级 | 触发方式                                  | 模型 slot | 描述                                                                                           |
+| ------------------------------ | ----------- | ------ | ----------------------------------------- | --------- | ---------------------------------------------------------------------------------------------- |
+| pregame                        | core-plugin | 10     | scheduled（仅首轮）                       | —         | 游戏初始化（function runtime）                                                                 |
+| world-init/schema-gen          | core-plugin | 40     | scheduled（仅首轮）                       | `plugin`  | 世界维度初始化（guard + agent，Pre-Game 第二步）                                               |
+| char-creator/player-init       | core-plugin | 50     | auto（guard 门控）                        | `plugin`  | 玩家角色创建（agent runtime；依赖 schema-gen 写出的 worldSchema）                              |
+| npc-graph/rag-retriever        | plugin      | 400    | scheduled（interval=1，function runtime） | —         | Narrator-prep 层：NPC 图谱结构化检索器，向 narrator 注入相关关系事实                           |
+| scene-cast                     | plugin      | 450    | scheduled（interval=1，function）         | —         | Narrator-prep 层：对话模式当前场景演员，注入 `activeCastContext`                               |
+| narrator                       | core-plugin | 500    | auto                                      | `story`   | Narrator 层：主叙事生成器                                                                      |
+| chat-mode-narrator             | plugin      | 500    | auto                                      | `story`   | Narrator 层：对话 / GalGame 模式叙事器（`conflicts: narrator`，`requires` 场景/角色子系统）    |
+| guide                          | plugin      | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：行动引导 + 聊天内建议面                                                |
+| codex                          | plugin      | 600    | auto（每轮，紧跟 narrator 之后）          | `plugin`  | Narrator-downstream 层：知识图鉴系统（agent runtime）                                          |
+| npc-graph/extractor            | plugin      | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：NPC 关系图抽取器                                                       |
+| char-creator/character-tracker | core-plugin | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：NPC 发现 + 角色状态跟踪                                                |
+| scene-prompts                  | plugin      | 600    | scheduled（interval=1, cooldown=1）       | `plugin`  | Narrator-downstream 层：对话模式玩家口吻短回复                                                 |
+| character-blueprint            | plugin      | —      | manual（按需 / world-data 导入）          | —         | 可复用角色蓝图；`dataSchemas` blueprints/characters 接收世界导入                               |
+| character-presence             | plugin      | —      | manual（按需 / world-data 导入）          | —         | 角色头像 / 立绘 / 语音媒体；`dataSchemas` presence/assets                                      |
+| player-identity                | plugin      | —      | manual（按需）                            | —         | 玩家人设（`persona-provider`，注入 activePersona）                                             |
+| living-world-rules             | plugin      | —      | manual（按需 / world-data 导入）          | —         | 长期世界规则 → `lorebook.upsert` 注入叙事；`dataSchemas` rules                                 |
+| branch-reply                   | plugin      | 700    | auto（每回合播种）+ manual（重生成/采纳） | `system`  | 回复候选 + `prompt-history-rewriter`（自动播种叙事原文，重生成走 LLM；投影历史折叠已采纳回合） |
+| memory                         | core-plugin | —      | UI-only（无 runtime）                     | —         | 长期记忆摘要面板 + 通过 `memoryBlocks` 声明默认核心记忆块（剧情/角色关系/场景/玩家状态）       |
+| cost-gate                      | plugin      | —      | hook-only（opt-in，默认禁用）             | —         | 跨切面：每会话 token 预算门控（hooks：PostLLMResponse/PreSchedule/TurnStart/SessionEnd）       |
+| director                       | plugin      | —      | hook-only（opt-in，默认禁用）             | —         | 跨切面：用 PostContextAssembly 给本局所有 story runtime 统一注入导演前言                       |
+| story-guard                    | plugin      | —      | hook-only（opt-in，默认禁用）             | —         | 跨切面：故事文本红线净化（PostLLMResponse）+ 高危工具拦截（PreToolUse）                        |
 
 ---
 
@@ -669,13 +669,18 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 
 **路径**: `plugins/branch-reply/`
 
-| 字段         | 值                                        |
-| ------------ | ----------------------------------------- |
-| pluginType   | `plugin`                                  |
-| runtimeType  | `function`，`trigger: manual`             |
-| outputKind   | `system`                                  |
-| capabilities | `[branch-reply, prompt-history-rewriter]` |
-| ui.message   | `branch-reply-block.json`                 |
+| 字段         | 值                                           |
+| ------------ | -------------------------------------------- |
+| pluginType   | `plugin`                                     |
+| runtimeType  | `function`，`trigger: auto`，`priority: 700` |
+| outputKind   | `system`                                     |
+| capabilities | `[branch-reply, prompt-history-rewriter]`    |
+| ui.message   | `branch-reply-block.json`                    |
+
+**生命周期（两条路径，按 `manualPayload` 是否存在区分）**：
+
+1. **自动播种（seed，无 `manualPayload`）**：作为 `trigger: auto`、`priority: 700` 的 runtime，每个故事回合在叙事引擎（priority 500）之后运行，从 `ctx.completedResults` 读取**当前激活叙事引擎**的 `narrativeOutput`，把它作为 candidate[0]（"原文"）写入 `message`/`turns` namespace。发现方式**与引擎无关**：按 `narrativeOutput` 非空这一叙事契约识别（系统类 runtime 的 narrative 会被抑制为空），**不硬编码任何叙事插件 id**，因此 `narrator` 与 `chat-mode-narrator` 通用。播种**按 `turnId` 幂等**（不会重复播种），空回合 / 系统回合不播种。这是该 block 能出现的前提——`ui.message` block 只有在其 `message` namespace 被写入后才渲染，纯手动写入者无法自举（这是它此前完全不显示的根因）。
+2. **手动动作（`manualPayload` 存在，经 plugin-rpc）**：`createCandidates` / `acceptCandidate`。其中 `createCandidates`（前端"重生成"按钮）通过 `ctx.gateway` 调用**快速文本 slot** 生成 1-2 条同一剧情节拍的真实改写（语言跟随 `ctx.locale` 与原文）；当宿主无 gateway / 无 slot 或调用失败时，仅返回原文，**绝不编造英文填充近似句**。
 
 **职责**：`buildProjectedPromptHistory` 读其 `turns` namespace，把采纳的备选回合折叠进投影历史；未发现时历史原样透传。
 

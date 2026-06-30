@@ -1109,6 +1109,7 @@
     "send": "Send",
     "accept": "Accept",
     "regenerate": "Regenerate",
+    "regenerateHint": "Tap Regenerate for alternative phrasings of this reply.",
     "jobSubmitted": "Submitted branch-reply job: {{jobId}}",
     "approvalRequired": "Branch reply action requires approval.",
     "actionFailed": "Branch reply action failed"
