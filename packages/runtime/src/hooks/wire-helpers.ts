@@ -293,6 +293,7 @@ export async function runPostContextAssemblyHook(
     systemPrompt: assembled.systemPrompt,
     messages: assembled.messages,
     outputKind: assembled.outputKind,
+    locale: assembled.locale,
     pluginId: opts.pluginId,
     runtimeId: opts.runtimeId,
   };
@@ -306,6 +307,7 @@ export async function runPostContextAssemblyHook(
       systemPrompt: replace.systemPrompt ?? assembled.systemPrompt,
       messages: replace.messages ?? assembled.messages,
       outputKind: assembled.outputKind,
+      locale: assembled.locale,
     };
   }
   return assembled;

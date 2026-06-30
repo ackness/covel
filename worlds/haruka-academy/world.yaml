@@ -44,7 +44,10 @@ pluginSettings:
   chat-mode-narrator:
     dialogueRatio: 80
     proseLength: short
+  scene-cast:
     # 8-character ensemble — keep 2 speakers on stage per beat for intimate focus.
+    # Declared on scene-cast (which enforces cast size); a chat-mode-narrator
+    # key here would be orphaned since the knob lives on scene-cast now.
     activeSpeakerCount: 2
 # World-authored core-memory blocks for a dialogue / slice-of-life romance.
 # Merged on top of plugin/framework blocks for this world's sessions only, so a
