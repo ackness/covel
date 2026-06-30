@@ -9,11 +9,6 @@
     "en": "Rules"
   },
   "icon": "book-marked",
-  "group": "chat-mode",
-  "groupLabel": {
-    "zh": "对话",
-    "en": "Chat Mode"
-  },
   "groupOrder": 430,
   "dataSource": { "namespace": "rules" },
   "alwaysRender": true,

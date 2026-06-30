@@ -9,11 +9,6 @@
     "en": "Voice"
   },
   "icon": "user-round-cog",
-  "group": "chat-mode",
-  "groupLabel": {
-    "zh": "对话",
-    "en": "Chat Mode"
-  },
   "groupOrder": 440,
   "dataSource": { "namespace": "profiles" },
   "alwaysRender": true,

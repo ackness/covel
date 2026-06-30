@@ -26,7 +26,6 @@ recommendedPlugins:
   - npc-graph
   - player-identity
   - living-world-rules
-  - character-blueprint
   - character-presence
   - cost-gate
 excludedPlugins:

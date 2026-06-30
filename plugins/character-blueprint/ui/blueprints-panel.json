@@ -9,11 +9,6 @@
     "en": "Presets"
   },
   "icon": "id-card",
-  "group": "chat-mode",
-  "groupLabel": {
-    "zh": "对话",
-    "en": "Chat Mode"
-  },
   "groupOrder": 450,
   "dataSource": { "namespace": "blueprints" },
   "alwaysRender": true,
