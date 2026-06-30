@@ -75,7 +75,16 @@ export function buildWorldContextView(input: BuildViewInput): WorldContextView {
     tone,
     openingScenario,
     dimensions,
-    schema: input.schemaMap,
+    // Localize i18n leaves in the schema too (e.g. attribute `name` /
+    // `description` records) so prompt-injected `<world-schema>` shows one
+    // language, mirroring how dimensions are resolved above.
+    schema:
+      input.schemaMap !== undefined
+        ? (resolveI18nDeep(input.schemaMap, input.locale) as Record<
+            string,
+            unknown
+          >)
+        : undefined,
     entries: entriesArray,
     extra,
   };

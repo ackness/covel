@@ -11,6 +11,8 @@
  * Stored in plugin_data: (sessionId, worldDataPluginId, 'schema', 'character-attributes')
  */
 
+import type { I18nText } from "./world.js";
+
 // ── Field types ─────────────────────────────────────────────────
 
 /**
@@ -45,8 +47,12 @@ export type AttributeCategory =
 export interface AttributeDefinition {
   /** Machine key used in CharacterRecord.fields, e.g. "hp", "lingGen". */
   readonly id: string;
-  /** Human-readable display name (locale-aware). */
-  readonly name: string;
+  /**
+   * Human-readable display name. Either a plain string or an i18n record
+   * (`{ "zh-CN": "门派", "en-US": "Faction" }`) so a world can ship bilingual
+   * labels; resolve via `resolveI18nText(name, locale)` at display time.
+   */
+  readonly name: I18nText;
   /** Value type. */
   readonly type: AttributeFieldType;
   /** Minimum value (number type). */
@@ -71,8 +77,8 @@ export interface AttributeDefinition {
   readonly valueType?: "string" | "number" | "boolean";
   /** Grouping category for UI rendering and context organization. */
   readonly category: AttributeCategory;
-  /** Optional description of this attribute. */
-  readonly description?: string;
+  /** Optional description of this attribute (plain string or i18n record). */
+  readonly description?: I18nText;
 }
 
 // ── Full schema ─────────────────────────────────────────────────

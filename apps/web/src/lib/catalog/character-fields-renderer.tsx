@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
+import { resolveI18nText } from "@covel/shared";
 import { useCharacterAttributeSchema } from "@/stores/plugin-data-store.js";
 import { renderJsonValue } from "./core-renderers.js";
 import { resolveIcon } from "./helpers.js";
@@ -24,7 +25,8 @@ type CatId = "stats" | "bio" | "abilities" | "equipment" | "social";
 
 interface AttrDefLite {
   readonly id: string;
-  readonly name?: string;
+  /** Plain string or i18n record (`{ "zh-CN": …, "en-US": … }`). */
+  readonly name?: string | Readonly<Record<string, string>>;
   readonly type: AttributeFieldType;
   readonly min?: number;
   readonly max?: number;
@@ -115,7 +117,8 @@ function AttributeProgressBar({
 }
 
 function AttributeRow({ attr, value }: { attr: AttrDefLite; value: unknown }) {
-  const label = attr.name?.trim() || attr.id;
+  const { i18n } = useTranslation();
+  const label = resolveI18nText(attr.name, i18n.language)?.trim() || attr.id;
 
   if (
     attr.type === "number" &&

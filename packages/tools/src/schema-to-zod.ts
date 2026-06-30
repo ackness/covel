@@ -15,9 +15,10 @@
  */
 
 import { z, type ZodType } from "zod";
-import type {
-  AttributeDefinition,
-  CharacterAttributeSchema,
+import {
+  resolveI18nText,
+  type AttributeDefinition,
+  type CharacterAttributeSchema,
 } from "@covel/shared";
 
 /**
@@ -112,7 +113,9 @@ function attributeToZod(attr: AttributeDefinition): ZodType {
  * description itself is the primary source for longer prose.
  */
 function attrDescribe(attr: AttributeDefinition): string {
-  const parts: string[] = [attr.name];
+  // `name` / `description` may be i18n records; flatten to a plain label for
+  // the LLM-facing field description (no locale → first available value).
+  const parts: string[] = [resolveI18nText(attr.name) ?? ""];
 
   switch (attr.type) {
     case "number": {
@@ -133,6 +136,7 @@ function attrDescribe(attr: AttributeDefinition): string {
       break;
   }
 
-  if (attr.description) parts.push(`— ${attr.description}`);
+  const desc = resolveI18nText(attr.description);
+  if (desc) parts.push(`— ${desc}`);
   return parts.join(" ");
 }

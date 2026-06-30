@@ -183,3 +183,32 @@ describe("buildSessionCharacterWriteTools", () => {
     });
   });
 });
+
+describe("i18n attribute labels", () => {
+  // A world may ship bilingual labels; the LLM-facing field description must
+  // flatten the i18n record to a plain string, never `[object Object]`.
+  const i18nSchema: CharacterAttributeSchema = {
+    version: 1,
+    attributes: [
+      {
+        id: "faction",
+        name: { "zh-CN": "门派", "en-US": "Faction" },
+        type: "string",
+        category: "social",
+        description: { "zh-CN": "所属门派", "en-US": "Affiliated faction" },
+      },
+    ],
+  };
+
+  it("flattens i18n name/description into the field description string", () => {
+    const z = buildFieldsZodFromSchema(i18nSchema)!;
+    type Z4 = { toJSONSchema(): Record<string, unknown> };
+    const json = (z as unknown as Z4).toJSONSchema();
+    const props = json.properties as Record<string, Record<string, unknown>>;
+    const desc = props.faction.description as string;
+
+    expect(desc).toContain("门派");
+    expect(desc).toContain("所属门派");
+    expect(desc).not.toContain("[object Object]");
+  });
+});

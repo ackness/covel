@@ -7,6 +7,14 @@
 import { withPendingProposals } from "@covel/tools";
 
 export default function ({ tool, z, store }) {
+  // A display label is either a plain string or an i18n record
+  // (`{ "zh-CN": "门派", "en-US": "Faction" }`). The LLM normally emits a plain
+  // string; a world that ships its own schema may declare bilingual labels.
+  const i18nText = z.union([
+    z.string().min(1),
+    z.record(z.string(), z.string()),
+  ]);
+
   // Recursive: an `object` attribute can carry `subSchema`, which itself is
   // an array of AttributeDefinition. Zod 4 still exposes `z.lazy(fn)` for
   // self-referential schemas; the `/** @type {z.ZodTypeAny} */` annotation
@@ -18,7 +26,7 @@ export default function ({ tool, z, store }) {
         .string()
         .min(1)
         .describe('属性唯一标识（如 "hp", "level", "skills"）'),
-      name: z.string().min(1).describe("属性显示名称"),
+      name: i18nText.describe("属性显示名称（字符串或 i18n 记录）"),
       type: z
         .enum(["string", "number", "array", "enum", "boolean", "object", "map"])
         .describe("属性数据类型"),
@@ -44,7 +52,9 @@ export default function ({ tool, z, store }) {
       category: z
         .enum(["stats", "bio", "abilities", "equipment", "social"])
         .describe("属性分类"),
-      description: z.string().optional().describe("属性说明"),
+      description: i18nText
+        .optional()
+        .describe("属性说明（字符串或 i18n 记录）"),
     }),
   );
 
