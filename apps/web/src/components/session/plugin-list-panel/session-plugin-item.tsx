@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
+import { resolveI18n } from "@/lib/catalog/helpers.js";
 import { useRuntimeModelSlotOverride } from "./runtime-model-slot-override.js";
 import {
   RUNTIME_TYPE_ICONS,
@@ -24,7 +25,7 @@ export function SessionPluginItem({
   sessionId,
   runtimeModelOverrides,
 }: SessionPluginItemProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   const runtimeKey = plugin.id;
@@ -67,10 +68,13 @@ export function SessionPluginItem({
     );
   }
 
+  // Resolve i18n displayName / description to the UI locale (both arrive as
+  // I18nText `{ zh, en }` from the manifest). Falls back to the plugin id for
+  // the name and hides the description when absent.
   const displayName =
-    typeof plugin.displayName === "string" ? plugin.displayName : plugin.id;
+    resolveI18n(plugin.displayName, i18n.language) || plugin.id;
   const description =
-    typeof plugin.description === "string" ? plugin.description : undefined;
+    resolveI18n(plugin.description, i18n.language) || undefined;
   const isLocked = plugin.locked === true;
   const toggleDisabled = executing === true || isLocked;
   const allTools = [
