@@ -173,6 +173,17 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   // session.locale still acts as the fallback when the client omits it.
   const effectiveLocale = locale ?? session.locale ?? "zh-CN";
 
+  // Persist the live locale so server-initiated turns — plugin-rpc manual
+  // triggers and deferred background followers, which build TurnInput.locale
+  // from the stored session.locale — inherit the player's current UI language
+  // instead of a stale value. Only write when it actually changed.
+  if (effectiveLocale !== session.locale) {
+    await store.updateSession(sessionId, {
+      locale: effectiveLocale,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
   // Ensure session's plugins are activated in the registry (idempotent, needed after server restart).
   // On start_session with no plugins yet, auto-activate all registered plugins and persist.
   let sessionPlugins = session.activePlugins as readonly string[] | undefined;

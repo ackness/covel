@@ -53,6 +53,7 @@ export type SessionUpdatePatch = Partial<
     | "preGameCompleted"
     | "activePlugins"
     | "presetId"
+    | "locale"
     | "updatedAt"
     | "metadata"
     | "embeddingModelId"
@@ -569,6 +570,7 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
       if ("metadata" in patch || "presetId" in patch) {
         values.metadata = json.writeNullableJson(merged.metadata);
       }
+      if (patch.locale !== undefined) values.locale = patch.locale;
       if (patch.updatedAt !== undefined) values.updatedAt = patch.updatedAt;
       if ("embeddingModelId" in patch) {
         values.embeddingModelId = patch.embeddingModelId ?? null;

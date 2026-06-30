@@ -80,6 +80,12 @@ export interface CompactorRunner {
     sessionId: string,
     systemPromptPreview: string,
     messages: readonly TurnMessageRecord[],
+    /**
+     * Session locale. Threaded into the compaction prompt + focus sections so a
+     * non-Chinese session's history summaries are generated in its own language
+     * instead of always falling back to zh-CN.
+     */
+    locale?: string,
   ): Promise<CompactorResult>;
 }
 

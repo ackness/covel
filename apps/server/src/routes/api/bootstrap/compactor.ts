@@ -48,7 +48,13 @@ export function createBootstrapCompactorRunner({
   };
 
   return {
-    async run(sessionId, systemPromptPreview, messages) {
+    async run(sessionId, systemPromptPreview, messages, locale) {
+      // The compactor only ships zh-CN / en-US prompt templates; map the
+      // session locale by prefix (en* → en-US, else the zh-CN default).
+      const compactorLocale =
+        typeof locale === "string" && locale.toLowerCase().startsWith("en")
+          ? "en-US"
+          : "zh-CN";
       return await maybeCompact(
         sessionId,
         systemPromptPreview,
@@ -61,6 +67,7 @@ export function createBootstrapCompactorRunner({
         },
         {
           focusSections,
+          locale: compactorLocale,
         },
       );
     },

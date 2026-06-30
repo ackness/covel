@@ -118,6 +118,21 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       });
     });
 
+    it("parity: updateSession persists locale across backends", async () => {
+      // The player's live UI locale is persisted onto the session so
+      // server-initiated turns (plugin-rpc / deferred followers) inherit it.
+      // Every backend must round-trip a locale change identically.
+      const session = makeSession({ locale: "zh-CN" });
+      await store.createSession(session);
+      expect((await store.getSession(session.id))?.locale).toBe("zh-CN");
+
+      await store.updateSession(session.id, {
+        locale: "en-US",
+        updatedAt: ts(),
+      });
+      expect((await store.getSession(session.id))?.locale).toBe("en-US");
+    });
+
     it("persists session metadata and presetId through create and update", async () => {
       const session = makeSession({
         presetId: "preset-a",

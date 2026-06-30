@@ -181,6 +181,12 @@ export async function executeAgentRuntime({
   const buildParams = {
     promptTemplate: loaded.promptTemplate,
     manifest,
+    // Segments 9/10 (Author's Note + Post-History) read authorsNote/postHistory
+    // from activeManifests. Use the locale-resolved `loaded.manifest` (parsed
+    // from PLUGIN.<locale>.md) so an en session gets the localized notes, while
+    // `manifest` (the canonical registry manifest) still drives inject/execution
+    // semantics — avoids any PLUGIN.en.md frontmatter drift leaking into scheduling.
+    activeManifests: [loaded.manifest],
     turnInput: input,
     completedResults,
     config,

@@ -134,6 +134,7 @@ export interface SessionStore {
         | "preGameCompleted"
         | "activePlugins"
         | "presetId"
+        | "locale"
         | "updatedAt"
         | "metadata"
         | "embeddingModelId"

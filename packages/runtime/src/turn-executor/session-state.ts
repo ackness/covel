@@ -98,6 +98,7 @@ export async function loadTurnSessionState(args: {
         input.sessionId,
         "",
         freshMessages,
+        input.locale,
       );
       await runPostCompactionHook(hookOpts, {
         compacted: result.compacted,
