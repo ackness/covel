@@ -44,10 +44,12 @@ describe("character-blueprint manifest and UI loading", () => {
     const loaded = await loadRuntime(discovery, "character-blueprint");
     expect(loaded.handler).toBeTypeOf("function");
     expect(loaded.uiSpecs?.right).toHaveLength(1);
+    // Read-only display panel (no editing): relies on emptyState rather than
+    // alwaysRender, so a world without preset characters shows the empty hint.
     expect(loaded.uiSpecs?.right?.[0]).toMatchObject({
       id: "character-blueprint",
       dataSource: { namespace: "blueprints" },
-      alwaysRender: true,
     });
+    expect(loaded.uiSpecs?.right?.[0]?.emptyState).toBeDefined();
   });
 });

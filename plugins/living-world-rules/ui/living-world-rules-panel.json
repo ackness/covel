@@ -11,7 +11,12 @@
   "icon": "book-marked",
   "groupOrder": 430,
   "dataSource": { "namespace": "rules" },
-  "alwaysRender": true,
+  "emptyState": {
+    "message": {
+      "zh": "本世界没有声明长期规则。规则由世界作者写在世界包里（world-data 导入）。",
+      "en": "This world declares no lasting rules. Rules are authored in the world package (imported via world-data)."
+    }
+  },
   "view": {
     "component": "Stack",
     "props": { "gap": "md" },
@@ -20,240 +25,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "添加会长期影响故事的世界规则，比如禁忌、风俗和特殊设定。",
-            "en": "Add lasting world rules, such as taboos, customs, and special setting details."
-          },
-          "variant": "muted",
-          "size": "xs"
-        }
-      },
-      {
-        "component": "Grid",
-        "props": { "cols": 2 },
-        "children": [
-          {
-            "component": "Input",
-            "props": {
-              "label": { "zh": "规则编号", "en": "Rule code" },
-              "placeholder": {
-                "zh": "留空自动生成短编号",
-                "en": "Leave blank to create a short code"
-              },
-              "value": { "$bindState": "/form/id" }
-            }
-          },
-          {
-            "component": "Input",
-            "props": {
-              "label": { "zh": "标题", "en": "Title" },
-              "placeholder": { "zh": "雨市真名禁忌", "en": "True-name taboo" },
-              "value": { "$bindState": "/form/title" }
-            }
-          }
-        ]
-      },
-      {
-        "component": "Textarea",
-        "props": {
-          "label": { "zh": "规则内容", "en": "Rule content" },
-          "placeholder": {
-            "zh": "雨市里没人会直接说出真实姓名。",
-            "en": "No one in the rain market says their true name directly."
-          },
-          "value": { "$bindState": "/form/content" },
-          "rows": 4
-        }
-      },
-      {
-        "component": "Grid",
-        "props": { "cols": 3 },
-        "children": [
-          {
-            "component": "Select",
-            "props": {
-              "label": { "zh": "类型", "en": "Kind" },
-              "value": { "$bindState": "/form/kind" },
-              "options": [
-                {
-                  "value": "constant",
-                  "label": { "zh": "常驻", "en": "Constant" }
-                },
-                {
-                  "value": "triggered",
-                  "label": { "zh": "关键词触发", "en": "Triggered" }
-                },
-                {
-                  "value": "evolving",
-                  "label": { "zh": "可演化", "en": "Evolving" }
-                }
-              ]
-            }
-          },
-          {
-            "component": "Select",
-            "props": {
-              "label": { "zh": "分类", "en": "Category" },
-              "value": { "$bindState": "/form/category" },
-              "options": [
-                {
-                  "value": "",
-                  "label": { "zh": "未分类", "en": "Uncategorized" }
-                },
-                {
-                  "value": "character",
-                  "label": { "zh": "角色", "en": "Character" }
-                },
-                { "value": "scene", "label": { "zh": "场景", "en": "Scene" } },
-                {
-                  "value": "relationship",
-                  "label": { "zh": "关系", "en": "Relationship" }
-                },
-                { "value": "world", "label": { "zh": "世界", "en": "World" } },
-                { "value": "style", "label": { "zh": "风格", "en": "Style" } }
-              ]
-            }
-          },
-          {
-            "component": "Select",
-            "props": {
-              "label": { "zh": "预算", "en": "Budget" },
-              "value": { "$bindState": "/form/budgetClass" },
-              "options": [
-                { "value": "", "label": { "zh": "默认", "en": "Default" } },
-                {
-                  "value": "sticky",
-                  "label": { "zh": "常驻", "en": "Sticky" }
-                },
-                {
-                  "value": "flexible",
-                  "label": { "zh": "弹性", "en": "Flexible" }
-                },
-                {
-                  "value": "droppable",
-                  "label": { "zh": "可丢弃", "en": "Droppable" }
-                }
-              ]
-            }
-          }
-        ]
-      },
-      {
-        "component": "Grid",
-        "props": { "cols": 3 },
-        "children": [
-          {
-            "component": "Select",
-            "props": {
-              "label": { "zh": "出现位置", "en": "Placement" },
-              "value": { "$bindState": "/form/position" },
-              "options": [
-                {
-                  "value": "after_plugin",
-                  "label": { "zh": "靠后出现", "en": "Later" }
-                },
-                {
-                  "value": "before_plugin",
-                  "label": { "zh": "靠前出现", "en": "Earlier" }
-                },
-                {
-                  "value": "at_depth",
-                  "label": { "zh": "固定位置", "en": "Fixed place" }
-                }
-              ]
-            }
-          },
-          {
-            "component": "Input",
-            "props": {
-              "label": { "zh": "位置编号", "en": "Place number" },
-              "placeholder": {
-                "zh": "选择固定位置时填写",
-                "en": "Used with fixed place"
-              },
-              "value": { "$bindState": "/form/depth" }
-            }
-          },
-          {
-            "component": "Input",
-            "props": {
-              "label": { "zh": "顺序", "en": "Order" },
-              "placeholder": { "zh": "默认 500", "en": "Default 500" },
-              "value": { "$bindState": "/form/insertionOrder" }
-            }
-          }
-        ]
-      },
-      {
-        "component": "Input",
-        "props": {
-          "label": { "zh": "关键词", "en": "Keys" },
-          "placeholder": {
-            "zh": "用逗号分隔，用于关键词触发规则",
-            "en": "Comma separated, used by triggered rules"
-          },
-          "value": { "$bindState": "/form/keysText" }
-        }
-      },
-      {
-        "component": "Row",
-        "props": { "gap": "sm" },
-        "children": [
-          {
-            "component": "Button",
-            "props": {
-              "label": {
-                "zh": "保存并启用规则",
-                "en": "Save enabled rule"
-              },
-              "variant": "primary",
-              "size": "compact"
-            },
-            "on": {
-              "click": {
-                "action": "invokeRuntime",
-                "params": {
-                  "runtimeId": "living-world-rules",
-                  "payload": {
-                    "ruleForm": { "$bindState": "/form" }
-                  }
-                }
-              }
-            }
-          },
-          {
-            "component": "Button",
-            "props": {
-              "label": {
-                "zh": "保存为停用",
-                "en": "Save disabled"
-              },
-              "variant": "ghost",
-              "size": "compact"
-            },
-            "on": {
-              "click": {
-                "action": "invokeRuntime",
-                "params": {
-                  "runtimeId": "living-world-rules",
-                  "payload": {
-                    "ruleForm": { "$bindState": "/form" },
-                    "enabled": false
-                  }
-                }
-              }
-            }
-          }
-        ]
-      },
-      {
-        "component": "Separator"
-      },
-      {
-        "component": "Text",
-        "props": {
-          "content": {
-            "zh": "已保存规则",
-            "en": "Saved rules"
+            "zh": "本世界生效中的长期设定与禁忌（只读）。",
+            "en": "Lasting setting rules and taboos in effect for this world (read-only)."
           },
           "variant": "muted",
           "size": "xs"
@@ -275,8 +48,8 @@
             "defaultExpanded": false
           },
           "emptyMessage": {
-            "zh": "还没有保存的规则",
-            "en": "No saved rules yet"
+            "zh": "暂无规则",
+            "en": "No rules"
           }
         }
       }
