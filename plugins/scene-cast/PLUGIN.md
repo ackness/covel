@@ -21,6 +21,9 @@ trigger:
   type: scheduled
   interval: 1
 ui:
+  # Player-facing as "当前场景 / Scene" — a read-only "who's on stage now" view
+  # (portrait + name + role). The internal selection signals / scores / ids are
+  # NOT shown; they stay in plugin_data for the prompt + debug only.
   right:
     - ./ui/scene-cast-panel.json
 userSettings:

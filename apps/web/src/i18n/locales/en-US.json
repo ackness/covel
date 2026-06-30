@@ -956,6 +956,9 @@
     "uploading": "Uploading…",
     "enlarge": "Enlarge portrait"
   },
+  "sceneCast": {
+    "empty": "No characters are on stage in this scene yet."
+  },
   "common": {
     "preview": "Preview",
     "loading": "Loading...",

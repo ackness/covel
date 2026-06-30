@@ -3,12 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
 import * as Icons from "lucide-react";
-import {
-  formatDateTime,
-  isRecordLike,
-  toTextArray,
-  useI18nResolver,
-} from "./helpers.js";
+import { formatDateTime, isRecordLike, toTextArray } from "./helpers.js";
 
 export { CharacterFieldsView } from "./character-fields-renderer.js";
 
@@ -248,99 +243,50 @@ function readSceneCastSpeakers(value: unknown): SceneCastSpeakerView[] {
     : [];
 }
 
-function compactSpeakerId(value: string | undefined): string {
-  if (!value) return "";
-  const npcIndex = value.lastIndexOf("-npc-");
-  if (npcIndex >= 0) return value.slice(npcIndex + 1);
-  const playerIndex = value.lastIndexOf("-player-");
-  if (playerIndex >= 0) return value.slice(playerIndex + 1);
-  if (value.length <= 28) return value;
-  return value.slice(-28);
-}
-
 export const SceneCastList: ComponentRenderer = ({ element }) => {
   const { t } = useTranslation();
-  const resolve = useI18nResolver();
   const speakers = readSceneCastSpeakers(element.props?.speakers);
-  const reason =
-    typeof element.props?.reason === "string" ? element.props.reason : "";
-  const reasonLabel = resolve(element.props?.reasonLabel);
 
   if (speakers.length === 0) {
     return (
       <div className="ui-band-quiet px-3 py-4 text-[11px] leading-relaxed text-muted-foreground">
-        {reasonLabel || reason || t("common.noData", "No data")}
+        {t("sceneCast.empty", "No one is on stage in this scene yet.")}
       </div>
     );
   }
 
+  // Player-facing "who's in this scene" — name + role only. The internal
+  // selection signals / scores / raw character ids stay in plugin_data for the
+  // prompt and /debug; the player just sees who is present.
   return (
     <div className="space-y-2">
       {speakers.map((speaker, index) => {
-        const name =
-          (speaker.name ?? compactSpeakerId(speaker.id)) || `#${index + 1}`;
-        const compactId = compactSpeakerId(speaker.id);
-        const signals =
-          speaker.signalViews && speaker.signalViews.length > 0
-            ? speaker.signalViews
-            : (speaker.signals ?? []).map((signal) => ({ label: signal }));
+        const name = speaker.name || `#${index + 1}`;
         return (
           <div
             key={speaker.id ?? `${name}-${index}`}
-            className="ui-band space-y-2"
+            className="ui-band space-y-1.5"
             data-tone="muted"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 space-y-1">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Icons.UserRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate text-[13px] font-semibold text-foreground">
-                    {name}
-                  </span>
-                  {speaker.type && (
-                    <BlueprintChip tone="primary">
-                      {t(`character.type.${speaker.type}`, speaker.type)}
-                    </BlueprintChip>
-                  )}
-                </div>
-                {compactId && (
-                  <div className="font-mono text-[10px] text-muted-foreground">
-                    {compactId}
-                  </div>
-                )}
-              </div>
-              {typeof speaker.score === "number" && (
-                <div className="shrink-0 rounded-[var(--radius-control)] border border-border bg-muted px-2 py-1 text-center">
-                  <div className="font-mono text-[13px] text-foreground">
-                    {speaker.score}
-                  </div>
-                </div>
+            <div className="flex min-w-0 items-center gap-2">
+              <Icons.UserRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="truncate text-[13px] font-semibold text-foreground">
+                {name}
+              </span>
+              {speaker.type && (
+                <BlueprintChip tone="primary">
+                  {t(`character.type.${speaker.type}`, speaker.type)}
+                </BlueprintChip>
               )}
             </div>
-
             {speaker.description && (
-              <p className="line-clamp-3 text-[11px] leading-relaxed text-muted-foreground">
+              <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
                 {speaker.description}
               </p>
-            )}
-
-            {signals.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {signals.map((signal, signalIndex) => (
-                  <BlueprintChip key={`${speaker.id ?? index}-${signalIndex}`}>
-                    {resolve(signal.label)}
-                  </BlueprintChip>
-                ))}
-              </div>
             )}
           </div>
         );
       })}
-      {reason && (
-        <div className="text-[10px] leading-relaxed text-muted-foreground">
-          {reason}
-        </div>
-      )}
     </div>
   );
 };

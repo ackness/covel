@@ -956,6 +956,9 @@
     "uploading": "上传中…",
     "enlarge": "放大立绘"
   },
+  "sceneCast": {
+    "empty": "这一幕还没有角色登场。"
+  },
   "common": {
     "preview": "预览",
     "loading": "加载中...",

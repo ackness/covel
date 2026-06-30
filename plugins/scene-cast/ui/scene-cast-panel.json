@@ -1,25 +1,20 @@
 {
   "id": "scene-cast",
   "label": {
-    "zh": "场景演员",
-    "en": "Scene Cast"
+    "zh": "当前场景",
+    "en": "Scene"
   },
   "shortLabel": {
-    "zh": "演员",
-    "en": "Cast"
+    "zh": "场景",
+    "en": "Scene"
   },
   "icon": "users-round",
-  "group": "chat-mode",
-  "groupLabel": {
-    "zh": "对话",
-    "en": "Chat Mode"
-  },
   "groupOrder": 450,
   "dataSource": { "namespace": "active-cast" },
   "emptyState": {
     "message": {
-      "zh": "等待场景演员选择。",
-      "en": "Waiting for scene cast selection."
+      "zh": "这一幕还没有角色登场。",
+      "en": "No characters are on stage in this scene yet."
     }
   },
   "view": {
@@ -30,8 +25,8 @@
         "component": "Text",
         "props": {
           "content": {
-            "zh": "当前活跃演员",
-            "en": "Current active cast"
+            "zh": "这一幕在场的角色",
+            "en": "Characters in this scene"
           },
           "variant": "muted",
           "size": "xs"
@@ -40,9 +35,7 @@
       {
         "component": "SceneCastList",
         "props": {
-          "speakers": { "$state": "/current/speakers" },
-          "reason": { "$state": "/current/reason" },
-          "reasonLabel": { "$state": "/current/reasonLabel" }
+          "speakers": { "$state": "/current/speakers" }
         }
       }
     ]
