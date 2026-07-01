@@ -207,9 +207,12 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async listTraceEvents(sessionId, pagination?) {
-      const filtered = state.traceEvents.filter(
-        (r) => r.sessionId === sessionId,
-      );
+      // Sort by createdAt to match the SQL backends (`asc(createdAt)`); the
+      // append order is usually chronological but resume/replay/backfill can
+      // insert out of order, and paging must return a stable time window.
+      const filtered = state.traceEvents
+        .filter((r) => r.sessionId === sessionId)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       return applyPagination(filtered, pagination);
     },
 

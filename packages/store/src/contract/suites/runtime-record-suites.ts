@@ -100,6 +100,41 @@ export function registerRuntimeRecordStoreSuites(
       expect(list).toHaveLength(1);
       expect(list[0]).toEqual(te);
     });
+
+    it("parity: listTraceEvents returns events sorted by createdAt", async () => {
+      // Backend-divergence regression guard. SQL backends order by
+      // `asc(createdAt)`; memory relied on push order and IDB on the
+      // primary-key (random uuid) index order, so both returned effectively
+      // random order under out-of-order inserts — breaking turn grouping on
+      // the browser-local backend. Insert deliberately out of chronological
+      // order to prove the read path sorts.
+      const e1 = makeTraceEvent({ sessionId: "sess-te", createdAt: ts(0) });
+      const e2 = makeTraceEvent({ sessionId: "sess-te", createdAt: ts(100) });
+      const e3 = makeTraceEvent({ sessionId: "sess-te", createdAt: ts(200) });
+      await store.addTraceEvent(e2);
+      await store.addTraceEvent(e3);
+      await store.addTraceEvent(e1);
+      const list = await store.listTraceEvents("sess-te");
+      expect(list.map((e) => e.id)).toEqual([e1.id, e2.id, e3.id]);
+    });
+
+    it("parity: listTraceEvents pages a stable chronological window", async () => {
+      const e1 = makeTraceEvent({ sessionId: "sess-te-pg", createdAt: ts(10) });
+      const e2 = makeTraceEvent({ sessionId: "sess-te-pg", createdAt: ts(20) });
+      const e3 = makeTraceEvent({ sessionId: "sess-te-pg", createdAt: ts(30) });
+      await store.addTraceEvent(e3);
+      await store.addTraceEvent(e1);
+      await store.addTraceEvent(e2);
+
+      const first2 = await store.listTraceEvents("sess-te-pg", { limit: 2 });
+      expect(first2.map((e) => e.id)).toEqual([e1.id, e2.id]);
+
+      const page2 = await store.listTraceEvents("sess-te-pg", {
+        limit: 2,
+        offset: 2,
+      });
+      expect(page2.map((e) => e.id)).toEqual([e3.id]);
+    });
   });
 
   describe("RuntimeOutputs", () => {

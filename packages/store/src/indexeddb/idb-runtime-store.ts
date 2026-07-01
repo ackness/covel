@@ -224,7 +224,12 @@ export function createIdbRuntimeStore(ctx: IdbStoreContext): IdbStoreSlice {
         "sessionId",
         sessionId,
       );
-      return paginateRows(all, pagination);
+      // The IDB `sessionId` index yields rows in primary-key (random uuid)
+      // order, not time order — sort by createdAt so paging returns a stable,
+      // chronological window (matches listMessages/listTurnMessages). Without
+      // this, turn-grouped trace views on the browser-local backend saw events
+      // in effectively random order.
+      return paginateRows(sortByCreatedAtAsc(all), pagination);
     },
 
     async saveRuntimeOutput(record: RuntimeOutputRecord): Promise<void> {
