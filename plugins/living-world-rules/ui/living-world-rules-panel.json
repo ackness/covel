@@ -1,5 +1,7 @@
 {
   "id": "living-world-rules",
+  "group": "world-data",
+  "groupLabel": { "zh": "世界资料", "en": "World Details" },
   "label": {
     "zh": "世界规则",
     "en": "World Rules"
@@ -9,7 +11,7 @@
     "en": "Rules"
   },
   "icon": "book-marked",
-  "groupOrder": 430,
+  "groupOrder": 300,
   "dataSource": { "namespace": "rules" },
   "emptyState": {
     "message": {
@@ -39,9 +41,9 @@
           "itemComponent": "EntryCard",
           "itemKeyField": "key",
           "itemPropMap": {
-            "title": "value/rule/title",
-            "content": "value/rule/content",
-            "category": "value/rule/kind"
+            "title": "value/title",
+            "content": "value/content",
+            "category": "value/kind"
           },
           "itemLiteralProps": {
             "collapsible": true,

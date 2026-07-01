@@ -35,8 +35,11 @@ export default async function handler(ctx) {
     makeProposal(ctx, now, "plugin.data", {
       namespace: RULE_NAMESPACE,
       key: rule.id,
+      // Store the rule fields flat (title/content/kind at the top of `value`)
+      // so this matches the world-data import shape — the panel reads
+      // value/title etc. Both writers must agree; the import path stores flat.
       value: {
-        rule,
+        ...rule,
         lorebookEntryId,
         updatedAt: now,
       },

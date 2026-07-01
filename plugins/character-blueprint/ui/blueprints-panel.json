@@ -1,5 +1,7 @@
 {
   "id": "character-blueprint",
+  "group": "character",
+  "groupLabel": { "zh": "角色", "en": "Characters" },
   "label": {
     "zh": "预设角色",
     "en": "Preset Characters"
@@ -9,7 +11,7 @@
     "en": "Presets"
   },
   "icon": "id-card",
-  "groupOrder": 450,
+  "groupOrder": 100,
   "dataSource": { "namespace": "blueprints" },
   "emptyState": {
     "message": {

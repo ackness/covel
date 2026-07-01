@@ -51,12 +51,10 @@ describe("living-world-rules handler", () => {
         key: "rain-market",
         value: {
           lorebookEntryId: "lwr-rain-market",
-          rule: {
-            id: "rain-market",
-            content: "雨市里没人会直接说出真实姓名。",
-            kind: "constant",
-            coordinate: { position: "before_plugin" },
-          },
+          id: "rain-market",
+          content: "雨市里没人会直接说出真实姓名。",
+          kind: "constant",
+          coordinate: { position: "before_plugin" },
         },
       },
     });
@@ -188,18 +186,16 @@ describe("living-world-rules handler", () => {
         namespace: "rules",
         key: "club-room",
         value: {
-          rule: {
-            schemaVersion: 1,
-            id: "club-room",
-            title: "活动室门禁",
-            content: "文艺部活动室在放学后只允许社员进入。",
-            kind: "triggered",
-            category: "scene",
-            keys: ["文艺部", "活动室"],
-            coordinate: { position: "before_plugin" },
-            budgetClass: "sticky",
-            insertionOrder: 80,
-          },
+          schemaVersion: 1,
+          id: "club-room",
+          title: "活动室门禁",
+          content: "文艺部活动室在放学后只允许社员进入。",
+          kind: "triggered",
+          category: "scene",
+          keys: ["文艺部", "活动室"],
+          coordinate: { position: "before_plugin" },
+          budgetClass: "sticky",
+          insertionOrder: 80,
         },
       },
     });
@@ -232,7 +228,7 @@ describe("living-world-rules handler", () => {
     );
 
     const proposals = getPendingProposals(result);
-    expect(proposals[0].payload.value.rule.enabled).toBe(false);
+    expect(proposals[0].payload.value.enabled).toBe(false);
     expect(proposals[1].payload.entries[0].enabled).toBe(false);
   });
 
