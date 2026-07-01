@@ -81,7 +81,11 @@ export async function loadTurnSessionState(args: {
   }
 
   if (deps.compactor && deps.store && shouldAppendPlayerMessage) {
-    const freshMessages = await deps.store.listTurnMessages(input.sessionId);
+    // Reuse messageHistory (set above after appending the player message) — no
+    // write happens between there and here, so re-reading the full history was
+    // a redundant unbounded scan on the per-turn critical path. The line-107
+    // reload still runs after the compactor actually mutates history.
+    const freshMessages = messageHistory;
     const hookOpts = {
       pipeline: deps.hookPipeline,
       sessionId: input.sessionId,

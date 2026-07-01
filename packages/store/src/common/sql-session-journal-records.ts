@@ -20,7 +20,7 @@
  *    return unified across both backends.
  */
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
 
 import type { InsertValueBuilders } from "./insert-values.js";
@@ -47,7 +47,7 @@ import type {
   TurnMessageRecord,
 } from "../types.js";
 
-type TraceEventsTable = Table & { sessionId: Column };
+type TraceEventsTable = Table & { sessionId: Column; createdAt: Column };
 type TurnMessagesTable = Table & {
   sessionId: Column;
   createdAt: Column;
@@ -108,6 +108,7 @@ export function createSqlSessionJournalRecords(
     ): Promise<TraceEventRecord[]> {
       const rows = await runner.select<TraceEventRow>(traceEvents, {
         where: eq(traceEvents.sessionId, sessionId),
+        orderBy: [asc(traceEvents.createdAt)],
         limit: pagination?.limit,
         offset: pagination?.offset,
       });
@@ -137,16 +138,16 @@ export function createSqlSessionJournalRecords(
       summaryId: string,
     ): Promise<void> {
       if (messageIds.length === 0) return;
-      for (const msgId of messageIds) {
-        await runner.update(
-          turnMessages,
-          { compactedAtTurnId: summaryId },
-          and(
-            eq(turnMessages.sessionId, sessionId),
-            eq(turnMessages.id, msgId),
-          ),
-        );
-      }
+      // One bulk UPDATE ... WHERE id IN (...) instead of N serially-awaited
+      // single-row updates (the compacted window grows on long sessions).
+      await runner.update(
+        turnMessages,
+        { compactedAtTurnId: summaryId },
+        and(
+          eq(turnMessages.sessionId, sessionId),
+          inArray(turnMessages.id, [...messageIds]),
+        ),
+      );
     },
 
     async savePlayerInput(record: PlayerInputRecord): Promise<void> {
