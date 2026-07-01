@@ -119,10 +119,6 @@ const REGISTRY: readonly StorageMigrationDescriptor[] = [
   }),
 ];
 
-export function getStorageMigrationRegistry(): readonly StorageMigrationDescriptor[] {
-  return REGISTRY;
-}
-
 export function summarizeStorageMigrations(
   registry: readonly StorageMigrationDescriptor[] = REGISTRY,
 ): readonly StorageMigrationSummary[] {

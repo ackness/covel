@@ -7,16 +7,9 @@ export {
   BROWSER_IDB_DATABASE_NAME,
   IDB_BROWSER_STORAGE_SCHEMA_VERSION,
   IDB_DATA_STORE_SCHEMA_VERSION,
-  IDB_MEDIA_STORE_SCHEMA_VERSION,
-  getStorageMigrationRegistry,
   summarizeStorageMigrations,
 } from "./migrations.js";
 export { describeStorageCapabilities } from "./storage-capabilities.js";
-export {
-  createVectorStore,
-  createVectorStoreFromEnv,
-  resolveVectorBackendFromEnv,
-} from "./vector-factory.js";
 export { createMemoryStore } from "./memory/memory-store.js";
 export { createSqliteStore } from "./sqlite/sqlite-store.js";
 export { createPgStore } from "./postgres/pg-store.js";
