@@ -14,12 +14,23 @@ export function applyPagination<T>(
 
 type Keyed = { readonly createdAt: string; readonly id: string };
 
-/** Total order on `(createdAt, id)` — the JS mirror of the SQL keyset order. */
+/**
+ * Total order on `(createdAt, id)` — the JS mirror of the SQL keyset order.
+ *
+ * Uses code-unit `<` (NOT `localeCompare`) so the tie-break matches SQLite's
+ * BINARY collation and {@link applyCursorPage}'s own `<` comparison exactly: for
+ * ASCII ids (all framework-generated + client-supplied ids in practice), a
+ * code-unit compare equals a byte compare. `localeCompare` would order e.g.
+ * `"alpha"` before `"Zeta"` while SQLite orders `"Zeta"` first, so memory/idb
+ * and the SQL backends would pick DIFFERENT rows for the same same-`createdAt`
+ * cursor page — a store-backend-parity bug (skip/duplicate at page boundary).
+ */
 export function sortByCursorAsc<T extends Keyed>(rows: readonly T[]): T[] {
-  return [...rows].sort(
-    (a, b) =>
-      a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
-  );
+  return [...rows].sort((a, b) => {
+    if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
+    if (a.id !== b.id) return a.id < b.id ? -1 : 1;
+    return 0;
+  });
 }
 
 /**

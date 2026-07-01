@@ -325,6 +325,44 @@ sources:
     expect((rows[0]?.value as { content: string }).content).toBe("闸门锁着。");
   });
 
+  it("a malicious locale cannot escape the descriptor root (path traversal)", async () => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  facts:
+    kind: json
+    path: data/facts.json
+    to: plugin:world-notes/facts
+    key: id
+`,
+      files: {
+        "data/facts.json": JSON.stringify([{ id: "gate", content: "safe" }]),
+      },
+    });
+    const store = await makeStore(["world-notes"]);
+
+    // A locale crafted to try to walk out of the world root via the
+    // `<name>.<lang>.<ext>` variant. `lang` = locale.split("-")[0], and the
+    // resolved variant is contained-checked, so this must safely fall back to
+    // the declared source, not read outside the root or error.
+    const result = await importWorldDataForSession({
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      locale: "../../../../etc/passwd",
+      preflight: {
+        activePlugins: ["world-notes"],
+        registry: registry({ "world-notes": ["facts"] }),
+      },
+    });
+
+    expect(result.written).toBe(1);
+    const rows = await store.listPluginData("sess-1", "world-notes", "facts");
+    expect((rows[0]?.value as { content: string }).content).toBe("safe");
+  });
+
   it("rejects missing plugin schemas during preflight", async () => {
     const { worldsDir, worldId } = await makeWorld({
       descriptor: `schemaVersion: 1

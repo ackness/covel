@@ -205,20 +205,22 @@ export function reducer(
     }
     case "PREPEND_MESSAGES": {
       // 把更旧的一批消息合并到前部。已有消息（含流式占位/本地追加）优先保留，
-      // 仅补入尚未出现的历史条目（按 id 去重），再整体按 createdAt 正序排列。
-      // 绝不复用 LOAD_MESSAGES（整体覆盖会丢历史）。
+      // 仅补入尚未出现的历史条目（按 id 去重）。绝不复用 LOAD_MESSAGES（整体覆盖会丢历史）。
       const existingIds = new Set(state.messages.map((m) => m.id));
       const older = action.messages.filter((m) => !existingIds.has(m.id));
       if (older.length === 0) {
         // 没有新增历史，只推进游标即可（引用不变的 messages 避免多余重渲染）。
         return { ...state, olderMessagesCursor: action.cursor };
       }
-      // StreamMessage.timestamp 即消息的 createdAt（restore 时透传），稳定排序在时间
-      // 相同时保留插入顺序（older 在前、existing 在后）。
-      const merged = [...older, ...state.messages].sort((a, b) =>
-        a.timestamp.localeCompare(b.timestamp),
-      );
-      return { ...state, messages: merged, olderMessagesCursor: action.cursor };
+      // `older` 来自 listMessagesPage(before = 当前最旧一条的游标)，按契约**严格早于**
+      // 所有 existing、且自身已按 (createdAt,id) 正序，故直接拼到前部即可。不能再按
+      // timestamp 整体重排：流式占位/本地回显用的是客户端墙钟时间戳，服务端权威 createdAt
+      // 与它混排会在客户端时钟偏移时把历史顺序打乱（desktop 无 NTP 保证）。
+      return {
+        ...state,
+        messages: [...older, ...state.messages],
+        olderMessagesCursor: action.cursor,
+      };
     }
     case "SET_OLDER_MESSAGES_CURSOR":
       return { ...state, olderMessagesCursor: action.cursor };

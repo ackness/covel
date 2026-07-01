@@ -64,7 +64,12 @@ describe("session-store — PREPEND_MESSAGES slice", () => {
     expect(next.olderMessagesCursor).toBeNull();
   });
 
-  it("keeps overall createdAt ordering after the merge", () => {
+  it("prepends the older page in front, preserving order", () => {
+    // `older` comes from listMessagesPage(before=oldest-loaded), so by contract
+    // it is already ascending AND strictly older than everything in `messages`.
+    // The reducer must NOT re-sort by timestamp (that would let a client
+    // wall-clock stream placeholder reorder server history under clock skew) —
+    // it just concatenates the older page in front.
     const state = {
       ...initialState,
       messages: [msg("d", "2026-01-04")],
@@ -72,8 +77,7 @@ describe("session-store — PREPEND_MESSAGES slice", () => {
     };
     const next = reducer(state, {
       type: "PREPEND_MESSAGES",
-      // Deliberately out of order in the payload — reducer must sort.
-      messages: [msg("c", "2026-01-03"), msg("a", "2026-01-01")],
+      messages: [msg("a", "2026-01-01"), msg("c", "2026-01-03")],
       cursor: { createdAt: "2026-01-01", id: "a" },
     });
     expect(next.messages.map((m) => m.timestamp)).toEqual([
@@ -81,6 +85,27 @@ describe("session-store — PREPEND_MESSAGES slice", () => {
       "2026-01-03",
       "2026-01-04",
     ]);
+  });
+
+  it("does not reorder existing messages by timestamp (clock-skew safety)", () => {
+    // A stream placeholder can carry a client wall-clock timestamp that is
+    // EARLIER than older server history when the client clock lags. The reducer
+    // must keep the placeholder where it is (end), not sort it before the
+    // prepended older history.
+    const state = {
+      ...initialState,
+      // Placeholder's client timestamp (2020) is absurdly behind the real
+      // server createdAt of the older page (2026).
+      messages: [msg("stream_x", "2020-01-01")],
+      olderMessagesCursor: { createdAt: "2026-01-02", id: "b" },
+    };
+    const next = reducer(state, {
+      type: "PREPEND_MESSAGES",
+      messages: [msg("a", "2026-01-01")],
+      cursor: null,
+    });
+    // Older history stays in front; the skewed placeholder stays last.
+    expect(next.messages.map((m) => m.id)).toEqual(["a", "stream_x"]);
   });
 
   it("only advances the cursor (no message churn) when every row is a dup", () => {

@@ -26,6 +26,7 @@ import {
   runWithHookScope,
 } from "@covel/runtime";
 import { errorBody } from "../../api-error.js";
+import { normalizeLocale } from "../../lib/validators.js";
 import { signMediaTokenForSession } from "../../middleware/media-token.js";
 import {
   cleanupWorldDataMediaRefs,
@@ -157,7 +158,10 @@ sessionRoutes.post("/", async (c) => {
   const session: SessionRecord = {
     id,
     worldId: rawWorldId,
-    locale: typeof body.locale === "string" ? body.locale : "zh-CN",
+    // Validate the untrusted locale: it flows into locale-variant file-path
+    // construction (world-data importer) and localized prompt text, so an
+    // invalid/attacker-controlled value must never be stored verbatim.
+    locale: normalizeLocale(body.locale),
     status: "active",
     turnCount: 0,
     preGameCompleted: [],

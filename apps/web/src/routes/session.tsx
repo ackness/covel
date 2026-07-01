@@ -146,14 +146,23 @@ function SessionPage() {
         const tt = tRef.current;
         const sid = sessionIdRef.current;
         void (async () => {
-          // 导出前先拉全量历史 —— 窗口化后内存里的 state.messages 可能不完整（只含
-          // 最近一窗 + 已向上加载的部分）。拉取失败再回退到已加载部分，保证不丢用户可见内容。
-          let msgs: ReadonlyArray<{ role: string; content: string }> =
-            messagesRef.current;
+          // 导出以持久化全量历史为基底（窗口化后 state.messages 只含最近一窗 + 已上滚
+          // 加载的部分，可能不完整），再按 id 并入内存里尚未落盘的消息（如正在流式生成的
+          // 占位）。这样既不丢早期历史，也不丢屏幕上正在生成、尚未落盘的内容。拉取失败则
+          // 回退到内存已加载部分。
+          const inMemory = messagesRef.current;
+          let msgs: ReadonlyArray<{
+            id: string;
+            role: string;
+            content: string;
+          }> = inMemory;
           if (sid) {
             try {
               const full = await getDataService().listMessages(sid);
-              if (full.length > 0) msgs = full;
+              if (full.length > 0) {
+                const fullIds = new Set(full.map((m) => m.id));
+                msgs = [...full, ...inMemory.filter((m) => !fullIds.has(m.id))];
+              }
             } catch {
               // 回退到内存中已加载的消息。
             }

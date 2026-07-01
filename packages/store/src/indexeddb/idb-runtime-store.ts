@@ -319,7 +319,7 @@ export function createIdbRuntimeStore(ctx: IdbStoreContext): IdbStoreSlice {
         "turnMessages",
         sessionId,
       );
-      return sortByCreatedAtAsc(all).slice(-limit);
+      return sortByCursorAsc(all).slice(-limit);
     },
   };
 }

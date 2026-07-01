@@ -73,18 +73,23 @@ messageRoutes.get("/:id/messages", async (c) => {
 // GET /sessions/:id/messages/page — keyset page, oldest-first. `?limit`,
 // `?before_created_at`, `?before_id` (see cursor-params). No cursor → the
 // newest window; cursor → the page immediately older (scroll-up "load older").
-messageRoutes.get("/:id/messages/page", async (c) => {
-  const store = c.get("store");
-  const sessionId = c.req.param("id");
-  const guard = await resolveSessionParam(c);
-  if (!guard.ok) return guard.response;
-  const { limit, before } = parseCursorQuery(c);
-  const messages = await store.listMessagesPage(sessionId, { limit, before });
-  return c.json({
-    items: messages.map(flattenMessage),
-    nextCursor: nextCursorFrom(messages, limit),
-  });
-});
+// Rate-limited: this is called repeatedly while scrolling.
+messageRoutes.get(
+  "/:id/messages/page",
+  rateLimiter({ max: 120 }),
+  async (c) => {
+    const store = c.get("store");
+    const sessionId = c.req.param("id");
+    const guard = await resolveSessionParam(c);
+    if (!guard.ok) return guard.response;
+    const { limit, before } = parseCursorQuery(c);
+    const messages = await store.listMessagesPage(sessionId, { limit, before });
+    return c.json({
+      items: messages.map(flattenMessage),
+      nextCursor: nextCursorFrom(messages, limit),
+    });
+  },
+);
 
 // POST /sessions/:id/messages/sync — bulk upsert messages (LocalDataService)
 messageRoutes.post(

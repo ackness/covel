@@ -7,6 +7,7 @@ import type { DataStore, TraceEventRecord } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { buildSessionDiscoverySnapshot } from "./discovery.js";
 import { nextCursorFrom, parseCursorQuery } from "./cursor-params.js";
+import { rateLimiter } from "../../middleware/rate-limit.js";
 
 /** Default per-page event window for the paged turns endpoint. */
 const TRACE_PAGE_EVENT_LIMIT = 400;
@@ -108,26 +109,39 @@ traceRoutes.get("/:sessionId/turns", async (c) => {
 // (events, not turns), `?before_created_at`, `?before_id` (see cursor-params).
 // nextCursor is the oldest event's position; the frontend merges a turn split
 // across the window boundary by turnId when it loads the next (older) page.
-traceRoutes.get("/:sessionId/turns/page", async (c) => {
-  const store = c.get("store");
-  const sessionId = c.req.param("sessionId");
-  const { limit, before } = parseCursorQuery(c, TRACE_PAGE_EVENT_LIMIT);
+traceRoutes.get(
+  "/:sessionId/turns/page",
+  rateLimiter({ max: 120 }),
+  async (c) => {
+    const store = c.get("store");
+    const sessionId = c.req.param("sessionId");
+    const { limit, before } = parseCursorQuery(c, TRACE_PAGE_EVENT_LIMIT);
 
-  const events = await store.listTraceEventsPage(sessionId, { limit, before });
-  const discovery = await buildSessionDiscoverySnapshot({
-    store,
-    registry: c.get("pluginRegistry"),
-    sessionId,
-    builtinToolNames: c.get("builtinToolNames"),
-  });
+    const events = await store.listTraceEventsPage(sessionId, {
+      limit,
+      before,
+    });
+    // Discovery is a session-level snapshot (getSession + N× listPluginData), not
+    // per-page — only rebuild it for the first page (no cursor). "Load older"
+    // pages reuse the discovery the client already has, avoiding N DB reads per
+    // scroll step.
+    const discovery = before
+      ? undefined
+      : await buildSessionDiscoverySnapshot({
+          store,
+          registry: c.get("pluginRegistry"),
+          sessionId,
+          builtinToolNames: c.get("builtinToolNames"),
+        });
 
-  return c.json({
-    sessionId,
-    turns: buildTurnSummaries(events),
-    nextCursor: nextCursorFrom(events, limit),
-    discovery,
-  });
-});
+    return c.json({
+      sessionId,
+      turns: buildTurnSummaries(events),
+      nextCursor: nextCursorFrom(events, limit),
+      ...(discovery ? { discovery } : {}),
+    });
+  },
+);
 
 /**
  * Map a store TraceEventRecord to the shape expected by the frontend API client.

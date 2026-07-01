@@ -163,7 +163,9 @@ export function createSqlSessionJournalRecords(
       // restore the oldest-first order every caller expects from the tail.
       const rows = await runner.select<TurnMessageRow>(turnMessages, {
         where: eq(turnMessages.sessionId, sessionId),
-        orderBy: [desc(turnMessages.createdAt)],
+        // Tie-break on id so the truncation boundary picks the same rows as
+        // memory/idb (sortByCursorAsc) when several share a createdAt.
+        orderBy: [desc(turnMessages.createdAt), desc(turnMessages.id)],
         limit,
       });
       return rows.reverse().map((row) => toTurnMessageRecord(row, json));
