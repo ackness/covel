@@ -331,6 +331,21 @@ export interface TurnMessageStore {
     pagination?: PaginationOpts,
   ): Promise<TurnMessageRecord[]>;
   /**
+   * Return the **most recent** `limit` turn messages, ordered oldest-first
+   * (the tail of {@link listTurnMessages}).
+   *
+   * This differs from `listTurnMessages(sessionId, { limit })`, which returns
+   * the OLDEST `limit` rows (ascending order + front-truncated). Backends
+   * resolve this with a single descending-ordered, limited query, so a long
+   * session never loads its whole history into memory just to keep the tail
+   * (recall search, plugin "recent context" reads). A `limit <= 0` returns an
+   * empty array.
+   */
+  listRecentTurnMessages(
+    sessionId: string,
+    limit: number,
+  ): Promise<TurnMessageRecord[]>;
+  /**
    * Tag a set of turn messages as compacted into the given summary.
    * Sets `compactedAtTurnId = summaryId` on each message identified by
    * `messageIds`. Original content is preserved; only the prompt-build path

@@ -20,7 +20,7 @@
  *    return unified across both backends.
  */
 
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
 
 import type { InsertValueBuilders } from "./insert-values.js";
@@ -82,6 +82,7 @@ export type SqlSessionJournalRecords = Pick<
   | "listTraceEvents"
   | "appendTurnMessage"
   | "listTurnMessages"
+  | "listRecentTurnMessages"
   | "tagTurnMessagesCompacted"
   | "savePlayerInput"
   | "getPlayerInput"
@@ -130,6 +131,22 @@ export function createSqlSessionJournalRecords(
         offset: pagination?.offset,
       });
       return rows.map((row) => toTurnMessageRecord(row, json));
+    },
+
+    async listRecentTurnMessages(
+      sessionId: string,
+      limit: number,
+    ): Promise<TurnMessageRecord[]> {
+      if (limit <= 0) return [];
+      // Fetch the newest `limit` rows via a descending, limited query so a long
+      // session never streams its whole history into memory, then reverse to
+      // restore the oldest-first order every caller expects from the tail.
+      const rows = await runner.select<TurnMessageRow>(turnMessages, {
+        where: eq(turnMessages.sessionId, sessionId),
+        orderBy: [desc(turnMessages.createdAt)],
+        limit,
+      });
+      return rows.reverse().map((row) => toTurnMessageRecord(row, json));
     },
 
     async tagTurnMessagesCompacted(

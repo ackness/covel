@@ -378,6 +378,51 @@ export function registerRuntimeRecordStoreSuites(
       });
       expect(empty).toHaveLength(0);
     });
+
+    it("listRecentTurnMessages returns the newest N, oldest-first", async () => {
+      const m1 = makeTurnMessage({ sessionId: "sess-tail", createdAt: ts(10) });
+      const m2 = makeTurnMessage({ sessionId: "sess-tail", createdAt: ts(20) });
+      const m3 = makeTurnMessage({ sessionId: "sess-tail", createdAt: ts(30) });
+      const m4 = makeTurnMessage({ sessionId: "sess-tail", createdAt: ts(40) });
+      // Insert out of chronological order to prove the query orders by createdAt,
+      // not by insertion order.
+      await store.appendTurnMessage(m3);
+      await store.appendTurnMessage(m1);
+      await store.appendTurnMessage(m4);
+      await store.appendTurnMessage(m2);
+
+      // Newest 2 → the tail of the ascending list, still oldest-first.
+      const recent2 = await store.listRecentTurnMessages("sess-tail", 2);
+      expect(recent2.map((m) => m.id)).toEqual([m3.id, m4.id]);
+
+      // Limit larger than the row count returns everything (ascending).
+      const all = await store.listRecentTurnMessages("sess-tail", 10);
+      expect(all.map((m) => m.id)).toEqual([m1.id, m2.id, m3.id, m4.id]);
+    });
+
+    it("listRecentTurnMessages returns [] for a non-positive limit", async () => {
+      await store.appendTurnMessage(
+        makeTurnMessage({ sessionId: "sess-tail-zero", createdAt: ts(0) }),
+      );
+      expect(await store.listRecentTurnMessages("sess-tail-zero", 0)).toEqual(
+        [],
+      );
+      expect(await store.listRecentTurnMessages("sess-tail-zero", -5)).toEqual(
+        [],
+      );
+    });
+
+    it("listRecentTurnMessages filters by sessionId", async () => {
+      await store.appendTurnMessage(
+        makeTurnMessage({ sessionId: "sess-tail-a", createdAt: ts(0) }),
+      );
+      await store.appendTurnMessage(
+        makeTurnMessage({ sessionId: "sess-tail-b", createdAt: ts(0) }),
+      );
+      const a = await store.listRecentTurnMessages("sess-tail-a", 10);
+      expect(a).toHaveLength(1);
+      expect(a[0].sessionId).toBe("sess-tail-a");
+    });
   });
 
   describe("PlayerInputs", () => {

@@ -224,6 +224,14 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       return applyPagination(filtered, pagination);
     },
 
+    async listRecentTurnMessages(sessionId, limit) {
+      if (limit <= 0) return [];
+      const filtered = state.turnMessages
+        .filter((r) => r.sessionId === sessionId)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      return filtered.slice(-limit);
+    },
+
     async savePlayerInput(record) {
       state.playerInputs.push(record);
     },

@@ -281,5 +281,18 @@ export function createIdbRuntimeStore(ctx: IdbStoreContext): IdbStoreSlice {
       );
       return paginateRows(sortByCreatedAtAsc(all), pagination);
     },
+
+    async listRecentTurnMessages(
+      sessionId: string,
+      limit: number,
+    ): Promise<TurnMessageRecord[]> {
+      if (limit <= 0) return [];
+      const all = await listBySession<TurnMessageRecord>(
+        db,
+        "turnMessages",
+        sessionId,
+      );
+      return sortByCreatedAtAsc(all).slice(-limit);
+    },
   };
 }
