@@ -159,6 +159,29 @@ describe("maybeCompact", () => {
       expect(store.tagTurnMessagesCompacted).toHaveBeenCalledOnce();
     });
 
+    it("skips compaction when the fast LLM returns empty/whitespace content", async () => {
+      const messages = makeSimpleHistory(20);
+      const deps: CompactorDeps = {
+        store,
+        estimator,
+        fastSlotLlm: makeFastLlm("   "), // whitespace-only response
+        contextWindow: 1_000,
+      };
+
+      const result = await maybeCompact("sess-1", "", messages, deps, {
+        threshold: 0.6,
+        protectLastNUserTurns: 2,
+        protectLastNMessages: 5,
+      });
+
+      // An empty summary must NOT be persisted or tag the source messages
+      // compacted — that would permanently drop real history.
+      expect(result.compacted).toBe(false);
+      expect(deps.fastSlotLlm.complete).toHaveBeenCalledOnce();
+      expect(store.saveSessionSummary).not.toHaveBeenCalled();
+      expect(store.tagTurnMessagesCompacted).not.toHaveBeenCalled();
+    });
+
     it("stores the summary with correct sessionId and focusSections", async () => {
       const messages = makeSimpleHistory(20);
       const deps: CompactorDeps = {

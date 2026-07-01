@@ -289,6 +289,17 @@ export async function maybeCompact(
     return { compacted: false };
   }
 
+  // A successful-but-empty response (safety filter, reasoning-only output, or a
+  // provider returning content elsewhere) must NOT be persisted + tag the source
+  // messages compacted — that would permanently replace real history with an
+  // empty summary. Skip so the window keeps its messages and can compact later.
+  if (!summaryContent.trim()) {
+    console.warn(
+      `[compactor] Empty summary from fast LLM for session ${sessionId}; skipping compaction to avoid dropping history.`,
+    );
+    return { compacted: false };
+  }
+
   // 4. Persist the summary record
   const summaryId = crypto.randomUUID();
   const now = new Date().toISOString();
