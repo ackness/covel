@@ -14,6 +14,7 @@ import { buildPackagesResponse } from "./misc-api/plugin-catalog.js";
 import { buildPluginFlowResponse } from "./misc-api/plugin-flow.js";
 import { bearerToken } from "./misc-api/shared.js";
 import { buildUiSpecsResponse } from "./misc-api/ui-specs.js";
+import { decodeBase64Json } from "../lib/base64-json.js";
 
 export function createMiscApiRoutes(
   ai: AiStack,
@@ -237,18 +238,13 @@ export function createMiscApiRoutes(
     const requested =
       body.presetId ?? (body.slot ? `slot-${body.slot}` : "slot-default");
 
-    // Decode per-request API keys (base64 JSON). Keys are never persisted server-side.
+    // Decode per-request API keys (base64 JSON). Keys are never persisted
+    // server-side. Malformed header → undefined; let the gateway raise a
+    // clearer error later if the key is actually needed.
     let apiKeys: Record<string, string> | undefined;
-    const keysHeader = c.req.header("X-Provider-Keys");
-    if (keysHeader) {
-      try {
-        const decoded = Buffer.from(keysHeader, "base64").toString("utf8");
-        const parsed = JSON.parse(decoded);
-        if (parsed && typeof parsed === "object")
-          apiKeys = parsed as Record<string, string>;
-      } catch {
-        // Fall through — let gateway raise a clearer error if the key is actually needed.
-      }
+    const keysParsed = decodeBase64Json(c.req.header("X-Provider-Keys"));
+    if (keysParsed && typeof keysParsed === "object") {
+      apiKeys = keysParsed as Record<string, string>;
     }
 
     // Decode the client slot config header (base64 JSON). Shared with the
@@ -256,17 +252,11 @@ export function createMiscApiRoutes(
     // own decode because ping can be called before the per-request
     // middleware runs (same request, but the resolution we do here happens
     // against the already-mutated registries).
+    // Malformed header → behave as if no overrides were supplied.
     let slotConfig: SlotOverridesInput = {};
-    const slotHeader = c.req.header("X-Slot-Config");
-    if (slotHeader) {
-      try {
-        const decoded = Buffer.from(slotHeader, "base64").toString("utf8");
-        const parsed = JSON.parse(decoded);
-        if (parsed && typeof parsed === "object")
-          slotConfig = parsed as SlotOverridesInput;
-      } catch {
-        // Malformed header — behave as if no overrides were supplied.
-      }
+    const slotParsed = decodeBase64Json(c.req.header("X-Slot-Config"));
+    if (slotParsed && typeof slotParsed === "object") {
+      slotConfig = slotParsed as SlotOverridesInput;
     }
 
     // Register client-declared custom presets + providers via the shared

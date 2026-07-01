@@ -11,16 +11,17 @@ import { readRuntimeEnv } from "@covel/shared";
 import { errorBody } from "../api-error.js";
 
 interface RateLimitOptions {
-  /** Maximum requests per window. Default: 60 */
-  max?: number;
-  /** Window size in milliseconds. Default: 60_000 (1 minute) */
-  windowMs?: number;
+  /** Maximum requests per window. */
+  max: number;
 }
 
 interface WindowEntry {
   count: number;
   resetAt: number;
 }
+
+/** Sliding-window size — every caller uses the same 1-minute window. */
+const WINDOW_MS = 60_000;
 
 function parseTrustedProxyIps(raw: string | undefined): ReadonlySet<string> {
   return new Set(
@@ -71,9 +72,7 @@ function clientIp(c: Context): string {
   return remote ?? "unknown";
 }
 
-export function rateLimiter(opts: RateLimitOptions = {}): MiddlewareHandler {
-  const max = opts.max ?? readRuntimeEnv().rateLimitRpm;
-  const windowMs = opts.windowMs ?? 60_000;
+export function rateLimiter({ max }: RateLimitOptions): MiddlewareHandler {
   const windows = new Map<string, WindowEntry>();
 
   // Periodic cleanup to prevent memory leak (every 5 minutes)
@@ -96,7 +95,7 @@ export function rateLimiter(opts: RateLimitOptions = {}): MiddlewareHandler {
     const entry = windows.get(key);
 
     if (!entry || now >= entry.resetAt) {
-      windows.set(key, { count: 1, resetAt: now + windowMs });
+      windows.set(key, { count: 1, resetAt: now + WINDOW_MS });
       await next();
       return;
     }
@@ -118,13 +117,11 @@ export function rateLimiter(opts: RateLimitOptions = {}): MiddlewareHandler {
  * Single-flight guard — allows only one concurrent execution per key.
  * Useful for expensive operations like model-db refresh.
  */
-export function singleFlight(
-  keyFn: (c: { req: { path: string } }) => string = (c) => c.req.path,
-): MiddlewareHandler {
+export function singleFlight(): MiddlewareHandler {
   const inflight = new Set<string>();
 
   return async (c, next) => {
-    const key = keyFn(c);
+    const key = c.req.path;
     if (inflight.has(key)) {
       return c.json(
         errorBody("Operation already in progress", {

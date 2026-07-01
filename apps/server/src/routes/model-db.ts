@@ -65,7 +65,7 @@ export function createModelDbRoutes(ai: AiStack): Hono {
 
   app.post(
     "/api/model-db/refresh",
-    rateLimiter({ max: 1, windowMs: 60_000 }),
+    rateLimiter({ max: 1 }),
     singleFlight(),
     async (c) => {
       if (!ai.modelDb)

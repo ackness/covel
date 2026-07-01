@@ -25,13 +25,7 @@ export const UI_NAMESPACE_BY_SLOT: Record<UiSlotName, string> = {
   left: "__ui_left__",
 };
 
-export function bearerToken(c: {
-  req: { header(name: string): string | undefined };
-}): string | undefined {
-  const header = c.req.header("authorization") ?? "";
-  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  return match?.[1]?.trim();
-}
+export { bearerToken } from "../privileged-auth.js";
 
 /**
  * All plugin directories the server should scan — bundled first, user

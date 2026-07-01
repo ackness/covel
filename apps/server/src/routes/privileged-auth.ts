@@ -2,7 +2,8 @@ import type { Context, MiddlewareHandler } from "hono";
 import { readRuntimeEnv } from "@covel/shared";
 import { errorBody } from "../api-error.js";
 
-function bearerToken(c: Context): string | undefined {
+/** Extract the token from an `Authorization: Bearer <token>` header. */
+export function bearerToken(c: Context): string | undefined {
   const header = c.req.header("authorization") ?? "";
   const match = /^Bearer\s+(.+)$/i.exec(header.trim());
   return match?.[1]?.trim();

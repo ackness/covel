@@ -38,7 +38,8 @@ import { createMiscApiRoutes } from "./routes/misc-api.js";
 import { createConfigApiRoutes } from "./routes/config-api.js";
 import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
 import { createRequestBodyLimitMiddleware } from "./middleware/request-body-limit.js";
-import { errorBody } from "./api-error.js";
+import { errorBody, makeErrorHandler } from "./api-error.js";
+import { parseEnvLines } from "./lib/env-file.js";
 import {
   providerApiKeysFromEnv,
   providerIdToApiKeyEnvName,
@@ -57,25 +58,21 @@ function loadKeysEnvInto(target: NodeJS.ProcessEnv): void {
   const file = join(home, "keys.env");
   if (!existsSync(file)) return;
   try {
-    for (const raw of readFileSync(file, "utf-8").split("\n")) {
-      const trimmed = raw.trim();
-      if (!trimmed || trimmed.startsWith("#")) continue;
-      const eq = trimmed.indexOf("=");
-      if (eq < 0) continue;
-      const key = trimmed.slice(0, eq).trim();
-      let val = trimmed.slice(eq + 1).trim();
-      if (
-        (val.startsWith('"') && val.endsWith('"')) ||
-        (val.startsWith("'") && val.endsWith("'"))
-      ) {
-        val = val.slice(1, -1);
-      }
+    for (const [key, val] of parseEnvLines(readFileSync(file, "utf-8"))) {
       const envKey = providerIdToApiKeyEnvName(key);
       if (envKey && target[envKey] === undefined) target[envKey] = val;
     }
   } catch (err) {
     console.warn(`[server] Could not read ${file}:`, err);
   }
+}
+
+/**
+ * Base dir first, plus the user override dir only when set and distinct.
+ * Shared by pluginsDirs and worldsDirs.
+ */
+function mergeDirs(base: string, user: string | undefined): string[] {
+  return user && user !== base ? [base, user] : [base];
 }
 
 function resolvePreferredMemorySlot(slotRegistry: {
@@ -93,16 +90,7 @@ const env = readRuntimeEnv();
 
 // ── Global error handler ────────────────────────────────────────
 const isDev = env.nodeEnv !== "production";
-app.onError((err, c) => {
-  const message = err instanceof Error ? err.message : String(err);
-  // Log every unhandled error WITH request context (method + full URL) so any
-  // 500 is greppable and locatable from the logs.
-  console.error(
-    `[server] Unhandled error: ${c.req.method} ${c.req.url} — ${message}`,
-    err,
-  );
-  return c.json(errorBody(isDev ? message : "Internal server error"), 500);
-});
+app.onError(makeErrorHandler("[server] Unhandled error", isDev));
 
 // ── Middleware ────────────────────────────────────────────────────
 // Suppress Hono request logging for noisy paths (Electron heartbeat, health
@@ -235,11 +223,7 @@ const preferredMemorySlot = resolvePreferredMemorySlot(ai.slotRegistry);
 // plugins can augment but not shadow core functionality.
 const bundledPluginsDir =
   env.pluginsDir ?? resolve(import.meta.dirname, "../../../plugins");
-const userPluginsDir = env.userPluginsDir;
-const pluginsDirs = [bundledPluginsDir];
-if (userPluginsDir && userPluginsDir !== bundledPluginsDir) {
-  pluginsDirs.push(userPluginsDir);
-}
+const pluginsDirs = mergeDirs(bundledPluginsDir, env.userPluginsDir);
 const ensureEmbeddingLock = createEmbeddingLockHelper({ store, ai, apiKeys });
 // Embedding seam for the semantic memory tier. The memory package never
 // imports a provider — it gets this injected (mirrors the LLM adapter). Routes
@@ -266,11 +250,7 @@ const perRequestLlm = createPerRequestLlmMiddleware({
 // merged on top and hot-reloaded alongside.
 const bundledWorldsDir =
   env.worldsDir ?? resolve(import.meta.dirname, "../../../worlds");
-const userWorldsDir = env.userWorldsDir;
-const worldsDirs = [bundledWorldsDir];
-if (userWorldsDir && userWorldsDir !== bundledWorldsDir) {
-  worldsDirs.push(userWorldsDir);
-}
+const worldsDirs = mergeDirs(bundledWorldsDir, env.userWorldsDir);
 
 const api = await bootstrapApi({
   pluginsDir: bundledPluginsDir,

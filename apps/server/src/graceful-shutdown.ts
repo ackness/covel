@@ -1,5 +1,4 @@
 type ShutdownSignal = "SIGINT" | "SIGTERM";
-type ShutdownTimer = unknown;
 
 export const SHUTDOWN_SIGNALS = ["SIGINT", "SIGTERM"] as const;
 
@@ -8,32 +7,9 @@ export interface ShutdownServer {
   closeAllConnections?: () => void;
 }
 
-export interface GracefulShutdownOptions {
-  on?: (signal: ShutdownSignal, listener: () => void) => void;
-  log?: (message: string) => void;
-  exit?: (code: number) => void;
-  setTimer?: (handler: () => void, timeoutMs: number) => ShutdownTimer;
-  clearTimer?: (timer: ShutdownTimer) => void;
-  forceExitAfterMs?: number;
-}
+const FORCE_EXIT_AFTER_MS = 5_000;
 
-export const registerGracefulShutdown = (
-  server: ShutdownServer,
-  {
-    on = (signal, listener) => {
-      process.on(signal, listener);
-    },
-    log = (message) => {
-      console.log(message);
-    },
-    exit = (code) => {
-      process.exit(code);
-    },
-    setTimer = (handler, timeoutMs) => setTimeout(handler, timeoutMs),
-    clearTimer = (timer) => clearTimeout(timer as NodeJS.Timeout),
-    forceExitAfterMs = 5_000,
-  }: GracefulShutdownOptions = {},
-) => {
+export const registerGracefulShutdown = (server: ShutdownServer): void => {
   let shuttingDown = false;
 
   const shutdown = (signal: ShutdownSignal) => {
@@ -42,24 +18,24 @@ export const registerGracefulShutdown = (
     }
 
     shuttingDown = true;
-    log(`Received ${signal}, shutting down server...`);
+    console.log(`Received ${signal}, shutting down server...`);
 
-    const shutdownTimer = setTimer(() => {
-      log(`Server shutdown timed out after ${forceExitAfterMs}ms`);
-      exit(1);
-    }, forceExitAfterMs);
+    const shutdownTimer = setTimeout(() => {
+      console.log(`Server shutdown timed out after ${FORCE_EXIT_AFTER_MS}ms`);
+      process.exit(1);
+    }, FORCE_EXIT_AFTER_MS);
 
     server.close((error) => {
-      clearTimer(shutdownTimer);
+      clearTimeout(shutdownTimer);
 
       if (error) {
-        log(`Server shutdown failed: ${error.message}`);
-        exit(1);
+        console.log(`Server shutdown failed: ${error.message}`);
+        process.exit(1);
         return;
       }
 
-      log("Server stopped.");
-      exit(0);
+      console.log("Server stopped.");
+      process.exit(0);
     });
 
     if (typeof server.closeAllConnections === "function") {
@@ -68,10 +44,8 @@ export const registerGracefulShutdown = (
   };
 
   for (const signal of SHUTDOWN_SIGNALS) {
-    on(signal, () => {
+    process.on(signal, () => {
       shutdown(signal);
     });
   }
-
-  return shutdown;
 };
