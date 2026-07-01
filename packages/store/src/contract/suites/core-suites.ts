@@ -485,6 +485,80 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       expect(list[0].id).toBe(m1.id);
       expect(list[1].id).toBe(m2.id);
     });
+
+    it("listMessagesPage returns the newest window then pages older by cursor", async () => {
+      const m1 = makeMessage({ sessionId: "sess-mp", createdAt: ts(10) });
+      const m2 = makeMessage({ sessionId: "sess-mp", createdAt: ts(20) });
+      const m3 = makeMessage({ sessionId: "sess-mp", createdAt: ts(30) });
+      const m4 = makeMessage({ sessionId: "sess-mp", createdAt: ts(40) });
+      // Insert out of order to prove the read path — not insertion order —
+      // determines the window.
+      await store.addMessage(m3);
+      await store.addMessage(m1);
+      await store.addMessage(m4);
+      await store.addMessage(m2);
+
+      // No cursor → newest 2, oldest-first.
+      const newest = await store.listMessagesPage("sess-mp", { limit: 2 });
+      expect(newest.map((m) => m.id)).toEqual([m3.id, m4.id]);
+
+      // Page older than the oldest of the previous window.
+      const older = await store.listMessagesPage("sess-mp", {
+        limit: 2,
+        before: { createdAt: newest[0].createdAt, id: newest[0].id },
+      });
+      expect(older.map((m) => m.id)).toEqual([m1.id, m2.id]);
+
+      // Cursor before the very first message → empty.
+      const none = await store.listMessagesPage("sess-mp", {
+        limit: 5,
+        before: { createdAt: m1.createdAt, id: m1.id },
+      });
+      expect(none).toEqual([]);
+    });
+
+    it("listMessagesPage keyset breaks createdAt ties by id (no skip/repeat)", async () => {
+      // `messages` has no monotonic `order` column and same-turn proposals
+      // routinely share a millisecond, so the cursor must fall back to id.
+      const same = ts(50);
+      const a = makeMessage({
+        sessionId: "sess-tie",
+        id: "id-a",
+        createdAt: same,
+      });
+      const b = makeMessage({
+        sessionId: "sess-tie",
+        id: "id-b",
+        createdAt: same,
+      });
+      const c = makeMessage({
+        sessionId: "sess-tie",
+        id: "id-c",
+        createdAt: same,
+      });
+      await store.addMessage(b);
+      await store.addMessage(c);
+      await store.addMessage(a);
+
+      const page1 = await store.listMessagesPage("sess-tie", { limit: 2 });
+      expect(page1.map((m) => m.id)).toEqual(["id-b", "id-c"]);
+
+      const page2 = await store.listMessagesPage("sess-tie", {
+        limit: 2,
+        before: { createdAt: page1[0].createdAt, id: page1[0].id },
+      });
+      expect(page2.map((m) => m.id)).toEqual(["id-a"]);
+    });
+
+    it("listMessagesPage returns [] for a non-positive limit", async () => {
+      await store.addMessage(makeMessage({ sessionId: "sess-mp0" }));
+      expect(await store.listMessagesPage("sess-mp0", { limit: 0 })).toEqual(
+        [],
+      );
+      expect(await store.listMessagesPage("sess-mp0", { limit: -3 })).toEqual(
+        [],
+      );
+    });
   });
 
   describe("Characters", () => {

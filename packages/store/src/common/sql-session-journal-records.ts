@@ -23,6 +23,7 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
 
+import { cursorPageOrder, cursorPageWhere } from "./cursor.js";
 import type { InsertValueBuilders } from "./insert-values.js";
 import type { JsonReader } from "./mappers.js";
 import {
@@ -39,6 +40,7 @@ import type {
 import type { TraceEventRow } from "./mappers/plugin-mappers.js";
 import type { SqlRunner } from "./sql-runner.js";
 import type {
+  CursorPageOpts,
   DataStore,
   PaginationOpts,
   PlayerInputRecord,
@@ -47,7 +49,11 @@ import type {
   TurnMessageRecord,
 } from "../types.js";
 
-type TraceEventsTable = Table & { sessionId: Column; createdAt: Column };
+type TraceEventsTable = Table & {
+  id: Column;
+  sessionId: Column;
+  createdAt: Column;
+};
 type TurnMessagesTable = Table & {
   sessionId: Column;
   createdAt: Column;
@@ -80,6 +86,7 @@ export type SqlSessionJournalRecords = Pick<
   DataStore,
   | "addTraceEvent"
   | "listTraceEvents"
+  | "listTraceEventsPage"
   | "appendTurnMessage"
   | "listTurnMessages"
   | "listRecentTurnMessages"
@@ -114,6 +121,19 @@ export function createSqlSessionJournalRecords(
         offset: pagination?.offset,
       });
       return rows.map((row) => toTraceEventRecord(row, json));
+    },
+
+    async listTraceEventsPage(
+      sessionId: string,
+      opts: CursorPageOpts,
+    ): Promise<TraceEventRecord[]> {
+      if (opts.limit <= 0) return [];
+      const rows = await runner.select<TraceEventRow>(traceEvents, {
+        where: cursorPageWhere(traceEvents, sessionId, opts.before),
+        orderBy: cursorPageOrder(traceEvents),
+        limit: opts.limit,
+      });
+      return rows.reverse().map((row) => toTraceEventRecord(row, json));
     },
 
     async appendTurnMessage(record: TurnMessageRecord): Promise<void> {

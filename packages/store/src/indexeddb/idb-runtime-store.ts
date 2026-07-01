@@ -1,5 +1,6 @@
 import type {
   ApprovalRecord,
+  CursorPageOpts,
   EventRecord,
   InteractionRecordFilters,
   InteractionRecordRow,
@@ -16,6 +17,7 @@ import type {
   TurnMessageRecord,
   TurnResultRecord,
 } from "../types.js";
+import { applyCursorPage, sortByCursorAsc } from "../common/pagination.js";
 import type { IdbStoreContext, IdbStoreSlice } from "./idb-context.js";
 import {
   filterInteractionRecords,
@@ -211,6 +213,14 @@ export function createIdbRuntimeStore(ctx: IdbStoreContext): IdbStoreSlice {
       return paginateRows(sortByCreatedAtAsc(all), pagination);
     },
 
+    async listMessagesPage(
+      sessionId: string,
+      opts: CursorPageOpts,
+    ): Promise<MessageRecord[]> {
+      const all = await listBySession<MessageRecord>(db, "messages", sessionId);
+      return applyCursorPage(sortByCursorAsc(all), opts);
+    },
+
     async addTraceEvent(record: TraceEventRecord): Promise<void> {
       await putClonedRecord(mutations, "traceEvents", record);
     },
@@ -230,6 +240,18 @@ export function createIdbRuntimeStore(ctx: IdbStoreContext): IdbStoreSlice {
       // this, turn-grouped trace views on the browser-local backend saw events
       // in effectively random order.
       return paginateRows(sortByCreatedAtAsc(all), pagination);
+    },
+
+    async listTraceEventsPage(
+      sessionId: string,
+      opts: CursorPageOpts,
+    ): Promise<TraceEventRecord[]> {
+      const all = await db.getAllFromIndex(
+        "traceEvents",
+        "sessionId",
+        sessionId,
+      );
+      return applyCursorPage(sortByCursorAsc(all), opts);
     },
 
     async saveRuntimeOutput(record: RuntimeOutputRecord): Promise<void> {

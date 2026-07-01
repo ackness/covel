@@ -135,6 +135,49 @@ export function registerRuntimeRecordStoreSuites(
       });
       expect(page2.map((e) => e.id)).toEqual([e3.id]);
     });
+
+    it("listTraceEventsPage returns the newest window then pages older by cursor", async () => {
+      const e1 = makeTraceEvent({ sessionId: "sess-tep", createdAt: ts(10) });
+      const e2 = makeTraceEvent({ sessionId: "sess-tep", createdAt: ts(20) });
+      const e3 = makeTraceEvent({ sessionId: "sess-tep", createdAt: ts(30) });
+      await store.addTraceEvent(e2);
+      await store.addTraceEvent(e3);
+      await store.addTraceEvent(e1);
+
+      const newest = await store.listTraceEventsPage("sess-tep", { limit: 2 });
+      expect(newest.map((e) => e.id)).toEqual([e2.id, e3.id]);
+
+      const older = await store.listTraceEventsPage("sess-tep", {
+        limit: 5,
+        before: { createdAt: newest[0].createdAt, id: newest[0].id },
+      });
+      expect(older.map((e) => e.id)).toEqual([e1.id]);
+    });
+
+    it("listTraceEventsPage keyset breaks createdAt ties by id", async () => {
+      const same = ts(7);
+      const a = makeTraceEvent({
+        sessionId: "sess-tep-tie",
+        id: "te-a",
+        createdAt: same,
+      });
+      const b = makeTraceEvent({
+        sessionId: "sess-tep-tie",
+        id: "te-b",
+        createdAt: same,
+      });
+      await store.addTraceEvent(b);
+      await store.addTraceEvent(a);
+      const page1 = await store.listTraceEventsPage("sess-tep-tie", {
+        limit: 1,
+      });
+      expect(page1.map((e) => e.id)).toEqual(["te-b"]);
+      const page2 = await store.listTraceEventsPage("sess-tep-tie", {
+        limit: 1,
+        before: { createdAt: page1[0].createdAt, id: page1[0].id },
+      });
+      expect(page2.map((e) => e.id)).toEqual(["te-a"]);
+    });
   });
 
   describe("RuntimeOutputs", () => {

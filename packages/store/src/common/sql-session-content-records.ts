@@ -19,6 +19,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import type { Column, SQL, Table } from "drizzle-orm";
 
+import { cursorPageOrder, cursorPageWhere } from "./cursor.js";
 import type { InsertValueBuilders } from "./insert-values.js";
 import type { JsonReader } from "./mappers.js";
 import {
@@ -37,6 +38,7 @@ import type { SqlRunner } from "./sql-runner.js";
 import type {
   ApprovalRecord,
   CharacterRecord,
+  CursorPageOpts,
   DataStore,
   EventRecord,
   MessageRecord,
@@ -49,7 +51,11 @@ type EventsTable = Table & {
   createdAt: Column;
 };
 type ApprovalsTable = Table & { sessionId: Column };
-type MessagesTable = Table & { sessionId: Column; createdAt: Column };
+type MessagesTable = Table & {
+  id: Column;
+  sessionId: Column;
+  createdAt: Column;
+};
 type CharactersTable = Table & { id: Column; sessionId: Column };
 
 export interface SqlSessionContentTables {
@@ -81,6 +87,7 @@ export type SqlSessionContentRecords = Pick<
   | "listApprovals"
   | "addMessage"
   | "listMessages"
+  | "listMessagesPage"
   | "upsertCharacter"
   | "listCharacters"
   | "deleteCharacter"
@@ -139,6 +146,19 @@ export function createSqlSessionContentRecords(
         offset: pagination?.offset,
       });
       return rows.map((row) => toMessageRecord(row, json));
+    },
+
+    async listMessagesPage(
+      sessionId: string,
+      opts: CursorPageOpts,
+    ): Promise<MessageRecord[]> {
+      if (opts.limit <= 0) return [];
+      const rows = await runner.select<MessageRow>(messages, {
+        where: cursorPageWhere(messages, sessionId, opts.before),
+        orderBy: cursorPageOrder(messages),
+        limit: opts.limit,
+      });
+      return rows.reverse().map((row) => toMessageRecord(row, json));
     },
 
     async upsertCharacter(record: CharacterRecord): Promise<void> {

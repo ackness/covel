@@ -1,4 +1,8 @@
-import { applyPagination } from "../common/pagination.js";
+import {
+  applyCursorPage,
+  applyPagination,
+  sortByCursorAsc,
+} from "../common/pagination.js";
 import { stateEntryKey } from "../common/keys.js";
 import type { SessionSummaryRecord } from "../types.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
@@ -185,6 +189,13 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       return applyPagination(filtered, pagination);
     },
 
+    async listMessagesPage(sessionId, opts) {
+      const sorted = sortByCursorAsc(
+        state.messages.filter((r) => r.sessionId === sessionId),
+      );
+      return applyCursorPage(sorted, opts);
+    },
+
     async upsertCharacter(record) {
       state.characters.set(record.id, record);
     },
@@ -214,6 +225,13 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
         .filter((r) => r.sessionId === sessionId)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       return applyPagination(filtered, pagination);
+    },
+
+    async listTraceEventsPage(sessionId, opts) {
+      const sorted = sortByCursorAsc(
+        state.traceEvents.filter((r) => r.sessionId === sessionId),
+      );
+      return applyCursorPage(sorted, opts);
     },
 
     async appendTurnMessage(record) {
