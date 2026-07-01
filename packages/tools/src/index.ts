@@ -52,6 +52,7 @@ export {
   mirrorCharacterToPluginData,
   mergeSchemaDefaults,
 } from "./builtin/character-tools.js";
+export { CHARACTER_NAMESPACE } from "./builtin/character-tool-helpers.js";
 export type {
   CharacterStore,
   CharacterToolDeps,
