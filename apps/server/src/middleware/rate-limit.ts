@@ -5,7 +5,8 @@
  * (use Redis-backed limiter for T3). Sufficient for T1/T2.
  */
 
-import type { MiddlewareHandler } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
+import { getConnInfo } from "@hono/node-server/conninfo";
 import { readRuntimeEnv } from "@covel/shared";
 import { errorBody } from "../api-error.js";
 
@@ -38,18 +39,20 @@ function normalizeIp(value: string | undefined): string | undefined {
   return trimmed;
 }
 
-function requestRemoteAddr(c: { req: { raw?: Request } }): string | undefined {
-  const raw = c.req.raw as
-    | (Request & {
-        readonly connInfo?: { readonly remote?: { readonly address?: string } };
-      })
-    | undefined;
-  return normalizeIp(raw?.connInfo?.remote?.address);
+function requestRemoteAddr(c: Context): string | undefined {
+  // @hono/node-server does NOT attach the client address to the raw Request;
+  // it is only exposed via getConnInfo (reads the underlying socket). Reading
+  // `c.req.raw.connInfo` returned undefined for every request, collapsing the
+  // limiter to a single global bucket. getConnInfo throws when there is no
+  // socket (e.g. app.request() in tests) — fall back to undefined there.
+  try {
+    return normalizeIp(getConnInfo(c).remote.address);
+  } catch {
+    return undefined;
+  }
 }
 
-function clientIp(c: {
-  req: { header(name: string): string | undefined; raw?: Request };
-}): string {
+function clientIp(c: Context): string {
   const env = readRuntimeEnv();
   const remote = requestRemoteAddr(c);
   const trustedProxyIps = parseTrustedProxyIps(env.trustedProxyIps);
