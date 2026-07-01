@@ -9,9 +9,6 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 
-/** Channels the renderer may SEND (fire-and-forget) to main. */
-const SEND_CHANNELS = [] as const;
-
 /** Channels the renderer may INVOKE (request/response) on main. */
 const INVOKE_CHANNELS = [
   "covel:get-info",
@@ -43,13 +40,8 @@ const RECEIVE_CHANNELS = [
   "covel:startup:error",
 ] as const;
 
-type SendChannel = (typeof SEND_CHANNELS)[number];
 type InvokeChannel = (typeof INVOKE_CHANNELS)[number];
 type ReceiveChannel = (typeof RECEIVE_CHANNELS)[number];
-
-function isSendChannel(ch: string): ch is SendChannel {
-  return (SEND_CHANNELS as readonly string[]).includes(ch);
-}
 
 function isInvokeChannel(ch: string): ch is InvokeChannel {
   return (INVOKE_CHANNELS as readonly string[]).includes(ch);
@@ -83,18 +75,6 @@ const api = {
   appVersion: process.env.COVEL_APP_VERSION ?? "0.0.1-beta",
 
   /**
-   * Fire-and-forget send. Returns true if the channel was allowed.
-   */
-  send(channel: string, payload?: unknown): boolean {
-    if (!isSendChannel(channel)) {
-      console.warn(`[covelIpc] blocked send to '${channel}'`);
-      return false;
-    }
-    ipcRenderer.send(channel, payload);
-    return true;
-  },
-
-  /**
    * Request/response. Rejects if the channel is not allowlisted.
    */
   async invoke<T = unknown>(channel: string, payload?: unknown): Promise<T> {
@@ -125,13 +105,5 @@ const api = {
 } as const;
 
 contextBridge.exposeInMainWorld("covelIpc", api);
-
-// Also expose the channel catalogs for renderer TS typings (not strictly
-// required, but convenient for the web app to introspect).
-contextBridge.exposeInMainWorld("covelIpcChannels", {
-  send: SEND_CHANNELS,
-  invoke: INVOKE_CHANNELS,
-  receive: RECEIVE_CHANNELS,
-});
 
 export type CovelIpcApi = typeof api;

@@ -56,13 +56,17 @@ export function optionalInteger(value: unknown): number | undefined {
 }
 
 /**
- * Split a comma / fullwidth-comma / newline separated string into a trimmed,
- * de-blanked list (capped at 32 entries). Non-strings yield an empty list.
+ * Normalize a value into a trimmed, de-blanked string list (capped at 32
+ * entries). Strings are split on comma / fullwidth-comma / newline; arrays keep
+ * their string items. Anything else yields an empty list.
  */
 export function splitList(value: unknown): string[] {
-  if (typeof value !== "string") return [];
-  return value
-    .split(/[,，\n]/)
+  const parts = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : typeof value === "string"
+      ? value.split(/[,，\n]/)
+      : [];
+  return parts
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 32);
@@ -94,6 +98,108 @@ export function compactRecord<T extends Record<string, unknown>>(
       return true;
     }),
   );
+}
+
+// ── Manual-entity helpers ────────────────────────────────────────
+
+/**
+ * Dispatch a manual RPC payload to one of three entity shapes:
+ *   1. `{entity}Json` — a JSON string (parsed; throws on invalid JSON)
+ *   2. `{entity}Form` — a form object (converted via `fromForm`)
+ *   3. `{entity}`     — a raw object
+ *
+ * Returns `undefined` when `payload` is not a plain object. Previously
+ * copy-pasted as `read<Entity>Payload` across the manual-entity handlers.
+ *
+ * @param payload - The manual RPC payload (`ctx.manualPayload`).
+ * @param entity - Entity name, e.g. `"blueprint"` reads `blueprintJson` /
+ *   `blueprintForm` / `blueprint`.
+ * @param fromForm - Converts a `{entity}Form` object into the raw entity shape.
+ */
+export function readManualEntity(
+  payload: unknown,
+  entity: string,
+  fromForm: (form: Record<string, unknown>) => unknown,
+): unknown {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return undefined;
+  }
+  const record = payload as Record<string, unknown>;
+  const json = record[`${entity}Json`];
+  if (typeof json === "string" && json.trim().length > 0) {
+    try {
+      return JSON.parse(json);
+    } catch {
+      throw new Error(`manualPayload.${entity}Json must be valid JSON`);
+    }
+  }
+  const form = record[`${entity}Form`];
+  if (form && typeof form === "object") {
+    return fromForm(form as Record<string, unknown>);
+  }
+  return record[entity];
+}
+
+export interface EntityEnvelopeOptions {
+  /** Entity name used in every error message, e.g. `"blueprint"`. */
+  readonly entity: string;
+  /** Identifier field name. Defaults to `"id"`. */
+  readonly idField?: string;
+  /** Pattern the identifier must match. */
+  readonly idPattern: RegExp;
+  /** Error message thrown when the identifier fails `idPattern`. */
+  readonly idError: string;
+  /** Max serialized byte length. Defaults to 64KB. */
+  readonly maxBytes?: number;
+  /**
+   * Layer entity-specific fields onto the validated
+   * `{ ...value, schemaVersion: 1, [idField]: id }` base before the size guard.
+   */
+  readonly build?: (base: Record<string, unknown>) => Record<string, unknown>;
+}
+
+/**
+ * Validate the shared manual-entity envelope and return the normalized object.
+ * Runs the checks every manual-entity handler repeats:
+ *   1. `value` is a plain object (else `manualPayload.<entity> must be an object`)
+ *   2. `value[idField]` is a non-empty string matching `idPattern`
+ *   3. `value.schemaVersion` is absent or exactly 1
+ *   4. the built object serializes to <= `maxBytes` (default 64KB)
+ */
+export function assertEntityEnvelope(
+  value: unknown,
+  options: EntityEnvelopeOptions,
+): Record<string, unknown> {
+  const {
+    entity,
+    idField = "id",
+    idPattern,
+    idError,
+    maxBytes = 65_536,
+    build,
+  } = options;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`manualPayload.${entity} must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  const id = normalizeRequiredString(input[idField], `${entity}.${idField}`);
+  if (!idPattern.test(id)) {
+    throw new Error(idError);
+  }
+  const schemaVersion = input.schemaVersion ?? 1;
+  if (schemaVersion !== 1) {
+    throw new Error(`${entity}.schemaVersion must be 1`);
+  }
+  const base: Record<string, unknown> = {
+    ...input,
+    schemaVersion: 1,
+    [idField]: id,
+  };
+  const built = build ? build(base) : base;
+  if (JSON.stringify(built).length > maxBytes) {
+    throw new Error(`${entity} is too large; max serialized size is 64KB`);
+  }
+  return built;
 }
 
 // ── Proposal factory ─────────────────────────────────────────────

@@ -1,13 +1,14 @@
 import {
+  assertEntityEnvelope,
   makeProposal,
   normalizeRequiredString,
   optionalInteger,
   optionalString,
+  readManualEntity,
 } from "@covel/plugin-handlers-utils";
 import { shortId, withPendingProposals } from "@covel/tools";
 
 const PRESENCE_NAMESPACE = "presence";
-const MAX_PRESENCE_BYTES = 65_536;
 const CHARACTER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 
 /**
@@ -17,7 +18,9 @@ const CHARACTER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 export default async function handler(ctx) {
   const payload = ctx.manualPayload ?? {};
   const presence = normalizePresence(
-    readPresencePayload(payload, ctx.sessionId),
+    readManualEntity(payload, "presence", (form) =>
+      presenceFromForm(form, ctx.sessionId),
+    ),
   );
   const now = new Date().toISOString();
 
@@ -37,29 +40,6 @@ export default async function handler(ctx) {
     },
     [proposal],
   );
-}
-
-function readPresencePayload(payload, sessionId) {
-  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-    if (
-      typeof payload.presenceJson === "string" &&
-      payload.presenceJson.trim().length > 0
-    ) {
-      try {
-        return JSON.parse(payload.presenceJson);
-      } catch {
-        throw new Error("manualPayload.presenceJson must be valid JSON");
-      }
-    }
-    if (payload.presenceForm && typeof payload.presenceForm === "object") {
-      return presenceFromForm(
-        /** @type {Record<string, unknown>} */ (payload.presenceForm),
-        sessionId,
-      );
-    }
-    return payload.presence;
-  }
-  return undefined;
 }
 
 /**
@@ -121,46 +101,28 @@ function mediaRefFromForm(form, prefix) {
  * @param {unknown} value
  */
 function normalizePresence(value) {
-  if (!isRecord(value)) {
-    throw new Error("manualPayload.presence must be an object");
-  }
-
-  const characterId = normalizeRequiredString(
-    value.characterId,
-    "presence.characterId",
-  );
-  if (!CHARACTER_ID_PATTERN.test(characterId)) {
-    throw new Error(
+  return assertEntityEnvelope(value, {
+    entity: "presence",
+    idField: "characterId",
+    idPattern: CHARACTER_ID_PATTERN,
+    idError:
       "presence.characterId must be 1-128 characters using letters, digits, underscore, hyphen, dot, colon, or slash-free ids",
-    );
-  }
-  const schemaVersion = value.schemaVersion ?? 1;
-  if (schemaVersion !== 1) {
-    throw new Error("presence.schemaVersion must be 1");
-  }
-
-  const presence = {
-    ...value,
-    schemaVersion: 1,
-    characterId,
-    ...(value.avatar !== undefined
-      ? { avatar: normalizeMediaRef(value.avatar, "presence.avatar") }
-      : {}),
-    ...(value.sprite !== undefined
-      ? { sprite: normalizeMediaRef(value.sprite, "presence.sprite") }
-      : {}),
-    ...(value.voice !== undefined
-      ? { voice: normalizeMediaRef(value.voice, "presence.voice") }
-      : {}),
-    ...(value.media !== undefined
-      ? { media: normalizeMediaMap(value.media) }
-      : {}),
-  };
-  const serialized = JSON.stringify(presence);
-  if (serialized.length > MAX_PRESENCE_BYTES) {
-    throw new Error("presence is too large; max serialized size is 64KB");
-  }
-  return presence;
+    build: (base) => ({
+      ...base,
+      ...(base.avatar !== undefined
+        ? { avatar: normalizeMediaRef(base.avatar, "presence.avatar") }
+        : {}),
+      ...(base.sprite !== undefined
+        ? { sprite: normalizeMediaRef(base.sprite, "presence.sprite") }
+        : {}),
+      ...(base.voice !== undefined
+        ? { voice: normalizeMediaRef(base.voice, "presence.voice") }
+        : {}),
+      ...(base.media !== undefined
+        ? { media: normalizeMediaMap(base.media) }
+        : {}),
+    }),
+  });
 }
 
 function normalizeMediaMap(value) {

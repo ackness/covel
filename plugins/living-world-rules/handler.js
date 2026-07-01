@@ -1,14 +1,15 @@
 import {
+  assertEntityEnvelope,
   makeProposal,
   normalizeRequiredString,
   optionalNumber,
   optionalString,
+  readManualEntity,
   splitList,
 } from "@covel/plugin-handlers-utils";
 import { shortId, withPendingProposals } from "@covel/tools";
 
 const RULE_NAMESPACE = "rules";
-const MAX_RULE_BYTES = 65_536;
 const RULE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const VALID_KINDS = new Set(["constant", "triggered", "evolving"]);
 const VALID_CATEGORIES = new Set([
@@ -27,7 +28,11 @@ const VALID_BUDGET_CLASSES = new Set(["sticky", "flexible", "droppable"]);
  */
 export default async function handler(ctx) {
   const payload = ctx.manualPayload ?? {};
-  const rule = normalizeRule(readRulePayload(payload, ctx.sessionId));
+  const rule = normalizeRule(
+    readManualEntity(payload, "rule", (form) =>
+      ruleFromForm(form, payload.enabled !== false, ctx.sessionId),
+    ),
+  );
   const now = new Date().toISOString();
   const lorebookEntryId = lorebookIdForRule(rule.id);
 
@@ -57,30 +62,6 @@ export default async function handler(ctx) {
     },
     proposals,
   );
-}
-
-function readRulePayload(payload, sessionId) {
-  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-    if (
-      typeof payload.ruleJson === "string" &&
-      payload.ruleJson.trim().length > 0
-    ) {
-      try {
-        return JSON.parse(payload.ruleJson);
-      } catch {
-        throw new Error("manualPayload.ruleJson must be valid JSON");
-      }
-    }
-    if (payload.ruleForm && typeof payload.ruleForm === "object") {
-      return ruleFromForm(
-        /** @type {Record<string, unknown>} */ (payload.ruleForm),
-        payload.enabled !== false,
-        sessionId,
-      );
-    }
-    return payload.rule;
-  }
-  return undefined;
 }
 
 /**
@@ -123,60 +104,40 @@ function ruleFromForm(form, enabled, sessionId) {
  * @param {unknown} value
  */
 function normalizeRule(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("manualPayload.rule must be an object");
-  }
-
-  const input = /** @type {Record<string, unknown>} */ (value);
-  const id = normalizeRequiredString(input.id, "rule.id");
-  const content = normalizeRequiredString(input.content, "rule.content");
-  if (!RULE_ID_PATTERN.test(id)) {
-    throw new Error(
+  return assertEntityEnvelope(value, {
+    entity: "rule",
+    idPattern: RULE_ID_PATTERN,
+    idError:
       "rule.id must be 1-128 characters using letters, digits, underscore, or hyphen",
-    );
-  }
-  const schemaVersion = input.schemaVersion ?? 1;
-  if (schemaVersion !== 1) {
-    throw new Error("rule.schemaVersion must be 1");
-  }
-
-  const kind = normalizeKind(input.kind);
-  const coordinate = normalizeCoordinate(input.coordinate);
-  const category = normalizeOptionalEnum(
-    input.category,
-    VALID_CATEGORIES,
-    "rule.category",
-  );
-  const budgetClass = normalizeOptionalEnum(
-    input.budgetClass,
-    VALID_BUDGET_CLASSES,
-    "rule.budgetClass",
-  );
-  const keys = normalizeStringArray(input.keys);
-  const insertionOrder = normalizeOptionalNumber(
-    input.insertionOrder,
-    "rule.insertionOrder",
-  );
-
-  const rule = {
-    ...input,
-    schemaVersion: 1,
-    id,
-    content,
-    kind,
-    enabled: input.enabled !== false,
-    coordinate,
-    ...(category ? { category } : {}),
-    ...(budgetClass ? { budgetClass } : {}),
-    ...(keys.length > 0 ? { keys } : {}),
-    ...(insertionOrder !== undefined ? { insertionOrder } : {}),
-  };
-
-  const serialized = JSON.stringify(rule);
-  if (serialized.length > MAX_RULE_BYTES) {
-    throw new Error("rule is too large; max serialized size is 64KB");
-  }
-  return rule;
+    build: (base) => {
+      const category = normalizeOptionalEnum(
+        base.category,
+        VALID_CATEGORIES,
+        "rule.category",
+      );
+      const budgetClass = normalizeOptionalEnum(
+        base.budgetClass,
+        VALID_BUDGET_CLASSES,
+        "rule.budgetClass",
+      );
+      const keys = splitList(base.keys);
+      const insertionOrder = normalizeOptionalNumber(
+        base.insertionOrder,
+        "rule.insertionOrder",
+      );
+      return {
+        ...base,
+        content: normalizeRequiredString(base.content, "rule.content"),
+        kind: normalizeKind(base.kind),
+        enabled: base.enabled !== false,
+        coordinate: normalizeCoordinate(base.coordinate),
+        ...(category ? { category } : {}),
+        ...(budgetClass ? { budgetClass } : {}),
+        ...(keys.length > 0 ? { keys } : {}),
+        ...(insertionOrder !== undefined ? { insertionOrder } : {}),
+      };
+    },
+  });
 }
 
 function normalizeKind(value) {
@@ -212,15 +173,6 @@ function normalizeOptionalEnum(value, allowed, field) {
     throw new Error(`${field} is invalid`);
   }
   return value;
-}
-
-function normalizeStringArray(value) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((item) => typeof item === "string")
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, 32);
 }
 
 function normalizeOptionalNumber(value, field) {
