@@ -39,7 +39,9 @@ function mustHaveBundledWorlds(resourcesDir) {
   }
   const worldDirs = fs
     .readdirSync(worldsDir, { withFileTypes: true })
-    .filter((e) => e.isDirectory());
+    // `_`-prefixed dirs are archives (e.g. worlds/_archive) — the world-seed
+    // loader skips any dir without a valid world.yaml, so they aren't worlds.
+    .filter((e) => e.isDirectory() && !e.name.startsWith("_"));
   if (worldDirs.length === 0) {
     throw new Error(`No bundled worlds present under ${worldsDir} `);
   }
