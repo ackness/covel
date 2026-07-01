@@ -123,7 +123,12 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const mediaStore = c.get("mediaStore");
   const prepareToolsForSession = c.get("prepareToolsForSession"); // optional — see env.d.ts
 
-  const body = await c.req.json<ActionRequest>();
+  const body = (await c.req
+    .json<ActionRequest>()
+    .catch(() => null)) as ActionRequest | null;
+  if (!body || typeof body !== "object") {
+    return c.json(errorBody("Request body must be a JSON object"), 400);
+  }
   const { requestId, type, sessionId, locale, model, payload } = body;
 
   const SUPPORTED_ACTIONS = [
@@ -135,6 +140,15 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   ];
   if (!SUPPORTED_ACTIONS.includes(type)) {
     return c.json(errorBody(`Unsupported action type: ${type}`), 400);
+  }
+
+  // Every action except start_session dereferences `payload` (content /
+  // command / …); a request missing it would throw a TypeError → opaque 500.
+  if (type !== "start_session" && (!payload || typeof payload !== "object")) {
+    return c.json(
+      errorBody(`payload (object) is required for action "${type}"`),
+      400,
+    );
   }
 
   const session = await store.getSession(sessionId);
