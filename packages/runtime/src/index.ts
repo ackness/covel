@@ -13,14 +13,8 @@ export {
 } from "@covel/context";
 
 // ── Parallel Executor ────────────────────────────────────────────
-export {
-  executeParallel,
-  resolveFailure,
-} from "./schedule/parallel-executor.js";
-export type {
-  RuntimeExecuteFn,
-  FailureResolution,
-} from "./schedule/parallel-executor.js";
+export { executeParallel } from "./schedule/parallel-executor.js";
+export type { RuntimeExecuteFn } from "./schedule/parallel-executor.js";
 
 // ── Turn Executor ────────────────────────────────────────────────
 export {
