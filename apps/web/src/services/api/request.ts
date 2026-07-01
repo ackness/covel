@@ -33,31 +33,76 @@ function emitNetworkErrorToast(url: string, err: unknown): void {
   emitToast("error", short, detail);
 }
 
+/**
+ * Gateway statuses that mean "backend not reachable yet", never a real app
+ * response (the API server returns 4xx/500 for its own errors, and 429 for rate
+ * limits — none of these). The Vite dev proxy answers 503 while the runtime
+ * server is still booting, and a brief server restart in prod looks the same.
+ */
+const RETRYABLE_STATUS = new Set([502, 503, 504]);
+// 5 retries, capped exponential backoff (250 → 2000 ms) ≈ a 5.75s window — wide
+// enough to cover the dev runtime server's boot (plugin discovery + DB init)
+// so the first load waits it out instead of failing.
+const MAX_RETRIES = 5;
+const RETRY_BASE_DELAY_MS = 250;
+const RETRY_MAX_DELAY_MS = 2000;
+
+function backoffMs(attempt: number): number {
+  return Math.min(RETRY_BASE_DELAY_MS * 2 ** attempt, RETRY_MAX_DELAY_MS);
+}
+
+function isIdempotent(init: RequestInit): boolean {
+  return (init.method ?? "GET").toUpperCase() === "GET";
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function request<T>(
   url: string,
   init?: RequestOptions,
 ): Promise<T> {
   const { silentErrors, ...fetchInit } = init ?? {};
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      ...fetchInit,
-      headers: {
-        "Content-Type": "application/json",
-        ...(needsProviderKeys(url) ? buildAiHeaders() : {}),
-        ...fetchInit.headers,
-      },
-    });
-  } catch (err) {
-    // Transport-level failure (offline, DNS, CORS preflight). These never
-    // reach `res.ok`, so surface them explicitly unless the caller opted out.
-    if (!silentErrors) emitNetworkErrorToast(url, err);
-    throw err;
+  // Only GETs are retried — they're idempotent, so a boot-race ECONNREFUSED (dev
+  // server not up yet) or a transient gateway error can be retried without risk
+  // of double-submitting. Non-GET requests keep the single-shot behaviour.
+  const canRetry = isIdempotent(fetchInit);
+
+  for (let attempt = 0; ; attempt++) {
+    const isLastAttempt = attempt >= MAX_RETRIES;
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        ...fetchInit,
+        headers: {
+          "Content-Type": "application/json",
+          ...(needsProviderKeys(url) ? buildAiHeaders() : {}),
+          ...fetchInit.headers,
+        },
+      });
+    } catch (err) {
+      // Transport-level failure (offline, DNS, CORS preflight, or the dev proxy
+      // resetting the socket because the runtime server isn't up yet).
+      if (canRetry && !isLastAttempt) {
+        await delay(backoffMs(attempt));
+        continue;
+      }
+      if (!silentErrors) emitNetworkErrorToast(url, err);
+      throw err;
+    }
+
+    if (!res.ok) {
+      if (canRetry && !isLastAttempt && RETRYABLE_STATUS.has(res.status)) {
+        await delay(backoffMs(attempt));
+        continue;
+      }
+      const text = await res.text().catch(() => "");
+      if (!silentErrors) emitHttpErrorToast(url, res.status, text);
+      throw new Error(`API ${res.status}: ${text}`);
+    }
+
+    return res.json();
   }
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    if (!silentErrors) emitHttpErrorToast(url, res.status, text);
-    throw new Error(`API ${res.status}: ${text}`);
-  }
-  return res.json();
 }
