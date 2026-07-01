@@ -18,18 +18,18 @@ export default function ({ tool, z, store }) {
   return tool({
     name: "update-codex-entry",
     description:
-      "更新已有的图鉴条目，追加新发现的信息。entryId 使用 unlock-codex-entries 返回的短 ID（如 codex-fire-magic）。",
+      "Update an existing codex entry by appending newly discovered information. Use the short entryId returned by unlock-codex-entries (e.g. codex-fire-magic).",
     parameters: z.object({
       entryId: z
         .string()
         .min(1)
-        .describe("要更新的条目短 ID（如 codex-fire-magic）"),
-      appendContent: z.string().min(1).describe("追加的新内容"),
-      newTags: z.array(z.string()).optional().describe("新增的标签"),
+        .describe("Short ID of the entry to update (e.g. codex-fire-magic)"),
+      appendContent: z.string().min(1).describe("New content to append"),
+      newTags: z.array(z.string()).optional().describe("Tags to add"),
       rarityUpgrade: z
         .enum(["common", "uncommon", "rare", "legendary"])
         .optional()
-        .describe("如果有新发现提升了稀有度"),
+        .describe("Set if a new discovery upgrades the rarity"),
     }),
     execute: async (params, context) => {
       const now = new Date().toISOString();

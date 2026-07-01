@@ -11,7 +11,7 @@ export default function ({ tool, z, store }) {
   return tool({
     name: "list-npc-graph",
     description:
-      "列出当前会话已登记的 NPC 节点和关系边，帮助判断哪些是新出现的、哪些是已知的。返回节点的 name/type/labels/summary 摘要以及所有边的 fact。",
+      "List the NPC nodes and relationship edges already registered in the current session, to help tell which are newly introduced and which are already known. Returns each node's name/type/labels/summary plus the fact of every edge.",
     parameters: z.object({
       limit: z
         .number()
@@ -19,7 +19,9 @@ export default function ({ tool, z, store }) {
         .positive()
         .max(200)
         .optional()
-        .describe("最多返回多少条（默认 120，内部也会截断）"),
+        .describe(
+          "Maximum number of records to return (default 120; also truncated internally)",
+        ),
     }),
     execute: async (params, context) => {
       const limit = Math.min(params.limit ?? 120, 200);
