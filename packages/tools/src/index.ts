@@ -10,18 +10,10 @@ export type { ToolExecutionEnvelope } from "./result.js";
 // ── Zod re-export (for plugin tool factory injection) ───────────
 export { z } from "zod";
 
-// ── Registry ─────────────────────────────────────────────────────
-export { createToolRegistry, generateToolName } from "./registry.js";
-export type { ToolRegistry } from "./registry.js";
+// ── Tool client ──────────────────────────────────────────────────
 export { InMemoryToolClient } from "./in-memory-client.js";
 export type { InMemoryToolClientOptions } from "./in-memory-client.js";
-export type {
-  ToolCallResult,
-  ToolClient,
-  ToolClientEntry,
-  ToolDefinition,
-  ToolTransport,
-} from "./client.js";
+export type { ToolCallResult, ToolClient, ToolDefinition } from "./client.js";
 
 // ── Output validation ────────────────────────────────────────────
 export {

@@ -2,7 +2,7 @@
  * ToolExecutor — resolves, validates, and executes tool calls from LLM responses.
  *
  * Pipeline per call:
- *   1. Look up tool in ToolRegistry by name
+ *   1. Look up tool by name (via the injected findTool callback)
  *   2. Check approval pipeline (if configured)
  *   3. Parse arguments JSON
  *   4. Execute tool.execute(params, context)
