@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useSession } from "@/stores/session-store.js";
+import { getDataService } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { resolveI18n } from "@/lib/catalog.js";
@@ -121,6 +122,8 @@ function SessionPage() {
   navigateRef.current = navigate;
   const messagesRef = useRef(state.messages);
   messagesRef.current = state.messages;
+  const sessionIdRef = useRef(state.session?.id);
+  sessionIdRef.current = state.session?.id;
   const tRef = useRef(t);
   tRef.current = t;
 
@@ -141,31 +144,47 @@ function SessionPage() {
       onNewWorld: () => navigateRef.current({ to: "/session", search: {} }),
       onExportChat: () => {
         const tt = tRef.current;
-        const msgs = messagesRef.current;
-        if (msgs.length === 0) {
-          emitToast(
-            "info",
-            tt("session.exportEmpty", "No messages to export yet"),
-          );
-          return;
-        }
-        try {
-          const text = msgs.map((m) => `[${m.role}] ${m.content}`).join("\n\n");
-          const blob = new Blob([text], { type: "text/plain" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = "covel-chat.txt";
-          a.click();
-          URL.revokeObjectURL(url);
-          emitToast("success", tt("session.exportSuccess", "Chat exported"));
-        } catch (err) {
-          emitToast(
-            "error",
-            tt("session.exportFailed", "Failed to export chat"),
-            err instanceof Error ? err.message : String(err),
-          );
-        }
+        const sid = sessionIdRef.current;
+        void (async () => {
+          // 导出前先拉全量历史 —— 窗口化后内存里的 state.messages 可能不完整（只含
+          // 最近一窗 + 已向上加载的部分）。拉取失败再回退到已加载部分，保证不丢用户可见内容。
+          let msgs: ReadonlyArray<{ role: string; content: string }> =
+            messagesRef.current;
+          if (sid) {
+            try {
+              const full = await getDataService().listMessages(sid);
+              if (full.length > 0) msgs = full;
+            } catch {
+              // 回退到内存中已加载的消息。
+            }
+          }
+          if (msgs.length === 0) {
+            emitToast(
+              "info",
+              tt("session.exportEmpty", "No messages to export yet"),
+            );
+            return;
+          }
+          try {
+            const text = msgs
+              .map((m) => `[${m.role}] ${m.content}`)
+              .join("\n\n");
+            const blob = new Blob([text], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "covel-chat.txt";
+            a.click();
+            URL.revokeObjectURL(url);
+            emitToast("success", tt("session.exportSuccess", "Chat exported"));
+          } catch (err) {
+            emitToast(
+              "error",
+              tt("session.exportFailed", "Failed to export chat"),
+              err instanceof Error ? err.message : String(err),
+            );
+          }
+        })();
       },
     });
   }, []);

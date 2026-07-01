@@ -1,9 +1,11 @@
 import { useTranslation } from "react-i18next";
 import {
   Activity,
+  ChevronsUp,
   Database,
   Filter,
   Gamepad2,
+  Layers,
   Radio,
   RefreshCw,
   Terminal,
@@ -35,9 +37,13 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
     traceDiscovery,
     totalEvents,
     storyTurnCount,
+    isPartial,
+    loadingOlder,
     selectSession,
     openSelectedSession,
     loadTraces,
+    loadOlder,
+    loadAll,
     setAutoRefresh,
     setFilterCategory,
     setSelectedEvent,
@@ -63,9 +69,25 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
             <Terminal className="w-3.5 h-3.5 opacity-50" />
           </h1>
           {selectedSessionId && (
-            <Badge variant="outline" className="font-mono text-[10px]">
+            <Badge
+              variant="outline"
+              className="font-mono text-[10px]"
+              title={
+                isPartial
+                  ? t(
+                      "debugger.windowedHint",
+                      "Only the most recent trace window is loaded — counts are partial.",
+                    )
+                  : undefined
+              }
+            >
               {t("debugger.turn", { count: storyTurnCount })} · {totalEvents}{" "}
               {t("session.events")}
+              {isPartial && (
+                <span className="ml-1 opacity-70">
+                  · {t("debugger.windowed", "window")}
+                </span>
+              )}
             </Badge>
           )}
         </div>
@@ -90,6 +112,32 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
               <Gamepad2 className="w-3 h-3" />
               {t("debugger.toSession")}
             </Button>
+          )}
+          {selectedSessionId && isPartial && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-[11px] text-muted-foreground gap-1"
+                onClick={loadOlder}
+                disabled={loadingOlder}
+              >
+                <ChevronsUp
+                  className={`w-3 h-3 ${loadingOlder ? "animate-pulse" : ""}`}
+                />
+                {t("debugger.loadOlder", "Load older")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-[11px] text-muted-foreground gap-1"
+                onClick={loadAll}
+                disabled={loading}
+              >
+                <Layers className="w-3 h-3" />
+                {t("debugger.loadAll", "Load all")}
+              </Button>
+            </>
           )}
           <Button
             variant="ghost"
@@ -135,6 +183,18 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
                 {totalEvents} {t("session.events")}
               </span>
             </span>
+            {isPartial && (
+              <span
+                className="inline-flex items-center gap-1.5 text-amber-500/80"
+                title={t(
+                  "debugger.windowedHint",
+                  "Only the most recent trace window is loaded — counts are partial.",
+                )}
+              >
+                <Layers className="h-3 w-3" />
+                <span>{t("debugger.windowedBadge", "Partial window")}</span>
+              </span>
+            )}
             {filterCategory && (
               <span className="inline-flex items-center gap-1.5">
                 <Filter className="h-3 w-3 text-muted-foreground" />
@@ -168,7 +228,11 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
                 traceDiscovery={traceDiscovery}
               />
             ) : debugView === "cost" ? (
-              <CostPanel turns={visibleTurns} />
+              <CostPanel
+                turns={visibleTurns}
+                isPartial={isPartial}
+                onLoadAll={loadAll}
+              />
             ) : (
               <>
                 <TraceTimeline

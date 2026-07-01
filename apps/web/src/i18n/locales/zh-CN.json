@@ -328,6 +328,7 @@
       "server": "服务端"
     },
     "jumpToLatest": "跳到最新",
+    "loadingOlder": "正在加载更早的消息…",
     "startingGame": "创建中…",
     "resuming": "恢复中…",
     "connectionConnecting": "连接中…",
@@ -1011,9 +1012,17 @@
       "byRuntime": "按 runtime",
       "byTurn": "按回合",
       "note": "token 求和来自 llm.responded / gateway.responded。美元成本为待办 follow-up（model id 尚未进入 trace 负载）。",
-      "noData": "本会话暂无 token 用量记录。"
+      "noData": "本会话暂无 token 用量记录。",
+      "windowTitle": "已加载窗口",
+      "partialNote": "仅加载最近一段窗口，下方合计为部分值。",
+      "loadAllForTotal": "加载全部以纳入整个会话"
     },
     "all": "全部",
+    "loadOlder": "加载更早",
+    "loadAll": "加载全部",
+    "windowed": "窗口",
+    "windowedBadge": "部分窗口",
+    "windowedHint": "仅加载最近一段追踪窗口，计数为部分值。",
     "selectSessionToInspect": "选择一个会话以查看追踪",
     "noTraceEvents": "尚未记录追踪事件",
     "eventsWillAppear": "回合执行后事件将在此处显示",

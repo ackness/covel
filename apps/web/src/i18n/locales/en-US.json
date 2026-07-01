@@ -328,6 +328,7 @@
       "server": "Server"
     },
     "jumpToLatest": "Jump to latest",
+    "loadingOlder": "Loading earlier messages…",
     "startingGame": "Creating…",
     "resuming": "Resuming…",
     "connectionConnecting": "Connecting…",
@@ -1011,9 +1012,17 @@
       "byRuntime": "By runtime",
       "byTurn": "By turn",
       "note": "Token sums from llm.responded / gateway.responded. USD cost is a pending follow-up (model id not yet in the trace payload).",
-      "noData": "No token usage recorded for this session."
+      "noData": "No token usage recorded for this session.",
+      "windowTitle": "Loaded window",
+      "partialNote": "Only the most recent window is loaded — totals below are partial.",
+      "loadAllForTotal": "Load all to include the full session"
     },
     "all": "All",
+    "loadOlder": "Load older",
+    "loadAll": "Load all",
+    "windowed": "window",
+    "windowedBadge": "Partial window",
+    "windowedHint": "Only the most recent trace window is loaded — counts are partial.",
     "selectSessionToInspect": "Select a session to inspect traces",
     "noTraceEvents": "No trace events recorded",
     "eventsWillAppear": "Events will appear here as turns execute",

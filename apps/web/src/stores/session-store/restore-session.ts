@@ -18,7 +18,7 @@ interface RestoreSessionOptions {
   session: api.SessionRecord;
 }
 
-function toStreamMessages(
+export function toStreamMessages(
   messages: readonly (api.MessageRecord | SnapshotMessage)[],
 ): StreamMessage[] {
   return messages.map((message) => ({
@@ -80,6 +80,12 @@ async function restoreServerSnapshot(
       type: "LOAD_MESSAGES",
       messages: toStreamMessages(snapshot.messages),
     });
+    // snapshot.messages 只是最近一窗；记录游标作为"加载更旧"的起点。
+    // null / undefined ⇒ 已到历史开头，禁用向上加载。
+    dispatch({
+      type: "SET_OLDER_MESSAGES_CURSOR",
+      cursor: snapshot.messagesCursor ?? null,
+    });
 
     if (
       snapshot.characters.length > 0 ||
@@ -120,6 +126,8 @@ async function restoreLocalFallback(
       type: "LOAD_MESSAGES",
       messages: toStreamMessages(messagesResult.value),
     });
+    // 本地回退走 ds.listMessages 全量恢复，没有更旧要加载 → 游标置空。
+    dispatch({ type: "SET_OLDER_MESSAGES_CURSOR", cursor: null });
   }
   if (patchesResult.status === "fulfilled") {
     dispatch({

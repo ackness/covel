@@ -12,6 +12,12 @@ export interface SessionActions {
   loadWorldSessions: () => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
   sendMessage: (content: string) => void;
+  /**
+   * Fetch the page of messages immediately older than the current window (from
+   * `olderMessagesCursor`) and prepend them. No-op when the cursor is `null`
+   * (start of history reached). Resolves once the store has been updated.
+   */
+  loadOlderMessages: () => Promise<void>;
   submitBlock: (blockId: string, values?: Record<string, unknown>) => void;
   submitInteraction: (
     blockId: string,

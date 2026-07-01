@@ -1,4 +1,5 @@
 import type {
+  CursorPage,
   I18nText,
   PluginRpcResponse,
   RuntimeResult,
@@ -321,6 +322,31 @@ export async function listMessages(
   sessionId: string,
 ): Promise<MessageRecord[]> {
   return request<MessageRecord[]>(`/api/sessions/${sessionId}/messages`);
+}
+
+/**
+ * Keyset page of messages, oldest-first. `before` omitted ⇒ the newest window;
+ * `before` set ⇒ the page immediately older than that `(createdAt, id)`
+ * position (scroll-up "load older"). `nextCursor` points at the oldest returned
+ * row, or is `null` once the window reaches the start of history. Keeps the
+ * full-history `listMessages` above untouched.
+ */
+export async function listMessagesPage(
+  sessionId: string,
+  opts: { limit?: number; before?: { createdAt: string; id: string } } = {},
+): Promise<CursorPage<MessageRecord>> {
+  const params = new URLSearchParams();
+  if (opts.limit != null) params.set("limit", String(opts.limit));
+  if (opts.before) {
+    params.set("before_created_at", opts.before.createdAt);
+    params.set("before_id", opts.before.id);
+  }
+  const qs = params.toString();
+  return request<CursorPage<MessageRecord>>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/messages/page${
+      qs ? `?${qs}` : ""
+    }`,
+  );
 }
 
 export async function syncMessages(

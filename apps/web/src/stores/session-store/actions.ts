@@ -11,7 +11,7 @@ import { bootSessionStore } from "./boot.js";
 import type { SessionActions } from "./context.js";
 import { toExecutionStepStatus } from "./execution-steps.js";
 import { enrichGameStateFromSnapshot } from "./game-state.js";
-import { restoreSessionState } from "./restore-session.js";
+import { restoreSessionState, toStreamMessages } from "./restore-session.js";
 import {
   ensureServerThenRun,
   finalizeActionExecution,
@@ -36,6 +36,9 @@ interface UseSessionActionsOptions {
   handleSseEvent: SseEventHandler;
 }
 
+/** Page size for the scroll-up "load older messages" fetch. */
+const OLDER_MESSAGES_PAGE_SIZE = 40;
+
 export function useBuildSessionActions({
   state,
   dispatch,
@@ -43,7 +46,7 @@ export function useBuildSessionActions({
   refs,
   handleSseEvent,
 }: UseSessionActionsOptions): SessionActions {
-  const { sessionIdRef } = refs;
+  const { sessionIdRef, stateRef } = refs;
 
   const boot = useCallback(async () => {
     await bootSessionStore({ dispatch, ds });
@@ -219,6 +222,28 @@ export function useBuildSessionActions({
     },
     [dispatch, state, runSingleAction],
   );
+
+  const loadOlderMessages = useCallback(async () => {
+    const sid = sessionIdRef.current;
+    // 从 ref 读取最新游标，避免闭包捕获陈旧值并保持该 action 引用稳定。
+    const cursor = stateRef.current.olderMessagesCursor;
+    if (!sid || !cursor) return;
+    try {
+      const page = await ds.listMessagesPage(sid, {
+        before: { createdAt: cursor.createdAt, id: cursor.id },
+        limit: OLDER_MESSAGES_PAGE_SIZE,
+      });
+      // 会话可能在请求期间被切换 —— 丢弃过期响应。
+      if (sessionIdRef.current !== sid) return;
+      dispatch({
+        type: "PREPEND_MESSAGES",
+        messages: toStreamMessages(page.items),
+        cursor: page.nextCursor,
+      });
+    } catch {
+      // 非关键：下次滚动到顶部时会重试。
+    }
+  }, [ds, dispatch, sessionIdRef, stateRef]);
 
   const submitBlock = useCallback(
     (blockId: string, values?: Record<string, unknown>) => {
@@ -548,6 +573,7 @@ export function useBuildSessionActions({
       loadWorldSessions,
       deleteSession,
       sendMessage,
+      loadOlderMessages,
       submitBlock,
       submitInteraction,
       executeCommand,
@@ -578,6 +604,7 @@ export function useBuildSessionActions({
       loadWorldSessions,
       deleteSession,
       sendMessage,
+      loadOlderMessages,
       submitBlock,
       submitInteraction,
       executeCommand,

@@ -126,7 +126,16 @@ function StatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function CostPanel({ turns }: { turns: readonly VisibleTurn[] }) {
+export function CostPanel({
+  turns,
+  isPartial = false,
+  onLoadAll,
+}: {
+  turns: readonly VisibleTurn[];
+  // 仍有更早未加载的事件：下方聚合只是「当前窗口」，不是整会话合计。
+  isPartial?: boolean;
+  onLoadAll?: () => void;
+}) {
   const { t } = useTranslation();
   const model = useMemo(() => aggregate(turns), [turns]);
   const totalTokens = model.totalInput + model.totalOutput;
@@ -145,11 +154,35 @@ export function CostPanel({ turns }: { turns: readonly VisibleTurn[] }) {
 
   return (
     <div className="flex-1 overflow-auto p-4 space-y-6">
-      {/* Session totals */}
+      {/* 聚合合计：窗口化后标题明确「当前窗口」而非「会话合计」，避免静默失真 */}
       <section className="space-y-2">
         <h2 className="ui-meta text-[10px] uppercase tracking-wider text-muted-foreground">
-          {t("debugger.cost.session", "Session total")}
+          {isPartial
+            ? t("debugger.cost.windowTitle", "Loaded window")
+            : t("debugger.cost.session", "Session total")}
         </h2>
+        {isPartial && (
+          <div className="flex flex-wrap items-center gap-2 border border-amber-500/40 bg-amber-500/5 px-3 py-1.5 text-[10px] text-amber-600 dark:text-amber-400">
+            <span>
+              {t(
+                "debugger.cost.partialNote",
+                "Only the most recent window is loaded — totals below are partial.",
+              )}
+            </span>
+            {onLoadAll && (
+              <button
+                type="button"
+                onClick={onLoadAll}
+                className="underline underline-offset-2 hover:opacity-80"
+              >
+                {t(
+                  "debugger.cost.loadAllForTotal",
+                  "Load all to include the full session",
+                )}
+              </button>
+            )}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           <StatCard
             label={t("debugger.cost.totalTokens", "Total tokens")}

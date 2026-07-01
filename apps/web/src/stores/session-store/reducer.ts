@@ -25,6 +25,7 @@ export const initialState: SessionState = {
   world: null,
   session: null,
   messages: [],
+  olderMessagesCursor: null,
   worldSessions: [],
   executing: false,
   executionError: null,
@@ -202,6 +203,25 @@ export function reducer(
       }
       return nextState;
     }
+    case "PREPEND_MESSAGES": {
+      // 把更旧的一批消息合并到前部。已有消息（含流式占位/本地追加）优先保留，
+      // 仅补入尚未出现的历史条目（按 id 去重），再整体按 createdAt 正序排列。
+      // 绝不复用 LOAD_MESSAGES（整体覆盖会丢历史）。
+      const existingIds = new Set(state.messages.map((m) => m.id));
+      const older = action.messages.filter((m) => !existingIds.has(m.id));
+      if (older.length === 0) {
+        // 没有新增历史，只推进游标即可（引用不变的 messages 避免多余重渲染）。
+        return { ...state, olderMessagesCursor: action.cursor };
+      }
+      // StreamMessage.timestamp 即消息的 createdAt（restore 时透传），稳定排序在时间
+      // 相同时保留插入顺序（older 在前、existing 在后）。
+      const merged = [...older, ...state.messages].sort((a, b) =>
+        a.timestamp.localeCompare(b.timestamp),
+      );
+      return { ...state, messages: merged, olderMessagesCursor: action.cursor };
+    }
+    case "SET_OLDER_MESSAGES_CURSOR":
+      return { ...state, olderMessagesCursor: action.cursor };
     case "LOAD_STATE_PATCHES":
       return {
         ...state,
@@ -297,6 +317,7 @@ export function reducer(
         ...state,
         session: null,
         messages: [],
+        olderMessagesCursor: null,
         statePatches: [],
         gameState: {},
         pluginData: {},
@@ -318,6 +339,7 @@ export function reducer(
         world: null,
         session: null,
         messages: [],
+        olderMessagesCursor: null,
         worldSessions: [],
         statePatches: [],
         gameState: {},
