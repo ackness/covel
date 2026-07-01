@@ -8,6 +8,7 @@ import type { DataStore } from "@covel/store";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import { resolveSessionParam } from "./session/session-guard.js";
 import { errorBody } from "../../api-error.js";
+import { nextCursorFrom, parseCursorQuery } from "./cursor-params.js";
 
 type Env = {
   Variables: {
@@ -34,29 +35,55 @@ const syncBodySchema = z.object({
   messages: z.array(syncMessageSchema),
 });
 
-// GET /sessions/:id/messages
+// Flatten stored metadata into top-level fields for frontend consumption.
+function flattenMessage(m: {
+  id: string;
+  sessionId: string;
+  role: string;
+  content: string;
+  metadata?: unknown;
+  createdAt: string;
+}) {
+  const meta = (m.metadata ?? {}) as Record<string, unknown>;
+  return {
+    id: m.id,
+    sessionId: m.sessionId,
+    role: m.role,
+    content: m.content,
+    turnId: meta.turnId,
+    runtimeId: meta.runtimeId,
+    kind: meta.kind,
+    block: meta.block,
+    createdAt: m.createdAt,
+  };
+}
+
+// GET /sessions/:id/messages — full history (backward-compatible; used by the
+// snapshot-miss fallback and bulk sync). Prefer /messages/page for windowed
+// reads on long sessions.
 messageRoutes.get("/:id/messages", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
   const guard = await resolveSessionParam(c);
   if (!guard.ok) return guard.response;
   const messages = await store.listMessages(sessionId);
-  // Flatten metadata into top-level fields for frontend consumption
-  const flattened = messages.map((m) => {
-    const meta = (m.metadata ?? {}) as Record<string, unknown>;
-    return {
-      id: m.id,
-      sessionId: m.sessionId,
-      role: m.role,
-      content: m.content,
-      turnId: meta.turnId,
-      runtimeId: meta.runtimeId,
-      kind: meta.kind,
-      block: meta.block,
-      createdAt: m.createdAt,
-    };
+  return c.json(messages.map(flattenMessage));
+});
+
+// GET /sessions/:id/messages/page — keyset page, oldest-first. `?limit`,
+// `?before_created_at`, `?before_id` (see cursor-params). No cursor → the
+// newest window; cursor → the page immediately older (scroll-up "load older").
+messageRoutes.get("/:id/messages/page", async (c) => {
+  const store = c.get("store");
+  const sessionId = c.req.param("id");
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const { limit, before } = parseCursorQuery(c);
+  const messages = await store.listMessagesPage(sessionId, { limit, before });
+  return c.json({
+    items: messages.map(flattenMessage),
+    nextCursor: nextCursorFrom(messages, limit),
   });
-  return c.json(flattened);
 });
 
 // POST /sessions/:id/messages/sync — bulk upsert messages (LocalDataService)

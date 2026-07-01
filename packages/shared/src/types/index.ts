@@ -194,6 +194,8 @@ export type {
   SnapshotCharacter,
   SnapshotTraceEvent,
   SnapshotPluginStatus,
+  TimeCursor,
+  CursorPage,
 } from "./protocol.js";
 
 export type {

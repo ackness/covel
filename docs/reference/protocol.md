@@ -337,20 +337,22 @@ community-trust 插件的 RPC 调用需要玩家显式批准。框架返回 202 
 
 只读数据获取，标准 REST GET 响应：
 
-| 查询     | 端点                                              | 响应                                |
-| -------- | ------------------------------------------------- | ----------------------------------- |
-| 会话列表 | `GET /api/sessions?worldId=`                      | `{ items: SessionRecord[] }`        |
-| 会话详情 | `GET /api/sessions/:id`                           | `SessionRecord`                     |
-| 会话快照 | `GET /api/sessions/:id/snapshot`                  | `SessionSnapshot`                   |
-| 消息列表 | `GET /api/sessions/:id/messages`                  | `MessageRecord[]`                   |
-| 角色列表 | `GET /api/sessions/:id/characters`                | `{ items: CharacterRecord[] }`      |
-| 插件列表 | `GET /api/sessions/:id/plugins`                   | `{ active[], available[] }`         |
-| 状态查询 | `GET /api/sessions/:id/state`                     | `{ tables }`                        |
-| 状态补丁 | `GET /api/sessions/:id/state-patches`             | `Patch[]`                           |
-| 插件数据 | `GET /api/sessions/:id/plugin-data/:pluginId/:ns` | `{ items[] }`                       |
-| 世界列表 | `GET /api/worlds`                                 | `{ items: WorldRecord[] }`          |
-| 执行追踪 | `GET /api/traces/:sessionId`                      | `{ events[] }`                      |
-| 服务健康 | `GET /api/health`                                 | `{ status, version, storeBackend }` |
+| 查询     | 端点                                              | 响应                                                              |
+| -------- | ------------------------------------------------- | ----------------------------------------------------------------- |
+| 会话列表 | `GET /api/sessions?worldId=`                      | `{ items: SessionRecord[] }`                                      |
+| 会话详情 | `GET /api/sessions/:id`                           | `SessionRecord`                                                   |
+| 会话快照 | `GET /api/sessions/:id/snapshot`                  | `SessionSnapshot`（messages/steps 为最近窗口 + `messagesCursor`） |
+| 消息列表 | `GET /api/sessions/:id/messages`                  | `FlatMessage[]`（全量）                                           |
+| 消息分页 | `GET /api/sessions/:id/messages/page`             | `CursorPage<FlatMessage>`（游标）                                 |
+| 角色列表 | `GET /api/sessions/:id/characters`                | `{ items: CharacterRecord[] }`                                    |
+| 插件列表 | `GET /api/sessions/:id/plugins`                   | `{ active[], available[] }`                                       |
+| 状态查询 | `GET /api/sessions/:id/state`                     | `{ tables }`                                                      |
+| 状态补丁 | `GET /api/sessions/:id/state-patches`             | `Patch[]`                                                         |
+| 插件数据 | `GET /api/sessions/:id/plugin-data/:pluginId/:ns` | `{ items[] }`                                                     |
+| 世界列表 | `GET /api/worlds`                                 | `{ items: WorldRecord[] }`                                        |
+| 执行追踪 | `GET /api/traces/:sessionId`                      | `{ events[] }`（全量）                                            |
+| 追踪分页 | `GET /api/traces/:sessionId/turns/page`           | `{ turns[], nextCursor }`（游标）                                 |
+| 服务健康 | `GET /api/health`                                 | `{ status, version, storeBackend }`                               |
 
 ## 四、SSE 信封格式
 

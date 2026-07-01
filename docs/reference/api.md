@@ -186,9 +186,11 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 会话快照
 
-| 方法 | 路径                         | 描述                                    |
-| ---- | ---------------------------- | --------------------------------------- |
-| GET  | `/api/sessions/:id/snapshot` | 获取完整会话快照（用于客户端恢复/重连） |
+| 方法 | 路径                         | 描述                            |
+| ---- | ---------------------------- | ------------------------------- |
+| GET  | `/api/sessions/:id/snapshot` | 获取会话快照（客户端恢复/重连） |
+
+> 快照的 `messages` 与 `executionSteps` 只含**最近窗口**（默认最新 80 条消息 / 600 条 trace 事件），不再全量加载（长会话每次重连都全量读是原性能热点）。快照带 `messagesCursor`（`{createdAt,id} | null`）；前端聊天界面向上滚动时用它调 `GET /api/sessions/:id/messages/page` 增量补更旧消息。窗口外旧 Turn 的执行时间线优雅降级（不渲染）。
 
 ### Turn 执行
 
@@ -242,10 +244,11 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 消息历史
 
-| 方法 | 路径                              | 描述                            |
-| ---- | --------------------------------- | ------------------------------- |
-| GET  | `/api/sessions/:id/messages`      | 获取会话消息列表                |
-| POST | `/api/sessions/:id/messages/sync` | 同步消息（LocalDataService 用） |
+| 方法 | 路径                              | 描述                                                        |
+| ---- | --------------------------------- | ----------------------------------------------------------- |
+| GET  | `/api/sessions/:id/messages`      | 获取会话完整消息列表（兜底 / 同步用；长会话优先用 `/page`） |
+| GET  | `/api/sessions/:id/messages/page` | keyset 游标分页消息（最新窗口 + 向上加载更旧）              |
+| POST | `/api/sessions/:id/messages/sync` | 同步消息（LocalDataService 用）                             |
 
 ### 统一翻译层（Runtime Outputs / Interaction Records，PR-1）
 
@@ -406,10 +409,11 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ### Trace 调试
 
-| 方法 | 路径                           | 描述                      |
-| ---- | ------------------------------ | ------------------------- |
-| GET  | `/api/traces/:sessionId`       | 获取会话所有 trace 事件   |
-| GET  | `/api/traces/:sessionId/turns` | 按 Turn 分组的 trace 事件 |
+| 方法 | 路径                                | 描述                                           |
+| ---- | ----------------------------------- | ---------------------------------------------- |
+| GET  | `/api/traces/:sessionId`            | 获取会话所有 trace 事件（全量）                |
+| GET  | `/api/traces/:sessionId/turns`      | 按 Turn 分组的 trace 事件（全量）              |
+| GET  | `/api/traces/:sessionId/turns/page` | 最近事件窗口分组为 Turn + 游标（向上加载更旧） |
 
 ### 媒体管理
 
@@ -1943,7 +1947,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 #### `GET /api/sessions/:id/messages`
 
-获取会话的所有消息列表。
+获取会话的**完整**消息列表（升序）。长会话优先用 `/page`；本端点保留给快照缺失兜底和批量同步。
 
 **参数:**
 
@@ -1951,28 +1955,54 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 | ---- | ---- | ------- |
 | `id` | 路径 | 会话 ID |
 
+**响应:** 扁平化消息对象的**数组**（`metadata.{turnId,runtimeId,kind,block}` 提升为顶层字段）。
+
+```json
+[
+  {
+    "id": "msg-001",
+    "sessionId": "mistport-a1b2c3d4",
+    "role": "user",
+    "content": "我环顾四周",
+    "turnId": "turn-1",
+    "createdAt": "2025-01-15T10:00:00.000Z"
+  }
+]
+```
+
+#### `GET /api/sessions/:id/messages/page`
+
+keyset（游标）分页消息，**按时间正序（oldest-first）**。不传游标返回最新窗口；传游标返回其之前（更旧）的一页 —— 聊天界面向上滚动时用它增量加载历史。
+
+**参数:**
+
+| 参数                | 位置 | 说明                                                           |
+| ------------------- | ---- | -------------------------------------------------------------- |
+| `id`                | 路径 | 会话 ID                                                        |
+| `limit`             | 查询 | 每页条数，默认 80，上限 500                                    |
+| `before_created_at` | 查询 | 游标：只返回早于此 `createdAt` 的消息（需与 `before_id` 成对） |
+| `before_id`         | 查询 | 游标 tie-break：同 `createdAt` 时按 `id` 断序                  |
+
+`(before_created_at, before_id)` 是 `(createdAt, id)` 元组游标，即使同毫秒也不漏不重（`messages` 表无单调 `order` 列，故 `id` 断序是必需的）。
+
 **响应:**
 
 ```json
 {
   "items": [
     {
-      "id": "msg-001",
-      "sessionId": "mistport-a1b2c3d4",
+      "id": "msg-041",
       "role": "user",
-      "content": "我环顾四周",
-      "createdAt": "2025-01-15T10:00:00.000Z"
-    },
-    {
-      "id": "msg-002",
-      "sessionId": "mistport-a1b2c3d4",
-      "role": "assistant",
-      "content": "你发现自己站在一片广阔的草原上...",
-      "createdAt": "2025-01-15T10:00:05.000Z"
+      "content": "…",
+      "turnId": "turn-8",
+      "createdAt": "…"
     }
-  ]
+  ],
+  "nextCursor": { "createdAt": "2025-01-15T10:00:00.000Z", "id": "msg-041" }
 }
 ```
+
+`nextCursor` 指向本页最旧一条的位置，作为下一页（更旧）的 `before_*`；当返回条数少于 `limit`（已到历史开头）时为 `null`。
 
 ---
 
@@ -2690,6 +2720,38 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
   ]
 }
 ```
+
+#### `GET /api/traces/:sessionId/turns/page`
+
+只把**最近一段事件窗口**分组为 Turn 返回，供 debug 时间线增量加载 —— `trace_events` 是增长最快的表，全量 `/turns` 在长会话上会把整表读进内存。
+
+**参数:**
+
+| 参数                | 位置 | 说明                                                  |
+| ------------------- | ---- | ----------------------------------------------------- |
+| `sessionId`         | 路径 | 会话 ID                                               |
+| `limit`             | 查询 | 每页**事件**数（非 Turn 数），默认 400，上限 500      |
+| `before_created_at` | 查询 | 游标：只返回早于此位置的事件（需与 `before_id` 成对） |
+| `before_id`         | 查询 | 游标 tie-break                                        |
+
+分页单位是**事件**：一个 Turn 可能跨窗口边界被切开，前端加载更旧一页后按 `turnId` 合并边界 Turn。`nextCursor` 指向窗口内最旧**事件**的 `(createdAt, id)`。
+
+**响应:**
+
+```json
+{
+  "sessionId": "mistport-a1b2c3d4",
+  "turns": [
+    { "turnId": "turn-008", "startedAt": "…", "completedAt": "…", "eventCount": 6, "events": [...] }
+  ],
+  "nextCursor": { "createdAt": "2025-01-15T10:03:00.000Z", "id": "evt-1042" },
+  "discovery": {
+    /* 与 /turns 相同 */
+  }
+}
+```
+
+`nextCursor` 为 `null` 时表示窗口已到 trace 起点。
 
 ---
 

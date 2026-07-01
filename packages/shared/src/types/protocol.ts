@@ -446,6 +446,27 @@ export interface ProtocolEvent {
 
 // ── Session Snapshot (for restore/reconnection) ─────────────────
 
+/**
+ * Keyset cursor for backward pagination over an append-only, time-ordered log.
+ * The `(createdAt, id)` tuple is a total order even when rows share a
+ * millisecond, so paging by it never skips or repeats a row. Pass it as the
+ * `before` position to fetch the page immediately older than the current one.
+ */
+export interface TimeCursor {
+  readonly createdAt: string;
+  readonly id: string;
+}
+
+/**
+ * A keyset page of an append-only log. `items` are oldest-first; `nextCursor`
+ * is the position to request the next (older) page, or `null` when the returned
+ * window already reaches the start of history.
+ */
+export interface CursorPage<T> {
+  readonly items: readonly T[];
+  readonly nextCursor: TimeCursor | null;
+}
+
 export interface SessionSnapshot {
   readonly session: {
     readonly id: string;
@@ -454,6 +475,12 @@ export interface SessionSnapshot {
     readonly locale?: string;
   };
   readonly messages: readonly SnapshotMessage[];
+  /**
+   * Cursor for loading messages older than `messages` (which is the most-recent
+   * window, not the full history). `null` when the window already reaches the
+   * start of the chat — i.e. there is nothing older to load.
+   */
+  readonly messagesCursor?: TimeCursor | null;
   readonly characters: readonly SnapshotCharacter[];
   readonly gameState: Readonly<Record<string, unknown>>;
   readonly executionSteps: readonly SnapshotTraceEvent[];

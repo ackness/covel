@@ -18,7 +18,7 @@ describe("buildSessionSnapshot", () => {
         preGameCompleted: [],
         locale: "zh-CN",
       }),
-      listMessages: vi.fn().mockResolvedValue([
+      listMessagesPage: vi.fn().mockResolvedValue([
         {
           id: "m1",
           role: "user",
@@ -60,7 +60,7 @@ describe("buildSessionSnapshot", () => {
             ]);
           return Promise.resolve([]);
         }),
-      listTraceEvents: vi.fn().mockResolvedValue([
+      listTraceEventsPage: vi.fn().mockResolvedValue([
         {
           type: "runtime.started",
           turnId: "t1",
@@ -118,11 +118,11 @@ describe("buildSessionSnapshot", () => {
 
   it("should handle empty collections gracefully", async () => {
     const store = createMockStore();
-    store.listMessages.mockResolvedValue([]);
+    store.listMessagesPage.mockResolvedValue([]);
     store.listCharacters.mockResolvedValue([]);
     store.listStateSchemas.mockResolvedValue([]);
     store.listStateEntries.mockResolvedValue([]);
-    store.listTraceEvents.mockResolvedValue([]);
+    store.listTraceEventsPage.mockResolvedValue([]);
 
     const snapshot = await buildSessionSnapshot(store as any, "sess-1");
 
@@ -131,5 +131,7 @@ describe("buildSessionSnapshot", () => {
     expect(snapshot!.characters).toEqual([]);
     expect(snapshot!.gameState).toEqual({});
     expect(snapshot!.executionSteps).toEqual([]);
+    // A short window (< limit) reaches the start of history → no older cursor.
+    expect(snapshot!.messagesCursor).toBeNull();
   });
 });
