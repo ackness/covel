@@ -1,5 +1,8 @@
 ---
 name: chat-mode-narrator
+displayName:
+  zh: 对话叙事
+  en: Dialogue Narrator
 description:
   zh: 让故事更像角色对话，适合重视聊天和人物互动的玩法。
   en: Makes the story feel more like character dialogue, suited for play focused on conversation and interaction.
@@ -9,7 +12,7 @@ model: story
 timeoutMs: 240000
 callTimeoutMs: 120000
 outputKind: story
-capabilities: [narrative, chat-mode]
+capabilities: [narrative, chat-mode, narrative-engine]
 tags:
   - mode:dialogue
   - role:narrator
@@ -38,7 +41,6 @@ relations:
     - scene-prompts
     - character-blueprint
     - character-presence
-    - player-identity
     - living-world-rules
     - branch-reply
 userSettings:
@@ -73,15 +75,6 @@ userSettings:
         label:
           zh: 长
           en: Long
-  - key: activeSpeakerCount
-    type: number
-    default: 2
-    min: 1
-    max: 4
-    step: 1
-    label:
-      zh: 活跃说话人数
-      en: Active speakers
 summaryFocus:
   - character-intent
   - relationship-change
@@ -118,23 +111,14 @@ postHistory:
 
 {{ player.message }}
 
-## 活跃演员
-
-<active-cast>
-{{ inputs.scene-cast.scene-cast.activeCastContext }}
-</active-cast>
-
-## NPC 关系上下文
-
-<npc-relationships>
-{{ inputs.npc-graph.rag-retriever.npcContext }}
-</npc-relationships>
+<!-- <active-cast> 与 <npc-relationships> 由 input.inject（frontmatter）在 segment 5
+     自动追加，正文不再重复内联，避免每回合双份注入。下方写作规则直接引用这两个标签。 -->
 
 ## 用户设置
 
 - 对话占比：{{ userSettings.dialogueRatio }}%
 - 回复长度：{{ userSettings.proseLength }}
-- 目标活跃说话人数：{{ userSettings.activeSpeakerCount }}
+- 目标活跃说话人数：以 `<active-cast>` 中实际列出的角色为准（由 scene-cast 按玩家设置决定）
 
 ## 写作规则
 

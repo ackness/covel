@@ -1,5 +1,8 @@
 ---
 name: narrator
+displayName:
+  zh: 叙事
+  en: Narrator
 description:
   zh: 根据你的行动继续推进故事，描写场景、人物反应和结果。
   en: Continues the story from your actions, describing scenes, reactions, and outcomes.
@@ -9,7 +12,7 @@ model: story
 timeoutMs: 240000
 callTimeoutMs: 120000
 outputKind: story
-capabilities: [narrative]
+capabilities: [narrative, narrative-engine]
 tags:
   - mode:traditional-story
   - role:narrator

@@ -1,8 +1,10 @@
 import {
+  assertEntityEnvelope,
   compactRecord,
   makeProposal,
   normalizeRequiredString,
   optionalString,
+  readManualEntity,
   splitList,
 } from "@covel/plugin-handlers-utils";
 import { playerIdentityToCharacterUpsert } from "@covel/shared";
@@ -12,7 +14,6 @@ const PROFILE_NAMESPACE = "profiles";
 const BINDING_NAMESPACE = "session-binding";
 const CURRENT_BINDING_KEY = "current";
 const DEFAULT_MIRROR_PLUGIN_ID = "player-identity";
-const MAX_PROFILE_BYTES = 65_536;
 const PROFILE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
 /**
@@ -21,7 +22,11 @@ const PROFILE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
  */
 export default async function handler(ctx) {
   const payload = ctx.manualPayload ?? {};
-  const profile = normalizeProfile(readProfilePayload(payload, ctx.sessionId));
+  const profile = normalizeProfile(
+    readManualEntity(payload, "profile", (form) =>
+      profileFromForm(form, ctx.sessionId),
+    ),
+  );
   const shouldActivate = payload.activate !== false;
   const shouldBindToPlayer = payload.bindToPlayer !== false;
   const now = new Date().toISOString();
@@ -38,12 +43,28 @@ export default async function handler(ctx) {
       value: {
         profile,
         updatedAt: now,
+        // Mirror the active/bound state INTO the profiles namespace so the
+        // single-namespace panel can mark which voice is currently driving the
+        // model (the binding itself lives in BINDING_NAMESPACE, which the panel
+        // can't read). Exactly one profile carries active:true at a time.
+        active: shouldActivate,
         ...(shouldBindToPlayer ? { boundCharacterId: characterId } : {}),
       },
     }),
   ];
 
   if (shouldActivate) {
+    // Clear active on every other saved profile so the panel shows a single
+    // active voice. Best-effort: skips silently if the store can't list.
+    for (const other of await listOtherProfiles(ctx, profile.id)) {
+      proposals.push(
+        makeProposal(ctx, now, "plugin.data", {
+          namespace: PROFILE_NAMESPACE,
+          key: other.key,
+          value: { ...other.value, active: false },
+        }),
+      );
+    }
     proposals.push(
       makeProposal(ctx, now, "plugin.data", {
         namespace: BINDING_NAMESPACE,
@@ -90,27 +111,36 @@ function playerCharacterIdForProfile(profileId) {
   return profileId.startsWith("player-") ? profileId : `player-${profileId}`;
 }
 
-function readProfilePayload(payload, sessionId) {
-  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-    if (
-      typeof payload.profileJson === "string" &&
-      payload.profileJson.trim().length > 0
-    ) {
-      try {
-        return JSON.parse(payload.profileJson);
-      } catch {
-        throw new Error("manualPayload.profileJson must be valid JSON");
-      }
-    }
-    if (payload.profileForm && typeof payload.profileForm === "object") {
-      return profileFromForm(
-        /** @type {Record<string, unknown>} */ (payload.profileForm),
-        sessionId,
-      );
-    }
-    return payload.profile;
+/**
+ * List saved profile rows other than `activeId`, so activation can clear their
+ * `active` flag. Best-effort — returns [] when the store can't list.
+ * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @param {string} activeId
+ * @returns {Promise<Array<{ key: string; value: Record<string, unknown> }>>}
+ */
+async function listOtherProfiles(ctx, activeId) {
+  const s = /** @type {any} */ (ctx.store);
+  if (!s || typeof s.listPluginData !== "function") return [];
+  try {
+    const rows = await s.listPluginData(
+      ctx.sessionId,
+      ctx.pluginId,
+      PROFILE_NAMESPACE,
+    );
+    if (!Array.isArray(rows)) return [];
+    return rows
+      .filter(
+        (r) =>
+          r &&
+          r.key !== activeId &&
+          r.value &&
+          typeof r.value === "object" &&
+          r.value.active === true,
+      )
+      .map((r) => ({ key: String(r.key), value: r.value }));
+  } catch {
+    return [];
   }
-  return undefined;
 }
 
 /**
@@ -152,34 +182,16 @@ function profileFromForm(form, sessionId) {
  * @param {unknown} value
  */
 function normalizeProfile(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("manualPayload.profile must be an object");
-  }
-
-  const input = /** @type {Record<string, unknown>} */ (value);
-  const id = normalizeRequiredString(input.id, "profile.id");
-  const name = normalizeRequiredString(input.name, "profile.name");
-  if (!PROFILE_ID_PATTERN.test(id)) {
-    throw new Error(
+  return assertEntityEnvelope(value, {
+    entity: "profile",
+    idPattern: PROFILE_ID_PATTERN,
+    idError:
       "profile.id must be 1-128 characters using letters, digits, underscore, or hyphen",
-    );
-  }
-  const schemaVersion = input.schemaVersion ?? 1;
-  if (schemaVersion !== 1) {
-    throw new Error("profile.schemaVersion must be 1");
-  }
-
-  const profile = {
-    ...input,
-    schemaVersion: 1,
-    id,
-    name,
-  };
-  const serialized = JSON.stringify(profile);
-  if (serialized.length > MAX_PROFILE_BYTES) {
-    throw new Error("profile is too large; max serialized size is 64KB");
-  }
-  return profile;
+    build: (base) => ({
+      ...base,
+      name: normalizeRequiredString(base.name, "profile.name"),
+    }),
+  });
 }
 
 async function findExistingPlayer(store, sessionId) {

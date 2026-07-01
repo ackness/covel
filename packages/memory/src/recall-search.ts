@@ -34,10 +34,14 @@ export function createKeywordRecallSearcher(store: DataStore): RecallSearcher {
       query,
       limit = 10,
     ): Promise<readonly RecallSearchResult[]> {
-      const messages = await store.listTurnMessages(sessionId);
-
-      // Take most recent N messages
-      const candidates = messages.slice(-MAX_SCAN_MESSAGES);
+      // Only the most-recent N messages are scanned. Pull exactly that tail
+      // from the store (single descending-limited query) instead of loading the
+      // whole session history and slicing — trace_events/turn_messages is the
+      // fastest-growing table on long runs.
+      const candidates = await store.listRecentTurnMessages(
+        sessionId,
+        MAX_SCAN_MESSAGES,
+      );
       if (candidates.length === 0) return [];
 
       // Tokenize query into terms (split on whitespace and punctuation)

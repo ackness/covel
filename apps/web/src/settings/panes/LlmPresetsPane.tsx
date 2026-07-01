@@ -4,7 +4,6 @@ import { Download, Eye, EyeOff, Plus, Trash2, Upload } from "lucide-react";
 import {
   getCustomPresets,
   setCustomPresets,
-  uid,
   type CustomPreset,
 } from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
@@ -39,7 +38,10 @@ export function LlmPresetsPane() {
 
   const handleAdd = () => {
     if (!newPreset.name || !newPreset.provider || !newPreset.model) return;
-    const preset: CustomPreset = { ...newPreset, id: `custom_${uid()}` };
+    const preset: CustomPreset = {
+      ...newPreset,
+      id: `custom_${crypto.randomUUID()}`,
+    };
     commit([...presets, preset]);
     setNewPreset({
       name: "",

@@ -27,68 +27,83 @@ import { withPendingProposals } from "@covel/tools";
 
 export default function ({ tool, z, shortIdBatch, store }) {
   const nodeInputSchema = z.object({
-    name: z.string().min(1).describe("人物/群体/势力的规范名称（用于去重）"),
-    aliases: z.array(z.string()).optional().describe("别名列表"),
+    name: z
+      .string()
+      .min(1)
+      .describe(
+        "Canonical name of the person/group/faction (used for de-duplication)",
+      ),
+    aliases: z.array(z.string()).optional().describe("List of aliases"),
     type: z
       .enum(["individual", "group", "faction"])
-      .describe("节点种类：individual=个人, group=群体, faction=势力"),
+      .describe("Node kind: individual=person, group, faction"),
     labels: z
       .array(z.string())
       .max(5)
       .optional()
-      .describe('本体标签（如 ["merchant","ally"]），最多 5 个'),
+      .describe('Ontology labels (e.g. ["merchant","ally"]), max 5'),
     summary: z
       .string()
       .min(4)
       .max(200)
-      .describe("不超过 200 字的简介，作为节点档案"),
+      .describe(
+        "A profile summary of no more than 200 characters, used as the node's dossier",
+      ),
     attributes: z
       .record(z.string(), z.unknown())
       .optional()
-      .describe('自由属性键值对（如 {"profession":"merchant"}）'),
+      .describe(
+        'Free-form attribute key-value pairs (e.g. {"profession":"merchant"})',
+      ),
   });
 
   const edgeInputSchema = z.object({
     sourceName: z
       .string()
       .min(1)
-      .describe("源节点的 name — 可指向新节点或已存在节点"),
-    targetName: z.string().min(1).describe("目标节点的 name"),
+      .describe(
+        "The source node's name — may reference a new or an existing node",
+      ),
+    targetName: z.string().min(1).describe("The target node's name"),
     relation: z
       .string()
       .min(1)
       .max(48)
       .regex(/^[\p{Letter}][\p{Letter}\p{Number}_\-\s]*$/u)
       .describe(
-        "关系类型，支持结构化英文标识或中文关系名（如 TRUSTS、同盟、竞争）",
+        "Relation type; accepts a structured English identifier or a natural-language relation label (e.g. TRUSTS, ALLIED_WITH, RIVALS)",
       ),
     strength: z
       .number()
       .min(-1)
       .max(1)
-      .describe("关系强度 [-1..1]，负数表示敌意"),
+      .describe(
+        "Relationship strength [-1..1]; negative values indicate hostility",
+      ),
     fact: z
       .string()
       .min(8)
       .max(400)
-      .describe("一句完整的自然语言事实，包含主谓宾"),
+      .describe(
+        "A complete natural-language fact in one sentence, with subject, verb, and object",
+      ),
   });
 
   return tool({
     name: "upsert-npc-graph",
     description:
-      "批量写入 NPC 节点和关系边。节点通过 name 去重；边通过 (sourceName, targetName, relation) 去重。无需事先列出已有数据 — 工具内部合并更新。",
+      "Batch-write NPC nodes and relationship edges. Nodes are de-duplicated by name; edges by (sourceName, targetName, relation). No need to list existing data first — the tool merges and updates internally.",
     parameters: z.object({
       nodes: z
         .array(nodeInputSchema)
         .max(8)
         .optional()
-        .describe("本回合要创建或更新的节点，最多 8 个"),
+        .describe("Nodes to create or update this turn, max 8"),
       edges: z
         .array(edgeInputSchema)
         .max(12)
         .optional()
-        .describe("本回合要创建的关系边，最多 12 条"),
+        .describe("Relationship edges to create this turn, max 12"),
     }),
     execute: async (params, context) => {
       const now = new Date().toISOString();

@@ -15,6 +15,30 @@ export interface WorkingMemoryRecord {
   readonly updatedAt: string; // ISO
 }
 
+/**
+ * Canonical working-memory ordering: by semantic scope (player → story →
+ * shared) then key. Every backend's `listWorkingMemory` sorts with this so the
+ * order entries are surfaced (and injected into prompts) is identical across
+ * Memory / SQLite / PG / IDB — alphabetical scope ordering would put `shared`
+ * before `story` only on the SQL backends, breaking parity.
+ */
+export const WORKING_MEMORY_SCOPE_ORDER: Readonly<Record<string, number>> = {
+  player: 0,
+  story: 1,
+  shared: 2,
+};
+
+export function compareWorkingMemoryEntries(
+  a: { readonly scope: string; readonly key: string },
+  b: { readonly scope: string; readonly key: string },
+): number {
+  const scopeDiff =
+    (WORKING_MEMORY_SCOPE_ORDER[a.scope] ?? 99) -
+    (WORKING_MEMORY_SCOPE_ORDER[b.scope] ?? 99);
+  if (scopeDiff !== 0) return scopeDiff;
+  return a.key.localeCompare(b.key);
+}
+
 export interface WorldDataImportLedgerRecord {
   readonly id: string;
   readonly sessionId: string;

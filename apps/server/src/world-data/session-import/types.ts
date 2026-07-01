@@ -98,6 +98,8 @@ export interface ImportWorldDataForSessionOptions {
   readonly now: string;
   readonly preflight?: WorldDataImportPreflightDeps;
   readonly deferMediaFinalize?: boolean;
+  /** Session locale — selects `<name>.<lang>.<ext>` source variants when present. */
+  readonly locale?: string;
 }
 
 export interface ImportWorldDataForSessionResult {
@@ -116,6 +118,8 @@ export interface PreflightWorldDataForSessionOptions {
   readonly covelHome?: string;
   readonly now: string;
   readonly preflight?: WorldDataImportPreflightDeps;
+  /** Session locale — selects `<name>.<lang>.<ext>` source variants when present. */
+  readonly locale?: string;
 }
 
 export interface PreflightWorldDataForSessionResult {
@@ -144,6 +148,8 @@ export interface SyncWorldDataForSessionOptions {
   readonly dryRun?: boolean;
   readonly force?: boolean;
   readonly deferMediaFinalize?: boolean;
+  /** Session locale — selects `<name>.<lang>.<ext>` source variants when present. */
+  readonly locale?: string;
 }
 
 export interface SyncWorldDataForSessionResult {

@@ -12,28 +12,30 @@ Deployable as Web or Electron (desktop). Production desktop builds should use `p
 
 Before changing anything non-trivial, consult the matching reference doc — they are the source of truth, CLAUDE.md only points at them.
 
-| Topic                                               | Authoritative doc                                                                          |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Project intro, quick start, roadmap                 | [README.md](./README.md) · [docs/README.md](./docs/README.md)                              |
-| End-to-end turn pipeline, full architecture         | [docs/architecture/flow.md](./docs/architecture/flow.md)                                   |
-| Plugin registry (all plugins, priorities, triggers) | [docs/reference/plugins.md](./docs/reference/plugins.md)                                   |
-| World Data (`worldData`, source import, overrides)  | [docs/reference/world-data.md](./docs/reference/world-data.md)                             |
-| Tool registry (builtin + local, approval policy)    | [docs/reference/tools.md](./docs/reference/tools.md)                                       |
-| HTTP API (all endpoints, request/response, curl)    | [docs/reference/api.md](./docs/reference/api.md)                                           |
-| Protocol (SSE events, envelope, Transport layer)    | [docs/reference/protocol.md](./docs/reference/protocol.md)                                 |
-| Right-panel tabs, json-render declarative UI        | [docs/reference/ui-panels.md](./docs/reference/ui-panels.md)                               |
-| Prompt assembly (segments, cache_control)           | [docs/reference/prompt-structure.md](./docs/reference/prompt-structure.md)                 |
-| DataStore transactions (begin/commit/rollback)      | [docs/reference/transactions.md](./docs/reference/transactions.md)                         |
-| Writing a plugin (tutorial + frontmatter fields)    | [docs/guide/plugin-authoring.md](./docs/guide/plugin-authoring.md)                         |
-| Plugin UI + runtime guidelines                      | [docs/guide/plugin-ui-runtime-guidelines.md](./docs/guide/plugin-ui-runtime-guidelines.md) |
-| Plugin testing (harness + examples)                 | [docs/guide/plugin-testing.md](./docs/guide/plugin-testing.md)                             |
-| UI component catalogue (json-render primitives)     | [docs/reference/ui-components.md](./docs/reference/ui-components.md)                       |
-| Terminology glossary (session / runtime / slot / …) | [docs/glossary.md](./docs/glossary.md)                                                     |
-| E2E plugin verify harness                           | [docs/guide/e2e-plugin-verify.md](./docs/guide/e2e-plugin-verify.md)                       |
-| Environment variable registry                       | [docs/guide/env-registry.md](./docs/guide/env-registry.md)                                 |
-| Desktop config (paths, sidecar, safeStorage)        | [docs/guide/desktop-config.md](./docs/guide/desktop-config.md)                             |
-| Desktop packaging (Electron), signing, notarisation | [apps/desktop/PACKAGING.md](./apps/desktop/PACKAGING.md)                                   |
-| Contributing & release workflow                     | [docs/CONTRIBUTING.md](./docs/CONTRIBUTING.md)                                             |
+| Topic                                                | Authoritative doc                                                                                                       |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Project intro, quick start, roadmap                  | [README.md](./README.md) · [docs/README.md](./docs/README.md)                                                           |
+| End-to-end turn pipeline, full architecture          | [docs/architecture/flow.md](./docs/architecture/flow.md)                                                                |
+| Plugin registry (all plugins, priorities, triggers)  | [docs/reference/plugins.md](./docs/reference/plugins.md)                                                                |
+| World Data (`worldData`, source import, overrides)   | [docs/reference/world-data.md](./docs/reference/world-data.md)                                                          |
+| Tool registry (builtin + local, approval policy)     | [docs/reference/tools.md](./docs/reference/tools.md)                                                                    |
+| HTTP API (all endpoints, request/response, curl)     | [docs/reference/api.md](./docs/reference/api.md)                                                                        |
+| Protocol (SSE events, envelope, Transport layer)     | [docs/reference/protocol.md](./docs/reference/protocol.md)                                                              |
+| Right-panel tabs, json-render declarative UI         | [docs/reference/ui-panels.md](./docs/reference/ui-panels.md)                                                            |
+| Prompt assembly (segments, cache_control)            | [docs/reference/prompt-structure.md](./docs/reference/prompt-structure.md)                                              |
+| DataStore transactions (begin/commit/rollback)       | [docs/reference/transactions.md](./docs/reference/transactions.md)                                                      |
+| Writing a plugin (tutorial + frontmatter fields)     | [docs/guide/plugin-authoring.md](./docs/guide/plugin-authoring.md)                                                      |
+| Plugin UI + runtime guidelines                       | [docs/guide/plugin-ui-runtime-guidelines.md](./docs/guide/plugin-ui-runtime-guidelines.md)                              |
+| Plugin testing (harness + examples)                  | [docs/guide/plugin-testing.md](./docs/guide/plugin-testing.md)                                                          |
+| UI component catalogue (json-render primitives)      | [docs/reference/ui-components.md](./docs/reference/ui-components.md)                                                    |
+| Theme packages (player CSS / JSON theme packs)       | [docs/guide/themes.md](./docs/guide/themes.md) · [docs/reference/theme-packages.md](./docs/reference/theme-packages.md) |
+| Media store (generated images / portraits, MediaRef) | [docs/reference/media-store.md](./docs/reference/media-store.md)                                                        |
+| Terminology glossary (session / runtime / slot / …)  | [docs/glossary.md](./docs/glossary.md)                                                                                  |
+| E2E plugin verify harness                            | [docs/guide/e2e-plugin-verify.md](./docs/guide/e2e-plugin-verify.md)                                                    |
+| Environment variable registry                        | [docs/guide/env-registry.md](./docs/guide/env-registry.md)                                                              |
+| Desktop config (paths, sidecar, safeStorage)         | [docs/guide/desktop-config.md](./docs/guide/desktop-config.md)                                                          |
+| Desktop packaging (Electron), signing, notarisation  | [apps/desktop/PACKAGING.md](./apps/desktop/PACKAGING.md)                                                                |
+| Contributing & release workflow                      | [docs/CONTRIBUTING.md](./docs/CONTRIBUTING.md)                                                                          |
 
 ## Commands
 
@@ -43,11 +45,15 @@ pnpm install
 pnpm dev              # web (5173) + server (3001), SqliteStore (default, ./data/covel.db)
 pnpm dev:web          # web only
 pnpm dev:server       # server only (SqliteStore default; STORE_BACKEND=memory for ephemeral)
-pnpm dev:pg           # server only, STORE_BACKEND=pg (needs pnpm db:up first)
+pnpm dev:pg           # server only, STORE_BACKEND=pg (auto-runs db preflight; needs pnpm db:up)
+pnpm stop             # kill stray dev/turbo processes (dev-supervisor)
 
-# Build & check
+# Build & check — the git pre-commit hook runs prettier + oxlint + full `pnpm lint`
 pnpm build            # build all
-pnpm lint             # tsc --noEmit across workspace
+pnpm lint             # tsc --noEmit across workspace (turbo lint; run the FULL workspace, not one pkg)
+pnpm format           # prettier --write .   (format:check = verify-only, for CI)
+pnpm deps:check       # knip — flag unused / undeclared workspace deps
+pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs (check:plugins is a subset)
 pnpm test             # vitest via turbo (cached)
 pnpm test:coverage    # + @vitest/coverage-v8
 pnpm clean
@@ -60,19 +66,19 @@ pnpm --filter @covel/<pkg> test
 pnpm db:up / db:down / db:generate / db:migrate / db:studio
 
 # E2E
-pnpm e2e              # Playwright headless
-pnpm e2e:ui
-
-# Real-LLM E2E scripts (need .env.llm)
-npx tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts --slot e2e_local --turns 3
+pnpm e2e              # Playwright headless (e2e:ui for the runner UI)
+pnpm e2e:verify       # API-driven, real-LLM plugin harness (needs .env.llm); pass --slot e2e_local --turns 3
+pnpm test:runtime     # standalone runtime harness CLI (packages/test-runtime)
 
 # Docker (full stack)
 pnpm docker:build / docker:up / docker:down / docker:logs
 
 # Desktop
-pnpm dev:electron                        # Electron dev shell (real sidecar)
-pnpm build:electron                      # platform installer → release/
-pnpm build:desktop                       # Electron desktop build
+pnpm dev:electron     # Electron dev shell (real sidecar)
+pnpm build:electron   # platform installer → release/ (build:desktop is an alias)
+
+# Release
+pnpm release:preflight  # static pre-tag gate: lockfile sync, import resolution, plugin/world/prompt structure
 ```
 
 ## Config Files
@@ -86,9 +92,9 @@ Dev-time files (copied from `*.example`):
 Desktop-shell files under `<covelHome>/` (typically `~/.covel/`):
 
 - `config.toml` — desktop shell config (paths, log rotation)
-- `llm.toml` — hand-editable slot / provider definitions (same schema as dev-time)
+- `llm.toml` — hand-editable slot / provider definitions (same schema as dev-time). Hot-reloaded from Settings without a server restart.
 - `keys.env` — provider API keys, mode 600
-- `settings.json` — front-end user preferences (locale, appearance, slot overrides, custom presets, parameter overrides, per-plugin settings). Managed via the unified **SettingsStore** in `packages/shared/src/settings/`. Auto-saved on every change; mirrored to `localStorage` (`covel:settings`) on pure-web tiers.
+- `settings.json` — front-end user preferences (locale, appearance, slot overrides, custom presets, parameter overrides, per-plugin settings). Managed via the unified **SettingsStore** (`@covel/settings`, `packages/settings/src/`). Auto-saved on every change; mirrored to `localStorage` (`covel:settings`) on pure-web tiers.
 
 Provider API keys flow through the `SettingsStore` too: writes end up in `keys.env` on desktop, `localStorage` (`covel:keys`) on web. They are never persisted server-side by the REST API — each AI request passes them via the `X-Provider-Keys` header (base64).
 
@@ -114,8 +120,8 @@ packages/           16 internal packages: shared, settings, context, ai-provider
 
 plugins/            19 bundled plugin packages (see docs/reference/plugins.md)
 prompts/            Externalised prompt templates (locale-aware markdown)
-worlds/             4 file-based sample world packages
-                    (cloudmere / mistport / neonridge / haruka-academy)
+worlds/             2 curated sample world packages (mistport / haruka-academy);
+                    archived worlds in worlds/_archive/ are not loaded
 ```
 
 Dependency flow (rough):
@@ -141,7 +147,7 @@ Input/Event → Trigger Router → Priority Scheduler → [per priority group:]
 → Follow-up Events (may re-enter Router)
 ```
 
-- **Trigger modes**: production-active are `auto`, `manual`, `scheduled`, `event` (see `TriggerType` in `packages/shared/src/types/plugin.ts`). `scheduled` carries `interval` / `maxTriggerCount` / `cooldownTurns` / `startTurn`. `conditional` and `error-retry` are **reserved — they never fire in production** (no condition engine; scheduler hardcodes `hasUpstreamFailure: false`); `shouldTrigger` skips them and warns once. The single authority for trigger decisions is `shouldTrigger` (`packages/runtime/src/trigger/trigger.ts`) — the in-turn event fan-out in `turn-event-chain.ts` re-uses it too.
+- **Trigger modes**: production-active are `auto`, `manual`, `scheduled`, `event` (see `TriggerType` in `packages/shared/src/types/plugin.ts`). `scheduled` carries `interval` / `maxTriggerCount` / `cooldownTurns` / `startTurn`. `conditional` and `error-retry` are **reserved — they never fire in production** (no condition engine; scheduler hardcodes `hasUpstreamFailure: false`); `shouldTrigger` skips them and warns once. The single authority for `auto` / `scheduled` / `event` trigger decisions is `shouldTrigger` (`packages/runtime/src/trigger/trigger.ts`) — the in-turn event fan-out in `turn-event-chain.ts` re-uses it too. **`manual` is the exception**: a `manual` runtime is selected by name match in `scheduling.ts` (`selectTriggeredRuntimes`) and runs **without** calling `shouldTrigger` — an explicit plugin-rpc call _is_ the trigger decision, so it bypasses the `preGameCompleted` / `startTurn` / `maxTriggerCount` / `cooldownTurns` gates (the `case "manual"` branch in `shouldTrigger` is consequently dead in the production selection path).
 - **Runtime types**: `agent` (default, loads PLUGIN.md and drives LLM tool-calls) or `function` (pure JS handler, no LLM).
 - **Proposal envelopes** (registered `ProposalType`s, derived from the single source of truth `ProposalPayloadMap` in `packages/shared/src/types/proposal.ts`; commit-handler registry and discovery advert are compile-time aligned to it): `narrative.append`, `state.patch`, `event.emit`, `interaction.request`, `ui.render`, `asset.generate`, `plugin.data`, `plugin.data.batch`, `character.upsert`, `working_memory.set`, `lorebook.upsert`. Full reference in [docs/reference/tools.md](./docs/reference/tools.md#proposal-类型). **All writes flow through validate → commit — plugins never touch the DB directly.**
 - **Hook lifecycle** (16 events; full table in [docs/reference/plugins.md](./docs/reference/plugins.md)): `SessionStart` · `TurnStart` · `PreCompaction` / `PostCompaction` · `PreSchedule` · `PreRuntime` / `PostRuntime` · `PostContextAssembly` · `PreLLMCall` / `PostLLMResponse` · `PreToolUse` / `PostToolUse` · `PreStateCommit` / `PostStateCommit` · `TurnStop` · `SessionEnd`. Registered hooks are session-scoped (a plugin's hooks fire only for sessions where it is active, via `AsyncLocalStorage`); `HookContext.getOwnSettings()` exposes the plugin's own per-session `userSettings`.
@@ -294,6 +300,7 @@ Each SQL backend keeps a thin public factory plus focused method modules:
 ## Security & Operations
 
 - **SSRF guard**: `validateBaseUrl()` in `ai-provider/adapters/http.ts` is **open by default** — any public https host is allowed. Blocks: RFC1918 / link-local IPs (`10.x` / `172.16-31.x` / `192.168.x` / `169.254.x` / `fc00::` / `fe80::`), cloud metadata hostnames (`metadata.google.internal`, `metadata.internal`), non-https on remote hosts, non-http(s) protocols. Loopback (`localhost` / `127.0.0.1` / `::1`) bypasses the https requirement for Ollama-style local dev. `COVEL_ALLOWED_LLM_HOSTS` appears in env-registry as `status: 'documented'` but **is not read** by the guard — third-party plugin authors targeting custom provider hosts do not need any env shim.
+- **Signed media URLs**: `middleware/media-token.ts` signs `MediaRef` URLs with `COVEL_MEDIA_TOKEN_SECRET`. Desktop shells must provision it or generated images/portraits fail to load; web uses an ephemeral per-boot secret.
 - **Session IDs**: `{worldId}-{uuid8}` via `crypto.randomUUID()` — enumeration-resistant.
 - **worldId**: `/^[a-z0-9_-]{1,64}$/i` regex whitelist.
 - **Rate limiting**: `middleware/rate-limit.ts` (`rateLimiter()`, `singleFlight()`).

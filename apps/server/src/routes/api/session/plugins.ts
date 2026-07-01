@@ -326,6 +326,9 @@ export function buildAvailablePluginList(
     return {
       id: entry.id,
       name: entry.summary.name,
+      ...(entry.summary.displayName
+        ? { displayName: entry.summary.displayName }
+        : {}),
       description: entry.summary.description,
       pluginType: entry.summary.pluginType,
       source: trust.source,

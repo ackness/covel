@@ -317,25 +317,6 @@ export interface ToolsConfig {
   readonly local?: readonly string[];
 }
 
-// ── Plugin config fields ─────────────────────────────────────────
-
-export type ConfigFieldType =
-  | "string"
-  | "integer"
-  | "number"
-  | "boolean"
-  | "enum";
-
-export interface PluginConfigField {
-  readonly type: ConfigFieldType;
-  readonly default?: unknown;
-  readonly min?: number;
-  readonly max?: number;
-  readonly options?: readonly string[];
-  readonly label?: string;
-  readonly description?: string;
-}
-
 // ── User-declared plugin settings ────────────────────────────────
 
 /**
@@ -346,7 +327,18 @@ export interface PluginConfigField {
  */
 export interface PluginUserSettingSpec {
   readonly key: string;
-  readonly type: "text" | "number" | "toggle" | "select" | "textarea";
+  // `integer` is a `number` constrained to whole values; `slider` is a
+  // `number` rendered as a range control (declare `min`/`max`). `secret` is
+  // intentionally not yet supported — its keys.env storage + transport channel
+  // are unresolved (see the configurable-surface spec, Open Question #4).
+  readonly type:
+    | "text"
+    | "textarea"
+    | "number"
+    | "integer"
+    | "toggle"
+    | "select"
+    | "slider";
   // Optional: a setting may declare no default (e.g. cost-gate). Mirrors the
   // schema's `z.unknown().optional()` so the parsed manifest type-checks.
   readonly default?: unknown;
@@ -400,6 +392,17 @@ export interface UISpec {
 
 // ── Runtime manifest ─────────────────────────────────────────────
 
+/**
+ * One entry in `upstreamRequired`. Either:
+ *  • a runtime id (string) — that exact runtime must have succeeded; an absent
+ *    (disabled) upstream still skips this runtime, never counts as success.
+ *  • `{ capability }` — at least one in-scope runtime declaring that capability
+ *    must have succeeded. Lets a runtime depend on "the active provider of X"
+ *    (e.g. `narrative`) without naming a concrete plugin, so the same downstream
+ *    works across modes that swap the provider (narrator ↔ chat-mode-narrator).
+ */
+export type UpstreamRequirement = string | { readonly capability: string };
+
 export interface RuntimeManifest {
   readonly name: string;
   /**
@@ -410,6 +413,12 @@ export interface RuntimeManifest {
    */
   readonly pluginId: string;
   readonly description: string;
+  /**
+   * Friendly, player-facing name (I18nText). Distinct from `name` (the runtime
+   * id). Surfaced via `PluginSummary.displayName` for plugin-list UIs so a
+   * non-Chinese player sees e.g. "Action Guide" instead of the id "guide".
+   */
+  readonly displayName?: import("./world.js").I18nText;
   readonly priority?: number;
   readonly version?: string;
   /**
@@ -499,15 +508,17 @@ export interface RuntimeManifest {
    */
   readonly relations?: PluginRelations;
   /**
-   * Runtime IDs this runtime depends on for a successful upstream output.
-   * When any listed upstream ran with `status !== 'success'` in the same
-   * turn, the framework short-circuits this runtime with `status: 'skipped'`
-   * before the guard / LLM pipeline. Prevents downstream LLMs from being
-   * invoked with empty inject blocks when their upstream failed.
+   * Upstreams this runtime depends on for a successful output. Each entry is a
+   * runtime id or a `{ capability }` requirement (see {@link UpstreamRequirement}).
+   * When a required upstream ran with `status !== 'success'` in the same turn —
+   * or, for a capability entry, no in-scope provider succeeded — the framework
+   * short-circuits this runtime with `status: 'skipped'` before the guard / LLM
+   * pipeline. Prevents downstream LLMs from being invoked with empty inject
+   * blocks when their upstream failed.
    *
    * Implemented in packages/runtime/src/turn-executor.ts (executeOneRuntime).
    */
-  readonly upstreamRequired?: readonly string[];
+  readonly upstreamRequired?: readonly UpstreamRequirement[];
   readonly trigger?: TriggerConfig;
   /**
    * Execution mode when this runtime is activated via a manual plugin-rpc call
@@ -526,7 +537,6 @@ export interface RuntimeManifest {
   readonly input?: InputConfig;
   readonly output?: OutputConfig;
   readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
-  readonly config?: Readonly<Record<string, PluginConfigField>>;
   readonly i18n?: Readonly<Record<string, string>>;
   readonly ui?: UISpec;
   /**
@@ -644,5 +654,4 @@ export interface PluginManifest {
   readonly runtime?: RuntimeManifest;
   /** Multi-runtime plugin: list of runtimes. */
   readonly runtimes?: readonly RuntimeManifest[];
-  readonly config?: Readonly<Record<string, PluginConfigField>>;
 }

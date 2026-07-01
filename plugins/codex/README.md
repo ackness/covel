@@ -8,7 +8,8 @@
 - `tools/unlock-codex-entries.js`：创建新图鉴条目。
 - `tools/update-codex-entry.js`：补充已有图鉴条目。
 - `ui/codex-panel.json`：右侧完整图鉴面板。
-- `ui/codex-message.json`：聊天区本轮发现块。
+
+聊天区的"本轮发现"卡片由 `unlock-codex-entries` 工具的 `ui` 字段经 `ui.render` 渲染（不再使用单独的 `ui.message` spec）。
 
 ## 数据与行为
 

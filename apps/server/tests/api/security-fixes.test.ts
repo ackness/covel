@@ -157,14 +157,17 @@ describe("[P2] rate limiter proxy trust", () => {
     else process.env.TRUSTED_PROXY_IPS = savedTrustedProxyIps;
   });
 
-  function requestFrom(remote: string, forwarded: string): Request {
-    const req = new Request("http://localhost/limited", {
+  function requestFrom(forwarded: string): Request {
+    return new Request("http://localhost/limited", {
       headers: { "X-Forwarded-For": forwarded },
     });
-    Object.defineProperty(req, "connInfo", {
-      value: { remote: { address: remote } },
-    });
-    return req;
+  }
+
+  // The client address reaches the limiter via getConnInfo, which reads
+  // c.env.incoming.socket.remoteAddress. app.request(req, undefined, env)
+  // injects that env, mirroring @hono/node-server's real request context.
+  function connEnv(remote: string): Record<string, unknown> {
+    return { incoming: { socket: { remoteAddress: remote } } };
   }
 
   it("ignores forged forwarded headers when the remote address is untrusted", async () => {
@@ -173,11 +176,16 @@ describe("[P2] rate limiter proxy trust", () => {
     app.use("/limited", rateLimiter({ max: 1, windowMs: 60_000 }));
     app.get("/limited", (c) => c.text("ok"));
 
+    const env = connEnv("203.0.113.10");
     const first = await app.request(
-      requestFrom("203.0.113.10", "198.51.100.1"),
+      requestFrom("198.51.100.1"),
+      undefined,
+      env,
     );
     const second = await app.request(
-      requestFrom("203.0.113.10", "198.51.100.2"),
+      requestFrom("198.51.100.2"),
+      undefined,
+      env,
     );
 
     expect(first.status).toBe(200);
@@ -190,8 +198,17 @@ describe("[P2] rate limiter proxy trust", () => {
     app.use("/limited", rateLimiter({ max: 1, windowMs: 60_000 }));
     app.get("/limited", (c) => c.text("ok"));
 
-    const first = await app.request(requestFrom("127.0.0.1", "198.51.100.1"));
-    const second = await app.request(requestFrom("127.0.0.1", "198.51.100.2"));
+    const env = connEnv("127.0.0.1");
+    const first = await app.request(
+      requestFrom("198.51.100.1"),
+      undefined,
+      env,
+    );
+    const second = await app.request(
+      requestFrom("198.51.100.2"),
+      undefined,
+      env,
+    );
 
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);

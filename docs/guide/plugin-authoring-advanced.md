@@ -39,9 +39,8 @@ import type {
   // 工具
   ToolsConfig, // { builtin?, local? }
 
-  // 配置
-  ConfigFieldType, // 'string' | 'integer' | 'number' | 'boolean' | 'enum'
-  PluginConfigField, // { type, default?, min?, max?, options?, label?, description? }
+  // 玩家可调设置（PLUGIN.md `userSettings`）
+  PluginUserSettingSpec, // { key, type, default?, label, min?, max?, options? }
 
   // 运行时数据
   TurnInput, // 每轮输入
@@ -261,7 +260,6 @@ interface PluginManifest {
   readonly runtime?: RuntimeManifest;
   /** 多 runtime 插件 */
   readonly runtimes?: readonly RuntimeManifest[];
-  readonly config?: Readonly<Record<string, PluginConfigField>>;
 }
 ```
 
@@ -298,17 +296,17 @@ export default async function handler(
 
 `FunctionHandlerContext` 暴露的字段(仅列和插件作者最相关的):
 
-| 字段                     | 类型                    | 用途                                                                                                                                                                                                       |
-| ------------------------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sessionId`              | `string`                | 当前 session ID                                                                                                                                                                                            |
-| `turnId`                 | `string`                | 当前 turn ID(触发该 runtime 的 turn)                                                                                                                                                                       |
-| `pluginId` / `runtimeId` | `string`                | 本 runtime 的身份(和 manifest 里一致)                                                                                                                                                                      |
-| `locale`                 | `string`                | `zh-CN` / `en` / ...,来自 session / 请求                                                                                                                                                                   |
-| `store`                  | `FunctionStoreView`     | 绑定当前 session/plugin 的只读 DataStore 视图：`getPluginData(namespace, key)` / `listPluginData(namespace)` / `getSession()` / `listTurnMessages(limit?)`。写入使用 `ctx.pluginData` 或 handler return 值 |
-| `gateway`                | `PluginRuntimeGateway?` | 文本/object 生成 + slot 解析。签名见下                                                                                                                                                                     |
-| `utils`                  | `PluginRuntimeUtils?`   | SSRF 安全的 URL 校验 + 带重试的 fetch。插件自管 wire 时使用                                                                                                                                                |
-| `manualPayload`          | `unknown?`              | 仅在 `POST /plugin-rpc` 手动触发时注入,为请求体的 `payload` 字段                                                                                                                                           |
-| `triggerEvent`           | `{ topic, data }?`      | 仅 event 触发时存在,包含触发该 runtime 的事件                                                                                                                                                              |
+| 字段                     | 类型                    | 用途                                                                                                                                                                                                                                                                         |
+| ------------------------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sessionId`              | `string`                | 当前 session ID                                                                                                                                                                                                                                                              |
+| `turnId`                 | `string`                | 当前 turn ID(触发该 runtime 的 turn)                                                                                                                                                                                                                                         |
+| `pluginId` / `runtimeId` | `string`                | 本 runtime 的身份(和 manifest 里一致)                                                                                                                                                                                                                                        |
+| `locale`                 | `string`                | `zh-CN` / `en` / ...,来自 session / 请求                                                                                                                                                                                                                                     |
+| `store`                  | `FunctionStoreView`     | 绑定当前 session/plugin 的只读 DataStore 视图：`getPluginData(namespace, key)` / `listPluginData(namespace)` / `getSession()` / `listTurnMessages(limit?)`(传 `limit` 时返回**最近** N 条 turn 消息、按时间正序；不传则全量)。写入使用 `ctx.pluginData` 或 handler return 值 |
+| `gateway`                | `PluginRuntimeGateway?` | 文本/object 生成 + slot 解析。签名见下                                                                                                                                                                                                                                       |
+| `utils`                  | `PluginRuntimeUtils?`   | SSRF 安全的 URL 校验 + 带重试的 fetch。插件自管 wire 时使用                                                                                                                                                                                                                  |
+| `manualPayload`          | `unknown?`              | 仅在 `POST /plugin-rpc` 手动触发时注入,为请求体的 `payload` 字段                                                                                                                                                                                                             |
+| `triggerEvent`           | `{ topic, data }?`      | 仅 event 触发时存在,包含触发该 runtime 的事件                                                                                                                                                                                                                                |
 
 **`ctx.gateway`:** function runtime 调用 LLM 的入口。绝不允许直接 `fetch` 文本 provider URL 或导入文本 SDK —— 这样会跳过 slot 解析、密钥管理、SSRF 防护和 replay cache。
 

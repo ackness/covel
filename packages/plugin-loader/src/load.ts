@@ -136,6 +136,9 @@ export async function loadPluginSummary(
       ? data.name
       : discovery.id
     : discovery.id;
+  // Friendly display name (I18nText) — only meaningful from the root summary.
+  const displayName =
+    hasRootSummary && isI18n(data.displayName) ? data.displayName : undefined;
   const description = isI18n(data.description) ? data.description : "";
   const pluginType: PluginType =
     data.pluginType === "core-plugin" ? "core-plugin" : "plugin";
@@ -146,6 +149,7 @@ export async function loadPluginSummary(
   return {
     id: discovery.id,
     name,
+    ...(displayName ? { displayName } : {}),
     description,
     pluginType,
     runtimeCount: discovery.pluginMdPaths.length,

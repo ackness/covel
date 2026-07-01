@@ -29,6 +29,7 @@ import {
 import type { AiStack } from "../ai-setup.js";
 import type { SlotOverridesInput } from "@covel/ai-provider";
 import type { PluginRuntimeGateway } from "@covel/plugin-loader";
+import { decodeBase64Json } from "../lib/base64-json.js";
 
 export interface PerRequestLlmOptions {
   readonly ai: AiStack;
@@ -109,28 +110,23 @@ function parseProviderKeys(
   header: string | undefined,
 ): Record<string, string> | null {
   if (!header || header.length > MAX_HEADER_BYTES) return null;
-  try {
-    const decoded = Buffer.from(header, "base64").toString("utf8");
-    const parsed = JSON.parse(decoded);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-      return null;
-    const result: Record<string, string> = {};
-    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof v === "string" && v.length > 0) result[k] = v;
-    }
-    return result;
-  } catch {
+  const parsed = decodeBase64Json(header);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
     return null;
+  const result: Record<string, string> = {};
+  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof v === "string" && v.length > 0) result[k] = v;
   }
+  return result;
 }
 
 function parseSlotOverrides(
   header: string | undefined,
 ): SlotOverridesInput | null {
   if (!header || header.length > MAX_HEADER_BYTES) return null;
+  // Defensive try/catch: untrusted browser input parsed across many branches.
   try {
-    const decoded = Buffer.from(header, "base64").toString("utf8");
-    const parsed = JSON.parse(decoded);
+    const parsed = decodeBase64Json(header);
     if (!parsed || typeof parsed !== "object") return null;
     const out: SlotOverridesInput = {};
     const slotMap = (parsed as Record<string, unknown>).slotPresetOverrides;

@@ -5,21 +5,23 @@
  * (use Redis-backed limiter for T3). Sufficient for T1/T2.
  */
 
-import type { MiddlewareHandler } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
+import { getConnInfo } from "@hono/node-server/conninfo";
 import { readRuntimeEnv } from "@covel/shared";
 import { errorBody } from "../api-error.js";
 
 interface RateLimitOptions {
-  /** Maximum requests per window. Default: 60 */
-  max?: number;
-  /** Window size in milliseconds. Default: 60_000 (1 minute) */
-  windowMs?: number;
+  /** Maximum requests per window. */
+  max: number;
 }
 
 interface WindowEntry {
   count: number;
   resetAt: number;
 }
+
+/** Sliding-window size — every caller uses the same 1-minute window. */
+const WINDOW_MS = 60_000;
 
 function parseTrustedProxyIps(raw: string | undefined): ReadonlySet<string> {
   return new Set(
@@ -38,18 +40,20 @@ function normalizeIp(value: string | undefined): string | undefined {
   return trimmed;
 }
 
-function requestRemoteAddr(c: { req: { raw?: Request } }): string | undefined {
-  const raw = c.req.raw as
-    | (Request & {
-        readonly connInfo?: { readonly remote?: { readonly address?: string } };
-      })
-    | undefined;
-  return normalizeIp(raw?.connInfo?.remote?.address);
+function requestRemoteAddr(c: Context): string | undefined {
+  // @hono/node-server does NOT attach the client address to the raw Request;
+  // it is only exposed via getConnInfo (reads the underlying socket). Reading
+  // `c.req.raw.connInfo` returned undefined for every request, collapsing the
+  // limiter to a single global bucket. getConnInfo throws when there is no
+  // socket (e.g. app.request() in tests) — fall back to undefined there.
+  try {
+    return normalizeIp(getConnInfo(c).remote.address);
+  } catch {
+    return undefined;
+  }
 }
 
-function clientIp(c: {
-  req: { header(name: string): string | undefined; raw?: Request };
-}): string {
+function clientIp(c: Context): string {
   const env = readRuntimeEnv();
   const remote = requestRemoteAddr(c);
   const trustedProxyIps = parseTrustedProxyIps(env.trustedProxyIps);
@@ -68,9 +72,7 @@ function clientIp(c: {
   return remote ?? "unknown";
 }
 
-export function rateLimiter(opts: RateLimitOptions = {}): MiddlewareHandler {
-  const max = opts.max ?? readRuntimeEnv().rateLimitRpm;
-  const windowMs = opts.windowMs ?? 60_000;
+export function rateLimiter({ max }: RateLimitOptions): MiddlewareHandler {
   const windows = new Map<string, WindowEntry>();
 
   // Periodic cleanup to prevent memory leak (every 5 minutes)
@@ -93,7 +95,7 @@ export function rateLimiter(opts: RateLimitOptions = {}): MiddlewareHandler {
     const entry = windows.get(key);
 
     if (!entry || now >= entry.resetAt) {
-      windows.set(key, { count: 1, resetAt: now + windowMs });
+      windows.set(key, { count: 1, resetAt: now + WINDOW_MS });
       await next();
       return;
     }
@@ -115,13 +117,11 @@ export function rateLimiter(opts: RateLimitOptions = {}): MiddlewareHandler {
  * Single-flight guard — allows only one concurrent execution per key.
  * Useful for expensive operations like model-db refresh.
  */
-export function singleFlight(
-  keyFn: (c: { req: { path: string } }) => string = (c) => c.req.path,
-): MiddlewareHandler {
+export function singleFlight(): MiddlewareHandler {
   const inflight = new Set<string>();
 
   return async (c, next) => {
-    const key = keyFn(c);
+    const key = c.req.path;
     if (inflight.has(key)) {
       return c.json(
         errorBody("Operation already in progress", {

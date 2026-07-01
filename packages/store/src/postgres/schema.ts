@@ -246,7 +246,12 @@ export const messages = pgTable(
     metadata: jsonb("metadata"), // JSON
     createdAt: text("created_at").notNull(),
   },
-  (table) => [index("pg_messages_session_id_idx").on(table.sessionId)],
+  (table) => [
+    index("pg_messages_session_id_idx").on(table.sessionId),
+    // Supports the keyset page query (WHERE session_id = ? ORDER BY created_at
+    // DESC … LIMIT) so a long chat log never scans every row to fetch a window.
+    index("pg_messages_created_idx").on(table.sessionId, table.createdAt),
+  ],
 );
 
 // ── Characters ──────────────────────────────────────────────────
@@ -359,6 +364,8 @@ export const traceEvents = pgTable(
     index("pg_trace_events_session_id_idx").on(table.sessionId),
     index("pg_trace_events_trace_id_idx").on(table.sessionId, table.traceId),
     index("pg_trace_events_turn_id_idx").on(table.sessionId, table.turnId),
+    // Supports the keyset page query on the fastest-growing table.
+    index("pg_trace_events_created_idx").on(table.sessionId, table.createdAt),
   ],
 );
 

@@ -34,7 +34,10 @@ export interface DagScheduleResult {
   readonly error?: string;
 }
 
-function collectDependencies(manifest: RuntimeManifest): readonly string[] {
+function collectDependencies(
+  manifest: RuntimeManifest,
+  capabilityProviders: ReadonlyMap<string, readonly string[]>,
+): readonly string[] {
   const deps = new Set<string>();
   const injects = manifest.input?.inject ?? [];
   for (const decl of injects) {
@@ -43,7 +46,15 @@ function collectDependencies(manifest: RuntimeManifest): readonly string[] {
     }
   }
   for (const up of manifest.upstreamRequired ?? []) {
-    if (typeof up === "string" && up.length > 0) deps.add(up);
+    if (typeof up === "string") {
+      if (up.length > 0) deps.add(up);
+    } else {
+      // Capability upstream — depend on every in-scope provider of it so the
+      // level ordering waits for whichever provider the current mode loaded.
+      for (const name of capabilityProviders.get(up.capability) ?? []) {
+        deps.add(name);
+      }
+    }
   }
   return [...deps];
 }
@@ -64,13 +75,21 @@ export function scheduleByDag(
   const dependents = new Map<string, string[]>();
   const byName = new Map<string, RuntimeManifest>();
 
+  // capability → in-scope runtime names that declare it, for resolving
+  // `{ capability }` upstream entries into concrete dependency edges.
+  const capabilityProviders = new Map<string, string[]>();
   for (const rt of runtimes) {
     byName.set(rt.name, rt);
     inDegree.set(rt.name, 0);
+    for (const cap of rt.capabilities ?? []) {
+      const list = capabilityProviders.get(cap) ?? [];
+      list.push(rt.name);
+      capabilityProviders.set(cap, list);
+    }
   }
 
   for (const rt of runtimes) {
-    const deps = collectDependencies(rt);
+    const deps = collectDependencies(rt, capabilityProviders);
     for (const dep of deps) {
       if (!inScope.has(dep)) continue; // out-of-scope — treat as satisfied
       inDegree.set(rt.name, (inDegree.get(rt.name) ?? 0) + 1);

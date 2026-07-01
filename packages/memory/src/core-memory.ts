@@ -33,59 +33,75 @@ export function createMemoryManager(
   store: DataStore,
   config?: CoreMemoryConfig,
 ): MemoryManager {
-  const schema = config?.blocks ?? DEFAULT_CORE_MEMORY_BLOCKS;
-  const labels: readonly string[] = schema.map((b) => b.label);
-  const schemaByLabel = new Map<string, CoreMemoryBlockSchema>(
-    schema.map((b) => [b.label, b]),
-  );
+  const staticSchema = config?.blocks ?? DEFAULT_CORE_MEMORY_BLOCKS;
   const defaultMaxChars = config?.maxBlockChars ?? DEFAULT_MAX_BLOCK_CHARS;
   const mirrorPluginId = config?.pluginId;
 
-  const maxCharsFor = (label: string): number =>
-    schemaByLabel.get(label)?.maxChars ?? defaultMaxChars;
+  // Resolve the block schema for a session: the bootstrap-injected resolver
+  // (plugin blocks merged with the session's world blocks) when present, else
+  // the static schema. Derivation helpers are rebuilt per call so world-declared
+  // blocks render and extract for the sessions that actually use them.
+  const resolveSchema = async (
+    sessionId: string,
+  ): Promise<readonly CoreMemoryBlockSchema[]> =>
+    (await config?.resolveBlocks?.(sessionId)) ?? staticSchema;
 
-  const displayNameFor = (label: string): I18nText =>
-    schemaByLabel.get(label)?.displayName ?? { zh: label, en: label };
+  interface SchemaHelpers {
+    readonly labels: readonly string[];
+    readonly maxCharsFor: (label: string) => number;
+    readonly displayNameFor: (label: string) => I18nText;
+    readonly iconFor: (label: string) => string;
+  }
 
-  const iconFor = (label: string): string =>
-    schemaByLabel.get(label)?.icon ?? "Info";
+  function helpersFor(schema: readonly CoreMemoryBlockSchema[]): SchemaHelpers {
+    const byLabel = new Map<string, CoreMemoryBlockSchema>(
+      schema.map((b) => [b.label, b]),
+    );
+    return {
+      labels: schema.map((b) => b.label),
+      maxCharsFor: (label) => byLabel.get(label)?.maxChars ?? defaultMaxChars,
+      displayNameFor: (label) =>
+        byLabel.get(label)?.displayName ?? { zh: label, en: label },
+      iconFor: (label) => byLabel.get(label)?.icon ?? "Info",
+    };
+  }
 
-  function toBlock(record: {
-    key: string;
-    value: unknown;
-    updatedAt: string;
-  }): CoreMemoryBlock {
+  function toBlock(
+    record: { key: string; value: unknown; updatedAt: string },
+    h: SchemaHelpers,
+  ): CoreMemoryBlock {
     const raw = record.value as { text?: string } | string | null;
     const content = typeof raw === "string" ? raw : (raw?.text ?? "");
     return {
       label: record.key,
       content,
       updatedAt: record.updatedAt,
-      displayName: displayNameFor(record.key),
-      icon: iconFor(record.key),
+      displayName: h.displayNameFor(record.key),
+      icon: h.iconFor(record.key),
     };
   }
 
   return {
     async loadBlocks(sessionId: string): Promise<readonly CoreMemoryBlock[]> {
+      const h = helpersFor(await resolveSchema(sessionId));
       const all = await store.listWorkingMemory(sessionId);
       const blockMap = new Map<string, CoreMemoryBlock>();
 
       for (const record of all) {
-        if (record.scope === SCOPE && labels.includes(record.key)) {
-          blockMap.set(record.key, toBlock(record));
+        if (record.scope === SCOPE && h.labels.includes(record.key)) {
+          blockMap.set(record.key, toBlock(record, h));
         }
       }
 
       // Return in canonical (schema) order, with empty blocks for missing labels
-      return labels.map(
+      return h.labels.map(
         (label) =>
           blockMap.get(label) ?? {
             label,
             content: "",
             updatedAt: new Date().toISOString(),
-            displayName: displayNameFor(label),
-            icon: iconFor(label),
+            displayName: h.displayNameFor(label),
+            icon: h.iconFor(label),
           },
       );
     },
@@ -95,7 +111,9 @@ export function createMemoryManager(
       label: CoreMemoryLabel,
     ): Promise<CoreMemoryBlock | null> {
       const record = await store.getWorkingMemory(sessionId, SCOPE, label);
-      return record ? toBlock(record) : null;
+      if (!record) return null;
+      const h = helpersFor(await resolveSchema(sessionId));
+      return toBlock(record, h);
     },
 
     async updateBlock(
@@ -103,7 +121,8 @@ export function createMemoryManager(
       label: CoreMemoryLabel,
       content: string,
     ): Promise<void> {
-      const maxChars = maxCharsFor(label);
+      const h = helpersFor(await resolveSchema(sessionId));
+      const maxChars = h.maxCharsFor(label);
       const truncated =
         content.length > maxChars ? content.slice(0, maxChars) : content;
       const now = new Date().toISOString();
@@ -124,8 +143,8 @@ export function createMemoryManager(
       if (mirrorPluginId) {
         await mirrorToPluginData(store, sessionId, mirrorPluginId, label, {
           content: truncated,
-          displayName: displayNameFor(label),
-          icon: iconFor(label),
+          displayName: h.displayNameFor(label),
+          icon: h.iconFor(label),
           now,
         });
       }
@@ -135,11 +154,12 @@ export function createMemoryManager(
       sessionId: string,
       updates: ReadonlyMap<CoreMemoryLabel, string>,
     ): Promise<void> {
+      const h = helpersFor(await resolveSchema(sessionId));
       const now = new Date().toISOString();
 
       const promises: Promise<void>[] = [];
       for (const [label, content] of updates) {
-        const maxChars = maxCharsFor(label);
+        const maxChars = h.maxCharsFor(label);
         const truncated =
           content.length > maxChars ? content.slice(0, maxChars) : content;
         promises.push(
@@ -156,8 +176,8 @@ export function createMemoryManager(
           promises.push(
             mirrorToPluginData(store, sessionId, mirrorPluginId, label, {
               content: truncated,
-              displayName: displayNameFor(label),
-              icon: iconFor(label),
+              displayName: h.displayNameFor(label),
+              icon: h.iconFor(label),
               now,
             }),
           );
@@ -167,6 +187,7 @@ export function createMemoryManager(
     },
 
     async initializeDefaults(sessionId: string): Promise<void> {
+      const h = helpersFor(await resolveSchema(sessionId));
       const existing = await store.listWorkingMemory(sessionId);
       const existingKeys = new Set(
         existing.filter((r) => r.scope === SCOPE).map((r) => r.key),
@@ -175,7 +196,7 @@ export function createMemoryManager(
       const now = new Date().toISOString();
       const promises: Promise<void>[] = [];
 
-      for (const label of labels) {
+      for (const label of h.labels) {
         if (!existingKeys.has(label)) {
           promises.push(
             store.upsertWorkingMemory({

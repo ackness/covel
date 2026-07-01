@@ -24,7 +24,9 @@ repos:
       - id: check-shebang-scripts-are-executable
         exclude: ^(\.claude/|apps/desktop-tauri/src-tauri/src/main\.rs$)
       - id: check-added-large-files
-        args: [--maxkb=2048]
+        # 3 MB: covers tracked world character portraits (~1.7–2.4 MB PNGs)
+        # while still catching accidental large blobs (videos, dumps, bundles).
+        args: [--maxkb=3072]
 
   - repo: https://github.com/oxc-project/mirrors-oxlint
     rev: v1.63.0

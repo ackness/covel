@@ -33,7 +33,6 @@ describe("scene-prompts manifest and UI loading", () => {
       trigger: {
         type: "scheduled",
         interval: 1,
-        cooldownTurns: 1,
       },
       tools: {
         local: ["./tools/generate-scene-prompts.js"],
@@ -62,14 +61,21 @@ describe("scene-prompts manifest and UI loading", () => {
       trigger: {
         type: "scheduled",
         interval: 1,
-        cooldownTurns: 1,
       },
-      upstreamRequired: ["chat-mode-narrator"],
+      // Engine-agnostic: gates on the narrative-engine capability and injects
+      // from both known engines so it works under either narrator.
+      upstreamRequired: [{ capability: "narrative-engine" }],
       input: {
         inject: [
           {
             kind: "runtime",
             from: "chat-mode-narrator",
+            field: "narrativeOutput",
+            as: "<narrator-output>",
+          },
+          {
+            kind: "runtime",
+            from: "narrator",
             field: "narrativeOutput",
             as: "<narrator-output>",
           },
@@ -81,9 +87,10 @@ describe("scene-prompts manifest and UI loading", () => {
     });
 
     const loaded = await loadRuntime(discovery!, "scene-prompts");
-    expect(loaded.promptTemplate).toContain(
-      "{{ inputs.chat-mode-narrator.chat-mode-narrator.narrativeOutput }}",
-    );
+    // Engine-agnostic body: it references the injected <narrator-output> block
+    // (filled from whichever narrative engine is active) instead of hardcoding
+    // a single engine's `{{ inputs.<engine>... }}` template path.
+    expect(loaded.promptTemplate).toContain("<narrator-output>");
     expect(loaded.uiSpecs?.message).toHaveLength(1);
     expect(loaded.uiSpecs?.message?.[0]).toMatchObject({
       id: "scene-prompts",

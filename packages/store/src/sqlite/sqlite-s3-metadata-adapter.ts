@@ -22,6 +22,7 @@ import type {
   S3MediaMetadataAdapter,
 } from "../media-store.js";
 import { createTables } from "./sqlite-store-mappers.js";
+import { fromJson } from "./sqlite-json.js";
 
 /**
  * Create a SQLite-backed metadata adapter at `dbPath`. Reuses the standard
@@ -100,6 +101,12 @@ export function createSqliteS3MetadataAdapter(
     ownerPluginId: string | null;
     createdAt: string;
   }): MediaAssetRecord {
+    // fromJson try/catches the parse (returns undefined on null/corrupt), so a
+    // malformed `meta` column degrades to no-meta instead of throwing the whole
+    // read — matching every other SQLite mapper and the PG jsonb path.
+    const meta = fromJson(row.meta) as
+      | Readonly<Record<string, unknown>>
+      | undefined;
     return {
       id: row.id,
       mime: row.mime,
@@ -107,9 +114,7 @@ export function createSqliteS3MetadataAdapter(
       ownerSessionId: row.ownerSessionId,
       ownerPluginId: row.ownerPluginId,
       createdAt: row.createdAt,
-      ...(row.meta
-        ? { meta: JSON.parse(row.meta) as Readonly<Record<string, unknown>> }
-        : {}),
+      ...(meta ? { meta } : {}),
     };
   }
 

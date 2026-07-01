@@ -12,7 +12,19 @@ import type {
   SnapshotMessage,
   SnapshotCharacter,
   SnapshotTraceEvent,
+  TimeCursor,
 } from "@covel/shared";
+
+/**
+ * Restore windows: the snapshot ships the most-recent slice, not the whole
+ * history, so a long session doesn't stream its entire message log and (the
+ * fastest-growing) trace_events table into memory on every reconnect. Older
+ * messages load on demand via the messages cursor endpoint; execution steps
+ * for turns beyond the window degrade gracefully (timeline just doesn't render
+ * for very old, scrolled-in turns).
+ */
+const SNAPSHOT_MESSAGE_LIMIT = 80;
+const SNAPSHOT_TRACE_EVENT_LIMIT = 600;
 
 /**
  * Minimal store interface for snapshot building.
@@ -30,7 +42,10 @@ export interface SnapshotStore {
     preGameCompleted?: readonly string[];
     locale?: string;
   } | null>;
-  listMessages(sessionId: string): Promise<
+  listMessagesPage(
+    sessionId: string,
+    opts: { limit: number; before?: TimeCursor },
+  ): Promise<
     readonly {
       id: string;
       role: string;
@@ -57,7 +72,10 @@ export interface SnapshotStore {
   ): Promise<
     readonly { tableName: string; fieldName: string; value: unknown }[]
   >;
-  listTraceEvents(sessionId: string): Promise<
+  listTraceEventsPage(
+    sessionId: string,
+    opts: { limit: number; before?: TimeCursor },
+  ): Promise<
     readonly {
       type: string;
       turnId: string;
@@ -78,14 +96,27 @@ export async function buildSessionSnapshot(
   const session = await store.getSession(sessionId);
   if (!session) return null;
 
-  // Parallel queries for all session data
+  // Parallel queries for all session data. Messages + trace events are
+  // windowed to the most-recent slice (see the *_LIMIT constants); older
+  // messages load on demand via the cursor endpoint.
   const [rawMessages, characters, stateSchemas, traceEvents] =
     await Promise.all([
-      store.listMessages(sessionId),
+      store.listMessagesPage(sessionId, { limit: SNAPSHOT_MESSAGE_LIMIT }),
       store.listCharacters(sessionId),
       store.listStateSchemas(sessionId),
-      store.listTraceEvents(sessionId),
+      store.listTraceEventsPage(sessionId, {
+        limit: SNAPSHOT_TRACE_EVENT_LIMIT,
+      }),
     ]);
+
+  // A full window (=== limit) means older messages exist; hand back the oldest
+  // returned position as the cursor to fetch them. A short window reaches the
+  // start of history, so there is nothing older → null.
+  const oldest = rawMessages[0];
+  const messagesCursor: TimeCursor | null =
+    rawMessages.length === SNAPSHOT_MESSAGE_LIMIT && oldest
+      ? { createdAt: oldest.createdAt, id: oldest.id }
+      : null;
 
   // Query state entries per table (schemas → entries)
   const stateEntries = (
@@ -143,6 +174,7 @@ export async function buildSessionSnapshot(
       locale: session.locale,
     },
     messages,
+    messagesCursor,
     characters: snapshotCharacters,
     gameState,
     executionSteps,

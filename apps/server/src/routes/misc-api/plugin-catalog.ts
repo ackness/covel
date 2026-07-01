@@ -1,6 +1,6 @@
 import { getPluginTrustInfo, type PluginRegistry } from "@covel/plugin-loader";
 import { loadLivePluginMaps } from "./live-plugin-maps.js";
-import { normalizeRuntimeTrigger, textValue } from "./shared.js";
+import { normalizeRuntimeTrigger } from "./shared.js";
 
 export async function buildPackagesResponse(registry: PluginRegistry): Promise<{
   packages: Array<Record<string, unknown>>;
@@ -84,8 +84,12 @@ export async function buildPackagesResponse(registry: PluginRegistry): Promise<{
 
     packages.push({
       name: entry.id,
-      displayName: textValue(liveSummary.name),
-      description: textValue(liveSummary.description),
+      // Serve raw I18nText (the frontend resolves to the UI locale), matching
+      // /api/plugins and /api/session/plugins. Prefer the dedicated friendly
+      // `displayName`; fall back to summary `name` (an I18nText for multi-runtime
+      // packages, else the id). Never collapse to a single locale here.
+      displayName: liveSummary.displayName ?? liveSummary.name,
+      description: liveSummary.description,
       pluginType: liveSummary.pluginType,
       source: getPluginTrustInfo(entry.id, entry.source).source,
       enabled: true,

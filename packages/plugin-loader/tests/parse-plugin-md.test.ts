@@ -15,6 +15,34 @@ function md(frontmatter: string, body: string): string {
 // ── Tests ────────────────────────────────────────────────────────
 
 describe("parsePluginMd", () => {
+  describe("deprecated `config` field", () => {
+    it("strips `config` with a warning instead of failing the strict load", () => {
+      const content = md(
+        [
+          "name: legacy-config-plugin",
+          "description: A plugin written against the old docs",
+          "priority: 500",
+          "trigger:",
+          "  type: auto",
+          "config:",
+          "  difficulty:",
+          "    type: enum",
+          "    default: normal",
+          "    options: [easy, normal, hard]",
+        ].join("\n"),
+        "\nBody.\n",
+      );
+
+      // Must not throw — `config` was removed in favour of `userSettings`, but a
+      // straggler PLUGIN.md should get a deprecation cycle, not a hard crash.
+      const result = parsePluginMd(content, "plugins/legacy/PLUGIN.md");
+      expect(result.manifest.name).toBe("legacy-config-plugin");
+      expect(
+        (result.manifest as Record<string, unknown>).config,
+      ).toBeUndefined();
+    });
+  });
+
   describe("minimal PLUGIN.md", () => {
     it("should parse name, description, priority and body", () => {
       const content = md(
@@ -120,16 +148,6 @@ describe("parsePluginMd", () => {
           "    - narrative-engine",
           "  conflicts:",
           "    - chat-mode-narrator",
-          "config:",
-          "  difficulty:",
-          "    type: enum",
-          "    default: normal",
-          "    options:",
-          "      - easy",
-          "      - normal",
-          "      - hard",
-          "    label: Difficulty",
-          "    description: Combat difficulty level",
         ].join("\n"),
         "\nHandle combat encounters.\n",
       );
@@ -173,15 +191,6 @@ describe("parsePluginMd", () => {
           acceptsWorldData: true,
           schema: "./schemas/relationships.schema.json",
           description: "Relationship graph",
-        },
-      });
-      expect(result.manifest.config).toEqual({
-        difficulty: {
-          type: "enum",
-          default: "normal",
-          options: ["easy", "normal", "hard"],
-          label: "Difficulty",
-          description: "Combat difficulty level",
         },
       });
     });

@@ -3,6 +3,7 @@ import type {
   SettingGroup,
   SettingsStoreApi,
 } from "@covel/settings";
+import { resolveI18nText } from "@covel/shared";
 
 export type NavNodeKind = "group" | "plugin" | "subgroup";
 
@@ -55,15 +56,6 @@ const LLM_SUBNODES: Array<{
 function groupLabel(group: SettingGroup, locale: string): string {
   const l = GROUP_LABELS[group];
   return locale.startsWith("en") ? l["en-US"] : l["zh-CN"];
-}
-
-function labelToString(
-  label: SettingEntry["label"] | string | undefined,
-  locale: string,
-): string {
-  if (!label) return "";
-  if (typeof label === "string") return label;
-  return label[locale] ?? label["en-US"] ?? Object.values(label)[0] ?? "";
 }
 
 interface BuildNavOptions {
@@ -185,7 +177,9 @@ export function filterNav(
   const result = nodes.filter((node) => {
     const labelHit = node.label.toLowerCase().includes(q);
     const childHit = node.children.some((e) =>
-      (e.key + " " + labelToString(e.label, locale)).toLowerCase().includes(q),
+      (e.key + " " + (resolveI18nText(e.label, locale) ?? ""))
+        .toLowerCase()
+        .includes(q),
     );
     // Also surface children of siblings when searching.
     const parentHit = node.parentId

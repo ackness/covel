@@ -81,6 +81,58 @@ function jsonError(
   });
 }
 
+/**
+ * `POST /api/media?sessionId=<id>` — player image upload.
+ *
+ * Accepts a raw image body (`Content-Type` = the file's MIME), content-
+ * addresses it into the media store, and records the session as owner + ref
+ * so the session's signed media-token can read it back. Used by the portrait
+ * gallery's "replace" action so a player uploads a picture instead of
+ * hand-entering a sha256 id. The request-body-limit middleware grants this
+ * exact path the 20 MB image budget (default is 1 MB).
+ */
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+
+mediaRoutes.post("/", async (c) => {
+  const mediaStore = c.get("mediaStore");
+  if (!mediaStore) {
+    return jsonError("unavailable", "media store not configured", 503);
+  }
+  const sessionId = c.req.query("sessionId");
+  if (!sessionId) {
+    return jsonError(
+      "invalid_request",
+      "sessionId query param is required",
+      400,
+    );
+  }
+  const mime = (c.req.header("content-type") ?? "").split(";")[0]!.trim();
+  if (!/^image\//.test(mime)) {
+    return jsonError(
+      "invalid_request",
+      "only image/* uploads are accepted",
+      400,
+    );
+  }
+  const bytes = new Uint8Array(await c.req.arrayBuffer());
+  if (bytes.byteLength === 0) {
+    return jsonError("invalid_request", "empty upload body", 400);
+  }
+  if (bytes.byteLength > MAX_UPLOAD_BYTES) {
+    return jsonError(
+      "limit_exceeded",
+      "image exceeds the 20 MB upload limit",
+      400,
+    );
+  }
+  const ref = await mediaStore.put(bytes, mime);
+  // Owner for GC/quota; ref guarantees this session can read it back through
+  // the signed media-token (which checks owner OR a media_refs row).
+  await mediaStore.recordOwnership(ref.id, sessionId);
+  await mediaStore.addRef(ref.id, sessionId);
+  return c.json({ id: ref.id, mime: ref.mime, size: ref.size });
+});
+
 interface CleanupRequestBody {
   readonly dryRun?: unknown;
   readonly maxBytes?: unknown;

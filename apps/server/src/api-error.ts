@@ -1,3 +1,5 @@
+import type { ErrorHandler } from "hono";
+
 /**
  * Standard API error envelope.
  *
@@ -36,4 +38,24 @@ export function errorBody<Code extends string = string>(
   if (options?.code !== undefined) body.code = options.code;
   if (options?.details !== undefined) body.details = options.details;
   return body;
+}
+
+/**
+ * Global `app.onError` handler factory. Logs every unhandled error WITH request
+ * context (method + full URL) under `logPrefix` so any 500 is greppable, then
+ * returns the standard envelope — the raw message in dev, a generic string in
+ * prod (`isDev` false) so stacks/paths never leak.
+ */
+export function makeErrorHandler(
+  logPrefix: string,
+  isDev: boolean,
+): ErrorHandler {
+  return (err, c) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `${logPrefix}: ${c.req.method} ${c.req.url} — ${message}`,
+      err,
+    );
+    return c.json(errorBody(isDev ? message : "Internal server error"), 500);
+  };
 }

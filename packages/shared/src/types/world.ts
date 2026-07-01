@@ -227,3 +227,14 @@ export interface WorldPluginPolicy {
   readonly recommendedPlugins?: readonly string[];
   readonly excludedPlugins?: readonly string[];
 }
+
+/**
+ * World-authored default values for plugins' declared `userSettings`, stored on
+ * `WorldRecord.metadata.pluginSettings`. Keyed `pluginId → settingKey → value`.
+ * The turn boundary merges this under the player's per-session overrides
+ * (player override → world default → manifest default) before handing the
+ * bucket to `resolveUserSettings`.
+ */
+export type WorldPluginSettings = Readonly<
+  Record<string, Readonly<Record<string, unknown>>>
+>;

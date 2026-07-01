@@ -30,7 +30,7 @@ import {
   createInProcessSessionLock,
   type SessionLock,
 } from "../../lib/session-lock.js";
-import { errorBody } from "../../api-error.js";
+import { makeErrorHandler } from "../../api-error.js";
 import { sessionRoutes } from "./session.js";
 import { pluginRoutes } from "./plugins.js";
 import { frameworkRoutes } from "./framework.js";
@@ -375,18 +375,7 @@ export async function bootstrapApi(
   const app = new Hono();
 
   const isDev = runtimeEnv.nodeEnv !== "production";
-  app.onError((err, c) => {
-    const message = err instanceof Error ? err.message : String(err);
-    // Log every unhandled route error WITH request context (method + full URL)
-    // so any 500 is greppable and locatable from the logs — not just this one.
-    console.error(
-      `[api] Route error: ${c.req.method} ${c.req.url} — ${message}`,
-      err,
-    );
-    return c.json(errorBody(isDev ? message : "Internal server error"), {
-      status: 500,
-    });
-  });
+  app.onError(makeErrorHandler("[api] Route error", isDev));
 
   app.use("*", async (c, next) => {
     c.set("store", store);

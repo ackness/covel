@@ -247,6 +247,122 @@ sources:
     expect(await store.listWorldDataImportLedger("sess-1")).toHaveLength(2);
   });
 
+  it("imports the locale variant <name>.<lang>.<ext> when the session locale matches", async () => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  facts:
+    kind: json
+    path: data/facts.json
+    to: plugin:world-notes/facts
+    key: id
+`,
+      files: {
+        "data/facts.json": JSON.stringify([
+          { id: "gate", content: "闸门锁着。" },
+        ]),
+        "data/facts.en.json": JSON.stringify([
+          { id: "gate", content: "The gate is locked." },
+        ]),
+      },
+    });
+    const store = await makeStore(["world-notes"]);
+
+    await importWorldDataForSession({
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      locale: "en-US",
+      preflight: {
+        activePlugins: ["world-notes"],
+        registry: registry({ "world-notes": ["facts"] }),
+      },
+    });
+
+    const rows = await store.listPluginData("sess-1", "world-notes", "facts");
+    expect((rows[0]?.value as { content: string }).content).toBe(
+      "The gate is locked.",
+    );
+  });
+
+  it("falls back to the declared source when no locale variant exists", async () => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  facts:
+    kind: json
+    path: data/facts.json
+    to: plugin:world-notes/facts
+    key: id
+`,
+      // Only the zh default exists — an en-US session must fall back to it,
+      // not error.
+      files: {
+        "data/facts.json": JSON.stringify([
+          { id: "gate", content: "闸门锁着。" },
+        ]),
+      },
+    });
+    const store = await makeStore(["world-notes"]);
+
+    const result = await importWorldDataForSession({
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      locale: "en-US",
+      preflight: {
+        activePlugins: ["world-notes"],
+        registry: registry({ "world-notes": ["facts"] }),
+      },
+    });
+
+    expect(result.written).toBe(1);
+    const rows = await store.listPluginData("sess-1", "world-notes", "facts");
+    expect((rows[0]?.value as { content: string }).content).toBe("闸门锁着。");
+  });
+
+  it("a malicious locale cannot escape the descriptor root (path traversal)", async () => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  facts:
+    kind: json
+    path: data/facts.json
+    to: plugin:world-notes/facts
+    key: id
+`,
+      files: {
+        "data/facts.json": JSON.stringify([{ id: "gate", content: "safe" }]),
+      },
+    });
+    const store = await makeStore(["world-notes"]);
+
+    // A locale crafted to try to walk out of the world root via the
+    // `<name>.<lang>.<ext>` variant. `lang` = locale.split("-")[0], and the
+    // resolved variant is contained-checked, so this must safely fall back to
+    // the declared source, not read outside the root or error.
+    const result = await importWorldDataForSession({
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      locale: "../../../../etc/passwd",
+      preflight: {
+        activePlugins: ["world-notes"],
+        registry: registry({ "world-notes": ["facts"] }),
+      },
+    });
+
+    expect(result.written).toBe(1);
+    const rows = await store.listPluginData("sess-1", "world-notes", "facts");
+    expect((rows[0]?.value as { content: string }).content).toBe("safe");
+  });
+
   it("rejects missing plugin schemas during preflight", async () => {
     const { worldsDir, worldId } = await makeWorld({
       descriptor: `schemaVersion: 1
@@ -1125,13 +1241,74 @@ sources: {}
     const worldsDir = path.resolve(import.meta.dirname, "../../../../worlds");
     const pluginRegistry = await builtinPluginRegistry();
 
-    for (const [worldId, ruleSourceId] of [
-      ["cloudmere", "cultivationRules"],
-      ["mistport", "tideRules"],
-      ["neonridge", "streetRules"],
+    // mistport ships a living-world-rules rule set, a character-blueprint cast,
+    // and character-presence portraits (media + presence); activate the plugins
+    // all its sources target so the import is clean.
+    const worldId = "mistport";
+    const ruleSourceId = "tideRules";
+    const activePlugins = [
+      "living-world-rules",
+      "character-blueprint",
+      "char-creator",
+      "character-presence",
+    ];
+    const sessionId = `sess-${worldId}`;
+    const store = createMemoryStore();
+    await store.createSession({
+      id: sessionId,
+      worldId,
+      status: "active",
+      turnCount: 0,
+      preGameCompleted: [],
+      locale: "zh-CN",
+      activePlugins,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+
+    const result = await importWorldDataForSession({
+      store,
+      sessionId,
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      preflight: {
+        activePlugins,
+        registry: pluginRegistry,
+      },
+    });
+
+    expect(result.diagnostics.filter((d) => d.level === "error")).toEqual([]);
+    expect(result.written).toBeGreaterThanOrEqual(6);
+    expect(
+      await store.listPluginData(sessionId, "living-world-rules", "rules"),
+    ).toHaveLength(6);
+    expect(await store.listSessionLorebookEntries(sessionId)).toHaveLength(6);
+    expect(
+      (await store.listWorldDataImportLedger(sessionId)).map(
+        (row) => row.sourceId,
+      ),
+    ).toContain(ruleSourceId);
+    expect(await store.listCharacters(sessionId)).not.toHaveLength(0);
+  });
+
+  it("materializes bundled world portraits into the media store and links presence", async () => {
+    const worldsDir = path.resolve(import.meta.dirname, "../../../../worlds");
+    const pluginRegistry = await builtinPluginRegistry();
+    const activePlugins = [
+      "living-world-rules",
+      "character-blueprint",
+      "char-creator",
+      "character-presence",
+    ];
+
+    for (const [worldId, portraitCount] of [
+      ["mistport", 7],
+      ["haruka-academy", 8],
     ] as const) {
-      const sessionId = `sess-${worldId}`;
+      const sessionId = `sess-portraits-${worldId}`;
       const store = createMemoryStore();
+      const mediaStore = createMemoryMediaStore();
       await store.createSession({
         id: sessionId,
         worldId,
@@ -1139,34 +1316,45 @@ sources: {}
         turnCount: 0,
         preGameCompleted: [],
         locale: "zh-CN",
-        activePlugins: ["living-world-rules"],
+        activePlugins,
         createdAt: NOW,
         updatedAt: NOW,
       });
 
       const result = await importWorldDataForSession({
         store,
+        mediaStore,
         sessionId,
         worldId,
         worldsDirs: [worldsDir],
         now: NOW,
-        preflight: {
-          activePlugins: ["living-world-rules"],
-          registry: pluginRegistry,
-        },
+        preflight: { activePlugins, registry: pluginRegistry },
       });
 
       expect(result.diagnostics.filter((d) => d.level === "error")).toEqual([]);
-      expect(result.written).toBeGreaterThanOrEqual(6);
-      expect(
-        await store.listPluginData(sessionId, "living-world-rules", "rules"),
-      ).toHaveLength(3);
-      expect(await store.listSessionLorebookEntries(sessionId)).toHaveLength(3);
-      expect(
-        (await store.listWorldDataImportLedger(sessionId)).map(
-          (row) => row.sourceId,
-        ),
-      ).toContain(ruleSourceId);
+
+      // Every portrait is content-addressed into the media store.
+      const assetIds = new Set(
+        (await mediaStore.listAssets()).map((a) => a.id),
+      );
+      expect(assetIds.size).toBe(portraitCount);
+
+      // Every character has a presence record whose avatar + sprite resolve to a
+      // stored asset — i.e. the portrait actually displays for that character.
+      const presence = await store.listPluginData(
+        sessionId,
+        "character-presence",
+        "presence",
+      );
+      expect(presence).toHaveLength(portraitCount);
+      for (const rec of presence) {
+        const value = rec.value as {
+          avatar?: { id?: string };
+          sprite?: { id?: string };
+        };
+        expect(assetIds.has(value.avatar?.id ?? "")).toBe(true);
+        expect(assetIds.has(value.sprite?.id ?? "")).toBe(true);
+      }
     }
   });
 });

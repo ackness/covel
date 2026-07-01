@@ -176,11 +176,26 @@ export function createCommitHandlers(store: KernelStore): CommitHandlerMap {
     proposal: ProposalFor<"state.patch">,
   ): Promise<CommitResult> {
     const { table, field, value } = proposal.payload;
+    const tableName = table ?? "default";
+    const fieldName = field ?? "unknown";
+    // Update the current value AND append the change log, mirroring
+    // StateManager.setValue. Without the upsertStateEntry, a committed
+    // state.patch never changed the value that listStateEntries /
+    // getTableSnapshot / fork snapshots read — the write was lost to every
+    // current-value reader.
+    await store.upsertStateEntry({
+      id: crypto.randomUUID(),
+      sessionId: proposal.sessionId,
+      tableName,
+      fieldName,
+      value,
+      updatedAt: proposal.timestamp,
+    });
     await store.addStateChange({
       id: proposal.id,
       sessionId: proposal.sessionId,
-      tableName: table ?? "default",
-      fieldName: field ?? "unknown",
+      tableName,
+      fieldName,
       value,
       changedBy: `${proposal.source.pluginId}/${proposal.source.runtimeId}`,
       turnId: proposal.turnId,

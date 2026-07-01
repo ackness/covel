@@ -101,6 +101,12 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
 
   if (candidates.length === 0) return null;
 
+  // The seeded "original" candidate IS the narrative message shown above — do
+  // NOT re-render it as a card (that would duplicate every reply). Only the
+  // LLM-generated alternatives get cards; the original anchors Regenerate and
+  // stays the committed reply until the player accepts a variant.
+  const variants = candidates.filter((c) => c.source !== "original");
+
   const selectionGroup = turnId
     ? `branch-reply:${turnId}`
     : `branch-reply:${candidates[0]?.id ?? "candidate"}`;
@@ -188,8 +194,12 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
               void invokeBranchReplyAction("createCandidates", {
                 action: "createCandidates",
                 turnId,
+                // candidates[0] is the original (seeded) reply; regenerate it
+                // into the original + up to 2 LLM variants. Use a fixed count
+                // because after seeding `candidates.length` is 1, which would
+                // otherwise request zero variants.
                 baseText: candidates[0]?.content,
-                count: candidates.length,
+                count: 3,
               })
             }
             disabled={!canInvokeRuntime || pendingAction !== null}
@@ -206,8 +216,16 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
           </button>
         )}
       </div>
+      {variants.length === 0 && (
+        <p className="text-[11px] italic text-muted-foreground">
+          {t(
+            "branchReply.regenerateHint",
+            "Tap Regenerate for alternative phrasings of this reply.",
+          )}
+        </p>
+      )}
       <div className="space-y-1.5">
-        {candidates.map((candidate, index) => {
+        {variants.map((candidate, index) => {
           const accepted = candidate.id === acceptedCandidateId;
           return (
             <div

@@ -1,3 +1,4 @@
+import type { CursorPage } from "@covel/shared";
 import type {
   MessageRecord,
   SessionRecord,
@@ -38,6 +39,17 @@ export interface DataService {
 
   // Messages
   listMessages(sessionId: string): Promise<MessageRecord[]>;
+  /**
+   * Keyset page of messages, oldest-first. `before` omitted ⇒ the newest
+   * window; `before` set ⇒ the page immediately older than that position
+   * (scroll-up "load older"). `nextCursor` is the oldest returned row, or
+   * `null` once the start of history is reached. Remote透传后端端点；local 直连
+   * IDB 并按契约包成 `{ items, nextCursor }`。
+   */
+  listMessagesPage(
+    sessionId: string,
+    opts: { limit?: number; before?: { createdAt: string; id: string } },
+  ): Promise<CursorPage<MessageRecord>>;
   addMessage(msg: MessageRecord): Promise<void>;
 
   // State patches

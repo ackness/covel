@@ -20,8 +20,8 @@ export async function buildPluginFlowResponse() {
 
   const plugins: Array<{
     id: string;
-    name: string;
-    description: string;
+    name: I18nText;
+    description: I18nText;
     pluginType: string;
     runtimeIds: string[];
   }> = [];
@@ -29,7 +29,7 @@ export async function buildPluginFlowResponse() {
   const steps: Array<{
     id: string;
     pluginId: string;
-    pluginName: string;
+    pluginName: I18nText;
     runtimeId: string;
     runtimeName: string;
     description: string;
@@ -109,8 +109,12 @@ export async function buildPluginFlowResponse() {
       loadPluginManifest(discovery),
     ]);
 
-    const pluginName = textValue(summary.name) || discovery.id;
-    const pluginDescription = textValue(summary.description);
+    // Serve raw I18nText (frontend resolves to the UI locale), matching
+    // /api/packages and the segment labelText — never collapse to one locale
+    // server-side. Prefer the friendly displayName, fall back to summary name
+    // (an I18nText for multi-runtime packages, else the id).
+    const pluginName = summary.displayName ?? summary.name ?? discovery.id;
+    const pluginDescription = summary.description;
 
     plugins.push({
       id: discovery.id,

@@ -58,9 +58,8 @@ export type {
   InputConfig,
   OutputConfig,
   PluginDataSchemaDecl,
+  PluginUserSettingSpec,
   ToolsConfig,
-  ConfigFieldType,
-  PluginConfigField,
   PluginRelation,
   PluginRelations,
   PluginRelationTarget,
@@ -195,6 +194,8 @@ export type {
   SnapshotCharacter,
   SnapshotTraceEvent,
   SnapshotPluginStatus,
+  TimeCursor,
+  CursorPage,
 } from "./protocol.js";
 
 export type {
@@ -340,4 +341,5 @@ export type {
   WorldDimensions,
   WorldPluginPack,
   WorldPluginPolicy,
+  WorldPluginSettings,
 } from "./world.js";

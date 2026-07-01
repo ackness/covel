@@ -33,9 +33,11 @@ export function createSuspensionMethods(
     },
 
     async listSuspensions(sessionId) {
-      return [...state.suspensions.values()].filter(
-        (r) => r.sessionId === sessionId,
-      );
+      // Sort by createdAt to match SQL (asc(suspensions.createdAt)) and IDB;
+      // Map insertion order would otherwise diverge on out-of-order inserts.
+      return [...state.suspensions.values()]
+        .filter((r) => r.sessionId === sessionId)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     },
 
     async deleteSuspension(id) {

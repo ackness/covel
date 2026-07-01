@@ -117,6 +117,8 @@ tmp/
 !apps/web/public/icon.png
 !apps/desktop/resources/icon.png
 !apps/desktop-tauri/src-tauri/icons/**/*.png
+# World character portraits are tracked assets (generated once, reused).
+!worlds/**/media/portraits/*.png
 .playwright-mcp/
 # Local git worktrees for parallel agents
 .worktrees/

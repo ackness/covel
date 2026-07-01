@@ -22,6 +22,22 @@ function assertAllowedBaseUrl(
   }
 }
 
+/**
+ * Reject 3xx redirects instead of following them. Only the initial baseUrl is
+ * SSRF-checked (assertAllowedBaseUrl); a redirect Location is not, so following
+ * it could reach a blocked internal/metadata host from an attacker-controlled
+ * provider endpoint. LLM provider POSTs do not legitimately redirect, so we use
+ * `redirect: "manual"` and fail closed on a 3xx.
+ */
+function rejectRedirect(response: Response, url: string): Response {
+  if (response.status >= 300 && response.status < 400) {
+    throw new Error(
+      `Provider error: refusing to follow redirect (HTTP ${response.status}) from "${url}".`,
+    );
+  }
+  return response;
+}
+
 export async function postJson(
   config: ProviderConfig,
   path: string,
@@ -42,13 +58,17 @@ export async function postJson(
   const serializedBody = JSON.stringify(body);
   const effectiveSignal = signal ?? config.signal;
 
-  const doFetch = (): Promise<Response> =>
-    fetch(url, {
-      method: "POST",
-      headers,
-      body: serializedBody,
-      signal: effectiveSignal,
-    });
+  const doFetch = async (): Promise<Response> =>
+    rejectRedirect(
+      await fetch(url, {
+        method: "POST",
+        headers,
+        body: serializedBody,
+        redirect: "manual",
+        signal: effectiveSignal,
+      }),
+      url,
+    );
 
   if (isRetryDisabled()) {
     return doFetch();
@@ -83,13 +103,18 @@ export async function postFormData(
 ): Promise<Response> {
   assertAllowedBaseUrl(config.baseUrl);
 
-  return fetch(buildProviderUrl(config.baseUrl, path), {
-    method: "POST",
-    headers: {
-      ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
-      ...config.headers,
-    },
-    body,
-    signal: signal ?? config.signal,
-  });
+  const url = buildProviderUrl(config.baseUrl, path);
+  return rejectRedirect(
+    await fetch(url, {
+      method: "POST",
+      headers: {
+        ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
+        ...config.headers,
+      },
+      body,
+      redirect: "manual",
+      signal: signal ?? config.signal,
+    }),
+    url,
+  );
 }

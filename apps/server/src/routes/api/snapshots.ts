@@ -33,9 +33,11 @@ import type {
   TurnMessageRecord,
 } from "@covel/store";
 import { buildSnapshotPayload } from "@covel/runtime";
+import { CHARACTER_NAMESPACE } from "@covel/tools";
 import type { EventBus } from "@covel/events";
 import { errorBody } from "../../api-error.js";
 import { SAFE_SESSION_ID_RE } from "../../lib/validators.js";
+import { resolveSessionParam } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -60,10 +62,9 @@ snapshotRoutes.post("/:id/snapshot", async (c) => {
   const sessionId = c.req.param("id");
   const store = c.get("store");
 
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json(errorBody("Session not found", { code: "not_found" }), 404);
-  }
+  const resolved = await resolveSessionParam(c);
+  if (!resolved.ok) return resolved.response;
+  const session = resolved.session;
 
   // Derive a turnId for the snapshot — use the latest turn_result we can
   // find, or fall back to the session's turnCount so fresh sessions still
@@ -128,10 +129,8 @@ snapshotRoutes.get("/:id/snapshots", async (c) => {
   const sessionId = c.req.param("id");
   const store = c.get("store");
 
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json(errorBody("Session not found", { code: "not_found" }), 404);
-  }
+  const resolved = await resolveSessionParam(c);
+  if (!resolved.ok) return resolved.response;
 
   const snapshots = await store.listSnapshots(sessionId);
   return c.json({ snapshots });
@@ -163,13 +162,9 @@ snapshotRoutes.post("/:id/fork", async (c) => {
     );
   }
 
-  const parentSession = await store.getSession(parentSessionId);
-  if (!parentSession) {
-    return c.json(
-      errorBody("Parent session not found", { code: "not_found" }),
-      404,
-    );
-  }
+  const resolved = await resolveSessionParam(c);
+  if (!resolved.ok) return resolved.response;
+  const parentSession = resolved.session;
 
   const snapshot = await store.getSnapshot(fromSnapshotId);
   if (!snapshot || snapshot.sessionId !== parentSessionId) {
@@ -218,11 +213,15 @@ snapshotRoutes.post("/:id/fork", async (c) => {
 
       // Copy characters. Mint fresh ids because several store backends key
       // characters by `id` alone — reusing the parent's id would overwrite
-      // the parent's row in those backends.
+      // the parent's row in those backends. Track old→new so the character
+      // mirror plugin-data (keyed by character id) can be remapped below.
+      const characterIdMap = new Map<string, string>();
       for (const ch of snapshot.payload.characters) {
+        const newId = randomUUID();
+        characterIdMap.set(ch.id, newId);
         const record: CharacterRecord = {
           ...ch,
-          id: randomUUID(),
+          id: newId,
           sessionId: childSessionId,
         };
         await tx.upsertCharacter(record);
@@ -249,13 +248,27 @@ snapshotRoutes.post("/:id/fork", async (c) => {
         await tx.upsertStateEntry(record);
       }
 
-      // Copy plugin data
+      // Copy plugin data. The character-mirror namespace keys each row by the
+      // character id and stores the character (value.id = same id). Characters
+      // were re-minted above, so remap those rows' key + value.id to the child
+      // ids — otherwise the mirror references characters that don't exist in
+      // the child, desyncing UI panels and duplicating on the next update.
       const pluginDataBatch: PluginDataRecord[] =
-        snapshot.payload.pluginData.map((pd) => ({
-          ...pd,
-          id: randomUUID(),
-          sessionId: childSessionId,
-        }));
+        snapshot.payload.pluginData.map((pd) => {
+          const base: PluginDataRecord = {
+            ...pd,
+            id: randomUUID(),
+            sessionId: childSessionId,
+          };
+          if (pd.namespace !== CHARACTER_NAMESPACE) return base;
+          const newId = characterIdMap.get(pd.key);
+          if (!newId) return base;
+          const value =
+            base.value && typeof base.value === "object"
+              ? { ...(base.value as Record<string, unknown>), id: newId }
+              : base.value;
+          return { ...base, key: newId, value };
+        });
       if (pluginDataBatch.length > 0) {
         await tx.setPluginDataBatch(pluginDataBatch);
       }
@@ -281,6 +294,19 @@ snapshotRoutes.post("/:id/fork", async (c) => {
           sessionId: childSessionId,
         };
         await tx.saveSuspension(record);
+      }
+
+      // Copy session-scoped lorebook entries. Missing before, so a fork lost
+      // every lore/world entry the parent accumulated during play, and the
+      // child's `{{ config.worldEntries }}` came back empty. (sessionId, id) is
+      // the composite key, so keeping the original id is safe.
+      if (snapshot.payload.lorebookEntries.length > 0) {
+        await tx.upsertLorebookEntries(
+          snapshot.payload.lorebookEntries.map((lb) => ({
+            ...lb,
+            sessionId: childSessionId,
+          })),
+        );
       }
 
       // Copy turn messages up to and including the snapshot's cursor.

@@ -18,7 +18,7 @@ describe("buildSessionSnapshot", () => {
         preGameCompleted: [],
         locale: "zh-CN",
       }),
-      listMessages: vi.fn().mockResolvedValue([
+      listMessagesPage: vi.fn().mockResolvedValue([
         {
           id: "m1",
           role: "user",
@@ -60,7 +60,7 @@ describe("buildSessionSnapshot", () => {
             ]);
           return Promise.resolve([]);
         }),
-      listTraceEvents: vi.fn().mockResolvedValue([
+      listTraceEventsPage: vi.fn().mockResolvedValue([
         {
           type: "runtime.started",
           turnId: "t1",
@@ -118,11 +118,11 @@ describe("buildSessionSnapshot", () => {
 
   it("should handle empty collections gracefully", async () => {
     const store = createMockStore();
-    store.listMessages.mockResolvedValue([]);
+    store.listMessagesPage.mockResolvedValue([]);
     store.listCharacters.mockResolvedValue([]);
     store.listStateSchemas.mockResolvedValue([]);
     store.listStateEntries.mockResolvedValue([]);
-    store.listTraceEvents.mockResolvedValue([]);
+    store.listTraceEventsPage.mockResolvedValue([]);
 
     const snapshot = await buildSessionSnapshot(store as any, "sess-1");
 
@@ -131,5 +131,30 @@ describe("buildSessionSnapshot", () => {
     expect(snapshot!.characters).toEqual([]);
     expect(snapshot!.gameState).toEqual({});
     expect(snapshot!.executionSteps).toEqual([]);
+    // A short window (< limit) reaches the start of history → no older cursor.
+    expect(snapshot!.messagesCursor).toBeNull();
+  });
+
+  it("returns messagesCursor at the oldest message when the window is full", async () => {
+    const store = createMockStore();
+    // A full window (=== SNAPSHOT_MESSAGE_LIMIT, currently 80) means older
+    // messages exist → the cursor points at the oldest returned message so the
+    // client can page further back.
+    const full = Array.from({ length: 80 }, (_v, i) => ({
+      id: `m${i}`,
+      role: "user",
+      content: `msg ${i}`,
+      metadata: { turnId: `t${i}` },
+      createdAt: `2026-01-01T00:00:${String(i).padStart(2, "0")}.000Z`,
+    }));
+    store.listMessagesPage.mockResolvedValue(full);
+
+    const snapshot = await buildSessionSnapshot(store as any, "sess-1");
+
+    expect(snapshot!.messages).toHaveLength(80);
+    expect(snapshot!.messagesCursor).toEqual({
+      createdAt: full[0].createdAt,
+      id: "m0",
+    });
   });
 });

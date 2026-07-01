@@ -34,6 +34,7 @@ import {
   formatFields,
   formatFieldValue,
   loadCharacterSchema,
+  mergeSchemaDefaults,
   mirrorCharacterToPluginData,
   sortByFrequencyThenRecency,
   toSnapshot,
@@ -43,7 +44,10 @@ import {
   type CharacterToolDeps,
 } from "./character-tool-helpers.js";
 
-export { mirrorCharacterToPluginData } from "./character-tool-helpers.js";
+export {
+  mirrorCharacterToPluginData,
+  mergeSchemaDefaults,
+} from "./character-tool-helpers.js";
 export type {
   CharacterSnapshot,
   CharacterStore,
@@ -99,6 +103,13 @@ function createCreateCharacterTool(
         };
       }
 
+      // Load the schema BEFORE the write so we can persist declared defaults
+      // into the stored fields — keeping the panel (which overlays defaults at
+      // render time) in sync with what the model later reads via get-character
+      // and prompt context. A null schema leaves fields untouched.
+      const schema = await loadCharacterSchema(store, deps, context.sessionId);
+      const fields = mergeSchemaDefaults(params.fields, schema);
+
       const id = `char-${crypto.randomUUID()}`;
       await store.upsertCharacter({
         id,
@@ -106,7 +117,7 @@ function createCreateCharacterTool(
         name: params.name,
         type: params.type,
         description: params.description,
-        fields: params.fields,
+        fields,
         version: 1,
         createdAt: now,
         updatedAt: now,
@@ -117,7 +128,7 @@ function createCreateCharacterTool(
         name: params.name,
         type: params.type,
         description: params.description,
-        fields: params.fields,
+        fields,
         version: 1,
         createdAt: now,
         updatedAt: now,
@@ -129,15 +140,9 @@ function createCreateCharacterTool(
         snapshot,
       );
 
-      // Soft schema validation — runs AFTER the write so the LLM still gets
-      // the character into state even when fields drift off-schema. Warnings
-      // are appended to _text so the LLM sees them as tool feedback and can
-      // self-correct on the next turn.
-      const schema = await loadCharacterSchema(store, deps, context.sessionId);
-      const { warningText } = validateFieldsAgainstSchema(
-        params.fields,
-        schema,
-      );
+      // Soft schema validation on the stored (default-merged) fields — surfaces
+      // any off-schema keys as _text warnings the LLM can self-correct next turn.
+      const { warningText } = validateFieldsAgainstSchema(fields, schema);
 
       const summary = params.description
         ? ` — ${truncate(params.description, 60)}`

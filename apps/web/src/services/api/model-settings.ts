@@ -64,18 +64,27 @@ function persistCustomPresetKeyToProvider(
 /**
  * Build the `X-Plugin-User-Settings` header from SettingsStore entries
  * keyed `plugin.<pluginId>.<setting>`. Groups by plugin id so the server
- * can route each bucket to the matching runtime (audit F7). Returns an
- * empty object when the player hasn't saved any plugin-scoped settings -
- * the server falls back to manifest defaults in that case.
+ * can route each bucket to the matching runtime (audit F7).
+ *
+ * Only carries settings the player has **explicitly set** (`store.has(key)`).
+ * `listEntries()` returns every registered plugin setting (registered at boot
+ * for all plugins) and `store.get()` would return the manifest default for an
+ * untouched key — sending that as a "player override" would mask the world's
+ * `pluginSettings` default at the server merge boundary (player → world →
+ * manifest). Filtering by `has()` keeps the header to genuine overrides, so the
+ * world default survives for keys the player never touched. Returns an empty
+ * object when the player hasn't explicitly saved any plugin-scoped setting.
  */
 function buildPluginUserSettingsHeader(): Record<string, string> {
   const store = getSettings() as unknown as {
     listEntries(): readonly { key: string }[];
     get<T>(key: string): T;
+    has(key: string): boolean;
   };
   const buckets: Record<string, Record<string, unknown>> = {};
   for (const entry of store.listEntries()) {
     if (!entry.key.startsWith("plugin.")) continue;
+    if (!store.has(entry.key)) continue; // explicit player overrides only
     const parts = entry.key.split(".");
     if (parts.length < 3) continue;
     const pluginId = parts[1];

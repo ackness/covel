@@ -5,14 +5,37 @@ const TURNS_NAMESPACE = "turns";
 const MESSAGE_NAMESPACE = "message";
 const DEFAULT_COUNT = 3;
 const MAX_COUNT = 6;
+const MAX_VARIANTS = 2;
 const MAX_TEXT_LENGTH = 4_000;
+// Fast text slot for regenerate. Unconfigured slots fall back tag-aware to the
+// first text slot, so this never hardcodes a provider — only a preferred speed.
+const FAST_TEXT_SLOT = "fast";
 const TURN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 
 /**
+ * branch-reply runtime.
+ *
+ * Two execution paths, selected by the presence of `ctx.manualPayload`:
+ *
+ *   - SEED (auto trigger, `manualPayload` absent): runs after the narrative
+ *     engines each story turn. Reads the active engine's narrative from
+ *     `ctx.completedResults` (engine-agnostic — discovered by the non-empty
+ *     `narrativeOutput` contract, never by plugin id) and seeds the message
+ *     block with that reply as candidate[0]. Idempotent per turnId; no-ops on
+ *     empty / system turns. This is what makes the block surface at all — a
+ *     `ui.message` block only renders once its `message` namespace is
+ *     populated, so a manual-only writer could never bootstrap itself.
+ *
+ *   - MANUAL (plugin-rpc, `manualPayload` present): the existing
+ *     createCandidates / acceptCandidate actions from the block UI.
+ *
  * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
  * @returns {Promise<Record<string, unknown>>}
  */
 export default async function handler(ctx) {
+  if (ctx.manualPayload === undefined) {
+    return seedFromNarrative(ctx);
+  }
   const payload = readPayload(ctx.manualPayload);
   if (payload.action === "createCandidates") {
     return createCandidates(ctx, payload);
@@ -25,36 +48,154 @@ export default async function handler(ctx) {
   );
 }
 
-function createCandidates(ctx, payload) {
+/**
+ * Seed candidate[0] from the narrative the active story engine produced this
+ * turn. Engine-agnostic: scans `completedResults` for a non-empty
+ * `narrativeOutput` (the framework's narrative contract) instead of matching a
+ * concrete engine id, so it works for `narrator`, `chat-mode-narrator`, or any
+ * future story engine.
+ */
+async function seedFromNarrative(ctx) {
+  const now = new Date().toISOString();
+  const targetTurnId = normalizeTurnId(ctx.turnId);
+  const narrative = extractNarrativeText(ctx.completedResults);
+
+  // Skip empty / system turns — nothing to seed, so the block stays hidden
+  // rather than rendering an empty swipe widget.
+  if (!narrative) {
+    return { action: "seed", turnId: targetTurnId, seeded: false };
+  }
+  const baseText = narrative.text;
+  // The runtime that produced the narrative this turn. Stored on the turn
+  // record so the prompt-history rewriter (`normalizeAcceptedBranchReply` →
+  // `isReplaceableAssistantMessage`) targets the narrator's assistant message,
+  // not branch-reply's OWN auto-appended seed message (which also lands in the
+  // turn's history with sourceRuntimeId="branch-reply"). Discovered, never
+  // hardcoded.
+  const narrativeRuntimeId = narrative.runtimeId;
+
+  // Idempotency: never seed a turnId twice. A pre-existing record means either
+  // a prior seed or a player regenerate/accept already owns this turn.
+  const existing = await readTurnRecord(
+    ctx.store,
+    ctx.sessionId,
+    ctx.pluginId,
+    targetTurnId,
+  );
+  if (existing) {
+    return { action: "seed", turnId: targetTurnId, seeded: false };
+  }
+
+  const candidates = toCandidates(
+    targetTurnId,
+    [baseText],
+    () => "original",
+    now,
+  );
+  const turnRecord = makeTurnRecord({
+    turnId: targetTurnId,
+    baseText,
+    candidates,
+    selectedCandidateId: candidates[0]?.id,
+    status: "ready",
+    runtimeId: narrativeRuntimeId,
+    now,
+  });
+  const messageState = makeMessageState({
+    turnId: targetTurnId,
+    status: "ready",
+    candidateSet: turnRecord,
+    selectedCandidateId: turnRecord.selectedCandidateId,
+    acceptedCandidateId: undefined,
+    updatedAt: now,
+  });
+
+  // NOTE: as an auto/scheduled system function runtime, branch-reply's return
+  // value is also appended to conversation history as an assistant TurnMessage
+  // (turn-function-runtime.ts) — same as scene-prompts / guide / codex. This
+  // compact `{action:"seed",…}` marker carries no `narrativeOutput`/`content`,
+  // so it serialises to JSON and the story prompt filters it via
+  // `looksLikeStructuredRuntimeOutput`. The prompt-history rewriter ignores it
+  // because the turn record's `runtimeId` points at the narrator, not us.
+  return withPendingProposals(
+    {
+      action: "seed",
+      turnId: targetTurnId,
+      seeded: true,
+      candidateCount: candidates.length,
+    },
+    [
+      makePluginDataBatchProposal(ctx, now, [
+        { namespace: TURNS_NAMESPACE, key: targetTurnId, value: turnRecord },
+        {
+          namespace: MESSAGE_NAMESPACE,
+          key: targetTurnId,
+          value: messageState,
+        },
+      ]),
+    ],
+  );
+}
+
+async function createCandidates(ctx, payload) {
   const now = new Date().toISOString();
   const targetTurnId = normalizeTurnId(payload.turnId ?? ctx.turnId);
   const baseText =
     normalizeOptionalString(payload.baseText, "baseText") ??
     normalizeFallbackText(ctx.playerMessage);
   const count = normalizeCount(payload.count);
-  const variants = normalizeStringArray(payload.candidates, "candidates");
-  const candidates = buildCandidates({
-    turnId: targetTurnId,
-    baseText,
-    count,
-    variants,
-    now,
-  });
+  const explicitVariants = normalizeStringArray(
+    payload.candidates,
+    "candidates",
+  );
+
+  // Carry the seeded narrator runtimeId forward so regenerate keeps targeting
+  // the narrator's message (not branch-reply's auto-seed message) when the
+  // player later accepts a variant. Read it back from the existing turn record
+  // rather than trusting the click payload, which never carries it.
+  const existing = await readTurnRecord(
+    ctx.store,
+    ctx.sessionId,
+    ctx.pluginId,
+    targetTurnId,
+  );
+  const narrativeRuntimeId =
+    typeof existing?.runtimeId === "string" ? existing.runtimeId : undefined;
+
+  // Candidate composition, in priority order:
+  //   1. explicit `candidates` payload (programmatic / API) — that array IS the
+  //      full candidate list (candidate[0] = candidates[0]), no LLM.
+  //   2. LLM regenerate via the fast text slot when a gateway is wired —
+  //      candidate[0] is the original (`baseText`), then genuine variants.
+  //   3. no gateway — return just the original (NEVER fabricate filler text).
+  let texts;
+  let sourceFor;
+  if (explicitVariants) {
+    texts = dedupeTexts(explicitVariants).slice(0, count);
+    sourceFor = () => "manual";
+  } else {
+    const variants = ctx.gateway
+      ? await generateVariants(ctx, baseText, count - 1)
+      : [];
+    texts = dedupeTexts([baseText, ...variants]).slice(0, Math.max(1, count));
+    sourceFor = (index) => (index === 0 ? "original" : "regenerated");
+  }
+
+  const candidates = toCandidates(targetTurnId, texts, sourceFor, now);
   const selectedCandidateId =
     normalizeOptionalString(
       payload.selectedCandidateId,
       "selectedCandidateId",
     ) ?? candidates[0]?.id;
-  const turnRecord = {
-    schemaVersion: 1,
+  const turnRecord = makeTurnRecord({
     turnId: targetTurnId,
     baseText,
     candidates,
     selectedCandidateId: selectCandidateId(candidates, selectedCandidateId),
     status: "ready",
-    createdAt: now,
-    updatedAt: now,
-  };
+    runtimeId: narrativeRuntimeId,
+    now,
+  });
   const messageState = makeMessageState({
     turnId: targetTurnId,
     status: "ready",
@@ -152,6 +293,72 @@ async function acceptCandidate(ctx, payload) {
   );
 }
 
+/**
+ * Generate genuine alternative phrasings of a story beat through the
+ * function-runtime gateway. Returns up to `MAX_VARIANTS` rewrites in the same
+ * language as the original (driven by `ctx.locale` + the original passage).
+ *
+ * The gateway is absent in test harnesses / hosts without a slot. In that case
+ * — and on any provider error — we return `[]` so the caller falls back to the
+ * original text only. We never fabricate near-duplicate filler.
+ */
+async function generateVariants(ctx, baseText, requested) {
+  const wanted = Math.max(0, Math.min(requested, MAX_VARIANTS));
+  if (wanted === 0 || !ctx.gateway) return [];
+
+  const localeHint =
+    typeof ctx.locale === "string" && ctx.locale.trim()
+      ? ` The reader's locale is "${ctx.locale.trim()}".`
+      : "";
+  const system =
+    "You rewrite a single interactive-fiction narrative beat into alternative " +
+    "phrasings for a branching-reply UI. Preserve the exact same events, " +
+    "characters, facts, and outcome — vary only wording, rhythm, and tone. " +
+    "Write every alternative in the SAME language as the original passage." +
+    localeHint +
+    ` Output exactly ${wanted} alternative${wanted > 1 ? "s" : ""}, each ` +
+    "separated by a line containing only three hyphens (---). Do not number " +
+    "them and do not add any commentary or preamble.";
+  const prompt =
+    `Original passage:\n\n${baseText}\n\n` +
+    `Produce ${wanted} alternative phrasing${wanted > 1 ? "s" : ""} now.`;
+
+  try {
+    const result = await ctx.gateway.generateText({
+      presetId: FAST_TEXT_SLOT,
+      system,
+      prompt,
+    });
+    return parseVariantText(result?.text, baseText, wanted);
+  } catch (err) {
+    await ctx.logger?.warn?.("branch-reply regenerate failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return [];
+  }
+}
+
+/**
+ * Split the model's `---`-separated output into clean variant strings:
+ * trim, drop empties / separator-only chunks, drop anything equal to the
+ * original, dedupe, and cap to `limit`.
+ */
+function parseVariantText(text, baseText, limit) {
+  if (typeof text !== "string") return [];
+  const base = baseText.trim();
+  const seen = new Set();
+  const variants = [];
+  for (const chunk of text.split(/^\s*-{3,}\s*$/m)) {
+    const trimmed = chunk.trim();
+    if (!trimmed || trimmed === base || seen.has(trimmed)) continue;
+    if (trimmed.length > MAX_TEXT_LENGTH) continue;
+    seen.add(trimmed);
+    variants.push(trimmed);
+    if (variants.length >= limit) break;
+  }
+  return variants;
+}
+
 function readPayload(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("manualPayload must be an object");
@@ -225,31 +432,54 @@ function selectCandidateId(candidates, requestedId) {
   );
 }
 
-function buildCandidates({ turnId, baseText, count, variants, now }) {
-  const sourceTexts = variants?.length
-    ? variants.slice(0, MAX_COUNT)
-    : deterministicTexts(baseText, count);
-  return sourceTexts.slice(0, count).map((text, index) => ({
+/** Trim, drop empties / over-long / duplicates while preserving order. */
+function dedupeTexts(texts) {
+  const seen = new Set();
+  const out = [];
+  for (const text of texts ?? []) {
+    const trimmed = typeof text === "string" ? text.trim() : "";
+    if (!trimmed || seen.has(trimmed) || trimmed.length > MAX_TEXT_LENGTH)
+      continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
+}
+
+/** Map ordered candidate texts into candidate records with per-index source. */
+function toCandidates(turnId, texts, sourceFor, now) {
+  return texts.map((text, index) => ({
     id: `${turnId}-candidate-${index + 1}`,
     index,
     text,
-    source: variants?.length ? "manual" : "deterministic",
+    source: sourceFor(index),
     createdAt: now,
   }));
 }
 
-function deterministicTexts(baseText, count) {
-  const templates = [
-    (text) => text,
-    (text) => `${text} I watch for the first honest reaction.`,
-    (text) => `${text} Then I wait before choosing my next move.`,
-    (text) => `${text} I keep my voice steady and focused.`,
-    (text) => `${text} I mark the detail that feels out of place.`,
-    (text) => `${text} I leave space for a reply.`,
-  ];
-  return Array.from({ length: count }, (_, index) =>
-    templates[index](baseText),
-  );
+function makeTurnRecord({
+  turnId,
+  baseText,
+  candidates,
+  selectedCandidateId,
+  status,
+  runtimeId,
+  now,
+}) {
+  return {
+    schemaVersion: 1,
+    turnId,
+    baseText,
+    candidates,
+    selectedCandidateId,
+    status,
+    // The narrating runtime this turn record projects onto. Consumed by the
+    // prompt-history rewriter to target the narrator's message rather than
+    // branch-reply's own seed message. Omitted when unknown.
+    ...(runtimeId ? { runtimeId } : {}),
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
 function makeMessageState({
@@ -275,6 +505,60 @@ function makeMessageState({
 
 function makePluginDataBatchProposal(ctx, now, items) {
   return makeProposal(ctx, now, "plugin.data.batch", { items });
+}
+
+/**
+ * Find the active story engine's narrative for this turn, engine-agnostically,
+ * together with the runtime id that produced it.
+ *
+ * `completedResults` is keyed by runtime name and accumulates across priority
+ * groups, so by the time branch-reply (priority ~700) runs, the narrative
+ * engine (priority 500) is present. We pick the longest non-empty
+ * `narrativeOutput` among successful results — no plugin id, no capability
+ * lookup (the active narrator is discovered, not hardcoded).
+ *
+ * Limitation (stated honestly): non-story `narrativeOutput` is suppressed at
+ * the PROPOSAL layer (session-output-normalizer), NOT in `completedResults`,
+ * which exposes raw `RuntimeResult.output`. `RuntimeResult` carries no
+ * `outputKind`, so a function handler cannot filter the scan to
+ * `outputKind === "story"`. In practice every bundled non-story downstream is
+ * tool-driven (its narrative finalizes to `""`), so only the real story engine
+ * has non-empty `narrativeOutput`; a hypothetical schema-less prose plugin that
+ * emits longer text without tool calls could be mispicked. The returned
+ * `runtimeId` bounds that risk — accept/regenerate rewrite exactly the runtime
+ * we seeded from, so seed and accept always agree on a single message.
+ *
+ * @returns {{ text: string, runtimeId?: string } | undefined}
+ */
+function extractNarrativeText(completedResults) {
+  if (!completedResults || typeof completedResults.values !== "function") {
+    return undefined;
+  }
+  let best;
+  for (const result of completedResults.values()) {
+    if (!result || typeof result !== "object") continue;
+    if (typeof result.status === "string" && result.status !== "success")
+      continue;
+    const output = result.output;
+    if (!output || typeof output !== "object") continue;
+    const narrative =
+      typeof output.narrativeOutput === "string"
+        ? output.narrativeOutput.trim()
+        : "";
+    if (!narrative) continue;
+    if (!best || narrative.length > best.text.length) {
+      best = {
+        text: narrative,
+        runtimeId:
+          typeof result.runtimeId === "string" ? result.runtimeId : undefined,
+      };
+    }
+  }
+  if (!best) return undefined;
+  return {
+    text: best.text.slice(0, MAX_TEXT_LENGTH),
+    ...(best.runtimeId ? { runtimeId: best.runtimeId } : {}),
+  };
 }
 
 async function readTurnRecord(store, sessionId, pluginId, turnId) {

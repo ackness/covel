@@ -24,8 +24,9 @@ recommendedPlugins:
   - guide
   - codex
   - npc-graph
-  - player-identity
   - living-world-rules
+  - character-presence
+  - cost-gate
 excludedPlugins:
   - chat-mode-narrator
   - scene-cast
@@ -40,4 +41,94 @@ pluginPolicy:
     - role:world-rules
   avoidTags:
     - mode:dialogue
+# World-authored plugin setting defaults. mistport is the heaviest world (narrator
+# + codex + guide + npc-graph + character-tracker + per-turn memory extraction), so
+# it ships cost-gate with GENEROUS caps as a silent budget guardrail — it never
+# trims normal sessions, only runaway ones. Players can disable / retune in Settings.
+pluginSettings:
+  cost-gate:
+    softTokens: 400000
+    hardTokens: 600000
+# World-authored core-memory blocks for a mystery / investigation story. The
+# memory system merges these on top of plugin/framework blocks for this world's
+# sessions only (genre-specific dimensions without forking a plugin).
+memoryBlocks:
+  - label: clues
+    displayName:
+      zh-CN: 线索
+      en-US: Clues
+    extractionHint:
+      zh-CN: 已发现的线索、物证、矛盾证词，及其与齐老失踪、"钥匙"和裂潮真相的关联。
+      en-US: Discovered clues, evidence, and contradictions, and how they tie to Qi's disappearance, the "key", and the truth of the Riftide.
+    icon: Search
+  - label: relics
+    displayName:
+      zh-CN: 遗物
+      en-US: Relics
+    extractionHint:
+      zh-CN: 已获得或见识过的远古遗物、其鉴定结果、效果、风险与归属。
+      en-US: Ancient relics obtained or seen, their appraisals, effects, risks, and ownership.
+    icon: Gem
+  - label: tides
+    displayName:
+      zh-CN: 潮讯
+      en-US: Tide Lore
+    extractionHint:
+      zh-CN: 关于退潮时间、深退潮预警、雾兽出没、雾蚀进展与安全/危险窗口的观察。
+      en-US: Observations on ebb timing, deep-withdrawal alerts, fog-beast sightings, fog-rot progression, and safe/danger windows.
+    icon: Waves
+# World-declared character attributes. world-init writes these verbatim as the
+# session's `character-attributes` schema (no LLM, no dimension-derived
+# fallback), so the right panel shows authored bilingual labels that match the
+# fields on this world's cast cards (faction / role / tideSense / fogRot / …).
+characterAttributes:
+  # 性格是角色卡的属性、在创角时设定（口吻由性格而来）。bio 类 + freeform，
+  # char-creator 创角表单会优先纳入它。
+  - id: persona
+    name: { zh-CN: 性格, en-US: Personality }
+    type: string
+    category: bio
+    description:
+      zh-CN: 主角的性格与说话方式（口吻由性格而来）——如「沉默寡言、谨慎多疑、必要时果断」。影响叙事如何刻画你的角色与对白。
+      en-US: The hero's personality and how they speak (voice follows from personality) — e.g. "taciturn, wary, decisive when it counts." Shapes how the narrator portrays the character and their dialogue.
+  - id: faction
+    name: { zh-CN: 势力, en-US: Faction }
+    type: string
+    category: social
+    description: { zh-CN: 所属势力或公会, en-US: Affiliated faction or guild }
+  - id: role
+    name: { zh-CN: 身份, en-US: Role }
+    type: string
+    category: bio
+    description:
+      { zh-CN: 在势力中的身份或职务, en-US: Role or rank within the faction }
+  - id: location
+    name: { zh-CN: 所在地, en-US: Location }
+    type: string
+    category: bio
+    description: { zh-CN: 当前所在地点, en-US: Current whereabouts }
+  - id: tideSense
+    name: { zh-CN: 潮感, en-US: Tide Sense }
+    type: string
+    category: abilities
+    description:
+      { zh-CN: 感知潮汐与雾的能力, en-US: Sensitivity to the tide and fog }
+  - id: fogRot
+    name: { zh-CN: 雾蚀, en-US: Fog Rot }
+    type: string
+    category: stats
+    description: { zh-CN: 受雾侵蚀的程度, en-US: Degree of fog corruption }
+  - id: trust
+    name: { zh-CN: 信任, en-US: Trust }
+    type: number
+    min: 0
+    max: 100
+    defaultValue: 0
+    category: social
+    description: { zh-CN: 对玩家的信任, en-US: Trust toward the player }
+  - id: dispositionToPlayer
+    name: { zh-CN: 对你的态度, en-US: Disposition }
+    type: string
+    category: social
+    description: { zh-CN: 对玩家的态度, en-US: Attitude toward the player }
 worldData: data/world.data.yaml

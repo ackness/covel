@@ -328,6 +328,7 @@
       "server": "Server"
     },
     "jumpToLatest": "Jump to latest",
+    "loadingOlder": "Loading earlier messages…",
     "startingGame": "Creating…",
     "resuming": "Resuming…",
     "connectionConnecting": "Connecting…",
@@ -659,6 +660,14 @@
     "desktopLlmMissingTitle": "No LLM slots configured yet",
     "desktopLlmMissingHint": "Click below to open ~/.covel/llm.toml and add at least one [covel.<slot>] section.",
     "autoBindSlots": "Auto-bind",
+    "llm": {
+      "reloadConfig": "Reload config",
+      "reloadHint": "Edited llm.toml? Reload to apply your slots without restarting the app.",
+      "reloadOk": "Configuration reloaded",
+      "reloadOkDetail": "{{count}} slot(s) active: {{slots}}",
+      "reloadFailed": "llm.toml could not be parsed",
+      "parseError": "llm.toml could not be parsed — using the built-in default. Fix it and reload: {{error}}"
+    },
     "runtimeSlotsDiscovered": "Runtime-requested slots",
     "temperature": "Temperature",
     "topP": "Top P",
@@ -729,6 +738,10 @@
     "useRuntimeDefault": "Runtime default: {{slot}}",
     "useRuntimeDefaultWith": "Runtime default: {{slot}} ({{value}})",
     "providerSlot": "provider slot",
+    "providerSlotOverridden": "overridden",
+    "providerSlotOverrideAria": "Override which configured slot this plugin's provider uses. Leave at default unless you have a reason to change it.",
+    "providerSlotDefaultOption": "default · [covel.{{slot}}]",
+    "providerSlotNoDefault": "default",
     "providerSlotMissingTitle": "Add [covel.{{slot}}] to llm.toml, or change {{plugin}}.modelPresetId in Settings > Plugins.",
     "providerSlotMissingDetail": "Configure [covel.{{slot}}] in llm.toml, or change modelPresetId in Settings > Plugins > {{plugin}}.",
     "providerSlotSettingDetail": "from plugin setting modelPresetId; edit in Settings > Plugins > {{plugin}}",
@@ -937,7 +950,18 @@
       "reload": "Reload app"
     }
   },
+  "characterPresence": {
+    "hint": "Click a portrait to enlarge, or hover and pick an image to replace it.",
+    "empty": "This world ships no character portraits yet.",
+    "replace": "Replace",
+    "uploading": "Uploading…",
+    "enlarge": "Enlarge portrait"
+  },
+  "sceneCast": {
+    "empty": "No characters are on stage in this scene yet."
+  },
   "common": {
+    "preview": "Preview",
     "loading": "Loading...",
     "error": "Something went wrong",
     "save": "Save",
@@ -965,6 +989,7 @@
     "copy": "Copy",
     "new": "new",
     "newUpper": "NEW",
+    "active": "Active",
     "retry": "Retry"
   },
   "debugger": {
@@ -987,9 +1012,17 @@
       "byRuntime": "By runtime",
       "byTurn": "By turn",
       "note": "Token sums from llm.responded / gateway.responded. USD cost is a pending follow-up (model id not yet in the trace payload).",
-      "noData": "No token usage recorded for this session."
+      "noData": "No token usage recorded for this session.",
+      "windowTitle": "Loaded window",
+      "partialNote": "Only the most recent window is loaded — totals below are partial.",
+      "loadAllForTotal": "Load all to include the full session"
     },
     "all": "All",
+    "loadOlder": "Load older",
+    "loadAll": "Load all",
+    "windowed": "window",
+    "windowedBadge": "Partial window",
+    "windowedHint": "Only the most recent trace window is loaded — counts are partial.",
     "selectSessionToInspect": "Select a session to inspect traces",
     "noTraceEvents": "No trace events recorded",
     "eventsWillAppear": "Events will appear here as turns execute",
@@ -1088,6 +1121,7 @@
     "send": "Send",
     "accept": "Accept",
     "regenerate": "Regenerate",
+    "regenerateHint": "Tap Regenerate for alternative phrasings of this reply.",
     "jobSubmitted": "Submitted branch-reply job: {{jobId}}",
     "approvalRequired": "Branch reply action requires approval.",
     "actionFailed": "Branch reply action failed"

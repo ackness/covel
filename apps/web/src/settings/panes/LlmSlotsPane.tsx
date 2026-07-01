@@ -8,6 +8,7 @@ import {
   getSlotConfig,
   mergeCapability,
   refreshModelDb,
+  reloadLlmConfig,
   setCapabilityOverrides,
   setSlotConfig,
   type ModelCapabilityInfo,
@@ -16,6 +17,7 @@ import {
 } from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
+import { emitToast } from "@/lib/toast-channel.js";
 import { useSession } from "@/stores/session-store.js";
 import { CapabilityEditor, CapabilityTags } from "./llm-capability-controls.js";
 import {
@@ -33,7 +35,7 @@ import { ignoreError } from "@/lib/ignore-error.js";
  */
 export function LlmSlotsPane() {
   const { t } = useTranslation();
-  const { state } = useSession();
+  const { state, boot } = useSession();
   const llm = state.llmConfig;
   const isConfigured = llm?.configured ?? false;
 
@@ -46,6 +48,7 @@ export function LlmSlotsPane() {
   const [editingSlot, setEditingSlot] = useState<string | null>(null);
   const [modelDbInfo, setModelDbInfo] = useState<ModelDbInfo | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [reloading, setReloading] = useState(false);
 
   useEffect(() => {
     fetchModelDbInfo()
@@ -111,6 +114,38 @@ export function LlmSlotsPane() {
     return mergeCapability(serverCap, capOverrides[slotId]);
   };
 
+  const handleReloadConfig = async () => {
+    setReloading(true);
+    try {
+      const result = await reloadLlmConfig();
+      // Refetch the config bundle (presets / packages / llm-config) into the
+      // store so the slot list + "missing slot" checks reflect the new file.
+      // BOOT_SUCCESS preserves any active session/world/messages.
+      await boot();
+      if (result.ok) {
+        emitToast(
+          "success",
+          t("settings.llm.reloadOk", "Configuration reloaded"),
+          t("settings.llm.reloadOkDetail", {
+            count: result.slots.length,
+            slots: result.slots.join(", "),
+            defaultValue: "{{count}} slot(s) active: {{slots}}",
+          }),
+        );
+      } else {
+        emitToast(
+          "error",
+          t("settings.llm.reloadFailed", "llm.toml could not be parsed"),
+          result.error ?? "",
+        );
+      }
+    } catch {
+      // request() already surfaced a transport/HTTP toast.
+    } finally {
+      setReloading(false);
+    }
+  };
+
   const handleRefreshModelDb = async () => {
     setRefreshing(true);
     try {
@@ -159,6 +194,41 @@ export function LlmSlotsPane() {
           </span>
         </div>
       </div>
+      {/* Manual hot-reload: re-read llm.toml on the server and apply it to the
+          live gateway without restarting. */}
+      <div className="flex items-center justify-between gap-2 border border-border/60 bg-muted/20 px-3 py-2">
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          {t(
+            "settings.llm.reloadHint",
+            "Edited llm.toml? Reload to apply your slots without restarting the app.",
+          )}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-[11px] shrink-0"
+          disabled={reloading}
+          onClick={handleReloadConfig}
+        >
+          {reloading ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <RotateCw className="w-3 h-3" />
+          )}
+          <span className="ml-1">
+            {t("settings.llm.reloadConfig", "Reload config")}
+          </span>
+        </Button>
+      </div>
+      {llm?.error && (
+        <div className="border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] text-destructive leading-relaxed">
+          {t("settings.llm.parseError", {
+            error: llm.error,
+            defaultValue:
+              "llm.toml could not be parsed — using the built-in default. Fix it and reload: {{error}}",
+          })}
+        </div>
+      )}
       {isConfigured && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Info className="w-3 h-3" />

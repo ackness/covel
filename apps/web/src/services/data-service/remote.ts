@@ -61,6 +61,12 @@ export class RemoteDataService implements DataService {
   async listMessages(sessionId: string) {
     return api.listMessages(sessionId);
   }
+  async listMessagesPage(
+    sessionId: string,
+    opts: { limit?: number; before?: { createdAt: string; id: string } },
+  ) {
+    return api.listMessagesPage(sessionId, opts);
+  }
   async addMessage(_msg: MessageRecord) {
     // Remote mode: server stores messages during action SSE flow
   }

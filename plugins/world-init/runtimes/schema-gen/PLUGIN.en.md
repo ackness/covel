@@ -27,8 +27,10 @@ tools:
     - plugin-data-list
 ui:
   right:
+    # world-entries.json removed (mirror PLUGIN.md): redundant raw-JSON
+    # duplicate of world-overview for imported worlds. The `entries` plugin_data
+    # + lorebook/prompt write is unchanged.
     - ./ui/world-overview.json
-    - ./ui/world-entries.json
     - ./ui/world-schema.json
 ---
 

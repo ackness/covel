@@ -27,6 +27,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { setupServerLogFile } from "./server-log-tee.js";
+import { parseEnvLines } from "./lib/env-file.js";
 
 interface BootstrapSummary {
   readonly applied: boolean;
@@ -67,27 +68,15 @@ function setIfMissing(
 
 function loadKeysEnvIntoProcessEnv(filePath: string): number {
   if (!fs.existsSync(filePath)) return 0;
-  let count = 0;
   let content: string;
   try {
     content = fs.readFileSync(filePath, "utf-8");
   } catch {
     return 0;
   }
-  for (const rawLine of content.split("\n")) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-    const eq = line.indexOf("=");
-    if (eq < 0) continue;
-    const key = line.slice(0, eq).trim();
-    let value = line.slice(eq + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    if (!key || process.env[key]) continue;
+  let count = 0;
+  for (const [key, value] of parseEnvLines(content)) {
+    if (process.env[key]) continue;
     process.env[key] = value;
     count++;
   }

@@ -1,5 +1,9 @@
 import type { EventBus } from "@covel/events";
-import type { DataStore, PluginDataRecord } from "@covel/store";
+import type {
+  DataStore,
+  PluginDataRecord,
+  StoreTransaction,
+} from "@covel/store";
 
 function emitPluginDataChangedEvent(
   eventBus: EventBus,
@@ -104,6 +108,27 @@ export function wrapStoreWithPluginDataEvents(
             emitPluginDataChangedEvent(eventBus, pluginId, sessionId, changes);
           }
         };
+      }
+
+      // The commit pipeline prefers `withTransaction` (SQLite/PG). Its handlers
+      // write through the tx-scoped store view, which is NOT this proxy — so
+      // proposal-backed plugin-data writes (e.g. scene-prompts' plugin.data.batch)
+      // would commit without ever emitting `plugin-data.changed`, leaving the
+      // live UI un-refreshed until a page reload re-reads the DB. Wrap the tx
+      // handed to the callback with the same proxy so those writes emit too.
+      if (prop === "withTransaction") {
+        if (typeof target.withTransaction !== "function") {
+          return target.withTransaction;
+        }
+        return <T>(fn: (tx: StoreTransaction) => Promise<T>): Promise<T> =>
+          target.withTransaction!((tx) =>
+            fn(
+              wrapStoreWithPluginDataEvents(
+                tx as unknown as DataStore,
+                eventBus,
+              ) as unknown as StoreTransaction,
+            ),
+          );
       }
 
       if (prop === "deletePluginData") {

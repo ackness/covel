@@ -1,8 +1,10 @@
 import {
+  assertEntityEnvelope,
   compactRecord,
   makeProposal,
   normalizeRequiredString,
   optionalString,
+  readManualEntity,
   splitList,
 } from "@covel/plugin-handlers-utils";
 import { characterBlueprintToCharacterUpsert } from "@covel/shared";
@@ -11,7 +13,6 @@ import { shortId, withPendingProposals } from "@covel/tools";
 const BLUEPRINT_NAMESPACE = "blueprints";
 const DEFAULT_MIRROR_PLUGIN_ID = "character-blueprint";
 const CHARACTER_PANEL_PLUGIN_ID = "char-creator";
-const MAX_BLUEPRINT_BYTES = 65_536;
 const BLUEPRINT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const MAX_SCOPED_CHARACTER_ID_LENGTH = 180;
 
@@ -28,7 +29,9 @@ export default async function handler(ctx) {
     payload.blueprintForm &&
     typeof payload.blueprintForm === "object";
   const blueprint = normalizeBlueprint(
-    readBlueprintPayload(payload, ctx.sessionId),
+    readManualEntity(payload, "blueprint", (form) =>
+      blueprintFromForm(form, payload.instantiate === true, ctx.sessionId),
+    ),
   );
   const shouldInstantiate =
     typeof payload.instantiate === "boolean"
@@ -79,30 +82,6 @@ export default async function handler(ctx) {
     },
     proposals,
   );
-}
-
-function readBlueprintPayload(payload, sessionId) {
-  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-    if (
-      typeof payload.blueprintJson === "string" &&
-      payload.blueprintJson.trim().length > 0
-    ) {
-      try {
-        return JSON.parse(payload.blueprintJson);
-      } catch {
-        throw new Error("manualPayload.blueprintJson must be valid JSON");
-      }
-    }
-    if (payload.blueprintForm && typeof payload.blueprintForm === "object") {
-      return blueprintFromForm(
-        /** @type {Record<string, unknown>} */ (payload.blueprintForm),
-        payload.instantiate === true,
-        sessionId,
-      );
-    }
-    return payload.blueprint;
-  }
-  return undefined;
 }
 
 /**
@@ -173,34 +152,16 @@ function rolePrefix(value) {
  * @param {unknown} value
  */
 function normalizeBlueprint(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("manualPayload.blueprint must be an object");
-  }
-
-  const input = /** @type {Record<string, unknown>} */ (value);
-  const id = normalizeRequiredString(input.id, "blueprint.id");
-  const name = normalizeRequiredString(input.name, "blueprint.name");
-  if (!BLUEPRINT_ID_PATTERN.test(id)) {
-    throw new Error(
+  return assertEntityEnvelope(value, {
+    entity: "blueprint",
+    idPattern: BLUEPRINT_ID_PATTERN,
+    idError:
       "blueprint.id must be 1-128 characters using letters, digits, underscore, or hyphen",
-    );
-  }
-  const schemaVersion = input.schemaVersion ?? 1;
-  if (schemaVersion !== 1) {
-    throw new Error("blueprint.schemaVersion must be 1");
-  }
-
-  const blueprint = {
-    ...input,
-    schemaVersion: 1,
-    id,
-    name,
-  };
-  const serialized = JSON.stringify(blueprint);
-  if (serialized.length > MAX_BLUEPRINT_BYTES) {
-    throw new Error("blueprint is too large; max serialized size is 64KB");
-  }
-  return blueprint;
+    build: (base) => ({
+      ...base,
+      name: normalizeRequiredString(base.name, "blueprint.name"),
+    }),
+  });
 }
 
 /**

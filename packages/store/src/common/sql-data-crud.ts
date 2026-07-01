@@ -21,6 +21,7 @@ import {
   toWorkingMemoryRecord,
   toWorldDataImportLedgerRecord,
 } from "./mappers.js";
+import { compareWorkingMemoryEntries } from "../records/memory-records.js";
 import type { PluginDataRow } from "./mappers/plugin-mappers.js";
 import type {
   LorebookEntryRow,
@@ -241,9 +242,13 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
     ): Promise<readonly WorkingMemoryRecord[]> {
       const rows = await runner.select<WorkingMemoryRow>(workingMemory, {
         where: eq(workingMemory.sessionId, sessionId),
-        orderBy: [asc(workingMemory.scope), asc(workingMemory.key)],
       });
-      return rows.map((row) => toWorkingMemoryRecord(row, json));
+      // Sort in JS with the shared comparator (semantic scope order) so the
+      // result matches Memory/IDB exactly — raw `asc(scope)` is alphabetical
+      // ([player, shared, story]) and would diverge from the other backends.
+      return rows
+        .map((row) => toWorkingMemoryRecord(row, json))
+        .sort(compareWorkingMemoryEntries);
     },
 
     async deleteWorkingMemory(

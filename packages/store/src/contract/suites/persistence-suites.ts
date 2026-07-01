@@ -73,6 +73,24 @@ export function registerPersistenceStoreSuites(
       expect(listB[0].id).toBe(s3.id);
     });
 
+    it("parity: listSuspensions returns entries sorted by createdAt", async () => {
+      // Insert out of createdAt order; every backend must return ascending
+      // createdAt (SQL/IDB sort; MemoryStore previously returned insertion order).
+      const later = makeSuspension({
+        sessionId: "sess-susp-ord",
+        createdAt: "2026-01-02T00:00:00.000Z",
+      });
+      const earlier = makeSuspension({
+        sessionId: "sess-susp-ord",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      await store.saveSuspension(later);
+      await store.saveSuspension(earlier);
+
+      const list = await store.listSuspensions("sess-susp-ord");
+      expect(list.map((s) => s.id)).toEqual([earlier.id, later.id]);
+    });
+
     it("should markSuspensionResolved — sets resolvedAt, leaves other fields intact", async () => {
       const suspension = makeSuspension({ sessionId: "sess-susp-res" });
       await store.saveSuspension(suspension);

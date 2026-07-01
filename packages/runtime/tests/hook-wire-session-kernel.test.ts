@@ -49,6 +49,7 @@ function createRecordingStore(): RecordingStore {
     async addStateChange(r) {
       stateChanges.push(r as Record<string, unknown>);
     },
+    async upsertStateEntry() {},
     async setPluginData(r) {
       pluginData.push(r as Record<string, unknown>);
     },

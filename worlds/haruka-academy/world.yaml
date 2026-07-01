@@ -1,11 +1,16 @@
 schemaVersion: "1.0"
 id: haruka-academy
-name: 遥风学园・春日薄荷
+name:
+  zh-CN: 遥风学园・春日薄荷
+  en-US: Haruka Academy · Spring Mint
 version: "0.1.0"
-summary: 一所海边私立高中，社团、考试、传闻与未说出口的喜欢交织成青春日常。
+summary:
+  zh-CN: 一所海边私立高中，社团、考试、传闻与未说出口的喜欢交织成青春日常。
+  en-US: A seaside private high school where clubs, exams, rumors, and unspoken crushes weave into everyday youth.
 defaultLocale: zh-CN
 supportedLocales:
   - zh-CN
+  - en-US
 tags:
   - school
   - romance
@@ -21,9 +26,9 @@ recommendedPlugins:
   - scene-prompts
   - character-blueprint
   - character-presence
-  - player-identity
   - living-world-rules
   - branch-reply
+  - npc-graph
 excludedPlugins:
   - narrator
   - guide
@@ -36,4 +41,125 @@ pluginPolicy:
     - role:world-rules
   avoidTags:
     - mode:traditional-story
+# World-authored defaults for plugin userSettings (players can still override
+# these in Settings). A slice-of-life school world leans dialogue-heavy and
+# keeps replies short and snappy.
+pluginSettings:
+  chat-mode-narrator:
+    dialogueRatio: 80
+    proseLength: short
+  scene-cast:
+    # 8-character ensemble — keep 2 speakers on stage per beat for intimate focus.
+    # Declared on scene-cast (which enforces cast size); a chat-mode-narrator
+    # key here would be orphaned since the knob lives on scene-cast now.
+    activeSpeakerCount: 2
+# World-authored core-memory blocks for a dialogue / slice-of-life romance.
+# Merged on top of plugin/framework blocks for this world's sessions only, so a
+# GalGame-style world tracks relationships, promises, rumors and the festival
+# countdown without forking a plugin.
+memoryBlocks:
+  - label: relationships
+    displayName:
+      zh-CN: 人物关系
+      en-US: Relationships
+    extractionHint:
+      zh-CN: 每名主要角色当前的关系阶段，以及好感、信任、压力、公开亲密度的变化与原因。
+      en-US: Each main character's current relationship stage, plus shifts in affection, trust, pressure, and public closeness, and why.
+    icon: Heart
+  - label: promises
+    displayName:
+      zh-CN: 约定
+      en-US: Promises
+    extractionHint:
+      zh-CN: 玩家对角色许下的承诺与约定（放学同行、帮忙、保密、赴约等）及其兑现情况。
+      en-US: Promises and commitments the player made to characters (walking home, helping out, keeping secrets, meeting up) and whether they were kept.
+    icon: Handshake
+  - label: rumors
+    displayName:
+      zh-CN: 传闻
+      en-US: Rumors
+    extractionHint:
+      zh-CN: 当前在班级或校内流传的传闻、热度、源头，以及它对哪些角色造成了压力。
+      en-US: Rumors circulating in class or school, their heat and source, and which characters they pressure.
+    icon: Megaphone
+  - label: festival
+    displayName:
+      zh-CN: 学园祭
+      en-US: Festival
+    extractionHint:
+      zh-CN: 学园祭倒计时、各社团的准备进度、玩家承担的筹备任务与未决的关键节点。
+      en-US: The festival countdown, each club's prep progress, the player's assigned tasks, and unresolved milestones.
+    icon: CalendarDays
+# World-declared character attributes. world-init writes these verbatim as the
+# session's `character-attributes` schema (no LLM, no dimension-derived
+# fallback), so the right panel shows authored bilingual labels that match the
+# fields on this world's cast cards (club / affection / trust / …).
+characterAttributes:
+  # 性格是角色卡的属性、在创角时设定（口吻由性格而来）——取代了被退役的
+  # player-identity 口吻编辑器。bio 类 + freeform，char-creator 创角表单会优先纳入它。
+  - id: persona
+    name: { zh-CN: 性格, en-US: Personality }
+    type: string
+    category: bio
+    description:
+      zh-CN: 主角的性格与说话方式（口吻由性格而来）——如「谨慎内向，紧张时话少，礼貌但有主见」。影响叙事如何刻画你的角色与对白。
+      en-US: The hero's personality and how they speak (voice follows from personality) — e.g. "cautious and reserved, terse when nervous, polite but opinionated." Shapes how the narrator portrays the character and their dialogue.
+  - id: club
+    name: { zh-CN: 社团, en-US: Club }
+    type: string
+    category: social
+    description: { zh-CN: 所属社团, en-US: Club membership }
+  - id: class
+    name: { zh-CN: 班级, en-US: Class }
+    type: string
+    category: bio
+    description: { zh-CN: 所在班级, en-US: Homeroom class }
+  - id: relationshipStage
+    name: { zh-CN: 关系阶段, en-US: Relationship }
+    type: string
+    category: social
+    description:
+      zh-CN: 与玩家的当前关系阶段
+      en-US: Current relationship stage with the player
+  - id: affection
+    name: { zh-CN: 好感度, en-US: Affection }
+    type: number
+    min: 0
+    max: 100
+    defaultValue: 0
+    category: social
+    description: { zh-CN: 对玩家的好感, en-US: Affection toward the player }
+  - id: trust
+    name: { zh-CN: 信任, en-US: Trust }
+    type: number
+    min: 0
+    max: 100
+    defaultValue: 0
+    category: social
+    description: { zh-CN: 对玩家的信任, en-US: Trust toward the player }
+  - id: pressure
+    name: { zh-CN: 压力, en-US: Pressure }
+    type: number
+    min: 0
+    max: 100
+    defaultValue: 0
+    category: stats
+    description:
+      { zh-CN: 当前承受的心理压力, en-US: Current psychological pressure }
+  - id: publicCloseness
+    name: { zh-CN: 公开亲密度, en-US: Public Closeness }
+    type: number
+    min: 0
+    max: 100
+    defaultValue: 0
+    category: social
+    description:
+      zh-CN: 在他人面前与玩家的亲密程度
+      en-US: How close to the player in public
+  - id: favoriteTopic
+    name: { zh-CN: 喜欢的话题, en-US: Favorite Topic }
+    type: string
+    category: bio
+    description:
+      { zh-CN: 感兴趣或容易聊开的话题, en-US: Topics they enjoy talking about }
 worldData: data/world.data.yaml

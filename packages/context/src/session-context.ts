@@ -119,6 +119,7 @@ export async function buildSessionContextSnapshot(
       worldRecord,
       schemaMap: worldSchema,
       entriesMap: worldEntriesMap,
+      locale: opts.locale,
     }),
     characters,
     workingMemory,
@@ -146,6 +147,24 @@ async function safeGetSession(store: SessionContextStore, sessionId: string) {
   }
 }
 
+/**
+ * Log a per-source loader failure before degrading to an empty fallback. The
+ * loaders never throw (graceful degradation is intentional), but swallowing the
+ * error with no log turned a transient store failure into empty world/character
+ * context injected into the LLM — invisible to operators. Warn so it's visible.
+ */
+function warnLoadFailure(
+  loader: string,
+  sessionId: string,
+  err: unknown,
+): void {
+  const message = err instanceof Error ? err.message : String(err);
+  console.warn(
+    `[session-context] ${loader} failed for session ${sessionId}: ${message}. ` +
+      `Degrading to empty — the prompt may omit this context.`,
+  );
+}
+
 async function loadCharacters(
   store: SessionContextStore,
   sessionId: string,
@@ -161,7 +180,8 @@ async function loadCharacters(
           ? (c.fields as Record<string, unknown>)
           : undefined,
     }));
-  } catch {
+  } catch (err) {
+    warnLoadFailure("loadCharacters", sessionId, err);
     return [];
   }
 }
@@ -193,7 +213,8 @@ async function loadWorkingMemory(
     const records: readonly WorkingMemoryRecord[] =
       await store.listWorkingMemory(sessionId);
     return records.map((r) => ({ scope: r.scope, key: r.key, value: r.value }));
-  } catch {
+  } catch (err) {
+    warnLoadFailure("loadWorkingMemory", sessionId, err);
     return [];
   }
 }
@@ -205,7 +226,8 @@ async function loadLorebookRecords(
   if (typeof store.listSessionLorebookEntries !== "function") return [];
   try {
     return await store.listSessionLorebookEntries(sessionId);
-  } catch {
+  } catch (err) {
+    warnLoadFailure("loadLorebookRecords", sessionId, err);
     return [];
   }
 }
@@ -238,7 +260,8 @@ async function loadActivePersona(
     );
     const profileRecord = profiles.find((record) => record.key === profileId);
     return normalizePersonaProfile(profileRecord?.value, profileId);
-  } catch {
+  } catch (err) {
+    warnLoadFailure("loadActivePersona", sessionId, err);
     return undefined;
   }
 }
@@ -477,7 +500,8 @@ async function safeGetWorld(
 ): Promise<WorldRecord | null> {
   try {
     return await store.getWorld(worldId);
-  } catch {
+  } catch (err) {
+    warnLoadFailure("safeGetWorld", worldId, err);
     return null;
   }
 }
@@ -498,7 +522,8 @@ async function loadWorldSchema(
     const map: Record<string, unknown> = {};
     for (const r of records) map[r.key] = r.value;
     return map;
-  } catch {
+  } catch (err) {
+    warnLoadFailure("loadWorldSchema", sessionId, err);
     return undefined;
   }
 }

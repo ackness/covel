@@ -144,6 +144,9 @@ describe("Snapshot routes", () => {
         method: "POST",
       });
       expect(res.status).toBe(404);
+      expect(((await res.json()) as { code?: string }).code).toBe(
+        "session_not_found",
+      );
     });
 
     it("returns 201 with a manual snapshot", async () => {
@@ -212,6 +215,9 @@ describe("Snapshot routes", () => {
       const app = createTestApp(store);
       const res = await app.request("/api/sessions/nonexistent/snapshots");
       expect(res.status).toBe(404);
+      expect(((await res.json()) as { code?: string }).code).toBe(
+        "session_not_found",
+      );
     });
 
     it("returns empty list for a session with no snapshots", async () => {
@@ -293,6 +299,9 @@ describe("Snapshot routes", () => {
         body: JSON.stringify({ fromSnapshotId: "snap-x" }),
       });
       expect(res.status).toBe(404);
+      expect(((await res.json()) as { code?: string }).code).toBe(
+        "session_not_found",
+      );
     });
 
     it("returns 404 when snapshot does not exist", async () => {
@@ -378,6 +387,73 @@ describe("Snapshot routes", () => {
       const childWm = await store.listWorkingMemory(childId);
       expect(childWm).toHaveLength(1);
       expect(childWm[0]!.key).toBe("mood");
+    });
+
+    it("copies session-scoped lorebook entries to the child session", async () => {
+      await store.upsertLorebookEntries([
+        {
+          id: "sess-1-lore-1",
+          sessionId: "sess-1",
+          pluginId: "test-plugin",
+          keys: ["mist"],
+          content: "The mist hides ancient ruins.",
+          strategy: "selective",
+          position: "before_char",
+          insertionOrder: 0,
+          enabled: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ]);
+      const app = createTestApp(store);
+      const snapId = await createParentSnapshot(store, app);
+
+      const res = await app.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      const childId = ((await res.json()) as { sessionId: string }).sessionId;
+
+      const childLore = await store.listSessionLorebookEntries(childId);
+      expect(childLore).toHaveLength(1);
+      expect(childLore[0]!.content).toBe("The mist hides ancient ruins.");
+      expect(childLore[0]!.sessionId).toBe(childId);
+    });
+
+    it("remaps character-mirror plugin-data to the child's re-minted character ids", async () => {
+      // The mirror namespace keys a row by the character id and stores
+      // value.id = same id; characters are re-minted on fork, so both must move.
+      await store.setPluginData({
+        id: "sess-1-charmirror",
+        sessionId: "sess-1",
+        pluginId: "character-blueprint",
+        namespace: "characters",
+        key: "sess-1-hero",
+        value: { id: "sess-1-hero", name: "Hero" },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      const app = createTestApp(store);
+      const snapId = await createParentSnapshot(store, app);
+
+      const res = await app.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      const childId = ((await res.json()) as { sessionId: string }).sessionId;
+
+      const childChar = (await store.listCharacters(childId))[0]!;
+      const mirror = await store.listPluginData(
+        childId,
+        "character-blueprint",
+        "characters",
+      );
+      expect(mirror).toHaveLength(1);
+      expect(mirror[0]!.key).toBe(childChar.id);
+      expect((mirror[0]!.value as { id: string }).id).toBe(childChar.id);
+      expect(mirror[0]!.key).not.toBe("sess-1-hero");
     });
 
     it("copies media_refs for inherited MediaRefs on fork", async () => {

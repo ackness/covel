@@ -64,13 +64,13 @@
 
 ### 执行生命周期事件
 
-| 事件类型              | 方向 | 描述              | 负载                                        |
-| --------------------- | ---- | ----------------- | ------------------------------------------- |
-| `execution.started`   | S→C  | 回合执行开始      | `{ runtimeCount }`                          |
-| `runtime.started`     | S→C  | 单个 runtime 开始 | `{ runtimeId, pluginId, label }`            |
-| `runtime.completed`   | S→C  | 单个 runtime 完成 | `{ runtimeId, pluginId, durationMs }`       |
-| `runtime.failed`      | S→C  | 单个 runtime 失败 | `{ runtimeId, pluginId, error }`            |
-| `execution.completed` | S→C  | 回合执行完成      | `{ runtimeCount, resultCount, durationMs }` |
+| 事件类型              | 方向 | 描述              | 负载                                                                                                                                                             |
+| --------------------- | ---- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execution.started`   | S→C  | 回合执行开始      | `{ runtimeCount }`                                                                                                                                               |
+| `runtime.started`     | S→C  | 单个 runtime 开始 | `{ runtimeId, pluginId, label }`                                                                                                                                 |
+| `runtime.completed`   | S→C  | 单个 runtime 完成 | `{ runtimeId, pluginId, durationMs }`                                                                                                                            |
+| `runtime.failed`      | S→C  | 单个 runtime 失败 | `{ runtimeId, pluginId, error }`                                                                                                                                 |
+| `execution.completed` | S→C  | 回合执行完成      | `{ runtimeCount, resultCount, durationMs, abortReason? }`（`abortReason` 仅在回合于产出前被中止时出现，如 cost-gate 硬预算上限——前端据此提示玩家而非静默空回合） |
 
 ### 会话生命周期事件
 
@@ -337,20 +337,22 @@ community-trust 插件的 RPC 调用需要玩家显式批准。框架返回 202 
 
 只读数据获取，标准 REST GET 响应：
 
-| 查询     | 端点                                              | 响应                                |
-| -------- | ------------------------------------------------- | ----------------------------------- |
-| 会话列表 | `GET /api/sessions?worldId=`                      | `{ items: SessionRecord[] }`        |
-| 会话详情 | `GET /api/sessions/:id`                           | `SessionRecord`                     |
-| 会话快照 | `GET /api/sessions/:id/snapshot`                  | `SessionSnapshot`                   |
-| 消息列表 | `GET /api/sessions/:id/messages`                  | `MessageRecord[]`                   |
-| 角色列表 | `GET /api/sessions/:id/characters`                | `{ items: CharacterRecord[] }`      |
-| 插件列表 | `GET /api/sessions/:id/plugins`                   | `{ active[], available[] }`         |
-| 状态查询 | `GET /api/sessions/:id/state`                     | `{ tables }`                        |
-| 状态补丁 | `GET /api/sessions/:id/state-patches`             | `Patch[]`                           |
-| 插件数据 | `GET /api/sessions/:id/plugin-data/:pluginId/:ns` | `{ items[] }`                       |
-| 世界列表 | `GET /api/worlds`                                 | `{ items: WorldRecord[] }`          |
-| 执行追踪 | `GET /api/traces/:sessionId`                      | `{ events[] }`                      |
-| 服务健康 | `GET /api/health`                                 | `{ status, version, storeBackend }` |
+| 查询     | 端点                                              | 响应                                                              |
+| -------- | ------------------------------------------------- | ----------------------------------------------------------------- |
+| 会话列表 | `GET /api/sessions?worldId=`                      | `{ items: SessionRecord[] }`                                      |
+| 会话详情 | `GET /api/sessions/:id`                           | `SessionRecord`                                                   |
+| 会话快照 | `GET /api/sessions/:id/snapshot`                  | `SessionSnapshot`（messages/steps 为最近窗口 + `messagesCursor`） |
+| 消息列表 | `GET /api/sessions/:id/messages`                  | `FlatMessage[]`（全量）                                           |
+| 消息分页 | `GET /api/sessions/:id/messages/page`             | `CursorPage<FlatMessage>`（游标）                                 |
+| 角色列表 | `GET /api/sessions/:id/characters`                | `{ items: CharacterRecord[] }`                                    |
+| 插件列表 | `GET /api/sessions/:id/plugins`                   | `{ active[], available[] }`                                       |
+| 状态查询 | `GET /api/sessions/:id/state`                     | `{ tables }`                                                      |
+| 状态补丁 | `GET /api/sessions/:id/state-patches`             | `Patch[]`                                                         |
+| 插件数据 | `GET /api/sessions/:id/plugin-data/:pluginId/:ns` | `{ items[] }`                                                     |
+| 世界列表 | `GET /api/worlds`                                 | `{ items: WorldRecord[] }`                                        |
+| 执行追踪 | `GET /api/traces/:sessionId`                      | `{ events[] }`（全量）                                            |
+| 追踪分页 | `GET /api/traces/:sessionId/turns/page`           | `{ turns[], nextCursor }`（游标）                                 |
+| 服务健康 | `GET /api/health`                                 | `{ status, version, storeBackend }`                               |
 
 ## 四、SSE 信封格式
 

@@ -5,7 +5,7 @@
 import type { ToolExecutionContext, ResolvedTool } from "./types.js";
 import type { ToolExecutionEnvelope } from "./result.js";
 
-export type ToolTransport = "in-memory" | "stdio" | "http" | "sse";
+export type ToolTransport = "in-memory";
 
 export type ToolDefinition = ResolvedTool;
 
@@ -23,9 +23,4 @@ export interface ToolClient {
     ctx: ToolExecutionContext,
   ): Promise<ToolCallResult>;
   close?(): Promise<void>;
-}
-
-export interface ToolClientEntry {
-  readonly tool: ResolvedTool;
-  readonly client: ToolClient;
 }

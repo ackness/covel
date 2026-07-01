@@ -328,6 +328,7 @@
       "server": "服务端"
     },
     "jumpToLatest": "跳到最新",
+    "loadingOlder": "正在加载更早的消息…",
     "startingGame": "创建中…",
     "resuming": "恢复中…",
     "connectionConnecting": "连接中…",
@@ -659,6 +660,14 @@
     "desktopLlmMissingTitle": "尚未配置任何 LLM slot",
     "desktopLlmMissingHint": "点击下方按钮打开 ~/.covel/llm.toml，至少添加一个 [covel.<slot>] 片段。",
     "autoBindSlots": "自动绑定",
+    "llm": {
+      "reloadConfig": "重载配置",
+      "reloadHint": "改过 llm.toml？点这里重载即可应用新 slot，无需重启。",
+      "reloadOk": "配置已重载",
+      "reloadOkDetail": "已激活 {{count}} 个 slot：{{slots}}",
+      "reloadFailed": "llm.toml 解析失败",
+      "parseError": "llm.toml 解析失败 —— 已回退到内置默认。修好后重载：{{error}}"
+    },
     "runtimeSlotsDiscovered": "运行时声明的 Slot",
     "temperature": "温度",
     "topP": "Top P",
@@ -729,6 +738,10 @@
     "useRuntimeDefault": "运行时默认: {{slot}}",
     "useRuntimeDefaultWith": "运行时默认: {{slot}} ({{value}})",
     "providerSlot": "提供方 slot",
+    "providerSlotOverridden": "已覆盖",
+    "providerSlotOverrideAria": "覆盖该插件 provider 使用的已配置 slot。无特殊原因请保持默认。",
+    "providerSlotDefaultOption": "默认 · [covel.{{slot}}]",
+    "providerSlotNoDefault": "默认",
     "providerSlotMissingTitle": "请在 llm.toml 添加 [covel.{{slot}}]，或在 设置 > 插件 中修改 {{plugin}}.modelPresetId。",
     "providerSlotMissingDetail": "请在 llm.toml 配置 [covel.{{slot}}]，或在 设置 > 插件 > {{plugin}} 中修改 modelPresetId。",
     "providerSlotSettingDetail": "来自插件设置 modelPresetId；可在 设置 > 插件 > {{plugin}} 修改",
@@ -937,7 +950,18 @@
       "reload": "重新加载"
     }
   },
+  "characterPresence": {
+    "hint": "点击立绘可放大，鼠标悬停可替换成你自己的图片。",
+    "empty": "本世界暂未提供角色立绘。",
+    "replace": "替换",
+    "uploading": "上传中…",
+    "enlarge": "放大立绘"
+  },
+  "sceneCast": {
+    "empty": "这一幕还没有角色登场。"
+  },
   "common": {
+    "preview": "预览",
     "loading": "加载中...",
     "error": "出错了",
     "save": "保存",
@@ -965,6 +989,7 @@
     "copy": "复制",
     "new": "新增",
     "newUpper": "新增",
+    "active": "生效中",
     "retry": "重试"
   },
   "debugger": {
@@ -987,9 +1012,17 @@
       "byRuntime": "按 runtime",
       "byTurn": "按回合",
       "note": "token 求和来自 llm.responded / gateway.responded。美元成本为待办 follow-up（model id 尚未进入 trace 负载）。",
-      "noData": "本会话暂无 token 用量记录。"
+      "noData": "本会话暂无 token 用量记录。",
+      "windowTitle": "已加载窗口",
+      "partialNote": "仅加载最近一段窗口，下方合计为部分值。",
+      "loadAllForTotal": "加载全部以纳入整个会话"
     },
     "all": "全部",
+    "loadOlder": "加载更早",
+    "loadAll": "加载全部",
+    "windowed": "窗口",
+    "windowedBadge": "部分窗口",
+    "windowedHint": "仅加载最近一段追踪窗口，计数为部分值。",
     "selectSessionToInspect": "选择一个会话以查看追踪",
     "noTraceEvents": "尚未记录追踪事件",
     "eventsWillAppear": "回合执行后事件将在此处显示",
@@ -1088,6 +1121,7 @@
     "send": "发送",
     "accept": "采纳",
     "regenerate": "重新生成",
+    "regenerateHint": "点「重新生成」获取这条回复的其他说法。",
     "jobSubmitted": "已提交 branch-reply 任务: {{jobId}}",
     "approvalRequired": "Branch reply 操作需要授权。",
     "actionFailed": "Branch reply 操作失败"

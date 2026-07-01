@@ -40,6 +40,7 @@ import {
   SceneCastList,
 } from "./catalog/character-renderers.js";
 import { CharacterFieldsView } from "./catalog/character-fields-renderer.js";
+import { CharacterAvatar } from "./catalog/character-avatar-renderer.js";
 import {
   Button,
   FilterBar,
@@ -64,6 +65,7 @@ import {
   ImageGallery,
   ImageJobs,
   MediaCatalogComponent,
+  PortraitGallery,
   Source,
 } from "./catalog/media-renderers.js";
 import { BranchReplyCandidates } from "./catalog/branch-reply-renderer.js";
@@ -111,6 +113,7 @@ export const covelRegistry: Record<string, ComponentRenderer> = {
   AudioPlayer: AudioPlayerCatalogComponent,
   ImageGallery,
   ImageJobs,
+  PortraitGallery,
   // Data
   Card,
   CardList,
@@ -123,6 +126,7 @@ export const covelRegistry: Record<string, ComponentRenderer> = {
   CharacterBlueprintList,
   SceneCastList,
   CharacterFieldsView,
+  CharacterAvatar,
   // Interactive
   Button,
   Input,

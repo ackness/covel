@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Cpu, KeyRound, Lock, Wrench } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
@@ -9,6 +10,8 @@ import {
   recommendationReason,
   type PluginPack,
 } from "@/lib/session-plugin-selection.js";
+import { getSettings } from "@/settings/store.js";
+import { resolveProviderSlot } from "./model-slot-helpers.js";
 import type * as api from "@/services/api.js";
 
 export interface PluginPackageRowProps {
@@ -69,13 +72,56 @@ export function PluginPackageRow({
   const providerSlotSetting = pkg.userSettings?.find(
     (spec) => spec.key === "modelPresetId",
   );
-  const providerSlotName =
+  const manifestDefaultSlot =
     typeof providerSlotSetting?.default === "string"
       ? providerSlotSetting.default
       : undefined;
-  const providerSlotMissing = providerSlotName
-    ? isMissingDeclaredSlot(providerSlotName)
-    : false;
+  const providerSlotKey = `plugin.${pkg.name}.modelPresetId`;
+  const [providerSlotOverride, setProviderSlotOverride] = useState<
+    string | undefined
+  >(() => {
+    const store = getSettings();
+    return store.has(providerSlotKey)
+      ? store.get<string>(providerSlotKey)
+      : undefined;
+  });
+  // Reflect out-of-band edits to this setting (e.g. from Settings > Plugins)
+  // while the prep screen is open. The initializer above only reads once, so
+  // without this an external change would leave the picker stale.
+  useEffect(() => {
+    const store = getSettings();
+    const read = () =>
+      store.has(providerSlotKey)
+        ? store.get<string>(providerSlotKey)
+        : undefined;
+    setProviderSlotOverride(read());
+    return store.subscribe<string>(providerSlotKey, () => {
+      setProviderSlotOverride(read());
+    });
+  }, [providerSlotKey]);
+  const {
+    effectiveSlot: effectiveProviderSlot,
+    missing: providerSlotMissing,
+    isOverridden: providerSlotOverridden,
+  } = resolveProviderSlot({
+    manifestDefault: manifestDefaultSlot,
+    override: providerSlotOverride,
+    isMissing: isMissingDeclaredSlot,
+  });
+  // Player picks a configured slot inline (no trip to Settings > Plugins). The
+  // override lands in the SettingsStore under `plugin.<id>.modelPresetId`, which
+  // the X-Plugin-User-Settings header reads live — so the function runtime
+  // resolves it server-side without any extra plumbing.
+  const handleProviderSlotChange = (value: string): void => {
+    const store = getSettings();
+    if (value === "") {
+      void store.clear(providerSlotKey);
+      setProviderSlotOverride(undefined);
+    } else {
+      void store.set(providerSlotKey, value);
+      setProviderSlotOverride(value);
+    }
+  };
   const hasMissingRuntimeSlot = pluginBindings.some((binding) =>
     isMissingDeclaredSlot(binding.defaultSlot),
   );
@@ -207,8 +253,8 @@ export function PluginPackageRow({
           </Badge>
         ))}
       </div>
-      {isSelected && providerSlotName && (
-        <div className="mt-2.5 ml-9 flex items-center gap-2.5 text-[11px] text-muted-foreground">
+      {isSelected && providerSlotSetting && (
+        <div className="mt-2.5 ml-9 flex flex-wrap items-center gap-2.5 text-[11px] text-muted-foreground min-w-0">
           <KeyRound className="w-3 h-3 shrink-0" />
           <span className="font-medium shrink-0">
             {t("plugin.providerSlot", "provider slot")}
@@ -219,35 +265,57 @@ export function PluginPackageRow({
             title={
               providerSlotMissing
                 ? t("plugin.providerSlotMissingTitle", {
-                    slot: providerSlotName,
+                    slot: effectiveProviderSlot,
                     plugin: pkg.name,
                     defaultValue:
-                      "Add [covel.{{slot}}] to llm.toml, or change {{plugin}}.modelPresetId in Settings > Plugins.",
+                      "Add [covel.{{slot}}] to llm.toml, or pick a configured slot here.",
                   })
                 : undefined
             }
           >
             {providerSlotMissing
               ? t("plugin.slotMissingShort", {
-                  slot: providerSlotName,
+                  slot: effectiveProviderSlot,
                   defaultValue: "missing [covel.{{slot}}]",
                 })
-              : `[covel.${providerSlotName}]`}
+              : `[covel.${effectiveProviderSlot}]`}
           </Badge>
-          <span className="truncate">
-            {providerSlotMissing
-              ? t("plugin.providerSlotMissingDetail", {
-                  slot: providerSlotName,
-                  plugin: pkg.name,
-                  defaultValue:
-                    "Configure [covel.{{slot}}] in llm.toml, or change modelPresetId in Settings > Plugins > {{plugin}}.",
-                })
-              : t("plugin.providerSlotSettingDetail", {
-                  plugin: pkg.name,
-                  defaultValue:
-                    "from plugin setting modelPresetId; edit in Settings > Plugins > {{plugin}}",
-                })}
-          </span>
+          {providerSlotOverridden && (
+            <Badge
+              variant="secondary"
+              className="text-[9px] px-1.5 py-0 h-4 shrink-0"
+            >
+              {t("plugin.providerSlotOverridden", "overridden")}
+            </Badge>
+          )}
+          {/* Inline override: pick any configured slot without leaving prep.
+              "" = fall back to the manifest default. */}
+          {resolvedSlots.length > 0 && (
+            <select
+              value={providerSlotOverride ?? ""}
+              onChange={(event) => handleProviderSlotChange(event.target.value)}
+              className="ml-auto min-w-[120px] flex-shrink text-[11px] bg-background border border-border rounded px-2 py-1 max-w-[280px]"
+              aria-label={t(
+                "plugin.providerSlotOverrideAria",
+                "Override which configured slot this plugin's provider uses. Leave at default unless you have a reason to change it.",
+              )}
+            >
+              <option value="">
+                {manifestDefaultSlot
+                  ? t("plugin.providerSlotDefaultOption", {
+                      slot: manifestDefaultSlot,
+                      defaultValue: "default · [covel.{{slot}}]",
+                    })
+                  : t("plugin.providerSlotNoDefault", "default")}
+              </option>
+              {resolvedSlots.map((slot) => (
+                <option key={slot.slotId} value={slot.slotId}>
+                  {slot.slotId}
+                  {slot.serverModel ? ` · ${slot.serverModel}` : ""}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       )}
       {isSelected &&

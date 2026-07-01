@@ -2,7 +2,12 @@
  * Private helpers extracted from turn-executor.ts to keep it within the 1000-line budget.
  */
 
-import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
+import type {
+  PluginUserSettingSpec,
+  RuntimeManifest,
+  RuntimeResult,
+  TurnInput,
+} from "@covel/shared";
 import type {
   ToolCallContext,
   ToolExecutor,
@@ -149,6 +154,42 @@ export function makeFailedResult(
  *   - Scoped to the manifest's own `pluginId` — a runtime never sees
  *     another plugin's bucket.
  */
+/**
+ * Validate a candidate value against a userSettings spec's declared constraints
+ * (type / min / max / options). The front-end SettingsStore enforces these when
+ * a player edits a value, but world-authored `pluginSettings` and a raw
+ * `X-Plugin-User-Settings` header reach the server WITHOUT that check — so an
+ * out-of-range / wrong-type value (`dialogueRatio: "lots"`, `999`) could
+ * otherwise flow into `{{ userSettings.* }}`, guards, and numeric hook
+ * comparisons. Invalid values fall back to the manifest default here.
+ */
+function isValidForSpec(value: unknown, spec: PluginUserSettingSpec): boolean {
+  switch (spec.type) {
+    case "number":
+    case "integer":
+    case "slider":
+      if (typeof value !== "number" || !Number.isFinite(value)) return false;
+      if (spec.type === "integer" && !Number.isInteger(value)) return false;
+      if (typeof spec.min === "number" && value < spec.min) return false;
+      if (typeof spec.max === "number" && value > spec.max) return false;
+      return true;
+    case "toggle":
+      return typeof value === "boolean";
+    case "select":
+      return (
+        typeof value === "string" &&
+        (!spec.options ||
+          spec.options.length === 0 ||
+          spec.options.some((o) => o.value === value))
+      );
+    case "text":
+    case "textarea":
+      return typeof value === "string";
+    default:
+      return true;
+  }
+}
+
 export function resolveUserSettings(
   manifest: RuntimeManifest,
   allUserSettings: TurnInput["userSettings"],
@@ -159,12 +200,18 @@ export function resolveUserSettings(
   const playerValues = allUserSettings?.[manifest.pluginId] ?? {};
   const merged: Record<string, unknown> = {};
   for (const spec of specs) {
-    merged[spec.key] = Object.prototype.hasOwnProperty.call(
+    const hasValue = Object.prototype.hasOwnProperty.call(
       playerValues,
       spec.key,
-    )
-      ? playerValues[spec.key]
-      : spec.default;
+    );
+    const candidate = hasValue ? playerValues[spec.key] : spec.default;
+    // Enforce declared constraints on the (untrusted) merged value; an invalid
+    // world/header value degrades to the manifest default rather than reaching
+    // the runtime. spec.default itself is author-trusted and not re-checked.
+    merged[spec.key] =
+      hasValue && candidate !== undefined && !isValidForSpec(candidate, spec)
+        ? spec.default
+        : candidate;
   }
   return merged;
 }

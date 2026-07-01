@@ -455,6 +455,22 @@ export function parsePluginMd(
       for (const spec of LENIENT_FIELDS) {
         lenientData = parseLenientField(lenientData, spec, content, filePath);
       }
+      // Deprecated field: `config` was removed in favour of `userSettings`.
+      // Strip it with a warning instead of crashing the (strict) load, so a
+      // third-party plugin written against the old docs gets a deprecation
+      // cycle rather than a hard load failure.
+      if ("config" in lenientData) {
+        console.warn(
+          formatLoaderError(
+            filePath,
+            findYamlKeyLine(content, "config"),
+            "`config` is deprecated and ignored — it was removed in favour of `userSettings`.",
+            "Declare player-tunable settings with `userSettings` (see docs/guide/plugin-authoring-zero-code.md §7).",
+          ),
+        );
+        const { config: _deprecatedConfig, ...rest } = lenientData;
+        lenientData = rest;
+      }
       dataToValidate = lenientData;
     }
 

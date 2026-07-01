@@ -50,7 +50,7 @@ export const BUILTIN_PLUGIN_PACKS: readonly PluginPack[] = [
       "npc-graph",
       "living-world-rules",
     ],
-    optionalPlugins: ["memory", "player-identity"],
+    optionalPlugins: ["memory"],
     excludedPlugins: [
       "chat-mode-narrator",
       "scene-cast",
@@ -76,7 +76,6 @@ export const BUILTIN_PLUGIN_PACKS: readonly PluginPack[] = [
       "scene-prompts",
       "character-blueprint",
       "character-presence",
-      "player-identity",
       "living-world-rules",
       "branch-reply",
     ],
@@ -100,12 +99,27 @@ export const BUILTIN_PLUGIN_PACKS: readonly PluginPack[] = [
       "living-world-rules",
       "cost-gate",
     ],
-    optionalPlugins: ["memory", "player-identity"],
+    optionalPlugins: ["memory"],
     excludedPlugins: ["guide", "codex", "scene-prompts"],
     tags: ["cost:function"],
     source: "builtin",
   },
 ];
+
+/**
+ * All locale values of an I18nText joined — used to build a locale-agnostic
+ * search index so a query matches regardless of which language the value was
+ * authored in (an English UI should still match an English display name).
+ */
+export function i18nAllText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return Object.values(value as Record<string, unknown>)
+      .filter((v): v is string => typeof v === "string")
+      .join(" ");
+  }
+  return "";
+}
 
 export function textValue(value: unknown, locale = "zh-CN"): string {
   if (typeof value === "string") return value;
@@ -390,8 +404,8 @@ export function filterPluginPackages(
     if (!normalizedQuery) return true;
     const haystack = [
       pkg.name,
-      textValue(pkg.displayName),
-      textValue(pkg.description),
+      i18nAllText(pkg.displayName),
+      i18nAllText(pkg.description),
       ...(pkg.tags ?? []),
       ...(pkg.capabilities ?? []),
     ]

@@ -14,17 +14,19 @@
 
 ## 交叉引用
 
-| 你想做的事                                                  | 看这里                                                                                                                                                                 |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 看所有已实现插件的 frontmatter、调度层级、capabilities 标签 | [docs/reference/plugins.md](../reference/plugins.md)                                                                                                                   |
-| 写 json-render UI 面板（`ui.right` / `ui.message`）         | [docs/guide/plugin-ui-runtime-guidelines.md](./plugin-ui-runtime-guidelines.md)                                                                                        |
-| 写生命周期 hook（工具调用前校验、commit 前审批、审计日志）  | [docs/reference/plugins.md#hooks](../reference/plugins.md#hooks)                                                                                                       |
-| 写图像生成 / 媒体资产插件                                   | [docs/guide/plugin-authoring-advanced.md#图像生成的设计](./plugin-authoring-advanced.md#图像生成的设计) · [docs/reference/media-store.md](../reference/media-store.md) |
-| 让插件配套世界数据、角色卡、媒体或 override 包              | [docs/reference/world-data.md](../reference/world-data.md)                                                                                                             |
-| 写单元 / 集成 / 真实 LLM E2E 测试                           | [docs/guide/plugin-testing.md](./plugin-testing.md) · [docs/guide/e2e-plugin-verify.md](./e2e-plugin-verify.md)                                                        |
-| 看内置工具完整清单 + 审批策略                               | [docs/reference/tools.md](../reference/tools.md)                                                                                                                       |
-| 看 prompt 如何组装（10 段 + cache_control）                 | [docs/reference/prompt-structure.md](../reference/prompt-structure.md)                                                                                                 |
-| 程序化发现框架和插件提供哪些字段、工具、数据 namespace      | [docs/reference/api.md 插件管理](../reference/api.md#插件管理)                                                                                                         |
+| 你想做的事                                                       | 看这里                                                                                                                                                                 |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 先理解为什么这么设计、agent/function/组合三种写法怎么选          | [docs/architecture/design-principles.md](../architecture/design-principles.md)                                                                                         |
+| 看所有已实现插件的 frontmatter、调度层级、capabilities 标签      | [docs/reference/plugins.md](../reference/plugins.md)                                                                                                                   |
+| 写 json-render UI 面板（`ui.right` / `ui.message`）              | [docs/guide/plugin-ui-runtime-guidelines.md](./plugin-ui-runtime-guidelines.md)                                                                                        |
+| 让 `ui.message` block 首次出现（避免"只有手动按钮无法自举"死锁） | [docs/reference/ui-panels.md#消息-block-声明](../reference/ui-panels.md#消息-block-声明)                                                                               |
+| 写生命周期 hook（工具调用前校验、commit 前审批、审计日志）       | [docs/reference/plugins.md#hooks](../reference/plugins.md#hooks)                                                                                                       |
+| 写图像生成 / 媒体资产插件                                        | [docs/guide/plugin-authoring-advanced.md#图像生成的设计](./plugin-authoring-advanced.md#图像生成的设计) · [docs/reference/media-store.md](../reference/media-store.md) |
+| 让插件配套世界数据、角色卡、媒体或 override 包                   | [docs/reference/world-data.md](../reference/world-data.md)                                                                                                             |
+| 写单元 / 集成 / 真实 LLM E2E 测试                                | [docs/guide/plugin-testing.md](./plugin-testing.md) · [docs/guide/e2e-plugin-verify.md](./e2e-plugin-verify.md)                                                        |
+| 看内置工具完整清单 + 审批策略                                    | [docs/reference/tools.md](../reference/tools.md)                                                                                                                       |
+| 看 prompt 如何组装（10 段 + cache_control）                      | [docs/reference/prompt-structure.md](../reference/prompt-structure.md)                                                                                                 |
+| 程序化发现框架和插件提供哪些字段、工具、数据 namespace           | [docs/reference/api.md 插件管理](../reference/api.md#插件管理)                                                                                                         |
 
 ---
 
@@ -76,7 +78,15 @@ memoryBlocks:
       en: Known suspects, their motives, alibis, and shifts in credibility.
 ```
 
-builtin `memory` 插件声明默认四块（`story_state` / `character_relationships` / `scene` / `player_profile`）。换一种游戏类型只需声明你自己的块，无需改动框架。字段规则（`label` / `displayName` / `extractionHint` / `icon` / `maxChars`）见 [plugins.md #memoryblocks核心记忆块](../reference/plugins.md#memoryblocks核心记忆块)。
+builtin `memory` 插件声明默认四块（`story_state` / `character_relationships` / `scene` / `player_profile`）。换一种游戏类型只需声明你自己的块，无需改动框架。字段规则（`label` / `displayName` / `extractionHint` / `icon` / `maxChars`）见 [plugins.md #memoryblocks核心记忆块](../reference/plugins.md#memoryblocks核心记忆块)。**世界包**也能在 `world.yaml` 顶层声明 `memoryBlocks`（按 session 合并到插件块之上），让题材专属的记忆维度随世界走——见 [world-data.md #世界记忆块memoryblocks](../reference/world-data.md#世界记忆块memoryblocks)。
+
+## 运行时文案的 i18n（重要）
+
+CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，**以及** 工具/hook handler `.js` 里 `label:` / `title:` / `placeholder:` 的裸 CJK 字面量。但工具/handler **写入 plugin_data 或 prompt 的运行时文案**仍需作者自觉处理，否则 en 会话会看到中文：
+
+- **写给前端展示的标签**（如徽标 label）：存成 `I18nText` 对象 `{ zh, en }`，前端的 `Badge`/`Text` 等组件经 `resolveI18n` 按 locale 解析。例：`scene-prompts` 的 `prompt{N}Label`、`guide` 的 `category{N}Label`。
+- **写给模型 / 通知的纯文本**（如 prompt 前言、欢迎通知）：用 `ctx.locale`（function runtime）或 hook payload 的 `locale` 在写入时解析成单一语言。例：`director` 的导演前言、`pregame` 的欢迎语。
+- **agent runtime 的 `PLUGIN.md` 正文**（agent skill prompt）按 locale 解析 `PLUGIN.<locale>.md` → `PLUGIN.md`。正文含 CJK 的 agent 插件应配套提供 `PLUGIN.en.md`（如 `narrator` / `chat-mode-narrator`），否则 en 会话喂给模型的是中文指令。
 
 ## 程序化发现能力
 

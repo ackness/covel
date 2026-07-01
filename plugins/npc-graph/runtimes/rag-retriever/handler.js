@@ -11,9 +11,16 @@
  * @returns {Promise<Record<string, unknown>>}
  */
 export default async function handler(ctx) {
-  const { sessionId, playerMessage } = ctx;
+  const { sessionId, playerMessage, locale } = ctx;
   const pluginId = "npc-graph";
   const store = /** @type {any} */ (ctx.store);
+  // This markdown header is injected into the narrator prompt, so resolve it to
+  // the session locale instead of emitting a fixed-language heading.
+  const lang = typeof locale === "string" ? locale.split("-")[0] : "";
+  const relHeader =
+    lang === "zh"
+      ? "## 已知 NPC 关系（从图谱检索）"
+      : "## Known NPC relationships (from graph retrieval)";
 
   try {
     const nodeRows =
@@ -120,7 +127,7 @@ export default async function handler(ctx) {
     // ── 4. Format as markdown for narrator injection ─────────────
     const lines = [];
     if (topEdges.length > 0) {
-      lines.push("## 已知 NPC 关系（从图谱检索）");
+      lines.push(relHeader);
       lines.push("");
       for (const edge of topEdges) {
         const src = nodeById.get(edge.source);

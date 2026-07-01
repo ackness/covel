@@ -111,7 +111,9 @@ function addBlockMessageFromSse(
 ): void {
   const blockMeta = block.meta as Record<string, unknown> | undefined;
   const blockId =
-    (block.id as string) ?? (payload.proposalId as string) ?? api.uid();
+    (block.id as string) ??
+    (payload.proposalId as string) ??
+    crypto.randomUUID();
   const blockTurnId =
     (blockMeta?.turnId as string | undefined) ??
     (payload.turnId as string | undefined) ??
@@ -225,7 +227,7 @@ export function createSseEventHandler(
       case "narrative.completed": {
         const content = (payload.content as string) ?? "";
         const runtimeId = (payload.runtimeId as string) ?? "unknown";
-        const msgId = (payload.messageId as string) ?? api.uid();
+        const msgId = (payload.messageId as string) ?? crypto.randomUUID();
         const completedKind =
           (payload.kind as string) ??
           deps.runtimeKindRef.current.get(runtimeId);
@@ -285,7 +287,9 @@ export function createSseEventHandler(
           block ??
           (render
             ? {
-                id: (payload.proposalId as string | undefined) ?? api.uid(),
+                id:
+                  (payload.proposalId as string | undefined) ??
+                  crypto.randomUUID(),
                 type: "ui.render",
                 data: render,
                 meta: {
@@ -389,6 +393,13 @@ export function createSseEventHandler(
         break;
       }
       case "execution.completed": {
+        // A turn aborted before producing output (e.g. cost-gate's hard budget
+        // cap) carries an abortReason — surface it so the player isn't left with
+        // a silent empty turn.
+        const abortReason = payload.abortReason as string | undefined;
+        if (abortReason) {
+          deps.dispatch({ type: "SET_EXECUTION_ERROR", error: abortReason });
+        }
         deps.dispatch({ type: "SET_EXECUTING", value: false });
         deps.dispatch({
           type: "FINALIZE_HANGING_RUNTIMES",
@@ -574,7 +585,7 @@ export function applyResumeEvents(
   for (const event of events) {
     handleSseEvent({
       type: event.type,
-      requestId: api.uid(),
+      requestId: crypto.randomUUID(),
       traceId: event.turnId,
       sessionId: event.sessionId,
       turnId: event.turnId,

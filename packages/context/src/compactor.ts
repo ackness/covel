@@ -80,6 +80,12 @@ export interface CompactorRunner {
     sessionId: string,
     systemPromptPreview: string,
     messages: readonly TurnMessageRecord[],
+    /**
+     * Session locale. Threaded into the compaction prompt + focus sections so a
+     * non-Chinese session's history summaries are generated in its own language
+     * instead of always falling back to zh-CN.
+     */
+    locale?: string,
   ): Promise<CompactorResult>;
 }
 
@@ -279,6 +285,17 @@ export async function maybeCompact(
     const message = err instanceof Error ? err.message : String(err);
     console.warn(
       `[compactor] Fast LLM call failed for session ${sessionId}: ${message}. Skipping compaction.`,
+    );
+    return { compacted: false };
+  }
+
+  // A successful-but-empty response (safety filter, reasoning-only output, or a
+  // provider returning content elsewhere) must NOT be persisted + tag the source
+  // messages compacted — that would permanently replace real history with an
+  // empty summary. Skip so the window keeps its messages and can compact later.
+  if (!summaryContent.trim()) {
+    console.warn(
+      `[compactor] Empty summary from fast LLM for session ${sessionId}; skipping compaction to avoid dropping history.`,
     );
     return { compacted: false };
   }

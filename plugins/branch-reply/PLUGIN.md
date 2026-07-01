@@ -1,14 +1,18 @@
 ---
 name: branch-reply
+displayName:
+  zh: 回复变体
+  en: Reply Variants
 description:
   zh: 提供多条可切换的回复，让你挑选更合适的说法。
   en: Offers several reply options so you can choose the one that fits best.
 pluginType: plugin
 runtimeType: function
 outputKind: system
+priority: 700
 handler: ./handler.js
 trigger:
-  type: manual
+  type: auto
 capabilities:
   - branch-reply
   - prompt-history-rewriter
@@ -25,7 +29,21 @@ relations: {}
 
 # Branch Reply
 
-Manual function runtime for Covel-native swipe and regenerate storage.
+Function runtime for Covel-native swipe + regenerate storage. Runs two ways:
+
+- **Auto seed** (`trigger: auto`, priority 700 — after the narrative engines):
+  with no `manualPayload`, it reads the active story engine's `narrativeOutput`
+  from `completedResults` (engine-agnostic — discovered by the non-empty
+  `narrativeOutput` contract, never by plugin id, so it works under `narrator`
+  or `chat-mode-narrator`) and seeds candidate[0] with that reply. This is what
+  makes the `ui.message` block appear — the block only renders once its
+  `message` namespace is populated, so seeding is mandatory bootstrap. The seed
+  is idempotent per `turnId` and no-ops on empty / system turns.
+- **Manual** (`POST /api/sessions/:id/plugin-rpc` with `runtimeId: branch-reply`):
+  the `createCandidates` / `acceptCandidate` actions below. `createCandidates`
+  (Regenerate) calls the fast text slot through `ctx.gateway` to produce 1-2
+  genuine alternative phrasings in the session locale; when no gateway/slot is
+  available it returns the original only (it never fabricates filler).
 
 ## Manual payload
 

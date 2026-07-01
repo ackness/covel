@@ -288,6 +288,52 @@ const pluginPolicySchema = z
   })
   .strict();
 
+// ── Character attribute schema (world-declared) ─────────────────
+//
+// A world may ship its own `CharacterAttributeSchema` so the right panel and
+// context injection use authored, i18n labels (e.g. "社团" / "Club") instead
+// of the generic attributes `deriveSchema()` infers from dimensions. When
+// present, `world-init`'s guard writes this verbatim and skips the LLM
+// schema-gen entirely. Mirrors `AttributeDefinition` in
+// types/character-schema.ts; `name` / `description` accept i18n records.
+const attributeFieldTypeSchema = z.enum([
+  "string",
+  "number",
+  "boolean",
+  "enum",
+  "array",
+  "object",
+  "map",
+]);
+
+const attributeCategorySchema = z.enum([
+  "stats",
+  "bio",
+  "abilities",
+  "equipment",
+  "social",
+]);
+
+/** @type {z.ZodType} */
+export const attributeDefinitionSchema: z.ZodType = z.lazy(() =>
+  z
+    .object({
+      id: z.string().min(1),
+      name: i18nTextSchema,
+      type: attributeFieldTypeSchema,
+      min: z.number().optional(),
+      max: z.number().optional(),
+      defaultValue: z.unknown().optional(),
+      itemType: z.enum(["string", "number"]).optional(),
+      options: z.array(z.string()).optional(),
+      subSchema: z.array(attributeDefinitionSchema).optional(),
+      valueType: z.enum(["string", "number", "boolean"]).optional(),
+      category: attributeCategorySchema,
+      description: i18nTextSchema.optional(),
+    })
+    .strict(),
+);
+
 export const worldManifestSchema = z
   .object({
     schemaVersion: z.string().min(1),
@@ -309,9 +355,45 @@ export const worldManifestSchema = z
     pluginPolicy: pluginPolicySchema.optional(),
     worldData: z.string().min(1).optional(),
     characterBlueprintSources: z.array(z.string().min(1)).optional(),
+    /**
+     * World-declared character attribute definitions. When non-empty,
+     * `world-init` writes this verbatim as the session's
+     * `character-attributes` schema (no LLM, no dimension-derived fallback),
+     * so the right panel renders authored i18n labels.
+     */
+    characterAttributes: z.array(attributeDefinitionSchema).optional(),
     dimensions: worldDimensionsSchema.optional(),
     /** Map of dimension key → relative file path for external dimension files. */
     dimensionSources: z.record(z.string(), z.string().min(1)).optional(),
+    /**
+     * World-authored default values for plugins' declared `userSettings`,
+     * keyed `pluginId → settingKey → value`. Middle layer of the resolution
+     * chain (player override → world default → manifest default); players can
+     * still override each value. Unknown keys are harmless — the runtime only
+     * reads keys a plugin actually declares.
+     */
+    pluginSettings: z
+      .record(z.string(), z.record(z.string(), z.unknown()))
+      .optional(),
+    /**
+     * World-authored core-memory blocks (same shape as a plugin's
+     * `memoryBlocks`). Lets a world declare genre-specific memory dimensions
+     * (e.g. a detective world adding `clues` / `suspects`) without forking a
+     * plugin. Merged with plugin-declared blocks per session at memory time.
+     */
+    memoryBlocks: z
+      .array(
+        z
+          .object({
+            label: z.string().min(1),
+            displayName: i18nTextSchema,
+            extractionHint: i18nTextSchema,
+            icon: z.string().optional(),
+            maxChars: z.number().optional(),
+          })
+          .strict(),
+      )
+      .optional(),
   })
   .strict();
 

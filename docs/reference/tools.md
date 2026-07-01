@@ -6,25 +6,29 @@
 
 ## 概览
 
-| 工具名                  | 来源    | 所属插件   | 审批策略   | 描述                                                                    |
-| ----------------------- | ------- | ---------- | ---------- | ----------------------------------------------------------------------- |
-| create-form             | builtin | —          | auto-allow | 创建玩家表单                                                            |
-| create-choices          | builtin | —          | auto-allow | 创建选项列表                                                            |
-| create-notification     | builtin | —          | auto-allow | 显示通知消息                                                            |
-| render-ui               | builtin | —          | auto-allow | 渲染带独立 part 状态的 UI 块                                            |
-| plugin-data-set         | builtin | —          | auto-allow | 写入插件持久化数据（单条）                                              |
-| plugin-data-set-batch   | builtin | —          | auto-allow | 批量写入插件持久化数据                                                  |
-| plugin-data-get         | builtin | —          | auto-allow | 读取当前插件持久化数据                                                  |
-| plugin-data-list        | builtin | —          | auto-allow | 列出当前插件持久化数据                                                  |
-| **create-character**    | builtin | —          | auto-allow | 创建角色（player/npc/companion），写 characters 表 + 镜像到 plugin-data |
-| **update-character**    | builtin | —          | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                |
-| **list-characters**     | builtin | —          | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                   |
-| **get-character**       | builtin | —          | auto-allow | 按 id 或 name 查找单个角色                                              |
-| **world-dimension-get** | builtin | —          | auto-allow | 按需读取当前 session 世界的结构化维度字段                               |
-| set-world-schema        | local   | world-init | auto-allow | 定义世界角色属性 Schema                                                 |
-| set-world-entries-batch | local   | world-init | auto-allow | 批量写入世界词条                                                        |
-| unlock-codex-entries    | local   | codex      | auto-allow | 批量解锁图鉴条目                                                        |
-| update-codex-entry      | local   | codex      | auto-allow | 更新已有图鉴条目                                                        |
+| 工具名                  | 来源    | 所属插件   | 审批策略   | 描述                                                                          |
+| ----------------------- | ------- | ---------- | ---------- | ----------------------------------------------------------------------------- |
+| create-form             | builtin | —          | auto-allow | 创建玩家表单                                                                  |
+| create-choices          | builtin | —          | auto-allow | 创建选项列表                                                                  |
+| create-notification     | builtin | —          | auto-allow | 显示通知消息                                                                  |
+| render-ui               | builtin | —          | auto-allow | 渲染带独立 part 状态的 UI 块                                                  |
+| plugin-data-set         | builtin | —          | auto-allow | 写入插件持久化数据（单条）                                                    |
+| plugin-data-set-batch   | builtin | —          | auto-allow | 批量写入插件持久化数据                                                        |
+| plugin-data-get         | builtin | —          | auto-allow | 读取当前插件持久化数据                                                        |
+| plugin-data-list        | builtin | —          | auto-allow | 列出当前插件持久化数据                                                        |
+| **create-character**    | builtin | —          | auto-allow | 创建角色（player/npc/companion），写 characters 表 + 镜像到 plugin-data       |
+| **update-character**    | builtin | —          | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                      |
+| **list-characters**     | builtin | —          | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                         |
+| **get-character**       | builtin | —          | auto-allow | 按 id 或 name 查找单个角色                                                    |
+| **world-dimension-get** | builtin | —          | auto-allow | 按需读取当前 session 世界的结构化维度字段                                     |
+| **runtime-done**        | builtin | —          | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime              |
+| **memory-search**       | builtin | —          | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 codex/lorebook/角色)     |
+| **memory-get-block**    | builtin | —          | auto-allow | 读取一个核心记忆块的当前内容                                                  |
+| **memory-update-block** | builtin | —          | auto-allow | 更新（完整替换）一个核心记忆块。无 capability 门控——列入 tools.builtin 即可用 |
+| set-world-schema        | local   | world-init | auto-allow | 定义世界角色属性 Schema                                                       |
+| set-world-entries-batch | local   | world-init | auto-allow | 批量写入世界词条                                                              |
+| unlock-codex-entries    | local   | codex      | auto-allow | 批量解锁图鉴条目                                                              |
+| update-codex-entry      | local   | codex      | auto-allow | 更新已有图鉴条目                                                              |
 
 ---
 

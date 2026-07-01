@@ -79,17 +79,20 @@ Any new store backend MUST pass this suite.
 
 ### MemoryStore
 
-Two-phase snapshot using `structuredClone` (Node ≥ 17, native). On
-`beginTx()` the store eagerly clones every collection (sessions, turn
-results, characters, plugin data, etc.) into a shadow copy. On
-`rollbackTx()` it clears each collection in place and refills it from the
+Two-phase snapshot using a **shallow reference copy** of each collection
+(`new Map(value)` / `[...value]`), not a deep clone. On `beginTx()` the store
+eagerly snapshots every collection (sessions, turn results, characters, plugin
+data, etc.) by copying the container while sharing the same record references.
+On `rollbackTx()` it clears each collection in place and refills it from the
 shadow so that any existing references the caller is holding stay valid.
 `commitTx()` simply discards the shadow.
 
-- File: `packages/store/src/memory/memory-store.ts`
-- Failure mode: `structuredClone` cannot clone functions, Proxies, or
-  WeakMaps. Covel does not store any of those in state, so
-  `DataCloneError` is treated as a programming bug.
+- File: `packages/store/src/memory/transaction-methods.ts`
+- Invariant: correctness relies on records being treated as **immutable** —
+  mutations must replace the record (new object), never mutate in place. This
+  is why an O(row-count) reference copy is safe and why it replaced the previous
+  `structuredClone` deep copy (audit 2026-06-04 finding H3): deep cloning was
+  unnecessary given the never-mutate-in-place contract and far more expensive.
 
 ### SqliteStore
 

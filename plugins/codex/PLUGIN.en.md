@@ -1,5 +1,8 @@
 ---
 name: codex
+displayName:
+  zh: 设定图鉴
+  en: Codex
 description:
   zh: 自动整理新发现的地点、人物、物品和传闻，方便随时回看。
   en: Automatically collects newly discovered places, people, items, and rumors for later review.
@@ -30,8 +33,6 @@ tools:
 ui:
   right:
     - ./ui/codex-panel.json
-  message:
-    - ./ui/codex-message.json
 postHistory:
   role: system
   content: |

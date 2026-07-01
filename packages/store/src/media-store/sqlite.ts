@@ -1,5 +1,8 @@
 import type { MediaRef, MediaRefRecord, MediaStore } from "@covel/shared";
-import Database from "better-sqlite3";
+import {
+  acquireSqliteConnection,
+  releaseSqliteConnection,
+} from "../sqlite/shared-connection.js";
 import {
   createReadStream,
   existsSync,
@@ -30,9 +33,11 @@ export function createSqliteMediaStore(
     mkdirSync(dbDir, { recursive: true });
   }
 
-  const sqlite = new Database(dbPath);
-  sqlite.pragma("journal_mode = WAL");
-  sqlite.pragma("foreign_keys = ON");
+  // Reuse the DataStore's connection for this file. Two connections to one
+  // covel.db deadlock when the mirror media store writes (e.g. session-import
+  // materializing world portraits) while the main store holds a write
+  // transaction. See sqlite/shared-connection.ts.
+  const sqlite = acquireSqliteConnection(dbPath);
   createTables(sqlite);
 
   const mediaRoot = resolve(
@@ -262,6 +267,10 @@ export function createSqliteMediaStore(
       // Node 22+ exposes Readable.toWeb; Covel's engines field requires Node ≥ 22.
       const nodeStream = createReadStream(row.path);
       return Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
+    },
+
+    close() {
+      releaseSqliteConnection(sqlite);
     },
   };
 }

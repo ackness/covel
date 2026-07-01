@@ -46,3 +46,37 @@
     - teen
     - 关系阶段
   insertionOrder: 430
+- schemaVersion: 1
+  id: haruka-ensemble-reactions
+  title: 群像交错
+  content: 主要角色彼此认识，支持角色（三枝遥、小野寺千寻、森川奏太）也会评价玩家对他人的选择。推进某段关系会影响其他角色的态度——偏袒、冷落或误会都会在群像中产生连锁反应，但核心冲突应保持青春日常质感。
+  kind: triggered
+  category: relationship
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - 群像
+    - 偏袒
+    - 误会
+    - 其他角色
+    - 连锁
+  insertionOrder: 440
+- schemaVersion: 1
+  id: haruka-rumor-heat
+  title: 传闻热度
+  content: 青砾町和遥风学园都很小。公开场合频繁独处、明显偏袒或被新闻部记录，会优先提高传闻热度与公开亲密度；私下兑现承诺、记住细节、尊重沉默，则优先提升信任、降低压力。传闻能制造机会，也会让内向或守规矩的角色退后一步。
+  kind: triggered
+  category: scene
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - 传闻
+    - 公开
+    - 私下
+    - 新闻部
+    - 热度
+  insertionOrder: 450

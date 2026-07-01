@@ -267,6 +267,12 @@ resumeRoutes.post("/:id/resume", async (c) => {
     effectiveManifest.pluginId,
   ]);
 
+  // NOTE: the resume path does not currently apply per-plugin userSettings.
+  // The resumed runtime continues from a pre-rendered prompt (so `{{ userSettings.* }}`
+  // is not re-interpolated) and this route's hook scope is settings-less, so a
+  // merged bucket would be dead-threaded. Supporting it (re-resolve + populate
+  // the resume hook scope) is a follow-up — see plugin-configurable-surface-spec.
+
   try {
     return await runWithHookScope({ activePluginIds }, async () => {
       const result = await sessionLock.withLock(sessionId, () =>

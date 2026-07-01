@@ -1,5 +1,8 @@
 ---
 name: pregame
+displayName:
+  zh: 开局准备
+  en: Pre-Game Setup
 description:
   zh: 在开局时读取世界资料，准备好第一段冒险。
   en: Reads the world details at the start and prepares the first step of the adventure.

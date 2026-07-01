@@ -33,8 +33,11 @@ tools:
     - plugin-data-list
 ui:
   right:
+    # world-entries.json removed: for imported worlds it was a raw-JSON dump of
+    # the same dimensions WorldDimensions (world-overview) already renders
+    # nicely. The `entries` plugin_data + lorebook/prompt write is unchanged;
+    # only the redundant debug tab is gone. (Data Explorer still shows it.)
     - ./ui/world-overview.json
-    - ./ui/world-entries.json
     - ./ui/world-schema.json
 relations: {}
 ---

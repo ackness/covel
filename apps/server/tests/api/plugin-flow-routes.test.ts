@@ -97,7 +97,11 @@ describe("plugin flow routes", () => {
       summary: {
         id: "test-package",
         name: "Test Package",
-        description: "Package from the registry",
+        displayName: { "zh-CN": "测试包", "en-US": "Test Pkg" },
+        description: {
+          "zh-CN": "注册表里的包",
+          "en-US": "Package from the registry",
+        },
         pluginType: "core-plugin",
         runtimeCount: 1,
       },
@@ -115,6 +119,8 @@ describe("plugin flow routes", () => {
     const body = (await res.json()) as {
       packages: Array<{
         name: string;
+        displayName?: unknown;
+        description?: unknown;
         source?: string;
         capabilities?: string[];
         tags?: string[];
@@ -127,6 +133,16 @@ describe("plugin flow routes", () => {
       }>;
     };
     const pkg = body.packages.find((item) => item.name === "test-package");
+    // displayName / description are served as RAW I18nText (the frontend
+    // resolves to the UI locale) — never collapsed to a single locale here.
+    expect(pkg?.displayName).toEqual({
+      "zh-CN": "测试包",
+      "en-US": "Test Pkg",
+    });
+    expect(pkg?.description).toEqual({
+      "zh-CN": "注册表里的包",
+      "en-US": "Package from the registry",
+    });
     expect(pkg?.source).toBe("builtin");
     expect(pkg?.capabilities).toEqual(["narrative"]);
     expect(pkg?.tags).toEqual(["mode:dialogue", "role:narrator"]);

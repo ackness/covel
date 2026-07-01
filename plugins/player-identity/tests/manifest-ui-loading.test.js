@@ -19,19 +19,20 @@ describe("player-identity manifest and UI loading", () => {
       pluginMdPath,
     );
 
+    // No player-facing UI: the player's voice/persona belongs on the character
+    // card (set at creation), not a mid-play editor panel. player-identity is a
+    // UI-less persona-provider (its handler stays for programmatic use).
     expect(parsed.manifest).toMatchObject({
       name: "player-identity",
       pluginId: "player-identity",
       runtimeType: "function",
       handler: "./handler.js",
       trigger: { type: "manual" },
-      ui: {
-        right: ["./ui/player-identity-panel.json"],
-      },
     });
+    expect(parsed.manifest.ui).toBeUndefined();
   });
 
-  it("loads the identity right panel through plugin-loader", async () => {
+  it("loads as a UI-less persona provider through plugin-loader", async () => {
     const discoveries = await discoverPlugins(pluginsDir);
     const discovery = discoveries.find(
       (candidate) => candidate.id === "player-identity",
@@ -43,11 +44,6 @@ describe("player-identity manifest and UI loading", () => {
 
     const loaded = await loadRuntime(discovery, "player-identity");
     expect(loaded.handler).toBeTypeOf("function");
-    expect(loaded.uiSpecs?.right).toHaveLength(1);
-    expect(loaded.uiSpecs?.right?.[0]).toMatchObject({
-      id: "player-identity",
-      dataSource: { namespace: "profiles" },
-      alwaysRender: true,
-    });
+    expect(loaded.uiSpecs?.right ?? []).toHaveLength(0);
   });
 });

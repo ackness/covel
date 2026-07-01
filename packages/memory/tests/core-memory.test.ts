@@ -103,6 +103,54 @@ describe("CoreMemoryManager", () => {
     });
   });
 
+  describe("resolveBlocks (per-session world blocks)", () => {
+    it("resolves a session-specific schema so world blocks render + persist", async () => {
+      const s = createMockStore();
+      const base = [
+        {
+          label: "story_state",
+          displayName: { zh: "剧情", en: "Story" },
+          extractionHint: { zh: "剧情", en: "Story" },
+        },
+      ];
+      const detectiveBlocks = [
+        ...base,
+        {
+          label: "clues",
+          displayName: { zh: "线索", en: "Clues" },
+          extractionHint: { zh: "线索", en: "Clues" },
+          icon: "Search",
+        },
+      ];
+      const m = createMemoryManager(s as any, {
+        blocks: base,
+        resolveBlocks: async (sessionId: string) =>
+          sessionId === "detective" ? detectiveBlocks : undefined,
+      });
+
+      // The detective session sees the extra `clues` block in canonical order…
+      await m.initializeDefaults("detective");
+      const detectiveLoaded = await m.loadBlocks("detective");
+      expect(detectiveLoaded.map((b) => b.label)).toEqual([
+        "story_state",
+        "clues",
+      ]);
+      // …and can write to it, with the display name from the resolved schema.
+      await m.updateBlock(
+        "detective",
+        "clues" as CoreMemoryLabel,
+        "footprints",
+      );
+      const clues = await m.getBlock("detective", "clues" as CoreMemoryLabel);
+      expect(clues?.content).toBe("footprints");
+      expect(clues?.displayName).toEqual({ zh: "线索", en: "Clues" });
+
+      // A session without a resolver match falls back to the base schema.
+      const otherLoaded = await m.loadBlocks("other");
+      expect(otherLoaded.map((b) => b.label)).toEqual(["story_state"]);
+    });
+  });
+
   describe("updateBlock / getBlock", () => {
     it("should write and read a block", async () => {
       await manager.updateBlock("sess-1", "scene", "青萍宗坊市，午后。");

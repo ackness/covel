@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import injectPreamble from "../hooks/inject-preamble.js";
-import { PREAMBLE } from "../hooks/_preamble.js";
+import { PREAMBLE, PREAMBLE_ZH } from "../hooks/_preamble.js";
 import handler from "../handler.js";
 
 const CTX = { sessionId: "sess-director-1" };
@@ -15,6 +15,15 @@ describe("director / inject-preamble (PostContextAssembly)", () => {
     expect(r.replace.systemPrompt).toBe(
       "BASE_SYSTEM_PROMPT" + "\n\n" + PREAMBLE,
     );
+  });
+
+  it("localizes the preamble to the payload locale (zh-CN → Chinese note)", async () => {
+    const r = await injectPreamble(CTX, {
+      outputKind: "story",
+      systemPrompt: "BASE",
+      locale: "zh-CN",
+    });
+    expect(r.replace.systemPrompt).toBe("BASE" + "\n\n" + PREAMBLE_ZH);
   });
 
   it("preserves the original prompt verbatim as the prefix", async () => {

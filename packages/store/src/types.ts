@@ -63,7 +63,11 @@ export type {
   SuspensionRecord,
 } from "./records/snapshot-records.js";
 
-export type { PaginationOpts } from "./records/pagination-records.js";
+export type {
+  PaginationOpts,
+  TimeCursor,
+  CursorPageOpts,
+} from "./records/pagination-records.js";
 
 // ── Local imports for the DataStore interface signatures ─────────
 
@@ -104,7 +108,10 @@ import type {
   SnapshotRecord,
   SuspensionRecord,
 } from "./records/snapshot-records.js";
-import type { PaginationOpts } from "./records/pagination-records.js";
+import type {
+  PaginationOpts,
+  CursorPageOpts,
+} from "./records/pagination-records.js";
 
 // ── Domain sub-interfaces ────────────────────────────────────────
 //
@@ -134,6 +141,7 @@ export interface SessionStore {
         | "preGameCompleted"
         | "activePlugins"
         | "presetId"
+        | "locale"
         | "updatedAt"
         | "metadata"
         | "embeddingModelId"
@@ -247,6 +255,18 @@ export interface MessageStore {
     sessionId: string,
     pagination?: PaginationOpts,
   ): Promise<MessageRecord[]>;
+  /**
+   * Keyset page of messages, oldest-first. `before` omitted ⇒ the newest
+   * `limit` messages (session-restore's initial window); `before` set ⇒ the
+   * `limit` messages immediately older than that `(createdAt, id)` position
+   * (scroll-up "load older"). A single descending, limited query — a long
+   * session never loads its whole history. Keeps `listMessages`'s ascending
+   * offset semantics untouched (the media GC scan depends on them).
+   */
+  listMessagesPage(
+    sessionId: string,
+    opts: CursorPageOpts,
+  ): Promise<MessageRecord[]>;
 }
 
 /** Character records. Part of `sql-session-content-records`. */
@@ -320,6 +340,19 @@ export interface TraceStore {
     sessionId: string,
     pagination?: PaginationOpts,
   ): Promise<TraceEventRecord[]>;
+  /**
+   * Keyset page of trace events, oldest-first. `before` omitted ⇒ the newest
+   * `limit` events; `before` set ⇒ the `limit` events immediately older than
+   * that `(createdAt, id)` position. The debug turn view groups the returned
+   * events by `turnId` and reconciles the boundary turn across pages, so this
+   * stays an event-level cursor. `trace_events` is the fastest-growing table —
+   * this bounds the read; `listTraceEvents`'s full scan is left for the media
+   * GC scan that needs every row.
+   */
+  listTraceEventsPage(
+    sessionId: string,
+    opts: CursorPageOpts,
+  ): Promise<TraceEventRecord[]>;
 }
 
 /** Append-only turn-message log. Part of `sql-session-journal-records`. */
@@ -328,6 +361,21 @@ export interface TurnMessageStore {
   listTurnMessages(
     sessionId: string,
     pagination?: PaginationOpts,
+  ): Promise<TurnMessageRecord[]>;
+  /**
+   * Return the **most recent** `limit` turn messages, ordered oldest-first
+   * (the tail of {@link listTurnMessages}).
+   *
+   * This differs from `listTurnMessages(sessionId, { limit })`, which returns
+   * the OLDEST `limit` rows (ascending order + front-truncated). Backends
+   * resolve this with a single descending-ordered, limited query, so a long
+   * session never loads its whole history into memory just to keep the tail
+   * (recall search, plugin "recent context" reads). A `limit <= 0` returns an
+   * empty array.
+   */
+  listRecentTurnMessages(
+    sessionId: string,
+    limit: number,
   ): Promise<TurnMessageRecord[]>;
   /**
    * Tag a set of turn messages as compacted into the given summary.

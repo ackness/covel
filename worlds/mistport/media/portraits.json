@@ -1,0 +1,62 @@
+{
+  "world": "mistport",
+  "note": "Generation manifest for character portraits. The script composes each prompt as style.prefix + character.subject + style.suffix. Keep one unified style across all entries so the cast reads as one set.",
+  "style": {
+    "direction": "dark-fantasy fog-noir, painterly semi-realistic",
+    "prefix": "Character portrait, dark-fantasy fog-noir illustration, painterly semi-realistic rendering, cold desaturated palette of greys, teal and rust, soft volumetric grey sea-fog background, dramatic low-key cinematic lighting, weathered gothic harbor atmosphere, half-body bust, three-quarter view, ",
+    "suffix": ", muted moody colors, fine painterly detail, atmospheric depth, consistent art style, one single character, centered composition",
+    "negative": "bright saturated colors, anime, chibi, cartoon, flat vector, modern or futuristic clothing, neon, text, caption, signature, watermark, logo, frame, multiple people, crowd, extra limbs, extra fingers, deformed hands, distorted face, nsfw"
+  },
+  "defaults": { "size": "1024x1536", "quality": "medium", "mime": "image/png" },
+  "characters": [
+    {
+      "id": "lin-yuanzhou",
+      "characterId": "npc-lin-yuanzhou",
+      "name": "林远舟",
+      "filename": "lin-yuanzhou.png",
+      "subject": "a cautious curious young man in his early twenties, a novice tide-reader apprentice, short dark windswept hair, plain layered guild coat, a faint cold-blue glowing spiral tide-mark on his wrist, holding a small cold blue-white tide-stone lantern, alert wary but eager expression"
+    },
+    {
+      "id": "su-yao",
+      "characterId": "npc-su-yao",
+      "name": "苏窈",
+      "filename": "su-yao.png",
+      "subject": "a meticulous composed young woman in her twenties, a fully-fledged tide-reader, neat high-collared dark guild uniform, dark hair pinned up, holding a small round polished tide-stone appraisal mirror, pale and quietly worried, controlled tension in her eyes"
+    },
+    {
+      "id": "iron-meg",
+      "characterId": "npc-iron-meg",
+      "name": "铁姑",
+      "filename": "iron-meg.png",
+      "subject": "a cold hard woman in her thirties, a smuggler syndicate second-in-command, dark practical layered leather attire, short tousled dark hair, her left forearm translucent and faintly glowing grey from fog-rot, half-wrapped in a worn leather glove, a faint old scar along her jaw, guarded unreadable expression"
+    },
+    {
+      "id": "chen-yuanshan",
+      "characterId": "npc-chen-yuanshan",
+      "name": "陈远山",
+      "filename": "chen-yuanshan.png",
+      "subject": "a silver-haired councilor in his sixties, a master politician, fine layered robes of office, neatly trimmed grey beard, idly turning a small dull-grey relic fragment between his fingers like a prayer bead, a gentle but dangerous knowing half-smile"
+    },
+    {
+      "id": "guildmaster-qi",
+      "characterId": "npc-guildmaster-qi",
+      "name": "齐老",
+      "filename": "guildmaster-qi.png",
+      "subject": "a gentle white-haired old scholar, head of the tide-reader guild, a worn long scholar's robe, translucent fog-rot faintly creeping up his fingertips, cradling a battered leather tide journal, melancholy and wise with soft sorrowful eyes"
+    },
+    {
+      "id": "xiao-shuang",
+      "characterId": "npc-xiao-shuang",
+      "name": "小霜",
+      "filename": "xiao-shuang.png",
+      "subject": "an eerily calm girl of about fifteen, the youngest fog-church oracle, a simple pale grey acolyte robe, long ashen hair, faint fog-rot shimmering at her fingertips, head tilted slightly as if listening to a whisper no one else can hear, otherworldly serene gaze"
+    },
+    {
+      "id": "grey-falcon",
+      "characterId": "npc-grey-falcon",
+      "name": "灰隼",
+      "filename": "grey-falcon.png",
+      "subject": "a silent disciplined man, a council expedition captain and enforcer, dark grey military greatcoat with a council insignia, close-cropped hair, holding a shielded storm lantern, hard watchful eyes showing no wasted emotion, weathered and severe"
+    }
+  ]
+}

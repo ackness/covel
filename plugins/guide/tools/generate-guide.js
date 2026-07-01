@@ -25,20 +25,25 @@ export default function ({ tool, z }) {
       .array(z.string().min(1))
       .min(1)
       .max(3)
-      .describe("1-3 个具体的行动建议"),
+      .describe("1-3 concrete, actionable suggestions"),
   });
 
   return tool({
     name: "generate-guide",
     description:
-      "生成分风格的行动引导。为玩家提供不同风格（稳妥/激进/创意/疯狂）的选择建议。",
+      "Generate a style-categorized action guide, offering the player choices in different styles (safe / aggressive / creative / wild).",
     parameters: z.object({
-      topic: z.string().min(1).describe("当前决策点的简要描述"),
+      topic: z
+        .string()
+        .min(1)
+        .describe("A brief description of the current decision point"),
       categories: z
         .array(categorySchema)
+        // Capped at 3: the message block has exactly 3 strategy slots and the
+        // handler slices to 3, so a 4th category would be silently dropped.
         .min(2)
-        .max(4)
-        .describe("2-4 个风格分类，每个包含 1-3 个建议"),
+        .max(3)
+        .describe("2-3 style categories, each with 1-3 suggestions"),
     }),
     execute: async (params, context) => {
       const { topic, categories } = params;
@@ -48,7 +53,11 @@ export default function ({ tool, z }) {
         return {
           slot: index + 1,
           style: cat.style,
-          label: cat.label ?? config.zh,
+          // Store an I18nText label so the block resolves it to the session
+          // locale. An LLM-supplied `cat.label` is a single string in the
+          // session language; otherwise fall back to the bilingual config
+          // (previously only the zh half was used → en players saw Chinese).
+          label: cat.label ?? { zh: config.zh, en: config.en },
           icon: config.icon,
           color: config.color,
           suggestions: cat.suggestions,

@@ -1,0 +1,69 @@
+{
+  "world": "haruka-academy",
+  "note": "Generation manifest for character portraits. The script composes each prompt as style.prefix + character.subject + style.suffix. Keep one unified style across all entries so the cast reads as one set.",
+  "style": {
+    "direction": "anime visual-novel character sprite (GalGame tachi-e), soft cel-shading",
+    "prefix": "Character sprite for a visual novel, clean anime style, soft cel-shading, crisp lineart, gentle pastel spring palette, warm soft afternoon daylight, seaside Japanese high-school slice-of-life mood, half-body bust, neutral soft-gradient background, ",
+    "suffix": ", wholesome and teen-appropriate, clean and bright, consistent art style, one single character, centered composition, GalGame tachi-e",
+    "negative": "photorealistic, realism, 3d render, dark, gritty, horror, oversaturated, text, caption, signature, watermark, logo, frame, multiple people, crowd, extra fingers, extra limbs, deformed hands, distorted face, nsfw, suggestive"
+  },
+  "defaults": { "size": "1024x1536", "quality": "medium", "mime": "image/png" },
+  "characters": [
+    {
+      "id": "kamishiro-mio",
+      "characterId": "npc-kamishiro-mio",
+      "name": "神代澪",
+      "filename": "kamishiro-mio.png",
+      "subject": "a gentle reserved seventeen-year-old girl, the class representative and literature-club president, neat navy Japanese sailor school uniform, tidy shoulder-length dark hair, holding a stack of club papers and a book to her chest, a soft slightly worried but kind smile"
+    },
+    {
+      "id": "asakura-rin",
+      "characterId": "npc-asakura-rin",
+      "name": "朝仓凛",
+      "filename": "asakura-rin.png",
+      "subject": "a lively bright teenage girl, a school news-club reporter, the same school uniform with a small press armband, short reddish bobbed hair, holding a little notebook and a compact camera, a playful teasing wink and grin"
+    },
+    {
+      "id": "shiina-kaho",
+      "characterId": "npc-shiina-kaho",
+      "name": "椎名夏帆",
+      "filename": "shiina-kaho.png",
+      "subject": "a breezy easygoing teenage girl, a light-music-club guitarist, school uniform worn a little loosely with a soft cardigan, light wavy hair, an acoustic guitar slung on a strap, a casual confident relaxed grin"
+    },
+    {
+      "id": "shiraishi-yuma",
+      "characterId": "npc-shiraishi-yuma",
+      "name": "白石悠真",
+      "filename": "shiraishi-yuma.png",
+      "subject": "a cool composed teenage boy, the student-council vice-president, a crisp tidy school blazer uniform, neat dark hair, thin-framed glasses, holding a clipboard, a reserved measured calm expression"
+    },
+    {
+      "id": "mikoeda-haruka",
+      "characterId": "npc-mikoeda-haruka",
+      "name": "三枝遥",
+      "filename": "mikoeda-haruka.png",
+      "subject": "a warm precise third-year girl, the student-council president, a neat uniform with a council badge, long well-kept dark hair, holding a schedule binder, a gentle reassuring senpai smile"
+    },
+    {
+      "id": "onodera-chihiro",
+      "characterId": "npc-onodera-chihiro",
+      "name": "小野寺千寻",
+      "filename": "onodera-chihiro.png",
+      "subject": "a gentle young woman teacher in her late twenties, a soft cardigan over a blouse, loosely tied hair, holding a piece of chalk and a worn paperback, a warm patient unhurried smile"
+    },
+    {
+      "id": "morikawa-souta",
+      "characterId": "npc-morikawa-souta",
+      "name": "森川奏太",
+      "filename": "morikawa-souta.png",
+      "subject": "an outgoing cheerful teenage boy, a band drummer, school uniform with sleeves rolled up, short spiky hair, a pair of drumsticks twirled in one hand, a big friendly open grin"
+    },
+    {
+      "id": "toujou-akane",
+      "characterId": "npc-toujou-akane",
+      "name": "东条茜",
+      "filename": "toujou-akane.png",
+      "subject": "a quiet melancholy third-year girl, on the library committee, a neat uniform, long straight dark hair, holding a hardcover book with a small pressed flower as a bookmark, a soft distant gaze and a faint gentle senpai air"
+    }
+  ]
+}

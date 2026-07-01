@@ -1,5 +1,8 @@
 ---
 name: director
+displayName:
+  zh: 导演前言
+  en: Director's Note
 description:
   zh: 给主线叙事 runtime 注入一段“导演前言”：只塑形 story 类提示词，其它 runtime 完全不碰。
   en: Injects a "director's note" into the main narrative runtime — shapes only story-kind prompts and leaves every other runtime untouched.

@@ -1,10 +1,43 @@
 import { readFile, stat } from "node:fs/promises";
+import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { resolveContainedPath } from "./safe-path.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "./types.js";
 
 const MAX_STRUCTURED_BYTES = 2 * 1024 * 1024;
 const MAX_TEXT_BYTES = 1 * 1024 * 1024;
+
+/**
+ * Resolve a source file with locale awareness, mirroring the WORLD.md /
+ * dimension convention: try `<name>.<lang>.<ext>` (e.g. `main-cast.en.json`)
+ * before the declared `<name>.<ext>`, where `lang` is the session locale's
+ * primary subtag (`en-US` → `en`). Lets a world ship a per-locale variant of
+ * any worldData source (character cast, rules/lorebook, …) that the importer
+ * picks for the session's locale, falling back to the authored default. Returns
+ * the resolved absolute path, or `null` when neither exists / escapes root.
+ */
+async function resolveSourcePath(
+  source: OrderedWorldDataSource,
+  locale?: string,
+): Promise<string | null> {
+  const root = source.pathOrigin.descriptorRoot;
+  const declared = source.descriptor.path;
+  const lang = locale?.split("-")[0];
+  if (lang) {
+    const parsed = path.parse(declared);
+    const variant = path.join(
+      parsed.dir,
+      `${parsed.name}.${lang}${parsed.ext}`,
+    );
+    // resolveContainedPath returns null when the variant doesn't exist, so a
+    // hit means the file is present, contained, and not a symlink.
+    const resolvedVariant = await resolveContainedPath(root, variant, {
+      rejectSymlinks: true,
+    });
+    if (resolvedVariant) return resolvedVariant;
+  }
+  return resolveContainedPath(root, declared, { rejectSymlinks: true });
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -28,17 +61,14 @@ function isJsonValue(value: unknown): boolean {
 
 export async function readWorldDataSource(
   source: OrderedWorldDataSource,
+  locale?: string,
 ): Promise<{
   value?: unknown;
   path?: string;
   diagnostics: readonly WorldDataDiagnostic[];
 }> {
   const diagnostics: WorldDataDiagnostic[] = [];
-  const resolved = await resolveContainedPath(
-    source.pathOrigin.descriptorRoot,
-    source.descriptor.path,
-    { rejectSymlinks: true },
-  );
+  const resolved = await resolveSourcePath(source, locale);
   if (!resolved) {
     return {
       diagnostics: [

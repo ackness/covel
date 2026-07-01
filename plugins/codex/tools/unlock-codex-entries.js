@@ -25,29 +25,29 @@ export default function ({ tool, z, shortIdBatch, store }) {
   const codexEntrySchema = z.object({
     category: z
       .enum(["monster", "item", "location", "lore", "character", "skill"])
-      .describe("知识类别"),
-    title: z.string().min(1).describe("条目标题"),
-    content: z.string().min(10).describe("2-3 句话的描述"),
-    tags: z.array(z.string()).min(1).max(5).describe("标签列表"),
+      .describe("Knowledge category"),
+    title: z.string().min(1).describe("Entry title"),
+    content: z.string().min(10).describe("A 2-3 sentence description"),
+    tags: z.array(z.string()).min(1).max(5).describe("List of tags"),
     rarity: z
       .enum(["common", "uncommon", "rare", "legendary"])
       .default("common")
-      .describe("稀有度，影响 UI 展示样式"),
+      .describe("Rarity; affects the UI display style"),
     imageHint: z
       .string()
       .optional()
-      .describe("可选的视觉描述提示，用于后续图像生成"),
+      .describe("Optional visual description hint for later image generation"),
   });
 
   return tool({
     name: "unlock-codex-entries",
     description:
-      '批量解锁新的图鉴条目。条目会持久化存储并生成"知识发现"卡片。返回的 entryId（如 codex-fire-magic）可用于后续 update-codex-entry 调用。',
+      'Batch-unlock new codex entries. Entries are persisted and rendered as a "knowledge discovery" card. The returned entryId (e.g. codex-fire-magic) can be used in subsequent update-codex-entry calls.',
     parameters: z.object({
       entries: z
         .array(codexEntrySchema)
         .min(1)
-        .describe("要解锁的图鉴条目列表"),
+        .describe("List of codex entries to unlock"),
     }),
     execute: async (params, context) => {
       const ids = shortIdBatch(

@@ -126,7 +126,6 @@ export {
 } from "./capability/index.js";
 
 // Trace
-export type { TraceContext } from "./trace/context.js";
 export { createLangfuseHook } from "./trace/langfuse.js";
 
 // Tokenizer

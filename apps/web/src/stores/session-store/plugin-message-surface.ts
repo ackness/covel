@@ -33,10 +33,6 @@ function collectPluginMessageStates(
   });
 }
 
-function cloneJson<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
-
 export function applyPluginMessageSurface(
   state: SessionState,
   pluginId: string,
@@ -65,8 +61,8 @@ export function applyPluginMessageSurface(
       type: "plugin_message",
       data: {
         pluginId,
-        specs: cloneJson(uiEntry.specs) as unknown,
-        state: cloneJson(blockState),
+        specs: structuredClone(uiEntry.specs) as unknown,
+        state: structuredClone(blockState),
       },
       meta: { pluginId, turnId },
     } as Record<string, unknown>;

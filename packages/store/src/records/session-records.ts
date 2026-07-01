@@ -63,6 +63,7 @@ export function mergeSessionPatch(
       | "preGameCompleted"
       | "activePlugins"
       | "presetId"
+      | "locale"
       | "updatedAt"
       | "metadata"
       | "embeddingModelId"

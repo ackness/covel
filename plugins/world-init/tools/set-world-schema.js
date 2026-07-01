@@ -7,6 +7,14 @@
 import { withPendingProposals } from "@covel/tools";
 
 export default function ({ tool, z, store }) {
+  // A display label is either a plain string or an i18n record
+  // (`{ "zh-CN": "门派", "en-US": "Faction" }`). The LLM normally emits a plain
+  // string; a world that ships its own schema may declare bilingual labels.
+  const i18nText = z.union([
+    z.string().min(1),
+    z.record(z.string(), z.string()),
+  ]);
+
   // Recursive: an `object` attribute can carry `subSchema`, which itself is
   // an array of AttributeDefinition. Zod 4 still exposes `z.lazy(fn)` for
   // self-referential schemas; the `/** @type {z.ZodTypeAny} */` annotation
@@ -17,43 +25,52 @@ export default function ({ tool, z, store }) {
       id: z
         .string()
         .min(1)
-        .describe('属性唯一标识（如 "hp", "level", "skills"）'),
-      name: z.string().min(1).describe("属性显示名称"),
+        .describe('Unique attribute ID (e.g. "hp", "level", "skills")'),
+      name: i18nText.describe("Attribute display name (string or i18n record)"),
       type: z
         .enum(["string", "number", "array", "enum", "boolean", "object", "map"])
-        .describe("属性数据类型"),
-      min: z.number().optional().describe("数值类型最小值"),
-      max: z.number().optional().describe("数值类型最大值"),
-      defaultValue: z.unknown().optional().describe("默认值"),
+        .describe("Attribute data type"),
+      min: z.number().optional().describe("Minimum value for number types"),
+      max: z.number().optional().describe("Maximum value for number types"),
+      defaultValue: z.unknown().optional().describe("Default value"),
       itemType: z
         .enum(["string", "number"])
         .optional()
-        .describe("数组元素类型（type=array 时必填）"),
+        .describe("Array element type (required when type=array)"),
       options: z
         .array(z.string())
         .optional()
-        .describe("枚举选项（type=enum 时必填）"),
+        .describe("Enum options (required when type=enum)"),
       subSchema: z
         .array(attributeSchema)
         .optional()
-        .describe("嵌套属性定义（type=object 时必填，描述对象内部结构）"),
+        .describe(
+          "Nested attribute definitions (required when type=object; describes the object's internal structure)",
+        ),
       valueType: z
         .enum(["string", "number", "boolean"])
         .optional()
-        .describe("map 值类型（type=map 时可选，默认 string）"),
+        .describe(
+          "Map value type (optional when type=map; defaults to string)",
+        ),
       category: z
         .enum(["stats", "bio", "abilities", "equipment", "social"])
-        .describe("属性分类"),
-      description: z.string().optional().describe("属性说明"),
+        .describe("Attribute category"),
+      description: i18nText
+        .optional()
+        .describe("Attribute description (string or i18n record)"),
     }),
   );
 
   return tool({
     name: "set-world-schema",
     description:
-      "定义世界角色属性 Schema。一次调用传入所有属性定义。支持类型：string | number (可设 min/max/defaultValue) | boolean | enum (需 options) | array (需 itemType) | object (需 subSchema 描述子字段) | map (可选 valueType)。至少覆盖世界观文档里反复出现的核心机制。",
+      "Define the world's character attribute schema. Pass all attribute definitions in a single call. Supported types: string | number (may set min/max/defaultValue) | boolean | enum (needs options) | array (needs itemType) | object (needs subSchema to describe sub-fields) | map (optional valueType). Cover at least the core mechanics that recur throughout the worldbuilding document.",
     parameters: z.object({
-      attributes: z.array(attributeSchema).min(1).describe("角色属性定义数组"),
+      attributes: z
+        .array(attributeSchema)
+        .min(1)
+        .describe("Array of character attribute definitions"),
     }),
     execute: async (params, context) => {
       const now = new Date().toISOString();

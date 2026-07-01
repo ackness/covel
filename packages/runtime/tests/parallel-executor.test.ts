@@ -1,9 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
-import {
-  executeParallel,
-  resolveFailure,
-} from "../src/schedule/parallel-executor.js";
+import { executeParallel } from "../src/schedule/parallel-executor.js";
 
 function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   return { name: "test-rt", description: "test", priority: 500, ...overrides };
@@ -119,85 +116,5 @@ describe("executeParallel", () => {
     expect(executeFn).toHaveBeenCalledWith(runtimes[0]);
     expect(executeFn).toHaveBeenCalledWith(runtimes[1]);
     expect(executeFn).toHaveBeenCalledWith(runtimes[2]);
-  });
-});
-
-// ── resolveFailure ──────────────────────────────────────────────
-
-describe("resolveFailure", () => {
-  // 6. Dependent skipped
-  it("should skip runtimes that depend on the failed runtime", () => {
-    const failed = makeManifest({ name: "A", priority: 200 });
-    const pending = [makeManifest({ name: "B", priority: 600 })];
-    const deps = new Map([["B", ["A"]]]);
-
-    const resolution = resolveFailure(failed, pending, deps);
-
-    expect(resolution.skip).toHaveLength(1);
-    expect(resolution.skip[0].manifest.name).toBe("B");
-    expect(resolution.skip[0].reason).toContain("A");
-    expect(resolution.continue).toHaveLength(0);
-  });
-
-  // 7. Independent continues
-  it("should continue runtimes that do not depend on the failed runtime", () => {
-    const failed = makeManifest({ name: "A", priority: 200 });
-    const pending = [makeManifest({ name: "C", priority: 700 })];
-    const deps = new Map<string, readonly string[]>();
-
-    const resolution = resolveFailure(failed, pending, deps);
-
-    expect(resolution.continue).toHaveLength(1);
-    expect(resolution.continue[0].manifest.name).toBe("C");
-    expect(resolution.continue[0].degraded).toBe(false);
-    expect(resolution.skip).toHaveLength(0);
-  });
-
-  // 8. Narrator always continues (degraded: true)
-  it("should continue narrator (priority 500) in degraded mode even if dependent", () => {
-    const failed = makeManifest({ name: "A", priority: 200 });
-    const narrator = makeManifest({ name: "narrator", priority: 500 });
-    const pending = [narrator];
-    const deps = new Map([["narrator", ["A"]]]);
-
-    const resolution = resolveFailure(failed, pending, deps);
-
-    expect(resolution.skip).toHaveLength(0);
-    expect(resolution.continue).toHaveLength(1);
-    expect(resolution.continue[0].manifest.name).toBe("narrator");
-    expect(resolution.continue[0].degraded).toBe(true);
-  });
-
-  // 9. No pending runtimes
-  it("should return empty skip and continue when no pending runtimes", () => {
-    const failed = makeManifest({ name: "A", priority: 200 });
-    const pending: readonly RuntimeManifest[] = [];
-    const deps = new Map<string, readonly string[]>();
-
-    const resolution = resolveFailure(failed, pending, deps);
-
-    expect(resolution.skip).toHaveLength(0);
-    expect(resolution.continue).toHaveLength(0);
-  });
-
-  // 10. Multiple dependents
-  it("should skip all runtimes that depend on the failed runtime", () => {
-    const failed = makeManifest({ name: "A", priority: 200 });
-    const pending = [
-      makeManifest({ name: "B", priority: 600 }),
-      makeManifest({ name: "D", priority: 700 }),
-    ];
-    const deps = new Map([
-      ["B", ["A"]],
-      ["D", ["A"]],
-    ]);
-
-    const resolution = resolveFailure(failed, pending, deps);
-
-    expect(resolution.skip).toHaveLength(2);
-    const skippedNames = resolution.skip.map((s) => s.manifest.name);
-    expect(skippedNames).toContain("B");
-    expect(skippedNames).toContain("D");
-    expect(resolution.continue).toHaveLength(0);
   });
 });

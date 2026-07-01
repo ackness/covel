@@ -1,4 +1,8 @@
-import type { AssetGenerateView, SnapshotCharacter } from "@covel/shared";
+import type {
+  AssetGenerateView,
+  SnapshotCharacter,
+  TimeCursor,
+} from "@covel/shared";
 import type * as api from "@/services/api";
 
 export interface StreamMessage {
@@ -113,6 +117,15 @@ export interface SessionState {
   world: api.WorldRecord | null;
   session: api.SessionRecord | null;
   messages: StreamMessage[];
+
+  /**
+   * Keyset cursor for loading messages OLDER than the current `messages` window.
+   * `messages` holds only the most-recent window (session restore no longer
+   * loads the full history); this points at the position immediately before the
+   * oldest loaded message. `null` ⇒ the window already reaches the start of the
+   * chat (nothing older to load) — the scroll-up loader stops.
+   */
+  olderMessagesCursor: TimeCursor | null;
 
   /** All sessions for the current world (for switching). */
   worldSessions: api.SessionRecord[];
@@ -229,6 +242,14 @@ export type SessionAction =
       };
     }
   | { type: "LOAD_MESSAGES"; messages: StreamMessage[] }
+  | {
+      // 把更旧的一批消息合并到 messages 前部（按 id 去重、整体保持 createdAt 正序），
+      // 并把 olderMessagesCursor 更新为返回的 nextCursor。区别于 LOAD_MESSAGES（整体覆盖）。
+      type: "PREPEND_MESSAGES";
+      messages: StreamMessage[];
+      cursor: TimeCursor | null;
+    }
+  | { type: "SET_OLDER_MESSAGES_CURSOR"; cursor: TimeCursor | null }
   | {
       type: "LOAD_STATE_PATCHES";
       patches: Array<{

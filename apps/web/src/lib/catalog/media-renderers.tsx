@@ -1,11 +1,14 @@
+import { useState } from "react";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
 import { Media as MediaComponent } from "@/components/Media.js";
+import { MediaPreviewDialog } from "@/components/MediaPreviewDialog.js";
 import { AudioPlayer as AudioPlayerComponent } from "@/components/AudioPlayer.js";
 import {
   ImageGalleryPanel,
   ImageJobsPanel,
 } from "@/components/session/image-plugin-panels.js";
+import { PortraitGalleryPanel } from "@/components/session/portrait-gallery-panel.js";
 import type { MediaRef } from "@covel/shared";
 import { isMediaRef } from "@/lib/media-ref-utils.js";
 import { useActiveSessionId } from "./session-context.js";
@@ -53,6 +56,7 @@ function extractMediaRef(
 
 export const ImageComponent: ComponentRenderer = ({ element }) => {
   const sessionId = useActiveSessionId();
+  const [zoomed, setZoomed] = useState(false);
   const props = element.props ?? {};
   const alt = (props.alt as string | undefined) ?? "";
   const aspectRatio = (props.aspectRatio as string | undefined) ?? "1/1";
@@ -65,7 +69,7 @@ export const ImageComponent: ComponentRenderer = ({ element }) => {
       typeof props.sessionId === "string" && props.sessionId.length > 0
         ? (props.sessionId as string)
         : sessionId;
-    return (
+    const media = (
       <MediaComponent
         src={ref}
         sessionId={overrideSession}
@@ -75,6 +79,35 @@ export const ImageComponent: ComponentRenderer = ({ element }) => {
         fit={fit}
         as="image"
       />
+    );
+    // `framed: true` wraps the image in a card frame (rounded border + hover),
+    // matching the image-generation gallery's thumbnail cards.
+    const frameCls =
+      props.framed === true
+        ? "block w-full overflow-hidden rounded-[var(--radius-card)] border border-border bg-card/60 transition-colors hover:border-primary/40"
+        : "";
+    // `zoom: true` makes the image click-to-enlarge via the shared preview.
+    if (props.zoom !== true) {
+      return frameCls ? <div className={frameCls}>{media}</div> : media;
+    }
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setZoomed(true)}
+          className={clsx("block w-full cursor-zoom-in", frameCls || undefined)}
+          aria-label={alt || "enlarge image"}
+        >
+          {media}
+        </button>
+        <MediaPreviewDialog
+          mediaRef={zoomed ? ref : null}
+          sessionId={overrideSession}
+          title={alt || undefined}
+          aspectRatio={aspectRatio}
+          onClose={() => setZoomed(false)}
+        />
+      </>
     );
   }
 
@@ -207,6 +240,11 @@ export const ImageGallery: ComponentRenderer = ({ element }) => {
 export const ImageJobs: ComponentRenderer = ({ element }) => {
   const pluginId = element.props?.pluginId as string | undefined;
   return pluginId ? <ImageJobsPanel pluginId={pluginId} /> : null;
+};
+
+export const PortraitGallery: ComponentRenderer = ({ element }) => {
+  const pluginId = element.props?.pluginId as string | undefined;
+  return pluginId ? <PortraitGalleryPanel pluginId={pluginId} /> : null;
 };
 
 export const Source: ComponentRenderer = ({ element }) => {

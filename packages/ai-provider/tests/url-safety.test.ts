@@ -44,6 +44,24 @@ describe("validateBaseUrl", () => {
       expect(validateBaseUrl("http://169.254.1.1")).toBe(false);
     });
 
+    it("blocks IPv6 unique-local + link-local (bracket-normalized)", () => {
+      expect(validateBaseUrl("https://[fc00::1]")).toBe(false);
+      expect(validateBaseUrl("https://[fd12:3456::1]")).toBe(false);
+      expect(validateBaseUrl("https://[fe80::1]")).toBe(false);
+      expect(validateBaseUrl("https://[feb0::1]")).toBe(false);
+    });
+
+    it("blocks IPv4-mapped IPv6 reaching private/metadata targets", () => {
+      // Textual form.
+      expect(validateBaseUrl("https://[::ffff:169.254.169.254]")).toBe(false);
+      expect(validateBaseUrl("https://[::ffff:10.0.0.1]")).toBe(false);
+      expect(validateBaseUrl("https://[::ffff:192.168.1.1]")).toBe(false);
+      // Node canonicalizes these to hex-collapsed form; must still be blocked.
+      expect(validateBaseUrl("https://[::ffff:a9fe:a9fe]")).toBe(false); // 169.254.169.254
+      expect(validateBaseUrl("https://[::ffff:a00:1]")).toBe(false); // 10.0.0.1
+      expect(validateBaseUrl("https://[::ffff:c0a8:101]")).toBe(false); // 192.168.1.1
+    });
+
     it("blocks non-https for non-localhost external domains", () => {
       // http (non-TLS) is only allowed for loopback; remote endpoints require https
       expect(validateBaseUrl("http://internal-db:5432")).toBe(false);

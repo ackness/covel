@@ -1,3 +1,4 @@
+import type { CursorPage } from "@covel/shared";
 import type {
   DataStore,
   SessionRecord as StoreSessionRecord,
@@ -24,6 +25,9 @@ import { LOCAL_SEED_WORLDS } from "./seed-worlds.js";
 import type { DataService, WorldPatch } from "./types.js";
 
 type Writable<T> = { -readonly [K in keyof T]: T[K] };
+
+/** Default keyset page size when a caller omits `limit` (mirrors the API default). */
+const DEFAULT_MESSAGES_PAGE_LIMIT = 80;
 
 function uid(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -266,6 +270,26 @@ export class LocalDataService implements DataService {
     return messages
       .map(toFrontendMessage)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  async listMessagesPage(
+    sessionId: string,
+    opts: { limit?: number; before?: { createdAt: string; id: string } },
+  ): Promise<CursorPage<MessageRecord>> {
+    const store = await this.getStore();
+    const limit = opts.limit ?? DEFAULT_MESSAGES_PAGE_LIMIT;
+    // 直连 IDB 拿到 oldest-first 的一页（store 已按 (createdAt, id) 键集切片）。
+    const rows = await store.listMessagesPage(sessionId, {
+      limit,
+      before: opts.before,
+    });
+    const items = rows.map(toFrontendMessage);
+    // 按契约：拿满一页（可能还有更旧）时游标指向最旧一条，否则到历史开头 → null。
+    const nextCursor =
+      items.length >= limit && items.length > 0
+        ? { createdAt: items[0].createdAt, id: items[0].id }
+        : null;
+    return { items, nextCursor };
   }
 
   async addMessage(msg: MessageRecord): Promise<void> {

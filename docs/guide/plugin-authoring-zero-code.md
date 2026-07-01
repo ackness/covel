@@ -8,7 +8,7 @@
 > - 根据场景选对触发类型（`auto` / `scheduled` / `event` / `manual`）
 > - 用框架内置的四个 UI 工具（`render-ui` / `create-form` / `create-choices` / `create-notification`）产生玩家可交互块。`render-ui` 是通用的 parts 模型（详见 [docs/reference/tools.md#render-ui](../reference/tools.md#render-ui)），后三个是 form / choices / notification 的语义糖。
 > - 通过 `references/` 目录按关键词按需注入参考资料，避免每轮烧 token
-> - 用 `config` 字段暴露玩家可调参数
+> - 用 `userSettings` 字段暴露玩家可调参数
 > - 打包一个 `worlds/<id>/` 世界包并指定 `requiredPlugins` / `recommendedPlugins`
 
 ---
@@ -83,7 +83,7 @@ trigger:
 | `trigger`                | 否   | object                        | 触发配置（见下方详解）                                                                                 |
 | `tools`                  | 否   | object                        | 工具声明（见[进阶指南](./plugin-authoring-agent.md)）                                                  |
 | `input`                  | 否   | object                        | 输入注入声明（见[进阶指南](./plugin-authoring-agent.md)）                                              |
-| `config`                 | 否   | object                        | 配置字段定义（见第 7 节）                                                                              |
+| `userSettings`           | 否   | array                         | 玩家可调设置数组（见第 7 节）                                                                          |
 | `timeoutMs`              | 否   | number                        | Runtime 总时长硬上限，默认 60000                                                                       |
 | `maxSteps`               | 否   | number                        | 单次 attempt 内的 tool-call 步数上限，默认 10                                                          |
 | `maxRetries`             | 否   | number                        | LLM 调用失败/超时/工具循环时的重试次数，默认 1                                                         |
@@ -471,43 +471,51 @@ keywords: [龙族, 龙鳞, 上古战争, Drakon]
 关于精灵历史请参见 [精灵编年史](references/elven-history.md)。
 ```
 
-## 7. 配置字段
+## 7. 配置字段（`userSettings`）
 
-让玩家在 UI 中调整插件行为，无需修改 PLUGIN.md：
+用 `userSettings` 声明让玩家在「设置 > Plugins > 你的插件」里调的旋钮，无需写任何前端代码：
 
 ```yaml
-config:
-  narrativeLength:
-    type: enum
-    options: [short, medium, long]
+userSettings:
+  - key: narrativeLength
+    type: select
     default: medium
-    label: 叙事长度
-    description: 控制每轮叙事的长度
-  detailLevel:
+    label: { zh: 叙事长度, en: Narrative length }
+    description: { zh: 控制每轮叙事的长度, en: Length of each narration }
+    options:
+      - { value: short, label: { zh: 短, en: Short } }
+      - { value: medium, label: { zh: 中, en: Medium } }
+      - { value: long, label: { zh: 长, en: Long } }
+  - key: detailLevel
     type: integer
     min: 1
     max: 5
     default: 3
-    label: 细节等级
-    description: 环境描写的详细程度
-  enableCombatNarrative:
-    type: boolean
+    label: { zh: 细节等级, en: Detail level }
+    description: { zh: 环境描写的详细程度, en: Level of environmental detail }
+  - key: enableCombatNarrative
+    type: toggle
     default: true
-    label: 战斗叙事
-    description: 是否在战斗中生成详细叙事
+    label: { zh: 战斗叙事, en: Combat narration }
 ```
 
 支持的字段类型：
 
-| type      | 说明     | 额外参数          |
-| --------- | -------- | ----------------- |
-| `string`  | 文本输入 | —                 |
-| `integer` | 整数     | `min`, `max`      |
-| `number`  | 小数     | `min`, `max`      |
-| `boolean` | 开关     | —                 |
-| `enum`    | 下拉选择 | `options`（必需） |
+| type       | 说明         | 额外参数             |
+| ---------- | ------------ | -------------------- |
+| `text`     | 单行文本     | —                    |
+| `textarea` | 多行文本     | —                    |
+| `number`   | 小数         | `min`, `max`, `step` |
+| `integer`  | 整数         | `min`, `max`, `step` |
+| `slider`   | 滑块（数值） | `min`, `max`, `step` |
+| `toggle`   | 开关         | —                    |
+| `select`   | 下拉选择     | `options`（必需）    |
 
-框架会自动根据 config 定义渲染设置面板。
+字段说明：`key` 用作存储键（`/^[a-zA-Z][a-zA-Z0-9_-]*$/`）；`label` / `description` 是 `I18nText`（`string` 或 `{ zh, en }`）；`default` 可省（如 cost-gate 靠 env 兜底）。声明的 `min` / `max` / `options` 会进 schema 校验——越界值会被拒，不只是 UI 提示。
+
+框架会**自动**把每条注册成 `plugin.<pluginId>.<key>` 并渲染成对应控件，零前端代码。runtime 里读取：agent 用 `{{ userSettings.<key> }}` 模板变量；function/hook 用 `ctx.userSettings` / `ctx.getOwnSettings()`。
+
+**世界可预置默认值**：世界包能在 `world.yaml` 顶层用 `pluginSettings` 给这些 `userSettings` 设世界级默认（玩家仍可覆盖）。解析链是 `玩家覆盖 → 世界默认 → 这里声明的 default`。见 [world-data.md](../reference/world-data.md#插件配置默认值pluginsettings)。
 
 ## 8. 世界包创建
 
@@ -649,14 +657,14 @@ trigger:
 tools:
   builtin:
     - create-choices
-config:
-  choiceCount:
+userSettings:
+  - key: choiceCount
     type: integer
     min: 2
     max: 6
     default: 3
-    label: 选项数量
-    description: 每轮提供的选项数
+    label: { zh: 选项数量, en: Choice count }
+    description: { zh: 每轮提供的选项数, en: Choices offered per turn }
 ---
 
 你是故事引导助手。你的任务是在每轮叙事后为玩家提供行动选项。

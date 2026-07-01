@@ -3,7 +3,6 @@ import {
   setProviderKeys,
   getCustomPresets,
   setCustomPresets,
-  uid,
   listPresets,
   getSlotConfig,
   setSlotConfig,
@@ -55,7 +54,7 @@ function upsertTransientPreset(input: Omit<CustomPreset, "id">): string {
 
   const nextPreset: CustomPreset = {
     ...input,
-    id: `custom_${uid()}`,
+    id: `custom_${crypto.randomUUID()}`,
   };
   setCustomPresets([...getCustomPresets(), nextPreset]);
   return nextPreset.id;

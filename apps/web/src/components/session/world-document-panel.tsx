@@ -6,24 +6,9 @@
 
 import { useTranslation } from "react-i18next";
 import { BookOpen } from "lucide-react";
-import i18n from "@/i18n/index.js";
-import type { I18nText } from "@covel/shared";
 import type { WorldRecord } from "@/services/api.js";
 import { Markdown } from "@/components/ui/markdown.js";
-
-function resolveText(v: I18nText | undefined): string {
-  if (!v) return "";
-  if (typeof v === "string") return v;
-  const lang = i18n.language;
-  if (lang) {
-    const r = v as Record<string, string>;
-    if (r[lang]) return r[lang];
-    const prefix = lang.split("-")[0];
-    const fallback = Object.keys(r).find((k) => k.startsWith(prefix));
-    if (fallback) return r[fallback];
-  }
-  return Object.values(v)[0] ?? "";
-}
+import { text as resolveText } from "@/components/world/editor-helpers.js";
 
 export interface WorldDocumentPanelProps {
   world: WorldRecord | null;

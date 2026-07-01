@@ -1,6 +1,19 @@
-import { mirrorCharacterToPluginData } from "@covel/tools";
+import { mergeSchemaDefaults, mirrorCharacterToPluginData } from "@covel/tools";
 
 const CHARACTER_PLUGIN_ID = "char-creator";
+
+/**
+ * Pick a string for the session locale (prefix match), defaulting to English.
+ * The narrative line is written into the story at runtime, so the guard
+ * resolves it via ctx.locale instead of emitting a fixed-language string.
+ * @param {string | undefined} locale
+ * @param {string} zh
+ * @param {string} en
+ */
+function pick(locale, zh, en) {
+  const lang = typeof locale === "string" ? locale.split("-")[0] : "";
+  return lang === "zh" ? zh : en;
+}
 
 /**
  * guard.js — Pre-execution gate for player-init runtime.
@@ -21,7 +34,7 @@ const CHARACTER_PLUGIN_ID = "char-creator";
  * @returns {Promise<Record<string, unknown>>}
  */
 export default async function guard(ctx) {
-  const { logger, sessionId, store } = ctx;
+  const { logger, sessionId, store, locale } = ctx;
   const s = /** @type {any} */ (store);
 
   try {
@@ -61,13 +74,20 @@ export default async function guard(ctx) {
         const now = new Date().toISOString();
         const id = `char-${crypto.randomUUID()}`;
         try {
+          // Merge declared schema defaults into stored fields so the player
+          // record the model reads (get-character / prompt context) matches
+          // what the character panel shows (the panel overlays defaults at
+          // render time). Schema is discovered by its well-known namespace/key,
+          // not by a hardcoded world-data plugin id.
+          const schema = await loadCharacterAttributesSchema(s, sessionId);
+          const fields = mergeSchemaDefaults(stripNameKeys(values), schema);
           const character = {
             id,
             sessionId,
             name,
             type: "player",
             description: pickDescription(values),
-            fields: stripNameKeys(values),
+            fields,
             version: 1,
             createdAt: now,
             updatedAt: now,
@@ -82,7 +102,11 @@ export default async function guard(ctx) {
             playerExists: true,
             playerId: id,
             playerName: name,
-            narrativeOutput: `[系统] 已登记弟子 ${name}，宗门生活即将开始……`,
+            narrativeOutput: pick(
+              locale,
+              `[系统] 已创建角色 ${name}，冒险即将开始……`,
+              `[System] Character ${name} created — your adventure is about to begin…`,
+            ),
             preGameDone: true,
           };
         } catch (err) {
@@ -101,6 +125,38 @@ export default async function guard(ctx) {
   } catch (err) {
     console.warn("[char-creator/player-init] guard error:", err);
     return { skip: false, error: String(err) };
+  }
+}
+
+/**
+ * Discover the session's character-attribute schema by its well-known
+ * `(namespace='schema', key='character-attributes')` location, across all
+ * pluginIds — so char-creator never hardcodes the world-data provider's id
+ * (framework/plugin isolation). Returns null when unavailable.
+ * @param {any} store
+ * @param {string} sessionId
+ * @returns {Promise<import('@covel/shared').CharacterAttributeSchema | null>}
+ */
+async function loadCharacterAttributesSchema(store, sessionId) {
+  if (typeof store.listPluginDataSessionScope !== "function") return null;
+  try {
+    const rows = await store.listPluginDataSessionScope(sessionId);
+    const row = Array.isArray(rows)
+      ? rows.find(
+          (r) => r.namespace === "schema" && r.key === "character-attributes",
+        )
+      : null;
+    const value = row?.value;
+    if (
+      !value ||
+      typeof value !== "object" ||
+      !Array.isArray(/** @type {any} */ (value).attributes)
+    ) {
+      return null;
+    }
+    return /** @type {any} */ (value);
+  } catch {
+    return null;
   }
 }
 

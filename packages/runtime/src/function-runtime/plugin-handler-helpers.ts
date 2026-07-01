@@ -185,13 +185,13 @@ export function createFunctionStoreView(
       return store.getSession(ctx.sessionId);
     },
     listTurnMessages(limit) {
-      // DataStore.listTurnMessages takes a PaginationOpts ({ limit, offset }).
-      // We expose just `limit` to plugin authors — offset is a paging
-      // concern that plugins rarely need from inside a runtime handler.
-      return store.listTurnMessages(
-        ctx.sessionId,
-        typeof limit === "number" ? { limit } : undefined,
-      );
+      // A bounded read from inside a runtime handler means "recent context":
+      // plugins asking for `limit` turn messages want the MOST RECENT ones.
+      // `listTurnMessages(sessionId, { limit })` would return the OLDEST N, so
+      // route a numeric limit through the tail query. No limit → full history.
+      return typeof limit === "number"
+        ? store.listRecentTurnMessages(ctx.sessionId, limit)
+        : store.listTurnMessages(ctx.sessionId);
     },
   };
 }

@@ -3,7 +3,7 @@ export * from "./types/index.js";
 
 // ── Utilities ─────────────────────────────────────────────────────
 export { deepMerge } from "./utils/deep-merge.js";
-export { resolveI18nText } from "./utils/i18n.js";
+export { resolveI18nText, resolveI18nDeep } from "./utils/i18n.js";
 export { collectMediaRefIds } from "./utils/media-ref-scan.js";
 export {
   MAX_CACHE_BREAKPOINTS,
@@ -34,8 +34,6 @@ export {
   pluginDataSchemaDeclSchema,
   pluginDataSchemaMapSchema,
   toolsConfigSchema,
-  configFieldTypeSchema,
-  pluginConfigFieldSchema,
   hookDeclarationSchema,
   authorsNoteDeclSchema,
   postHistoryDeclSchema,
@@ -56,6 +54,7 @@ export type {
 // ── World Schemas ───────────────────────────────────────────────
 export {
   i18nTextSchema,
+  attributeDefinitionSchema,
   worldManifestSchema,
   worldDimensionsSchema,
   worldGeographySchema,

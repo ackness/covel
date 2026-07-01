@@ -1,13 +1,16 @@
 ---
 name: guide
+displayName:
+  zh: 行动引导
+  en: Action Guide
 description:
   zh: 在每轮故事后给出几种行动建议，帮你更快决定下一步。
   en: Suggests a few possible actions after each story beat so you can choose your next move faster.
 pluginType: plugin
 # Narrator-downstream layer — shares priority 600 with codex, npc-graph
 # extractor, and character-tracker so the scheduler runs them in parallel.
-# They all declare upstreamRequired: [narrator] and only depend on
-# narrator's output; they do not read each other's writes.
+# They depend only on the active narrative engine's output (see
+# upstreamRequired below); they do not read each other's writes.
 priority: 600
 model: plugin
 outputKind: system
@@ -22,14 +25,22 @@ trigger:
   type: scheduled
   interval: 1
   cooldownTurns: 1
-# Suggestions only make sense when narrator produced fresh prose.
-# Framework skips this runtime before the LLM call if narrator failed.
+# Engine-agnostic guidance. The upstream gate discovers the active narrative
+# engine by capability (narrative-engine → narrator in traditional,
+# chat-mode-narrator in dialogue) instead of naming one, so the same plugin
+# gates correctly in either mode and still skips when that engine failed. The
+# inject lists both known engines; the absent one resolves to nothing, so
+# exactly the active engine's fresh prose fills <narrator-output>.
 upstreamRequired:
-  - narrator
+  - capability: narrative-engine
 input:
   inject:
     - kind: runtime
       from: narrator
+      field: narrativeOutput
+      as: "<narrator-output>"
+    - kind: runtime
+      from: chat-mode-narrator
       field: narrativeOutput
       as: "<narrator-output>"
 tools:
@@ -52,7 +63,7 @@ postHistory:
 
 ## 当前叙事结果
 
-<narrator-output>{{ inputs.narrator.narrator.narrativeOutput }}</narrator-output>
+最新一轮叙事见上方 `<narrator-output>` 区块（由当前模式的叙事引擎注入）。
 
 ## 你的任务（严格两步）
 

@@ -21,7 +21,7 @@ export default function ({ tool, z, store }) {
   return tool({
     name: "set-world-entries-batch",
     description:
-      "批量写入世界词条。一次调用传入所有词条（地理、阵营、货币、力量体系等），无需逐个调用。至少 5 个词条。",
+      "Batch-write world entries. Pass all entries in a single call (geography, factions, currency, power system, etc.) instead of calling one by one. At least 5 entries.",
     parameters: z.object({
       entries: z
         .array(
@@ -29,14 +29,14 @@ export default function ({ tool, z, store }) {
             key: z
               .string()
               .min(1)
-              .describe('词条标识（如 "geography", "factions", "currency"）'),
+              .describe('Entry key (e.g. "geography", "factions", "currency")'),
             value: z
               .record(z.string(), z.unknown())
-              .describe("词条内容（任意 JSON 对象）"),
+              .describe("Entry content (any JSON object)"),
           }),
         )
         .min(1)
-        .describe("世界词条数组"),
+        .describe("Array of world entries"),
     }),
     execute: async (params, context) => {
       const now = new Date().toISOString();

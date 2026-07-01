@@ -4,20 +4,20 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.9-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.9)
+[![Version](https://img.shields.io/badge/version-v0.0.10-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.10)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)]()
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
 
 ![Covel demo](./.assets/images/demo.gif)
 
-> **Current public release: v0.0.9.** Covel is still early access: APIs, data formats, and plugin frontmatter may change between versions. Official prebuilt binaries currently target macOS Apple Silicon.
+> **Current public release: v0.0.10.** Covel is still early access: APIs, data formats, and plugin frontmatter may change between versions. Official prebuilt binaries currently target macOS Apple Silicon.
 
 ---
 
 ## What is Covel
 
-Covel is an AI-driven role-playing game where every gameplay mechanic — narration, NPC relationships, world lore, character creation, memory — runs as its own **autonomous agent**. A single turn can chain several agents together. Each agent is a plugin: install one, swap one, or write your own.
+Covel is an AI-driven RPG where the world keeps running between your turns — NPCs track how they feel about you, lore builds up as you play, and memory carries the thread across a session. Each mechanic that makes that happen — narration, NPC relationships, world lore, character creation, memory — runs as its own **autonomous agent**, and a single turn chains several together. Each agent is a plugin: install one, swap one, or write your own.
 
 ## See it in action
 
@@ -30,15 +30,22 @@ The gif above is one normal turn. While the narrator writes the scene, four othe
 
 Every agent is its own plugin. Disable one, swap one, or write your own.
 
+## Worlds in the box
+
+Two sample worlds ship in the box — each a complete, hand-built showcase of a different play style. Play one as-is, or fork it as a starting template:
+
+- **Mistport Chronicles** (雾港·裂潮纪) — a dark-fantasy mystery in traditional-story mode. A fog-shrouded port where every ebb bares different ruins; a guildmaster vanishes, and four powers race for a key to what sleeps in the deep. Ships with a seed cast, a four-faction map, and investigation-flavored memory. Bilingual (English + 中文).
+- **Haruka Academy** (遥风学园) — school romance and slice-of-life in dialogue mode, GalGame-style. Clubs, exams, rumors, and quiet crushes at a seaside high school in the weeks before the spring festival, told through a cast of eight.
+
 ## Quick start
 
 ### Play it
 
-Grab the official **v0.0.9 macOS Apple Silicon** build from [GitHub Releases](https://github.com/ackness/covel/releases/tag/v0.0.9) — `Covel-electron-0.0.9-mac-arm64.dmg`. The rolling release list is available at [Releases](https://github.com/ackness/covel/releases).
+Grab the official **v0.0.10 macOS Apple Silicon** build from [GitHub Releases](https://github.com/ackness/covel/releases/tag/v0.0.10) — `Covel-electron-0.0.10-mac-arm64.dmg`. The rolling release list is available at [Releases](https://github.com/ackness/covel/releases).
 
-Open Settings, paste an LLM API key, pick one of the four sample worlds (`cloudmere` / `mistport` / `neonridge` / `haruka-academy`), and play.
+Open Settings, paste an LLM API key, pick one of the worlds above, and play.
 
-v0.0.9 is a **playability-loop pass** — function runtimes become visible in the trace timeline, stale suspensions expire on a TTL sweep, and player-input narrative localizes by session locale — plus a follow-up engineering batch: multi-node S3 media metadata on Postgres, plugin-utils provider-call tracing, a `/debug` token cost panel, and community plugin uninstall/revoke. All workspace dependencies were bumped to latest stable (incl. zod 4.4, electron 42). The default world and bundled plugins are behavior-unchanged. Full notes: [`docs/CHANGELOG.md#009---2026-06-28`](./docs/CHANGELOG.md#009---2026-06-28).
+Per-release notes live in [`docs/CHANGELOG.md`](./docs/CHANGELOG.md).
 
 Your data lives at `~/.covel/` — config, keys, SQLite, custom worlds, logs. Full schema → [`docs/guide/desktop-config.en.md`](./docs/guide/desktop-config.en.md).
 

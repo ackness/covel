@@ -85,6 +85,49 @@ describe("player-identity handler", () => {
     });
   });
 
+  it("stamps active:true on the saved voice and clears active on others", async () => {
+    const store = {
+      async listCharacters() {
+        return [];
+      },
+      async listPluginData(sessionId, pluginId, namespace) {
+        expect(namespace).toBe("profiles");
+        return [
+          {
+            key: "old-voice",
+            value: { profile: { id: "old-voice" }, active: true },
+          },
+          {
+            key: "never-active",
+            value: { profile: { id: "never-active" }, active: false },
+          },
+        ];
+      },
+    };
+    const result = await handler(
+      ctx(
+        {
+          profile: { schemaVersion: 1, id: "new-voice", name: "New" },
+          bindToPlayer: false,
+        },
+        store,
+      ),
+    );
+    const proposals = getPendingProposals(result);
+    const profileWrites = proposals.filter(
+      (p) => p.type === "plugin.data" && p.payload.namespace === "profiles",
+    );
+    // The saved voice is active; the previously-active one is cleared; the
+    // already-inactive one is not needlessly rewritten.
+    const saved = profileWrites.find((p) => p.payload.key === "new-voice");
+    const cleared = profileWrites.find((p) => p.payload.key === "old-voice");
+    expect(saved.payload.value.active).toBe(true);
+    expect(cleared.payload.value.active).toBe(false);
+    expect(profileWrites.some((p) => p.payload.key === "never-active")).toBe(
+      false,
+    );
+  });
+
   it("preserves existing player fields when binding", async () => {
     const store = {
       async listCharacters(sessionId) {

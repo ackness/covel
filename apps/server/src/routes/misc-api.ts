@@ -6,7 +6,7 @@
 
 import { Hono } from "hono";
 import { readEnvString, readRuntimeEnv } from "@covel/shared";
-import type { AiStack } from "../ai-setup.js";
+import { reloadAiStack, type AiStack } from "../ai-setup.js";
 import { applySlotOverlay, type SlotOverridesInput } from "@covel/ai-provider";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
@@ -14,6 +14,7 @@ import { buildPackagesResponse } from "./misc-api/plugin-catalog.js";
 import { buildPluginFlowResponse } from "./misc-api/plugin-flow.js";
 import { bearerToken } from "./misc-api/shared.js";
 import { buildUiSpecsResponse } from "./misc-api/ui-specs.js";
+import { decodeBase64Json } from "../lib/base64-json.js";
 
 export function createMiscApiRoutes(
   ai: AiStack,
@@ -159,7 +160,24 @@ export function createMiscApiRoutes(
       providers: [
         ...new Set(ai.presetRegistry.listPresets().map((p) => p.provider)),
       ],
+      // Present only when the last llm.toml load failed to parse and fell back
+      // to the built-in default — lets the UI explain why slots are missing.
+      ...(ai.lastLoadError ? { error: ai.lastLoadError } : {}),
     });
+  });
+
+  // POST /api/llm-config/reload — re-read llm.toml and apply it to the live
+  // gateway in place (no restart). Mirrors the desktop write-endpoint auth:
+  // when a desktop REST token is configured the request must carry it; dev/web
+  // tiers (no token) stay open, matching the rest of misc-api. Always returns
+  // 200 on a completed reload — the body's `ok` / `error` conveys whether the
+  // file parsed (a broken file falls back to the default, reported via `error`).
+  app.post("/api/llm-config/reload", (c) => {
+    const env = readRuntimeEnv();
+    if (env.desktopRestToken && bearerToken(c) !== env.desktopRestToken) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    return c.json(reloadAiStack(ai));
   });
 
   // GET /api/provider-keys — return server-configured API keys to desktop bearer clients only.
@@ -220,18 +238,13 @@ export function createMiscApiRoutes(
     const requested =
       body.presetId ?? (body.slot ? `slot-${body.slot}` : "slot-default");
 
-    // Decode per-request API keys (base64 JSON). Keys are never persisted server-side.
+    // Decode per-request API keys (base64 JSON). Keys are never persisted
+    // server-side. Malformed header → undefined; let the gateway raise a
+    // clearer error later if the key is actually needed.
     let apiKeys: Record<string, string> | undefined;
-    const keysHeader = c.req.header("X-Provider-Keys");
-    if (keysHeader) {
-      try {
-        const decoded = Buffer.from(keysHeader, "base64").toString("utf8");
-        const parsed = JSON.parse(decoded);
-        if (parsed && typeof parsed === "object")
-          apiKeys = parsed as Record<string, string>;
-      } catch {
-        // Fall through — let gateway raise a clearer error if the key is actually needed.
-      }
+    const keysParsed = decodeBase64Json(c.req.header("X-Provider-Keys"));
+    if (keysParsed && typeof keysParsed === "object") {
+      apiKeys = keysParsed as Record<string, string>;
     }
 
     // Decode the client slot config header (base64 JSON). Shared with the
@@ -239,17 +252,11 @@ export function createMiscApiRoutes(
     // own decode because ping can be called before the per-request
     // middleware runs (same request, but the resolution we do here happens
     // against the already-mutated registries).
+    // Malformed header → behave as if no overrides were supplied.
     let slotConfig: SlotOverridesInput = {};
-    const slotHeader = c.req.header("X-Slot-Config");
-    if (slotHeader) {
-      try {
-        const decoded = Buffer.from(slotHeader, "base64").toString("utf8");
-        const parsed = JSON.parse(decoded);
-        if (parsed && typeof parsed === "object")
-          slotConfig = parsed as SlotOverridesInput;
-      } catch {
-        // Malformed header — behave as if no overrides were supplied.
-      }
+    const slotParsed = decodeBase64Json(c.req.header("X-Slot-Config"));
+    if (slotParsed && typeof slotParsed === "object") {
+      slotConfig = slotParsed as SlotOverridesInput;
     }
 
     // Register client-declared custom presets + providers via the shared

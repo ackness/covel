@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Package, Upload, Globe, Puzzle, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { hasElectronIpc, reloadServerAndWait } from "@/lib/desktop-bridge.js";
+import { text } from "@/components/world/editor-helpers.js";
 
 type InstallKind = "plugin" | "world";
 
@@ -21,6 +22,7 @@ interface ToastState {
 interface InstalledPlugin {
   id: string;
   name?: string;
+  displayName?: string | Record<string, string>;
   source: string;
   pluginType?: string;
 }
@@ -240,7 +242,7 @@ export function PackagesPane() {
               >
                 <div className="min-w-0">
                   <div className="text-xs font-medium truncate">
-                    {p.name || p.id}
+                    {text(p.displayName) || p.name || p.id}
                   </div>
                   <div className="text-[10px] font-mono text-muted-foreground truncate">
                     {p.id}

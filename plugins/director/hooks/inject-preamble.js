@@ -1,4 +1,4 @@
-import { PREAMBLE } from "./_preamble.js";
+import { preambleForLocale } from "./_preamble.js";
 
 /**
  * PostContextAssembly — append the director preamble to the **story** runtime's
@@ -14,14 +14,18 @@ import { PREAMBLE } from "./_preamble.js";
  * Pure rewrite: this hook only reshapes the system prompt it is handed. It never
  * reads or writes the store, never emits proposals, and never calls the LLM.
  *
+ * The preamble is localized to `payload.locale` so it matches the otherwise
+ * locale-resolved story prompt instead of always injecting English.
+ *
  * @param {{ sessionId: string }} _ctx
- * @param {{ outputKind?: string, systemPrompt: string }} payload
+ * @param {{ outputKind?: string, systemPrompt: string, locale?: string }} payload
  * @returns {Promise<{ action: "continue", replace?: { systemPrompt: string } }>}
  */
 export default async function injectPreamble(_ctx, payload) {
   if (payload?.outputKind !== "story") return { action: "continue" };
+  const preamble = preambleForLocale(payload.locale);
   return {
     action: "continue",
-    replace: { systemPrompt: payload.systemPrompt + "\n\n" + PREAMBLE },
+    replace: { systemPrompt: payload.systemPrompt + "\n\n" + preamble },
   };
 }

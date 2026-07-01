@@ -18,7 +18,7 @@
  * X-Provider-Keys header flow driven by browser localStorage.
  */
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { resolve, join, dirname, isAbsolute } from "node:path";
 import {
   readFileSync,
@@ -36,7 +36,24 @@ import {
   toApiKeyEnvMap,
 } from "@covel/shared";
 import { errorBody } from "../api-error.js";
+import { parseEnvLines } from "../lib/env-file.js";
 import { makeDesktopRestTokenGuard } from "./privileged-auth.js";
+
+/**
+ * Parse a JSON request body, or return a 400 envelope Response. Callers do
+ * `const parsed = await readJsonBody(c); if (parsed instanceof Response) return parsed;`
+ * then read `parsed.body`.
+ */
+async function readJsonBody(c: Context): Promise<{ body: unknown } | Response> {
+  try {
+    return { body: await c.req.json() };
+  } catch {
+    return c.json(
+      errorBody("Invalid JSON body", { code: "invalid_json_body" }),
+      400,
+    );
+  }
+}
 
 export interface ConfigApiDeps {
   /** Mutable map shared with the gateway adapter. PUT handlers mutate in-place. */
@@ -100,15 +117,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       );
     }
 
-    let body: unknown;
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json(
-        errorBody("Invalid JSON body", { code: "invalid_json_body" }),
-        400,
-      );
-    }
+    const parsed = await readJsonBody(c);
+    if (parsed instanceof Response) return parsed;
+    const body = parsed.body;
     if (!body || typeof body !== "object") {
       return c.json(
         errorBody("Body must be { [provider]: value }", {
@@ -183,15 +194,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
         400,
       );
     }
-    let body: unknown;
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json(
-        errorBody("Invalid JSON body", { code: "invalid_json_body" }),
-        400,
-      );
-    }
+    const parsed = await readJsonBody(c);
+    if (parsed instanceof Response) return parsed;
+    const body = parsed.body;
     if (!body || typeof body !== "object") {
       return c.json(
         errorBody("Body must be { entries: object }", {
@@ -237,15 +242,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       );
     }
 
-    let body: unknown;
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json(
-        errorBody("Invalid JSON body", { code: "invalid_json_body" }),
-        400,
-      );
-    }
+    const parsed = await readJsonBody(c);
+    if (parsed instanceof Response) return parsed;
+    const body = parsed.body;
     const newPath =
       body && typeof body === "object"
         ? (body as { path?: string }).path
@@ -288,15 +287,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   // Opens the requested folder or file in the platform default application.
   // The whitelist keeps callers from reaching arbitrary filesystem paths.
   app.post("/api/config/open-folder", requireToken, async (c) => {
-    let body: unknown;
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json(
-        errorBody("Invalid JSON body", { code: "invalid_json_body" }),
-        400,
-      );
-    }
+    const parsed = await readJsonBody(c);
+    if (parsed instanceof Response) return parsed;
+    const body = parsed.body;
     const target =
       body && typeof body === "object"
         ? (body as { target?: string }).target
@@ -442,20 +435,8 @@ function readKeysEnv(file: string): Record<string, string> {
   const result: Record<string, string> = {};
   if (!existsSync(file)) return result;
   try {
-    for (const raw of readFileSync(file, "utf-8").split("\n")) {
-      const trimmed = raw.trim();
-      if (!trimmed || trimmed.startsWith("#")) continue;
-      const eq = trimmed.indexOf("=");
-      if (eq < 0) continue;
-      const key = trimmed.slice(0, eq).trim();
-      let val = trimmed.slice(eq + 1).trim();
-      if (
-        (val.startsWith('"') && val.endsWith('"')) ||
-        (val.startsWith("'") && val.endsWith("'"))
-      ) {
-        val = val.slice(1, -1);
-      }
-      if (key) result[key] = val;
+    for (const [key, val] of parseEnvLines(readFileSync(file, "utf-8"))) {
+      result[key] = val;
     }
   } catch (err) {
     console.warn(`[config-api] Could not read ${file}:`, err);

@@ -100,6 +100,84 @@ export function registerRuntimeRecordStoreSuites(
       expect(list).toHaveLength(1);
       expect(list[0]).toEqual(te);
     });
+
+    it("parity: listTraceEvents returns events sorted by createdAt", async () => {
+      // Backend-divergence regression guard. SQL backends order by
+      // `asc(createdAt)`; memory relied on push order and IDB on the
+      // primary-key (random uuid) index order, so both returned effectively
+      // random order under out-of-order inserts — breaking turn grouping on
+      // the browser-local backend. Insert deliberately out of chronological
+      // order to prove the read path sorts.
+      const e1 = makeTraceEvent({ sessionId: "sess-te", createdAt: ts(0) });
+      const e2 = makeTraceEvent({ sessionId: "sess-te", createdAt: ts(100) });
+      const e3 = makeTraceEvent({ sessionId: "sess-te", createdAt: ts(200) });
+      await store.addTraceEvent(e2);
+      await store.addTraceEvent(e3);
+      await store.addTraceEvent(e1);
+      const list = await store.listTraceEvents("sess-te");
+      expect(list.map((e) => e.id)).toEqual([e1.id, e2.id, e3.id]);
+    });
+
+    it("parity: listTraceEvents pages a stable chronological window", async () => {
+      const e1 = makeTraceEvent({ sessionId: "sess-te-pg", createdAt: ts(10) });
+      const e2 = makeTraceEvent({ sessionId: "sess-te-pg", createdAt: ts(20) });
+      const e3 = makeTraceEvent({ sessionId: "sess-te-pg", createdAt: ts(30) });
+      await store.addTraceEvent(e3);
+      await store.addTraceEvent(e1);
+      await store.addTraceEvent(e2);
+
+      const first2 = await store.listTraceEvents("sess-te-pg", { limit: 2 });
+      expect(first2.map((e) => e.id)).toEqual([e1.id, e2.id]);
+
+      const page2 = await store.listTraceEvents("sess-te-pg", {
+        limit: 2,
+        offset: 2,
+      });
+      expect(page2.map((e) => e.id)).toEqual([e3.id]);
+    });
+
+    it("listTraceEventsPage returns the newest window then pages older by cursor", async () => {
+      const e1 = makeTraceEvent({ sessionId: "sess-tep", createdAt: ts(10) });
+      const e2 = makeTraceEvent({ sessionId: "sess-tep", createdAt: ts(20) });
+      const e3 = makeTraceEvent({ sessionId: "sess-tep", createdAt: ts(30) });
+      await store.addTraceEvent(e2);
+      await store.addTraceEvent(e3);
+      await store.addTraceEvent(e1);
+
+      const newest = await store.listTraceEventsPage("sess-tep", { limit: 2 });
+      expect(newest.map((e) => e.id)).toEqual([e2.id, e3.id]);
+
+      const older = await store.listTraceEventsPage("sess-tep", {
+        limit: 5,
+        before: { createdAt: newest[0].createdAt, id: newest[0].id },
+      });
+      expect(older.map((e) => e.id)).toEqual([e1.id]);
+    });
+
+    it("listTraceEventsPage keyset breaks createdAt ties by id", async () => {
+      const same = ts(7);
+      const a = makeTraceEvent({
+        sessionId: "sess-tep-tie",
+        id: "te-a",
+        createdAt: same,
+      });
+      const b = makeTraceEvent({
+        sessionId: "sess-tep-tie",
+        id: "te-b",
+        createdAt: same,
+      });
+      await store.addTraceEvent(b);
+      await store.addTraceEvent(a);
+      const page1 = await store.listTraceEventsPage("sess-tep-tie", {
+        limit: 1,
+      });
+      expect(page1.map((e) => e.id)).toEqual(["te-b"]);
+      const page2 = await store.listTraceEventsPage("sess-tep-tie", {
+        limit: 1,
+        before: { createdAt: page1[0].createdAt, id: page1[0].id },
+      });
+      expect(page2.map((e) => e.id)).toEqual(["te-a"]);
+    });
   });
 
   describe("RuntimeOutputs", () => {
@@ -378,6 +456,51 @@ export function registerRuntimeRecordStoreSuites(
       });
       expect(empty).toHaveLength(0);
     });
+
+    it("listRecentTurnMessages returns the newest N, oldest-first", async () => {
+      const m1 = makeTurnMessage({ sessionId: "sess-tail", createdAt: ts(10) });
+      const m2 = makeTurnMessage({ sessionId: "sess-tail", createdAt: ts(20) });
+      const m3 = makeTurnMessage({ sessionId: "sess-tail", createdAt: ts(30) });
+      const m4 = makeTurnMessage({ sessionId: "sess-tail", createdAt: ts(40) });
+      // Insert out of chronological order to prove the query orders by createdAt,
+      // not by insertion order.
+      await store.appendTurnMessage(m3);
+      await store.appendTurnMessage(m1);
+      await store.appendTurnMessage(m4);
+      await store.appendTurnMessage(m2);
+
+      // Newest 2 → the tail of the ascending list, still oldest-first.
+      const recent2 = await store.listRecentTurnMessages("sess-tail", 2);
+      expect(recent2.map((m) => m.id)).toEqual([m3.id, m4.id]);
+
+      // Limit larger than the row count returns everything (ascending).
+      const all = await store.listRecentTurnMessages("sess-tail", 10);
+      expect(all.map((m) => m.id)).toEqual([m1.id, m2.id, m3.id, m4.id]);
+    });
+
+    it("listRecentTurnMessages returns [] for a non-positive limit", async () => {
+      await store.appendTurnMessage(
+        makeTurnMessage({ sessionId: "sess-tail-zero", createdAt: ts(0) }),
+      );
+      expect(await store.listRecentTurnMessages("sess-tail-zero", 0)).toEqual(
+        [],
+      );
+      expect(await store.listRecentTurnMessages("sess-tail-zero", -5)).toEqual(
+        [],
+      );
+    });
+
+    it("listRecentTurnMessages filters by sessionId", async () => {
+      await store.appendTurnMessage(
+        makeTurnMessage({ sessionId: "sess-tail-a", createdAt: ts(0) }),
+      );
+      await store.appendTurnMessage(
+        makeTurnMessage({ sessionId: "sess-tail-b", createdAt: ts(0) }),
+      );
+      const a = await store.listRecentTurnMessages("sess-tail-a", 10);
+      expect(a).toHaveLength(1);
+      expect(a[0].sessionId).toBe("sess-tail-a");
+    });
   });
 
   describe("PlayerInputs", () => {
@@ -463,6 +586,23 @@ export function registerRuntimeRecordStoreSuites(
       expect(keys).toContain("a");
       expect(keys).toContain("b");
       expect(keys).toContain("c");
+    });
+
+    it("parity: lists entries in semantic scope order (player → story → shared)", async () => {
+      // Insert scrambled; every backend must return semantic scope order then
+      // key. Alphabetical scope ordering ([player, shared, story]) would fail
+      // here, catching the SQL-vs-Memory/IDB divergence.
+      await store.upsertWorkingMemory(
+        makeWorkingMemory({ sessionId: "wm-order", scope: "shared", key: "s" }),
+      );
+      await store.upsertWorkingMemory(
+        makeWorkingMemory({ sessionId: "wm-order", scope: "story", key: "t" }),
+      );
+      await store.upsertWorkingMemory(
+        makeWorkingMemory({ sessionId: "wm-order", scope: "player", key: "p" }),
+      );
+      const list = await store.listWorkingMemory("wm-order");
+      expect(list.map((r) => r.scope)).toEqual(["player", "story", "shared"]);
     });
 
     it("upsert-on-conflict replaces the record (same sessionId+scope+key)", async () => {

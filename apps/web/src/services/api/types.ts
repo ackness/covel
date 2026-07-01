@@ -1,4 +1,9 @@
-import type { I18nText, SessionStatus, WorldDimensions } from "@covel/shared";
+import type {
+  I18nText,
+  PluginUserSettingSpec,
+  SessionStatus,
+  WorldDimensions,
+} from "@covel/shared";
 
 export type {
   PluginRpcRequest,
@@ -123,17 +128,7 @@ export interface PackageSummary {
   version?: string;
   author?: string;
   /** User-editable settings declared in PLUGIN.md frontmatter. */
-  userSettings?: Array<{
-    key: string;
-    type: "text" | "number" | "toggle" | "select" | "textarea";
-    default: unknown;
-    label: string | Record<string, string>;
-    description?: string | Record<string, string>;
-    min?: number;
-    max?: number;
-    step?: number;
-    options?: Array<{ value: string; label: string | Record<string, string> }>;
-  }>;
+  userSettings?: readonly PluginUserSettingSpec[];
 }
 
 export type WorldDataPreflightDiagnosticLevel = "info" | "warning" | "error";

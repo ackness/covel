@@ -29,6 +29,7 @@ function stateFor(
     world: null,
     session: baseSession,
     messages: [],
+    olderMessagesCursor: null,
     worldSessions: [],
     executing: false,
     executionError: null,

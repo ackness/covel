@@ -1,5 +1,8 @@
 ---
 name: scene-prompts
+displayName:
+  zh: 场景快捷回复
+  en: Scene Prompts
 description:
   zh: 根据当前场景给出几句可直接采用的行动短句。
   en: Suggests short actions that fit the current scene and can be used right away.
@@ -16,13 +19,22 @@ tags:
 trigger:
   type: scheduled
   interval: 1
-  cooldownTurns: 1
+# Engine-agnostic guidance. The upstream gate discovers the active narrative
+# engine by capability (narrative-engine → chat-mode-narrator in dialogue,
+# narrator in traditional) instead of naming one, so the same plugin gates
+# correctly in either mode and still skips when that engine failed. The inject
+# lists both known engines; the absent one resolves to nothing, so exactly the
+# active engine's fresh prose fills <narrator-output>.
 upstreamRequired:
-  - chat-mode-narrator
+  - capability: narrative-engine
 input:
   inject:
     - kind: runtime
       from: chat-mode-narrator
+      field: narrativeOutput
+      as: "<narrator-output>"
+    - kind: runtime
+      from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
 tools:
@@ -45,7 +57,7 @@ postHistory:
 
 ## 当前叙事结果
 
-<narrator-output>{{ inputs.chat-mode-narrator.chat-mode-narrator.narrativeOutput }}</narrator-output>
+最新一轮叙事见上方 `<narrator-output>` 区块（由当前模式的叙事引擎注入）。
 
 ## 你的任务
 

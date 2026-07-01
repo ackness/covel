@@ -4,11 +4,12 @@
 
 ## Pages
 
-| Page                                                         | Use it for                                                 |
-| ------------------------------------------------------------ | ---------------------------------------------------------- |
-| [`flow.md`](./flow.md)                                       | 端到端 turn pipeline、状态模型、插件执行、前后端数据流。   |
-| [`npc-graph.md`](./npc-graph.md)                             | `npc-graph` 插件、Graph-RAG、embedding、图数据与 UI 面板。 |
-| [`changelog-session-state.md`](./changelog-session-state.md) | session state 和 narrative flow 的历史变更记录。           |
+| Page                                                         | Use it for                                                                      |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| [`design-principles.md`](./design-principles.md)             | 设计理念：内核提供原语 / 插件承载玩法、插头 vs 电器裁决、三种写法、可表达边界。 |
+| [`flow.md`](./flow.md)                                       | 端到端 turn pipeline、状态模型、插件执行、前后端数据流。                        |
+| [`npc-graph.md`](./npc-graph.md)                             | `npc-graph` 插件、Graph-RAG、embedding、图数据与 UI 面板。                      |
+| [`changelog-session-state.md`](./changelog-session-state.md) | session state 和 narrative flow 的历史变更记录。                                |
 
 ## Search Anchors
 

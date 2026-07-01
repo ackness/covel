@@ -20,9 +20,10 @@
  *    return unified across both backends.
  */
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
 
+import { cursorPageOrder, cursorPageWhere } from "./cursor.js";
 import type { InsertValueBuilders } from "./insert-values.js";
 import type { JsonReader } from "./mappers.js";
 import {
@@ -39,6 +40,7 @@ import type {
 import type { TraceEventRow } from "./mappers/plugin-mappers.js";
 import type { SqlRunner } from "./sql-runner.js";
 import type {
+  CursorPageOpts,
   DataStore,
   PaginationOpts,
   PlayerInputRecord,
@@ -47,7 +49,11 @@ import type {
   TurnMessageRecord,
 } from "../types.js";
 
-type TraceEventsTable = Table & { sessionId: Column };
+type TraceEventsTable = Table & {
+  id: Column;
+  sessionId: Column;
+  createdAt: Column;
+};
 type TurnMessagesTable = Table & {
   sessionId: Column;
   createdAt: Column;
@@ -80,8 +86,10 @@ export type SqlSessionJournalRecords = Pick<
   DataStore,
   | "addTraceEvent"
   | "listTraceEvents"
+  | "listTraceEventsPage"
   | "appendTurnMessage"
   | "listTurnMessages"
+  | "listRecentTurnMessages"
   | "tagTurnMessagesCompacted"
   | "savePlayerInput"
   | "getPlayerInput"
@@ -108,10 +116,24 @@ export function createSqlSessionJournalRecords(
     ): Promise<TraceEventRecord[]> {
       const rows = await runner.select<TraceEventRow>(traceEvents, {
         where: eq(traceEvents.sessionId, sessionId),
+        orderBy: [asc(traceEvents.createdAt)],
         limit: pagination?.limit,
         offset: pagination?.offset,
       });
       return rows.map((row) => toTraceEventRecord(row, json));
+    },
+
+    async listTraceEventsPage(
+      sessionId: string,
+      opts: CursorPageOpts,
+    ): Promise<TraceEventRecord[]> {
+      if (opts.limit <= 0) return [];
+      const rows = await runner.select<TraceEventRow>(traceEvents, {
+        where: cursorPageWhere(traceEvents, sessionId, opts.before),
+        orderBy: cursorPageOrder(traceEvents),
+        limit: opts.limit,
+      });
+      return rows.reverse().map((row) => toTraceEventRecord(row, json));
     },
 
     async appendTurnMessage(record: TurnMessageRecord): Promise<void> {
@@ -131,22 +153,40 @@ export function createSqlSessionJournalRecords(
       return rows.map((row) => toTurnMessageRecord(row, json));
     },
 
+    async listRecentTurnMessages(
+      sessionId: string,
+      limit: number,
+    ): Promise<TurnMessageRecord[]> {
+      if (limit <= 0) return [];
+      // Fetch the newest `limit` rows via a descending, limited query so a long
+      // session never streams its whole history into memory, then reverse to
+      // restore the oldest-first order every caller expects from the tail.
+      const rows = await runner.select<TurnMessageRow>(turnMessages, {
+        where: eq(turnMessages.sessionId, sessionId),
+        // Tie-break on id so the truncation boundary picks the same rows as
+        // memory/idb (sortByCursorAsc) when several share a createdAt.
+        orderBy: [desc(turnMessages.createdAt), desc(turnMessages.id)],
+        limit,
+      });
+      return rows.reverse().map((row) => toTurnMessageRecord(row, json));
+    },
+
     async tagTurnMessagesCompacted(
       sessionId: string,
       messageIds: readonly string[],
       summaryId: string,
     ): Promise<void> {
       if (messageIds.length === 0) return;
-      for (const msgId of messageIds) {
-        await runner.update(
-          turnMessages,
-          { compactedAtTurnId: summaryId },
-          and(
-            eq(turnMessages.sessionId, sessionId),
-            eq(turnMessages.id, msgId),
-          ),
-        );
-      }
+      // One bulk UPDATE ... WHERE id IN (...) instead of N serially-awaited
+      // single-row updates (the compacted window grows on long sessions).
+      await runner.update(
+        turnMessages,
+        { compactedAtTurnId: summaryId },
+        and(
+          eq(turnMessages.sessionId, sessionId),
+          inArray(turnMessages.id, [...messageIds]),
+        ),
+      );
     },
 
     async savePlayerInput(record: PlayerInputRecord): Promise<void> {

@@ -61,9 +61,13 @@ export const DEFAULT_CORE_MEMORY_BLOCKS: readonly CoreMemoryBlockSchema[] = [
     label: "character_relationships",
     displayName: { zh: "角色关系", en: "Character Relationships" },
     icon: "Users",
+    // Player-centric by design: this block tracks the player's bonds with
+    // NPCs. NPC↔NPC structural relationships are owned by the `npc-graph`
+    // plugin's typed graph — the two are complementary, not redundant, so the
+    // hint explicitly scopes to player-centric bonds to avoid double-extraction.
     extractionHint: {
-      zh: "关键角色与玩家之间的关系状态、态度变化、重要互动与承诺。",
-      en: "Key characters' relationships with the player, attitude shifts, important interactions and commitments.",
+      zh: "主角（玩家）与关键角色之间的羁绊：好感、信任、压力、承诺与态度变化，以及对玩家的重要互动。只记录与玩家相关的关系；NPC 之间的结构性关系由关系图谱（npc-graph）负责，不在此重复。",
+      en: "The player character's bonds with key characters — affection, trust, pressure, promises, attitude shifts, and interactions toward the player. Track only player-centric bonds; NPC↔NPC structural relationships are owned by the relationship graph (npc-graph) and are not duplicated here.",
     },
   },
   {
@@ -142,6 +146,15 @@ export interface CoreMemoryConfig {
    */
   readonly blocks?: readonly CoreMemoryBlockSchema[];
   /**
+   * Per-session block schema resolver. When provided, methods resolve the
+   * schema for a given `sessionId` (e.g. plugin blocks merged with the
+   * session's world-declared blocks) instead of using the static `blocks`.
+   * Returning undefined falls back to `blocks`. Injected by the bootstrap layer.
+   */
+  readonly resolveBlocks?: (
+    sessionId: string,
+  ) => Promise<readonly CoreMemoryBlockSchema[] | undefined>;
+  /**
    * Plugin ID used when mirroring core memory blocks to plugin_data for
    * real-time UI panel updates. Injected by the bootstrap layer so the
    * memory package never hardcodes a specific plugin name.
@@ -201,6 +214,14 @@ export interface MemoryUpdaterConfig {
    * Defaults to {@link DEFAULT_CORE_MEMORY_BLOCKS}.
    */
   readonly blocks?: readonly CoreMemoryBlockSchema[];
+  /**
+   * Per-session block schema resolver (see {@link CoreMemoryConfig.resolveBlocks}).
+   * When provided, the updater builds its extraction prompt from the resolved
+   * schema for the turn's session. Returning undefined falls back to `blocks`.
+   */
+  readonly resolveBlocks?: (
+    sessionId: string,
+  ) => Promise<readonly CoreMemoryBlockSchema[] | undefined>;
 }
 
 export interface MemoryUpdateResult {
@@ -318,6 +339,14 @@ export interface CompactionConfig {
    * {@link DEFAULT_CORE_MEMORY_BLOCKS}.
    */
   readonly blocks?: readonly CoreMemoryBlockSchema[];
+  /**
+   * Per-session block resolver (see {@link CoreMemoryConfig.resolveBlocks}).
+   * Forwarded to the post-compaction updater so world-declared blocks are also
+   * refreshed during compaction, not just on the normal post-turn path.
+   */
+  readonly resolveBlocks?: (
+    sessionId: string,
+  ) => Promise<readonly CoreMemoryBlockSchema[] | undefined>;
 }
 
 export interface CompactionResult {

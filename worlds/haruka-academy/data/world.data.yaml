@@ -21,3 +21,17 @@ sources:
     to: plugin:living-world-rules/rules+lorebook
     key: id
     after: cast
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: plugin:character-presence/assets
+    key: filename
+    after: cast
+  presence:
+    kind: json
+    path: media/presence.json
+    schema: plugin://character-presence/presence
+    to: plugin:character-presence/presence
+    key: characterId
+    after: portraits

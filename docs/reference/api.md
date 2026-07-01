@@ -82,13 +82,13 @@ curl http://localhost:3001/api/plugins
 curl -X POST http://localhost:3001/api/sessions \
   -H "Content-Type: application/json" \
   -d '{
-    "worldId": "cloudmere",
+    "worldId": "mistport",
     "locale": "zh-CN",
     "plugins": ["pregame", "narrator", "codex"]
   }'
 ```
 
-记下返回的 `id`（格式为 `{worldId}-{uuid8}`，如 `cloudmere-a1b2c3d4`），后续请求都需要它。
+记下返回的 `id`（格式为 `{worldId}-{uuid8}`，如 `mistport-a1b2c3d4`），后续请求都需要它。
 
 ### 6. 执行第一个 Turn（玩家发言）
 
@@ -186,9 +186,11 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 会话快照
 
-| 方法 | 路径                         | 描述                                    |
-| ---- | ---------------------------- | --------------------------------------- |
-| GET  | `/api/sessions/:id/snapshot` | 获取完整会话快照（用于客户端恢复/重连） |
+| 方法 | 路径                         | 描述                            |
+| ---- | ---------------------------- | ------------------------------- |
+| GET  | `/api/sessions/:id/snapshot` | 获取会话快照（客户端恢复/重连） |
+
+> 快照的 `messages` 与 `executionSteps` 只含**最近窗口**（默认最新 80 条消息 / 600 条 trace 事件），不再全量加载（长会话每次重连都全量读是原性能热点）。快照带 `messagesCursor`（`{createdAt,id} | null`）；前端聊天界面向上滚动时用它调 `GET /api/sessions/:id/messages/page` 增量补更旧消息。窗口外旧 Turn 的执行时间线优雅降级（不渲染）。
 
 ### Turn 执行
 
@@ -242,10 +244,11 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 消息历史
 
-| 方法 | 路径                              | 描述                            |
-| ---- | --------------------------------- | ------------------------------- |
-| GET  | `/api/sessions/:id/messages`      | 获取会话消息列表                |
-| POST | `/api/sessions/:id/messages/sync` | 同步消息（LocalDataService 用） |
+| 方法 | 路径                              | 描述                                                        |
+| ---- | --------------------------------- | ----------------------------------------------------------- |
+| GET  | `/api/sessions/:id/messages`      | 获取会话完整消息列表（兜底 / 同步用；长会话优先用 `/page`） |
+| GET  | `/api/sessions/:id/messages/page` | keyset 游标分页消息（最新窗口 + 向上加载更旧）              |
+| POST | `/api/sessions/:id/messages/sync` | 同步消息（LocalDataService 用）                             |
 
 ### 统一翻译层（Runtime Outputs / Interaction Records，PR-1）
 
@@ -406,17 +409,19 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ### Trace 调试
 
-| 方法 | 路径                           | 描述                      |
-| ---- | ------------------------------ | ------------------------- |
-| GET  | `/api/traces/:sessionId`       | 获取会话所有 trace 事件   |
-| GET  | `/api/traces/:sessionId/turns` | 按 Turn 分组的 trace 事件 |
+| 方法 | 路径                                | 描述                                           |
+| ---- | ----------------------------------- | ---------------------------------------------- |
+| GET  | `/api/traces/:sessionId`            | 获取会话所有 trace 事件（全量）                |
+| GET  | `/api/traces/:sessionId/turns`      | 按 Turn 分组的 trace 事件（全量）              |
+| GET  | `/api/traces/:sessionId/turns/page` | 最近事件窗口分组为 Turn + 游标（向上加载更旧） |
 
 ### 媒体管理
 
-| 方法 | 路径                            | 描述                                                                                                             |
-| ---- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| GET  | `/api/media/:id?token=<signed>` | 内容寻址媒体下载（HMAC token + 会话引用校验）                                                                    |
-| POST | `/api/media/cleanup`            | 破坏性维护端点：默认禁用 (`COVEL_MEDIA_CLEANUP_ENABLED`)，商业层 503，`dryRun:false` 需 `X-Confirm-Cleanup: yes` |
+| 方法 | 路径                            | 描述                                                                                                                                       |
+| ---- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET  | `/api/media/:id?token=<signed>` | 内容寻址媒体下载（HMAC token + 会话引用校验）                                                                                              |
+| POST | `/api/media?sessionId=<id>`     | 玩家图片上传：原始字节 body（`Content-Type` = 文件 MIME，仅 `image/*`，≤20MB），内容寻址入库 + 记会话 owner/ref，返回 `{ id, mime, size }` |
+| POST | `/api/media/cleanup`            | 破坏性维护端点：默认禁用 (`COVEL_MEDIA_CLEANUP_ENABLED`)，商业层 503，`dryRun:false` 需 `X-Confirm-Cleanup: yes`                           |
 
 ### 配置信息
 
@@ -427,7 +432,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 | GET  | `/api/commands`                | 列出注册的命令                                                                          |
 | GET  | `/api/block-schemas`           | 列出插件 block schema                                                                   |
 | GET  | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件 |
-| GET  | `/api/llm-config`              | 返回 slot 配置与能力信息                                                                |
+| GET  | `/api/llm-config`              | 返回 slot 配置与能力信息；llm.toml 解析失败回退默认时附带 `error` 字段                  |
+| POST | `/api/llm-config/reload`       | 重读 llm.toml 并原地应用到运行中的 gateway（无需重启）；返回 `{ ok, slots, error? }`    |
 | GET  | `/api/provider-keys`           | 桌面 bearer client 返回原始 provider key；其他请求返回 masked availability              |
 | GET  | `/api/config/info`             | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等）                             |
 | GET  | `/api/config/keys`             | 仅桌面：列出已配置的 provider（不返回值）                                               |
@@ -565,7 +571,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 {
   "items": [
     {
-      "id": "cloudmere",
+      "id": "mistport",
       "name": "云溟界",
       "description": "一个漂浮于云层之上的奇幻世界...",
       "locale": "zh-CN",
@@ -607,15 +613,15 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 **参数:**
 
-| 参数 | 位置 | 说明                      |
-| ---- | ---- | ------------------------- |
-| `id` | 路径 | 世界 ID（如 `cloudmere`） |
+| 参数 | 位置 | 说明                     |
+| ---- | ---- | ------------------------ |
+| `id` | 路径 | 世界 ID（如 `mistport`） |
 
 **响应 200:**
 
 ```json
 {
-  "id": "cloudmere",
+  "id": "mistport",
   "name": "云溟界",
   "description": "一个漂浮于云层之上的奇幻世界...",
   "locale": "zh-CN",
@@ -755,7 +761,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 **请求体:**
 
 ```json
-{ "sessionId": "neonridge-abcd1234" }
+{ "sessionId": "mistport-abcd1234" }
 ```
 
 **响应:**
@@ -858,8 +864,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 {
   "items": [
     {
-      "id": "cloudmere-a1b2c3d4",
-      "worldId": "cloudmere",
+      "id": "mistport-a1b2c3d4",
+      "worldId": "mistport",
       "status": "active",
       "turnCount": 0,
       "preGameCompleted": [],
@@ -880,7 +886,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ```json
 {
-  "worldId": "cloudmere",
+  "worldId": "mistport",
   "locale": "zh-CN",
   "plugins": ["pregame", "narrator", "codex"]
 }
@@ -905,8 +911,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ```json
 {
-  "id": "cloudmere-a1b2c3d4",
-  "worldId": "cloudmere",
+  "id": "mistport-a1b2c3d4",
+  "worldId": "mistport",
   "locale": "zh-CN",
   "status": "active",
   "turnCount": 0,
@@ -923,7 +929,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 - `turnCount`(number) — 主循环轮数计数（从 0 开始，每次成功 turn +1）
 - `preGameCompleted`(string[]) — 已完成 Pre-Game 初始化的 runtime id 集合，框架据此跳过后续轮次的 Pre-Game 调度
 
-> **Session ID 格式**: 自动生成的 ID 格式为 `{worldId}-{uuid8}`（如 `cloudmere-a1b2c3d4`），使用 `crypto.randomUUID()` 后缀防止枚举。如未提供 worldId 则前缀为 `session`。
+> **Session ID 格式**: 自动生成的 ID 格式为 `{worldId}-{uuid8}`（如 `mistport-a1b2c3d4`），使用 `crypto.randomUUID()` 后缀防止枚举。如未提供 worldId 则前缀为 `session`。
 
 #### `GET /api/sessions/:id`
 
@@ -939,8 +945,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ```json
 {
-  "id": "cloudmere-a1b2c3d4",
-  "worldId": "cloudmere",
+  "id": "mistport-a1b2c3d4",
+  "worldId": "mistport",
   "status": "active",
   "turnCount": 3,
   "preGameCompleted": [
@@ -1066,7 +1072,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 ```json
 {
   "turnId": "a1b2c3d4-...",
-  "sessionId": "cloudmere-a1b2c3d4",
+  "sessionId": "mistport-a1b2c3d4",
   "runtimeResults": [
     {
       "pluginId": "narrator",
@@ -1941,7 +1947,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 #### `GET /api/sessions/:id/messages`
 
-获取会话的所有消息列表。
+获取会话的**完整**消息列表（升序）。长会话优先用 `/page`；本端点保留给快照缺失兜底和批量同步。
 
 **参数:**
 
@@ -1949,28 +1955,54 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 | ---- | ---- | ------- |
 | `id` | 路径 | 会话 ID |
 
+**响应:** 扁平化消息对象的**数组**（`metadata.{turnId,runtimeId,kind,block}` 提升为顶层字段）。
+
+```json
+[
+  {
+    "id": "msg-001",
+    "sessionId": "mistport-a1b2c3d4",
+    "role": "user",
+    "content": "我环顾四周",
+    "turnId": "turn-1",
+    "createdAt": "2025-01-15T10:00:00.000Z"
+  }
+]
+```
+
+#### `GET /api/sessions/:id/messages/page`
+
+keyset（游标）分页消息，**按时间正序（oldest-first）**。不传游标返回最新窗口；传游标返回其之前（更旧）的一页 —— 聊天界面向上滚动时用它增量加载历史。
+
+**参数:**
+
+| 参数                | 位置 | 说明                                                           |
+| ------------------- | ---- | -------------------------------------------------------------- |
+| `id`                | 路径 | 会话 ID                                                        |
+| `limit`             | 查询 | 每页条数，默认 80，上限 500                                    |
+| `before_created_at` | 查询 | 游标：只返回早于此 `createdAt` 的消息（需与 `before_id` 成对） |
+| `before_id`         | 查询 | 游标 tie-break：同 `createdAt` 时按 `id` 断序                  |
+
+`(before_created_at, before_id)` 是 `(createdAt, id)` 元组游标，即使同毫秒也不漏不重（`messages` 表无单调 `order` 列，故 `id` 断序是必需的）。
+
 **响应:**
 
 ```json
 {
   "items": [
     {
-      "id": "msg-001",
-      "sessionId": "cloudmere-a1b2c3d4",
+      "id": "msg-041",
       "role": "user",
-      "content": "我环顾四周",
-      "createdAt": "2025-01-15T10:00:00.000Z"
-    },
-    {
-      "id": "msg-002",
-      "sessionId": "cloudmere-a1b2c3d4",
-      "role": "assistant",
-      "content": "你发现自己站在一片广阔的草原上...",
-      "createdAt": "2025-01-15T10:00:05.000Z"
+      "content": "…",
+      "turnId": "turn-8",
+      "createdAt": "…"
     }
-  ]
+  ],
+  "nextCursor": { "createdAt": "2025-01-15T10:00:00.000Z", "id": "msg-041" }
 }
 ```
+
+`nextCursor` 指向本页最旧一条的位置，作为下一页（更旧）的 `before_*`；当返回条数少于 `limit`（已到历史开头）时为 `null`。
 
 ---
 
@@ -2011,7 +2043,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 ```json
 {
-  "sessionId": "cloudmere-a1b2c3d4",
+  "sessionId": "mistport-a1b2c3d4",
   "pluginId": "codex",
   "namespaces": [
     {
@@ -2225,7 +2257,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 {
   "snapshot": {
     "id": "<uuid>",
-    "sessionId": "cloudmere-a1b2c3d4",
+    "sessionId": "mistport-a1b2c3d4",
     "turnId": "turn-42",
     "kind": "manual",
     "payload": {
@@ -2291,8 +2323,8 @@ session 不存在时返回 `404`。
 
 ```json
 {
-  "sessionId": "cloudmere-<new-uuid8>",
-  "parentSessionId": "cloudmere-a1b2c3d4",
+  "sessionId": "mistport-<new-uuid8>",
+  "parentSessionId": "mistport-a1b2c3d4",
   "fromSnapshotId": "<parent-snapshot-id>",
   "forkSnapshotId": "<child-fork-snapshot-id>"
 }
@@ -2325,7 +2357,7 @@ session 不存在时返回 `404`。
   "items": [
     {
       "id": "char-001",
-      "sessionId": "cloudmere-a1b2c3d4",
+      "sessionId": "mistport-a1b2c3d4",
       "name": "艾尔文",
       "type": "player",
       "description": "一名孤儿出身的流浪剑客",
@@ -2375,7 +2407,7 @@ session 不存在时返回 `404`。
 ```json
 {
   "id": "char-001",
-  "sessionId": "cloudmere-a1b2c3d4",
+  "sessionId": "mistport-a1b2c3d4",
   "name": "艾尔文",
   "type": "player",
   "description": "一名孤儿出身的流浪剑客",
@@ -2416,7 +2448,7 @@ curl -N "http://localhost:3001/api/events/stream?sessionId=<sessionId>"
 
 ```
 event: connected
-data: {"sessionId":"cloudmere-a1b2c3d4","timestamp":"2025-01-15T10:00:00.000Z"}
+data: {"sessionId":"mistport-a1b2c3d4","timestamp":"2025-01-15T10:00:00.000Z"}
 ```
 
 后续事件：
@@ -2456,7 +2488,7 @@ id: evt-002
 {
   "topic": "combat.start",
   "payload": { "enemyId": "goblin-01", "terrain": "forest" },
-  "sessionId": "cloudmere-a1b2c3d4",
+  "sessionId": "mistport-a1b2c3d4",
   "targetRuntime": "combat"
 }
 ```
@@ -2499,7 +2531,7 @@ id: evt-002
 {
   "requestId": "req-001",
   "type": "send_message",
-  "sessionId": "cloudmere-a1b2c3d4",
+  "sessionId": "mistport-a1b2c3d4",
   "locale": "zh-CN",
   "payload": {
     "content": "我拔出剑，准备迎战"
@@ -2513,6 +2545,13 @@ id: evt-002
 | `command`      | `execute_command` | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。 |
 
 > 旧版示例曾使用 `payload.message`，但服务端从未读取该字段，已统一为 `content` / `command`。
+
+**请求头（可选）:**
+
+| Header                   | 说明                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `X-Provider-Keys`        | base64(JSON) 的 provider API key，不入库、每次请求携带。                                                                                                                                                                                                                                                                                                                             |
+| `X-Plugin-User-Settings` | base64(JSON) 的玩家 per-plugin 设置 `{ [pluginId]: { [settingKey]: value } }`，只发玩家显式改过的值。`actions.ts` 解码后与世界默认 `WorldRecord.metadata.pluginSettings` 合并（玩家覆盖优先），注入 `TurnInput.userSettings`，再经 `resolveUserSettings` 用 manifest 默认补齐缺失 key。这让玩家在设置里调的插件配置真正进入主回合循环（此前仅 `plugin-rpc` 手动路径读取该 header）。 |
 
 **响应:** SSE 事件流，使用 **data-only** SSE 帧（无 `event:` 命名头），每条 `data:` 是一个 `SseEnvelope` 对象（不是 `ProtocolEvent`）：
 
@@ -2628,16 +2667,19 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
 
 ```json
 {
-  "sessionId": "cloudmere-a1b2c3d4",
+  "sessionId": "mistport-a1b2c3d4",
   "count": 42,
+  "discovery": {
+    /* plugin/runtime discovery snapshot for this session (buildSessionDiscoverySnapshot) */
+  },
   "events": [
     {
       "type": "runtime.started",
-      "requestId": "req-001",
-      "traceId": "trace-001",
-      "sessionId": "cloudmere-a1b2c3d4",
+      "requestId": "",
+      "traceId": "8f1c2d3e-…",
+      "sessionId": "mistport-a1b2c3d4",
       "turnId": "turn-001",
-      "flowId": "flow-001",
+      "flowId": "8f1c2d3e-…",
       "seq": 0,
       "timestamp": "2025-01-15T10:00:00.000Z",
       "payload": {}
@@ -2645,6 +2687,12 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
   ]
 }
 ```
+
+- `discovery` — top-level plugin/runtime discovery snapshot (same shape the
+  `/debug` page consumes); present on both trace endpoints.
+- `flowId` equals `traceId` for the event (protocol.md `flowId = traceId`).
+- `requestId` is reserved and currently emitted as `""` (no per-turn request id
+  is threaded yet).
 
 #### `GET /api/traces/:sessionId/turns`
 
@@ -2654,13 +2702,16 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
 
 ```json
 {
-  "sessionId": "cloudmere-a1b2c3d4",
+  "sessionId": "mistport-a1b2c3d4",
   "turnCount": 3,
+  "discovery": {
+    /* plugin/runtime discovery snapshot (same as /api/traces/:sessionId) */
+  },
   "turns": [
     {
       "turnId": "turn-001",
-      "flowId": "flow-001",
-      "traceId": "trace-001",
+      "flowId": "8f1c2d3e-…",
+      "traceId": "8f1c2d3e-…",
       "startedAt": "2025-01-15T10:00:00.000Z",
       "completedAt": "2025-01-15T10:00:05.000Z",
       "eventCount": 12,
@@ -2669,6 +2720,38 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
   ]
 }
 ```
+
+#### `GET /api/traces/:sessionId/turns/page`
+
+只把**最近一段事件窗口**分组为 Turn 返回，供 debug 时间线增量加载 —— `trace_events` 是增长最快的表，全量 `/turns` 在长会话上会把整表读进内存。
+
+**参数:**
+
+| 参数                | 位置 | 说明                                                  |
+| ------------------- | ---- | ----------------------------------------------------- |
+| `sessionId`         | 路径 | 会话 ID                                               |
+| `limit`             | 查询 | 每页**事件**数（非 Turn 数），默认 400，上限 500      |
+| `before_created_at` | 查询 | 游标：只返回早于此位置的事件（需与 `before_id` 成对） |
+| `before_id`         | 查询 | 游标 tie-break                                        |
+
+分页单位是**事件**：一个 Turn 可能跨窗口边界被切开，前端加载更旧一页后按 `turnId` 合并边界 Turn。`nextCursor` 指向窗口内最旧**事件**的 `(createdAt, id)`。
+
+**响应:**
+
+```json
+{
+  "sessionId": "mistport-a1b2c3d4",
+  "turns": [
+    { "turnId": "turn-008", "startedAt": "…", "completedAt": "…", "eventCount": 6, "events": [...] }
+  ],
+  "nextCursor": { "createdAt": "2025-01-15T10:03:00.000Z", "id": "evt-1042" },
+  "discovery": {
+    /* 与 /turns 相同 */
+  }
+}
+```
+
+`nextCursor` 为 `null` 时表示窗口已到 trace 起点。
 
 ---
 

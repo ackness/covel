@@ -24,6 +24,7 @@ import {
   formatValidationErrors,
   DIMENSION_KEYS,
 } from "@covel/shared";
+import type { MemoryBlockSchema } from "@covel/shared";
 import type { DataStore, WorldRecord } from "@covel/store";
 import { resolveContainedPath } from "./world-data/safe-path.js";
 import { loadWorldDataSummary } from "./world-data/world-load.js";
@@ -200,6 +201,40 @@ async function loadExternalDimensions(
 }
 
 /**
+ * Fold the deprecated top-level `requiredPlugins` / `recommendedPlugins` /
+ * `excludedPlugins` into `pluginPolicy` (union, de-duplicated) so metadata
+ * carries plugin selection in exactly one place — the prep page reads selection
+ * only through `pluginPolicy`. The top-level fields stay valid in `world.yaml`
+ * for back-compat but are no longer stored as separate metadata keys.
+ * Returns undefined when neither source declares anything.
+ */
+function foldSelectionIntoPluginPolicy(
+  manifest: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const rawPolicy = manifest.pluginPolicy as
+    | Record<string, unknown>
+    | undefined;
+  const folded: Record<string, unknown> = { ...rawPolicy };
+  let hasSelection = rawPolicy !== undefined;
+  for (const key of [
+    "requiredPlugins",
+    "recommendedPlugins",
+    "excludedPlugins",
+  ] as const) {
+    const top = Array.isArray(manifest[key]) ? (manifest[key] as string[]) : [];
+    const inPolicy = Array.isArray(rawPolicy?.[key])
+      ? (rawPolicy![key] as string[])
+      : [];
+    const merged = [...new Set([...inPolicy, ...top])];
+    if (merged.length > 0) {
+      folded[key] = merged;
+      hasSelection = true;
+    }
+  }
+  return hasSelection ? folded : undefined;
+}
+
+/**
  * Load a single world package from its directory.
  * Returns a WorldRecord ready for upsert, or null if invalid/missing.
  */
@@ -233,8 +268,12 @@ export async function loadSingleWorld(
     | Record<string, string>
     | undefined;
   const worldDataPath = manifest.worldData as string | undefined;
-  const pluginPolicy = manifest.pluginPolicy as
-    | Record<string, unknown>
+  const pluginPolicy = foldSelectionIntoPluginPolicy(manifest);
+  const pluginSettings = manifest.pluginSettings as
+    | Record<string, Record<string, unknown>>
+    | undefined;
+  const memoryBlocks = manifest.memoryBlocks as
+    | readonly MemoryBlockSchema[]
     | undefined;
 
   // Merge inline + external dimensions (external wins for same key)
@@ -262,19 +301,25 @@ export async function loadSingleWorld(
       ? await loadCharacterBlueprints(worldDir, characterBlueprintSources)
       : undefined;
 
+  // World-declared character attribute schema (optional). Carried into
+  // metadata so `world-init`'s guard can write it verbatim and skip the LLM.
+  const characterAttributes = Array.isArray(manifest.characterAttributes)
+    ? (manifest.characterAttributes as unknown[])
+    : undefined;
+
   const baseMetadata: Record<string, unknown> = {
     source: options?.source ?? "file",
     ...(options?.storage ? { storage: options.storage } : {}),
     dimensions:
       Object.keys(mergedDimensions).length > 0 ? mergedDimensions : undefined,
     dimensionSources: dimensionSources,
-    requiredPlugins: manifest.requiredPlugins as string[] | undefined,
-    recommendedPlugins: manifest.recommendedPlugins as string[] | undefined,
-    excludedPlugins: manifest.excludedPlugins as string[] | undefined,
     pluginPolicy,
+    pluginSettings,
+    memoryBlocks,
     worldDataPath,
     characterBlueprintSources,
     characterBlueprints,
+    characterAttributes,
   };
   const worldData = await loadWorldDataSummary({
     worldRoot: worldDir,
@@ -361,11 +406,13 @@ export async function loadWorldPackages(
 
 /**
  * Seed all world packages into the DataStore (idempotent via upsert).
+ * Returns the ids of the worlds loaded from this directory so callers can build
+ * the set of "live" worlds across every source and reconcile stale DB records.
  */
 export async function seedWorlds(
   store: DataStore,
   worldsDir: string,
-): Promise<number> {
+): Promise<string[]> {
   const records = await loadWorldPackages(worldsDir);
 
   for (const record of records) {
@@ -378,5 +425,57 @@ export async function seedWorlds(
     );
   }
 
-  return records.length;
+  return records.map((r) => r.id);
+}
+
+export interface WorldReconcileResult {
+  /** Worlds removed from the DB because their package is gone and they had no sessions. */
+  removed: string[];
+  /** Stale worlds kept because they still have saved sessions (never silently deleted). */
+  keptWithSessions: string[];
+}
+
+/**
+ * Reconcile DB world records against the worlds actually present on disk.
+ *
+ * `seedWorlds` only ever upserts, so a world that was file-seeded in a previous
+ * release and later archived (removed from the bundle) lingers in every existing
+ * user's DB and keeps showing up in the world list. This drops those stragglers.
+ *
+ * Safety rails — this only ever removes data it is certain is a dead seed:
+ *  1. **Origin gate** — only `metadata.source === "file"` worlds are eligible.
+ *     AI-generated worlds (`generated` / `generated-file`) and any other origin
+ *     are never touched, even when absent from `liveWorldIds`.
+ *  2. **Save protection** — a stale world that still has saved sessions is KEPT
+ *     and reported in `keptWithSessions`; deleting a player's saves is left to an
+ *     explicit action, never a silent boot-time sweep.
+ *  3. **Empty-set guard (caller)** — the caller must skip this entirely when no
+ *     world was seeded, so a transient load failure can never wipe the DB.
+ */
+export async function reconcileSeededWorlds(
+  store: DataStore,
+  liveWorldIds: ReadonlySet<string>,
+): Promise<WorldReconcileResult> {
+  const removed: string[] = [];
+  const keptWithSessions: string[] = [];
+  const worlds = await store.listWorlds();
+  let sessions: { worldId?: string }[] | null = null;
+
+  for (const world of worlds) {
+    if (liveWorldIds.has(world.id)) continue;
+    const source = (world.metadata as Record<string, unknown> | undefined)
+      ?.source;
+    if (source !== "file") continue;
+
+    if (!sessions) sessions = await store.listSessions();
+    if (sessions.some((s) => s.worldId === world.id)) {
+      keptWithSessions.push(world.id);
+      continue;
+    }
+
+    await store.deleteWorld(world.id);
+    removed.push(world.id);
+  }
+
+  return { removed, keptWithSessions };
 }

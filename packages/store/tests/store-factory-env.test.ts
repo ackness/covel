@@ -4,12 +4,9 @@ import {
   createMediaStoreFromEnv,
   createStore,
   createStoreFromEnv,
-  createVectorStore,
-  getStorageMigrationRegistry,
   IDB_BROWSER_STORAGE_SCHEMA_VERSION,
   IDB_DATA_STORE_SCHEMA_VERSION,
   resolveBackendFromEnv,
-  resolveVectorBackendFromEnv,
   summarizeStorageMigrations,
 } from "../src/index.js";
 
@@ -206,40 +203,8 @@ describe("store factory env wiring", () => {
     );
   });
 
-  it("resolves VECTOR_BACKEND through the shared env fallback", () => {
-    withEnv({
-      VECTOR_BACKEND: "external",
-    });
-
-    expect(resolveVectorBackendFromEnv()).toBe("external");
-
-    withEnv({
-      VECTOR_BACKEND: "qdrant",
-    });
-
-    expect(resolveVectorBackendFromEnv()).toBe("embedded");
-  });
-
-  it("creates a separate vector store capability from a capable DataStore", async () => {
-    const dataStore = await createStore({ backend: "memory" });
-
-    const vectorStore = await createVectorStore({ dataStore });
-
-    expect(vectorStore).toBeDefined();
-    expect(typeof vectorStore!.searchVectors).toBe("function");
-  });
-
-  it("honors VECTOR_BACKEND=none in the vector factory", async () => {
-    const dataStore = await createStore({ backend: "memory" });
-
-    await expect(
-      createVectorStore({ backend: "none", dataStore }),
-    ).resolves.toBeUndefined();
-  });
-
   it("summarizes storage migration descriptors", () => {
-    const registry = getStorageMigrationRegistry();
-    const summary = summarizeStorageMigrations(registry);
+    const summary = summarizeStorageMigrations();
 
     expect(summary).toEqual(
       expect.arrayContaining([

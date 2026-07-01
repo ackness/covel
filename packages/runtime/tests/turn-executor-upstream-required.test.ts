@@ -229,3 +229,73 @@ describe("executeTurn: manifest.upstreamRequired", () => {
     expect(byId.get("guide")?.status).toBe("skipped");
   });
 });
+
+describe("executeTurn: capability-based upstreamRequired", () => {
+  it("runs when an in-scope capability provider succeeded — discovered by capability, not name", async () => {
+    // The downstream never names chat-mode-narrator; it gates on the
+    // `narrative-engine` capability, which chat-mode-narrator declares. This is
+    // what lets the same guidance plugin work under either narrative engine.
+    const engine = manifest("chat-mode-narrator", {
+      priority: 500,
+      capabilities: ["narrative-engine"],
+    });
+    const downstream = manifest("guide", {
+      priority: 600,
+      upstreamRequired: [{ capability: "narrative-engine" }],
+    });
+
+    let ran = false;
+    const result = await runTurn([engine, downstream], {
+      "chat-mode-narrator": async () => ({ narrativeOutput: "ok" }),
+      guide: async () => {
+        ran = true;
+        return { ok: true };
+      },
+    });
+
+    expect(ran).toBe(true);
+    const byId = new Map(result.runtimeResults.map((r) => [r.runtimeId, r]));
+    expect(byId.get("guide")?.status).toBe("success");
+  });
+
+  it("skips when the in-scope capability provider failed", async () => {
+    const engine = manifest("narrator", {
+      priority: 500,
+      capabilities: ["narrative-engine"],
+    });
+    const downstream = manifest("guide", {
+      priority: 600,
+      upstreamRequired: [{ capability: "narrative-engine" }],
+    });
+
+    const result = await runTurn([engine, downstream], {
+      narrator: async () => {
+        throw new Error("engine exploded");
+      },
+      guide: async () => {
+        throw new Error("downstream should not have executed");
+      },
+    });
+
+    const byId = new Map(result.runtimeResults.map((r) => [r.runtimeId, r]));
+    expect(byId.get("narrator")?.status).toBe("failed");
+    expect(byId.get("guide")?.status).toBe("skipped");
+  });
+
+  it("skips when no in-scope runtime provides the capability", async () => {
+    // A guidance runtime with no narrative engine active has nothing to act on.
+    const downstream = manifest("guide", {
+      priority: 600,
+      upstreamRequired: [{ capability: "narrative-engine" }],
+    });
+
+    const result = await runTurn([downstream], {
+      guide: async () => {
+        throw new Error("downstream should not have executed");
+      },
+    });
+
+    const byId = new Map(result.runtimeResults.map((r) => [r.runtimeId, r]));
+    expect(byId.get("guide")?.status).toBe("skipped");
+  });
+});

@@ -31,6 +31,14 @@ export interface KernelStore {
     reason?: string;
     createdAt: string;
   }): Promise<void>;
+  upsertStateEntry(record: {
+    id: string;
+    sessionId: string;
+    tableName: string;
+    fieldName: string;
+    value: unknown;
+    updatedAt: string;
+  }): Promise<void>;
   addTraceEvent(record: {
     id: string;
     sessionId: string;

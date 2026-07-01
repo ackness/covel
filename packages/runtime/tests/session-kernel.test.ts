@@ -551,6 +551,7 @@ describe("createCommitPipeline", () => {
       setPluginDataBatch: vi.fn(),
       addTraceEvent: vi.fn(),
       addStateChange: vi.fn(),
+      upsertStateEntry: vi.fn(),
     };
   }
 
@@ -725,6 +726,16 @@ describe("createCommitPipeline", () => {
       expect(result.event!.payload.table).toBe("world");
 
       expect(store.addStateChange).toHaveBeenCalledOnce();
+      // state.patch must also write the current value, not just the change log,
+      // or listStateEntries / getTableSnapshot / fork never see the patch.
+      expect(store.upsertStateEntry).toHaveBeenCalledOnce();
+      expect(store.upsertStateEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tableName: "world",
+          fieldName: "weather",
+          value: "rain",
+        }),
+      );
     });
   });
 
@@ -1143,6 +1154,7 @@ describe("processRuntimeResult", () => {
       setPluginDataBatch: vi.fn(),
       addTraceEvent: vi.fn(),
       addStateChange: vi.fn(),
+      upsertStateEntry: vi.fn(),
     };
   }
 

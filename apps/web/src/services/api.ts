@@ -12,6 +12,7 @@ export * from "./api/worlds.js";
 export * from "./api/sessions.js";
 export * from "./api/packages.js";
 export * from "./api/llm.js";
+export * from "./api/media.js";
 export * from "./api/actions.js";
 export {
   addCustomPreset,
@@ -44,4 +45,3 @@ export * from "./api/plugin-rpc.js";
 export * from "./api/approvals.js";
 export * from "./api/traces.js";
 export * from "./api/health.js";
-export * from "./api/utils.js";

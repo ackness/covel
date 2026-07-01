@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, ArrowDown, MessageSquare } from "lucide-react";
+import { AlertCircle, ArrowDown, Loader2, MessageSquare } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Button } from "@/components/ui/button.js";
 import { useAutoScroll } from "@/hooks/use-auto-scroll.js";
@@ -17,6 +17,7 @@ import { SessionCanvasHero } from "./chat-messages/session-canvas-hero.js";
 import { ChatMessageRenderer } from "./chat-messages/chat-message-renderer.js";
 import { ChatBlockRenderer } from "./chat-messages/chat-block-renderer.js";
 import { useImageGeneration } from "./chat-messages/use-image-generation.js";
+import { useLoadOlderMessages } from "./chat-messages/use-load-older-messages.js";
 import { useMessageGrouping } from "./chat-messages/use-message-grouping.js";
 import type { PluginRpcConfirmRequest } from "./plugin-rpc-ui.js";
 import type {
@@ -82,7 +83,7 @@ export function ChatMessages({
   messagesEndRef,
 }: ChatMessagesProps) {
   const { t } = useTranslation();
-  const { state: sessionState } = useSession();
+  const { state: sessionState, loadOlderMessages } = useSession();
   const sessionId = sessionState.session?.id;
 
   // Sticky-bottom auto-scroll. Follows the stream only while the user is
@@ -90,16 +91,29 @@ export function ChatMessages({
   // scroll up. The Radix ScrollArea renders its scrollable element as the
   // [data-radix-scroll-area-viewport] node, so we resolve it from the root.
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
+  // 解析出的滚动视口。除自动滚动外，向上加载更旧消息的 IntersectionObserver
+  // 与滚动补偿也需要它，故存入 state 以便相关 effect 在其就绪后重新运行。
+  const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null);
   const { scrollRef, bottomRef, showJumpButton, jumpToBottom } =
     useAutoScroll(messages);
   useEffect(() => {
     const root = scrollRootRef.current;
-    const viewport = root?.querySelector<HTMLElement>(
-      "[data-radix-scroll-area-viewport]",
-    );
-    scrollRef(viewport ?? null);
+    const viewport =
+      root?.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]") ??
+      null;
+    setViewportEl(viewport);
+    scrollRef(viewport);
     return () => scrollRef(null);
   }, [scrollRef]);
+
+  // 向上滚动加载更旧消息（游标分页）。顶部 sentinel 进入视口即预取一页，
+  // 合并后按 scrollHeight 差值补偿 scrollTop 保持视图不跳。
+  const { topSentinelRef, loadingOlder } = useLoadOlderMessages({
+    viewportEl,
+    hasOlder: sessionState.olderMessagesCursor != null,
+    firstMessageId: messages[0]?.id,
+    onLoadOlder: loadOlderMessages,
+  });
   const isPreGame = session.status === "active" && session.turnCount === 0;
   const isPlaying = session.status === "active" && session.turnCount > 0;
   const isEnded = session.status === "ended";
@@ -208,6 +222,10 @@ export function ChatMessages({
       <div className="relative flex-1 min-h-0 flex flex-col">
         <ScrollArea ref={scrollRootRef} className="flex-1 min-h-0">
           <div className="ui-session-column p-4 md:p-6 space-y-6 md:space-y-7 mx-auto w-full">
+            {/* 顶部哨兵（零高度）：进入视口触发游标分页向上加载。放在滚动内容流内，
+                但不产生高度，避免影响加载后的 scrollHeight 差值补偿。 */}
+            <div ref={topSentinelRef} aria-hidden="true" />
+
             {messages.length === 0 &&
               !executing &&
               (isPreGame ? (
@@ -252,6 +270,14 @@ export function ChatMessages({
             />
           </div>
         </ScrollArea>
+        {/* 加载更旧消息指示：绝对定位悬浮，不进入滚动内容流，避免扰动 scrollHeight
+            补偿计算（否则会在加载前后产生额外跳动）。 */}
+        {loadingOlder && (
+          <div className="pointer-events-none absolute top-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-background/90 px-3 py-1 text-xs text-muted-foreground shadow-sm">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            {t("session.loadingOlder", "Loading earlier messages…")}
+          </div>
+        )}
         {showJumpButton && (
           <Button
             type="button"

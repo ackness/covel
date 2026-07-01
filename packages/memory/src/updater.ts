@@ -108,8 +108,7 @@ export function createMemoryUpdater(
   awaitPending(sessionId: string): Promise<void>;
 } {
   const resolvedLocale = config?.locale ?? "zh-CN";
-  const schema = config?.blocks ?? DEFAULT_CORE_MEMORY_BLOCKS;
-  const validLabels = new Set<string>(schema.map((b) => b.label));
+  const staticSchema = config?.blocks ?? DEFAULT_CORE_MEMORY_BLOCKS;
 
   // Per-session pending-promise map. Tracks the most recent in-flight
   // updateAfterTurn() call so the next turn can await it before reading
@@ -133,6 +132,12 @@ export function createMemoryUpdater(
     } = params;
     const effectiveLocale = locale ?? resolvedLocale;
     const lang = effectiveLocale.startsWith("zh") ? "zh" : "en";
+
+    // Resolve the block schema for this session (plugin blocks merged with the
+    // session's world-declared blocks) so world memory dimensions are extracted
+    // for the worlds that declare them. Falls back to the static schema.
+    const schema = (await config?.resolveBlocks?.(sessionId)) ?? staticSchema;
+    const validLabels = new Set<string>(schema.map((b) => b.label));
 
     // Build user prompt with current blocks + new events
     const blockSection = currentBlocks

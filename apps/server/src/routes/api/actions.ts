@@ -24,6 +24,12 @@ import { rateLimiter } from "../../middleware/rate-limit.js";
 import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
 import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
 import { syncSessionTurnCount } from "./turn-count.js";
+import { decodePluginUserSettingsHeader } from "./plugin-rpc/body.js";
+import {
+  mergePluginUserSettings,
+  readWorldPluginSettings,
+} from "./plugin-user-settings.js";
+import { getCachedWorld } from "../../world-cache.js";
 
 // SSE uses ProtocolEventType names directly — no legacy mapping.
 // Frontend handleSseEvent handles these standard types.
@@ -117,7 +123,12 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const mediaStore = c.get("mediaStore");
   const prepareToolsForSession = c.get("prepareToolsForSession"); // optional — see env.d.ts
 
-  const body = await c.req.json<ActionRequest>();
+  const body = (await c.req
+    .json<ActionRequest>()
+    .catch(() => null)) as ActionRequest | null;
+  if (!body || typeof body !== "object") {
+    return c.json(errorBody("Request body must be a JSON object"), 400);
+  }
   const { requestId, type, sessionId, locale, model, payload } = body;
 
   const SUPPORTED_ACTIONS = [
@@ -129,6 +140,15 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   ];
   if (!SUPPORTED_ACTIONS.includes(type)) {
     return c.json(errorBody(`Unsupported action type: ${type}`), 400);
+  }
+
+  // Every action except start_session dereferences `payload` (content /
+  // command / …); a request missing it would throw a TypeError → opaque 500.
+  if (type !== "start_session" && (!payload || typeof payload !== "object")) {
+    return c.json(
+      errorBody(`payload (object) is required for action "${type}"`),
+      400,
+    );
   }
 
   const session = await store.getSession(sessionId);
@@ -166,6 +186,17 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   // users who toggle language mid-session see matching LLM output. The
   // session.locale still acts as the fallback when the client omits it.
   const effectiveLocale = locale ?? session.locale ?? "zh-CN";
+
+  // Persist the live locale so server-initiated turns — plugin-rpc manual
+  // triggers and deferred background followers, which build TurnInput.locale
+  // from the stored session.locale — inherit the player's current UI language
+  // instead of a stale value. Only write when it actually changed.
+  if (effectiveLocale !== session.locale) {
+    await store.updateSession(sessionId, {
+      locale: effectiveLocale,
+      updatedAt: new Date().toISOString(),
+    });
+  }
 
   // Ensure session's plugins are activated in the registry (idempotent, needed after server restart).
   // On start_session with no plugins yet, auto-activate all registered plugins and persist.
@@ -300,11 +331,15 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
 
       // Per-turn trace emitter — fans emit() into trace_events + eventBus. Threaded
       // down into ToolCallContext / llm-retry / hooks etc. via executeTurn deps.
+      // Pass the SSE envelope's traceId so persisted trace_events.traceId matches
+      // the live-streamed traceId/flowId (without it the emitter falls back to
+      // turnId, breaking traceId correlation between SSE and /api/traces).
       const emitter = createTurnEmitter({
         store,
         eventBus,
         sessionId,
         turnId,
+        traceId,
       });
 
       // NOTE: Session `phase` is no longer a first-class field. The state
@@ -340,12 +375,28 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       // is backed by `pg_advisory_lock` so mutual exclusion extends across
       // Node pods; memory/sqlite use the in-process chain lock (audit
       // 2026-04-21 F5).
+      // Resolve plugin userSettings for this turn: world-authored defaults
+      // (WorldRecord.metadata.pluginSettings) merged under the player's
+      // per-session overrides (X-Plugin-User-Settings header). The runtime's
+      // resolveUserSettings fills any still-missing declared key from the
+      // manifest default. Without this the scheduled loop only ever saw
+      // manifest defaults — player + world tuning were silently dropped on the
+      // main route (only plugin-rpc read the header).
+      const world = session.worldId
+        ? await getCachedWorld(store, session.worldId)
+        : null;
+      const userSettings = mergePluginUserSettings(
+        readWorldPluginSettings(world?.metadata),
+        decodePluginUserSettingsHeader(c.req.header("X-Plugin-User-Settings")),
+      );
+
       const turnInput = {
         sessionId,
         turnId,
         playerMessage,
         locale: effectiveLocale,
         modelOverride: model,
+        ...(userSettings ? { userSettings } : {}),
         // PR-6: snapshot session-level per-runtime slot overrides so the
         // turn executor can consult them when resolving each runtime's
         // model. The session record was loaded above (line ~67).
@@ -483,6 +534,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             runtimeCount: activeRuntimes.length,
             resultCount: result.runtimeResults.length,
             durationMs: result.durationMs,
+            // Surface a turn that was aborted before producing output (e.g.
+            // cost-gate's hard budget cap) so the player gets a visible reason
+            // instead of a silent empty turn.
+            ...(result.abortReason ? { abortReason: result.abortReason } : {}),
           }),
         ),
       });

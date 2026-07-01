@@ -13,7 +13,7 @@ const pluginsDir = path.dirname(pluginDir);
 const pluginMdPath = path.join(pluginDir, "PLUGIN.md");
 
 describe("branch-reply manifest and UI loading", () => {
-  it("parses the manual runtime manifest through the strict schema", () => {
+  it("parses the auto-seed runtime manifest through the strict schema", () => {
     const parsed = parsePluginMd(
       readFileSync(pluginMdPath, "utf-8"),
       pluginMdPath,
@@ -25,8 +25,12 @@ describe("branch-reply manifest and UI loading", () => {
       pluginType: "plugin",
       runtimeType: "function",
       outputKind: "system",
+      priority: 700,
       handler: "./handler.js",
-      trigger: { type: "manual" },
+      // auto so the seed path runs after the narrative engines each turn;
+      // the manual createCandidates / acceptCandidate actions still arrive via
+      // plugin-rpc manualTrigger regardless of the declared trigger type.
+      trigger: { type: "auto" },
       capabilities: ["branch-reply", "prompt-history-rewriter"],
       ui: {
         message: ["./ui/branch-reply-block.json"],

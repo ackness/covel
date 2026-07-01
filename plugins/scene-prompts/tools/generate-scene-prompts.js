@@ -1,10 +1,18 @@
 import { withPendingProposals } from "@covel/tools";
 
+// Labels are stored as I18nText into plugin_data so the Badge renderer resolves
+// them to the session locale (a bare zh string would render Chinese for en
+// players). The CI i18n gate doesn't scan tool-written values, so keep these
+// bilingual by hand.
 const KIND_CONFIG = {
-  observe: { label: "观察", icon: "eye", color: "blue" },
-  ask: { label: "追问", icon: "lightbulb", color: "purple" },
-  act: { label: "行动", icon: "zap", color: "green" },
-  social: { label: "交涉", icon: "user", color: "amber" },
+  observe: { label: { zh: "观察", en: "Observe" }, icon: "eye", color: "blue" },
+  ask: { label: { zh: "追问", en: "Ask" }, icon: "lightbulb", color: "purple" },
+  act: { label: { zh: "行动", en: "Act" }, icon: "zap", color: "green" },
+  social: {
+    label: { zh: "交涉", en: "Negotiate" },
+    icon: "user",
+    color: "amber",
+  },
 };
 
 function makePluginDataBatchProposal(context, items, timestamp) {
@@ -23,25 +31,31 @@ export default function ({ tool, z }) {
   const promptSchema = z.object({
     kind: z
       .enum(["observe", "ask", "act", "social"])
-      .describe("提示类型：observe/ask/act/social"),
+      .describe("Prompt type: observe/ask/act/social"),
     text: z
       .string()
       .min(1)
       .max(80)
-      .describe("玩家可以直接发送的场景化行动短句"),
+      .describe(
+        "A short, scene-specific action phrase the player can send directly",
+      ),
   });
 
   return tool({
     name: "generate-scene-prompts",
     description:
-      "生成场景化快捷回复。写入 message 命名空间，前端以 ui.message 渲染为可草拟或直接发送的提示按钮。",
+      "Generate scene-specific quick replies. Written to the message namespace; the frontend renders them via ui.message as prompt buttons the player can edit or send directly.",
     parameters: z.object({
-      scene: z.string().min(1).max(40).describe("当前场景或决策点标题"),
+      scene: z
+        .string()
+        .min(1)
+        .max(40)
+        .describe("Title of the current scene or decision point"),
       prompts: z
         .array(promptSchema)
         .min(3)
         .max(6)
-        .describe("3-6 条可直接发送的玩家行动短句"),
+        .describe("3-6 short player action phrases that can be sent directly"),
     }),
     execute: async (params, context) => {
       const now = new Date().toISOString();
@@ -69,11 +83,6 @@ export default function ({ tool, z }) {
             namespace: "message",
             key: `prompt${slot}Text`,
             value: prompt?.text ?? "",
-          },
-          {
-            namespace: "message",
-            key: `prompt${slot}Kind`,
-            value: prompt?.kind ?? "",
           },
           {
             namespace: "message",

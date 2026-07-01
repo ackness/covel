@@ -179,28 +179,6 @@ export const toolsConfigSchema = z
   })
   .strict();
 
-// ── Config field ─────────────────────────────────────────────────
-
-export const configFieldTypeSchema = z.enum([
-  "string",
-  "integer",
-  "number",
-  "boolean",
-  "enum",
-]);
-
-export const pluginConfigFieldSchema = z
-  .object({
-    type: configFieldTypeSchema,
-    default: z.unknown().optional(),
-    min: z.number().optional(),
-    max: z.number().optional(),
-    options: z.array(z.string()).optional(),
-    label: z.string().optional(),
-    description: z.string().optional(),
-  })
-  .strict();
-
 // ── Hook declarations ────────────────────────────────────────────
 
 // Validation set derived from the single source of truth (./types/hooks.ts),
@@ -419,7 +397,15 @@ export const pluginUserSettingSpecSchema = z
         message:
           "key must start with a letter and contain only letters/digits/underscore/hyphen",
       }),
-    type: z.enum(["text", "number", "toggle", "select", "textarea"]),
+    type: z.enum([
+      "text",
+      "textarea",
+      "number",
+      "integer",
+      "toggle",
+      "select",
+      "slider",
+    ]),
     // zod 4.4: a bare `z.unknown()` field in ANY object (strict or not) is now
     // treated as a required key (4.3 treated it as optional); `.optional()`
     // keeps the field omittable so plugins can declare a setting with no default.
@@ -452,6 +438,9 @@ export const runtimeManifestSchema = z
           'name must be lowercase with hyphens, optional slash separators (e.g. "my-runtime" or "my-plugin/sub-runtime")',
       }),
     description: z.string().min(1),
+    // Friendly, player-facing name (I18nText). Distinct from `name`, which is
+    // the runtime id. Surfaced via PluginSummary.displayName for plugin lists.
+    displayName: i18nTextLoose.optional(),
     priority: z.number().int().min(0).max(1000).optional(),
     version: z.string().optional(),
     runtimeType: z.enum(["agent", "function"]).optional(),
@@ -497,7 +486,14 @@ export const runtimeManifestSchema = z
      * (guide, codex, char-creator/character-tracker, npc-graph/extractor
      * all depend on narrator succeeding).
      */
-    upstreamRequired: z.array(z.string().min(1)).optional(),
+    upstreamRequired: z
+      .array(
+        z.union([
+          z.string().min(1),
+          z.object({ capability: z.string().min(1) }).strict(),
+        ]),
+      )
+      .optional(),
     trigger: triggerConfigSchema.optional(),
     /**
      * Execution mode when activated via manual plugin-rpc (`sync` awaits,
@@ -509,7 +505,6 @@ export const runtimeManifestSchema = z
     input: inputConfigSchema.optional(),
     output: outputConfigSchema.optional(),
     dataSchemas: pluginDataSchemaMapSchema.optional(),
-    config: z.record(z.string(), pluginConfigFieldSchema).optional(),
     i18n: z.record(z.string(), z.string()).optional(),
     ui: uiSpecSchema.optional(),
     userSettings: z.array(pluginUserSettingSpecSchema).optional(),

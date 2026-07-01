@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useSession } from "@/stores/session-store.js";
+import { getDataService } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { resolveI18n } from "@/lib/catalog.js";
@@ -121,6 +122,8 @@ function SessionPage() {
   navigateRef.current = navigate;
   const messagesRef = useRef(state.messages);
   messagesRef.current = state.messages;
+  const sessionIdRef = useRef(state.session?.id);
+  sessionIdRef.current = state.session?.id;
   const tRef = useRef(t);
   tRef.current = t;
 
@@ -141,31 +144,56 @@ function SessionPage() {
       onNewWorld: () => navigateRef.current({ to: "/session", search: {} }),
       onExportChat: () => {
         const tt = tRef.current;
-        const msgs = messagesRef.current;
-        if (msgs.length === 0) {
-          emitToast(
-            "info",
-            tt("session.exportEmpty", "No messages to export yet"),
-          );
-          return;
-        }
-        try {
-          const text = msgs.map((m) => `[${m.role}] ${m.content}`).join("\n\n");
-          const blob = new Blob([text], { type: "text/plain" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = "covel-chat.txt";
-          a.click();
-          URL.revokeObjectURL(url);
-          emitToast("success", tt("session.exportSuccess", "Chat exported"));
-        } catch (err) {
-          emitToast(
-            "error",
-            tt("session.exportFailed", "Failed to export chat"),
-            err instanceof Error ? err.message : String(err),
-          );
-        }
+        const sid = sessionIdRef.current;
+        void (async () => {
+          // 导出以持久化全量历史为基底（窗口化后 state.messages 只含最近一窗 + 已上滚
+          // 加载的部分，可能不完整），再按 id 并入内存里尚未落盘的消息（如正在流式生成的
+          // 占位）。这样既不丢早期历史，也不丢屏幕上正在生成、尚未落盘的内容。拉取失败则
+          // 回退到内存已加载部分。
+          const inMemory = messagesRef.current;
+          let msgs: ReadonlyArray<{
+            id: string;
+            role: string;
+            content: string;
+          }> = inMemory;
+          if (sid) {
+            try {
+              const full = await getDataService().listMessages(sid);
+              if (full.length > 0) {
+                const fullIds = new Set(full.map((m) => m.id));
+                msgs = [...full, ...inMemory.filter((m) => !fullIds.has(m.id))];
+              }
+            } catch {
+              // 回退到内存中已加载的消息。
+            }
+          }
+          if (msgs.length === 0) {
+            emitToast(
+              "info",
+              tt("session.exportEmpty", "No messages to export yet"),
+            );
+            return;
+          }
+          try {
+            const text = msgs
+              .map((m) => `[${m.role}] ${m.content}`)
+              .join("\n\n");
+            const blob = new Blob([text], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "covel-chat.txt";
+            a.click();
+            URL.revokeObjectURL(url);
+            emitToast("success", tt("session.exportSuccess", "Chat exported"));
+          } catch (err) {
+            emitToast(
+              "error",
+              tt("session.exportFailed", "Failed to export chat"),
+              err instanceof Error ? err.message : String(err),
+            );
+          }
+        })();
       },
     });
   }, []);

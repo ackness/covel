@@ -6,6 +6,7 @@ import type { EventCategory } from "./-debug-helpers.js";
 import {
   getStoryTurnCount,
   getVisibleTurns,
+  mergeTurnPages,
   traceEventMatchesCategory,
   type DebugView,
 } from "./-debug-page-model.js";
@@ -21,6 +22,10 @@ export function useDebugPageData(sid: string | undefined) {
     sid ?? null,
   );
   const [turns, setTurns] = useState<api.TurnTrace[]>([]);
+  // 游标分页：olderCursor 指向已加载最旧一段的更前一步；null 表示已到 trace
+  // 起点或已通过「加载全部」拉全量，此时展示数据即完整（无窗口失真）。
+  const [olderCursor, setOlderCursor] = useState<api.TraceCursor | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [filterCategory, setFilterCategory] = useState<EventCategory | null>(
@@ -75,27 +80,83 @@ export function useDebugPageData(sid: string | undefined) {
     }
   }, [selectedSessionId, sid]);
 
+  // 展开最新（正序数组的最后一个）turn，便于用户直接看到最近一轮。
+  const expandLatestTurn = useCallback((loaded: api.TurnTrace[]) => {
+    if (loaded.length === 0) return;
+    const latestId = loaded[loaded.length - 1].turnId;
+    setExpandedTurns((prev) => {
+      const next = new Set(prev);
+      next.add(latestId);
+      return next;
+    });
+  }, []);
+
+  // 默认加载：拉最近一段窗口（第一页），重置游标。切换会话 / 手动刷新走这里。
   const loadTraces = useCallback(async () => {
+    if (!selectedSessionId) return;
+    setLoading(true);
+    try {
+      const data = await apiClient.fetchTraceTurnsPage(selectedSessionId);
+      setTurns(data.turns);
+      setOlderCursor(data.nextCursor);
+      setTraceDiscovery(data.discovery ?? null);
+      expandLatestTurn(data.turns);
+    } catch {
+      setTurns([]);
+      setOlderCursor(null);
+      setTraceDiscovery(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedSessionId, expandLatestTurn]);
+
+  // 加载更早：用 olderCursor 拉更旧一页，按 turnId 合并进现有 turns（合并边界
+  // turn），并前移游标；已加载页不受影响。
+  const loadOlder = useCallback(async () => {
+    if (!selectedSessionId || !olderCursor || loadingOlder) return;
+    setLoadingOlder(true);
+    try {
+      const data = await apiClient.fetchTraceTurnsPage(selectedSessionId, {
+        before: olderCursor,
+      });
+      setTurns((prev) => mergeTurnPages(prev, data.turns));
+      setOlderCursor(data.nextCursor);
+    } catch {
+      // 保留已加载数据；失败不清空。
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [selectedSessionId, olderCursor, loadingOlder]);
+
+  // 自动刷新：只重拉最新窗口（第一页）并按 turnId 合并进现有 turns，
+  // 不 wipe 已加载的更早页，也不动 olderCursor（它可能指向更前的位置）。
+  const refreshLatest = useCallback(async () => {
+    if (!selectedSessionId) return;
+    try {
+      const data = await apiClient.fetchTraceTurnsPage(selectedSessionId);
+      setTurns((prev) => mergeTurnPages(prev, data.turns));
+      if (data.discovery) setTraceDiscovery(data.discovery);
+    } catch {
+      // 轮询失败静默：保留已加载数据。
+    }
+  }, [selectedSessionId]);
+
+  // 兜底：拉全量 turn，整体替换并清空游标（展示数据即完整）。
+  const loadAll = useCallback(async () => {
     if (!selectedSessionId) return;
     setLoading(true);
     try {
       const data = await apiClient.fetchTraceTurns(selectedSessionId);
       setTurns(data.turns);
+      setOlderCursor(null);
       setTraceDiscovery(data.discovery ?? null);
-      if (data.turns.length > 0) {
-        setExpandedTurns((prev) => {
-          const next = new Set(prev);
-          next.add(data.turns[data.turns.length - 1].turnId);
-          return next;
-        });
-      }
+      expandLatestTurn(data.turns);
     } catch {
-      setTurns([]);
-      setTraceDiscovery(null);
+      // 保留已加载数据；失败不清空。
     } finally {
       setLoading(false);
     }
-  }, [selectedSessionId]);
+  }, [selectedSessionId, expandLatestTurn]);
 
   useEffect(() => {
     loadSessions();
@@ -118,9 +179,9 @@ export function useDebugPageData(sid: string | undefined) {
 
   useEffect(() => {
     if (!autoRefresh || !selectedSessionId) return;
-    const interval = setInterval(loadTraces, 3000);
+    const interval = setInterval(refreshLatest, 3000);
     return () => clearInterval(interval);
-  }, [autoRefresh, selectedSessionId, loadTraces]);
+  }, [autoRefresh, selectedSessionId, refreshLatest]);
 
   const toggleTurn = useCallback((turnId: string) => {
     setExpandedTurns((prev) => {
@@ -149,6 +210,9 @@ export function useDebugPageData(sid: string | undefined) {
 
   const visibleTurns = useMemo(() => getVisibleTurns(turns), [turns]);
 
+  // 仍有更早未加载的事件：展示的计数/成本聚合只是「当前窗口」，非全会话。
+  const isPartial = olderCursor !== null;
+
   const filterMatchesEvent = useCallback(
     (event: api.TraceEvent) => traceEventMatchesCategory(event, filterCategory),
     [filterCategory],
@@ -170,9 +234,13 @@ export function useDebugPageData(sid: string | undefined) {
     traceDiscovery,
     totalEvents,
     storyTurnCount,
+    isPartial,
+    loadingOlder,
     selectSession,
     openSelectedSession,
     loadTraces,
+    loadOlder,
+    loadAll,
     setAutoRefresh,
     setFilterCategory,
     setSelectedEvent,

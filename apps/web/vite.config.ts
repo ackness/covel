@@ -1,10 +1,38 @@
-import { defineConfig } from "vite";
+import { defineConfig, type ProxyOptions } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
+import type { ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
 
 const RUNTIME_PROXY_PATHS = ["/api"] as const;
+
+const RUNTIME_NOT_READY_BODY = JSON.stringify({
+  error: "runtime server not ready",
+});
+
+/**
+ * The runtime server (3001) boots a few seconds after Vite. Until it's up,
+ * proxied `/api/*` requests hit ECONNREFUSED — Vite's default handler answers
+ * with a 500 or resets the socket, so the first page load fails and the user
+ * has to reload. Answer with a clean 503 ("backend not ready") instead: the
+ * frontend `request()` helper retries idempotent GETs on 503, so the first load
+ * simply waits for the server to finish booting — no manual reload needed.
+ */
+function configureRuntimeProxy(proxy: {
+  on(
+    event: "error",
+    handler: (err: Error, req: unknown, res: unknown) => void,
+  ): void;
+}): void {
+  proxy.on("error", (_err, _req, res) => {
+    const response = res as Partial<ServerResponse>;
+    if (typeof response.writeHead === "function" && !response.headersSent) {
+      response.writeHead(503, { "Content-Type": "application/json" });
+      response.end?.(RUNTIME_NOT_READY_BODY);
+    }
+  });
+}
 
 function readEnvString(
   name: string,
@@ -36,12 +64,11 @@ export function resolveRuntimeProxyTarget(
 
 export function createRuntimeProxyConfig(
   env: Record<string, string | undefined> = process.env,
-) {
+): Record<string, ProxyOptions> {
   const target = resolveRuntimeProxyTarget(env);
+  const entry: ProxyOptions = { target, configure: configureRuntimeProxy };
 
-  return Object.fromEntries(
-    RUNTIME_PROXY_PATHS.map((path) => [path, { target }]),
-  );
+  return Object.fromEntries(RUNTIME_PROXY_PATHS.map((path) => [path, entry]));
 }
 
 export function resolveWorkspaceRoot(): string {

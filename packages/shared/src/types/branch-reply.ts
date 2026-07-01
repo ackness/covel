@@ -4,7 +4,12 @@ export interface BranchReplyCandidate {
   readonly id: string;
   readonly index: number;
   readonly text: string;
-  readonly source: "deterministic" | "manual" | "llm";
+  /**
+   * `original` — seeded from / kept as the engine's actual reply (candidate[0]).
+   * `regenerated` — a genuine LLM rephrasing produced by the regenerate action.
+   * `manual` — supplied verbatim via an explicit `candidates` payload.
+   */
+  readonly source: "original" | "regenerated" | "manual";
   readonly createdAt: string;
 }
 
@@ -16,6 +21,14 @@ export interface BranchReplyTurnRecord {
   readonly selectedCandidateId?: string;
   readonly acceptedCandidateId?: string;
   readonly acceptedText?: string;
+  /**
+   * Runtime id of the narrating engine this record projects onto (discovered
+   * from the seed turn's `completedResults`, never hardcoded). The
+   * prompt-history rewriter uses it to rewrite the narrator's assistant message
+   * rather than branch-reply's own auto-appended seed message. Absent on
+   * records seeded/created without a known narrator runtime.
+   */
+  readonly runtimeId?: string;
   readonly status: "ready" | "accepted";
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -54,6 +67,15 @@ export type BranchReplyManualPayload =
   | BranchReplyAcceptCandidatePayload;
 
 export type BranchReplyRuntimeResult =
+  | {
+      // Auto-seed path (no manualPayload): seeds candidate[0] from the active
+      // engine's narrative. `seeded: false` on empty / system / already-seeded
+      // turns (no proposal emitted).
+      readonly action: "seed";
+      readonly turnId: string;
+      readonly seeded: boolean;
+      readonly candidateCount?: number;
+    }
   | {
       readonly action: "createCandidates";
       readonly turnId: string;

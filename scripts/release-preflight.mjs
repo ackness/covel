@@ -250,7 +250,9 @@ if (pluginIssues === 0)
 console.log("\n[4/6] worlds/<id>/ structure");
 const worldDirs = fs
   .readdirSync(path.join(repoRoot, "worlds"), { withFileTypes: true })
-  .filter((e) => e.isDirectory());
+  // `_`-prefixed dirs are archives (e.g. worlds/_archive) — the world-seed
+  // loader skips any dir without a valid world.yaml, so they aren't worlds.
+  .filter((e) => e.isDirectory() && !e.name.startsWith("_"));
 let worldIssues = 0;
 for (const entry of worldDirs) {
   const dir = path.join(repoRoot, "worlds", entry.name);
