@@ -43,6 +43,31 @@ export const initialState: SessionState = {
   assetProgressByTurn: new Map<string, readonly AssetProgressEvent[]>(),
 };
 
+/**
+ * Per-session slices cleared on both RESET_SESSION and RESET_TO_WORLD_SELECT.
+ * Safe to share module-wide: the reducer only ever replaces these collections
+ * with fresh copies, never mutates them in place.
+ */
+const SESSION_RESET: Partial<SessionState> = {
+  session: null,
+  messages: [],
+  olderMessagesCursor: null,
+  statePatches: [],
+  gameState: {},
+  pluginData: {},
+  executing: false,
+  executionError: null,
+  executionSteps: [],
+  submittedBlockIds: new Set<string>(),
+  submittedBlockValues: {},
+  sessionPlugins: [],
+  messageUiSpecs: [],
+  pendingInteractionDrafts: [],
+  suspensions: [],
+  assetsByTurn: new Map<string, readonly AssetGenerateView[]>(),
+  assetProgressByTurn: new Map<string, readonly AssetProgressEvent[]>(),
+};
+
 export function reducer(
   state: SessionState,
   action: SessionAction,
@@ -315,49 +340,9 @@ export function reducer(
           : state.submittedBlockValues,
       };
     case "RESET_SESSION":
-      return {
-        ...state,
-        session: null,
-        messages: [],
-        olderMessagesCursor: null,
-        statePatches: [],
-        gameState: {},
-        pluginData: {},
-        executing: false,
-        executionError: null,
-        executionSteps: [],
-        submittedBlockIds: new Set<string>(),
-        submittedBlockValues: {},
-        sessionPlugins: [],
-        messageUiSpecs: [],
-        pendingInteractionDrafts: [],
-        suspensions: [],
-        assetsByTurn: new Map<string, readonly AssetGenerateView[]>(),
-        assetProgressByTurn: new Map<string, readonly AssetProgressEvent[]>(),
-      };
+      return { ...state, ...SESSION_RESET };
     case "RESET_TO_WORLD_SELECT":
-      return {
-        ...state,
-        world: null,
-        session: null,
-        messages: [],
-        olderMessagesCursor: null,
-        worldSessions: [],
-        statePatches: [],
-        gameState: {},
-        pluginData: {},
-        executing: false,
-        executionError: null,
-        executionSteps: [],
-        submittedBlockIds: new Set<string>(),
-        submittedBlockValues: {},
-        sessionPlugins: [],
-        messageUiSpecs: [],
-        pendingInteractionDrafts: [],
-        suspensions: [],
-        assetsByTurn: new Map<string, readonly AssetGenerateView[]>(),
-        assetProgressByTurn: new Map<string, readonly AssetProgressEvent[]>(),
-      };
+      return { ...state, ...SESSION_RESET, world: null, worldSessions: [] };
     case "LOAD_SESSION_PLUGINS":
       return { ...state, sessionPlugins: action.plugins };
     case "TOGGLE_SESSION_PLUGIN":

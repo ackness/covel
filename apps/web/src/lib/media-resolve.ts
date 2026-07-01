@@ -200,16 +200,6 @@ async function fetchBlobAndCache(
 }
 
 /**
- * Pull a blob from IDB and validate its integrity against `ref`. A
- * mismatched record is evicted so the next call re-fetches. Returns
- * `null` when no usable blob is present.
- */
-async function getAndVerifyCachedMedia(ref: MediaRef): Promise<Blob | null> {
-  const cached = await getCachedMedia(ref.id, ref);
-  return cached?.blob ?? null;
-}
-
-/**
  * Resolve a `MediaRef` to a renderable URL.
  *
  * Never throws. On failure returns `ok: false` with the sentinel URL so
@@ -229,7 +219,7 @@ export async function resolveMediaSrc(
 
   // 2. IDB cache hit (validated against ref to prevent serving a
   // poisoned record from a previous miscached fetch).
-  const cachedBlob = await getAndVerifyCachedMedia(ref);
+  const cachedBlob = (await getCachedMedia(ref.id, ref))?.blob ?? null;
   if (cachedBlob) {
     return {
       url: URL.createObjectURL(cachedBlob),

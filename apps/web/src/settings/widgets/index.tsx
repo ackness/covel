@@ -2,20 +2,12 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Eye, EyeOff } from "lucide-react";
 import type { SettingEntry, WidgetKind } from "@covel/settings";
+import { resolveI18nText } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
 import { ThemeManagerWidget } from "@/components/theme-manager.js";
 import { useSetting } from "../use-settings.js";
 import { THEME_MANAGER_WIDGET_KEY } from "@/theme-system/storage.js";
-
-function resolveLabel(
-  label: SettingEntry["label"] | undefined,
-  locale = "zh-CN",
-): string {
-  if (!label) return "";
-  if (typeof label === "string") return label;
-  return label[locale] ?? label["en-US"] ?? Object.values(label)[0] ?? "";
-}
 
 function inferWidget(entry: SettingEntry): WidgetKind {
   if (entry.widget) return entry.widget;
@@ -64,11 +56,11 @@ function FieldShell({
   return (
     <div className="space-y-1.5">
       <Label className="text-xs uppercase tracking-widest text-muted-foreground">
-        {resolveLabel(entry.label, locale)}
+        {resolveI18nText(entry.label, locale) ?? ""}
       </Label>
       {entry.description && (
         <p className="text-[11px] text-muted-foreground">
-          {resolveLabel(entry.description, locale)}
+          {resolveI18nText(entry.description, locale) ?? ""}
         </p>
       )}
       {children}
@@ -149,7 +141,7 @@ function SelectWidget({ entry }: { entry: SettingEntry }) {
       >
         {(entry.options ?? []).map((opt) => (
           <option key={opt.value} value={opt.value}>
-            {resolveLabel(opt.label, i18n.language)}
+            {resolveI18nText(opt.label, i18n.language) ?? ""}
           </option>
         ))}
       </select>

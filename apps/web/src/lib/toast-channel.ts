@@ -65,9 +65,3 @@ export function subscribeToast(cb: Subscriber): () => void {
     if (idx >= 0) subscribers.splice(idx, 1);
   };
 }
-
-/** Test helper — exposed for unit tests, no callers expected in prod code. */
-export function __resetToastChannelForTests(): void {
-  subscribers.length = 0;
-  nextId = 1;
-}

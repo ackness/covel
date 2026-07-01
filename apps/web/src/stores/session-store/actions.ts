@@ -95,7 +95,7 @@ export function useBuildSessionActions({
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
       runActionStream(
         {
-          requestId: api.uid(),
+          requestId: crypto.randomUUID(),
           type: "start_session",
           sessionId,
           locale: i18n.language,
@@ -112,7 +112,7 @@ export function useBuildSessionActions({
       .catch(() => postStart());
   }, [state, handleSseEvent, dispatch]);
 
-  const restoreSession = useCallback(
+  const resumeSession = useCallback(
     async (session: api.SessionRecord) => {
       await restoreSessionState({
         ds,
@@ -125,20 +125,13 @@ export function useBuildSessionActions({
     [ds, dispatch, sessionIdRef, state.worlds],
   );
 
-  const resumeSession = useCallback(
-    async (session: api.SessionRecord) => {
-      await restoreSession(session);
-    },
-    [restoreSession],
-  );
-
   const resumeSessionById = useCallback(
     async (sessionId: string) => {
       const session = await ds.getSession(sessionId);
       if (!session) throw new Error("Session not found: " + sessionId);
-      await restoreSession(session);
+      await resumeSession(session);
     },
-    [ds, restoreSession],
+    [ds, resumeSession],
   );
 
   const loadWorldSessions = useCallback(async () => {
@@ -166,7 +159,7 @@ export function useBuildSessionActions({
       const sessionId = session.id;
 
       if (opts.echoUserMessage && content) {
-        const userMsgId = api.uid();
+        const userMsgId = crypto.randomUUID();
         const userTimestamp = new Date().toISOString();
         dispatch({
           type: "ADD_MESSAGE",
@@ -191,7 +184,7 @@ export function useBuildSessionActions({
           const isCommand = content.startsWith("/");
           runActionStream(
             {
-              requestId: api.uid(),
+              requestId: crypto.randomUUID(),
               type: isCommand ? "execute_command" : "send_message",
               sessionId,
               locale: i18n.language,
@@ -353,7 +346,7 @@ export function useBuildSessionActions({
 
       ensureServerThenRun(ds, sessionId, () =>
         runKernelAction({
-          requestId: api.uid(),
+          requestId: crypto.randomUUID(),
           type: "execute_command",
           sessionId,
           locale: i18n.language,
@@ -385,7 +378,7 @@ export function useBuildSessionActions({
 
       ensureServerThenRun(ds, sessionId, () =>
         runKernelAction({
-          requestId: api.uid(),
+          requestId: crypto.randomUUID(),
           type: "retry_runtime",
           sessionId,
           locale: i18n.language,
@@ -508,10 +501,6 @@ export function useBuildSessionActions({
     dispatch({ type: "CLEAR_DRAFTS" });
   }, [dispatch]);
 
-  const setComposerText = useCallback((_text: string) => {
-    // Composer state lives in GameView; this callback preserves plugin API compatibility.
-  }, []);
-
   const resumeSuspension = useCallback(
     async (suspensionId: string, data: unknown) => {
       const sid = sessionIdRef.current;
@@ -589,7 +578,6 @@ export function useBuildSessionActions({
       upsertInteractionDraft,
       removeInteractionDraft,
       clearInteractionDrafts,
-      setComposerText,
       resumeSuspension,
       cancelSuspension,
       refreshSuspensions,
@@ -620,7 +608,6 @@ export function useBuildSessionActions({
       upsertInteractionDraft,
       removeInteractionDraft,
       clearInteractionDrafts,
-      setComposerText,
       resumeSuspension,
       cancelSuspension,
       refreshSuspensions,

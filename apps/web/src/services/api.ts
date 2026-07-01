@@ -45,4 +45,3 @@ export * from "./api/plugin-rpc.js";
 export * from "./api/approvals.js";
 export * from "./api/traces.js";
 export * from "./api/health.js";
-export * from "./api/utils.js";

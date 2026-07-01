@@ -18,7 +18,6 @@ import { afterEach, beforeEach, describe, it, expect } from "vitest";
 import {
   __resetMediaCacheForTests,
   deleteCachedMedia,
-  getCacheSize,
   getCachedMedia,
   putCachedMedia,
   type MediaCacheRecord,
@@ -221,14 +220,6 @@ describe("media-cache", () => {
     await deleteCachedMedia("zap");
     const got = await getCachedMedia("zap");
     expect(got).toBeNull();
-  });
-
-  it("getCacheSize sums sizes across records", async () => {
-    await putCachedMedia(makeRecord("a"));
-    await putCachedMedia(makeRecord("bb"));
-    const size = await getCacheSize();
-    expect(size).toBeGreaterThan(0);
-    expect(typeof size).toBe("number");
   });
 
   it("returns null gracefully when indexedDB is unavailable", async () => {

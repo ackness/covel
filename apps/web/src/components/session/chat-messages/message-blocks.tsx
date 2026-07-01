@@ -29,8 +29,7 @@ export function PluginMessageBlock({
   sourceBlockId: string;
   locked: boolean;
 }) {
-  const { sendMessage, upsertInteractionDraft, setComposerText } =
-    useSessionActions();
+  const { sendMessage, upsertInteractionDraft } = useSessionActions();
   const data = (block.data ?? {}) as Record<string, unknown>;
   const pluginId = data.pluginId as string;
   const specs = (data.specs ?? []) as Array<Record<string, unknown>>;
@@ -70,19 +69,8 @@ export function PluginMessageBlock({
         if (!text) return;
         sendMessage(text);
       },
-      setComposerText: async (params: Record<string, unknown>) => {
-        if (locked) return;
-        setComposerText(String(params.text ?? ""));
-      },
     }),
-    [
-      locked,
-      turnId,
-      sourceBlockId,
-      sendMessage,
-      upsertInteractionDraft,
-      setComposerText,
-    ],
+    [locked, turnId, sourceBlockId, sendMessage, upsertInteractionDraft],
   );
 
   if (!pluginId || specs.length === 0) return null;
