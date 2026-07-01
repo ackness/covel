@@ -146,6 +146,22 @@ sources:
 | `locale`  | no   | 长度至少 2 的字符串                                                                    | source 对应的内容语言。                                                                   |
 | `merge`   | no   | `replace`、`skipExisting`                                                              | 写入冲突策略。                                                                            |
 
+### Locale 变体解析（`<name>.<lang>.<ext>`）
+
+导入器按**会话 locale** 解析 source 文件，沿用 `WORLD.md` / 外部 dimension 的双语约定：对每个 source 的 `path`，先尝试 `<name>.<lang>.<ext>`（`lang` 为 locale 主子标签，`en-US` → `en`），命中则用之，否则回退到声明的 `path`。
+
+```
+characters/main-cast.json      # 默认（作者语言）
+characters/main-cast.en.json   # en 会话自动选用
+data/rules/tide-mystery.yaml
+data/rules/tide-mystery.en.yaml
+```
+
+- locale 来自 session（创建时确定）；`importWorldDataForSession` / `syncWorldDataForSession` / `preflightWorldDataForSession` 的 `locale` 选项透传，缺省时回退到 `session.locale`。
+- 对**任意** source kind 生效（`json` / `yaml` / `text` / `markdown` / `media` 目录）——变体不存在即回退，是纯 opt-in、非破坏。
+- import ledger / `sync-data` 记录并比对被选中的变体文件摘要，故不同 locale 的会话各自独立、互不污染。
+- 与 source 的 `locale` 字段无关：那是 source 内容语言的元数据；本机制是「按会话 locale 选文件」。
+
 `source id` 必须匹配 `^[a-z][a-zA-Z0-9_-]{0,63}$`。descriptor 顶层目前只接受 `schemaVersion: 1` 和 `sources`。
 
 ## Target URI

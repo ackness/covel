@@ -103,6 +103,7 @@ export async function importWorldDataForSession(
     sources: descriptor.sources,
     deps: preflight,
     now: options.now,
+    locale: options.locale ?? session?.locale,
   });
   const result = await writeImportPlan({
     store: options.store,
@@ -181,6 +182,7 @@ export async function preflightWorldDataForSession(
     sources: descriptor.sources,
     deps: options.preflight,
     now: options.now,
+    locale: options.locale,
   });
 
   return {
@@ -295,6 +297,7 @@ export async function syncWorldDataForSession(
     sources: descriptor.sources,
     deps: preflight,
     now: options.now,
+    locale: options.locale ?? session?.locale,
   });
   const diagnostics = [
     ...descriptor.diagnostics,

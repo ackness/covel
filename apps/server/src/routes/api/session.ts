@@ -180,6 +180,7 @@ sessionRoutes.post("/", async (c) => {
       worldsDirs,
       covelHome,
       now,
+      locale: session.locale,
       preflight: {
         activePlugins: plugins,
         registry: pluginRegistry,

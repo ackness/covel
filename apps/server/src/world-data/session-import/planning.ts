@@ -260,6 +260,8 @@ export async function buildImportPlan(options: {
   sources: readonly OrderedWorldDataSource[];
   deps?: WorldDataImportPreflightDeps;
   now: string;
+  /** Session locale — selects `<name>.<lang>.<ext>` source variants when present. */
+  locale?: string;
 }): Promise<ImportPlan> {
   const writes: PlannedWrite[] = [];
   const diagnostics: WorldDataDiagnostic[] = [];
@@ -312,7 +314,7 @@ export async function buildImportPlan(options: {
       continue;
     }
 
-    const read = await readWorldDataSource(source);
+    const read = await readWorldDataSource(source, options.locale);
     diagnostics.push(...read.diagnostics);
     if (read.diagnostics.some((diagnostic) => diagnostic.level === "error")) {
       continue;

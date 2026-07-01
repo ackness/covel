@@ -247,6 +247,84 @@ sources:
     expect(await store.listWorldDataImportLedger("sess-1")).toHaveLength(2);
   });
 
+  it("imports the locale variant <name>.<lang>.<ext> when the session locale matches", async () => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  facts:
+    kind: json
+    path: data/facts.json
+    to: plugin:world-notes/facts
+    key: id
+`,
+      files: {
+        "data/facts.json": JSON.stringify([
+          { id: "gate", content: "闸门锁着。" },
+        ]),
+        "data/facts.en.json": JSON.stringify([
+          { id: "gate", content: "The gate is locked." },
+        ]),
+      },
+    });
+    const store = await makeStore(["world-notes"]);
+
+    await importWorldDataForSession({
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      locale: "en-US",
+      preflight: {
+        activePlugins: ["world-notes"],
+        registry: registry({ "world-notes": ["facts"] }),
+      },
+    });
+
+    const rows = await store.listPluginData("sess-1", "world-notes", "facts");
+    expect((rows[0]?.value as { content: string }).content).toBe(
+      "The gate is locked.",
+    );
+  });
+
+  it("falls back to the declared source when no locale variant exists", async () => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  facts:
+    kind: json
+    path: data/facts.json
+    to: plugin:world-notes/facts
+    key: id
+`,
+      // Only the zh default exists — an en-US session must fall back to it,
+      // not error.
+      files: {
+        "data/facts.json": JSON.stringify([
+          { id: "gate", content: "闸门锁着。" },
+        ]),
+      },
+    });
+    const store = await makeStore(["world-notes"]);
+
+    const result = await importWorldDataForSession({
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      locale: "en-US",
+      preflight: {
+        activePlugins: ["world-notes"],
+        registry: registry({ "world-notes": ["facts"] }),
+      },
+    });
+
+    expect(result.written).toBe(1);
+    const rows = await store.listPluginData("sess-1", "world-notes", "facts");
+    expect((rows[0]?.value as { content: string }).content).toBe("闸门锁着。");
+  });
+
   it("rejects missing plugin schemas during preflight", async () => {
     const { worldsDir, worldId } = await makeWorld({
       descriptor: `schemaVersion: 1

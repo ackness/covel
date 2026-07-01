@@ -53,6 +53,7 @@ worldDataSyncRoutes.post("/:id/world-data/preflight", async (c) => {
     worldsDirs,
     covelHome,
     now: new Date().toISOString(),
+    locale: session?.locale,
     preflight: {
       activePlugins: plugins,
       registry: pluginRegistry,
@@ -97,6 +98,7 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
     dryRun: body.dryRun !== false,
     force: body.force === true,
     deferMediaFinalize: false,
+    locale: session.locale,
     preflight: {
       activePlugins: session.activePlugins ?? [],
       registry: pluginRegistry,

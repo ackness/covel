@@ -1,0 +1,101 @@
+- schemaVersion: 1
+  id: mistport-fog-truth
+  title: Truth in the Fog
+  content: In Mistport the clues often contradict one another. Every investigation should preserve verifiable details, witness bias, and the drift of evidence caused by the tides, letting the player advance the truth by questioning and cross-checking rather than being handed a conclusion.
+  kind: constant
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - fog
+    - clue
+    - witness
+    - tide
+  insertionOrder: 410
+- schemaVersion: 1
+  id: mistport-tide-clock
+  title: The Tide Clock
+  content: Flood tide, ebb tide, the tolling of the bell tower, and the Tide-Seal Decree all change which places can be entered. Action choices should make the current tide-time explicit, letting time pressure shape the route of exploration; the deep-ebb warning (a triple strike) is a rare window of opportunity — and of danger.
+  kind: triggered
+  category: scene
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - flood tide
+    - ebb
+    - bell tower
+    - Tide-Seal
+    - route
+  insertionOrder: 420
+- schemaVersion: 1
+  id: mistport-ruin-whisper
+  title: Whispers of the Ruins
+  content: Ancient relics bring knowledge, contamination, and trade value, with unpredictable effects. Handling a relic means weighing appraisal, the black market, the Congregation, the Council, and personal safety all at once; using an unappraised relic should carry real risk.
+  kind: triggered
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - relic
+    - appraisal
+    - black market
+    - Congregation
+    - risk
+  insertionOrder: 430
+- schemaVersion: 1
+  id: mistport-fog-rot
+  title: Tide-Force and Fog-Rot
+  content: Channeling the tide-force or using an active relic always has a price. Gains in power should come with accumulating fog-rot, bodily mutation, or the erosion of the mind — never a costless boost; fog-rot is irreversible, and the deeper into the Undertow, the more the price shows itself.
+  kind: triggered
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - tide-force
+    - fog-rot
+    - price
+    - mutation
+    - tide-warden
+  insertionOrder: 440
+- schemaVersion: 1
+  id: mistport-faction-pressure
+  title: The Four-Way Struggle
+  content: The Council, the Tide-Reader Guild, the Salt Fangs, and the Congregation of the Mist each react to the player's relic dealings and moves in the Undertow, their standing rising and falling against one another. When advancing the plot, foreground the cost of taking sides — pleasing one faction usually offends another, and there is no neutrality that leaves no mark.
+  kind: triggered
+  category: relationship
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - Council
+    - Guild
+    - Salt Fangs
+    - Congregation
+    - allegiance
+  insertionOrder: 450
+- schemaVersion: 1
+  id: mistport-deep-truth
+  title: The Thing in the Deep
+  content: The Riftide, the thickening fog, Old Qi's disappearance, and the fragments of the "Key" all point, in the end, to something awakening in the deepest reach of the Undertow. This main thread should accumulate slowly, layer by layer, hinted at through clues and strange phenomena — never cheaply revealed in the early or middle game; the closer to the truth, the more oppressive the world's mood and the heavier the cost.
+  kind: evolving
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - Riftide
+    - the deep
+    - Key
+    - cycle
+    - truth
+  insertionOrder: 460
