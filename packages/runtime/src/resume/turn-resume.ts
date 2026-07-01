@@ -15,6 +15,7 @@ import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { runAgentToolLoop } from "../agent-loop/turn-agent-tool-loop.js";
 import { finalizeAgentOutput } from "../agent-loop/finalize-agent-output.js";
+import { NARRATOR_PRIORITY } from "../schedule/scheduler.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 
 export interface ResumeSuspendedRuntimeOptions {
@@ -229,6 +230,39 @@ export async function resumeSuspendedRuntime(
 
   if (deps.store) {
     await deps.store.markSuspensionResolved(suspension.id);
+
+    // Persist the resumed output to turn_messages, mirroring the normal agent
+    // path (turn-agent-runtime). Without this, resumed narrative landed only in
+    // the `messages` display table and was absent from prompt history / turnNumber
+    // / trigger counts, which are all derived from listTurnMessages.
+    const out = output as Record<string, unknown>;
+    const narrativeContent =
+      typeof out.narrativeOutput === "string"
+        ? out.narrativeOutput
+        : typeof out.content === "string"
+          ? out.content
+          : JSON.stringify(output);
+    const interactionsArr = out.interactions as unknown[] | undefined;
+    const pendingInput =
+      interactionsArr && interactionsArr.length > 0
+        ? interactionsArr
+        : undefined;
+    const ui = out.ui as unknown[] | undefined;
+    await deps.store.appendTurnMessage({
+      id: crypto.randomUUID(),
+      sessionId: suspension.sessionId,
+      turnId: suspension.turnId,
+      sourceType: "runtime",
+      sourcePluginId: manifest.pluginId,
+      sourceRuntimeId: manifest.name,
+      role: "assistant",
+      name: manifest.name,
+      content: narrativeContent,
+      order: manifest.priority ?? NARRATOR_PRIORITY,
+      pendingInput,
+      ui,
+      createdAt: new Date().toISOString(),
+    });
   }
 
   emitSubEvent(deps.eventBus, "game", "turn.resumed", suspension.sessionId, {

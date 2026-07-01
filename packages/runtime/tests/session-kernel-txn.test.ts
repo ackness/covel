@@ -94,6 +94,11 @@ function createRecordingStore(): RecordingStore {
       maybeFail("addStateChange");
       stateChanges.push(record as Record<string, unknown>);
     },
+    async upsertStateEntry(record) {
+      // state.patch commits the current value here before addStateChange; these
+      // tests only assert the change log / message / event arrays, so no-op.
+      void record;
+    },
     async addTraceEvent(record) {
       traceEvents.push(record as Record<string, unknown>);
     },
@@ -219,6 +224,7 @@ describe("session-kernel commitAll atomicity (S4-T1)", () => {
       updateSession: vi.fn().mockResolvedValue(undefined),
       saveEvent: vi.fn().mockResolvedValue(undefined),
       addStateChange: vi.fn().mockResolvedValue(undefined),
+      upsertStateEntry: vi.fn().mockResolvedValue(undefined),
       addTraceEvent: vi.fn().mockResolvedValue(undefined),
     };
 

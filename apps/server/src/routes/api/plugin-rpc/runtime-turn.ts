@@ -148,13 +148,20 @@ export function createPluginRpcRuntimeTurnRunner(
         : {}),
     };
 
-    const turnResult = await executeTurn(turnInput, ctx.activeRuntimes, {
-      ...ctx.deps,
-      store: ctx.store,
-      eventBus: ctx.eventBus,
-      emitter,
-      ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
-    });
+    // Take the per-session lock like runManualTurn / actions / resume. Deferred
+    // followers fire via setImmediate after the originating request's lock has
+    // released, so without this they can interleave turnNumber computation,
+    // state writes, and auto-snapshots with a concurrent player turn on the same
+    // session (audit 2026-04-20 finding 1).
+    const turnResult = await ctx.sessionLock.withLock(ctx.sessionId, () =>
+      executeTurn(turnInput, ctx.activeRuntimes, {
+        ...ctx.deps,
+        store: ctx.store,
+        eventBus: ctx.eventBus,
+        emitter,
+        ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
+      }),
+    );
     await processTurnResults(turnResult, emitter);
 
     return { turnResult };
