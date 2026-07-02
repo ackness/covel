@@ -132,6 +132,10 @@ export function normalizeBytes(value: Uint8Array | Buffer): Uint8Array {
 /**
  * Shared listByMetadata used by ALL media backends (memory/sqlite/pg/idb):
  * one code path — backend parity by construction.
+ * A `filter` value of `undefined` matches both a missing key and a key
+ * explicitly stored as `undefined` (`meta[k] === v` reads `undefined` either
+ * way). Only primitive values compare meaningfully — objects/arrays never
+ * match since `===` is reference equality.
  * ponytail: full-scan over listAssets(); push down to SQL when per-session
  * media volume outgrows tens of records.
  */

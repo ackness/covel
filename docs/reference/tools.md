@@ -71,6 +71,10 @@ Local 工具承接插件自己的业务封装，例如：
 - bootstrap 会校验路径边界，并只加载位于插件目录内的文件
 - local 工具访问权限按 `pluginId` 隔离，调用插件只能访问自己声明的 local tool
 
+### 不是 Tool：`FunctionHandlerContext` 上的框架能力
+
+`ctx.gateway`、`ctx.media`、`ctx.images`、`ctx.utils` 是 function runtime handler 直接调用的 JS API，**不经过** Tool 注册表 / 审批管线——它们不是 LLM 通过 function calling 触发的工具，而是框架注入给 handler 代码本身的能力。图像生成尤其如此：插件不应该声明一个 `generate-image` 工具让 LLM 调用，而应在 `handler.js` 里直接 `await ctx.images.generate({...})`。完整的 ctx 能力表和图像生成契约见 [plugin-authoring-advanced.md §6](../guide/plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行)。
+
 ### 当前代码状态
 
 当前实现里，local tool 可以读取注入的 `store`，持久化写入优先通过 `withPendingProposals(...)` 交给 commit chain；deterministic function handler 继续使用 `store` 完成内部批量工作。

@@ -28,7 +28,7 @@ function stubFetchSequence(
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  delete process.env.COVEL_LLM_RETRY_DISABLED;
+  vi.unstubAllEnvs();
 });
 
 describe("dashscope-wan wire", () => {
@@ -213,7 +213,7 @@ describe("dashscope-wan wire", () => {
     // Avoid postJson's built-in 5xx retry/backoff — this test is about the
     // wire's error surfacing, not the shared retry wrapper (covered by
     // http-retry.test.ts).
-    process.env.COVEL_LLM_RETRY_DISABLED = "1";
+    vi.stubEnv("COVEL_LLM_RETRY_DISABLED", "1");
     stubFetchSequence([{ status: 500, json: { message: "internal error" } }]);
     await expect(
       dashscopeWanWire.generate(

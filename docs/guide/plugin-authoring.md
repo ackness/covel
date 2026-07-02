@@ -14,19 +14,19 @@
 
 ## 交叉引用
 
-| 你想做的事                                                       | 看这里                                                                                                                                                                 |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 先理解为什么这么设计、agent/function/组合三种写法怎么选          | [docs/architecture/design-principles.md](../architecture/design-principles.md)                                                                                         |
-| 看所有已实现插件的 frontmatter、调度层级、capabilities 标签      | [docs/reference/plugins.md](../reference/plugins.md)                                                                                                                   |
-| 写 json-render UI 面板（`ui.right` / `ui.message`）              | [docs/guide/plugin-ui-runtime-guidelines.md](./plugin-ui-runtime-guidelines.md)                                                                                        |
-| 让 `ui.message` block 首次出现（避免"只有手动按钮无法自举"死锁） | [docs/reference/ui-panels.md#消息-block-声明](../reference/ui-panels.md#消息-block-声明)                                                                               |
-| 写生命周期 hook（工具调用前校验、commit 前审批、审计日志）       | [docs/reference/plugins.md#hooks](../reference/plugins.md#hooks)                                                                                                       |
-| 写图像生成 / 媒体资产插件                                        | [docs/guide/plugin-authoring-advanced.md#图像生成的设计](./plugin-authoring-advanced.md#图像生成的设计) · [docs/reference/media-store.md](../reference/media-store.md) |
-| 让插件配套世界数据、角色卡、媒体或 override 包                   | [docs/reference/world-data.md](../reference/world-data.md)                                                                                                             |
-| 写单元 / 集成 / 真实 LLM E2E 测试                                | [docs/guide/plugin-testing.md](./plugin-testing.md) · [docs/guide/e2e-plugin-verify.md](./e2e-plugin-verify.md)                                                        |
-| 看内置工具完整清单 + 审批策略                                    | [docs/reference/tools.md](../reference/tools.md)                                                                                                                       |
-| 看 prompt 如何组装（10 段 + cache_control）                      | [docs/reference/prompt-structure.md](../reference/prompt-structure.md)                                                                                                 |
-| 程序化发现框架和插件提供哪些字段、工具、数据 namespace           | [docs/reference/api.md 插件管理](../reference/api.md#插件管理)                                                                                                         |
+| 你想做的事                                                       | 看这里                                                                                                                                                                                                                                                     |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 先理解为什么这么设计、agent/function/组合三种写法怎么选          | [docs/architecture/design-principles.md](../architecture/design-principles.md)                                                                                                                                                                             |
+| 看所有已实现插件的 frontmatter、调度层级、capabilities 标签      | [docs/reference/plugins.md](../reference/plugins.md)                                                                                                                                                                                                       |
+| 写 json-render UI 面板（`ui.right` / `ui.message`）              | [docs/guide/plugin-ui-runtime-guidelines.md](./plugin-ui-runtime-guidelines.md)                                                                                                                                                                            |
+| 让 `ui.message` block 首次出现（避免"只有手动按钮无法自举"死锁） | [docs/reference/ui-panels.md#消息-block-声明](../reference/ui-panels.md#消息-block-声明)                                                                                                                                                                   |
+| 写生命周期 hook（工具调用前校验、commit 前审批、审计日志）       | [docs/reference/plugins.md#hooks](../reference/plugins.md#hooks)                                                                                                                                                                                           |
+| 写图像生成 / 媒体资产插件                                        | [docs/guide/plugin-authoring-advanced.md 第 6 节](./plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行)（`ctx.images` 契约 + `registerImageWire`）· [docs/reference/media-store.md](../reference/media-store.md#metadata-conventions--querying) |
+| 让插件配套世界数据、角色卡、媒体或 override 包                   | [docs/reference/world-data.md](../reference/world-data.md)                                                                                                                                                                                                 |
+| 写单元 / 集成 / 真实 LLM E2E 测试                                | [docs/guide/plugin-testing.md](./plugin-testing.md) · [docs/guide/e2e-plugin-verify.md](./e2e-plugin-verify.md)                                                                                                                                            |
+| 看内置工具完整清单 + 审批策略                                    | [docs/reference/tools.md](../reference/tools.md)                                                                                                                                                                                                           |
+| 看 prompt 如何组装（10 段 + cache_control）                      | [docs/reference/prompt-structure.md](../reference/prompt-structure.md)                                                                                                                                                                                     |
+| 程序化发现框架和插件提供哪些字段、工具、数据 namespace           | [docs/reference/api.md 插件管理](../reference/api.md#插件管理)                                                                                                                                                                                             |
 
 ---
 
@@ -130,7 +130,7 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 
 完整注册表（含 priority bands、capabilities、frontmatter 全字段）见 [docs/reference/plugins.md](../reference/plugins.md)。
 
-> **要做手动按钮 / 后台任务 / 多 runtime 协作 / 图像生成**？这些范式没有内置插件作为模板,直接看 [`.claude/skills/create-plugin/references/example-plugins.md`](../../.claude/skills/create-plugin/references/example-plugins.md) 的 dashscope-image-gen 综合样例。
+> **要做手动按钮 / 后台任务 / 多 runtime 协作**？这些范式没有内置插件作为模板,直接看 [`.claude/skills/create-plugin/references/example-plugins.md`](../../.claude/skills/create-plugin/references/example-plugins.md) 的 dashscope-image-gen 综合样例（注意：该样例的图像生成部分示范的是 `resolveSlot` 自管 wire 这条逃生口路径；新插件写**图像生成**本身请优先看 [plugin-authoring-advanced.md 第 6 节的 `ctx.images`](./plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行)）。
 
 ### C. Hook 组合行为
 

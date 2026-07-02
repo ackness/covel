@@ -186,6 +186,7 @@ All panels/blocks render through [json-render](https://github.com/vercel-labs/js
 - **Tag-aware fallback**: an unconfigured slot falls back to the first slot with the same tag (`text`/`image`/`embedding`/`speech`/`transcription`). Cross-tag fallback is forbidden (an image request never silently routes to text).
 - Supports OpenAI, Anthropic, DeepSeek, Qwen (Aliyun DashScope).
 - **Model capabilities** (multimodal, features, token limits, pricing) auto-detected via: frontend localStorage override → `llm.toml` manual → `known-models.ts` (~60 common) → LiteLLM DB (2597 models, `pnpm --filter @covel/ai-provider update-model-db`) → protocol defaults. Directional modality: `input: InputModality[]` = accepts, `output: OutputModality[]` = produces.
+- **Image generation**: `gateway.generateImage()` (server) / `ctx.images.generate()` (function-runtime plugins, preferred) routes through a pluggable image-wire registry — builtin `openai-images` (default) and `dashscope-wan`, selectable per-slot via `llm.toml` `providerRequestMetadata.imageWire`; plugins register additional wires with `registerImageWire()`. See [docs/reference/media-store.md](./docs/reference/media-store.md) and [docs/guide/plugin-authoring-advanced.md](./docs/guide/plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行).
 
 ## Critical Conventions (Read These)
 
@@ -258,7 +259,7 @@ All store writes key on `pluginId`; all trace logs key on `runtimeId`.
 - Never depend on DB table names, ORM models, kernel internals, or frontend components.
 - All writes go through proposals; tools must have Zod schemas; high-risk tools declare `permissions`.
 - Hooks guard / rewrite / audit — they do **not** carry gameplay logic.
-- Provider access only through binding declarations (no direct SDK usage).
+- Provider access only through binding declarations (no direct SDK usage) — image generation goes through `ctx.images` / `ctx.gateway.generateImage`, never a hand-rolled provider fetch.
 - Declare `outputKind` (`story` / `plugin` / `system`) and `capabilities` for framework discovery.
 - Optional retry/timeout fields: `timeoutMs`, `maxRetries` (default 1), `callTimeoutMs`, `firstTokenTimeoutMs` (default 30s), `loopDetectionThreshold` (default 3). See [docs/reference/plugins.md](./docs/reference/plugins.md#超时与智能重试).
 

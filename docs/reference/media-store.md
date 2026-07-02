@@ -50,6 +50,21 @@ If you store media larger than a few MiB on PostgreSQL, consider moving bytes to
 SQLite local-fs (`createSqliteMediaStore`) and keeping PG for the rest of the
 kernel state.
 
+## Metadata Conventions & Querying
+
+`put()`, `ctx.media.put()`, and `ctx.images.generate()` all accept a free-form `meta` object stored alongside each asset. Two kinds of keys live in that object:
+
+- **Business keys** — plugin-defined, describe what the image _is_: `kind` (`scene-background` / `character-sprite` / `illustration` / …), `sceneId` or `characterId`, `variant` (`day` / `night` / …). The framework never reads these; they exist purely for the querying plugin's own convention.
+- **Framework keys** — `pluginId` and `promptHash`, injected automatically by `ctx.images.generate()` (`packages/runtime/src/function-runtime/runtime-images-context.ts`). They are spread onto `meta` **after** the caller-supplied `metadata`, so a plugin can never override them.
+
+### `listByMetadata(sessionId, filter)`
+
+Returns assets owned by `sessionId` whose `meta` contains every key/value in `filter` — an exact, shallow subset match, one shared implementation (`filterAssetsByMetadata` in `packages/store/src/media-store/utils.ts`) reused by all four backends. A `filter` value of `undefined` matches both a missing key and a key explicitly stored as `undefined` (`meta[k] === v` — both sides read `undefined`). Only primitive values (string/number/boolean/`null`) compare meaningfully; objects and arrays never match because `===` on them is reference equality. Result sets are expected to stay small — per-session media volume is tens of records, so this is a full scan (`ponytail:` comment in `utils.ts` — push down to SQL when volume outgrows that).
+
+### `promptHash` idempotency
+
+`ctx.images.generate()` derives `promptHash` deterministically from the generation parameters (`presetId`, `prompt`, `negativePrompt`, `size`, `quality`, `n`, `background` — **not** `metadata`, and not `signal`). Before calling the gateway it queries `listByMetadata(sessionId, { promptHash, pluginId })`; if at least `n` matching assets already exist, it returns those refs with `cached: true` and skips the provider call entirely. Two calls with the same prompt but different `metadata` therefore dedupe to the same cached asset — the metadata stamped on disk is whatever the **first** call supplied, later calls' `metadata` is discarded on a cache hit. A partial hit (fewer than `n` existing assets, e.g. one image failed to persist on a prior call) is **not** served as cached — it regenerates the full batch rather than silently handing back fewer images than requested.
+
 ## Ownership
 
 `recordOwnership()` sets the first owner for an asset. `addRef()` grants another session read access for fork and snapshot flows. `isReferencedBy()` returns true for the owner session and for sessions with an explicit reference row.

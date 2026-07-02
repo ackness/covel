@@ -152,6 +152,8 @@ function createMockMediaStore(options: MockMediaStoreOptions = {}): {
       return rows;
     },
     async listByMetadata(sessionId, filter) {
+      // Keep this in sync with filterAssetsByMetadata in
+      // packages/store/src/media-store/utils.ts.
       const rows = await this.listAssets();
       return rows.filter((row) => {
         if (row.ownerSessionId !== sessionId) return false;
