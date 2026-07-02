@@ -39,15 +39,16 @@ export interface StageBackdrop {
 }
 
 /**
- * Four-tier backdrop fallback (spec §4 front-end landing):
- * resolved MediaRef → generating (keep previous, badge) → explicit "none"
- * (world hero image) → no stage-stage data at all (theme gradient).
+ * Four-tier backdrop fallback (spec §4: "none" and "no scene-stage data at
+ * all" share the same fallback chain — world hero image first, since
+ * `worldVisual` always resolves to a real image; "gradient" is kept in the
+ * type as the theoretical last resort but this selector never returns it).
  */
 export function resolveBackdrop(
   stageCurrent: StageCurrentRecord | null | undefined,
   worldVisual: WorldVisual,
 ): StageBackdrop {
-  if (!stageCurrent) return { kind: "gradient" };
+  if (!stageCurrent) return { kind: "hero", ref: worldVisual.image };
   if (isMediaRef(stageCurrent.resolved)) {
     return { kind: "scene", ref: stageCurrent.resolved };
   }
@@ -226,8 +227,6 @@ export type StageChoiceItem =
       /** Also the exact text to send via onSendMessage. */
       readonly label: string;
       readonly description?: string;
-      readonly icon?: string;
-      readonly color?: string;
     };
 
 export interface MergedChoices {
@@ -240,8 +239,11 @@ const TWO_COLUMN_THRESHOLD = 6;
 
 /**
  * Order: pending interaction choices, then scene-prompts short phrases
- * (unpacked from `prompt{N}Text/Label/Icon/Color`, N sorted ascending, empty
- * slots skipped). The caller appends the "✎ free input" entry itself.
+ * (unpacked from `prompt{N}Text/Label`, N sorted ascending, empty slots
+ * skipped). The caller appends the "✎ free input" entry itself.
+ *
+ * ponytail: `prompt{N}Icon/Color` are left unpacked — v1 has no consumer for
+ * them (plan's explicit scope cut); add when a component wants icon/color.
  */
 export function mergeChoices(
   interactionChoices: readonly StageInteractionChoice[],
@@ -275,14 +277,8 @@ export function mergeChoices(
       label: text,
       description:
         resolveI18n(promptsNamespace[`prompt${n}Label`], locale) || undefined,
-      icon: asNonEmptyString(promptsNamespace[`prompt${n}Icon`]),
-      color: asNonEmptyString(promptsNamespace[`prompt${n}Color`]),
     });
   }
 
   return { items, twoColumn: items.length > TWO_COLUMN_THRESHOLD };
-}
-
-function asNonEmptyString(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
 }

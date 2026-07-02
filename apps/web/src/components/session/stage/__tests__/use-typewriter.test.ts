@@ -141,6 +141,41 @@ describe("typewriterReduce", () => {
     expect(reset.turnId).toBe("turn-2");
   });
 
+  it("streamEnd mid-reveal of the last segment must not jump straight to done", () => {
+    const s1 = typewriterReduce(typewriterInit(), {
+      type: "feed",
+      text: "还在写的一段话",
+    });
+    // Only 2 of the segment's chars are shown — still typing, nowhere near caught up.
+    const s2 = typewriterReduce(s1, { type: "tick" });
+    const s3 = typewriterReduce(s2, { type: "tick" });
+    expect(s3.visible).toBe("还在");
+    expect(s3.status).toBe("typing");
+
+    const ended = typewriterReduce(s3, { type: "streamEnd" });
+    expect(ended.status).toBe("typing");
+    expect(ended.streamEnded).toBe(true);
+    expect(ended.visible).toBe("还在"); // unrevealed tail is untouched by streamEnd
+  });
+
+  it("advance() outside of pause is a no-op", () => {
+    const idle = typewriterInit();
+    expect(typewriterReduce(idle, { type: "advance" })).toEqual(idle);
+
+    const typing = typewriterReduce(idle, { type: "feed", text: "第一段" });
+    expect(typewriterReduce(typing, { type: "advance" })).toEqual(typing);
+
+    const singleSegment = typewriterReduce(typewriterInit(), {
+      type: "feed",
+      text: "唯一段",
+    });
+    const done = typewriterReduce(ticksUntilPause(singleSegment), {
+      type: "streamEnd",
+    });
+    expect(done.status).toBe("done");
+    expect(typewriterReduce(done, { type: "advance" })).toEqual(done);
+  });
+
   it("7. reducedMotion shows a fed segment fully at once but still pauses at the boundary", () => {
     const s1 = typewriterReduce(typewriterInit(true), {
       type: "feed",

@@ -55,10 +55,14 @@ describe("resolveBackdrop", () => {
     });
   });
 
-  it("无数据: no scene-stage record at all falls back to a theme gradient", () => {
-    expect(resolveBackdrop(null, worldVisual)).toEqual({ kind: "gradient" });
+  it('无数据: no scene-stage record at all shares the "none" fallback (world hero image)', () => {
+    expect(resolveBackdrop(null, worldVisual)).toEqual({
+      kind: "hero",
+      ref: worldVisual.image,
+    });
     expect(resolveBackdrop(undefined, worldVisual)).toEqual({
-      kind: "gradient",
+      kind: "hero",
+      ref: worldVisual.image,
     });
   });
 });
@@ -208,12 +212,8 @@ describe("mergeChoices", () => {
       scene: "library",
       prompt2Text: "追问档案员",
       prompt2Label: { zh: "追问", en: "Ask" },
-      prompt2Icon: "lightbulb",
-      prompt2Color: "purple",
       prompt1Text: "环顾四周",
       prompt1Label: { zh: "观察", en: "Observe" },
-      prompt1Icon: "eye",
-      prompt1Color: "blue",
     };
     const merged = mergeChoices(interactionChoices, prompts, "zh-CN");
 
@@ -225,11 +225,7 @@ describe("mergeChoices", () => {
     ]);
     const promptItems = merged.items.filter((i) => i.kind === "prompt");
     expect(promptItems.map((i) => i.label)).toEqual(["环顾四周", "追问档案员"]);
-    expect(promptItems[0]).toMatchObject({
-      description: "观察",
-      icon: "eye",
-      color: "blue",
-    });
+    expect(promptItems[0]).toMatchObject({ description: "观察" });
     expect(merged.twoColumn).toBe(false);
   });
 
