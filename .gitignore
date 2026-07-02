@@ -141,3 +141,4 @@ docker/docker-compose.mock.replay.yml
 
 # ── Local developer docs ──
 devs/docs/
+.superpowers/
