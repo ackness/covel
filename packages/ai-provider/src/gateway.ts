@@ -17,6 +17,8 @@ import {
 import { createGatewaySlotResolution } from "./gateway-slot-resolution.js";
 import type { GatewayOptions } from "./gateway-slot-resolution.js";
 import { createRunOperation } from "./gateway-run-operation.js";
+import { DEFAULT_IMAGE_WIRE, getImageWire } from "./image/wire-registry.js";
+import type { ImageGenerationResult } from "./image/types.js";
 import type {
   EmbeddingResult,
   OperationMode,
@@ -419,6 +421,64 @@ export function createGateway(deps: GatewayDependencies) {
     );
   }
 
+  async function generateImage(
+    input: {
+      presetId?: string;
+      prompt: string;
+      negativePrompt?: string;
+      size?: string;
+      quality?: string;
+      n?: number;
+      background?: "transparent" | "opaque";
+      providerRequestMetadata?: Record<string, unknown>;
+    },
+    options?: GatewayOptions,
+  ): Promise<ImageGenerationResult & { model: string; providerId: string }> {
+    return runOperation(
+      {
+        presetId: input.presetId,
+        mode: "image",
+        fallbackTag: "image",
+        resolveTargets: (presetId) => [
+          deps.presetRegistry.resolveTextTarget({ presetId }),
+        ],
+        execute: async (target, resolved) => {
+          const meta = target.preset?.providerRequestMetadata;
+          const wireId =
+            typeof meta?.imageWire === "string" && meta.imageWire
+              ? meta.imageWire
+              : DEFAULT_IMAGE_WIRE;
+          const wire = getImageWire(wireId);
+          if (!wire) {
+            throw new Error(
+              `unknown image wire "${wireId}" — register it via registerImageWire() or fix llm.toml providerRequestMetadata.imageWire`,
+            );
+          }
+          const result = await wire.generate(
+            configWithSignal(resolved.config, options),
+            {
+              model: targetModel(target),
+              prompt: input.prompt,
+              negativePrompt: input.negativePrompt,
+              size: input.size,
+              quality: input.quality,
+              n: input.n,
+              background: input.background,
+              providerRequestMetadata: input.providerRequestMetadata,
+            },
+            { profile: target.profile, preset: target.preset, mode: "image" },
+          );
+          return {
+            ...result,
+            model: targetModel(target),
+            providerId: targetProvider(target),
+          };
+        },
+      },
+      options,
+    );
+  }
+
   return {
     generateText,
     generateObject,
@@ -426,6 +486,7 @@ export function createGateway(deps: GatewayDependencies) {
     embed,
     synthesizeSpeech,
     transcribeAudio,
+    generateImage,
     resolveSlot,
   };
 

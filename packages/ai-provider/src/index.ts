@@ -80,6 +80,19 @@ export {
 // Gateway
 export { createGateway, type GatewayOptions } from "./gateway.js";
 
+// Image generation (pluggable wires — plugins register custom formats)
+export {
+  registerImageWire,
+  getImageWire,
+  DEFAULT_IMAGE_WIRE,
+} from "./image/wire-registry.js";
+export type {
+  ImageGenerationParams,
+  ImageGenerationResult,
+  GeneratedImageSource,
+  ImageWire,
+} from "./image/types.js";
+
 // Slot overlay (per-request preset/provider injection)
 export {
   applySlotOverlay,
