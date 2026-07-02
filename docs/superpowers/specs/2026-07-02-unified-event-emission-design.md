@@ -44,15 +44,13 @@ events:
 
 - 入参 Zod：`{ topic: string, data: Record<string, unknown> }`。
 - 执行校验：topic 必须在**当前会话目录**中（未激活消费方 → 工具返回错误给 LLM，附目录内可用 topic 列表）；`data` 按声明的 JSON Schema 校验（复用 dataSchemas 既有的校验器），失败返回具体字段错误——LLM 可在同一回合内修正重试（既有工具循环）。
-- 发射（双路，均为既有机制）：
-  1. 记入该 runtime 的 `output.events[{topic, data}]` → 回合内事件链同回合接力（消费 runtime 的 `shouldTrigger` 照常裁决）。
-  2. 出 `event.emit` 提案 → 持久化 + SSE（审计与前端可观测）。
+- 发射（**单通道，双消费**）：工具事件经工具循环累积、在 finalize 时并入该 runtime 的 `output.events[{topic, data}]`——下游两条既有路径自然分流：`turn-event-chain.collectEventsFrom` 同回合 fan-out + `session-output-normalizer.normalizeOutput` 自动产 `event.emit` 提案（持久化 + SSE）。**工具本身不得再返回 event.emit pendingProposal**（`session-runtime-result` 对 normalizeOutput 与 pendingProposals 两路拼接，双通道会导致提案双发——侦察确认的坑）。
 - 同 topic 同回合重复发射：工具层不拦（首发胜出由事件链已有语义保证），返回值提示"该 topic 本回合已发射过"。
 
 ## E3 目录注入（发射方）
 
 - runtime frontmatter opt-in：`advertiseEvents: true`。框架为该 runtime 注入一段系统上下文：目录中每个 advertise 事件的 `topic + description(按 locale) + 载荷字段摘要`，附一句使用规约（"叙事中发生对应事实时调用 emit-event，一次一个 topic"）。目录为空则整段不注入。
-- 注入走既有 prompt 组装的 contribution 通道（与 plugin-data inject 同层，具体挂点实现计划定）。
+- 注入走 segment 5（upstreamInjects）新 collector——**不进 framework preamble**（segment 1 按会话稳定可缓存，事件目录依赖激活插件集会破坏缓存）；目录由 turn executor 层从 registry 派生（`getSessionEventDeclarations` 并集）经 ContextBuildParams 线程进 prompt 组装。
 - **参考接入**：`chat-mode-narrator` 与 `narrator` 两个插件加 `advertiseEvents: true`（prose 输出要求追加一句"工具调用不计入正文"）。narrator 从纯文本变为带工具循环——需要一轮 e2e 叙事质量抽验（验收项）。
 
 ## 观测与错误
