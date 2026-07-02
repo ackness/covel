@@ -113,6 +113,45 @@ memoryBlocks:
     ]);
   });
 
+  it("passes defaultViewMode from world.yaml into world metadata", async () => {
+    const root = await makeTempWorld();
+    await writeFile(
+      path.join(root, "world.yaml"),
+      `schemaVersion: "1.0"
+id: stage-world
+name: Stage World
+summary: World declaring a stage default view mode
+defaultLocale: zh-CN
+supportedLocales: [zh-CN]
+defaultViewMode: stage
+`,
+    );
+    await writeFile(path.join(root, "WORLD.md"), "# Stage World");
+
+    const record = await loadSingleWorld(root);
+
+    expect(record?.metadata?.defaultViewMode).toBe("stage");
+  });
+
+  it("omits defaultViewMode from world metadata when not declared", async () => {
+    const root = await makeTempWorld();
+    await writeFile(
+      path.join(root, "world.yaml"),
+      `schemaVersion: "1.0"
+id: no-view-mode-world
+name: No View Mode World
+summary: World without a declared default view mode
+defaultLocale: zh-CN
+supportedLocales: [zh-CN]
+`,
+    );
+    await writeFile(path.join(root, "WORLD.md"), "# No View Mode World");
+
+    const record = await loadSingleWorld(root);
+
+    expect(record?.metadata?.defaultViewMode).toBeUndefined();
+  });
+
   it("folds deprecated top-level selection into pluginPolicy (deduped union)", async () => {
     const root = await makeTempWorld();
     await writeFile(

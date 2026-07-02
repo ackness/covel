@@ -140,7 +140,9 @@ export function GameView({
     llmConfig,
   );
 
-  const [viewMode, setViewMode] = useState<GameViewMode>("parsed");
+  const [viewMode, setViewMode] = useState<GameViewMode>(() =>
+    world?.metadata?.defaultViewMode === "stage" ? "stage" : "parsed",
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsInitialKey, setSettingsInitialKey] = useState<
     string | undefined
@@ -378,46 +380,55 @@ export function GameView({
           />
 
           {/* Messages */}
-          <ChatMessages
-            messages={messages}
-            executionSteps={executionSteps}
-            executionError={executionError}
-            executing={executing}
-            session={session}
-            world={world}
-            packages={packages}
-            sessionPlugins={sessionPlugins}
-            submittedBlockIds={submittedBlockIds}
-            submittedBlockValues={submittedBlockValues}
-            viewMode={viewMode}
-            onSendMessage={onSendMessage}
-            onSubmitBlock={onSubmitBlock}
-            onSubmitInteraction={onSubmitInteraction}
-            onRetryRuntime={onRetryRuntime}
-            onBeginAdventure={onBeginAdventure}
-            messagesEndRef={messagesEndRef}
-          />
+          {viewMode === "stage" && session.turnCount >= 1 ? (
+            // ponytail: placeholder — task 5 replaces this with <StageView>.
+            <div className="flex-1 min-h-0 flex items-center justify-center text-sm text-muted-foreground">
+              stage placeholder
+            </div>
+          ) : (
+            <>
+              <ChatMessages
+                messages={messages}
+                executionSteps={executionSteps}
+                executionError={executionError}
+                executing={executing}
+                session={session}
+                world={world}
+                packages={packages}
+                sessionPlugins={sessionPlugins}
+                submittedBlockIds={submittedBlockIds}
+                submittedBlockValues={submittedBlockValues}
+                viewMode={viewMode}
+                onSendMessage={onSendMessage}
+                onSubmitBlock={onSubmitBlock}
+                onSubmitInteraction={onSubmitInteraction}
+                onRetryRuntime={onRetryRuntime}
+                onBeginAdventure={onBeginAdventure}
+                messagesEndRef={messagesEndRef}
+              />
 
-          <PendingDraftsBar
-            t={t}
-            pendingDrafts={pendingDrafts}
-            executing={executing}
-            onConfirmDrafts={handleConfirmDrafts}
-            onRemoveDraft={removeInteractionDraft}
-          />
+              <PendingDraftsBar
+                t={t}
+                pendingDrafts={pendingDrafts}
+                executing={executing}
+                onConfirmDrafts={handleConfirmDrafts}
+                onRemoveDraft={removeInteractionDraft}
+              />
 
-          {/* Input — always fixed at bottom */}
-          <MessageComposer
-            t={t}
-            session={session}
-            executing={executing}
-            inputValue={inputValue}
-            composerBlocked={composerBlocked}
-            composerDisabled={composerDisabled}
-            onInputValueChange={setInputValue}
-            onSubmit={handleSubmit}
-            onKeyDown={handleKeyDown}
-          />
+              {/* Input — always fixed at bottom */}
+              <MessageComposer
+                t={t}
+                session={session}
+                executing={executing}
+                inputValue={inputValue}
+                composerBlocked={composerBlocked}
+                composerDisabled={composerDisabled}
+                onInputValueChange={setInputValue}
+                onSubmit={handleSubmit}
+                onKeyDown={handleKeyDown}
+              />
+            </>
+          )}
         </ResizablePanel>
 
         {/* Desktop: Right panel */}

@@ -267,6 +267,7 @@ export async function loadSingleWorld(
   const memoryBlocks = manifest.memoryBlocks as
     | readonly MemoryBlockSchema[]
     | undefined;
+  const defaultViewMode = manifest.defaultViewMode as string | undefined;
 
   // Merge inline + external dimensions (external wins for same key)
   const inlineDims = (manifest.dimensions as Record<string, unknown>) ?? {};
@@ -312,6 +313,7 @@ export async function loadSingleWorld(
     characterBlueprintSources,
     characterBlueprints,
     characterAttributes,
+    ...(defaultViewMode ? { defaultViewMode } : {}),
   };
   const worldData = await loadWorldDataSummary({
     worldRoot: worldDir,

@@ -22,7 +22,12 @@ export interface WorldRecord {
   tags?: string[];
   dimensions?: WorldDimensions;
   /** World metadata, including storage/source labels used by the world list. */
-  metadata?: { source?: string; [key: string]: unknown };
+  metadata?: {
+    source?: string;
+    /** Preferred initial `GameViewMode` for new sessions (e.g. "stage"). */
+    defaultViewMode?: string;
+    [key: string]: unknown;
+  };
   createdAt: string;
   updatedAt?: string;
 }
