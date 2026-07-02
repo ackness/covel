@@ -29,6 +29,7 @@ import {
   buildFrameworkPreamble,
   buildInjectBlocks,
   buildInjectBlocksAsync,
+  escapeXmlContent,
   interpolateTemplate,
   renderCoreMemory,
   renderWorkingMemory,
@@ -121,7 +122,7 @@ function buildAvailableEventsBlock(params: ContextBuildParams): string {
   const catalog = params.eventCatalogText;
   if (!catalog) return "";
   return (
-    `<available-events>\n${catalog}\n\n` +
+    `<available-events>\n${escapeXmlContent(catalog)}\n\n` +
     "When a declared domain event occurs in your narration, call the emit-event tool — " +
     "one topic per call; tool calls are not part of the prose.\n</available-events>"
   );

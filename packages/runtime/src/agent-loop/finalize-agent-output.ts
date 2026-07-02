@@ -113,10 +113,8 @@ export function finalizeAgentOutput(
   // JSON output can already carry its own `events` array) — envelope wins the
   // same-topic race in the turn-event-chain fan-out's first-wins semantics.
   if (emittedEvents.length > 0) {
-    output.events = [
-      ...((output.events as unknown[] | undefined) ?? []),
-      ...emittedEvents,
-    ];
+    const existingEvents = Array.isArray(output.events) ? output.events : [];
+    output.events = [...existingEvents, ...emittedEvents];
   }
 
   const interactions = extractInteractions(

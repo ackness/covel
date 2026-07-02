@@ -24,9 +24,6 @@ import {
   type RuntimeManifest,
 } from "@covel/shared";
 
-/** Module-level so a cross-plugin topic conflict warns once per (session, topic), not every call. */
-const warnedConflicts = new Set<string>();
-
 export interface EventDirectory {
   listTopics(sessionId: string): Promise<readonly string[]>;
   validate(
@@ -77,6 +74,8 @@ function requiredFieldsSummary(raw: AnySchema): string {
 export function createEventDirectory(deps: EventDirectoryDeps): EventDirectory {
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   const schemaCache = new Map<string, LoadedSchema>();
+  /** So a cross-plugin topic conflict warns once per (session, topic), not every call. */
+  const warnedConflicts = new Set<string>();
 
   function collectSessionEvents(
     sessionId: string,

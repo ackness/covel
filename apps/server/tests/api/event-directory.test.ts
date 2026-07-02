@@ -374,8 +374,8 @@ describe("event directory", () => {
       rootE,
     );
 
-    registry.activate("plugin-a", "sess-3");
-    registry.activate("plugin-e", "sess-3");
+    registry.activate("plugin-a", "sess-2");
+    registry.activate("plugin-e", "sess-2");
 
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const directory = createEventDirectory({
@@ -386,9 +386,9 @@ describe("event directory", () => {
     // Every call re-aggregates (session activation can change turn to turn),
     // so the same conflict is re-detected each time — the warn must still
     // fire only once for this (session, topic) pair.
-    await directory.listTopics("sess-3");
-    await directory.validate("sess-3", "scene.set", { location: "教室" });
-    await directory.catalogText("sess-3", "en-US");
+    await directory.listTopics("sess-2");
+    await directory.validate("sess-2", "scene.set", { location: "教室" });
+    await directory.catalogText("sess-2", "en-US");
 
     expect(warn).toHaveBeenCalledTimes(1);
   });
