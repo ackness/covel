@@ -17,6 +17,7 @@
  */
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
+import { parse as parseYaml } from "yaml";
 import {
   exists,
   pool,
@@ -98,12 +99,86 @@ function sceneTasks(manifest, args) {
   return tasks;
 }
 
-async function scaffold() {
-  // ponytail: placeholder — task 3 replaces this with the real
-  // dimensions.yaml-derived scaffold, after reading the file's actual
-  // region/landmark nesting (see plan task 3 step 1).
-  console.error("--scaffold not implemented yet");
-  process.exit(1);
+function slugify(index) {
+  return `scene-${String(index + 1).padStart(2, "0")}`;
+}
+
+async function scaffold(args) {
+  const dimPath = path.join(
+    repoRoot,
+    "worlds",
+    args.world,
+    "data",
+    "dimensions.yaml",
+  );
+  const dims = parseYaml(await readFile(dimPath, "utf-8"));
+  // dimensions.yaml nests the region list under geography.regions (verified
+  // against worlds/haruka-academy/data/dimensions.yaml — NOT location.regions).
+  const regions = dims?.geography?.regions ?? [];
+  if (regions.length === 0) {
+    console.error(`no regions found in ${dimPath} — nothing to scaffold`);
+    process.exit(1);
+  }
+
+  const manifestPath = path.join(
+    repoRoot,
+    "worlds",
+    args.world,
+    "media",
+    "scenes.json",
+  );
+  let manifest;
+  try {
+    manifest = JSON.parse(await readFile(manifestPath, "utf-8"));
+  } catch {
+    manifest = {
+      world: args.world,
+      note: "Generation manifest for scene backgrounds. Prompts compose as style.prefix + scene.subject + style.suffix (+ style.nightSuffix for the night variant). Rename scaffolded ids to meaningful slugs, then polish every subject into an English visual description before generating.",
+      style: {
+        direction: "anime visual-novel background, painterly",
+        prefix: "Visual novel background art, anime scenery style, no people, ",
+        suffix: ", clean composition, GalGame background",
+        negative:
+          "people, character, figure, text, caption, watermark, logo, frame",
+        nightSuffix: ", at night, moonlight, warm artificial lights",
+      },
+      defaults: { size: "1536x1024", quality: "medium", mime: "image/png" },
+      scenes: [],
+    };
+  }
+
+  const existingRefs = new Set(
+    manifest.scenes.map((s) => s.locationRef).filter(Boolean),
+  );
+  let added = 0;
+  const pushDraft = (name, description) => {
+    if (existingRefs.has(name)) return; // never overwrite / duplicate
+    manifest.scenes.push({
+      id: slugify(manifest.scenes.length),
+      name,
+      locationRef: name, // dimensions.yaml has no ids — name IS the identity
+      subject: description, // verbatim draft; author polishes into English scenery prose
+      subjectNight: "",
+    });
+    existingRefs.add(name);
+    added += 1;
+  };
+
+  for (const region of regions) {
+    const desc = [region.description, region.climate].filter(Boolean).join(" ");
+    pushDraft(region.name, desc);
+    if (args.landmarks) {
+      for (const lm of region.landmarks ?? []) {
+        pushDraft(lm.name, lm.description ?? "");
+      }
+    }
+  }
+
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  console.log(
+    `scaffolded ${added} new scene draft(s) into worlds/${args.world}/media/scenes.json (${manifest.scenes.length} total). Rename ids + polish subjects, then re-run with --dry-run.`,
+  );
 }
 
 async function main() {
@@ -116,7 +191,7 @@ async function main() {
   }
 
   if (args.scaffold) {
-    await scaffold();
+    await scaffold(args);
     return;
   }
 
