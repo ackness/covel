@@ -19,6 +19,8 @@
 2. 无按用途（场景/人物/变体）的统一资产查询面——metadata 散落在各插件自己的 plugin_data namespace。
 3. 离线脚本（generate-portraits.mjs）也在手写同一套 wire。
 
+**历史包袱（本规格是一次有意翻案）**：`gateway.generateImage` 曾存在，2026-04-26 由 d9caf04c 刻意移除，理由是"图像 wire 格式异构，集中 adapter 逼每个新格式发框架 PR，违背 kernel-primitives 契约"。本规格采用混合架构化解该理由：**管线（编排/资产管理/幂等/计费 trace）收归框架，wire adapter 可插拔**——框架内置最常见的两种 wire，奇形格式由插件注册自定义 wire，不需要框架 PR。旧理由与新需求（统一管线、统一资产管理）同时成立。
+
 ## 范围
 
 **做**：D1 gateway 图像 operation + 协议 adapter；D2 插件运行时一级 API（ctx.images）；D3 MediaRef metadata 约定 + 查询面；两个第三方示例插件（openai-image-gen / dashscope-image-gen）迁移到新 API；generate-portraits.mjs 改走同一实现；文档同步。
@@ -44,11 +46,14 @@ gateway.generateImage(input: {
 }>
 ```
 
-- **协议 adapter**（与文本 adapter 同层，按 provider protocol 分发）：
-  - `openai-images`：`POST {base}/v1/images/generations`（兼容裸 base 与 /v1 双形态——沿用 openai-image-gen 已验证的 endpoint 归一逻辑），同步返回 b64/url。
-  - `dashscope-images`：wan2.x 异步 wire——submit task → poll 至 SUCCEEDED/FAILED（迁移 dashscope-image-gen 已验证的实现）。
-  - adapter 接口统一为"一次调用返回最终图"，async-poll 细节封装在 adapter 内；超时沿用调用方传入的 signal。
-- 密钥/授权：复用现有 per-request keys 与 SSRF guard（`validateBaseUrl`）；不新增任何密钥存储。
+- **image-wire 注册表**（独立于文本协议 adapter——一个 provider 的 chat 协议和图像 wire 可以不同）：
+  - 注册表键为开放字符串 wire id（**非枚举**，避免 d9caf04c 批评的编译期耦合）；slot 通过 llm.toml 元数据 `imageWire = "<id>"` 选 wire，缺省 `"openai-images"`。
+  - 框架内置两个 wire：
+    - `openai-images`：`POST {base}/v1/images/generations`（兼容裸 base 与 /v1 双形态——沿用 openai-image-gen 已验证的 endpoint 归一逻辑），同步返回 b64/url。
+    - `dashscope-wan`：wan2.x 异步 wire——submit task → poll 至 SUCCEEDED/FAILED（迁移 dashscope-image-gen 已验证的实现）。
+  - **插件注册面**：插件可注册自定义 wire（`registerImageWire(id, factory)`，经插件 server 入口在 bootstrap 时注册；契约随 plugin-authoring 文档发布）。Replicate/fal 等奇形格式走这里，不发框架 PR。
+  - wire 接口统一为"一次调用返回最终图"，async-poll 细节封装在 wire 内；超时沿用调用方传入的 signal。
+- 密钥/授权：复用现有 per-request keys 与 SSRF guard（`validateBaseUrl`）——含插件注册的 wire（其 fetch 由框架包裹，同样过 SSRF guard）。不新增任何密钥存储。
 - trace：产出 `gateway.responded` trace（含 costUsd），进现有 Cost 页聚合。
 
 ## D2 插件运行时一级 API（packages/runtime）
@@ -100,7 +105,8 @@ ctx.images.generate(input /* 同 D1 + metadata */): Promise<{ ref: MediaRef; war
 
 ## 决策记录
 
-1. 生成执行收进框架（gateway operation + 协议 adapter），插件只编排——用户定调"图像生成是框架基本功能"。
+0. **对 d9caf04c 的翻案方式**：管线在框架、wire 可插拔（用户选定）。wire id 为开放字符串 + 插件注册面，直接回应当年"新格式逼框架 PR"的批评；统一管线/资产管理/幂等是当年方案缺失、本次补齐的部分。
+1. 生成执行收进框架（gateway operation + 可插拔 image-wire），插件只编排——用户定调"图像生成是框架基本功能"。
 2. adapter 统一"一次调用返回最终图"，async-poll 封装在 adapter 内（DashScope wan2.x 实测 wire 直接迁移）。
 3. `promptHash` 幂等去重由框架承担（60-180s/张 + 计费，重复生成代价高）。
 4. resolveSlot 逃生口保留，不做破坏性下线。
