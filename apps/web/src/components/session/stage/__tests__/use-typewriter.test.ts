@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { act, renderHook } from "@testing-library/react";
 import {
   typewriterInit,
   typewriterReduce,
+  useTypewriter,
   type TypewriterState,
 } from "../use-typewriter.js";
 
@@ -190,5 +192,38 @@ describe("typewriterReduce", () => {
     // reducedMotion reveals everything known so far and waits.
     expect(s2.visible).toBe("第二段");
     expect(s2.status).toBe("typing");
+  });
+});
+
+describe("useTypewriter (hook wiring)", () => {
+  it("reaches done for an already-complete turn hydrated after a turnId change (session restore)", () => {
+    // Session restore renders StageDialog once with no story yet (turnId
+    // undefined, empty text) while streamEnded is already true — the session
+    // isn't executing. The snapshot then loads and turnId/text change in place
+    // while streamEnded stays true the whole time.
+    //
+    // The turnId change fires `reset`, which clears the internal streamEnded
+    // flag. Because the streamEnded PROP never changes (level-true throughout),
+    // the streamEnd effect must still re-sync it — otherwise the last segment
+    // never resolves to "done", onAllRead never fires, and the stage choice
+    // overlay / composer stay gated forever.
+    const { result, rerender } = renderHook(
+      ({ text, ended, turnId }) =>
+        useTypewriter(text, ended, { turnId, reducedMotion: true }),
+      {
+        initialProps: {
+          text: "",
+          ended: true,
+          turnId: undefined as string | undefined,
+        },
+      },
+    );
+
+    rerender({ text: "第一段。\n\n第二段。", ended: true, turnId: "turn-1" });
+    expect(result.current.status).toBe("pause");
+    expect(result.current.visible).toBe("第一段。");
+
+    act(() => result.current.advance());
+    expect(result.current.status).toBe("done");
   });
 });

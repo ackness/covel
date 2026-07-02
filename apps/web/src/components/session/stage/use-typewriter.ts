@@ -212,9 +212,15 @@ export function useTypewriter(
     if (delta) dispatch({ type: "feed", text: delta });
   }, [streamText]);
 
+  // `opts.turnId` is a dependency even though it isn't read here: a turnId
+  // change fires `reset` (above), which clears the internal streamEnded flag.
+  // When an already-complete turn is hydrated (session restore), the
+  // streamEnded PROP is level-true and never edges, so without re-running on
+  // turnId this stays cleared — the last segment never resolves to "done" and
+  // the stage choice overlay / composer stay gated forever.
   useEffect(() => {
     if (streamEnded) dispatch({ type: "streamEnd" });
-  }, [streamEnded]);
+  }, [streamEnded, opts.turnId]);
 
   useEffect(() => {
     if (reducedMotion || state.status !== "typing") return;
