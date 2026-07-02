@@ -121,6 +121,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const compactorRunner = c.get("compactorRunner");
   const sessionLock = c.get("sessionLock");
   const mediaStore = c.get("mediaStore");
+  const eventDirectory = c.get("eventDirectory");
   const prepareToolsForSession = c.get("prepareToolsForSession"); // optional — see env.d.ts
 
   const body = (await c.req
@@ -483,6 +484,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           memorySystem: _memorySystem,
           // Let the turn executor construct a unified SessionContextSnapshot.
           capabilityPluginIds,
+          ...(eventDirectory ? { eventDirectory } : {}),
         }),
       );
 

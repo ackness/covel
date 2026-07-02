@@ -188,3 +188,66 @@ describe("emit-event: tool-loop accumulation + finalize merge into output.events
     });
   });
 });
+
+describe("emit-event: segment 5 directory injection (plan task 5)", () => {
+  it("threads deps.eventDirectory.catalogText into the system prompt for an advertiseEvents runtime", async () => {
+    const emitterManifest: RuntimeManifest = {
+      name: "plug/emitter",
+      pluginId: "plug",
+      description: "Emits domain events via emit-event",
+      priority: 500,
+      outputKind: "plugin",
+      tools: { builtin: ["emit-event"] },
+      trigger: { type: "auto" },
+      advertiseEvents: true,
+    } as RuntimeManifest;
+
+    let capturedSystemPrompt: string | undefined;
+    class CapturingLLM implements LLMAdapter {
+      async generate(params: {
+        messages: readonly { role: string; content: unknown }[];
+      }): Promise<LLMResponse> {
+        capturedSystemPrompt ??= params.messages.find(
+          (m) => m.role === "system",
+        )?.content as string | undefined;
+        return {
+          content: "done.",
+          toolCalls: [],
+          finishReason: "stop",
+          usage: { inputTokens: 10, outputTokens: 5 },
+        };
+      }
+    }
+
+    const store = await mainLoopStore("sess-1");
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async (m) => ({
+        manifest: m,
+        promptTemplate: "You are a domain-event emitter.",
+      }),
+      llm: new CapturingLLM(),
+      getConfig: () => ({}),
+      store,
+      toolExecutor: createToolExecutor({
+        findTool: (name) =>
+          name === "emit-event"
+            ? createEmitEventTool({ directory })
+            : undefined,
+        store,
+      }),
+      eventDirectory: {
+        catalogText: async () =>
+          "- test.ping: Ping event (required: x: number)",
+      },
+    };
+
+    await executeTurn(makeTurnInput(), [emitterManifest], deps, {
+      maxSteps: 3,
+    });
+
+    expect(capturedSystemPrompt).toContain("<available-events>");
+    expect(capturedSystemPrompt).toContain(
+      "- test.ping: Ping event (required: x: number)",
+    );
+  });
+});

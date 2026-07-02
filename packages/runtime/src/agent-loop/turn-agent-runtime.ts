@@ -178,6 +178,17 @@ export async function executeAgentRuntime({
   // branch byte-identical to the pre-ticket variables object.
   const agentUserSettings = resolveUserSettings(manifest, input.userSettings);
 
+  // Segment 5 event directory injection (unified event emission layer):
+  // only fetched for runtimes that opted in, so consumer-only runtimes never
+  // pay for the catalog lookup.
+  const eventCatalogText =
+    manifest.advertiseEvents === true && deps.eventDirectory
+      ? await deps.eventDirectory.catalogText(
+          input.sessionId,
+          input.locale ?? "zh-CN",
+        )
+      : undefined;
+
   const buildParams = {
     promptTemplate: loaded.promptTemplate,
     manifest,
@@ -199,6 +210,7 @@ export async function executeAgentRuntime({
     // read structured session data via `world`, `session`, and `player`.
     ...(sessionContext ? { sessionContext } : {}),
     ...(agentUserSettings ? { userSettings: agentUserSettings } : {}),
+    ...(eventCatalogText ? { eventCatalogText } : {}),
     ...(budgetEligible
       ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
       : {}),

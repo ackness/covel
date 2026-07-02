@@ -402,6 +402,7 @@ export async function bootstrapApi(
     c.set("resolveModel", resolveModel);
     c.set("compactorRunner", compactorRunner);
     c.set("hookPipeline", hookPipeline);
+    c.set("eventDirectory", eventDirectory);
     // memorySystem injected via module-level setter, not Hono context
     c.set("rpcExecutor", rpcExecutor);
     c.set("rpcRegistry", rpcRegistry);

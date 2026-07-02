@@ -107,6 +107,27 @@ function defaultFrameworkPreamble(locale: string | undefined): string {
 }
 
 /**
+ * Renders the session's event directory into a segment-5 XML block for
+ * runtimes that opt in via `manifest.advertiseEvents: true`. Only the
+ * emitting runtime pays for this — consumer-only runtimes never see it.
+ *
+ * Kept English-only (unlike the locale-branching `buildFrameworkPreamble`)
+ * because `eventCatalogText` itself is already resolved to the session
+ * locale by the event-directory service; this line is a fixed tool-use
+ * instruction, not narrative-facing content.
+ */
+function buildAvailableEventsBlock(params: ContextBuildParams): string {
+  if (params.manifest.advertiseEvents !== true) return "";
+  const catalog = params.eventCatalogText;
+  if (!catalog) return "";
+  return (
+    `<available-events>\n${catalog}\n\n` +
+    "When a declared domain event occurs in your narration, call the emit-event tool — " +
+    "one topic per call; tool calls are not part of the prose.\n</available-events>"
+  );
+}
+
+/**
  * Build the 10 prompt segments for a single runtime context.
  *
  * Internal helper — used by the exported segmented context builder so tests
@@ -168,9 +189,15 @@ function buildPromptSegmentsCommon(
 
   // Interpolate inject blocks too so plugins may reference template variables
   // inside injected output.
-  const upstreamInjects = rawInjects
+  const interpolatedInjects = rawInjects
     ? interpolateTemplate(rawInjects, variables)
     : "";
+  const upstreamInjects = [
+    interpolatedInjects,
+    buildAvailableEventsBlock(params),
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const frameworkPreamble =
     params.frameworkPreamble ??

@@ -709,6 +709,54 @@ describe("prompt-assembler", () => {
     expect(result.systemPrompt).toContain("[LANGUAGE]");
     expect(result.systemPrompt).toContain("Plugin body.");
   });
+
+  describe("segment 5 — available events directory", () => {
+    const CATALOG = "- scene.set: Scene change (required: location: string)";
+
+    it("renders <available-events> when advertiseEvents is true and the catalog is non-empty", () => {
+      const params = baselineParams({
+        manifest: makeManifest({ advertiseEvents: true }),
+        eventCatalogText: CATALOG,
+      });
+
+      const result = buildSegmentedContext(params);
+
+      expect(result.systemPrompt).toContain("<available-events>");
+      expect(result.systemPrompt).toContain(CATALOG);
+      expect(result.systemPrompt).toContain("call the emit-event tool");
+      expect(result.systemPrompt).toContain("</available-events>");
+    });
+
+    it("omits the block when advertiseEvents is true but the catalog is empty", () => {
+      const params = baselineParams({
+        manifest: makeManifest({ advertiseEvents: true }),
+        eventCatalogText: "",
+      });
+
+      const result = buildSegmentedContext(params);
+
+      expect(result.systemPrompt).not.toContain("<available-events>");
+    });
+
+    it("omits the block when the catalog is non-empty but advertiseEvents is not set", () => {
+      const params = baselineParams({
+        manifest: makeManifest(),
+        eventCatalogText: CATALOG,
+      });
+
+      const result = buildSegmentedContext(params);
+
+      expect(result.systemPrompt).not.toContain("<available-events>");
+    });
+
+    it("omits the block when neither advertiseEvents nor the catalog is set", () => {
+      const params = baselineParams({ manifest: makeManifest() });
+
+      const result = buildSegmentedContext(params);
+
+      expect(result.systemPrompt).not.toContain("<available-events>");
+    });
+  });
 });
 
 // ── S2-T3: Prompt cache breakpoint markers ──────────────────────

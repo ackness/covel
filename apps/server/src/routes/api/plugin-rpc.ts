@@ -107,6 +107,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
     const hookPipeline = c.get("hookPipeline");
     const sessionLock = c.get("sessionLock");
     const mediaStore = c.get("mediaStore");
+    const eventDirectory = c.get("eventDirectory");
     const prepareToolsForSession = c.get("prepareToolsForSession");
 
     // Activate the session's plugins in the registry — idempotent but
@@ -245,6 +246,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
         compactor: compactorRunner,
         capabilityPluginIds,
         ...(hookPipeline ? { hookPipeline } : {}),
+        ...(eventDirectory ? { eventDirectory } : {}),
       },
       ...(hookPipeline ? { hookPipeline } : {}),
     });

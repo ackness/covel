@@ -19,6 +19,7 @@ import type { RpcApprovalGate } from "@covel/approval";
 import type { RuntimeManifest } from "@covel/shared";
 import type { CompactorRunner } from "@covel/context";
 import type { SessionLock } from "./lib/session-lock.js";
+import type { EventDirectory } from "./routes/api/bootstrap/event-directory.js";
 
 type LoadRuntimeFn = (
   manifest: RuntimeManifest,
@@ -118,5 +119,13 @@ declare module "hono" {
      * Optional so tests with hand-built DI middleware don't have to wire it.
      */
     activatePluginLocalTools?: ActivatePluginLocalToolsFn;
+    /**
+     * Session event directory (unified event emission layer, plan task 4/5).
+     * Threaded into `TurnExecutorDeps.eventDirectory` at each `executeTurn`
+     * call site so a runtime declaring `advertiseEvents: true` gets its
+     * segment-5 `<available-events>` block. Same instance also backs the
+     * `emit-event` builtin tool registered in `setupPluginTools`.
+     */
+    eventDirectory?: EventDirectory;
   }
 }
