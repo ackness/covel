@@ -72,3 +72,4 @@ events:
 2. 发射双路（output.events 回合内接力 + event.emit 提案持久化）——复用两条既有通路，不造第三条。
 3. narrator 内联发射（工具循环）替代"每关切一个叙事后小 agent"——每轮省 N 次 LLM 调用；质量风险用 e2e 抽验兜底。
 4. B（scene-stage）重构为本层第一个消费方（见同日 scene-stage 规格）。
+5. **实施后修订（终审记录）**：schema 文件的存在性/合法性校验采用惰性运行时路径（validate 返回 "schema unreadable" 优雅降级），与 dataSchemas 既有模式一致——加载期校验推迟到 B 落地首个真实声明时（进 release:preflight 或 load 期）；"同 topic 本回合已发射过" 提示同样留待 B 接入时补（当前重复 emit 会产生重复提案/SSE，同回合 fan-out 首胜不受影响）。
