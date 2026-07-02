@@ -82,6 +82,30 @@ export interface FullGatewayLike {
     tag: string;
     metadata: Record<string, unknown>;
   } | null;
+
+  /**
+   * Optional — only present on gateways built with image wires registered.
+   * Mirrors `PluginRuntimeGateway.generateImage`; the facade below exposes
+   * it only when the underlying gateway actually has it wired.
+   */
+  generateImage?(
+    input: {
+      presetId?: string;
+      prompt: string;
+      negativePrompt?: string;
+      size?: string;
+      quality?: string;
+      n?: number;
+      background?: "transparent" | "opaque";
+    },
+    options?: FullGatewayOptions,
+  ): Promise<{
+    images: ReadonlyArray<
+      | { kind: "bytes"; bytes: Uint8Array; mime: string }
+      | { kind: "url"; url: string; mime: string }
+    >;
+    warnings: readonly string[];
+  }>;
 }
 
 /**
@@ -119,7 +143,7 @@ export function createPluginRuntimeGateway(
     ...(config?.slotOverrides ? { slotOverrides: config.slotOverrides } : {}),
   });
 
-  return {
+  const facade: PluginRuntimeGateway = {
     async generateText(input) {
       const messages = input.messages
         ? input.messages.map((m) => ({ role: m.role, content: m.content }))
@@ -228,6 +252,19 @@ export function createPluginRuntimeGateway(
       };
     },
   };
+
+  // Only exposed when the underlying gateway has an image wire registered
+  // (audit D2/7) — `ctx.images` degrades to "unavailable" rather than
+  // throwing through a stub method when no image slot is configured.
+  if (gateway.generateImage) {
+    const generateImage = gateway.generateImage.bind(gateway);
+    facade.generateImage = async (input) => {
+      const result = await generateImage(input, commonOptions());
+      return { images: result.images, warnings: result.warnings };
+    };
+  }
+
+  return facade;
 }
 
 function toMessages(opts: { system?: string; prompt?: string }): Array<{
