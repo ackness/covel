@@ -1,6 +1,6 @@
 import type { MediaStore } from "@covel/shared";
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import { filterAssetsByMetadata } from "../media-store/utils.js";
+import { filterAssetsByMetadata } from "../media-store/filter.js";
 import {
   cloneMeta,
   type IdbMediaAssetRecord,
