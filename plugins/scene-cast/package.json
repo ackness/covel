@@ -10,7 +10,9 @@
   "devDependencies": {
     "@covel/plugin-loader": "workspace:*",
     "@covel/runtime": "workspace:*",
-    "@covel/tools": "workspace:*",
     "vitest": "^4.1.9"
+  },
+  "dependencies": {
+    "@covel/tools": "workspace:*"
   }
 }

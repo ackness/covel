@@ -799,6 +799,10 @@ importers:
         version: link:../../packages/plugin-handlers-utils
 
   plugins/scene-cast:
+    dependencies:
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*
@@ -806,9 +810,6 @@ importers:
       '@covel/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../../packages/tools
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.0)(@types/node@26.0.0)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.0.16(@types/node@26.0.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
