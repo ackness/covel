@@ -130,7 +130,7 @@ describe("createRuntimeImagesContext", () => {
     expect(meta.promptHash).not.toBe("fake");
   });
 
-  it("returns a cached result and skips the gateway when promptHash already exists", async () => {
+  it("returns a cached result (with the first call's meta) and skips the gateway when promptHash already exists", async () => {
     const { media, mediaStore } = makeMediaStub();
     const gateway = makeGatewayStub([
       { kind: "bytes", bytes: new Uint8Array([1]), mime: "image/png" },
@@ -140,7 +140,10 @@ describe("createRuntimeImagesContext", () => {
       pluginId: "img-plugin",
     });
 
-    const first = await ctx.generate({ prompt: "same prompt" });
+    const first = await ctx.generate({
+      prompt: "same prompt",
+      metadata: { kind: "avatar" },
+    });
     expect(first.cached).toBe(false);
 
     gateway.generateImage.mockClear();
@@ -150,7 +153,39 @@ describe("createRuntimeImagesContext", () => {
     expect(second.warnings).toEqual([]);
     expect(second.refs).toHaveLength(1);
     expect(second.refs[0]!.id).toBe(first.refs[0]!.id);
+    expect(second.refs[0]!.meta).toMatchObject({
+      kind: "avatar",
+      pluginId: "img-plugin",
+    });
     expect(gateway.generateImage).not.toHaveBeenCalled();
+  });
+
+  it("does not serve a partial result as cached when a mid-batch persist fails", async () => {
+    const { media, mediaStore } = makeMediaStub();
+    const gateway = makeGatewayStub([
+      { kind: "bytes", bytes: new Uint8Array([1]), mime: "image/png" },
+      { kind: "url", url: "https://example.test/b.png", mime: "image/png" },
+    ]);
+    const ctx = createRuntimeImagesContext(gateway, mediaStore, media, {
+      sessionId: "sess-1",
+      pluginId: "img-plugin",
+    });
+
+    media.ingestUrl.mockImplementationOnce(async () => {
+      throw new Error("network error");
+    });
+
+    await expect(
+      ctx.generate({ prompt: "two cats", n: 2 }),
+    ).rejects.toThrow("network error");
+
+    // Only the bytes image persisted; the promptHash asset is a partial
+    // result (1 of 2 requested) and must not be treated as a cache hit.
+    gateway.generateImage.mockClear();
+    const retry = await ctx.generate({ prompt: "two cats", n: 2 });
+
+    expect(retry.cached).toBe(false);
+    expect(gateway.generateImage).toHaveBeenCalledTimes(1);
   });
 
   it("does not hit the cache when generation params differ", async () => {

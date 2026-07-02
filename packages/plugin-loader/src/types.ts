@@ -255,7 +255,8 @@ export interface ImageGenerateInput {
   /**
    * Business metadata persisted onto the MediaRef (kind / sceneId /
    * characterId / variant …). `pluginId` and `promptHash` are injected by
-   * the framework and cannot be overridden.
+   * the framework and cannot be overridden. `metadata` does not participate
+   * in dedup; a cache hit returns the metadata stamped by the first call.
    */
   readonly metadata?: Readonly<Record<string, unknown>>;
   /** Abort signal forwarded to the provider call. Not part of promptHash. */

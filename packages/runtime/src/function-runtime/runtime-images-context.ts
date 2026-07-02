@@ -56,12 +56,17 @@ export function createRuntimeImagesContext(
     async generate(input: ImageGenerateInput): Promise<ImageGenerateOutput> {
       const promptHash = promptHashOf(input);
 
+      const wantedCount = input.n ?? 1;
       const existing = await mediaStore.listByMetadata(sessionId, {
         promptHash,
+        pluginId,
       });
-      if (existing.length > 0) {
+      // A partial hit (e.g. one of two images failed to persist on a prior
+      // call) must NOT be served as cached — it would silently hand back
+      // fewer images than requested and never retry the missing ones.
+      if (existing.length >= wantedCount) {
         return {
-          refs: existing.map(
+          refs: existing.slice(0, wantedCount).map(
             (asset): MediaRef => ({
               id: asset.id,
               mime: asset.mime,
