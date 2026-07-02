@@ -4,13 +4,14 @@
 
 ## 运行时结构
 
-- `PLUGIN.md`：事件触发函数 runtime 声明（消费 `scene.set`）。
-- `handler.js`：场景匹配与舞台状态写入。
+- `PLUGIN.md`：插件级元信息（名称/描述/关联），本身不是可执行 runtime——`runtimes/` 下才是实际发现、调度的两个 runtime。
+- `runtimes/resolver/PLUGIN.md` + `handler.js` + `ui/scene-stage-panel.json`：事件触发函数 runtime（消费 `scene.set`），场景匹配与舞台状态写入，声明右侧只读场景面板。
 - `runtimes/background-gen/PLUGIN.md` + `handler.js`：后台函数 runtime，消费内部信令 `scene-stage.generate.requested`，调用 `ctx.images` 增量生成缺失的场景背景。
 - `schemas/scene-set.event.json`：`scene.set` 载荷校验。
 - `schemas/generate-requested.event.json`：`scene-stage.generate.requested` 载荷校验（内部信令，`advertise: false`，不进 `<available-events>` 目录）。
 - `schemas/scenes.schema.json`：`scenes` namespace 校验，对齐世界包导入的场景注册表形状（`schemaVersion` + `registryId` + `style` + `scenes[]`）。
-- `ui/scene-stage-panel.json`：右侧只读场景面板。
+
+`events[].schema` 和 `dataSchemas.*.schema` 路径始终相对**插件根目录**解析（不管声明它们的 PLUGIN.md 放在哪个 runtime 下）；`handler` 和 `ui.*` 路径相对**各自 runtime 目录**解析——两个 runtime 的 `schemas/` 因此共享放在插件根，`ui/` 则跟着 `resolver` runtime 走。
 
 ## 数据与行为
 

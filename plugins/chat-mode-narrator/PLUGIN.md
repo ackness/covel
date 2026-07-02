@@ -42,6 +42,7 @@ relations:
     - narrator
   requires:
     - scene-cast
+    - scene-stage
     - scene-prompts
     - character-blueprint
     - character-presence

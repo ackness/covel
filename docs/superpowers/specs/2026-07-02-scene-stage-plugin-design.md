@@ -54,6 +54,8 @@ namespace `stage`，key `current`：
 - C 的回退链输入：`resolved` 为 null 时按 `source` 分档（pending → 回退图+等待 SSE；none → 世界头图/渐变）。
 - namespace `generated`：sceneId → 会话内已生成变体索引（内部记账 + 会话帽计数）。
 
+> **追认（B 实现落地）**：`stage/current` 额外携带 `sourceLabel: I18nText`——resolver 按 `source` 算好的展示文案（`world` → "世界背景"、`session` → "本局生成"、`pending` → "背景生成中…"、`none` → "无背景"，双语见 `plugins/scene-stage/lib/stage-data.js`）。面板直接渲染 `sourceLabel`，不必自行按枚举值翻译；C 若有更精细的状态展示需求可忽略该字段、自行按 `source` 枚举值渲染。
+
 ## §5 世界包接线与 A 侧小改
 
 - `dataSchemas.scenes`（acceptsWorldData，schema `./schemas/scenes.schema.json` 对齐 registry 形状）。

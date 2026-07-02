@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { getPendingProposals } from "@covel/tools";
-import handler from "../handler.js";
+import handler from "../runtimes/resolver/handler.js";
 
 const TOPIC = "scene.set";
 
@@ -59,7 +59,7 @@ function makeCtx({
   });
   return {
     pluginId: "scene-stage",
-    runtimeId: "scene-stage",
+    runtimeId: "scene-stage/resolver",
     sessionId: "sess-1",
     turnId: "turn-1",
     userSettings,
@@ -86,7 +86,7 @@ describe("scene-stage resolver handler", () => {
     expect(proposals).toHaveLength(1);
     expect(proposals[0]).toMatchObject({
       type: "plugin.data",
-      source: { pluginId: "scene-stage", runtimeId: "scene-stage" },
+      source: { pluginId: "scene-stage", runtimeId: "scene-stage/resolver" },
       sessionId: "sess-1",
       turnId: "turn-1",
       payload: {

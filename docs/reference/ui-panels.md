@@ -53,16 +53,17 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 
 ### 当前注册的面板
 
-| 插件/runtime             | 面板 ID             | 图标               | group      | 数据 namespace | 描述                                                                                                |
-| ------------------------ | ------------------- | ------------------ | ---------- | -------------- | --------------------------------------------------------------------------------------------------- |
-| char-creator/player-init | character           | users              | character  | characters     | 角色列表（player + NPC + companion）                                                                |
-| character-blueprint      | character-blueprint | id-card            | character  | blueprints     | 预设角色（世界作者预置的登场角色模板，只读；作为 `character` 组的子 Tab）                           |
-| codex                    | codex               | book-open          | codex      | entries        | 知识图鉴                                                                                            |
-| living-world-rules       | living-world-rules  | book-marked        | world-data | rules          | 世界规则（长期设定 / 禁忌，只读；随 world-data 导入播种，作为 `world-data` 组的子 Tab）             |
-| memory                   | memory              | brain              | memory     | （框架托管）   | 核心记忆面板：剧情摘要 / 当前场景 / 角色关系 / 玩家状态。纯 UI，由 `@covel/memory` 在每轮结束后写入 |
-| npc-graph/extractor      | npc-graph           | network            | npc-graph  | nodes + edges  | NPC 关系图（force-directed 可视化）                                                                 |
-| world-init/schema-gen    | world-overview      | layout-dashboard   | world-data | (汇总)         | 世界总览（词条 + 维度的概览页）                                                                     |
-| world-init/schema-gen    | world-schema        | sliders-horizontal | world-data | schema         | 角色属性 schema                                                                                     |
+| 插件/runtime             | 面板 ID             | 图标               | group       | 数据 namespace | 描述                                                                                                |
+| ------------------------ | ------------------- | ------------------ | ----------- | -------------- | --------------------------------------------------------------------------------------------------- |
+| char-creator/player-init | character           | users              | character   | characters     | 角色列表（player + NPC + companion）                                                                |
+| character-blueprint      | character-blueprint | id-card            | character   | blueprints     | 预设角色（世界作者预置的登场角色模板，只读；作为 `character` 组的子 Tab）                           |
+| codex                    | codex               | book-open          | codex       | entries        | 知识图鉴                                                                                            |
+| living-world-rules       | living-world-rules  | book-marked        | world-data  | rules          | 世界规则（长期设定 / 禁忌，只读；随 world-data 导入播种，作为 `world-data` 组的子 Tab）             |
+| memory                   | memory              | brain              | memory      | （框架托管）   | 核心记忆面板：剧情摘要 / 当前场景 / 角色关系 / 玩家状态。纯 UI，由 `@covel/memory` 在每轮结束后写入 |
+| npc-graph/extractor      | npc-graph           | network            | npc-graph   | nodes + edges  | NPC 关系图（force-directed 可视化）                                                                 |
+| scene-stage/resolver     | scene-stage         | image              | scene-stage | stage          | 当前场景舞台（只读）：场景名 + 昼夜徽标 + `sourceLabel` 状态文案（`pending` 时"背景生成中…"）       |
+| world-init/schema-gen    | world-overview      | layout-dashboard   | world-data  | (汇总)         | 世界总览（词条 + 维度的概览页）                                                                     |
+| world-init/schema-gen    | world-schema        | sliders-horizontal | world-data  | schema         | 角色属性 schema                                                                                     |
 
 > `world-data` 组（groupLabel "世界资料"）汇聚三个 spec：`world-init` 的 `world-overview` / `world-schema`，以及 `living-world-rules` 的 `living-world-rules`（世界规则）。合并为单个 activity-bar tab，内部横向子 Tab 在总览 / 属性 / 世界规则 之间切换。（旧 `world-entries` 子 Tab 已移除：对导入型世界它只是 `world-overview` 已格式化渲染的同一份 dimensions 的原始 JSON 重复；`entries` 的 lorebook/prompt 写入不变，`/debug` Data Explorer 仍可查看。）
 > `character` 组汇聚 `char-creator` 的 character-panel（活角色列表，character-tracker runtime 共享 namespace `characters`，由 `create-character` / `update-character` builtin 工具写入）与 `character-blueprint` 的预设角色面板（世界作者预置的登场角色模板，只读）。前者是当前存档的活状态，后者是导入的只读源；同一批角色导入后会 mirror 成活的 `CharacterRecord`，两个子 Tab 分别呈现"源"与"当前"。

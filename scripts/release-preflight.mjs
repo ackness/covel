@@ -266,7 +266,7 @@ function looksLikeJsonSchema(value) {
   );
 }
 
-function checkEventsSchemas(manifestPath) {
+function checkEventsSchemas(manifestPath, pluginRoot) {
   const rel = path.relative(repoRoot, manifestPath);
   const text = fs.readFileSync(manifestPath, "utf-8");
   const frontmatter = extractFrontmatter(text);
@@ -284,7 +284,11 @@ function checkEventsSchemas(manifestPath) {
   if (!Array.isArray(events)) return 0;
 
   let issues = 0;
-  const manifestDir = path.dirname(manifestPath);
+  // events[].schema resolves relative to the PLUGIN ROOT, not this specific
+  // manifest file's directory — matches the runtime resolution in
+  // apps/server/src/routes/api/bootstrap/event-directory.ts, so a
+  // multi-runtime plugin can declare `events` on a runtimes/<sub>/PLUGIN.md
+  // while its schema files live at the shared plugins/<id>/schemas/.
   for (const evt of events) {
     const topic = evt?.topic ?? "(missing topic)";
     if (typeof evt?.schema !== "string") {
@@ -292,7 +296,7 @@ function checkEventsSchemas(manifestPath) {
       issues++;
       continue;
     }
-    const schemaPath = path.resolve(manifestDir, evt.schema);
+    const schemaPath = path.resolve(pluginRoot, evt.schema);
     const schemaRel = path.relative(repoRoot, schemaPath);
     if (!fs.existsSync(schemaPath)) {
       fail(`${rel}: events[] "${topic}" schema not found: ${schemaRel}`);
@@ -349,7 +353,7 @@ for (const entry of pluginDirs) {
   }
   for (const manifestFile of findPluginManifestFiles(dir)) {
     eventSchemaChecks++;
-    pluginIssues += checkEventsSchemas(manifestFile);
+    pluginIssues += checkEventsSchemas(manifestFile, dir);
   }
 }
 if (pluginIssues === 0)

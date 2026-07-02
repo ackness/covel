@@ -336,7 +336,27 @@ sources:
     after: dimensions
 ```
 
-与 portraits 不同：**不加 `indexTo`**——`scenes.registry.json`（`scripts/emit-scenes.mjs` 自动生成，`{schemaVersion, scenes:[{sceneId,name,locationRef?,day,night}]}`，`day`/`night` 是 sha256 `MediaRef`）在 A 阶段**不导入 world.data.yaml**，因为当前没有消费方插件声明对应 namespace；场景插件（B 阶段）落地后会新增 `indexTo` 或专属 source 接管消费。`scenes.registry.json` 是生成产物，不要手编，重新生成场景图后必须重跑 `emit-scenes.mjs` 刷新哈希。
+与 portraits 不同：**不加 `indexTo`**——`scenes.registry.json` 单独走第二条 source 整份导入，被 [`scene-stage`](plugins.md#scene-stage) 插件的 `scenes` namespace 消费（`schemaVersion` 仍为 1：纯增字段，向后兼容）：
+
+```yaml
+sources:
+  scenes:
+    kind: media
+    path: media/scenes
+    to: media
+    after: dimensions
+  scenesRegistry:
+    kind: json
+    path: media/scenes.registry.json
+    schema: plugin://scene-stage/scenes
+    to: plugin:scene-stage/scenes
+    key: registryId
+    after: dimensions
+```
+
+`scenes.registry.json`（`scripts/emit-scenes.mjs` 自动生成，`{schemaVersion, registryId, style, scenes:[{sceneId,name,locationRef?,day,night}]}`，`day`/`night` 是 sha256 `MediaRef`）整份文档作为**一行** plugin_data 导入：`registryId: "scene-registry"` 是自描述常量字段，同时充当 `key`——scene-stage 的解析 runtime 读一行即得 `style`（增量生成用的画风 prompt 片段）与 `scenes[]` 全量，不需要按条目遍历。`scenes.registry.json` 是生成产物，不要手编，重新生成场景图后必须重跑 `emit-scenes.mjs` 刷新哈希与 `style` 块。
+
+**未出图时的空 registry 兜底**：`media/scenes.registry.json` 不存在会导致 world-data 校验失败（source 引用了不存在的文件）。作者还没准备场景图时，对空的 `media/scenes/` 目录跑一次 `emit-scenes.mjs` 即可产出合法的空 registry（`{schemaVersion: 1, registryId: "scene-registry", style: {...}, scenes: []}`），先提交进世界包占位；scene-stage 侧空 `scenes[]` 时一律走"未命中注册表"分支（`autoGenerateScenes` 门控 → 增量生成或 `source: "none"`），不是错误状态。出图后重跑 `emit-scenes.mjs` 覆盖即可，无需改 world.data.yaml。
 
 清单润色规范、参数表、日/夜缺图回退语义、作者四步工作流见 [worlds/SCENES.md](../../worlds/SCENES.md)。
 

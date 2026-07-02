@@ -204,6 +204,7 @@ describe("world data session importer", () => {
       "character-presence/assets",
       "character-presence/presence",
       "living-world-rules/rules",
+      "scene-stage/scenes",
     ]);
   });
 
@@ -1185,6 +1186,7 @@ sources: {}
     const activePlugins = [
       "chat-mode-narrator",
       "scene-cast",
+      "scene-stage",
       "scene-prompts",
       "character-blueprint",
       "character-presence",
@@ -1300,6 +1302,7 @@ sources: {}
       "character-blueprint",
       "char-creator",
       "character-presence",
+      "scene-stage",
     ];
 
     for (const [worldId, portraitCount] of [

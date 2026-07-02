@@ -9,7 +9,7 @@ import {
   STAGE_NS,
   resolveMedia,
   sourceLabelFor,
-} from "./lib/stage-data.js";
+} from "../../lib/stage-data.js";
 
 const DEFAULT_MAX_GENERATED = 10;
 
