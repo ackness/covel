@@ -62,6 +62,7 @@ import { createBootstrapCompactorRunner } from "./bootstrap/compactor.js";
 import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
 import { createBootstrapHookPipeline } from "./bootstrap/plugin-hooks.js";
 import { setupPluginTools } from "./bootstrap/tools.js";
+import { createEventDirectory } from "./bootstrap/event-directory.js";
 import { createBootstrapMemorySystem } from "./bootstrap/memory.js";
 import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
 import { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
@@ -238,6 +239,16 @@ export async function bootstrapApi(
   // install route to reject third-party packages that claim a builtin id.
   const reservedPluginIds = deriveBuiltinPluginIds(discoveryMap.values());
 
+  // Session event directory — aggregates active plugins' `events` manifest
+  // contracts (union, first-wins on cross-plugin topic conflicts) so the
+  // emit-event tool below can validate emitted payloads. Re-aggregated per
+  // call since session activation changes turn to turn; only compiled ajv
+  // validators are cached.
+  const eventDirectory = createEventDirectory({
+    registry,
+    resolvePluginDir: (pluginId) => discoveryMap.get(pluginId)?.rootPath,
+  });
+
   // 3. Load plugin-level llm.toml configs for model resolution
   const pluginLlmConfigs = new Map<string, PluginLlmConfig>();
   for (const [pluginId, discovery] of discoveryMap) {
@@ -286,6 +297,7 @@ export async function bootstrapApi(
     discoveryMap,
     manifestCache,
     llmAdapter: config.llmAdapter,
+    eventDirectory,
   });
 
   // 6b. Eagerly load runtimes that declare UI specs so /api/ui-specs has data at boot

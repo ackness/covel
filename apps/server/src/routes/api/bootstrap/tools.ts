@@ -17,6 +17,7 @@ import {
   createCharacterTools,
   buildSessionCharacterWriteTools,
   createWorldDimensionTools,
+  createEmitEventTool,
   suspendTool,
   runtimeDoneTool,
   type ToolModule,
@@ -37,6 +38,7 @@ import type {
   ParsedPluginMd,
 } from "@covel/plugin-loader";
 import { createBootstrapLocalTools } from "./local-tools.js";
+import type { EventDirectory } from "./event-directory.js";
 
 export interface SetupPluginToolsParams {
   readonly store: DataStore;
@@ -44,6 +46,7 @@ export interface SetupPluginToolsParams {
   readonly discoveryMap: Map<string, PluginDiscoveryResult>;
   readonly manifestCache: Map<string, readonly ParsedPluginMd[]>;
   readonly llmAdapter: LLMAdapter;
+  readonly eventDirectory: EventDirectory;
 }
 
 export interface PluginToolsResult {
@@ -58,7 +61,8 @@ export interface PluginToolsResult {
 export async function setupPluginTools(
   params: SetupPluginToolsParams,
 ): Promise<PluginToolsResult> {
-  const { store, registry, discoveryMap, manifestCache } = params;
+  const { store, registry, discoveryMap, manifestCache, eventDirectory } =
+    params;
 
   const builtinToolNames = new Set<string>();
   const localToolNames = new Set<string>();
@@ -86,6 +90,13 @@ export async function setupPluginTools(
     toolMap.set(t.name, t);
     builtinToolNames.add(t.name);
   }
+
+  // Register emit-event tool — validates against the session event directory
+  // (aggregated `events` contracts of active plugins) and routes through the
+  // emitted-events result channel, never an `event.emit` pendingProposal.
+  const emitEventTool = createEmitEventTool({ directory: eventDirectory });
+  toolMap.set(emitEventTool.name, emitEventTool);
+  builtinToolNames.add(emitEventTool.name);
 
   // Register character management tools (writes characters table + mirrors to plugin-data).
   // `findWorldDataPluginId` lets create/update-character locate the schema
