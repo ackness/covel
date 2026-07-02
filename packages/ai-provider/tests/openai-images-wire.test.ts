@@ -129,4 +129,58 @@ describe("openai-images wire", () => {
       ),
     ).rejects.toThrow(/no images/i);
   });
+
+  it("strips imageWire from providerRequestMetadata but keeps other keys", async () => {
+    const fn = mockFetchOnce(200, { data: [{ b64_json: PNG_B64 }] });
+    await openAiImagesWire.generate(
+      { baseUrl: "https://x.test", apiKey: "k" },
+      {
+        model: "m",
+        prompt: "p",
+        providerRequestMetadata: { imageWire: "openai-images", style: "vivid" },
+      },
+    );
+    const body = JSON.parse(
+      (fn.mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(body.style).toBe("vivid");
+    expect(body).not.toHaveProperty("imageWire");
+  });
+
+  it("records a warning when negativePrompt is provided (unsupported field)", async () => {
+    mockFetchOnce(200, { data: [{ b64_json: PNG_B64 }] });
+    const result = await openAiImagesWire.generate(
+      { baseUrl: "https://x.test", apiKey: "k" },
+      { model: "m", prompt: "p", negativePrompt: "ugly" },
+    );
+    expect(result.warnings.join(" ")).toMatch(/negative-prompt/i);
+  });
+
+  it("throws when baseUrl is empty or missing", async () => {
+    await expect(
+      openAiImagesWire.generate(
+        { baseUrl: "", apiKey: "k" },
+        { model: "m", prompt: "p" },
+      ),
+    ).rejects.toThrow(/baseUrl is required/);
+    await expect(
+      openAiImagesWire.generate({ apiKey: "k" }, { model: "m", prompt: "p" }),
+    ).rejects.toThrow(/baseUrl is required/);
+  });
+
+  it("throws on non-JSON response body", async () => {
+    const fn = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () => "oops",
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fn);
+    await expect(
+      openAiImagesWire.generate(
+        { baseUrl: "https://x.test", apiKey: "k" },
+        { model: "m", prompt: "p" },
+      ),
+    ).rejects.toThrow(/non-JSON/);
+  });
 });

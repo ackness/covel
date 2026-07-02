@@ -138,4 +138,117 @@ describe("dashscope-wan wire", () => {
     );
     expect(result.images[0]).toMatchObject({ kind: "url" });
   });
+
+  it("passes the same AbortSignal to submit and poll requests", async () => {
+    const calls = stubFetchSequence([
+      { json: { output: { task_id: "t1" } } },
+      {
+        json: {
+          output: {
+            task_status: "SUCCEEDED",
+            results: [{ url: "https://oss.test/a.png" }],
+          },
+        },
+      },
+    ]);
+    const controller = new AbortController();
+    await dashscopeWanWire.generate(
+      { baseUrl: "https://d.test", apiKey: "k", signal: controller.signal },
+      { model: "m", prompt: "p" },
+      undefined,
+      { pollIntervalMs: 1, timeoutMs: 5_000 },
+    );
+    expect(calls[0]!.init!.signal).toBe(controller.signal);
+    expect(calls[1]!.init!.signal).toBe(controller.signal);
+  });
+
+  it("warns for unsupported background and clamps n to 1", async () => {
+    stubFetchSequence([
+      { json: { output: { task_id: "t1" } } },
+      {
+        json: {
+          output: {
+            task_status: "SUCCEEDED",
+            results: [{ url: "https://oss.test/a.png" }],
+          },
+        },
+      },
+    ]);
+    const result = await dashscopeWanWire.generate(
+      { baseUrl: "https://d.test", apiKey: "k" },
+      { model: "m", prompt: "p", background: "transparent", n: 3 },
+      undefined,
+      { pollIntervalMs: 1, timeoutMs: 5_000 },
+    );
+    expect(result.warnings.join(" ")).toMatch(/transparent/i);
+    expect(result.warnings.join(" ")).toMatch(/clamped to 1/i);
+  });
+
+  it("writes negative_prompt for models that accept it", async () => {
+    const calls = stubFetchSequence([
+      { json: { output: { task_id: "t1" } } },
+      {
+        json: {
+          output: {
+            task_status: "SUCCEEDED",
+            results: [{ url: "https://oss.test/a.png" }],
+          },
+        },
+      },
+    ]);
+    await dashscopeWanWire.generate(
+      { baseUrl: "https://d.test", apiKey: "k" },
+      { model: "wan2.2-t2i", prompt: "p", negativePrompt: "ugly" },
+      undefined,
+      { pollIntervalMs: 1, timeoutMs: 5_000 },
+    );
+    const body = JSON.parse(calls[0]!.init!.body as string);
+    expect(body.parameters.negative_prompt).toBe("ugly");
+  });
+
+  it("throws with HTTP status when submit request fails", async () => {
+    stubFetchSequence([{ status: 500, json: {} }]);
+    await expect(
+      dashscopeWanWire.generate(
+        { baseUrl: "https://d.test", apiKey: "k" },
+        { model: "m", prompt: "p" },
+        undefined,
+        { pollIntervalMs: 1, timeoutMs: 5_000 },
+      ),
+    ).rejects.toThrow(/DashScope submit failed: HTTP 500/);
+  });
+
+  it("throws when submit response has no task_id", async () => {
+    stubFetchSequence([{ json: { output: {} } }]);
+    await expect(
+      dashscopeWanWire.generate(
+        { baseUrl: "https://d.test", apiKey: "k" },
+        { model: "m", prompt: "p" },
+        undefined,
+        { pollIntervalMs: 1, timeoutMs: 5_000 },
+      ),
+    ).rejects.toThrow(/no task_id/);
+  });
+
+  it("retries past a transient poll failure and still succeeds", async () => {
+    stubFetchSequence([
+      { json: { output: { task_id: "t1" } } },
+      { status: 503, json: {} },
+      {
+        json: {
+          output: {
+            task_status: "SUCCEEDED",
+            results: [{ url: "https://oss.test/a.png" }],
+          },
+        },
+      },
+    ]);
+    const result = await dashscopeWanWire.generate(
+      { baseUrl: "https://d.test", apiKey: "k" },
+      { model: "m", prompt: "p" },
+      undefined,
+      { pollIntervalMs: 1, timeoutMs: 5_000 },
+    );
+    expect(result.images[0]).toMatchObject({ kind: "url" });
+  });
 });
