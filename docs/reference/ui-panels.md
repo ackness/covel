@@ -331,6 +331,43 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
   → InputBar 统一发送待发送草稿与手写输入
 ```
 
+## 舞台模式（Stage View）
+
+`viewMode: "stage"` 是消息区之外的第四个呈现档（与 `parsed` / `detailed` / `raw` 并列，头部 `GameViewHeader` 的 Toggle 切换）。它把消息区三件（`ChatMessages` + `PendingDraftsBar` + `MessageComposer`）整体替换成全屏 GalGame 舞台，`GameViewHeader` 保留。
+
+- **渲染条件**：`viewMode === "stage" && session.turnCount >= 1`。Pre-Game（`turnCount === 0`）即使处于 stage 档也走原有消息流（角色创建 / begin-adventure 不受影响）。
+- **初值**：世界包 `world.yaml` 顶层 `defaultViewMode: stage`（→ `WorldRecord.metadata.defaultViewMode`）让会话**首挂载**即进舞台；玩家在头部切换后以玩家选择为准（无持久化）。见 [world-data.md](./world-data.md#world-package)。
+
+### 层级与数据源
+
+五层绝对定位、`z-index` 分档，DOM 顺序 Backdrop → Sprites → Hud → Dialog → Choices，全部套在一个 `relative` 有界容器里。数据全部经 `usePluginNamespace(pluginId, namespace)` 读取（`StageView` 保持薄，逻辑在 `stage-selectors.ts`）：
+
+| 层           | 数据源                                                                                        | 选择器                                                              |
+| ------------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| **Backdrop** | `("scene-stage","stage")["current"]`                                                          | `resolveBackdrop`（四档回退，见下）                                 |
+| **Sprites**  | `("scene-cast","active-cast")["current"].speakers` × `("character-presence","presence")`      | `computeSpriteSlots`（站位/高亮，无立绘则过滤）                     |
+| **Hud**      | `("scene-stage","stage")["current"]`（`name` / `variant` / `sourceLabel` / `source`）         | —（无状态，按钮回调上抛）                                           |
+| **Dialog**   | 最新 `kind === "story"` 消息的 `content`                                                      | `use-typewriter`（流式驱动、`\n\n` 分段、▼ 暂停）                   |
+| **Choices**  | 未提交的 choice 类 interaction block + `("scene-prompts","message")` 的 `prompt{N}Text/Label` | `extractInteractionChoices` + `mergeChoices`（末位追加 ✎ 自由输入） |
+
+“流式中”判定沿用内核约定——无 streaming 布尔，`executing && story 消息 id 以 stream_ 开头`；打字机读完（`done`）且 `!executing` 才浮现选择肢。
+
+### 背景回退链（`resolveBackdrop`）
+
+| 档                 | 触发                                      | 表现                                        |
+| ------------------ | ----------------------------------------- | ------------------------------------------- |
+| `scene`            | `stage/current.resolved` 是 `MediaRef`    | 渲染场景图（换图 600ms crossfade）          |
+| `previous-or-hero` | `source === "pending"`（生成中）          | 保留上一帧场景图 + 呼吸徽标，无则退世界头图 |
+| `hero`             | `source === "none"` 或无 scene-stage 数据 | 世界头图（`worldVisual().image`）           |
+| `gradient`         | 理论兜底                                  | 世界 accent 渐变（选择器当前不返回）        |
+
+### 履历抽屉与表单模态
+
+- **履历抽屉**：Hud 的 📖 打开 Radix `Dialog`，内含 `flex h-[80vh] flex-col` 包裹的完整 `<ChatMessages viewMode="parsed">`（舞台下仍可回看/滚动全部解析消息）。
+- **表单模态**：舞台对话框只接选择肢与自由文本，故 messages 里出现未提交的 **form 类** interaction block 时（`extractPendingFormMessages`），弹 `Dialog` 承载 `MessageBlockRenderer` 填写；提交后自动关闭。
+
+实现位置：`apps/web/src/components/session/stage/`（`StageView.tsx` 组装 + `Stage{Backdrop,Sprites,Hud,Dialog,Choices}.tsx` + `stage-selectors.ts` + `use-typewriter.ts`）。
+
 ## 组件 Catalog
 
 框架内置 ~25 个 json-render 组件，所有插件共享：
