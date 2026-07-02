@@ -848,3 +848,64 @@
   scrollbar-color: color-mix(in oklab, var(--color-foreground) 14%, transparent)
     transparent;
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Stage mode (viewMode: "stage") — fullscreen backdrop, sprites,
+   dialog box, and choice overlay. apps/web/src/components/session/stage/.
+   The reduced-motion block above already collapses every animation here
+   to a hard cut, so no per-component matchMedia branching is needed.
+   ───────────────────────────────────────────────────────────────── */
+@keyframes ui-stage-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Bakes the sprite's horizontal centering offset into the keyframe itself —
+   a CSS animation's fill-forward otherwise wins over any plain `transform`
+   rule targeting the same property on the same element, so a static
+   `translateX(-50%)` declared alongside this animation would be ignored. */
+@keyframes ui-stage-rise-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(2%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.ui-stage-crossfade {
+  animation: ui-stage-fade-in 600ms ease-out both;
+}
+
+.ui-stage-sprite {
+  animation: ui-stage-rise-in 300ms ease-out both;
+}
+
+/* Active/inactive treatment lives on the sprite's *inner* element (never
+   the animated outer wrapper above) so it doesn't fight the entrance
+   animation for control of `transform`. */
+.ui-stage-sprite-active {
+  transform: scale(1.03);
+  filter: drop-shadow(
+    0 0 28px color-mix(in oklab, var(--accent-primary) 55%, transparent)
+  );
+}
+
+.ui-stage-sprite-inactive {
+  filter: brightness(0.55) saturate(0.6);
+}
+
+/* Translucent theme-token surface for HUD/dialog/choice chrome floating
+   over the backdrop art — opaque enough to stay legible over any photo,
+   in both light and dark themes. */
+.ui-stage-panel {
+  background: color-mix(in oklab, var(--surface-page) 88%, transparent);
+  border: var(--rule-thickness) var(--rule-style) var(--rule-color);
+  backdrop-filter: blur(8px);
+}
