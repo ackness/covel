@@ -40,6 +40,7 @@ export {
   rpcActionDeclSchema,
   rpcDeclMapSchema,
   memoryBlockDeclSchema,
+  pluginEventDeclSchema,
   pluginRelationsSchema,
   runtimeManifestSchema,
   validateRuntimeManifestSemantics,

@@ -1196,4 +1196,103 @@ describe("parsePluginMd", () => {
       );
     });
   });
+
+  describe("events declarations", () => {
+    it("parses a valid events list with defaults", () => {
+      const content = md(
+        [
+          "name: scene-consumer",
+          "description: Reacts to scene events",
+          "priority: 500",
+          "events:",
+          "  - topic: scene.set",
+          "    schema: ./schemas/scene-set.event.json",
+          "    description:",
+          "      zh: 场景切换",
+          "      en: Scene change",
+        ].join("\n"),
+        "\nBody.\n",
+      );
+
+      const result = parsePluginMd(content, "plugins/scene-consumer/PLUGIN.md");
+
+      expect(result.manifest.events).toEqual([
+        {
+          topic: "scene.set",
+          schema: "./schemas/scene-set.event.json",
+          description: { zh: "场景切换", en: "Scene change" },
+          advertise: true,
+        },
+      ]);
+    });
+
+    it("rejects an invalid topic format", () => {
+      const content = md(
+        [
+          "name: scene-consumer",
+          "description: Reacts to scene events",
+          "priority: 500",
+          "events:",
+          "  - topic: SceneSet",
+          "    schema: ./schemas/scene-set.event.json",
+          "    description: Scene change",
+        ].join("\n"),
+        "\nBody.\n",
+      );
+
+      expect(() =>
+        parsePluginMd(content, "plugins/scene-consumer/PLUGIN.md"),
+      ).toThrow(/topic/);
+    });
+
+    it("rejects schema path escaping the plugin dir", () => {
+      const content = md(
+        [
+          "name: scene-consumer",
+          "description: Reacts to scene events",
+          "priority: 500",
+          "events:",
+          "  - topic: scene.set",
+          "    schema: ../outside.json",
+          "    description: Scene change",
+        ].join("\n"),
+        "\nBody.\n",
+      );
+
+      expect(() =>
+        parsePluginMd(content, "plugins/scene-consumer/PLUGIN.md"),
+      ).toThrow(/schema/);
+    });
+
+    it("parses runtime-level advertiseEvents boolean", () => {
+      const withFlag = md(
+        [
+          "name: narrator",
+          "description: Main narrative generation",
+          "priority: 500",
+          "advertiseEvents: true",
+        ].join("\n"),
+        "\nBody.\n",
+      );
+      const resultWithFlag = parsePluginMd(
+        withFlag,
+        "plugins/narrator/PLUGIN.md",
+      );
+      expect(resultWithFlag.manifest.advertiseEvents).toBe(true);
+
+      const withoutFlag = md(
+        [
+          "name: narrator",
+          "description: Main narrative generation",
+          "priority: 500",
+        ].join("\n"),
+        "\nBody.\n",
+      );
+      const resultWithoutFlag = parsePluginMd(
+        withoutFlag,
+        "plugins/narrator/PLUGIN.md",
+      );
+      expect(resultWithoutFlag.manifest.advertiseEvents).toBeUndefined();
+    });
+  });
 });

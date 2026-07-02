@@ -277,6 +277,23 @@ export interface PluginDataSchemaDecl {
   readonly description?: string;
 }
 
+// ── Event declarations ───────────────────────────────────────────
+
+/**
+ * Declares a domain event a plugin's runtime may emit via the builtin
+ * `emit-event` tool. See {@link RuntimeManifest.events} and
+ * {@link RuntimeManifest.advertiseEvents}.
+ */
+export interface PluginEventDecl {
+  /** Dot-separated kebab-case topic, e.g. `"scene.set"`. */
+  readonly topic: string;
+  /** Plugin-relative JSON Schema path validating the event payload. */
+  readonly schema: string;
+  readonly description: import("./world.js").I18nText;
+  /** When true (default) the contract is advertised to emitting runtimes. */
+  readonly advertise: boolean;
+}
+
 // ── Plugin catalogue metadata ───────────────────────────────────
 
 export type PluginTag = string;
@@ -531,10 +548,19 @@ export interface RuntimeManifest {
    * Ignored for runtimes triggered by the normal per-turn scheduler.
    */
   readonly execution?: "sync" | "background";
+  /**
+   * When true, the session-level event directory (aggregated across all
+   * active runtimes' `events` declarations) is rendered into this runtime's
+   * segment 5 prompt so the LLM knows which topics it may emit via the
+   * builtin `emit-event` tool. Defaults to `undefined` (not advertised).
+   */
+  readonly advertiseEvents?: boolean;
   readonly tools?: ToolsConfig;
   readonly input?: InputConfig;
   readonly output?: OutputConfig;
   readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
+  /** Domain events this plugin's runtime may emit via `emit-event`. */
+  readonly events?: readonly PluginEventDecl[];
   readonly i18n?: Readonly<Record<string, string>>;
   readonly ui?: UISpec;
   /**
