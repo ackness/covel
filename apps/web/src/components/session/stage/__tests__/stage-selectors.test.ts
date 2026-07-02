@@ -4,6 +4,7 @@ import type { WorldVisual } from "@/lib/world-visuals.js";
 import {
   computeSpriteSlots,
   extractInteractionChoices,
+  extractPendingFormMessages,
   mergeChoices,
   resolveBackdrop,
   type StageCurrentRecord,
@@ -190,6 +191,49 @@ describe("extractInteractionChoices", () => {
       } satisfies StreamMessage,
     ];
     expect(extractInteractionChoices(messages, new Set())).toEqual([]);
+  });
+});
+
+describe("extractPendingFormMessages", () => {
+  const formMessage: StreamMessage = {
+    id: "msg-form-1",
+    role: "assistant",
+    content: "",
+    timestamp: "2026-07-03T00:00:00.000Z",
+    turnId: "turn-1",
+    block: {
+      type: "interactive_form",
+      data: {
+        type: "form",
+        interactionId: "sign-up",
+        fields: [{ name: "codename", label: "Codename", required: true }],
+      },
+    },
+  };
+  const choiceMessage: StreamMessage = {
+    id: "msg-choice-1",
+    role: "assistant",
+    content: "",
+    timestamp: "2026-07-03T00:00:01.000Z",
+    turnId: "turn-1",
+    block: {
+      type: "interactive_choice",
+      data: { type: "choice", choices: [{ id: "a", label: "Agree" }] },
+    },
+  };
+
+  it("returns pending form blocks but not choice blocks", () => {
+    const result = extractPendingFormMessages(
+      [formMessage, choiceMessage],
+      new Set(),
+    );
+    expect(result).toEqual([formMessage]);
+  });
+
+  it("drops a form once it has been submitted", () => {
+    expect(
+      extractPendingFormMessages([formMessage], new Set(["msg-form-1"])),
+    ).toEqual([]);
   });
 });
 

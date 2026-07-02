@@ -208,6 +208,35 @@ export function extractInteractionChoices(
   return result;
 }
 
+/**
+ * Pending form-type interaction messages (the stage dialog can only take
+ * choices and free text inline, so forms are surfaced in a modal). Same
+ * "pending" rule as {@link extractInteractionChoices}, but keeps the full
+ * `StreamMessage` because `MessageBlockRenderer` needs `msg` + `block`.
+ */
+export function extractPendingFormMessages(
+  messages: readonly StreamMessage[],
+  submittedBlockIds: ReadonlySet<string>,
+): StreamMessage[] {
+  return messages.filter(
+    (msg) =>
+      isPendingInteractionMessage(
+        msg,
+        messages as StreamMessage[],
+        submittedBlockIds,
+      ) && isFormBlock(msg.block as Record<string, unknown>),
+  );
+}
+
+function isFormBlock(block: Record<string, unknown>): boolean {
+  const data = (block.data ?? block) as Record<string, unknown>;
+  return (
+    data.type === "form" ||
+    block.type === "interactive_form" ||
+    (Array.isArray(data.fields) && data.fields.length > 0)
+  );
+}
+
 /** A single renderable entry in the stage choice overlay. */
 export type StageChoiceItem =
   | {

@@ -19,6 +19,7 @@ import { useMediaQuery } from "@/hooks/use-media-query.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
 import { ChatMessages } from "./chat-messages.js";
+import { StageView } from "./stage/StageView.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import type {
   SessionRecord,
@@ -381,10 +382,25 @@ export function GameView({
 
           {/* Messages */}
           {viewMode === "stage" && session.turnCount >= 1 ? (
-            // ponytail: placeholder — task 5 replaces this with <StageView>.
-            <div className="flex-1 min-h-0 flex items-center justify-center text-sm text-muted-foreground">
-              stage placeholder
-            </div>
+            <StageView
+              session={session}
+              world={world}
+              messages={messages}
+              executing={executing}
+              executionError={executionError}
+              executionSteps={executionSteps}
+              packages={packages}
+              sessionPlugins={sessionPlugins}
+              submittedBlockIds={submittedBlockIds}
+              submittedBlockValues={submittedBlockValues}
+              onSendMessage={onSendMessage}
+              onSubmitBlock={onSubmitBlock}
+              onSubmitInteraction={onSubmitInteraction}
+              onRetryRuntime={onRetryRuntime}
+              onBeginAdventure={onBeginAdventure}
+              onViewModeChange={setViewMode}
+              messagesEndRef={messagesEndRef}
+            />
           ) : (
             <>
               <ChatMessages

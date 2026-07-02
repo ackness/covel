@@ -1,0 +1,244 @@
+/**
+ * Full-screen GalGame stage (viewMode: "stage"). Composes the five stage
+ * layers over a shared plugin-data feed and owns the small amount of
+ * cross-layer state the pieces can't hold themselves: which turn's text is
+ * fully read (gates the choice overlay), whether the dialog is in free-text
+ * input mode (toggled from the sibling choice overlay), auto-play, and the
+ * history / pending-form modals.
+ *
+ * Absolute-positioned layers stack inside a `relative` bounded container in
+ * DOM order Backdrop → Sprites → Hud → Dialog → Choices (z-index banded on
+ * the components). Data all arrives through `usePluginNamespace`, so the
+ * component stays thin — the real logic lives in `stage-selectors`.
+ */
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useTranslation } from "react-i18next";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.js";
+import { useMediaQuery } from "@/hooks/use-media-query.js";
+import { usePluginNamespace } from "@/stores/plugin-data-store.js";
+import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
+import type {
+  SessionRecord,
+  WorldRecord,
+  PackageSummary,
+  SessionPluginInfo,
+} from "@/services/api.js";
+import { ChatMessages } from "../chat-messages.js";
+import { MessageBlockRenderer } from "../chat-messages/message-blocks.js";
+import { StageBackdrop } from "./StageBackdrop.js";
+import { StageSprites } from "./StageSprites.js";
+import { StageHud } from "./StageHud.js";
+import { StageDialog } from "./StageDialog.js";
+import { StageChoices } from "./StageChoices.js";
+import {
+  extractInteractionChoices,
+  extractPendingFormMessages,
+  type PresenceRecord,
+  type StageCurrentRecord,
+  type StageSpeaker,
+} from "./stage-selectors.js";
+
+export interface StageViewProps {
+  readonly session: SessionRecord;
+  readonly world: WorldRecord | null;
+  readonly messages: StreamMessage[];
+  readonly executing: boolean;
+  readonly executionError: string | null;
+  readonly executionSteps: ExecutionStep[];
+  readonly packages: PackageSummary[];
+  readonly sessionPlugins: SessionPluginInfo[];
+  readonly submittedBlockIds: ReadonlySet<string>;
+  readonly submittedBlockValues: Readonly<
+    Record<string, Record<string, unknown>>
+  >;
+  readonly onSendMessage: (text: string) => void;
+  readonly onSubmitBlock: (blockId: string) => void;
+  readonly onSubmitInteraction?: (
+    blockId: string,
+    turnId: string,
+    interactionId: string,
+    type: "form" | "choice" | "confirmation",
+    values: Record<string, unknown>,
+    submitBehavior?: { echoFilledNarrative?: boolean },
+  ) => Promise<void>;
+  readonly onRetryRuntime?: (runtimeId: string | undefined) => void;
+  readonly onBeginAdventure: () => void;
+  readonly onViewModeChange: (mode: "parsed") => void;
+  readonly messagesEndRef: React.RefObject<HTMLDivElement | null>;
+}
+
+/** Latest `story` message drives the dialog; a `stream_`-prefixed id while
+ *  the turn is still executing means the text is mid-stream (no dedicated
+ *  streaming flag exists — see reducer.ts). */
+function findLatestStory(
+  messages: readonly StreamMessage[],
+): StreamMessage | undefined {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].kind === "story") return messages[i];
+  }
+  return undefined;
+}
+
+export function StageView(props: StageViewProps): ReactElement {
+  const {
+    session,
+    world,
+    messages,
+    executing,
+    submittedBlockIds,
+    submittedBlockValues,
+    onSendMessage,
+    onSubmitBlock,
+    onSubmitInteraction,
+    onViewModeChange,
+  } = props;
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language;
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+
+  // ── Plugin-data feeds ─────────────────────────────────────────
+  const sceneCurrent = usePluginNamespace("scene-stage", "stage")["current"] as
+    | StageCurrentRecord
+    | undefined;
+  const activeCast = usePluginNamespace("scene-cast", "active-cast")[
+    "current"
+  ] as { speakers?: readonly StageSpeaker[] } | undefined;
+  const speakers = activeCast?.speakers ?? [];
+  const promptsNamespace = usePluginNamespace("scene-prompts", "message");
+  // Mirror portrait-gallery-panel: the presence namespace is consumed as a
+  // characterId-keyed record of `{ sprite, avatar, ... }`.
+  const presence = usePluginNamespace(
+    "character-presence",
+    "presence",
+  ) as Readonly<Record<string, PresenceRecord | undefined>>;
+
+  // ── Latest story text + stream state ──────────────────────────
+  const storyMsg = findLatestStory(messages);
+  const storyText = storyMsg?.content ?? "";
+  const storyTurnId = storyMsg?.turnId;
+  const isStreaming =
+    executing && (storyMsg?.id.startsWith("stream_") ?? false);
+
+  // ── Cross-layer state ─────────────────────────────────────────
+  const [autoPlay, setAutoPlay] = useState(false);
+  const [inputMode, setInputMode] = useState(false);
+  const [allRead, setAllRead] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [dismissedFormIds, setDismissedFormIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+
+  // New turn: the dialog re-types (its own typewriter resets on turnId), so
+  // reset "fully read" here too. Leaving input mode avoids a stale composer.
+  useEffect(() => {
+    setAllRead(false);
+    setInputMode(false);
+  }, [storyTurnId]);
+
+  const interactionChoices = useMemo(
+    () => extractInteractionChoices(messages, submittedBlockIds),
+    [messages, submittedBlockIds],
+  );
+  const pendingForms = useMemo(
+    () => extractPendingFormMessages(messages, submittedBlockIds),
+    [messages, submittedBlockIds],
+  );
+  const activeForm = pendingForms.find((m) => !dismissedFormIds.has(m.id));
+
+  return (
+    <div
+      className="relative flex-1 min-h-0 overflow-hidden"
+      data-testid="stage-view"
+    >
+      <StageBackdrop
+        sceneCurrent={sceneCurrent}
+        world={world}
+        sessionId={session.id}
+      />
+      <StageSprites
+        speakers={speakers}
+        presence={presence}
+        sessionId={session.id}
+      />
+      <StageHud
+        sceneCurrent={sceneCurrent}
+        locale={locale}
+        autoPlay={autoPlay}
+        onOpenHistory={() => setHistoryOpen(true)}
+        onToggleAutoPlay={() => setAutoPlay((v) => !v)}
+        onExit={() => onViewModeChange("parsed")}
+      />
+      <StageDialog
+        turnId={storyTurnId}
+        storyText={storyText}
+        streamEnded={!isStreaming}
+        speakerName={speakers[0]?.name}
+        autoPlay={autoPlay}
+        reducedMotion={reducedMotion}
+        inputMode={inputMode}
+        onInputModeChange={setInputMode}
+        onAllRead={() => setAllRead(true)}
+        onSendMessage={onSendMessage}
+      />
+      <StageChoices
+        visible={allRead && !executing && !inputMode}
+        interactionChoices={interactionChoices}
+        promptsNamespace={promptsNamespace}
+        locale={locale}
+        onSubmitInteraction={onSubmitInteraction}
+        onSendMessage={onSendMessage}
+        onFreeInput={() => setInputMode(true)}
+      />
+
+      {/* History drawer — the full parsed chat, needs a bounded flex column
+          for its internal ScrollArea (flex-1 min-h-0). */}
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent
+          className="max-w-3xl p-0 gap-0"
+          aria-describedby={undefined}
+        >
+          <DialogHeader className="px-4 pt-4 pb-2">
+            <DialogTitle>{t("stage.historyTitle")}</DialogTitle>
+          </DialogHeader>
+          <div className="flex h-[80vh] flex-col">
+            <ChatMessages {...props} viewMode="parsed" />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pending form modal — the inline dialog only takes choices/free text,
+          so a form interaction surfaces here. */}
+      <Dialog
+        open={!!activeForm}
+        onOpenChange={(open) => {
+          if (!open && activeForm) {
+            setDismissedFormIds((prev) => new Set(prev).add(activeForm.id));
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg" aria-describedby={undefined}>
+          <DialogHeader className="sr-only">
+            <DialogTitle>{t("stage.formTitle")}</DialogTitle>
+          </DialogHeader>
+          {activeForm && (
+            <MessageBlockRenderer
+              msg={activeForm}
+              block={activeForm.block as Record<string, unknown>}
+              submitted={submittedBlockIds.has(activeForm.id)}
+              submittedValues={submittedBlockValues[activeForm.id]}
+              executing={executing}
+              onSubmitInteraction={onSubmitInteraction}
+              onSendMessage={onSendMessage}
+              onSubmitBlock={onSubmitBlock}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

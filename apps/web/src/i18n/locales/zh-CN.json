@@ -963,6 +963,8 @@
   },
   "stage": {
     "historyLabel": "履历",
+    "historyTitle": "对话履历",
+    "formTitle": "填写表单",
     "autoPlayLabel": "自动播放",
     "autoPlayPauseLabel": "暂停自动播放",
     "exitLabel": "退出舞台",

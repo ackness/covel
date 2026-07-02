@@ -963,6 +963,8 @@
   },
   "stage": {
     "historyLabel": "History",
+    "historyTitle": "Conversation history",
+    "formTitle": "Fill out form",
     "autoPlayLabel": "Auto-play",
     "autoPlayPauseLabel": "Pause auto-play",
     "exitLabel": "Exit stage",
