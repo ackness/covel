@@ -1,6 +1,6 @@
 /**
  * Unified non-streaming operation runner shared by the gateway's
- * text / object / speech / transcription / embed paths.
+ * text / object / speech / transcription / embed / image paths.
  *
  * Each of those operations repeats the same skeleton:
  *

@@ -433,7 +433,7 @@ export function createGateway(deps: GatewayDependencies) {
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: GatewayOptions,
-  ): Promise<ImageGenerationResult & { model: string; providerId: string }> {
+  ): Promise<ImageGenerationResult & { model: string; provider: string }> {
     return runOperation(
       {
         presetId: input.presetId,
@@ -443,16 +443,19 @@ export function createGateway(deps: GatewayDependencies) {
           deps.presetRegistry.resolveTextTarget({ presetId }),
         ],
         execute: async (target, resolved) => {
-          const meta = target.preset?.providerRequestMetadata;
+          const slotMeta = target.preset?.providerRequestMetadata;
           const wireId =
-            typeof meta?.imageWire === "string" && meta.imageWire
-              ? meta.imageWire
+            typeof slotMeta?.imageWire === "string" && slotMeta.imageWire
+              ? slotMeta.imageWire
               : DEFAULT_IMAGE_WIRE;
           const wire = getImageWire(wireId);
           if (!wire) {
-            throw new Error(
-              `unknown image wire "${wireId}" — register it via registerImageWire() or fix llm.toml providerRequestMetadata.imageWire`,
-            );
+            throw new AiProviderError({
+              code: "CONFIG_ERROR",
+              message: `unknown image wire "${wireId}" — register it via registerImageWire() or fix llm.toml providerRequestMetadata.imageWire`,
+              provider: targetProvider(target),
+              retriable: false,
+            });
           }
           const result = await wire.generate(
             configWithSignal(resolved.config, options),
@@ -464,16 +467,24 @@ export function createGateway(deps: GatewayDependencies) {
               quality: input.quality,
               n: input.n,
               background: input.background,
-              providerRequestMetadata: input.providerRequestMetadata,
+              // Per-call metadata overrides slot defaults. Not routed through
+              // withPresetMetadata — that also folds in parameterOverrides,
+              // which are text-generation params that don't belong in an
+              // image request body.
+              providerRequestMetadata: {
+                ...slotMeta,
+                ...input.providerRequestMetadata,
+              },
             },
             { profile: target.profile, preset: target.preset, mode: "image" },
           );
           return {
             ...result,
             model: targetModel(target),
-            providerId: targetProvider(target),
+            provider: targetProvider(target),
           };
         },
+        resolveUsage: (r) => r.usage,
       },
       options,
     );

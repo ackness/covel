@@ -118,7 +118,22 @@ describe("gateway.generateImage", () => {
     );
     expect(result.images).toHaveLength(1);
     expect(result.model).toBe("test-image-model");
-    expect(result.providerId).toBe("test");
+    expect(result.provider).toBe("test");
+  });
+
+  it("merges slot providerRequestMetadata into the wire call, stripping the imageWire routing key", async () => {
+    const fn = mockFetchOnce(200, { data: [{ b64_json: PNG_B64 }] });
+    const { gateway } = setup({
+      providerRequestMetadata: { imageWire: "openai-images", style: "vivid" },
+    });
+
+    await gateway.generateImage({ presetId: "img-primary", prompt: "a cat" });
+
+    const body = JSON.parse(
+      (fn.mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(body.style).toBe("vivid");
+    expect(body).not.toHaveProperty("imageWire");
   });
 
   it("dispatches to a custom wire named via preset providerRequestMetadata.imageWire", async () => {
