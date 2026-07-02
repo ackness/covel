@@ -50,7 +50,7 @@ export function StageSprites({
         >
           <div
             className={clsx(
-              "h-full transition-[filter,transform] duration-300 ease-out",
+              "flex h-full items-end justify-center transition-[filter,transform] duration-300 ease-out",
               slot.active
                 ? "ui-stage-sprite-active"
                 : "ui-stage-sprite-inactive",
