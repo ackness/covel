@@ -13,6 +13,7 @@ timeoutMs: 240000
 callTimeoutMs: 120000
 outputKind: story
 capabilities: [narrative, chat-mode, narrative-engine]
+advertiseEvents: true
 tags:
   - mode:dialogue
   - role:narrator
@@ -21,6 +22,9 @@ tags:
   - cost:llm
 trigger:
   type: auto
+tools:
+  builtin:
+    - emit-event
 input:
   inject:
     - kind: runtime
@@ -88,6 +92,7 @@ postHistory:
     - 玩家当前输入为空时，写出贴近角色聊天的开场场景
     - 对白、动作和感官细节交织推进，避免菜单、编号选项和系统说明
     - 结尾保留自然互动接口，来自人物追问、动作悬停、情绪变化或新线索
+    - 叙事中发生 <available-events> 里声明的领域事件时，调用 emit-event 发射（一次一个 topic）；工具调用不计入正文
     - 回复长度按用户设置控制：short 约 120-220 字，medium 约 220-420 字，long 约 420-650 字
 ---
 

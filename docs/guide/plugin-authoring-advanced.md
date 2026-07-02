@@ -454,6 +454,52 @@ providerRequestMetadata = { imageWire = "replicate" }
 }
 ```
 
+### 事件契约声明与统一发射（`events` + `emit-event`）
+
+统一事件发射层让**任意声明了事件契约的插件**都能被**任意具备发射能力的叙事 / agent runtime**驱动，框架和叙事插件都不需要硬编码谁消费什么事件。分两端：
+
+**消费方：声明 `events` + 用 `trigger: { type: event }` 接住**
+
+```yaml
+# plugins/quest-tracker/PLUGIN.md frontmatter
+name: quest-tracker
+events:
+  - topic: quest.updated
+    schema: ./schemas/quest-updated.event.json
+    description:
+      zh: 任务状态更新
+      en: Quest status updated
+trigger:
+  type: event
+  topic: quest.updated
+runtimeType: function
+handler: ./handler.js
+```
+
+`schema`（插件根目录相对 JSON Schema 路径）校验事件的 `data` payload——同一份 schema 既供 `emit-event` 工具在执行前校验，也是作者自己核对契约的单一来源。`quest-tracker/handler.js` 通过 `ctx.triggerEvent.data` 读到事件负载：
+
+```ts
+export default async function handler(ctx) {
+  const { questId, status } = ctx.triggerEvent?.data ?? {};
+  // ... 更新 quest 状态
+}
+```
+
+**发射方：`advertiseEvents: true` + `tools.builtin: [emit-event]`**
+
+```yaml
+advertiseEvents: true
+tools:
+  builtin:
+    - emit-event
+```
+
+声明后，该 runtime 的 prompt 段 5 会自动收到当前 session 内所有 `advertise !== false` 事件的目录（`<available-events>` 块，逐条 `- topic: description (required: field1, field2)`），LLM 据此判断"当前叙事是否触发了某个已知领域事件"，命中时调用 `emit-event({ topic: "quest.updated", data: { questId: "q1", status: "completed" } })`（一次一个 topic）。校验失败（未知 topic / payload 不合 schema）会把可读错误文本原样回给 LLM 重试，不中断工具循环、也不产出重复事件。
+
+聚合范围是**当前 session 的激活插件集**——`quest-tracker` 未启用时，narrator 的 `<available-events>` 目录里不会出现 `quest.updated`，`emit-event` 也会拒绝该 topic。跨插件同 topic 不同 schema 时按插件优先级首胜。完整字段表、冲突规则见 [plugins.md #events 声明与 advertiseEvents](../reference/plugins.md#events-声明与-advertiseevents统一事件发射层)，工具校验流程见 [tools.md #emit-event](../reference/tools.md#emit-event)。
+
+> `narrator` / `chat-mode-narrator` 已接入为发射方参考实现。第一个真正落地的消费方是场景切换（`scene.set` 契约），尚在推进中——上面的 `quest.updated` 只是中性教学示例，不代表已有插件声明。
+
 ### `execution: sync` vs `execution: background`
 
 ```yaml

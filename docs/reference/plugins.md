@@ -186,16 +186,17 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 
 **路径**: `plugins/narrator/`
 
-| 字段          | 值                                                               |
-| ------------- | ---------------------------------------------------------------- |
-| pluginType    | `core-plugin`（不可禁用）                                        |
-| priority      | 500（Narrator 带，每轮执行）                                     |
-| trigger       | `auto` — 每轮 Narrator 带执行                                    |
-| outputKind    | `story`（输出显示在主聊天区）                                    |
-| model         | `story`                                                          |
-| capabilities  | `[narrative]`                                                    |
-| tools.builtin | `world-dimension-get`                                            |
-| input.inject  | `npc-graph/rag-retriever` → `npcContext` → `<npc-relationships>` |
+| 字段            | 值                                                               |
+| --------------- | ---------------------------------------------------------------- |
+| pluginType      | `core-plugin`（不可禁用）                                        |
+| priority        | 500（Narrator 带，每轮执行）                                     |
+| trigger         | `auto` — 每轮 Narrator 带执行                                    |
+| outputKind      | `story`（输出显示在主聊天区）                                    |
+| model           | `story`                                                          |
+| capabilities    | `[narrative]`                                                    |
+| tools.builtin   | `world-dimension-get`、`emit-event`                              |
+| advertiseEvents | `true`（segment 5 注入 `<available-events>` 目录）               |
+| input.inject    | `npc-graph/rag-retriever` → `npcContext` → `<npc-relationships>` |
 
 **职责**: 根据玩家输入、世界观和历史上下文生成主线叙事。输出 `narrativeOutput` 字段供其他插件引用；需要精确世界字段时调用 `world-dimension-get` 按需读取。
 
@@ -501,17 +502,19 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 
 **路径**: `plugins/chat-mode-narrator/`
 
-| 字段         | 值                                                                                                                                                       |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| pluginType   | `plugin`                                                                                                                                                 |
-| priority     | 500（Narrator 带，每轮）                                                                                                                                 |
-| trigger      | `auto`                                                                                                                                                   |
-| outputKind   | `story`                                                                                                                                                  |
-| model        | `story`                                                                                                                                                  |
-| capabilities | `[narrative, chat-mode]`                                                                                                                                 |
-| tags         | `mode:dialogue` · `role:narrator`                                                                                                                        |
-| relations    | `conflicts: narrator`；`requires: scene-cast, scene-prompts, character-blueprint, character-presence, player-identity, living-world-rules, branch-reply` |
-| input.inject | `scene-cast/activeCastContext` → `<active-cast>`；`npc-graph/rag-retriever/npcContext` → `<npc-relationships>`                                           |
+| 字段            | 值                                                                                                                                                       |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pluginType      | `plugin`                                                                                                                                                 |
+| priority        | 500（Narrator 带，每轮）                                                                                                                                 |
+| trigger         | `auto`                                                                                                                                                   |
+| outputKind      | `story`                                                                                                                                                  |
+| model           | `story`                                                                                                                                                  |
+| capabilities    | `[narrative, chat-mode]`                                                                                                                                 |
+| tags            | `mode:dialogue` · `role:narrator`                                                                                                                        |
+| relations       | `conflicts: narrator`；`requires: scene-cast, scene-prompts, character-blueprint, character-presence, player-identity, living-world-rules, branch-reply` |
+| tools.builtin   | `emit-event`                                                                                                                                             |
+| advertiseEvents | `true`（segment 5 注入 `<available-events>` 目录）                                                                                                       |
+| input.inject    | `scene-cast/activeCastContext` → `<active-cast>`；`npc-graph/rag-retriever/npcContext` → `<npc-relationships>`                                           |
 
 **userSettings**（世界用 `pluginSettings.chat-mode-narrator` 预置，玩家可覆盖）：
 
@@ -816,6 +819,40 @@ schema: plugin://social-sim/relationships
 to: plugin:social-sim/relationships
 key: id
 ```
+
+### events 声明与 advertiseEvents（统一事件发射层）
+
+`events` 声明该插件的某个 runtime**消费**的领域事件契约——通常配合 `trigger: { type: event, topic: ... }` 让另一个 runtime 的发射触发它。服务端按会话激活插件集聚合所有声明，供内置 `emit-event` 工具（见 [tools.md #emit-event](tools.md#emit-event)）做 topic 校验与 payload schema 校验。
+
+```yaml
+events:
+  - topic: quest.updated
+    schema: ./schemas/quest-updated.event.json
+    description:
+      zh: 任务状态更新
+      en: Quest status updated
+    advertise: true # 默认 true，可省略
+```
+
+| 字段          | 类型       | 默认   | 说明                                                                                                                                             |
+| ------------- | ---------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `topic`       | `string`   | 必填   | 点分 kebab-case（`domain.verb`，如 `quest.updated`），正则拒绝其他格式                                                                           |
+| `schema`      | `string`   | 必填   | 插件根目录相对 JSON Schema 路径，校验 `data` payload（与 `dataSchemas` 同规则）                                                                  |
+| `description` | `I18nText` | 必填   | 目录展示用说明，按 session locale 解析                                                                                                           |
+| `advertise`   | `boolean`  | `true` | `false` 时该 topic 仍可被声明/发射/触发，但**不出现**在 `<available-events>` 目录里——适合两个插件间的内部信令，不希望被通用叙事 runtime 随手调用 |
+
+同一 session 内若两个不同插件声明了同一 `topic` 但 `schema` 路径不同，服务端按插件激活优先级顺序**首胜**（保留先声明者的 schema）并 `console.warn` 一次（同一 `(session, topic)` 不重复告警）。
+
+顶层 `advertiseEvents: true` 让该 runtime 在 prompt 段 5 收到当前会话已声明事件（`advertise !== false` 的那些）的目录文本（`<available-events>` 块，含 topic、locale 描述与必填字段名）；要真正发射还需要在 `tools.builtin` 里加 `emit-event`。两者职责分离：`advertiseEvents` 只控制"是否看得到目录"，`tools.builtin: [emit-event]` 才控制"能不能调用"。
+
+```yaml
+advertiseEvents: true
+tools:
+  builtin:
+    - emit-event
+```
+
+目录为空（当前会话没有任何插件声明可发射事件）时不会注入 `<available-events>` 块，不占用 prompt 空间。`narrator` / `chat-mode-narrator` 已按此接入，作为发射方参考实现。
 
 ### recursiveCall
 

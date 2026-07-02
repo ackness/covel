@@ -7,6 +7,7 @@
 - `PLUGIN.md`：单 agent runtime 和玩家可调设置。
 - 依赖 `scene-cast` 提供当前在场角色上下文。
 - 可读取 `npc-graph/rag-retriever` 提供的人物关系上下文。
+- `advertiseEvents: true`，可调用 `emit-event` 发射当前会话已声明的领域事件。
 
 ## 数据与行为
 

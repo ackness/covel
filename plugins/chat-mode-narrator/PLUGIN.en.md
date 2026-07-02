@@ -13,6 +13,7 @@ timeoutMs: 240000
 callTimeoutMs: 120000
 outputKind: story
 capabilities: [narrative, chat-mode]
+advertiseEvents: true
 tags:
   - mode:dialogue
   - role:narrator
@@ -21,6 +22,9 @@ tags:
   - cost:llm
 trigger:
   type: auto
+tools:
+  builtin:
+    - emit-event
 input:
   inject:
     - kind: runtime
@@ -88,6 +92,7 @@ postHistory:
     - When the player's current input is empty, write an opening scene that reads like character conversation.
     - Interweave dialogue, action, and sensory detail; avoid menus, numbered options, and system notes.
     - End on a natural interaction hook — a character's question, a hovering action, an emotional shift, or a new lead.
+    - When a domain event declared in <available-events> occurs in the narrative, call emit-event to emit it (one topic per call); tool calls do not count as prose
     - Control reply length by the user setting: short ~120-220 chars, medium ~220-420, long ~420-650.
 ---
 

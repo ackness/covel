@@ -6,29 +6,30 @@
 
 ## 概览
 
-| 工具名                  | 来源    | 所属插件   | 审批策略   | 描述                                                                          |
-| ----------------------- | ------- | ---------- | ---------- | ----------------------------------------------------------------------------- |
-| create-form             | builtin | —          | auto-allow | 创建玩家表单                                                                  |
-| create-choices          | builtin | —          | auto-allow | 创建选项列表                                                                  |
-| create-notification     | builtin | —          | auto-allow | 显示通知消息                                                                  |
-| render-ui               | builtin | —          | auto-allow | 渲染带独立 part 状态的 UI 块                                                  |
-| plugin-data-set         | builtin | —          | auto-allow | 写入插件持久化数据（单条）                                                    |
-| plugin-data-set-batch   | builtin | —          | auto-allow | 批量写入插件持久化数据                                                        |
-| plugin-data-get         | builtin | —          | auto-allow | 读取当前插件持久化数据                                                        |
-| plugin-data-list        | builtin | —          | auto-allow | 列出当前插件持久化数据                                                        |
-| **create-character**    | builtin | —          | auto-allow | 创建角色（player/npc/companion），写 characters 表 + 镜像到 plugin-data       |
-| **update-character**    | builtin | —          | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                      |
-| **list-characters**     | builtin | —          | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                         |
-| **get-character**       | builtin | —          | auto-allow | 按 id 或 name 查找单个角色                                                    |
-| **world-dimension-get** | builtin | —          | auto-allow | 按需读取当前 session 世界的结构化维度字段                                     |
-| **runtime-done**        | builtin | —          | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime              |
-| **memory-search**       | builtin | —          | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 codex/lorebook/角色)     |
-| **memory-get-block**    | builtin | —          | auto-allow | 读取一个核心记忆块的当前内容                                                  |
-| **memory-update-block** | builtin | —          | auto-allow | 更新（完整替换）一个核心记忆块。无 capability 门控——列入 tools.builtin 即可用 |
-| set-world-schema        | local   | world-init | auto-allow | 定义世界角色属性 Schema                                                       |
-| set-world-entries-batch | local   | world-init | auto-allow | 批量写入世界词条                                                              |
-| unlock-codex-entries    | local   | codex      | auto-allow | 批量解锁图鉴条目                                                              |
-| update-codex-entry      | local   | codex      | auto-allow | 更新已有图鉴条目                                                              |
+| 工具名                  | 来源    | 所属插件   | 审批策略   | 描述                                                                             |
+| ----------------------- | ------- | ---------- | ---------- | -------------------------------------------------------------------------------- |
+| create-form             | builtin | —          | auto-allow | 创建玩家表单                                                                     |
+| create-choices          | builtin | —          | auto-allow | 创建选项列表                                                                     |
+| create-notification     | builtin | —          | auto-allow | 显示通知消息                                                                     |
+| render-ui               | builtin | —          | auto-allow | 渲染带独立 part 状态的 UI 块                                                     |
+| plugin-data-set         | builtin | —          | auto-allow | 写入插件持久化数据（单条）                                                       |
+| plugin-data-set-batch   | builtin | —          | auto-allow | 批量写入插件持久化数据                                                           |
+| plugin-data-get         | builtin | —          | auto-allow | 读取当前插件持久化数据                                                           |
+| plugin-data-list        | builtin | —          | auto-allow | 列出当前插件持久化数据                                                           |
+| **create-character**    | builtin | —          | auto-allow | 创建角色（player/npc/companion），写 characters 表 + 镜像到 plugin-data          |
+| **update-character**    | builtin | —          | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                         |
+| **list-characters**     | builtin | —          | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                            |
+| **get-character**       | builtin | —          | auto-allow | 按 id 或 name 查找单个角色                                                       |
+| **world-dimension-get** | builtin | —          | auto-allow | 按需读取当前 session 世界的结构化维度字段                                        |
+| **emit-event**          | builtin | —          | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema |
+| **runtime-done**        | builtin | —          | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime                 |
+| **memory-search**       | builtin | —          | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 codex/lorebook/角色)        |
+| **memory-get-block**    | builtin | —          | auto-allow | 读取一个核心记忆块的当前内容                                                     |
+| **memory-update-block** | builtin | —          | auto-allow | 更新（完整替换）一个核心记忆块。无 capability 门控——列入 tools.builtin 即可用    |
+| set-world-schema        | local   | world-init | auto-allow | 定义世界角色属性 Schema                                                          |
+| set-world-entries-batch | local   | world-init | auto-allow | 批量写入世界词条                                                                 |
+| unlock-codex-entries    | local   | codex      | auto-allow | 批量解锁图鉴条目                                                                 |
+| update-codex-entry      | local   | codex      | auto-allow | 更新已有图鉴条目                                                                 |
 
 ---
 
@@ -294,6 +295,29 @@ interface UIRenderPart {
 - narrator 只需读取 `startingConditions.openingScenario`
 - guide 只需读取 `tone.themes`
 - 角色或剧情 agent 只需读取某个势力、地区、力量阶位的精确字段
+
+---
+
+### emit-event
+
+声明在 `packages/tools/src/builtin/emit-event.ts`。发射一个由某个激活插件在 `events`（见 [plugins.md #events-声明与-advertiseevents统一事件发射层](plugins.md#events-声明与-advertiseevents统一事件发射层)）声明的领域事件。校验和 topic 列举委托给注入的 `EventDirectoryLike`（server 侧实现见 `apps/server/src/routes/api/bootstrap/event-directory.ts`），聚合当前 session 激活插件集的声明。
+
+| 参数  | 类型                    | 必需 | 描述                                                    |
+| ----- | ----------------------- | ---- | ------------------------------------------------------- |
+| topic | string                  | ✓    | 事件 topic，须匹配某个激活插件已声明的 `events[].topic` |
+| data  | Record<string, unknown> |      | 事件 payload，按声明的 JSON Schema 校验，默认 `{}`      |
+
+**单通道语义**：发射成功时结果只经 `emittedEvents` result channel 携带（`withEmittedEvents`，见 `packages/tools/src/result.ts`），由工具循环累积、`finalize-agent-output.ts` 合并进 `RuntimeResult.output.events`——**绝不**同时返回 `event.emit` pendingProposal，避免同一事件被 `turn-event-chain.ts` 的 fan-out 与提案归一化重复处理。合并进 `output.events` 后走已有的回合内事件 fan-out（同 depth 同 topic 首胜）与 `event.emit` proposal 归一化，最终以 `event.emitted` SSE 事件下发（见 [protocol.md](protocol.md)）。
+
+**校验流程与错误形态**（错误均以可读文本回给 LLM，供其看错误后重试，不抛异常中断工具循环）：
+
+1. topic 不在当前 session 已知目录里 → `unknown topic "<topic>". Available topics: <逗号分隔列表，或 "(none — no consumer plugin active)">`
+2. topic 已知但 payload 未通过 JSON Schema 校验 → `event payload rejected: <ajv 错误文本>`
+3. 两者都通过 → `event "<topic>" emitted`，结果携带 `emittedEvents`
+
+**一次一个 topic**：单次调用只发射一条事件；需要发多个领域事件时多次调用 `emit-event`。
+
+**使用者**：任何声明了 `advertiseEvents: true` 且在 `tools.builtin` 里包含 `emit-event` 的 agent runtime，例如 `narrator`、`chat-mode-narrator`。
 
 ---
 
