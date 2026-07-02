@@ -1,6 +1,6 @@
 # 场景资产管线（Scene Asset Pipeline）设计
 
-> GalGame 对话模式三部曲的第一步（A）。后续：B 场景解析运行时、C GalGame 舞台 UI——各自另立规格。
+> GalGame 对话模式四部曲的第二步（A），**依赖 D（框架统一图像管线，见 `2026-07-02-framework-image-pipeline-design.md`）先行落地**。后续：B 场景解析运行时、C GalGame 舞台 UI——各自另立规格。
 > 北极星：**作者改世界包顺手（清单可手编、脚手架代劳、dry-run 先审后花钱）；玩家体验不因缺资产而破碎（每一层都有默认回退）。**
 
 ## 背景
@@ -61,24 +61,16 @@
 
 `scripts/generate-scenes.mjs`，克隆 generate-portraits.mjs 骨架：
 
-- 共享代码下沉 `scripts/lib/image-gen-common.mjs`：readSlot（llm.toml）、readKeys（keys.env）、并行 worker 队列、落盘、`--only/--force/--limit/--concurrency/--slot` 参数解析。generate-portraits.mjs 改为复用同一 lib（顺手去重，行为不变）。
+- wire 层不再手写：生成调用走 D 的 ai-provider image adapter（tsx 运行，同 D 规格"迁移"节对 generate-portraits.mjs 的处理）。脚本自留的只有 llm.toml/keys.env 读取、清单解析、并行队列、落盘——这些下沉 `scripts/lib/image-gen-common.mjs` 与 generate-portraits.mjs 共用（顺手去重，行为不变）。
 - 每个场景入队 day + night 两个任务；`--variant day|night` 可只生成一种。
 - `--scaffold`：读 `data/dimensions.yaml` 的 regions/landmarks，为每个 landmark 预填草稿条目（id/name/locationRef 填好，subject 留 landmark 描述原文），**已存在的条目不覆盖**；`--scaffold-llm` 可选用文本 slot 把 subject 草拟成画面描述。
 - `--dry-run`：打印完整 prompt 队列与目标文件名，不出图（单张 60-180s，先审后花钱）。
 - emit 步骤：并列新增 `emit-scenes.mjs`（presence.json 的字段是角色特化的，泛化不值得；两脚本共用 §2 的共享 lib 做 sha256/落盘）。
 
-## §3 运行时增量生成契约（A 定契约，B/C 消费）
+## §3 运行时增量生成契约（由 D 承载，A 只声明用法）
 
-- 通路复用现有 `image-generation` capability 插件（event 触发、`execution: background`、产物入会话 media store）——不新建机制。
-- MediaRef metadata 约定：
-
-```jsonc
-{ "kind": "scene-background" | "character-sprite",
-  "sceneId": "...",        // 或 characterId
-  "variant": "day" | "night" }
-```
-
-- 查图优先级（B/C 实现遵循）：**世界包注册表 → 会话 media store 按 metadata 匹配 → 回退链（§4）**。
+- 通路 = D 的框架管线：插件（`image-generation` capability、event 触发、`execution: background`）调用 `ctx.images.generate` 并带上 D3 的 metadata（`kind: "scene-background"|"character-sprite"`、`sceneId|characterId`、`variant: "day"|"night"`）——metadata 约定与查询面定义在 D 规格 §D3，本规格不重复定义。
+- 查图优先级（B/C 实现遵循）：**世界包注册表 → 会话 media store（D3 `listByMetadata`）→ 回退链（§4）**。
 - 会话内生成的资产归会话；玩家可在 UI 里"保存到世界级"（落盘用户世界目录 + 回写注册表）——入口与实现归 C。
 
 ## §4 回退链（每层可缺，模式永远可玩）
