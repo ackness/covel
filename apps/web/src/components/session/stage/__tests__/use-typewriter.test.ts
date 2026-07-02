@@ -226,4 +226,17 @@ describe("useTypewriter (hook wiring)", () => {
     act(() => result.current.advance());
     expect(result.current.status).toBe("done");
   });
+
+  it("restarts from scratch when new stream text is not a prefix (dropped-delta COMPLETE_MESSAGE)", () => {
+    const { result, rerender } = renderHook(
+      ({ text }) =>
+        useTypewriter(text, false, { turnId: "t", reducedMotion: true }),
+      { initialProps: { text: "abc" } },
+    );
+    expect(result.current.visible).toBe("abc");
+
+    // Authoritative full text that doesn't extend "abc" — must not append.
+    rerender({ text: "xyz" });
+    expect(result.current.visible).toBe("xyz");
+  });
 });

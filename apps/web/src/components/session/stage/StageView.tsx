@@ -13,12 +13,14 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
+import { AlertCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.js";
+import { Button } from "@/components/ui/button.js";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
 import { usePluginNamespace } from "@/stores/plugin-data-store.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
@@ -90,11 +92,13 @@ export function StageView(props: StageViewProps): ReactElement {
     world,
     messages,
     executing,
+    executionError,
     submittedBlockIds,
     submittedBlockValues,
     onSendMessage,
     onSubmitBlock,
     onSubmitInteraction,
+    onRetryRuntime,
     onViewModeChange,
   } = props;
   const { t, i18n } = useTranslation();
@@ -194,6 +198,36 @@ export function StageView(props: StageViewProps): ReactElement {
         onSendMessage={onSendMessage}
         onFreeInput={() => setInputMode(true)}
       />
+
+      {/* Execution error — a failed turn otherwise just stops the typewriter
+          silently on stage; surface it with a retry affordance. */}
+      {executionError && (
+        <div
+          className="pointer-events-none absolute inset-x-0 top-14 z-50 flex justify-center px-4"
+          data-testid="stage-error"
+        >
+          <div className="ui-stage-panel pointer-events-auto flex max-w-2xl items-start gap-2 rounded-[var(--radius-card)] border border-destructive/60 px-4 py-3 text-sm">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-destructive">
+                {t("common.error")}
+              </p>
+              <p className="mt-1 break-words text-xs text-muted-foreground">
+                {executionError}
+              </p>
+            </div>
+            {onRetryRuntime && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => onRetryRuntime(undefined)}
+              >
+                {t("session.retryAll")}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* History drawer — the full parsed chat, needs a bounded flex column
           for its internal ScrollArea (flex-1 min-h-0). */}

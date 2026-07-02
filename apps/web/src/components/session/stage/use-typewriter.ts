@@ -179,8 +179,9 @@ export interface UseTypewriterResult {
 /**
  * Drives `typewriterReduce` off real stream text. `streamText` is expected
  * to grow monotonically within a turn (SSE deltas); a full replacement
- * (e.g. `narrative.completed` swapping in the final text) is also handled —
- * anything that isn't a simple append re-feeds the whole new text.
+ * (e.g. `narrative.completed` swapping in the final text after dropped deltas)
+ * is also handled — anything that isn't a prefix of the previous text resets
+ * the machine and re-feeds from scratch (never appended onto the stale text).
  */
 export function useTypewriter(
   streamText: string,
@@ -204,13 +205,24 @@ export function useTypewriter(
   }, [opts.turnId, reducedMotion]);
 
   useEffect(() => {
-    if (streamText === fedTextRef.current) return;
-    const delta = streamText.startsWith(fedTextRef.current)
-      ? streamText.slice(fedTextRef.current.length)
-      : streamText;
+    const prev = fedTextRef.current;
+    if (streamText === prev) return;
     fedTextRef.current = streamText;
-    if (delta) dispatch({ type: "feed", text: delta });
-  }, [streamText]);
+    if (streamText.startsWith(prev)) {
+      // Simple append (the common SSE delta path).
+      const delta = streamText.slice(prev.length);
+      if (delta) dispatch({ type: "feed", text: delta });
+    } else {
+      // Non-prefix replacement (COMPLETE_MESSAGE swaps in the authoritative
+      // full text after dropped deltas): restart from scratch instead of
+      // appending onto stale text (which duplicated it). reset clears the
+      // internal streamEnded flag, so re-sync it from the prop — it may be
+      // level-true and won't edge to re-fire the streamEnd effect below.
+      dispatch({ type: "reset", turnId: turnIdRef.current });
+      dispatch({ type: "feed", text: streamText });
+      if (streamEnded) dispatch({ type: "streamEnd" });
+    }
+  }, [streamText, streamEnded]);
 
   // `opts.turnId` is a dependency even though it isn't read here: a turnId
   // change fires `reset` (above), which clears the internal streamEnded flag.
