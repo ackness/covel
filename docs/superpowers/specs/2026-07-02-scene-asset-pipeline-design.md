@@ -36,7 +36,7 @@
     {
       "id": "classroom",
       "name": "教室",
-      "locationRef": "landmark-classroom-2a", // dimensions.yaml landmark id，B 的映射锚点
+      "locationRef": "二年 B 组", // dimensions.yaml 的 region/landmark **name**（该数据模型无 id 字段，name 即身份），B 的映射锚点
       "subject": "a sunlit Japanese high-school classroom, rows of desks, ...",
       "subjectNight": "", // 可选；缺省 = subject + style.nightSuffix
     },
@@ -45,11 +45,12 @@
 ```
 
 - 每场景固定产出两张：`media/scenes/<id>-day.png`、`<id>-night.png`。
-- `locationRef` 可空（自由场景）；scaffold 从 landmarks 派生时自动填。
+- `locationRef` 可空（自由场景）；scaffold 派生时自动填（值 = region/landmark 的 name 原文）。
+- scaffold 默认按 **region** 粒度派生（每 region 一条；landmark 级场景由作者按需手加或用 `--landmarks` 派生）——地标数量 × 日夜两张会让生成量爆炸，region 是 GalGame 背景的自然粒度。
 
 ### 场景注册表（自动生成，勿手编）
 
-`media/scenes.registry.json`：`sceneId → { day: MediaRef, night: MediaRef }`（sha256 寻址，同 presence.json 规则）。由 emit 步骤从 `media/scenes/` 产出；**重生成图片后必须重跑**（同 presence 的既有约定）。world.data.yaml 增加一条 media source 指向它，导入时注册进媒体库。
+`media/scenes.registry.json`：`sceneId → { day: MediaRef, night: MediaRef|null }`（sha256 寻址，同 presence.json 规则；缺夜图记 null，运行时回退日图）。由 emit 步骤从 `media/scenes/` 产出；**重生成图片后必须重跑**（同 presence 的既有约定）。world.data.yaml 增加一条 `kind: media` source 指向 `media/scenes` 目录，导入时图片注册进媒体库；registry **文件本身在 A 阶段不导入**（`to:` 需要消费方 namespace，B 的场景插件落地时再接——A 只保证格式就位）。
 
 ### 立绘透明底升级
 
@@ -63,7 +64,7 @@
 
 - wire 层不再手写：生成调用走 D 的 ai-provider image adapter（tsx 运行，同 D 规格"迁移"节对 generate-portraits.mjs 的处理）。脚本自留的只有 llm.toml/keys.env 读取、清单解析、并行队列、落盘——这些下沉 `scripts/lib/image-gen-common.mjs` 与 generate-portraits.mjs 共用（顺手去重，行为不变）。
 - 每个场景入队 day + night 两个任务；`--variant day|night` 可只生成一种。
-- `--scaffold`：读 `data/dimensions.yaml` 的 regions/landmarks，为每个 landmark 预填草稿条目（id/name/locationRef 填好，subject 留 landmark 描述原文），**已存在的条目不覆盖**；`--scaffold-llm` 可选用文本 slot 把 subject 草拟成画面描述。
+- `--scaffold`：读 `data/dimensions.yaml` 的 regions（`--landmarks` 加地标级），预填草稿条目（id 为顺序 slug 由作者改名、name/locationRef 取 name 原文、subject 取 description+climate 原文），**已存在的条目不覆盖**。`--scaffold-llm`（文本 slot 草拟 subject）**后置**：作者本就要润色清单（清单为真），先验证纯 scaffold 工作流，真有痛点再加。
 - `--dry-run`：打印完整 prompt 队列与目标文件名，不出图（单张 60-180s，先审后花钱）。
 - emit 步骤：并列新增 `emit-scenes.mjs`（presence.json 的字段是角色特化的，泛化不值得；两脚本共用 §2 的共享 lib 做 sha256/落盘）。
 
