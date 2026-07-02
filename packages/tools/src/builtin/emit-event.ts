@@ -38,6 +38,11 @@ export function createEmitEventTool(deps: {
       data: z.record(z.string(), z.unknown()).default({}),
     }),
     execute: async ({ topic, data }, context) => {
+      if (context.emittedEventTopics?.includes(topic)) {
+        return {
+          _text: `event "${topic}" already emitted this turn — skipped`,
+        };
+      }
       const known = await deps.directory.listTopics(context.sessionId);
       if (!known.includes(topic)) {
         return {

@@ -251,3 +251,107 @@ describe("emit-event: segment 5 directory injection (plan task 5)", () => {
     );
   });
 });
+
+describe("emit-event: same-turn duplicate topic no-op (plan task 1)", () => {
+  it("only produces one event.emit proposal when emit-event is called twice for the same topic", async () => {
+    // Three-step script: step 1 and step 2 both call emit-event for
+    // "test.ping" (simulating an LLM re-emitting the same fact), step 3
+    // returns final text. The tool loop should thread the topic emitted in
+    // step 1 into step 2's ToolExecutionContext so emit-event no-ops instead
+    // of producing a second emittedEvent.
+    class RepeatingLLM implements LLMAdapter {
+      private step = 0;
+
+      async generate(): Promise<LLMResponse> {
+        this.step++;
+        if (this.step <= 2) {
+          return {
+            content: null,
+            toolCalls: [
+              {
+                id: `tc-${this.step}`,
+                name: "emit-event",
+                arguments: JSON.stringify({
+                  topic: "test.ping",
+                  data: { x: this.step },
+                }),
+              },
+            ],
+            finishReason: "tool_calls",
+            usage: { inputTokens: 10, outputTokens: 5 },
+          };
+        }
+        return {
+          content: "done.",
+          toolCalls: [],
+          finishReason: "stop",
+          usage: { inputTokens: 10, outputTokens: 5 },
+        };
+      }
+    }
+
+    const emitterManifest: RuntimeManifest = {
+      name: "plug/emitter",
+      pluginId: "plug",
+      description: "Emits domain events via emit-event",
+      priority: 500,
+      outputKind: "plugin",
+      tools: { builtin: ["emit-event"] },
+      trigger: { type: "auto" },
+    } as RuntimeManifest;
+
+    const store = await mainLoopStore("sess-1");
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async (m) => ({
+        manifest: m,
+        promptTemplate: "Emit test.ping via emit-event.",
+      }),
+      llm: new RepeatingLLM(),
+      getConfig: () => ({}),
+      store,
+      toolExecutor: createToolExecutor({
+        findTool: (name) =>
+          name === "emit-event"
+            ? createEmitEventTool({ directory })
+            : undefined,
+        store,
+      }),
+    };
+
+    const result = await executeTurn(makeTurnInput(), [emitterManifest], deps, {
+      maxSteps: 4,
+    });
+
+    const emitterResult = result.runtimeResults.find(
+      (r) => r.runtimeId === "plug/emitter",
+    );
+    expect(emitterResult?.status).toBe("success");
+
+    // Only the first emit-event call produced an event — output.events has
+    // exactly one entry, from step 1's payload.
+    const events = (emitterResult?.output as Record<string, unknown> | null)
+      ?.events as Array<{ topic: string; data: unknown }> | undefined;
+    expect(events).toEqual([{ topic: "test.ping", data: { x: 1 } }]);
+
+    // The second tool call got the "already emitted" no-op hint instead of
+    // a second emitted event.
+    const secondCall = emitterResult!.toolCalls[1];
+    expect((secondCall?.output as { _text?: string })?._text).toContain(
+      "already emitted",
+    );
+
+    // Exactly one event.emit proposal reaches commit — the duplicate never
+    // produced a second one to merge.
+    const output = emitterResult!.output as Record<string, unknown>;
+    const proposals = normalizeOutput(
+      output,
+      { pluginId: "plug", runtimeId: "plug/emitter" },
+      "turn-1",
+      "sess-1",
+      "plugin",
+    );
+    proposals.push(...getPendingProposals(output));
+    const eventEmitProposals = proposals.filter((p) => p.type === "event.emit");
+    expect(eventEmitProposals).toHaveLength(1);
+  });
+});

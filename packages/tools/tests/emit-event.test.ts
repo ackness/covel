@@ -83,4 +83,16 @@ describe("emit-event tool", () => {
     const result = await tool.execute({ topic: "scene.set", data: {} }, ctx);
     expect(getPendingProposals(result)).toHaveLength(0);
   });
+
+  it("no-ops with a hint when the topic was already emitted this turn", async () => {
+    const tool = createEmitEventTool({
+      directory: makeDirectory([{ topic: "scene.set" }]),
+    });
+    const result = (await tool.execute(
+      { topic: "scene.set", data: {} },
+      { ...ctx, emittedEventTopics: ["scene.set"] },
+    )) as { _text: string };
+    expect(getEmittedEvents(result)).toBeUndefined();
+    expect(result._text).toContain("already emitted");
+  });
 });

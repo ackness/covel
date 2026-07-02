@@ -16,7 +16,15 @@
  *      under `--frozen-lockfile`.
  *   3. Every `plugins/<id>/` has a `package.json` and either a root
  *      `PLUGIN.md` or `runtimes/<sub>/PLUGIN.md` — what
- *      verify-release.mjs enforces in CI.
+ *      verify-release.mjs enforces in CI. Each PLUGIN.md's declared
+ *      `events[]` also gets its `schema` path resolved, JSON-parsed, and
+ *      shape-checked (has `type` or `properties`, i.e. looks like a JSON
+ *      Schema). This is a structural check, not a full ajv compile: ajv is
+ *      a dependency of packages/tools and apps/server but not of the repo
+ *      root, and this script only declares node builtins + the root `yaml`
+ *      devDependency (see check #2 above, which this script itself must
+ *      satisfy). Full ajv 2020 validation of event payloads happens at
+ *      runtime via the same dataSchemas validator emit-event already uses.
  *   4. Every `worlds/<id>/` has `world.yaml` + at least one
  *      `WORLD*.md`.
  *   5. `prompts/server/` has at least one `*.md`.
@@ -36,6 +44,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import module from "node:module";
+import YAML from "yaml";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -215,10 +224,106 @@ if (undeclaredCount === 0)
 // ── 3. plugins/ structure ─────────────────────────────────────────
 console.log("\n[3/6] plugins/<id>/ structure (verify-release sentinels)");
 const isPluginManifest = (f) => /^PLUGIN(\.[a-z-]+)?\.md$/i.test(f);
+
+// Same extraction as scripts/check-plugin-i18n.mjs — frontmatter is the YAML
+// block between the leading `---` markers.
+function extractFrontmatter(text) {
+  if (!text.startsWith("---")) return null;
+  const end = text.indexOf("\n---", 3);
+  if (end === -1) return null;
+  return text.slice(3, end).trim();
+}
+
+function findPluginManifestFiles(dir) {
+  const files = [];
+  if (fs.existsSync(dir)) {
+    for (const f of fs.readdirSync(dir)) {
+      if (isPluginManifest(f)) files.push(path.join(dir, f));
+    }
+  }
+  const runtimesDir = path.join(dir, "runtimes");
+  if (fs.existsSync(runtimesDir)) {
+    for (const sub of fs.readdirSync(runtimesDir, { withFileTypes: true })) {
+      if (!sub.isDirectory()) continue;
+      const subDir = path.join(runtimesDir, sub.name);
+      for (const f of fs.readdirSync(subDir)) {
+        if (isPluginManifest(f)) files.push(path.join(subDir, f));
+      }
+    }
+  }
+  return files;
+}
+
+// Structural JSON Schema check (no ajv — see the file-header comment for
+// why). A schema "looks valid" once it parses as JSON and its top level has
+// either `type` or `properties`.
+function looksLikeJsonSchema(value) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    ("type" in value || "properties" in value)
+  );
+}
+
+function checkEventsSchemas(manifestPath) {
+  const rel = path.relative(repoRoot, manifestPath);
+  const text = fs.readFileSync(manifestPath, "utf-8");
+  const frontmatter = extractFrontmatter(text);
+  if (frontmatter == null) return 0;
+
+  let parsed;
+  try {
+    parsed = YAML.parse(frontmatter);
+  } catch (e) {
+    fail(`${rel}: failed to parse frontmatter — ${e.message}`);
+    return 1;
+  }
+
+  const events = parsed?.events;
+  if (!Array.isArray(events)) return 0;
+
+  let issues = 0;
+  const manifestDir = path.dirname(manifestPath);
+  for (const evt of events) {
+    const topic = evt?.topic ?? "(missing topic)";
+    if (typeof evt?.schema !== "string") {
+      fail(`${rel}: events[] "${topic}" is missing a "schema" path`);
+      issues++;
+      continue;
+    }
+    const schemaPath = path.resolve(manifestDir, evt.schema);
+    const schemaRel = path.relative(repoRoot, schemaPath);
+    if (!fs.existsSync(schemaPath)) {
+      fail(`${rel}: events[] "${topic}" schema not found: ${schemaRel}`);
+      issues++;
+      continue;
+    }
+    let schemaJson;
+    try {
+      schemaJson = JSON.parse(fs.readFileSync(schemaPath, "utf-8"));
+    } catch (e) {
+      fail(
+        `${rel}: events[] "${topic}" schema (${schemaRel}) is not valid JSON — ${e.message}`,
+      );
+      issues++;
+      continue;
+    }
+    if (!looksLikeJsonSchema(schemaJson)) {
+      fail(
+        `${rel}: events[] "${topic}" schema (${schemaRel}) doesn't look like a JSON Schema (no "type" or "properties")`,
+      );
+      issues++;
+    }
+  }
+  return issues;
+}
+
 const pluginDirs = fs
   .readdirSync(path.join(repoRoot, "plugins"), { withFileTypes: true })
   .filter((e) => e.isDirectory());
 let pluginIssues = 0;
+let eventSchemaChecks = 0;
 for (const entry of pluginDirs) {
   const dir = path.join(repoRoot, "plugins", entry.name);
   if (!fs.existsSync(path.join(dir, "package.json"))) {
@@ -242,9 +347,15 @@ for (const entry of pluginDirs) {
     fail(`plugins/${entry.name}: no PLUGIN.md (root or runtimes/*/)`);
     pluginIssues++;
   }
+  for (const manifestFile of findPluginManifestFiles(dir)) {
+    eventSchemaChecks++;
+    pluginIssues += checkEventsSchemas(manifestFile);
+  }
 }
 if (pluginIssues === 0)
-  ok(`all ${pluginDirs.length} plugins have package.json + PLUGIN.md`);
+  ok(
+    `all ${pluginDirs.length} plugins have package.json + PLUGIN.md (${eventSchemaChecks} manifest(s) checked for events[] schema refs)`,
+  );
 
 // ── 4. worlds/ structure ──────────────────────────────────────────
 console.log("\n[4/6] worlds/<id>/ structure");

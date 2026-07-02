@@ -61,6 +61,8 @@ export interface ToolCallContext {
   readonly pluginId: string;
   readonly runtimeId: string;
   readonly pendingProposals?: readonly Proposal[];
+  /** Topics already emitted via `emit-event` earlier in this tool loop — see @covel/tools ToolExecutionContext. */
+  readonly emittedEventTopics?: readonly string[];
   /** Optional trace emitter — when present, tool.calling / tool.completed / tool.failed are traced. */
   readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
 }
@@ -405,6 +407,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           pluginId: context.pluginId,
           runtimeId: context.runtimeId,
           pendingProposals: context.pendingProposals,
+          emittedEventTopics: context.emittedEventTopics,
         };
         const rawResult = await client.call(call.name, params, execContext);
         const parsedResult = getToolContent(rawResult);
