@@ -311,6 +311,35 @@ preflight 要求：`character-presence` 在 session 最终启用插件列表中�
 
 实际范例见 `worlds/mistport` 与 `worlds/haruka-academy`（`data/world.data.yaml` + `media/`），提示词与生成流程见 `worlds/PORTRAITS.md`。
 
+## Scene Backgrounds
+
+场景背景（教室、社团楼、海堤这类地点插画，日/夜各一张）与立绘同一套图片管线，但清单结构不同：作者手编 `media/scenes.json`，脚本按清单批量生成 PNG、再由 `scripts/emit-scenes.mjs` 生成内容寻址的 `scenes.registry.json`。
+
+`media/scenes.json` 字段：
+
+| 字段           | 说明                                                                                                                    |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `id`           | 场景机器键，也是文件名前缀（`<id>-day.png` / `<id>-night.png`）。                                                       |
+| `name`         | 场景显示名。                                                                                                            |
+| `locationRef`  | 对应 `dimensions.yaml` 里 `geography.regions[].name` 或其 `landmarks[].name`（dimensions 数据模型无 id，name 即身份）。 |
+| `subject`      | 英文画面描述（日图），composes 为 `style.prefix + subject + style.suffix`。                                             |
+| `subjectNight` | 可选，夜图专用画面描述；留空则夜图回退用 `subject`（配合 `style.nightSuffix`）。                                        |
+
+world 包用一条 media source 把生成好的 PNG 导入媒体库（沿用 portraits 的 `kind: media` 机制，按 sha256 内容寻址）：
+
+```yaml
+sources:
+  scenes:
+    kind: media
+    path: media/scenes
+    to: media
+    after: dimensions
+```
+
+与 portraits 不同：**不加 `indexTo`**——`scenes.registry.json`（`scripts/emit-scenes.mjs` 自动生成，`{schemaVersion, scenes:[{sceneId,name,locationRef?,day,night}]}`，`day`/`night` 是 sha256 `MediaRef`）在 A 阶段**不导入 world.data.yaml**，因为当前没有消费方插件声明对应 namespace；场景插件（B 阶段）落地后会新增 `indexTo` 或专属 source 接管消费。`scenes.registry.json` 是生成产物，不要手编，重新生成场景图后必须重跑 `emit-scenes.mjs` 刷新哈希。
+
+清单润色规范、参数表、日/夜缺图回退语义、作者四步工作流见 [worlds/SCENES.md](../../worlds/SCENES.md)。
+
 ## Third-Party Extension
 
 第三方库可以以 world 包或 override 包交付数据。插件作者推荐把数据契约写成 `plugin://<pluginId>/<namespace>` schema URI，再在 world 包里引用这个 schema。
