@@ -18,9 +18,14 @@ import {
   type AnySchema,
   type ValidateFunction,
 } from "ajv/dist/2020.js";
-import { resolveI18nText, type RuntimeManifest } from "@covel/shared";
+import {
+  resolveI18nText,
+  type PluginEventDecl,
+  type RuntimeManifest,
+} from "@covel/shared";
 
-type PluginEventDecl = NonNullable<RuntimeManifest["events"]>[number];
+/** Module-level so a cross-plugin topic conflict warns once per (session, topic), not every call. */
+const warnedConflicts = new Set<string>();
 
 export interface EventDirectory {
   listTopics(sessionId: string): Promise<readonly string[]>;
@@ -90,9 +95,13 @@ export function createEventDirectory(deps: EventDirectoryDeps): EventDirectory {
             existing.pluginId !== manifest.pluginId &&
             existing.schemaKey !== schemaKey
           ) {
-            console.warn(
-              `[event-directory] topic "${decl.topic}" declared with conflicting schemas by "${existing.pluginId}" and "${manifest.pluginId}" — keeping "${existing.pluginId}"'s declaration`,
-            );
+            const warnKey = `${sessionId}:${decl.topic}`;
+            if (!warnedConflicts.has(warnKey)) {
+              warnedConflicts.add(warnKey);
+              console.warn(
+                `[event-directory] topic "${decl.topic}" declared with conflicting schemas by "${existing.pluginId}" and "${manifest.pluginId}" — keeping "${existing.pluginId}"'s declaration`,
+              );
+            }
           }
           continue; // first-wins (getActiveRuntimes is priority-sorted)
         }

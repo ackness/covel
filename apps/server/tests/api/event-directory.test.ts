@@ -321,4 +321,75 @@ describe("event directory", () => {
     expect(warn.mock.calls[0]?.[0]).toContain("plugin-a");
     expect(warn.mock.calls[0]?.[0]).toContain("plugin-e");
   });
+
+  it("warns only once for a repeatedly re-encountered conflict on the same session+topic", async () => {
+    const registry = createPluginRegistry();
+    const rootPaths = new Map<string, string>();
+
+    const rootA = await makePluginRoot();
+    await writeSchema(rootA, "scene-set.event.json", SCENE_SCHEMA);
+    rootPaths.set("plugin-a", rootA);
+    registerPlugin(
+      registry,
+      "plugin-a",
+      parsedManifest({
+        name: "plugin-a/main",
+        pluginId: "plugin-a",
+        priority: 100,
+        events: [
+          {
+            topic: "scene.set",
+            schema: "scene-set.event.json",
+            description: "scene change (a)",
+            advertise: true,
+          },
+        ],
+      }),
+      rootA,
+    );
+
+    const rootE = await makePluginRoot();
+    await writeSchema(rootE, "scene-set-e.event.json", {
+      type: "object",
+      required: ["sceneId"],
+      properties: { sceneId: { type: "string" } },
+    });
+    rootPaths.set("plugin-e", rootE);
+    registerPlugin(
+      registry,
+      "plugin-e",
+      parsedManifest({
+        name: "plugin-e/main",
+        pluginId: "plugin-e",
+        priority: 200,
+        events: [
+          {
+            topic: "scene.set",
+            schema: "scene-set-e.event.json",
+            description: "scene change (e)",
+            advertise: true,
+          },
+        ],
+      }),
+      rootE,
+    );
+
+    registry.activate("plugin-a", "sess-3");
+    registry.activate("plugin-e", "sess-3");
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const directory = createEventDirectory({
+      registry,
+      resolvePluginDir: (pluginId) => rootPaths.get(pluginId),
+    });
+
+    // Every call re-aggregates (session activation can change turn to turn),
+    // so the same conflict is re-detected each time — the warn must still
+    // fire only once for this (session, topic) pair.
+    await directory.listTopics("sess-3");
+    await directory.validate("sess-3", "scene.set", { location: "教室" });
+    await directory.catalogText("sess-3", "en-US");
+
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
 });
