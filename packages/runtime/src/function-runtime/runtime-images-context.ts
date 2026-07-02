@@ -82,6 +82,7 @@ export function createRuntimeImagesContext(
         quality: input.quality,
         n: input.n,
         background: input.background,
+        signal: input.signal,
       });
 
       // Framework-injected keys are spread last so plugin-supplied

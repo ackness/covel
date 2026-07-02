@@ -259,7 +259,21 @@ export function createPluginRuntimeGateway(
   if (gateway.generateImage) {
     const generateImage = gateway.generateImage.bind(gateway);
     facade.generateImage = async (input) => {
-      const result = await generateImage(input, commonOptions());
+      const result = await generateImage(
+        {
+          presetId: input.presetId,
+          prompt: input.prompt,
+          negativePrompt: input.negativePrompt,
+          size: input.size,
+          quality: input.quality,
+          n: input.n,
+          background: input.background,
+        },
+        {
+          ...commonOptions(),
+          ...(input.signal ? { signal: input.signal } : {}),
+        },
+      );
       return { images: result.images, warnings: result.warnings };
     };
   }

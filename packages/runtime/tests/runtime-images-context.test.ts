@@ -173,4 +173,27 @@ describe("createRuntimeImagesContext", () => {
     expect(second.cached).toBe(false);
     expect(gateway.generateImage).toHaveBeenCalledTimes(1);
   });
+
+  it("forwards the abort signal to the gateway without affecting promptHash", async () => {
+    const { media, mediaStore } = makeMediaStub();
+    const gateway = makeGatewayStub([
+      { kind: "bytes", bytes: new Uint8Array([1]), mime: "image/png" },
+    ]);
+    const ctx = createRuntimeImagesContext(gateway, mediaStore, media, {
+      sessionId: "sess-1",
+      pluginId: "img-plugin",
+    });
+    const controller = new AbortController();
+
+    await ctx.generate({ prompt: "same prompt", signal: controller.signal });
+    expect(gateway.generateImage).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: controller.signal }),
+    );
+
+    gateway.generateImage.mockClear();
+    const second = await ctx.generate({ prompt: "same prompt" });
+
+    expect(second.cached).toBe(true);
+    expect(gateway.generateImage).not.toHaveBeenCalled();
+  });
 });

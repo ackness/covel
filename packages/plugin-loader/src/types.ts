@@ -157,6 +157,7 @@ export interface PluginRuntimeGateway {
     quality?: string;
     n?: number;
     background?: "transparent" | "opaque";
+    signal?: AbortSignal;
   }): Promise<{
     images: ReadonlyArray<
       | { kind: "bytes"; bytes: Uint8Array; mime: string }
@@ -257,6 +258,8 @@ export interface ImageGenerateInput {
    * the framework and cannot be overridden.
    */
   readonly metadata?: Readonly<Record<string, unknown>>;
+  /** Abort signal forwarded to the provider call. Not part of promptHash. */
+  readonly signal?: AbortSignal;
 }
 
 export interface ImageGenerateOutput {
