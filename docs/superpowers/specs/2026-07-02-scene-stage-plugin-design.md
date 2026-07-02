@@ -57,8 +57,8 @@ namespace `stage`，key `current`：
 ## §5 世界包接线与 A 侧小改
 
 - `dataSchemas.scenes`（acceptsWorldData，schema `./schemas/scenes.schema.json` 对齐 registry 形状）。
-- haruka world.data.yaml 新增 source：`kind: json, path: media/scenes.registry.json, schema: plugin://scene-stage/scenes, to: plugin:scene-stage/scenes, after: dimensions`（兑现 A 规格"B 接管消费"的注记；world-data.md 同步改写该段）。
-- **A 侧小改**：`emit-scenes.mjs` 在 registry 顶层带上 `style` 块（从 scenes.json 复制）——增量生成需要同源画风；重跑 emit 后 registry 形状为 `{schemaVersion, style, scenes:[...]}`（schemaVersion 仍为 1：纯增字段，消费方尚未发布）。
+- haruka world.data.yaml 新增 source：`kind: json, path: media/scenes.registry.json, schema: plugin://scene-stage/scenes, to: plugin:scene-stage/scenes, key: registryId, after: dimensions`（兑现 A 规格"B 接管消费"的注记；world-data.md 同步改写该段）。**导入力学**：json source 要求每条目可提取 key——registry 是单对象文档，emit-scenes 为其新增自描述字段 `registryId: "scene-registry"`，整份文档作为 scene-stage `scenes` namespace 下的**一行** plugin_data 导入（B 读一行即得 style+scenes 全量）。
+- **A 侧小改**：`emit-scenes.mjs` 在 registry 顶层带上 `style` 块（从 scenes.json 复制）与 `registryId: "scene-registry"`——增量生成需要同源画风、导入需要 key；重跑 emit 后 registry 形状为 `{schemaVersion, registryId, style, scenes:[...]}`（schemaVersion 仍为 1：纯增字段，消费方尚未发布）。
 
 ## §6 UI（只读，App is for players）
 

@@ -45,7 +45,7 @@ events:
 - 入参 Zod：`{ topic: string, data: Record<string, unknown> }`。
 - 执行校验：topic 必须在**当前会话目录**中（未激活消费方 → 工具返回错误给 LLM，附目录内可用 topic 列表）；`data` 按声明的 JSON Schema 校验（复用 dataSchemas 既有的校验器），失败返回具体字段错误——LLM 可在同一回合内修正重试（既有工具循环）。
 - 发射（**单通道，双消费**）：工具事件经工具循环累积、在 finalize 时并入该 runtime 的 `output.events[{topic, data}]`——下游两条既有路径自然分流：`turn-event-chain.collectEventsFrom` 同回合 fan-out + `session-output-normalizer.normalizeOutput` 自动产 `event.emit` 提案（持久化 + SSE）。**工具本身不得再返回 event.emit pendingProposal**（`session-runtime-result` 对 normalizeOutput 与 pendingProposals 两路拼接，双通道会导致提案双发——侦察确认的坑）。
-- 同 topic 同回合重复发射：工具层不拦（首发胜出由事件链已有语义保证），返回值提示"该 topic 本回合已发射过"。
+- 同 topic 同回合重复发射：**工具层 no-op**——返回提示"该 topic 本回合已发射过"且不产生第二份事件（修订：原"不拦"方案会产生重复 event.emit 提案与 SSE，幂等 no-op 更干净；fan-out 首胜语义不变）。实现载体：工具循环把已累积 topics 经 ToolExecutionContext 传入。
 
 ## E3 目录注入（发射方）
 
