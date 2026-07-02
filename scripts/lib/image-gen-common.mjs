@@ -20,7 +20,7 @@ import {
  * subtable (the real schema field) or a flat `imageWire` key directly under
  * `[covel.<slot>]` (script-only convenience).
  */
-export async function readSlot(slotName) {
+async function readSlot(slotName) {
   const p = path.join(os.homedir(), ".covel", "llm.toml");
   const txt = await readFile(p, "utf-8");
   const out = {};
@@ -43,7 +43,7 @@ export async function readSlot(slotName) {
   return out;
 }
 
-export async function readKeysEnv(name) {
+async function readKeysEnv(name) {
   const p = path.join(os.homedir(), ".covel", "keys.env");
   try {
     const txt = await readFile(p, "utf-8");
@@ -99,6 +99,24 @@ export async function fetchImageBytes({
   const res = await fetch(img.url);
   if (!res.ok) throw new Error(`fetch image url failed: HTTP ${res.status}`);
   return new Uint8Array(await res.arrayBuffer());
+}
+
+/**
+ * Print the ok/failed summary for a pool() result array and exit(2) if any
+ * task failed — shared tail of generate-portraits.mjs / generate-scenes.mjs.
+ */
+export function reportResults(results) {
+  const failed = results.filter((r) => r.status === "failed");
+  console.log(
+    `\ndone: ${results.filter((r) => r.status === "ok").length} ok, ${failed.length} failed`,
+  );
+  if (failed.length) {
+    console.log(
+      "re-run to retry failed (existing ones are skipped):",
+      failed.map((f) => f.id).join(", "),
+    );
+    process.exit(2);
+  }
 }
 
 /**

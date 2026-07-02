@@ -3,7 +3,8 @@
  * emit-scenes.mjs — build worlds/<world>/media/scenes.registry.json from
  * generated scene backgrounds.
  *
- * Scans worlds/<world>/media/scenes/, content-addresses each PNG with sha256
+ * Resolves expected filenames from scenes.json and probes
+ * worlds/<world>/media/scenes/, content-addresses each PNG with sha256
  * (the media store assigns the same hash on import), and maps
  * sceneId → { day, night } MediaRefs via scenes.json. Scenes missing the DAY
  * image are skipped with a warning (day is the base variant); a missing
@@ -36,8 +37,9 @@ async function refOf(filename) {
       mime: "image/png",
       size: bytes.length,
     };
-  } catch {
-    return null;
+  } catch (err) {
+    if (err?.code === "ENOENT") return null;
+    throw err; // permission/IO errors are real failures, not "missing" — surface them
   }
 }
 

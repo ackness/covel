@@ -29,6 +29,7 @@ import {
   pool,
   fetchImageBytes,
   resolveImageWire,
+  reportResults,
 } from "./lib/image-gen-common.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
@@ -160,17 +161,7 @@ async function main() {
     }
   });
 
-  const failed = results.filter((r) => r.status === "failed");
-  console.log(
-    `\ndone: ${results.filter((r) => r.status === "ok").length} ok, ${failed.length} failed`,
-  );
-  if (failed.length) {
-    console.log(
-      "re-run to retry failed (existing ones are skipped):",
-      failed.map((f) => f.id).join(", "),
-    );
-    process.exit(2);
-  }
+  reportResults(results);
 }
 
 main().catch((e) => {
