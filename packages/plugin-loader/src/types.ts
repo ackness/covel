@@ -143,6 +143,27 @@ export interface PluginRuntimeGateway {
     /** Defaults to "text"; pass "image" / "embedding" / "speech" / "transcription" for non-text slots. */
     readonly fallbackTag?: string;
   }): ResolvedSlotForPlugin | null;
+
+  /**
+   * Low-level image generation returning raw sources (bytes/URLs) without
+   * media persistence. Framework-internal building block for ctx.images —
+   * plugins should prefer ctx.images.generate.
+   */
+  generateImage?(input: {
+    presetId?: string;
+    prompt: string;
+    negativePrompt?: string;
+    size?: string;
+    quality?: string;
+    n?: number;
+    background?: "transparent" | "opaque";
+  }): Promise<{
+    images: ReadonlyArray<
+      | { kind: "bytes"; bytes: Uint8Array; mime: string }
+      | { kind: "url"; url: string; mime: string }
+    >;
+    warnings: readonly string[];
+  }>;
 }
 
 /**
@@ -221,6 +242,40 @@ export interface MediaContext {
   ingestUrl(url: string, opts?: IngestUrlOptions): Promise<MediaRef>;
 }
 
+export interface ImageGenerateInput {
+  /** Slot name; defaults to image-tag resolution. */
+  readonly presetId?: string;
+  readonly prompt: string;
+  readonly negativePrompt?: string;
+  readonly size?: string;
+  readonly quality?: string;
+  readonly n?: number;
+  readonly background?: "transparent" | "opaque";
+  /**
+   * Business metadata persisted onto the MediaRef (kind / sceneId /
+   * characterId / variant …). `pluginId` and `promptHash` are injected by
+   * the framework and cannot be overridden.
+   */
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+
+export interface ImageGenerateOutput {
+  readonly refs: readonly MediaRef[];
+  readonly warnings: readonly string[];
+  /** True when promptHash matched an existing asset and no provider call was made. */
+  readonly cached: boolean;
+}
+
+/**
+ * First-class image generation for function runtimes. Prefer this over
+ * `gateway.resolveSlot()` + hand-rolled HTTP: the framework picks the wire,
+ * stores bytes into the media library, stamps unified metadata, and
+ * deduplicates identical prompts (promptHash).
+ */
+export interface ImagesContext {
+  generate(input: ImageGenerateInput): Promise<ImageGenerateOutput>;
+}
+
 export interface AssetProgressInput {
   /** Stable asset/job id when the plugin has one before final MediaRef commit. */
   readonly assetId?: string;
@@ -284,6 +339,11 @@ export interface FunctionHandlerContext {
    * persisting bytes.
    */
   readonly media?: MediaContext;
+  /**
+   * Unified image-generation pipeline (framework primitive). Present when
+   * the executor is wired with both a gateway and a MediaStore.
+   */
+  readonly images?: ImagesContext;
   /**
    * Emits generation progress as `asset.progress` trace/SSE events. The
    * final durable output remains `assetGenerations[]` → `asset.generate`.

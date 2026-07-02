@@ -39,4 +39,7 @@ export type {
   PluginDataWriter,
   PluginLogger,
   FunctionStoreView,
+  ImagesContext,
+  ImageGenerateInput,
+  ImageGenerateOutput,
 } from "./types.js";
