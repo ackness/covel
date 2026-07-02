@@ -256,6 +256,7 @@ export async function executeAgentRuntime({
     executedToolCalls,
     failedToolCalls,
     pendingProposals,
+    emittedEvents,
     streamDeltaCount,
     stoppedWithResponse,
     effectiveMaxSteps,
@@ -308,6 +309,7 @@ export async function executeAgentRuntime({
     executedToolCalls,
     failedToolCalls,
     pendingProposals,
+    emittedEvents,
     dedupeInteractions: true,
     schemaGate:
       loaded.outputSchema && manifest.outputKind !== "story"

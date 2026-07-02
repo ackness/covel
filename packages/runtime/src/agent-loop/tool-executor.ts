@@ -13,8 +13,10 @@
 import {
   InMemoryToolClient,
   ToolValidationError,
+  getEmittedEvents,
   getPendingProposals,
   getToolContent,
+  type EmittedEvent,
   type ToolClient,
   type ToolModule,
 } from "@covel/tools";
@@ -69,6 +71,8 @@ export interface ToolCallResult {
   readonly result: string; // JSON string for LLM
   readonly parsedResult: unknown; // Parsed result for framework use
   readonly pendingProposals?: readonly Proposal[];
+  /** Domain events emitted via the `emit-event` builtin tool (see @covel/tools result.ts). */
+  readonly emittedEvents?: readonly EmittedEvent[];
   readonly success: boolean;
   readonly approvalStatus?: ApprovalStatus;
 }
@@ -405,6 +409,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
         const rawResult = await client.call(call.name, params, execContext);
         const parsedResult = getToolContent(rawResult);
         const pendingProposals = getPendingProposals(rawResult);
+        const emittedEvents = getEmittedEvents(rawResult);
 
         // Text-first convention: if the tool result is an object with a
         // `_text` string field, send ONLY the text as the LLM-facing payload
@@ -443,6 +448,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           result: resultStr,
           parsedResult,
           pendingProposals,
+          emittedEvents,
           success: true,
           approvalStatus,
         };

@@ -6,7 +6,11 @@ import type {
   TurnInput,
 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
-import { isSuspendSentinel, isRuntimeDoneSentinel } from "@covel/tools";
+import {
+  isSuspendSentinel,
+  isRuntimeDoneSentinel,
+  type EmittedEvent,
+} from "@covel/tools";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import { buildToolDefinitions } from "../turn-executor/turn-executor-helpers.js";
@@ -39,6 +43,8 @@ export interface AgentToolLoopCompleted {
   readonly executedToolCalls: ExecutedToolCallState[];
   readonly failedToolCalls: FailedToolCallState[];
   readonly pendingProposals: Proposal[];
+  /** Domain events emitted via `emit-event` tool calls this loop — merged into `output.events` at finalize. */
+  readonly emittedEvents: EmittedEvent[];
   readonly streamDeltaCount: number;
   readonly stoppedWithResponse: boolean;
   readonly effectiveMaxSteps: number;
@@ -107,6 +113,10 @@ export async function runAgentToolLoop({
   const pendingProposals: Proposal[] = [
     ...(initialState?.pendingProposals ?? []),
   ];
+  // Fresh per loop run — not seeded from initialState. A suspend mid-round
+  // that follows an emit-event call in the same LLM response would lose that
+  // event on resume; narrow edge case, not covered by SuspensionRecord today.
+  const emittedEvents: EmittedEvent[] = [];
   let steps = 0;
   // Count streaming text deltas so the `message.completed` trace event can
   // report how many chunks the narrative was assembled from. Non-streaming
@@ -325,6 +335,10 @@ export async function runAgentToolLoop({
             pendingProposals.push(...toolResult.pendingProposals);
           }
 
+          if (toolResult.emittedEvents && toolResult.emittedEvents.length > 0) {
+            emittedEvents.push(...toolResult.emittedEvents);
+          }
+
           // ── Suspend detection (S4-T4) ────────────────────────
           // When the suspend tool is called, capture the current loop state and
           // persist a SuspensionRecord. The tool result is not pushed back to
@@ -490,6 +504,7 @@ export async function runAgentToolLoop({
     executedToolCalls,
     failedToolCalls,
     pendingProposals,
+    emittedEvents,
     streamDeltaCount,
     stoppedWithResponse,
     effectiveMaxSteps,
