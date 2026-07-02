@@ -28,6 +28,11 @@ sources:
     indexTo: plugin:character-presence/assets
     key: filename
     after: cast
+  scenes:
+    kind: media
+    path: media/scenes
+    to: media
+    after: dimensions
   presence:
     kind: json
     path: media/presence.json

@@ -1,11 +1,12 @@
 {
   "world": "haruka-academy",
-  "note": "Generation manifest for character portraits. The script composes each prompt as style.prefix + character.subject + style.suffix. Keep one unified style across all entries so the cast reads as one set.",
+  "note": "Generation manifest for character portraits. The script composes each prompt as style.prefix + character.subject + style.suffix. Keep one unified style across all entries so the cast reads as one set. Sprites are generated with background=transparent for stage compositing; regenerate all portraits and re-run emit-presence after changing the style.",
   "style": {
     "direction": "anime visual-novel character sprite (GalGame tachi-e), soft cel-shading",
-    "prefix": "Character sprite for a visual novel, clean anime style, soft cel-shading, crisp lineart, gentle pastel spring palette, warm soft afternoon daylight, seaside Japanese high-school slice-of-life mood, half-body bust, neutral soft-gradient background, ",
+    "background": "transparent",
+    "prefix": "Character sprite for a visual novel, clean anime style, soft cel-shading, crisp lineart, gentle pastel spring palette, warm soft afternoon daylight, seaside Japanese high-school slice-of-life mood, half-body bust, isolated character sprite on a transparent background, ",
     "suffix": ", wholesome and teen-appropriate, clean and bright, consistent art style, one single character, centered composition, GalGame tachi-e",
-    "negative": "photorealistic, realism, 3d render, dark, gritty, horror, oversaturated, text, caption, signature, watermark, logo, frame, multiple people, crowd, extra fingers, extra limbs, deformed hands, distorted face, nsfw, suggestive"
+    "negative": "photorealistic, realism, 3d render, dark, gritty, horror, oversaturated, text, caption, signature, watermark, logo, frame, multiple people, crowd, extra fingers, extra limbs, deformed hands, distorted face, nsfw, suggestive, background scenery, gradient background"
   },
   "defaults": { "size": "1024x1536", "quality": "medium", "mime": "image/png" },
   "characters": [
