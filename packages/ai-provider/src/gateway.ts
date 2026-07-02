@@ -436,7 +436,11 @@ export function createGateway(deps: GatewayDependencies) {
   ): Promise<ImageGenerationResult & { model: string; provider: string }> {
     return runOperation(
       {
-        presetId: input.presetId,
+        // Default to the conventional "image" slot so an omitted presetId
+        // enters the named-slot → image-tag fallback chain instead of
+        // passing `undefined` through to the default (text) slot. Keeps
+        // the documented "defaults to image-tag resolution" contract true.
+        presetId: input.presetId ?? "image",
         mode: "image",
         fallbackTag: "image",
         resolveTargets: (presetId) => [

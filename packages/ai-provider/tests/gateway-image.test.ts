@@ -177,4 +177,50 @@ describe("gateway.generateImage", () => {
       gateway.generateImage({ presetId: "img-primary", prompt: "a fox" }),
     ).rejects.toThrow(/unknown image wire "ghost"/);
   });
+
+  it("does not silently route to the default text slot when presetId is omitted", async () => {
+    // Harness has a default text preset and a separate image preset. Before
+    // the `?? "image"` default, an omitted presetId resolved to the default
+    // (text) preset and silently succeeded against the text provider; now it
+    // enters the named-slot chain and fails loudly when no "image" slot or
+    // image-tagged fallback exists.
+    mockFetchOnce(200, { data: [{ b64_json: PNG_B64 }] });
+    const providerRegistry = createProviderRegistry({
+      providers: {
+        test: {
+          adapter: createStubAdapter(),
+          defaults: { baseUrl: "https://x.test", apiKey: "k" },
+        },
+      },
+    });
+    const presetRegistry = createPresetRegistry({
+      profiles,
+      presets: [
+        {
+          id: "story",
+          name: "Story",
+          provider: "test",
+          model: "test-text-model",
+          tier: "image-tier",
+          supportedModes: ["text"],
+          enabled: true,
+          isDefault: true,
+        },
+        {
+          id: "img-primary",
+          name: "Image Primary",
+          provider: "test",
+          model: "test-image-model",
+          tier: "image-tier",
+          supportedModes: ["image"],
+          enabled: true,
+        },
+      ],
+    });
+    const gateway = createGateway({ providerRegistry, presetRegistry });
+
+    await expect(gateway.generateImage({ prompt: "a cat" })).rejects.toThrow(
+      /image/,
+    );
+  });
 });
