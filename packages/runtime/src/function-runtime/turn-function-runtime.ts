@@ -12,6 +12,7 @@ import {
   createFunctionStoreView,
 } from "./plugin-handler-helpers.js";
 import { createRuntimeMediaContext } from "./runtime-media-context.js";
+import { createRuntimeImagesContext } from "./runtime-images-context.js";
 import { runPostRuntimeHook } from "../hooks/wire-helpers.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import {
@@ -150,6 +151,19 @@ export async function executeFunctionRuntime({
         pluginId: manifest.pluginId,
       })
     : undefined;
+  // ctx.images only when both halves of the pipeline are wired: a gateway
+  // that actually exposes generateImage (older test/embedder gateways don't)
+  // and a mediaStore to persist through. Either missing → undefined, so
+  // handlers null-check rather than hitting a stub that always throws.
+  const imagesHandle =
+    deps.gateway?.generateImage && deps.mediaStore && mediaHandle
+      ? createRuntimeImagesContext(
+          { generateImage: deps.gateway.generateImage.bind(deps.gateway) },
+          deps.mediaStore,
+          mediaHandle,
+          { sessionId: input.sessionId, pluginId: manifest.pluginId },
+        )
+      : undefined;
   const isTrustedSource = isTrustedPluginSource(deps, manifest);
   const handlerStore = deps.store
     ? isTrustedSource
@@ -195,6 +209,7 @@ export async function executeFunctionRuntime({
       ...(tracedGateway ? { gateway: tracedGateway } : {}),
       ...(tracedUtils ? { utils: tracedUtils } : {}),
       ...(mediaHandle ? { media: mediaHandle } : {}),
+      ...(imagesHandle ? { images: imagesHandle } : {}),
       ...(assetProgress ? { assetProgress } : {}),
       ...(manualPayloadForRuntime
         ? { manualPayload: manualPayloadForRuntime }

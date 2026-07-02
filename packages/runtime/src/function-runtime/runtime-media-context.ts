@@ -35,6 +35,7 @@ export type MediaStoreLike = Pick<
   | "lookup"
   | "isReferencedBy"
   | "addRef"
+  | "listByMetadata"
 >;
 
 interface CreateRuntimeMediaContextOptions {
