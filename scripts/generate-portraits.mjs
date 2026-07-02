@@ -22,13 +22,14 @@
  *        [--only id1,id2] [--size WxH] [--quality low|medium|high]
  *        [--limit N] [--concurrency N] [--force] [--dry-run]
  */
-import { readFile, writeFile, mkdir, access } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import os from "node:os";
 import {
-  getImageWire,
-  DEFAULT_IMAGE_WIRE,
-} from "../packages/ai-provider/src/image/wire-registry.ts";
+  exists,
+  pool,
+  fetchImageBytes,
+  resolveImageWire,
+} from "./lib/image-gen-common.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const DEFAULT_SLOT = "gpt-image-2";
@@ -59,96 +60,9 @@ function parseArgs(argv) {
   return args;
 }
 
-/**
- * Read a `[covel.<slot>]` block from ~/.covel/llm.toml into a flat object,
- * plus `imageWire` from either a `[covel.<slot>.providerRequestMetadata]`
- * subtable (the real schema field) or a flat `imageWire` key directly under
- * `[covel.<slot>]` (script-only convenience).
- */
-async function readSlot(slotName) {
-  const p = path.join(os.homedir(), ".covel", "llm.toml");
-  const txt = await readFile(p, "utf-8");
-  const out = {};
-  let section = null;
-  for (const line of txt.split("\n")) {
-    const sec = /^\s*\[([^\]]+)\]\s*$/.exec(line);
-    if (sec) {
-      section = sec[1];
-      continue;
-    }
-    const inSlot = section === `covel.${slotName}`;
-    const inMeta = section === `covel.${slotName}.providerRequestMetadata`;
-    if (!inSlot && !inMeta) continue;
-    const kv = /^\s*([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/.exec(line);
-    if (!kv) continue;
-    const value = kv[2].replace(/^["']|["']$/g, "").trim();
-    if (inMeta && kv[1] === "imageWire") out.imageWire = value;
-    else if (inSlot) out[kv[1]] = value;
-  }
-  return out;
-}
-
-async function readKeysEnv(name) {
-  const p = path.join(os.homedir(), ".covel", "keys.env");
-  try {
-    const txt = await readFile(p, "utf-8");
-    for (const line of txt.split("\n")) {
-      const m = /^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
-      if (m && m[1] === name) return m[2].replace(/^["']|["']$/g, "").trim();
-    }
-  } catch {
-    /* ignore */
-  }
-  return undefined;
-}
-
-const exists = (p) =>
-  access(p)
-    .then(() => true)
-    .catch(() => false);
-
-/** Run `worker` over items with a bounded concurrency pool. */
-async function pool(items, limit, worker) {
-  const results = new Array(items.length);
-  let idx = 0;
-  const run = async () => {
-    while (idx < items.length) {
-      const i = idx++;
-      results[i] = await worker(items[i], i);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
-  return results;
-}
-
 function buildPrompt(style, character) {
   const { prefix = "", suffix = "", negative = "" } = style;
   return `${prefix}${character.subject}${suffix}${negative ? `\n\nAvoid: ${negative}` : ""}`;
-}
-
-async function generateOne({
-  wire,
-  config,
-  model,
-  prompt,
-  size,
-  quality,
-  background,
-}) {
-  const result = await wire.generate(config, {
-    model,
-    prompt,
-    size,
-    quality,
-    n: 1,
-    background,
-  });
-  const img = result.images[0];
-  if (!img) throw new Error("wire returned no images");
-  if (img.kind === "bytes") return img.bytes;
-  const res = await fetch(img.url);
-  if (!res.ok) throw new Error(`fetch image url failed: HTTP ${res.status}`);
-  return new Uint8Array(await res.arrayBuffer());
 }
 
 async function main() {
@@ -201,35 +115,9 @@ async function main() {
   );
   await mkdir(outDir, { recursive: true });
 
-  const slot = await readSlot(args.slot);
-  const baseUrl = slot.baseUrl;
-  const model = slot.model;
-  const provider = (slot.provider || "openai").toUpperCase();
-  if (!baseUrl || !model) {
-    console.error(
-      `Slot [covel.${args.slot}] missing baseUrl/model in ~/.covel/llm.toml. Configure it (or pick another --slot).`,
-    );
-    process.exit(1);
-  }
-  const key =
-    process.env.COVEL_IMG_KEY ||
-    (await readKeysEnv(`${provider}_API_KEY`)) ||
-    (await readKeysEnv("OPENAI_API_KEY"));
-  if (!key) {
-    console.error(
-      `No API key. Set ${provider}_API_KEY in ~/.covel/keys.env (or COVEL_IMG_KEY env).`,
-    );
-    process.exit(1);
-  }
-  const wireId = slot.imageWire || DEFAULT_IMAGE_WIRE;
-  const wire = getImageWire(wireId);
-  if (!wire) {
-    console.error(
-      `unknown image wire "${wireId}" — register it via registerImageWire() or fix llm.toml providerRequestMetadata.imageWire`,
-    );
-    process.exit(1);
-  }
-  const config = { baseUrl, apiKey: key, headers: slot.headers };
+  const { wire, wireId, model, slot, config } = await resolveImageWire(
+    args.slot,
+  );
 
   // Filter out already-present files up front (unless --force).
   const todo = [];
@@ -252,7 +140,7 @@ async function main() {
     const prompt = buildPrompt(style, c);
     const t0 = Date.now();
     try {
-      const bytes = await generateOne({
+      const bytes = await fetchImageBytes({
         wire,
         config,
         model,
