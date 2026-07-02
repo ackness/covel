@@ -4,8 +4,10 @@ export {
   getPendingProposals,
   getToolContent,
   withPendingProposals,
+  getEmittedEvents,
+  withEmittedEvents,
 } from "./result.js";
-export type { ToolExecutionEnvelope } from "./result.js";
+export type { ToolExecutionEnvelope, EmittedEvent } from "./result.js";
 
 // ── Zod re-export (for plugin tool factory injection) ───────────
 export { z } from "zod";
@@ -58,6 +60,8 @@ export {
 export type { RuntimeDoneSentinel } from "./builtin/runtime-done.js";
 export { createMemoryTools } from "./builtin/memory-tools.js";
 export type { MemoryToolDeps } from "./builtin/memory-tools.js";
+export { createEmitEventTool } from "./builtin/emit-event.js";
+export type { EventDirectoryLike } from "./builtin/emit-event.js";
 
 // ── Short ID (LLM-friendly entity references) ──────────────────
 export { shortId, shortIdBatch } from "./short-id.js";
