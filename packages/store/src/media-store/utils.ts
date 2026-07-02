@@ -128,3 +128,21 @@ export function normalizeBytes(value: Uint8Array | Buffer): Uint8Array {
     value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength),
   );
 }
+
+/**
+ * Shared listByMetadata used by ALL media backends (memory/sqlite/pg/idb):
+ * one code path — backend parity by construction.
+ * ponytail: full-scan over listAssets(); push down to SQL when per-session
+ * media volume outgrows tens of records.
+ */
+export function filterAssetsByMetadata(
+  assets: readonly MediaAssetRecord[],
+  sessionId: string,
+  filter: Readonly<Record<string, unknown>>,
+): readonly MediaAssetRecord[] {
+  return assets.filter((asset) => {
+    if (asset.ownerSessionId !== sessionId) return false;
+    const meta = asset.meta ?? {};
+    return Object.entries(filter).every(([k, v]) => meta[k] === v);
+  });
+}

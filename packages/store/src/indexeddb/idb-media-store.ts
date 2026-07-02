@@ -1,5 +1,6 @@
 import type { MediaStore } from "@covel/shared";
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+import { filterAssetsByMetadata } from "../media-store/utils.js";
 import {
   cloneMeta,
   type IdbMediaAssetRecord,
@@ -180,6 +181,15 @@ export async function createIndexedDbMediaStore(
     async listRefs() {
       const rows = await db.getAll(STORE_REFS);
       return sortRefRecords(rows.map(toRefRecord));
+    },
+
+    async listByMetadata(sessionId, filter) {
+      const rows = await db.getAll(STORE_ASSETS);
+      return filterAssetsByMetadata(
+        sortAssetRecords(rows.map(toAssetRecord)),
+        sessionId,
+        filter,
+      );
     },
 
     async cleanup(protectedIds, policy = {}) {

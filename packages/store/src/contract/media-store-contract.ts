@@ -343,5 +343,41 @@ export function runMediaStoreContractTests(
       expect(combined[big.byteLength - 1]).toBe(big[big.byteLength - 1]);
       expect(combined[big.byteLength / 2]).toBe(big[big.byteLength / 2]);
     });
+
+    it("listByMetadata filters by session ownership and meta subset", async () => {
+      const store = await createStore();
+      const a = await store.put(PNG, "image/png", {
+        kind: "scene-background",
+        sceneId: "classroom",
+        variant: "day",
+      });
+      await store.recordOwnership(a.id, "sess-1", "p1");
+      const b = await store.put(OTHER, "image/png", {
+        kind: "scene-background",
+        sceneId: "classroom",
+        variant: "night",
+      });
+      await store.recordOwnership(b.id, "sess-1", "p1");
+      const c = await store.put(new Uint8Array([5, 6, 7, 8]), "image/png", {
+        kind: "scene-background",
+        sceneId: "classroom",
+        variant: "day",
+      });
+      await store.recordOwnership(c.id, "sess-2", "p1");
+
+      const hits = await store.listByMetadata("sess-1", {
+        kind: "scene-background",
+        sceneId: "classroom",
+        variant: "day",
+      });
+      expect(hits.map((h) => h.id)).toEqual([a.id]);
+      expect(await store.listByMetadata("sess-1", { sceneId: "nope" })).toEqual(
+        [],
+      );
+
+      // Empty filter = ownership-only filter, returns every sess-1 asset.
+      const all = await store.listByMetadata("sess-1", {});
+      expect(all.map((h) => h.id).sort()).toEqual([a.id, b.id].sort());
+    });
   });
 }

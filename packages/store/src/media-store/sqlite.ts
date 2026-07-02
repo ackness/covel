@@ -18,6 +18,7 @@ import { createTables } from "../sqlite/sqlite-store-mappers.js";
 import type { SqliteMediaStoreOptions } from "./types.js";
 import {
   cleanupCandidates,
+  filterAssetsByMetadata,
   mediaPath,
   sha256,
   toBytes,
@@ -245,6 +246,10 @@ export function createSqliteMediaStore(
 
     async listRefs() {
       return selectAllRefs.all() as MediaRefRecord[];
+    },
+
+    async listByMetadata(sessionId, filter) {
+      return filterAssetsByMetadata(await this.listAssets(), sessionId, filter);
     },
 
     async cleanup(protectedIds, policy) {

@@ -125,6 +125,16 @@ export interface MediaStore {
   isReferencedBy(id: string, sessionId: string): Promise<boolean>;
   /** List stored assets for GC/quota/retention policy decisions. */
   listAssets(): Promise<readonly MediaAssetRecord[]>;
+  /**
+   * List assets owned by `sessionId` whose meta contains every key/value in
+   * `filter` (exact match, shallow). Small result sets by design — media
+   * volume is per-session tens of records. Single shared implementation in
+   * @covel/store keeps all backends behaviourally identical.
+   */
+  listByMetadata(
+    sessionId: string,
+    filter: Readonly<Record<string, unknown>>,
+  ): Promise<readonly MediaAssetRecord[]>;
   /** List explicit cross-session refs for fork/snapshot protection. */
   listRefs(): Promise<readonly MediaRefRecord[]>;
   /**
