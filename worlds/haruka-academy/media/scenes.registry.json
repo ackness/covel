@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "registryId": "scene-registry",
+  "style": {
+    "direction": "anime visual-novel background art, painterly cel-shaded scenery, pastel spring palette, seaside Japanese high-school slice-of-life mood",
+    "prefix": "Visual novel background art, clean anime scenery style, soft cel-shaded painterly rendering, gentle pastel spring palette, warm soft seaside afternoon light, no people, no characters, ",
+    "suffix": ", clean wide establishing composition, consistent art style, GalGame background",
+    "negative": "people, character, figure, silhouette, text, caption, watermark, logo, frame, signature",
+    "nightSuffix": ", now at dusk after sunset, warm classroom and street lights glowing against a darkening sky, quiet after-hours campus and town atmosphere"
+  },
+  "scenes": []
+}

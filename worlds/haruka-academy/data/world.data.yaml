@@ -33,6 +33,13 @@ sources:
     path: media/scenes
     to: media
     after: dimensions
+  scenesRegistry:
+    kind: json
+    path: media/scenes.registry.json
+    schema: plugin://scene-stage/scenes
+    to: plugin:scene-stage/scenes
+    key: registryId
+    after: dimensions
   presence:
     kind: json
     path: media/presence.json

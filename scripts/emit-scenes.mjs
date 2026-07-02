@@ -62,7 +62,16 @@ for (const s of manifest.scenes ?? []) {
 
 await writeFile(
   path.join(mediaDir, "scenes.registry.json"),
-  JSON.stringify({ schemaVersion: 1, scenes }, null, 2) + "\n",
+  JSON.stringify(
+    {
+      schemaVersion: 1,
+      registryId: "scene-registry",
+      ...(manifest.style ? { style: manifest.style } : {}),
+      scenes,
+    },
+    null,
+    2,
+  ) + "\n",
 );
 console.log(
   `wrote worlds/${world}/media/scenes.registry.json with ${scenes.length} scene(s)`,
