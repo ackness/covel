@@ -94,7 +94,7 @@ export function withGatewayTrace(
     }
   }
 
-  return {
+  const facade: PluginRuntimeGateway = {
     generateText(input) {
       return traced("generateText", summarizeInput(input), () =>
         gateway.generateText(input),
@@ -112,4 +112,45 @@ export function withGatewayTrace(
       return gateway.resolveSlot(input);
     },
   };
+
+  // Only exposed when the source gateway has an image wire registered —
+  // mirrors the same undefined-passthrough guard in plugin-runtime-gateway.ts.
+  if (gateway.generateImage) {
+    const generateImage = gateway.generateImage.bind(gateway);
+    facade.generateImage = async (input) => {
+      const start = Date.now();
+      const summary = summarizeInput({
+        presetId: input.presetId,
+        prompt: input.prompt,
+      });
+      await emitter.emit("gateway.calling", {
+        ...ctx,
+        method: "generateImage",
+        ...summary,
+      });
+      try {
+        const result = await generateImage(input);
+        // No usage/finishReason for image calls — cost aggregation
+        // (readUsage in the debug cost panel) already treats a missing
+        // `usage` field as "skip", so this is a safe, deliberate gap.
+        await emitter.emit("gateway.responded", {
+          ...ctx,
+          method: "generateImage",
+          imageCount: result.images.length,
+          durationMs: Date.now() - start,
+        });
+        return result;
+      } catch (err) {
+        await emitter.emit("gateway.failed", {
+          ...ctx,
+          method: "generateImage",
+          error: summarizeTraceError(err),
+          durationMs: Date.now() - start,
+        });
+        throw err;
+      }
+    };
+  }
+
+  return facade;
 }
