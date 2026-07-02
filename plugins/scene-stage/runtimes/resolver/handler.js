@@ -93,9 +93,20 @@ export default async function handler(ctx) {
     return { skipped: true, reason: "no-op: scene/variant unchanged", stage };
   }
 
+  // Night lazy-gen steady-state gap: a session-generated scene (source
+  // "session") may only have its day variant on file (day-first, night
+  // lazy per A §4/spec §3). If the requested variant is still missing here,
+  // re-request generation for it — same gate as a fresh unmatched location,
+  // but the scene keeps its existing sceneId/source (no new "generated" row,
+  // background-gen merges into the existing one by sceneId).
+  const needsVariantBackfill =
+    candidate.source === "session" &&
+    candidate[variant] == null &&
+    isGenerationGateOpen(ctx, generatedRows);
+
   const proposal = makeStageProposal(ctx, stage);
   const output =
-    candidate.source === "pending"
+    candidate.source === "pending" || needsVariantBackfill
       ? {
           stage,
           events: [
@@ -122,11 +133,7 @@ export default async function handler(ctx) {
  */
 function buildUnmatchedCandidate(ctx, location, generatedRows) {
   const sceneId = sceneIdForLocation(location);
-  const autoGenerate = ctx.userSettings?.autoGenerateScenes !== false;
-  const maxGenerated = resolveMaxGenerated(
-    ctx.userSettings?.maxGeneratedScenes,
-  );
-  const gated = autoGenerate && generatedRows.length < maxGenerated;
+  const gated = isGenerationGateOpen(ctx, generatedRows);
   return {
     sceneId,
     name: location,
@@ -134,6 +141,25 @@ function buildUnmatchedCandidate(ctx, location, generatedRows) {
     day: null,
     night: null,
   };
+}
+
+/**
+ * Shared auto-generate gate: `autoGenerateScenes` (default true) and the
+ * per-session `maxGeneratedScenes` cap. Used both for brand-new unmatched
+ * locations and for backfilling a missing variant on an already-generated
+ * scene (the latter doesn't consume a new cap slot — background-gen merges
+ * into the existing `generated` row by sceneId — but still respects the
+ * same on/off switch and cap).
+ *
+ * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @param {ReadonlyArray<unknown>} generatedRows
+ */
+function isGenerationGateOpen(ctx, generatedRows) {
+  const autoGenerate = ctx.userSettings?.autoGenerateScenes !== false;
+  const maxGenerated = resolveMaxGenerated(
+    ctx.userSettings?.maxGeneratedScenes,
+  );
+  return autoGenerate && generatedRows.length < maxGenerated;
 }
 
 /**

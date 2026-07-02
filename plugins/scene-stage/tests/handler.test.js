@@ -250,6 +250,71 @@ describe("scene-stage resolver handler", () => {
     });
   });
 
+  it("7b. session match missing the requested variant backfills via generate-requested when gated open", async () => {
+    const generatedRows = [
+      {
+        key: "gen-abcd1234",
+        value: {
+          sceneId: "gen-abcd1234",
+          location: "地下室",
+          day: SESSION_DAY,
+          night: null,
+        },
+      },
+    ];
+    const ctx = makeCtx({
+      location: "地下室",
+      timeOfDay: "night",
+      generatedRows,
+      userSettings: { autoGenerateScenes: true, maxGeneratedScenes: 10 },
+    });
+    const result = await handler(ctx);
+
+    const proposals = getPendingProposals(result);
+    expect(proposals[0].payload.value).toMatchObject({
+      sceneId: "gen-abcd1234",
+      source: "session",
+      variant: "night",
+      night: null,
+      resolved: SESSION_DAY,
+    });
+    expect(result.events).toEqual([
+      {
+        topic: "scene-stage.generate.requested",
+        data: { sceneId: "gen-abcd1234", location: "地下室", variant: "night" },
+      },
+    ]);
+  });
+
+  it("7c. session match missing the requested variant only falls back, no event, when the gate is closed", async () => {
+    const generatedRows = [
+      {
+        key: "gen-abcd1234",
+        value: {
+          sceneId: "gen-abcd1234",
+          location: "地下室",
+          day: SESSION_DAY,
+          night: null,
+        },
+      },
+    ];
+    const ctx = makeCtx({
+      location: "地下室",
+      timeOfDay: "night",
+      generatedRows,
+      userSettings: { autoGenerateScenes: false, maxGeneratedScenes: 10 },
+    });
+    const result = await handler(ctx);
+
+    const proposals = getPendingProposals(result);
+    expect(proposals[0].payload.value).toMatchObject({
+      source: "session",
+      variant: "night",
+      resolved: SESSION_DAY,
+    });
+    expect(result.events).toBeUndefined();
+  });
+
   it("8a. skips without writing when there is no trigger event", async () => {
     const ctx = makeCtx({ location: "二年 B 组教室", noTriggerEvent: true });
     const result = await handler(ctx);

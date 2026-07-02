@@ -311,9 +311,10 @@ interface UIRenderPart {
 
 **校验流程与错误形态**（错误均以可读文本回给 LLM，供其看错误后重试，不抛异常中断工具循环）：
 
-1. topic 不在当前 session 已知目录里 → `unknown topic "<topic>". Available topics: <逗号分隔列表，或 "(none — no consumer plugin active)">`
-2. topic 已知但 payload 未通过 JSON Schema 校验 → `event payload rejected: <ajv 错误文本>`
-3. 两者都通过 → `event "<topic>" emitted`，结果携带 `emittedEvents`
+1. topic 本回合已经发射过（`context.emittedEventTopics` 由工具循环累积传入，见 `packages/tools/src/types.ts` 的 `ToolExecutionContext.emittedEventTopics`）→ no-op：`event "<topic>" already emitted this turn — skipped`，不产生第二条 `emittedEvents`
+2. topic 不在当前 session 已知目录里 → `unknown topic "<topic>". Available topics: <逗号分隔列表，或 "(none — no consumer plugin active)">`
+3. topic 已知但 payload 未通过 JSON Schema 校验 → `event payload rejected: <ajv 错误文本>`
+4. 全部通过 → `event "<topic>" emitted`，结果携带 `emittedEvents`
 
 **一次一个 topic**：单次调用只发射一条事件；需要发多个领域事件时多次调用 `emit-event`。
 

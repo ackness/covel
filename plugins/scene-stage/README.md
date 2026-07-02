@@ -24,6 +24,11 @@
 - `autoGenerateScenes`（默认 `true`）：场景未命中注册表时，是否自动请求背景生成。关闭后未命中场景的 `stage/current.source` 恒为 `"none"`，由消费方（舞台 UI）走世界头图/渐变等回退链。
 - `maxGeneratedScenes`（默认 `10`）：单会话内允许增量生成的场景数上限，达到后新场景同样回退到 `source: "none"`，即使门控开启。
 
+## 已知边界
+
+- **门控中途从关切换到开，同场景同变体不会立即补图**：`stage/current` 的 no-op 防抖（`previous.sceneId` 与 `previous.variant` 都不变时直接跳过）在补图判断之前就早退了，所以如果 `autoGenerateScenes` 关闭期间某场景/变体已经写过一次 `stage/current`（未命中或缺变体），随后开启门控但叙事仍反复发同一场景/变体的 `scene.set`，不会补发生成请求——需要先切换地点或昼夜（打破 no-op 条件）才能让 resolver 重新评估门控。
+- **`execution: background` 任务不跨进程重启恢复**：`background-gen` 由框架的 `_jobs` 挂起队列（`setImmediate` + `_jobs/<jobId>` pending 行）驱动，没有持久化的任务队列；服务进程在生成请求排队后、完成前重启，该请求就丢了，`_jobs` 行永久停在 `pending`，`stage/current.source` 也永久停在 `"pending"`。玩家需要重新触发一次同场景/变体的 `scene.set`（例如切走再切回）才能重新排队。
+
 ## 开发
 
 修改场景匹配逻辑、增量生成 prompt 拼装或面板数据路径后，运行本插件测试。
