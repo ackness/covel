@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schemaVersion", "registryId", "scenes"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "registryId": { "const": "scene-registry" },
+    "style": { "type": "object" },
+    "scenes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sceneId", "name", "day"],
+        "properties": {
+          "sceneId": { "type": "string" },
+          "name": { "type": "string" },
+          "locationRef": { "type": "string" },
+          "day": { "type": "object" },
+          "night": { "type": ["object", "null"] }
+        }
+      }
+    }
+  }
+}
