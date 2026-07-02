@@ -3,25 +3,32 @@
  * generate-portraits.mjs — batch-generate character portraits for a world.
  *
  * Reads worlds/<world>/media/portraits.json, composes each prompt as
- * style.prefix + character.subject + style.suffix, and POSTs to an
- * OpenAI-Images-compatible endpoint ({baseUrl}/v1/images/generations,
- * Bearer auth, { model, prompt, n, size, quality } — same wire as the
- * openai-image-gen plugin). Saves PNGs to
+ * style.prefix + character.subject + style.suffix, and generates through
+ * the framework's image wire (packages/ai-provider/src/image/wire-registry.ts
+ * — same wire the openai-image-gen / dashscope-image-gen plugins use, no
+ * hand-rolled HTTP here). Saves PNGs to
  * worlds/<world>/media/portraits/<filename>.
  *
  * Provider config is NOT hardcoded here — it is read from a slot in
- * ~/.covel/llm.toml (baseUrl / model / provider). The API key is read from
- * ~/.covel/keys.env by the `<PROVIDER>_API_KEY` convention. Pick the slot
- * with --slot; switch providers by editing llm.toml, never this script.
+ * ~/.covel/llm.toml (baseUrl / model / provider / providerRequestMetadata
+ * .imageWire). The API key is read from ~/.covel/keys.env by the
+ * `<PROVIDER>_API_KEY` convention. Pick the slot with --slot; switch
+ * providers by editing llm.toml, never this script.
  *
- * Usage:
- *   node scripts/generate-portraits.mjs <world> [--slot gpt-image-2]
+ * This script imports framework TS source directly (no build step for
+ * dev packages), so it must run under tsx, not plain node:
+ *
+ *   npx tsx scripts/generate-portraits.mjs <world> [--slot gpt-image-2]
  *        [--only id1,id2] [--size WxH] [--quality low|medium|high]
- *        [--limit N] [--concurrency N] [--force]
+ *        [--limit N] [--concurrency N] [--force] [--dry-run]
  */
 import { readFile, writeFile, mkdir, access } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import {
+  getImageWire,
+  DEFAULT_IMAGE_WIRE,
+} from "../packages/ai-provider/src/image/wire-registry.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const DEFAULT_SLOT = "gpt-image-2";
@@ -30,6 +37,7 @@ const DEFAULT_CONCURRENCY = 5;
 function parseArgs(argv) {
   const args = {
     force: false,
+    dryRun: false,
     concurrency: DEFAULT_CONCURRENCY,
     slot: DEFAULT_SLOT,
   };
@@ -44,27 +52,38 @@ function parseArgs(argv) {
       args.concurrency = Math.max(1, Number(argv[++i]) || DEFAULT_CONCURRENCY);
     else if (a === "--slot") args.slot = argv[++i];
     else if (a === "--force") args.force = true;
+    else if (a === "--dry-run") args.dryRun = true;
     else rest.push(a);
   }
   args.world = rest[0];
   return args;
 }
 
-/** Read a `[covel.<slot>]` block from ~/.covel/llm.toml into a flat object. */
+/**
+ * Read a `[covel.<slot>]` block from ~/.covel/llm.toml into a flat object,
+ * plus `imageWire` from either a `[covel.<slot>.providerRequestMetadata]`
+ * subtable (the real schema field) or a flat `imageWire` key directly under
+ * `[covel.<slot>]` (script-only convenience).
+ */
 async function readSlot(slotName) {
   const p = path.join(os.homedir(), ".covel", "llm.toml");
   const txt = await readFile(p, "utf-8");
   const out = {};
-  let inBlock = false;
+  let section = null;
   for (const line of txt.split("\n")) {
     const sec = /^\s*\[([^\]]+)\]\s*$/.exec(line);
     if (sec) {
-      inBlock = sec[1] === `covel.${slotName}`;
+      section = sec[1];
       continue;
     }
-    if (!inBlock) continue;
+    const inSlot = section === `covel.${slotName}`;
+    const inMeta = section === `covel.${slotName}.providerRequestMetadata`;
+    if (!inSlot && !inMeta) continue;
     const kv = /^\s*([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/.exec(line);
-    if (kv) out[kv[1]] = kv[2].replace(/^["']|["']$/g, "").trim();
+    if (!kv) continue;
+    const value = kv[2].replace(/^["']|["']$/g, "").trim();
+    if (inMeta && kv[1] === "imageWire") out.imageWire = value;
+    else if (inSlot) out[kv[1]] = value;
   }
   return out;
 }
@@ -81,79 +100,6 @@ async function readKeysEnv(name) {
     /* ignore */
   }
   return undefined;
-}
-
-function imagesEndpoint(baseUrl) {
-  const t = String(baseUrl).trim().replace(/\/+$/, "");
-  return t.endsWith("/v1")
-    ? `${t}/images/generations`
-    : `${t}/v1/images/generations`;
-}
-
-const asArray = (v) => (Array.isArray(v) ? v : undefined);
-
-/** Permissive image extraction — mirrors openai-image-gen's collectOpenAiImages. */
-function collectImages(json) {
-  const out = [];
-  const push = (v) => {
-    if (typeof v !== "string" || v.trim().length === 0) return;
-    const raw = v.trim();
-    if (/^https?:\/\//i.test(raw)) out.push({ kind: "url", url: raw });
-    else {
-      const m = /^data:[^;,]*;base64,([\s\S]+)$/i.exec(raw);
-      if (m) out.push({ kind: "b64", b64: m[1].replace(/\s+/g, "") });
-      else if (raw.replace(/\s+/g, "").length >= 64)
-        out.push({ kind: "b64", b64: raw.replace(/\s+/g, "") });
-    }
-  };
-  for (const item of asArray(json?.data) ?? []) {
-    if (item && typeof item === "object") {
-      push(item.b64_json);
-      push(item.url);
-    }
-  }
-  for (const choice of asArray(json?.choices) ?? []) {
-    for (const part of asArray(choice?.message?.content) ?? []) {
-      if (part && typeof part === "object") {
-        push(part.image);
-        push(part.url);
-        push(part.b64_json);
-      }
-    }
-  }
-  return out;
-}
-
-async function generateOne({ endpoint, key, model, prompt, size, quality }) {
-  const body = { model, prompt, n: 1, size };
-  if (quality) body.quality = quality;
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  let json;
-  try {
-    json = text.length ? JSON.parse(text) : {};
-  } catch {
-    json = undefined;
-  }
-  if (!res.ok)
-    throw new Error(
-      `HTTP ${res.status}: ${json?.error?.message ?? json?.error ?? text.slice(0, 400)}`,
-    );
-  const imgs = collectImages(json);
-  if (imgs.length === 0)
-    throw new Error(`no image in response: ${text.slice(0, 300)}`);
-  const img = imgs[0];
-  if (img.kind === "b64") return Buffer.from(img.b64, "base64");
-  const r = await fetch(img.url);
-  if (!r.ok) throw new Error(`fetch image url failed: HTTP ${r.status}`);
-  return Buffer.from(await r.arrayBuffer());
 }
 
 const exists = (p) =>
@@ -175,11 +121,41 @@ async function pool(items, limit, worker) {
   return results;
 }
 
+function buildPrompt(style, character) {
+  const { prefix = "", suffix = "", negative = "" } = style;
+  return `${prefix}${character.subject}${suffix}${negative ? `\n\nAvoid: ${negative}` : ""}`;
+}
+
+async function generateOne({
+  wire,
+  config,
+  model,
+  prompt,
+  size,
+  quality,
+  background,
+}) {
+  const result = await wire.generate(config, {
+    model,
+    prompt,
+    size,
+    quality,
+    n: 1,
+    background,
+  });
+  const img = result.images[0];
+  if (!img) throw new Error("wire returned no images");
+  if (img.kind === "bytes") return img.bytes;
+  const res = await fetch(img.url);
+  if (!res.ok) throw new Error(`fetch image url failed: HTTP ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.world) {
     console.error(
-      "usage: node scripts/generate-portraits.mjs <world> [--slot gpt-image-2] [--only id1,id2] [--size 1024x1536] [--quality medium] [--limit N] [--concurrency 5] [--force]",
+      "usage: npx tsx scripts/generate-portraits.mjs <world> [--slot gpt-image-2] [--only id1,id2] [--size 1024x1536] [--quality medium] [--limit N] [--concurrency 5] [--force] [--dry-run]",
     );
     process.exit(1);
   }
@@ -190,6 +166,32 @@ async function main() {
       "utf-8",
     ),
   );
+  const size = args.size || manifest.defaults?.size || "1024x1536";
+  const quality = args.quality || manifest.defaults?.quality || "medium";
+  const style = manifest.style || {};
+
+  let chars = manifest.characters;
+  if (args.only) chars = chars.filter((c) => args.only.has(c.id));
+  if (args.limit) chars = chars.slice(0, args.limit);
+
+  const queue = chars.map((c) => ({
+    id: c.id,
+    name: c.name,
+    filename: c.filename,
+    prompt: buildPrompt(style, c),
+  }));
+
+  if (args.dryRun) {
+    console.log(
+      `world=${args.world} slot=${args.slot} size=${size} quality=${quality} — ${queue.length} portrait(s) queued (dry-run, no network calls):\n`,
+    );
+    for (const q of queue) {
+      console.log(`  ${q.id} → ${q.filename}`);
+      console.log(`    ${q.prompt.replace(/\n/g, "\n    ")}\n`);
+    }
+    return;
+  }
+
   const outDir = path.join(
     repoRoot,
     "worlds",
@@ -219,14 +221,15 @@ async function main() {
     );
     process.exit(1);
   }
-  const endpoint = imagesEndpoint(baseUrl);
-  const size = args.size || manifest.defaults?.size || "1024x1536";
-  const quality = args.quality || manifest.defaults?.quality || "medium";
-  const { prefix = "", suffix = "", negative = "" } = manifest.style || {};
-
-  let chars = manifest.characters;
-  if (args.only) chars = chars.filter((c) => args.only.has(c.id));
-  if (args.limit) chars = chars.slice(0, args.limit);
+  const wireId = slot.imageWire || DEFAULT_IMAGE_WIRE;
+  const wire = getImageWire(wireId);
+  if (!wire) {
+    console.error(
+      `unknown image wire "${wireId}" — register it via registerImageWire() or fix llm.toml providerRequestMetadata.imageWire`,
+    );
+    process.exit(1);
+  }
+  const config = { baseUrl, apiKey: key, headers: slot.headers };
 
   // Filter out already-present files up front (unless --force).
   const todo = [];
@@ -239,27 +242,28 @@ async function main() {
   }
 
   console.log(
-    `world=${args.world} slot=${args.slot} (provider=${slot.provider}) model=${model} size=${size} quality=${quality} concurrency=${args.concurrency}`,
+    `world=${args.world} slot=${args.slot} (provider=${slot.provider}, wire=${wireId}) model=${model} size=${size} quality=${quality} concurrency=${args.concurrency}`,
   );
   console.log(
     `generating ${todo.length} portrait(s) concurrently → worlds/${args.world}/media/portraits/\n`,
   );
 
   const results = await pool(todo, args.concurrency, async (c) => {
-    const prompt = `${prefix}${c.subject}${suffix}${negative ? `\n\nAvoid: ${negative}` : ""}`;
+    const prompt = buildPrompt(style, c);
     const t0 = Date.now();
     try {
-      const buf = await generateOne({
-        endpoint,
-        key,
+      const bytes = await generateOne({
+        wire,
+        config,
         model,
         prompt,
         size,
         quality,
+        background: style.background,
       });
-      await writeFile(path.join(outDir, c.filename), buf);
+      await writeFile(path.join(outDir, c.filename), bytes);
       console.log(
-        `  ✅ ${c.name} (${c.filename}) ${(buf.length / 1024).toFixed(0)} KB · ${((Date.now() - t0) / 1000).toFixed(1)}s`,
+        `  ✅ ${c.name} (${c.filename}) ${(bytes.length / 1024).toFixed(0)} KB · ${((Date.now() - t0) / 1000).toFixed(1)}s`,
       );
       return { id: c.id, status: "ok" };
     } catch (err) {

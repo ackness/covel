@@ -21,18 +21,20 @@
 
 **haruka-academy（8）**：神代澪（班长/文艺部）· 朝仓凛（新闻部·采访本相机）· 椎名夏帆（轻音部·吉他）· 白石悠真（学生会副会长·眼镜文件夹）· 三枝遥（学生会长·日程本）· 小野寺千寻（班主任·粉笔旧书）· 森川奏太（鼓手·鼓棒）· 东条茜（图书委员·夹干花的书）。全部 teen 尺度、清爽。
 
-## 生成方式（参考 openai-image-gen 的调用）
+## 生成方式（框架统一 image wire）
 
-调用 = 标准 **OpenAI Images API**：`POST {baseUrl}/v1/images/generations`，`Authorization: Bearer <key>`，body `{ model, prompt, n, size, quality }`（与 `openai-image-gen` 插件同一套 wire）。**脚本不硬编码任何服务地址**——`baseUrl`/`model`/`provider` 从 `~/.covel/llm.toml` 的指定 slot 读取，key 从 `~/.covel/keys.env` 按 `<PROVIDER>_API_KEY` 约定读取。换服务只改 llm.toml，不动脚本。
+调用走框架的 `packages/ai-provider/src/image/wire-registry.ts`（`openai-images` / `dashscope-wan` 等，与 `openai-image-gen`/`dashscope-image-gen` 插件同一套 wire，无手写 HTTP）。**脚本不硬编码任何服务地址**——`baseUrl`/`model`/`provider` 从 `~/.covel/llm.toml` 的指定 slot 读取，wire 选择从 slot 的 `providerRequestMetadata.imageWire`（缺省 `openai-images`）读取，key 从 `~/.covel/keys.env` 按 `<PROVIDER>_API_KEY` 约定读取。换服务只改 llm.toml，不动脚本。
 
-生成脚本 `scripts/generate-portraits.mjs`（**并发**批量）：
+脚本直接 import 框架 TS 源码，需用 **tsx** 运行（`node` 直接跑不了）。生成脚本 `scripts/generate-portraits.mjs`（**并发**批量）：
 
 ```bash
 # 并发生成某世界全部立绘（默认 slot gpt-image-2，并发 5；已存在的跳过）
-node scripts/generate-portraits.mjs mistport
-node scripts/generate-portraits.mjs haruka-academy
+npx tsx scripts/generate-portraits.mjs mistport
+npx tsx scripts/generate-portraits.mjs haruka-academy
 # 指定 slot / 并发数 / 只重跑某角色 / 覆盖
-node scripts/generate-portraits.mjs mistport --slot gpt-image-2 --concurrency 6 --only iron-meg --force
+npx tsx scripts/generate-portraits.mjs mistport --slot gpt-image-2 --concurrency 6 --only iron-meg --force
+# 只打印 prompt 队列，不出图、不联网
+npx tsx scripts/generate-portraits.mjs haruka-academy --limit 1 --dry-run
 ```
 
 流程：读该世界 `portraits.json` → 逐角色合成 `prefix+subject+suffix` → **并发** POST → PNG 存到 `worlds/<world>/media/portraits/<filename>`。已存在文件默认跳过，失败直接重跑（只补缺的）。
