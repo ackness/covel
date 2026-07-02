@@ -26,7 +26,10 @@ function stubFetchSequence(
   return calls;
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  delete process.env.COVEL_LLM_RETRY_DISABLED;
+});
 
 describe("dashscope-wan wire", () => {
   it("submits with async header and star-separated size, then polls to SUCCEEDED", async () => {
@@ -206,8 +209,12 @@ describe("dashscope-wan wire", () => {
     expect(body.parameters.negative_prompt).toBe("ugly");
   });
 
-  it("throws with HTTP status when submit request fails", async () => {
-    stubFetchSequence([{ status: 500, json: {} }]);
+  it("throws a structured error when submit request fails", async () => {
+    // Avoid postJson's built-in 5xx retry/backoff — this test is about the
+    // wire's error surfacing, not the shared retry wrapper (covered by
+    // http-retry.test.ts).
+    process.env.COVEL_LLM_RETRY_DISABLED = "1";
+    stubFetchSequence([{ status: 500, json: { message: "internal error" } }]);
     await expect(
       dashscopeWanWire.generate(
         { baseUrl: "https://d.test", apiKey: "k" },
@@ -215,7 +222,7 @@ describe("dashscope-wan wire", () => {
         undefined,
         { pollIntervalMs: 1, timeoutMs: 5_000 },
       ),
-    ).rejects.toThrow(/DashScope submit failed: HTTP 500/);
+    ).rejects.toThrow(/internal error/);
   });
 
   it("throws when submit response has no task_id", async () => {
@@ -250,5 +257,42 @@ describe("dashscope-wan wire", () => {
       { pollIntervalMs: 1, timeoutMs: 5_000 },
     );
     expect(result.images[0]).toMatchObject({ kind: "url" });
+  });
+
+  it("throws immediately on a non-retriable poll failure (4xx except 429)", async () => {
+    const calls = stubFetchSequence([
+      { json: { output: { task_id: "t1" } } },
+      { status: 400, json: { message: "bad task id" } },
+    ]);
+    await expect(
+      dashscopeWanWire.generate(
+        { baseUrl: "https://d.test", apiKey: "k" },
+        { model: "m", prompt: "p" },
+        undefined,
+        { pollIntervalMs: 1, timeoutMs: 5_000 },
+      ),
+    ).rejects.toThrow(/bad task id/);
+    // Submit + exactly one poll attempt — no retry loop for a hard 4xx.
+    expect(calls).toHaveLength(2);
+  });
+
+  it("aborts mid-poll-sleep without waiting the full interval", async () => {
+    stubFetchSequence([
+      { json: { output: { task_id: "t1" } } },
+      { json: { output: { task_status: "RUNNING" } } },
+    ]);
+    const controller = new AbortController();
+    const start = Date.now();
+    const promise = dashscopeWanWire.generate(
+      { baseUrl: "https://d.test", apiKey: "k", signal: controller.signal },
+      { model: "m", prompt: "p" },
+      undefined,
+      { pollIntervalMs: 5_000, timeoutMs: 60_000 },
+    );
+    // Submit + first poll resolve on microtasks (no real delay); abort well
+    // before the 5s sleep before the second poll would otherwise elapse.
+    setTimeout(() => controller.abort(), 30);
+    await expect(promise).rejects.toThrow(/abort/i);
+    expect(Date.now() - start).toBeLessThan(2_000);
   });
 });

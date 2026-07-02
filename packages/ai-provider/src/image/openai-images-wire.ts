@@ -5,15 +5,7 @@ import type {
   ImageWire,
 } from "./types.js";
 import type { ProviderConfig } from "../types.js";
-
-/** `{base}/v1/images/generations`; tolerates baseUrl already ending in /v1. */
-function imagesEndpoint(baseUrl: string): string {
-  const trimmed = baseUrl.trim().replace(/\/+$/, "");
-  if (!trimmed) return "";
-  return trimmed.endsWith("/v1")
-    ? `${trimmed}/images/generations`
-    : `${trimmed}/v1/images/generations`;
-}
+import { assertSuccess, parseJson, postJson } from "../adapters/http.js";
 
 /** DashScope-style "1024*1024" → OpenAI "1024x1024". */
 function normalizeSize(size: string): string {
@@ -96,9 +88,6 @@ async function generate(
   config: ProviderConfig,
   params: ImageGenerationParams,
 ): Promise<ImageGenerationResult> {
-  const endpoint = imagesEndpoint(config.baseUrl ?? "");
-  if (!endpoint) throw new Error("openai-images wire: baseUrl is required");
-
   // ponytail: imageWire is a routing hint consumed by the caller before it
   // reaches here, not a real request param — strip it so it never leaks
   // onto the wire.
@@ -121,37 +110,11 @@ async function generate(
     );
   }
 
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey ?? ""}`,
-      "Content-Type": "application/json",
-      ...(config.headers ?? {}),
-    },
-    body: JSON.stringify(body),
-    signal: config.signal ?? null,
-  });
+  const response = await postJson(config, "/images/generations", body);
+  const payload = await parseJson(response);
+  assertSuccess(response, payload, "openai-images");
 
-  const text = await res.text();
-  let json: Record<string, unknown>;
-  try {
-    json = JSON.parse(text) as Record<string, unknown>;
-  } catch {
-    throw new Error(
-      `openai-images wire: provider returned non-JSON response (HTTP ${res.status})`,
-    );
-  }
-  if (!res.ok) {
-    const err = json.error as { message?: string } | string | undefined;
-    const message =
-      (typeof err === "object" && err?.message) ||
-      (typeof err === "string" && err) ||
-      text.slice(0, 1000) ||
-      res.statusText;
-    throw new Error(`HTTP ${res.status} ${res.statusText}: ${message}`);
-  }
-
-  const images = collectImages(json);
+  const images = collectImages(payload);
   if (images.length === 0) {
     throw new Error("openai-images wire: response contained no images");
   }

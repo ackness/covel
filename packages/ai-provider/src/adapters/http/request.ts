@@ -95,6 +95,39 @@ export async function postJson(
   return response;
 }
 
+/**
+ * Single-shot GET with the same SSRF guard + redirect posture as postJson.
+ * No built-in retry: callers that poll (e.g. the DashScope WAN wire) already
+ * control their own interval/backoff and decide per-status whether to retry.
+ */
+export async function getJson(
+  config: ProviderConfig,
+  path: string,
+  signal?: AbortSignal,
+  overrideHeaders?: Record<string, string>,
+): Promise<Response> {
+  assertAllowedBaseUrl(config.baseUrl);
+
+  const headers: Record<string, string> = {
+    ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
+    ...config.headers,
+    ...overrideHeaders,
+  };
+
+  const url = buildProviderUrl(config.baseUrl, path);
+  const effectiveSignal = signal ?? config.signal;
+
+  return rejectRedirect(
+    await fetch(url, {
+      method: "GET",
+      headers,
+      redirect: "manual",
+      signal: effectiveSignal,
+    }),
+    url,
+  );
+}
+
 export async function postFormData(
   config: ProviderConfig,
   path: string,

@@ -2,8 +2,17 @@ import type {
   GeneratedImageSource,
   ImageGenerationParams,
   ImageGenerationResult,
+  ImageWire,
 } from "./types.js";
 import type { ModelRequestContext, ProviderConfig } from "../types.js";
+import {
+  assertSuccess,
+  getJson,
+  isRetriableStatus,
+  parseJson,
+  postJson,
+  sleepWithAbort,
+} from "../adapters/http.js";
 
 const DEFAULT_POLL_INTERVAL_MS = 2_000;
 const DEFAULT_TIMEOUT_MS = 300_000;
@@ -82,8 +91,6 @@ async function generate(
   _context?: ModelRequestContext,
   poll?: WanPollOptions,
 ): Promise<ImageGenerationResult> {
-  const base = (config.baseUrl ?? "").replace(/\/$/, "");
-  if (!base) throw new Error("dashscope-wan wire: baseUrl is required");
   const warnings: string[] = [];
 
   const parameters: Record<string, unknown> = {
@@ -109,34 +116,22 @@ async function generate(
     );
   }
 
-  const submitRes = await fetch(
-    `${base}/api/v1/services/aigc/image-generation/generation`,
+  const submitResponse = await postJson(
+    config,
+    "/api/v1/services/aigc/image-generation/generation",
     {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${config.apiKey ?? ""}`,
-        "X-DashScope-Async": "enable",
-        ...(config.headers ?? {}),
+      model: params.model,
+      input: {
+        messages: [{ role: "user", content: [{ text: params.prompt }] }],
       },
-      body: JSON.stringify({
-        model: params.model,
-        input: {
-          messages: [{ role: "user", content: [{ text: params.prompt }] }],
-        },
-        parameters,
-      }),
-      signal: config.signal ?? null,
+      parameters,
     },
+    undefined,
+    { "X-DashScope-Async": "enable" },
   );
-  if (!submitRes.ok) {
-    const text = await submitRes.text();
-    throw new Error(
-      `DashScope submit failed: HTTP ${submitRes.status} ${submitRes.statusText} — ${text.slice(0, 200)}`,
-    );
-  }
-  const submitJson = asRecord(await submitRes.json());
-  const taskId = asRecord(submitJson?.output)?.task_id;
+  const submitPayload = await parseJson(submitResponse);
+  assertSuccess(submitResponse, submitPayload, "dashscope-wan");
+  const taskId = asRecord(submitPayload.output)?.task_id;
   if (typeof taskId !== "string" || !taskId) {
     throw new Error("DashScope WAN: no task_id in submit response");
   }
@@ -144,23 +139,24 @@ async function generate(
   const pollIntervalMs = poll?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const timeoutMs = poll?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const deadline = Date.now() + timeoutMs;
-  const pollUrl = `${base}/api/v1/tasks/${taskId}`;
+  const pollPath = `/api/v1/tasks/${encodeURIComponent(taskId)}`;
 
   while (Date.now() < deadline) {
     const sleepMs = Math.min(
       pollIntervalMs,
       Math.max(0, deadline - Date.now()),
     );
-    if (sleepMs > 0) await new Promise((r) => setTimeout(r, sleepMs));
-    if (config.signal?.aborted) {
-      throw new Error(`DashScope WAN: aborted while polling task ${taskId}`);
+    if (sleepMs > 0) await sleepWithAbort(sleepMs, config.signal);
+
+    const res = await getJson(config, pollPath);
+    if (!res.ok) {
+      if (isRetriableStatus(res.status)) continue; // transient — retry next tick
+      const errPayload = await parseJson(res);
+      assertSuccess(res, errPayload, "dashscope-wan");
     }
-    const res = await fetch(pollUrl, {
-      headers: { authorization: `Bearer ${config.apiKey ?? ""}` },
-      signal: config.signal ?? null,
-    });
-    if (!res.ok) continue; // transient poll errors retry on next tick
-    const output = asRecord(asRecord(await res.json())?.output);
+
+    const payload = await parseJson(res);
+    const output = asRecord(payload.output);
     const status = output?.task_status;
     if (status === "SUCCEEDED") {
       const images = collectResults(output ?? {});
@@ -179,4 +175,7 @@ async function generate(
   throw new Error(`DashScope WAN: polling timed out after ${timeoutMs}ms`);
 }
 
-export const dashscopeWanWire = { id: "dashscope-wan", generate } as const;
+export const dashscopeWanWire = {
+  id: "dashscope-wan",
+  generate,
+} satisfies ImageWire;

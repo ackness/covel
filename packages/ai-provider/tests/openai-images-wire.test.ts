@@ -110,14 +110,14 @@ describe("openai-images wire", () => {
     });
   });
 
-  it("throws HTTP error with provider message on !ok", async () => {
+  it("throws a structured error with the provider message on !ok", async () => {
     mockFetchOnce(400, { error: { message: "bad prompt" } });
     await expect(
       openAiImagesWire.generate(
         { baseUrl: "https://x.test", apiKey: "k" },
         { model: "m", prompt: "p" },
       ),
-    ).rejects.toThrow(/HTTP 400.*bad prompt/);
+    ).rejects.toThrow(/bad prompt/);
   });
 
   it("throws when response contains zero images", async () => {
