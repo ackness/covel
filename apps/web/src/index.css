@@ -909,3 +909,24 @@
   border: var(--rule-thickness) var(--rule-style) var(--rule-color);
   backdrop-filter: blur(8px);
 }
+
+@keyframes ui-stage-choice-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ui-stage-choice-item {
+  animation: ui-stage-choice-in 260ms ease-out both;
+}
+
+/* Reuses the existing blink keyframe (see `.ui-cursor` above) for the
+   dialog's "more text below" indicator. */
+.ui-stage-caret {
+  animation: ui-blink 1s step-end infinite;
+}

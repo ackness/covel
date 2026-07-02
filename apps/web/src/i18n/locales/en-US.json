@@ -965,7 +965,10 @@
     "historyLabel": "History",
     "autoPlayLabel": "Auto-play",
     "autoPlayPauseLabel": "Pause auto-play",
-    "exitLabel": "Exit stage"
+    "exitLabel": "Exit stage",
+    "inputPlaceholder": "Type your response…",
+    "inputSendHint": "Enter to send · Shift+Enter for a new line · Esc to cancel",
+    "freeInputLabel": "✎ Write your own…"
   },
   "common": {
     "preview": "Preview",

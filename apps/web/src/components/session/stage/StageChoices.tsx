@@ -1,0 +1,107 @@
+/**
+ * Choice overlay for stage mode (spec §2 `StageChoices`). Renders only
+ * once the dialog has finished revealing (`visible`), merging pending
+ * interaction choices with scene-prompts short phrases via `mergeChoices`;
+ * the always-present "write your own" entry hands off to the parent,
+ * which flips `StageDialog` into its input mode.
+ */
+import { clsx } from "clsx";
+import { useTranslation } from "react-i18next";
+import type { ReactElement } from "react";
+import {
+  mergeChoices,
+  type StageChoiceItem,
+  type StageInteractionChoice,
+} from "./stage-selectors.js";
+
+export interface StageChoicesProps {
+  readonly visible: boolean;
+  readonly interactionChoices: readonly StageInteractionChoice[];
+  readonly promptsNamespace: Readonly<Record<string, unknown>>;
+  readonly locale: string;
+  readonly onSubmitInteraction?: (
+    blockId: string,
+    turnId: string,
+    interactionId: string,
+    type: "form" | "choice" | "confirmation",
+    values: Record<string, unknown>,
+    submitBehavior?: { echoFilledNarrative?: boolean },
+  ) => Promise<void>;
+  readonly onSendMessage: (text: string) => void;
+  readonly onFreeInput: () => void;
+}
+
+const STAGGER_STEP_MS = 60;
+
+export function StageChoices({
+  visible,
+  interactionChoices,
+  promptsNamespace,
+  locale,
+  onSubmitInteraction,
+  onSendMessage,
+  onFreeInput,
+}: StageChoicesProps): ReactElement | null {
+  const { t } = useTranslation();
+  if (!visible) return null;
+
+  const { items, twoColumn } = mergeChoices(
+    interactionChoices,
+    promptsNamespace,
+    locale,
+  );
+
+  const handleSelect = (item: StageChoiceItem) => {
+    if (item.kind === "interaction") {
+      void onSubmitInteraction?.(
+        item.blockId,
+        item.turnId,
+        item.interactionId,
+        "choice",
+        { selectedId: item.choiceId, selectedLabel: item.label },
+        item.submitBehavior,
+      );
+      return;
+    }
+    onSendMessage(item.label);
+  };
+
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 bottom-[8rem] z-40 flex justify-center px-4 md:bottom-40"
+      data-testid="stage-choices"
+    >
+      <div
+        className={clsx(
+          "pointer-events-auto grid w-full max-w-3xl gap-2",
+          twoColumn ? "grid-cols-2" : "grid-cols-1",
+        )}
+      >
+        {items.map((item, index) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => handleSelect(item)}
+            className="ui-stage-panel ui-stage-choice-item rounded-[var(--radius-control)] px-4 py-2.5 text-left text-sm transition-colors hover:border-[var(--accent-primary)]"
+            style={{ animationDelay: `${index * STAGGER_STEP_MS}ms` }}
+          >
+            {item.label}
+            {item.description && (
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {item.description}
+              </span>
+            )}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={onFreeInput}
+          className="ui-stage-panel ui-stage-choice-item rounded-[var(--radius-control)] px-4 py-2.5 text-left text-sm text-muted-foreground transition-colors hover:border-[var(--accent-primary)]"
+          style={{ animationDelay: `${items.length * STAGGER_STEP_MS}ms` }}
+        >
+          {t("stage.freeInputLabel")}
+        </button>
+      </div>
+    </div>
+  );
+}
