@@ -61,33 +61,14 @@ export function shouldTrigger(
         context.pendingEventTopics.includes(trigger.topic)
       );
 
-    // ── RESERVED modes (never fire under the production scheduler) ──
-
-    case "error-retry": {
-      // RESERVED — `error-retry` depends on `context.hasUpstreamFailure`, but
-      // the scheduling path (`turn-executor/scheduling.ts`) hardcodes
-      // `hasUpstreamFailure: false`, so this branch is effectively dead in
-      // production: it can only return true when a *unit test* forces the
-      // flag. Warn once per (session, runtime) so authors don't ship a
-      // runtime that silently never runs. The evaluation logic below is
-      // retained for forward-compat and unit-testability only.
-      warnReservedTrigger(context.sessionId, manifest.name, "error-retry");
-      if (
-        trigger?.maxRetryCount !== undefined &&
-        context.triggerCount >= trigger.maxRetryCount
-      ) {
-        return false;
-      }
-      return context.hasUpstreamFailure;
-    }
-
+    case "error-retry":
     case "conditional":
-      // RESERVED (audit P2-9) — the schema accepts `conditional` for
-      // forward-compatibility but no expression engine evaluates the
-      // condition yet, so a conditional runtime stays permanently inactive.
-      // Warn once per (session, runtime) so plugin authors see the silent
-      // skip instead of debugging "why doesn't my plugin run".
-      warnReservedTrigger(context.sessionId, manifest.name, "conditional");
+      // RESERVED — the schema accepts these for forward-compatibility, but
+      // no condition engine / upstream-failure signal exists yet, so they
+      // never fire in production. Warn once per (session, runtime) so plugin
+      // authors see the silent skip instead of debugging "why doesn't my
+      // plugin run".
+      warnReservedTrigger(context.sessionId, manifest.name, type);
       return false;
 
     default:
@@ -115,7 +96,7 @@ function warnReservedTrigger(
   const reason =
     type === "conditional"
       ? "no condition expression engine is wired yet"
-      : "the scheduler never surfaces upstream failures (hasUpstreamFailure is always false)";
+      : "the scheduler never surfaces upstream failures";
   // eslint-disable-next-line no-console -- intentional dev-time warning, not user-facing
   console.warn(
     `[trigger] runtime "${runtimeId}" declares trigger.type: ${type}, ` +

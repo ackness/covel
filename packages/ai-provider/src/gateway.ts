@@ -81,13 +81,8 @@ export function createGateway(deps: GatewayDependencies) {
    */
   const warnedFallbacks = new Set<string>();
 
-  const {
-    resolveSlotOrPassthrough,
-    resolveSlotToPresetId,
-    getSlotParameterOverrides,
-    withPresetMetadata,
-    resolveSlot,
-  } = createGatewaySlotResolution(deps, warnedFallbacks);
+  const { resolveSlotOrPassthrough, withPresetMetadata, resolveSlot } =
+    createGatewaySlotResolution(deps, warnedFallbacks);
 
   const { runOperation } = createRunOperation(deps, resolveSlotOrPassthrough);
 
@@ -431,8 +426,6 @@ export function createGateway(deps: GatewayDependencies) {
     embed,
     synthesizeSpeech,
     transcribeAudio,
-    resolveSlotToPresetId,
-    getSlotParameterOverrides,
     resolveSlot,
   };
 

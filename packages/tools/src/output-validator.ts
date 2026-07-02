@@ -3,7 +3,7 @@
  */
 
 import Ajv from "ajv";
-import type { ValidationResult, StructuredOutputStrategy } from "./types.js";
+import type { ValidationResult } from "./types.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const AjvCtor = (Ajv as any).default ?? Ajv;
@@ -32,32 +32,4 @@ export function validateOutput(
   );
 
   return { valid: false, errors };
-}
-
-/**
- * Select the structured output strategy based on model capabilities.
- */
-export function selectOutputStrategy(
-  supportsNativeJsonSchema: boolean,
-): StructuredOutputStrategy {
-  return supportsNativeJsonSchema ? "native" : "prompt";
-}
-
-/**
- * Generate the prompt injection text for models that don't support native structured output.
- */
-export function generateSchemaPrompt(
-  schema: Readonly<Record<string, unknown>>,
-): string {
-  const schemaStr = JSON.stringify(schema, null, 2);
-
-  return `## Output Format
-
-You MUST respond with valid JSON matching this schema:
-
-\`\`\`json
-${schemaStr}
-\`\`\`
-
-Do not include any text outside the JSON object.`;
 }

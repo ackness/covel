@@ -158,16 +158,6 @@ export interface WorldDataPreflightResponse {
   targets: WorldDataPreflightTarget[];
 }
 
-export interface CommandSummary {
-  name: string;
-  pluginId: string;
-  description: string;
-  usage?: string;
-  examples?: string[];
-  positionalHints?: string[];
-  flagHints?: Record<string, string>;
-}
-
 export interface SseEnvelope {
   type: string;
   requestId: string;

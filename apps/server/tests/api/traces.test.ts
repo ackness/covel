@@ -103,7 +103,6 @@ function makeEntry(
       },
     },
     promptTemplate: "",
-    referenceLinks: [],
     rawFrontmatter: {},
   };
 

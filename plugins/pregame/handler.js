@@ -1,3 +1,5 @@
+import { pickLocaleText as pick } from "@covel/plugin-handlers-utils";
+
 /**
  * Pre-Game handler — pure function runtime, no LLM.
  *
@@ -8,20 +10,6 @@
  * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
  * @returns {Promise<Record<string, unknown>>}
  */
-/**
- * Pick a string for the session locale (prefix match), defaulting to English.
- * The welcome strings are written into notifications/narrative at runtime, so
- * the handler resolves them here using ctx.locale instead of emitting a fixed
- * language.
- * @param {string | undefined} locale
- * @param {string} zh
- * @param {string} en
- */
-function pick(locale, zh, en) {
-  const lang = typeof locale === "string" ? locale.split("-")[0] : "";
-  return lang === "zh" ? zh : en;
-}
-
 export default async function pregameHandler(ctx) {
   const { sessionId, store, locale } = ctx;
 

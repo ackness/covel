@@ -36,9 +36,6 @@ export const PREAMBLE_ZH = [
   "尊重世界基调与上方的系统指令——这些笔记只打磨呈现方式，绝不凌驾于设定之上。",
 ].join("\n");
 
-/** Back-compat alias (English). Prefer `preambleForLocale`. */
-export const PREAMBLE = PREAMBLE_EN;
-
 /**
  * Pick the director preamble for a session locale. Prefix-matches the language
  * (e.g. `zh-CN` → zh), defaults to English for anything else / undefined.

@@ -36,9 +36,3 @@ export async function getCachedWorld(
   cache.set(worldId, { world, at: now });
   return world;
 }
-
-/** Drop a cached world (or the whole cache). Optional — the TTL self-heals. */
-export function invalidateWorldCache(worldId?: string): void {
-  if (worldId === undefined) cache.clear();
-  else cache.delete(worldId);
-}

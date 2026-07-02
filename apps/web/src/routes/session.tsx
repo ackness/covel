@@ -264,7 +264,6 @@ function SessionPage() {
         pluginLoadErrors={state.pluginLoadErrors}
         sessionPlugins={state.sessionPlugins}
         presets={state.presets}
-        commands={state.commands}
         llmConfig={state.llmConfig}
         statePatches={state.statePatches}
         gameState={state.gameState}

@@ -1,19 +1,7 @@
+import { pickLocaleText as pick } from "@covel/plugin-handlers-utils";
 import { mergeSchemaDefaults, mirrorCharacterToPluginData } from "@covel/tools";
 
 const CHARACTER_PLUGIN_ID = "char-creator";
-
-/**
- * Pick a string for the session locale (prefix match), defaulting to English.
- * The narrative line is written into the story at runtime, so the guard
- * resolves it via ctx.locale instead of emitting a fixed-language string.
- * @param {string | undefined} locale
- * @param {string} zh
- * @param {string} en
- */
-function pick(locale, zh, en) {
-  const lang = typeof locale === "string" ? locale.split("-")[0] : "";
-  return lang === "zh" ? zh : en;
-}
 
 /**
  * guard.js — Pre-execution gate for player-init runtime.

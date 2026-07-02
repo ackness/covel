@@ -75,9 +75,5 @@ export function createSnapshotMethods(state: MemoryState): MemoryStoreMethods {
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
         .map((r) => structuredClone(r));
     },
-
-    async deleteSnapshot(id) {
-      state.snapshots.delete(id);
-    },
   };
 }

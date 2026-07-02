@@ -5,8 +5,7 @@ import { emitToast } from "@/lib/toast-channel.js";
 import type { SseEventHandler } from "./sse-handler.js";
 import type { SessionDispatch } from "./types.js";
 
-export const CONNECTION_CLOSED_REASON =
-  "__i18n:session.reasonConnectionClosed__";
+const CONNECTION_CLOSED_REASON = "__i18n:session.reasonConnectionClosed__";
 
 export function finalizeActionExecution(dispatch: SessionDispatch): void {
   dispatch({ type: "SET_EXECUTING", value: false });

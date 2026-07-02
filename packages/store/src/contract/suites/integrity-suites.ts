@@ -13,7 +13,6 @@ import {
   makeLorebookEntry,
   makeMessage,
   makePlayerInput,
-  makePluginConfig,
   makeRuntimeOutput,
   makeRuntimeResult,
   makeSession,
@@ -60,7 +59,6 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
       await store.saveApproval(makeApproval({ sessionId }));
       await store.addMessage(makeMessage({ sessionId }));
       await store.upsertCharacter(makeCharacter({ sessionId }));
-      await store.savePluginConfig(makePluginConfig({ sessionId }));
       await store.addTraceEvent(makeTraceEvent({ sessionId }));
       await store.saveRuntimeOutput(makeRuntimeOutput({ sessionId }));
       await store.saveInteractionRecord(makeInteractionRecord({ sessionId }));
@@ -114,7 +112,6 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
       expect(await store.listApprovals(sessionId)).toHaveLength(0);
       expect(await store.listMessages(sessionId)).toHaveLength(0);
       expect(await store.listCharacters(sessionId)).toHaveLength(0);
-      expect(await store.getPluginConfig(sessionId, "narrator")).toBeNull();
       expect(await store.listTraceEvents(sessionId)).toHaveLength(0);
       expect(await store.listRuntimeOutputs(sessionId)).toHaveLength(0);
       expect(await store.listInteractionRecords(sessionId)).toHaveLength(0);
@@ -134,63 +131,6 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
       expect(await store.listSuspensions(otherId)).toHaveLength(1);
       expect(await store.listWorkingMemory(otherId)).toHaveLength(1);
       expect(await store.listSessionLorebookEntries(otherId)).toHaveLength(1);
-    });
-  });
-
-  describe("transactions (S4-T1)", () => {
-    it("rolls back all writes on rollbackTx", async () => {
-      // Baseline — no sessions yet
-      const before = await store.listSessions();
-      const baselineIds = new Set(before.map((s) => s.id));
-
-      const s1 = makeSession();
-      const s2 = makeSession();
-
-      await store.beginTx();
-      await store.createSession(s1);
-      await store.createSession(s2);
-      await store.rollbackTx();
-
-      const after = await store.listSessions();
-      const afterIds = after.map((s) => s.id);
-      expect(afterIds).not.toContain(s1.id);
-      expect(afterIds).not.toContain(s2.id);
-      // Rollback must not delete pre-existing rows either
-      for (const id of baselineIds) {
-        expect(afterIds).toContain(id);
-      }
-    });
-
-    it("commits all writes on commitTx", async () => {
-      const s1 = makeSession();
-      const s2 = makeSession();
-
-      await store.beginTx();
-      await store.createSession(s1);
-      await store.createSession(s2);
-      await store.commitTx();
-
-      const r1 = await store.getSession(s1.id);
-      const r2 = await store.getSession(s2.id);
-      expect(r1).not.toBeNull();
-      expect(r2).not.toBeNull();
-    });
-
-    it("throws on nested beginTx", async () => {
-      await store.beginTx();
-      try {
-        await expect(store.beginTx()).rejects.toThrow();
-      } finally {
-        await store.rollbackTx();
-      }
-    });
-
-    it("throws on commitTx without an active transaction", async () => {
-      await expect(store.commitTx()).rejects.toThrow();
-    });
-
-    it("throws on rollbackTx without an active transaction", async () => {
-      await expect(store.rollbackTx()).rejects.toThrow();
     });
   });
 

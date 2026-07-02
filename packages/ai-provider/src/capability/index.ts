@@ -1,13 +1,7 @@
-export {
-  KNOWN_MODELS,
-  MODEL_ALIASES,
-  type KnownModelEntry,
-} from "./known-models.js";
+export { type KnownModelEntry } from "./known-models.js";
 export {
   resolveCapability,
-  lookupKnownModel,
   setModelDatabase,
-  getModelDatabase,
   type ManualCapabilityOverride,
 } from "./resolver.js";
 export {

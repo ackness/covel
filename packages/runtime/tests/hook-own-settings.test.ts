@@ -257,7 +257,6 @@ describe("executeTurn → hook getOwnSettings end-to-end", () => {
       loadRuntime: async () => ({
         manifest,
         promptTemplate: "Say something.",
-        references: [],
       }),
       llm: new SimpleMockLLM(),
       getConfig: () => ({}),

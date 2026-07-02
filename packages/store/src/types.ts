@@ -43,7 +43,6 @@ export type {
 
 export type {
   PluginDataRecord,
-  PluginConfigRecord,
   TraceEventRecord,
 } from "./records/plugin-records.js";
 
@@ -93,7 +92,6 @@ import type {
 } from "./records/state-records.js";
 import type {
   PluginDataRecord,
-  PluginConfigRecord,
   TraceEventRecord,
 } from "./records/plugin-records.js";
 import type {
@@ -163,10 +161,6 @@ export interface SessionStore {
 export interface RuntimeRecordStore {
   // ── Turn Results ──
   saveTurnResult(record: TurnResultRecord): Promise<void>;
-  getTurnResult(
-    sessionId: string,
-    turnId: string,
-  ): Promise<TurnResultRecord | null>;
   listTurnResults(
     sessionId: string,
     limit?: number,
@@ -316,15 +310,6 @@ export interface PluginDataStore {
   ): Promise<void>;
 }
 
-/** Per-plugin config blobs (`common/sql-plugin-config-records.ts`). */
-export interface PluginConfigStore {
-  savePluginConfig(record: PluginConfigRecord): Promise<void>;
-  getPluginConfig(
-    sessionId: string,
-    pluginId: string,
-  ): Promise<PluginConfigRecord | null>;
-}
-
 /** World package registry (`common/sql-world-records.ts`). */
 export interface WorldStore {
   listWorlds(): Promise<WorldRecord[]>;
@@ -393,10 +378,6 @@ export interface TurnMessageStore {
 /** Player form-input records. Part of `sql-session-journal-records`. */
 export interface PlayerInputStore {
   savePlayerInput(record: PlayerInputRecord): Promise<void>;
-  getPlayerInput(
-    sessionId: string,
-    formId: string,
-  ): Promise<PlayerInputRecord | null>;
   listPlayerInputs(sessionId: string): Promise<PlayerInputRecord[]>;
 }
 
@@ -512,51 +493,22 @@ export interface SnapshotStore {
   getSnapshot(id: string): Promise<SnapshotRecord | null>;
   /** List snapshots for a session, ordered by `createdAt` asc. */
   listSnapshots(sessionId: string): Promise<readonly SnapshotRecord[]>;
-  deleteSnapshot(id: string): Promise<void>;
 }
 
 /**
  * Transaction control (S4-T1). Held separate from the data domains because
- * {@link StoreTransaction} omits exactly these methods — a transaction body
- * must not begin/commit/rollback from inside the scope.
+ * {@link StoreTransaction} omits `withTransaction` — a transaction body must
+ * not open a nested transaction from inside the scope.
  */
 export interface TransactionalStore {
-  /**
-   * Begin a transaction. Subsequent writes are buffered until commit or rollback.
-   *
-   * On SQL backends this maps to `BEGIN`. On MemoryStore/IdbStore it takes a
-   * structural snapshot of the current state that can be restored on rollback.
-   *
-   * Nested transactions are NOT supported. Calling `beginTx()` twice without an
-   * intervening `commitTx()` / `rollbackTx()` throws.
-   */
-  beginTx(): Promise<void>;
-
-  /**
-   * Commit the current transaction. Buffered writes become durable.
-   * Throws if no transaction is active.
-   */
-  commitTx(): Promise<void>;
-
-  /**
-   * Roll back the current transaction. Buffered writes are discarded.
-   * Throws if no transaction is active.
-   */
-  rollbackTx(): Promise<void>;
-
   /**
    * Run `fn` inside a scoped transaction and return its result.
    *
    * `fn` receives a transaction-bound store view ({@link StoreTransaction}).
    * All writes made through that view commit atomically when `fn` resolves and
-   * roll back if it throws (the error is re-thrown to the caller).
-   *
-   * Unlike the imperative {@link DataStore.beginTx}/{@link DataStore.commitTx}/
-   * {@link DataStore.rollbackTx} shim — which routes writes through a
-   * store-level handle for the duration of the begin/commit window —
-   * `withTransaction` never mutates a shared/global handle. The tx scope is
-   * bound to the single `fn` invocation, so concurrent `withTransaction` calls
-   * are isolated and never swallow each other's writes:
+   * roll back if it throws (the error is re-thrown to the caller). No
+   * shared/global handle is mutated, so concurrent `withTransaction` calls are
+   * isolated and never swallow each other's writes:
    *
    * - PostgreSQL runs each call on an independent pooled connection (Drizzle's
    *   native `db.transaction`), giving true concurrency. A non-tx write made
@@ -575,9 +527,8 @@ export interface TransactionalStore {
    * silently running a non-atomic inner transaction on a separate connection.
    * The guard is precise: genuinely concurrent (non-nested) calls are unaffected.
    *
-   * This is the preferred transaction API; the imperative trio is retained as a
-   * compatibility shim for existing callers. Optional so partial mock stores
-   * and legacy backends remain assignable; all bundled backends implement it.
+   * Optional so partial mock stores remain assignable; all bundled backends
+   * implement it.
    */
   withTransaction?: <T>(fn: (tx: StoreTransaction) => Promise<T>) => Promise<T>;
 }
@@ -605,7 +556,6 @@ export interface DataStore
     MessageStore,
     CharacterStore,
     PluginDataStore,
-    PluginConfigStore,
     WorldStore,
     TraceStore,
     TurnMessageStore,
@@ -626,10 +576,7 @@ export interface DataStore
  * lifecycle methods — a transaction body must not begin/commit/close from
  * inside the scope.
  */
-export type StoreTransaction = Omit<
-  DataStore,
-  "beginTx" | "commitTx" | "rollbackTx" | "withTransaction" | "close"
->;
+export type StoreTransaction = Omit<DataStore, "withTransaction" | "close">;
 
 // ── Store config ─────────────────────────────────────────────────
 

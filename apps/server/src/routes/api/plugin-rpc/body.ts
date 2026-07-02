@@ -2,6 +2,7 @@ import type {
   PluginRpcActionRequest,
   PluginRpcRuntimeRequest,
 } from "@covel/shared";
+import { decodeBase64Json } from "../../../lib/base64-json.js";
 
 export type PluginRpcBody = Partial<PluginRpcActionRequest> &
   Partial<PluginRpcRuntimeRequest>;
@@ -64,23 +65,16 @@ export function validatePluginRpcBody(raw: unknown): PluginRpcBodyValidation {
 export function decodePluginUserSettingsHeader(
   raw: string | undefined,
 ): Readonly<Record<string, Readonly<Record<string, unknown>>>> | undefined {
-  if (!raw) return undefined;
-  try {
-    const json = JSON.parse(
-      Buffer.from(raw, "base64").toString("utf-8"),
-    ) as unknown;
-    if (!json || typeof json !== "object" || Array.isArray(json))
-      return undefined;
-    const out: Record<string, Record<string, unknown>> = {};
-    for (const [pluginId, bucket] of Object.entries(
-      json as Record<string, unknown>,
-    )) {
-      if (!bucket || typeof bucket !== "object" || Array.isArray(bucket))
-        continue;
-      out[pluginId] = { ...(bucket as Record<string, unknown>) };
-    }
-    return Object.keys(out).length > 0 ? out : undefined;
-  } catch {
+  const json = decodeBase64Json(raw);
+  if (!json || typeof json !== "object" || Array.isArray(json))
     return undefined;
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const [pluginId, bucket] of Object.entries(
+    json as Record<string, unknown>,
+  )) {
+    if (!bucket || typeof bucket !== "object" || Array.isArray(bucket))
+      continue;
+    out[pluginId] = { ...(bucket as Record<string, unknown>) };
   }
+  return Object.keys(out).length > 0 ? out : undefined;
 }

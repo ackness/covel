@@ -92,7 +92,6 @@ async function makeDeps(
     loadRuntime: async () => ({
       manifest,
       promptTemplate: "Say something.",
-      references: [],
     }),
     llm,
     getConfig: () => ({}),
@@ -228,7 +227,6 @@ describe("Turn executor hook wire-in", () => {
         loadRuntime: async () => ({
           manifest,
           promptTemplate: "Use tools.",
-          references: [],
         }),
         llm,
         getConfig: () => ({}),
@@ -369,7 +367,6 @@ describe("Turn executor hook wire-in", () => {
         loadRuntime: async () => ({
           manifest,
           promptTemplate: "Use tools.",
-          references: [],
         }),
         llm,
         getConfig: () => ({}),
@@ -455,7 +452,6 @@ describe("Turn executor hook wire-in", () => {
         loadRuntime: async (m) => ({
           manifest: m,
           promptTemplate: "Say something.",
-          references: [],
         }),
         llm,
         getConfig: () => ({}),
@@ -663,7 +659,6 @@ describe("Turn executor hook wire-in", () => {
         loadRuntime: async () => ({
           manifest,
           promptTemplate: "Use tools.",
-          references: [],
         }),
         llm,
         getConfig: () => ({}),
@@ -738,7 +733,6 @@ describe("Turn executor hook wire-in", () => {
         loadRuntime: async () => ({
           manifest,
           promptTemplate: "Use tools.",
-          references: [],
         }),
         llm,
         getConfig: () => ({}),

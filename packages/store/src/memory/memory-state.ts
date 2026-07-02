@@ -14,7 +14,6 @@ export function createMemoryState(): MemoryState {
     messages: [],
     characters: new Map(),
     pluginData: new Map(),
-    pluginConfigs: new Map(),
     suspensions: new Map(),
     snapshots: new Map(),
     vectorRows: new Map(),

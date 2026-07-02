@@ -255,12 +255,7 @@ export async function bootstrapApi(
 
   const resolveModel = createModelResolver({ pluginLlmConfigs });
 
-  // 4. (sessionScopes was removed 2026-04-12 — see audit Finding 2:
-  //     `createSessionScope` had no production caller, the map was always
-  //     empty, and PATCH /api/plugins/:id/config always 404'd. Runtime config
-  //     now comes from explicit runtime/plugin settings.)
-
-  // 5. loadRuntime resolver (locale-aware: loads PLUGIN.en.md when locale is "en-US")
+  // loadRuntime resolver (locale-aware: loads PLUGIN.en.md when locale is "en-US")
   const loadRuntimeFn = async (
     manifest: RuntimeManifest,
     locale?: string,

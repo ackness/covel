@@ -5,8 +5,6 @@
 import type { ToolExecutionContext, ResolvedTool } from "./types.js";
 import type { ToolExecutionEnvelope } from "./result.js";
 
-export type ToolTransport = "in-memory";
-
 export type ToolDefinition = ResolvedTool;
 
 export type ToolCallResult<TOutput = unknown> =
@@ -14,7 +12,6 @@ export type ToolCallResult<TOutput = unknown> =
   | ToolExecutionEnvelope<TOutput>;
 
 export interface ToolClient {
-  readonly transport: ToolTransport;
   readonly id: string;
   list(): Promise<readonly ToolDefinition[]>;
   call(

@@ -162,7 +162,6 @@ function makeDefaultDeps(store: DataStore, overrides?: Partial<Deps>): Deps {
       {
         manifest: TEST_MANIFEST,
         promptTemplate: "Test prompt",
-        references: [],
       },
     ],
     loadedRuntimes: new Map(),
@@ -177,7 +176,6 @@ function makeDefaultDeps(store: DataStore, overrides?: Partial<Deps>): Deps {
       ({
         manifest: TEST_MANIFEST,
         promptTemplate: "Test prompt",
-        references: [],
       }) as never,
     toolExecutor: {
       execute: async () => ({

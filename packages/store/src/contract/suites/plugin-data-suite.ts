@@ -13,7 +13,6 @@ import {
   makeLorebookEntry,
   makeMessage,
   makePlayerInput,
-  makePluginConfig,
   makeRuntimeOutput,
   makeRuntimeResult,
   makeSession,

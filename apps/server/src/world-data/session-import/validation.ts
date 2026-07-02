@@ -18,7 +18,7 @@ function getPreflightPluginEntry(
   deps: WorldDataImportPreflightDeps | undefined,
   pluginId: string,
 ): PluginRegistryEntry | undefined {
-  return deps?.getPluginEntry?.(pluginId) ?? deps?.registry?.get(pluginId);
+  return deps?.registry?.get(pluginId);
 }
 
 export function preflightPluginTarget(
@@ -37,7 +37,7 @@ export function preflightPluginTarget(
   }
 
   const entry = getPreflightPluginEntry(deps, target.pluginId);
-  if (deps?.registry || deps?.getPluginEntry) {
+  if (deps?.registry) {
     if (!entry) {
       diagnostics.push({
         level: "error",

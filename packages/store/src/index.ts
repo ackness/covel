@@ -5,8 +5,6 @@ export {
 } from "./factory.js";
 export {
   BROWSER_IDB_DATABASE_NAME,
-  IDB_BROWSER_STORAGE_SCHEMA_VERSION,
-  IDB_DATA_STORE_SCHEMA_VERSION,
   summarizeStorageMigrations,
 } from "./migrations.js";
 export { describeStorageCapabilities } from "./storage-capabilities.js";
@@ -20,15 +18,8 @@ export {
   createMemoryMediaStore,
   createPgMediaStore,
   createPgMediaStoreFromClient,
-  createS3MediaStore,
   createSqliteMediaStore,
 } from "./media-store.js";
-export { createSqliteS3MetadataAdapter } from "./sqlite/sqlite-s3-metadata-adapter.js";
-export {
-  createPgS3MetadataAdapter,
-  createPgS3MetadataAdapterFromClient,
-  type PgS3MetadataAdapterOptions,
-} from "./postgres/pg-s3-metadata-adapter.js";
 export { supportsVector } from "./vector-store.js";
 export type {
   MediaAssetLookup,
@@ -40,18 +31,11 @@ export type {
   MediaStoreBackend,
   MediaStoreConfig,
   PgMediaStoreOptions,
-  S3CompatibleMediaClient,
-  S3CompatibleObject,
-  S3CompatibleObjectInfo,
-  S3MediaMetadataAdapter,
-  S3MediaStoreOptions,
   SqliteMediaStoreOptions,
 } from "./media-store.js";
 export type { IndexedDbMediaStoreOptions } from "./indexeddb/idb-media-store.js";
 export type {
-  StorageMigrationDescriptor,
   StorageMigrationDomain,
-  StorageMigrationResult,
   StorageMigrationStatus,
   StorageMigrationSummary,
 } from "./migrations.js";
@@ -89,7 +73,6 @@ export type {
   MessageRecord,
   CharacterRecord,
   PluginDataRecord,
-  PluginConfigRecord,
   TraceEventRecord,
   RuntimeOutputRecord,
   InteractionRecordRow,

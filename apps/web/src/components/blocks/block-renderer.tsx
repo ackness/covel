@@ -5,9 +5,9 @@
  * `apps/web/src/components/session/chat-messages.tsx`）。本模块只保留两个
  * 对外契约：
  *
- *   1. `setBlockSchemas(schemas)` / `getBlockSchemas()` — 供 session-store
- *      在 boot 时注入插件声明的 blockSchemas，schema-block-renderer 用它
- *      为没有 json-render spec 的历史 block 兜底渲染。
+ *   1. `setBlockSchemas(schemas)` — 供 session-store 在 boot 时注入插件声明的
+ *      blockSchemas，schema-block-renderer 用它为没有 json-render spec 的历史
+ *      block 兜底渲染。
  *   2. `getBlockRenderer(blockType)` — 返回 schema-driven renderer（若有）
  *      或 null；不再维护硬编码的 kebab→React 组件映射。
  *
@@ -36,10 +36,6 @@ export function setBlockSchemas(
   schemas: Record<string, BlockSchemaDeclaration>,
 ) {
   blockSchemas = schemas;
-}
-
-export function getBlockSchemas(): Record<string, BlockSchemaDeclaration> {
-  return blockSchemas;
 }
 
 /**

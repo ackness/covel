@@ -71,8 +71,6 @@ export interface ResolvedTool {
 
 // ── Output validation ────────────────────────────────────────────
 
-export type StructuredOutputStrategy = "native" | "prompt";
-
 export interface ValidationResult {
   readonly valid: boolean;
   readonly errors?: readonly string[];

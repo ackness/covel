@@ -56,7 +56,6 @@ export type SessionScopedMemoryKey = Extract<
   | "characters"
   | "pluginData"
   | "worldDataImportLedger"
-  | "pluginConfigs"
   | "traceEvents"
   | "runtimeOutputs"
   | "interactionRecords"
@@ -107,7 +106,6 @@ export const SESSION_SCOPED_TABLES: readonly SessionScopedTable[] = [
     memoryKey: "worldDataImportLedger",
     memoryKind: "map",
   },
-  { table: "plugin_configs", memoryKey: "pluginConfigs", memoryKind: "map" },
   { table: "trace_events", memoryKey: "traceEvents", memoryKind: "array" },
   {
     table: "runtime_outputs",

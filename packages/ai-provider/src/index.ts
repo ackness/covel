@@ -49,18 +49,9 @@ export type {
 export { AiProviderError, type AiProviderErrorCode } from "./errors.js";
 
 // Bundled resources
-export {
-  BUNDLED_DEFAULT_PRESET_PATH,
-  BUNDLED_MODEL_DB_PATH,
-} from "./bundled-resources.js";
+export { BUNDLED_MODEL_DB_PATH } from "./bundled-resources.js";
 
 // Config
-export { loadAiConfig, parseAiConfig } from "./config/loader.js";
-export {
-  aiConfigSchema,
-  presetConfigSchema,
-  modelProfileSchema,
-} from "./config/schema.js";
 export { loadLlmConfig, parseLlmConfig } from "./config/llm-loader.js";
 export {
   llmConfigSchema,
@@ -79,12 +70,9 @@ export { createProviderRegistry } from "./provider-registry.js";
 export { createPresetRegistry } from "./preset-registry.js";
 export { createSlotRegistry, type SlotRegistry } from "./slot-registry.js";
 
-// Protocol registry (single registration point for a new wire protocol)
+// Protocol registry (protocol-scoped adapter / cache / capability lookup)
 export {
-  registerProtocol,
   getProtocolDefinition,
-  listRegisteredProtocols,
-  assertProtocolRegistryComplete,
   BASE_CAPABILITY_DEFAULTS,
   type ProtocolDefinition,
 } from "./protocol-registry.js";
@@ -110,13 +98,9 @@ export {
 // Capability
 export {
   resolveCapability,
-  lookupKnownModel,
   setModelDatabase,
-  getModelDatabase,
   createModelDatabase,
   fetchLiteLlmModels,
-  KNOWN_MODELS,
-  MODEL_ALIASES,
   type KnownModelEntry,
   type ManualCapabilityOverride,
   type ModelDatabase,
@@ -127,15 +111,3 @@ export {
 
 // Trace
 export { createLangfuseHook } from "./trace/langfuse.js";
-
-// Tokenizer
-export {
-  estimateTokens,
-  approximateTokenCounter,
-  setTokenCounter,
-  resetTokenCounter,
-  TOKEN_SAFETY_MULTIPLIERS,
-  type ProviderFamily,
-  type EstimateTokensOptions,
-  type TokenCounter,
-} from "./tokenizer.js";

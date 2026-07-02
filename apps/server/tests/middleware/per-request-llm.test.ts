@@ -115,12 +115,6 @@ function createMockAi(): {
     async transcribeAudio() {
       throw new Error("transcribeAudio: not used in this test");
     },
-    resolveSlotToPresetId() {
-      return undefined;
-    },
-    getSlotParameterOverrides() {
-      return undefined;
-    },
   } as unknown as AiStack["gateway"];
 
   const ai: AiStack = {

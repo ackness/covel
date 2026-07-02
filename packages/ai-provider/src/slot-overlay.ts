@@ -21,7 +21,6 @@ import type {
   CustomPresetInput,
   PresetConfig,
   ProviderDefaults,
-  ProviderProtocol,
   SlotOverridesInput,
 } from "./types.js";
 
@@ -201,6 +200,3 @@ export const __internals = {
   presetRefs,
   providerRefs,
 };
-
-// Kept for downstream consumers (no runtime use here, just re-export).
-export type { ProviderProtocol };

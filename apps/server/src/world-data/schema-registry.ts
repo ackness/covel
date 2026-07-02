@@ -21,9 +21,6 @@ const validatorCache = new Map<string, ValidateFunction>();
 
 export interface WorldDataSchemaRegistryDeps {
   readonly registry?: Pick<PluginRegistry, "get">;
-  readonly getPluginEntry?: (
-    pluginId: string,
-  ) => PluginRegistryEntry | undefined;
 }
 
 export interface PluginWorldDataSchemaRef {
@@ -71,7 +68,7 @@ function getPluginEntry(
   deps: WorldDataSchemaRegistryDeps | undefined,
   pluginId: string,
 ): PluginRegistryEntry | undefined {
-  return deps?.getPluginEntry?.(pluginId) ?? deps?.registry?.get(pluginId);
+  return deps?.registry?.get(pluginId);
 }
 
 async function loadJsonSchemaValidator(options: {

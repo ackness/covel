@@ -45,7 +45,6 @@ function makeLoadedRuntime(args: {
       trigger: { type: "auto" },
     },
     promptTemplate: "",
-    referenceLinks: [],
     rawFrontmatter: {},
     uiSpecs: args.uiSpecs,
   } as unknown as LoadedRuntime;

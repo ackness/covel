@@ -74,7 +74,6 @@ function makeEntry(id: string, loaded: LoadedRuntime): PluginRegistryEntry {
   const parsed = {
     manifest: loaded.manifest,
     promptTemplate: loaded.promptTemplate,
-    referenceLinks: [],
     rawFrontmatter: {},
   };
   return {
@@ -126,7 +125,6 @@ function makeLoadedRuntimes(store: DataStore): Map<string, LoadedRuntime> {
     loaded.set(manifest.name, {
       manifest,
       promptTemplate: "",
-      references: [],
       handler: async () => {
         if (manifest.name === "pregame") {
           return { narrativeOutput: "pregame ready", preGameDone: true };

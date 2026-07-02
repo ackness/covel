@@ -103,7 +103,6 @@ export interface SessionState {
   packages: api.PackageSummary[];
   /** Plugins that failed to load (manifest or dependency errors). */
   pluginLoadErrors: api.PluginLoadError[];
-  commands: api.CommandSummary[];
   worlds: api.WorldRecord[];
   /** Server-side llm.toml config (null = legacy / unconfigured). */
   llmConfig: api.LlmConfigResponse | null;
@@ -205,7 +204,6 @@ export type SessionAction =
       presets: api.PresetSummary[];
       packages: api.PackageSummary[];
       pluginLoadErrors: api.PluginLoadError[];
-      commands: api.CommandSummary[];
       worlds: api.WorldRecord[];
       llmConfig: api.LlmConfigResponse | null;
     }

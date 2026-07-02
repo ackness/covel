@@ -90,34 +90,6 @@ export const DEFAULT_CORE_MEMORY_BLOCKS: readonly CoreMemoryBlockSchema[] = [
   },
 ];
 
-/**
- * Display metadata for a core memory label, consumed by UI layers that prefer
- * a flat `{ displayName, icon }` lookup. Icons use Lucide icon names.
- */
-export interface CoreMemoryLabelInfo {
-  readonly displayName: I18nText;
-  readonly icon: string;
-}
-
-/** Ordered list of the default block labels. Derived — single source of truth. */
-export const CORE_MEMORY_LABELS: readonly CoreMemoryLabel[] =
-  DEFAULT_CORE_MEMORY_BLOCKS.map((b) => b.label);
-
-/**
- * Flat display registry for the default blocks. Derived from
- * {@link DEFAULT_CORE_MEMORY_BLOCKS} so display names live in exactly one
- * place. UI/back-compat consumers read this; the runtime path reads the
- * injected schema instead.
- */
-export const CORE_MEMORY_LABEL_INFO: Readonly<
-  Record<string, CoreMemoryLabelInfo>
-> = Object.fromEntries(
-  DEFAULT_CORE_MEMORY_BLOCKS.map((b) => [
-    b.label,
-    { displayName: b.displayName, icon: b.icon ?? "Info" },
-  ]),
-);
-
 /** Default max characters per block (not tokens — char count is cheaper to check). */
 export const DEFAULT_MAX_BLOCK_CHARS = 2000;
 

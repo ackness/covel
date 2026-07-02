@@ -89,7 +89,6 @@ export interface SqlRuntimeRecordsDeps {
 export type SqlRuntimeRecords = Pick<
   DataStore,
   | "saveTurnResult"
-  | "getTurnResult"
   | "listTurnResults"
   | "saveRuntimeResult"
   | "listRuntimeResults"
@@ -117,19 +116,6 @@ export function createSqlRuntimeRecords(
   return {
     async saveTurnResult(record: TurnResultRecord): Promise<void> {
       await runner.insert(turnResults, values.turnResultInsert(record));
-    },
-
-    async getTurnResult(
-      sessionId: string,
-      turnId: string,
-    ): Promise<TurnResultRecord | null> {
-      const row = await runner.selectFirst<TurnResultRow>(turnResults, {
-        where: and(
-          eq(turnResults.sessionId, sessionId),
-          eq(turnResults.turnId, turnId),
-        ),
-      });
-      return row ? toTurnResultRecord(row, json) : null;
     },
 
     async listTurnResults(

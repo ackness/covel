@@ -240,7 +240,6 @@ function sharedWebPreferences(): WebPreferences {
     contextIsolation: true,
     nodeIntegration: false,
     sandbox: true,
-    additionalArguments: [`--covel-app-version=${app.getVersion()}`],
   };
 }
 

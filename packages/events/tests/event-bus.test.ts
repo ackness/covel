@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import type { CovelMessage } from "@covel/shared";
+import type { CovelMessage, SubscriptionEvent } from "@covel/shared";
 import { createEventBus, type EventBus } from "../src/event-bus.js";
 import { createMemoryStore } from "@covel/store";
 
@@ -22,177 +22,86 @@ describe("EventBus", () => {
     bus = createEventBus(createMemoryStore());
   });
 
-  describe("emit + on", () => {
-    it("should call handler when subscribed topic is emitted", () => {
-      const handler = vi.fn();
-      bus.on("quest.completed", handler);
-
-      const msg = makeMessage({ topic: "quest.completed" });
-      bus.emit(msg);
-
-      expect(handler).toHaveBeenCalledTimes(1);
-    });
-
-    it("should pass the exact message object to the handler", () => {
-      const handler = vi.fn();
-      bus.on("quest.completed", handler);
-
-      const msg = makeMessage({
-        topic: "quest.completed",
-        payload: { questId: "q-1" },
-      });
-      bus.emit(msg);
-
-      expect(handler).toHaveBeenCalledWith(msg);
-    });
-
-    it("should call multiple subscribers on the same topic", () => {
-      const handler1 = vi.fn();
-      const handler2 = vi.fn();
-      bus.on("quest.completed", handler1);
-      bus.on("quest.completed", handler2);
-
-      bus.emit(makeMessage({ topic: "quest.completed" }));
-
-      expect(handler1).toHaveBeenCalledTimes(1);
-      expect(handler2).toHaveBeenCalledTimes(1);
-    });
-
-    it("should not call handler subscribed to a different topic", () => {
-      const handler = vi.fn();
-      bus.on("A", handler);
-
-      bus.emit(makeMessage({ topic: "B" }));
-
-      expect(handler).not.toHaveBeenCalled();
-    });
-
-    it("should not call handler after unsubscribe", () => {
-      const handler = vi.fn();
-      const unsub = bus.on("quest.completed", handler);
-
-      bus.emit(makeMessage({ topic: "quest.completed" }));
-      expect(handler).toHaveBeenCalledTimes(1);
-
-      unsub();
-      bus.emit(makeMessage({ topic: "quest.completed" }));
-      expect(handler).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe("once", () => {
-    it("should fire handler only once", () => {
-      const handler = vi.fn();
-      bus.once("quest.completed", handler);
-
-      bus.emit(makeMessage({ topic: "quest.completed" }));
-      bus.emit(makeMessage({ topic: "quest.completed" }));
-
-      expect(handler).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe("getPendingEvents", () => {
-    it("should accumulate emitted events for a session", () => {
-      const msg1 = makeMessage({ id: "msg-1", sessionId: "sess-1" });
-      const msg2 = makeMessage({ id: "msg-2", sessionId: "sess-1" });
-      bus.emit(msg1);
-      bus.emit(msg2);
-
-      const pending = bus.getPendingEvents("sess-1");
-      expect(pending).toHaveLength(2);
-      expect(pending).toContainEqual(msg1);
-      expect(pending).toContainEqual(msg2);
-    });
-
-    it("should filter events by session id", () => {
-      const msg1 = makeMessage({ id: "msg-1", sessionId: "sess-1" });
-      const msg2 = makeMessage({ id: "msg-2", sessionId: "sess-2" });
-      bus.emit(msg1);
-      bus.emit(msg2);
-
-      const pending = bus.getPendingEvents("sess-1");
-      expect(pending).toHaveLength(1);
-      expect(pending[0]).toEqual(msg1);
-    });
-
-    it("should return empty array for unknown session", () => {
-      expect(bus.getPendingEvents("unknown")).toEqual([]);
-    });
-  });
-
-  describe("acknowledge", () => {
-    it("should remove acknowledged event from pending", () => {
-      const msg = makeMessage({ id: "msg-1", sessionId: "sess-1" });
-      bus.emit(msg);
-
-      expect(bus.getPendingEvents("sess-1")).toHaveLength(1);
-
-      bus.acknowledge("msg-1");
-
-      expect(bus.getPendingEvents("sess-1")).toHaveLength(0);
-    });
-
-    it("should not throw when acknowledging unknown id", () => {
-      expect(() => bus.acknowledge("nonexistent")).not.toThrow();
-    });
-  });
-
-  describe("clearSession", () => {
-    it("should remove all pending events for the session", () => {
-      bus.emit(makeMessage({ id: "msg-1", sessionId: "sess-1" }));
-      bus.emit(makeMessage({ id: "msg-2", sessionId: "sess-1" }));
-      bus.emit(makeMessage({ id: "msg-3", sessionId: "sess-1" }));
-
-      bus.clearSession("sess-1");
-
-      expect(bus.getPendingEvents("sess-1")).toEqual([]);
-    });
-
-    it("M4: should clean up ring buffer and seq counter on clearSession", () => {
-      // Emit some events to populate ring buffer and seq counter
-      bus.emit(makeMessage({ id: "msg-1", sessionId: "sess-1" }));
-      bus.emit(makeMessage({ id: "msg-2", sessionId: "sess-1" }));
-      bus.emit(makeMessage({ id: "msg-3", sessionId: "sess-1" }));
-
-      // Verify events exist in ring buffer
-      expect(bus.getEventsAfter("sess-1", 0)).toHaveLength(3);
-
-      bus.clearSession("sess-1");
-
-      // Ring buffer should be empty after clearSession
-      expect(bus.getEventsAfter("sess-1", 0)).toHaveLength(0);
-
-      // After clearing, new events should start from seq 1 (reset counter)
-      const events: import("@covel/shared").SubscriptionEvent[] = [];
-      bus.onEmit((e) => events.push(e));
-      bus.emit(makeMessage({ id: "msg-4", sessionId: "sess-1" }));
-      expect(events[0]!.id).toBe("1");
-    });
-  });
-
-  describe("wildcard support", () => {
-    it("should call wildcard subscriber for any topic", () => {
-      const handler = vi.fn();
-      bus.on("*", handler);
+  describe("onEmit", () => {
+    it("should call callback for every emitted event", () => {
+      const cb = vi.fn();
+      bus.onEmit(cb);
 
       bus.emit(makeMessage({ topic: "quest.completed" }));
       bus.emit(makeMessage({ topic: "combat.started" }));
 
-      expect(handler).toHaveBeenCalledTimes(2);
+      expect(cb).toHaveBeenCalledTimes(2);
+    });
+
+    it("should not call callback after unsubscribe", () => {
+      const cb = vi.fn();
+      const unsub = bus.onEmit(cb);
+
+      bus.emit(makeMessage({ topic: "quest.completed" }));
+      expect(cb).toHaveBeenCalledTimes(1);
+
+      unsub();
+      bus.emit(makeMessage({ topic: "quest.completed" }));
+      expect(cb).toHaveBeenCalledTimes(1);
+    });
+
+    it("should assign per-session monotonic sequence ids", () => {
+      const events: SubscriptionEvent[] = [];
+      bus.onEmit((e) => events.push(e));
+
+      bus.emit(makeMessage({ id: "a", sessionId: "sess-1" }));
+      bus.emit(makeMessage({ id: "b", sessionId: "sess-2" }));
+      bus.emit(makeMessage({ id: "c", sessionId: "sess-1" }));
+
+      expect(events.map((e) => [e.sessionId, e.id])).toEqual([
+        ["sess-1", "1"],
+        ["sess-2", "1"],
+        ["sess-1", "2"],
+      ]);
+    });
+
+    it("should honor _subTopic/_subType payload overrides and strip them", () => {
+      const events: SubscriptionEvent[] = [];
+      bus.onEmit((e) => events.push(e));
+
+      bus.emit(
+        makeMessage({
+          topic: "raw.topic",
+          payload: { _subTopic: "plugin-data", _subType: "x.changed", k: 1 },
+        }),
+      );
+
+      expect(events[0]!.topic).toBe("plugin-data");
+      expect(events[0]!.type).toBe("x.changed");
+      expect(events[0]!.payload).toEqual({ k: 1 });
+    });
+  });
+
+  describe("getEventsAfter (SSE replay)", () => {
+    it("should return events after the given sequence number", () => {
+      bus.emit(makeMessage({ id: "msg-1", sessionId: "sess-1" }));
+      bus.emit(makeMessage({ id: "msg-2", sessionId: "sess-1" }));
+      bus.emit(makeMessage({ id: "msg-3", sessionId: "sess-1" }));
+
+      expect(bus.getEventsAfter("sess-1", 0)).toHaveLength(3);
+      expect(bus.getEventsAfter("sess-1", 2)).toHaveLength(1);
+      expect(bus.getEventsAfter("sess-1", 3)).toHaveLength(0);
+    });
+
+    it("should return empty array for unknown session", () => {
+      expect(bus.getEventsAfter("unknown", 0)).toEqual([]);
     });
   });
 
   describe("backward compatibility (no store)", () => {
     it("should work without a store parameter", () => {
       const noStoreBus = createEventBus();
-      const handler = vi.fn();
-      noStoreBus.on("test", handler);
+      const cb = vi.fn();
+      noStoreBus.onEmit(cb);
 
       noStoreBus.emit(makeMessage({ topic: "test" }));
 
-      expect(handler).toHaveBeenCalledTimes(1);
-      expect(noStoreBus.getPendingEvents("sess-1")).toHaveLength(1);
+      expect(cb).toHaveBeenCalledTimes(1);
     });
   });
 

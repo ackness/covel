@@ -39,7 +39,7 @@ function formatJobIdList(jobs: readonly PluginRpcDeferredJob[]): string {
   );
 }
 
-export function emitPluginRpcAcceptedJob(t: Translate, jobId: string): void {
+function emitPluginRpcAcceptedJob(t: Translate, jobId: string): void {
   emitToast(
     "info",
     t("plugin.invokeRuntime.submitted", {
@@ -51,7 +51,7 @@ export function emitPluginRpcAcceptedJob(t: Translate, jobId: string): void {
   );
 }
 
-export function emitPluginRpcDeferredJobs(
+function emitPluginRpcDeferredJobs(
   t: Translate,
   jobs: readonly PluginRpcDeferredJob[],
 ): void {

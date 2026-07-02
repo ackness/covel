@@ -109,7 +109,6 @@ describe("char-creator core plugin guard bridge", () => {
           return {
             manifest: runtime,
             promptTemplate: "",
-            references: [],
             guard: playerInitGuard,
           };
         }
@@ -117,7 +116,6 @@ describe("char-creator core plugin guard bridge", () => {
           manifest: runtime,
           promptTemplate:
             "Player={{ player.character.name }}; Description={{ player.character.description }}; Character={{ player.character }}.",
-          references: [],
         };
       },
       llm,

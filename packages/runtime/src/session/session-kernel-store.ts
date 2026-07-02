@@ -128,13 +128,4 @@ export interface KernelStore {
    * when it is absent.
    */
   withTransaction?<T>(fn: (tx: KernelStore) => Promise<T>): Promise<T>;
-
-  /**
-   * Imperative transaction shim — retained for backward compatibility and thin
-   * mock stores. The commit pipeline no longer drives these directly; it
-   * prefers {@link KernelStore.withTransaction}.
-   */
-  beginTx?(): Promise<void>;
-  commitTx?(): Promise<void>;
-  rollbackTx?(): Promise<void>;
 }

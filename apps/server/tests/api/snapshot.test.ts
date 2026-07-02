@@ -15,7 +15,7 @@ import {
   type MediaStore,
 } from "@covel/store";
 import { createEventBus, type EventBus } from "@covel/events";
-import type { CovelMessage } from "@covel/shared";
+import type { SubscriptionEvent } from "@covel/shared";
 import { snapshotRoutes } from "../../src/routes/api/snapshots.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -43,10 +43,10 @@ function createTestApp(
 }
 
 /** Capture every event emitted on the bus during the test. */
-function collectEvents(eventBus: EventBus): CovelMessage[] {
-  const captured: CovelMessage[] = [];
-  eventBus.on("*", (msg) => {
-    captured.push(msg);
+function collectEvents(eventBus: EventBus): SubscriptionEvent[] {
+  const captured: SubscriptionEvent[] = [];
+  eventBus.onEmit((event) => {
+    captured.push(event);
   });
   return captured;
 }
@@ -193,9 +193,7 @@ describe("Snapshot routes", () => {
       const snapshot = body.snapshot as Record<string, unknown>;
 
       const snapshotEvents = captured.filter(
-        (m) =>
-          (m.payload as { _subType?: string })._subType ===
-          "state.snapshot.created",
+        (m) => m.type === "state.snapshot.created",
       );
       expect(snapshotEvents).toHaveLength(1);
       const evt = snapshotEvents[0]!;
@@ -537,14 +535,9 @@ describe("Snapshot routes", () => {
       // snapshot.created (kind=fork) and session.forked.
       const childEvents = captured.filter((m) => m.sessionId === childId);
       const snapshotEvent = childEvents.find(
-        (m) =>
-          (m.payload as { _subType?: string })._subType ===
-          "state.snapshot.created",
+        (m) => m.type === "state.snapshot.created",
       );
-      const forkedEvent = childEvents.find(
-        (m) =>
-          (m.payload as { _subType?: string })._subType === "session.forked",
-      );
+      const forkedEvent = childEvents.find((m) => m.type === "session.forked");
       expect(snapshotEvent).toBeDefined();
       expect(forkedEvent).toBeDefined();
 
@@ -762,9 +755,7 @@ describe("Auto snapshot", () => {
     );
 
     const snapshotEvents = captured.filter(
-      (m) =>
-        (m.payload as { _subType?: string })._subType ===
-        "state.snapshot.created",
+      (m) => m.type === "state.snapshot.created",
     );
     expect(snapshotEvents.length).toBeGreaterThanOrEqual(1);
     const evt = snapshotEvents[0]!;

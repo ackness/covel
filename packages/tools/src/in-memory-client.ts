@@ -11,7 +11,6 @@ export interface InMemoryToolClientOptions {
 }
 
 export class InMemoryToolClient implements ToolClient {
-  readonly transport = "in-memory" as const;
   readonly id: string;
   private readonly byFullName = new Map<string, ResolvedTool>();
   private readonly byLocalName = new Map<string, ResolvedTool>();
@@ -26,15 +25,6 @@ export class InMemoryToolClient implements ToolClient {
   register(tool: ResolvedTool): void {
     this.byFullName.set(tool.fullName, tool);
     this.byLocalName.set(tool.localName, tool);
-  }
-
-  unregisterFullName(fullName: string): void {
-    const tool = this.byFullName.get(fullName);
-    if (!tool) return;
-    this.byFullName.delete(fullName);
-    if (this.byLocalName.get(tool.localName)?.fullName === fullName) {
-      this.byLocalName.delete(tool.localName);
-    }
   }
 
   get(name: string): ResolvedTool | undefined {

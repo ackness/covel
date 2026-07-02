@@ -160,14 +160,12 @@ describe("npc-graph core plugin write-read-inject path", () => {
           return {
             manifest: runtime,
             promptTemplate: "",
-            references: [],
             handler: ragRetrieverHandler,
           };
         }
         return {
           manifest: runtime,
           promptTemplate: "Narrator prompt.",
-          references: [],
         };
       },
       llm,

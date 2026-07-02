@@ -178,33 +178,6 @@ describe("SettingsStore", () => {
     expect(store.get("ui.appearance")).toBe("modern");
   });
 
-  it("clearGroup clears every entry in the group but leaves others", async () => {
-    const { store } = makeStore({
-      "ui.locale": "en-US",
-      "llm.slotConfig": { default: {} },
-    });
-    store.register({
-      key: "ui.locale",
-      schema: z.enum(["zh-CN", "en-US"]),
-      default: "zh-CN",
-      group: "general",
-      label: "Locale",
-    });
-    store.register({
-      key: "llm.slotConfig",
-      schema: z.record(z.string(), z.unknown()),
-      default: {},
-      group: "llm",
-      label: "Slots",
-    });
-    await store.init();
-    await store.clearGroup("general");
-    expect(store.get("ui.locale")).toBe("zh-CN");
-    expect(store.get<{ default?: unknown }>("llm.slotConfig")).toEqual({
-      default: {},
-    });
-  });
-
   it("list() filters registry by group", async () => {
     const { store } = makeStore();
     store.register({

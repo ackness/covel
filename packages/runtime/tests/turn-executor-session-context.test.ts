@@ -48,7 +48,6 @@ function makeLoaded(manifest: RuntimeManifest): LoadedRuntime {
     manifest,
     promptTemplate:
       "Lore: {{ world.lore }}. Tone: {{ world.tone }}. Player said: {{ player.message }}.",
-    references: [],
   };
 }
 
@@ -289,7 +288,6 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
           return {
             manifest,
             promptTemplate: "",
-            references: [],
             handler: async () => {
               const now = ts(2);
               await store.upsertCharacter({
@@ -310,7 +308,6 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
         return {
           manifest,
           promptTemplate: "Player: {{ player.character.name }}.",
-          references: [],
         };
       },
       llm,

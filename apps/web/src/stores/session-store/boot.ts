@@ -49,11 +49,10 @@ export async function bootSessionStore({
   await migrateLocalStorageToIdb();
 
   try {
-    const [presets, packagesRes, commands, worlds, schemas, llmConfig] =
+    const [presets, packagesRes, worlds, schemas, llmConfig] =
       await Promise.all([
         api.listPresets(),
         api.listPackages(),
-        api.listCommands(),
         ds.listWorlds(),
         api.fetchBlockSchemas().catch(() => ({})),
         api.fetchLlmConfig().catch(() => null),
@@ -76,7 +75,6 @@ export async function bootSessionStore({
       presets,
       packages: packagesRes.packages,
       pluginLoadErrors: packagesRes.loadErrors,
-      commands,
       worlds,
       llmConfig,
     });

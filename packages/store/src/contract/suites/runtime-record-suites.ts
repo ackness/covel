@@ -13,7 +13,6 @@ import {
   makeLorebookEntry,
   makeMessage,
   makePlayerInput,
-  makePluginConfig,
   makeRuntimeOutput,
   makeRuntimeResult,
   makeSession,
@@ -504,21 +503,6 @@ export function registerRuntimeRecordStoreSuites(
   });
 
   describe("PlayerInputs", () => {
-    it("should savePlayerInput and getPlayerInput", async () => {
-      const input = makePlayerInput({
-        sessionId: "sess-1",
-        formId: "form-a",
-      });
-      await store.savePlayerInput(input);
-      const result = await store.getPlayerInput("sess-1", "form-a");
-      expect(result).toEqual(input);
-    });
-
-    it("should return null for unknown playerInput", async () => {
-      const result = await store.getPlayerInput("sess-1", "nonexistent");
-      expect(result).toBeNull();
-    });
-
     it("should listPlayerInputs for a session", async () => {
       const i1 = makePlayerInput({ sessionId: "sess-1", formId: "form-a" });
       const i2 = makePlayerInput({ sessionId: "sess-1", formId: "form-b" });
@@ -718,24 +702,6 @@ export function registerRuntimeRecordStoreSuites(
       const list = await store.listWorkingMemory(sessId);
       expect(list).toHaveLength(2);
     });
-
-    it("rollback inside a transaction undoes working memory writes", async () => {
-      const wm = makeWorkingMemory({
-        sessionId: "wm-rollback",
-        scope: "player",
-        key: "rolled",
-      });
-      await store.beginTx();
-      await store.upsertWorkingMemory(wm);
-      await store.rollbackTx();
-
-      const result = await store.getWorkingMemory(
-        "wm-rollback",
-        "player",
-        "rolled",
-      );
-      expect(result).toBeNull();
-    });
   });
 
   describe("WorldDataImportLedger", () => {
@@ -784,20 +750,6 @@ export function registerRuntimeRecordStoreSuites(
       const b = await store.listWorldDataImportLedger("ledger-B");
       expect(a.map((r) => r.id)).toEqual(["ledger-session-a"]);
       expect(b.map((r) => r.id)).toEqual(["ledger-session-b"]);
-    });
-
-    it("rolls back ledger writes inside a transaction", async () => {
-      await store.beginTx();
-      await store.saveWorldDataImportLedgerBatch([
-        makeWorldDataImportLedger({
-          id: "ledger-rollback-row",
-          sessionId: "ledger-rollback",
-        }),
-      ]);
-      await store.rollbackTx();
-
-      const list = await store.listWorldDataImportLedger("ledger-rollback");
-      expect(list).toHaveLength(0);
     });
 
     it("deletes one ledger row by sessionId and id", async () => {
@@ -930,31 +882,6 @@ export function registerRuntimeRecordStoreSuites(
 
       const bMessages = await store.listTurnMessages("sess-tag-b");
       expect(bMessages[0].compactedAtTurnId).toBeUndefined();
-    });
-
-    it("should rollback saveSessionSummary in a transaction", async () => {
-      const s = makeSessionSummary({ sessionId: "sess-sum-tx" });
-      await store.beginTx();
-      await store.saveSessionSummary(s);
-      await store.rollbackTx();
-      const list = await store.listSessionSummaries("sess-sum-tx");
-      expect(list).toHaveLength(0);
-    });
-
-    it("should rollback tagTurnMessagesCompacted in a transaction", async () => {
-      const m = makeTurnMessage({ sessionId: "sess-tag-tx", id: id() });
-      await store.appendTurnMessage(m);
-
-      await store.beginTx();
-      await store.tagTurnMessagesCompacted(
-        "sess-tag-tx",
-        [m.id],
-        "summary-rollback",
-      );
-      await store.rollbackTx();
-
-      const messages = await store.listTurnMessages("sess-tag-tx");
-      expect(messages[0].compactedAtTurnId).toBeUndefined();
     });
   });
 }

@@ -111,8 +111,6 @@ describe("ToolExecutor trace emissions", () => {
     const approval: ApprovalPipeline = {
       check: () => ({ needsApproval: true, reason: "explicit deny" }),
       hasSessionAllow: () => false,
-      getSessionApprovals: () => [],
-      recordDecision: () => undefined,
     };
     const executor = createToolExecutor({
       findTool: () => mockTool as unknown as ToolModule,
@@ -149,8 +147,6 @@ describe("ToolExecutor trace emissions", () => {
       // with approvalStatus='user-allowed' (not 'user-denied').
       check: () => ({ needsApproval: true, reason: "sensitive action" }),
       hasSessionAllow: () => true,
-      getSessionApprovals: () => [],
-      recordDecision: () => undefined,
     };
     const executor = createToolExecutor({
       findTool: () => mockTool as unknown as ToolModule,

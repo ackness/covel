@@ -1,5 +1,5 @@
 /**
- * Plugin data / config and trace event record types.
+ * Plugin data and trace event record types.
  *
  * Split out of `../types.ts` by domain; re-exported there for compatibility.
  */
@@ -12,14 +12,6 @@ export interface PluginDataRecord {
   readonly key: string;
   readonly value: unknown; // JSON
   readonly createdAt: string;
-  readonly updatedAt: string;
-}
-
-export interface PluginConfigRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly pluginId: string;
-  readonly config: unknown; // JSON
   readonly updatedAt: string;
 }
 

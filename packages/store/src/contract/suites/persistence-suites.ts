@@ -13,7 +13,6 @@ import {
   makeLorebookEntry,
   makeMessage,
   makePlayerInput,
-  makePluginConfig,
   makeRuntimeOutput,
   makeRuntimeResult,
   makeSession,
@@ -120,17 +119,6 @@ export function registerPersistenceStoreSuites(
 
     it("should return null for non-existent suspension ID", async () => {
       const result = await store.getSuspension("nonexistent-id");
-      expect(result).toBeNull();
-    });
-
-    it("should roll back saveSuspension on rollbackTx", async () => {
-      const suspension = makeSuspension({ sessionId: "sess-susp-tx" });
-
-      await store.beginTx();
-      await store.saveSuspension(suspension);
-      await store.rollbackTx();
-
-      const result = await store.getSuspension(suspension.id);
       expect(result).toBeNull();
     });
 
@@ -247,20 +235,6 @@ export function registerPersistenceStoreSuites(
         expect(deleted).toBe(2);
         expect(await store.listSuspensions("sess-ttl-A")).toHaveLength(0);
         expect(await store.listSuspensions("sess-ttl-B")).toHaveLength(0);
-      });
-
-      it("rolls back the sweep on rollbackTx", async () => {
-        const old = makeSuspension({
-          sessionId: "sess-ttl-tx",
-          createdAt: OLD,
-        });
-        await store.saveSuspension(old);
-
-        await store.beginTx();
-        await store.deleteExpiredSuspensions(CUTOFF);
-        await store.rollbackTx();
-
-        expect(await store.getSuspension(old.id)).not.toBeNull();
       });
     });
   });
@@ -394,18 +368,6 @@ export function registerPersistenceStoreSuites(
       expect(listB[0].id).toBe(s3.id);
     });
 
-    it("should deleteSnapshot — removes only the targeted record", async () => {
-      const s1 = makeSnapshot({ sessionId: "sess-snap-del" });
-      const s2 = makeSnapshot({ sessionId: "sess-snap-del" });
-      await store.saveSnapshot(s1);
-      await store.saveSnapshot(s2);
-
-      await store.deleteSnapshot(s1.id);
-
-      expect(await store.getSnapshot(s1.id)).toBeNull();
-      expect(await store.getSnapshot(s2.id)).not.toBeNull();
-    });
-
     it("should persist all payload slices verbatim", async () => {
       const payload = makeSnapshotPayload({
         characters: [
@@ -483,28 +445,6 @@ export function registerPersistenceStoreSuites(
       const result = await store.getSnapshot(forkChild.id);
       expect(result!.kind).toBe("fork");
       expect(result!.parentId).toBe(origin.id);
-    });
-
-    it("should roll back saveSnapshot on rollbackTx", async () => {
-      const snap = makeSnapshot({ sessionId: "sess-snap-tx" });
-
-      await store.beginTx();
-      await store.saveSnapshot(snap);
-      await store.rollbackTx();
-
-      expect(await store.getSnapshot(snap.id)).toBeNull();
-    });
-
-    it("should commit saveSnapshot on commitTx", async () => {
-      const snap = makeSnapshot({ sessionId: "sess-snap-tx-commit" });
-
-      await store.beginTx();
-      await store.saveSnapshot(snap);
-      await store.commitTx();
-
-      const result = await store.getSnapshot(snap.id);
-      expect(result).not.toBeNull();
-      expect(result!.id).toBe(snap.id);
     });
   });
 

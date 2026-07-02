@@ -1,5 +1,5 @@
 /**
- * Plugin loader types — parsed results of PLUGIN.md files and references.
+ * Plugin loader types — parsed results of PLUGIN.md files.
  */
 
 import type {
@@ -20,21 +20,8 @@ export interface ParsedPluginMd {
   readonly manifest: RuntimeManifest;
   /** Markdown body (un-interpolated prompt template). */
   readonly promptTemplate: string;
-  /** Reference file paths extracted from markdown links. */
-  readonly referenceLinks: readonly string[];
   /** Raw frontmatter object (before validation). */
   readonly rawFrontmatter: Readonly<Record<string, unknown>>;
-}
-
-// ── Parsed reference ─────────────────────────────────────────────
-
-export interface ParsedReference {
-  /** File path of the reference. */
-  readonly filePath: string;
-  /** Trigger keywords from frontmatter. */
-  readonly keywords: readonly string[];
-  /** Markdown content body. */
-  readonly content: string;
 }
 
 // ── Plugin discovery ─────────────────────────────────────────────
@@ -433,7 +420,6 @@ export type FunctionHandler = (
 export interface LoadedRuntime {
   readonly manifest: RuntimeManifest;
   readonly promptTemplate: string;
-  readonly references: readonly ParsedReference[];
   readonly outputSchema?: Readonly<Record<string, unknown>>;
   /** Handler function for `runtimeType: 'function'` runtimes. */
   readonly handler?: FunctionHandler;

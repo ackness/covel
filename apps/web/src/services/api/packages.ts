@@ -1,11 +1,6 @@
 import { request } from "./request.js";
 import type { I18nText } from "@covel/shared";
-import type {
-  CommandSummary,
-  PackageSummary,
-  PresetSummary,
-  RuntimeSummary,
-} from "./types.js";
+import type { PackageSummary, PresetSummary, RuntimeSummary } from "./types.js";
 
 // -- Config API -------------------------------------------------
 
@@ -52,10 +47,6 @@ export async function listPackages(): Promise<PackagesResponse> {
     packages: res.packages.map(normalizePackageSummary),
     loadErrors: res.loadErrors,
   };
-}
-
-export async function listCommands(): Promise<CommandSummary[]> {
-  return request<CommandSummary[]>("/api/commands");
 }
 
 // -- Plugin Flows & Docs -------------------------------------

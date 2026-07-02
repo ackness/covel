@@ -20,6 +20,7 @@ import type {
   MemoryLLMAdapter,
   MemoryManager,
 } from "./types.js";
+import { createMemoryUpdater } from "./updater.js";
 
 const DEFAULT_THRESHOLD = 0.6;
 const DEFAULT_PROTECT_USER_TURNS = 2;
@@ -166,7 +167,6 @@ export function createCompactor(
         // so key facts survive the compaction
         try {
           const currentBlocks = await deps.memoryManager.loadBlocks(sessionId);
-          const { createMemoryUpdater } = await import("./updater.js");
           const updater = createMemoryUpdater(deps.memoryManager, deps.llm, {
             modelSlot: config?.modelSlot,
             locale,

@@ -1,69 +1,50 @@
 # Store Transactions
 
-> Covel's `DataStore` interface exposes an imperative transaction contract —
-> `beginTx / commitTx / rollbackTx` — that every backend must honor. This
-> document captures the contract, the per-backend implementation strategy,
-> and how the kernel uses transactional commits whenever the active store
-> backend exposes transaction methods.
+> Covel's `DataStore` interface exposes a single scoped transaction contract —
+> `withTransaction(fn)` — that every backend must honor. This document captures
+> the contract, the per-backend implementation strategy, and how the kernel uses
+> transactional commits whenever the active store backend exposes it.
 
 ## Contract
 
 ```ts
 interface DataStore {
   /**
-   * Begin a transaction. All subsequent writes on this store handle are
-   * buffered until commitTx() or rollbackTx() is called. Nested transactions
-   * are NOT supported — calling beginTx() twice without an intervening
-   * commit/rollback throws.
+   * Run `fn` inside a scoped transaction and return its result. `fn` receives a
+   * transaction-bound store view (`StoreTransaction` — every read/write method,
+   * minus the tx-control and lifecycle methods). Writes through that view commit
+   * atomically when `fn` resolves and roll back if it throws (the error is
+   * re-thrown to the caller). No shared/global handle is mutated, so the tx scope
+   * is bound to the single `fn` invocation.
+   *
+   * Optional so partial mock stores remain assignable; all bundled backends
+   * implement it.
    */
-  beginTx(): Promise<void>;
-
-  /** Flush buffered writes. No-op if there were none. */
-  commitTx(): Promise<void>;
-
-  /**
-   * Discard all writes performed since beginTx(). After rollback the store
-   * must observe exactly the state it had at the moment beginTx() returned.
-   */
-  rollbackTx(): Promise<void>;
+  withTransaction?: <T>(fn: (tx: StoreTransaction) => Promise<T>) => Promise<T>;
 }
 ```
 
 ### Rules
 
-1. **Single-writer scope.** A store handle has at most one active
-   transaction. The tx methods are not reentrant. If a caller needs
-   concurrent transactions it must open a second `DataStore` instance.
-2. **Rollback restores observable state.** After `rollbackTx()` completes,
-   every read method must return the same result it would have returned
-   immediately after `beginTx()` returned. Records that existed before
-   `beginTx()` are preserved with their original identity; mutations from
-   inside the transaction are discarded.
-3. **Commit is a best-effort flush.** If `commitTx()` throws, the active
-   transaction is considered ended and the store is guaranteed to accept a
-   fresh `beginTx()` afterward. Implementations must reset internal
-   "transaction active" flags in a `finally` block so that a throwing
-   commit does not strand the store in a phantom active state.
-4. **Rollback is also flag-resetting.** The same rule applies to
-   `rollbackTx()`: even if the restore step fails mid-way, the store must
-   accept a fresh `beginTx()` afterward. Half-restored state is allowed,
-   lock-out is not.
-5. **Writes outside a transaction auto-commit.** Calling any write method
-   without an active transaction must be immediately durable, just as it
-   was before `S4-T1`.
+1. **Atomic on resolve / throw.** When `fn` resolves, every write made through
+   the `tx` view is committed together. When `fn` throws, all of them roll back
+   and the error re-throws to the caller.
+2. **Rollback restores observable state.** After a rolled-back transaction every
+   read method returns the same result it would have returned immediately before
+   the transaction started. Records that existed before are preserved with their
+   original identity; mutations from inside the transaction are discarded.
+3. **No shared handle.** The tx scope is bound to the single `fn` invocation, so
+   the outer store is never left in a "transaction active" state — a failed
+   transaction never strands the store.
+4. **Writes outside a transaction auto-commit.** Calling any write method
+   without a surrounding `withTransaction` is immediately durable.
+5. **Nesting is rejected** on every backend (see below).
 
 ### Contract tests
 
-`packages/store/src/contract/store-contract.ts` contains the shared
-behavioral test suite that every backend runs:
-
-- `rolls back all writes on rollbackTx`
-- `commits all writes on commitTx`
-- `throws on nested beginTx`
-- `throws on commitTx without an active transaction`
-- `throws on rollbackTx without an active transaction`
-
-It also covers the scoped `withTransaction` API (see below):
+`packages/store/src/contract/store-contract.ts` runs the shared behavioral
+suite (`contract/suites/integrity-suites.ts`, `withTransaction` group) that every
+backend must pass:
 
 - `commits all writes when the callback resolves`
 - `rolls back all writes and rethrows when the callback throws`
@@ -80,12 +61,12 @@ Any new store backend MUST pass this suite.
 ### MemoryStore
 
 Two-phase snapshot using a **shallow reference copy** of each collection
-(`new Map(value)` / `[...value]`), not a deep clone. On `beginTx()` the store
-eagerly snapshots every collection (sessions, turn results, characters, plugin
-data, etc.) by copying the container while sharing the same record references.
-On `rollbackTx()` it clears each collection in place and refills it from the
-shadow so that any existing references the caller is holding stay valid.
-`commitTx()` simply discards the shadow.
+(`new Map(value)` / `[...value]`), not a deep clone. On transaction start the
+store snapshots every collection (sessions, turn results, characters, plugin
+data, etc.) by copying the container while sharing the same record references. On
+rollback it clears each collection in place and refills it from the shadow so
+that any existing references the caller is holding stay valid. On commit it simply
+discards the shadow.
 
 - File: `packages/store/src/memory/transaction-methods.ts`
 - Invariant: correctness relies on records being treated as **immutable** —
@@ -96,90 +77,39 @@ shadow so that any existing references the caller is holding stay valid.
 
 ### SqliteStore
 
-Direct SQL: `sqlite.exec('BEGIN')` / `'COMMIT'` / `'ROLLBACK'`, with a
-`txActive` boolean guarding against nesting. The flag is reset inside a
-`finally` block so that a throwing COMMIT or ROLLBACK does not leave the
-store locked.
+Direct SQL: `sqlite.exec('BEGIN')` / `'COMMIT'` / `'ROLLBACK'`. better-sqlite3 is
+a single synchronous connection, so `withTransaction` **serializes** concurrent
+calls through a promise chain — each runs its full BEGIN…COMMIT before the next
+starts, so neither loses writes.
 
-- File: `packages/store/src/sqlite/sqlite-store.ts`
+- File: `packages/store/src/sqlite/sqlite-transactions.ts`
 
 ### IdbStore
 
-Lazy first-touch snapshot. `beginTx()` 不会预先 `getAll()` 全部 object
-store —— 那样会和并发的 SSE / interval / 其他 tab 写入冲突。它只初始化
-两个跟踪结构：`idbSnapshot: Map<storeName, rows[]>` 与
-`touchedStores: Set<storeName>`。每次 `put` / `delete` 通过
-`ensureStoreSnapshot(name)` 检查 `touchedStores`：首次 mutation 时调用
-`db.getAll(name)` + `structuredClone` 把当前 rows 抓进 `idbSnapshot`
-并把 name 加进 set，后续 mutation 命中 set 直接跳过。`rollbackTx()`
-只 clear + refill `touchedStores` 中的 object store，未触碰的 store
-完全不动 —— 因此事务开启后落入未触碰 store 的并发写入不会被 rollback
-覆盖。`commitTx()` / `rollbackTx()` 都在 `finally` 块清空 `idbSnapshot`
-和 `touchedStores`，保证一次失败的 commit/rollback 不会卡住下一次
-`beginTx()`。
+Lazy first-touch snapshot. `withTransaction` wraps an internal snapshot primitive
+that does not pre-`getAll()` every object store —— 那样会和并发的 SSE / interval /
+其他 tab 写入冲突。它只初始化两个跟踪结构：`idbSnapshot: Map<storeName, rows[]>` 与
+`touchedStores: Set<storeName>`。每次 `put` / `delete` 通过 `ensureStoreSnapshot(name)`
+检查 `touchedStores`：首次 mutation 时调用 `db.getAll(name)` + `structuredClone` 把当前
+rows 抓进 `idbSnapshot` 并把 name 加进 set，后续 mutation 命中 set 直接跳过。回滚只
+clear + refill `touchedStores` 中的 object store，未触碰的 store 完全不动 —— 因此事务
+开启后落入未触碰 store 的并发写入不会被 rollback 覆盖。
 
-- File: `packages/store/src/indexeddb/idb-store.ts`
+- Files: `packages/store/src/indexeddb/idb-store.ts` (wires `withTransaction`),
+  `packages/store/src/indexeddb/idb-transaction.ts` (internal snapshot primitive)
 - Runtime environment: browser IndexedDB plus `fake-indexeddb` polyfill
   for tests.
 
 ### PgStore
 
-`postgres.js` is a connection pool, so a bare `unsafe('BEGIN')` does not
-bind to a specific connection. Drizzle's `db.transaction(async (tx) => ...)`
-API reserves a connection and issues BEGIN/COMMIT/ROLLBACK correctly but
-is callback-shaped. PgStore adapts that callback API to the imperative
-`beginTx / commitTx / rollbackTx` contract via a manual-gate adapter
-extracted into `packages/store/src/postgres/pg-store-tx.ts`.
+`postgres.js` is a connection pool, so a bare `unsafe('BEGIN')` does not bind to a
+specific connection. `withTransaction` uses Drizzle's native
+`db.transaction(async (tx) => …)`, which reserves a dedicated pooled connection
+for the callback and issues BEGIN/COMMIT/ROLLBACK correctly. The tx-scoped store
+view routes every write to that connection, so concurrent `withTransaction` calls
+run on independent connections — true parallel transactions.
 
-How it works:
-
-1. `beginTx()` spawns `pooledDb.transaction(async (tx) => { setDb(tx); await gate; })`
-   in the background and awaits a "ready" promise that resolves once the
-   tx callback has swapped the store's mutable `db` handle to the
-   tx-scoped drizzle instance. Every subsequent data method uses this
-   handle, so reads and writes route through the transaction.
-2. `commitTx()` resolves the gate promise. The callback returns cleanly,
-   drizzle issues `COMMIT`, and the `.finally` block restores the pooled
-   handle.
-3. `rollbackTx()` rejects the gate with a sentinel error
-   (`{ _covelRollback: ROLLBACK_SENTINEL }`). The callback throws, drizzle
-   issues `ROLLBACK` and rethrows; the adapter swallows the sentinel and
-   lets any non-sentinel error surface.
-4. `close()` calls `closeActiveTx()` which does a best-effort rollback
-   before `client.end()`, so a store teardown mid-transaction does not
-   leak a reserved pool connection.
-
-The `ROLLBACK_SENTINEL` is a module-local `Symbol`, which means it cannot
-be spoofed from outside the module — an unrelated thrown error will never
-be mistaken for a cooperative rollback.
-
-- Files:
-  - `packages/store/src/postgres/pg-store.ts` — factory, wires the adapter
-  - `packages/store/src/postgres/pg-store-tx.ts` — adapter implementation
-
-## Scoped transactions (`withTransaction`)
-
-Alongside the imperative trio, `DataStore` exposes a scoped, callback-shaped
-transaction API:
-
-```ts
-interface DataStore {
-  withTransaction?: <T>(fn: (tx: StoreTransaction) => Promise<T>) => Promise<T>;
-}
-```
-
-`fn` receives a transaction-bound store view (`StoreTransaction` — every
-read/write method, minus the tx-control and lifecycle methods). Writes through
-that view commit atomically when `fn` resolves and roll back if it throws (the
-error is re-thrown to the caller). Unlike the imperative shim, `withTransaction`
-never mutates a shared/global handle, so the tx scope is bound to the single
-`fn` invocation.
-
-This is the **preferred** transaction API. The imperative
-`beginTx / commitTx / rollbackTx` trio is retained as a compatibility shim for
-existing callers (the kernel commit path still uses it). As of this writing
-`withTransaction` has no production callers — it is wired and contract-tested,
-ready for adoption.
+- File: `packages/store/src/postgres/pg-store.ts`
 
 ### Cross-backend semantics (read before adopting)
 
@@ -237,38 +167,23 @@ Node-only and is never pulled into the IdbStore browser bundle.
 
 ## Kernel integration
 
-Turn commit (`packages/runtime/src/commit/session-commit-pipeline.ts`) uses a
-transaction whenever the underlying store implements `beginTx`, `commitTx`,
-and `rollbackTx`. `packages/runtime/src/session/session-kernel.ts` remains the public
-facade for processing runtime results. Store adapters that do not expose the
-transaction trio still execute proposals sequentially and warn on partial
-commit failure.
+Turn commit (`packages/runtime/src/commit/session-commit-pipeline.ts`) runs the
+whole proposal chain inside a single `withTransaction` callback whenever the
+underlying store implements it, so a mid-chain failure auto-rolls-back and leaves
+no partial state. `packages/runtime/src/session/session-kernel.ts` remains the
+public facade for processing runtime results. Store adapters that do not expose
+`withTransaction` still execute proposals sequentially and warn on partial commit
+failure.
 
 ```ts
-const supportsTx =
-  typeof store.beginTx === "function" &&
-  typeof store.commitTx === "function" &&
-  typeof store.rollbackTx === "function";
-
-if (supportsTx) {
-  await store.beginTx();
-  try {
-    // apply every proposal in order
-    await applyProposals(proposals);
-    await store.commitTx!();
-  } catch (err) {
-    try {
-      await store.rollbackTx!();
-    } catch {
-      // swallow — the original commit error is the one we want to surface
-    }
-    throw err;
-  }
+if (typeof store.withTransaction === "function") {
+  return store.withTransaction(async (tx) => {
+    // apply every proposal in order through `tx`
+    return applyProposals(tx, proposals);
+  });
 }
+// Non-transactional fallback for stores that lack withTransaction.
 ```
-
-The non-transactional path is reserved for stores that genuinely lack the
-transaction contract.
 
 ## World Data import
 
@@ -306,23 +221,27 @@ debugging whether a run used transactions.
 
 ## Schema migrations
 
-Schema changes in `packages/store/src/{sqlite,postgres}/*-store-mappers.ts` use
-`CREATE TABLE IF NOT EXISTS` and additive `ALTER TABLE ... ADD COLUMN IF NOT
-EXISTS` so fresh installs and existing databases both boot. The store
-package does **not** ship destructive auto-migrations — when a constraint
-becomes stricter (e.g. `media_refs UNIQUE` was widened from
-`(session_id, media_id, plugin_id)` to `(session_id, media_id)` to fix
-NULL-pluginId duplicate rows; see [`media-store.md`](./media-store.md#ownership)),
-the DDL still creates the new index, but operators with legacy duplicates
-must run a one-off cleanup SQL before the new index can be applied. Each
-such migration is documented next to the affected table in the relevant
-reference doc.
+Table + index DDL is derived from the Drizzle schema
+(`packages/store/src/{sqlite,postgres}/schema.ts`) via
+`packages/store/src/common/ddl-codegen.ts`, using `CREATE TABLE IF NOT EXISTS`
+and additive `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` so fresh installs and
+existing databases both boot. The store package does **not** ship destructive
+auto-migrations — when a constraint becomes stricter (e.g. `media_refs UNIQUE`
+was widened from `(session_id, media_id, plugin_id)` to `(session_id, media_id)`
+to fix NULL-pluginId duplicate rows; see
+[`media-store.md`](./media-store.md#ownership)), the DDL still creates the new
+index, but operators with legacy duplicates must run a one-off cleanup SQL before
+the new index can be applied. Each such migration is documented next to the
+affected table in the relevant reference doc.
 
 ## References
 
 - Contract type: `packages/store/src/types.ts` (`DataStore` interface)
 - Contract tests: `packages/store/src/contract/store-contract.ts` and `packages/store/src/contract/suites/`
-- PgStore adapter: `packages/store/src/postgres/pg-store-tx.ts`
 - `withTransaction` nesting guard: `packages/store/src/tx-nesting-guard.ts` (Node-only AsyncLocalStorage) and `packages/store/src/tx-nesting-error.ts` (browser-safe error builder)
 - Kernel commit path: `packages/runtime/src/commit/session-commit-pipeline.ts`, `packages/runtime/src/commit/session-commit-handlers.ts`
-- MediaStore schema + S3 metadata adapter: [`media-store.md`](./media-store.md)
+- MediaStore schema: [`media-store.md`](./media-store.md)
+
+```
+
+```

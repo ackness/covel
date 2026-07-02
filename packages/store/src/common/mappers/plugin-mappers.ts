@@ -1,13 +1,9 @@
 /**
  * Backend-agnostic canonical row→record mappers for the plugin domain
- * (plugin data, plugin configs, trace events).
+ * (plugin data, trace events).
  */
 
-import type {
-  PluginConfigRecord,
-  PluginDataRecord,
-  TraceEventRecord,
-} from "../../types.js";
+import type { PluginDataRecord, TraceEventRecord } from "../../types.js";
 import type { JsonReader } from "./json-reader.js";
 
 export interface PluginDataRow {
@@ -18,14 +14,6 @@ export interface PluginDataRow {
   key: string;
   value: unknown;
   createdAt: string;
-  updatedAt: string;
-}
-
-export interface PluginConfigRow {
-  id: string;
-  sessionId: string;
-  pluginId: string;
-  config: unknown;
   updatedAt: string;
 }
 
@@ -53,19 +41,6 @@ export function toPluginDataRecord(
     // (not `undefined`) on both PG and SQLite.
     value: json.readRequired(row.value),
     createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
-}
-
-export function toPluginConfigRecord(
-  row: PluginConfigRow,
-  json: JsonReader,
-): PluginConfigRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    pluginId: row.pluginId,
-    config: json.readRequired(row.config),
     updatedAt: row.updatedAt,
   };
 }

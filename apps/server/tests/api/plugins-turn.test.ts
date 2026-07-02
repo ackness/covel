@@ -11,7 +11,6 @@ import { frameworkRoutes } from "../../src/routes/api/framework.js";
 import {
   createPluginRegistry,
   type PluginRegistry,
-  type SessionPluginScope,
   type PluginSummary,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
@@ -58,7 +57,6 @@ function makeParsedManifest(
       ...manifest,
     },
     promptTemplate: "",
-    referenceLinks: [],
     rawFrontmatter: {},
   };
 }
@@ -67,7 +65,6 @@ function makeParsedManifest(
 
 type AppVariables = {
   pluginRegistry: PluginRegistry;
-  sessionScopes: Map<string, SessionPluginScope>;
   store: DataStore;
 };
 
@@ -77,7 +74,6 @@ function createTestApp(vars: AppVariables): Hono {
   // Inject dependencies via middleware
   app.use("*", async (c, next) => {
     c.set("pluginRegistry" as never, vars.pluginRegistry);
-    c.set("sessionScopes" as never, vars.sessionScopes);
     c.set("store" as never, vars.store);
     await next();
   });
@@ -91,15 +87,13 @@ function createTestApp(vars: AppVariables): Hono {
 
 describe("Plugin Routes", () => {
   let registry: PluginRegistry;
-  let sessionScopes: Map<string, SessionPluginScope>;
   let store: DataStore;
   let app: Hono;
 
   beforeEach(() => {
     registry = createPluginRegistry();
-    sessionScopes = new Map();
     store = createMemoryStore();
-    app = createTestApp({ pluginRegistry: registry, sessionScopes, store });
+    app = createTestApp({ pluginRegistry: registry, store });
   });
 
   describe("GET /api/plugins", () => {

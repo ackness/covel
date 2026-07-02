@@ -42,8 +42,6 @@ type GetPluginSourceFn = (pluginId: string) => PluginSource | undefined;
  */
 type ActivatePluginLocalToolsFn = (pluginId: string) => Promise<void>;
 
-// (sessionScopes context var removed 2026-04-12 — see audit Finding 2)
-
 declare module "hono" {
   interface ContextVariableMap {
     store: DataStore;

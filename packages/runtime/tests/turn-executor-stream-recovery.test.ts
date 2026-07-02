@@ -131,7 +131,6 @@ describe("TurnExecutor stream recovery (S1-T3)", () => {
     narratorLoaded = {
       manifest: narratorManifest,
       promptTemplate: manifests[0]!.promptTemplate,
-      references: [],
     };
     noToolManifest = { ...narratorManifest, tools: undefined };
   });

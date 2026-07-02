@@ -6,11 +6,6 @@ import { dirname, resolve } from "node:path";
 // where this file lives under `node_modules/@covel/ai-provider/src/`.
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-export const BUNDLED_DEFAULT_PRESET_PATH = resolve(
-  PACKAGE_ROOT,
-  "presets/default.toml",
-);
-
 export const BUNDLED_MODEL_DB_PATH = resolve(
   PACKAGE_ROOT,
   "data/model-db.json",

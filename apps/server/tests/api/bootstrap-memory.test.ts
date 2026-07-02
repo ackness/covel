@@ -15,7 +15,6 @@ function parsedManifest(
       ...manifest,
     } as RuntimeManifest,
     promptTemplate: "",
-    referenceLinks: [],
     rawFrontmatter: {},
   };
 }

@@ -1,3 +1,5 @@
+import { pickLocaleText as pick } from "@covel/plugin-handlers-utils";
+
 /**
  * guard.js — Pre-execution gate for schema-gen runtime.
  *
@@ -165,19 +167,6 @@ function deriveSchema(dimensions) {
   }
 
   return attrs;
-}
-
-/**
- * Pick a string for the session locale (prefix match), defaulting to English.
- * The [系统] narrative lines are written into the story at runtime, so the
- * guard resolves them via ctx.locale instead of emitting fixed Chinese.
- * @param {string | undefined} locale
- * @param {string} zh
- * @param {string} en
- */
-function pick(locale, zh, en) {
-  const lang = typeof locale === "string" ? locale.split("-")[0] : "";
-  return lang === "zh" ? zh : en;
 }
 
 export default async function guard(ctx) {

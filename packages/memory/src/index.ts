@@ -6,12 +6,14 @@
  *   - Recall Memory: searchable conversation history
  *   - Archival Memory: long-term cross-plugin knowledge
  *   - Compaction: automatic summarization of old messages
+ *
+ * Public surface is intentionally narrow: consumers compose the whole system
+ * via `createMemorySystem`. The individual tier factories stay package-internal.
  */
 
 // ── Types ────────────────────────────────────────────────────────
 export type {
   CoreMemoryLabel,
-  CoreMemoryLabelInfo,
   CoreMemoryBlockSchema,
   CoreMemoryBlock,
   CoreMemoryConfig,
@@ -30,36 +32,10 @@ export type {
   MemorySystem,
 } from "./types.js";
 
-export {
-  CORE_MEMORY_LABELS,
-  CORE_MEMORY_LABEL_INFO,
-  DEFAULT_CORE_MEMORY_BLOCKS,
-  DEFAULT_MAX_BLOCK_CHARS,
-} from "./types.js";
+export { DEFAULT_CORE_MEMORY_BLOCKS } from "./types.js";
 
-// ── Factories ────────────────────────────────────────────────────
-export { createMemoryManager } from "./core-memory.js";
-export { createMemoryUpdater } from "./updater.js";
-export { createKeywordRecallSearcher } from "./recall-search.js";
-export { createKeywordArchivalSearcher } from "./archival-search.js";
-export { createVectorRecallSearcher } from "./vector-recall-search.js";
-export { createVectorArchivalSearcher } from "./vector-archival-search.js";
-export {
-  createVectorIngestor,
-  createNoopIngestor,
-  type VectorIngestor,
-  type IngestResult,
-} from "./vector-ingest.js";
-export {
-  MEMORY_VECTOR_PLUGIN_ID,
-  RECALL_NAMESPACE,
-  ARCHIVAL_NAMESPACE,
-  distanceToScore,
-} from "./vector-common.js";
 export type { EmbedFn } from "./vector-common.js";
-export { createCompactor } from "./compactor.js";
+
+// ── Memory system facade ─────────────────────────────────────────
 export { createMemorySystem } from "./memory-system.js";
 export type { CreateMemorySystemOptions } from "./memory-system.js";
-
-// ── Renderers ────────────────────────────────────────────────────
-export { renderCoreMemory, renderCompactedSummary } from "./render.js";

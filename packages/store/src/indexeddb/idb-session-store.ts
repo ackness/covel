@@ -86,7 +86,6 @@ export function createIdbSessionStore(ctx: IdbStoreContext): IdbStoreSlice {
       await cascadeByIndex("lorebook_entries", id);
       await cascadeByIndex("runtime_outputs", id);
       await cascadeByIndex("interaction_records", id);
-      await cascadeByFilter("pluginConfigs", id);
       await cascadeByFilter("plugin_data", id);
       await cascadeByIndex("world_data_import_ledger", id);
       await mutations.deleteAndTrack("sessions", id);

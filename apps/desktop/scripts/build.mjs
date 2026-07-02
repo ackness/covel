@@ -38,10 +38,7 @@ await build({
   platform: "node",
   target: "node22",
   sourcemap: true,
-  // electron-updater is an optional runtime dependency loaded via dynamic
-  // import. Marking it external keeps it out of the main bundle whether or
-  // not the package happens to be installed at build time.
-  external: ["electron", "electron-updater"],
+  external: ["electron"],
 });
 
 // Preload must be CJS because Electron's contextBridge requires a

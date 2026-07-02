@@ -429,7 +429,6 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 | ---- | ------------------------------ | --------------------------------------------------------------------------------------- |
 | GET  | `/api/presets`                 | 列出配置的模型预设                                                                      |
 | GET  | `/api/packages`                | 列出已加载插件包（含 runtime/tool/`userSettings`/`tags`/`relations` 信息）              |
-| GET  | `/api/commands`                | 列出注册的命令                                                                          |
 | GET  | `/api/block-schemas`           | 列出插件 block schema                                                                   |
 | GET  | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件 |
 | GET  | `/api/llm-config`              | 返回 slot 配置与能力信息；llm.toml 解析失败回退默认时附带 `error` 字段                  |
@@ -2332,7 +2331,7 @@ session 不存在时返回 `404`。
 
 返回 `201 Created`；快照不属于该 session、快照不存在、或父 session 不存在均返回 `404`；`fromSnapshotId` 缺失返回 `400`；`payload.messagesCursor` 指向的消息已不在父 session 中返回 `409 { code: 'cursor_missing' }`；内部写入失败返回 `500`。
 
-整个 fork 在 `beginTx` / `commitTx` 下写入，中途任何失败都会 rollback，不会留下半成品子 session。
+整个 fork 在 `withTransaction` 下写入，中途任何失败都会 rollback，不会留下半成品子 session。
 
 ---
 

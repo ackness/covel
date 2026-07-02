@@ -103,7 +103,6 @@ describe("TurnExecutor Resilience", () => {
     narratorLoaded = {
       manifest: narratorManifest,
       promptTemplate: manifests[0]!.promptTemplate,
-      references: [],
     };
   });
 

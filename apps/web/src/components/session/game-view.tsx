@@ -25,7 +25,6 @@ import type {
   WorldRecord,
   PackageSummary,
   PresetSummary,
-  CommandSummary,
   LlmConfigResponse,
   PluginLoadError,
   SessionPluginInfo,
@@ -57,7 +56,6 @@ interface GameViewProps {
   /** Session-scoped plugin list with live isActive state. */
   sessionPlugins: SessionPluginInfo[];
   presets: PresetSummary[];
-  commands: CommandSummary[];
   llmConfig?: LlmConfigResponse | null;
   statePatches: Array<{
     id: string;
@@ -115,7 +113,6 @@ export function GameView({
   pluginLoadErrors,
   sessionPlugins,
   presets,
-  commands,
   llmConfig,
   statePatches,
   gameState,
@@ -281,7 +278,6 @@ export function GameView({
             pluginLoadErrors={pluginLoadErrors}
             sessionPlugins={sessionPlugins}
             executing={executing}
-            commands={commands}
             resolvedSlots={resolvedSlots}
             onToggleLeftPanel={toggleLeftPanel}
             onToggleSessionList={handleToggleSessionList}

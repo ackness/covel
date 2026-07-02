@@ -18,7 +18,6 @@ import type { DataStore, StoreTransaction } from "../types.js";
 import type { VectorModelOps, VectorStoreCapability } from "../vector-store.js";
 import * as schema from "./schema.js";
 import { createSqliteDataCrud } from "./sqlite-data-crud.js";
-import { createSqlitePluginConfigs } from "./sqlite-plugin-configs.js";
 import { createSqliteRuntimeRecords } from "./sqlite-runtime-records.js";
 import { createSqliteSessionRecords } from "./sqlite-session-records.js";
 import { createSqliteSessions } from "./sqlite-sessions.js";
@@ -70,7 +69,6 @@ export function createSqliteStore(
     ...createSqliteState(db),
     ...createSqliteSessionRecords(db),
     ...createSqliteDataCrud(db),
-    ...createSqlitePluginConfigs(db),
     ...createSqliteWorlds(db),
     ...createSqliteSnapshotRecords(db),
   };

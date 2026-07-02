@@ -198,7 +198,6 @@
     "currentWorld": "当前会话",
     "sessions": "会话",
     "noOtherSessions": "没有其他会话",
-    "commands": "命令",
     "startingUp": "正在启动...",
     "retryFrom": "从 {{label}} 重试",
     "executionSummary": "执行 · {{count}} 个运行时",

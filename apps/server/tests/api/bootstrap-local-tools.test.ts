@@ -26,7 +26,6 @@ function parsedManifest(
       ...patch,
     } as RuntimeManifest,
     promptTemplate: "",
-    referenceLinks: [],
     rawFrontmatter: {},
   };
 }

@@ -89,7 +89,6 @@ describe("plugin flow routes", () => {
     const parsed: ParsedPluginMd = {
       manifest,
       promptTemplate: "",
-      referenceLinks: [],
       rawFrontmatter: {},
     };
     const entry: PluginRegistryEntry = {

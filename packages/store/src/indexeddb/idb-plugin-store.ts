@@ -1,9 +1,5 @@
 import { applyPagination } from "../common/pagination.js";
-import type {
-  PaginationOpts,
-  PluginConfigRecord,
-  PluginDataRecord,
-} from "../types.js";
+import type { PaginationOpts, PluginDataRecord } from "../types.js";
 import type { IdbStoreContext, IdbStoreSlice } from "./idb-context.js";
 
 export function createIdbPluginStore(ctx: IdbStoreContext): IdbStoreSlice {
@@ -105,31 +101,6 @@ export function createIdbPluginStore(ctx: IdbStoreContext): IdbStoreSlice {
       for (const record of existing) {
         await mutations.deleteAndTrack("plugin_data", record.id);
       }
-    },
-
-    async savePluginConfig(record: PluginConfigRecord): Promise<void> {
-      const existing = await db.getAllFromIndex("pluginConfigs", "lookup", [
-        record.sessionId,
-        record.pluginId,
-      ]);
-      await mutations.ensureStoreSnapshot("pluginConfigs");
-      const tx = db.transaction("pluginConfigs", "readwrite");
-      for (const old of existing) {
-        await tx.store.delete(old.id);
-      }
-      await tx.store.put(structuredClone(record));
-      await tx.done;
-    },
-
-    async getPluginConfig(
-      sessionId: string,
-      pluginId: string,
-    ): Promise<PluginConfigRecord | null> {
-      const results = await db.getAllFromIndex("pluginConfigs", "lookup", [
-        sessionId,
-        pluginId,
-      ]);
-      return results[0] ?? null;
     },
   };
 }

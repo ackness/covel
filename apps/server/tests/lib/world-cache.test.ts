@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getCachedWorld, invalidateWorldCache } from "../../src/world-cache.js";
+import { getCachedWorld } from "../../src/world-cache.js";
 import type { DataStore, WorldRecord } from "@covel/store";
 
 function mockStore() {
@@ -16,7 +16,6 @@ function mockStore() {
 
 describe("getCachedWorld", () => {
   it("serves repeat reads of the same worldId from cache", async () => {
-    invalidateWorldCache();
     const store = mockStore();
     await getCachedWorld(store, "w-cache-a");
     await getCachedWorld(store, "w-cache-a");
@@ -24,19 +23,9 @@ describe("getCachedWorld", () => {
   });
 
   it("keys by worldId — distinct worlds are read separately", async () => {
-    invalidateWorldCache();
     const store = mockStore();
     await getCachedWorld(store, "w-cache-b");
     await getCachedWorld(store, "w-cache-c");
-    expect(store.calls()).toBe(2);
-  });
-
-  it("invalidateWorldCache(worldId) forces a re-read", async () => {
-    invalidateWorldCache();
-    const store = mockStore();
-    await getCachedWorld(store, "w-cache-d");
-    invalidateWorldCache("w-cache-d");
-    await getCachedWorld(store, "w-cache-d");
     expect(store.calls()).toBe(2);
   });
 });

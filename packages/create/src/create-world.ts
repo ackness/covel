@@ -20,7 +20,6 @@ import {
   normalizeLoreDocument,
 } from "./validation-helpers.js";
 import { writeWorldDataFiles } from "./world-writer.js";
-import { combineAbortSignals } from "./retry.js";
 
 const MAX_RETRIES = 2;
 const DEFAULT_ATTEMPT_TIMEOUT_MS = 150_000;
@@ -76,10 +75,12 @@ export async function createWorld(
 
     let response;
     try {
-      const signal = combineAbortSignals(
-        options.signal,
+      const timeout = AbortSignal.timeout(
         options.attemptTimeoutMs ?? DEFAULT_ATTEMPT_TIMEOUT_MS,
       );
+      const signal = options.signal
+        ? AbortSignal.any([options.signal, timeout])
+        : timeout;
       if (options.llm.stream) {
         let content = "";
         let finishReason: "stop" | "tool_calls" | "length" | "error" = "stop";

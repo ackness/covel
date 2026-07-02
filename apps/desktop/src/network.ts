@@ -1,17 +1,5 @@
 import { createServer } from "node:net";
 
-/** Check whether a TCP port is currently occupied on 127.0.0.1. */
-export function isPortFree(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const s = createServer();
-    s.once("error", () => resolve(false));
-    s.once("listening", () => {
-      s.close(() => resolve(true));
-    });
-    s.listen(port, "127.0.0.1");
-  });
-}
-
 /** Find a random free port. */
 export function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {

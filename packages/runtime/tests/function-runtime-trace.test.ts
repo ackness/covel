@@ -123,7 +123,6 @@ describe("function-runtime trace (A2-P1-5)", () => {
     const loaded: LoadedRuntime = {
       manifest: makeFunctionManifest(),
       promptTemplate: "",
-      references: [],
       handler: async () => {
         executingSeenBeforeHandler = events.some(
           (e) => e.type === "function.executing",
@@ -150,7 +149,6 @@ describe("function-runtime trace (A2-P1-5)", () => {
     const loaded: LoadedRuntime = {
       manifest: makeFunctionManifest(),
       promptTemplate: "",
-      references: [],
       handler: async () => ({
         status: "suspended",
         reason: "need input",
@@ -173,7 +171,6 @@ describe("function-runtime trace (A2-P1-5)", () => {
     const loaded: LoadedRuntime = {
       manifest: makeFunctionManifest(),
       promptTemplate: "",
-      references: [],
       handler: async () => {
         throw new Error("kaboom");
       },
@@ -197,7 +194,6 @@ describe("function-runtime trace (A2-P1-5)", () => {
     const loaded = {
       manifest: makeFunctionManifest(),
       promptTemplate: "",
-      references: [],
     } as LoadedRuntime;
 
     const result = await executeTurn(
@@ -218,7 +214,6 @@ describe("function-runtime trace (A2-P1-5)", () => {
     const loaded: LoadedRuntime = {
       manifest: makeFunctionManifest(),
       promptTemplate: "",
-      references: [],
       handler: async (ctx) => {
         handlerGateway = ctx.gateway;
         await ctx.gateway?.generateText({ prompt: "x" });
@@ -244,7 +239,6 @@ describe("function-runtime trace (A2-P1-5)", () => {
     const loaded: LoadedRuntime = {
       manifest: makeFunctionManifest(),
       promptTemplate: "",
-      references: [],
       handler: async (ctx) => {
         handlerGateway = ctx.gateway;
         return {};
@@ -275,7 +269,6 @@ describe("function-runtime trace (A2-P1-5)", () => {
     const loaded: LoadedRuntime = {
       manifest: makeFunctionManifest(),
       promptTemplate: "",
-      references: [],
       handler: async (ctx) => {
         await ctx.gateway!.generateText({ prompt: "hello" });
         return { narrativeOutput: "done" };

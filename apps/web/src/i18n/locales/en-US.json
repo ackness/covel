@@ -198,7 +198,6 @@
     "currentWorld": "Current session",
     "sessions": "Sessions",
     "noOtherSessions": "No other sessions",
-    "commands": "Commands",
     "startingUp": "Starting up...",
     "retryFrom": "Retry from {{label}}",
     "executionSummary": "Execution · {{count}} runtimes",

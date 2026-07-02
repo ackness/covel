@@ -24,20 +24,6 @@ export function filterRuntimeBindingsForKnownRuntimes(
 }
 
 /**
- * Remove empty-string runtime bindings before serializing them into request headers.
- * The server schema only accepts non-empty slot names.
- */
-export function sanitizeRuntimeBindingsForHeader(
-  bindings: Record<string, string>,
-): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(bindings).filter(
-      ([, slotName]) => typeof slotName === "string" && slotName.length > 0,
-    ),
-  );
-}
-
-/**
  * Fill every currently unbound runtime with the best matching slot.
  * Existing non-empty bindings are preserved.
  *

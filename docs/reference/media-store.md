@@ -35,24 +35,20 @@ interface MediaStore {
 
 ## Backends
 
-| Backend          | Factory                                         | Byte storage                                           | `openReadStream()`          |
-| ---------------- | ----------------------------------------------- | ------------------------------------------------------ | --------------------------- |
-| Memory           | `createMemoryMediaStore()`                      | Process memory                                         | yes (single chunk)          |
-| SQLite/local-fs  | `createSqliteMediaStore(dbPath, { mediaRoot })` | Local files under `{mediaRoot}/{ab}/{cd}/{sha256}.bin` | yes (true streaming)        |
-| PostgreSQL       | `createPgMediaStore(databaseUrl)`               | `media_assets.body` as `bytea`                         | **no** — see "PG streaming" |
-| S3/R2-compatible | `createS3MediaStore(client, options)`           | External object storage via `S3CompatibleMediaClient`  | yes (eager `get()` wrap)    |
-| IndexedDB (web)  | `createIndexedDbMediaStore({ dbName })`         | Browser IDB Blob store                                 | yes (Blob.stream())         |
-
-The S3/R2 adapter accepts a small object-client interface. Production deployments can wrap AWS SDK S3, Cloudflare R2, MinIO, or any compatible object store behind that interface.
+| Backend         | Factory                                         | Byte storage                                           | `openReadStream()`          |
+| --------------- | ----------------------------------------------- | ------------------------------------------------------ | --------------------------- |
+| Memory          | `createMemoryMediaStore()`                      | Process memory                                         | yes (single chunk)          |
+| SQLite/local-fs | `createSqliteMediaStore(dbPath, { mediaRoot })` | Local files under `{mediaRoot}/{ab}/{cd}/{sha256}.bin` | yes (true streaming)        |
+| PostgreSQL      | `createPgMediaStore(databaseUrl)`               | `media_assets.body` as `bytea`                         | **no** — see "PG streaming" |
+| IndexedDB (web) | `createIndexedDbMediaStore({ dbName })`         | Browser IDB Blob store                                 | yes (Blob.stream())         |
 
 ### PG streaming caveat
 
 `createPgMediaStore` intentionally does **not** implement `openReadStream`. The `bytea` column type forces the entire blob into memory before the driver can hand it back, so a "streaming" wrapper would just buffer the whole asset and add no value over the eager `get()` path. The route layer in `apps/server/src/routes/api/media.ts` already gates on `typeof store.openReadStream === 'function'` and falls back to `get()` automatically — no caller change is required.
 
-If you store media larger than a few MiB on PostgreSQL, consider one of:
-
-- Move bytes to SQLite local-fs (`createSqliteMediaStore`) and keep PG for the rest of the kernel state.
-- Use S3/R2 (`createS3MediaStore`) with a durable metadata adapter — see "S3 metadata adapter" below.
+If you store media larger than a few MiB on PostgreSQL, consider moving bytes to
+SQLite local-fs (`createSqliteMediaStore`) and keeping PG for the rest of the
+kernel state.
 
 ## Ownership
 
@@ -76,31 +72,6 @@ If you store media larger than a few MiB on PostgreSQL, consider one of:
 >  );
 > ```
 
-## S3 metadata adapter
-
-`createS3MediaStore(client)` only persists bytes to the bucket. Owner / refs / mime / size / `createdAt` go through an `S3MediaMetadataAdapter` so they survive process restarts and span multiple server instances.
-
-| Wiring                                                                                          | When to use                                                                                                                                                                                                                                                                                                                                                                                        |
-| ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `createS3MediaStore(client)` (no adapter)                                                       | Dev only. Logs a warning at construction. Owner / refs vanish on restart and `lookup()` always reports `ownerSessionId: null` post-restart, which makes every strict-route asset inaccessible.                                                                                                                                                                                                     |
-| `createS3MediaStore(client, { metadataAdapter: createSqliteS3MetadataAdapter(dbPath) })`        | Single-node production. Reuses the standard `media_assets` / `media_refs` schema; the same SQLite database can host metadata for both local-fs media and S3-backed media.                                                                                                                                                                                                                          |
-| `createS3MediaStore(client, { metadataAdapter: await createPgS3MetadataAdapter(databaseUrl) })` | Multi-node production. PG-backed metadata over the shared `media_assets` / `media_refs` tables, so S3-backed media survives restarts and is shared across nodes. Mirrors the SQLite adapter and passes the same media-store contract suite. Pass `{ freshSchema: true }` to drop+recreate the media DDL, or use `createPgS3MetadataAdapterFromClient(sql)` to share an existing `postgres` client. |
-
-```ts
-import {
-  createS3MediaStore,
-  createSqliteS3MetadataAdapter,
-} from "@covel/store";
-
-const mediaStore = createS3MediaStore(s3Client, {
-  bucket: "covel-media",
-  keyPrefix: "prod",
-  metadataAdapter: createSqliteS3MetadataAdapter(
-    "/var/lib/covel/media-meta.db",
-  ),
-});
-```
-
 ## Lifecycle Cleanup
 
 The framework exposes `POST /api/media/cleanup` for manual cleanup and scheduler integration. The route scans live sessions, messages, plugin data, runtime outputs, trace events, snapshots, turn results, `MediaStore.listAssets()`, and `MediaStore.listRefs()` with the shared `collectMediaRefIds()` scanner, then passes the protected id set into `MediaStore.cleanup()`.
@@ -118,4 +89,4 @@ An empty policy returns an inventory-style dry run with zero selected deletions.
 
 ## Tests
 
-The shared contract lives in `packages/store/src/contract/media-store-contract.ts`. Current coverage runs against Memory, SQLite/local-fs, S3-compatible fake storage, and PostgreSQL when `DATABASE_URL` points at a reachable database.
+The shared contract lives in `packages/store/src/contract/media-store-contract.ts`. Current coverage runs against Memory, SQLite/local-fs, and PostgreSQL when `DATABASE_URL` points at a reachable database.

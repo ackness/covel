@@ -13,7 +13,6 @@ import {
   makeLorebookEntry,
   makeMessage,
   makePlayerInput,
-  makePluginConfig,
   makeRuntimeOutput,
   makeRuntimeResult,
   makeSession,
@@ -221,13 +220,6 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
   });
 
   describe("TurnResults", () => {
-    it("should save and retrieve a turn result", async () => {
-      const tr = makeTurnResult({ sessionId: "sess-1" });
-      await store.saveTurnResult(tr);
-      const result = await store.getTurnResult("sess-1", tr.turnId);
-      expect(result).toEqual(tr);
-    });
-
     it("should list turn results for a session ordered by createdAt", async () => {
       const tr1 = makeTurnResult({ sessionId: "sess-1", createdAt: ts(0) });
       const tr2 = makeTurnResult({ sessionId: "sess-1", createdAt: ts(100) });
@@ -613,23 +605,6 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
           (r) => r.id,
         ),
       ).toEqual(["char-keep"]);
-    });
-  });
-
-  describe("PluginConfigs", () => {
-    it("should save and retrieve plugin config", async () => {
-      const config = makePluginConfig({
-        sessionId: "sess-1",
-        pluginId: "narrator",
-      });
-      await store.savePluginConfig(config);
-      const result = await store.getPluginConfig("sess-1", "narrator");
-      expect(result).toEqual(config);
-    });
-
-    it("should return null for unknown plugin config", async () => {
-      const result = await store.getPluginConfig("sess-1", "unknown");
-      expect(result).toBeNull();
     });
   });
 }

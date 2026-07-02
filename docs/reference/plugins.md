@@ -1235,14 +1235,14 @@ input:
 
 ### trigger 类型
 
-| 类型          | 状态        | 说明                                                                                                                                                                     |
-| ------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `auto`        | ✅ 生产可用 | 每个 Turn 自动触发                                                                                                                                                       |
-| `manual`      | ✅ 生产可用 | 仅玩家手动触发；启用插件只表示该能力可用，不会自动进入每轮调度                                                                                                           |
-| `scheduled`   | ✅ 生产可用 | 每 N 轮触发一次（配合 `interval` + `maxTriggerCount`）                                                                                                                   |
-| `event`       | ✅ 生产可用 | 监听特定事件触发（在 Turn 内的事件 fan-out 中由 `shouldTrigger` 判定）                                                                                                   |
-| `conditional` | ⚠️ reserved | **当前永不触发**：schema 接受该值，但没有条件表达式引擎，`shouldTrigger` 直接返回 false 并打印一次性 warning（audit P2-9）。条件引擎落地前请勿使用                       |
-| `error-retry` | ⚠️ reserved | **当前永不触发**：依赖 `hasUpstreamFailure`，而调度路径（`turn-executor/scheduling.ts`）将其硬编码为 `false`，该分支在生产中不可达，`shouldTrigger` 会打印一次性 warning |
+| 类型          | 状态        | 说明                                                                                                                                 |
+| ------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `auto`        | ✅ 生产可用 | 每个 Turn 自动触发                                                                                                                   |
+| `manual`      | ✅ 生产可用 | 仅玩家手动触发；启用插件只表示该能力可用，不会自动进入每轮调度                                                                       |
+| `scheduled`   | ✅ 生产可用 | 每 N 轮触发一次（配合 `interval` + `maxTriggerCount`）                                                                               |
+| `event`       | ✅ 生产可用 | 监听特定事件触发（在 Turn 内的事件 fan-out 中由 `shouldTrigger` 判定）                                                               |
+| `conditional` | ⚠️ reserved | **当前永不触发**：schema 接受该值，但没有条件表达式引擎，`shouldTrigger` 直接返回 false 并打印一次性 warning。条件引擎落地前请勿使用 |
+| `error-retry` | ⚠️ reserved | **当前永不触发**：调度器不会上报上游失败信号，`shouldTrigger` 直接返回 false 并打印一次性 warning。对应能力落地前请勿使用            |
 
 > **可用 vs reserved**：生产实际可用的只有 `auto` / `manual` / `scheduled` / `event` 四种。`conditional` 与 `error-retry` 是为未来能力预留的占位类型，声明它们的 Runtime 会被静默跳过（并在 console 提示一次）。在对应能力落地前请使用上面四种之一。
 

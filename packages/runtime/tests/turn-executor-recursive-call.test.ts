@@ -41,7 +41,6 @@ describe("executeTurn recursiveCall", () => {
         {
           manifest: caller,
           promptTemplate: "",
-          references: [],
           handler: async (ctx) => {
             const nested = await ctx.recursiveCall(
               {
@@ -64,7 +63,6 @@ describe("executeTurn recursiveCall", () => {
         {
           manifest: leaf,
           promptTemplate: "",
-          references: [],
           handler: async (ctx) => ({ depth: ctx.recursionDepth }),
         },
       ],
@@ -109,7 +107,6 @@ describe("executeTurn recursiveCall", () => {
         {
           manifest: caller,
           promptTemplate: "",
-          references: [],
           handler: async (ctx) => {
             await ctx.recursiveCall(
               { manualTrigger: { runtimeId: "leaf" } },
@@ -124,7 +121,6 @@ describe("executeTurn recursiveCall", () => {
         {
           manifest: leaf,
           promptTemplate: "",
-          references: [],
           handler: async () => ({ ok: true }),
         },
       ],

@@ -5,10 +5,8 @@
  * runner, SQLite tables, and SQLite JSON read/write gateways; all query logic is
  * shared with the PostgreSQL backend.
  *
- * Plugin configs are NOT included here — they live in the separate
- * `sqlite-plugin-configs.ts` factory (which delegates to the same shared
- * plugin-config module). The turn-message writers (`appendTurnMessage`,
- * `tagTurnMessagesCompacted`) are also shared now — see the journal module.
+ * The turn-message writers (`appendTurnMessage`, `tagTurnMessagesCompacted`)
+ * are also shared now — see the journal module.
  */
 
 import { makeInsertValues } from "../common/insert-values.js";

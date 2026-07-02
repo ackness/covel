@@ -74,10 +74,6 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
   return {
     ...data,
 
-    beginTx: mutations.beginTx,
-    commitTx: mutations.commitTx,
-    rollbackTx: mutations.rollbackTx,
-
     withTransaction<T>(fn: (tx: StoreTransaction) => Promise<T>): Promise<T> {
       // Checked at CALL time (before chaining) so a nested call rejects instead
       // of deadlocking behind the outer transaction on the chain.

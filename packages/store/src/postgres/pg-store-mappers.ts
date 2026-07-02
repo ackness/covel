@@ -23,7 +23,6 @@ import type {
   EventRecord,
   MessageRecord,
   PlayerInputRecord,
-  PluginConfigRecord,
   SessionRecord,
   SessionSummaryRecord,
   TraceEventRecord,
@@ -68,12 +67,6 @@ export function toCharacterRecord(
   row: typeof schema.characters.$inferSelect,
 ): CharacterRecord {
   return canonical.toCharacterRecord(row, pgJsonReader);
-}
-
-export function toPluginConfigRecord(
-  row: typeof schema.pluginConfigs.$inferSelect,
-): PluginConfigRecord {
-  return canonical.toPluginConfigRecord(row, pgJsonReader);
 }
 
 export function toTraceEventRecord(

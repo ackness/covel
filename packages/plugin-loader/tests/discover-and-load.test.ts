@@ -319,24 +319,16 @@ describe("loadPluginManifest", () => {
 // ── loadRuntime ─────────────────────────────────────────────────
 
 describe("loadRuntime", () => {
-  it("loads prompt template and references", async () => {
+  it("loads prompt template", async () => {
     const pluginDir = path.join(tmpDir, "runtime-refs");
     await fs.mkdir(pluginDir, { recursive: true });
-    await fs.mkdir(path.join(pluginDir, "references"), { recursive: true });
     await fs.writeFile(path.join(pluginDir, "PLUGIN.md"), MINIMAL_FRONTMATTER);
-    await fs.writeFile(
-      path.join(pluginDir, "references", "lore.md"),
-      "---\nkeywords:\n  - dragon\n---\n\nDragon lore content.\n",
-    );
 
     const [discovery] = await discoverPlugins(tmpDir);
     const loaded = await loadRuntime(discovery, "test-plugin");
 
     expect(loaded.manifest.name).toBe("test-plugin");
     expect(loaded.promptTemplate).toContain("You are a test agent.");
-    expect(loaded.references).toHaveLength(1);
-    expect(loaded.references[0].keywords).toContain("dragon");
-    expect(loaded.references[0].content).toContain("Dragon lore content.");
   });
 
   it("loads output schema when present", async () => {
@@ -358,7 +350,7 @@ describe("loadRuntime", () => {
     expect(loaded.outputSchema).toEqual(schema);
   });
 
-  it("handles missing references and schema gracefully", async () => {
+  it("handles missing schema gracefully", async () => {
     const pluginDir = path.join(tmpDir, "runtime-bare");
     await fs.mkdir(pluginDir, { recursive: true });
     await fs.writeFile(path.join(pluginDir, "PLUGIN.md"), MINIMAL_FRONTMATTER);
@@ -366,7 +358,6 @@ describe("loadRuntime", () => {
     const [discovery] = await discoverPlugins(tmpDir);
     const loaded = await loadRuntime(discovery, "test-plugin");
 
-    expect(loaded.references).toEqual([]);
     expect(loaded.outputSchema).toBeUndefined();
   });
 });

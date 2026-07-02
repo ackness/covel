@@ -56,12 +56,7 @@ function isDurableDataBackend(backend: StoreBackend): boolean {
 function isDurableMediaBackend(
   backend: Exclude<MediaStoreBackend, "mirror">,
 ): boolean {
-  return (
-    backend === "sqlite" ||
-    backend === "pg" ||
-    backend === "idb" ||
-    backend === "s3"
-  );
+  return backend === "sqlite" || backend === "pg" || backend === "idb";
 }
 
 function vectorDriver(

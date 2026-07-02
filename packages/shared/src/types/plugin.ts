@@ -32,12 +32,10 @@ export type RuntimeType = "agent" | "function";
  * RESERVED modes (schema-accepted for forward-compat, but **never fire** —
  * `shouldTrigger` / the scheduler do not implement them yet; a runtime that
  * declares one stays permanently inactive):
- * - `conditional` — no condition-expression engine is wired (audit P2-9).
+ * - `conditional` — no condition-expression engine is wired.
  *                   `shouldTrigger` returns false and warns once.
- * - `error-retry` — depends on `hasUpstreamFailure`, which the scheduling path
- *                   (`turn-executor/scheduling.ts`) hardcodes to `false`, so
- *                   this branch is unreachable in production. `shouldTrigger`
- *                   warns once and never fires it under the real scheduler.
+ * - `error-retry` — the scheduler never surfaces upstream failures.
+ *                   `shouldTrigger` returns false and warns once.
  *
  * Prefer `auto` / `manual` / `scheduled` / `event` until the reserved modes
  * are implemented.

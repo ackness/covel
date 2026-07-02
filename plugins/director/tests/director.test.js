@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import injectPreamble from "../hooks/inject-preamble.js";
-import { PREAMBLE, PREAMBLE_ZH } from "../hooks/_preamble.js";
+import { PREAMBLE_EN, PREAMBLE_ZH } from "../hooks/_preamble.js";
 import handler from "../handler.js";
 
 const CTX = { sessionId: "sess-director-1" };
@@ -13,7 +13,7 @@ describe("director / inject-preamble (PostContextAssembly)", () => {
     });
     expect(r.action).toBe("continue");
     expect(r.replace.systemPrompt).toBe(
-      "BASE_SYSTEM_PROMPT" + "\n\n" + PREAMBLE,
+      "BASE_SYSTEM_PROMPT" + "\n\n" + PREAMBLE_EN,
     );
   });
 
@@ -33,7 +33,7 @@ describe("director / inject-preamble (PostContextAssembly)", () => {
       systemPrompt: base,
     });
     expect(r.replace.systemPrompt.startsWith(base + "\n\n")).toBe(true);
-    expect(r.replace.systemPrompt.endsWith(PREAMBLE)).toBe(true);
+    expect(r.replace.systemPrompt.endsWith(PREAMBLE_EN)).toBe(true);
   });
 
   it("leaves plugin-kind runtimes untouched (no replace)", async () => {

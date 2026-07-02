@@ -25,6 +25,16 @@ const hpSchema: StateTableSchema = {
   ],
 };
 
+async function getValue(
+  sm: StateManager,
+  sessionId: string,
+  table: string,
+  field: string,
+): Promise<unknown> {
+  const snapshot = await sm.getTableSnapshot(sessionId, table);
+  return snapshot[field];
+}
+
 describe("StateManager", () => {
   let sm: StateManager;
   const sid = "session-1";
@@ -51,11 +61,11 @@ describe("StateManager", () => {
     });
   });
 
-  describe("setValue + getValue", () => {
-    it("should set a field and get returns the value", async () => {
+  describe("setValue", () => {
+    it("should set a field and snapshot returns the value", async () => {
       await sm.createTable(sid, hpSchema);
       await sm.setValue(sid, "stats", "hp", 80, meta("turn-1"));
-      expect(await sm.getValue(sid, "stats", "hp")).toBe(80);
+      expect(await getValue(sm, sid, "stats", "hp")).toBe(80);
     });
   });
 
@@ -74,9 +84,9 @@ describe("StateManager", () => {
   describe("default values", () => {
     it("should return field defaults before any setValue", async () => {
       await sm.createTable(sid, hpSchema);
-      expect(await sm.getValue(sid, "stats", "hp")).toBe(100);
-      expect(await sm.getValue(sid, "stats", "mp")).toBe(50);
-      expect(await sm.getValue(sid, "stats", "name")).toBeUndefined();
+      expect(await getValue(sm, sid, "stats", "hp")).toBe(100);
+      expect(await getValue(sm, sid, "stats", "mp")).toBe(50);
+      expect(await getValue(sm, sid, "stats", "name")).toBeUndefined();
     });
   });
 
@@ -93,61 +103,14 @@ describe("StateManager", () => {
       expect(log[1]!.value).toBe(80);
       expect(log[2]!.value).toBe(70);
     });
-  });
 
-  describe("sliding window", () => {
-    it("should keep only the last windowSize entries", async () => {
-      sm = createStateManager(createMemoryStore(), {
-        windowSize: 2,
-        keepSessionBoundary: false,
-      });
+    it("should exclude the session-boundary default record", async () => {
       await sm.createTable(sid, hpSchema);
       await sm.setValue(sid, "stats", "hp", 90, meta("turn-1"));
-      await sm.setValue(sid, "stats", "hp", 80, meta("turn-2"));
-      await sm.setValue(sid, "stats", "hp", 70, meta("turn-3"));
 
       const log = await sm.getChangeLog(sid, "stats", "hp");
-      expect(log).toHaveLength(2);
-      expect(log[0]!.value).toBe(80);
-      expect(log[1]!.value).toBe(70);
-    });
-  });
-
-  describe("session boundary preserved", () => {
-    it("should keep the initial default value entry when keepSessionBoundary=true", async () => {
-      sm = createStateManager(createMemoryStore(), {
-        windowSize: 2,
-        keepSessionBoundary: true,
-      });
-      await sm.createTable(sid, hpSchema);
-      // Default value (100) is the session boundary
-      await sm.setValue(sid, "stats", "hp", 90, meta("turn-1"));
-      await sm.setValue(sid, "stats", "hp", 80, meta("turn-2"));
-      await sm.setValue(sid, "stats", "hp", 70, meta("turn-3"));
-
-      const log = await sm.getChangeLog(sid, "stats", "hp");
-      // session boundary (default 100) + last 2 = 3 entries
-      expect(log).toHaveLength(3);
-      expect(log[0]!.value).toBe(100);
-      expect(log[1]!.value).toBe(80);
-      expect(log[2]!.value).toBe(70);
-    });
-  });
-
-  describe("getChangesByTurn", () => {
-    it("should return only changes from the specified turn", async () => {
-      await sm.createTable(sid, hpSchema);
-      await sm.setValue(sid, "stats", "hp", 90, meta("turn-1"));
-      await sm.setValue(sid, "stats", "mp", 40, meta("turn-1"));
-      await sm.setValue(sid, "stats", "hp", 80, meta("turn-2"));
-
-      const turn1Changes = await sm.getChangesByTurn(sid, "turn-1");
-      expect(turn1Changes).toHaveLength(2);
-      expect(turn1Changes.every((c) => c.turnId === "turn-1")).toBe(true);
-
-      const turn2Changes = await sm.getChangesByTurn(sid, "turn-2");
-      expect(turn2Changes).toHaveLength(1);
-      expect(turn2Changes[0]!.value).toBe(80);
+      expect(log).toHaveLength(1);
+      expect(log.some((c) => c.turnId === "__init__")).toBe(false);
     });
   });
 
@@ -158,14 +121,14 @@ describe("StateManager", () => {
       await sm.createTable(sid2, hpSchema);
       await sm.setValue(sid, "stats", "hp", 1, meta("turn-1"));
 
-      expect(await sm.getValue(sid, "stats", "hp")).toBe(1);
-      expect(await sm.getValue(sid2, "stats", "hp")).toBe(100); // default
+      expect(await getValue(sm, sid, "stats", "hp")).toBe(1);
+      expect(await getValue(sm, sid2, "stats", "hp")).toBe(100); // default
     });
   });
 
   describe("unknown table", () => {
-    it("should return undefined for getValue on non-existent table", async () => {
-      expect(await sm.getValue(sid, "nonexistent", "field")).toBeUndefined();
+    it("should return empty snapshot for non-existent table", async () => {
+      expect(await sm.getTableSnapshot(sid, "nonexistent")).toEqual({});
     });
   });
 });

@@ -36,8 +36,8 @@ export interface RunEventChainParams {
  * **once per turn** by the main scheduler (`selectTriggeredRuntimes`). Within
  * a turn, event fan-out is bounded instead by `maxDepth`, so those fields are
  * set to non-blocking sentinels here — re-applying per-session throttles to a
- * within-turn reaction would be semantically wrong. `hasUpstreamFailure` /
- * `isManualTrigger` are irrelevant to the `event` branch, and
+ * within-turn reaction would be semantically wrong. `isManualTrigger` is
+ * irrelevant to the `event` branch, and
  * `preGameCompleted` gating is a Pre-Game (turn 0) concern, not a main-loop
  * fan-out concern.
  */
@@ -52,7 +52,6 @@ function eventFanoutTriggerContext(
     triggerCount: 0,
     turnsSinceLastTrigger: Number.MAX_SAFE_INTEGER,
     pendingEventTopics,
-    hasUpstreamFailure: false,
     isManualTrigger: false,
     preGameCompleted: [],
   };

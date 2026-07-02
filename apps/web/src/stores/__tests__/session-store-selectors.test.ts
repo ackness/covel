@@ -20,7 +20,6 @@ function stateFor(
     presets: [],
     packages: [],
     pluginLoadErrors: [],
-    commands: [],
     worlds: [],
     llmConfig: null,
     booted: true,

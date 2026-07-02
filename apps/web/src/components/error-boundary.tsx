@@ -67,53 +67,6 @@ abstract class BaseBoundary extends React.Component<
 }
 
 /**
- * Inline boundary for a single message bubble. Small visual footprint,
- * retry/copy inline, doesn't take over the viewport.
- */
-export class MessageErrorBoundary extends BaseBoundary {
-  render() {
-    if (this.state.hasError) {
-      const msg =
-        this.state.error?.message ??
-        this.props.fallbackMessage ??
-        i18n.t("error.boundary.messageRenderingError", {
-          defaultValue: "Message rendering error",
-        });
-      return (
-        <div className="p-3 text-xs border border-destructive/50 bg-destructive/5 text-destructive space-y-2">
-          <div className="font-medium">
-            {this.props.fallbackMessage ??
-              i18n.t("error.boundary.messageRenderingError", {
-                defaultValue: "Message rendering error",
-              })}
-          </div>
-          <div className="font-mono text-[11px] break-all opacity-80">
-            {msg}
-          </div>
-          <div className="flex items-center gap-2 pt-1">
-            <button
-              onClick={this.handleReset}
-              className="px-2 py-1 text-[11px] border border-destructive/40 hover:bg-destructive/10 transition-colors"
-            >
-              {i18n.t("common.retry", { defaultValue: "Retry" })}
-            </button>
-            <button
-              onClick={this.handleCopy}
-              className="px-2 py-1 text-[11px] border border-destructive/40 hover:bg-destructive/10 transition-colors"
-            >
-              {i18n.t("error.boundary.copyError", {
-                defaultValue: "Copy error",
-              })}
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-/**
  * Full-page boundary for the app root. Prevents a single failing subtree
  * from whiting out the entire app.
  */

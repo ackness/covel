@@ -6,22 +6,13 @@
  *   - local:*       → allow (plugin-declared tools from trusted sources)
  *   - third-party:* → deny  (community plugins, not yet implemented)
  *
- * When community plugin support is added, this pipeline enables:
- *   - Per-tool approval prompts (ask user before executing)
- *   - Session-level allow (approve once, skip for rest of session)
- *   - Audit trail (all decisions persisted to DataStore)
- *   - Wildcard + exact-match permission rules
+ * When community plugin support is added, this pipeline gains the missing
+ * decision-recording + session-allow persistence path (`hasSessionAllow` is a
+ * stub until then).
  */
 
-import type {
-  ApprovalDecision,
-  ApprovalRequest,
-  ApprovalRecord,
-} from "@covel/shared";
-import type {
-  DataStore,
-  ApprovalRecord as StoreApprovalRecord,
-} from "@covel/store";
+import type { ApprovalRequest } from "@covel/shared";
+import type { DataStore } from "@covel/store";
 
 export interface ApprovalCheckResult {
   readonly needsApproval: boolean;
@@ -41,10 +32,6 @@ export interface ApprovalPipeline {
     request: ApprovalRequest,
     toolSource?: "builtin" | "local" | "third-party",
   ): ApprovalCheckResult;
-  /** Get all session approval records. */
-  getSessionApprovals(sessionId: string): readonly ApprovalRecord[];
-  /** Record an approval decision. */
-  recordDecision(record: ApprovalRecord): void;
   /** Check if a tool has a session-level allow decision for a specific plugin. */
   hasSessionAllow(
     sessionId: string,
@@ -90,30 +77,16 @@ export function matchPermissionRule(
 }
 
 /**
- * Convert a shared ApprovalRecord to a store ApprovalRecord.
- */
-function toStoreApproval(record: ApprovalRecord): StoreApprovalRecord {
-  return {
-    id: record.approvalId,
-    sessionId: record.sessionId,
-    toolName: record.toolName,
-    pluginId: record.pluginId,
-    decision: record.decision,
-    turnId: record.turnId,
-    createdAt: record.decidedAt,
-  };
-}
-
-/**
  * Create an approval pipeline for gating tool calls against permission rules.
  *
  * When no custom rules are provided, all tool calls are auto-approved (default-allow-all).
  * When custom rules are provided, each tool call is matched against the rule list in order.
- * Decisions are cached in memory and optionally persisted to a `DataStore`.
  *
- * @param store - Optional `DataStore` for persisting approval decisions across restarts.
+ * @param _store - Reserved for the future decision-persistence path (community
+ *   plugin approvals). Currently unused — accepted so callers need not change
+ *   when persistence lands.
  * @param rules - Optional permission rules (e.g., `[{ pattern: 'third-party:*', action: 'ask' }]`). Defaults to allow-all.
- * @returns An `ApprovalPipeline` with `check`, `recordDecision`, `getSessionApprovals`, and `hasSessionAllow` methods.
+ * @returns An `ApprovalPipeline` with `check` and `hasSessionAllow` methods.
  *
  * @example
  * ```typescript
@@ -132,12 +105,9 @@ function toStoreApproval(record: ApprovalRecord): StoreApprovalRecord {
  * ```
  */
 export function createApprovalPipeline(
-  store?: DataStore,
+  _store?: DataStore,
   rules?: readonly PermissionRule[],
 ): ApprovalPipeline {
-  // In-memory cache — always maintained for fast lookups
-  const sessionRecords = new Map<string, ApprovalRecord[]>();
-
   function check(
     request: ApprovalRequest,
     toolSource?: "builtin" | "local" | "third-party",
@@ -177,40 +147,12 @@ export function createApprovalPipeline(
     }
   }
 
-  function getSessionApprovals(sessionId: string): readonly ApprovalRecord[] {
-    return sessionRecords.get(sessionId) ?? [];
+  // Community-plugin session approvals aren't wired to persistence yet, so
+  // there is never a recorded prior allow-session. Stub returns false until
+  // that decision-recording flow lands.
+  function hasSessionAllow(): boolean {
+    return false;
   }
 
-  function recordDecision(record: ApprovalRecord): void {
-    const existing = sessionRecords.get(record.sessionId);
-    if (existing !== undefined) {
-      sessionRecords.set(record.sessionId, [...existing, record]);
-    } else {
-      sessionRecords.set(record.sessionId, [record]);
-    }
-
-    // Persist to store (fire-and-forget to keep sync API)
-    if (store) {
-      void store.saveApproval(toStoreApproval(record));
-    }
-  }
-
-  function hasSessionAllow(
-    sessionId: string,
-    toolName: string,
-    pluginId: string,
-  ): boolean {
-    const records = sessionRecords.get(sessionId);
-    if (records === undefined) {
-      return false;
-    }
-    return records.some(
-      (r) =>
-        r.toolName === toolName &&
-        r.pluginId === pluginId &&
-        r.decision === "allow-session",
-    );
-  }
-
-  return { check, getSessionApprovals, recordDecision, hasSessionAllow };
+  return { check, hasSessionAllow };
 }

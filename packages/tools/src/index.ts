@@ -16,11 +16,7 @@ export type { InMemoryToolClientOptions } from "./in-memory-client.js";
 export type { ToolCallResult, ToolClient, ToolDefinition } from "./client.js";
 
 // ── Output validation ────────────────────────────────────────────
-export {
-  validateOutput,
-  selectOutputStrategy,
-  generateSchemaPrompt,
-} from "./output-validator.js";
+export { validateOutput } from "./output-validator.js";
 
 // ── Character schema validation ──────────────────────────────────
 export { validateFieldsAgainstSchema } from "./schema-validator.js";
@@ -64,7 +60,7 @@ export { createMemoryTools } from "./builtin/memory-tools.js";
 export type { MemoryToolDeps } from "./builtin/memory-tools.js";
 
 // ── Short ID (LLM-friendly entity references) ──────────────────
-export { shortId, shortIdBatch, clearSessionCounters } from "./short-id.js";
+export { shortId, shortIdBatch } from "./short-id.js";
 
 // ── Types ────────────────────────────────────────────────────────
 export type {
@@ -73,6 +69,5 @@ export type {
   ToolDefinitionInput,
   ToolSource,
   ResolvedTool,
-  StructuredOutputStrategy,
   ValidationResult,
 } from "./types.js";

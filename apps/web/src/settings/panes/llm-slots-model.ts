@@ -4,7 +4,7 @@ import type {
   SlotConfigEntry,
 } from "@/services/api.js";
 
-export const DEFAULT_LLM_SLOT_IDS = [
+const DEFAULT_LLM_SLOT_IDS = [
   "story",
   "plugin",
   "memory",

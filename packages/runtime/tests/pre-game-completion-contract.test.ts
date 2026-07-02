@@ -79,7 +79,6 @@ async function runPregameTurn(
     loadRuntime: async (m) => ({
       manifest: m,
       promptTemplate: "",
-      references: [],
       handler: handlers[m.name],
       guard: options?.guards?.[m.name],
     }),
@@ -172,7 +171,6 @@ describe("Pre-Game completion contract", () => {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "",
-        references: [],
         handler: async () =>
           m.name === "pregame"
             ? { preGameDone: true }
@@ -220,7 +218,6 @@ describe("Pre-Game completion contract", () => {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "",
-        references: [],
         handler: async () => {
           if (m.name === "narrator") {
             return { narrativeOutput: "main loop started" };
@@ -361,7 +358,6 @@ describe("Pre-Game completion contract", () => {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "",
-        references: [],
         handler: async () => {
           throw new Error("exhausted runtime must not be invoked");
         },

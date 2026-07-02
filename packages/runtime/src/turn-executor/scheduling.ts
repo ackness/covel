@@ -60,7 +60,6 @@ export function selectTriggeredRuntimes(args: {
         rt.name,
       ),
       pendingEventTopics: [],
-      hasUpstreamFailure: false,
       isManualTrigger: false,
       preGameCompleted,
     };

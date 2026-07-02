@@ -64,7 +64,6 @@ describe("executeTurn: saveTurnResult invariant", () => {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "",
-        references: [],
         handler: async () => ({ preGameDone: true }),
       }),
       llm: new NoopLLM(),
@@ -85,7 +84,6 @@ describe("executeTurn: saveTurnResult invariant", () => {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "",
-        references: [],
         handler: async () => {
           throw new Error("blew up");
         },
@@ -115,7 +113,6 @@ describe("executeTurn: saveTurnResult invariant", () => {
       loadRuntime: async () => ({
         manifest: {} as RuntimeManifest,
         promptTemplate: "",
-        references: [],
       }),
       llm: new NoopLLM(),
       getConfig: () => ({}),
@@ -138,7 +135,6 @@ describe("executeTurn: saveTurnResult invariant", () => {
       loadRuntime: async () => ({
         manifest: {} as RuntimeManifest,
         promptTemplate: "",
-        references: [],
       }),
       llm: new NoopLLM(),
       getConfig: () => ({}),

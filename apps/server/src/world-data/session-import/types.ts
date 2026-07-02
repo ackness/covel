@@ -4,7 +4,7 @@ import type {
   MediaStore,
   StoreTransaction,
 } from "@covel/store";
-import type { PluginRegistry, PluginRegistryEntry } from "@covel/plugin-loader";
+import type { PluginRegistry } from "@covel/plugin-loader";
 import type { ParsedWorldDataTarget } from "../target-uri.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "../types.js";
 
@@ -80,9 +80,6 @@ export interface WorldDataImportedMediaRef {
 export interface WorldDataImportPreflightDeps {
   readonly activePlugins?: readonly string[];
   readonly registry?: Pick<PluginRegistry, "get">;
-  readonly getPluginEntry?: (
-    pluginId: string,
-  ) => PluginRegistryEntry | undefined;
 }
 
 export interface ImportWorldDataForSessionOptions {

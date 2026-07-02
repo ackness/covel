@@ -66,7 +66,6 @@ function makeLoaded(manifest: RuntimeManifest): LoadedRuntime {
   return {
     manifest,
     promptTemplate: "You are narrating. Current message: {{ player.message }}.",
-    references: [],
   };
 }
 

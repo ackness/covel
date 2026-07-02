@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import { createMemorySystem } from "../src/memory-system.js";
 import { createMemoryManager } from "../src/core-memory.js";
 import { createMemoryUpdater } from "../src/updater.js";
-import { renderCoreMemory } from "../src/render.js";
 import type { CoreMemoryBlockSchema, MemoryLLMAdapter } from "../src/types.js";
 
 /**
@@ -92,23 +91,6 @@ describe("custom (non-default) core-memory block schema", () => {
     expect(result.blocksChanged).toEqual(["clues"]); // story_state filtered out
     const clues = await manager.getBlock("s1", "clues");
     expect(clues!.content).toBe("血迹手帕");
-  });
-
-  it("render uses the schema display name for custom blocks", () => {
-    const out = renderCoreMemory(
-      [
-        {
-          label: "suspects",
-          content: "管家有作案动机",
-          updatedAt: "",
-          displayName: { zh: "嫌疑人", en: "Suspects" },
-        },
-      ],
-      "en-US",
-    );
-    expect(out).toContain("<suspects>");
-    expect(out).toContain("# Suspects");
-    expect(out).not.toContain("Story State");
   });
 
   it("createMemorySystem threads the schema to manager + updater", async () => {

@@ -75,6 +75,5 @@ export function makeFakeLoadedRuntime(args: {
     promptTemplate:
       args.promptTemplate ??
       "You are a test narrator. Reply with a single line.",
-    references: [],
   };
 }

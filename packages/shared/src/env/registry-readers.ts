@@ -128,15 +128,6 @@ export function readRuntimeEnv(source: EnvSource = defaultSource()) {
       source,
     ),
     mediaRoot: readEnvString("MEDIA_ROOT", undefined, source),
-    mediaS3Bucket: readEnvString("MEDIA_S3_BUCKET", undefined, source),
-    mediaS3Region: readEnvString("MEDIA_S3_REGION", undefined, source),
-    mediaS3Endpoint: readEnvString("MEDIA_S3_ENDPOINT", undefined, source),
-    mediaS3KeyPrefix: readEnvString("MEDIA_S3_KEY_PREFIX", undefined, source),
-    mediaS3PublicBaseUrl: readEnvString(
-      "MEDIA_S3_PUBLIC_BASE_URL",
-      undefined,
-      source,
-    ),
     mediaTokenSecret: readEnvString(
       "COVEL_MEDIA_TOKEN_SECRET",
       undefined,

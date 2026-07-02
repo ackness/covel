@@ -327,26 +327,6 @@ export const worldDataImportLedger = pgTable(
   ],
 );
 
-// ── Plugin Configs ──────────────────────────────────────────────
-
-export const pluginConfigs = pgTable(
-  "plugin_configs",
-  {
-    id: text("id").primaryKey(),
-    sessionId: text("session_id").notNull(),
-    pluginId: text("plugin_id").notNull(),
-    config: jsonb("config").notNull(), // JSON
-    updatedAt: text("updated_at").notNull(),
-  },
-  (table) => [
-    index("pg_plugin_configs_session_id_idx").on(table.sessionId),
-    index("pg_plugin_configs_composite_idx").on(
-      table.sessionId,
-      table.pluginId,
-    ),
-  ],
-);
-
 // ── Trace Events ────────────────────────────────────────────────
 
 export const traceEvents = pgTable(
