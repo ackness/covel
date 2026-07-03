@@ -23,6 +23,7 @@ import {
   type PluginEventDecl,
   type RuntimeManifest,
 } from "@covel/shared";
+import { resolveContainedPath } from "../../../world-data/safe-path.js";
 
 export interface EventDirectory {
   listTopics(sessionId: string): Promise<readonly string[]>;
@@ -127,7 +128,19 @@ export function createEventDirectory(deps: EventDirectoryDeps): EventDirectory {
     if (!entry.pluginDir) {
       throw new Error(`plugin "${entry.pluginId}" root path is not resolvable`);
     }
-    const absPath = path.resolve(entry.pluginDir, entry.decl.schema);
+    // Defense-in-depth: the zod manifest schema already rejects absolute
+    // and `..` paths, but every other schema loader (schema-registry,
+    // descriptor) also enforces containment at read time — keep parity so
+    // a future manifest-ingestion path can't silently reopen traversal.
+    const absPath = await resolveContainedPath(
+      entry.pluginDir,
+      entry.decl.schema,
+    );
+    if (!absPath) {
+      throw new Error(
+        `event schema "${entry.decl.schema}" of plugin "${entry.pluginId}" is missing or escapes the plugin root`,
+      );
+    }
     const raw = JSON.parse(await readFile(absPath, "utf-8")) as AnySchema;
     const loaded: LoadedSchema = { validate: ajv.compile(raw), raw };
     schemaCache.set(entry.schemaKey, loaded);
