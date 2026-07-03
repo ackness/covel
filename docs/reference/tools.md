@@ -22,6 +22,7 @@
 | **get-character**       | builtin | —          | auto-allow | 按 id 或 name 查找单个角色                                                       |
 | **world-dimension-get** | builtin | —          | auto-allow | 按需读取当前 session 世界的结构化维度字段                                        |
 | **emit-event**          | builtin | —          | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema |
+| **suspend**             | builtin | —          | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复       |
 | **runtime-done**        | builtin | —          | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime                 |
 | **memory-search**       | builtin | —          | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 codex/lorebook/角色)        |
 | **memory-get-block**    | builtin | —          | auto-allow | 读取一个核心记忆块的当前内容                                                     |

@@ -830,7 +830,7 @@ description: # I18nText：一句话简介
 ---
 ```
 
-**没有** `displayName` 时，UI 退回显示 plugin id（如 `dashscope-image-gen`），冗长且不直观。所有插件（含内置与第三方）都**建议**声明 `displayName`；19 个内置插件均已声明中英文名。
+**没有** `displayName` 时，UI 退回显示 plugin id（如 `dashscope-image-gen`），冗长且不直观。所有插件（含内置与第三方）都**建议**声明 `displayName`；20 个内置插件均已声明中英文名。
 
 > 兼容：多 runtime 插件的**包级 PLUGIN.md**（根目录仅含摘要 frontmatter、不作为 runtime 加载）若把 `name` 写成 I18nText 对象，仍会作为展示名的回落来源；但新代码应优先用 `displayName`，不要重载 `name`。
 

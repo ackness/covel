@@ -149,10 +149,10 @@ To enable auto-update later:
 3. Pass `GH_TOKEN` (or the matching provider credential) in CI. The Release
    workflow's `--publish=never` flag will need to flip to `--publish=always`.
 
-To enable in-app update checks, add `electron-updater` as an optional dependency,
-set `COVEL_AUTO_UPDATE=1`, and configure `publish` in `electron-builder.yml`.
-The wiring lives in `apps/desktop/src/auto-updater.ts`; `main.ts` only calls
-`initAutoUpdater()` during app startup.
+In-app update checks are not currently wired up (the earlier `auto-updater.ts`
+module was removed as dead scaffolding). Re-adding them requires an
+`electron-updater` dependency, a `main.ts` startup call, and the `publish`
+config above.
 
 ## Release checklist
 

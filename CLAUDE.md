@@ -118,7 +118,7 @@ packages/           16 internal packages: shared, settings, context, ai-provider
                     SettingsStore + localStorage/json-file backends, split out of
                     `shared` so pure-type consumers avoid browser/Electron code.
 
-plugins/            19 bundled plugin packages (see docs/reference/plugins.md)
+plugins/            20 bundled plugin packages (see docs/reference/plugins.md)
 prompts/            Externalised prompt templates (locale-aware markdown)
 worlds/             2 curated sample world packages (mistport / haruka-academy);
                     archived worlds in worlds/_archive/ are not loaded
@@ -168,9 +168,9 @@ Session lifecycle tracked by three fields on `SessionRecord`:
 ### Plugin system
 
 - **Layout**: `PLUGIN.md` (frontmatter + agent skill prompt) + `package.json` is the minimum. Optional: `prompts/`, `schemas/`, `server/`, `client/`, `ui/`.
-- **Session scope**: Global plugin pool loaded at startup; each `KernelSession` has a `SessionPluginScope` (active set). Scoped registry views filter runtimes / tools / hooks. World manifest seeds initial set; enable/disable mid-session applies next turn.
+- **Session scope**: Global plugin pool loaded at startup; each session's `SessionRecord.activePlugins` (string[]) is the active set. Runtime selection, tool lookup, and hooks all filter against it (hooks see it as `activePluginIds` via `AsyncLocalStorage`, see `packages/runtime/src/hooks/hook-scope.ts`). World manifest seeds initial set; enable/disable mid-session applies next turn.
 - **Trust tiers**: `builtin` (auto-load) · `official` (whitelist) · `community` (deferred `import()` until user approves).
-- **Plugin data**: session-scoped KV storage keyed by `(sessionId, pluginId, namespace, key)` in `plugin_data` table. Builtin tools: `plugin-data-{set,get,list,set-batch}`, `create-character` / `update-character` / `list-characters` / `get-character`.
+- **Plugin data**: session-scoped KV storage keyed by `(sessionId, pluginId, namespace, key)` in `plugin_data` table. Builtin tools: `plugin-data-{set,get,list,set-batch}`, `create-character` / `update-character` / `list-characters` / `get-character`, `emit-event`.
 - **Plugin-data inject** (agent runtimes): `input.inject` with `kind: plugin-data` reads the runtime's own namespace and inlines a summary into the system prompt (avoids tool-call round-trips). Switches that runtime to the async context path.
 
 Detailed field reference, per-plugin table, and trigger semantics: [docs/reference/plugins.md](./docs/reference/plugins.md) · [docs/guide/plugin-authoring.md](./docs/guide/plugin-authoring.md).
@@ -205,12 +205,6 @@ Correct approach:
 - Use `pluginType` to gate on core vs third-party.
 - Test files may use real plugin IDs as fixtures; production code must not.
 - **UI curation/preset data may list concrete plugin IDs as _data_** (e.g. the front-end plugin packs in `apps/web/src/lib/session-plugin-selection.ts`, which a player picks from). The rule bans hardcoded IDs in **dispatch/control flow** — `if`/`switch` on a plugin ID to change behavior — not curated, user-overridable selection lists. The runtime still discovers and dispatches by `outputKind`/`capabilities`.
-
-**Block submission convention**: plugin blocks trigger kernel events via a `_eventType` field — the framework does not hardcode block types.
-
-```json
-{ "_eventType": "image.settings.updated", "settings": { ... } }
-```
 
 **Character creation convention**: forms marked with `_createCharacter: true` cause the framework to auto-create a `CharacterRecord`.
 
