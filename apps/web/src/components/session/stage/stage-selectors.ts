@@ -90,7 +90,9 @@ export interface StageSpriteSlot {
 
 const POSITIONS_BY_COUNT: Readonly<Record<number, readonly SpritePosition[]>> =
   {
-    1: ["right"],
+    // Solo speaker stands centered, fully visible (player feedback overrode
+    // the spec's original right-side station).
+    1: ["center"],
     2: ["left", "right"],
     3: ["left", "center", "right"],
     4: ["left", "center-left", "center-right", "right"],

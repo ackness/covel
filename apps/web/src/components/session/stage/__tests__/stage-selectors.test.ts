@@ -90,7 +90,7 @@ describe("computeSpriteSlots", () => {
         displayName: "林月",
         ref: ref("lin-sprite"),
         active: true,
-        pos: "right",
+        pos: "center",
       },
     ]);
   });

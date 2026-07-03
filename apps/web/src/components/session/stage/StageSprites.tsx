@@ -22,12 +22,14 @@ export interface StageSpritesProps {
   readonly sessionId: string;
 }
 
+// Offsets are the sprite's CENTER (the slot below applies translateX(-50%)),
+// so no station ever crops a sprite against the stage edge.
 const POSITION_OFFSET: Readonly<Record<SpritePosition, string>> = {
-  left: "14%",
-  "center-left": "34%",
+  left: "22%",
+  "center-left": "37%",
   center: "50%",
-  "center-right": "66%",
-  right: "86%",
+  "center-right": "63%",
+  right: "78%",
 };
 
 export function StageSprites({
@@ -54,7 +56,7 @@ export function StageSprites({
       {slots.map((slot) => (
         <div
           key={slot.characterId}
-          className="ui-stage-sprite absolute bottom-0 h-full"
+          className="ui-stage-sprite absolute bottom-0 h-full -translate-x-1/2"
           style={{ left: POSITION_OFFSET[slot.pos] }}
         >
           <div
