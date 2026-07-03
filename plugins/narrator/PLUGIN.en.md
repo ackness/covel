@@ -38,7 +38,7 @@ postHistory:
     - Do NOT write A/B/C/D choices, classification headings, or bold sub-headings acting as menus
     - Use expressions that fit within the world setting to drive the story forward
     - Task descriptions, setup statements, system notes, and meta-speech do NOT count as a finished turn
-    - When a domain event declared in <available-events> occurs in the narrative, call emit-event to emit it (one topic per call); tool calls do not count as prose
+    - [REQUIRED] Before writing prose, check <available-events>: whenever this turn's narrative state matches an event's emission conditions (including the initial state on the very first turn), call emit-event FIRST, then write the prose; one topic per call, tool calls do not count as prose and must not be mentioned in it
     # The following are **hard prohibitions**. Violating them immediately marks the output as invalid — do not touch them at the end of the text:
     - Do NOT output leading phrases such as "You should:" / "You can:" / "Your choice is:" / "Please tell me your action"
     - Do NOT use list markers "1.", "2.", "A)", "B)", "- " to enumerate options (this covers action suggestions, investigation targets, strategy combos, route categories — all forbidden)

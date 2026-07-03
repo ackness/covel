@@ -32,6 +32,8 @@ sources:
     kind: media
     path: media/scenes
     to: media
+    indexTo: plugin:scene-stage/assets
+    key: filename
     after: dimensions
   scenesRegistry:
     kind: json

@@ -204,6 +204,7 @@ describe("world data session importer", () => {
       "character-presence/assets",
       "character-presence/presence",
       "living-world-rules/rules",
+      "scene-stage/assets",
       "scene-stage/scenes",
     ]);
   });
@@ -1305,9 +1306,10 @@ sources: {}
       "scene-stage",
     ];
 
-    for (const [worldId, portraitCount] of [
-      ["mistport", 7],
-      ["haruka-academy", 8],
+    // haruka media = 8 portraits + 10 scene backdrops (scenes source has indexTo).
+    for (const [worldId, portraitCount, mediaCount] of [
+      ["mistport", 7, 7],
+      ["haruka-academy", 8, 18],
     ] as const) {
       const sessionId = `sess-portraits-${worldId}`;
       const store = createMemoryStore();
@@ -1340,7 +1342,7 @@ sources: {}
       const assetIds = new Set(
         (await mediaStore.listAssets()).map((a) => a.id),
       );
-      expect(assetIds.size).toBe(portraitCount);
+      expect(assetIds.size).toBe(mediaCount);
 
       // Every character has a presence record whose avatar + sprite resolve to a
       // stored asset — i.e. the portrait actually displays for that character.

@@ -92,7 +92,7 @@ postHistory:
     - When the player's current input is empty, write an opening scene that reads like character conversation.
     - Interweave dialogue, action, and sensory detail; avoid menus, numbered options, and system notes.
     - End on a natural interaction hook — a character's question, a hovering action, an emotional shift, or a new lead.
-    - When a domain event declared in <available-events> occurs in the narrative, call emit-event to emit it (one topic per call); tool calls do not count as prose
+    - [REQUIRED] Before writing prose, check <available-events>: whenever this turn's narrative state matches an event's emission conditions (including the initial state on the very first turn), call emit-event FIRST, then write the prose; one topic per call, tool calls do not count as prose and must not be mentioned in it
     - Control reply length by the user setting: short ~120-220 chars, medium ~220-420, long ~420-650.
 ---
 

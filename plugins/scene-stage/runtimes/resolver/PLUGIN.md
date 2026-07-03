@@ -21,8 +21,8 @@ events:
   - topic: scene.set
     schema: ./schemas/scene-set.event.json
     description:
-      zh: 叙事确立或切换场景、或昼夜变化时发射；location 用叙事中的地点名；无把握沿用上次值；新地点须附英文 visualHint。
-      en: Emit when the narrative establishes/changes the scene or day-night shifts; use the in-narrative location name; keep previous values when unsure; add an English visualHint for brand-new places.
+      zh: "发射条件：第一回合开场确立场景时、场景/地点切换时、昼夜变化时——满足任一即须发射（每回合最多一次）。location 用叙事中的地点名；无把握沿用上次值；新地点须附英文 visualHint。"
+      en: "Emission conditions (any one requires emitting, at most once per turn): the very first turn establishing the opening scene, a scene/location change, or a day-night shift. Use the in-narrative location name; keep previous values when unsure; add an English visualHint for brand-new places."
   - topic: scene-stage.generate.requested
     schema: ./schemas/generate-requested.event.json
     description:
@@ -30,6 +30,11 @@ events:
       en: Internal signal — requests background generation when a scene misses the registry and the auto-generate gate allows it.
     advertise: false
 dataSchemas:
+  assets:
+    schemaVersion: 1
+    acceptsWorldData: true
+    schema: ./schemas/assets.schema.json
+    description: Scene backdrop media index records imported from world packages.
   scenes:
     schemaVersion: 1
     acceptsWorldData: true
