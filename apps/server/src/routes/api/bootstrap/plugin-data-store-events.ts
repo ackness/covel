@@ -1,4 +1,5 @@
 import type { EventBus } from "@covel/events";
+import type { CovelMessage } from "@covel/shared";
 import type {
   DataStore,
   PluginDataRecord,
@@ -120,15 +121,34 @@ export function wrapStoreWithPluginDataEvents(
         if (typeof target.withTransaction !== "function") {
           return target.withTransaction;
         }
-        return <T>(fn: (tx: StoreTransaction) => Promise<T>): Promise<T> =>
-          target.withTransaction!((tx) =>
+        return async <T>(
+          fn: (tx: StoreTransaction) => Promise<T>,
+        ): Promise<T> => {
+          // Buffer plugin-data.changed events emitted by tx-scoped writes and
+          // flush them only after the transaction commits. Emitting inline
+          // would broadcast (and persist) before COMMIT — on PG a subscriber's
+          // immediate GET could miss the uncommitted rows, and a later rollback
+          // would leave a phantom event. Buffering defers the fan-out to a real
+          // commit and discards it on rollback (the throw skips the flush).
+          const buffered: CovelMessage[] = [];
+          const bufferingBus: EventBus = {
+            ...eventBus,
+            emit: (message: CovelMessage): void => {
+              buffered.push(message);
+            },
+          };
+          const result = await target.withTransaction!((tx) =>
             fn(
               wrapStoreWithPluginDataEvents(
                 tx as unknown as DataStore,
-                eventBus,
+                bufferingBus,
               ) as unknown as StoreTransaction,
             ),
           );
+          // Preserves write order; flush happens post-COMMIT.
+          for (const message of buffered) eventBus.emit(message);
+          return result;
+        };
       }
 
       if (prop === "deletePluginData") {
