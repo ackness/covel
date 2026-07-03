@@ -130,7 +130,7 @@ describe("createRuntimeImagesContext", () => {
     expect(meta.promptHash).not.toBe("fake");
   });
 
-  it("returns a cached result (with the first call's meta) and skips the gateway when promptHash already exists", async () => {
+  it("returns a cached result and skips the gateway when promptHash already exists", async () => {
     const { media, mediaStore } = makeMediaStub();
     const gateway = makeGatewayStub([
       { kind: "bytes", bytes: new Uint8Array([1]), mime: "image/png" },
@@ -153,10 +153,38 @@ describe("createRuntimeImagesContext", () => {
     expect(second.warnings).toEqual([]);
     expect(second.refs).toHaveLength(1);
     expect(second.refs[0]!.id).toBe(first.refs[0]!.id);
-    expect(second.refs[0]!.meta).toMatchObject({
-      kind: "avatar",
+    // The returned ref carries THIS call's metadata, not the first call's:
+    // this call passed none, so the first call's `kind: "avatar"` must not
+    // leak onto it (only the framework-injected keys remain).
+    expect(second.refs[0]!.meta).toMatchObject({ pluginId: "img-plugin" });
+    expect(second.refs[0]!.meta).not.toHaveProperty("kind");
+    expect(gateway.generateImage).not.toHaveBeenCalled();
+  });
+
+  it("stamps each cache hit with the calling turn's own metadata, not the first call's", async () => {
+    const { media, mediaStore } = makeMediaStub();
+    const gateway = makeGatewayStub([
+      { kind: "bytes", bytes: new Uint8Array([1]), mime: "image/png" },
+    ]);
+    const ctx = createRuntimeImagesContext(gateway, mediaStore, media, {
+      sessionId: "sess-1",
       pluginId: "img-plugin",
     });
+
+    const first = await ctx.generate({
+      prompt: "same prompt",
+      metadata: { sceneId: "scene-1" },
+    });
+
+    gateway.generateImage.mockClear();
+    const second = await ctx.generate({
+      prompt: "same prompt",
+      metadata: { sceneId: "scene-2" },
+    });
+
+    expect(second.cached).toBe(true);
+    expect(second.refs[0]!.id).toBe(first.refs[0]!.id);
+    expect(second.refs[0]!.meta).toMatchObject({ sceneId: "scene-2" });
     expect(gateway.generateImage).not.toHaveBeenCalled();
   });
 
@@ -175,9 +203,9 @@ describe("createRuntimeImagesContext", () => {
       throw new Error("network error");
     });
 
-    await expect(
-      ctx.generate({ prompt: "two cats", n: 2 }),
-    ).rejects.toThrow("network error");
+    await expect(ctx.generate({ prompt: "two cats", n: 2 })).rejects.toThrow(
+      "network error",
+    );
 
     // Only the bytes image persisted; the promptHash asset is a partial
     // result (1 of 2 requested) and must not be treated as a cache hit.

@@ -13,6 +13,7 @@ import {
   getImageWire,
   DEFAULT_IMAGE_WIRE,
 } from "../../packages/ai-provider/src/image/wire-registry.ts";
+import { validateBaseUrl } from "../../packages/ai-provider/src/adapters/http.ts";
 
 /**
  * Read a `[covel.<slot>]` block from ~/.covel/llm.toml into a flat object,
@@ -96,8 +97,19 @@ export async function fetchImageBytes({
   const img = result.images[0];
   if (!img) throw new Error("wire returned no images");
   if (img.kind === "bytes") return img.bytes;
+  // ponytail: minimal SSRF + content-type guard. The wire returns a direct
+  // provider URL (not user input), so no redirect-hop revalidation.
+  if (!validateBaseUrl(img.url)) {
+    throw new Error(`image url rejected by SSRF policy: ${img.url}`);
+  }
   const res = await fetch(img.url);
   if (!res.ok) throw new Error(`fetch image url failed: HTTP ${res.status}`);
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.startsWith("image/")) {
+    throw new Error(
+      `image url returned non-image content-type: ${ct || "(none)"}`,
+    );
+  }
   return new Uint8Array(await res.arrayBuffer());
 }
 

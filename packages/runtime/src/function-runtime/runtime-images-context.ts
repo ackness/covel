@@ -56,6 +56,14 @@ export function createRuntimeImagesContext(
     async generate(input: ImageGenerateInput): Promise<ImageGenerateOutput> {
       const promptHash = promptHashOf(input);
 
+      // Framework-injected keys are spread last so plugin-supplied
+      // `metadata` can never override them. Computed up front so a cache
+      // hit stamps THIS call's metadata onto the returned refs — the stored
+      // record keeps the first call's meta (write/read stay consistent), but
+      // consumers indexing off the returned refs see their own values, not
+      // a stale sceneId/variant from whoever generated the prompt first.
+      const meta = { ...input.metadata, pluginId, promptHash };
+
       const wantedCount = input.n ?? 1;
       const existing = await mediaStore.listByMetadata(sessionId, {
         promptHash,
@@ -71,7 +79,7 @@ export function createRuntimeImagesContext(
               id: asset.id,
               mime: asset.mime,
               size: asset.size,
-              ...(asset.meta ? { meta: asset.meta } : {}),
+              meta,
             }),
           ),
           warnings: [],
@@ -89,10 +97,6 @@ export function createRuntimeImagesContext(
         background: input.background,
         signal: input.signal,
       });
-
-      // Framework-injected keys are spread last so plugin-supplied
-      // `metadata` can never override them.
-      const meta = { ...input.metadata, pluginId, promptHash };
 
       const refs: MediaRef[] = [];
       for (const image of result.images) {
