@@ -33,6 +33,12 @@ export interface StageChoicesProps {
 
 const STAGGER_STEP_MS = 60;
 
+// Category labels (观察/交涉/行动/追问) arrive as already-localized display text
+// with no semantic key attached, so there's nothing to map a fixed color onto.
+// Cycle the four `ui-stage-cat-*` hues by item index instead — the goal is only
+// visual separation between adjacent choices.
+const CATEGORY_HUES = 4;
+
 export function StageChoices({
   visible,
   interactionChoices,
@@ -86,9 +92,14 @@ export function StageChoices({
             className="ui-stage-panel ui-stage-choice-item rounded-[var(--radius-control)] px-3.5 py-2 text-left text-sm transition-colors hover:border-[var(--accent-primary)]"
             style={{ animationDelay: `${index * STAGGER_STEP_MS}ms` }}
           >
-            {item.label}
+            <span className="block">{item.label}</span>
             {item.description && (
-              <span className="mt-0.5 block text-xs text-muted-foreground">
+              <span
+                className={clsx(
+                  "ui-stage-cat",
+                  `ui-stage-cat-${index % CATEGORY_HUES}`,
+                )}
+              >
                 {item.description}
               </span>
             )}

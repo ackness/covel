@@ -966,6 +966,37 @@
     color-mix(in oklab, var(--accent-primary) 40%, transparent);
 }
 
+/* Category pill under a stage choice (观察/交涉/行动/追问). Four hues drawn from
+   existing accent tokens, tinted low-saturation via color-mix so both themes
+   stay readable — the surface anchors to --surface-page and the text mixes the
+   hue toward --color-foreground, both of which flip per theme. Hue is selected
+   by `--cat`; StageChoices assigns the modifier class by cycling index. */
+.ui-stage-cat {
+  display: inline-block;
+  margin-top: 0.3rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: var(--radius-chip);
+  font-size: 0.6875rem;
+  line-height: 1.3;
+  background: color-mix(in oklab, var(--cat) 16%, var(--surface-page));
+  border: var(--rule-thickness) var(--rule-style)
+    color-mix(in oklab, var(--cat) 32%, transparent);
+  color: color-mix(in oklab, var(--cat) 68%, var(--color-foreground));
+}
+
+.ui-stage-cat-0 {
+  --cat: var(--accent-secondary);
+}
+.ui-stage-cat-1 {
+  --cat: var(--accent-success);
+}
+.ui-stage-cat-2 {
+  --cat: var(--accent-warning);
+}
+.ui-stage-cat-3 {
+  --cat: var(--accent-primary);
+}
+
 /* Reuses the existing blink keyframe (see `.ui-cursor` above) for the
    dialog's "more text below" indicator. */
 .ui-stage-caret {
