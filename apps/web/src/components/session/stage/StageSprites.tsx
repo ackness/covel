@@ -20,6 +20,8 @@ export interface StageSpritesProps {
   readonly speakers: readonly StageSpeaker[];
   readonly presence: Readonly<Record<string, PresenceRecord | undefined>>;
   readonly sessionId: string;
+  /** Choice overlay open — pull focus off the sprites (classic VN dim). */
+  readonly dimmed?: boolean;
 }
 
 // Offsets are the sprite's CENTER (the slot below applies translateX(-50%)),
@@ -36,6 +38,7 @@ export function StageSprites({
   speakers,
   presence,
   sessionId,
+  dimmed = false,
 }: StageSpritesProps): ReactElement {
   const fresh = computeSpriteSlots(speakers, presence);
   // GalGame sticky sprites: transitional narration turns often have no active
@@ -50,7 +53,10 @@ export function StageSprites({
 
   return (
     <div
-      className="pointer-events-none absolute inset-x-0 top-0 bottom-[26%]"
+      className={clsx(
+        "pointer-events-none absolute inset-x-0 top-0 bottom-[26%] transition-[filter,opacity] duration-300",
+        dimmed && "opacity-60 brightness-[.72]",
+      )}
       data-testid="stage-sprites"
     >
       {slots.map((slot) => (

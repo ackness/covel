@@ -167,6 +167,8 @@ export function StageView(props: StageViewProps): ReactElement {
   );
   const activeForm = pendingForms.find((m) => !dismissedFormIds.has(m.id));
 
+  const choicesVisible = allRead && !executing && !inputMode;
+
   return (
     <div
       className="relative flex-1 min-h-0 overflow-hidden"
@@ -181,6 +183,7 @@ export function StageView(props: StageViewProps): ReactElement {
         speakers={speakers}
         presence={presence}
         sessionId={session.id}
+        dimmed={choicesVisible}
       />
       <StageHud
         sceneCurrent={sceneCurrent}
@@ -205,7 +208,7 @@ export function StageView(props: StageViewProps): ReactElement {
         onSendMessage={onSendMessage}
       />
       <StageChoices
-        visible={allRead && !executing && !inputMode}
+        visible={choicesVisible}
         interactionChoices={interactionChoices}
         promptsNamespace={freshPrompts}
         locale={locale}
