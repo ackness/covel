@@ -967,6 +967,8 @@
     "formTitle": "Fill out form",
     "autoPlayLabel": "Auto-play",
     "autoPlayPauseLabel": "Pause auto-play",
+    "immersiveLabel": "Fullscreen stage",
+    "immersiveExitLabel": "Exit fullscreen",
     "exitLabel": "Exit stage",
     "inputPlaceholder": "Type your response…",
     "inputSendHint": "Enter to send · Shift+Enter for a new line · Esc to cancel",

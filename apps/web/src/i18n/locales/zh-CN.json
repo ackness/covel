@@ -967,6 +967,8 @@
     "formTitle": "填写表单",
     "autoPlayLabel": "自动播放",
     "autoPlayPauseLabel": "暂停自动播放",
+    "immersiveLabel": "全屏舞台",
+    "immersiveExitLabel": "退出全屏",
     "exitLabel": "退出舞台",
     "inputPlaceholder": "输入你的回应…",
     "inputSendHint": "Enter 发送 · Shift+Enter 换行 · Esc 取消",

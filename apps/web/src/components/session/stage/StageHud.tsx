@@ -3,7 +3,16 @@
  * it shows comes from `sceneCurrent` (scene-stage `stage/current`) and
  * every button forwards straight to a prop callback.
  */
-import { BookOpen, MessagesSquare, Moon, Pause, Play, Sun } from "lucide-react";
+import {
+  BookOpen,
+  Maximize2,
+  MessagesSquare,
+  Minimize2,
+  Moon,
+  Pause,
+  Play,
+  Sun,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { clsx } from "clsx";
 import type { ReactElement } from "react";
@@ -15,8 +24,10 @@ export interface StageHudProps {
   readonly sceneCurrent: StageCurrentRecord | null | undefined;
   readonly locale: string;
   readonly autoPlay: boolean;
+  readonly immersive: boolean;
   readonly onOpenHistory: () => void;
   readonly onToggleAutoPlay: () => void;
+  readonly onToggleImmersive: () => void;
   readonly onExit: () => void;
 }
 
@@ -24,8 +35,10 @@ export function StageHud({
   sceneCurrent,
   locale,
   autoPlay,
+  immersive,
   onOpenHistory,
   onToggleAutoPlay,
+  onToggleImmersive,
   onExit,
 }: StageHudProps): ReactElement {
   const { t } = useTranslation();
@@ -93,6 +106,26 @@ export function StageHud({
             <Pause className="h-3.5 w-3.5" />
           ) : (
             <Play className="h-3.5 w-3.5" />
+          )}
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onToggleImmersive}
+          aria-pressed={immersive}
+          className={clsx(immersive && "text-[var(--accent-primary)]")}
+          aria-label={t(
+            immersive ? "stage.immersiveExitLabel" : "stage.immersiveLabel",
+          )}
+          title={t(
+            immersive ? "stage.immersiveExitLabel" : "stage.immersiveLabel",
+          )}
+          data-testid="stage-immersive-toggle"
+        >
+          {immersive ? (
+            <Minimize2 className="h-3.5 w-3.5" />
+          ) : (
+            <Maximize2 className="h-3.5 w-3.5" />
           )}
         </Button>
         <Button

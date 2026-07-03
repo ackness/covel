@@ -72,6 +72,10 @@ export interface StageViewProps {
   readonly onRetryRuntime?: (runtimeId: string | undefined) => void;
   readonly onBeginAdventure: () => void;
   readonly onViewModeChange: (mode: "parsed") => void;
+  /** Whether studio rails are collapsed for full-screen immersion. */
+  readonly immersive: boolean;
+  /** Toggle immersive (full-screen) stage mode. */
+  readonly onToggleImmersive: () => void;
   readonly messagesEndRef: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -101,6 +105,8 @@ export function StageView(props: StageViewProps): ReactElement {
     onSubmitInteraction,
     onRetryRuntime,
     onViewModeChange,
+    immersive,
+    onToggleImmersive,
   } = props;
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
@@ -180,8 +186,10 @@ export function StageView(props: StageViewProps): ReactElement {
         sceneCurrent={sceneCurrent}
         locale={locale}
         autoPlay={autoPlay}
+        immersive={immersive}
         onOpenHistory={() => setHistoryOpen(true)}
         onToggleAutoPlay={() => setAutoPlay((v) => !v)}
+        onToggleImmersive={onToggleImmersive}
         onExit={() => onViewModeChange("parsed")}
       />
       <StageDialog

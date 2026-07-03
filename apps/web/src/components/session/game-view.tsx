@@ -144,6 +144,9 @@ export function GameView({
   const [viewMode, setViewMode] = useState<GameViewMode>(() =>
     world?.metadata?.defaultViewMode === "stage" ? "stage" : "parsed",
   );
+  // Full-screen stage: collapse both studio rails + hide the session header so
+  // the stage fills the viewport. Session-memory only (no persistence).
+  const [immersive, setImmersive] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsInitialKey, setSettingsInitialKey] = useState<
     string | undefined
@@ -190,6 +193,56 @@ export function GameView({
     toggleLeftPanel,
     toggleRightPanel,
   } = usePanelCollapse(isMobile, isTablet);
+
+  // Immersive stage: collapse both rails on enter, restore prior expansion on
+  // exit. On mobile/tablet the rails are already collapsed by usePanelCollapse,
+  // so we only drive the imperative panels on wide viewports.
+  const priorRailState = useRef<{ left: boolean; right: boolean } | null>(null);
+  useEffect(() => {
+    if (isMobile || isTablet) return;
+    const left = leftPanelRef.current;
+    const right = rightPanelRef.current;
+    if (!left || !right) return;
+    if (immersive) {
+      priorRailState.current = {
+        left: left.isCollapsed(),
+        right: right.isCollapsed(),
+      };
+      left.collapse();
+      right.collapse();
+    } else if (priorRailState.current) {
+      if (!priorRailState.current.left) left.expand();
+      if (!priorRailState.current.right) right.expand();
+      priorRailState.current = null;
+    }
+  }, [immersive, isMobile, isTablet, leftPanelRef, rightPanelRef]);
+
+  // Esc leaves immersive — but only when nothing editable is focused (the stage
+  // free-text composer owns Esc to cancel input) and no modal already ate it.
+  useEffect(() => {
+    if (!immersive) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const el = e.target as HTMLElement | null;
+      if (
+        el &&
+        (el.isContentEditable ||
+          el.tagName === "INPUT" ||
+          el.tagName === "TEXTAREA")
+      )
+        return;
+      setImmersive(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [immersive]);
+
+  // Leaving stage always drops immersion so a hidden header can't strand the
+  // player in a chrome-less non-stage view.
+  const handleViewModeChange = (mode: GameViewMode) => {
+    if (mode !== "stage") setImmersive(false);
+    setViewMode(mode);
+  };
 
   // Sentinel ref for the bottom of the message list. Auto-scroll behaviour
   // (sticky-bottom + jump-to-latest) lives in ChatMessages via useAutoScroll;
@@ -361,24 +414,29 @@ export function GameView({
               }}
             />
           </div>
-          {/* Header */}
-          <GameViewHeader
-            t={t}
-            sessionId={session.id}
-            world={world}
-            executing={executing}
-            viewMode={viewMode}
-            isLeftCollapsed={isLeftCollapsed}
-            isRightCollapsed={isRightCollapsed}
-            onViewModeChange={setViewMode}
-            onToggleLeftPanel={toggleLeftPanel}
-            onToggleRightPanel={toggleRightPanel}
-            onOpenSettings={() => setSettingsOpen(true)}
-            onOpenSuspensions={() => setSuspensionsOpen(true)}
-            onBackToWorldSelect={onBackToWorldSelect}
-            onResetSession={onResetSession}
-            suspensionsCount={suspensions.length}
-          />
+          {/* Header — hidden while the stage is immersive so it fills the
+              viewport. Fades back in on exit (rails snap; chrome fades). */}
+          {!(immersive && viewMode === "stage") && (
+            <div className="animate-in fade-in-0 duration-200">
+              <GameViewHeader
+                t={t}
+                sessionId={session.id}
+                world={world}
+                executing={executing}
+                viewMode={viewMode}
+                isLeftCollapsed={isLeftCollapsed}
+                isRightCollapsed={isRightCollapsed}
+                onViewModeChange={handleViewModeChange}
+                onToggleLeftPanel={toggleLeftPanel}
+                onToggleRightPanel={toggleRightPanel}
+                onOpenSettings={() => setSettingsOpen(true)}
+                onOpenSuspensions={() => setSuspensionsOpen(true)}
+                onBackToWorldSelect={onBackToWorldSelect}
+                onResetSession={onResetSession}
+                suspensionsCount={suspensions.length}
+              />
+            </div>
+          )}
 
           {/* Messages */}
           {viewMode === "stage" && session.turnCount >= 1 ? (
@@ -398,7 +456,9 @@ export function GameView({
               onSubmitInteraction={onSubmitInteraction}
               onRetryRuntime={onRetryRuntime}
               onBeginAdventure={onBeginAdventure}
-              onViewModeChange={setViewMode}
+              onViewModeChange={handleViewModeChange}
+              immersive={immersive}
+              onToggleImmersive={() => setImmersive((v) => !v)}
               messagesEndRef={messagesEndRef}
             />
           ) : (
