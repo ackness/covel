@@ -201,6 +201,47 @@ describe("scene-stage background-gen handler", () => {
     );
   });
 
+  it("7. skips the image call when the requested variant already exists, but still refreshes a lagging stage", async () => {
+    const existingDay = makeRef("e");
+    const ctx = makeCtx({
+      variant: "day",
+      existingGenerated: {
+        sceneId: "gen-abcd1234",
+        location: "废弃天文台",
+        day: existingDay,
+        night: null,
+      },
+      stage: {
+        sceneId: "gen-abcd1234",
+        variant: "day",
+        source: "pending",
+        day: null,
+        night: null,
+        resolved: null,
+      },
+    });
+
+    const result = await handler(ctx);
+
+    expect(ctx.images.generate).not.toHaveBeenCalled();
+    expect(result.status).toBe("skipped");
+    expect(ctx.pluginData.set).not.toHaveBeenCalledWith(
+      "generated",
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(ctx.pluginData.set).toHaveBeenCalledWith(
+      "stage",
+      "current",
+      expect.objectContaining({
+        sceneId: "gen-abcd1234",
+        source: "session",
+        day: existingDay,
+        resolved: existingDay,
+      }),
+    );
+  });
+
   it("returns a failed status when the provider resolves with zero refs", async () => {
     const ctx = makeCtx({
       images: {

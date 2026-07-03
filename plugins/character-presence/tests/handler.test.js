@@ -55,12 +55,10 @@ describe("character-presence handler", () => {
         namespace: "presence",
         key: "mentor-lin",
         value: {
-          presence: {
-            schemaVersion: 1,
-            characterId: "mentor-lin",
-            displayName: "Lin Yue",
-            avatar,
-          },
+          schemaVersion: 1,
+          characterId: "mentor-lin",
+          displayName: "Lin Yue",
+          avatar,
         },
       },
     });
@@ -111,21 +109,19 @@ describe("character-presence handler", () => {
         namespace: "presence",
         key: "mentor-lin",
         value: {
-          presence: {
-            schemaVersion: 1,
-            characterId: "mentor-lin",
-            displayName: "林月",
-            style: "语音轻，立绘偏安静。",
-            avatar: {
-              id: "a".repeat(64),
-              mime: "image/png",
-              size: 1234,
-            },
-            sprite: {
-              id: "b".repeat(64),
-              mime: "image/png",
-              size: 5678,
-            },
+          schemaVersion: 1,
+          characterId: "mentor-lin",
+          displayName: "林月",
+          style: "语音轻，立绘偏安静。",
+          avatar: {
+            id: "a".repeat(64),
+            mime: "image/png",
+            size: 1234,
+          },
+          sprite: {
+            id: "b".repeat(64),
+            mime: "image/png",
+            size: 5678,
           },
         },
       },

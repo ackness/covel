@@ -27,8 +27,12 @@ export default async function handler(ctx) {
   const proposal = makeProposal(ctx, now, "plugin.data", {
     namespace: PRESENCE_NAMESPACE,
     key: presence.characterId,
+    // Flat shape — matches the world seed (media/presence.json), the schema,
+    // and every frontend read site (stage-selectors, portrait-gallery-panel,
+    // character-avatar-renderer). Records are keyed by characterId and fully
+    // overwritten each RPC, so any legacy wrapped record self-heals on rewrite.
     value: {
-      presence,
+      ...presence,
       updatedAt: now,
     },
   });

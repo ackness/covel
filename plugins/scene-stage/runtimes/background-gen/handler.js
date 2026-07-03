@@ -47,6 +47,24 @@ export default async function handler(ctx) {
     };
   }
 
+  const existing = ctx.pluginData
+    ? await ctx.pluginData.get(GENERATED_NS, sceneId)
+    : null;
+
+  // Already generated this scene+variant — skip the (billed) image call so a
+  // repeat generate.requested (e.g. visualHint drift) can't re-charge for art
+  // we already have. Still refresh the stage in case it lags the index.
+  const cachedRef = existing?.[variant];
+  if (cachedRef && typeof cachedRef === "object") {
+    await refreshStageIfCurrent(
+      ctx,
+      sceneId,
+      existing.day ?? null,
+      existing.night ?? null,
+    );
+    return { status: "skipped", reason: "variant already generated" };
+  }
+
   const registry = ctx.pluginData
     ? await ctx.pluginData.get(SCENES_NS, REGISTRY_KEY)
     : null;
@@ -89,9 +107,6 @@ export default async function handler(ctx) {
     return { status: "failed", error: message };
   }
 
-  const existing = ctx.pluginData
-    ? await ctx.pluginData.get(GENERATED_NS, sceneId)
-    : null;
   const generatedEntry = {
     sceneId,
     location,
@@ -101,29 +116,12 @@ export default async function handler(ctx) {
   };
   await ctx.pluginData?.set(GENERATED_NS, sceneId, generatedEntry);
 
-  const previousStage = ctx.pluginData
-    ? await ctx.pluginData.get(STAGE_NS, STAGE_KEY)
-    : null;
-  if (
-    previousStage &&
-    typeof previousStage === "object" &&
-    previousStage.sceneId === sceneId
-  ) {
-    const refreshedStage = {
-      ...previousStage,
-      source: "session",
-      day: generatedEntry.day,
-      night: generatedEntry.night,
-      resolved: resolveMedia(
-        previousStage.variant,
-        generatedEntry.day,
-        generatedEntry.night,
-      ),
-      sourceLabel: sourceLabelFor("session"),
-      updatedAt: new Date().toISOString(),
-    };
-    await ctx.pluginData.set(STAGE_NS, STAGE_KEY, refreshedStage);
-  }
+  await refreshStageIfCurrent(
+    ctx,
+    sceneId,
+    generatedEntry.day,
+    generatedEntry.night,
+  );
 
   return {
     status: "done",
@@ -131,4 +129,35 @@ export default async function handler(ctx) {
       { ref, modality: "image", meta: { kind: SCENE_KIND, sceneId, variant } },
     ],
   };
+}
+
+/**
+ * When `stage/current` still points at this scene, refresh it from "pending"
+ * to the freshly-known "session" art. No-op otherwise (the player has moved on).
+ *
+ * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @param {string} sceneId
+ * @param {unknown} day
+ * @param {unknown} night
+ */
+async function refreshStageIfCurrent(ctx, sceneId, day, night) {
+  const previousStage = ctx.pluginData
+    ? await ctx.pluginData.get(STAGE_NS, STAGE_KEY)
+    : null;
+  if (
+    !previousStage ||
+    typeof previousStage !== "object" ||
+    previousStage.sceneId !== sceneId
+  ) {
+    return;
+  }
+  await ctx.pluginData.set(STAGE_NS, STAGE_KEY, {
+    ...previousStage,
+    source: "session",
+    day,
+    night,
+    resolved: resolveMedia(previousStage.variant, day, night),
+    sourceLabel: sourceLabelFor("session"),
+    updatedAt: new Date().toISOString(),
+  });
 }
