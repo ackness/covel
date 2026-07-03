@@ -73,7 +73,8 @@ export function StageChoices({
     >
       <div
         className={clsx(
-          "pointer-events-auto grid w-full max-w-3xl gap-2",
+          "pointer-events-auto grid max-h-[46vh] w-full gap-1.5 overflow-y-auto",
+          twoColumn ? "max-w-2xl" : "max-w-md",
           twoColumn ? "grid-cols-2" : "grid-cols-1",
         )}
       >
@@ -82,7 +83,7 @@ export function StageChoices({
             key={item.id}
             type="button"
             onClick={() => handleSelect(item)}
-            className="ui-stage-panel ui-stage-choice-item rounded-[var(--radius-control)] px-4 py-2.5 text-left text-sm transition-colors hover:border-[var(--accent-primary)]"
+            className="ui-stage-panel ui-stage-choice-item rounded-[var(--radius-control)] px-3.5 py-2 text-left text-sm transition-colors hover:border-[var(--accent-primary)]"
             style={{ animationDelay: `${index * STAGGER_STEP_MS}ms` }}
           >
             {item.label}

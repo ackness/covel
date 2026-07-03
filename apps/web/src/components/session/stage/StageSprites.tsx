@@ -7,7 +7,7 @@
  * `transform` (see the `.ui-stage-rise-in` comment in index.css).
  */
 import { clsx } from "clsx";
-import type { ReactElement } from "react";
+import { useRef, type ReactElement } from "react";
 import { Media } from "@/components/Media.js";
 import {
   computeSpriteSlots,
@@ -35,7 +35,16 @@ export function StageSprites({
   presence,
   sessionId,
 }: StageSpritesProps): ReactElement {
-  const slots = computeSpriteSlots(speakers, presence);
+  const fresh = computeSpriteSlots(speakers, presence);
+  // GalGame sticky sprites: transitional narration turns often have no active
+  // cast — keep the previous line-up on stage (dimmed) instead of blinking
+  // everyone out, until a turn with a real cast replaces it.
+  const lastSlotsRef = useRef(fresh);
+  if (fresh.length > 0) lastSlotsRef.current = fresh;
+  const sticky = fresh.length === 0 && lastSlotsRef.current.length > 0;
+  const slots = sticky
+    ? lastSlotsRef.current.map((slot) => ({ ...slot, active: false }))
+    : fresh;
 
   return (
     <div
