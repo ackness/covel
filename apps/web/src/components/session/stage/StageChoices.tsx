@@ -92,17 +92,19 @@ export function StageChoices({
             className="ui-stage-panel ui-stage-choice-item rounded-[var(--radius-control)] px-3.5 py-2 text-left text-sm transition-colors hover:border-[var(--accent-primary)]"
             style={{ animationDelay: `${index * STAGGER_STEP_MS}ms` }}
           >
-            <span className="block">{item.label}</span>
-            {item.description && (
-              <span
-                className={clsx(
-                  "ui-stage-cat",
-                  `ui-stage-cat-${index % CATEGORY_HUES}`,
-                )}
-              >
-                {item.description}
-              </span>
-            )}
+            <span className="flex items-center justify-between gap-3">
+              <span className="min-w-0 flex-1">{item.label}</span>
+              {item.description && (
+                <span
+                  className={clsx(
+                    "ui-stage-cat shrink-0",
+                    `ui-stage-cat-${index % CATEGORY_HUES}`,
+                  )}
+                >
+                  {item.description}
+                </span>
+              )}
+            </span>
           </button>
         ))}
         <button
