@@ -78,6 +78,10 @@ export function StageHud({
           size="icon-sm"
           onClick={onToggleAutoPlay}
           aria-pressed={autoPlay}
+          // Ghost buttons have no pressed background, so when auto-play is on
+          // only the Play→Pause icon swap signals it. Tint the button accent
+          // while active so the on-state reads at a glance.
+          className={clsx(autoPlay && "text-[var(--accent-primary)]")}
           aria-label={t(
             autoPlay ? "stage.autoPlayPauseLabel" : "stage.autoPlayLabel",
           )}
