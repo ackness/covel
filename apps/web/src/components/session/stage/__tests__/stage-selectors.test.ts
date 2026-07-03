@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { StreamMessage } from "@/stores/session-store.js";
 import type { WorldVisual } from "@/lib/world-visuals.js";
 import {
+  assignStations,
   computeSpriteSlots,
   extractInteractionChoices,
   extractPendingFormMessages,
   filterStalePrompts,
   mergeChoices,
   resolveBackdrop,
+  type SpritePosition,
   type StageCurrentRecord,
   type StageSpeaker,
 } from "../stage-selectors.js";
@@ -111,14 +113,16 @@ describe("computeSpriteSlots", () => {
     expect(slots.map((s) => s.pos)).toEqual(["left", "right"]);
   });
 
-  it("3-4 speakers distribute evenly", () => {
+  it("3 speakers: fresh layout centers the primary, wings the rest", () => {
     const presence = {
       lin: { characterId: "lin", sprite: ref("lin-sprite") },
       archivist: { characterId: "archivist", sprite: ref("archivist-sprite") },
       ghost: { characterId: "ghost", sprite: ref("ghost-sprite") },
     };
     const slots = computeSpriteSlots(speakers, presence);
-    expect(slots.map((s) => s.pos)).toEqual(["left", "center", "right"]);
+    // Newcomers gravitate to center in salience order (ties break left):
+    // primary center, second left, third right.
+    expect(slots.map((s) => s.pos)).toEqual(["center", "left", "right"]);
   });
 
   it("marks speakers[0] active, falls back to avatar, and keeps artless speakers as null slots", () => {
@@ -141,8 +145,8 @@ describe("computeSpriteSlots", () => {
     const ghost = slots.find((s) => s.characterId === `${SESSION}-ghost`);
     expect(ghost?.ref).toBeNull();
     expect(ghost?.displayName).toBe("无立绘的角色");
-    // stations still count the fallback slot: 3 speakers → left/center/right
-    expect(slots.map((s) => s.pos)).toEqual(["left", "center", "right"]);
+    // stations still count the fallback slot: 3 speakers, primary centered
+    expect(slots.map((s) => s.pos)).toEqual(["center", "left", "right"]);
   });
 
   it("keeps an artless primary speaker on stage as an active null slot (no nameplate mismatch)", () => {
@@ -157,6 +161,74 @@ describe("computeSpriteSlots", () => {
     expect(lin?.ref).toBeNull();
     expect(lin?.active).toBe(true);
     expect(slots.map((s) => s.pos)).toEqual(["left", "right"]);
+  });
+});
+
+describe("assignStations", () => {
+  const empty: ReadonlyMap<string, SpritePosition> = new Map();
+  const at = (m: ReadonlyMap<string, SpritePosition>, id: string) => m.get(id);
+
+  it("speaker-order swap keeps every station (the sprite-drift regression)", () => {
+    const prev = assignStations(empty, ["a", "b"]);
+    expect([at(prev, "a"), at(prev, "b")]).toEqual(["left", "right"]);
+
+    // b becomes the primary speaker — salience order flips, nobody moves.
+    const next = assignStations(prev, ["b", "a"]);
+    expect(at(next, "a")).toBe("left");
+    expect(at(next, "b")).toBe("right");
+  });
+
+  it("a newcomer fills the free station without moving survivors", () => {
+    const prev = assignStations(empty, ["a", "b"]);
+    const next = assignStations(prev, ["a", "b", "c"]);
+    expect(at(next, "a")).toBe("left");
+    expect(at(next, "b")).toBe("right");
+    expect(at(next, "c")).toBe("center");
+  });
+
+  it("a leaver frees their station without moving survivors", () => {
+    const trio = assignStations(assignStations(empty, ["a", "b"]), [
+      "a",
+      "b",
+      "c",
+    ]);
+    const next = assignStations(trio, ["b", "a"]); // c left, b now primary
+    expect(at(next, "a")).toBe("left");
+    expect(at(next, "b")).toBe("right");
+  });
+
+  it("a solo centered speaker steps aside for a newcomer", () => {
+    const solo = assignStations(empty, ["a"]);
+    expect(at(solo, "a")).toBe("center");
+
+    const duo = assignStations(solo, ["a", "b"]);
+    expect(at(duo, "a")).toBe("left"); // nearest free to center, ties break left
+    expect(at(duo, "b")).toBe("right");
+  });
+
+  it("an empty cast (sticky narration turn) keeps the memory untouched", () => {
+    const prev = assignStations(empty, ["a", "b"]);
+    expect(assignStations(prev, [])).toBe(prev);
+    // …so the returning cast lands on their old spots, whatever the order.
+    const back = assignStations(assignStations(prev, []), ["b", "a"]);
+    expect(at(back, "a")).toBe("left");
+    expect(at(back, "b")).toBe("right");
+  });
+
+  it("a re-entering character prefers their remembered spot", () => {
+    const duo = assignStations(empty, ["a", "b"]); // a left, b right
+    const solo = assignStations(duo, ["a"]); // b leaves, a re-centers
+    expect(at(solo, "a")).toBe("center");
+
+    const back = assignStations(solo, ["a", "b"]); // b returns
+    expect(at(back, "b")).toBe("right"); // remembered spot, still free
+    expect(at(back, "a")).toBe("left"); // displaced from center, ties break left
+  });
+
+  it("is idempotent (safe under StrictMode double render)", () => {
+    const prev = assignStations(empty, ["a", "b", "c"]);
+    const again = assignStations(prev, ["a", "b", "c"]);
+    expect([...again.entries()]).toEqual([...prev.entries()]);
   });
 });
 

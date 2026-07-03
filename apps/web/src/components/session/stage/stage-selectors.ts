@@ -91,27 +91,101 @@ export interface StageSpriteSlot {
   readonly pos: SpritePosition;
 }
 
-const POSITIONS_BY_COUNT: Readonly<Record<number, readonly SpritePosition[]>> =
-  {
-    // Solo speaker stands centered, fully visible (player feedback overrode
-    // the spec's original right-side station).
-    1: ["center"],
-    2: ["left", "right"],
-    3: ["left", "center", "right"],
-    4: ["left", "center-left", "center-right", "right"],
-  };
+/** Spatial scale of the five stations, left→right — index distance on this
+ * array is the visual distance a sprite travels when re-stationed. */
+const STATION_ORDER: readonly SpritePosition[] = [
+  "left",
+  "center-left",
+  "center",
+  "center-right",
+  "right",
+];
+
+/** Which stations are *in play* for a cast size (set semantics — assignment
+ * order comes from `assignStations`, not from array order). Solo speaker
+ * stands centered, fully visible (player feedback overrode the spec's
+ * original right-side station). */
+const STATIONS_BY_COUNT: Readonly<Record<number, readonly SpritePosition[]>> = {
+  1: ["center"],
+  2: ["left", "right"],
+  3: ["left", "center", "right"],
+  4: ["left", "center-left", "center-right", "right"],
+};
 
 // ponytail: stage real estate caps at 4 sprites (scene-cast's default/typical
-// activeSpeakerCount is 1-2); extend POSITIONS_BY_COUNT if a world ever needs more.
-const MAX_SPRITE_SLOTS = 4;
+// activeSpeakerCount is 1-2); extend STATIONS_BY_COUNT if a world ever needs more.
+export const MAX_SPRITE_SLOTS = 4;
+
+/** Leftmost free station nearest to `target` (ties break left — the
+ * left-to-right STATION_ORDER walk with a strict `<` guarantees it). */
+function nearestFree(
+  free: ReadonlySet<SpritePosition>,
+  target: SpritePosition,
+): SpritePosition {
+  const targetIdx = STATION_ORDER.indexOf(target);
+  let best: SpritePosition = "center";
+  let bestDist = Infinity;
+  for (const [idx, pos] of STATION_ORDER.entries()) {
+    if (!free.has(pos)) continue;
+    const dist = Math.abs(idx - targetIdx);
+    if (dist < bestDist) {
+      best = pos;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
 
 /**
- * Station speakers on stage. Speakers without a resolvable sprite/avatar are
- * kept as `ref: null` slots (the sprite layer renders a fallback card) rather
- * than dropped — dropping the primary speaker left the dialog nameplate
- * pointing at nobody on stage. `speakers[0]` (the highest-salience speaker
- * from scene-cast) is always flagged `active`.
+ * Sticky station assignment (classic-VN semantics): scene-cast's salience
+ * order decides who is *on* stage and who is highlighted — never where
+ * anyone stands. Stations only reshuffle when the cast membership changes
+ * (someone enters or leaves), and even then movement is minimised:
+ *
+ * 1. Whoever already holds a station that's still in play keeps it.
+ * 2. Everyone else (in salience order) walks to the free station nearest
+ *    their target — their remembered spot if they have one, stage center
+ *    otherwise. One rule covers both "step aside" (the station set shrank
+ *    or grew) and "enter" (newcomers gravitate to center, so the fresh
+ *    layout naturally centers the primary speaker).
+ * 3. Off-stage memory survives (map is bounded by distinct cast size), so a
+ *    character who re-enters later prefers their old spot.
+ * 4. An empty cast (transitional narration turn) returns `previous`
+ *    untouched — the sprite layer shows the sticky line-up, and the
+ *    returning cast must land on their old spots, not a fresh layout.
+ *
+ * Pure and idempotent: `assignStations(assignStations(m, ids), ids)` is a
+ * fixpoint, so the caller may safely re-run it per render (StrictMode).
  */
+export function assignStations(
+  previous: ReadonlyMap<string, SpritePosition>,
+  speakerIds: readonly string[],
+): ReadonlyMap<string, SpritePosition> {
+  const staged = speakerIds.slice(0, MAX_SPRITE_SLOTS);
+  if (staged.length === 0) return previous;
+
+  const free = new Set(STATIONS_BY_COUNT[staged.length] ?? []);
+  const next = new Map<string, SpritePosition>();
+
+  for (const id of staged) {
+    const remembered = previous.get(id);
+    if (remembered && free.has(remembered)) {
+      next.set(id, remembered);
+      free.delete(remembered);
+    }
+  }
+  for (const id of staged) {
+    if (next.has(id)) continue;
+    const pos = nearestFree(free, previous.get(id) ?? "center");
+    next.set(id, pos);
+    free.delete(pos);
+  }
+  for (const [id, pos] of previous) {
+    if (!next.has(id)) next.set(id, pos);
+  }
+  return next;
+}
+
 /**
  * Reconcile scoped speaker ids against bare presence characterIds. scene-cast
  * keys speakers by `<sessionId>-<characterId>` (scopedCharacterId) while
@@ -132,15 +206,32 @@ function findPresence(
   return undefined;
 }
 
+/**
+ * Station speakers on stage. Speakers without a resolvable sprite/avatar are
+ * kept as `ref: null` slots (the sprite layer renders a fallback card) rather
+ * than dropped — dropping the primary speaker left the dialog nameplate
+ * pointing at nobody on stage. `speakers[0]` (the highest-salience speaker
+ * from scene-cast) is always flagged `active`.
+ *
+ * `stations` is the sticky assignment from {@link assignStations} — pass the
+ * previous render's map through it so sprites keep their spots across speaker
+ * switches. Omitting it computes a fresh (memory-less) layout.
+ */
 export function computeSpriteSlots(
   speakers: readonly StageSpeaker[],
   presenceMap: Readonly<Record<string, PresenceRecord | undefined>>,
+  stations?: ReadonlyMap<string, SpritePosition>,
 ): StageSpriteSlot[] {
   const primaryId = speakers[0]?.id;
   const staged = speakers.slice(0, MAX_SPRITE_SLOTS);
-  const positions = POSITIONS_BY_COUNT[staged.length] ?? [];
+  const resolved =
+    stations ??
+    assignStations(
+      new Map(),
+      staged.map((speaker) => speaker.id),
+    );
 
-  return staged.map((speaker, index) => {
+  return staged.map((speaker) => {
     const presence = findPresence(presenceMap, speaker.id);
     const ref = isMediaRef(presence?.sprite)
       ? presence.sprite
@@ -152,7 +243,7 @@ export function computeSpriteSlots(
       displayName: speaker.name,
       ref,
       active: speaker.id === primaryId,
-      pos: positions[index] ?? "center",
+      pos: resolved.get(speaker.id) ?? "center",
     };
   });
 }

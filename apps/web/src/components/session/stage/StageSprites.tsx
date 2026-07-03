@@ -10,6 +10,7 @@ import { clsx } from "clsx";
 import { useRef, type ReactElement } from "react";
 import { Media } from "@/components/Media.js";
 import {
+  assignStations,
   computeSpriteSlots,
   type PresenceRecord,
   type SpritePosition,
@@ -40,7 +41,18 @@ export function StageSprites({
   sessionId,
   dimmed = false,
 }: StageSpritesProps): ReactElement {
-  const fresh = computeSpriteSlots(speakers, presence);
+  // Sticky stations: characters keep their spot while on stage; salience
+  // only moves the highlight. The memory map lives in a ref updated during
+  // render — deterministic and idempotent (assignStations is a fixpoint on
+  // its own output), same pattern as lastSlotsRef below.
+  const stationsRef = useRef<ReadonlyMap<string, SpritePosition>>(new Map());
+  const stations = assignStations(
+    stationsRef.current,
+    speakers.map((speaker) => speaker.id),
+  );
+  stationsRef.current = stations;
+
+  const fresh = computeSpriteSlots(speakers, presence, stations);
   // GalGame sticky sprites: transitional narration turns often have no active
   // cast — keep the previous line-up on stage (dimmed) instead of blinking
   // everyone out, until a turn with a real cast replaces it.
@@ -62,7 +74,13 @@ export function StageSprites({
       {slots.map((slot) => (
         <div
           key={slot.characterId}
-          className="ui-stage-sprite absolute bottom-0 h-[92%] -translate-x-1/2"
+          // ponytail: transitions `left` (a layout prop, against the web
+          // rules) — ≤4 absolutely-positioned sprites moving once per
+          // enter/leave; FLIP/transform plumbing isn't worth it. The global
+          // prefers-reduced-motion block collapses it. Station changes only
+          // happen on cast membership changes (assignStations), so this
+          // reads as "stepping aside", never as drift.
+          className="ui-stage-sprite absolute bottom-0 h-[92%] -translate-x-1/2 transition-[left] duration-500 ease-out"
           style={{ left: POSITION_OFFSET[slot.pos] }}
         >
           <div

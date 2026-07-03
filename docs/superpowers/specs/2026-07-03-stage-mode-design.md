@@ -17,14 +17,14 @@
 
 ## §2 组件（`apps/web/src/components/session/stage/`）
 
-| 组件            | 职责                                                                                                                                                                                                                                                                                       |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `StageView`     | 模式根：Playing 时替换 ChatMessages+PendingDraftsBar+MessageComposer 区域；组织下述层级；托管履历抽屉与表单模态                                                                                                                                                                            |
-| `StageBackdrop` | 背景层：读 scene-stage `stage/current` → `resolved` MediaRef → media-resolve URL；场景切换 600ms crossfade（双 img 层轮换）；§4 回退链                                                                                                                                                     |
-| `StageSprites`  | 立绘层：scene-cast `active-cast.speakers` × character-presence sprite refs；站位 1 人右侧/2 人左右/3-4 人均布，底边对齐；主发声者（speakers[0]）全亮+光晕+scale(1.03)，其余 brightness(.55) saturate(.6)；进出场 300ms opacity/transform 过渡；无 sprite 的角色不渲染占位                  |
-| `StageDialog`   | 对话框：消费流式 StreamMessage（outputKind story 的最新回合）；**打字机由真实 delta 驱动**（到达字符入队按节奏放出，队列空则等待）；`\n\n` 段界自动停顿显示 ▼，点击放行下一段；停顿外点击 = 立即放完当前段（跳过）；名牌 = active-cast 主发声者名；回合叙事完成且全部段放完 → 通知选择肢层 |
-| `StageChoices`  | 选择肢覆盖层（舞台中央纵列浮现）：interaction.request 的 choice 类在上、scene-prompts 短句居中、`✎ 自己输入…` 恒垫底；点击选择肢 = 直接提交（interaction 走既有 onSubmitInteraction，短句走 onSendMessage）；✎ 将对话框切为输入态（textarea + 发送，Esc 返回）；6 条以上双列               |
-| `StageHud`      | 左上：场景徽标（`stage/current` 的 name + 日/夜图标 + `sourceLabel`，pending 时呼吸动画）；右上按钮组：履历 · 自动播放（定时推进段落，再点关闭）· 切回聊天流（viewMode=parsed）                                                                                                            |
+| 组件            | 职责                                                                                                                                                                                                                                                                                                                                                           |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `StageView`     | 模式根：Playing 时替换 ChatMessages+PendingDraftsBar+MessageComposer 区域；组织下述层级；托管履历抽屉与表单模态                                                                                                                                                                                                                                                |
+| `StageBackdrop` | 背景层：读 scene-stage `stage/current` → `resolved` MediaRef → media-resolve URL；场景切换 600ms crossfade（双 img 层轮换）；§4 回退链                                                                                                                                                                                                                         |
+| `StageSprites`  | 立绘层：scene-cast `active-cast.speakers` × character-presence sprite refs；**粘性站位**（决策 5）：salience 只决定谁上场/谁高亮，站位只在成员进出时按"最近空位"重排；主发声者（speakers[0]）全亮+光晕+scale(1.03)，其余 brightness(.55) saturate(.6)；进出场 300ms opacity/transform 过渡，让位滑移 500ms；无 sprite 的角色渲染名字首字占位卡（修订于实现期） |
+| `StageDialog`   | 对话框：消费流式 StreamMessage（outputKind story 的最新回合）；**打字机由真实 delta 驱动**（到达字符入队按节奏放出，队列空则等待）；`\n\n` 段界自动停顿显示 ▼，点击放行下一段；停顿外点击 = 立即放完当前段（跳过）；名牌 = active-cast 主发声者名；回合叙事完成且全部段放完 → 通知选择肢层                                                                     |
+| `StageChoices`  | 选择肢覆盖层（舞台中央纵列浮现）：interaction.request 的 choice 类在上、scene-prompts 短句居中、`✎ 自己输入…` 恒垫底；点击选择肢 = 直接提交（interaction 走既有 onSubmitInteraction，短句走 onSendMessage）；✎ 将对话框切为输入态（textarea + 发送，Esc 返回）；6 条以上双列                                                                                   |
+| `StageHud`      | 左上：场景徽标（`stage/current` 的 name + 日/夜图标 + `sourceLabel`，pending 时呼吸动画）；右上按钮组：履历 · 自动播放（定时推进段落，再点关闭）· 切回聊天流（viewMode=parsed）                                                                                                                                                                                |
 
 - 履历抽屉：右侧 Drawer 内嵌**现有 `ChatMessages` 组件**（完整 props 透传）——历史、重试、分支、表单回看零新开发。
 - `interaction.request` 的 **form 类**：舞台上弹既有 json-render 模态（复用 MessageBlockRenderer 的表单通道），提交链不变。
@@ -69,3 +69,4 @@
 2. 立绘不做卡片降级（用户选 A 而非混合 C）：非透明底旧立绘原样站台（视觉略生硬，重生成透明底即愈）——**修订 A 规格 §4 回退表的"卡片式呈现"行**为"原样站台"。
 3. viewMode 新档 + 世界默认声明（用户选定）；履历复用 ChatMessages、桌面优先（用户选定）。
 4. 逐句说话人识别后置（升级路径经 E 层事件）。
+5. **粘性站位（2026-07-03 修订，替换原"按人数均布"）**：原设计按 speakers 数组下标查 count→站位表，而 scene-cast 每回合按 salience 重排数组，导致换说话人/换场景时立绘左右互换（漂移）。修订为 `assignStations` 纯函数：① 成员不变站位不变（salience 只移动高亮）；② 站位只在上/下场时重排且移动最小化——留场者原地不动，被挤占者与新人以"记忆站位 ?? center"为目标取最近空位（平局取左，初排自然主发声者居中）；③ 离场保留站位记忆，回场回原位；④ 空 cast 过渡回合沿用 sticky 阵容、记忆不动；⑤ 合法让位用 500ms left 过渡（reduced-motion 折叠）。记忆存组件 ref（渲染期更新，函数幂等，StrictMode 安全）。
