@@ -27,6 +27,7 @@
 ## 已知边界
 
 - **门控中途从关切换到开，同场景同变体不会立即补图**：`stage/current` 的 no-op 防抖（`previous.sceneId` 与 `previous.variant` 都不变时直接跳过）在补图判断之前就早退了，所以如果 `autoGenerateScenes` 关闭期间某场景/变体已经写过一次 `stage/current`（未命中或缺变体），随后开启门控但叙事仍反复发同一场景/变体的 `scene.set`，不会补发生成请求——需要先切换地点或昼夜（打破 no-op 条件）才能让 resolver 重新评估门控。
+- **生成期间会话锁被长时间持有**：deferred follower 在会话锁内执行完整回合（`runDeferredFollowerTurn`），`background-gen` 的图像生成（单张 60-300s）也发生在锁内——生成进行中时，玩家的下一条消息会在锁上排队等待，最坏等到生成结束。对发起回合本身无影响（follower 在回合结束后才调度）。后续方向：把 provider I/O 挪到锁外、进锁只做提交，或细化锁粒度。
 - **`execution: background` 任务不跨进程重启恢复**：`background-gen` 由框架的 `_jobs` 挂起队列（`setImmediate` + `_jobs/<jobId>` pending 行）驱动，没有持久化的任务队列；服务进程在生成请求排队后、完成前重启，该请求就丢了，`_jobs` 行永久停在 `pending`，`stage/current.source` 也永久停在 `"pending"`。玩家需要重新触发一次同场景/变体的 `scene.set`（例如切走再切回）才能重新排队。
 
 ## 开发

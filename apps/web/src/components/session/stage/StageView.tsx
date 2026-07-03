@@ -11,7 +11,7 @@
  * the components). Data all arrives through `usePluginNamespace`, so the
  * component stays thin — the real logic lives in `stage-selectors`.
  */
-import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle } from "lucide-react";
 import {
