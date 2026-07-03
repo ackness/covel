@@ -68,6 +68,10 @@ export default async function handler(ctx) {
           source: "session",
           day: generatedMatch.day ?? null,
           night: generatedMatch.night ?? null,
+          visualHint:
+            typeof generatedMatch.visualHint === "string"
+              ? generatedMatch.visualHint
+              : undefined,
         }
       : buildUnmatchedCandidate(ctx, location, generatedRows);
 
@@ -104,6 +108,10 @@ export default async function handler(ctx) {
     candidate[variant] == null &&
     isGenerationGateOpen(ctx, generatedRows);
 
+  // Prefer the current event's hint; fall back to the one stored on the
+  // generated row (a night backfill's scene.set usually carries no hint, so
+  // this keeps the night art aligned with the day subject).
+  const effectiveHint = visualHint ?? candidate.visualHint;
   const proposal = makeStageProposal(ctx, stage);
   const output =
     candidate.source === "pending" || needsVariantBackfill
@@ -115,7 +123,7 @@ export default async function handler(ctx) {
               data: {
                 sceneId: candidate.sceneId,
                 location,
-                ...(visualHint ? { visualHint } : {}),
+                ...(effectiveHint ? { visualHint: effectiveHint } : {}),
                 variant,
               },
             },

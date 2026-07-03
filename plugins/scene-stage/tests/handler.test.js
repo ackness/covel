@@ -286,6 +286,41 @@ describe("scene-stage resolver handler", () => {
     ]);
   });
 
+  it("7b-hint. night backfill reuses the visualHint stored on the generated row when the scene.set carries none", async () => {
+    const generatedRows = [
+      {
+        key: "gen-abcd1234",
+        value: {
+          sceneId: "gen-abcd1234",
+          location: "地下室",
+          day: SESSION_DAY,
+          night: null,
+          visualHint: "a dim stone cellar lit by a single bulb",
+        },
+      },
+    ];
+    const ctx = makeCtx({
+      location: "地下室",
+      timeOfDay: "night",
+      // no visualHint on this scene.set — the day one is long gone
+      generatedRows,
+      userSettings: { autoGenerateScenes: true, maxGeneratedScenes: 10 },
+    });
+    const result = await handler(ctx);
+
+    expect(result.events).toEqual([
+      {
+        topic: "scene-stage.generate.requested",
+        data: {
+          sceneId: "gen-abcd1234",
+          location: "地下室",
+          visualHint: "a dim stone cellar lit by a single bulb",
+          variant: "night",
+        },
+      },
+    ]);
+  });
+
   it("7c. session match missing the requested variant only falls back, no event, when the gate is closed", async () => {
     const generatedRows = [
       {

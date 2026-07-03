@@ -284,6 +284,8 @@ export interface MergedChoices {
 }
 
 const MAX_PROMPT_SLOTS = 6;
+// Spec's "6 条以上双列" is read exclusively: ≤6 items stay single-column (still
+// visually acceptable), 7+ go two-column. `items.length > 6` below.
 const TWO_COLUMN_THRESHOLD = 6;
 
 /**

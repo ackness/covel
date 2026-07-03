@@ -72,10 +72,11 @@ export default async function handler(ctx) {
     registry && typeof registry.style === "object" && registry.style !== null
       ? registry.style
       : {};
-  const subject =
+  const hint =
     typeof data.visualHint === "string" && data.visualHint.trim()
       ? data.visualHint.trim()
-      : location;
+      : undefined;
+  const subject = hint ?? location;
   const prefix = typeof style.prefix === "string" ? style.prefix : "";
   const suffix = typeof style.suffix === "string" ? style.suffix : "";
   const nightSuffix =
@@ -107,11 +108,17 @@ export default async function handler(ctx) {
     return { status: "failed", error: message };
   }
 
+  // Persist the visualHint so a later night backfill (which arrives on a
+  // scene.set that no longer carries the hint) reuses the same subject as the
+  // day art, instead of drifting to the bare location name. Keep any earlier
+  // hint if this request didn't carry one.
+  const storedHint = hint ?? existing?.visualHint;
   const generatedEntry = {
     sceneId,
     location,
     day: variant === "day" ? ref : (existing?.day ?? null),
     night: variant === "night" ? ref : (existing?.night ?? null),
+    ...(storedHint ? { visualHint: storedHint } : {}),
     updatedAt: new Date().toISOString(),
   };
   await ctx.pluginData?.set(GENERATED_NS, sceneId, generatedEntry);

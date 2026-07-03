@@ -242,6 +242,23 @@ describe("scene-stage background-gen handler", () => {
     );
   });
 
+  it("8. persists the visualHint on the generated index so a later night backfill can reuse it", async () => {
+    const ctx = makeCtx({
+      variant: "day",
+      visualHint: "an abandoned observatory at dusk",
+    });
+
+    await handler(ctx);
+
+    expect(ctx.pluginData.set).toHaveBeenCalledWith(
+      "generated",
+      "gen-abcd1234",
+      expect.objectContaining({
+        visualHint: "an abandoned observatory at dusk",
+      }),
+    );
+  });
+
   it("returns a failed status when the provider resolves with zero refs", async () => {
     const ctx = makeCtx({
       images: {

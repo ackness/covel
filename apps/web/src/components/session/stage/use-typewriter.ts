@@ -222,7 +222,13 @@ export function useTypewriter(
       dispatch({ type: "feed", text: streamText });
       if (streamEnded) dispatch({ type: "streamEnd" });
     }
-  }, [streamText, streamEnded]);
+    // `opts.turnId` is a dep even though it isn't read here: when a new turn's
+    // full text is byte-identical to the previous turn's, `streamText` never
+    // edges, so without turnId this effect wouldn't re-run — the turnId reset
+    // (above) would have cleared the machine and nothing re-feeds, leaving an
+    // empty dialog box. The turnId reset runs first (declared earlier) and
+    // clears `fedTextRef`, so `prev` is "" here and the text re-feeds cleanly.
+  }, [streamText, streamEnded, opts.turnId]);
 
   // `opts.turnId` is a dependency even though it isn't read here: a turnId
   // change fires `reset` (above), which clears the internal streamEnded flag.

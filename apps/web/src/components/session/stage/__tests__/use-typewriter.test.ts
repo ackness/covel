@@ -227,6 +227,24 @@ describe("useTypewriter (hook wiring)", () => {
     expect(result.current.status).toBe("done");
   });
 
+  it("re-plays a new turn whose full text is byte-identical to the previous turn", () => {
+    // Two consecutive turns land on the same narrative string. The turnId
+    // change resets the machine; because `streamText` never edges, the feed
+    // effect must still re-run (via its turnId dep) and re-feed — otherwise the
+    // second turn shows an empty dialog box.
+    const { result, rerender } = renderHook(
+      ({ text, turnId }) =>
+        useTypewriter(text, true, { turnId, reducedMotion: true }),
+      { initialProps: { text: "同一段话。", turnId: "turn-1" } },
+    );
+    expect(result.current.status).toBe("done");
+    expect(result.current.visible).toBe("同一段话。");
+
+    rerender({ text: "同一段话。", turnId: "turn-2" });
+    expect(result.current.visible).toBe("同一段话。");
+    expect(result.current.status).toBe("done");
+  });
+
   it("restarts from scratch when new stream text is not a prefix (dropped-delta COMPLETE_MESSAGE)", () => {
     const { result, rerender } = renderHook(
       ({ text }) =>
