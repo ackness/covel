@@ -169,6 +169,6 @@ export async function resolveImageWire(slotName) {
     wireId,
     model,
     slot,
-    config: { baseUrl, apiKey, headers: slot.headers },
+    config: { baseUrl, apiKey },
   };
 }
