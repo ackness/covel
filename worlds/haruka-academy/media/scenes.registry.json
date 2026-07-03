@@ -8,5 +8,81 @@
     "negative": "people, character, figure, silhouette, text, caption, watermark, logo, frame, signature",
     "nightSuffix": ", now at dusk after sunset, warm classroom and street lights glowing against a darkening sky, quiet after-hours campus and town atmosphere"
   },
-  "scenes": []
+  "scenes": [
+    {
+      "sceneId": "classroom-2b",
+      "name": "二年 B 组",
+      "locationRef": "二年 B 组",
+      "day": {
+        "id": "8a02503330e9163669a7bd82a71195154863ad367958ec71471f7c20e12d7ab8",
+        "mime": "image/png",
+        "size": 2201263
+      },
+      "night": {
+        "id": "7cc798abe8518744f6de3f38ee158ee3809a61d74507ce729346b611fb25c2bc",
+        "mime": "image/png",
+        "size": 2271684
+      }
+    },
+    {
+      "sceneId": "club-building",
+      "name": "社团楼",
+      "locationRef": "社团楼",
+      "day": {
+        "id": "6a0c93618a2284d570ce0eafe43a5bcf2a987eb566b612367585fd51976c654e",
+        "mime": "image/png",
+        "size": 3215293
+      },
+      "night": {
+        "id": "c4ff6c8db585403e93bce871d8a382c856590bed9124fe324b571a50236af159",
+        "mime": "image/png",
+        "size": 1925780
+      }
+    },
+    {
+      "sceneId": "library",
+      "name": "图书馆",
+      "locationRef": "图书馆",
+      "day": {
+        "id": "a5793b4c64645aabb7bddf5ddc62d775ee51fddee90f08457f541ccd3f1160f3",
+        "mime": "image/png",
+        "size": 2279676
+      },
+      "night": {
+        "id": "01cdf881d35837bf922f54f10e6fbb2269ba59f3eddcf6167e0bf964a8426c0a",
+        "mime": "image/png",
+        "size": 2172829
+      }
+    },
+    {
+      "sceneId": "sakurazaka-seawall",
+      "name": "樱坂海堤",
+      "locationRef": "樱坂海堤",
+      "day": {
+        "id": "0a8a6bc497e49a267cb8c37c52989e0eb9050ed39bb7f7b4a46c3d4ab8b05931",
+        "mime": "image/png",
+        "size": 3083978
+      },
+      "night": {
+        "id": "e86417cc17a6884a367529507971c847183816c2a6538a71103439948b0b4ee9",
+        "mime": "image/png",
+        "size": 2781718
+      }
+    },
+    {
+      "sceneId": "shopping-street",
+      "name": "青砾町商店街",
+      "locationRef": "青砾町商店街",
+      "day": {
+        "id": "aec9ef6b0f6dff09d651cb524d9f7e4321c6e63b495bd6b625567852d13b74dc",
+        "mime": "image/png",
+        "size": 2674457
+      },
+      "night": {
+        "id": "f5861a10e6f1954a21ac923b243cb552c9f36faf62e32668d5e968496e8cd967",
+        "mime": "image/png",
+        "size": 2594668
+      }
+    }
+  ]
 }

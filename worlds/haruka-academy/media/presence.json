@@ -4,14 +4,14 @@
     "characterId": "npc-kamishiro-mio",
     "displayName": "神代澪",
     "avatar": {
-      "id": "80b1efa01931fa641e72e8dfbaeed77de7bbd52703239583fe713c10f2454fd5",
+      "id": "f0e5e9fa37c6f4a8e730881e0e9118c59f5efe987628cda89a5a1ea23d16756e",
       "mime": "image/png",
-      "size": 2155557
+      "size": 1817975
     },
     "sprite": {
-      "id": "80b1efa01931fa641e72e8dfbaeed77de7bbd52703239583fe713c10f2454fd5",
+      "id": "f0e5e9fa37c6f4a8e730881e0e9118c59f5efe987628cda89a5a1ea23d16756e",
       "mime": "image/png",
-      "size": 2155557
+      "size": 1817975
     }
   },
   {
@@ -19,14 +19,14 @@
     "characterId": "npc-asakura-rin",
     "displayName": "朝仓凛",
     "avatar": {
-      "id": "414275e69db476e71c3fc1c6d965ac74198a19260b2dea8fd812fa4836a55031",
+      "id": "1a631166756391f7a7dd68796fa63eec62d64d85777cfbcc0819b86a75d093bf",
       "mime": "image/png",
-      "size": 2144039
+      "size": 1551015
     },
     "sprite": {
-      "id": "414275e69db476e71c3fc1c6d965ac74198a19260b2dea8fd812fa4836a55031",
+      "id": "1a631166756391f7a7dd68796fa63eec62d64d85777cfbcc0819b86a75d093bf",
       "mime": "image/png",
-      "size": 2144039
+      "size": 1551015
     }
   },
   {
@@ -34,14 +34,14 @@
     "characterId": "npc-shiina-kaho",
     "displayName": "椎名夏帆",
     "avatar": {
-      "id": "45fb9bd0384622f3da6be67147f7bc54d8c1c4c0c44d5cc7af409c43d6d23fe8",
+      "id": "902688fc86a9ca767a7684545cee1f54d7a84cb783281001b37819627afb2191",
       "mime": "image/png",
-      "size": 2160362
+      "size": 1867968
     },
     "sprite": {
-      "id": "45fb9bd0384622f3da6be67147f7bc54d8c1c4c0c44d5cc7af409c43d6d23fe8",
+      "id": "902688fc86a9ca767a7684545cee1f54d7a84cb783281001b37819627afb2191",
       "mime": "image/png",
-      "size": 2160362
+      "size": 1867968
     }
   },
   {
@@ -49,14 +49,14 @@
     "characterId": "npc-shiraishi-yuma",
     "displayName": "白石悠真",
     "avatar": {
-      "id": "cef49f1ff9b1764676d867a5e286499518b6f994f02d1fd7bb1f415c86abe2dc",
+      "id": "71a88467a52f0e7c5db4ffd1794b6107803ec9aa8af5f07af425d524a053643b",
       "mime": "image/png",
-      "size": 2249309
+      "size": 1628878
     },
     "sprite": {
-      "id": "cef49f1ff9b1764676d867a5e286499518b6f994f02d1fd7bb1f415c86abe2dc",
+      "id": "71a88467a52f0e7c5db4ffd1794b6107803ec9aa8af5f07af425d524a053643b",
       "mime": "image/png",
-      "size": 2249309
+      "size": 1628878
     }
   },
   {
@@ -64,14 +64,14 @@
     "characterId": "npc-mikoeda-haruka",
     "displayName": "三枝遥",
     "avatar": {
-      "id": "381e4afebfd006524ad3ceb3b53296d9ae39b08a3fa76e622fd635173698921b",
+      "id": "80ba29c18fc69335689bd2c6352ca75a154af1c65266e397061e021b021119ce",
       "mime": "image/png",
-      "size": 1976753
+      "size": 1914443
     },
     "sprite": {
-      "id": "381e4afebfd006524ad3ceb3b53296d9ae39b08a3fa76e622fd635173698921b",
+      "id": "80ba29c18fc69335689bd2c6352ca75a154af1c65266e397061e021b021119ce",
       "mime": "image/png",
-      "size": 1976753
+      "size": 1914443
     }
   },
   {
@@ -79,14 +79,14 @@
     "characterId": "npc-onodera-chihiro",
     "displayName": "小野寺千寻",
     "avatar": {
-      "id": "beebfd3d486e2c9452f3463e3ebf720ecb495360afa62090a0032185042a4318",
+      "id": "7bab86321e6f5d925df7d48620e3b1b30441ef44033c13cf780af2f18bb44ebe",
       "mime": "image/png",
-      "size": 2330493
+      "size": 1632888
     },
     "sprite": {
-      "id": "beebfd3d486e2c9452f3463e3ebf720ecb495360afa62090a0032185042a4318",
+      "id": "7bab86321e6f5d925df7d48620e3b1b30441ef44033c13cf780af2f18bb44ebe",
       "mime": "image/png",
-      "size": 2330493
+      "size": 1632888
     }
   },
   {
@@ -94,14 +94,14 @@
     "characterId": "npc-morikawa-souta",
     "displayName": "森川奏太",
     "avatar": {
-      "id": "feb3016d61e1c9803c8b0cdf7f10065617cc4922b517b29687b5371014839fe0",
+      "id": "e9d917b87877480b4ec5b8be84bcebf6bbbfc65e92e09556f8f141b301d82efb",
       "mime": "image/png",
-      "size": 2029834
+      "size": 1663132
     },
     "sprite": {
-      "id": "feb3016d61e1c9803c8b0cdf7f10065617cc4922b517b29687b5371014839fe0",
+      "id": "e9d917b87877480b4ec5b8be84bcebf6bbbfc65e92e09556f8f141b301d82efb",
       "mime": "image/png",
-      "size": 2029834
+      "size": 1663132
     }
   },
   {
@@ -109,14 +109,14 @@
     "characterId": "npc-toujou-akane",
     "displayName": "东条茜",
     "avatar": {
-      "id": "cff950ba09ac5b802b4366cfc6fb6a1bb37912fa3a8f35a5e2f4fd01c6b962ca",
+      "id": "9f8ad968fd0e05374a5ca4fbaf12d004a98d4dccc405c2b9685028444be67961",
       "mime": "image/png",
-      "size": 2258456
+      "size": 2010039
     },
     "sprite": {
-      "id": "cff950ba09ac5b802b4366cfc6fb6a1bb37912fa3a8f35a5e2f4fd01c6b962ca",
+      "id": "9f8ad968fd0e05374a5ca4fbaf12d004a98d4dccc405c2b9685028444be67961",
       "mime": "image/png",
-      "size": 2258456
+      "size": 2010039
     }
   }
 ]

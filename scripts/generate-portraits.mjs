@@ -53,6 +53,8 @@ function parseArgs(argv) {
     else if (a === "--concurrency")
       args.concurrency = Math.max(1, Number(argv[++i]) || DEFAULT_CONCURRENCY);
     else if (a === "--slot") args.slot = argv[++i];
+    else if (a === "--model") args.model = argv[++i];
+    else if (a === "--chroma") args.chroma = true;
     else if (a === "--force") args.force = true;
     else if (a === "--dry-run") args.dryRun = true;
     else rest.push(a);
@@ -61,9 +63,17 @@ function parseArgs(argv) {
   return args;
 }
 
-function buildPrompt(style, character) {
+// --chroma: providers that reject the background=transparent parameter draw a
+// flat pure-green backdrop instead; strip it locally afterwards, e.g.
+//   magick sprite.png -alpha set -fuzz 12% -fill none \
+//     -draw 'color 0,0 floodfill' ... (see worlds/PORTRAITS.md)
+const CHROMA_PROMPT =
+  ", standing against a solid uniform flat pure green (#00FF00) chroma-key backdrop filling the entire background, no background scenery, no shadow on the backdrop";
+
+function buildPrompt(style, character, chroma = false) {
   const { prefix = "", suffix = "", negative = "" } = style;
-  return `${prefix}${character.subject}${suffix}${negative ? `\n\nAvoid: ${negative}` : ""}`;
+  const chromaPart = chroma ? CHROMA_PROMPT : "";
+  return `${prefix}${character.subject}${suffix}${chromaPart}${negative ? `\n\nAvoid: ${negative}` : ""}`;
 }
 
 async function main() {
@@ -93,7 +103,7 @@ async function main() {
     id: c.id,
     name: c.name,
     filename: c.filename,
-    prompt: buildPrompt(style, c),
+    prompt: buildPrompt(style, c, args.chroma),
   }));
 
   if (args.dryRun) {
@@ -116,9 +126,12 @@ async function main() {
   );
   await mkdir(outDir, { recursive: true });
 
-  const { wire, wireId, model, slot, config } = await resolveImageWire(
+  const { wire, wireId, model: slotModel, slot, config } = await resolveImageWire(
     args.slot,
   );
+  // --model overrides the slot's model (e.g. gpt-image-1 for transparent sprites
+  // when the slot's default model rejects the background parameter).
+  const model = args.model ?? slotModel;
 
   // Filter out already-present files up front (unless --force).
   const todo = [];
@@ -138,7 +151,7 @@ async function main() {
   );
 
   const results = await pool(todo, args.concurrency, async (c) => {
-    const prompt = buildPrompt(style, c);
+    const prompt = buildPrompt(style, c, args.chroma);
     const t0 = Date.now();
     try {
       const bytes = await fetchImageBytes({
@@ -148,7 +161,7 @@ async function main() {
         prompt,
         size,
         quality,
-        background: style.background,
+        background: args.chroma ? undefined : style.background,
       });
       await writeFile(path.join(outDir, c.filename), bytes);
       console.log(
