@@ -254,7 +254,10 @@ export function StageView(props: StageViewProps): ReactElement {
       )}
 
       {/* History drawer — the full parsed chat, needs a bounded flex column
-          for its internal ScrollArea (flex-1 min-h-0). */}
+          for its internal ScrollArea (flex-1 min-h-0). Zero out executionSteps
+          / executionError so the drawer stays player-facing: the per-turn
+          runtime timeline (dev timing chips) and the failed-turn banner belong
+          on the stage itself, not in this narrative read-back. */}
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
         <DialogContent
           className="max-w-3xl p-0 gap-0"
@@ -264,7 +267,12 @@ export function StageView(props: StageViewProps): ReactElement {
             <DialogTitle>{t("stage.historyTitle")}</DialogTitle>
           </DialogHeader>
           <div className="flex h-[80vh] flex-col">
-            <ChatMessages {...props} viewMode="parsed" />
+            <ChatMessages
+              {...props}
+              viewMode="parsed"
+              executionSteps={[]}
+              executionError={null}
+            />
           </div>
         </DialogContent>
       </Dialog>
