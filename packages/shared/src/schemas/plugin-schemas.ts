@@ -488,6 +488,8 @@ export const runtimeManifestSchema = z
     firstTokenTimeoutMs: z.number().int().positive().optional(),
     /** Tool-call loop detection threshold. Default 3. Set 0 to disable. */
     loopDetectionThreshold: z.number().int().min(0).max(20).optional(),
+    /** Retry a bare (no-tool-call) finish once before releasing. Default false. */
+    requireToolUse: z.boolean().optional(),
     /** Maximum nested ctx.recursiveCall() depth. Default 10. */
     maxRecursionDepth: z.number().int().min(0).max(50).optional(),
     pluginType: z.enum(["core-plugin", "plugin"]).optional(),

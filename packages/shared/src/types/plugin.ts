@@ -493,6 +493,16 @@ export interface RuntimeManifest {
    */
   readonly loopDetectionThreshold?: number;
   /**
+   * Agent runtimes only. When `true`, a loop that finishes without ever
+   * successfully executing a tool (LLM returned prose with no tool call) is
+   * given one corrective retry — a system message telling it to call its
+   * declared tool first — before being allowed to finish. Guards against
+   * models that drift into free-form narration and skip their sole tool.
+   * `maxSteps` still bounds the loop, so a second bare finish is released
+   * (with a warn) rather than looping forever. Default `false`.
+   */
+  readonly requireToolUse?: boolean;
+  /**
    * Maximum nested `ctx.recursiveCall()` depth for this runtime. Defaults
    * to the executor limit, currently 10. Depth starts at 0 for a top-level
    * turn and increments once per recursive call.

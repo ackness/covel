@@ -11,6 +11,10 @@ priority: 600
 model: plugin
 outputKind: system
 timeoutMs: 120000
+# This runtime's only job is to call generate-scene-prompts. Some models drift
+# into continuing the narrative and finish with zero tool calls; the gate gives
+# one corrective retry before releasing so the choices don't silently vanish.
+requireToolUse: true
 tags:
   - mode:dialogue
   - role:quick-reply

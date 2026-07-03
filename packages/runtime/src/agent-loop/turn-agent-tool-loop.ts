@@ -205,6 +205,10 @@ export async function runAgentToolLoop({
   // Set by a PostToolUse hook returning `terminate` — ends the loop after the
   // current response's tool calls are recorded.
   let terminatedByHook = false;
+  // requireToolUse: how many times we've already nudged a bare (no-tool-call)
+  // finish back into the loop. Capped at one correction so a model that keeps
+  // refusing to call its tool is released instead of burning maxSteps.
+  let noToolCallCorrections = 0;
 
   while (steps < effectiveMaxSteps && Date.now() < deadline) {
     steps++;
@@ -491,6 +495,30 @@ export async function runAgentToolLoop({
 
       // Continue loop — LLM sees tool results and decides next action
       continue;
+    }
+
+    // requireToolUse gate: a runtime whose whole job is to call a tool has
+    // drifted into free-form prose (zero tool calls, nothing executed). Nudge
+    // it back once with a corrective system message; on a second bare finish
+    // release it (maxSteps still bounds the loop) so a stubborn model cannot
+    // wedge the runtime. Only fires when no tool ever executed successfully —
+    // a runtime that did its work and then narrated is left alone.
+    if (manifest.requireToolUse && !executedToolCalls.some((c) => c.success)) {
+      if (noToolCallCorrections === 0) {
+        noToolCallCorrections++;
+        console.warn(
+          `[runtime-retry] ${manifest.name} attempt=${noToolCallCorrections} reason=no-tool-call cause=finished without calling any tool`,
+        );
+        messages.push({
+          role: "system",
+          content:
+            "你没有调用任何工具就结束了。必须先调用声明的工具完成任务，再收尾。",
+        });
+        continue;
+      }
+      console.warn(
+        `[runtime-retry] ${manifest.name} reason=no-tool-call cause=still no tool call after correction; releasing`,
+      );
     }
 
     // Final response (no more tool calls)

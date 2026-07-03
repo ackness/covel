@@ -1136,13 +1136,16 @@ relations:
 
 Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用时长**（`callTimeoutMs` / `firstTokenTimeoutMs`）和**运行总时长**（`timeoutMs`）。框架会自动在 transient 错误、call-timeout、first-token-timeout、tool-call 循环四种情形下重试，并在每次重试时向 prompt 追加一条短 system 提示打破 KV-cache 命中。
 
-| 字段                     | 类型     | 默认                                              | 含义                                                                             |
-| ------------------------ | -------- | ------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `timeoutMs`              | `number` | 60000                                             | 运行总时长硬上限。任何情况下都不会超过此值                                       |
-| `maxRetries`             | `number` | `1`                                               | transient 错误/超时/循环时的重试次数（不含首次尝试）。`0` 禁用重试。上限 5       |
-| `callTimeoutMs`          | `number` | `min(60000, floor(timeoutMs / (maxRetries + 1)))` | 单次 LLM 调用的总时长。防止一个挂死请求吃掉整轮预算                              |
-| `firstTokenTimeoutMs`    | `number` | `30000`                                           | 流式 runtime 的首 token（TTFB）上限；非流式忽略                                  |
-| `loopDetectionThreshold` | `number` | `3`                                               | 连续重复相同 `(tool name + JSON arguments)` 的次数；命中则注入扰动继续。`0` 关闭 |
+| 字段                     | 类型      | 默认                                              | 含义                                                                                                                                                                                                                     |
+| ------------------------ | --------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `timeoutMs`              | `number`  | 60000                                             | 运行总时长硬上限。任何情况下都不会超过此值                                                                                                                                                                               |
+| `maxRetries`             | `number`  | `1`                                               | transient 错误/超时/循环时的重试次数（不含首次尝试）。`0` 禁用重试。上限 5                                                                                                                                               |
+| `callTimeoutMs`          | `number`  | `min(60000, floor(timeoutMs / (maxRetries + 1)))` | 单次 LLM 调用的总时长。防止一个挂死请求吃掉整轮预算                                                                                                                                                                      |
+| `firstTokenTimeoutMs`    | `number`  | `30000`                                           | 流式 runtime 的首 token（TTFB）上限；非流式忽略                                                                                                                                                                          |
+| `loopDetectionThreshold` | `number`  | `3`                                               | 连续重复相同 `(tool name + JSON arguments)` 的次数；命中则注入扰动继续。`0` 关闭                                                                                                                                         |
+| `requireToolUse`         | `boolean` | `false`                                           | 仅 agent runtime。循环在“零成功工具调用”下收场（LLM 只回散文）时，注入一条纠正 system 消息并重试一次；第二次仍零工具则放行并 `console.warn`（`maxSteps` 仍兜底）。适合唯一职责就是调某工具、却会漂移成续写正文的 runtime |
+
+**`requireToolUse` 判定**：仅当本轮 loop 从未有任何工具**成功**执行、且 LLM 本次回复无 tool call 时触发；已经成功干过活再收尾的 runtime 不受影响。纠正消息为固定中文提示“你没有调用任何工具就结束了……”，记一条 `[runtime-retry] <name> ... reason=no-tool-call`。内置的 `scene-prompts`（每回合必须调用 `generate-scene-prompts`）已启用。
 
 **四类重试触发条件：**
 
