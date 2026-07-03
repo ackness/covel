@@ -200,11 +200,12 @@ to: plugin:character-blueprint/blueprints
 `plugin:*/*` 与 `indexTo` 都会做 preflight：
 
 - 目标插件已注册。
-- 目标插件在本 session 最终启用插件列表中。
 - 目标 namespace 在插件 `dataSchemas` 中声明。
 - `acceptsWorldData: true`。
 - `schema` 为 `plugin://<id>/<namespace>` 时必须和 `to: plugin:<id>/<namespace>` 兼容。
 - 插件包内 JSON Schema、world/override 本地 JSON Schema 或内置 schema 校验通过。
+
+以上为 **error 级**（作者错误，阻断导入）。**目标插件是否在本 session 最终启用插件列表中**是玩家选择的结果，不算作者错误：`to: plugin:*` 目标未激活时该 source 整体跳过（warning 级诊断）；`indexTo` 目标未激活时媒体字节照常导入，仅跳过索引写入（warning 级）。世界给可选插件携带数据因此是安全的——玩家取消勾选对应插件不会导致建会话失败。
 
 world load 阶段只强校验内置 schema 和本地 schema；`plugin://...` schema 在 session import/preflight 阶段结合当前启用插件严格校验。
 
@@ -310,7 +311,7 @@ sources:
 
 `mediaRef.id` 必须是该图内容的 **64 位小写 sha256**——media source 导入后媒体库以同一 sha256 寻址，二者相等才能解析到资产。手算易错，仓库提供 `scripts/emit-presence.mjs <world>`，从 `media/portraits/` 自动生成 `presence.json`（**重生成立绘后必须重跑刷新哈希**）。
 
-preflight 要求：`character-presence` 在 session 最终启用插件列表中（放进 `recommendedPlugins`），其 `assets` / `presence` namespace 已声明 `acceptsWorldData: true`（builtin 默认满足）。媒体受 v1 限制：单文件 ≤ 20 MB、单 source ≤ 100 MB、扩展名 allowlist（含 `.png` / `.webp`）。
+preflight 要求：`character-presence` 的 `assets` / `presence` namespace 已声明 `acceptsWorldData: true`（builtin 默认满足）。要让立绘数据实际生效，把 `character-presence` 放进世界的 `recommendedPlugins`——若玩家取消勾选，presence source 跳过、媒体照常导入但索引写入跳过（warning，不阻断建会话）。媒体受 v1 限制：单文件 ≤ 20 MB、单 source ≤ 100 MB、扩展名 allowlist（含 `.png` / `.webp`）。
 
 实际范例见 `worlds/mistport` 与 `worlds/haruka-academy`（`data/world.data.yaml` + `media/`），提示词与生成流程见 `worlds/PORTRAITS.md`。
 

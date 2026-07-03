@@ -266,6 +266,8 @@ export async function buildImportPlan(options: {
   const writes: PlannedWrite[] = [];
   const diagnostics: WorldDataDiagnostic[] = [];
 
+  const activePlugins = options.deps?.activePlugins;
+
   for (const source of options.sources) {
     const target = parseWorldDataTarget(source.descriptor.to);
     if (!target) {
@@ -273,6 +275,24 @@ export async function buildImportPlan(options: {
         level: "error",
         sourceId: source.id,
         message: `invalid target URI: ${source.descriptor.to}`,
+      });
+      continue;
+    }
+    // A source whose destination plugin the player left inactive is skipped
+    // with a warning, never a session-blocking error — plugin selection is
+    // player-facing, so any world shipping data for an optional plugin would
+    // otherwise 500 on session creation the moment that plugin is
+    // deselected. Data without a consumer is harmless to omit; authoring
+    // errors (schema mismatch, non-accepting namespace) below stay errors.
+    if (
+      isPluginTarget(target) &&
+      activePlugins &&
+      !activePlugins.includes(target.pluginId)
+    ) {
+      diagnostics.push({
+        level: "warning",
+        sourceId: source.id,
+        message: `worldData target plugin "${target.pluginId}" is not active for this session; source "${source.id}" skipped`,
       });
       continue;
     }
@@ -349,9 +369,24 @@ export async function buildImportPlan(options: {
         : (await digestFile(read.path)).digest;
 
     if (source.descriptor.kind === "media") {
-      const indexTarget = source.descriptor.indexTo
+      let indexTarget = source.descriptor.indexTo
         ? parseWorldDataIndexTarget(source.descriptor.indexTo)
         : null;
+      // Same player-facing rule as the primary target above — but the media
+      // bytes still import (characters may reference them); only the
+      // plugin-data index writes are dropped.
+      if (
+        indexTarget &&
+        activePlugins &&
+        !activePlugins.includes(indexTarget.pluginId)
+      ) {
+        diagnostics.push({
+          level: "warning",
+          sourceId: source.id,
+          message: `worldData indexTo plugin "${indexTarget.pluginId}" is not active for this session; index writes for source "${source.id}" skipped`,
+        });
+        indexTarget = null;
+      }
       for (const mediaPath of mediaFiles?.files ?? []) {
         const key = itemKey(source, undefined, mediaPath);
         if (!key) {

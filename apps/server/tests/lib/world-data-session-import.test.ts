@@ -394,7 +394,7 @@ sources:
     ).rejects.toThrow(/not registered/);
   });
 
-  it("rejects plugin targets outside final activePlugins", async () => {
+  it("skips sources targeting plugins outside final activePlugins (warning, not a session-blocking error)", async () => {
     const { worldsDir, worldId } = await makeWorld({
       descriptor: `schemaVersion: 1
 sources:
@@ -408,19 +408,27 @@ sources:
     });
     const store = await makeStore([]);
 
-    await expect(
-      importWorldDataForSession({
-        store,
-        sessionId: "sess-1",
-        worldId,
-        worldsDirs: [worldsDir],
-        now: NOW,
-        preflight: {
-          activePlugins: [],
-          registry: registry({ "world-notes": ["facts"] }),
-        },
-      }),
-    ).rejects.toThrow(/not active/);
+    // The player deselected world-notes at session creation — the source has
+    // no consumer, so it must be skipped, never fail the whole import.
+    const result = await importWorldDataForSession({
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      preflight: {
+        activePlugins: [],
+        registry: registry({ "world-notes": ["facts"] }),
+      },
+    });
+
+    expect(result.written).toBe(0);
+    expect(
+      result.diagnostics.some(
+        (d) => d.level === "warning" && /not active/.test(d.message),
+      ),
+    ).toBe(true);
+    expect(result.diagnostics.some((d) => d.level === "error")).toBe(false);
   });
 
   it("rejects values that fail a plugin data schema", async () => {
@@ -1076,6 +1084,46 @@ sources:
     });
 
     expect(result.written).toBe(0);
+    expect(
+      await store.listPluginData("sess-1", "character-presence", "assets"),
+    ).toEqual([]);
+  });
+
+  it("skips media index writes when the indexTo plugin is inactive (warning, media unaffected)", async () => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: plugin:character-presence/assets
+    key: filename
+`,
+      files: {
+        "media/portraits/mio.png": "png-ish",
+      },
+    });
+    const store = await makeStore([]);
+
+    const result = await importWorldDataForSession({
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      preflight: {
+        activePlugins: [],
+        registry: registry({ "character-presence": ["assets"] }),
+      },
+    });
+
+    expect(result.diagnostics.some((d) => d.level === "error")).toBe(false);
+    expect(
+      result.diagnostics.some(
+        (d) => d.level === "warning" && /indexTo plugin/.test(d.message),
+      ),
+    ).toBe(true);
     expect(
       await store.listPluginData("sess-1", "character-presence", "assets"),
     ).toEqual([]);
