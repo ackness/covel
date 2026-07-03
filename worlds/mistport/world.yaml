@@ -25,6 +25,9 @@ recommendedPlugins:
   - codex
   - npc-graph
   - living-world-rules
+  # character-blueprint consumes the worldData `cast` source
+  # (plugin:character-blueprint/blueprints) — main-cast cards + right panel.
+  - character-blueprint
   - character-presence
   - cost-gate
 excludedPlugins:
