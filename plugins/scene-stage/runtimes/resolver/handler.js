@@ -9,6 +9,7 @@ import {
   STAGE_NS,
   resolveMedia,
   sourceLabelFor,
+  variantLabelFor,
 } from "../../lib/stage-data.js";
 
 const DEFAULT_MAX_GENERATED = 10;
@@ -79,6 +80,7 @@ export default async function handler(ctx) {
     sceneId: candidate.sceneId,
     name: candidate.name,
     variant,
+    variantLabel: variantLabelFor(variant),
     source: candidate.source,
     day: candidate.day,
     night: candidate.night,

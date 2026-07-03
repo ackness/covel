@@ -28,6 +28,20 @@ export function sourceLabelFor(source) {
   return SOURCE_LABELS[source] ?? SOURCE_LABELS.none;
 }
 
+/** @type {Record<"day"|"night", {zh: string, en: string}>} */
+const VARIANT_LABELS = {
+  day: { zh: "白天", en: "Day" },
+  night: { zh: "夜晚", en: "Night" },
+};
+
+/**
+ * @param {"day"|"night"} variant
+ * @returns {{zh: string, en: string}}
+ */
+export function variantLabelFor(variant) {
+  return VARIANT_LABELS[variant] ?? VARIANT_LABELS.day;
+}
+
 /**
  * Pick the display MediaRef for a variant, falling back night → day when
  * the night image hasn't been generated yet (A §4 fallback chain).

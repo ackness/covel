@@ -596,7 +596,7 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 | `autoGenerateScenes` | `toggle` | `true` | 未命中注册表时是否自动请求背景增量生成   |
 | `maxGeneratedScenes` | `number` | `10`   | 0–50（step 1）——单会话增量生成场景数上限 |
 
-**职责**：narrator（或对话模式叙事器）经 `emit-event` 发射 `scene.set` 后，同回合触发本 runtime：读自身 `scenes` namespace（世界注册表）与 `stage/current`（上一状态），按精确名 / `locationRef` → 归一化子串 → 会话内已生成场景的顺序匹配 `location`。命中写 `stage/current`（`source: "world" | "session"`）；同 `sceneId` 且同 `variant` 时 no-op（不写不发 SSE，防抖）。未命中按 `autoGenerateScenes` + `maxGeneratedScenes` 门控：放行则 `source: "pending"` 并发内部信令请求 `background-gen`，门控不过或已达会话帽则 `source: "none"`。昼夜变体缺夜图时 `resolved` 回退日图。`stage/current` 额外写 `sourceLabel`（`I18nText`，`source` 对应的展示文案，如 `pending` → "背景生成中…"），面板直接渲染，无需按枚举值自行翻译。
+**职责**：narrator（或对话模式叙事器）经 `emit-event` 发射 `scene.set` 后，同回合触发本 runtime：读自身 `scenes` namespace（世界注册表）与 `stage/current`（上一状态），按精确名 / `locationRef` → 归一化子串 → 会话内已生成场景的顺序匹配 `location`。命中写 `stage/current`（`source: "world" | "session"`）；同 `sceneId` 且同 `variant` 时 no-op（不写不发 SSE，防抖）——但上一状态为 `source: "pending"` 时不视为 no-op：生成失败后重发的 `scene.set` 会重新发内部信令重试（成功场景的重复计费由 background-gen 的已生成检查防住）。未命中按 `autoGenerateScenes` + `maxGeneratedScenes` 门控：放行则 `source: "pending"` 并发内部信令请求 `background-gen`，门控不过或已达会话帽则 `source: "none"`。昼夜变体缺夜图时 `resolved` 回退日图。`stage/current` 额外写 `sourceLabel`（`I18nText`，`source` 对应的展示文案，如 `pending` → "背景生成中…"）与 `variantLabel`（`I18nText`，昼夜文案 `day` → "白天" / `night` → "夜晚"），面板直接渲染，无需按枚举值自行翻译。
 
 ### scene-stage/background-gen
 

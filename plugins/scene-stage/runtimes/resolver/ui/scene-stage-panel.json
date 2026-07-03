@@ -36,7 +36,7 @@
           {
             "component": "Badge",
             "props": {
-              "label": { "$state": "/current/variant" },
+              "label": { "$state": "/current/variantLabel" },
               "color": "blue"
             }
           }

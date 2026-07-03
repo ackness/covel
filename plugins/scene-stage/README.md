@@ -16,7 +16,7 @@
 ## 数据与行为
 
 - `scenes` namespace（`dataSchemas.scenes`，`acceptsWorldData: true`）：从世界包导入的场景注册表，key 为固定值 `scene-registry`，一行文档即整份 registry。
-- `stage/current`：解析后的当前场景状态（场景 id、名称、昼夜变体、来源、日/夜 `MediaRef`、解析后的展示图）。命中注册表或会话内已生成的场景时写入 `source: "world" | "session"`；未命中且门控放行时写入 `source: "pending"` 并向 `background-gen` 发内部事件；门控不放行则 `source: "none"`。同时写入 `sourceLabel`（`I18nText`，`source` 的展示文案，例如 `pending` → "背景生成中…"）供只读面板直接渲染——json-render spec 不支持按枚举值条件选文案，翻译需在 handler 侧算好（对齐 `scene-cast` 的 `signalView()`/`reasonLabel` 做法）。
+- `stage/current`：解析后的当前场景状态（场景 id、名称、昼夜变体、来源、日/夜 `MediaRef`、解析后的展示图）。命中注册表或会话内已生成的场景时写入 `source: "world" | "session"`；未命中且门控放行时写入 `source: "pending"` 并向 `background-gen` 发内部事件；门控不放行则 `source: "none"`。同时写入 `sourceLabel`（`I18nText`，`source` 的展示文案，例如 `pending` → "背景生成中…"）与 `variantLabel`（`I18nText`，昼夜文案）供只读面板直接渲染——json-render spec 不支持按枚举值条件选文案，翻译需在 handler 侧算好（对齐 `scene-cast` 的 `signalView()`/`reasonLabel` 做法）。
 - `stage/generated`：会话内已增量生成的场景索引，供 `background-gen` 记账、场景解析器做会话内命中匹配、以及 `maxGeneratedScenes` 帽计数。
 
 ## userSettings

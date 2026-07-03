@@ -96,6 +96,7 @@ describe("scene-stage resolver handler", () => {
           sceneId: "classroom",
           name: "二年 B 组教室",
           variant: "day",
+          variantLabel: { zh: "白天", en: "Day" },
           source: "world",
           day: CLASSROOM_DAY,
           night: CLASSROOM_NIGHT,
