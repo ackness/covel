@@ -195,6 +195,48 @@ describe("event directory", () => {
     expect(catalog).toContain("location");
   });
 
+  it("renders enum-valued required fields as quoted allowed values in catalogText", async () => {
+    const registry = createPluginRegistry();
+    const root = await makePluginRoot();
+    await writeSchema(root, "scene-set.event.json", {
+      type: "object",
+      required: ["location", "timeOfDay"],
+      properties: {
+        location: { type: "string" },
+        timeOfDay: { enum: ["day", "night"] },
+      },
+    });
+    registerPlugin(
+      registry,
+      "plugin-enum",
+      parsedManifest({
+        name: "plugin-enum/main",
+        pluginId: "plugin-enum",
+        events: [
+          {
+            topic: "scene.set",
+            schema: "scene-set.event.json",
+            description: "scene change",
+            advertise: true,
+          },
+        ],
+      }),
+      root,
+    );
+    registry.activate("plugin-enum", "sess-enum");
+
+    const directory = createEventDirectory({
+      registry,
+      resolvePluginDir: () => root,
+    });
+
+    const catalog = await directory.catalogText("sess-enum", "zh-CN");
+    // enum values rendered (quoted) so the LLM's first emit picks a legal value
+    expect(catalog).toContain('timeOfDay: "day"|"night"');
+    // non-enum field keeps its type rendering
+    expect(catalog).toContain("location: string");
+  });
+
   it("returns an empty string for a session with no declared events", async () => {
     const { directory } = await setupBasicSession();
     expect(await directory.catalogText("sess-empty", "zh-CN")).toBe("");

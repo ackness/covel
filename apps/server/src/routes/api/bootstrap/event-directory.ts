@@ -59,14 +59,20 @@ interface LoadedSchema {
 function requiredFieldsSummary(raw: AnySchema): string {
   const schema = raw as {
     required?: readonly string[];
-    properties?: Record<string, { type?: string }>;
+    properties?: Record<string, { type?: string; enum?: readonly unknown[] }>;
   };
   const required = schema.required ?? [];
   if (required.length === 0) return "";
   return required
     .map((name) => {
-      const type = schema.properties?.[name]?.type;
-      return type ? `${name}: ${type}` : name;
+      const prop = schema.properties?.[name];
+      // Enum-valued field: render the allowed values (JSON.stringify quotes
+      // strings, leaves numbers bare) so the LLM's first emit picks a legal
+      // value instead of guessing and getting ajv-rejected.
+      if (prop?.enum) {
+        return `${name}: ${prop.enum.map((v) => JSON.stringify(v)).join("|")}`;
+      }
+      return prop?.type ? `${name}: ${prop.type}` : name;
     })
     .join(", ");
 }
