@@ -104,6 +104,21 @@ describe("dashscope-wan wire", () => {
     ).rejects.toThrow(/FAILED: quota/);
   });
 
+  it("treats CANCELED as terminal instead of polling to the timeout", async () => {
+    stubFetchSequence([
+      { json: { output: { task_id: "t" } } },
+      { json: { output: { task_status: "CANCELED" } } },
+    ]);
+    await expect(
+      dashscopeWanWire.generate(
+        { baseUrl: "https://d.test", apiKey: "k" },
+        { model: "m", prompt: "p" },
+        undefined,
+        { pollIntervalMs: 1, timeoutMs: 5_000 },
+      ),
+    ).rejects.toThrow(/CANCELED/);
+  });
+
   it("times out when polling exceeds deadline", async () => {
     stubFetchSequence([
       { json: { output: { task_id: "t" } } },

@@ -165,12 +165,14 @@ async function generate(
       }
       return { images, usage: null, warnings };
     }
-    if (status === "FAILED") {
+    // CANCELED / UNKNOWN are terminal too — without this they would poll
+    // until the timeout and surface a generic timeout instead of the cause.
+    if (status === "FAILED" || status === "CANCELED" || status === "UNKNOWN") {
       const msg =
-        typeof output?.message === "string" ? output.message : "Task FAILED";
-      throw new Error(`DashScope WAN generation FAILED: ${msg}`);
+        typeof output?.message === "string" ? output.message : `Task ${status}`;
+      throw new Error(`DashScope WAN generation ${status}: ${msg}`);
     }
-    // PENDING / RUNNING → keep polling
+    // PENDING / RUNNING (or a payload without task_status) → keep polling
   }
   throw new Error(`DashScope WAN: polling timed out after ${timeoutMs}ms`);
 }
