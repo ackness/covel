@@ -5,6 +5,7 @@ import {
   computeSpriteSlots,
   extractInteractionChoices,
   extractPendingFormMessages,
+  filterStalePrompts,
   mergeChoices,
   resolveBackdrop,
   type StageCurrentRecord,
@@ -69,18 +70,23 @@ describe("resolveBackdrop", () => {
 });
 
 describe("computeSpriteSlots", () => {
+  // Real shapes: scene-cast keys speakers by the scoped `<sessionId>-<id>`
+  // (scopedCharacterId), while character-presence keys records by the bare
+  // `characterId`. The join must reconcile the two — a same-string fixture
+  // would mask the break.
+  const SESSION = "haruka-academy-1a2b3c4d";
   const speakers: StageSpeaker[] = [
-    { id: "lin", name: "林月" },
-    { id: "archivist", name: "档案员" },
-    { id: "ghost", name: "无立绘的角色" },
+    { id: `${SESSION}-lin`, name: "林月" },
+    { id: `${SESSION}-archivist`, name: "档案员" },
+    { id: `${SESSION}-ghost`, name: "无立绘的角色" },
   ];
 
-  it("1 speaker stations at right", () => {
-    const presence = { lin: { sprite: ref("lin-sprite") } };
+  it("joins a scoped speaker id to a bare-keyed presence record", () => {
+    const presence = { lin: { characterId: "lin", sprite: ref("lin-sprite") } };
     const slots = computeSpriteSlots(speakers.slice(0, 1), presence);
     expect(slots).toEqual([
       {
-        characterId: "lin",
+        characterId: `${SESSION}-lin`,
         displayName: "林月",
         ref: ref("lin-sprite"),
         active: true,
@@ -89,10 +95,17 @@ describe("computeSpriteSlots", () => {
     ]);
   });
 
+  it("matches an unscoped speaker id by exact characterId", () => {
+    const presence = { lin: { characterId: "lin", sprite: ref("lin-sprite") } };
+    const slots = computeSpriteSlots([{ id: "lin", name: "林月" }], presence);
+    expect(slots).toHaveLength(1);
+    expect(slots[0].ref).toEqual(ref("lin-sprite"));
+  });
+
   it("2 speakers split left/right", () => {
     const presence = {
-      lin: { sprite: ref("lin-sprite") },
-      archivist: { sprite: ref("archivist-sprite") },
+      lin: { characterId: "lin", sprite: ref("lin-sprite") },
+      archivist: { characterId: "archivist", sprite: ref("archivist-sprite") },
     };
     const slots = computeSpriteSlots(speakers.slice(0, 2), presence);
     expect(slots.map((s) => s.pos)).toEqual(["left", "right"]);
@@ -100,9 +113,9 @@ describe("computeSpriteSlots", () => {
 
   it("3-4 speakers distribute evenly", () => {
     const presence = {
-      lin: { sprite: ref("lin-sprite") },
-      archivist: { sprite: ref("archivist-sprite") },
-      ghost: { sprite: ref("ghost-sprite") },
+      lin: { characterId: "lin", sprite: ref("lin-sprite") },
+      archivist: { characterId: "archivist", sprite: ref("archivist-sprite") },
+      ghost: { characterId: "ghost", sprite: ref("ghost-sprite") },
     };
     const slots = computeSpriteSlots(speakers, presence);
     expect(slots.map((s) => s.pos)).toEqual(["left", "center", "right"]);
@@ -110,20 +123,22 @@ describe("computeSpriteSlots", () => {
 
   it("marks speakers[0] active, and drops characters with no sprite/avatar", () => {
     const presence = {
-      lin: { sprite: ref("lin-sprite") },
-      archivist: { avatar: ref("archivist-avatar") }, // falls back to avatar
+      lin: { characterId: "lin", sprite: ref("lin-sprite") },
+      archivist: { characterId: "archivist", avatar: ref("archivist-avatar") }, // falls back to avatar
       // ghost has no presence entry at all — filtered out
     };
     const slots = computeSpriteSlots(speakers, presence);
     expect(slots).toHaveLength(2);
-    expect(slots.find((s) => s.characterId === "lin")?.active).toBe(true);
-    expect(slots.find((s) => s.characterId === "archivist")?.active).toBe(
-      false,
+    expect(slots.find((s) => s.characterId === `${SESSION}-lin`)?.active).toBe(
+      true,
     );
-    expect(slots.find((s) => s.characterId === "archivist")?.ref).toEqual(
-      ref("archivist-avatar"),
-    );
-    expect(slots.some((s) => s.characterId === "ghost")).toBe(false);
+    expect(
+      slots.find((s) => s.characterId === `${SESSION}-archivist`)?.active,
+    ).toBe(false);
+    expect(
+      slots.find((s) => s.characterId === `${SESSION}-archivist`)?.ref,
+    ).toEqual(ref("archivist-avatar"));
+    expect(slots.some((s) => s.characterId === `${SESSION}-ghost`)).toBe(false);
   });
 });
 
@@ -310,5 +325,22 @@ describe("mergeChoices", () => {
     const merged = mergeChoices(manyInteraction, prompts, "zh-CN");
     expect(merged.items).toHaveLength(7);
     expect(merged.twoColumn).toBe(true);
+  });
+});
+
+describe("filterStalePrompts", () => {
+  it("keeps prompts stamped with the current turn", () => {
+    const ns = { __turnId: "turn-5", prompt1Text: "环顾四周" };
+    expect(filterStalePrompts(ns, "turn-5")).toBe(ns);
+  });
+
+  it("drops prompts stamped with a past turn", () => {
+    const ns = { __turnId: "turn-4", prompt1Text: "环顾四周" };
+    expect(filterStalePrompts(ns, "turn-5")).toEqual({});
+  });
+
+  it("keeps prompts with no __turnId stamp (back-compat with old data)", () => {
+    const ns = { prompt1Text: "环顾四周" };
+    expect(filterStalePrompts(ns, "turn-5")).toBe(ns);
   });
 });

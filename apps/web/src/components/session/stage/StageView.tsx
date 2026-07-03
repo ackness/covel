@@ -40,6 +40,7 @@ import { StageChoices } from "./StageChoices.js";
 import {
   extractInteractionChoices,
   extractPendingFormMessages,
+  filterStalePrompts,
   type PresenceRecord,
   type StageCurrentRecord,
   type StageSpeaker,
@@ -152,6 +153,12 @@ export function StageView(props: StageViewProps): ReactElement {
     () => extractPendingFormMessages(messages, submittedBlockIds),
     [messages, submittedBlockIds],
   );
+  // Drop scene-prompts left over from a previous turn (StageChoices merges them
+  // in via mergeChoices, which doesn't itself check freshness).
+  const freshPrompts = useMemo(
+    () => filterStalePrompts(promptsNamespace, storyTurnId),
+    [promptsNamespace, storyTurnId],
+  );
   const activeForm = pendingForms.find((m) => !dismissedFormIds.has(m.id));
 
   return (
@@ -192,7 +199,7 @@ export function StageView(props: StageViewProps): ReactElement {
       <StageChoices
         visible={allRead && !executing && !inputMode}
         interactionChoices={interactionChoices}
-        promptsNamespace={promptsNamespace}
+        promptsNamespace={freshPrompts}
         locale={locale}
         onSubmitInteraction={onSubmitInteraction}
         onSendMessage={onSendMessage}

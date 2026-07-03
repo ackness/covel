@@ -106,6 +106,26 @@ const MAX_SPRITE_SLOTS = 4;
  * highest-salience speaker from scene-cast) is flagged `active` when it
  * survives filtering.
  */
+/**
+ * Reconcile scoped speaker ids against bare presence characterIds. scene-cast
+ * keys speakers by `<sessionId>-<characterId>` (scopedCharacterId) while
+ * character-presence keys its records by the bare `characterId`, so a direct
+ * `presenceMap[speaker.id]` lookup always misses. Match on the presence
+ * *value*'s characterId by exact id or the `-<characterId>` suffix — mirrors
+ * `resolveCharacterAvatar` in lib/catalog.
+ */
+function findPresence(
+  presenceMap: Readonly<Record<string, PresenceRecord | undefined>>,
+  speakerId: string,
+): PresenceRecord | undefined {
+  for (const value of Object.values(presenceMap)) {
+    const pid = value?.characterId;
+    if (!pid) continue;
+    if (speakerId === pid || speakerId.endsWith(`-${pid}`)) return value;
+  }
+  return undefined;
+}
+
 export function computeSpriteSlots(
   speakers: readonly StageSpeaker[],
   presenceMap: Readonly<Record<string, PresenceRecord | undefined>>,
@@ -114,7 +134,7 @@ export function computeSpriteSlots(
 
   const withMedia = speakers
     .map((speaker) => {
-      const presence = presenceMap[speaker.id];
+      const presence = findPresence(presenceMap, speaker.id);
       const ref = isMediaRef(presence?.sprite)
         ? presence.sprite
         : isMediaRef(presence?.avatar)
@@ -310,4 +330,24 @@ export function mergeChoices(
   }
 
   return { items, twoColumn: items.length > TWO_COLUMN_THRESHOLD };
+}
+
+/**
+ * scene-prompts stamps its `message` namespace with the `__turnId` that
+ * produced the phrases. Once the story advances, the old prompts linger until
+ * scene-prompts regenerates — drop them so the stage never offers phrases from
+ * a past turn. Returns the namespace untouched when the stamp is fresh, absent,
+ * or uncomparable (no current turn yet) — the latter two keep back-compat with
+ * pre-`__turnId` data. Interaction choices and the ✎ entry are unaffected
+ * (they don't live in this namespace).
+ */
+export function filterStalePrompts(
+  promptsNamespace: Readonly<Record<string, unknown>>,
+  currentTurnId: string | undefined,
+): Readonly<Record<string, unknown>> {
+  const stamp = promptsNamespace.__turnId;
+  if (typeof stamp === "string" && currentTurnId && stamp !== currentTurnId) {
+    return {};
+  }
+  return promptsNamespace;
 }
