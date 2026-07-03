@@ -901,6 +901,26 @@
   filter: brightness(0.55) saturate(0.6);
 }
 
+/* Silhouette standee for a speaking character with no sprite/avatar yet — a
+   translucent, dashed placeholder card carrying the name initial. Keeps the
+   speaker on stage so the dialog nameplate never points at an empty stage;
+   the active/inactive filters on the wrapper above still apply to it. */
+.ui-stage-sprite-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(6rem, 13vh, 9rem);
+  height: clamp(11rem, 58%, 20rem);
+  border-radius: var(--radius-dialog);
+  background: color-mix(in oklab, var(--surface-page) 60%, transparent);
+  border: var(--rule-thickness) dashed
+    color-mix(in oklab, var(--rule-color) 80%, transparent);
+  color: color-mix(in oklab, var(--color-foreground) 55%, transparent);
+  font-size: clamp(2rem, 6vh, 3.25rem);
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+}
+
 /* Translucent theme-token surface for HUD/dialog/choice chrome floating
    over the backdrop art — opaque enough to stay legible over any photo,
    in both light and dark themes. */

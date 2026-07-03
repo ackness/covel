@@ -121,14 +121,14 @@ describe("computeSpriteSlots", () => {
     expect(slots.map((s) => s.pos)).toEqual(["left", "center", "right"]);
   });
 
-  it("marks speakers[0] active, and drops characters with no sprite/avatar", () => {
+  it("marks speakers[0] active, falls back to avatar, and keeps artless speakers as null slots", () => {
     const presence = {
       lin: { characterId: "lin", sprite: ref("lin-sprite") },
       archivist: { characterId: "archivist", avatar: ref("archivist-avatar") }, // falls back to avatar
-      // ghost has no presence entry at all — filtered out
+      // ghost has no presence entry at all — kept on stage with ref: null
     };
     const slots = computeSpriteSlots(speakers, presence);
-    expect(slots).toHaveLength(2);
+    expect(slots).toHaveLength(3);
     expect(slots.find((s) => s.characterId === `${SESSION}-lin`)?.active).toBe(
       true,
     );
@@ -138,7 +138,25 @@ describe("computeSpriteSlots", () => {
     expect(
       slots.find((s) => s.characterId === `${SESSION}-archivist`)?.ref,
     ).toEqual(ref("archivist-avatar"));
-    expect(slots.some((s) => s.characterId === `${SESSION}-ghost`)).toBe(false);
+    const ghost = slots.find((s) => s.characterId === `${SESSION}-ghost`);
+    expect(ghost?.ref).toBeNull();
+    expect(ghost?.displayName).toBe("无立绘的角色");
+    // stations still count the fallback slot: 3 speakers → left/center/right
+    expect(slots.map((s) => s.pos)).toEqual(["left", "center", "right"]);
+  });
+
+  it("keeps an artless primary speaker on stage as an active null slot (no nameplate mismatch)", () => {
+    // The bug: speakers[0] (林月) has no art, only the second speaker does.
+    // Dropping 林月 left 档案员's sprite alone while the nameplate said 林月.
+    const presence = {
+      archivist: { characterId: "archivist", sprite: ref("archivist-sprite") },
+    };
+    const slots = computeSpriteSlots(speakers.slice(0, 2), presence);
+    expect(slots).toHaveLength(2);
+    const lin = slots.find((s) => s.characterId === `${SESSION}-lin`);
+    expect(lin?.ref).toBeNull();
+    expect(lin?.active).toBe(true);
+    expect(slots.map((s) => s.pos)).toEqual(["left", "right"]);
   });
 });
 

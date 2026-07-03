@@ -67,14 +67,25 @@ export function StageSprites({
                 : "ui-stage-sprite-inactive",
             )}
           >
-            <Media
-              src={slot.ref}
-              sessionId={sessionId}
-              alt={slot.displayName}
-              fit="contain"
-              rounded="none"
-              maxHeight="100%"
-            />
+            {slot.ref ? (
+              <Media
+                src={slot.ref}
+                sessionId={sessionId}
+                alt={slot.displayName}
+                fit="contain"
+                rounded="none"
+                maxHeight="100%"
+              />
+            ) : (
+              // No sprite/avatar yet — a name-initial standee keeps the
+              // speaker on stage so the dialog nameplate matches someone.
+              <div
+                className="ui-stage-sprite-fallback"
+                aria-label={slot.displayName}
+              >
+                {slot.displayName.trim().slice(0, 1)}
+              </div>
+            )}
           </div>
           <span
             className={clsx(

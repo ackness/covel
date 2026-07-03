@@ -83,7 +83,10 @@ export type SpritePosition =
 export interface StageSpriteSlot {
   readonly characterId: string;
   readonly displayName: string;
-  readonly ref: MediaRef;
+  /** `null` when the speaker has no resolvable sprite/avatar — the sprite
+   * layer renders a name-initial fallback card so the dialog nameplate never
+   * points at an empty stage. */
+  readonly ref: MediaRef | null;
   readonly active: boolean;
   readonly pos: SpritePosition;
 }
@@ -103,10 +106,11 @@ const POSITIONS_BY_COUNT: Readonly<Record<number, readonly SpritePosition[]>> =
 const MAX_SPRITE_SLOTS = 4;
 
 /**
- * Station speakers on stage. Characters without a resolvable sprite/avatar
- * are dropped entirely (no empty-frame placeholder). `speakers[0]` (the
- * highest-salience speaker from scene-cast) is flagged `active` when it
- * survives filtering.
+ * Station speakers on stage. Speakers without a resolvable sprite/avatar are
+ * kept as `ref: null` slots (the sprite layer renders a fallback card) rather
+ * than dropped — dropping the primary speaker left the dialog nameplate
+ * pointing at nobody on stage. `speakers[0]` (the highest-salience speaker
+ * from scene-cast) is always flagged `active`.
  */
 /**
  * Reconcile scoped speaker ids against bare presence characterIds. scene-cast
@@ -133,32 +137,24 @@ export function computeSpriteSlots(
   presenceMap: Readonly<Record<string, PresenceRecord | undefined>>,
 ): StageSpriteSlot[] {
   const primaryId = speakers[0]?.id;
+  const staged = speakers.slice(0, MAX_SPRITE_SLOTS);
+  const positions = POSITIONS_BY_COUNT[staged.length] ?? [];
 
-  const withMedia = speakers
-    .map((speaker) => {
-      const presence = findPresence(presenceMap, speaker.id);
-      const ref = isMediaRef(presence?.sprite)
-        ? presence.sprite
-        : isMediaRef(presence?.avatar)
-          ? presence.avatar
-          : null;
-      return ref ? { speaker, ref } : null;
-    })
-    .filter(
-      (entry): entry is { speaker: StageSpeaker; ref: MediaRef } =>
-        entry !== null,
-    )
-    .slice(0, MAX_SPRITE_SLOTS);
-
-  const positions = POSITIONS_BY_COUNT[withMedia.length] ?? [];
-
-  return withMedia.map(({ speaker, ref }, index) => ({
-    characterId: speaker.id,
-    displayName: speaker.name,
-    ref,
-    active: speaker.id === primaryId,
-    pos: positions[index] ?? "center",
-  }));
+  return staged.map((speaker, index) => {
+    const presence = findPresence(presenceMap, speaker.id);
+    const ref = isMediaRef(presence?.sprite)
+      ? presence.sprite
+      : isMediaRef(presence?.avatar)
+        ? presence.avatar
+        : null;
+    return {
+      characterId: speaker.id,
+      displayName: speaker.name,
+      ref,
+      active: speaker.id === primaryId,
+      pos: positions[index] ?? "center",
+    };
+  });
 }
 
 // ── Choices (interaction.request choice blocks + scene-prompts) ─────
