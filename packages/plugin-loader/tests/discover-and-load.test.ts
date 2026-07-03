@@ -171,6 +171,7 @@ describe("bundled plugin dataSchemas", () => {
       "character-presence/assets",
       "character-presence/presence",
       "living-world-rules/rules",
+      "scene-stage/assets",
       "scene-stage/scenes",
     ]);
   });
