@@ -103,7 +103,11 @@ class ScriptedLLM implements LLMAdapter {
   }
 }
 
-const CORRECTION = "你没有调用任何工具就结束了";
+// The correction message is locale-branched like buildFrameworkPreamble:
+// zh locales get the Chinese variant, everything else (including no locale)
+// gets English.
+const CORRECTION = "You finished without calling any tool";
+const CORRECTION_ZH = "你没有调用任何工具就结束了";
 
 describe("requireToolUse gate", () => {
   it("injects one correction then succeeds when the retry calls the tool", async () => {
@@ -141,6 +145,32 @@ describe("requireToolUse gate", () => {
       | Array<{ topic: string }>
       | undefined;
     expect(events).toEqual([{ topic: "test.ping", data: { x: 1 } }]);
+  });
+
+  it("injects the Chinese correction for zh locales", async () => {
+    const store = await mainLoopStore("sess-1");
+    const llm = new ScriptedLLM(2);
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
+      llm,
+      getConfig: () => ({}),
+      store,
+      toolExecutor: toolExecutor(store),
+    };
+
+    await executeTurn(
+      makeTurnInput({ locale: "zh-CN" }),
+      [manifest({ requireToolUse: true })],
+      deps,
+      { maxSteps: 5 },
+    );
+
+    const secondCallSystems = llm.seenMessages[1]!.filter(
+      (m) => m.role === "system",
+    );
+    expect(
+      secondCallSystems.some((m) => String(m.content).includes(CORRECTION_ZH)),
+    ).toBe(true);
   });
 
   it("releases with a warn when the retry still calls no tool", async () => {
