@@ -52,9 +52,9 @@ node scripts/emit-scenes.mjs haruka-academy
 | `--slot`               | 指定 `~/.covel/llm.toml` 的图像 slot（默认 `gpt-image-2`）。                               |
 | `--dry-run`            | 只打印 prompt 队列，不出图、不联网。                                                       |
 
-## 接入插件（预留）
+## 接入插件
 
-`data/world.data.yaml` 里的 `media/scenes` source（`kind: media, to: media`）负责把 `media/scenes/*.png` 按 sha256 导入媒体库；`scenes.registry.json` 是生成产物，把 `sceneId → { day, night } MediaRef` 映射写死到 world 包里，**目前没有消费方 namespace，A 阶段不导入进 world.data.yaml**——等场景插件（B 阶段）落地后接管消费。
+`data/world.data.yaml` 里有两个相关 source：`scenes`（`kind: media, to: media, indexTo: plugin:scene-stage/assets, key: filename`）把 `media/scenes/*.png` 按 sha256 导入媒体库并写入 scene-stage 的 `assets` 索引；`scenesRegistry`（`kind: json, to: plugin:scene-stage/scenes, key: registryId`）把 `scenes.registry.json` 的 `sceneId → { day, night } MediaRef` 映射导入 scene-stage 的 `scenes` namespace，由 `scene-stage/resolver` 在 `scene.set` 事件到达时消费。
 
 ## 复用与重生成
 
