@@ -923,6 +923,27 @@
 
 .ui-stage-choice-item {
   animation: ui-stage-choice-in 260ms ease-out both;
+  cursor: pointer;
+}
+
+/* Hover/focus affordance — the Tailwind border-color change alone is barely
+   perceptible over busy backdrop art. Add a faint accent-tinted fill on hover
+   and a real focus ring for keyboard users (raw <button>s, so no shared
+   Button focus style). Kept off `transform` so it never fights the entrance
+   keyframe's forwards-fill. */
+.ui-stage-choice-item:hover {
+  background: color-mix(
+    in oklab,
+    var(--surface-page) 85%,
+    var(--accent-primary)
+  );
+}
+
+.ui-stage-choice-item:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px
+    color-mix(in oklab, var(--accent-primary) 40%, transparent);
 }
 
 /* Reuses the existing blink keyframe (see `.ui-cursor` above) for the

@@ -122,7 +122,7 @@ export function StageDialog({
           <button
             type="button"
             onClick={handleFrameClick}
-            className="flex w-full flex-col gap-1.5 p-4 text-left"
+            className="flex w-full cursor-pointer flex-col gap-1.5 p-4 text-left"
           >
             {speakerName && (
               <span className="text-xs font-semibold text-[var(--accent-primary)]">
