@@ -892,12 +892,12 @@ events:
     advertise: true # 默认 true，可省略
 ```
 
-| 字段          | 类型       | 默认   | 说明                                                                                                                                             |
-| ------------- | ---------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `topic`       | `string`   | 必填   | 点分 kebab-case（`domain.verb`，如 `quest.updated`），正则拒绝其他格式                                                                           |
-| `schema`      | `string`   | 必填   | 插件根目录相对 JSON Schema 路径，校验 `data` payload（与 `dataSchemas` 同规则）                                                                  |
-| `description` | `I18nText` | 必填   | 目录展示用说明，按 session locale 解析                                                                                                           |
-| `advertise`   | `boolean`  | `true` | `false` 时该 topic 仍可被声明/发射/触发，但**不出现**在 `<available-events>` 目录里——适合两个插件间的内部信令，不希望被通用叙事 runtime 随手调用 |
+| 字段          | 类型       | 默认   | 说明                                                                                                                                                                                                                                                                                                                        |
+| ------------- | ---------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `topic`       | `string`   | 必填   | 点分 kebab-case（`domain.verb`，如 `quest.updated`），正则拒绝其他格式                                                                                                                                                                                                                                                      |
+| `schema`      | `string`   | 必填   | 插件根目录相对 JSON Schema 路径，校验 `data` payload（与 `dataSchemas` 同规则）                                                                                                                                                                                                                                             |
+| `description` | `I18nText` | 必填   | 目录展示用说明，按 session locale 解析                                                                                                                                                                                                                                                                                      |
+| `advertise`   | `boolean`  | `true` | `false` 时该 topic 为**内部信令**：不出现在 `<available-events>` 目录里，且**不进 `emit-event` 白名单**——只能由声明它的插件自己的函数 runtime 经 `output.events` 结果通道发射（或 `trigger: { type: event, topic }` 触发消费方），agent 无法经 `emit-event` 直发。适合两个插件间不希望被通用叙事 runtime 随手调用的内部信令 |
 
 同一 session 内若两个不同插件声明了同一 `topic` 但 `schema` 路径不同，服务端按插件激活优先级顺序**首胜**（保留先声明者的 schema）并 `console.warn` 一次（同一 `(session, topic)` 不重复告警）。
 

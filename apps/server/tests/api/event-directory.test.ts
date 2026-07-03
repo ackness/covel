@@ -162,20 +162,29 @@ async function setupBasicSession() {
 }
 
 describe("event directory", () => {
-  it("lists the union of active plugins' declared topics, excluding inactive plugins", async () => {
+  it("lists active plugins' advertised topics, excluding inactive plugins and advertise:false", async () => {
     const { directory } = await setupBasicSession();
     const topics = await directory.listTopics("sess-1");
-    expect([...topics].sort()).toEqual(["quest.done", "scene.set"]);
+    expect([...topics].sort()).toEqual(["scene.set"]);
   });
 
-  it("includes advertise:false topics in listTopics but omits them from catalogText", async () => {
+  it("omits advertise:false topics from both listTopics and catalogText", async () => {
     const { directory } = await setupBasicSession();
     const topics = await directory.listTopics("sess-1");
-    expect(topics).toContain("quest.done");
+    expect(topics).not.toContain("quest.done");
 
     const catalog = await directory.catalogText("sess-1", "zh-CN");
     expect(catalog).toContain("scene.set");
     expect(catalog).not.toContain("quest.done");
+  });
+
+  it("rejects an advertise:false topic as unknown without leaking its name", async () => {
+    const { directory } = await setupBasicSession();
+    const result = await directory.validate("sess-1", "quest.done", {});
+    expect(result).toEqual({
+      ok: false,
+      reason: 'unknown topic "quest.done"',
+    });
   });
 
   it("renders topic, localized description, and required fields in catalogText", async () => {

@@ -13,16 +13,22 @@ const ctx: ToolExecutionContext = {
 interface FakeTopicEntry {
   readonly topic: string;
   readonly requires?: string;
+  /** advertise:false internal topics are omitted from listTopics (the emit gate). */
+  readonly advertised?: boolean;
 }
 
 function makeDirectory(entries: readonly FakeTopicEntry[]) {
   return {
     listTopics: vi.fn((_sessionId: string) =>
-      entries.map((entry) => entry.topic),
+      entries
+        .filter((entry) => entry.advertised !== false)
+        .map((entry) => entry.topic),
     ),
     validate: vi.fn(
       (_sessionId: string, topic: string, data: Record<string, unknown>) => {
-        const hit = entries.find((entry) => entry.topic === topic);
+        const hit = entries.find(
+          (entry) => entry.topic === topic && entry.advertised !== false,
+        );
         if (!hit)
           return { ok: false as const, reason: `unknown topic "${topic}"` };
         if (hit.requires && !(hit.requires in data)) {
@@ -62,6 +68,24 @@ describe("emit-event tool", () => {
     expect(getEmittedEvents(result)).toBeUndefined();
     expect(result._text).toContain('unknown topic "quest.done"');
     expect(result._text).toContain("scene.set");
+  });
+
+  it("rejects an advertise:false internal topic without leaking its name", async () => {
+    const tool = createEmitEventTool({
+      directory: makeDirectory([
+        { topic: "scene.set" },
+        { topic: "quest.done", advertised: false },
+      ]),
+    });
+    const result = (await tool.execute(
+      { topic: "quest.done", data: {} },
+      ctx,
+    )) as { _text: string };
+    expect(getEmittedEvents(result)).toBeUndefined();
+    expect(result._text).toContain('unknown topic "quest.done"');
+    expect(result._text).toContain("scene.set");
+    // The internal topic must not be echoed back in the available-topics hint.
+    expect(result._text).not.toContain("Available topics: quest.done");
   });
 
   it("returns the schema validation error verbatim so the LLM can retry", async () => {

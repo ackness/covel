@@ -129,13 +129,20 @@ export function createEventDirectory(deps: EventDirectoryDeps): EventDirectory {
   }
 
   return {
+    // Only advertised topics are emittable via the builtin emit-event tool.
+    // advertise:false topics are internal — reachable by a plugin's own
+    // function runtime, never surfaced to an agent (keeps the generation gate
+    // from being bypassed by a direct emit). Aligned with catalogText's filter.
     async listTopics(sessionId) {
-      return [...collectSessionEvents(sessionId).keys()];
+      return [...collectSessionEvents(sessionId).values()]
+        .filter((entry) => entry.decl.advertise)
+        .map((entry) => entry.decl.topic);
     },
 
     async validate(sessionId, topic, data) {
       const entry = collectSessionEvents(sessionId).get(topic);
-      if (!entry) return { ok: false, reason: `unknown topic "${topic}"` };
+      if (!entry || !entry.decl.advertise)
+        return { ok: false, reason: `unknown topic "${topic}"` };
       let loaded: LoadedSchema;
       try {
         loaded = await loadSchema(entry);

@@ -1656,6 +1656,40 @@ describe("processRuntimeResult", () => {
     });
   });
 
+  // A function handler that reports its own terminal outcome — RuntimeResult.status
+  // stays "success" while output.status carries failed/skipped/error (see
+  // turn-function-runtime) — deliberately produces no asset.generate proposal and
+  // must not be flagged as asset_missing.
+  it.each(["failed", "skipped", "error"])(
+    "keeps image generation logs empty for %s handler outputs",
+    async (status) => {
+      const store = createMockStore();
+      const result = makeRuntimeResult({
+        status,
+        pluginData: [{ namespace: "_jobs", key: "job-1", value: { status } }],
+      });
+
+      const { events, failedProposals } = await processRuntimeResult(
+        result,
+        store as any,
+        SESSION_ID,
+        "plugin",
+        {
+          capabilities: ["image-generation"],
+        },
+      );
+
+      expect(events).toHaveLength(0);
+      expect(failedProposals).toHaveLength(0);
+      expect(store.setPluginData).toHaveBeenCalledOnce();
+      expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
+        namespace: "_jobs",
+        key: "job-1",
+        value: { status },
+      });
+    },
+  );
+
   it("should surface failed proposals when commit returns committed:false", async () => {
     const store = createMockStore();
     // Use working_memory.set which returns committed:false when feature flag is off
