@@ -3,6 +3,7 @@ import type { StreamMessage } from "@/stores/session-store.js";
 import type { WorldVisual } from "@/lib/world-visuals.js";
 import {
   assignStations,
+  computeSpriteLanes,
   computeSpriteSlots,
   extractInteractionChoices,
   extractPendingFormMessages,
@@ -229,6 +230,43 @@ describe("assignStations", () => {
     const prev = assignStations(empty, ["a", "b", "c"]);
     const again = assignStations(prev, ["a", "b", "c"]);
     expect([...again.entries()]).toEqual([...prev.entries()]);
+  });
+});
+
+describe("computeSpriteLanes", () => {
+  it("a lone sprite is capped and centered instead of blanketing the stage", () => {
+    expect(computeSpriteLanes(["center"])).toEqual([
+      { leftPct: 20, widthPct: 60 },
+    ]);
+  });
+
+  it("two sprites split the stage into non-overlapping halves", () => {
+    expect(computeSpriteLanes(["left", "right"])).toEqual([
+      { leftPct: 0, widthPct: 50 },
+      { leftPct: 50, widthPct: 50 },
+    ]);
+  });
+
+  it("lane order follows station rank, not input order", () => {
+    expect(computeSpriteLanes(["right", "left"])).toEqual([
+      { leftPct: 50, widthPct: 50 },
+      { leftPct: 0, widthPct: 50 },
+    ]);
+  });
+
+  it("lanes tile the stage without overlap for any cast size", () => {
+    for (const positions of [
+      ["left", "center", "right"],
+      ["left", "center-left", "center-right", "right"],
+    ] as const) {
+      const lanes = computeSpriteLanes(positions);
+      const width = 100 / positions.length;
+      const sorted = [...lanes].sort((a, b) => a.leftPct - b.leftPct);
+      sorted.forEach((lane, i) => {
+        expect(lane.widthPct).toBeCloseTo(width, 6);
+        expect(lane.leftPct).toBeCloseTo(i * width, 6);
+      });
+    }
   });
 });
 

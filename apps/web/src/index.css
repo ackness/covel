@@ -864,18 +864,18 @@
   }
 }
 
-/* Bakes the sprite's horizontal centering offset into the keyframe itself —
-   a CSS animation's fill-forward otherwise wins over any plain `transform`
-   rule targeting the same property on the same element, so a static
-   `translateX(-50%)` declared alongside this animation would be ignored. */
+/* Sprite entrance. Sprites are positioned as lane *boxes* (left+width in
+   stage-width percent, see computeSpriteLanes) rather than a translateX(-50%)
+   center anchor, so the keyframe owns `transform` outright — no static
+   offset to preserve across the animation's fill-forward. */
 @keyframes ui-stage-rise-in {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(2%);
+    transform: translateY(2%);
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0);
   }
 }
 

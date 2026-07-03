@@ -186,6 +186,46 @@ export function assignStations(
   return next;
 }
 
+export interface SpriteLane {
+  /** Lane box left edge, percent of stage width. */
+  readonly leftPct: number;
+  /** Lane box width, percent of stage width. */
+  readonly widthPct: number;
+}
+
+/** A lone sprite gets the whole stage as its lane — cap it so a wide
+ * (non-transparent, scene-baked) card can't blanket the entire backdrop. */
+const MAX_SOLO_LANE_PCT = 60;
+
+/**
+ * Lane geometry for the sprite layer: the stage splits into equal-width
+ * lanes, one per staged sprite, ordered left→right by station rank. Sprites
+ * render *contained inside* their lane box, so occlusion is impossible by
+ * construction — sprite width is bounded by stage *width* (a share of it),
+ * not by stage height × image aspect, which is what let wide sprite cards
+ * swallow their neighbours whenever the stage got narrower.
+ *
+ * Returns one lane per input position, aligned with input order. Assumes
+ * positions are unique (guaranteed by `assignStations`).
+ */
+export function computeSpriteLanes(
+  positions: readonly SpritePosition[],
+): SpriteLane[] {
+  const count = positions.length;
+  if (count === 0) return [];
+  const laneWidth = 100 / count;
+  const widthPct = Math.min(laneWidth, MAX_SOLO_LANE_PCT);
+
+  return positions.map((pos) => {
+    const idx = STATION_ORDER.indexOf(pos);
+    const rank = positions.filter(
+      (other) => STATION_ORDER.indexOf(other) < idx,
+    ).length;
+    const centerPct = (rank + 0.5) * laneWidth;
+    return { leftPct: centerPct - widthPct / 2, widthPct };
+  });
+}
+
 /**
  * Reconcile scoped speaker ids against bare presence characterIds. scene-cast
  * keys speakers by `<sessionId>-<characterId>` (scopedCharacterId) while

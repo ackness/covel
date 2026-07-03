@@ -11,6 +11,7 @@ import { useRef, type ReactElement } from "react";
 import { Media } from "@/components/Media.js";
 import {
   assignStations,
+  computeSpriteLanes,
   computeSpriteSlots,
   type PresenceRecord,
   type SpritePosition,
@@ -24,16 +25,6 @@ export interface StageSpritesProps {
   /** Choice overlay open — pull focus off the sprites (classic VN dim). */
   readonly dimmed?: boolean;
 }
-
-// Offsets are the sprite's CENTER (the slot below applies translateX(-50%)),
-// so no station ever crops a sprite against the stage edge.
-const POSITION_OFFSET: Readonly<Record<SpritePosition, string>> = {
-  left: "27%",
-  "center-left": "38%",
-  center: "50%",
-  "center-right": "62%",
-  right: "73%",
-};
 
 export function StageSprites({
   speakers,
@@ -62,6 +53,7 @@ export function StageSprites({
   const slots = sticky
     ? lastSlotsRef.current.map((slot) => ({ ...slot, active: false }))
     : fresh;
+  const lanes = computeSpriteLanes(slots.map((slot) => slot.pos));
 
   return (
     <div
@@ -71,21 +63,26 @@ export function StageSprites({
       )}
       data-testid="stage-sprites"
     >
-      {slots.map((slot) => (
+      {slots.map((slot, index) => (
         <div
           key={slot.characterId}
-          // ponytail: transitions `left` (a layout prop, against the web
-          // rules) — ≤4 absolutely-positioned sprites moving once per
+          // ponytail: transitions `left`/`width` (layout props, against the
+          // web rules) — ≤4 absolutely-positioned sprites moving once per
           // enter/leave; FLIP/transform plumbing isn't worth it. The global
-          // prefers-reduced-motion block collapses it. Station changes only
+          // prefers-reduced-motion block collapses it. Lane changes only
           // happen on cast membership changes (assignStations), so this
-          // reads as "stepping aside", never as drift.
-          className="ui-stage-sprite absolute bottom-0 h-[92%] -translate-x-1/2 transition-[left] duration-500 ease-out"
-          style={{ left: POSITION_OFFSET[slot.pos] }}
+          // reads as "stepping aside", never as drift. Active speaker sits
+          // on top for the residual glow/shadow overlap at lane edges.
+          className="ui-stage-sprite absolute bottom-0 h-[92%] px-1 transition-[left,width] duration-500 ease-out"
+          style={{
+            left: `${lanes[index].leftPct}%`,
+            width: `${lanes[index].widthPct}%`,
+            zIndex: slot.active ? 2 : 1,
+          }}
         >
           <div
             className={clsx(
-              "flex h-full items-end justify-center transition-[filter,transform] duration-300 ease-out",
+              "flex h-full w-full items-end justify-center transition-[filter,transform] duration-300 ease-out",
               slot.active
                 ? "ui-stage-sprite-active"
                 : "ui-stage-sprite-inactive",
