@@ -368,6 +368,25 @@ describe("scene-stage resolver handler", () => {
     expect(ctx.pluginData.get).not.toHaveBeenCalled();
   });
 
+  it("10. re-emitted scene.set for a stuck pending stage retries generation instead of no-op", async () => {
+    const location = "废弃天文台";
+    // First resolve queued generation, but background-gen failed — stage is
+    // still "pending" and no `generated` row was ever written.
+    const first = await handler(makeCtx({ location }));
+    const pendingStage = getPendingProposals(first)[0].payload.value;
+    expect(pendingStage.source).toBe("pending");
+
+    const result = await handler(makeCtx({ location, previous: pendingStage }));
+
+    expect(result.skipped).toBeUndefined();
+    expect(result.events).toEqual([
+      {
+        topic: "scene-stage.generate.requested",
+        data: { sceneId: pendingStage.sceneId, location, variant: "day" },
+      },
+    ]);
+  });
+
   it("9. day-to-night switch on the same scene writes a new variant, not a no-op", async () => {
     const previous = {
       sceneId: "classroom",

@@ -88,9 +88,15 @@ export default async function handler(ctx) {
     updatedAt: new Date().toISOString(),
   };
 
+  // A "pending" previous stage is never a no-op: if background-gen failed
+  // (no `generated` row written), a re-emitted scene.set is the only signal
+  // that can retry generation — swallowing it would wedge the stage on
+  // "背景生成中…" forever. Successful double-generation is already prevented
+  // by background-gen's cachedRef check.
   const isNoOp =
     previous &&
     typeof previous === "object" &&
+    previous.source !== "pending" &&
     previous.sceneId === stage.sceneId &&
     previous.variant === stage.variant;
   if (isNoOp) {
