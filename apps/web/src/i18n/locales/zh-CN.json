@@ -970,7 +970,8 @@
     "exitLabel": "退出舞台",
     "inputPlaceholder": "输入你的回应…",
     "inputSendHint": "Enter 发送 · Shift+Enter 换行 · Esc 取消",
-    "freeInputLabel": "✎ 自己输入…"
+    "freeInputLabel": "✎ 自己输入…",
+    "thinkingLabel": "叙事生成中…"
   },
   "common": {
     "preview": "预览",

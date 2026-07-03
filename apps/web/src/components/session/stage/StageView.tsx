@@ -13,7 +13,7 @@
  */
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -205,6 +205,23 @@ export function StageView(props: StageViewProps): ReactElement {
         onSendMessage={onSendMessage}
         onFreeInput={() => setInputMode(true)}
       />
+
+      {/* Thinking indicator — between choice submit and the first stream delta
+          the dialog just holds the previous line with no cue that a turn is
+          running (narrator can take tens of seconds). Surface a quiet pill in
+          the choice band so the player knows the scene is being generated.
+          Hidden once deltas arrive: the typewriter itself is then the feedback. */}
+      {executing && !isStreaming && (
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-[8rem] z-30 flex justify-center px-4 md:bottom-40"
+          data-testid="stage-thinking"
+        >
+          <div className="ui-stage-panel flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            <span>{t("stage.thinkingLabel")}</span>
+          </div>
+        </div>
+      )}
 
       {/* Execution error — a failed turn otherwise just stops the typewriter
           silently on stage; surface it with a retry affordance. */}
