@@ -73,6 +73,10 @@ const BUILTIN_PLUGIN_PACKS: readonly PluginPack[] = [
       "char-creator",
       "chat-mode-narrator",
       "scene-cast",
+      // chat-mode-narrator's relations.requires re-adds the scene/VN
+      // subsystem server-side anyway — list it here so the prep page shows
+      // what will actually run instead of it being silently expanded.
+      "scene-stage",
       "scene-prompts",
       "character-blueprint",
       "character-presence",
