@@ -40,7 +40,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           # On tag push the runner already checks out the tag; on dispatch
           # honour the optional input. Empty string falls back to default.
@@ -75,7 +75,7 @@ jobs:
         run: node apps/desktop/scripts/verify-release.mjs mac
 
       - name: Upload Electron artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: covel-electron-mac-arm64
           # cleanup-artifacts.mjs strips blockmaps and update-info yml so the
@@ -102,7 +102,7 @@ jobs:
 
     steps:
       - name: Checkout (for CHANGELOG extraction)
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
           # We only need the working tree for docs/CHANGELOG.md, no history.
@@ -141,7 +141,7 @@ jobs:
           cat release/notes.md
 
       - name: Download Electron artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: release/electron
           pattern: covel-electron-*
@@ -164,7 +164,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: Covel ${{ env.RELEASE_TAG }}
           tag_name: ${{ env.RELEASE_TAG }}
