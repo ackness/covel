@@ -181,10 +181,6 @@ export function getThemeDefinition(id: string): ThemeDefinition | null {
   return themeRegistry.get(id) ?? null;
 }
 
-export function isRegisteredTheme(id: unknown): id is string {
-  return typeof id === "string" && themeRegistry.has(id);
-}
-
 export function primeThemeRegistry(store: SettingsStoreApi): ThemeDefinition[] {
   themeRegistry = buildRegistry(sortThemes([...builtinThemes]));
   registerAppearanceEntry(store);

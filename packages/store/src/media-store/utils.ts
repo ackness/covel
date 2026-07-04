@@ -128,3 +128,8 @@ export function normalizeBytes(value: Uint8Array | Buffer): Uint8Array {
     value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength),
   );
 }
+
+// filterAssetsByMetadata moved to ./filter.js (node-built-in-free) so the
+// browser idb backend can reach it without pulling node:crypto/node:path into
+// the web bundle. Re-exported here so node backends keep their utils import.
+export { filterAssetsByMetadata } from "./filter.js";

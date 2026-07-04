@@ -12,11 +12,9 @@ import type {
   PluginSummary,
   LoadedRuntime,
   ParsedPluginMd,
-  ParsedReference,
   FunctionHandler,
 } from "./types.js";
 import { parsePluginMd } from "./parse-plugin-md.js";
-import { parseReference } from "./parse-reference.js";
 
 /**
  * Resolve a locale-aware PLUGIN.md path.
@@ -88,18 +86,6 @@ async function fileExists(p: string): Promise<boolean> {
   try {
     const stat = await fs.stat(p);
     return stat.isFile();
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Check whether a path exists and is a directory.
- */
-async function dirExists(p: string): Promise<boolean> {
-  try {
-    const stat = await fs.stat(p);
-    return stat.isDirectory();
   } catch {
     return false;
   }
@@ -210,32 +196,6 @@ function parseSummaryRelations(value: unknown): PluginRelations | undefined {
 }
 
 /**
- * Read all reference files from a `references/` directory.
- */
-async function readReferences(
-  runtimeDir: string,
-): Promise<readonly ParsedReference[]> {
-  const refsDir = path.join(runtimeDir, "references");
-  if (!(await dirExists(refsDir))) {
-    return [];
-  }
-
-  const entries = await fs.readdir(refsDir, { withFileTypes: true });
-  const refs: ParsedReference[] = [];
-
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith(".md")) {
-      continue;
-    }
-    const filePath = path.join(refsDir, entry.name);
-    const content = await fs.readFile(filePath, "utf-8");
-    refs.push(parseReference(content, filePath));
-  }
-
-  return refs;
-}
-
-/**
  * Load UI spec JSON files declared in manifest.ui.
  * Validates paths to prevent traversal outside the plugin root.
  */
@@ -281,7 +241,7 @@ async function loadUiSpecs(
 
 /**
  * Level 2: Fully load a runtime for execution.
- * Reads prompt template, references, output schema.
+ * Reads prompt template, output schema.
  *
  * @param locale - Optional locale for loading localized PLUGIN.md (e.g., "en-US" → PLUGIN.en.md)
  */
@@ -295,8 +255,6 @@ export async function loadRuntime(
 
   const content = await fs.readFile(pluginMdPath, "utf-8");
   const parsed = parsePluginMd(content, pluginMdPath);
-
-  const references = await readReferences(runtimeDir);
 
   const schemaPath = path.join(runtimeDir, "output.schema.json");
   let outputSchema: Readonly<Record<string, unknown>> | undefined;
@@ -338,7 +296,6 @@ export async function loadRuntime(
   return {
     manifest: parsed.manifest,
     promptTemplate: parsed.promptTemplate,
-    references,
     outputSchema,
     handler,
     guard,

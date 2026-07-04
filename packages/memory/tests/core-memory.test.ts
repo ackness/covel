@@ -1,7 +1,17 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createMemoryManager } from "../src/core-memory.js";
-import { CORE_MEMORY_LABELS, CORE_MEMORY_LABEL_INFO } from "../src/types.js";
+import { DEFAULT_CORE_MEMORY_BLOCKS } from "../src/types.js";
 import type { CoreMemoryLabel } from "../src/types.js";
+
+// Derived from the default block schema — the manager governs exactly these
+// labels and mirrors each block's schema display name + icon.
+const LABELS: readonly CoreMemoryLabel[] = DEFAULT_CORE_MEMORY_BLOCKS.map(
+  (b) => b.label,
+);
+function infoFor(label: string): { displayName: unknown; icon: string } {
+  const block = DEFAULT_CORE_MEMORY_BLOCKS.find((b) => b.label === label)!;
+  return { displayName: block.displayName, icon: block.icon ?? "Info" };
+}
 
 interface PluginDataRow {
   id: string;
@@ -85,11 +95,11 @@ describe("CoreMemoryManager", () => {
       await manager.initializeDefaults("sess-1");
 
       const blocks = await manager.loadBlocks("sess-1");
-      expect(blocks).toHaveLength(CORE_MEMORY_LABELS.length);
+      expect(blocks).toHaveLength(LABELS.length);
 
       for (const block of blocks) {
         expect(block.content).toBe("");
-        expect(CORE_MEMORY_LABELS).toContain(block.label);
+        expect(LABELS).toContain(block.label);
       }
     });
 
@@ -206,7 +216,7 @@ describe("CoreMemoryManager", () => {
 
       const blocks = await manager.loadBlocks("sess-1");
 
-      // Canonical order from CORE_MEMORY_LABELS
+      // Canonical order from the default block schema
       expect(blocks[0].label).toBe("story_state");
       expect(blocks[0].content).toBe("Story");
       expect(blocks[1].label).toBe("character_relationships");
@@ -253,10 +263,8 @@ describe("CoreMemoryManager", () => {
 
       const value = row!.value as Record<string, unknown>;
       expect(value.content).toBe("青萍宗坊市，午后。");
-      expect(value.displayName).toEqual(
-        CORE_MEMORY_LABEL_INFO.scene.displayName,
-      );
-      expect(value.icon).toBe(CORE_MEMORY_LABEL_INFO.scene.icon);
+      expect(value.displayName).toEqual(infoFor("scene").displayName);
+      expect(value.icon).toBe(infoFor("scene").icon);
       expect(value.charCount).toBe("青萍宗坊市，午后。".length);
       expect(typeof value.updatedAt).toBe("string");
       expect(value.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
@@ -285,16 +293,16 @@ describe("CoreMemoryManager", () => {
 
       expect(storyValue.content).toBe("主线开始");
       expect(storyValue.displayName).toEqual(
-        CORE_MEMORY_LABEL_INFO.story_state.displayName,
+        infoFor("story_state").displayName,
       );
-      expect(storyValue.icon).toBe(CORE_MEMORY_LABEL_INFO.story_state.icon);
+      expect(storyValue.icon).toBe(infoFor("story_state").icon);
       expect(storyValue.charCount).toBe("主线开始".length);
 
       expect(playerValue.content).toBe("玩家：林墨。");
       expect(playerValue.displayName).toEqual(
-        CORE_MEMORY_LABEL_INFO.player_profile.displayName,
+        infoFor("player_profile").displayName,
       );
-      expect(playerValue.icon).toBe(CORE_MEMORY_LABEL_INFO.player_profile.icon);
+      expect(playerValue.icon).toBe(infoFor("player_profile").icon);
       expect(playerValue.charCount).toBe("玩家：林墨。".length);
     });
 

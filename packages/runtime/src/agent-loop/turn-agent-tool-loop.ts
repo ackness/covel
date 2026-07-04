@@ -6,7 +6,11 @@ import type {
   TurnInput,
 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
-import { isSuspendSentinel, isRuntimeDoneSentinel } from "@covel/tools";
+import {
+  isSuspendSentinel,
+  isRuntimeDoneSentinel,
+  type EmittedEvent,
+} from "@covel/tools";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import { buildToolDefinitions } from "../turn-executor/turn-executor-helpers.js";
@@ -39,6 +43,8 @@ export interface AgentToolLoopCompleted {
   readonly executedToolCalls: ExecutedToolCallState[];
   readonly failedToolCalls: FailedToolCallState[];
   readonly pendingProposals: Proposal[];
+  /** Domain events emitted via `emit-event` tool calls this loop — merged into `output.events` at finalize. */
+  readonly emittedEvents: EmittedEvent[];
   readonly streamDeltaCount: number;
   readonly stoppedWithResponse: boolean;
   readonly effectiveMaxSteps: number;
@@ -107,6 +113,10 @@ export async function runAgentToolLoop({
   const pendingProposals: Proposal[] = [
     ...(initialState?.pendingProposals ?? []),
   ];
+  // Fresh per loop run — not seeded from initialState. A suspend mid-round
+  // that follows an emit-event call in the same LLM response would lose that
+  // event on resume; narrow edge case, not covered by SuspensionRecord today.
+  const emittedEvents: EmittedEvent[] = [];
   let steps = 0;
   // Count streaming text deltas so the `message.completed` trace event can
   // report how many chunks the narrative was assembled from. Non-streaming
@@ -195,6 +205,10 @@ export async function runAgentToolLoop({
   // Set by a PostToolUse hook returning `terminate` — ends the loop after the
   // current response's tool calls are recorded.
   let terminatedByHook = false;
+  // requireToolUse: how many times we've already nudged a bare (no-tool-call)
+  // finish back into the loop. Capped at one correction so a model that keeps
+  // refusing to call its tool is released instead of burning maxSteps.
+  let noToolCallCorrections = 0;
 
   while (steps < effectiveMaxSteps && Date.now() < deadline) {
     steps++;
@@ -295,6 +309,7 @@ export async function runAgentToolLoop({
               pluginId: manifest.pluginId,
               runtimeId: manifest.name,
               pendingProposals: pendingProposals,
+              emittedEventTopics: emittedEvents.map((e) => e.topic),
               emitter: deps.emitter,
             },
           );
@@ -323,6 +338,10 @@ export async function runAgentToolLoop({
             toolResult.pendingProposals.length > 0
           ) {
             pendingProposals.push(...toolResult.pendingProposals);
+          }
+
+          if (toolResult.emittedEvents && toolResult.emittedEvents.length > 0) {
+            emittedEvents.push(...toolResult.emittedEvents);
           }
 
           // ── Suspend detection (S4-T4) ────────────────────────
@@ -478,6 +497,31 @@ export async function runAgentToolLoop({
       continue;
     }
 
+    // requireToolUse gate: a runtime whose whole job is to call a tool has
+    // drifted into free-form prose (zero tool calls, nothing executed). Nudge
+    // it back once with a corrective system message; on a second bare finish
+    // release it (maxSteps still bounds the loop) so a stubborn model cannot
+    // wedge the runtime. Only fires when no tool ever executed successfully —
+    // a runtime that did its work and then narrated is left alone.
+    if (manifest.requireToolUse && !executedToolCalls.some((c) => c.success)) {
+      if (noToolCallCorrections === 0) {
+        noToolCallCorrections++;
+        console.warn(
+          `[runtime-retry] ${manifest.name} attempt=${noToolCallCorrections} reason=no-tool-call cause=finished without calling any tool`,
+        );
+        messages.push({
+          role: "system",
+          content: input.locale?.toLowerCase().startsWith("zh")
+            ? "你没有调用任何工具就结束了。必须先调用声明的工具完成任务，再收尾。"
+            : "You finished without calling any tool. Call the declared tools to complete the task first, then wrap up.",
+        });
+        continue;
+      }
+      console.warn(
+        `[runtime-retry] ${manifest.name} reason=no-tool-call cause=still no tool call after correction; releasing`,
+      );
+    }
+
     // Final response (no more tool calls)
     finalContent = response.content;
     stoppedWithResponse = true;
@@ -490,6 +534,7 @@ export async function runAgentToolLoop({
     executedToolCalls,
     failedToolCalls,
     pendingProposals,
+    emittedEvents,
     streamDeltaCount,
     stoppedWithResponse,
     effectiveMaxSteps,

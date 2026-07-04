@@ -172,6 +172,7 @@ export async function resumeSuspendedRuntime(
     executedToolCalls,
     failedToolCalls,
     pendingProposals,
+    emittedEvents,
     stoppedWithResponse,
     effectiveMaxSteps,
     deadline,
@@ -203,6 +204,7 @@ export async function resumeSuspendedRuntime(
     executedToolCalls,
     failedToolCalls,
     pendingProposals,
+    emittedEvents,
   });
   if (finalized.kind === "tool-failed") {
     return finalizeWithPostRuntime({

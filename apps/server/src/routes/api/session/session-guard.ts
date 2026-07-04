@@ -12,8 +12,7 @@
  *
  *   { "error": "Session not found: <id>", "code": "session_not_found" }
  *
- * Routes that need the session call `resolveSessionParam(c)` and branch on the
- * discriminated result; routes that only need a guard call `requireSession(c)`.
+ * Routes call `resolveSessionParam(c)` and branch on the discriminated result.
  */
 import type { Context } from "hono";
 import type { SessionRecord } from "@covel/store";
@@ -26,16 +25,12 @@ type ResolveResult =
   | { readonly ok: false; readonly response: Response };
 
 /**
- * Look up the session named by the `:id` route param (override with `paramKey`).
- * On miss, the returned `response` is a ready-to-return 404 with the unified
- * error envelope.
+ * Look up the session named by the `:id` route param. On miss, the returned
+ * `response` is a ready-to-return 404 with the unified error envelope.
  */
-export async function resolveSessionParam(
-  c: Context,
-  paramKey = "id",
-): Promise<ResolveResult> {
+export async function resolveSessionParam(c: Context): Promise<ResolveResult> {
   const store = c.get("store");
-  const sessionId = c.req.param(paramKey) ?? "";
+  const sessionId = c.req.param("id") ?? "";
   const session = await store.getSession(sessionId);
   if (!session) {
     return {

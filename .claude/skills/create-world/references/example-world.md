@@ -106,3 +106,8 @@ dimensions:
 - history、economy、socialStructure 省略了，完整版见 `worlds/cloudmere/world.yaml`
 - 所有 id 字段使用 kebab-case 英文
 - 其余内容使用中文
+
+其它风格的完整成品参考（都在仓库内）：
+
+- `worlds/mistport` — 传统叙事 + 完整 worldData（角色蓝图 / 世界规则 / 立绘 presence）+ `pluginSettings` / `memoryBlocks` / `characterAttributes`
+- `worlds/haruka-academy` — **视觉小说**：`defaultViewMode: stage` + 对话模式插件集 + 立绘/场景背景资产管线（`media/portraits` + `media/scenes` + 双注册表 JSON）

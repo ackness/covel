@@ -848,3 +848,157 @@
   scrollbar-color: color-mix(in oklab, var(--color-foreground) 14%, transparent)
     transparent;
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Stage mode (viewMode: "stage") — fullscreen backdrop, sprites,
+   dialog box, and choice overlay. apps/web/src/components/session/stage/.
+   The reduced-motion block above already collapses every animation here
+   to a hard cut, so no per-component matchMedia branching is needed.
+   ───────────────────────────────────────────────────────────────── */
+@keyframes ui-stage-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Sprite entrance. Sprites are positioned as lane *boxes* (left+width in
+   stage-width percent, see computeSpriteLanes) rather than a translateX(-50%)
+   center anchor, so the keyframe owns `transform` outright — no static
+   offset to preserve across the animation's fill-forward. */
+@keyframes ui-stage-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(2%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ui-stage-crossfade {
+  animation: ui-stage-fade-in 600ms ease-out both;
+}
+
+.ui-stage-sprite {
+  animation: ui-stage-rise-in 300ms ease-out both;
+}
+
+/* Active/inactive treatment lives on the sprite's *inner* element (never
+   the animated outer wrapper above) so it doesn't fight the entrance
+   animation for control of `transform`. */
+.ui-stage-sprite-active {
+  transform: scale(1.03);
+  filter: drop-shadow(
+    0 0 28px color-mix(in oklab, var(--accent-primary) 55%, transparent)
+  );
+}
+
+.ui-stage-sprite-inactive {
+  filter: brightness(0.55) saturate(0.6);
+}
+
+/* Silhouette standee for a speaking character with no sprite/avatar yet — a
+   translucent, dashed placeholder card carrying the name initial. Keeps the
+   speaker on stage so the dialog nameplate never points at an empty stage;
+   the active/inactive filters on the wrapper above still apply to it. */
+.ui-stage-sprite-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(6rem, 13vh, 9rem);
+  height: clamp(11rem, 58%, 20rem);
+  border-radius: var(--radius-dialog);
+  background: color-mix(in oklab, var(--surface-page) 60%, transparent);
+  border: var(--rule-thickness) dashed
+    color-mix(in oklab, var(--rule-color) 80%, transparent);
+  color: color-mix(in oklab, var(--color-foreground) 55%, transparent);
+  font-size: clamp(2rem, 6vh, 3.25rem);
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+}
+
+/* Translucent theme-token surface for HUD/dialog/choice chrome floating
+   over the backdrop art — opaque enough to stay legible over any photo,
+   in both light and dark themes. */
+.ui-stage-panel {
+  background: color-mix(in oklab, var(--surface-page) 88%, transparent);
+  border: var(--rule-thickness) var(--rule-style) var(--rule-color);
+  backdrop-filter: blur(8px);
+}
+
+@keyframes ui-stage-choice-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ui-stage-choice-item {
+  animation: ui-stage-choice-in 260ms ease-out both;
+  cursor: pointer;
+}
+
+/* Hover/focus affordance — the Tailwind border-color change alone is barely
+   perceptible over busy backdrop art. Add a faint accent-tinted fill on hover
+   and a real focus ring for keyboard users (raw <button>s, so no shared
+   Button focus style). Kept off `transform` so it never fights the entrance
+   keyframe's forwards-fill. */
+.ui-stage-choice-item:hover {
+  background: color-mix(
+    in oklab,
+    var(--surface-page) 85%,
+    var(--accent-primary)
+  );
+}
+
+.ui-stage-choice-item:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px
+    color-mix(in oklab, var(--accent-primary) 40%, transparent);
+}
+
+/* Category pill under a stage choice (观察/交涉/行动/追问). Four hues drawn from
+   existing accent tokens, tinted low-saturation via color-mix so both themes
+   stay readable — the surface anchors to --surface-page and the text mixes the
+   hue toward --color-foreground, both of which flip per theme. Hue is selected
+   by `--cat`; StageChoices assigns the modifier class by cycling index. */
+.ui-stage-cat {
+  display: inline-block;
+  margin-top: 0.3rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: var(--radius-chip);
+  font-size: 0.6875rem;
+  line-height: 1.3;
+  background: color-mix(in oklab, var(--cat) 16%, var(--surface-page));
+  border: var(--rule-thickness) var(--rule-style)
+    color-mix(in oklab, var(--cat) 32%, transparent);
+  color: color-mix(in oklab, var(--cat) 68%, var(--color-foreground));
+}
+
+.ui-stage-cat-0 {
+  --cat: var(--accent-secondary);
+}
+.ui-stage-cat-1 {
+  --cat: var(--accent-success);
+}
+.ui-stage-cat-2 {
+  --cat: var(--accent-warning);
+}
+.ui-stage-cat-3 {
+  --cat: var(--accent-primary);
+}
+
+/* Reuses the existing blink keyframe (see `.ui-cursor` above) for the
+   dialog's "more text below" indicator. */
+.ui-stage-caret {
+  animation: ui-blink 1s step-end infinite;
+}

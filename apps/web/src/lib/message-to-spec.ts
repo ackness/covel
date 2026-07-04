@@ -177,10 +177,19 @@ function formToSpec(data: Record<string, unknown>): NestedSpec {
 
   const children: NestedSpec[] = [{ type: "FormHeader", props: { title } }];
 
-  // Narrative template (italic intro text)
+  // Narrative template — a muted intro preview with blanks for the fields the
+  // player hasn't filled. The `Text` component renders plain text, so the raw
+  // template's markdown and newlines would leak through verbatim: weaker models
+  // double-escape newlines in the tool-call JSON (literal `\n`), and bolding a
+  // blank placeholder (`**___**`) is meaningless here. Normalise to clean inline
+  // prose before rendering.
   if (narrativeTemplate) {
     const preview = narrativeTemplate
       .replace(/\{\{[^}]+\}\}/g, "___")
+      .replace(/\*\*(.+?)\*\*/g, "$1") // drop markdown bold markers
+      .replace(/(?:\\n|\n)+/g, " ") // collapse escaped/real newlines
+      .replace(/\s+/g, " ")
+      .trim()
       .slice(0, 200);
     children.push({
       type: "Text",

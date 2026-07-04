@@ -47,7 +47,7 @@ export function configTomlPath(): string {
   return path.join(covelHome(), "config.toml");
 }
 
-export function userLlmTomlPath(): string {
+function userLlmTomlPath(): string {
   return path.join(covelHome(), "llm.toml");
 }
 
@@ -93,7 +93,7 @@ export function dataRoot(): string {
   return path.join(covelHome(), "data");
 }
 
-export function userDbPath(): string {
+function userDbPath(): string {
   return path.join(dataRoot(), "covel.db");
 }
 
@@ -101,7 +101,7 @@ export function userWorldsDir(): string {
   return path.join(dataRoot(), "worlds");
 }
 
-export function userLogsDir(): string {
+function userLogsDir(): string {
   return path.join(dataRoot(), "logs");
 }
 
@@ -109,7 +109,7 @@ export function userServerPortFile(): string {
   return path.join(dataRoot(), "server.port");
 }
 
-export function logRotationConfig(): { maxSizeMb: number; maxFiles: number } {
+function logRotationConfig(): { maxSizeMb: number; maxFiles: number } {
   const cfg = readConfig();
   return {
     maxSizeMb: cfg.logging?.max_size_mb ?? 10,
@@ -139,15 +139,15 @@ export function resolveServerEntry(): string {
   return path.join(root, "src/index.ts");
 }
 
-export function resolveBundledWorldsDir(): string {
+function resolveBundledWorldsDir(): string {
   return path.join(resolveProjectRoot(), "worlds");
 }
 
-export function resolveBundledPluginsDir(): string {
+function resolveBundledPluginsDir(): string {
   return path.join(resolveProjectRoot(), "plugins");
 }
 
-export function resolveBundledLlmToml(): string {
+function resolveBundledLlmToml(): string {
   return path.join(resolveProjectRoot(), "llm.toml");
 }
 

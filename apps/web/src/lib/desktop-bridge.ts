@@ -433,16 +433,6 @@ export interface ImportResult {
   readonly message?: string;
 }
 
-/** Import an asset from a known filesystem path (drag-drop target). */
-export async function importAssetFromPath(
-  kind: ImportKind,
-  sourcePath: string,
-): Promise<ImportResult | null> {
-  const ipc = getCovelIpc();
-  if (!ipc) return null;
-  return ipc.invoke<ImportResult>(`covel:import:${kind}`, { sourcePath });
-}
-
 /** Open the native file chooser and import the selected file / folder. */
 export async function pickAndImport(
   kind: ImportKind,

@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import {
   Bug,
+  Clapperboard,
   Clock,
   Code,
   Database,
@@ -17,7 +18,7 @@ import { text } from "@/components/world/editor-helpers.js";
 import { SessionBreadcrumb } from "../session-breadcrumb.js";
 import { ConnectionStatus } from "./connection-status.js";
 
-export type GameViewMode = "parsed" | "detailed" | "raw";
+export type GameViewMode = "parsed" | "detailed" | "raw" | "stage";
 
 interface GameViewHeaderProps {
   t: TFunction;
@@ -120,6 +121,16 @@ export function GameViewHeader({
             title={t("session.viewRaw")}
           >
             <Code className="w-3.5 h-3.5" />
+          </Toggle>
+          <Toggle
+            pressed={viewMode === "stage"}
+            onPressedChange={() => onViewModeChange("stage")}
+            size="sm"
+            className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-[var(--surface-page)]"
+            aria-label={t("session.viewStageAria")}
+            title={t("session.viewStage")}
+          >
+            <Clapperboard className="w-3.5 h-3.5" />
           </Toggle>
         </div>
 

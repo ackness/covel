@@ -18,7 +18,6 @@ import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 import type {
   SessionRecord,
   PackageSummary,
-  CommandSummary,
   PluginLoadError,
   SessionPluginInfo,
 } from "@/services/api.js";
@@ -32,7 +31,6 @@ export interface LeftPanelProps {
   pluginLoadErrors: PluginLoadError[];
   sessionPlugins: SessionPluginInfo[];
   executing: boolean;
-  commands: CommandSummary[];
   resolvedSlots: ResolvedSlot[];
   onToggleLeftPanel: () => void;
   onToggleSessionList: () => void;
@@ -52,7 +50,6 @@ export function LeftPanel({
   pluginLoadErrors,
   sessionPlugins,
   executing,
-  commands,
   resolvedSlots,
   onToggleSessionList,
   onSwitchSession,
@@ -190,30 +187,6 @@ export function LeftPanel({
               runtimeModelOverrides={session.runtimeModelOverrides}
             />
           </div>
-
-          {/* ── Commands ── */}
-          {commands.length > 0 && (
-            <div className="ui-panel-section border-b border-border space-y-2">
-              <h3 className="ui-eyebrow text-[11px]">
-                {t("session.commands")}
-              </h3>
-              <div className="space-y-0.5">
-                {commands.map((cmd) => (
-                  <div
-                    key={cmd.name}
-                    className="flex items-center gap-2 py-1 text-xs"
-                  >
-                    <span className="font-mono text-primary shrink-0">
-                      /{cmd.name}
-                    </span>
-                    <span className="text-muted-foreground truncate text-[11px]">
-                      {cmd.description}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </ScrollArea>
 

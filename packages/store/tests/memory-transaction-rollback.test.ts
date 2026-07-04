@@ -7,8 +7,9 @@ import type { PluginDataRecord } from "../src/types.js";
 /**
  * Regression coverage for audit 2026-06-04 finding H3: the transaction
  * snapshot switched from per-record `structuredClone` to shallow collection
- * copies. These tests lock in the correctness invariant that rollback restores
- * exact pre-tx membership across the trickiest mutation shapes:
+ * copies. These tests lock in the correctness invariant that a rolled-back
+ * `withTransaction` restores exact pre-tx membership across the trickiest
+ * mutation shapes:
  *   - array append (appendTurnMessage)
  *   - Map upsert + delete (setPluginData / deletePluginData)
  *   - array-slot spread replacement (tagTurnMessagesCompacted)
@@ -43,13 +44,16 @@ describe("MemoryStore transaction rollback (H3 shallow snapshot)", () => {
     );
     await store.setPluginData(pluginData({ key: "keep", value: { n: 1 } }));
 
-    await store.beginTx();
-    await store.appendTurnMessage(
-      makeTurnMessage({ id: "tm-drop", sessionId: "sess-1", order: 1 }),
-    );
-    await store.setPluginData(pluginData({ key: "drop", value: { n: 2 } }));
-    await store.setPluginData(pluginData({ key: "keep", value: { n: 99 } }));
-    await store.rollbackTx();
+    await expect(
+      store.withTransaction!(async (tx) => {
+        await tx.appendTurnMessage(
+          makeTurnMessage({ id: "tm-drop", sessionId: "sess-1", order: 1 }),
+        );
+        await tx.setPluginData(pluginData({ key: "drop", value: { n: 2 } }));
+        await tx.setPluginData(pluginData({ key: "keep", value: { n: 99 } }));
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
 
     const messages = await store.listTurnMessages("sess-1");
     expect(messages.map((m) => m.id)).toEqual(["tm-keep"]);
@@ -64,9 +68,12 @@ describe("MemoryStore transaction rollback (H3 shallow snapshot)", () => {
     await store.setPluginData(pluginData({ key: "k1" }));
     await store.setPluginData(pluginData({ key: "k2" }));
 
-    await store.beginTx();
-    await store.deletePluginData("sess-1", "p1", "ns", "k1");
-    await store.rollbackTx();
+    await expect(
+      store.withTransaction!(async (tx) => {
+        await tx.deletePluginData("sess-1", "p1", "ns", "k1");
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
 
     const rows = await store.listPluginData("sess-1", "p1");
     expect(rows.map((r) => r.key).sort()).toEqual(["k1", "k2"]);
@@ -77,20 +84,23 @@ describe("MemoryStore transaction rollback (H3 shallow snapshot)", () => {
       makeTurnMessage({ id: "tm-1", sessionId: "sess-1", order: 0 }),
     );
 
-    await store.beginTx();
-    await store.tagTurnMessagesCompacted("sess-1", ["tm-1"], "summary-1");
-    const tagged = await store.listTurnMessages("sess-1");
-    expect(tagged[0]?.compactedAtTurnId).toBe("summary-1");
-    await store.rollbackTx();
+    await expect(
+      store.withTransaction!(async (tx) => {
+        await tx.tagTurnMessagesCompacted("sess-1", ["tm-1"], "summary-1");
+        const tagged = await tx.listTurnMessages("sess-1");
+        expect(tagged[0]?.compactedAtTurnId).toBe("summary-1");
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
 
     const restored = await store.listTurnMessages("sess-1");
     expect(restored[0]?.compactedAtTurnId).toBeUndefined();
   });
 
-  it("commit discards the snapshot and keeps writes", async () => {
-    await store.beginTx();
-    await store.setPluginData(pluginData({ key: "committed" }));
-    await store.commitTx();
+  it("commit keeps writes when the callback resolves", async () => {
+    await store.withTransaction!(async (tx) => {
+      await tx.setPluginData(pluginData({ key: "committed" }));
+    });
 
     const rows = await store.listPluginData("sess-1", "p1");
     expect(rows.map((r) => r.key)).toEqual(["committed"]);
@@ -100,9 +110,12 @@ describe("MemoryStore transaction rollback (H3 shallow snapshot)", () => {
     await store.setPluginData(pluginData({ key: "k", value: { n: 1 } }));
     const before = (await store.listPluginData("sess-1", "p1"))[0];
 
-    await store.beginTx();
-    await store.setPluginData(pluginData({ key: "k", value: { n: 2 } }));
-    await store.rollbackTx();
+    await expect(
+      store.withTransaction!(async (tx) => {
+        await tx.setPluginData(pluginData({ key: "k", value: { n: 2 } }));
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
 
     // The pre-tx reference still reflects its original value (records are
     // replaced wholesale, never mutated in place).

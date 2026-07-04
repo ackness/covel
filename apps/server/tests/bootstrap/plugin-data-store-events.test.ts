@@ -54,6 +54,64 @@ describe("wrapStoreWithPluginDataEvents", () => {
     expect(emitted).toHaveLength(1);
   });
 
+  it("buffers tx-scoped events until commit and flushes them in write order", async () => {
+    const emit = vi.fn();
+    const eventBus = { emit } as unknown as EventBus;
+
+    const tx = { setPluginData: vi.fn(async () => {}) };
+    // Capture how many events reached the real bus at the COMMIT boundary (just
+    // before withTransaction returns). Buffering means it must be zero there.
+    let emitsAtCommit = -1;
+    const store = {
+      withTransaction: vi.fn(async (fn: (t: typeof tx) => Promise<unknown>) => {
+        const r = await fn(tx);
+        emitsAtCommit = pluginDataChangedEmits(emit).length;
+        return r;
+      }),
+    } as unknown as DataStore;
+
+    const wrapped = wrapStoreWithPluginDataEvents(store, eventBus);
+    await wrapped.withTransaction!(async (t) => {
+      const view = t as unknown as typeof tx;
+      await view.setPluginData({ ...makeRecord(), key: "a", value: "1" });
+      await view.setPluginData({ ...makeRecord(), key: "b", value: "2" });
+    });
+
+    expect(emitsAtCommit).toBe(0); // nothing broadcast/persisted before COMMIT
+    const emitted = pluginDataChangedEmits(emit) as Array<{
+      payload?: { changes?: Array<{ key?: string }> };
+    }>;
+    expect(emitted).toHaveLength(2);
+    expect(emitted.map((e) => e.payload?.changes?.[0]?.key)).toEqual([
+      "a",
+      "b",
+    ]);
+  });
+
+  it("discards buffered events when the transaction rolls back", async () => {
+    const emit = vi.fn();
+    const eventBus = { emit } as unknown as EventBus;
+
+    const tx = { setPluginData: vi.fn(async () => {}) };
+    // Real stores rethrow after rollback; a mid-chain proposal error is the
+    // common trigger. The successful earlier write must not leave a phantom.
+    const store = {
+      withTransaction: vi.fn((fn: (t: typeof tx) => Promise<unknown>) =>
+        fn(tx),
+      ),
+    } as unknown as DataStore;
+
+    const wrapped = wrapStoreWithPluginDataEvents(store, eventBus);
+    await expect(
+      wrapped.withTransaction!(async (t) => {
+        await (t as unknown as typeof tx).setPluginData(makeRecord());
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
+
+    expect(pluginDataChangedEmits(emit)).toHaveLength(0);
+  });
+
   it("still emits for direct (non-transactional) writes", async () => {
     const emit = vi.fn();
     const eventBus = { emit } as unknown as EventBus;

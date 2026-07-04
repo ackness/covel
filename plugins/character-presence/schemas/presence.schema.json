@@ -1,18 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "plugin://character-presence/presence",
-  "oneOf": [
-    { "$ref": "#/$defs/presence" },
-    {
-      "type": "object",
-      "required": ["presence"],
-      "properties": {
-        "presence": { "$ref": "#/$defs/presence" },
-        "updatedAt": { "type": "string" }
-      },
-      "additionalProperties": true
-    }
-  ],
+  "$ref": "#/$defs/presence",
   "$defs": {
     "presence": {
       "type": "object",

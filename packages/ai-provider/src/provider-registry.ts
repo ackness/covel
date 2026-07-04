@@ -1,8 +1,5 @@
 import type { ModelProviderAdapter } from "./adapters/adapter.js";
-import {
-  assertProtocolRegistryComplete,
-  getProtocolDefinition,
-} from "./protocol-registry.js";
+import { getProtocolDefinition } from "./protocol-registry.js";
 import type {
   CacheStrategy,
   OperationMode,
@@ -11,9 +8,6 @@ import type {
   ProviderLifecycleHook,
   ProviderProtocol,
 } from "./types.js";
-
-// Fail fast at module load if a known protocol lost its registration.
-assertProtocolRegistryComplete();
 
 /**
  * Provider-name → default protocol when the target doesn't pin one.

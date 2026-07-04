@@ -1,4 +1,4 @@
-import { pluginConfigKey, pluginDataKey } from "../common/keys.js";
+import { pluginDataKey } from "../common/keys.js";
 import { applyPagination } from "../common/pagination.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
 
@@ -60,19 +60,6 @@ export function createPluginDataMethods(
     async deletePluginData(sessionId, pluginId, namespace, key) {
       state.pluginData.delete(
         pluginDataKey(sessionId, pluginId, namespace, key),
-      );
-    },
-
-    async savePluginConfig(record) {
-      state.pluginConfigs.set(
-        pluginConfigKey(record.sessionId, record.pluginId),
-        record,
-      );
-    },
-
-    async getPluginConfig(sessionId, pluginId) {
-      return (
-        state.pluginConfigs.get(pluginConfigKey(sessionId, pluginId)) ?? null
       );
     },
   };

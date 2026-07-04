@@ -7,7 +7,6 @@ import type {
   LorebookEntryRecord,
   MessageRecord,
   PlayerInputRecord,
-  PluginConfigRecord,
   PluginDataRecord,
   RuntimeOutputRecord,
   RuntimeResultRecord,
@@ -56,7 +55,6 @@ export interface MemoryState {
   readonly messages: MessageRecord[];
   readonly characters: Map<string, CharacterRecord>;
   readonly pluginData: Map<string, PluginDataRecord>;
-  readonly pluginConfigs: Map<string, PluginConfigRecord>;
   readonly suspensions: Map<string, SuspensionRecord>;
   readonly snapshots: Map<string, SnapshotRecord>;
   readonly vectorRows: Map<string, MemoryVectorRow>;

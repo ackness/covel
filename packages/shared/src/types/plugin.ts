@@ -32,12 +32,10 @@ export type RuntimeType = "agent" | "function";
  * RESERVED modes (schema-accepted for forward-compat, but **never fire** —
  * `shouldTrigger` / the scheduler do not implement them yet; a runtime that
  * declares one stays permanently inactive):
- * - `conditional` — no condition-expression engine is wired (audit P2-9).
+ * - `conditional` — no condition-expression engine is wired.
  *                   `shouldTrigger` returns false and warns once.
- * - `error-retry` — depends on `hasUpstreamFailure`, which the scheduling path
- *                   (`turn-executor/scheduling.ts`) hardcodes to `false`, so
- *                   this branch is unreachable in production. `shouldTrigger`
- *                   warns once and never fires it under the real scheduler.
+ * - `error-retry` — the scheduler never surfaces upstream failures.
+ *                   `shouldTrigger` returns false and warns once.
  *
  * Prefer `auto` / `manual` / `scheduled` / `event` until the reserved modes
  * are implemented.
@@ -279,6 +277,23 @@ export interface PluginDataSchemaDecl {
   readonly description?: string;
 }
 
+// ── Event declarations ───────────────────────────────────────────
+
+/**
+ * Declares a domain event a plugin's runtime may emit via the builtin
+ * `emit-event` tool. See {@link RuntimeManifest.events} and
+ * {@link RuntimeManifest.advertiseEvents}.
+ */
+export interface PluginEventDecl {
+  /** Dot-separated kebab-case topic, e.g. `"scene.set"`. */
+  readonly topic: string;
+  /** Plugin-relative JSON Schema path validating the event payload. */
+  readonly schema: string;
+  readonly description: import("./world.js").I18nText;
+  /** When true (default) the contract is advertised to emitting runtimes. */
+  readonly advertise: boolean;
+}
+
 // ── Plugin catalogue metadata ───────────────────────────────────
 
 export type PluginTag = string;
@@ -478,6 +493,16 @@ export interface RuntimeManifest {
    */
   readonly loopDetectionThreshold?: number;
   /**
+   * Agent runtimes only. When `true`, a loop that finishes without ever
+   * successfully executing a tool (LLM returned prose with no tool call) is
+   * given one corrective retry — a system message telling it to call its
+   * declared tool first — before being allowed to finish. Guards against
+   * models that drift into free-form narration and skip their sole tool.
+   * `maxSteps` still bounds the loop, so a second bare finish is released
+   * (with a warn) rather than looping forever. Default `false`.
+   */
+  readonly requireToolUse?: boolean;
+  /**
    * Maximum nested `ctx.recursiveCall()` depth for this runtime. Defaults
    * to the executor limit, currently 10. Depth starts at 0 for a top-level
    * turn and increments once per recursive call.
@@ -533,10 +558,19 @@ export interface RuntimeManifest {
    * Ignored for runtimes triggered by the normal per-turn scheduler.
    */
   readonly execution?: "sync" | "background";
+  /**
+   * When true, the session-level event directory (aggregated across all
+   * active runtimes' `events` declarations) is rendered into this runtime's
+   * segment 5 prompt so the LLM knows which topics it may emit via the
+   * builtin `emit-event` tool. Defaults to `undefined` (not advertised).
+   */
+  readonly advertiseEvents?: boolean;
   readonly tools?: ToolsConfig;
   readonly input?: InputConfig;
   readonly output?: OutputConfig;
   readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
+  /** Domain events this plugin's runtime may emit via `emit-event`. */
+  readonly events?: readonly PluginEventDecl[];
   readonly i18n?: Readonly<Record<string, string>>;
   readonly ui?: UISpec;
   /**

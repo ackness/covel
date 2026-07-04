@@ -45,7 +45,6 @@ export function makeTriggerContext(
     triggerCount: 0,
     turnsSinceLastTrigger: 999,
     pendingEventTopics: [],
-    hasUpstreamFailure: false,
     isManualTrigger: false,
     preGameCompleted: [],
     ...overrides,

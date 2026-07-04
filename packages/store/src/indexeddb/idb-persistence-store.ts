@@ -160,9 +160,5 @@ export function createIdbPersistenceStore(ctx: IdbStoreContext): IdbStoreSlice {
         a.createdAt.localeCompare(b.createdAt),
       );
     },
-
-    async deleteSnapshot(id: string): Promise<void> {
-      await mutations.deleteAndTrack("state_snapshots", id);
-    },
   };
 }

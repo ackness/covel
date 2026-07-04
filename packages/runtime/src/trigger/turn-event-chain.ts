@@ -36,8 +36,8 @@ export interface RunEventChainParams {
  * **once per turn** by the main scheduler (`selectTriggeredRuntimes`). Within
  * a turn, event fan-out is bounded instead by `maxDepth`, so those fields are
  * set to non-blocking sentinels here — re-applying per-session throttles to a
- * within-turn reaction would be semantically wrong. `hasUpstreamFailure` /
- * `isManualTrigger` are irrelevant to the `event` branch, and
+ * within-turn reaction would be semantically wrong. `isManualTrigger` is
+ * irrelevant to the `event` branch, and
  * `preGameCompleted` gating is a Pre-Game (turn 0) concern, not a main-loop
  * fan-out concern.
  */
@@ -52,7 +52,6 @@ function eventFanoutTriggerContext(
     triggerCount: 0,
     turnsSinceLastTrigger: Number.MAX_SAFE_INTEGER,
     pendingEventTopics,
-    hasUpstreamFailure: false,
     isManualTrigger: false,
     preGameCompleted: [],
   };
@@ -92,6 +91,11 @@ export async function runEventChain({
   }
 
   const deferredFollowers: DeferredFollower[] = [];
+  // Background runtimes never enter `completedResults` (they run off-turn), so
+  // the chain-local dedup below can't catch them: if the same topic is re-emitted
+  // across depths, the same background runtime would be deferred twice. Dedup by
+  // runtime name here — first defer wins, later re-emissions are dropped.
+  const deferredNames = new Set<string>();
   let chainDepth = 0;
   while (emittedEvents.size > 0 && chainDepth < maxDepth) {
     chainDepth += 1;
@@ -132,6 +136,14 @@ export async function runEventChain({
         topic !== undefined &&
         matchedEvent !== undefined
       ) {
+        if (deferredNames.has(manifest.name)) {
+          // eslint-disable-next-line no-console -- dev-time warning, not user-facing
+          console.warn(
+            `[event-chain] background runtime "${manifest.name}" already deferred this turn — dropping duplicate for topic "${topic}"`,
+          );
+          continue;
+        }
+        deferredNames.add(manifest.name);
         deferredFollowers.push({
           runtimeId: manifest.name,
           pluginId: manifest.pluginId,

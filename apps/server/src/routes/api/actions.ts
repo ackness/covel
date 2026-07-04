@@ -22,6 +22,8 @@ import type { CompactorRunner } from "@covel/context";
 import { errorBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
+import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
+import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
 import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
 import { syncSessionTurnCount } from "./turn-count.js";
 import { decodePluginUserSettingsHeader } from "./plugin-rpc/body.js";
@@ -121,6 +123,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const compactorRunner = c.get("compactorRunner");
   const sessionLock = c.get("sessionLock");
   const mediaStore = c.get("mediaStore");
+  const eventDirectory = c.get("eventDirectory");
   const prepareToolsForSession = c.get("prepareToolsForSession"); // optional — see env.d.ts
 
   const body = (await c.req
@@ -483,6 +486,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           memorySystem: _memorySystem,
           // Let the turn executor construct a unified SessionContextSnapshot.
           capabilityPluginIds,
+          ...(eventDirectory ? { eventDirectory } : {}),
         }),
       );
 
@@ -521,6 +525,56 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             data: JSON.stringify(makeEnvelope(evt.type, ssePayload)),
           });
         }
+      }
+
+      // Audit F1 (main turn path): `executeTurn` can surface `deferredFollowers`
+      // — event-chain followers with `execution: 'background'` that were
+      // skipped so the player gets an immediate response (e.g. scene-stage's
+      // background-gen). Schedule them the same way plugin-rpc.ts's sync mode
+      // does: a pending `_jobs` row + `setImmediate`, so they actually run
+      // instead of silently never firing on the main narrative path.
+      if (result.deferredFollowers?.length) {
+        const runtimeTurnRunner = createPluginRpcRuntimeTurnRunner({
+          store,
+          eventBus,
+          sessionLock,
+          sessionId,
+          // effectiveLocale, not session.locale — the in-memory `session` may
+          // still hold the pre-update value even though the store write above
+          // already persisted the live locale.
+          session: { ...session, locale: effectiveLocale },
+          activeRuntimes,
+          deps: {
+            loadRuntime: loadRuntimeFn,
+            llm: llmAdapter,
+            ...(pluginGateway ? { gateway: pluginGateway } : {}),
+            ...(pluginUtils ? { utils: pluginUtils } : {}),
+            ...(getPluginSource ? { getPluginSource } : {}),
+            getConfig: getConfigFn ?? (() => ({})),
+            ...(mediaStore ? { mediaStore } : {}),
+            toolExecutor,
+            resolveModel,
+            compactor: compactorRunner,
+            capabilityPluginIds,
+            ...(eventDirectory ? { eventDirectory } : {}),
+          },
+          ...(hookPipeline ? { hookPipeline } : {}),
+        });
+        const jobRunner = createPluginRpcJobRunner({
+          store,
+          sessionId,
+          ...(userSettings ? { userSettings } : {}),
+          // ponytail: no manual-trigger concept on the main turn path —
+          // scheduleDeferredFollowers is the only method this route calls.
+          runManualTurn: () => {
+            throw new Error("runManualTurn is unused on the main turn path");
+          },
+          runDeferredFollowerTurn: (args) =>
+            runtimeTurnRunner.runDeferredFollowerTurn(args),
+          hasActiveRuntime: (runtimeId) =>
+            activeRuntimes.some((rt) => rt.name === runtimeId),
+        });
+        await jobRunner.scheduleDeferredFollowers(result.deferredFollowers);
       }
 
       // Emit runtime progress: complete + persist trace

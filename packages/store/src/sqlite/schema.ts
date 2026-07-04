@@ -316,23 +316,6 @@ export const worldDataImportLedger = sqliteTable(
   ],
 );
 
-// ── Plugin Configs ──────────────────────────────────────────────
-
-export const pluginConfigs = sqliteTable(
-  "plugin_configs",
-  {
-    id: text("id").primaryKey(),
-    sessionId: text("session_id").notNull(),
-    pluginId: text("plugin_id").notNull(),
-    config: text("config").notNull(), // JSON
-    updatedAt: text("updated_at").notNull(),
-  },
-  (table) => [
-    index("plugin_configs_session_id_idx").on(table.sessionId),
-    index("plugin_configs_composite_idx").on(table.sessionId, table.pluginId),
-  ],
-);
-
 // ── Trace Events ────────────────────────────────────────────────
 
 export const traceEvents = sqliteTable(

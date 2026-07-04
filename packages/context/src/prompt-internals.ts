@@ -104,7 +104,7 @@ function validateTagName(name: string): string {
  * Escape XML-special characters in content so injected values cannot break
  * the surrounding XML tag structure.
  */
-function escapeXmlContent(value: string): string {
+export function escapeXmlContent(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

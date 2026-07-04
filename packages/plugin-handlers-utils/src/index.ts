@@ -149,8 +149,6 @@ export interface EntityEnvelopeOptions {
   readonly idPattern: RegExp;
   /** Error message thrown when the identifier fails `idPattern`. */
   readonly idError: string;
-  /** Max serialized byte length. Defaults to 64KB. */
-  readonly maxBytes?: number;
   /**
    * Layer entity-specific fields onto the validated
    * `{ ...value, schemaVersion: 1, [idField]: id }` base before the size guard.
@@ -164,20 +162,13 @@ export interface EntityEnvelopeOptions {
  *   1. `value` is a plain object (else `manualPayload.<entity> must be an object`)
  *   2. `value[idField]` is a non-empty string matching `idPattern`
  *   3. `value.schemaVersion` is absent or exactly 1
- *   4. the built object serializes to <= `maxBytes` (default 64KB)
+ *   4. the built object serializes to <= 64KB
  */
 export function assertEntityEnvelope(
   value: unknown,
   options: EntityEnvelopeOptions,
 ): Record<string, unknown> {
-  const {
-    entity,
-    idField = "id",
-    idPattern,
-    idError,
-    maxBytes = 65_536,
-    build,
-  } = options;
+  const { entity, idField = "id", idPattern, idError, build } = options;
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`manualPayload.${entity} must be an object`);
   }
@@ -196,10 +187,29 @@ export function assertEntityEnvelope(
     [idField]: id,
   };
   const built = build ? build(base) : base;
-  if (JSON.stringify(built).length > maxBytes) {
+  if (JSON.stringify(built).length > 65_536) {
     throw new Error(`${entity} is too large; max serialized size is 64KB`);
   }
   return built;
+}
+
+/**
+ * Pick the string matching a session locale's language. Prefix-matches the
+ * language subtag (`zh-CN` → `zh`) and returns `en` for any non-`zh` or
+ * undefined locale. Extracted from the byte-identical `pick(locale, zh, en)`
+ * previously copied across plugin handlers/guards.
+ *
+ * @param locale - Session locale, e.g. `"zh-CN"`, `"en"`, or `undefined`.
+ * @param zh - Chinese string.
+ * @param en - English (default) string.
+ */
+export function pickLocaleText(
+  locale: string | undefined,
+  zh: string,
+  en: string,
+): string {
+  const lang = typeof locale === "string" ? locale.split("-")[0] : "";
+  return lang === "zh" ? zh : en;
 }
 
 // ── Proposal factory ─────────────────────────────────────────────

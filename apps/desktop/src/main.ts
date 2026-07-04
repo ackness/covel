@@ -27,7 +27,7 @@ import {
   userServerPortFile,
 } from "./paths.js";
 import { loadEnvFiles, loadKeysEnvForChild } from "./env-files.js";
-import { findFreePort, isPortFree, waitForServer } from "./network.js";
+import { findFreePort, waitForServer } from "./network.js";
 import { diagnoseStartupError, type DiagnosedError } from "./startup-errors.js";
 import {
   initPersistentLog,
@@ -40,11 +40,9 @@ import {
 // "@covel/desktop" from package.json — override to the friendly product name.
 app.setName("Covel");
 import { registerDesktopIpcHandlers } from "./ipc-handlers.js";
-import { initAutoUpdater } from "./auto-updater.js";
 import {
   buildAppMenu,
   createMainWindow,
-  getMainWindow,
   loadSplashInto,
   navigateToApp,
 } from "./windows.js";
@@ -153,11 +151,7 @@ function broadcastStartupError(diag: DiagnosedError, logs: string): void {
 async function startServer(
   paths: ReturnType<typeof ensureUserPaths>,
 ): Promise<number> {
-  // Check configured port availability before committing to it
   const port = await findFreePort();
-  if (!(await isPortFree(port))) {
-    throw new Error(`EADDRINUSE: port ${port} became unavailable`);
-  }
   serverPort = port;
   fs.writeFileSync(userServerPortFile(), String(port), "utf-8");
 
@@ -573,15 +567,6 @@ app.whenReady().then(async () => {
     writeLog("error", "Fatal:", err);
     app.quit();
   }
-
-  // Fire-and-forget: auto-updater is opt-in via COVEL_AUTO_UPDATE=1.
-  // Deliberately awaited outside the try/catch above so update failures
-  // never cascade into a "Fatal" shutdown.
-  void initAutoUpdater({
-    disabled: isDev,
-    window: () => getMainWindow(),
-    log: (level, ...parts) => writeLog(level, ...parts),
-  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0 && serverPort > 0) {

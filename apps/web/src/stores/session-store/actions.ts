@@ -17,7 +17,7 @@ import {
   finalizeActionExecution,
   runActionStream,
 } from "./runtime-rpc.js";
-import type { SessionRuntimeRefs } from "./runtime-refs.js";
+import type { MutableRef, SessionRuntimeRefs } from "./runtime-refs.js";
 import { canRunSessionAction } from "./selectors.js";
 import type { SseEventHandler } from "./sse-handler.js";
 import { applyResumeEvents as applyResumeSseEvents } from "./sse-handler.js";
@@ -38,6 +38,28 @@ interface UseSessionActionsOptions {
 
 /** Page size for the scroll-up "load older messages" fetch. */
 const OLDER_MESSAGES_PAGE_SIZE = 40;
+
+/**
+ * The server evolves SessionRecord during a turn (turnCount advances,
+ * pre-game completion, status) but the SSE stream carries none of it —
+ * without a resync the stage view's turnCount gate stays stale until a
+ * full page reload.
+ */
+export async function resyncSessionRecord(
+  sessionId: string,
+  sessionIdRef: MutableRef<string | null>,
+  dispatch: SessionDispatch,
+): Promise<void> {
+  try {
+    const session = await api.getSession(sessionId);
+    // A stale response after a session switch must not overwrite the
+    // now-active session's record (and yank the URL back to it).
+    if (sessionIdRef.current !== sessionId) return;
+    dispatch({ type: "SET_SESSION", session });
+  } catch {
+    /* next action or reload will resync */
+  }
+}
 
 export function useBuildSessionActions({
   state,
@@ -84,6 +106,13 @@ export function useBuildSessionActions({
     [ds, dispatch, sessionIdRef, state.world, state.presets, state.llmConfig],
   );
 
+  const resyncSession = useCallback(
+    (sessionId: string): void => {
+      void resyncSessionRecord(sessionId, sessionIdRef, dispatch);
+    },
+    [dispatch, sessionIdRef],
+  );
+
   const beginAdventure = useCallback(() => {
     if (!canRunSessionAction(state)) return;
     const sessionId = state.session?.id;
@@ -103,14 +132,17 @@ export function useBuildSessionActions({
         },
         handleSseEvent,
         dispatch,
-      ).finally(() => finalizeActionExecution(dispatch));
+      ).finally(() => {
+        finalizeActionExecution(dispatch);
+        resyncSession(sessionId);
+      });
     };
 
     void api
       .getWorldOverlay(worldId)
       .then((overlay) => postStart(overlay?.lore))
       .catch(() => postStart());
-  }, [state, handleSseEvent, dispatch]);
+  }, [state, handleSseEvent, dispatch, resyncSession]);
 
   const resumeSession = useCallback(
     async (session: api.SessionRecord) => {
@@ -209,11 +241,12 @@ export function useBuildSessionActions({
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
-      runSingleAction(content, { echoUserMessage: true }).finally(() =>
-        finalizeActionExecution(dispatch),
-      );
+      runSingleAction(content, { echoUserMessage: true }).finally(() => {
+        finalizeActionExecution(dispatch);
+        if (state.session) resyncSession(state.session.id);
+      });
     },
-    [dispatch, state, runSingleAction],
+    [dispatch, state, runSingleAction, resyncSession],
   );
 
   const loadOlderMessages = useCallback(async () => {
@@ -321,9 +354,18 @@ export function useBuildSessionActions({
         }
       } finally {
         finalizeActionExecution(dispatch);
+        const sid = sessionIdRef.current;
+        if (sid) resyncSession(sid);
       }
     },
-    [dispatch, sessionIdRef, submitBlock, sendMessage, runSingleAction],
+    [
+      dispatch,
+      sessionIdRef,
+      submitBlock,
+      sendMessage,
+      runSingleAction,
+      resyncSession,
+    ],
   );
 
   const runKernelAction = useCallback(
@@ -331,11 +373,12 @@ export function useBuildSessionActions({
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
-      runActionStream(request, handleSseEvent, dispatch).finally(() =>
-        finalizeActionExecution(dispatch),
-      );
+      runActionStream(request, handleSseEvent, dispatch).finally(() => {
+        finalizeActionExecution(dispatch);
+        if (request.sessionId) resyncSession(request.sessionId);
+      });
     },
-    [dispatch, handleSseEvent],
+    [dispatch, handleSseEvent, resyncSession],
   );
 
   const executeCommand = useCallback(
@@ -473,8 +516,12 @@ export function useBuildSessionActions({
           (err) => {
             dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
             finalizeActionExecution(dispatch);
+            resyncSession(sessionId);
           },
-          () => finalizeActionExecution(dispatch),
+          () => {
+            finalizeActionExecution(dispatch);
+            resyncSession(sessionId);
+          },
         );
       };
 

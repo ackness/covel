@@ -10,7 +10,17 @@
       ]
     },
     "apps/desktop": {
-      "ignoreDependencies": ["tsx", "electron-updater"]
+      "ignoreDependencies": ["tsx"]
+    },
+    "plugins/*": {
+      "entry": [
+        "handler.js",
+        "guard.js",
+        "hooks/*.js",
+        "tools/*.js",
+        "runtimes/*/handler.js",
+        "runtimes/*/guard.js"
+      ]
     }
   }
 }

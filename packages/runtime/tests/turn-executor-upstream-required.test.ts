@@ -74,7 +74,6 @@ async function runTurn(
     loadRuntime: async (m) => ({
       manifest: m,
       promptTemplate: "",
-      references: [],
       handler: handlers[m.name],
     }),
     llm: new NoopLLM(),
@@ -156,7 +155,6 @@ describe("executeTurn: manifest.upstreamRequired", () => {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "",
-        references: [],
         ...(m.name === "world-init/schema-gen"
           ? {
               guard: async () => ({

@@ -15,12 +15,6 @@ const ALLOWED_EXTENSIONS = new Set([
   ".mp4",
 ]);
 
-export interface MediaSourceSummary {
-  readonly count: number;
-  readonly bytes: number;
-  readonly digest: string;
-}
-
 export interface MediaSourceFiles {
   readonly files: readonly string[];
   readonly bytes: number;
@@ -100,23 +94,5 @@ export async function collectMediaSourceFiles(
     bytes: totalBytes,
     digest: sha256Hex(parts.join("\n")),
     diagnostics,
-  };
-}
-
-export async function summarizeMediaSource(
-  source: OrderedWorldDataSource,
-  resolvedPath: string,
-): Promise<{
-  summary?: MediaSourceSummary;
-  diagnostics: readonly WorldDataDiagnostic[];
-}> {
-  const collected = await collectMediaSourceFiles(source, resolvedPath);
-  return {
-    summary: {
-      count: collected.files.length,
-      bytes: collected.bytes,
-      digest: collected.digest,
-    },
-    diagnostics: collected.diagnostics,
   };
 }

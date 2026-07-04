@@ -28,9 +28,6 @@ interface CharacterEffectsDeps {
   readonly registry?: {
     get(pluginId: string): CharacterPluginEntry | undefined;
   };
-  readonly getPluginEntry?: (
-    pluginId: string,
-  ) => CharacterPluginEntry | undefined;
 }
 
 export interface CharacterMirrorTarget {
@@ -184,7 +181,7 @@ function getPluginEntry(
   deps: CharacterEffectsDeps | undefined,
   pluginId: string,
 ): CharacterPluginEntry | undefined {
-  return deps?.getPluginEntry?.(pluginId) ?? deps?.registry?.get(pluginId);
+  return deps?.registry?.get(pluginId);
 }
 
 export function characterMirrorTargets(

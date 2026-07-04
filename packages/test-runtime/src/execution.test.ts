@@ -86,7 +86,6 @@ function loadedRuntime(
   return {
     manifest: runtimeManifest,
     promptTemplate: "",
-    references: [],
     ...(handler ? { handler } : {}),
   };
 }

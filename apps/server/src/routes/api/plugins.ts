@@ -1,11 +1,6 @@
 /**
  * API Plugin routes — list loaded plugins and expose manifest-derived
  * contracts for developer tooling and AI agents.
- *
- * NOTE: The PATCH /:id/config route was removed in 2026-04-12 because the
- * `sessionScopes` map it depended on was never populated by any production
- * code path. See audits/2026-04-12-backend-webv2-framework-audit Finding 2.
- * Runtime config now comes from explicit runtime/plugin settings.
  */
 
 import { homedir } from "node:os";

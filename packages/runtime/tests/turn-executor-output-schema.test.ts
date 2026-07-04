@@ -59,7 +59,6 @@ describe("executeTurn: output.schema.json", () => {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "Return JSON.",
-        references: [],
         outputSchema: schema,
       }),
       llm,
@@ -107,7 +106,6 @@ describe("executeTurn: output.schema.json", () => {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "Return JSON.",
-        references: [],
         outputSchema: schema,
       }),
       llm,
@@ -148,7 +146,6 @@ describe("executeTurn: output.schema.json", () => {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "Return JSON.",
-        references: [],
         outputSchema: schema,
       }),
       llm,
@@ -202,7 +199,6 @@ describe("executeTurn: output.schema.json", () => {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "Return JSON.",
-        references: [],
         outputSchema: schema,
       }),
       llm,
@@ -265,7 +261,6 @@ describe("executeTurn: output.schema.json", () => {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "Return JSON.",
-        references: [],
         outputSchema: schema,
       }),
       llm,

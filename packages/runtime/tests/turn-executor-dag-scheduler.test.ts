@@ -132,7 +132,6 @@ describe("executeTurn main-loop DAG scheduler", () => {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "",
-        references: [],
         handler: makeHandler(m.name),
       }),
       llm: new NoopLLM(),

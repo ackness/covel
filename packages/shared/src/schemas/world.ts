@@ -394,6 +394,13 @@ export const worldManifestSchema = z
           .strict(),
       )
       .optional(),
+    /**
+     * Preferred `GameViewMode` for new sessions of this world ("stage" =
+     * fullscreen GalGame stage). Player's own choice still wins once made;
+     * this only seeds the initial value. Unrecognised values fall back to
+     * "parsed".
+     */
+    defaultViewMode: z.enum(["stage", "parsed"]).optional(),
   })
   .strict();
 

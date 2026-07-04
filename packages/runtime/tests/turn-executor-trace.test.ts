@@ -63,7 +63,6 @@ describe("turn-executor message.completed trace emission", () => {
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "Tell a short story.",
-      references: [],
     };
 
     const narrative = "The village was quiet under the morning mist.";
@@ -114,7 +113,6 @@ describe("turn-executor message.completed trace emission", () => {
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "Return structured data.",
-      references: [],
     };
 
     const llm: LLMAdapter = {
@@ -165,7 +163,6 @@ describe("turn-executor direct-generate error trace pairing (Q1)", () => {
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "Exercise fallback trace.",
-      references: [],
     };
 
     // Error text that matches shouldRetryMalformedToolArguments and causes

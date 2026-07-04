@@ -92,7 +92,6 @@ export type SqlSessionJournalRecords = Pick<
   | "listRecentTurnMessages"
   | "tagTurnMessagesCompacted"
   | "savePlayerInput"
-  | "getPlayerInput"
   | "listPlayerInputs"
   | "saveSessionSummary"
   | "listSessionSummaries"
@@ -191,19 +190,6 @@ export function createSqlSessionJournalRecords(
 
     async savePlayerInput(record: PlayerInputRecord): Promise<void> {
       await runner.insert(playerInputs, values.playerInputInsert(record));
-    },
-
-    async getPlayerInput(
-      sessionId: string,
-      formId: string,
-    ): Promise<PlayerInputRecord | null> {
-      const row = await runner.selectFirst<PlayerInputRow>(playerInputs, {
-        where: and(
-          eq(playerInputs.sessionId, sessionId),
-          eq(playerInputs.formId, formId),
-        ),
-      });
-      return row ? toPlayerInputRecord(row, json) : null;
     },
 
     async listPlayerInputs(sessionId: string): Promise<PlayerInputRecord[]> {

@@ -32,7 +32,7 @@ export interface PluginGroup {
   packages: PackageSummary[];
 }
 
-export const BUILTIN_PLUGIN_PACKS: readonly PluginPack[] = [
+const BUILTIN_PLUGIN_PACKS: readonly PluginPack[] = [
   {
     id: "traditional-story",
     label: "Traditional Story",
@@ -73,6 +73,10 @@ export const BUILTIN_PLUGIN_PACKS: readonly PluginPack[] = [
       "char-creator",
       "chat-mode-narrator",
       "scene-cast",
+      // chat-mode-narrator's relations.requires re-adds the scene/VN
+      // subsystem server-side anyway — list it here so the prep page shows
+      // what will actually run instead of it being silently expanded.
+      "scene-stage",
       "scene-prompts",
       "character-blueprint",
       "character-presence",
@@ -111,7 +115,7 @@ export const BUILTIN_PLUGIN_PACKS: readonly PluginPack[] = [
  * search index so a query matches regardless of which language the value was
  * authored in (an English UI should still match an English display name).
  */
-export function i18nAllText(value: unknown): string {
+function i18nAllText(value: unknown): string {
   if (typeof value === "string") return value;
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return Object.values(value as Record<string, unknown>)
@@ -140,7 +144,7 @@ export function textValue(value: unknown, locale = "zh-CN"): string {
   return "";
 }
 
-export function stringArrayFromMetadata(
+function stringArrayFromMetadata(
   metadata: WorldRecord["metadata"] | undefined,
   key: string,
 ): string[] {
@@ -337,7 +341,7 @@ export function collectPluginTags(
   );
 }
 
-export function groupIdForPackage(pkg: PackageSummary): string {
+function groupIdForPackage(pkg: PackageSummary): string {
   const tags = new Set(pkg.tags ?? []);
   if (tags.has("mode:dialogue")) return "dialogue";
   if (tags.has("mode:traditional-story")) return "traditional";

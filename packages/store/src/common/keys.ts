@@ -15,10 +15,6 @@ export function pluginDataKey(
   return `${sessionId}:${pluginId}:${namespace}:${key}`;
 }
 
-export function pluginConfigKey(sessionId: string, pluginId: string): string {
-  return `${sessionId}:${pluginId}`;
-}
-
 export function workingMemoryKey(
   sessionId: string,
   scope: string,

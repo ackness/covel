@@ -42,7 +42,6 @@ function makeEntry(args: {
   const parsed = {
     manifest: args.loaded.manifest,
     promptTemplate: args.loaded.promptTemplate,
-    referenceLinks: [],
     rawFrontmatter: {},
   };
   return {

@@ -13,7 +13,7 @@ import {
   parseWorldDataIndexTarget,
   parseWorldDataTarget,
 } from "./target-uri.js";
-import { summarizeMediaSource } from "./media.js";
+import { collectMediaSourceFiles } from "./media.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "./types.js";
 
 function countDiagnostics(diagnostics: readonly WorldDataDiagnostic[]): {
@@ -108,12 +108,9 @@ async function summarizeSource(
   }
 
   if (source.descriptor.kind === "media") {
-    const media = await summarizeMediaSource(source, read.path);
+    const media = await collectMediaSourceFiles(source, read.path);
     diagnostics.push(...media.diagnostics);
-    return {
-      digest: media.summary?.digest ?? (await digestFile(read.path)).digest,
-      diagnostics,
-    };
+    return { digest: media.digest, diagnostics };
   }
 
   diagnostics.push(...(await validateSourceSchema(source, read.value)));

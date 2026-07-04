@@ -84,12 +84,6 @@ export function createMiscApiRoutes(
     return c.json(payload);
   });
 
-  // GET /api/commands — list registered commands
-  // TODO: populate from plugin command registry when command system is implemented
-  app.get("/api/commands", (c) => {
-    return c.json([]);
-  });
-
   // GET /api/block-schemas — list block schemas from plugin manifests
   app.get("/api/block-schemas", (c) => {
     const schemas: Record<string, unknown> = {};

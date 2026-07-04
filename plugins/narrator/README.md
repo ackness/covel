@@ -7,6 +7,7 @@
 - `PLUGIN.md`：单 agent runtime 和故事提示词。
 - 使用 `story` 模型 slot。
 - 可调用 `world-dimension-get` 内置工具获取精确世界事实。
+- `advertiseEvents: true`，可调用 `emit-event` 发射当前会话已声明的领域事件。
 
 ## 数据与行为
 

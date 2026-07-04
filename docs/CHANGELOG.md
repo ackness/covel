@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.11] - 2026-07-04
+
+The visual-novel release. A full-screen GalGame **stage mode** — scene backdrops, character sprites, typewriter dialog, choice overlays — built on three new framework layers: a unified event-emission layer (`events` contracts + `emit-event`), a first-class image-generation pipeline (`ctx.images` + pluggable wires), and the `scene-stage` plugin that resolves narrative locations into stage art and generates missing backdrops on demand, mid-session. Haruka Academy ships the full asset set and plays as a visual novel out of the box.
+
+### Added
+
+- **Stage mode (`viewMode: "stage"`).** A full-screen visual-novel view for Playing turns: crossfading scene backdrop, bottom-anchored character sprites with active-speaker highlight, a delta-driven typewriter dialog with paragraph pauses, a classic centered choice overlay (interaction choices + scene-prompts phrases + free input), a HUD (scene badge, history drawer, auto-play, immersive toggle), and a player-clean history drawer reusing `ChatMessages`. Worlds pick their default via the new `world.yaml` `defaultViewMode: stage | parsed`; players can switch any time. Sprite stationing is **sticky** — salience decides who is on stage and who is highlighted, never where anyone stands — and sprites render inside equal-width lanes, so occlusion is impossible by construction.
+- **Unified event layer.** Plugin runtimes declare event contracts in frontmatter (`events: [{topic, schema, description, advertise}]`); emitting agents declare `advertiseEvents: true` and call the new builtin **`emit-event`** tool, whose payloads are schema-validated against the declaring plugin's contract with per-turn topic dedupe. A per-session event directory aggregates active plugins' contracts into the prompt (`<available-events>`), and deferred event followers are scheduled once per turn on the main loop. `narrator` / `chat-mode-narrator` emit `scene.set` as the reference implementation.
+- **Framework image pipeline (`ctx.images` / `gateway.generateImage`).** One primitive for plugin image generation: wire selection (builtin `openai-images` and `dashscope-wan` submit+poll, extensible via `registerImageWire()`), MediaStore persistence, and promptHash dedupe all handled by the framework — handlers never touch bytes or provider credentials.
+- **`scene-stage` plugin.** Resolves `scene.set` (location + day/night) against the world scene registry — exact, then fuzzy, then session-generated matches — writes `stage/current` for the stage backdrop, and queues background generation for unmatched locations behind player-tunable gates (`autoGenerateScenes`, `maxGeneratedScenes`). Night variants lazy-generate on first use and reuse the day image's visual hint.
+- **Haruka Academy visual-novel asset set.** Ten scene backdrops (5 locations × day/night) plus regenerated transparent-background portraits, imported via new `worldData` media sources (`to: media` + `indexTo` + `key: filename`) and the `scenes.registry.json` / `presence.json` registries; `scripts/generate-scenes.mjs` + `scripts/emit-scenes.mjs` regenerate them from `scenes.json` specs.
+- **`requireToolUse` manifest gate.** An agent runtime whose whole job is a tool call gets one corrective retry (locale-aware message) when it drifts into prose without calling anything; `scene-prompts` uses it.
+
+### Changed
+
+- **Media store simplified.** The unused S3 backend and its SQLite/PG metadata adapters are gone; media stores gain a shared `listByMetadata` filter. The imperative `beginTx/commitTx/rollbackTx` API and the empty `plugin_configs` table are removed (all writes go through `withTransaction`; existing databases are unaffected).
+- **ai-provider slimmed.** Dead config loader, token estimator, and protocol-registry indirection removed; model capability resolution unchanged.
+- **Desktop auto-updater removed** — releases install via the dmg; update checks return in a later cycle.
+- **README rewritten** around stage mode with a fresh 6×-speed demo gif and play-mode stills; the `create-world` / `create-plugin` skills now document the VN feature set (defaultViewMode, asset pipeline, events contracts, `ctx.images`).
+
+### Fixed
+
+- `plugin-data.changed` SSE now fires **after** transaction commit (and never on rollback), so panels re-render exactly when data is durable.
+- worldData sources targeting a plugin the player deselected are skipped with a warning instead of failing session creation with a 500; `indexTo` targets skip only the index writes.
+- Stage polish batch: sprites no longer drift when the speaker or scene changes (sticky stations + lane geometry), stale `getSession` responses can't corrupt state after a session switch, the typewriter survives same-text turns and stream-end races, artless speakers keep a name-card on stage, execution errors surface on stage with retry, and choice overlays no longer cover sprites.
+- A stuck "generating…" backdrop retries when the scene re-emits after a failed generation; DashScope image tasks that are CANCELED/UNKNOWN fail fast instead of polling to timeout.
+- Duplicate deferred event followers are deduped per turn; enum values render in the event catalog; image cache hits stamp per-call metadata.
+
 ## [0.0.10] - 2026-06-29
 
 A plugin-configuration pass: worlds can now preset any plugin's player-tunable settings and declare genre-specific memory dimensions, the player's per-plugin settings finally reach the scheduled turn loop, and the plugin config layer is consolidated onto a single declaration with server-enforced constraints. Behavior-unchanged for worlds and plugins that don't adopt the new fields.

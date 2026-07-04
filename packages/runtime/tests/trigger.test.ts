@@ -20,7 +20,6 @@ function makeContext(overrides?: Partial<TriggerContext>): TriggerContext {
     triggerCount: 0,
     turnsSinceLastTrigger: 999,
     pendingEventTopics: [],
-    hasUpstreamFailure: false,
     isManualTrigger: false,
     preGameCompleted: [],
     ...overrides,
@@ -92,18 +91,10 @@ describe("shouldTrigger", () => {
     expect(shouldTrigger(manifest, ctx)).toBe(false);
   });
 
-  // 9. error-retry, has failure
-  it("should return true for error-retry when hasUpstreamFailure is true", () => {
+  // 9. error-retry is reserved and never fires
+  it("should return false for reserved error-retry trigger", () => {
     const manifest = makeManifest({ trigger: { type: "error-retry" } });
-    const ctx = makeContext({ hasUpstreamFailure: true });
-    expect(shouldTrigger(manifest, ctx)).toBe(true);
-  });
-
-  // 10. error-retry, no failure
-  it("should return false for error-retry when hasUpstreamFailure is false", () => {
-    const manifest = makeManifest({ trigger: { type: "error-retry" } });
-    const ctx = makeContext({ hasUpstreamFailure: false });
-    expect(shouldTrigger(manifest, ctx)).toBe(false);
+    expect(shouldTrigger(manifest, makeContext())).toBe(false);
   });
 
   // 11. conditional with unknown condition returns false
@@ -130,15 +121,6 @@ describe("shouldTrigger", () => {
       trigger: { type: "auto", cooldownTurns: 5 },
     });
     const ctx = makeContext({ turnsSinceLastTrigger: 2 });
-    expect(shouldTrigger(manifest, ctx)).toBe(false);
-  });
-
-  // 14. maxRetryCount exceeded for error-retry
-  it("should return false for error-retry when triggerCount >= maxRetryCount", () => {
-    const manifest = makeManifest({
-      trigger: { type: "error-retry", maxRetryCount: 2 },
-    });
-    const ctx = makeContext({ hasUpstreamFailure: true, triggerCount: 2 });
     expect(shouldTrigger(manifest, ctx)).toBe(false);
   });
 
@@ -182,7 +164,6 @@ describe("shouldTrigger — preGameCompleted gate", () => {
       triggerCount: 0,
       turnsSinceLastTrigger: 999,
       pendingEventTopics: [],
-      hasUpstreamFailure: false,
       isManualTrigger: false,
       preGameCompleted: ["pregame"],
     };
@@ -203,7 +184,6 @@ describe("shouldTrigger — preGameCompleted gate", () => {
       triggerCount: 0,
       turnsSinceLastTrigger: 999,
       pendingEventTopics: [],
-      hasUpstreamFailure: false,
       isManualTrigger: false,
       preGameCompleted: [],
     };
@@ -224,7 +204,6 @@ describe("shouldTrigger — preGameCompleted gate", () => {
       triggerCount: 0,
       turnsSinceLastTrigger: 999,
       pendingEventTopics: [],
-      hasUpstreamFailure: false,
       isManualTrigger: false,
       preGameCompleted: ["pregame", "world-init/schema-gen"],
     };

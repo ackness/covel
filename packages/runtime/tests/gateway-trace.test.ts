@@ -128,6 +128,59 @@ describe("withGatewayTrace (A2-P1-5)", () => {
     expect(events).toHaveLength(0);
   });
 
+  it("generateImage emits calling/responded with method=generateImage and imageCount, no usage", async () => {
+    const { emitter, events } = captureEmitter();
+    const gateway = makeGateway({
+      generateImage: async () => ({
+        images: [
+          { kind: "bytes", bytes: new Uint8Array([1]), mime: "image/png" },
+        ],
+        warnings: [],
+      }),
+    });
+
+    const traced = withGatewayTrace(gateway, emitter, ctx);
+    const result = await traced.generateImage!({ prompt: "a cat" });
+
+    expect(result.images).toHaveLength(1);
+    expect(events.map((e) => e.type)).toEqual([
+      "gateway.calling",
+      "gateway.responded",
+    ]);
+    const responded = events[1]!.payload;
+    expect(responded.method).toBe("generateImage");
+    expect(responded.imageCount).toBe(1);
+    expect(responded.usage).toBeUndefined();
+    expect(typeof responded.durationMs).toBe("number");
+  });
+
+  it("generateImage is absent from the traced facade when the source gateway has none", async () => {
+    const { emitter } = captureEmitter();
+    const traced = withGatewayTrace(makeGateway(), emitter, ctx);
+
+    expect(traced.generateImage).toBeUndefined();
+  });
+
+  it("generateImage emits gateway.failed and rethrows when the gateway throws", async () => {
+    const { emitter, events } = captureEmitter();
+    const gateway = makeGateway({
+      generateImage: async () => {
+        throw new Error("image provider down");
+      },
+    });
+
+    const traced = withGatewayTrace(gateway, emitter, ctx);
+
+    await expect(traced.generateImage!({ prompt: "a cat" })).rejects.toThrow(
+      "image provider down",
+    );
+    expect(events.map((e) => e.type)).toEqual([
+      "gateway.calling",
+      "gateway.failed",
+    ]);
+    expect(events[1]!.payload.error).toBe("image provider down");
+  });
+
   it("gateway.calling carries only prompt shape (messageCount/promptChars), never raw text", async () => {
     const { emitter, events } = captureEmitter();
     const traced = withGatewayTrace(makeGateway(), emitter, ctx);

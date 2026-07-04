@@ -42,7 +42,7 @@ type MemorySnapshot = Map<keyof MemoryState, unknown>;
  * Capture a transaction snapshot.
  *
  * Performance (audit 2026-06-04 finding H3): instead of `structuredClone`-ing
- * every collection (O(total-bytes) per `beginTx`), we take a *shallow* copy of
+ * every collection (O(total-bytes) per transaction), we take a *shallow* copy of
  * each collection — a fresh `Map`/array holding the same record references. This
  * is O(row-count) reference copy, not a byte deep clone.
  *
@@ -50,7 +50,7 @@ type MemorySnapshot = Map<keyof MemoryState, unknown>;
  * stored record object in place. Every write path either pushes a new object,
  * `.set(key, newObject)`, replaces an array slot with a spread copy
  * (`arr[i] = { ...arr[i], ... }`), or `.delete()`s. A `Map`/array shallow copy
- * therefore preserves the exact membership at `beginTx`, and `restoreSnapshot`
+ * therefore preserves the exact membership at snapshot time, and `restoreSnapshot`
  * rewinds structure (insertions, deletions, slot replacements) faithfully — the
  * shared record references it restores were never mutated, so isolation and
  * rollback semantics are unchanged.
@@ -94,8 +94,6 @@ export function createTransactionMethods(
   state: MemoryState,
   getScope: () => StoreTransaction,
 ): MemoryStoreMethods {
-  // Imperative shim state — a single active snapshot (nested tx unsupported).
-  let snapshot: MemorySnapshot | null = null;
   // Serialize withTransaction calls so two concurrent transactions snapshot /
   // restore against a stable state rather than interleaving on shared Maps.
   // Because a single in-flight snapshot covers the whole store, a concurrent
@@ -107,34 +105,6 @@ export function createTransactionMethods(
   const nesting = createTxNestingGuard();
 
   return {
-    async beginTx() {
-      if (snapshot !== null) {
-        throw new Error(
-          "MemoryStore: nested transactions are not supported (beginTx called while another tx is active)",
-        );
-      }
-      snapshot = captureSnapshot(state);
-    },
-
-    async commitTx() {
-      if (snapshot === null) {
-        throw new Error(
-          "MemoryStore: commitTx called without an active transaction",
-        );
-      }
-      snapshot = null;
-    },
-
-    async rollbackTx() {
-      if (snapshot === null) {
-        throw new Error(
-          "MemoryStore: rollbackTx called without an active transaction",
-        );
-      }
-      restoreSnapshot(state, snapshot);
-      snapshot = null;
-    },
-
     async withTransaction<T>(
       fn: (tx: StoreTransaction) => Promise<T>,
     ): Promise<T> {
@@ -149,11 +119,6 @@ export function createTransactionMethods(
       }
       const task = chain.then(() =>
         nesting.runScoped(async () => {
-          if (snapshot !== null) {
-            throw new Error(
-              "MemoryStore: withTransaction cannot start while an imperative transaction is active",
-            );
-          }
           const snap = captureSnapshot(state);
           try {
             // Resolve on success = commit (discard snapshot).

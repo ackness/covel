@@ -59,7 +59,7 @@
 | 事件类型         | 方向 | 描述         | 负载                                              |
 | ---------------- | ---- | ------------ | ------------------------------------------------- |
 | `state.changed`  | S→C  | 游戏状态变更 | `{ table, field, value, runtimeId, pluginId }`    |
-| `event.emitted`  | S→C  | 游戏业务事件 | `{ topic, data, runtimeId, pluginId }`            |
+| `event.emitted`  | S→C  | 游戏业务事件 | `{ topic?, type?, eventType?, data?, pluginId? }` |
 | `record.updated` | S→C  | 长期记录更新 | `{ key, value, recordType, runtimeId, pluginId }` |
 
 ### 执行生命周期事件

@@ -6,7 +6,6 @@ import matter from "gray-matter";
 import { z } from "zod";
 import {
   authorsNoteDeclSchema,
-  FRAMEWORK_KNOWN_CAPABILITIES,
   HOOK_EVENTS,
   postHistoryDeclSchema,
   rpcDeclMapSchema,
@@ -218,96 +217,6 @@ const LENIENT_FIELDS: readonly LenientFieldSpec[] = [
 // loader's accept-list can never drift from the framework's hook contract.
 const VALID_HOOK_EVENTS = new Set<string>(HOOK_EVENTS);
 
-// ── Framework-known capability typo detection ─────────────────────
-
-// Capability tags the framework itself discovers / dispatches on, from the
-// single source of truth in @covel/shared (plugin-level FrameworkCapability +
-// runtime-level FrameworkRuntimeCapability). Plugins may declare arbitrary
-// custom capabilities — we do NOT reject unknown ones. We only warn when a
-// declared tag looks like a *misspelled* framework-known capability, so the
-// typo surfaces at load time instead of as a silent `?.includes` miss that
-// disables a feature (e.g. an image plugin tagging `image-genrator`).
-const KNOWN_CAPABILITIES: readonly string[] = FRAMEWORK_KNOWN_CAPABILITIES;
-const KNOWN_CAPABILITY_SET = new Set<string>(KNOWN_CAPABILITIES);
-
-/** Normalize a capability tag for case/separator-insensitive comparison. */
-function normalizeCapability(cap: string): string {
-  return cap
-    .toLowerCase()
-    .replace(/[_\s]+/g, "-")
-    .replace(/-+/g, "-");
-}
-
-/** Levenshtein edit distance between two short strings. */
-function levenshtein(a: string, b: string): number {
-  const m = a.length;
-  const n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  let prev = Array.from({ length: n + 1 }, (_, i) => i);
-  for (let i = 1; i <= m; i += 1) {
-    const curr: number[] = [i];
-    for (let j = 1; j <= n; j += 1) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
-    }
-    prev = curr;
-  }
-  return prev[n];
-}
-
-/**
- * Find the framework-known capability a declared tag most likely *meant* to be
- * when it is not an exact match. Catches case/separator drift (`Image_Generator`)
- * and one/two-character typos (`image-genrator`, `memory-pannel`). Returns null
- * for genuinely-custom tags so plugins keep full freedom to invent their own
- * capabilities.
- */
-function suspectedCapabilityTypo(cap: string): string | null {
-  if (KNOWN_CAPABILITY_SET.has(cap)) return null;
-  const normalized = normalizeCapability(cap);
-  // 1. Case / separator drift maps onto a known tag exactly.
-  for (const known of KNOWN_CAPABILITIES) {
-    if (normalizeCapability(known) === normalized) return known;
-  }
-  // 2. A short edit away from a known tag of similar length.
-  for (const known of KNOWN_CAPABILITIES) {
-    if (
-      Math.abs(cap.length - known.length) <= 2 &&
-      levenshtein(cap, known) <= 2
-    )
-      return known;
-  }
-  return null;
-}
-
-/**
- * Emit a dev warning for each declared capability that looks like a misspelled
- * framework-known capability. Mirrors the lenient hook-event validation style:
- * never throws, never drops the tag — capabilities stay free-form — it only
- * nudges the author toward the intended spelling.
- */
-function warnOnSuspectedCapabilityTypos(
-  capabilities: readonly string[] | undefined,
-  content: string,
-  filePath: string,
-): void {
-  if (!capabilities || capabilities.length === 0) return;
-  const line = findYamlKeyLine(content, "capabilities");
-  for (const cap of capabilities) {
-    const suggestion = suspectedCapabilityTypo(cap);
-    if (suggestion === null) continue;
-    console.warn(
-      formatLoaderError(
-        filePath,
-        line,
-        `capability "${cap}" looks like a misspelled framework capability "${suggestion}" — the framework will not discover this plugin by it`,
-        `Did you mean "${suggestion}"? If "${cap}" is an intentional custom capability, ignore this. Framework-known capabilities: ${KNOWN_CAPABILITIES.join(", ")}.`,
-      ),
-    );
-  }
-}
-
 /**
  * Lenient hook schema that accepts any string for `event`, used to
  * pre-validate hooks before filtering out unknown event names with a warning.
@@ -321,27 +230,12 @@ const lenientHookDeclarationSchema = z.object({
   enforce: z.enum(["pre", "normal", "post"]).optional(),
 });
 
-/** Regex to extract markdown links pointing to `references/` paths. */
-const REFERENCE_LINK_RE = /\[([^\]]*)\]\((references\/[^)]+)\)/g;
-
-/**
- * Extract reference file paths from markdown body.
- */
-function extractReferenceLinks(body: string): readonly string[] {
-  const links: string[] = [];
-  let match: RegExpExecArray | null;
-  while ((match = REFERENCE_LINK_RE.exec(body)) !== null) {
-    links.push(match[2]);
-  }
-  return links;
-}
-
 /**
  * Parse a PLUGIN.md file content into structured data.
  *
  * @param content - Raw file content (YAML frontmatter + Markdown body)
  * @param filePath - File path for error reporting
- * @returns Parsed manifest, prompt template, and reference links
+ * @returns Parsed manifest and prompt template
  * @throws {Error} When frontmatter is missing or invalid
  */
 export function parsePluginMd(
@@ -481,10 +375,6 @@ export function parsePluginMd(
     const pluginId =
       slashIdx >= 0 ? parsed.name.slice(0, slashIdx) : parsed.name;
     manifest = { ...parsed, pluginId };
-    // Lenient capability typo detection — warn-only, after strict validation
-    // so we have the final capability list. Covers both plugin-level and
-    // runtime-level tags (each runtime PLUGIN.md is parsed independently).
-    warnOnSuspectedCapabilityTypos(manifest.capabilities, content, filePath);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     // Best-effort: attach the source line for the first failing key so the
@@ -505,12 +395,9 @@ export function parsePluginMd(
     );
   }
 
-  const referenceLinks = extractReferenceLinks(body);
-
   return {
     manifest,
     promptTemplate: body,
-    referenceLinks,
     rawFrontmatter: { ...data } as Readonly<Record<string, unknown>>,
   };
 }

@@ -35,13 +35,6 @@ function nextCounter(sessionId: string, prefix: string): number {
   return next;
 }
 
-/**
- * Clean up counters for a session (call on session delete).
- */
-export function clearSessionCounters(sessionId: string): void {
-  counters.delete(sessionId);
-}
-
 // ── Slug generation ─────────────────────────────────────────────
 
 /** ASCII-safe slug: lowercase, hyphens only, max length. */

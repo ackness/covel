@@ -38,7 +38,6 @@ export interface SettingEntry<T = unknown> {
   readonly step?: number;
   readonly backend?: SettingBackend;
   readonly secret?: boolean;
-  readonly visibleWhen?: (store: { get<V>(key: SettingKey): V }) => boolean;
 }
 
 export interface SettingsExportBundle {
@@ -62,11 +61,9 @@ export interface SettingsStoreApi {
   has(key: SettingKey): boolean;
   list(group?: SettingGroup): readonly SettingEntry[];
   listEntries(): readonly SettingEntry[];
-  resolveEntry(key: SettingKey): SettingEntry | null;
   export(opts?: { includeSecrets?: boolean }): Promise<SettingsExportBundle>;
   set<T>(key: SettingKey, value: T): Promise<void>;
   clear(key: SettingKey): Promise<void>;
-  clearGroup(group: SettingGroup): Promise<void>;
   clearAll(): Promise<void>;
   import(
     bundle: SettingsExportBundle,
@@ -75,10 +72,7 @@ export interface SettingsStoreApi {
   subscribe<T>(key: SettingKey, handler: (value: T) => void): () => void;
   subscribeAll(handler: SettingsListener): () => void;
   register<T>(entry: SettingEntry<T>): void;
-  unregister(key: SettingKey): void;
   ready(): Promise<void>;
-  /** All known secret provider ids (including unregistered ones loaded from disk). */
-  listSecretProviders(): readonly string[];
   /** Raw snapshot of the secrets map — used by code that ships API keys as headers. */
   snapshotSecrets(): Record<string, string>;
 }

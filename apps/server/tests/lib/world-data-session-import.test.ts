@@ -204,6 +204,8 @@ describe("world data session importer", () => {
       "character-presence/assets",
       "character-presence/presence",
       "living-world-rules/rules",
+      "scene-stage/assets",
+      "scene-stage/scenes",
     ]);
   });
 
@@ -392,7 +394,7 @@ sources:
     ).rejects.toThrow(/not registered/);
   });
 
-  it("rejects plugin targets outside final activePlugins", async () => {
+  it("skips sources targeting plugins outside final activePlugins (warning, not a session-blocking error)", async () => {
     const { worldsDir, worldId } = await makeWorld({
       descriptor: `schemaVersion: 1
 sources:
@@ -406,19 +408,27 @@ sources:
     });
     const store = await makeStore([]);
 
-    await expect(
-      importWorldDataForSession({
-        store,
-        sessionId: "sess-1",
-        worldId,
-        worldsDirs: [worldsDir],
-        now: NOW,
-        preflight: {
-          activePlugins: [],
-          registry: registry({ "world-notes": ["facts"] }),
-        },
-      }),
-    ).rejects.toThrow(/not active/);
+    // The player deselected world-notes at session creation — the source has
+    // no consumer, so it must be skipped, never fail the whole import.
+    const result = await importWorldDataForSession({
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      preflight: {
+        activePlugins: [],
+        registry: registry({ "world-notes": ["facts"] }),
+      },
+    });
+
+    expect(result.written).toBe(0);
+    expect(
+      result.diagnostics.some(
+        (d) => d.level === "warning" && /not active/.test(d.message),
+      ),
+    ).toBe(true);
+    expect(result.diagnostics.some((d) => d.level === "error")).toBe(false);
   });
 
   it("rejects values that fail a plugin data schema", async () => {
@@ -1079,6 +1089,46 @@ sources:
     ).toEqual([]);
   });
 
+  it("skips media index writes when the indexTo plugin is inactive (warning, media unaffected)", async () => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: plugin:character-presence/assets
+    key: filename
+`,
+      files: {
+        "media/portraits/mio.png": "png-ish",
+      },
+    });
+    const store = await makeStore([]);
+
+    const result = await importWorldDataForSession({
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      preflight: {
+        activePlugins: [],
+        registry: registry({ "character-presence": ["assets"] }),
+      },
+    });
+
+    expect(result.diagnostics.some((d) => d.level === "error")).toBe(false);
+    expect(
+      result.diagnostics.some(
+        (d) => d.level === "warning" && /indexTo plugin/.test(d.message),
+      ),
+    ).toBe(true);
+    expect(
+      await store.listPluginData("sess-1", "character-presence", "assets"),
+    ).toEqual([]);
+  });
+
   it("sync deletion removes only the current session ref for shared imported media", async () => {
     const { worldsDir, worldRoot, worldId } = await makeWorld({
       descriptor: `schemaVersion: 1
@@ -1185,6 +1235,7 @@ sources: {}
     const activePlugins = [
       "chat-mode-narrator",
       "scene-cast",
+      "scene-stage",
       "scene-prompts",
       "character-blueprint",
       "character-presence",
@@ -1300,11 +1351,13 @@ sources: {}
       "character-blueprint",
       "char-creator",
       "character-presence",
+      "scene-stage",
     ];
 
-    for (const [worldId, portraitCount] of [
-      ["mistport", 7],
-      ["haruka-academy", 8],
+    // haruka media = 8 portraits + 10 scene backdrops (scenes source has indexTo).
+    for (const [worldId, portraitCount, mediaCount] of [
+      ["mistport", 7, 7],
+      ["haruka-academy", 8, 18],
     ] as const) {
       const sessionId = `sess-portraits-${worldId}`;
       const store = createMemoryStore();
@@ -1337,7 +1390,7 @@ sources: {}
       const assetIds = new Set(
         (await mediaStore.listAssets()).map((a) => a.id),
       );
-      expect(assetIds.size).toBe(portraitCount);
+      expect(assetIds.size).toBe(mediaCount);
 
       // Every character has a presence record whose avatar + sprite resolve to a
       // stored asset — i.e. the portrait actually displays for that character.

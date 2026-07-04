@@ -151,6 +151,16 @@ function createMockMediaStore(options: MockMediaStoreOptions = {}): {
       }
       return rows;
     },
+    async listByMetadata(sessionId, filter) {
+      // Keep this in sync with filterAssetsByMetadata in
+      // packages/store/src/media-store/utils.ts.
+      const rows = await this.listAssets();
+      return rows.filter((row) => {
+        if (row.ownerSessionId !== sessionId) return false;
+        const meta = row.meta ?? {};
+        return Object.entries(filter).every(([k, v]) => meta[k] === v);
+      });
+    },
     async cleanup(protectedIds, policy = {}) {
       const rows = await this.listAssets();
       const deletable = rows.filter((row) => !protectedIds.has(row.id));

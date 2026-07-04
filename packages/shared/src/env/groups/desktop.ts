@@ -106,20 +106,4 @@ export const DESKTOP_ENV_VARS = [
     defaultValue: "0.0.1-beta",
     description: "Desktop preload app version fallback.",
   },
-  {
-    name: "COVEL_AUTO_UPDATE",
-    group: "desktop",
-    type: "boolean",
-    status: "active",
-    defaultValue: "false",
-    description: "Electron auto-updater opt-in flag.",
-  },
-  {
-    name: "COVEL_UPDATE_CHANNEL",
-    group: "desktop",
-    type: "enum",
-    status: "active",
-    values: ["latest", "beta", "alpha"],
-    description: "Electron auto-updater release channel override.",
-  },
 ] as const satisfies readonly EnvVarDefinition[];

@@ -210,16 +210,6 @@ export function usePluginJobs(pluginId: string): readonly PluginJobRecord[] {
   return jobs;
 }
 
-/** React hook — returns a single job record by id. */
-export function usePluginJob(
-  pluginId: string,
-  jobId: string,
-): PluginJobRecord | null {
-  const all = useSyncExternalStore(subscribe, getSnapshot);
-  const value = all[pluginId]?.["_jobs"]?.[jobId];
-  return value === undefined ? null : asJobRecord(jobId, value);
-}
-
 const EMPTY_JOBS: readonly PluginJobRecord[] = Object.freeze([]);
 
 /**

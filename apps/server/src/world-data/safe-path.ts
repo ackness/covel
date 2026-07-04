@@ -12,7 +12,7 @@ function isInsideRoot(
 export async function resolveContainedPath(
   root: string,
   relativePath: string,
-  options?: { rejectSymlinks?: boolean; mustExist?: boolean },
+  options?: { rejectSymlinks?: boolean },
 ): Promise<string | null> {
   if (path.isAbsolute(relativePath)) return null;
 
@@ -27,7 +27,6 @@ export async function resolveContainedPath(
   try {
     stat = await lstat(resolved);
   } catch {
-    if (options?.mustExist === false) return resolved;
     return null;
   }
 
@@ -35,10 +34,4 @@ export async function resolveContainedPath(
 
   const realResolved = await realpath(resolved);
   return isInsideRoot(rootRealPath, realResolved) ? realResolved : null;
-}
-
-export function isHiddenPathSegment(relativePath: string): boolean {
-  return relativePath
-    .split(/[\\/]+/)
-    .some((segment) => segment.startsWith(".") || segment === "node_modules");
 }

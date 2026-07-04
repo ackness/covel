@@ -58,6 +58,7 @@ export type {
   InputConfig,
   OutputConfig,
   PluginDataSchemaDecl,
+  PluginEventDecl,
   PluginUserSettingSpec,
   ToolsConfig,
   PluginRelation,

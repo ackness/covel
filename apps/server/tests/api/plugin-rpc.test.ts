@@ -497,14 +497,12 @@ function makeFunctionEntry(args: {
   const loaded: LoadedRuntime = {
     manifest,
     promptTemplate: "",
-    references: [],
     handler: args.handler,
   };
 
   const parsed = {
     manifest,
     promptTemplate: "",
-    referenceLinks: [],
     rawFrontmatter: {},
   };
 
@@ -545,12 +543,10 @@ function makeAgentEntry(args: {
   const loaded: LoadedRuntime = {
     manifest,
     promptTemplate: "You are a test narrator.",
-    references: [],
   };
   const parsed = {
     manifest,
     promptTemplate: loaded.promptTemplate,
-    referenceLinks: [],
     rawFrontmatter: {},
   };
   const entry: PluginRegistryEntry = {
@@ -1647,13 +1643,11 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     const parsedTarget = {
       manifest: targetLoaded.manifest,
       promptTemplate: "",
-      referenceLinks: [],
       rawFrontmatter: {},
     };
     const parsedFollower = {
       manifest: followerLoaded.manifest,
       promptTemplate: "",
-      referenceLinks: [],
       rawFrontmatter: {},
     };
     pluginRegistry.register({
@@ -1838,13 +1832,11 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     const parsedTarget = {
       manifest: targetLoaded.manifest,
       promptTemplate: "",
-      referenceLinks: [],
       rawFrontmatter: {},
     };
     const parsedFollower = {
       manifest: followerLoaded.manifest,
       promptTemplate: "",
-      referenceLinks: [],
       rawFrontmatter: {},
     };
     pluginRegistry.register({

@@ -23,7 +23,6 @@ import { createPgSessionJournalRecords } from "./pg-session-journal-records.js";
 import { createPgSessionRecords } from "./pg-session-records.js";
 import { createPgSnapshotRecords } from "./pg-snapshot-records.js";
 import { CREATE_TABLES_SQL, DROP_ALL_SQL } from "./pg-store-mappers.js";
-import { createPgTxAdapter } from "./pg-store-tx.js";
 import { createPgStateRecords } from "./pg-state-records.js";
 import { createPgVectorCapability } from "./pg-vector.js";
 import { createPgWorldRecords } from "./pg-world-records.js";
@@ -94,21 +93,10 @@ export async function createPgStore(
     await client.unsafe(CREATE_TABLES_SQL);
   }
 
-  // `imperativeTxDb` is null except while an imperative beginTx/commitTx window
-  // is open, in which case the root data methods route through that tx handle.
-  // The default is always `pooledDb`, and `withTransaction` never touches this
-  // holder — it builds its own tx-scoped data view bound to a private
-  // connection, so concurrent `withTransaction` calls are fully isolated and a
-  // non-transactional caller never gets folded into someone else's tx via a
-  // swapped global handle.
-  let imperativeTxDb: typeof pooledDb | null = null;
-  const txAdapter = createPgTxAdapter({
-    pooledDb,
-    setDb: (next) => {
-      imperativeTxDb = next === pooledDb ? null : next;
-    },
-  });
-  const getDb = (): PgDb => imperativeTxDb ?? pooledDb;
+  // Root data methods always run on the pool. `withTransaction` never touches
+  // this handle — it builds its own tx-scoped data view bound to a private
+  // connection, so concurrent `withTransaction` calls are fully isolated.
+  const getDb = (): PgDb => pooledDb;
 
   // PgStore runs each withTransaction on its own pooled connection, so nesting
   // does not deadlock (unlike the serialized backends). It is still rejected for
@@ -120,10 +108,6 @@ export async function createPgStore(
 
   const baseStore: DataStore = {
     ...buildPgData(getDb),
-
-    beginTx: txAdapter.beginTx,
-    commitTx: txAdapter.commitTx,
-    rollbackTx: txAdapter.rollbackTx,
 
     /**
      * Scoped, isolation-correct transaction. Drizzle reserves a dedicated
@@ -151,7 +135,6 @@ export async function createPgStore(
     },
 
     async close(): Promise<void> {
-      await txAdapter.closeActiveTx();
       await client.end();
     },
   };

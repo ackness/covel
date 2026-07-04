@@ -39,9 +39,12 @@ pluginPolicy:
   avoidTags:
     - mode:dialogue
 worldData: data/world.data.yaml
+defaultViewMode: stage
 ```
 
 `worldData` path 相对 world root。
+
+`defaultViewMode`（可选）：会话首次进入 Playing 时的默认呈现模式。目前仅 `stage`（全屏 GalGame 舞台，见 [ui-panels.md](./ui-panels.md#舞台模式stage-view)）有效，其他值按 `parsed` 处理。它经 `world-seed-loader` 拼进 `WorldRecord.metadata.defaultViewMode`，前端仅在会话首挂载时用作初值——玩家在头部切换视图后即以玩家选择为准。
 
 > **@deprecated 顶层 `requiredPlugins` / `recommendedPlugins` / `excludedPlugins`**：仍可用（向后兼容），但**请改用 `pluginPolicy` 下的同名字段**。加载时框架会把顶层这三个字段**折叠进 `pluginPolicy`（去重合并）**，`WorldRecord.metadata` 只保留 `pluginPolicy` 作为插件选择的唯一来源。`pluginPolicy` 还能表达 `preset` / `packs` / `preferTags` 等场景意图，顶层字段无法表达。
 
@@ -197,11 +200,12 @@ to: plugin:character-blueprint/blueprints
 `plugin:*/*` 与 `indexTo` 都会做 preflight：
 
 - 目标插件已注册。
-- 目标插件在本 session 最终启用插件列表中。
 - 目标 namespace 在插件 `dataSchemas` 中声明。
 - `acceptsWorldData: true`。
 - `schema` 为 `plugin://<id>/<namespace>` 时必须和 `to: plugin:<id>/<namespace>` 兼容。
 - 插件包内 JSON Schema、world/override 本地 JSON Schema 或内置 schema 校验通过。
+
+以上为 **error 级**（作者错误，阻断导入）。**目标插件是否在本 session 最终启用插件列表中**是玩家选择的结果，不算作者错误：`to: plugin:*` 目标未激活时该 source 整体跳过（warning 级诊断）；`indexTo` 目标未激活时媒体字节照常导入，仅跳过索引写入（warning 级）。世界给可选插件携带数据因此是安全的——玩家取消勾选对应插件不会导致建会话失败。
 
 world load 阶段只强校验内置 schema 和本地 schema；`plugin://...` schema 在 session import/preflight 阶段结合当前启用插件严格校验。
 
@@ -307,9 +311,58 @@ sources:
 
 `mediaRef.id` 必须是该图内容的 **64 位小写 sha256**——media source 导入后媒体库以同一 sha256 寻址，二者相等才能解析到资产。手算易错，仓库提供 `scripts/emit-presence.mjs <world>`，从 `media/portraits/` 自动生成 `presence.json`（**重生成立绘后必须重跑刷新哈希**）。
 
-preflight 要求：`character-presence` 在 session 最终启用插件列表中（放进 `recommendedPlugins`），其 `assets` / `presence` namespace 已声明 `acceptsWorldData: true`（builtin 默认满足）。媒体受 v1 限制：单文件 ≤ 20 MB、单 source ≤ 100 MB、扩展名 allowlist（含 `.png` / `.webp`）。
+preflight 要求：`character-presence` 的 `assets` / `presence` namespace 已声明 `acceptsWorldData: true`（builtin 默认满足）。要让立绘数据实际生效，把 `character-presence` 放进世界的 `recommendedPlugins`——若玩家取消勾选，presence source 跳过、媒体照常导入但索引写入跳过（warning，不阻断建会话）。媒体受 v1 限制：单文件 ≤ 20 MB、单 source ≤ 100 MB、扩展名 allowlist（含 `.png` / `.webp`）。
 
 实际范例见 `worlds/mistport` 与 `worlds/haruka-academy`（`data/world.data.yaml` + `media/`），提示词与生成流程见 `worlds/PORTRAITS.md`。
+
+## Scene Backgrounds
+
+场景背景（教室、社团楼、海堤这类地点插画，日/夜各一张）与立绘同一套图片管线，但清单结构不同：作者手编 `media/scenes.json`，脚本按清单批量生成 PNG、再由 `scripts/emit-scenes.mjs` 生成内容寻址的 `scenes.registry.json`。
+
+`media/scenes.json` 字段：
+
+| 字段           | 说明                                                                                                                    |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `id`           | 场景机器键，也是文件名前缀（`<id>-day.png` / `<id>-night.png`）。                                                       |
+| `name`         | 场景显示名。                                                                                                            |
+| `locationRef`  | 对应 `dimensions.yaml` 里 `geography.regions[].name` 或其 `landmarks[].name`（dimensions 数据模型无 id，name 即身份）。 |
+| `subject`      | 英文画面描述（日图），composes 为 `style.prefix + subject + style.suffix`。                                             |
+| `subjectNight` | 可选，夜图专用画面描述；留空则夜图回退用 `subject`（配合 `style.nightSuffix`）。                                        |
+
+world 包用一条 media source 把生成好的 PNG 导入媒体库（沿用 portraits 的 `kind: media` 机制，按 sha256 内容寻址）：
+
+```yaml
+sources:
+  scenes:
+    kind: media
+    path: media/scenes
+    to: media
+    after: dimensions
+```
+
+与 portraits 不同：**不加 `indexTo`**——`scenes.registry.json` 单独走第二条 source 整份导入，被 [`scene-stage`](plugins.md#scene-stage) 插件的 `scenes` namespace 消费（`schemaVersion` 仍为 1：纯增字段，向后兼容）：
+
+```yaml
+sources:
+  scenes:
+    kind: media
+    path: media/scenes
+    to: media
+    after: dimensions
+  scenesRegistry:
+    kind: json
+    path: media/scenes.registry.json
+    schema: plugin://scene-stage/scenes
+    to: plugin:scene-stage/scenes
+    key: registryId
+    after: dimensions
+```
+
+`scenes.registry.json`（`scripts/emit-scenes.mjs` 自动生成，`{schemaVersion, registryId, style, scenes:[{sceneId,name,locationRef?,day,night}]}`，`day`/`night` 是 sha256 `MediaRef`）整份文档作为**一行** plugin_data 导入：`registryId: "scene-registry"` 是自描述常量字段，同时充当 `key`——scene-stage 的解析 runtime 读一行即得 `style`（增量生成用的画风 prompt 片段）与 `scenes[]` 全量，不需要按条目遍历。`scenes.registry.json` 是生成产物，不要手编，重新生成场景图后必须重跑 `emit-scenes.mjs` 刷新哈希与 `style` 块。
+
+**未出图时的空 registry 兜底**：`media/scenes.registry.json` 不存在会导致 world-data 校验失败（source 引用了不存在的文件）。作者还没准备场景图时，对空的 `media/scenes/` 目录跑一次 `emit-scenes.mjs` 即可产出合法的空 registry（`{schemaVersion: 1, registryId: "scene-registry", style: {...}, scenes: []}`），先提交进世界包占位；scene-stage 侧空 `scenes[]` 时一律走"未命中注册表"分支（`autoGenerateScenes` 门控 → 增量生成或 `source: "none"`），不是错误状态。出图后重跑 `emit-scenes.mjs` 覆盖即可，无需改 world.data.yaml。
+
+清单润色规范、参数表、日/夜缺图回退语义、作者四步工作流见 [worlds/SCENES.md](../../worlds/SCENES.md)。
 
 ## Third-Party Extension
 

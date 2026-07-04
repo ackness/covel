@@ -1,0 +1,55 @@
+{
+  "id": "scene-stage",
+  "label": {
+    "zh": "场景舞台",
+    "en": "Scene Stage"
+  },
+  "shortLabel": {
+    "zh": "舞台",
+    "en": "Stage"
+  },
+  "icon": "image",
+  "groupOrder": 460,
+  "dataSource": { "namespace": "stage" },
+  "emptyState": {
+    "message": {
+      "zh": "还没有确立场景，等待叙事推进……",
+      "en": "No scene established yet, waiting for the narrative to progress…"
+    }
+  },
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "sm" },
+    "children": [
+      {
+        "component": "Row",
+        "props": { "gap": "sm", "align": "center" },
+        "children": [
+          {
+            "component": "Text",
+            "props": {
+              "content": { "$state": "/current/name" },
+              "weight": "bold",
+              "size": "sm"
+            }
+          },
+          {
+            "component": "Badge",
+            "props": {
+              "label": { "$state": "/current/variantLabel" },
+              "color": "blue"
+            }
+          }
+        ]
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": { "$state": "/current/sourceLabel" },
+          "variant": "muted",
+          "size": "xs"
+        }
+      }
+    ]
+  }
+}

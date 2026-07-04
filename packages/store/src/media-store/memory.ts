@@ -2,6 +2,7 @@ import type { MediaRef, MediaRefRecord, MediaStore } from "@covel/shared";
 import {
   bytesToReadableStream,
   cleanupCandidates,
+  filterAssetsByMetadata,
   sha256,
   toBytes,
   toMeta,
@@ -154,6 +155,10 @@ export function createMemoryMediaStore(): MediaStore {
 
     async listRefs() {
       return [...refRows.values()];
+    },
+
+    async listByMetadata(sessionId, filter) {
+      return filterAssetsByMetadata(await this.listAssets(), sessionId, filter);
     },
 
     async cleanup(protectedIds, policy) {

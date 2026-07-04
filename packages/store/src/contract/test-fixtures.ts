@@ -6,7 +6,6 @@ import type {
   LorebookEntryRecord,
   MessageRecord,
   PlayerInputRecord,
-  PluginConfigRecord,
   RuntimeOutputRecord,
   RuntimeResultRecord,
   SessionRecord,
@@ -197,19 +196,6 @@ export function makeCharacter(
     type: "player",
     version: 1,
     createdAt: ts(),
-    updatedAt: ts(),
-    ...overrides,
-  };
-}
-
-export function makePluginConfig(
-  overrides?: Partial<PluginConfigRecord>,
-): PluginConfigRecord {
-  return {
-    id: id(),
-    sessionId: "sess-1",
-    pluginId: "narrator",
-    config: { tone: "dramatic" },
     updatedAt: ts(),
     ...overrides,
   };

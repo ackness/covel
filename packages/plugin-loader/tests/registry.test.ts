@@ -45,7 +45,6 @@ function makeParsedPluginMd(
   return {
     manifest: makeRuntimeManifest(name, priority, overrides),
     promptTemplate: "",
-    referenceLinks: [],
     rawFrontmatter: {},
   };
 }

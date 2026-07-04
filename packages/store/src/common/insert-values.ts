@@ -21,7 +21,6 @@ import type {
   LorebookEntryRecord,
   MessageRecord,
   PlayerInputRecord,
-  PluginConfigRecord,
   PluginDataRecord,
   RuntimeOutputRecord,
   RuntimeResultRecord,
@@ -111,8 +110,6 @@ export interface InsertValueBuilders {
   messageInsert(record: MessageRecord): Record<string, unknown>;
   characterInsert(record: CharacterRecord): Record<string, unknown>;
   characterUpdate(record: CharacterRecord): Record<string, unknown>;
-  pluginConfigInsert(record: PluginConfigRecord): Record<string, unknown>;
-  pluginConfigUpdate(record: PluginConfigRecord): Record<string, unknown>;
   traceEventInsert(record: TraceEventRecord): Record<string, unknown>;
   playerInputInsert(record: PlayerInputRecord): Record<string, unknown>;
   sessionSummaryInsert(record: SessionSummaryRecord): Record<string, unknown>;
@@ -453,22 +450,6 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         description: record.description ?? null,
         fields: json.writeNullableJson(record.fields),
         version: record.version,
-        updatedAt: record.updatedAt,
-      };
-    },
-
-    pluginConfigInsert(record) {
-      return {
-        id: record.id,
-        sessionId: record.sessionId,
-        pluginId: record.pluginId,
-        config: json.writeJson(record.config),
-        updatedAt: record.updatedAt,
-      };
-    },
-    pluginConfigUpdate(record) {
-      return {
-        config: json.writeJson(record.config),
         updatedAt: record.updatedAt,
       };
     },

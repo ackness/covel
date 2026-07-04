@@ -1,4 +1,4 @@
-import { access, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import {
@@ -12,21 +12,13 @@ import type {
 } from "@covel/shared";
 import { resolveContainedPath } from "./safe-path.js";
 import { orderSources } from "./source-order.js";
+import { fileExists } from "./session-import/utils.js";
 import type {
   LoadedWorldDataDescriptor,
   MergedWorldDataSource,
   SourceFieldOrigin,
   WorldDataDiagnostic,
 } from "./types.js";
-
-async function fileExists(p: string): Promise<boolean> {
-  try {
-    await access(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 async function readDescriptorFile(
   root: string,

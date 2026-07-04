@@ -117,8 +117,9 @@ tmp/
 !apps/web/public/icon.png
 !apps/desktop/resources/icon.png
 !apps/desktop-tauri/src-tauri/icons/**/*.png
-# World character portraits are tracked assets (generated once, reused).
+# World character portraits and scene backdrops are tracked assets (generated once, reused).
 !worlds/**/media/portraits/*.png
+!worlds/**/media/scenes/*.png
 .playwright-mcp/
 # Local git worktrees for parallel agents
 .worktrees/
@@ -141,3 +142,4 @@ docker/docker-compose.mock.replay.yml
 
 # ── Local developer docs ──
 devs/docs/
+.superpowers/

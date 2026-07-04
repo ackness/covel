@@ -47,9 +47,6 @@ export function deriveBuiltinPluginIds(
   return ids;
 }
 
-/** Officially blessed but not shipped with the framework — empty for now. */
-const OFFICIAL_IDS = new Set<string>([]);
-
 /**
  * Determine trust level for a plugin.
  *
@@ -58,15 +55,14 @@ const OFFICIAL_IDS = new Set<string>([]);
  * - community: everything else (requires user confirmation, tools need approval)
  *
  * The caller should always pass an explicit `source` derived from the load
- * path; the no-source fallback only treats `OFFICIAL_IDS` as official and
- * everything else as community — it deliberately does NOT infer `builtin`
- * from the name, since names are author-controlled.
+ * path; the no-source fallback treats everything as community — it deliberately
+ * does NOT infer `builtin` from the name, since names are author-controlled.
  */
 export function getPluginTrustInfo(
-  pluginId: string,
+  _pluginId: string,
   source?: PluginSource,
 ): PluginTrustInfo {
-  const resolvedSource = source ?? detectSource(pluginId);
+  const resolvedSource = source ?? detectSource();
 
   switch (resolvedSource) {
     case "builtin":
@@ -85,9 +81,7 @@ export function getPluginTrustInfo(
   }
 }
 
-function detectSource(pluginId: string): PluginSource {
-  if (OFFICIAL_IDS.has(pluginId)) {
-    return "official";
-  }
+function detectSource(): PluginSource {
+  // ponytail: no official plugins yet; reintroduce a whitelist when the first one ships
   return "community";
 }

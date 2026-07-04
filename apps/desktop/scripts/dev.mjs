@@ -25,7 +25,7 @@ await build({
   platform: "node",
   target: "node22",
   sourcemap: true,
-  external: ["electron", "electron-updater"],
+  external: ["electron"],
 });
 
 await build({

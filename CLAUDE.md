@@ -118,7 +118,7 @@ packages/           16 internal packages: shared, settings, context, ai-provider
                     SettingsStore + localStorage/json-file backends, split out of
                     `shared` so pure-type consumers avoid browser/Electron code.
 
-plugins/            19 bundled plugin packages (see docs/reference/plugins.md)
+plugins/            20 bundled plugin packages (see docs/reference/plugins.md)
 prompts/            Externalised prompt templates (locale-aware markdown)
 worlds/             2 curated sample world packages (mistport / haruka-academy);
                     archived worlds in worlds/_archive/ are not loaded
@@ -147,7 +147,7 @@ Input/Event → Trigger Router → Priority Scheduler → [per priority group:]
 → Follow-up Events (may re-enter Router)
 ```
 
-- **Trigger modes**: production-active are `auto`, `manual`, `scheduled`, `event` (see `TriggerType` in `packages/shared/src/types/plugin.ts`). `scheduled` carries `interval` / `maxTriggerCount` / `cooldownTurns` / `startTurn`. `conditional` and `error-retry` are **reserved — they never fire in production** (no condition engine; scheduler hardcodes `hasUpstreamFailure: false`); `shouldTrigger` skips them and warns once. The single authority for `auto` / `scheduled` / `event` trigger decisions is `shouldTrigger` (`packages/runtime/src/trigger/trigger.ts`) — the in-turn event fan-out in `turn-event-chain.ts` re-uses it too. **`manual` is the exception**: a `manual` runtime is selected by name match in `scheduling.ts` (`selectTriggeredRuntimes`) and runs **without** calling `shouldTrigger` — an explicit plugin-rpc call _is_ the trigger decision, so it bypasses the `preGameCompleted` / `startTurn` / `maxTriggerCount` / `cooldownTurns` gates (the `case "manual"` branch in `shouldTrigger` is consequently dead in the production selection path).
+- **Trigger modes**: production-active are `auto`, `manual`, `scheduled`, `event` (see `TriggerType` in `packages/shared/src/types/plugin.ts`). `scheduled` carries `interval` / `maxTriggerCount` / `cooldownTurns` / `startTurn`. `conditional` and `error-retry` are **reserved — they never fire in production** (no condition engine; the scheduler never surfaces upstream failures); `shouldTrigger` skips them and warns once. The single authority for `auto` / `scheduled` / `event` trigger decisions is `shouldTrigger` (`packages/runtime/src/trigger/trigger.ts`) — the in-turn event fan-out in `turn-event-chain.ts` re-uses it too. **`manual` is the exception**: a `manual` runtime is selected by name match in `scheduling.ts` (`selectTriggeredRuntimes`) and runs **without** calling `shouldTrigger` — an explicit plugin-rpc call _is_ the trigger decision, so it bypasses the `preGameCompleted` / `startTurn` / `maxTriggerCount` / `cooldownTurns` gates (the `case "manual"` branch in `shouldTrigger` is consequently dead in the production selection path).
 - **Runtime types**: `agent` (default, loads PLUGIN.md and drives LLM tool-calls) or `function` (pure JS handler, no LLM).
 - **Proposal envelopes** (registered `ProposalType`s, derived from the single source of truth `ProposalPayloadMap` in `packages/shared/src/types/proposal.ts`; commit-handler registry and discovery advert are compile-time aligned to it): `narrative.append`, `state.patch`, `event.emit`, `interaction.request`, `ui.render`, `asset.generate`, `plugin.data`, `plugin.data.batch`, `character.upsert`, `working_memory.set`, `lorebook.upsert`. Full reference in [docs/reference/tools.md](./docs/reference/tools.md#proposal-类型). **All writes flow through validate → commit — plugins never touch the DB directly.**
 - **Hook lifecycle** (16 events; full table in [docs/reference/plugins.md](./docs/reference/plugins.md)): `SessionStart` · `TurnStart` · `PreCompaction` / `PostCompaction` · `PreSchedule` · `PreRuntime` / `PostRuntime` · `PostContextAssembly` · `PreLLMCall` / `PostLLMResponse` · `PreToolUse` / `PostToolUse` · `PreStateCommit` / `PostStateCommit` · `TurnStop` · `SessionEnd`. Registered hooks are session-scoped (a plugin's hooks fire only for sessions where it is active, via `AsyncLocalStorage`); `HookContext.getOwnSettings()` exposes the plugin's own per-session `userSettings`.
@@ -168,9 +168,9 @@ Session lifecycle tracked by three fields on `SessionRecord`:
 ### Plugin system
 
 - **Layout**: `PLUGIN.md` (frontmatter + agent skill prompt) + `package.json` is the minimum. Optional: `prompts/`, `schemas/`, `server/`, `client/`, `ui/`.
-- **Session scope**: Global plugin pool loaded at startup; each `KernelSession` has a `SessionPluginScope` (active set). Scoped registry views filter runtimes / tools / hooks. World manifest seeds initial set; enable/disable mid-session applies next turn.
+- **Session scope**: Global plugin pool loaded at startup; each session's `SessionRecord.activePlugins` (string[]) is the active set. Runtime selection, tool lookup, and hooks all filter against it (hooks see it as `activePluginIds` via `AsyncLocalStorage`, see `packages/runtime/src/hooks/hook-scope.ts`). World manifest seeds initial set; enable/disable mid-session applies next turn.
 - **Trust tiers**: `builtin` (auto-load) · `official` (whitelist) · `community` (deferred `import()` until user approves).
-- **Plugin data**: session-scoped KV storage keyed by `(sessionId, pluginId, namespace, key)` in `plugin_data` table. Builtin tools: `plugin-data-{set,get,list,set-batch}`, `create-character` / `update-character` / `list-characters` / `get-character`.
+- **Plugin data**: session-scoped KV storage keyed by `(sessionId, pluginId, namespace, key)` in `plugin_data` table. Builtin tools: `plugin-data-{set,get,list,set-batch}`, `create-character` / `update-character` / `list-characters` / `get-character`, `emit-event`.
 - **Plugin-data inject** (agent runtimes): `input.inject` with `kind: plugin-data` reads the runtime's own namespace and inlines a summary into the system prompt (avoids tool-call round-trips). Switches that runtime to the async context path.
 
 Detailed field reference, per-plugin table, and trigger semantics: [docs/reference/plugins.md](./docs/reference/plugins.md) · [docs/guide/plugin-authoring.md](./docs/guide/plugin-authoring.md).
@@ -186,6 +186,7 @@ All panels/blocks render through [json-render](https://github.com/vercel-labs/js
 - **Tag-aware fallback**: an unconfigured slot falls back to the first slot with the same tag (`text`/`image`/`embedding`/`speech`/`transcription`). Cross-tag fallback is forbidden (an image request never silently routes to text).
 - Supports OpenAI, Anthropic, DeepSeek, Qwen (Aliyun DashScope).
 - **Model capabilities** (multimodal, features, token limits, pricing) auto-detected via: frontend localStorage override → `llm.toml` manual → `known-models.ts` (~60 common) → LiteLLM DB (2597 models, `pnpm --filter @covel/ai-provider update-model-db`) → protocol defaults. Directional modality: `input: InputModality[]` = accepts, `output: OutputModality[]` = produces.
+- **Image generation**: `gateway.generateImage()` (server) / `ctx.images.generate()` (function-runtime plugins, preferred) routes through a pluggable image-wire registry — builtin `openai-images` (default) and `dashscope-wan`, selectable per-slot via `llm.toml` `providerRequestMetadata.imageWire`; plugins register additional wires with `registerImageWire()`. See [docs/reference/media-store.md](./docs/reference/media-store.md) and [docs/guide/plugin-authoring-advanced.md](./docs/guide/plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行).
 
 ## Critical Conventions (Read These)
 
@@ -204,12 +205,6 @@ Correct approach:
 - Use `pluginType` to gate on core vs third-party.
 - Test files may use real plugin IDs as fixtures; production code must not.
 - **UI curation/preset data may list concrete plugin IDs as _data_** (e.g. the front-end plugin packs in `apps/web/src/lib/session-plugin-selection.ts`, which a player picks from). The rule bans hardcoded IDs in **dispatch/control flow** — `if`/`switch` on a plugin ID to change behavior — not curated, user-overridable selection lists. The runtime still discovers and dispatches by `outputKind`/`capabilities`.
-
-**Block submission convention**: plugin blocks trigger kernel events via a `_eventType` field — the framework does not hardcode block types.
-
-```json
-{ "_eventType": "image.settings.updated", "settings": { ... } }
-```
 
 **Character creation convention**: forms marked with `_createCharacter: true` cause the framework to auto-create a `CharacterRecord`.
 
@@ -258,7 +253,7 @@ All store writes key on `pluginId`; all trace logs key on `runtimeId`.
 - Never depend on DB table names, ORM models, kernel internals, or frontend components.
 - All writes go through proposals; tools must have Zod schemas; high-risk tools declare `permissions`.
 - Hooks guard / rewrite / audit — they do **not** carry gameplay logic.
-- Provider access only through binding declarations (no direct SDK usage).
+- Provider access only through binding declarations (no direct SDK usage) — image generation goes through `ctx.images` / `ctx.gateway.generateImage`, never a hand-rolled provider fetch.
 - Declare `outputKind` (`story` / `plugin` / `system`) and `capabilities` for framework discovery.
 - Optional retry/timeout fields: `timeoutMs`, `maxRetries` (default 1), `callTimeoutMs`, `firstTokenTimeoutMs` (default 30s), `loopDetectionThreshold` (default 3). See [docs/reference/plugins.md](./docs/reference/plugins.md#超时与智能重试).
 
@@ -279,7 +274,7 @@ Each SQL backend keeps a thin public factory plus focused method modules:
 - `*-store-mappers.ts` / `*-store-values.ts` — row conversion and JSON helpers.
 - `*-data-crud.ts`, `*-runtime-records.ts`, `*-session-*`, `*-snapshot*`, `*-state*`, `*-world*` — focused persistence surfaces.
 
-23 tables via Drizzle; full list and transactions contract in [docs/reference/transactions.md](./docs/reference/transactions.md).
+22 tables via Drizzle; full list and transactions contract in [docs/reference/transactions.md](./docs/reference/transactions.md).
 
 - **`sessions.runtime_model_overrides`** — JSONB map of `runtimeId → slot name`, snapshotted into `TurnInput` each turn and consulted by `runtime-slot-resolver` before `manifest.model` / gateway default. Keys still flow via `X-Provider-Keys` + localStorage.
 - **JSONB writes**: use `sql.json(value as JSONValue)` — **never** `JSON.stringify()` (double-serialisation bug).

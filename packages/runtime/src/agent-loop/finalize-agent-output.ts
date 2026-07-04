@@ -18,7 +18,7 @@
  */
 
 import type { Proposal, RuntimeManifest, RuntimeResult } from "@covel/shared";
-import { withPendingProposals } from "@covel/tools";
+import { withPendingProposals, type EmittedEvent } from "@covel/tools";
 import {
   findLastStructuredToolOutput,
   findPresentableToolOutput,
@@ -35,6 +35,8 @@ export interface FinalizeAgentOutputParams {
   readonly executedToolCalls: readonly ExecutedToolCallState[];
   readonly failedToolCalls: readonly FailedToolCallState[];
   readonly pendingProposals: readonly Proposal[];
+  /** Events emitted via `emit-event` tool calls — appended to `output.events`. */
+  readonly emittedEvents?: readonly EmittedEvent[];
   /**
    * Dedupe interactions by `interactionId`. The main agent path enables this so
    * the LLM calling the same UI tool twice does not render duplicate forms; the
@@ -75,6 +77,7 @@ export function finalizeAgentOutput(
     executedToolCalls,
     failedToolCalls,
     pendingProposals,
+    emittedEvents = [],
     dedupeInteractions = false,
     schemaGate,
   } = params;
@@ -104,6 +107,14 @@ export function finalizeAgentOutput(
     return { kind: "tool-failed" };
   } else {
     output = presentable ?? { narrativeOutput: "" };
+  }
+
+  // Tool-emitted events merge in after any envelope-declared `events` (LLM
+  // JSON output can already carry its own `events` array) — envelope wins the
+  // same-topic race in the turn-event-chain fan-out's first-wins semantics.
+  if (emittedEvents.length > 0) {
+    const existingEvents = Array.isArray(output.events) ? output.events : [];
+    output.events = [...existingEvents, ...emittedEvents];
   }
 
   const interactions = extractInteractions(

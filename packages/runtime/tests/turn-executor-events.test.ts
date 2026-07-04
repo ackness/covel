@@ -85,7 +85,6 @@ describe("TurnExecutor EventBus Bridge", () => {
     narratorLoaded = {
       manifest: narratorManifest,
       promptTemplate: manifests[0]!.promptTemplate,
-      references: [],
     };
   });
 

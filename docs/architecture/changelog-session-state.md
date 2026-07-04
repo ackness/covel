@@ -195,18 +195,18 @@ createCharacter: z.boolean()
 
 **Remote 模式核心原则**: session 相关业务数据通过 `packages/store` 的 `DataStore` 接口持久化到服务端 DB，前端统一从 API 恢复。Local 模式仍可把业务记录持久化到浏览器 `covel-browser` IndexedDB。
 
-| #   | 数据类型                           | 当前状态                                              | 目标状态                                                                                                  |
-| --- | ---------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| A1  | **显示消息**                       | ✅ 已修复 — actions.ts 写入 messages 表               | 刷新后可恢复                                                                                              |
-| A2  | **运行时 trace / 日志**            | ❌ 只在 turn_messages 中有原始内容，无结构化 trace    | 每个 runtime 的 LLM 调用、tool calls、耗时、输入输出应通过 `store.addTraceEvent()` 写入 `trace_events` 表 |
-| A3  | **执行步骤 (ExecutionStep)**       | ❌ 只存 IDB，Remote 模式下刷新丢失                    | 通过 `store.addTraceEvent()` 写入 `trace_events` 表，前端从 API 恢复                                      |
-| A4  | **状态快照 (gameState)**           | ❌ Remote 模式下 `persistStateSnapshot()` 是 no-op    | 通过 `PUT /api/sessions/:id/state-snapshot` 持久化到 DB                                                   |
-| A5  | **状态变更 (statePatches)**        | ❌ Remote 模式下 `addStatePatch()` 是 no-op           | Server 在 SSE 流中同步写入 `state_changes` 表                                                             |
-| A6  | **已提交 block (submittedBlocks)** | ❌ Remote 模式下仍只存浏览器 app-KV                   | 需要 server 端持久化，或从 `player_inputs` 表推导                                                         |
-| A7  | **LLM 配置管理**                   | 部分 — `llm.toml` 文件级、前端 localStorage           | 配置变更应通过 `plugin_configs` 表持久化，支持运行时修改                                                  |
-| A8  | **Provider Keys**                  | ❌ 只在前端 localStorage                              | T3 模式需要 server 端加密存储（安全要求）                                                                 |
-| A9  | **Plugin 运行时日志**              | ❌ 各插件的 LLM 交互、工具调用细节不持久化            | 通过 trace_events 或 tool_calls 表持久化，debug 页面可查看                                                |
-| A10 | **Session 完整状态恢复**           | ❌ 刷新后 phase/消息部分恢复，角色/状态/事件/图鉴丢失 | 统一恢复机制：一次性从多个 API 加载所有 session 数据                                                      |
+| #   | 数据类型                           | 当前状态                                              | 目标状态                                                                                                                                            |
+| --- | ---------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1  | **显示消息**                       | ✅ 已修复 — actions.ts 写入 messages 表               | 刷新后可恢复                                                                                                                                        |
+| A2  | **运行时 trace / 日志**            | ❌ 只在 turn_messages 中有原始内容，无结构化 trace    | 每个 runtime 的 LLM 调用、tool calls、耗时、输入输出应通过 `store.addTraceEvent()` 写入 `trace_events` 表                                           |
+| A3  | **执行步骤 (ExecutionStep)**       | ❌ 只存 IDB，Remote 模式下刷新丢失                    | 通过 `store.addTraceEvent()` 写入 `trace_events` 表，前端从 API 恢复                                                                                |
+| A4  | **状态快照 (gameState)**           | ❌ Remote 模式下 `persistStateSnapshot()` 是 no-op    | 通过 `PUT /api/sessions/:id/state-snapshot` 持久化到 DB                                                                                             |
+| A5  | **状态变更 (statePatches)**        | ❌ Remote 模式下 `addStatePatch()` 是 no-op           | Server 在 SSE 流中同步写入 `state_changes` 表                                                                                                       |
+| A6  | **已提交 block (submittedBlocks)** | ❌ Remote 模式下仍只存浏览器 app-KV                   | 需要 server 端持久化，或从 `player_inputs` 表推导                                                                                                   |
+| A7  | **LLM 配置管理**                   | 部分 — `llm.toml` 文件级、前端 localStorage           | 已由 SettingsStore（`@covel/settings`）+ `llm.toml` 热重载 + `sessions.runtime_model_overrides` 覆盖；原计划的 `plugin_configs` 表已在 v0.0.11 移除 |
+| A8  | **Provider Keys**                  | ❌ 只在前端 localStorage                              | T3 模式需要 server 端加密存储（安全要求）                                                                                                           |
+| A9  | **Plugin 运行时日志**              | ❌ 各插件的 LLM 交互、工具调用细节不持久化            | 通过 trace_events 或 tool_calls 表持久化，debug 页面可查看                                                                                          |
+| A10 | **Session 完整状态恢复**           | ❌ 刷新后 phase/消息部分恢复，角色/状态/事件/图鉴丢失 | 统一恢复机制：一次性从多个 API 加载所有 session 数据                                                                                                |
 
 ### B. 前端数据流断裂
 

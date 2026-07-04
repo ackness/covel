@@ -16,8 +16,6 @@ export interface TriggerContext {
   readonly turnsSinceLastTrigger: number;
   /** Pending events (for event-type triggers). */
   readonly pendingEventTopics: readonly string[];
-  /** Whether an upstream runtime has failed. */
-  readonly hasUpstreamFailure: boolean;
   /** Whether this is a manual trigger request for this specific runtime. */
   readonly isManualTrigger: boolean;
   /** RuntimeIds already in the session's preGameCompleted set — used to skip

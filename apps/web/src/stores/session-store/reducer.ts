@@ -17,7 +17,6 @@ export const initialState: SessionState = {
   presets: [],
   packages: [],
   pluginLoadErrors: [],
-  commands: [],
   worlds: [],
   llmConfig: null,
   booted: false,
@@ -81,7 +80,6 @@ export function reducer(
         presets: action.presets,
         packages: action.packages,
         pluginLoadErrors: action.pluginLoadErrors,
-        commands: action.commands,
         worlds: action.worlds,
         llmConfig: action.llmConfig,
       };

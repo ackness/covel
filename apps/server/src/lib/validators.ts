@@ -19,16 +19,6 @@ export const SAFE_WORLD_ID_DESC = "/^[a-z0-9_-]{1,64}$/i";
 /** Human-readable description of the session-id rule (for error messages). */
 export const SAFE_SESSION_ID_DESC = "/^[a-z0-9_-]{1,128}$/i";
 
-/** Returns true when `id` is a syntactically valid world id. */
-export function isValidWorldId(id: string): boolean {
-  return SAFE_WORLD_ID_RE.test(id);
-}
-
-/** Returns true when `id` is a syntactically valid session id. */
-export function isValidSessionId(id: string): boolean {
-  return SAFE_SESSION_ID_RE.test(id);
-}
-
 /**
  * Locale tag: a simplified BCP-47 shape — a 2–3 letter primary subtag with an
  * optional single region/variant subtag (`zh`, `en-US`, `pt-BR`). Deliberately

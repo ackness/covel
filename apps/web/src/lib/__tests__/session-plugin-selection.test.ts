@@ -119,6 +119,17 @@ describe("session plugin selection helpers", () => {
     expect(selected.has("chat-mode-narrator")).toBe(true);
   });
 
+  it("dialogue-mode pack lists the full VN subsystem, matching the server-side relations expansion", () => {
+    const dialogue = pluginPacksForWorld(world({})).find(
+      (item) => item.id === "dialogue-mode",
+    );
+    // chat-mode-narrator's relations.requires would re-add these anyway —
+    // the pack lists them so the prep page shows what will actually run.
+    for (const pluginId of ["scene-cast", "scene-stage", "scene-prompts"]) {
+      expect(dialogue?.plugins).toContain(pluginId);
+    }
+  });
+
   it("retires player-identity from every pack (voice belongs on the card, not a mid-play editor)", () => {
     const packs = pluginPacksForWorld(world({}));
     const traditional = packs.find((item) => item.id === "traditional-story");

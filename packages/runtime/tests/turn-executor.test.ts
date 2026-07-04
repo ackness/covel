@@ -97,7 +97,6 @@ describe("TurnExecutor E2E", () => {
     narratorLoaded = {
       manifest: narratorManifest,
       promptTemplate: manifests[0].promptTemplate,
-      references: [],
     };
   });
 
@@ -195,7 +194,6 @@ describe("TurnExecutor E2E", () => {
     const preLoaded: LoadedRuntime = {
       manifest: preNarrator,
       promptTemplate: "You are a pre-processor.",
-      references: [],
     };
 
     const deps: TurnExecutorDeps = {
@@ -241,12 +239,10 @@ describe("TurnExecutor E2E", () => {
     const storyLoaded: LoadedRuntime = {
       manifest: storyManifest,
       promptTemplate: "Story runtime prompt.",
-      references: [],
     };
     const helperLoaded: LoadedRuntime = {
       manifest: helperManifest,
       promptTemplate: "Helper runtime prompt.",
-      references: [],
     };
 
     const resolveCalls: Array<{ name: string; override: string | undefined }> =
@@ -323,7 +319,6 @@ describe("TurnExecutor E2E", () => {
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "Generate guidance.",
-      references: [],
     };
 
     let callCount = 0;
@@ -498,7 +493,6 @@ describe("TurnExecutor E2E", () => {
     const guideLoaded: LoadedRuntime = {
       manifest: guideManifest,
       promptTemplate: "Generate action guidance.",
-      references: [],
     };
 
     let llmCallCount = 0;
@@ -579,7 +573,6 @@ describe("TurnExecutor E2E", () => {
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "Generate guidance and stop.",
-      references: [],
     };
 
     let llmCallCount = 0;
@@ -659,7 +652,6 @@ describe("TurnExecutor E2E", () => {
     const lookupLoaded: LoadedRuntime = {
       manifest: lookupManifest,
       promptTemplate: "Narrate after reading lore.",
-      references: [],
     };
 
     const loopingLLM: LLMAdapter = {
@@ -728,7 +720,6 @@ describe("TurnExecutor E2E", () => {
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "Generate guidance.",
-      references: [],
     };
 
     let llmCallCount = 0;

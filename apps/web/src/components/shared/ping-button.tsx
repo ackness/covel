@@ -280,8 +280,3 @@ export function PingButton({
 export function invalidatePingResult(target: PingTarget): void {
   resultCache.delete(requestIdFor(target));
 }
-
-/** Invalidate all cached ping results (e.g. on provider-keys rewrite). */
-export function invalidateAllPingResults(): void {
-  resultCache.clear();
-}

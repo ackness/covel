@@ -62,7 +62,6 @@ describe("parsePluginMd", () => {
       expect(result.promptTemplate).toBe(
         "\nYou are the narrator of an RPG story.\n",
       );
-      expect(result.referenceLinks).toEqual([]);
       expect(result.rawFrontmatter).toEqual({
         name: "narrator",
         description: "Main narrative generation",
@@ -325,32 +324,6 @@ describe("parsePluginMd", () => {
         "\nbody\n",
       );
       expect(() => parsePluginMd(content, "plugins/codex/PLUGIN.md")).toThrow();
-    });
-  });
-
-  describe("reference links extraction", () => {
-    it("should extract references/xxx.md links from body", () => {
-      const content = md(
-        ["name: codex", "description: Knowledge codex", "priority: 700"].join(
-          "\n",
-        ),
-        [
-          "",
-          "You manage the knowledge codex.",
-          "",
-          "See [combat rules](references/combat-rules.md) for details.",
-          "Also check [lore database](references/lore-db.md).",
-          "But ignore [external link](https://example.com).",
-          "",
-        ].join("\n"),
-      );
-
-      const result = parsePluginMd(content, "plugins/codex/PLUGIN.md");
-
-      expect(result.referenceLinks).toEqual([
-        "references/combat-rules.md",
-        "references/lore-db.md",
-      ]);
     });
   });
 
@@ -1224,85 +1197,102 @@ describe("parsePluginMd", () => {
     });
   });
 
-  describe("capability typo detection (dev warning)", () => {
-    function withCaps(name: string, caps: readonly string[]): string {
-      return md(
+  describe("events declarations", () => {
+    it("parses a valid events list with defaults", () => {
+      const content = md(
         [
-          `name: ${name}`,
-          "description: Capability typo test",
+          "name: scene-consumer",
+          "description: Reacts to scene events",
           "priority: 500",
-          "capabilities:",
-          ...caps.map((c) => `  - ${c}`),
+          "events:",
+          "  - topic: scene.set",
+          "    schema: ./schemas/scene-set.event.json",
+          "    description:",
+          "      zh: 场景切换",
+          "      en: Scene change",
         ].join("\n"),
         "\nBody.\n",
       );
-    }
 
-    it("warns on a single-char typo of a runtime-level capability and keeps it", () => {
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const result = parsePluginMd(content, "plugins/scene-consumer/PLUGIN.md");
 
-      const result = parsePluginMd(
-        withCaps("image-typo", ["image-genrator"]),
-        "plugins/image-typo/PLUGIN.md",
-      );
-
-      expect(warnSpy).toHaveBeenCalledOnce();
-      const msg = warnSpy.mock.calls[0][0] as string;
-      expect(msg).toContain("image-genrator");
-      expect(msg).toContain("image-generator");
-      expect(msg).toContain("plugins/image-typo/PLUGIN.md");
-      // Capability is NOT dropped — it stays free-form
-      expect(result.manifest.capabilities).toEqual(["image-genrator"]);
-
-      warnSpy.mockRestore();
+      expect(result.manifest.events).toEqual([
+        {
+          topic: "scene.set",
+          schema: "./schemas/scene-set.event.json",
+          description: { zh: "场景切换", en: "Scene change" },
+          advertise: true,
+        },
+      ]);
     });
 
-    it("warns on case / separator drift of a framework capability", () => {
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-      parsePluginMd(
-        withCaps("image-case", ["Image_Generator"]),
-        "plugins/image-case/PLUGIN.md",
+    it("rejects an invalid topic format", () => {
+      const content = md(
+        [
+          "name: scene-consumer",
+          "description: Reacts to scene events",
+          "priority: 500",
+          "events:",
+          "  - topic: SceneSet",
+          "    schema: ./schemas/scene-set.event.json",
+          "    description: Scene change",
+        ].join("\n"),
+        "\nBody.\n",
       );
 
-      expect(warnSpy).toHaveBeenCalledOnce();
-      expect(warnSpy.mock.calls[0][0]).toContain("image-generator");
-
-      warnSpy.mockRestore();
+      expect(() =>
+        parsePluginMd(content, "plugins/scene-consumer/PLUGIN.md"),
+      ).toThrow(/topic/);
     });
 
-    it("does not warn on exact framework capabilities", () => {
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-      parsePluginMd(
-        withCaps("image-ok", [
-          FrameworkCapability.ImageGeneration,
-          FrameworkRuntimeCapability.ImagePrompt,
-          FrameworkRuntimeCapability.ImageGenerator,
-        ]),
-        "plugins/image-ok/PLUGIN.md",
+    it("rejects schema path escaping the plugin dir", () => {
+      const content = md(
+        [
+          "name: scene-consumer",
+          "description: Reacts to scene events",
+          "priority: 500",
+          "events:",
+          "  - topic: scene.set",
+          "    schema: ../outside.json",
+          "    description: Scene change",
+        ].join("\n"),
+        "\nBody.\n",
       );
 
-      expect(warnSpy).not.toHaveBeenCalled();
-      warnSpy.mockRestore();
+      expect(() =>
+        parsePluginMd(content, "plugins/scene-consumer/PLUGIN.md"),
+      ).toThrow(/schema/);
     });
 
-    it("does not warn on genuine custom capabilities", () => {
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-      parsePluginMd(
-        withCaps("custom-caps", [
-          "npc-graph",
-          "graph-rag",
-          "cost-control",
-          "narration-director",
-          "content-safety",
-        ]),
-        "plugins/custom-caps/PLUGIN.md",
+    it("parses runtime-level advertiseEvents boolean", () => {
+      const withFlag = md(
+        [
+          "name: narrator",
+          "description: Main narrative generation",
+          "priority: 500",
+          "advertiseEvents: true",
+        ].join("\n"),
+        "\nBody.\n",
       );
+      const resultWithFlag = parsePluginMd(
+        withFlag,
+        "plugins/narrator/PLUGIN.md",
+      );
+      expect(resultWithFlag.manifest.advertiseEvents).toBe(true);
 
-      expect(warnSpy).not.toHaveBeenCalled();
-      warnSpy.mockRestore();
+      const withoutFlag = md(
+        [
+          "name: narrator",
+          "description: Main narrative generation",
+          "priority: 500",
+        ].join("\n"),
+        "\nBody.\n",
+      );
+      const resultWithoutFlag = parsePluginMd(
+        withoutFlag,
+        "plugins/narrator/PLUGIN.md",
+      );
+      expect(resultWithoutFlag.manifest.advertiseEvents).toBeUndefined();
     });
   });
 });

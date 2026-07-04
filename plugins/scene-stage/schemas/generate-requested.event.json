@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sceneId", "location", "variant"],
+  "properties": {
+    "sceneId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Deterministic gen-<hash8> id for the new scene."
+    },
+    "location": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Scene/location name as it appears in the narrative."
+    },
+    "visualHint": {
+      "type": "string",
+      "description": "One English sentence describing the visuals, used as the generation prompt subject."
+    },
+    "variant": { "enum": ["day", "night"] }
+  }
+}

@@ -1,10 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createProviderRegistry } from "../src/provider-registry.js";
 import { PROVIDER_PROTOCOLS } from "../src/types.js";
-import {
-  assertProtocolRegistryComplete,
-  getProtocolDefinition,
-} from "../src/protocol-registry.js";
+import { getProtocolDefinition } from "../src/protocol-registry.js";
 
 describe("provider-registry", () => {
   it("resolves a registered provider with defaults", () => {
@@ -189,10 +186,6 @@ describe("provider-registry", () => {
         expect(def?.capabilityDefaults.input.length).toBeGreaterThan(0);
         expect(def?.capabilityDefaults.output.length).toBeGreaterThan(0);
       }
-    });
-
-    it("assertProtocolRegistryComplete passes for the built-in set", () => {
-      expect(() => assertProtocolRegistryComplete()).not.toThrow();
     });
 
     it("resolves each protocol to a working adapter through the registry", () => {

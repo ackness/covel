@@ -97,6 +97,8 @@ input:
 - 玩家可调 `userSettings`
 - 通过 `ctx.gateway.resolveSlot` 取 slot 配置，自管 provider wire 后落 `ctx.media`
 
+> **图像生成已有更短路径**：框架现在内置图像 wire（`openai-images` / `dashscope-wan`，含 submit+poll），**写图像插件时把下面 handler 的整段自管 wire 替换为一次 `ctx.images.generate({prompt, metadata})`**——落 MediaStore、promptHash 去重全由框架完成，参考 `plugins/scene-stage/runtimes/background-gen/handler.js`。本样例的 wire 段保留作为「自管 wire」通用范式，对音频/视频/框架 wire 不覆盖的 provider 仍然适用；按钮 / 事件链 / 后台执行 / 画廊部分不受影响。
+
 ### 目录结构
 
 ```

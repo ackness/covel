@@ -15,7 +15,7 @@
  *   Path traversal is prevented — all paths must resolve within the world directory.
  */
 
-import { readFile, readdir, access } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import {
@@ -28,15 +28,7 @@ import type { MemoryBlockSchema } from "@covel/shared";
 import type { DataStore, WorldRecord } from "@covel/store";
 import { resolveContainedPath } from "./world-data/safe-path.js";
 import { loadWorldDataSummary } from "./world-data/world-load.js";
-
-async function fileExists(p: string): Promise<boolean> {
-  try {
-    await access(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { fileExists } from "./world-data/session-import/utils.js";
 
 /**
  * Resolve a single I18nText field to a plain display string.
@@ -275,6 +267,7 @@ export async function loadSingleWorld(
   const memoryBlocks = manifest.memoryBlocks as
     | readonly MemoryBlockSchema[]
     | undefined;
+  const defaultViewMode = manifest.defaultViewMode as string | undefined;
 
   // Merge inline + external dimensions (external wins for same key)
   const inlineDims = (manifest.dimensions as Record<string, unknown>) ?? {};
@@ -320,6 +313,7 @@ export async function loadSingleWorld(
     characterBlueprintSources,
     characterBlueprints,
     characterAttributes,
+    ...(defaultViewMode ? { defaultViewMode } : {}),
   };
   const worldData = await loadWorldDataSummary({
     worldRoot: worldDir,

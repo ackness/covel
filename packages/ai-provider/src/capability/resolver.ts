@@ -50,7 +50,7 @@ export interface ManualCapabilityOverride {
  * 3. Provider-prefixed match (e.g. "groq/llama-3.3-70b-versatile")
  * 4. Prefix match — find the longest key that starts with the model ID
  */
-export function lookupKnownModel(
+function lookupKnownModel(
   modelId: string,
   provider?: string,
 ): KnownModelEntry | null {
@@ -136,11 +136,6 @@ let _modelDb: ModelDatabase | null = null;
 /** Register a ModelDatabase for the resolver to use as secondary lookup source. */
 export function setModelDatabase(db: ModelDatabase | null): void {
   _modelDb = db;
-}
-
-/** Get the current ModelDatabase (if registered). */
-export function getModelDatabase(): ModelDatabase | null {
-  return _modelDb;
 }
 
 /**

@@ -318,8 +318,7 @@ plugins/my-plugin/
                     │ event   → topic in pendingEvents  │
                     │ ── reserved（永不触发）──         │
                     │ conditional → false（无引擎，warn）│
-                    │ error-retry → hasUpstreamFailure   │
-                    │   （调度器恒为 false，不可达）     │
+                    │ error-retry → false（无信号，warn）│
                     └────────────────────┘
 ```
 
@@ -502,8 +501,7 @@ plugins/my-plugin/
 │  ├── events            业务事件（append-only）                   │
 │  │                                                              │
 │  插件数据                                                       │
-│  ├── plugin_data       插件持久化 KV (sessionId+pluginId+ns+key) │
-│  ├── plugin_configs    插件配置覆盖                              │
+│  └── plugin_data       插件持久化 KV (sessionId+pluginId+ns+key) │
 │  │                                                              │
 │  世界级                                                         │
 │  ├── worlds            世界包记录 (name, lore, dimensions)       │

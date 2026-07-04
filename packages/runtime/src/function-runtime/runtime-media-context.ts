@@ -35,6 +35,7 @@ export type MediaStoreLike = Pick<
   | "lookup"
   | "isReferencedBy"
   | "addRef"
+  | "listByMetadata"
 >;
 
 interface CreateRuntimeMediaContextOptions {
@@ -156,7 +157,9 @@ async function ingestUrlIntoStore(
     () => controller.abort(new Error("media ingest timed out")),
     timeoutMs,
   );
-  const signal = combineAbortSignals(controller.signal, opts?.signal);
+  const signal = opts?.signal
+    ? AbortSignal.any([controller.signal, opts.signal])
+    : controller.signal;
 
   try {
     const { response, finalUrl } = await fetchWithValidatedRedirects(
@@ -355,21 +358,6 @@ function ascii(bytes: Uint8Array): string {
 
 function positiveInteger(value: number | undefined, fallback: number): number {
   return Number.isFinite(value) && value! > 0 ? Math.floor(value!) : fallback;
-}
-
-function combineAbortSignals(
-  primary: AbortSignal,
-  secondary: AbortSignal | undefined,
-): AbortSignal {
-  if (!secondary) return primary;
-  if (secondary.aborted) return secondary;
-  const controller = new AbortController();
-  const abort = (signal: AbortSignal) => {
-    if (!controller.signal.aborted) controller.abort(signal.reason);
-  };
-  primary.addEventListener("abort", () => abort(primary), { once: true });
-  secondary.addEventListener("abort", () => abort(secondary), { once: true });
-  return controller.signal;
 }
 
 function abortError(signal: AbortSignal): Error {

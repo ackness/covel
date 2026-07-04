@@ -13,14 +13,6 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       state.turnResults.push(record);
     },
 
-    async getTurnResult(sessionId, turnId) {
-      return (
-        state.turnResults.find(
-          (r) => r.sessionId === sessionId && r.turnId === turnId,
-        ) ?? null
-      );
-    },
-
     async listTurnResults(sessionId, limit?) {
       const filtered = state.turnResults
         .filter((r) => r.sessionId === sessionId)
@@ -255,14 +247,6 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
 
     async savePlayerInput(record) {
       state.playerInputs.push(record);
-    },
-
-    async getPlayerInput(sessionId, formId) {
-      return (
-        state.playerInputs.find(
-          (r) => r.sessionId === sessionId && r.formId === formId,
-        ) ?? null
-      );
     },
 
     async listPlayerInputs(sessionId) {

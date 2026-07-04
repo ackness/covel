@@ -5,7 +5,7 @@ Covel storage has four separate contracts:
 | Category                  | Contract                    | Main implementations                           | Owner                                              |
 | ------------------------- | --------------------------- | ---------------------------------------------- | -------------------------------------------------- |
 | Business records          | `DataStore`                 | memory, sqlite, pg, idb                        | `@covel/store`                                     |
-| Binary assets             | `MediaStore`                | memory, sqlite, pg, idb, opt-in S3             | `@covel/store`                                     |
+| Binary assets             | `MediaStore`                | memory, sqlite, pg, idb                        | `@covel/store`                                     |
 | User preferences and keys | `SettingsStore`, `keys.env` | localStorage, Electron IPC, desktop REST files | `@covel/shared`, desktop shells, server config API |
 | Frontend caches           | app KV, media cache         | browser IndexedDB databases                    | `apps/web` storage facade                          |
 
@@ -31,15 +31,14 @@ publishes the resolved `backend` and `frontendMode`.
 `MEDIA_BACKEND` selects the `MediaStore`. The default is `mirror`, which follows
 `STORE_BACKEND`.
 
-| Value    | Behavior                                                                                                                                                           |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `mirror` | `memory -> memory`, `sqlite -> sqlite`, `pg -> pg` on the server env path.                                                                                         |
-| `memory` | Process-local media, useful for tests.                                                                                                                             |
-| `sqlite` | File blobs under `MEDIA_ROOT`, or a `media/` directory beside `SQLITE_PATH`.                                                                                       |
-| `pg`     | Media records and bytes in PostgreSQL; unavailable when `DATABASE_URL` is missing.                                                                                 |
-| `idb`    | Browser IndexedDB media store through explicit factory calls.                                                                                                      |
-| `none`   | Disables media routes through the existing `mediaStore` absent path.                                                                                               |
-| `s3`     | Reserved for explicit client wiring. Use `createS3MediaStore(client, options)`; it is not accepted by `MEDIA_BACKEND` until a production S3 client factory exists. |
+| Value    | Behavior                                                                           |
+| -------- | ---------------------------------------------------------------------------------- |
+| `mirror` | `memory -> memory`, `sqlite -> sqlite`, `pg -> pg` on the server env path.         |
+| `memory` | Process-local media, useful for tests.                                             |
+| `sqlite` | File blobs under `MEDIA_ROOT`, or a `media/` directory beside `SQLITE_PATH`.       |
+| `pg`     | Media records and bytes in PostgreSQL; unavailable when `DATABASE_URL` is missing. |
+| `idb`    | Browser IndexedDB media store through explicit factory calls.                      |
+| `none`   | Disables media routes through the existing `mediaStore` absent path.               |
 
 ## Desktop Paths
 

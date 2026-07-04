@@ -283,6 +283,31 @@ export const rpcDeclMapSchema = z.record(
 
 const i18nTextLoose = z.union([z.string(), z.record(z.string(), z.string())]);
 
+// ── Event declarations ──────────────────────────────────────────
+
+const EVENT_TOPIC_RE = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+
+/**
+ * Declares a domain event a plugin's runtime may emit via the builtin
+ * `emit-event` tool. The event directory service (apps/server) aggregates
+ * these across active plugins per session and validates emitted payloads
+ * against `schema` before they enter the same-turn event fan-out.
+ */
+export const pluginEventDeclSchema = z
+  .object({
+    topic: z
+      .string()
+      .regex(
+        EVENT_TOPIC_RE,
+        "event topic must be dot-separated kebab-case (domain.verb)",
+      ),
+    schema: pluginRelativeJsonSchemaPath,
+    description: i18nTextLoose,
+    /** When true (default) the contract is advertised to emitting runtimes. */
+    advertise: z.boolean().default(true),
+  })
+  .strict();
+
 // ── Core-memory block schema ────────────────────────────────────
 
 /**
@@ -463,6 +488,8 @@ export const runtimeManifestSchema = z
     firstTokenTimeoutMs: z.number().int().positive().optional(),
     /** Tool-call loop detection threshold. Default 3. Set 0 to disable. */
     loopDetectionThreshold: z.number().int().min(0).max(20).optional(),
+    /** Retry a bare (no-tool-call) finish once before releasing. Default false. */
+    requireToolUse: z.boolean().optional(),
     /** Maximum nested ctx.recursiveCall() depth. Default 10. */
     maxRecursionDepth: z.number().int().min(0).max(50).optional(),
     pluginType: z.enum(["core-plugin", "plugin"]).optional(),
@@ -501,10 +528,19 @@ export const runtimeManifestSchema = z
      * plugin-data). Ignored for scheduler-driven runtimes.
      */
     execution: z.enum(["sync", "background"]).optional(),
+    /**
+     * When true, the session-level event directory (aggregated across all
+     * active runtimes' `events` declarations) is rendered into this
+     * runtime's segment 5 prompt so the LLM knows which topics it may emit
+     * via the builtin `emit-event` tool.
+     */
+    advertiseEvents: z.boolean().optional(),
     tools: toolsConfigSchema.optional(),
     input: inputConfigSchema.optional(),
     output: outputConfigSchema.optional(),
     dataSchemas: pluginDataSchemaMapSchema.optional(),
+    /** Domain events this plugin's runtime may emit via `emit-event`. */
+    events: z.array(pluginEventDeclSchema).optional(),
     i18n: z.record(z.string(), z.string()).optional(),
     ui: uiSpecSchema.optional(),
     userSettings: z.array(pluginUserSettingSpecSchema).optional(),

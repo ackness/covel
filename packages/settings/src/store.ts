@@ -57,15 +57,6 @@ export class SettingsStore implements SettingsStoreApi {
     this.registry.set(entry.key, entry as SettingEntry);
   }
 
-  unregister(key: SettingKey): void {
-    this.registry.delete(key);
-    this.values.delete(key);
-  }
-
-  resolveEntry(key: SettingKey): SettingEntry | null {
-    return this.registry.get(key) ?? null;
-  }
-
   get<T>(key: SettingKey): T {
     const entry = this.registry.get(key);
     const backend =
@@ -131,11 +122,6 @@ export class SettingsStore implements SettingsStoreApi {
     this.notify(key, fresh);
   }
 
-  async clearGroup(group: SettingGroup): Promise<void> {
-    const keys = this.list(group).map((e) => e.key);
-    for (const k of keys) await this.clear(k);
-  }
-
   async clearAll(): Promise<void> {
     this.values.clear();
     this.secrets.clear();
@@ -152,10 +138,6 @@ export class SettingsStore implements SettingsStoreApi {
 
   listEntries(): readonly SettingEntry[] {
     return [...this.registry.values()];
-  }
-
-  listSecretProviders(): readonly string[] {
-    return [...this.secrets.keys()];
   }
 
   snapshotSecrets(): Record<string, string> {

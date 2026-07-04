@@ -4,6 +4,7 @@ import { CREATE_MEDIA_TABLES_SQL } from "../postgres/pg-store-mappers.js";
 import type { PgMediaStoreOptions } from "./types.js";
 import {
   cleanupCandidates,
+  filterAssetsByMetadata,
   normalizeBytes,
   sha256,
   toBytes,
@@ -231,6 +232,10 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
         pluginId: row.plugin_id,
         createdAt: row.created_at,
       }));
+    },
+
+    async listByMetadata(sessionId, filter) {
+      return filterAssetsByMetadata(await this.listAssets(), sessionId, filter);
     },
 
     async cleanup(protectedIds, policy) {

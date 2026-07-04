@@ -17,7 +17,6 @@ export const IDB_OBJECT_STORES = [
   "approvals",
   "messages",
   "characters",
-  "pluginConfigs",
   "worlds",
   "traceEvents",
   "turnMessages",

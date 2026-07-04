@@ -64,6 +64,41 @@ trigger: { type: manual }     # 只能从 POST /plugin-rpc 触发,调度器不�
 trigger: { type: event, topic: image.generate.requested }  # 监听前序 runtime 发出的事件
 ```
 
+## `events`（事件契约声明，统一事件层）
+
+消费方 runtime 在 frontmatter 声明它订阅/发出的事件契约（参考实现：`plugins/scene-stage/runtimes/resolver/PLUGIN.md`）：
+
+```yaml
+events:
+  - topic: scene.set                        # 事件 topic
+    schema: ./schemas/scene-set.event.json  # 插件根相对 JSON Schema，校验 data payload
+    description:                            # I18nText，会进发射方的 <available-events> 目录
+      zh: "发射条件：开场确立场景 / 场景切换 / 昼夜变化"
+      en: "Emit on opening scene, scene change, or day-night shift"
+  - topic: my-plugin.internal.signal
+    schema: ./schemas/signal.event.json
+    advertise: false                        # 内部信令：agent 不可经 emit-event 发射，也不进目录
+```
+
+发射方 agent 配套声明：
+
+```yaml
+advertiseEvents: true    # prompt 段 5 自动注入当前 session 所有 advertise 事件目录
+tools:
+  builtin:
+    - emit-event         # LLM 命中契约时调用；未知 topic / payload 不合 schema 会拿到可读错误重试
+```
+
+同 topic 每回合去重（重复 emit 被跳过并提示 LLM）。schema 路径必须是插件根相对路径（zod 拒绝绝对路径和 `..`）。
+
+## `requireToolUse`（agent only）
+
+```yaml
+requireToolUse: true # 零成功工具调用就收场时，注入一条纠正消息重试一次（第二次放行 + warn）
+```
+
+适合唯一职责就是调某个工具、却容易漂移成续写正文的 runtime（如 `scene-prompts` 每回合必须调 `generate-scene-prompts`）。
+
 ## `tools`
 
 ```yaml
@@ -233,6 +268,7 @@ i18n:
 | `plugin-data-list` | 列出当前插件持久化数据 |
 | `plugin-data-set-batch` | 批量写入 |
 | `create-character` / `update-character` / `list-characters` / `get-character` | 角色记录 |
+| `emit-event` | 发射已声明契约的事件（配 `advertiseEvents: true`；payload 按声明方 schema 校验，同 topic 每回合去重） |
 
 ## 文件结构
 

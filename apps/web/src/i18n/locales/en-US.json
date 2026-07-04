@@ -198,7 +198,6 @@
     "currentWorld": "Current session",
     "sessions": "Sessions",
     "noOtherSessions": "No other sessions",
-    "commands": "Commands",
     "startingUp": "Starting up...",
     "retryFrom": "Retry from {{label}}",
     "executionSummary": "Execution · {{count}} runtimes",
@@ -274,9 +273,11 @@
     "viewParsed": "Parsed",
     "viewDetailed": "Detailed",
     "viewRaw": "Raw",
+    "viewStage": "Stage",
     "viewParsedAria": "Parsed view",
     "viewDetailedAria": "Detailed view",
     "viewRawAria": "Raw view",
+    "viewStageAria": "Stage view",
     "stateStreaming": "Streaming",
     "statePlaying": "Playing",
     "toggleStoryPanel": "Toggle story sidebar",
@@ -959,6 +960,20 @@
   },
   "sceneCast": {
     "empty": "No characters are on stage in this scene yet."
+  },
+  "stage": {
+    "historyLabel": "History",
+    "historyTitle": "Conversation history",
+    "formTitle": "Fill out form",
+    "autoPlayLabel": "Auto-play",
+    "autoPlayPauseLabel": "Pause auto-play",
+    "immersiveLabel": "Fullscreen stage",
+    "immersiveExitLabel": "Exit fullscreen",
+    "exitLabel": "Exit stage",
+    "inputPlaceholder": "Type your response…",
+    "inputSendHint": "Enter to send · Shift+Enter for a new line · Esc to cancel",
+    "freeInputLabel": "✎ Write your own…",
+    "thinkingLabel": "Weaving the scene…"
   },
   "common": {
     "preview": "Preview",

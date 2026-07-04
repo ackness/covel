@@ -52,17 +52,6 @@ export interface CharacterStore {
     namespace: string,
     key: string,
   ): Promise<{ value: unknown; updatedAt: string } | null>;
-  /** Optional — reserved for future use; create-character no longer calls this. */
-  updateSession?(
-    id: string,
-    patch: {
-      status?: "active" | "paused" | "ended";
-      turnCount?: number;
-      preGameCompleted?: readonly string[];
-      activePlugins?: readonly string[];
-      updatedAt?: string;
-    },
-  ): Promise<void>;
 }
 
 /**

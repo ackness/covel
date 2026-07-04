@@ -1,8 +1,5 @@
-import type {
-  ImagePart,
-  TextMessage,
-  TextMessageContent,
-} from "../../types.js";
+import type { TextMessage, TextMessageContent } from "../../types.js";
+import { mediaRefFallbackText } from "../common.js";
 
 export function readAnthropicText(payload: Record<string, unknown>): string {
   const block = Array.isArray(payload.content)
@@ -38,14 +35,6 @@ export function toAnthropicMessages(messages: TextMessage[]): {
       content: serializeAnthropicContent(m.content),
     }));
   return { system, messages: filtered };
-}
-
-function mediaRefFallbackText(part: ImagePart): string {
-  return JSON.stringify({
-    type: "image_ref",
-    ref: part.image,
-    note: "MediaRef has no resolved URL; provider vision input requires a retrievable image URL.",
-  });
 }
 
 function anthropicSystemText(content: TextMessageContent): string {

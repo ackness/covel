@@ -60,7 +60,6 @@ export type SqlSnapshotRecords = Pick<
   | "saveSnapshot"
   | "getSnapshot"
   | "listSnapshots"
-  | "deleteSnapshot"
   | "saveSuspension"
   | "getSuspension"
   | "markSuspensionResolved"
@@ -98,10 +97,6 @@ export function createSqlSnapshotRecords(
         orderBy: [asc(stateSnapshots.createdAt)],
       });
       return rows.map((row) => toSnapshotRecord(row, json));
-    },
-
-    async deleteSnapshot(id: string): Promise<void> {
-      await runner.delete(stateSnapshots, eq(stateSnapshots.id, id));
     },
 
     // ── Suspensions ──────────────────────────────────────────────

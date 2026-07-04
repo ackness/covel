@@ -1,5 +1,5 @@
 /**
- * Event bus — publish/subscribe with topic matching.
+ * Event bus — fan-out to onEmit subscribers with per-session replay buffer.
  * Optionally persists events to a DataStore for audit trail.
  *
  * Ring buffer design (RING_BUFFER_MAX = 1000 per session):
@@ -12,21 +12,9 @@
 import type { CovelMessage, SubscriptionEvent } from "@covel/shared";
 import type { DataStore, EventRecord } from "@covel/store";
 
-export type EventHandler = (message: CovelMessage) => void | Promise<void>;
-
 export interface EventBus {
   /** Publish an event. */
   emit(message: CovelMessage): void;
-  /** Subscribe to a topic. Returns unsubscribe function. */
-  on(topic: string, handler: EventHandler): () => void;
-  /** One-time subscription. */
-  once(topic: string, handler: EventHandler): () => void;
-  /** Get pending (unacknowledged) events for a session. */
-  getPendingEvents(sessionId: string): readonly CovelMessage[];
-  /** Acknowledge (consume) an event. */
-  acknowledge(messageId: string): void;
-  /** Clear all events for a session. */
-  clearSession(sessionId: string): void;
   /** Get subscription events after a given sequence number for replay. */
   getEventsAfter(sessionId: string, afterSeq: number): SubscriptionEvent[];
   /** Register a callback for every emitted event (as SubscriptionEvent). Returns unsubscribe function. */
@@ -43,14 +31,8 @@ export interface EventBus {
 }
 
 const RING_BUFFER_MAX = 1000;
-const MAX_PENDING_EVENTS = 1000;
 
 export function createEventBus(store?: DataStore): EventBus {
-  const handlers = new Map<string, Set<EventHandler>>();
-  const pendingEvents = new Map<string, Map<string, CovelMessage>>();
-  // Reverse lookup: messageId → sessionId for O(1) acknowledge
-  const messageSession = new Map<string, string>();
-
   // ── Subscription infrastructure ────────────────────────────────
   // Per-session monotonic sequence counter
   const sessionSeqCounters = new Map<string, number>();
@@ -78,48 +60,6 @@ export function createEventBus(store?: DataStore): EventBus {
     // M3: Trim ring buffer to max size — use shift() instead of splice(0, n) for O(1) typical case
     while (buffer.length > RING_BUFFER_MAX) {
       buffer.shift();
-    }
-  }
-
-  function getOrCreateHandlers(topic: string): Set<EventHandler> {
-    let set = handlers.get(topic);
-    if (!set) {
-      set = new Set();
-      handlers.set(topic, set);
-    }
-    return set;
-  }
-
-  function getOrCreateSessionPending(
-    sessionId: string,
-  ): Map<string, CovelMessage> {
-    let map = pendingEvents.get(sessionId);
-    if (!map) {
-      map = new Map();
-      pendingEvents.set(sessionId, map);
-    }
-    return map;
-  }
-
-  function notifyHandlers(topic: string, message: CovelMessage): void {
-    const topicHandlers = handlers.get(topic);
-    if (topicHandlers) {
-      for (const handler of [...topicHandlers]) {
-        try {
-          const result = handler(message);
-          // If handler returns a promise, catch its rejection
-          if (result && typeof (result as Promise<void>).catch === "function") {
-            (result as Promise<void>).catch((err) => {
-              console.error(
-                `[EventBus] Async handler error on topic "${topic}":`,
-                err,
-              );
-            });
-          }
-        } catch (err) {
-          console.error(`[EventBus] Handler error on topic "${topic}":`, err);
-        }
-      }
     }
   }
 
@@ -156,32 +96,6 @@ export function createEventBus(store?: DataStore): EventBus {
 
   const bus: EventBus = {
     emit(message: CovelMessage): void {
-      // Notify topic-specific handlers
-      notifyHandlers(message.topic, message);
-      // Notify wildcard handlers (unless the topic itself is '*')
-      if (message.topic !== "*") {
-        notifyHandlers("*", message);
-      }
-      // Add to pending events (in-memory for real-time trigger routing)
-      const sessionPending = getOrCreateSessionPending(message.sessionId);
-      sessionPending.set(message.id, message);
-      messageSession.set(message.id, message.sessionId);
-
-      // Enforce pending queue size limit — drop oldest events
-      if (sessionPending.size > MAX_PENDING_EVENTS) {
-        const excess = sessionPending.size - MAX_PENDING_EVENTS;
-        console.warn(
-          `[EventBus] Pending queue for session "${message.sessionId}" exceeded ${MAX_PENDING_EVENTS}, dropping ${excess} oldest event(s)`,
-        );
-        let dropped = 0;
-        for (const oldId of sessionPending.keys()) {
-          if (dropped >= excess) break;
-          sessionPending.delete(oldId);
-          messageSession.delete(oldId);
-          dropped++;
-        }
-      }
-
       // ── Subscription event creation ──────────────────────────
       const seq = nextSeq(message.sessionId);
       // Allow payload to carry explicit subscription topic/type overrides
@@ -220,59 +134,6 @@ export function createEventBus(store?: DataStore): EventBus {
       persistEvent(message);
     },
 
-    on(topic: string, handler: EventHandler): () => void {
-      const set = getOrCreateHandlers(topic);
-      set.add(handler);
-      return () => {
-        set.delete(handler);
-      };
-    },
-
-    once(topic: string, handler: EventHandler): () => void {
-      const wrappedHandler: EventHandler = (message) => {
-        set.delete(wrappedHandler);
-        handler(message);
-      };
-      const set = getOrCreateHandlers(topic);
-      set.add(wrappedHandler);
-      return () => {
-        set.delete(wrappedHandler);
-      };
-    },
-
-    getPendingEvents(sessionId: string): readonly CovelMessage[] {
-      const sessionPending = pendingEvents.get(sessionId);
-      if (!sessionPending) {
-        return [];
-      }
-      return [...sessionPending.values()];
-    },
-
-    acknowledge(messageId: string): void {
-      const sessionId = messageSession.get(messageId);
-      if (sessionId === undefined) {
-        return;
-      }
-      const sessionPending = pendingEvents.get(sessionId);
-      if (sessionPending) {
-        sessionPending.delete(messageId);
-      }
-      messageSession.delete(messageId);
-    },
-
-    clearSession(sessionId: string): void {
-      const sessionPending = pendingEvents.get(sessionId);
-      if (sessionPending) {
-        for (const msgId of sessionPending.keys()) {
-          messageSession.delete(msgId);
-        }
-        pendingEvents.delete(sessionId);
-      }
-      // M4: Clean up ring buffer and seq counter to prevent memory leaks
-      sessionEventBuffers.delete(sessionId);
-      sessionSeqCounters.delete(sessionId);
-    },
-
     getEventsAfter(sessionId: string, afterSeq: number): SubscriptionEvent[] {
       const buffer = sessionEventBuffers.get(sessionId);
       if (!buffer || buffer.length === 0) {
@@ -291,7 +152,7 @@ export function createEventBus(store?: DataStore): EventBus {
     async flush(): Promise<void> {
       // Snapshot: saves that settle during the await remove themselves from
       // the set via `finally`, which is safe while we await a copy.
-      await Promise.all([...pendingSaves]);
+      await Promise.all(pendingSaves);
     },
   };
 

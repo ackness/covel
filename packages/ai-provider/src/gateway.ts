@@ -17,6 +17,8 @@ import {
 import { createGatewaySlotResolution } from "./gateway-slot-resolution.js";
 import type { GatewayOptions } from "./gateway-slot-resolution.js";
 import { createRunOperation } from "./gateway-run-operation.js";
+import { DEFAULT_IMAGE_WIRE, getImageWire } from "./image/wire-registry.js";
+import type { ImageGenerationResult } from "./image/types.js";
 import type {
   EmbeddingResult,
   OperationMode,
@@ -81,13 +83,8 @@ export function createGateway(deps: GatewayDependencies) {
    */
   const warnedFallbacks = new Set<string>();
 
-  const {
-    resolveSlotOrPassthrough,
-    resolveSlotToPresetId,
-    getSlotParameterOverrides,
-    withPresetMetadata,
-    resolveSlot,
-  } = createGatewaySlotResolution(deps, warnedFallbacks);
+  const { resolveSlotOrPassthrough, withPresetMetadata, resolveSlot } =
+    createGatewaySlotResolution(deps, warnedFallbacks);
 
   const { runOperation } = createRunOperation(deps, resolveSlotOrPassthrough);
 
@@ -424,6 +421,79 @@ export function createGateway(deps: GatewayDependencies) {
     );
   }
 
+  async function generateImage(
+    input: {
+      presetId?: string;
+      prompt: string;
+      negativePrompt?: string;
+      size?: string;
+      quality?: string;
+      n?: number;
+      background?: "transparent" | "opaque";
+      providerRequestMetadata?: Record<string, unknown>;
+    },
+    options?: GatewayOptions,
+  ): Promise<ImageGenerationResult & { model: string; provider: string }> {
+    return runOperation(
+      {
+        // Default to the conventional "image" slot so an omitted presetId
+        // enters the named-slot → image-tag fallback chain instead of
+        // passing `undefined` through to the default (text) slot. Keeps
+        // the documented "defaults to image-tag resolution" contract true.
+        presetId: input.presetId ?? "image",
+        mode: "image",
+        fallbackTag: "image",
+        resolveTargets: (presetId) => [
+          deps.presetRegistry.resolveTextTarget({ presetId }),
+        ],
+        execute: async (target, resolved) => {
+          const slotMeta = target.preset?.providerRequestMetadata;
+          const wireId =
+            typeof slotMeta?.imageWire === "string" && slotMeta.imageWire
+              ? slotMeta.imageWire
+              : DEFAULT_IMAGE_WIRE;
+          const wire = getImageWire(wireId);
+          if (!wire) {
+            throw new AiProviderError({
+              code: "CONFIG_ERROR",
+              message: `unknown image wire "${wireId}" — register it via registerImageWire() or fix llm.toml providerRequestMetadata.imageWire`,
+              provider: targetProvider(target),
+              retriable: false,
+            });
+          }
+          const result = await wire.generate(
+            configWithSignal(resolved.config, options),
+            {
+              model: targetModel(target),
+              prompt: input.prompt,
+              negativePrompt: input.negativePrompt,
+              size: input.size,
+              quality: input.quality,
+              n: input.n,
+              background: input.background,
+              // Per-call metadata overrides slot defaults. Not routed through
+              // withPresetMetadata — that also folds in parameterOverrides,
+              // which are text-generation params that don't belong in an
+              // image request body.
+              providerRequestMetadata: {
+                ...slotMeta,
+                ...input.providerRequestMetadata,
+              },
+            },
+            { profile: target.profile, preset: target.preset, mode: "image" },
+          );
+          return {
+            ...result,
+            model: targetModel(target),
+            provider: targetProvider(target),
+          };
+        },
+        resolveUsage: (r) => r.usage,
+      },
+      options,
+    );
+  }
+
   return {
     generateText,
     generateObject,
@@ -431,8 +501,7 @@ export function createGateway(deps: GatewayDependencies) {
     embed,
     synthesizeSpeech,
     transcribeAudio,
-    resolveSlotToPresetId,
-    getSlotParameterOverrides,
+    generateImage,
     resolveSlot,
   };
 

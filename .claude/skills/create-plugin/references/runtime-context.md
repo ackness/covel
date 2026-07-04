@@ -48,7 +48,20 @@ export default async function handler(ctx: FunctionHandlerContext) {
 
 ## `ctx.gateway`
 
-只暴露 **3 个方法**——`generateText` / `generateObject` / `resolveSlot`。**没有** `generateImage` / `generateAudio` / `embed` / `streamText`。图像 / 音频 / 视频 / embed / streaming 一律走 `resolveSlot` 自管 wire——见 [`provider-quirks.md`](./provider-quirks.md)。
+只暴露 **3 个方法**——`generateText` / `generateObject` / `resolveSlot`。**没有** `generateAudio` / `embed` / `streamText`。音频 / 视频 / embed / streaming 走 `resolveSlot` 自管 wire——见 [`provider-quirks.md`](./provider-quirks.md)。
+
+**图像是例外——用 `ctx.images.generate`（首选），不要自管 wire：**
+
+```js
+const { refs, warnings, cached } = await ctx.images.generate({
+  prompt: "Visual novel background, seaside classroom at dusk",
+  metadata: { kind: "scene-background", sceneId, variant: "day" }, // 业务归档字段
+  // size / n / negativePrompt 等按需
+});
+// refs: MediaRef[] — 已落 MediaStore；cached: true = promptHash 命中，未重复计费
+```
+
+框架负责：按 slot 的 `providerRequestMetadata.imageWire` 选 wire（内置 `openai-images` / `dashscope-wan`，插件可 `registerImageWire()` 注册新 wire）、调 provider、落 MediaStore、promptHash 去重。handler 永远不接触字节流或供应商凭据。参考实现：`plugins/scene-stage/runtimes/background-gen/handler.js`。
 
 ### `gateway.generateText(input)`
 

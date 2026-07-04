@@ -48,42 +48,6 @@ export const STORAGE_ENV_VARS = [
       "Filesystem root for sqlite media blobs. Defaults to a media directory beside SQLITE_PATH.",
   },
   {
-    name: "MEDIA_S3_BUCKET",
-    group: "storage",
-    type: "string",
-    status: "planned",
-    description: "S3-compatible bucket for future explicit S3 media wiring.",
-  },
-  {
-    name: "MEDIA_S3_REGION",
-    group: "storage",
-    type: "string",
-    status: "planned",
-    description: "S3-compatible region for future explicit S3 media wiring.",
-  },
-  {
-    name: "MEDIA_S3_ENDPOINT",
-    group: "storage",
-    type: "url",
-    status: "planned",
-    description: "S3-compatible endpoint for future explicit S3 media wiring.",
-  },
-  {
-    name: "MEDIA_S3_KEY_PREFIX",
-    group: "storage",
-    type: "string",
-    status: "planned",
-    description: "Object key prefix for future explicit S3 media wiring.",
-  },
-  {
-    name: "MEDIA_S3_PUBLIC_BASE_URL",
-    group: "storage",
-    type: "url",
-    status: "planned",
-    description:
-      "Public base URL for resolving explicitly wired S3 media assets without signed URLs.",
-  },
-  {
     name: "VECTOR_BACKEND",
     group: "storage",
     type: "enum",

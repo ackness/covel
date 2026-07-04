@@ -5,9 +5,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
 import { createEventBus, type EventBus } from "@covel/events";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore, type DataStore } from "@covel/store";
 import { eventRoutes } from "../../src/routes/api/events.js";
-import type { CovelMessage } from "@covel/shared";
+import type { SubscriptionEvent } from "@covel/shared";
 
 function createTestApp(eventBus: EventBus): Hono {
   const store = createMemoryStore();
@@ -24,10 +24,11 @@ function createTestApp(eventBus: EventBus): Hono {
 describe("SSE Events", () => {
   let app: Hono;
   let eventBus: EventBus;
+  let busStore: DataStore;
 
   beforeEach(() => {
-    const store = createMemoryStore();
-    eventBus = createEventBus(store);
+    busStore = createMemoryStore();
+    eventBus = createEventBus(busStore);
     app = createTestApp(eventBus);
   });
 
@@ -48,10 +49,10 @@ describe("SSE Events", () => {
       expect(body.emitted).toBe(true);
     });
 
-    it("should trigger EventBus handlers", async () => {
-      const received: CovelMessage[] = [];
-      eventBus.on("test.event", (msg) => {
-        received.push(msg);
+    it("should notify onEmit subscribers", async () => {
+      const received: SubscriptionEvent[] = [];
+      eventBus.onEmit((event) => {
+        if (event.topic === "test.event") received.push(event);
       });
 
       await app.request("/api/events/emit", {
@@ -78,11 +79,6 @@ describe("SSE Events", () => {
     });
 
     it("should pass targetRuntime if provided", async () => {
-      const received: CovelMessage[] = [];
-      eventBus.on("routed.event", (msg) => {
-        received.push(msg);
-      });
-
       await app.request("/api/events/emit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -94,8 +90,12 @@ describe("SSE Events", () => {
         }),
       });
 
-      expect(received).toHaveLength(1);
-      expect(received[0].targetRuntime).toBe("narrator/narrator");
+      // targetRuntime is not part of the SubscriptionEvent surface; assert it
+      // via the persisted audit record instead.
+      await eventBus.flush();
+      const records = await busStore.listEvents("sess-1");
+      const routed = records.find((r) => r.topic === "routed.event");
+      expect(routed?.targetRuntime).toBe("narrator/narrator");
     });
   });
 

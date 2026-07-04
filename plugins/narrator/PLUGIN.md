@@ -13,6 +13,7 @@ timeoutMs: 240000
 callTimeoutMs: 120000
 outputKind: story
 capabilities: [narrative, narrative-engine]
+advertiseEvents: true
 tags:
   - mode:traditional-story
   - role:narrator
@@ -23,6 +24,7 @@ trigger:
 tools:
   builtin:
     - world-dimension-get
+    - emit-event
 relations:
   provides:
     - narrative-engine
@@ -47,6 +49,7 @@ postHistory:
     - 不写 A/B/C/D 选项，不写分类标题，不写带粗体的小标题菜单
     - 使用世界设定内的表达推进剧情
     - 任务说明、准备说明、系统说明、元话术都不算完成
+    - 【必做】写正文之前先核对 <available-events>：凡当前回合的叙事状态命中某事件描述的发射条件（包括第一回合开场时的初始状态），必须先调用 emit-event 发射再写正文；一次一个 topic，工具调用不计入正文，也不要在正文里提及
     # 下面是**硬禁止**，违反立刻视为失败输出，不要在文末触碰：
     - 禁止输出 “你要：” / “你可以：” / “你的选择是：” / “请告诉我你的行动选择” 这类引导语
     - 禁止用 “1.” “2.” “A)” “B)” “- ” 等列表符号写成串选项（行动建议、调查目标、策略组合、路线分类都算）

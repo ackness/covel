@@ -5,7 +5,7 @@
  *  - manual + cooldown
  *  - scheduled + startTurn together
  *  - event without a configured topic
- *  - error-retry + maxRetryCount pre-empting hasUpstreamFailure
+ *  - reserved modes (error-retry / conditional) never fire
  *  - conditional emits exactly one console.warn per (sessionId, runtimeId)
  *  - preGameCompleted gate runs BEFORE startTurn (so a Pre-Game runtime
  *    that already finished isn't re-evaluated)
@@ -33,7 +33,6 @@ function ctx(overrides?: Partial<TriggerContext>): TriggerContext {
     triggerCount: 0,
     turnsSinceLastTrigger: 999,
     pendingEventTopics: [],
-    hasUpstreamFailure: false,
     isManualTrigger: false,
     preGameCompleted: [],
     ...overrides,
@@ -128,22 +127,11 @@ describe("shouldTrigger — event", () => {
   });
 });
 
-describe("shouldTrigger — error-retry", () => {
-  it("maxRetryCount prevents infinite retry loops", () => {
-    const m = manifest({ trigger: { type: "error-retry", maxRetryCount: 2 } });
-    expect(
-      shouldTrigger(m, ctx({ hasUpstreamFailure: true, triggerCount: 1 })),
-    ).toBe(true);
-    expect(
-      shouldTrigger(m, ctx({ hasUpstreamFailure: true, triggerCount: 2 })),
-    ).toBe(false);
-  });
-
-  it("with no upstream failure, error-retry never triggers regardless of triggerCount", () => {
+describe("shouldTrigger — error-retry (reserved)", () => {
+  it("never triggers regardless of triggerCount", () => {
     const m = manifest({ trigger: { type: "error-retry", maxRetryCount: 5 } });
-    expect(
-      shouldTrigger(m, ctx({ hasUpstreamFailure: false, triggerCount: 0 })),
-    ).toBe(false);
+    expect(shouldTrigger(m, ctx({ triggerCount: 0 }))).toBe(false);
+    expect(shouldTrigger(m, ctx({ triggerCount: 3 }))).toBe(false);
   });
 });
 

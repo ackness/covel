@@ -18,26 +18,23 @@ function getPreflightPluginEntry(
   deps: WorldDataImportPreflightDeps | undefined,
   pluginId: string,
 ): PluginRegistryEntry | undefined {
-  return deps?.getPluginEntry?.(pluginId) ?? deps?.registry?.get(pluginId);
+  return deps?.registry?.get(pluginId);
 }
 
+/**
+ * Authoring-error checks for a plugin target (registered, declared namespace,
+ * accepts world data). Target-plugin *activeness* is not checked here — an
+ * inactive target is a player-selection outcome, handled in `buildImportPlan`
+ * as a warning + source skip, never an import-blocking error.
+ */
 export function preflightPluginTarget(
   target: PluginDataTarget,
   source: OrderedWorldDataSource,
   deps: WorldDataImportPreflightDeps | undefined,
 ): readonly WorldDataDiagnostic[] {
   const diagnostics: WorldDataDiagnostic[] = [];
-  const activePlugins = deps?.activePlugins;
-  if (activePlugins && !activePlugins.includes(target.pluginId)) {
-    diagnostics.push({
-      level: "error",
-      sourceId: source.id,
-      message: `worldData target plugin "${target.pluginId}" is not active for this session`,
-    });
-  }
-
   const entry = getPreflightPluginEntry(deps, target.pluginId);
-  if (deps?.registry || deps?.getPluginEntry) {
+  if (deps?.registry) {
     if (!entry) {
       diagnostics.push({
         level: "error",

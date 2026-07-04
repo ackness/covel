@@ -20,6 +20,10 @@ Schema 使用 Zod strict 模式验证，不允许未定义字段。所有文本�
 | pluginPolicy              | object                |      | 会话准备页的插件策略，见下方                            |
 | worldData                 | string                |      | world data descriptor 路径，通常 `data/world.data.yaml` |
 | characterBlueprintSources | string[]              |      | 旧式角色蓝图路径；声明 worldData 时通常不用             |
+| defaultViewMode           | enum                  |      | `stage` \| `parsed`（缺省 parsed）。视觉小说/对话世界声明 `stage` 进全屏舞台模式（背景图 + 立绘 + 打字机对话框），玩家可随时切回 |
+| characterAttributes       | array                 |      | 世界声明的角色属性 schema（id/name/type/category/min/max…），world-init 原样采用，创角表单与右面板据此渲染 |
+| pluginSettings            | object                |      | 插件 userSettings 的世界级默认值，如 `cost-gate: { softTokens: 400000 }`，玩家可在设置里覆盖 |
+| memoryBlocks              | array                 |      | 世界声明的 core-memory 块（label/displayName/extractionHint/icon），叠加在框架/插件块之上 |
 | dimensions                | object                |      | 见下方 9 个维度                                         |
 | dimensionSources          | Record<string,string> |      | 外置 dimension 文件路径，key 必须是 dimensions 的有效键 |
 
@@ -66,15 +70,18 @@ pluginPolicy:
   preferTags: [mode:traditional-story, role:codex, role:retrieval, role:world-rules]
   avoidTags: [mode:dialogue]
 
-# 对话模式
+# 对话 / 视觉小说模式（参考 worlds/haruka-academy）
+defaultViewMode: stage # 全屏舞台：场景背景 + 角色立绘 + 打字机对话框
 requiredPlugins: [pregame, world-init, char-creator]
-recommendedPlugins: [chat-mode-narrator, scene-cast, scene-prompts, character-blueprint, character-presence, player-identity, living-world-rules, branch-reply]
+recommendedPlugins: [chat-mode-narrator, scene-cast, scene-stage, scene-prompts, character-blueprint, character-presence, player-identity, living-world-rules, branch-reply]
 excludedPlugins: [narrator, guide, codex]
 pluginPolicy:
   preset: dialogue-mode
   preferTags: [mode:dialogue, role:character, role:world-rules]
   avoidTags: [mode:traditional-story]
 ```
+
+舞台模式的数据链：`chat-mode-narrator` 经 `emit-event` 发 `scene.set` → `scene-stage` 解析场景/昼夜、命中世界场景注册表或按需生成背景 → `scene-cast` 决定在场说话人 → `character-presence` 提供立绘。**没有场景/立绘资产也能跑**（回退世界头图 + 名字占位卡），资产是渐进增强——见下方 worldData 小节。
 
 ## worldData
 
@@ -107,6 +114,44 @@ sources:
 - `lorebook` — 写 lorebook 常量词条
 - `characters` — 写角色记录
 - `media` — 导入媒体资产
+
+目标插件未被玩家启用时该 source 自动跳过（warning，不阻断建会话）——给可选插件带数据是安全的，但要让数据默认生效，记得把目标插件放进 `recommendedPlugins`。
+
+### 视觉小说资产管线（立绘 + 场景背景，参考 worlds/haruka-academy）
+
+```yaml
+sources:
+  portraits: # 角色立绘 PNG → 媒体库 + character-presence 索引
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: plugin:character-presence/assets
+    key: filename
+    after: cast
+  presence: # characterId → 立绘/头像 MediaRef 映射（sha256 必须与图内容一致）
+    kind: json
+    path: media/presence.json
+    schema: plugin://character-presence/presence
+    to: plugin:character-presence/presence
+    key: characterId
+    after: portraits
+  scenes: # 场景背景 PNG（日/夜变体）→ 媒体库 + scene-stage 索引
+    kind: media
+    path: media/scenes
+    to: media
+    indexTo: plugin:scene-stage/assets
+    key: filename
+    after: dimensions
+  scenesRegistry: # sceneId → {day, night} MediaRef 注册表
+    kind: json
+    path: media/scenes.registry.json
+    schema: plugin://scene-stage/scenes
+    to: plugin:scene-stage/scenes
+    key: registryId
+    after: dimensions
+```
+
+图片与 JSON 索引不必手写：`scripts/generate-portraits.mjs` / `generate-scenes.mjs` 按世界的 `portraits.json` / `scenes.json` 描述批量出图，`emit-presence.mjs` / `emit-scenes.mjs` 从图片自动生成带 sha256 的索引 JSON（**重生成图片后必须重跑**）。提示词与流程详见 `worlds/PORTRAITS.md` 与 `worlds/SCENES.md`。未命中注册表的场景由 `scene-stage/background-gen` 会话内按需生成（玩家可用 `autoGenerateScenes` / `maxGeneratedScenes` 设置控制）。
 
 ## dimensions.geography
 

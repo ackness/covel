@@ -1,6 +1,9 @@
 {
   "name": "@covel/plugin-pregame",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@covel/plugin-handlers-utils": "workspace:*"
+  }
 }

@@ -165,7 +165,6 @@ describe("TurnExecutor — agent runtime suspend", () => {
     agentLoaded = {
       manifest: agentManifest,
       promptTemplate: "## Test Plugin\nYou are a test agent.",
-      references: [],
     };
   });
 
@@ -527,7 +526,6 @@ describe("TurnExecutor — function runtime suspend", () => {
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "",
-      references: [],
       handler: async () => ({
         status: "suspended",
         reason: "Need user to fill out form",
@@ -581,7 +579,6 @@ describe("TurnExecutor — function runtime suspend", () => {
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "",
-      references: [],
       handler: async (ctx) => {
         capturedStore = ctx.store;
         const writable = ctx.store as { setPluginData?: unknown };
@@ -624,7 +621,6 @@ describe("TurnExecutor — function runtime suspend", () => {
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "guarded",
-      references: [],
       guard: async (ctx) => {
         capturedStore = ctx.store;
         capturedPluginData = ctx.pluginData;
@@ -735,7 +731,6 @@ describe("resumeSuspendedRuntime", () => {
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "",
-      references: [],
     };
 
     const suspension = await store.getSuspension(suspensionId);
@@ -793,7 +788,6 @@ describe("resumeSuspendedRuntime", () => {
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "",
-      references: [],
     };
     const suspension = await store.getSuspension(suspensionId);
 
@@ -865,7 +859,6 @@ describe("resumeSuspendedRuntime", () => {
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "",
-      references: [],
     };
     const suspension = await store.getSuspension(suspensionId);
 
@@ -938,7 +931,6 @@ describe("resumeSuspendedRuntime", () => {
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "",
-      references: [],
     };
     const refreshed = await store.getSuspension(suspensionId);
 
@@ -986,7 +978,6 @@ describe("resumeSuspendedRuntime", () => {
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "",
-      references: [],
     };
     const suspension = await store.getSuspension(suspensionId);
 
@@ -1025,7 +1016,6 @@ describe("resumeSuspendedRuntime", () => {
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "",
-      references: [],
     };
     const suspension = await store.getSuspension(suspensionId);
 
@@ -1072,7 +1062,6 @@ describe("resumeSuspendedRuntime", () => {
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "",
-      references: [],
     };
     const suspension = await store.getSuspension(suspensionId);
 
@@ -1135,7 +1124,6 @@ describe("resumeSuspendedRuntime", () => {
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "",
-      references: [],
     };
     const suspension = await store.getSuspension(id);
 

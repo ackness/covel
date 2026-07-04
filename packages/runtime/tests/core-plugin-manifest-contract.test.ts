@@ -119,7 +119,10 @@ describe("core plugin manifest contract", () => {
         as: "npc-relationships",
       },
     ]);
-    expect(narrator.tools?.builtin).toEqual(["world-dimension-get"]);
+    expect(narrator.tools?.builtin).toEqual([
+      "world-dimension-get",
+      "emit-event",
+    ]);
 
     for (const downstream of downstreams) {
       expect(downstream.priority).toBe(600);

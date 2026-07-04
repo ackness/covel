@@ -98,7 +98,6 @@ async function runTurn(
     loadRuntime: async (m) => ({
       manifest: m,
       promptTemplate: "",
-      references: [],
       handler: async (ctx) => {
         const recorded = ctx as unknown as Record<string, unknown>;
         (handlerCalls[m.name] ??= []).push(recorded);

@@ -14,7 +14,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import matter from "gray-matter";
+import { parse as parseToml } from "smol-toml";
 
 export interface PluginLlmSlot {
   readonly provider: string;
@@ -64,47 +64,40 @@ export async function loadPluginLlmConfig(
  *   model = "..."
  */
 export function parsePluginLlmToml(content: string): PluginLlmConfig {
-  // Simple TOML parser for the subset we need (key = "value" under [section.name])
+  let root: Record<string, unknown>;
+  try {
+    root = parseToml(content) as Record<string, unknown>;
+  } catch (error: unknown) {
+    // Malformed llm.toml must not crash plugin loading — skip it with a warning.
+    console.warn(
+      `[plugin-loader] ignoring malformed plugin llm.toml: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return { slots: {} };
+  }
+
+  const pluginTable = root.plugin;
+  if (!pluginTable || typeof pluginTable !== "object") {
+    return { slots: {} };
+  }
+
   const slots: Record<string, PluginLlmSlot> = {};
-  let currentSection: string | null = null;
-  const currentSlot: Record<string, string> = {};
-
-  function flushSlot() {
-    if (currentSection && currentSlot.provider && currentSlot.model) {
-      slots[currentSection] = {
-        provider: currentSlot.provider,
-        model: currentSlot.model,
-        baseUrl: currentSlot.baseUrl,
-        protocol: currentSlot.protocol,
-      };
-    }
-    // Reset
-    for (const key of Object.keys(currentSlot)) {
-      delete currentSlot[key];
-    }
+  for (const [name, raw] of Object.entries(
+    pluginTable as Record<string, unknown>,
+  )) {
+    if (!raw || typeof raw !== "object") continue;
+    const entry = raw as Record<string, unknown>;
+    const { provider, model, baseUrl, protocol } = entry;
+    // A slot only counts when both provider and model are present.
+    if (typeof provider !== "string" || typeof model !== "string") continue;
+    slots[name] = {
+      provider,
+      model,
+      baseUrl: typeof baseUrl === "string" ? baseUrl : undefined,
+      protocol: typeof protocol === "string" ? protocol : undefined,
+    };
   }
-
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim();
-
-    // Skip comments and empty lines
-    if (trimmed === "" || trimmed.startsWith("#")) continue;
-
-    // Section header: [plugin.default]
-    const sectionMatch = trimmed.match(/^\[plugin\.(\w[\w-]*)\]$/);
-    if (sectionMatch) {
-      flushSlot();
-      currentSection = sectionMatch[1];
-      continue;
-    }
-
-    // Key-value pair: key = "value" or key = value
-    const kvMatch = trimmed.match(/^(\w+)\s*=\s*"?([^"]*)"?\s*$/);
-    if (kvMatch && currentSection) {
-      currentSlot[kvMatch[1]] = kvMatch[2];
-    }
-  }
-  flushSlot();
 
   return {
     defaultSlot: slots["default"],

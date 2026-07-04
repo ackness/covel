@@ -29,7 +29,7 @@ function collectSpecNamespaces(specs: api.UISpecsResponse): PluginNamespace[] {
   return [...namespaces.values()];
 }
 
-export async function hydratePluginDataNamespaces(
+async function hydratePluginDataNamespaces(
   sessionId: string,
   namespaces: readonly PluginNamespace[],
   dispatch: SessionDispatch,

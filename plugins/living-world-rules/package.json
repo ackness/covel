@@ -1,6 +1,6 @@
 {
   "name": "@covel/plugin-living-world-rules",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "private": true,
   "type": "module",
   "scripts": {

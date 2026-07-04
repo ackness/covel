@@ -4,11 +4,10 @@ import {
   createMediaStoreFromEnv,
   createStore,
   createStoreFromEnv,
-  IDB_BROWSER_STORAGE_SCHEMA_VERSION,
-  IDB_DATA_STORE_SCHEMA_VERSION,
   resolveBackendFromEnv,
   summarizeStorageMigrations,
 } from "../src/index.js";
+import { BROWSER_IDB_SCHEMA_VERSION } from "../src/indexeddb/idb-schema.js";
 
 const ENV_KEYS = [
   "STORE_BACKEND",
@@ -212,13 +211,13 @@ describe("store factory env wiring", () => {
           id: "browser:idb:unified-storage",
           domain: "browser",
           backend: "idb",
-          version: IDB_BROWSER_STORAGE_SCHEMA_VERSION,
+          version: BROWSER_IDB_SCHEMA_VERSION,
         }),
         expect.objectContaining({
           id: "data:idb:store",
           domain: "data",
           backend: "idb",
-          version: IDB_DATA_STORE_SCHEMA_VERSION,
+          version: BROWSER_IDB_SCHEMA_VERSION,
         }),
         expect.objectContaining({
           id: "vector:embedded:model-registry",

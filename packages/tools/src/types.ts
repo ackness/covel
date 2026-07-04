@@ -19,6 +19,13 @@ export interface ToolExecutionContext {
    * before the session kernel commits them at runtime end.
    */
   readonly pendingProposals?: readonly Proposal[];
+  /**
+   * Topics already emitted via `emit-event` earlier in the same tool loop
+   * (accumulated by the agent tool loop, see turn-agent-tool-loop.ts).
+   * Lets `emit-event` no-op a same-turn duplicate instead of producing a
+   * second `event.emit` proposal/SSE for a topic that already fired.
+   */
+  readonly emittedEventTopics?: readonly string[];
 }
 
 // ── Tool module (result of tool() call) ──────────────────────────
@@ -70,8 +77,6 @@ export interface ResolvedTool {
 }
 
 // ── Output validation ────────────────────────────────────────────
-
-export type StructuredOutputStrategy = "native" | "prompt";
 
 export interface ValidationResult {
   readonly valid: boolean;

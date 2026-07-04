@@ -65,10 +65,6 @@ export interface GatewaySlotResolution {
     fallbackTag?: string,
     options?: GatewayOptions,
   ): string | undefined;
-  resolveSlotToPresetId(slotId: string): string | undefined;
-  getSlotParameterOverrides(
-    slotId: string,
-  ): ModelParameterOverrides | undefined;
   resolveParameterOverrides(
     presetId: string | undefined,
     options: GatewayOptions | undefined,
@@ -153,14 +149,6 @@ export function createGatewaySlotResolution(
       );
     }
     return fallback.presetId;
-  }
-
-  /**
-   * Resolve a slot ID to a preset ID via the slot registry.
-   * Returns undefined if no slot registry is configured or slot cannot be resolved.
-   */
-  function resolveSlotToPresetId(slotId: string): string | undefined {
-    return deps.slotRegistry?.resolveSlot(slotId);
   }
 
   /**
@@ -301,8 +289,6 @@ export function createGatewaySlotResolution(
 
   return {
     resolveSlotOrPassthrough,
-    resolveSlotToPresetId,
-    getSlotParameterOverrides,
     resolveParameterOverrides,
     withParameterOverrides,
     withPresetMetadata,

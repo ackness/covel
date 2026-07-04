@@ -41,7 +41,7 @@ export interface ChatMessagesProps {
   submittedBlockIds: ReadonlySet<string>;
   /** Form values keyed by submitted block id — used to repopulate disabled forms. */
   submittedBlockValues: Readonly<Record<string, Record<string, unknown>>>;
-  viewMode: "parsed" | "detailed" | "raw";
+  viewMode: "parsed" | "detailed" | "raw" | "stage";
   onSendMessage: (msg: string) => void;
   onSubmitBlock: (blockId: string) => void;
   onSubmitInteraction?: (
@@ -156,6 +156,11 @@ export function ChatMessages({
     return -1;
   }, [messages]);
 
+  // ChatMessages accepts "stage" only so GameViewHeader's viewMode type-checks
+  // when passed through (game-view swaps ChatMessages out entirely in stage
+  // mode); the per-message renderers below only know parsed/detailed/raw.
+  const renderViewMode = viewMode === "stage" ? "parsed" : viewMode;
+
   const renderMessage = useCallback(
     (msg: StreamMessage, index: number) => {
       if (msg.block) {
@@ -164,7 +169,7 @@ export function ChatMessages({
             key={msg.id}
             msg={msg}
             index={index}
-            viewMode={viewMode}
+            viewMode={renderViewMode}
             lastUserMsgIndex={lastUserMsgIndex}
             sessionId={sessionId}
             executing={executing}
@@ -181,7 +186,7 @@ export function ChatMessages({
         <ChatMessageRenderer
           key={msg.id}
           msg={msg}
-          viewMode={viewMode}
+          viewMode={renderViewMode}
           isImageGenActive={isImageGenActive}
           sessionId={sessionId}
           executing={executing}
@@ -192,7 +197,7 @@ export function ChatMessages({
       );
     },
     [
-      viewMode,
+      renderViewMode,
       lastUserMsgIndex,
       sessionId,
       executing,

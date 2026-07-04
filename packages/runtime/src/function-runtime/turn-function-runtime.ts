@@ -12,6 +12,7 @@ import {
   createFunctionStoreView,
 } from "./plugin-handler-helpers.js";
 import { createRuntimeMediaContext } from "./runtime-media-context.js";
+import { createRuntimeImagesContext } from "./runtime-images-context.js";
 import { runPostRuntimeHook } from "../hooks/wire-helpers.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import {
@@ -150,6 +151,29 @@ export async function executeFunctionRuntime({
         pluginId: manifest.pluginId,
       })
     : undefined;
+  // Trace function-runtime provider calls when a turn emitter is present. The
+  // wrapper persists gateway.calling/responded/failed to trace_events; without
+  // an emitter (tests, third-party direct callers) the raw gateway passes
+  // through and no function.*/gateway.* events are emitted. Built before
+  // imagesHandle so image generation is traced too (withGatewayTrace forwards
+  // generateImage only when the source gateway has one).
+  const tracedGateway =
+    deps.gateway && deps.emitter
+      ? withGatewayTrace(deps.gateway, deps.emitter, helperCtx)
+      : deps.gateway;
+  // ctx.images only when both halves of the pipeline are wired: a gateway
+  // that actually exposes generateImage (older test/embedder gateways don't)
+  // and a mediaStore to persist through. Either missing → undefined, so
+  // handlers null-check rather than hitting a stub that always throws.
+  const imagesHandle =
+    tracedGateway?.generateImage && deps.mediaStore && mediaHandle
+      ? createRuntimeImagesContext(
+          { generateImage: tracedGateway.generateImage.bind(tracedGateway) },
+          deps.mediaStore,
+          mediaHandle,
+          { sessionId: input.sessionId, pluginId: manifest.pluginId },
+        )
+      : undefined;
   const isTrustedSource = isTrustedPluginSource(deps, manifest);
   const handlerStore = deps.store
     ? isTrustedSource
@@ -157,14 +181,6 @@ export async function executeFunctionRuntime({
       : createFunctionStoreView(deps.store, helperCtx)
     : undefined;
 
-  // Trace function-runtime provider calls when a turn emitter is present. The
-  // wrapper persists gateway.calling/responded/failed to trace_events; without
-  // an emitter (tests, third-party direct callers) the raw gateway passes
-  // through and no function.*/gateway.* events are emitted.
-  const tracedGateway =
-    deps.gateway && deps.emitter
-      ? withGatewayTrace(deps.gateway, deps.emitter, helperCtx)
-      : deps.gateway;
   // Trace plugin-owned provider HTTP calls (ctx.utils.fetchWithRetry — the wire
   // image plugins use) when an emitter is present; raw passthrough otherwise.
   const tracedUtils =
@@ -195,6 +211,7 @@ export async function executeFunctionRuntime({
       ...(tracedGateway ? { gateway: tracedGateway } : {}),
       ...(tracedUtils ? { utils: tracedUtils } : {}),
       ...(mediaHandle ? { media: mediaHandle } : {}),
+      ...(imagesHandle ? { images: imagesHandle } : {}),
       ...(assetProgress ? { assetProgress } : {}),
       ...(manualPayloadForRuntime
         ? { manualPayload: manualPayloadForRuntime }

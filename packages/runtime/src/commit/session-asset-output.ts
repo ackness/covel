@@ -24,7 +24,7 @@ export async function enforceImageAssetOutput(
   capabilities: readonly string[] | undefined,
 ): Promise<{ proposal: Proposal; error: string } | null> {
   if (!capabilities?.includes(FrameworkCapability.ImageGeneration)) return null;
-  if (isPendingAssetOutput(result.output)) return null;
+  if (isNonEnforceableAssetOutput(result.output)) return null;
 
   const hasAssetGenerate = proposals.some(
     (proposal) =>
@@ -134,7 +134,12 @@ async function writeImageGenerationErrorLog(
   );
 }
 
-function isPendingAssetOutput(output: Record<string, unknown> | null): boolean {
+// A function handler that reports its own terminal outcome (failed/skipped/error)
+// or an async in-flight status is not subject to asset-missing enforcement — the
+// missing asset.generate proposal is intentional, not a runtime slip.
+function isNonEnforceableAssetOutput(
+  output: Record<string, unknown> | null,
+): boolean {
   const status =
     typeof output?.status === "string" ? output.status.toLowerCase() : "";
   return (
@@ -142,7 +147,10 @@ function isPendingAssetOutput(output: Record<string, unknown> | null): boolean {
     status === "queued" ||
     status === "running" ||
     status === "processing" ||
-    status === "in_progress"
+    status === "in_progress" ||
+    status === "failed" ||
+    status === "skipped" ||
+    status === "error"
   );
 }
 

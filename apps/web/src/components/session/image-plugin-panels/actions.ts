@@ -23,7 +23,7 @@ export function findImageGeneratorRuntimeId(
   return rt?.id ?? null;
 }
 
-export async function triggerImageFromPrompt(
+async function triggerImageFromPrompt(
   sessionId: string | undefined,
   pluginId: string,
   runtimeId: string | null,
@@ -64,7 +64,7 @@ export async function triggerImageFromPrompt(
   emitToast("info", i18n.t("coreImage.panel.rerunSubmittedSimple"));
 }
 
-export async function downloadRef(
+async function downloadRef(
   ref: MediaRef,
   sessionId: string | undefined,
   filename: string,
@@ -80,7 +80,7 @@ export async function downloadRef(
   document.body.removeChild(a);
 }
 
-export function showActionError(err: unknown): void {
+function showActionError(err: unknown): void {
   emitToast("error", err instanceof Error ? err.message : String(err));
 }
 

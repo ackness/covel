@@ -418,6 +418,9 @@ importers:
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3
+      smol-toml:
+        specifier: ^1.6.1
+        version: 1.6.1
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -634,13 +637,17 @@ importers:
         version: 4.1.9(@opentelemetry/api@1.9.0)(@types/node@26.0.0)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.0.16(@types/node@26.0.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
 
   plugins/char-creator:
+    dependencies:
+      '@covel/plugin-handlers-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-handlers-utils
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../../packages/plugin-loader
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../../packages/tools
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.0)(@types/node@26.0.0)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.0.16(@types/node@26.0.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
@@ -717,6 +724,10 @@ importers:
         version: 4.1.9(@opentelemetry/api@1.9.0)(@types/node@26.0.0)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.0.16(@types/node@26.0.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
 
   plugins/guide:
+    dependencies:
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
     devDependencies:
       vitest:
         specifier: ^4.1.9
@@ -781,9 +792,17 @@ importers:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.0)(@types/node@26.0.0)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.0.16(@types/node@26.0.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
 
-  plugins/pregame: {}
+  plugins/pregame:
+    dependencies:
+      '@covel/plugin-handlers-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-handlers-utils
 
   plugins/scene-cast:
+    dependencies:
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*
@@ -791,9 +810,6 @@ importers:
       '@covel/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../../packages/tools
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.0)(@types/node@26.0.0)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.0.16(@types/node@26.0.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
@@ -810,6 +826,22 @@ importers:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.0)(@types/node@26.0.0)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.0.16(@types/node@26.0.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
 
+  plugins/scene-stage:
+    dependencies:
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
+    devDependencies:
+      '@covel/plugin-loader':
+        specifier: workspace:*
+        version: link:../../packages/plugin-loader
+      '@covel/plugin-test-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-test-utils
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@opentelemetry/api@1.9.0)(@types/node@26.0.0)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.0.16(@types/node@26.0.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+
   plugins/story-guard:
     devDependencies:
       vitest:
@@ -818,6 +850,9 @@ importers:
 
   plugins/world-init:
     dependencies:
+      '@covel/plugin-handlers-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-handlers-utils
       '@covel/tools':
         specifier: workspace:*
         version: link:../../packages/tools

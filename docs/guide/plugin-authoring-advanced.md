@@ -305,6 +305,8 @@ export default async function handler(
 | `store`                  | `FunctionStoreView`     | 绑定当前 session/plugin 的只读 DataStore 视图：`getPluginData(namespace, key)` / `listPluginData(namespace)` / `getSession()` / `listTurnMessages(limit?)`(传 `limit` 时返回**最近** N 条 turn 消息、按时间正序；不传则全量)。写入使用 `ctx.pluginData` 或 handler return 值 |
 | `gateway`                | `PluginRuntimeGateway?` | 文本/object 生成 + slot 解析。签名见下                                                                                                                                                                                                                                       |
 | `utils`                  | `PluginRuntimeUtils?`   | SSRF 安全的 URL 校验 + 带重试的 fetch。插件自管 wire 时使用                                                                                                                                                                                                                  |
+| `media`                  | `MediaContext?`         | `put` / `get` / `resolveUrl` / `ingestUrl`——媒体库读写原语，`ingestUrl` 内置 SSRF/MIME/超时校验                                                                                                                                                                              |
+| `images`                 | `ImagesContext?`        | 统一图像生成原语（generate → 落库 → promptHash 去重），见下方图像生成小节。存在条件：executor 同时装配了 gateway 与 MediaStore                                                                                                                                               |
 | `manualPayload`          | `unknown?`              | 仅在 `POST /plugin-rpc` 手动触发时注入,为请求体的 `payload` 字段                                                                                                                                                                                                             |
 | `triggerEvent`           | `{ topic, data }?`      | 仅 event 触发时存在,包含触发该 runtime 的事件                                                                                                                                                                                                                                |
 
@@ -316,19 +318,9 @@ const res = await ctx.gateway.generateText({
   presetId: "fast", // 可选;缺省走 manifest.model / default slot
   messages: [{ role: "user", content: "..." }],
 });
-
-// 解析 slot 配置(图像 / 自管 wire 的插件用)
-const slot = ctx.gateway.resolveSlot({
-  presetId: "image",
-  fallbackTag: "image",
-});
-if (slot) {
-  // slot = { presetId, provider, baseUrl, apiKey, model, tag, metadata, ... }
-  // 拿到凭据后用任意 SDK / fetch 调供应商
-}
 ```
 
-> **图像生成的设计:** 框架提供 `resolveSlot` / `ctx.media` / `asset.generate` 三个稳定原语。图像 wire(OpenAI Images / DashScope wan2.x 异步轮询 / Replicate / fal 队列 / Midjourney)由插件自管:可以用 Vercel AI SDK、`openai` SDK、原生 fetch、自写状态机。provider 返回的 `b64_json` 或临时 URL 只作为 wire 层响应处理,handler 必须立即写入 `ctx.media.put()` 或 `ctx.media.ingestUrl()`,完成态返回 `assetGenerations[]`。参考 `dashscope-image-gen` / `openai-image-gen` 两个内置实现。
+> 图像生成不走 `generateText` —— 见下方"图像生成:`ctx.images`"小节。
 
 > **结构化 JSON 输出(未在函数 runtime 中可用,审计 F9):** `ctx.gateway.generateObject`
 > 需要宿主向 gateway 注入 JSON Schema → Zod 的转换器,目前组合根未接入。若需要
@@ -336,9 +328,12 @@ if (slot) {
 > 框架在那里自动处理 schema → provider-specific grammar。
 > 待某个插件真正需要 function-runtime 下的 `generateObject` 时,再引入转换器。
 
-**`ctx.utils`:** 自管 wire 的插件必须经过这里调用网络,不要直接 `fetch`,以保持 SSRF 守卫和重试策略统一。
+**`ctx.utils`:** 自管 wire(见下方逃生口小节)的插件必须经过这里调用网络,不要直接 `fetch`,以保持 SSRF 守卫和重试策略统一。
 
 ```ts
+const slot = ctx.gateway.resolveSlot({ presetId: "image", fallbackTag: "image" });
+if (!slot) throw new Error("image slot not configured");
+
 // SSRF 守卫 — 远端必须 https,loopback 才允许 http,阻断 RFC1918/169.254/cloud metadata
 const guard = ctx.utils.validateBaseUrl(slot.baseUrl);
 if (!guard.ok) throw new Error(`Bad baseUrl: ${guard.reason}`);
@@ -351,6 +346,86 @@ const response = await ctx.utils.fetchWithRetry(`${slot.baseUrl}/...`, {
   maxRetries: 3,                                    // 默认 3,设 0 禁用
 });
 ```
+
+### 图像生成:`ctx.images`(推荐路径)
+
+`ctx.images` 是框架统一的图像生成原语:选 wire、调 provider、落 `MediaStore`、按 `promptHash` 去重全部由框架完成 —— handler 只需要给 prompt 和业务 metadata,永远不接触字节流或供应商凭据。**新插件应该从这里开始,不要手写 HTTP 调用图像 provider。**
+
+```ts
+const { refs, warnings, cached } = await ctx.images.generate({
+  presetId: "image", // 可选;缺省走 image tag 解析(现有 tag-aware fallback)
+  prompt: "a rainy street at night, cinematic lighting",
+  negativePrompt: "blurry, low quality",
+  size: "1024x1024",
+  n: 1,
+  metadata: {
+    // 业务 key,自由定义;框架会在后面追加 pluginId/promptHash,插件传同名字段也不会覆盖它们
+    kind: "scene-background",
+    sceneId: ctx.triggerEvent?.data?.sceneId,
+  },
+});
+const [ref] = refs;
+if (!ref) throw new Error("image provider returned no usable media");
+```
+
+- `refs: MediaRef[]` 已经落库,可以直接用在 `assetGenerations[]` / `pluginData[]` 里。
+- `cached: true` 表示命中了同 `promptHash` 的既有资产,没有真的调用 provider(省钱,防重试风暴重复扣费)。
+- `metadata` 只在**首次**调用时落地——同一组生成参数的后续调用即使传了不同 `metadata` 也会命中缓存并沿用第一次的值。完整的 metadata 约定和 `promptHash` 语义见 [media-store.md § Metadata Conventions & Querying](../reference/media-store.md#metadata-conventions--querying)。
+- 存在条件:executor 同时装配了 gateway 与 `MediaStore`(生产环境始终满足;没接 store 的测试 harness 里 `ctx.images` 是 `undefined`,调用前按需 `ctx.images?.generate` 做空判断)。
+
+### 自管 wire(逃生口):`ctx.gateway.resolveSlot`
+
+只有当框架内置的两个 wire(`openai-images` / `dashscope-wan`)都覆盖不了需求时才用这条路径 —— 比如要接一个响应形态特殊、`ctx.images` 尚未支持的 provider,或者单次调试性质、不想为它注册一个正式 wire。这时直接拿 slot 凭据自己发请求:
+
+```ts
+const slot = ctx.gateway.resolveSlot({
+  presetId: "image",
+  fallbackTag: "image",
+});
+if (slot) {
+  // slot = { presetId, provider, baseUrl, apiKey, model, tag, metadata, ... }
+  // 拿到凭据后用任意 SDK / fetch 调供应商(经 ctx.utils,见上)
+}
+```
+
+这条路径下框架不再帮你落库或去重 —— `resolveSlot` 只给凭据,provider 返回的 `b64_json` 或临时 URL 必须自己写入 `ctx.media.put()` 或 `ctx.media.ingestUrl()`,完成态返回 `assetGenerations[]`。
+
+### 注册自定义 wire:`registerImageWire`
+
+如果是一个会被反复使用的新 provider 协议(而不是一次性调试),把它注册成正式的 `ImageWire`,这样本插件所有 runtime、乃至 `llm.toml` 里任何指向它的 slot 都能通过 `ctx.images` 复用它 —— 不需要提交框架 PR:
+
+```ts
+import { registerImageWire } from "@covel/ai-provider";
+import type { ImageWire } from "@covel/ai-provider";
+
+const replicateWire: ImageWire = {
+  id: "replicate", // 开放字符串 id(非枚举)—— 新协议不占用框架命名空间
+  async generate(config, params, context) {
+    // config = { baseUrl, apiKey, signal, ... }(来自 slot 解析)
+    // params = { model, prompt, negativePrompt?, size?, quality?, n?, background?, providerRequestMetadata? }
+    // 必须走包内硬化 http 基建(SSRF + redirect manual + 结构化错误),参考
+    // packages/ai-provider/src/image/openai-images-wire.ts 的 postJson/parseJson/assertSuccess 用法。
+    // 返回 { images: [{ kind: "bytes" | "url", ... }], usage, warnings }
+  },
+};
+
+registerImageWire(replicateWire); // 顶层调用一次;重复 id 会抛错
+```
+
+**注册时机:** 把 `registerImageWire()` 放在 function runtime `handler.js`(或它 import 的模块)的顶层。`loadRuntime` 加载该 runtime 时(晚于插件发现、早于任何 turn 真正调度它)会 `import()` 这个模块一次,Node 的模块缓存保证顶层代码只跑一次 —— 不需要专门的插件 bootstrap 钩子。
+
+> **当前限制:** `@covel/ai-provider` 是 `private: true` 的 workspace 包,没有发布到 npm。这条注册路径目前只对**随主仓分发的 bundled 插件**(在 `plugins/` 下、有 workspace 依赖访问权限)可用;通过 `~/.covel/plugins` 独立安装的社区插件暂时拿不到 `@covel/ai-provider` 的 import 权限,这是一个待补的 gap(类似 [tools.md 里 third-party local tool 的现状](../reference/tools.md#第三方插件-local-tool-现状audit-p0-4-gap))。社区插件当下只能用内置的 `openai-images` / `dashscope-wan` 两个 wire,或退回"自管 wire(逃生口)"路径自己发 HTTP。
+
+**接上 slot:** 在 `llm.toml` 给对应 slot 加 `providerRequestMetadata.imageWire`,`ctx.images.generate()` / `gateway.generateImage()` 就会选中这个 wire:
+
+```toml
+[covel.image]
+provider = "replicate"
+model = "black-forest-labs/flux-schnell"
+providerRequestMetadata = { imageWire = "replicate" }
+```
+
+不设置 `imageWire` 时缺省用 `openai-images`。
 
 ### 手动触发: 前端 → RPC → 函数 Runtime
 
@@ -378,6 +453,52 @@ const response = await ctx.utils.fetchWithRetry(`${slot.baseUrl}/...`, {
   }
 }
 ```
+
+### 事件契约声明与统一发射（`events` + `emit-event`）
+
+统一事件发射层让**任意声明了事件契约的插件**都能被**任意具备发射能力的叙事 / agent runtime**驱动，框架和叙事插件都不需要硬编码谁消费什么事件。分两端：
+
+**消费方：声明 `events` + 用 `trigger: { type: event }` 接住**
+
+```yaml
+# plugins/quest-tracker/PLUGIN.md frontmatter
+name: quest-tracker
+events:
+  - topic: quest.updated
+    schema: ./schemas/quest-updated.event.json
+    description:
+      zh: 任务状态更新
+      en: Quest status updated
+trigger:
+  type: event
+  topic: quest.updated
+runtimeType: function
+handler: ./handler.js
+```
+
+`schema`（插件根目录相对 JSON Schema 路径）校验事件的 `data` payload——同一份 schema 既供 `emit-event` 工具在执行前校验，也是作者自己核对契约的单一来源。`quest-tracker/handler.js` 通过 `ctx.triggerEvent.data` 读到事件负载：
+
+```ts
+export default async function handler(ctx) {
+  const { questId, status } = ctx.triggerEvent?.data ?? {};
+  // ... 更新 quest 状态
+}
+```
+
+**发射方：`advertiseEvents: true` + `tools.builtin: [emit-event]`**
+
+```yaml
+advertiseEvents: true
+tools:
+  builtin:
+    - emit-event
+```
+
+声明后，该 runtime 的 prompt 段 5 会自动收到当前 session 内所有 `advertise !== false` 事件的目录（`<available-events>` 块，逐条 `- topic: description (required: field1, field2)`），LLM 据此判断"当前叙事是否触发了某个已知领域事件"，命中时调用 `emit-event({ topic: "quest.updated", data: { questId: "q1", status: "completed" } })`（一次一个 topic）。校验失败（未知 topic / payload 不合 schema）会把可读错误文本原样回给 LLM 重试，不中断工具循环、也不产出重复事件。
+
+聚合范围是**当前 session 的激活插件集**——`quest-tracker` 未启用时，narrator 的 `<available-events>` 目录里不会出现 `quest.updated`，`emit-event` 也会拒绝该 topic。跨插件同 topic 不同 schema 时按插件优先级首胜。完整字段表、冲突规则见 [plugins.md #events 声明与 advertiseEvents](../reference/plugins.md#events-声明与-advertiseevents统一事件发射层)，工具校验流程见 [tools.md #emit-event](../reference/tools.md#emit-event)。
+
+> `narrator` / `chat-mode-narrator` 已接入为发射方参考实现。第一个落地的消费方是 `scene-stage/resolver`（`scene.set` 契约）：声明 `events`（含 `advertise: false` 的内部信令 topic）+ `trigger: {type: event, topic: scene.set}`，把事件解析成 `stage/current` 舞台状态并向后台生成 runtime 发内部事件——写事件消费方直接以 `plugins/scene-stage/runtimes/resolver/PLUGIN.md` 为参考实现。上面的 `quest.updated` 只是中性教学示例。
 
 ### `execution: sync` vs `execution: background`
 
@@ -427,56 +548,31 @@ handler: ./image-handler.js
 ```ts
 // runtimes/image-generator/image-handler.js
 //
-// Plugin-owned wire: 框架只通过 ctx.gateway.resolveSlot() 给凭据,
-// 不参与图像 HTTP 形态。可换成 Vercel AI SDK / openai SDK / 直 fetch /
-// 自写轮询;参考 dashscope-image-gen 或 openai-image-gen 两个内置实现。
+// ctx.images 是框架统一的图像生成原语:选 wire、调 provider、落
+// MediaStore、按 promptHash 去重全部由框架完成。handler 只编排 prompt
+// 和业务 metadata,不接触字节流或供应商凭据、也不用管 openai-images 还是
+// dashscope-wan —— 那由 llm.toml 里 image slot 的 providerRequestMetadata.imageWire 决定。
 export default async function handler(ctx) {
   const prompt = ctx.triggerEvent?.data?.prompt;
-
-  // 1. 拿 slot 凭据(凭据全部住在 ~/.covel/llm.toml,不复制到插件设置)
-  const slot = ctx.gateway.resolveSlot({
-    presetId: "image",
-    fallbackTag: "image",
-  });
-  if (!slot) throw new Error("image slot not configured in llm.toml");
-
-  // 2. SSRF 守卫
-  const guard = ctx.utils.validateBaseUrl(slot.baseUrl);
-  if (!guard.ok) throw new Error(`Bad baseUrl: ${guard.reason}`);
-
-  // 3. 任选 SDK 或裸 fetch 调供应商。这里演示 OpenAI Images API 同步形态。
-  const response = await ctx.utils.fetchWithRetry(
-    `${slot.baseUrl}/images/generations`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${slot.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: slot.model,
-        prompt,
-        n: 1,
-        response_format: "b64_json",
-      }),
-    },
-  );
-  const payload = await response.json();
-  const first = payload.data?.[0] ?? {};
-  const mimeType = "image/png";
-  let ref = null;
-  if (typeof first.b64_json === "string") {
-    ref = await ctx.media.put(Buffer.from(first.b64_json, "base64"), mimeType, {
-      prompt,
-      provider: slot.provider,
-      model: slot.model,
-    });
-  } else if (typeof first.url === "string") {
-    ref = await ctx.media.ingestUrl(first.url, {
-      allowedMimes: ["image/png", "image/jpeg", "image/webp"],
-      meta: { prompt, provider: slot.provider, model: slot.model },
-    });
+  if (typeof prompt !== "string" || prompt.length === 0) {
+    return {
+      pluginData: [
+        {
+          namespace: "images",
+          key: ctx.turnId,
+          value: { status: "failed", error: "missing prompt" },
+        },
+      ],
+    };
   }
+
+  const { refs, warnings, cached } = await ctx.images.generate({
+    presetId: "image",
+    prompt,
+    n: 1,
+    metadata: { kind: "illustration" },
+  });
+  const [ref] = refs;
   if (!ref) throw new Error("image provider returned no usable media");
 
   return {
@@ -488,20 +584,16 @@ export default async function handler(ctx) {
       {
         namespace: "images",
         key: ctx.turnId,
-        value: { status: "done", ref, prompt, mimeType },
+        value: { status: "done", ref, prompt, cached, warnings },
       },
     ],
     // framework normalizes this to Proposal{ type: 'asset.generate' }
-    assetGenerations: [
-      {
-        ref,
-        modality: "image",
-        meta: { prompt, provider: slot.provider, model: slot.model },
-      },
-    ],
+    assetGenerations: [{ ref, modality: "image", meta: { prompt } }],
   };
 }
 ```
+
+> 需要接入 `openai-images` / `dashscope-wan` 都不支持的 provider?看上面"注册自定义 wire"小节,给它注册一个 `ImageWire` 再照常调 `ctx.images.generate()` —— handler 代码不用变。
 
 ## 7. 发布和分享
 

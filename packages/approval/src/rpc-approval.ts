@@ -57,8 +57,6 @@ export interface RpcApprovalGate {
   decide(
     decision: RpcApprovalDecision,
   ): { ok: true; pending: RpcApprovalPending } | { ok: false; error: string };
-  /** Look up a pending approval by id. */
-  getPending(approvalId: string): RpcApprovalPending | undefined;
   /** List all pending approvals for a session. */
   listPending(sessionId: string): readonly RpcApprovalPending[];
   /**
@@ -240,10 +238,6 @@ export function createRpcApprovalGate(): RpcApprovalGate {
       }
 
       return { ok: true, pending };
-    },
-
-    getPending(approvalId) {
-      return state.pending.get(approvalId);
     },
 
     listPending(sessionId) {

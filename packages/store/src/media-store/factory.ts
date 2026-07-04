@@ -43,10 +43,6 @@ export async function createMediaStore(
         dbName: config.idbDbName,
       });
     }
-    case "s3":
-      throw new Error(
-        "S3 media requires an S3CompatibleMediaClient; use createS3MediaStore(client, options) until a client factory is configured.",
-      );
     default:
       throw new Error(`Unknown media store backend: ${String(backend)}`);
   }
@@ -62,10 +58,5 @@ export function createMediaStoreFromEnv(
     sqlitePath: env.sqlitePath,
     databaseUrl: env.databaseUrl,
     mediaRoot: env.mediaRoot,
-    s3Bucket: env.mediaS3Bucket,
-    s3Region: env.mediaS3Region,
-    s3Endpoint: env.mediaS3Endpoint,
-    s3KeyPrefix: env.mediaS3KeyPrefix,
-    s3PublicBaseUrl: env.mediaS3PublicBaseUrl,
   });
 }

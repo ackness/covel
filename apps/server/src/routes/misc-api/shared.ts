@@ -1,9 +1,5 @@
 import { resolve, relative } from "node:path";
 import { FrameworkCapability, readRuntimeEnv } from "@covel/shared";
-import {
-  discoverPluginsMulti,
-  type PluginDiscoveryResult,
-} from "@covel/plugin-loader";
 
 // audit A5: segment ids are neutral priority-band labels. The framework must
 // not assume "priority 500 == narrator" — narrator is a plugin whose priority
@@ -138,11 +134,4 @@ export function normalizeRuntimeTrigger(trigger?: {
       ? { maxRetryCount: trigger.maxRetryCount }
       : {}),
   };
-}
-
-export async function loadPluginDiscovery(
-  pluginId: string,
-): Promise<PluginDiscoveryResult | undefined> {
-  const discoveries = await discoverPluginsMulti(resolvePluginsDirs());
-  return discoveries.find((item) => item.id === pluginId);
 }

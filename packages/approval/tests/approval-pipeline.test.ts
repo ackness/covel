@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import type { ApprovalRequest, ApprovalRecord } from "@covel/shared";
+import type { ApprovalRequest } from "@covel/shared";
 import {
   matchPermissionRule,
   createApprovalPipeline,
@@ -17,19 +17,6 @@ function makeRequest(overrides?: Partial<ApprovalRequest>): ApprovalRequest {
     pluginId: "test",
     runtimeId: "rt",
     input: {},
-    turnId: "turn-1",
-    sessionId: "sess-1",
-    ...overrides,
-  };
-}
-
-function makeRecord(overrides?: Partial<ApprovalRecord>): ApprovalRecord {
-  return {
-    approvalId: "apr-1",
-    toolName: "covel_test_rt_my_tool",
-    pluginId: "test",
-    decision: "allow-session",
-    decidedAt: new Date().toISOString(),
     turnId: "turn-1",
     sessionId: "sess-1",
     ...overrides,
@@ -137,72 +124,11 @@ describe("createApprovalPipeline", () => {
     });
   });
 
-  describe("recordDecision + getSessionApprovals", () => {
-    let pipeline: ApprovalPipeline;
-
-    beforeEach(() => {
-      pipeline = createApprovalPipeline();
-    });
-
-    it("record and retrieve", () => {
-      const record = makeRecord();
-      pipeline.recordDecision(record);
-      const approvals = pipeline.getSessionApprovals("sess-1");
-      expect(approvals).toEqual([record]);
-    });
-
-    it("multiple sessions isolated", () => {
-      pipeline.recordDecision(makeRecord({ sessionId: "sess-1" }));
-      pipeline.recordDecision(
-        makeRecord({ sessionId: "sess-2", approvalId: "apr-2" }),
-      );
-
-      const sess1 = pipeline.getSessionApprovals("sess-1");
-      const sess2 = pipeline.getSessionApprovals("sess-2");
-
-      expect(sess1).toHaveLength(1);
-      expect(sess1[0].sessionId).toBe("sess-1");
-      expect(sess2).toHaveLength(1);
-      expect(sess2[0].sessionId).toBe("sess-2");
-    });
-  });
-
   describe("hasSessionAllow", () => {
-    let pipeline: ApprovalPipeline;
-
-    beforeEach(() => {
-      pipeline = createApprovalPipeline();
-    });
-
-    it("has session allow — returns true after allow-session decision", () => {
-      pipeline.recordDecision(makeRecord({ decision: "allow-session" }));
+    it("returns false — community session approvals are not wired to persistence", () => {
+      const pipeline = createApprovalPipeline();
       expect(
         pipeline.hasSessionAllow("sess-1", "covel_test_rt_my_tool", "test"),
-      ).toBe(true);
-    });
-
-    it("no session allow — returns false when no record exists", () => {
-      expect(
-        pipeline.hasSessionAllow("sess-1", "covel_test_rt_my_tool", "test"),
-      ).toBe(false);
-    });
-
-    it("allow-once does not count as session allow", () => {
-      pipeline.recordDecision(makeRecord({ decision: "allow-once" }));
-      expect(
-        pipeline.hasSessionAllow("sess-1", "covel_test_rt_my_tool", "test"),
-      ).toBe(false);
-    });
-
-    it("session allow for one plugin does not apply to another plugin", () => {
-      pipeline.recordDecision(
-        makeRecord({ decision: "allow-session", pluginId: "plugin-a" }),
-      );
-      expect(
-        pipeline.hasSessionAllow("sess-1", "covel_test_rt_my_tool", "plugin-a"),
-      ).toBe(true);
-      expect(
-        pipeline.hasSessionAllow("sess-1", "covel_test_rt_my_tool", "plugin-b"),
       ).toBe(false);
     });
   });

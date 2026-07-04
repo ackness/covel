@@ -73,7 +73,6 @@ function makeRuntimeHarness(store: DataStore): {
     loaded.set(manifest.name, {
       manifest,
       promptTemplate: "",
-      references: [],
       handler: async () => {
         calls[manifest.name] = (calls[manifest.name] ?? 0) + 1;
 

@@ -9,11 +9,6 @@
  * abstracts the terminal, the {@link JsonReader} the read gateway, and the
  * value builders ({@link InsertValueBuilders}) the write gateway — so this is
  * the single source of truth for the session-content surface.
- *
- * Plugin-config methods stay in their own shared module
- * (`./sql-plugin-config-records.ts`) because SQLite keeps them in a separate
- * factory (`sqlite/sqlite-plugin-configs.ts`); the PG content adapter delegates
- * to both, the SQLite session adapter to this one only.
  */
 
 import { and, asc, eq } from "drizzle-orm";

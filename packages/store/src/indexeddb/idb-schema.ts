@@ -85,9 +85,6 @@ export function upgradeBrowserIdbSchema(
   const characters = ensureStore(db, "characters", { keyPath: "id" });
   characters?.createIndex("sessionId", "sessionId");
 
-  const pluginConfigs = ensureStore(db, "pluginConfigs", { keyPath: "id" });
-  pluginConfigs?.createIndex("lookup", ["sessionId", "pluginId"]);
-
   ensureStore(db, "worlds", { keyPath: "id" });
 
   const traceEvents = ensureStore(db, "traceEvents", { keyPath: "id" });

@@ -4,8 +4,10 @@ export {
   getPendingProposals,
   getToolContent,
   withPendingProposals,
+  getEmittedEvents,
+  withEmittedEvents,
 } from "./result.js";
-export type { ToolExecutionEnvelope } from "./result.js";
+export type { ToolExecutionEnvelope, EmittedEvent } from "./result.js";
 
 // ── Zod re-export (for plugin tool factory injection) ───────────
 export { z } from "zod";
@@ -16,11 +18,7 @@ export type { InMemoryToolClientOptions } from "./in-memory-client.js";
 export type { ToolCallResult, ToolClient, ToolDefinition } from "./client.js";
 
 // ── Output validation ────────────────────────────────────────────
-export {
-  validateOutput,
-  selectOutputStrategy,
-  generateSchemaPrompt,
-} from "./output-validator.js";
+export { validateOutput } from "./output-validator.js";
 
 // ── Character schema validation ──────────────────────────────────
 export { validateFieldsAgainstSchema } from "./schema-validator.js";
@@ -62,9 +60,11 @@ export {
 export type { RuntimeDoneSentinel } from "./builtin/runtime-done.js";
 export { createMemoryTools } from "./builtin/memory-tools.js";
 export type { MemoryToolDeps } from "./builtin/memory-tools.js";
+export { createEmitEventTool } from "./builtin/emit-event.js";
+export type { EventDirectoryLike } from "./builtin/emit-event.js";
 
 // ── Short ID (LLM-friendly entity references) ──────────────────
-export { shortId, shortIdBatch, clearSessionCounters } from "./short-id.js";
+export { shortId, shortIdBatch } from "./short-id.js";
 
 // ── Types ────────────────────────────────────────────────────────
 export type {
@@ -73,6 +73,5 @@ export type {
   ToolDefinitionInput,
   ToolSource,
   ResolvedTool,
-  StructuredOutputStrategy,
   ValidationResult,
 } from "./types.js";

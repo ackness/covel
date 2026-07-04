@@ -1,0 +1,53 @@
+{
+  "world": "haruka-academy",
+  "note": "Generation manifest for scene backgrounds. Prompts compose as style.prefix + scene.subject + style.suffix (+ style.nightSuffix for the night variant). Rename scaffolded ids to meaningful slugs, then polish every subject into an English visual description before generating.",
+  "style": {
+    "direction": "anime visual-novel background art, painterly cel-shaded scenery, pastel spring palette, seaside Japanese high-school slice-of-life mood",
+    "prefix": "Visual novel background art, clean anime scenery style, soft cel-shaded painterly rendering, gentle pastel spring palette, warm soft seaside afternoon light, no people, no characters, ",
+    "suffix": ", clean wide establishing composition, consistent art style, GalGame background",
+    "negative": "people, character, figure, silhouette, text, caption, watermark, logo, frame, signature",
+    "nightSuffix": ", now at dusk after sunset, warm classroom and street lights glowing against a darkening sky, quiet after-hours campus and town atmosphere"
+  },
+  "defaults": {
+    "size": "1536x1024",
+    "quality": "medium",
+    "mime": "image/png"
+  },
+  "scenes": [
+    {
+      "id": "classroom-2b",
+      "name": "二年 B 组",
+      "locationRef": "二年 B 组",
+      "subject": "Interior of a bright Japanese high school classroom, second-year row of wooden desks, window seats along the wall overlooking a schoolyard and a distant glittering sea horizon, pastel spring afternoon sunlight streaming through open windows, sheer curtains gently lifted by a sea breeze, worn wooden floor, chalkboard with a faint duty roster, tidy stacked notebooks on the nearest desk, soft dust motes drifting in the light",
+      "subjectNight": "Interior of the same second-year classroom just after sunset, empty wooden desks in dim amber light, window row overlooking a darkening schoolyard and the sea catching the last strip of orange horizon, chalk dust settled, a single warm ceiling light left on, quiet end-of-day stillness"
+    },
+    {
+      "id": "club-building",
+      "name": "社团楼",
+      "locationRef": "社团楼",
+      "subject": "Exterior of an old three-story wooden school clubhouse building, weathered timber walls and narrow stairwells, ivy creeping along one corner, open windows letting afternoon light spill onto a gravel path, spring foliage and soft shadows, warm pastel afternoon glow",
+      "subjectNight": "The same wooden clubhouse building at dusk, warm yellow light glowing from a few upper-floor windows against a deep blue evening sky, faint silhouette of the rooftop railing, quiet stairwell lit by a single bare bulb, distant school field lights visible beyond the building"
+    },
+    {
+      "id": "library",
+      "name": "图书馆",
+      "locationRef": "图书馆",
+      "subject": "Interior of a small two-story school library, tall wooden bookshelves lined with worn paperbacks, a long reading table beside a large window where seaside afternoon light pours in, dust-lit air, stacks of old festival magazines on a low shelf, soft pastel spring light warming the wood floor, quiet empty reading nook",
+      "subjectNight": "Interior of the library just before closing, warm desk lamps glowing along the long window table, outside the window a dusky sky over a distant sea, bookshelves in soft shadow, a single open book left on the table, hushed golden-hour library atmosphere"
+    },
+    {
+      "id": "sakurazaka-seawall",
+      "name": "樱坂海堤",
+      "locationRef": "樱坂海堤",
+      "subject": "A gently sloped seaside path lined with blooming cherry blossom trees leading from a school gate down toward a stone seawall, pale pink petals drifting in a sea breeze, sparkling ocean horizon beyond a low railing, worn asphalt path reflecting soft afternoon light, a vending machine glinting at the path's edge",
+      "subjectNight": "The same cherry-blossom seawall path at dusk, pale pink blossoms silhouetted against a darkening violet-orange sky, the sea catching the last warm light on the horizon, a lit vending machine glowing beside the railing, wet asphalt faintly reflecting streetlights after rain, quiet empty path"
+    },
+    {
+      "id": "shopping-street",
+      "name": "青砾町商店街",
+      "locationRef": "青砾町商店街",
+      "subject": "A small Japanese train-station shopping street with two short parallel rows of shopfronts, a bookstore, a flower shop, a family restaurant, and an instrument shop, cloth shop banners fluttering, narrow awnings, soft pastel afternoon light, a few bicycles parked along the curb, warm inviting storefronts",
+      "subjectNight": "The same shopping street after dark, shopfront signs and paper lanterns glowing warm orange and neon against a deep blue evening sky, wet pavement reflecting the lights, narrow awnings sheltering the empty street, a faint glow spilling from the family restaurant window, quiet lively small-town night mood"
+    }
+  ]
+}

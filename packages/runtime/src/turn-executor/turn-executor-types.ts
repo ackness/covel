@@ -190,6 +190,18 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
    * rather than three loose deps fields. Absent capability → feature off.
    */
   readonly capabilityPluginIds?: CapabilityPluginIds;
+
+  /**
+   * Optional session event directory (unified event emission layer, plan
+   * task 4/5). When present, an agent runtime whose manifest declares
+   * `advertiseEvents: true` gets `catalogText`'s rendered output threaded
+   * into `ContextBuildParams.eventCatalogText` for segment 5 injection.
+   * Structural type — satisfied by `apps/server`'s `EventDirectory`. Absent
+   * in test harnesses that don't wire the server bootstrap.
+   */
+  readonly eventDirectory?: {
+    catalogText(sessionId: string, locale: string): Promise<string>;
+  };
 }
 
 /** Plugin ids discovered by framework capability for the turn pipeline. */

@@ -198,7 +198,6 @@
     "currentWorld": "当前会话",
     "sessions": "会话",
     "noOtherSessions": "没有其他会话",
-    "commands": "命令",
     "startingUp": "正在启动...",
     "retryFrom": "从 {{label}} 重试",
     "executionSummary": "执行 · {{count}} 个运行时",
@@ -274,9 +273,11 @@
     "viewParsed": "解析",
     "viewDetailed": "详情",
     "viewRaw": "原始",
+    "viewStage": "舞台",
     "viewParsedAria": "解析视图",
     "viewDetailedAria": "详情视图",
     "viewRawAria": "原始视图",
+    "viewStageAria": "舞台视图",
     "stateStreaming": "生成中",
     "statePlaying": "进行中",
     "toggleStoryPanel": "切换故事侧栏",
@@ -959,6 +960,20 @@
   },
   "sceneCast": {
     "empty": "这一幕还没有角色登场。"
+  },
+  "stage": {
+    "historyLabel": "履历",
+    "historyTitle": "对话履历",
+    "formTitle": "填写表单",
+    "autoPlayLabel": "自动播放",
+    "autoPlayPauseLabel": "暂停自动播放",
+    "immersiveLabel": "全屏舞台",
+    "immersiveExitLabel": "退出全屏",
+    "exitLabel": "退出舞台",
+    "inputPlaceholder": "输入你的回应…",
+    "inputSendHint": "Enter 发送 · Shift+Enter 换行 · Esc 取消",
+    "freeInputLabel": "✎ 自己输入…",
+    "thinkingLabel": "叙事生成中…"
   },
   "common": {
     "preview": "预览",

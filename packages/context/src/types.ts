@@ -200,6 +200,15 @@ export interface ContextBuildParams {
    * `userSettings` specs — template lookups resolve to empty strings then.
    */
   readonly userSettings?: Readonly<Record<string, unknown>>;
+  /**
+   * Rendered text of the session's advertised event directory (topics +
+   * localized descriptions + required fields), produced by the server's
+   * event-directory service. Only injected into segment 5 when the
+   * runtime's manifest also declares `advertiseEvents: true` — see
+   * {@link RuntimeManifest.advertiseEvents}. Absent or empty string → no
+   * `<available-events>` block is rendered.
+   */
+  readonly eventCatalogText?: string;
 }
 
 // ── Session Context Snapshot ─────────────────────────────────────

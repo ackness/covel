@@ -13,8 +13,10 @@
 import {
   InMemoryToolClient,
   ToolValidationError,
+  getEmittedEvents,
   getPendingProposals,
   getToolContent,
+  type EmittedEvent,
   type ToolClient,
   type ToolModule,
 } from "@covel/tools";
@@ -59,6 +61,8 @@ export interface ToolCallContext {
   readonly pluginId: string;
   readonly runtimeId: string;
   readonly pendingProposals?: readonly Proposal[];
+  /** Topics already emitted via `emit-event` earlier in this tool loop — see @covel/tools ToolExecutionContext. */
+  readonly emittedEventTopics?: readonly string[];
   /** Optional trace emitter — when present, tool.calling / tool.completed / tool.failed are traced. */
   readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
 }
@@ -69,6 +73,8 @@ export interface ToolCallResult {
   readonly result: string; // JSON string for LLM
   readonly parsedResult: unknown; // Parsed result for framework use
   readonly pendingProposals?: readonly Proposal[];
+  /** Domain events emitted via the `emit-event` builtin tool (see @covel/tools result.ts). */
+  readonly emittedEvents?: readonly EmittedEvent[];
   readonly success: boolean;
   readonly approvalStatus?: ApprovalStatus;
 }
@@ -401,10 +407,12 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           pluginId: context.pluginId,
           runtimeId: context.runtimeId,
           pendingProposals: context.pendingProposals,
+          emittedEventTopics: context.emittedEventTopics,
         };
         const rawResult = await client.call(call.name, params, execContext);
         const parsedResult = getToolContent(rawResult);
         const pendingProposals = getPendingProposals(rawResult);
+        const emittedEvents = getEmittedEvents(rawResult);
 
         // Text-first convention: if the tool result is an object with a
         // `_text` string field, send ONLY the text as the LLM-facing payload
@@ -443,6 +451,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           result: resultStr,
           parsedResult,
           pendingProposals,
+          emittedEvents,
           success: true,
           approvalStatus,
         };

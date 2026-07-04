@@ -5,7 +5,7 @@ export {
   parseRetryAfterMs,
   sleepWithAbort,
 } from "./http/retry.js";
-export { postFormData, postJson } from "./http/request.js";
+export { getJson, postFormData, postJson } from "./http/request.js";
 export {
   appendProviderMetadata,
   assertSuccess,
