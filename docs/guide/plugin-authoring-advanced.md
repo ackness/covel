@@ -307,6 +307,7 @@ export default async function handler(
 | `utils`                  | `PluginRuntimeUtils?`   | SSRF 安全的 URL 校验 + 带重试的 fetch。插件自管 wire 时使用                                                                                                                                                                                                                  |
 | `media`                  | `MediaContext?`         | `put` / `get` / `resolveUrl` / `ingestUrl`——媒体库读写原语，`ingestUrl` 内置 SSRF/MIME/超时校验                                                                                                                                                                              |
 | `images`                 | `ImagesContext?`        | 统一图像生成原语（generate → 落库 → promptHash 去重），见下方图像生成小节。存在条件：executor 同时装配了 gateway 与 MediaStore                                                                                                                                               |
+| `speech`                 | `SpeechContext?`        | 统一语音原语：`generate`（TTS → 落库 → promptHash 去重）+ `transcribe`（STT → 纯文本）。存在条件与 `images` 相同                                                                                                                                                             |
 | `manualPayload`          | `unknown?`              | 仅在 `POST /plugin-rpc` 手动触发时注入,为请求体的 `payload` 字段                                                                                                                                                                                                             |
 | `triggerEvent`           | `{ topic, data }?`      | 仅 event 触发时存在,包含触发该 runtime 的事件                                                                                                                                                                                                                                |
 
@@ -373,6 +374,33 @@ if (!ref) throw new Error("image provider returned no usable media");
 - `metadata` 只在**首次**调用时落地——同一组生成参数的后续调用即使传了不同 `metadata` 也会命中缓存并沿用第一次的值。完整的 metadata 约定和 `promptHash` 语义见 [media-store.md § Metadata Conventions & Querying](../reference/media-store.md#metadata-conventions--querying)。
 - 存在条件:executor 同时装配了 gateway 与 `MediaStore`(生产环境始终满足;没接 store 的测试 harness 里 `ctx.images` 是 `undefined`,调用前按需 `ctx.images?.generate` 做空判断)。
 
+### 语音合成与转写:`ctx.speech`
+
+`ctx.speech` 是和 `ctx.images` 完全对称的语音原语。TTS 插件不再需要手写 HTTP wire、手动 `resolveSlot`、手动 `media.put`:
+
+```ts
+// TTS:文本 → 语音,返回已落库的 MediaRef
+const { refs, warnings, cached } = await ctx.speech.generate({
+  presetId: "mimo-tts", // 可选;缺省走 speech tag 解析
+  text: narrativeText,
+  voice: "mimo_default",
+  format: "mp3",
+  metadata: { turnId: ctx.turnId, triggeredBy: "auto" },
+});
+const [ref] = refs; // 单条音轨;数组形状与 images 对齐
+
+// STT:语音 → 文本(不落库、不去重)
+const { text } = await ctx.speech.transcribe({
+  presetId: "whisper", // 可选;缺省走 transcription tag 解析
+  audio: ref, // MediaRef,或 { data: Uint8Array, mimeType, fileName? }
+});
+```
+
+- `generate` 按 `sha256(presetId, text, voice, format)` 去重:同一段文本重复触发直接 `cached: true` 返回既有资产,不重复计费。
+- `transcribe` 输出纯文本直接返回 handler,无去重(需要缓存时插件可自行用 `ctx.pluginData` memoize)。
+- wire 选择:slot 的 `providerRequestMetadata.speechWire` / `transcriptionWire`,缺省 `openai-speech` / `openai-transcription`(标准 OpenAI `/audio/speech`、`/audio/transcriptions` 协议)。非标厂商用下方 `wires` 字段注册自定义 wire。
+- 存在条件与 `ctx.images` 相同,调用前 `ctx.speech?.generate` 空判断。
+
 ### 自管 wire(逃生口):`ctx.gateway.resolveSlot`
 
 只有当框架内置的两个 wire(`openai-images` / `dashscope-wan`)都覆盖不了需求时才用这条路径 —— 比如要接一个响应形态特殊、`ctx.images` 尚未支持的 provider,或者单次调试性质、不想为它注册一个正式 wire。这时直接拿 slot 凭据自己发请求:
@@ -390,42 +418,56 @@ if (slot) {
 
 这条路径下框架不再帮你落库或去重 —— `resolveSlot` 只给凭据,provider 返回的 `b64_json` 或临时 URL 必须自己写入 `ctx.media.put()` 或 `ctx.media.ingestUrl()`,完成态返回 `assetGenerations[]`。
 
-### 注册自定义 wire:`registerImageWire`
+### 注册自定义 wire:`wires` frontmatter 字段
 
-如果是一个会被反复使用的新 provider 协议(而不是一次性调试),把它注册成正式的 `ImageWire`,这样本插件所有 runtime、乃至 `llm.toml` 里任何指向它的 slot 都能通过 `ctx.images` 复用它 —— 不需要提交框架 PR:
+如果是一个会被反复使用的新 provider 协议(而不是一次性调试),把它注册成正式的 wire —— 图像、TTS、STT 三个模态同一套机制,任何插件(包括 `~/.covel/plugins` 下的社区插件)都可以接入,不需要提交框架 PR:
 
-```ts
-import { registerImageWire } from "@covel/ai-provider";
-import type { ImageWire } from "@covel/ai-provider";
+**1. 在 PLUGIN.md frontmatter 声明 `wires` 字段**(插件根目录相对路径,整个插件声明一次即可):
 
-const replicateWire: ImageWire = {
-  id: "replicate", // 开放字符串 id(非枚举)—— 新协议不占用框架命名空间
-  async generate(config, params, context) {
-    // config = { baseUrl, apiKey, signal, ... }(来自 slot 解析)
-    // params = { model, prompt, negativePrompt?, size?, quality?, n?, background?, providerRequestMetadata? }
-    // 必须走包内硬化 http 基建(SSRF + redirect manual + 结构化错误),参考
-    // packages/ai-provider/src/image/openai-images-wire.ts 的 postJson/parseJson/assertSuccess 用法。
-    // 返回 { images: [{ kind: "bytes" | "url", ... }], usage, warnings }
-  },
-};
-
-registerImageWire(replicateWire); // 顶层调用一次;重复 id 会抛错
+```yaml
+wires: lib/wires.js
 ```
 
-**注册时机:** 把 `registerImageWire()` 放在 function runtime `handler.js`(或它 import 的模块)的顶层。`loadRuntime` 加载该 runtime 时(晚于插件发现、早于任何 turn 真正调度它)会 `import()` 这个模块一次,Node 的模块缓存保证顶层代码只跑一次 —— 不需要专门的插件 bootstrap 钩子。
+**2. wires 模块 default export 三组 wire 数组**(都可选),或一个接受注入工具的工厂函数 —— 工厂形态让插件零依赖拿到框架的 SSRF 守卫和重试 fetch:
 
-> **当前限制:** `@covel/ai-provider` 是 `private: true` 的 workspace 包,没有发布到 npm。这条注册路径目前只对**随主仓分发的 bundled 插件**(在 `plugins/` 下、有 workspace 依赖访问权限)可用;通过 `~/.covel/plugins` 独立安装的社区插件暂时拿不到 `@covel/ai-provider` 的 import 权限,这是一个待补的 gap(类似 [tools.md 里 third-party local tool 的现状](../reference/tools.md#第三方插件-local-tool-现状audit-p0-4-gap))。社区插件当下只能用内置的 `openai-images` / `dashscope-wan` 两个 wire,或退回"自管 wire(逃生口)"路径自己发 HTTP。
+```js
+// lib/wires.js — 纯 JS,无需 import 任何框架包
+export default ({ fetchWithRetry, validateBaseUrl }) => ({
+  speech: [
+    {
+      id: "mimo", // 注册后自动加插件前缀 → "mimo-tts/mimo"
+      async synthesize(config, params) {
+        // config = { baseUrl, apiKey, ... }(来自 slot 解析,key 已注入)
+        // params = { model, text, voice?, format?, providerRequestMetadata? }
+        // 返回 { audio: { mimeType, data: Uint8Array }, usage, warnings }
+      },
+    },
+  ],
+  image: [
+    /* { id, async generate(config, params) } */
+  ],
+  transcription: [
+    /* { id, async transcribe(config, params) } */
+  ],
+});
+```
 
-**接上 slot:** 在 `llm.toml` 给对应 slot 加 `providerRequestMetadata.imageWire`,`ctx.images.generate()` / `gateway.generateImage()` 就会选中这个 wire:
+- **命名空间:** 注册 id 强制加 `<pluginId>/` 前缀 —— 不会撞内置 wire,两个插件可以各自有同名 wire。
+- **加载时机与信任门控:** builtin/official 插件在服务启动时注册;community 插件在其 runtime 首次被加载时注册(与框架 `import()` 其 handler.js 同刻,时序必然早于 handler 里的任何 `ctx.images` / `ctx.speech` 调用)。
+- **容错:** 路径逃逸、文件缺失、条目形状不对都只 warn 并跳过,不会拖垮启动;重复注册(dev 双重启动)也只 warn。
+- bundled 插件如果更愿意直接 `import { registerImageWire } from "@covel/ai-provider"` 在模块顶层注册,仍然可行 —— `wires` 字段只是把这条路开放给了拿不到 workspace 依赖的第三方插件。
+
+**3. 接上 slot:** 在 `llm.toml` 给对应 slot 的 `providerRequestMetadata` 指定 wire id(注意带插件前缀),`ctx.images` / `ctx.speech` / gateway 就会选中它:
 
 ```toml
-[covel.image]
-provider = "replicate"
-model = "black-forest-labs/flux-schnell"
-providerRequestMetadata = { imageWire = "replicate" }
+[covel.mimo-tts]
+provider = "xiaomi"
+model = "mimo-v2.5-tts"
+tag = "speech"
+providerRequestMetadata = { speechWire = "mimo-tts/mimo" }
 ```
 
-不设置 `imageWire` 时缺省用 `openai-images`。
+不设置时的缺省 wire:`imageWire` → `openai-images`、`speechWire` → `openai-speech`、`transcriptionWire` → `openai-transcription`。完整 slot 配置参考见 [slots.md](../reference/slots.md)。
 
 ### 手动触发: 前端 → RPC → 函数 Runtime
 
