@@ -29,6 +29,7 @@ description: 创建 Covel 世界包。根据用户概念直接生成 world.yaml 
 - 至少 3 个地区、3 个阵营、4 个力量等级、3 个历史事件、3 个社会阶层
 - `openingScenario` 必须呈现即时的选择或紧张感
 - 按玩法选择 `pluginPolicy.preset`: 传统叙事用 `traditional-story`，对话/校园/群像用 `dialogue-mode`
+- **视觉小说世界**（对话模式的增强档）：声明 `defaultViewMode: stage` 进全屏舞台（背景 + 立绘 + 打字机），`recommendedPlugins` 加 `scene-stage` / `character-presence` / `character-blueprint`。资产（立绘/场景图）是**渐进增强**——没有也能跑（回退世界头图 + 占位卡），后续可用 `scripts/generate-portraits.mjs` / `generate-scenes.mjs` 补。结构见 `references/world-yaml-schema.md` 的"视觉小说资产管线"小节，成品参考 `worlds/haruka-academy`
 - 本仓库示例世界默认声明 `worldData: data/world.data.yaml`; 如果生成对应数据 descriptor，必须读取 `references/world-yaml-schema.md` 的 worldData 小节
 - 避免泛化的奇幻套路，追求独特的世界设定
 - 所有 ID 字段（world id, faction id）使用 kebab-case 英文

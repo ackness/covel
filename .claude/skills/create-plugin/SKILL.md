@@ -31,10 +31,13 @@ description: 创建 Covel 插件。通过对话了解需求，直接生成 PLUGI
 - **同步 / 后台执行**（仅手动触发）：`execution: sync`（默认，阻塞 turn）/ `background`（202 + `jobId`，框架在 `_jobs/<jobId>` 写状态，前端通过 `plugin-data.changed` SSE 感知）。
   - 插件**禁止**主动写 `_jobs/*` / `_logs/*`，框架会覆盖。
 - **事件链**：runtime 在返回里带 `events: [{topic, data}]`，下游 `trigger: {type: event, topic}` runtime 在同 turn 被拉起。
+- **事件契约声明（统一事件层）**：消费方在 frontmatter 用 `events: [{topic, schema, description, advertise?}]` 声明契约（`schema` 为插件根相对 JSON Schema 路径，校验事件 payload；`advertise: false` = 仅插件内部信令，agent 不可发射）。发射方 agent 声明 `advertiseEvents: true` + `tools.builtin: [emit-event]`，prompt 会自动收到当前 session 所有已声明事件的目录，LLM 命中时调 `emit-event`（同 topic 每回合去重）。参考实现：`plugins/scene-stage/runtimes/resolver/PLUGIN.md`（`scene.set` 消费方）。
+- **`requireToolUse: true`**（仅 agent）：唯一职责就是调某个工具的 runtime 容易漂移成续写正文——开启后零成功工具调用即收场时框架注入一条纠正消息重试一次（如 `scene-prompts`）。
 - **存储**：runtime 返回里带 `pluginData: [{namespace, key, value}, ...]`，框架自动转成 `plugin.data` / `plugin.data.batch` Proposal，写到 `plugin_data` 表 `(sessionId, pluginId, namespace, key)`。也可以用 `ctx.pluginData.set(...)` 立即落库（前端立刻通过 SSE 看到），适合 placeholder。
 - **多媒体（图像 / 音频 / 视频 / 文件）**：用 `ctx.media`（不是 `pluginData` 直接塞 bytes）。`ctx.media.put(bytes, mime, meta) → MediaRef`；`ctx.media.ingestUrl(url, {allowedMimes})` 从 URL 拉取到 MediaStore。把 ref 写进 `pluginData.value.ref`，并在 runtime output 返回 `assetGenerations: [{ref, modality, meta}]` 让框架 emit `asset.generate` proposal（`assets` 仍是兼容 alias）。前端用 `<Media as="auto" ref={…}>` 渲染（自动按 mime 选 `<img>/<audio>/<video>/<a>` 控件）。完整契约见 [`runtime-context.md`](references/runtime-context.md) §`ctx.media`。
 - **UI**：`ui: { right | message | left: [./ui/xxx.json] }` 指向 json-render spec。`dataSource.namespace` 让 spec 自动从本插件的 plugin-data 读数据。所有组件 + binding 见 [`ui-components-quickref.md`](references/ui-components-quickref.md)。
-- **Gateway 不暴露的能力**：`ctx.gateway` 只有 `generateText` / `generateObject` / `resolveSlot`——**没有** `generateImage` / `generateAudio` / `embed` / `streamText`。图像 / 音频 / 视频 / embed / 转录一律 `resolveSlot` + 自管 wire，详见 [`provider-quirks.md`](references/provider-quirks.md)。
+- **图像生成用 `ctx.images.generate`（首选，不要手写 provider fetch）**：框架统一原语——选 wire（openai-images / dashscope-wan / 插件注册的）、调 provider、落 MediaStore、按 promptHash 去重全由框架完成，handler 只给 prompt + metadata，返回 `{refs, warnings, cached}`。参考实现：`plugins/scene-stage/runtimes/background-gen/handler.js`。
+- **Gateway 其余能力**：`ctx.gateway` 有 `generateText` / `generateObject` / `resolveSlot`——**没有** `generateAudio` / `embed` / `streamText`。音频 / 视频 / embed / 转录仍走 `resolveSlot` + 自管 wire，详见 [`provider-quirks.md`](references/provider-quirks.md)。
 
 ## 流程
 
@@ -127,7 +130,8 @@ export default async function handler(ctx) {
   // ctx.gateway                       // 只暴露 generateText / generateObject / resolveSlot
   //   generateObject 在当前 host 未注入 JSON Schema → Zod converter 时不可用;
   //   结构化 JSON 输出优先改用 agent runtime 的 output.schema 路径。
-  //   图像/音频/视频/embed/转录用 resolveSlot 取配置后自管 fetch wire。
+  // ctx.images.generate({prompt, metadata}) // 图像生成首选:框架选 wire/落库/去重
+  //   音频/视频/embed/转录才用 resolveSlot 取配置后自管 fetch wire。
   // ctx.media                         // 生成媒体必须落 MediaStore,不要把 bytes/base64 直接塞 pluginData。
   // ctx.config                        // 会话/世界级配置
   // ctx.completedResults              // 本 turn 前序 runtime 的 output (Map)
@@ -216,8 +220,8 @@ pnpm --filter @covel/plugin-<id> test
 完整代码见 `references/example-plugins.md` 的 dashscope-image-gen 小节。关键点：
 
 1. 多 runtime 结构，根目录只放 `package.json`。
-2. Runtime A（agent, manual, sync）生成 prompt —— agent 在 **runtime output** 里返回 `events: [{topic: 'image.generate.requested', data: {prompt}}]`（frontmatter 不能声明事件，`outputConfigSchema` 是 strict 的，只允许 `schema`/`recordAs`）。
-3. Runtime B（function, event, background）消费事件，`ctx.gateway.resolveSlot({ presetId: 'image', fallbackTag: 'image' })` 取 slot 配置，自管 provider fetch / poll，得到 URL 或 bytes 后用 `ctx.media.ingestUrl(...)` / `ctx.media.put(...)` 落 MediaStore。
+2. Runtime A（agent, manual, sync）生成 prompt —— agent 在 **runtime output** 里返回 `events: [{topic: 'image.generate.requested', data: {prompt}}]`（frontmatter 的 `events:` 声明的是事件**契约**——topic + payload schema + 是否 advertise，发射本身仍走 runtime output 或 `emit-event` 工具；`outputConfigSchema` 是 strict 的，只允许 `schema`/`recordAs`）。
+3. Runtime B（function, event, background）消费事件，**首选 `ctx.images.generate({prompt, metadata})`**（框架选 wire、落 MediaStore、promptHash 去重，参考 `plugins/scene-stage/runtimes/background-gen/handler.js`）；只有非图像模态或框架 wire 不覆盖的 provider 才 `ctx.gateway.resolveSlot(...)` 自管 fetch / poll 后用 `ctx.media.ingestUrl(...)` / `ctx.media.put(...)` 落库。
 4. Runtime B 通过 `pluginData: [{namespace:'images', key, value:{ref,...}}]` 写画廊索引，并返回 `assetGenerations: [{ref, modality:'image', meta}]` 触发 `asset.generate`。
 5. UI spec：按钮 spec（`invokeRuntime`）+ 画廊 spec（`dataSource.namespace: 'images'`，用 `Image` 或 `Media` 组件 + `$item` 绑定 `value/ref`）。
 6. 玩家设置通过 `userSettings` 在 frontmatter 声明后，**前端表单自动注册**；服务端有三条注入通道可直接使用：function handler 收到 `ctx.userSettings`、agent `guard` 收到 `ctx.userSettings`、agent 系统 prompt 可用 `{{ userSettings.<key> }}` 模板变量（框架 `resolveUserSettings` 已合并 manifest 默认和玩家值）。按钮点击时也可通过 `ctx.manualPayload` 传一次性覆盖。
@@ -254,7 +258,7 @@ upstreamRequired: [narrator] # 上游本 turn 非 success → 本 runtime 直接
 
 ### 多媒体 / 音频 / 视频（mimo-tts、dashscope-image-gen 范式）
 
-任何"生成内容并要播放/展示"的插件流程：
+任何"生成内容并要播放/展示"的插件流程（**图像直接用 `ctx.images.generate`，下面的自管 wire 流程只针对音频/视频/embed 等框架 wire 不覆盖的模态**）：
 
 1. **拿字节** — `ctx.gateway.resolveSlot({presetId, fallbackTag})` 取 `baseUrl/apiKey/model`，自己 `fetch` 拿到原始字节。短链 URL 用 `ctx.media.ingestUrl(url, {allowedMimes})`。
 2. **存进 MediaStore** — `ref = await ctx.media.put(bytes, mime, meta)`。

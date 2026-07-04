@@ -13,8 +13,12 @@
 ├─ 文本但鉴权头不是 Bearer（api-key、x-api-key、自定义 header）
 │   └─ 自管 wire：ctx.gateway.resolveSlot(...) 取 baseUrl/apiKey/model，自己 fetch
 │
-├─ 图像 / 音频 / 视频生成
-│   └─ 一定自管 wire（gateway 没有 generateImage / generateAudio）
+├─ 图像生成
+│   └─ 先用 ctx.images.generate（框架 wire：openai-images / dashscope-wan，
+│      可 registerImageWire 扩展）；仅框架 wire 不覆盖的 provider 才自管 wire
+│
+├─ 音频 / 视频生成
+│   └─ 一定自管 wire（gateway 没有 generateAudio）
 │
 ├─ Embedding / 转录（ASR）
 │   └─ 一定自管 wire（gateway 不暴露这两类）

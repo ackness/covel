@@ -498,7 +498,7 @@ tools:
 
 聚合范围是**当前 session 的激活插件集**——`quest-tracker` 未启用时，narrator 的 `<available-events>` 目录里不会出现 `quest.updated`，`emit-event` 也会拒绝该 topic。跨插件同 topic 不同 schema 时按插件优先级首胜。完整字段表、冲突规则见 [plugins.md #events 声明与 advertiseEvents](../reference/plugins.md#events-声明与-advertiseevents统一事件发射层)，工具校验流程见 [tools.md #emit-event](../reference/tools.md#emit-event)。
 
-> `narrator` / `chat-mode-narrator` 已接入为发射方参考实现。第一个真正落地的消费方是场景切换（`scene.set` 契约），尚在推进中——上面的 `quest.updated` 只是中性教学示例，不代表已有插件声明。
+> `narrator` / `chat-mode-narrator` 已接入为发射方参考实现。第一个落地的消费方是 `scene-stage/resolver`（`scene.set` 契约）：声明 `events`（含 `advertise: false` 的内部信令 topic）+ `trigger: {type: event, topic: scene.set}`，把事件解析成 `stage/current` 舞台状态并向后台生成 runtime 发内部事件——写事件消费方直接以 `plugins/scene-stage/runtimes/resolver/PLUGIN.md` 为参考实现。上面的 `quest.updated` 只是中性教学示例。
 
 ### `execution: sync` vs `execution: background`
 
