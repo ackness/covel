@@ -66,6 +66,24 @@ describe("plugin manifest dataSchemas", () => {
     ).toThrow(/plugin-relative \.json path/);
   });
 
+  it("accepts a plugin-relative wires path and rejects traversal", () => {
+    const manifest = runtimeManifestSchema.parse({
+      name: "tts-runtime",
+      description: "TTS runtime",
+      priority: 700,
+      wires: "lib/wires.js",
+    });
+    expect(manifest.wires).toBe("lib/wires.js");
+
+    expect(() =>
+      runtimeManifestSchema.parse({
+        name: "tts-runtime",
+        description: "TTS runtime",
+        wires: "../outside/wires.js",
+      }),
+    ).toThrow(/plugin-relative/);
+  });
+
   it("accepts catalogue tags and relation metadata", () => {
     const manifest = runtimeManifestSchema.parse({
       name: "dialogue-narrator",

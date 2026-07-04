@@ -471,6 +471,12 @@ export const runtimeManifestSchema = z
     runtimeType: z.enum(["agent", "function"]).optional(),
     handler: z.string().optional(),
     guard: z.string().optional(),
+    /**
+     * Plugin-root-relative path to a media-wires module (image / speech /
+     * transcription vendor wires). Declare on ONE runtime per plugin.
+     * Constrained like rpc handlers to block path traversal at schema level.
+     */
+    wires: pluginRelativeJsPath.optional(),
     model: z.string().optional(),
     timeoutMs: z.number().int().positive().optional(),
     /**

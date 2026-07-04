@@ -444,6 +444,16 @@ export interface RuntimeManifest {
   /** Relative path to handler module (required for runtimeType: 'function'). */
   readonly handler?: string;
   /**
+   * Plugin-root-relative path to a media-wires module (resolved from the
+   * plugin root, NOT the runtime dir — same convention as `tools.local`).
+   * Default export: `{ image?, speech?, transcription? }` arrays of wire
+   * objects, or a factory `(inject: { fetchWithRetry, validateBaseUrl }) =>`
+   * that shape. Loaded once per plugin (trust-gated like local tools);
+   * registered wire ids are prefixed `"<pluginId>/"`. Declare on ONE
+   * runtime per plugin.
+   */
+  readonly wires?: string;
+  /**
    * Relative path to a guard function module.
    * Runs before agent execution — if it returns `{ skip: true }`, the LLM call is skipped.
    * The guard receives the same `FunctionHandlerContext` as function runtimes.
