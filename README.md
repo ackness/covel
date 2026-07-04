@@ -9,47 +9,36 @@
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)]()
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
 
-![Covel demo](./.assets/images/demo.gif)
+![Covel demo — one full session at 6× speed](./.assets/images/demo.gif)
 
-> **Current public release: v0.0.10.** Covel is still early access: APIs, data formats, and plugin frontmatter may change between versions. Official prebuilt binaries currently target macOS Apple Silicon.
+Covel is an AI RPG where the world keeps running between your turns: NPCs track how they feel about you, lore accumulates as you play, and memory carries the thread across the session. Every mechanic behind that is an **autonomous agent shipped as a plugin** — disable one, swap one, or write your own.
 
----
+> **Current public release: v0.0.10**, early access — APIs, data formats, and plugin frontmatter may change between versions. Prebuilt binaries target macOS Apple Silicon; other platforms build from source.
 
-## What is Covel
+## Highlights
 
-Covel is an AI-driven RPG where the world keeps running between your turns — NPCs track how they feel about you, lore builds up as you play, and memory carries the thread across a session. Each mechanic that makes that happen — narration, NPC relationships, world lore, character creation, memory — runs as its own **autonomous agent**, and a single turn chains several together. Each agent is a plugin: install one, swap one, or write your own.
+- 🎭 **Stage mode** — a full-screen visual novel: scene backdrops, character sprites, typewriter dialog, and choice overlays. Backdrops for brand-new locations are generated on demand, mid-session.
+- 🤖 **Multi-agent turns** — while the narrator writes the scene, other agents extract NPC relationships, grow the world codex, pick the on-stage cast, and maintain long-range memory — in parallel, every turn.
+- 🧩 **Everything is a plugin** — 20 bundled agents. A plugin is a `PLUGIN.md`: YAML frontmatter for triggers/tools/events, markdown body as the agent's prompt.
+- 🌍 **Two flagship worlds** — a dark-fantasy mystery and a GalGame-style school romance, both hand-built and ready to fork.
+- 🔌 **Bring your own model** — OpenAI / Anthropic / DeepSeek / Qwen model slots. Local-first: SQLite on disk, API keys never persisted server-side.
 
-## See it in action
+## Two ways to play
 
-The gif above is one normal turn. While the narrator writes the scene, four other agents work in parallel:
+|                                 Stage mode (visual novel)                                  |                                     Story mode (text)                                      |
+| :----------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------: |
+|                   ![Stage mode](./.assets/images/readme/stage-mode.png)                    |                    ![Story mode](./.assets/images/readme/text-mode.png)                    |
+| Backdrops, sprites, and typewriter dialog; scene art resolves and generates as you explore | Classic narrated turns with inline choices, forms, and the per-turn agent timeline visible |
 
-- **Narrator + Guide** — drive the story and offer next actions
-- **NPC Graph** — extracts relationships and surfaces who-knows-whom
-- **Codex** — accumulates world lore as you play
-- **Memory** — keeps long-range context across the session
-
-Every agent is its own plugin. Disable one, swap one, or write your own.
-
-## Worlds in the box
-
-Two sample worlds ship in the box — each a complete, hand-built showcase of a different play style. Play one as-is, or fork it as a starting template:
-
-- **Mistport Chronicles** (雾港·裂潮纪) — a dark-fantasy mystery in traditional-story mode. A fog-shrouded port where every ebb bares different ruins; a guildmaster vanishes, and four powers race for a key to what sleeps in the deep. Ships with a seed cast, a four-faction map, and investigation-flavored memory. Bilingual (English + 中文).
-- **Haruka Academy** (遥风学园) — school romance and slice-of-life in dialogue mode, GalGame-style. Clubs, exams, rumors, and quiet crushes at a seaside high school in the weeks before the spring festival, told through a cast of eight.
+Worlds declare their default (`defaultViewMode: stage`); you can switch any time in-session.
 
 ## Quick start
 
-### Play it
+### Play
 
-Grab the official **v0.0.10 macOS Apple Silicon** build from [GitHub Releases](https://github.com/ackness/covel/releases/tag/v0.0.10) — `Covel-electron-0.0.10-mac-arm64.dmg`. The rolling release list is available at [Releases](https://github.com/ackness/covel/releases).
+Download the **macOS Apple Silicon** build from [Releases](https://github.com/ackness/covel/releases), then: open Settings → paste an LLM API key → pick a world → play.
 
-Open Settings, paste an LLM API key, pick one of the worlds above, and play.
-
-Per-release notes live in [`docs/CHANGELOG.md`](./docs/CHANGELOG.md).
-
-Your data lives at `~/.covel/` — config, keys, SQLite, custom worlds, logs. Full schema → [`docs/guide/desktop-config.en.md`](./docs/guide/desktop-config.en.md).
-
-For Windows, Intel Mac, and Linux, build from source. Electron is the only desktop shell in the current codebase.
+Your data lives in `~/.covel/` (config, keys, SQLite, custom worlds, logs) — details in the [desktop config guide](./docs/guide/desktop-config.en.md). Per-release notes: [`docs/CHANGELOG.md`](./docs/CHANGELOG.md).
 
 ### Run from source
 
@@ -60,108 +49,40 @@ cp .env.llm.example .env.llm        # provider API keys
 pnpm dev                            # web :5173 + server :3001 (SQLite)
 ```
 
-Open <http://localhost:5173>; debug page at `/debug`.
+Open <http://localhost:5173> — debug tooling lives at `/debug`. PostgreSQL, in-memory mode, and other knobs: [env registry](./docs/guide/env-registry.md).
 
-Need PostgreSQL, in-memory mode, or alternative paths? See [`docs/guide/env-registry.md`](./docs/guide/env-registry.md).
+## Worlds in the box
 
-## Make your own
+![World select](./.assets/images/readme/select-world.png)
 
-You can create a working plugin or world pack through the repo's **two Claude Code skills**:
+- **Mistport Chronicles** (雾港·裂潮纪) — dark-fantasy mystery in traditional-story mode. A fog-shrouded port where every ebb bares different ruins; a guildmaster vanishes and four powers race for a key to what sleeps in the deep. Bilingual, with a seed cast and investigation-flavored memory.
+- **Haruka Academy** (遥风学园) — school romance in GalGame stage mode. Clubs, exams, rumors, and quiet crushes at a seaside high school, told through a cast of eight — portraits and scene art included.
 
-- **`/create-plugin`** — describe the agent you want; the skill generates a `PLUGIN.md` (frontmatter + skill prompt) and a minimal `package.json`.
-- **`/create-world`** — describe a setting; the skill produces `world.yaml`, `WORLD.md`, and `data/world.data.yaml` ready to drop into `~/.covel/worlds/`.
+## Create your own
 
-Open Claude Code in this repository, type `/create-plugin` or `/create-world`, and have a conversation.
+Open Claude Code in this repository and use the bundled skills:
 
-> An official community for sharing plugins and world packs is on the roadmap. For now, share via Gist or fork.
+- **`/create-world`** — describe a setting; get a validated `world.yaml` + `WORLD.md` + world data, ready for `~/.covel/worlds/`.
+- **`/create-plugin`** — describe the agent you want; get a validated `PLUGIN.md` + `package.json`.
+
+An official hub for sharing plugins and world packs is on the roadmap — for now, share via Gist or fork.
 
 ## Develop
 
-For hand-writing plugins, debugging the runtime, or extending the kernel.
+- [Plugin authoring guide](./docs/guide/plugin-authoring.md) — start here; bundled plugins under [`plugins/`](./plugins/) are working references
+- [Architecture & turn pipeline](./docs/architecture/flow.md) — how a turn flows through trigger → schedule → agents → commit
+- Reference: [plugin registry](./docs/reference/plugins.md) · [tool registry](./docs/reference/tools.md) · [HTTP API](./docs/reference/api.md) · [full doc index](./docs/README.md)
 
-### Bundled plugin packages
-
-| Plugin                |   Kind   | Role                                              |
-| --------------------- | :------: | ------------------------------------------------- |
-| `branch-reply`        | Function | Reply candidates and accepted-variant storage     |
-| `char-creator`        |  Mixed   | Player creation and character tracking            |
-| `character-blueprint` | Function | Reusable character blueprints                     |
-| `character-presence`  | Function | Character portraits, sprites, voice, and media    |
-| `chat-mode-narrator`  |  Agent   | Dialogue-focused narration                        |
-| `codex`               |  Agent   | World-knowledge codex                             |
-| `cost-gate`           |   Hook   | Per-session token budget (trim + abort)           |
-| `director`            |   Hook   | One consistent narration preamble across runtimes |
-| `guide`               |  Agent   | Action guidance and option generation             |
-| `living-world-rules`  | Function | Persistent world rules and lorebook projection    |
-| `memory`              |    UI    | Memory panel                                      |
-| `narrator`            |  Agent   | Main traditional-story narration                  |
-| `npc-graph`           |  Mixed   | Relationship graph retrieval and extraction       |
-| `player-identity`     | Function | Hero voice, goals, and boundaries                 |
-| `pregame`             | Function | Pre-game bootstrap                                |
-| `scene-cast`          | Function | Current scene cast and active-speaker context     |
-| `scene-prompts`       |  Agent   | Dialogue-mode short action prompts                |
-| `story-guard`         |   Hook   | Output sanitisation + high-risk tool deny-list    |
-| `world-init`          |  Mixed   | World schema and lore initialization              |
-
-### Write a plugin manually
-
-Minimum: `PLUGIN.md` + `package.json`. Frontmatter declares trigger and tools; the markdown body is the agent's skill prompt.
-
-```yaml
----
-name: my-plugin/main
-priority: 500
-model: plugin
-trigger: { type: scheduled, interval: 1 }
-tools:
-  builtin: [create-form, plugin-data-set]
----
-You are an XXX agent. On this turn you need to…
-```
-
-Full walkthrough → [Plugin authoring guide](./docs/guide/plugin-authoring.md). Existing plugins under [`plugins/`](./plugins/) are good references too. See also: [plugin registry](./docs/reference/plugins.md) · [tool registry](./docs/reference/tools.md).
-
-### Repo layout
-
-```
-covel/
-├── apps/
-│   ├── web/              Frontend (React 19 + Vite)
-│   ├── server/           Backend (Hono + Drizzle)
-│   └── desktop/          Electron shell
-├── packages/             Internal packages (runtime / context / ai-provider / store / memory / tools / …)
-├── plugins/              Bundled plugin packages
-├── worlds/               Sample world packs
-├── prompts/              Externalised prompt templates
-└── docs/                 Reference docs and author guides
-```
-
-pnpm workspaces + Turborepo · ESM-only · TypeScript strict. Full package list → [`CLAUDE.md`](./CLAUDE.md#monorepo-structure).
-
-### Documentation
-
-| Topic                        | Link                                                                                                                |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Architecture & turn pipeline | [`docs/architecture/flow.md`](./docs/architecture/flow.md)                                                          |
-| Writing plugins              | [`docs/guide/plugin-authoring.md`](./docs/guide/plugin-authoring.md)                                                |
-| Plugin / tool registries     | [`docs/reference/plugins.md`](./docs/reference/plugins.md) · [`docs/reference/tools.md`](./docs/reference/tools.md) |
-| API / SSE protocol           | [`docs/reference/api.md`](./docs/reference/api.md) · [`docs/reference/protocol.md`](./docs/reference/protocol.md)   |
-| Desktop config               | [`docs/guide/desktop-config.en.md`](./docs/guide/desktop-config.en.md)                                              |
-| Desktop packaging            | [`apps/desktop/PACKAGING.md`](./apps/desktop/PACKAGING.md)                                                          |
-
-Full index → [`docs/README.md`](./docs/README.md). The in-app debug page at `/debug` shows session timeline, runtime traces, and prompt diffs.
+pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono + Drizzle. Repo layout and package list → [`CLAUDE.md`](./CLAUDE.md#monorepo-structure).
 
 ## Roadmap
 
 - Windows / Linux / Intel Mac builds
-- Official community for sharing plugins and world packs
+- Official community hub for plugins and world packs
 - Plugin marketplace inside the desktop app
 
-## Contributing & releases
+## Contributing & license
 
-- Issues and PRs welcome — please read [`docs/CONTRIBUTING.en.md`](./docs/CONTRIBUTING.en.md) first.
-- Releases are driven by Git tags: pushing a `v*` tag triggers [`.github/workflows/release.yml`](./.github/workflows/release.yml) to build the Electron macOS arm64 `.dmg` and `.zip`, then publish a GitHub Release.
-
-## License
+Issues and PRs welcome — please read [`docs/CONTRIBUTING.en.md`](./docs/CONTRIBUTING.en.md) first. Releases are tag-driven: pushing `v*` builds and publishes the macOS installer via [GitHub Actions](./.github/workflows/release.yml).
 
 [MIT](./LICENSE) © 2026 Covel Contributors
