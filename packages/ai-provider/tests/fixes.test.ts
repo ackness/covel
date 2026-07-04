@@ -443,6 +443,35 @@ describe("HIGH-3: fetchLiteLlmModels has 30s AbortController timeout", () => {
   });
 });
 
+// ── video_generation models derive output ["video"], not ["text"] ────
+
+describe("video_generation mode derives video output modality", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("maps mode=video_generation to input [text] / output [video]", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          "some/video-model": {
+            max_input_tokens: 4096,
+            max_output_tokens: 0,
+            mode: "video_generation",
+          },
+        }),
+      }),
+    );
+
+    const db = await fetchLiteLlmModels("https://example.com/models.json");
+
+    expect(db.models["some/video-model"]?.input).toEqual(["text"]);
+    expect(db.models["some/video-model"]?.output).toEqual(["video"]);
+  });
+});
+
 // ── MEDIUM: shouldFallback does NOT trigger on SCHEMA_VALIDATION_FAILED ──
 
 describe("MEDIUM: SCHEMA_VALIDATION_FAILED does not trigger fallback", () => {

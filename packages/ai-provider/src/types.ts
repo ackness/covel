@@ -44,7 +44,7 @@ export type OperationMode =
 export type InputModality = "text" | "image" | "audio" | "video" | "file";
 
 /** What a model can produce as output. */
-export type OutputModality = "text" | "image" | "audio" | "embedding";
+export type OutputModality = "text" | "image" | "audio" | "video" | "embedding";
 
 /** Feature flags for model capabilities beyond basic I/O. */
 export type ModelFeature =

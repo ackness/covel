@@ -7,7 +7,13 @@ const providerProtocolSchema = z.enum([
 ]);
 
 const inputModalitySchema = z.enum(["text", "image", "audio", "video", "file"]);
-const outputModalitySchema = z.enum(["text", "image", "audio", "embedding"]);
+const outputModalitySchema = z.enum([
+  "text",
+  "image",
+  "audio",
+  "video",
+  "embedding",
+]);
 const modelFeatureSchema = z.enum([
   "function_calling",
   "structured_output",

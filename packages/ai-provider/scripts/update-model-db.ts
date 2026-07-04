@@ -22,7 +22,7 @@ const LITELLM_URL =
 // ── Types ────────────────────────────────────────────────────────
 
 type InputModality = "text" | "image" | "audio" | "video" | "file";
-type OutputModality = "text" | "image" | "audio" | "embedding";
+type OutputModality = "text" | "image" | "audio" | "video" | "embedding";
 type ModelFeature =
   | "function_calling"
   | "structured_output"
@@ -239,7 +239,7 @@ function deriveOutputModalities(
     case "embedding":
       return ["embedding"];
     case "video_generation":
-      return ["text"]; // video not in our OutputModality, degrade to text
+      return ["video"];
     default:
       return ["text"];
   }
@@ -263,7 +263,7 @@ function isInputModality(s: string): s is InputModality {
 }
 
 function isOutputModality(s: string): s is OutputModality {
-  return ["text", "image", "audio", "embedding"].includes(s);
+  return ["text", "image", "audio", "video", "embedding"].includes(s);
 }
 
 function roundPrice(n: number): number {
