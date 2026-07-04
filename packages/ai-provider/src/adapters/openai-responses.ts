@@ -327,9 +327,5 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
     // Delegate non-text operations to the chat adapter
     embed: (config, params, context) =>
       chatAdapter.embed(config, params, context),
-    synthesizeSpeech: (config, params, context) =>
-      chatAdapter.synthesizeSpeech(config, params, context),
-    transcribeAudio: (config, params, context) =>
-      chatAdapter.transcribeAudio(config, params, context),
   };
 }

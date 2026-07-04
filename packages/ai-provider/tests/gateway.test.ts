@@ -41,15 +41,6 @@ function createStubAdapter(
         usage: { inputTokens: 5, outputTokens: 0 },
       };
     },
-    async synthesizeSpeech() {
-      return {
-        audio: { mimeType: "audio/mp3", data: new Uint8Array() },
-        usage: null,
-      };
-    },
-    async transcribeAudio() {
-      return { text: "transcribed", usage: null };
-    },
     ...overrides,
   };
 }

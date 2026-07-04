@@ -93,6 +93,17 @@ export type {
   ImageWire,
 } from "./image/types.js";
 
+// Speech synthesis / transcription (pluggable wires, same contract as image)
+export {
+  registerSpeechWire,
+  getSpeechWire,
+  DEFAULT_SPEECH_WIRE,
+  registerTranscriptionWire,
+  getTranscriptionWire,
+  DEFAULT_TRANSCRIPTION_WIRE,
+} from "./speech/wire-registry.js";
+export type { SpeechWire, TranscriptionWire } from "./speech/types.js";
+
 // Slot overlay (per-request preset/provider injection)
 export {
   applySlotOverlay,

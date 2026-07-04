@@ -514,15 +514,6 @@ describe("MEDIUM: SCHEMA_VALIDATION_FAILED does not trigger fallback", () => {
       async generateImage() {
         return { images: [], usage: null };
       },
-      async synthesizeSpeech() {
-        return {
-          audio: { mimeType: "audio/mp3", data: new Uint8Array() },
-          usage: null,
-        };
-      },
-      async transcribeAudio() {
-        return { text: "", usage: null };
-      },
     };
 
     const profiles: ModelProfile[] = [
