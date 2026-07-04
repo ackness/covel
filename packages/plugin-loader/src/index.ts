@@ -42,4 +42,8 @@ export type {
   ImagesContext,
   ImageGenerateInput,
   ImageGenerateOutput,
+  SpeechContext,
+  SpeechGenerateInput,
+  SpeechGenerateOutput,
+  SpeechTranscribeInput,
 } from "./types.js";

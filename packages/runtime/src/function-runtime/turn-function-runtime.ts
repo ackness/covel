@@ -13,6 +13,7 @@ import {
 } from "./plugin-handler-helpers.js";
 import { createRuntimeMediaContext } from "./runtime-media-context.js";
 import { createRuntimeImagesContext } from "./runtime-images-context.js";
+import { createRuntimeSpeechContext } from "./runtime-speech-context.js";
 import { runPostRuntimeHook } from "../hooks/wire-helpers.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import {
@@ -174,6 +175,24 @@ export async function executeFunctionRuntime({
           { sessionId: input.sessionId, pluginId: manifest.pluginId },
         )
       : undefined;
+  // ctx.speech mirrors the ctx.images assembly: a gateway with both speech
+  // halves wired plus a mediaStore to persist through, else undefined.
+  const speechHandle =
+    tracedGateway?.synthesizeSpeech &&
+    tracedGateway?.transcribeAudio &&
+    deps.mediaStore &&
+    mediaHandle
+      ? createRuntimeSpeechContext(
+          {
+            synthesizeSpeech:
+              tracedGateway.synthesizeSpeech.bind(tracedGateway),
+            transcribeAudio: tracedGateway.transcribeAudio.bind(tracedGateway),
+          },
+          deps.mediaStore,
+          mediaHandle,
+          { sessionId: input.sessionId, pluginId: manifest.pluginId },
+        )
+      : undefined;
   const isTrustedSource = isTrustedPluginSource(deps, manifest);
   const handlerStore = deps.store
     ? isTrustedSource
@@ -212,6 +231,7 @@ export async function executeFunctionRuntime({
       ...(tracedUtils ? { utils: tracedUtils } : {}),
       ...(mediaHandle ? { media: mediaHandle } : {}),
       ...(imagesHandle ? { images: imagesHandle } : {}),
+      ...(speechHandle ? { speech: speechHandle } : {}),
       ...(assetProgress ? { assetProgress } : {}),
       ...(manualPayloadForRuntime
         ? { manualPayload: manualPayloadForRuntime }

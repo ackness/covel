@@ -106,6 +106,32 @@ export interface FullGatewayLike {
     >;
     warnings: readonly string[];
   }>;
+
+  /** Optional — mirrors `PluginRuntimeGateway.synthesizeSpeech`. */
+  synthesizeSpeech?(
+    input: {
+      presetId?: string;
+      text: string;
+      voice?: string;
+      format?: string;
+    },
+    options?: FullGatewayOptions,
+  ): Promise<{
+    audio: { mimeType: string; data: Uint8Array };
+    warnings: readonly string[];
+  }>;
+
+  /** Optional — mirrors `PluginRuntimeGateway.transcribeAudio`. */
+  transcribeAudio?(
+    input: {
+      presetId?: string;
+      audio: { data: Uint8Array; mimeType: string; fileName?: string };
+    },
+    options?: FullGatewayOptions,
+  ): Promise<{
+    text: string;
+    warnings: readonly string[];
+  }>;
 }
 
 /**
@@ -275,6 +301,42 @@ export function createPluginRuntimeGateway(
         },
       );
       return { images: result.images, warnings: result.warnings };
+    };
+  }
+
+  if (gateway.synthesizeSpeech) {
+    const synthesizeSpeech = gateway.synthesizeSpeech.bind(gateway);
+    facade.synthesizeSpeech = async (input) => {
+      const result = await synthesizeSpeech(
+        {
+          presetId: input.presetId,
+          text: input.text,
+          voice: input.voice,
+          format: input.format,
+        },
+        {
+          ...commonOptions(),
+          ...(input.signal ? { signal: input.signal } : {}),
+        },
+      );
+      return { audio: result.audio, warnings: result.warnings };
+    };
+  }
+
+  if (gateway.transcribeAudio) {
+    const transcribeAudio = gateway.transcribeAudio.bind(gateway);
+    facade.transcribeAudio = async (input) => {
+      const result = await transcribeAudio(
+        {
+          presetId: input.presetId,
+          audio: input.audio,
+        },
+        {
+          ...commonOptions(),
+          ...(input.signal ? { signal: input.signal } : {}),
+        },
+      );
+      return { text: result.text, warnings: result.warnings };
     };
   }
 
