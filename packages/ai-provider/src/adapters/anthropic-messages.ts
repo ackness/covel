@@ -356,11 +356,5 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
     async embed() {
       throw createUnsupportedModeError("anthropic", "embed");
     },
-    async synthesizeSpeech() {
-      throw createUnsupportedModeError("anthropic", "speech");
-    },
-    async transcribeAudio() {
-      throw createUnsupportedModeError("anthropic", "transcription");
-    },
   };
 }

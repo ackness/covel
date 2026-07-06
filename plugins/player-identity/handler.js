@@ -119,14 +119,11 @@ function playerCharacterIdForProfile(profileId) {
  * @returns {Promise<Array<{ key: string; value: Record<string, unknown> }>>}
  */
 async function listOtherProfiles(ctx, activeId) {
-  const s = /** @type {any} */ (ctx.store);
-  if (!s || typeof s.listPluginData !== "function") return [];
+  // ctx.pluginData is the one scoped plugin-data path (works identically for
+  // trusted and community runtimes) — no store-shape fallback needed.
+  if (!ctx.pluginData) return [];
   try {
-    const rows = await s.listPluginData(
-      ctx.sessionId,
-      ctx.pluginId,
-      PROFILE_NAMESPACE,
-    );
+    const rows = await ctx.pluginData.list(PROFILE_NAMESPACE);
     if (!Array.isArray(rows)) return [];
     return rows
       .filter(
@@ -197,11 +194,11 @@ function normalizeProfile(value) {
 async function findExistingPlayer(store, sessionId) {
   if (!store || typeof store !== "object") return undefined;
   const s = /** @type {any} */ (store);
+  // Capability check only — characters live outside plugin-data, so this
+  // needs the full store. Passing sessionId to a zero-arg test double is
+  // harmless, so no arity sniffing.
   if (typeof s.listCharacters !== "function") return undefined;
-  const rows =
-    s.listCharacters.length <= 0
-      ? await s.listCharacters()
-      : await s.listCharacters(sessionId);
+  const rows = await s.listCharacters(sessionId);
   if (!Array.isArray(rows)) return undefined;
   const player = rows.find(
     (row) => row && typeof row === "object" && row.type === "player",

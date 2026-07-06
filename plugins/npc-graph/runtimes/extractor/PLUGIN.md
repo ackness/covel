@@ -39,7 +39,6 @@ tools:
 ui:
   right:
     - ./ui/npc-graph-panel.json
-relations: {}
 postHistory:
   role: system
   content: |

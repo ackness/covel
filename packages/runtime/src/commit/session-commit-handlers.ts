@@ -29,7 +29,6 @@ import {
   requireOptionalNumber,
   requireOptionalString,
   requireOptionalStringArray,
-  requireStoreCapability,
 } from "./commit-validators.js";
 
 /** A commit handler narrowed to a single proposal type. */
@@ -176,8 +175,20 @@ export function createCommitHandlers(store: KernelStore): CommitHandlerMap {
     proposal: ProposalFor<"state.patch">,
   ): Promise<CommitResult> {
     const { table, field, value } = proposal.payload;
-    const tableName = table ?? "default";
-    const fieldName = field ?? "unknown";
+    // The payload types require table/field, but .js plugins bypass the type
+    // layer and the output normalizer passes state.patch through untouched —
+    // without this gate a malformed patch silently landed in "default"/"unknown".
+    const invalid = firstFailure(
+      requireNonEmptyString(
+        table,
+        "state.patch: table must be a non-empty string",
+      ),
+      requireNonEmptyString(
+        field,
+        "state.patch: field must be a non-empty string",
+      ),
+    );
+    if (invalid) return invalid;
     // Update the current value AND append the change log, mirroring
     // StateManager.setValue. Without the upsertStateEntry, a committed
     // state.patch never changed the value that listStateEntries /
@@ -186,16 +197,16 @@ export function createCommitHandlers(store: KernelStore): CommitHandlerMap {
     await store.upsertStateEntry({
       id: crypto.randomUUID(),
       sessionId: proposal.sessionId,
-      tableName,
-      fieldName,
+      tableName: table,
+      fieldName: field,
       value,
       updatedAt: proposal.timestamp,
     });
     await store.addStateChange({
       id: proposal.id,
       sessionId: proposal.sessionId,
-      tableName,
-      fieldName,
+      tableName: table,
+      fieldName: field,
       value,
       changedBy: `${proposal.source.pluginId}/${proposal.source.runtimeId}`,
       turnId: proposal.turnId,
@@ -211,11 +222,16 @@ export function createCommitHandlers(store: KernelStore): CommitHandlerMap {
     proposal: ProposalFor<"event.emit">,
   ): Promise<CommitResult> {
     const { topic, data } = proposal.payload;
+    const invalid = requireNonEmptyString(
+      topic,
+      "event.emit: topic must be a non-empty string",
+    );
+    if (invalid) return invalid;
     await store.saveEvent({
       id: proposal.id,
       sessionId: proposal.sessionId,
       type: "game",
-      topic: topic ?? "unknown",
+      topic,
       payload: data ?? {},
       createdAt: proposal.timestamp,
     });
@@ -270,11 +286,13 @@ export function createCommitHandlers(store: KernelStore): CommitHandlerMap {
     proposal: ProposalFor<"plugin.data">,
   ): Promise<CommitResult> {
     const payload = proposal.payload;
-    const invalid = firstFailure(
-      requireStoreCapability(
-        store.setPluginData,
+    const setPluginData = store.setPluginData;
+    if (!setPluginData) {
+      return commitError(
         "plugin.data: store does not support plugin data writes",
-      ),
+      );
+    }
+    const invalid = firstFailure(
       requireNonEmptyString(
         payload.namespace,
         "plugin.data: namespace must be a non-empty string",
@@ -286,7 +304,7 @@ export function createCommitHandlers(store: KernelStore): CommitHandlerMap {
     );
     if (invalid) return invalid;
 
-    await store.setPluginData!({
+    await setPluginData({
       id: crypto.randomUUID(),
       sessionId: proposal.sessionId,
       pluginId: proposal.source.pluginId,
@@ -304,11 +322,13 @@ export function createCommitHandlers(store: KernelStore): CommitHandlerMap {
     proposal: ProposalFor<"plugin.data.batch">,
   ): Promise<CommitResult> {
     const payload = proposal.payload;
-    const invalid = firstFailure(
-      requireStoreCapability(
-        store.setPluginDataBatch,
+    const setPluginDataBatch = store.setPluginDataBatch;
+    if (!setPluginDataBatch) {
+      return commitError(
         "plugin.data.batch: store does not support plugin data writes",
-      ),
+      );
+    }
+    const invalid = firstFailure(
       requireNonEmptyArray(
         payload.items,
         "plugin.data.batch: items must be a non-empty array",
@@ -341,7 +361,7 @@ export function createCommitHandlers(store: KernelStore): CommitHandlerMap {
       });
     }
 
-    await store.setPluginDataBatch!(records);
+    await setPluginDataBatch(records);
     return { committed: true };
   }
 
@@ -349,11 +369,13 @@ export function createCommitHandlers(store: KernelStore): CommitHandlerMap {
     proposal: ProposalFor<"character.upsert">,
   ): Promise<CommitResult> {
     const payload = proposal.payload;
-    const invalid = firstFailure(
-      requireStoreCapability(
-        store.upsertCharacter,
+    const upsertCharacter = store.upsertCharacter;
+    if (!upsertCharacter) {
+      return commitError(
         "character.upsert: store does not support character writes",
-      ),
+      );
+    }
+    const invalid = firstFailure(
       requireNonEmptyString(
         payload.id,
         "character.upsert: id must be a non-empty string",
@@ -404,36 +426,40 @@ export function createCommitHandlers(store: KernelStore): CommitHandlerMap {
       updatedAt: now,
     };
 
-    await store.upsertCharacter!(record);
+    await upsertCharacter(record);
 
-    if (store.setPluginData) {
+    const setPluginData = store.setPluginData;
+    if (setPluginData) {
       const mirrorPluginIds = [
         ...(payload.mirrorPluginId ? [payload.mirrorPluginId] : []),
         ...(payload.mirrorPluginIds ?? []),
       ].filter((pluginId, index, all) => all.indexOf(pluginId) === index);
-      for (const mirrorPluginId of mirrorPluginIds) {
-        await store.setPluginData({
-          id: crypto.randomUUID(),
-          sessionId: proposal.sessionId,
-          pluginId: mirrorPluginId,
-          namespace: "characters",
-          key: record.id,
-          value: {
-            id: record.id,
-            name: record.name,
-            type: record.type,
-            ...(record.description !== undefined
-              ? { description: record.description }
-              : {}),
-            ...(record.fields !== undefined ? { fields: record.fields } : {}),
-            version: record.version,
-            createdAt: record.createdAt,
-            updatedAt: record.updatedAt,
-          },
-          createdAt: proposal.timestamp,
-          updatedAt: now,
-        });
-      }
+      // Each (sessionId, pluginId, namespace, key) target is independent.
+      await Promise.all(
+        mirrorPluginIds.map((mirrorPluginId) =>
+          setPluginData({
+            id: crypto.randomUUID(),
+            sessionId: proposal.sessionId,
+            pluginId: mirrorPluginId,
+            namespace: "characters",
+            key: record.id,
+            value: {
+              id: record.id,
+              name: record.name,
+              type: record.type,
+              ...(record.description !== undefined
+                ? { description: record.description }
+                : {}),
+              ...(record.fields !== undefined ? { fields: record.fields } : {}),
+              version: record.version,
+              createdAt: record.createdAt,
+              updatedAt: record.updatedAt,
+            },
+            createdAt: proposal.timestamp,
+            updatedAt: now,
+          }),
+        ),
+      );
     }
 
     return {
@@ -463,22 +489,25 @@ export function createCommitHandlers(store: KernelStore): CommitHandlerMap {
       payload.value === undefined
         ? commitError("working_memory.set: value must not be undefined")
         : undefined,
+      // TODO(S3-T3.b): resolve schemaRef against a framework-level Zod schema
+      // registry (A9 refinement) and validate payload.value against the schema.
+      // For now, schemaRef is accepted as an opaque string.
       requireOptionalString(
         payload.schemaRef,
         "working_memory.set: schemaRef must be a string when provided",
       ),
-      // TODO(S3-T3.b): resolve schemaRef against a framework-level Zod schema
-      // registry (A9 refinement) and validate payload.value against the schema.
-      // For now, schemaRef is accepted as an opaque string.
-      requireStoreCapability(
-        store.upsertWorkingMemory,
-        "working_memory.set: store does not support working memory",
-      ),
     );
     if (invalid) return invalid;
 
+    const upsertWorkingMemory = store.upsertWorkingMemory;
+    if (!upsertWorkingMemory) {
+      return commitError(
+        "working_memory.set: store does not support working memory",
+      );
+    }
+
     const { scope, key } = payload;
-    await store.upsertWorkingMemory!({
+    await upsertWorkingMemory({
       id: crypto.randomUUID(),
       sessionId: proposal.sessionId,
       key,
@@ -506,12 +535,15 @@ export function createCommitHandlers(store: KernelStore): CommitHandlerMap {
         payload.entries,
         "lorebook.upsert: entries must be a non-empty array",
       ),
-      requireStoreCapability(
-        store.upsertLorebookEntries,
-        "lorebook.upsert: store does not support session lorebook entries",
-      ),
     );
     if (invalid) return invalid;
+
+    const upsertLorebookEntries = store.upsertLorebookEntries;
+    if (!upsertLorebookEntries) {
+      return commitError(
+        "lorebook.upsert: store does not support session lorebook entries",
+      );
+    }
 
     const now = new Date().toISOString();
     const records: Array<{
@@ -573,7 +605,7 @@ export function createCommitHandlers(store: KernelStore): CommitHandlerMap {
       });
     }
 
-    await store.upsertLorebookEntries!(records);
+    await upsertLorebookEntries(records);
 
     return { committed: true };
   }

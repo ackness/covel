@@ -19,6 +19,12 @@ import type { GatewayOptions } from "./gateway-slot-resolution.js";
 import { createRunOperation } from "./gateway-run-operation.js";
 import { DEFAULT_IMAGE_WIRE, getImageWire } from "./image/wire-registry.js";
 import type { ImageGenerationResult } from "./image/types.js";
+import {
+  DEFAULT_SPEECH_WIRE,
+  DEFAULT_TRANSCRIPTION_WIRE,
+  getSpeechWire,
+  getTranscriptionWire,
+} from "./speech/wire-registry.js";
 import type {
   EmbeddingResult,
   OperationMode,
@@ -360,27 +366,58 @@ export function createGateway(deps: GatewayDependencies) {
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: GatewayOptions,
-  ): Promise<SpeechSynthesisResult> {
+  ): Promise<SpeechSynthesisResult & { model: string; provider: string }> {
     return runOperation(
       {
-        presetId: input.presetId,
+        // Default to the conventional "speech" slot so an omitted presetId
+        // enters the named-slot → speech-tag fallback chain instead of
+        // passing `undefined` through to the default (text) slot.
+        presetId: input.presetId ?? "speech",
         mode: "speech",
         fallbackTag: "speech",
         resolveTargets: (presetId) => [
           deps.presetRegistry.resolveTextTarget({ presetId }),
         ],
-        execute: async (target, resolved) =>
-          resolved.adapter.synthesizeSpeech(
+        execute: async (target, resolved) => {
+          const slotMeta = target.preset?.providerRequestMetadata;
+          const wireId =
+            typeof slotMeta?.speechWire === "string" && slotMeta.speechWire
+              ? slotMeta.speechWire
+              : DEFAULT_SPEECH_WIRE;
+          const wire = getSpeechWire(wireId);
+          if (!wire) {
+            throw new AiProviderError({
+              code: "CONFIG_ERROR",
+              message: `unknown speech wire "${wireId}" — register it via registerSpeechWire() or fix llm.toml providerRequestMetadata.speechWire`,
+              provider: targetProvider(target),
+              retriable: false,
+            });
+          }
+          const result = await wire.synthesize(
             configWithSignal(resolved.config, options),
             {
               model: targetModel(target),
               text: input.text,
               ...(input.voice ? { voice: input.voice } : {}),
               ...(input.format ? { format: input.format } : {}),
-              providerRequestMetadata: input.providerRequestMetadata,
+              // Per-call metadata overrides slot defaults. Not routed through
+              // withPresetMetadata — that also folds in parameterOverrides,
+              // which are text-generation params that don't belong in a
+              // speech request body.
+              providerRequestMetadata: {
+                ...slotMeta,
+                ...input.providerRequestMetadata,
+              },
             },
             { profile: target.profile, preset: target.preset, mode: "speech" },
-          ),
+          );
+          return {
+            ...result,
+            model: targetModel(target),
+            provider: targetProvider(target),
+          };
+        },
+        resolveUsage: (r) => r.usage,
       },
       options,
     );
@@ -393,29 +430,54 @@ export function createGateway(deps: GatewayDependencies) {
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: GatewayOptions,
-  ): Promise<TranscriptionResult> {
+  ): Promise<TranscriptionResult & { model: string; provider: string }> {
     return runOperation(
       {
-        presetId: input.presetId,
+        presetId: input.presetId ?? "transcription",
         mode: "transcription",
         fallbackTag: "transcription",
         resolveTargets: (presetId) => [
           deps.presetRegistry.resolveTextTarget({ presetId }),
         ],
-        execute: async (target, resolved) =>
-          resolved.adapter.transcribeAudio(
+        execute: async (target, resolved) => {
+          const slotMeta = target.preset?.providerRequestMetadata;
+          const wireId =
+            typeof slotMeta?.transcriptionWire === "string" &&
+            slotMeta.transcriptionWire
+              ? slotMeta.transcriptionWire
+              : DEFAULT_TRANSCRIPTION_WIRE;
+          const wire = getTranscriptionWire(wireId);
+          if (!wire) {
+            throw new AiProviderError({
+              code: "CONFIG_ERROR",
+              message: `unknown transcription wire "${wireId}" — register it via registerTranscriptionWire() or fix llm.toml providerRequestMetadata.transcriptionWire`,
+              provider: targetProvider(target),
+              retriable: false,
+            });
+          }
+          const result = await wire.transcribe(
             configWithSignal(resolved.config, options),
             {
               model: targetModel(target),
               audio: input.audio,
-              providerRequestMetadata: input.providerRequestMetadata,
+              providerRequestMetadata: {
+                ...slotMeta,
+                ...input.providerRequestMetadata,
+              },
             },
             {
               profile: target.profile,
               preset: target.preset,
               mode: "transcription",
             },
-          ),
+          );
+          return {
+            ...result,
+            model: targetModel(target),
+            provider: targetProvider(target),
+          };
+        },
+        resolveUsage: (r) => r.usage,
       },
       options,
     );

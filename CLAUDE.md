@@ -186,7 +186,7 @@ All panels/blocks render through [json-render](https://github.com/vercel-labs/js
 - **Tag-aware fallback**: an unconfigured slot falls back to the first slot with the same tag (`text`/`image`/`embedding`/`speech`/`transcription`). Cross-tag fallback is forbidden (an image request never silently routes to text).
 - Supports OpenAI, Anthropic, DeepSeek, Qwen (Aliyun DashScope).
 - **Model capabilities** (multimodal, features, token limits, pricing) auto-detected via: frontend localStorage override → `llm.toml` manual → `known-models.ts` (~60 common) → LiteLLM DB (2597 models, `pnpm --filter @covel/ai-provider update-model-db`) → protocol defaults. Directional modality: `input: InputModality[]` = accepts, `output: OutputModality[]` = produces.
-- **Image generation**: `gateway.generateImage()` (server) / `ctx.images.generate()` (function-runtime plugins, preferred) routes through a pluggable image-wire registry — builtin `openai-images` (default) and `dashscope-wan`, selectable per-slot via `llm.toml` `providerRequestMetadata.imageWire`; plugins register additional wires with `registerImageWire()`. See [docs/reference/media-store.md](./docs/reference/media-store.md) and [docs/guide/plugin-authoring-advanced.md](./docs/guide/plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行).
+- **Media generation (image / TTS / STT)**: `ctx.images.generate()` and `ctx.speech.generate()`/`.transcribe()` (function-runtime plugins, preferred) route through pluggable per-modality wire registries — builtin `openai-images` (default) + `dashscope-wan` for image, `openai-speech` / `openai-transcription` for speech — selectable per-slot via `llm.toml` `providerRequestMetadata.imageWire|speechWire|transcriptionWire`. Both `generate` paths dedupe on promptHash and persist to MediaStore. Plugins register vendor wires via the PLUGIN.md `wires` frontmatter field (ids namespaced `<pluginId>/<wireId>`, trust-gated loading in `bootstrap/plugin-wires.ts`); bundled code may call `register{Image,Speech,Transcription}Wire()` directly. See [docs/reference/slots.md](./docs/reference/slots.md), [docs/reference/media-store.md](./docs/reference/media-store.md) and [docs/guide/plugin-authoring-advanced.md](./docs/guide/plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行).
 
 ## Critical Conventions (Read These)
 
@@ -319,7 +319,7 @@ Cache dir: `COVEL_LLM_REPLAY_DIR` (default `debugs/llm-cache/`). Key = `sha256(m
 Trace chain: `traceId → runId → branchId → turnId → runtimeId → pluginId`.
 
 - **Runtime trace** (DB `trace_events`): structured turn hierarchy — LLM delta messages, tool calls, proposals, hooks, provider binding, context fragments. Delta recording avoids duplicating prompt history.
-- **Infrastructure log** (pino): startup, plugin loading, DB, SSE connections.
+- **Infrastructure log** (console, `[component]`-prefixed): startup, plugin loading, DB, SSE connections.
 - **Consumption**: `/api/traces/*`, `TraceExporter` interface (e.g. Langfuse), JSON export for players.
 - **Frontend `/debug`**: Session Timeline · Runtime Inspector · Prompt Viewer (full reconstruction + diff) · Data Explorer · Cost (token-usage aggregation from `llm.responded` / `gateway.responded` trace usage).
 

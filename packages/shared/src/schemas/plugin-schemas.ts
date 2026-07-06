@@ -27,7 +27,6 @@ export const triggerConfigSchema = z
     maxTriggerCount: z.number().int().positive().optional(),
     maxRetryCount: z.number().int().nonnegative().optional(),
     cooldownTurns: z.number().int().nonnegative().optional(),
-    phases: z.array(z.string()).optional(),
     startTurn: z.number().int().positive().optional(),
   })
   .strict();
@@ -471,6 +470,12 @@ export const runtimeManifestSchema = z
     runtimeType: z.enum(["agent", "function"]).optional(),
     handler: z.string().optional(),
     guard: z.string().optional(),
+    /**
+     * Plugin-root-relative path to a media-wires module (image / speech /
+     * transcription vendor wires). Declare on ONE runtime per plugin.
+     * Constrained like rpc handlers to block path traversal at schema level.
+     */
+    wires: pluginRelativeJsPath.optional(),
     model: z.string().optional(),
     timeoutMs: z.number().int().positive().optional(),
     /**
@@ -498,8 +503,9 @@ export const runtimeManifestSchema = z
      * Capability tags for framework discovery. Free-form by design: plugins
      * may declare arbitrary custom tags. The framework only acts on the tags in
      * `FRAMEWORK_KNOWN_CAPABILITIES` (plugin-level `FrameworkCapability` +
-     * runtime-level `FrameworkRuntimeCapability`); the plugin-loader emits a dev
-     * warning when a declared tag looks like a misspelled framework-known one.
+     * runtime-level `FrameworkRuntimeCapability`); at server bootstrap,
+     * `validateRuntimeManifestSemantics` warns when a declared tag looks like
+     * a misspelled framework-known one.
      */
     capabilities: z.array(z.string().min(1)).optional(),
     tags: z.array(pluginTagSchema).optional(),

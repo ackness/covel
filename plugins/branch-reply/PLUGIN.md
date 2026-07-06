@@ -24,7 +24,6 @@ tags:
 ui:
   message:
     - ./ui/branch-reply-block.json
-relations: {}
 ---
 
 # Branch Reply

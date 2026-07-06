@@ -5,13 +5,9 @@ import type {
   ObjectGenerationParams,
   ObjectGenerationResult,
   ProviderConfig,
-  SpeechSynthesisParams,
-  SpeechSynthesisResult,
   StreamEvent,
   TextGenerationParams,
   TextGenerationResult,
-  TranscriptionParams,
-  TranscriptionResult,
 } from "../types.js";
 
 /**
@@ -42,16 +38,4 @@ export interface ModelProviderAdapter {
     params: EmbeddingParams,
     context?: ModelRequestContext,
   ): Promise<EmbeddingResult>;
-
-  synthesizeSpeech(
-    config: ProviderConfig,
-    params: SpeechSynthesisParams,
-    context?: ModelRequestContext,
-  ): Promise<SpeechSynthesisResult>;
-
-  transcribeAudio(
-    config: ProviderConfig,
-    params: TranscriptionParams,
-    context?: ModelRequestContext,
-  ): Promise<TranscriptionResult>;
 }

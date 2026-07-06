@@ -47,7 +47,6 @@ tools:
 ui:
   message:
     - ./ui/scene-prompts-block.json
-relations: {}
 postHistory:
   role: system
   content: |

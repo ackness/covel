@@ -99,28 +99,26 @@ describe("branch-reply seed path (auto, no manualPayload)", () => {
     const completedResults = new Map([
       narrativeResult("narrator", "A door opens onto a cold corridor."),
     ]);
-    const store = {
-      // Scoped function-store view (2-arg getPluginData) already holds a record.
-      async getPluginData(namespace, key) {
+    const pluginData = {
+      // ctx.pluginData already holds a record for this turn.
+      async get(namespace, key) {
         expect([namespace, key]).toEqual(["turns", "turn-branch"]);
         return {
-          value: {
-            schemaVersion: 1,
-            turnId: "turn-branch",
-            candidates: [
-              {
-                id: "turn-branch-candidate-1",
-                index: 0,
-                text: "A door opens.",
-              },
-            ],
-            status: "ready",
-          },
+          schemaVersion: 1,
+          turnId: "turn-branch",
+          candidates: [
+            {
+              id: "turn-branch-candidate-1",
+              index: 0,
+              text: "A door opens.",
+            },
+          ],
+          status: "ready",
         };
       },
     };
 
-    const result = await handler(ctx({ completedResults, store }));
+    const result = await handler(ctx({ completedResults, pluginData }));
     expect(result).toMatchObject({ action: "seed", seeded: false });
     expect(getPendingProposals(result)).toHaveLength(0);
   });
@@ -176,19 +174,17 @@ describe("branch-reply createCandidates (regenerate)", () => {
     // The block was seeded earlier with runtimeId = the narrator. Regenerate
     // must read it back and re-store it so a later accept still targets the
     // narrator's message, not branch-reply's own seed message.
-    const store = {
-      async getPluginData(namespace, key) {
+    const pluginData = {
+      async get(namespace, key) {
         expect([namespace, key]).toEqual(["turns", "turn-42"]);
         return {
-          value: {
-            schemaVersion: 1,
-            turnId: "turn-42",
-            runtimeId: "chat-mode-narrator",
-            status: "ready",
-            candidates: [
-              { id: "turn-42-candidate-1", index: 0, text: "Seeded original." },
-            ],
-          },
+          schemaVersion: 1,
+          turnId: "turn-42",
+          runtimeId: "chat-mode-narrator",
+          status: "ready",
+          candidates: [
+            { id: "turn-42-candidate-1", index: 0, text: "Seeded original." },
+          ],
         };
       },
     };
@@ -208,7 +204,7 @@ describe("branch-reply createCandidates (regenerate)", () => {
           baseText: "Seeded original.",
           count: 3,
         },
-        store,
+        pluginData,
         gateway,
       }),
     );
@@ -339,15 +335,10 @@ describe("branch-reply acceptCandidate", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
-    const store = {
-      async getPluginData(sessionId, pluginId, namespace, key) {
-        expect([sessionId, pluginId, namespace, key]).toEqual([
-          "sess-branch",
-          "branch-reply",
-          "turns",
-          "turn-42",
-        ]);
-        return { value: storedTurn };
+    const pluginData = {
+      async get(namespace, key) {
+        expect([namespace, key]).toEqual(["turns", "turn-42"]);
+        return storedTurn;
       },
     };
 
@@ -358,7 +349,7 @@ describe("branch-reply acceptCandidate", () => {
           turnId: "turn-42",
           candidateId: "turn-42-candidate-2",
         },
-        store,
+        pluginData,
       }),
     );
 
@@ -395,58 +386,9 @@ describe("branch-reply acceptCandidate", () => {
     });
   });
 
-  it("accepts a stored candidate through a scoped function store view", async () => {
-    const storedTurn = {
-      schemaVersion: 1,
-      turnId: "turn-42",
-      baseText: "I test the lock.",
-      candidates: [
-        {
-          id: "turn-42-candidate-1",
-          index: 0,
-          text: "I test the lock.",
-          source: "original",
-        },
-        {
-          id: "turn-42-candidate-2",
-          index: 1,
-          text: "I test the lock. I listen.",
-          source: "regenerated",
-        },
-      ],
-      selectedCandidateId: "turn-42-candidate-1",
-      status: "ready",
-      createdAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    };
-    const store = {
-      async getPluginData(namespace, key) {
-        expect([namespace, key]).toEqual(["turns", "turn-42"]);
-        return { value: storedTurn };
-      },
-    };
-
-    const result = await handler(
-      ctx({
-        manualPayload: {
-          action: "acceptCandidate",
-          turnId: "turn-42",
-          candidateId: "turn-42-candidate-2",
-        },
-        store,
-      }),
-    );
-
-    expect(result).toMatchObject({
-      action: "acceptCandidate",
-      acceptedCandidateId: "turn-42-candidate-2",
-      acceptedText: "I test the lock. I listen.",
-    });
-  });
-
   it("rejects acceptCandidate when the turn record is missing", async () => {
-    const store = {
-      async getPluginData() {
+    const pluginData = {
+      async get() {
         return null;
       },
     };
@@ -459,33 +401,31 @@ describe("branch-reply acceptCandidate", () => {
             turnId: "turn-42",
             candidateId: "turn-42-candidate-1",
           },
-          store,
+          pluginData,
         }),
       ),
     ).rejects.toThrow("branch-reply turn record was not found");
   });
 
   it("rejects acceptCandidate when candidateId is not in the stored turn record", async () => {
-    const store = {
-      async getPluginData() {
+    const pluginData = {
+      async get() {
         return {
-          value: {
-            schemaVersion: 1,
-            turnId: "turn-42",
-            baseText: "I test the lock.",
-            candidates: [
-              {
-                id: "turn-42-candidate-1",
-                index: 0,
-                text: "I test the lock.",
-                source: "original",
-              },
-            ],
-            selectedCandidateId: "turn-42-candidate-1",
-            status: "ready",
-            createdAt: "2026-01-01T00:00:00.000Z",
-            updatedAt: "2026-01-01T00:00:00.000Z",
-          },
+          schemaVersion: 1,
+          turnId: "turn-42",
+          baseText: "I test the lock.",
+          candidates: [
+            {
+              id: "turn-42-candidate-1",
+              index: 0,
+              text: "I test the lock.",
+              source: "original",
+            },
+          ],
+          selectedCandidateId: "turn-42-candidate-1",
+          status: "ready",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
         };
       },
     };
@@ -498,7 +438,7 @@ describe("branch-reply acceptCandidate", () => {
             turnId: "turn-42",
             candidateId: "turn-42-candidate-9",
           },
-          store,
+          pluginData,
         }),
       ),
     ).rejects.toThrow(

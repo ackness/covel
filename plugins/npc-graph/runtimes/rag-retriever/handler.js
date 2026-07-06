@@ -7,26 +7,29 @@
  * embeddings. Phase 3.5 will upgrade to hybrid retrieval once the
  * framework exposes gateway access to function runtimes.
  *
+ */
+import { pickLocaleText } from "@covel/plugin-handlers-utils";
+
+/**
  * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
  * @returns {Promise<Record<string, unknown>>}
  */
 export default async function handler(ctx) {
-  const { sessionId, playerMessage, locale } = ctx;
-  const pluginId = "npc-graph";
-  const store = /** @type {any} */ (ctx.store);
+  const { playerMessage, locale } = ctx;
+  // ctx.pluginData is the one scoped plugin-data path — same shape for
+  // trusted and community runtimes, so no store arity sniffing.
+  const pluginData = ctx.pluginData;
   // This markdown header is injected into the narrator prompt, so resolve it to
   // the session locale instead of emitting a fixed-language heading.
-  const lang = typeof locale === "string" ? locale.split("-")[0] : "";
-  const relHeader =
-    lang === "zh"
-      ? "## 已知 NPC 关系（从图谱检索）"
-      : "## Known NPC relationships (from graph retrieval)";
+  const relHeader = pickLocaleText(
+    locale,
+    "## 已知 NPC 关系（从图谱检索）",
+    "## Known NPC relationships (from graph retrieval)",
+  );
 
   try {
-    const nodeRows =
-      (await listPluginData(store, sessionId, pluginId, "nodes")) ?? [];
-    const edgeRows =
-      (await listPluginData(store, sessionId, pluginId, "edges")) ?? [];
+    const nodeRows = pluginData ? ((await pluginData.list("nodes")) ?? []) : [];
+    const edgeRows = pluginData ? ((await pluginData.list("edges")) ?? []) : [];
 
     // Short-circuit when there is nothing to retrieve — zero-cost for
     // fresh sessions and for worlds that never trigger the extractor.
@@ -85,12 +88,7 @@ export default async function handler(ctx) {
       /** @type {Set<string>} */
       const nextFrontier = new Set();
       for (const nodeId of frontier) {
-        const neighbourEdgeIds = await loadAdjacency(
-          store,
-          sessionId,
-          pluginId,
-          nodeId,
-        );
+        const neighbourEdgeIds = await loadAdjacency(pluginData, nodeId);
         for (const edgeId of neighbourEdgeIds) {
           collectedEdgeIds.add(edgeId);
         }
@@ -148,7 +146,9 @@ export default async function handler(ctx) {
       edgeCount: topEdges.length,
     };
   } catch (err) {
-    console.warn("[npc-graph/rag-retriever] handler error:", err);
+    await ctx.logger?.warn?.("rag-retriever handler error", {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return {
       npcContext: "",
       matchedNodes: [],
@@ -162,58 +162,21 @@ export default async function handler(ctx) {
  * Load adjacent edge IDs for a node by merging `by-source:{id}` and
  * `by-target:{id}` entries from the index namespace.
  *
- * @param {any} store
- * @param {string} sessionId
- * @param {string} pluginId
+ * @param {import('@covel/plugin-loader').PluginDataWriter | undefined} pluginData
  * @param {string} nodeId
  * @returns {Promise<string[]>}
  */
-async function loadAdjacency(store, sessionId, pluginId, nodeId) {
+async function loadAdjacency(pluginData, nodeId) {
   /** @type {string[]} */
   const out = [];
+  if (!pluginData) return out;
   for (const indexKey of [`by-source:${nodeId}`, `by-target:${nodeId}`]) {
-    const row = await getPluginData(
-      store,
-      sessionId,
-      pluginId,
-      "index",
-      indexKey,
-    );
-    if (row && Array.isArray(row.value)) {
-      for (const edgeId of row.value) {
+    const value = await pluginData.get("index", indexKey);
+    if (Array.isArray(value)) {
+      for (const edgeId of value) {
         if (typeof edgeId === "string") out.push(edgeId);
       }
     }
   }
   return out;
-}
-
-/**
- * Function runtimes receive a scoped FunctionStoreView in the framework, while
- * direct plugin tests often pass a full DataStore. Support both call shapes.
- *
- * @param {any} store
- * @param {string} sessionId
- * @param {string} pluginId
- * @param {string} namespace
- */
-async function listPluginData(store, sessionId, pluginId, namespace) {
-  if (store.listPluginData.length <= 1) {
-    return store.listPluginData(namespace);
-  }
-  return store.listPluginData(sessionId, pluginId, namespace);
-}
-
-/**
- * @param {any} store
- * @param {string} sessionId
- * @param {string} pluginId
- * @param {string} namespace
- * @param {string} key
- */
-async function getPluginData(store, sessionId, pluginId, namespace, key) {
-  if (store.getPluginData.length <= 2) {
-    return store.getPluginData(namespace, key);
-  }
-  return store.getPluginData(sessionId, pluginId, namespace, key);
 }

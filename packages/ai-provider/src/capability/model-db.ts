@@ -381,7 +381,7 @@ function deriveOutput(
   const explicit = raw.supported_output_modalities as string[] | undefined;
   if (explicit?.length)
     return explicit.filter((s): s is OutputModality =>
-      ["text", "image", "audio", "embedding"].includes(s),
+      ["text", "image", "audio", "video", "embedding"].includes(s),
     );
 
   switch (mode) {
@@ -401,6 +401,8 @@ function deriveOutput(
     case "image_generation":
     case "image_edit":
       return ["image"];
+    case "video_generation":
+      return ["video"];
     case "embedding":
       return ["embedding"];
     default:

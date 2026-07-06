@@ -62,6 +62,7 @@ import { createBootstrapCompactorRunner } from "./bootstrap/compactor.js";
 import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
 import { createBootstrapHookPipeline } from "./bootstrap/plugin-hooks.js";
 import { setupPluginTools } from "./bootstrap/tools.js";
+import { createBootstrapPluginWires } from "./bootstrap/plugin-wires.js";
 import { createEventDirectory } from "./bootstrap/event-directory.js";
 import { createBootstrapMemorySystem } from "./bootstrap/memory.js";
 import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
@@ -266,6 +267,14 @@ export async function bootstrapApi(
 
   const resolveModel = createModelResolver({ pluginLlmConfigs });
 
+  // Plugin media wires (image/speech/transcription vendor wires declared via
+  // the `wires` frontmatter field). builtin/official register here at boot;
+  // community register lazily in loadRuntimeFn below.
+  const pluginWires = await createBootstrapPluginWires({
+    discoveryMap,
+    manifestCache,
+  });
+
   // loadRuntime resolver (locale-aware: loads PLUGIN.en.md when locale is "en-US")
   const loadRuntimeFn = async (
     manifest: RuntimeManifest,
@@ -274,6 +283,13 @@ export async function bootstrapApi(
     for (const [pluginId, discovery] of discoveryMap) {
       const manifests = manifestCache.get(pluginId);
       if (manifests?.some((m) => m.manifest.name === manifest.name)) {
+        // Community wires register at the same moment we'd import the
+        // plugin's handler.js — before any gateway call the handler makes.
+        // ponytail: a community *wire-only* plugin (wires consumed by other
+        // plugins' slots without its own runtime ever loading) would need
+        // ensurePluginWires added to the activatePluginLocalTools call
+        // sites too; no such plugin exists yet.
+        await pluginWires.ensurePluginWires(pluginId);
         return loadRuntimeFromDisk(discovery, manifest.name, locale);
       }
     }

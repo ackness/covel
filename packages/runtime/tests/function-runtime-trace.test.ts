@@ -188,6 +188,29 @@ describe("function-runtime trace (A2-P1-5)", () => {
     expect(result.runtimeResults[0]!.status).toBe("failed");
   });
 
+  it("fails the runtime when the handler exceeds manifest.timeoutMs instead of hanging the turn", async () => {
+    const { emitter, events } = captureEmitter();
+    const loaded: LoadedRuntime = {
+      manifest: makeFunctionManifest({ timeoutMs: 50 }),
+      promptTemplate: "",
+      handler: async () => {
+        await new Promise(() => {}); // never settles — simulates a hung provider call
+        return {};
+      },
+    };
+
+    const result = await executeTurn(
+      makeTurnInput(),
+      [loaded.manifest],
+      makeDeps(loaded, { emitter }),
+    );
+
+    expect(result.runtimeResults[0]!.status).toBe("failed");
+    const completed = events.find((e) => e.type === "function.completed");
+    expect(completed?.payload.status).toBe("failed");
+    expect(String(completed?.payload.error)).toContain("timed out after 50ms");
+  });
+
   it("emits runtime.failed (no hanging runtime.started) when the handler is missing", async () => {
     const seen: SubscriptionEvent[] = [];
     const off = eventBus.onEmit((e) => seen.push(e));

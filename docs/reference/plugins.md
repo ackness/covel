@@ -850,6 +850,18 @@ description: # I18nText：一句话简介
 
 `function` 类型 runtime 需要额外声明 `handler` 字段指向 JS 模块路径。
 
+### wires（媒体厂商 wire 注册）
+
+`wires` 指向一个**插件根目录相对**的 JS 模块（同 `tools.local` 的解析约定），default export `{ image?, speech?, transcription? }` 三组 wire 数组，或一个接受 `{ fetchWithRetry, validateBaseUrl }` 注入的工厂函数。框架加载后把每个 wire 以 `<pluginId>/<wireId>` 命名空间注册进 `@covel/ai-provider` 的对应 registry，llm.toml slot 通过 `providerRequestMetadata.imageWire / speechWire / transcriptionWire` 选中它。
+
+```yaml
+wires: lib/wires.js # 整个插件声明一次即可（多 runtime 声明同一路径会去重）
+```
+
+- 信任门控与 local tools 一致：builtin/official 启动即注册，community 在其 runtime 首次加载时注册。
+- 路径逃逸 / 文件缺失 / 条目形状错误只 warn 跳过，不影响启动；重复注册幂等。
+- 教程与 wire 接口签名见 [plugin-authoring-advanced.md § 注册自定义 wire](../guide/plugin-authoring-advanced.md#注册自定义-wirewires-frontmatter-字段)，slot 侧配置见 [slots.md](./slots.md)。
+
 ### dataSchemas
 
 `dataSchemas` 声明插件哪些 `plugin_data` namespace 可以接收 world package 导入数据。world-data session importer 会在创建 session 前做插件启用检查，并用插件包内 JSON Schema 校验 source item。
@@ -1135,6 +1147,8 @@ relations:
 ### 超时与智能重试
 
 Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用时长**（`callTimeoutMs` / `firstTokenTimeoutMs`）和**运行总时长**（`timeoutMs`）。框架会自动在 transient 错误、call-timeout、first-token-timeout、tool-call 循环四种情形下重试，并在每次重试时向 prompt 追加一条短 system 提示打破 KV-cache 命中。
+
+**Function runtime 只消费 `timeoutMs`**：handler 受同一运行总时长硬上限约束（默认 60000ms），超时该 runtime 以 failed 收场、turn 继续。function runtime 没有重试循环，其余字段（`maxRetries` / `callTimeoutMs` / `firstTokenTimeoutMs` / `loopDetectionThreshold` / `requireToolUse`）对其无效。注意超时只解除 turn 阻塞，已发出的 handler 调用无法被取消。
 
 | 字段                     | 类型      | 默认                                              | 含义                                                                                                                                                                                                                     |
 | ------------------------ | --------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

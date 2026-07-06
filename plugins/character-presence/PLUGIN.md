@@ -36,7 +36,6 @@ dataSchemas:
 ui:
   right:
     - ./ui/character-presence-panel.json
-relations: {}
 ---
 
 # Character Presence

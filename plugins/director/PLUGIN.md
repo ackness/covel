@@ -20,7 +20,6 @@ tags:
 hooks:
   - event: PostContextAssembly
     handler: ./hooks/inject-preamble.js
-relations: {}
 ---
 
 # Director

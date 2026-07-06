@@ -113,6 +113,71 @@ export function withGatewayTrace(
     },
   };
 
+  if (gateway.synthesizeSpeech) {
+    const synthesizeSpeech = gateway.synthesizeSpeech.bind(gateway);
+    facade.synthesizeSpeech = async (input) => {
+      const start = Date.now();
+      const summary = summarizeInput({
+        presetId: input.presetId,
+        prompt: input.text,
+      });
+      await emitter.emit("gateway.calling", {
+        ...ctx,
+        method: "synthesizeSpeech",
+        ...summary,
+      });
+      try {
+        const result = await synthesizeSpeech(input);
+        await emitter.emit("gateway.responded", {
+          ...ctx,
+          method: "synthesizeSpeech",
+          audioBytes: result.audio.data.byteLength,
+          durationMs: Date.now() - start,
+        });
+        return result;
+      } catch (err) {
+        await emitter.emit("gateway.failed", {
+          ...ctx,
+          method: "synthesizeSpeech",
+          error: summarizeTraceError(err),
+          durationMs: Date.now() - start,
+        });
+        throw err;
+      }
+    };
+  }
+
+  if (gateway.transcribeAudio) {
+    const transcribeAudio = gateway.transcribeAudio.bind(gateway);
+    facade.transcribeAudio = async (input) => {
+      const start = Date.now();
+      await emitter.emit("gateway.calling", {
+        ...ctx,
+        method: "transcribeAudio",
+        ...(input.presetId ? { presetId: input.presetId } : {}),
+        audioBytes: input.audio.data.byteLength,
+      });
+      try {
+        const result = await transcribeAudio(input);
+        await emitter.emit("gateway.responded", {
+          ...ctx,
+          method: "transcribeAudio",
+          textChars: result.text.length,
+          durationMs: Date.now() - start,
+        });
+        return result;
+      } catch (err) {
+        await emitter.emit("gateway.failed", {
+          ...ctx,
+          method: "transcribeAudio",
+          error: summarizeTraceError(err),
+          durationMs: Date.now() - start,
+        });
+        throw err;
+      }
+    };
+  }
+
   // Only exposed when the source gateway has an image wire registered —
   // mirrors the same undefined-passthrough guard in plugin-runtime-gateway.ts.
   if (gateway.generateImage) {

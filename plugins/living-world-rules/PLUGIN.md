@@ -31,7 +31,6 @@ dataSchemas:
 ui:
   right:
     - ./ui/living-world-rules-panel.json
-relations: {}
 ---
 
 # Living World Rules

@@ -54,8 +54,18 @@ export async function discoverAndRegisterPlugins(
         for (const diagnostic of validateRuntimeManifestSemantics(
           parsed.manifest,
         )) {
+          console.warn(`[bootstrap] ${diagnostic.message}`);
+        }
+        // Tool access and plugin-data are keyed by the directory name
+        // (discovery.id), but findTool looks up by the frontmatter-derived
+        // manifest.pluginId. The install path enforces the two match
+        // (validatePluginBundle); bundled discovery has no such gate, and a
+        // mismatch silently denies the plugin its own local tools.
+        if (parsed.manifest.pluginId !== discovery.id) {
           console.warn(
-            `[bootstrap] ${diagnostic.message} Remove one of the two to keep the scheduler intent clear.`,
+            `[bootstrap] Plugin "${discovery.id}": frontmatter name root "${parsed.manifest.pluginId}" ` +
+              `does not match the plugin directory name "${discovery.id}". Local tools and plugin-data ` +
+              "are keyed by the directory name, so this runtime's own local tools will be denied — rename one to match.",
           );
         }
       }

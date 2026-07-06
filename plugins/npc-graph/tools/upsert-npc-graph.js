@@ -23,6 +23,7 @@
  *
  * @param {{ tool: Function, z: import('zod'), shortIdBatch: Function, store: any }} injection
  */
+import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
 
 export default function ({ tool, z, shortIdBatch, store }) {
@@ -146,7 +147,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
       }
 
       // ── 3. Compute per-node merged records and stage writes ──
-      /** @type {Array<{ id: string; sessionId: string; pluginId: string; namespace: string; key: string; value: any; createdAt: string; updatedAt: string; }>} */
+      /** @type {Array<{ namespace: string; key: string; value: any }>} */
       const pluginDataWrites = [];
       /** @type {Array<{ id: string; name: string; status: 'created' | 'updated' }>} */
       const nodeResults = [];
@@ -178,14 +179,9 @@ export default function ({ tool, z, shortIdBatch, store }) {
             lastSeenTurn: existing.lastSeenTurn + 1,
           };
           pluginDataWrites.push({
-            id: crypto.randomUUID(),
-            sessionId: context.sessionId,
-            pluginId: context.pluginId,
             namespace: "nodes",
             key: existing.id,
             value: merged,
-            createdAt: now,
-            updatedAt: now,
           });
           nodeByName.set(lookupKey, merged);
           nodeResults.push({
@@ -208,14 +204,9 @@ export default function ({ tool, z, shortIdBatch, store }) {
             attributes: incoming.attributes ?? {},
           };
           pluginDataWrites.push({
-            id: crypto.randomUUID(),
-            sessionId: context.sessionId,
-            pluginId: context.pluginId,
             namespace: "nodes",
             key: id,
             value: fresh,
-            createdAt: now,
-            updatedAt: now,
           });
           nodeByName.set(lookupKey, fresh);
           for (const alias of fresh.aliases) {
@@ -288,14 +279,9 @@ export default function ({ tool, z, shortIdBatch, store }) {
           evidenceTurnIds: [currentTurnId],
         };
         pluginDataWrites.push({
-          id: crypto.randomUUID(),
-          sessionId: context.sessionId,
-          pluginId: context.pluginId,
           namespace: "edges",
           key: edgeId,
           value: edge,
-          createdAt: now,
-          updatedAt: now,
         });
         existingEdgeKeys.add(edgeKey);
         edgeResults.push({
@@ -325,14 +311,9 @@ export default function ({ tool, z, shortIdBatch, store }) {
           new Set([...prev, ...bucket.byNode.get(indexKey)]),
         );
         pluginDataWrites.push({
-          id: crypto.randomUUID(),
-          sessionId: context.sessionId,
-          pluginId: context.pluginId,
           namespace: "index",
           key: indexKey,
           value: merged,
-          createdAt: now,
-          updatedAt: now,
         });
       }
 
@@ -352,24 +333,9 @@ export default function ({ tool, z, shortIdBatch, store }) {
         },
         pluginDataWrites.length > 0
           ? [
-              {
-                id: crypto.randomUUID(),
-                type: "plugin.data.batch",
-                source: {
-                  pluginId: context.pluginId,
-                  runtimeId: context.runtimeId,
-                },
-                turnId: context.turnId,
-                sessionId: context.sessionId,
-                payload: {
-                  items: pluginDataWrites.map((record) => ({
-                    namespace: record.namespace,
-                    key: record.key,
-                    value: record.value,
-                  })),
-                },
-                timestamp: now,
-              },
+              makeProposal(context, now, "plugin.data.batch", {
+                items: pluginDataWrites,
+              }),
             ]
           : [],
       );

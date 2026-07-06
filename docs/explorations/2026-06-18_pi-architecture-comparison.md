@@ -24,12 +24,12 @@ Pi 是一个 **编码 Agent CLI 框架**(不是 RPG),但它在 _"把纯 Agent �
 
 ### 1.1 Pi 的分层
 
-| 层 | 包 | 职责 | 是否触碰持久化 |
-| --- | --- | --- | --- |
-| Provider 抽象 | `@earendil-works/pi-ai` | 多 Provider 统一流式 API、prompt caching、thinking、跨 Provider handoff | 否 |
-| 核心 Agent 循环 | `@earendil-works/pi-agent-core` | `Agent` 类:维护 `_state.messages` transcript、跑 `agentLoop`、执行工具、发射生命周期事件、管理 `steeringQueue`/`followUpQueue` | **否**(纯内存) |
-| 编排 Harness | `AgentHarness`(agent-core 内,概念层) | 会话持久化、运行时配置、资源解析(skills/prompts)、操作锁、**Hook 变更语义**、save-point 快照、abort 控制 | 是(单一真相源) |
-| 集成 / CLI | `@earendil-works/pi-coding-agent` 的 `AgentSession` | 把上面三者粘起来,接 TUI、SessionManager(JSONL)、扩展发现 | 是 |
+| 层              | 包                                                  | 职责                                                                                                                           | 是否触碰持久化 |
+| --------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------- |
+| Provider 抽象   | `@earendil-works/pi-ai`                             | 多 Provider 统一流式 API、prompt caching、thinking、跨 Provider handoff                                                        | 否             |
+| 核心 Agent 循环 | `@earendil-works/pi-agent-core`                     | `Agent` 类:维护 `_state.messages` transcript、跑 `agentLoop`、执行工具、发射生命周期事件、管理 `steeringQueue`/`followUpQueue` | **否**(纯内存) |
+| 编排 Harness    | `AgentHarness`(agent-core 内,概念层)                | 会话持久化、运行时配置、资源解析(skills/prompts)、操作锁、**Hook 变更语义**、save-point 快照、abort 控制                       | 是(单一真相源) |
+| 集成 / CLI      | `@earendil-works/pi-coding-agent` 的 `AgentSession` | 把上面三者粘起来,接 TUI、SessionManager(JSONL)、扩展发现                                                                       | 是             |
 
 关键设计意图(来自 `packages/agent/docs/agent-harness.md` / `durable-harness.md`):
 
@@ -63,6 +63,7 @@ TurnCore(纯执行,无 store)
 ```
 
 收益:
+
 - `TurnCore` 可在没有 SQLite/PG 的情况下用 `MockLLM` 单测,契合现有 `@covel/plugin-test-utils`。
 - 提案的"产生"与"提交"彻底解耦,`PreStateCommit`/`PostStateCommit` 的边界更自然。
 - 对应 pi 的 `runAgentLoop`(core)vs `AgentHarness`(orchestration)。Covel 已经有 `session-commit-pipeline.ts`,把它升格为 Harness 的一等成员即可。
@@ -78,19 +79,19 @@ Covel 现有 8 个(`packages/runtime/src/hooks/types.ts`):
 
 Pi 的事件(节选,与 Covel 对齐看缺口):
 
-| Pi 事件 | 作用 | Covel 是否有等价 |
-| --- | --- | --- |
-| `session_start` / `session_shutdown` | 会话起止 | ~ 部分(无显式扩展钩子) |
-| `before_agent_start` | 用户提交后、循环开始前,可注入 message / 改 system prompt | ~ 接近 `TurnStart`,但不能改 prompt |
-| `turn_start` / `turn_end` | turn 边界 | ✅ `PreRuntime`/`PostRuntime` 近似 |
-| **`context`** | **每次 LLM 调用前,非破坏性改写 messages** | ❌ **缺失** |
-| **`before_provider_request`** | **Provider 请求前,检查/替换 payload、改 streamOptions/headers** | ❌ **缺失** |
-| **`after_provider_response`** | **拿到响应、消费流之前拦截** | ❌ **缺失** |
-| `tool_call` | LLM 发起工具调用时拦截(可 block / 改 input) | ✅ `PreToolUse` |
-| `tool_result` | 工具返回后改写 content/isError/terminate | ✅ `PostToolUse` |
-| `model_select` / `thinking_level_select` | 模型/思考档位选择拦截 | ❌ 缺失(Covel 有 slot resolver 但无 hook) |
-| `session_before_compact` / `session_compact` | 压缩前后(可取消/自定义摘要) | ~ 有 compactor,但无扩展 hook |
-| `input` / `user_bash` | 用户输入/bash 拦截(CLI 专属) | N/A(Covel 非 CLI) |
+| Pi 事件                                      | 作用                                                            | Covel 是否有等价                          |
+| -------------------------------------------- | --------------------------------------------------------------- | ----------------------------------------- |
+| `session_start` / `session_shutdown`         | 会话起止                                                        | ~ 部分(无显式扩展钩子)                    |
+| `before_agent_start`                         | 用户提交后、循环开始前,可注入 message / 改 system prompt        | ~ 接近 `TurnStart`,但不能改 prompt        |
+| `turn_start` / `turn_end`                    | turn 边界                                                       | ✅ `PreRuntime`/`PostRuntime` 近似        |
+| **`context`**                                | **每次 LLM 调用前,非破坏性改写 messages**                       | ❌ **缺失**                               |
+| **`before_provider_request`**                | **Provider 请求前,检查/替换 payload、改 streamOptions/headers** | ❌ **缺失**                               |
+| **`after_provider_response`**                | **拿到响应、消费流之前拦截**                                    | ❌ **缺失**                               |
+| `tool_call`                                  | LLM 发起工具调用时拦截(可 block / 改 input)                     | ✅ `PreToolUse`                           |
+| `tool_result`                                | 工具返回后改写 content/isError/terminate                        | ✅ `PostToolUse`                          |
+| `model_select` / `thinking_level_select`     | 模型/思考档位选择拦截                                           | ❌ 缺失(Covel 有 slot resolver 但无 hook) |
+| `session_before_compact` / `session_compact` | 压缩前后(可取消/自定义摘要)                                     | ~ 有 compactor,但无扩展 hook              |
+| `input` / `user_bash`                        | 用户输入/bash 拦截(CLI 专属)                                    | N/A(Covel 非 CLI)                         |
 
 **最值得补的三个缺口**:`context`、`before_provider_request`、`after_provider_response`。
 
@@ -104,18 +105,18 @@ Covel 的 Hook 结果(`packages/runtime/src/hooks/types.ts`):
 ```ts
 type HookResult<P> =
   | { action: "continue" }
-  | { action: "continue"; replace: Partial<P> }   // 浅合并替换 payload
+  | { action: "continue"; replace: Partial<P> } // 浅合并替换 payload
   | { action: "abort"; reason: string };
 ```
 
 Pi 的 handler 签名统一,但**每个事件的返回语义不同**:
 
-| Pi 事件 | 语义 | 说明 |
-| --- | --- | --- |
-| `context` | **return-based 链式** | 顺序执行,每个 handler 拿到上一个的 `messages`,返回 `{messages}` 改写,返回 `undefined` 不变 |
-| `before_provider_request` | **return-based patch** | 返回 `{streamOptions}` 替换/补丁,下游 handler 看到累积结果 |
-| `tool_call` | **veto + mutate** | 返回 `{block:true, reason}` 直接否决并短路;`input` 对象可直接 mutate |
-| `tool_result` | **patch 累积** | 返回部分 patch(`content`/`isError`/`terminate`...),省略字段保留原值 |
+| Pi 事件                   | 语义                   | 说明                                                                                       |
+| ------------------------- | ---------------------- | ------------------------------------------------------------------------------------------ |
+| `context`                 | **return-based 链式**  | 顺序执行,每个 handler 拿到上一个的 `messages`,返回 `{messages}` 改写,返回 `undefined` 不变 |
+| `before_provider_request` | **return-based patch** | 返回 `{streamOptions}` 替换/补丁,下游 handler 看到累积结果                                 |
+| `tool_call`               | **veto + mutate**      | 返回 `{block:true, reason}` 直接否决并短路;`input` 对象可直接 mutate                       |
+| `tool_result`             | **patch 累积**         | 返回部分 patch(`content`/`isError`/`terminate`...),省略字段保留原值                        |
 
 Covel 的统一 `replace: Partial<P>` 已经能表达"patch 累积"(浅合并)和"abort"(≈veto),**但缺少 pi 的两个细节**:
 
@@ -139,12 +140,12 @@ export default function (pi: ExtensionAPI) {
 
 Covel 是 **声明式**:PLUGIN.md frontmatter 声明 `hooks[]` / `tools` / `rpc`,handler 指向相对路径模块。两种风格各有取舍:
 
-| | Pi 命令式 `ExtensionAPI` | Covel 声明式 PLUGIN.md |
-| --- | --- | --- |
-| 静态可分析(信任分级、工具白名单) | 弱(要执行才知道注册了啥) | **强**(frontmatter 直接读) |
-| 动态注册(运行时条件注册工具) | **强** | 弱 |
-| 样板代码 | 少 | 多(每个 hook 一个文件 + frontmatter 条目) |
-| 与信任分级 / 沙箱契合 | 需运行才能裁决 | **契合**(community 插件 defer import 前就能看清能力面) |
+|                                  | Pi 命令式 `ExtensionAPI` | Covel 声明式 PLUGIN.md                                 |
+| -------------------------------- | ------------------------ | ------------------------------------------------------ |
+| 静态可分析(信任分级、工具白名单) | 弱(要执行才知道注册了啥) | **强**(frontmatter 直接读)                             |
+| 动态注册(运行时条件注册工具)     | **强**                   | 弱                                                     |
+| 样板代码                         | 少                       | 多(每个 hook 一个文件 + frontmatter 条目)              |
+| 与信任分级 / 沙箱契合            | 需运行才能裁决           | **契合**(community 插件 defer import 前就能看清能力面) |
 
 Covel 的声明式选择对它的信任模型(builtin/official/community + `import()` 延迟)**是正确的**——不该照搬 pi 的命令式。但可以借鉴一点:
 
@@ -177,6 +178,7 @@ Covel 在状态**结构化**与**审计**上比 pi 强得多(per-field changeLog
 
 **借鉴 1 —— "config 即 event,统一进 log"。**
 Covel 的 `sessions.runtime_model_overrides` 是旁路 JSONB 字段,每 turn 快照进 `TurnInput`。这其实是"配置游离在事件流之外"。若把"运行时模型覆盖变更""插件启用/禁用变更"也建模成 `SessionEvent`(类似 `event.emit` 提案),则:
+
 - 时间旅行 / replay 时配置能自然重建(目前 replay 一个旧 turn,override 状态是"当前值"而非"当时值")。
 - `/debug` 的 Session Timeline 能显示"第 5 turn 玩家把 narrator 切到了 fast slot"。
 
@@ -191,14 +193,14 @@ Pi 明确要求"每个被接受的 mutation 在 public API resolve 前必须 dur
 
 这一块 Covel 不弱于 pi,甚至更全:
 
-| 维度 | Pi `pi-ai` | Covel `ai-provider` |
-| --- | --- | --- |
-| 多 Provider | OpenAI/Anthropic/Google | OpenAI-chat / OpenAI-responses / Anthropic-messages |
-| 流式 | ✅ | ✅ `streamText` |
-| Prompt caching | ✅ | ✅ `CacheStrategy`(anthropic-explicit / auto-prefix) |
-| 能力检测 | 有 | **更强**:多模态 input/output modality + features + LiteLLM 2597 模型库 |
-| 多模态操作 | 文本为主 | text/object/stream/embed/image/speech/transcription 全覆盖 |
-| Slot/Preset 路由 | 模型注册表 | **更强**:named slots + tag-aware fallback + per-runtime override |
+| 维度             | Pi `pi-ai`              | Covel `ai-provider`                                                    |
+| ---------------- | ----------------------- | ---------------------------------------------------------------------- |
+| 多 Provider      | OpenAI/Anthropic/Google | OpenAI-chat / OpenAI-responses / Anthropic-messages                    |
+| 流式             | ✅                      | ✅ `streamText`                                                        |
+| Prompt caching   | ✅                      | ✅ `CacheStrategy`(anthropic-explicit / auto-prefix)                   |
+| 能力检测         | 有                      | **更强**:多模态 input/output modality + features + LiteLLM 2597 模型库 |
+| 多模态操作       | 文本为主                | text/object/stream/embed/image/speech/transcription 全覆盖             |
+| Slot/Preset 路由 | 模型注册表              | **更强**:named slots + tag-aware fallback + per-runtime override       |
 
 唯一可借鉴:pi 的 **`before_provider_request` / `after_provider_response`** 是在 Provider 边界上的 hook(见 §2.1),让插件能改 headers / 替换 payload / 拦截响应流。Covel 的 gateway 目前没有暴露这个扩展点。这与 §2.1 的建议合并即可。
 
@@ -206,17 +208,18 @@ Pi 明确要求"每个被接受的 mutation 在 public API resolve 前必须 dur
 
 ## 5. 改进建议汇总(按性价比排序)
 
-| # | 建议 | 影响面 | 风险 | 对应 pi 设计 |
-| --- | --- | --- | --- | --- |
-| **B** | `HookResult` 增加 per-event 语义:`PreToolUse` 的 `skip-tool`(单工具否决)、`PostToolUse` 的 `terminate` | runtime | 低(向后兼容) | `tool_call.block` / `tool_result.terminate` |
-| **E** | 新增 `PreLLMCall`(≈`context`)hook:非破坏性改写发往 LLM 的 messages | runtime + context | 中 | `context` 事件 |
-| **D** | 运行时配置变更建模为 event/proposal,流经 commit pipeline | store + runtime | 中 | "config 即 entry,统一进 log" |
-| **A** | 把 `executeTurn` 拆为 `TurnHarness`(编排/持久化)+ `TurnCore`(纯执行) | runtime(大) | 中高(纯重构) | `AgentHarness` vs `runAgentLoop` |
-| **F** | Provider 边界 hook:`before_provider_request` / `after_provider_response` | ai-provider + runtime | 中 | 同名事件 |
-| **C** | function-runtime 的编程式注册门面(声明面/实现面分离) | plugin-loader + runtime | 中 | `ExtensionAPI` |
-| **G** | "durable before resolve"写成显式契约;审计事件落盘不再 fire-and-forget | events + store | 中 | durable-harness 不变量 |
+| #     | 建议                                                                                                   | 影响面                  | 风险         | 对应 pi 设计                                |
+| ----- | ------------------------------------------------------------------------------------------------------ | ----------------------- | ------------ | ------------------------------------------- |
+| **B** | `HookResult` 增加 per-event 语义:`PreToolUse` 的 `skip-tool`(单工具否决)、`PostToolUse` 的 `terminate` | runtime                 | 低(向后兼容) | `tool_call.block` / `tool_result.terminate` |
+| **E** | 新增 `PreLLMCall`(≈`context`)hook:非破坏性改写发往 LLM 的 messages                                     | runtime + context       | 中           | `context` 事件                              |
+| **D** | 运行时配置变更建模为 event/proposal,流经 commit pipeline                                               | store + runtime         | 中           | "config 即 entry,统一进 log"                |
+| **A** | 把 `executeTurn` 拆为 `TurnHarness`(编排/持久化)+ `TurnCore`(纯执行)                                   | runtime(大)             | 中高(纯重构) | `AgentHarness` vs `runAgentLoop`            |
+| **F** | Provider 边界 hook:`before_provider_request` / `after_provider_response`                               | ai-provider + runtime   | 中           | 同名事件                                    |
+| **C** | function-runtime 的编程式注册门面(声明面/实现面分离)                                                   | plugin-loader + runtime | 中           | `ExtensionAPI`                              |
+| **G** | "durable before resolve"写成显式契约;审计事件落盘不再 fire-and-forget                                  | events + store          | 中           | durable-harness 不变量                      |
 
 **不建议照搬**:
+
 - ❌ pi 的扁平 JSONL append-only 单文件状态。Covel 的关系化 + per-field changeLog 对 RPG 查询/审计是更优解。
 - ❌ pi 的命令式 `ExtensionAPI` 全面替换声明式 PLUGIN.md。Covel 的声明式清单对信任分级 / community 沙箱是刚需。
 - ❌ pi 的 jiti 运行时 TS 加载用于 community 插件(安全面更大);Covel 现有 `import()` defer + 信任分级更稳。
@@ -236,6 +239,7 @@ Pi 明确要求"每个被接受的 mutation 在 public API resolve 前必须 dur
 ## 附:关键文件索引(便于后续精读)
 
 **Covel 侧**
+
 - Hook:`packages/runtime/src/hooks/{types,pipeline}.ts`
 - 清单类型:`packages/shared/src/types/plugin.ts`(`RuntimeManifest` / `TriggerType` / `HookDeclaration`)
 - 事件总线:`packages/events/src/event-bus.ts`
@@ -246,6 +250,7 @@ Pi 明确要求"每个被接受的 mutation 在 public API resolve 前必须 dur
 - Provider:`packages/ai-provider/src/{gateway,types}.ts`、`adapters/`
 
 **Pi 侧**(DeepWiki 路径)
+
 - Extension System:wiki §6(API、loading、events、patterns)
 - AgentSession / 生命周期:wiki §2.2
 - 压缩:wiki §2.3

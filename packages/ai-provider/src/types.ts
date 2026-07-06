@@ -44,7 +44,7 @@ export type OperationMode =
 export type InputModality = "text" | "image" | "audio" | "video" | "file";
 
 /** What a model can produce as output. */
-export type OutputModality = "text" | "image" | "audio" | "embedding";
+export type OutputModality = "text" | "image" | "audio" | "video" | "embedding";
 
 /** Feature flags for model capabilities beyond basic I/O. */
 export type ModelFeature =
@@ -383,6 +383,8 @@ export interface SpeechSynthesisParams {
 export interface SpeechSynthesisResult {
   audio: { mimeType: string; data: Uint8Array };
   usage: UsageSummary | null;
+  /** e.g. "requested format unsupported by this wire, fell back to mp3". */
+  warnings: string[];
 }
 
 // ── Transcription ──────────────────────────────────────────────────
@@ -396,6 +398,7 @@ export interface TranscriptionParams {
 export interface TranscriptionResult {
   text: string;
   usage: UsageSummary | null;
+  warnings: string[];
 }
 
 // ── Request Context ────────────────────────────────────────────────

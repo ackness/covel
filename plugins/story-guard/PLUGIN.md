@@ -22,7 +22,6 @@ hooks:
     handler: ./hooks/sanitize-response.js
   - event: PreToolUse
     handler: ./hooks/guard-tool.js
-relations: {}
 ---
 
 # Story Guard

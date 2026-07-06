@@ -30,18 +30,18 @@ messages
   [10] Post-History Instructions
 ```
 
-| #   | 名称                         | 来源                                           | 输出位置        |
-| --- | ---------------------------- | ---------------------------------------------- | --------------- |
-| 1   | Framework Preamble           | locale、运行框架约束                           | `systemPrompt`  |
-| 2   | Core Memory + Working Memory | session context snapshot                       | `systemPrompt`  |
-| 3   | Plugin Instructions          | `PLUGIN.md` 正文 + persona contributions       | `systemPrompt`  |
-| 4   | WorldInfo before-plugin      | session context contributions                  | `systemPrompt`  |
-| 5   | Upstream Injects             | `manifest.input.inject`                        | `systemPrompt`  |
-| 6   | WorldInfo after-plugin       | session context contributions                  | `systemPrompt`  |
-| 7   | Message history              | store 中的 turn messages + compactor summaries | `messages`      |
-| 8   | At-depth contributions       | session context contributions                  | `messages`      |
-| 9   | Author's Note                | active manifests 的 `authorsNote`              | `messages`      |
-| 10  | Post-History Instructions    | active manifests 的 `postHistory`              | `messages` 末尾 |
+| #   | 名称                         | 来源                                                                                                                                                                                | 输出位置        |
+| --- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| 1   | Framework Preamble           | locale、运行框架约束                                                                                                                                                                | `systemPrompt`  |
+| 2   | Core Memory + Working Memory | session context snapshot                                                                                                                                                            | `systemPrompt`  |
+| 3   | Plugin Instructions          | `PLUGIN.md` 正文 + persona contributions                                                                                                                                            | `systemPrompt`  |
+| 4   | WorldInfo before-plugin      | session context contributions                                                                                                                                                       | `systemPrompt`  |
+| 5   | Upstream Injects             | `manifest.input.inject`；`manifest.advertiseEvents: true` 时追加 `<available-events>` 事件目录（opt-in，见 [plugins.md](./plugins.md#events-声明与-advertiseevents统一事件发射层)） | `systemPrompt`  |
+| 6   | WorldInfo after-plugin       | session context contributions                                                                                                                                                       | `systemPrompt`  |
+| 7   | Message history              | store 中的 turn messages + compactor summaries                                                                                                                                      | `messages`      |
+| 8   | At-depth contributions       | session context contributions                                                                                                                                                       | `messages`      |
+| 9   | Author's Note                | active manifests 的 `authorsNote`                                                                                                                                                   | `messages`      |
+| 10  | Post-History Instructions    | active manifests 的 `postHistory`                                                                                                                                                   | `messages` 末尾 |
 
 空段会被跳过，非空 system 段用 `\n\n` 拼接成 `AssembledContext.systemPrompt`。运行时仍消费一个 `systemPrompt: string` 与一个 `messages` 数组。
 

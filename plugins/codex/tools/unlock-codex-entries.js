@@ -18,6 +18,7 @@
  * generic `ui-spec` convention, not anything about codex semantics.
  */
 
+import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
 import { getCategoryMetadata } from "../category-metadata.js";
 
@@ -71,10 +72,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
       // (generic EntryCard prop). This panel keeps the NEW badge on
       // indefinitely — there is no session-scoped "clear NEW" mechanism
       // yet; downstream plugins can extend this if needed.
-      const records = results.map((entry) => ({
-        id: crypto.randomUUID(),
-        sessionId: context.sessionId,
-        pluginId: context.pluginId,
+      const items = results.map((entry) => ({
         namespace: "entries",
         key: entry.entryId,
         value: {
@@ -88,8 +86,6 @@ export default function ({ tool, z, shortIdBatch, store }) {
           unlockedAt: entry.unlockedAt,
           isNew: true,
         },
-        createdAt: now,
-        updatedAt: now,
       }));
       const ui = results.map((entry) => ({
         type: "ui-spec",
@@ -122,26 +118,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
           entries: results,
           ui,
         },
-        [
-          {
-            id: crypto.randomUUID(),
-            type: "plugin.data.batch",
-            source: {
-              pluginId: context.pluginId,
-              runtimeId: context.runtimeId,
-            },
-            turnId: context.turnId,
-            sessionId: context.sessionId,
-            payload: {
-              items: records.map((record) => ({
-                namespace: record.namespace,
-                key: record.key,
-                value: record.value,
-              })),
-            },
-            timestamp: now,
-          },
-        ],
+        [makeProposal(context, now, "plugin.data.batch", { items })],
       );
     },
   });

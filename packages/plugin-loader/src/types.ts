@@ -165,6 +165,35 @@ export interface PluginRuntimeGateway {
     >;
     warnings: readonly string[];
   }>;
+
+  /**
+   * Low-level speech synthesis returning raw audio bytes without media
+   * persistence. Framework-internal building block for ctx.speech —
+   * plugins should prefer ctx.speech.generate.
+   */
+  synthesizeSpeech?(input: {
+    presetId?: string;
+    text: string;
+    voice?: string;
+    format?: string;
+    signal?: AbortSignal;
+  }): Promise<{
+    audio: { mimeType: string; data: Uint8Array };
+    warnings: readonly string[];
+  }>;
+
+  /**
+   * Low-level transcription (STT). Framework-internal building block for
+   * ctx.speech — plugins should prefer ctx.speech.transcribe.
+   */
+  transcribeAudio?(input: {
+    presetId?: string;
+    audio: { data: Uint8Array; mimeType: string; fileName?: string };
+    signal?: AbortSignal;
+  }): Promise<{
+    text: string;
+    warnings: readonly string[];
+  }>;
 }
 
 /**
@@ -282,6 +311,57 @@ export interface ImagesContext {
   generate(input: ImageGenerateInput): Promise<ImageGenerateOutput>;
 }
 
+export interface SpeechGenerateInput {
+  /** Slot name; defaults to speech-tag resolution. */
+  readonly presetId?: string;
+  readonly text: string;
+  readonly voice?: string;
+  readonly format?: string;
+  /**
+   * Business metadata persisted onto the MediaRef. Same contract as
+   * ctx.images: `pluginId` and `promptHash` are injected by the framework
+   * and cannot be overridden; metadata does not participate in dedup.
+   */
+  readonly metadata?: Readonly<Record<string, unknown>>;
+  /** Abort signal forwarded to the provider call. Not part of promptHash. */
+  readonly signal?: AbortSignal;
+}
+
+export interface SpeechGenerateOutput {
+  /** Always a single ref today; array keeps the shape symmetric with images. */
+  readonly refs: readonly MediaRef[];
+  readonly warnings: readonly string[];
+  /** True when promptHash matched an existing asset and no provider call was made. */
+  readonly cached: boolean;
+}
+
+export interface SpeechTranscribeInput {
+  /** Slot name; defaults to transcription-tag resolution. */
+  readonly presetId?: string;
+  /** A MediaRef of already-stored audio (common path) or raw bytes. */
+  readonly audio:
+    | MediaRef
+    | {
+        readonly data: Uint8Array;
+        readonly mimeType: string;
+        readonly fileName?: string;
+      };
+  readonly signal?: AbortSignal;
+}
+
+/**
+ * First-class speech pipeline for function runtimes — TTS with the same
+ * dedup + MediaStore persistence contract as ctx.images, plus STT.
+ */
+export interface SpeechContext {
+  generate(input: SpeechGenerateInput): Promise<SpeechGenerateOutput>;
+  /** No dedup: output is plain text returned to the handler, nothing persisted. */
+  transcribe(input: SpeechTranscribeInput): Promise<{
+    readonly text: string;
+    readonly warnings: readonly string[];
+  }>;
+}
+
 export interface AssetProgressInput {
   /** Stable asset/job id when the plugin has one before final MediaRef commit. */
   readonly assetId?: string;
@@ -350,6 +430,11 @@ export interface FunctionHandlerContext {
    * the executor is wired with both a gateway and a MediaStore.
    */
   readonly images?: ImagesContext;
+  /**
+   * Unified speech pipeline — TTS (persisted MediaRefs) and STT. Present
+   * under the same wiring conditions as `images`.
+   */
+  readonly speech?: SpeechContext;
   /**
    * Emits generation progress as `asset.progress` trace/SSE events. The
    * final durable output remains `assetGenerations[]` → `asset.generate`.

@@ -4,6 +4,7 @@
  *
  * @param {{ tool: Function, z: import('zod'), store: any }} injection
  */
+import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
 
 export default function ({ tool, z, store }) {
@@ -81,22 +82,11 @@ export default function ({ tool, z, store }) {
           categories: [...new Set(params.attributes.map((a) => a.category))],
         },
         [
-          {
-            id: crypto.randomUUID(),
-            type: "plugin.data",
-            source: {
-              pluginId: context.pluginId,
-              runtimeId: context.runtimeId,
-            },
-            turnId: context.turnId,
-            sessionId: context.sessionId,
-            payload: {
-              namespace: "schema",
-              key: "character-attributes",
-              value: { version: 1, attributes: params.attributes },
-            },
-            timestamp: now,
-          },
+          makeProposal(context, now, "plugin.data", {
+            namespace: "schema",
+            key: "character-attributes",
+            value: { version: 1, attributes: params.attributes },
+          }),
         ],
       );
     },

@@ -126,9 +126,13 @@ async function main() {
   );
   await mkdir(outDir, { recursive: true });
 
-  const { wire, wireId, model: slotModel, slot, config } = await resolveImageWire(
-    args.slot,
-  );
+  const {
+    wire,
+    wireId,
+    model: slotModel,
+    slot,
+    config,
+  } = await resolveImageWire(args.slot);
   // --model overrides the slot's model (e.g. gpt-image-1 for transparent sprites
   // when the slot's default model rejects the background parameter).
   const model = args.model ?? slotModel;

@@ -8,6 +8,7 @@
  * Returns UI blocks that json-render renders as styled choice cards.
  */
 
+import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
 
 const STYLE_CONFIG = {
@@ -65,73 +66,37 @@ export default function ({ tool, z }) {
       });
 
       const now = new Date().toISOString();
-      const messageRecords = [
-        {
-          id: crypto.randomUUID(),
-          sessionId: context.sessionId,
-          pluginId: context.pluginId,
-          namespace: "message",
-          key: "__turnId",
-          value: context.turnId,
-          createdAt: now,
-          updatedAt: now,
-        },
-        {
-          id: crypto.randomUUID(),
-          sessionId: context.sessionId,
-          pluginId: context.pluginId,
-          namespace: "message",
-          key: "topic",
-          value: topic,
-          createdAt: now,
-          updatedAt: now,
-        },
+      // plugin.data.batch items only need {namespace, key, value} — the commit
+      // handler owns ids/timestamps.
+      const items = [
+        { namespace: "message", key: "__turnId", value: context.turnId },
+        { namespace: "message", key: "topic", value: topic },
       ];
 
       for (const category of resolvedCategories.slice(0, 3)) {
-        messageRecords.push(
+        items.push(
           {
-            id: crypto.randomUUID(),
-            sessionId: context.sessionId,
-            pluginId: context.pluginId,
             namespace: "message",
             key: `category${category.slot}Label`,
             value: category.label,
-            createdAt: now,
-            updatedAt: now,
           },
           {
-            id: crypto.randomUUID(),
-            sessionId: context.sessionId,
-            pluginId: context.pluginId,
             namespace: "message",
             key: `category${category.slot}Icon`,
             value: category.icon,
-            createdAt: now,
-            updatedAt: now,
           },
           {
-            id: crypto.randomUUID(),
-            sessionId: context.sessionId,
-            pluginId: context.pluginId,
             namespace: "message",
             key: `category${category.slot}Color`,
             value: category.color,
-            createdAt: now,
-            updatedAt: now,
           },
         );
 
         for (let i = 0; i < 3; i += 1) {
-          messageRecords.push({
-            id: crypto.randomUUID(),
-            sessionId: context.sessionId,
-            pluginId: context.pluginId,
+          items.push({
             namespace: "message",
             key: `category${category.slot}Suggestion${i + 1}`,
             value: category.suggestions[i] ?? "",
-            createdAt: now,
-            updatedAt: now,
           });
         }
       }
@@ -141,26 +106,7 @@ export default function ({ tool, z }) {
           topic,
           categories: resolvedCategories,
         },
-        [
-          {
-            id: crypto.randomUUID(),
-            type: "plugin.data.batch",
-            source: {
-              pluginId: context.pluginId,
-              runtimeId: context.runtimeId,
-            },
-            turnId: context.turnId,
-            sessionId: context.sessionId,
-            payload: {
-              items: messageRecords.map((record) => ({
-                namespace: record.namespace,
-                key: record.key,
-                value: record.value,
-              })),
-            },
-            timestamp: now,
-          },
-        ],
+        [makeProposal(context, now, "plugin.data.batch", { items })],
       );
     },
   });

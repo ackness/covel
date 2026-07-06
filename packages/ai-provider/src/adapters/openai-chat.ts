@@ -2,12 +2,10 @@ import type { ModelProviderAdapter } from "./adapter.js";
 import type { UsageSummary } from "../types.js";
 import {
   postJson,
-  postFormData,
   parseJson,
   iterateSsePayloads,
   assertSuccess,
   createStructuredOutputError,
-  appendProviderMetadata,
   readOpenAiChatText,
   readOpenAiChatFinishReason,
   readOpenAiChatUsage,
@@ -313,64 +311,6 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
           ),
           outputTokens: 0,
         },
-      };
-    },
-
-    async synthesizeSpeech(config, params) {
-      const response = await postJson(config, "/audio/speech", {
-        model: params.model,
-        input: params.text,
-        ...(params.voice ? { voice: params.voice } : {}),
-        ...(params.format ? { format: params.format } : {}),
-        ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
-      });
-
-      if (!response.ok) {
-        const payload = await parseJson(response);
-        assertSuccess(response, payload, "openai-chat");
-      }
-
-      return {
-        audio: {
-          mimeType: response.headers.get("content-type") ?? "audio/mpeg",
-          data: new Uint8Array(await response.arrayBuffer()),
-        },
-        usage: null,
-      };
-    },
-
-    async transcribeAudio(config, params) {
-      const formData = new FormData();
-      formData.set("model", params.model);
-      formData.set(
-        "file",
-        new Blob([params.audio.data.buffer as ArrayBuffer], {
-          type: params.audio.mimeType,
-        }),
-        params.audio.fileName ?? "audio.bin",
-      );
-      appendProviderMetadata(formData, params.providerRequestMetadata);
-
-      const response = await postFormData(
-        config,
-        "/audio/transcriptions",
-        formData,
-      );
-      const payload = await parseJson(response);
-      assertSuccess(response, payload, "openai-chat");
-
-      const transcriptionUsage =
-        payload.usage && typeof payload.usage === "object"
-          ? (payload.usage as Record<string, unknown>)
-          : null;
-      return {
-        text: String(payload.text ?? ""),
-        usage: transcriptionUsage
-          ? {
-              inputTokens: Number(transcriptionUsage.prompt_tokens ?? 0),
-              outputTokens: Number(transcriptionUsage.completion_tokens ?? 0),
-            }
-          : null,
       };
     },
   };

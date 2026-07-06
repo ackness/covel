@@ -7,6 +7,7 @@
  * fixed-English preamble would mix languages. `preambleForLocale(locale)` picks
  * the matching language (prefix match), falling back to English.
  */
+import { pickLocaleText } from "@covel/plugin-handlers-utils";
 
 /** @type {string} */
 export const PREAMBLE_EN = [
@@ -43,6 +44,5 @@ export const PREAMBLE_ZH = [
  * @returns {string}
  */
 export function preambleForLocale(locale) {
-  const lang = typeof locale === "string" ? locale.split("-")[0] : "";
-  return lang === "zh" ? PREAMBLE_ZH : PREAMBLE_EN;
+  return pickLocaleText(locale, PREAMBLE_ZH, PREAMBLE_EN);
 }

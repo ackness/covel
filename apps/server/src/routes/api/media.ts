@@ -31,7 +31,7 @@ import {
   getMediaTokenSecret,
   verifyMediaToken,
 } from "../../middleware/media-token.js";
-import { singleFlight } from "../../middleware/rate-limit.js";
+import { rateLimiter, singleFlight } from "../../middleware/rate-limit.js";
 import { errorBody } from "../../api-error.js";
 
 /**
@@ -93,7 +93,9 @@ function jsonError(
  */
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
-mediaRoutes.post("/", async (c) => {
+// 20 MB per request — keep the per-IP budget tight so repeat uploads can't
+// hammer storage.
+mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
   const mediaStore = c.get("mediaStore");
   if (!mediaStore) {
     return jsonError("unavailable", "media store not configured", 503);
@@ -107,7 +109,7 @@ mediaRoutes.post("/", async (c) => {
     );
   }
   const mime = (c.req.header("content-type") ?? "").split(";")[0]!.trim();
-  if (!/^image\//.test(mime)) {
+  if (!mime.startsWith("image/")) {
     return jsonError(
       "invalid_request",
       "only image/* uploads are accepted",

@@ -66,6 +66,24 @@ describe("plugin manifest dataSchemas", () => {
     ).toThrow(/plugin-relative \.json path/);
   });
 
+  it("accepts a plugin-relative wires path and rejects traversal", () => {
+    const manifest = runtimeManifestSchema.parse({
+      name: "tts-runtime",
+      description: "TTS runtime",
+      priority: 700,
+      wires: "lib/wires.js",
+    });
+    expect(manifest.wires).toBe("lib/wires.js");
+
+    expect(() =>
+      runtimeManifestSchema.parse({
+        name: "tts-runtime",
+        description: "TTS runtime",
+        wires: "../outside/wires.js",
+      }),
+    ).toThrow(/plugin-relative/);
+  });
+
   it("accepts catalogue tags and relation metadata", () => {
     const manifest = runtimeManifestSchema.parse({
       name: "dialogue-narrator",
@@ -104,7 +122,9 @@ describe("plugin manifest semantic diagnostics", () => {
         severity: "warning",
         path: ["priority"],
         message:
-          "Runtime \"manual-tool\" declares trigger.type='manual' but also sets priority=700. Manual runtimes are UI-only and should omit priority entirely.",
+          "Runtime \"manual-tool\" declares trigger.type='manual' but also sets priority=700. " +
+          "Manual runtimes are UI-only and should omit priority entirely. " +
+          "Remove one of the two to keep the scheduler intent clear.",
       },
     ]);
   });
@@ -114,6 +134,32 @@ describe("plugin manifest semantic diagnostics", () => {
       name: "manual-tool",
       description: "Manual tool",
       trigger: { type: "manual" },
+    });
+
+    expect(validateRuntimeManifestSemantics(manifest)).toEqual([]);
+  });
+
+  it("warns when a capability looks like a misspelled framework-known tag", () => {
+    const manifest = runtimeManifestSchema.parse({
+      name: "typo-plugin",
+      description: "Typo plugin",
+      priority: 500,
+      capabilities: ["narrativee"],
+    });
+
+    const diagnostics = validateRuntimeManifestSemantics(manifest);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].code).toBe("capability-typo");
+    expect(diagnostics[0].message).toContain('"narrativee"');
+    expect(diagnostics[0].message).toContain('"narrative"');
+  });
+
+  it("does not warn for exact framework-known or clearly custom capabilities", () => {
+    const manifest = runtimeManifestSchema.parse({
+      name: "ok-plugin",
+      description: "OK plugin",
+      priority: 500,
+      capabilities: ["narrative", "world-data-provider", "battle-simulator"],
     });
 
     expect(validateRuntimeManifestSemantics(manifest)).toEqual([]);
