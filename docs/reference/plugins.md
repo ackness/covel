@@ -1148,6 +1148,8 @@ relations:
 
 Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用时长**（`callTimeoutMs` / `firstTokenTimeoutMs`）和**运行总时长**（`timeoutMs`）。框架会自动在 transient 错误、call-timeout、first-token-timeout、tool-call 循环四种情形下重试，并在每次重试时向 prompt 追加一条短 system 提示打破 KV-cache 命中。
 
+**Function runtime 只消费 `timeoutMs`**：handler 受同一运行总时长硬上限约束（默认 60000ms），超时该 runtime 以 failed 收场、turn 继续。function runtime 没有重试循环，其余字段（`maxRetries` / `callTimeoutMs` / `firstTokenTimeoutMs` / `loopDetectionThreshold` / `requireToolUse`）对其无效。注意超时只解除 turn 阻塞，已发出的 handler 调用无法被取消。
+
 | 字段                     | 类型      | 默认                                              | 含义                                                                                                                                                                                                                     |
 | ------------------------ | --------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `timeoutMs`              | `number`  | 60000                                             | 运行总时长硬上限。任何情况下都不会超过此值                                                                                                                                                                               |
