@@ -20,16 +20,9 @@ import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
 import { ChatMessages } from "./chat-messages.js";
 import { StageView } from "./stage/StageView.js";
-import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
-import type {
-  SessionRecord,
-  WorldRecord,
-  PackageSummary,
-  PresetSummary,
-  LlmConfigResponse,
-  PluginLoadError,
-  SessionPluginInfo,
-} from "@/services/api.js";
+import { useSession } from "@/stores/session-store.js";
+import type { SessionRecord } from "@/services/api.js";
+import { useSettingsDialog } from "@/hooks/use-settings-dialog.js";
 import { LeftPanel } from "./left-panel.js";
 import { RightPanel } from "./right-panel.js";
 import {
@@ -47,94 +40,45 @@ import { ignoreError } from "@/lib/ignore-error.js";
 // ── Main Component ──────────────────────────────────────────────
 
 interface GameViewProps {
+  /**
+   * The active session, passed by the route (whose `state.session` null-check
+   * is the narrowing). Everything else is read from the session store.
+   */
   session: SessionRecord;
-  world: WorldRecord | null;
-  messages: StreamMessage[];
-  executing: boolean;
-  executionError: string | null;
-  packages: PackageSummary[];
-  pluginLoadErrors: PluginLoadError[];
-  /** Session-scoped plugin list with live isActive state. */
-  sessionPlugins: SessionPluginInfo[];
-  presets: PresetSummary[];
-  llmConfig?: LlmConfigResponse | null;
-  statePatches: Array<{
-    id: string;
-    summary: string;
-    packageName: string;
-    data?: unknown;
-  }>;
-  gameState: Record<string, unknown>;
-  pluginData: Record<string, Record<string, Record<string, unknown>>>;
-  executionSteps: ExecutionStep[];
-  worldSessions: SessionRecord[];
-  /** Block IDs that have been submitted (permanently locked). */
-  submittedBlockIds: ReadonlySet<string>;
-  /** Form values keyed by submitted block id — for repopulating disabled forms. */
-  submittedBlockValues: Readonly<Record<string, Record<string, unknown>>>;
-  /** Kick off the narrative — called when player clicks 开始冒险. */
-  onBeginAdventure: () => void;
-  onSendMessage: (content: string) => void;
-  /** Mark a block as submitted (permanently locks it). */
-  onSubmitBlock: (blockId: string) => void;
-  /** Submit an interactive block through framework submit-form RPC. */
-  onSubmitInteraction?: (
-    blockId: string,
-    turnId: string,
-    interactionId: string,
-    type: "form" | "choice" | "confirmation",
-    values: Record<string, unknown>,
-    submitBehavior?: { echoFilledNarrative?: boolean },
-  ) => Promise<void>;
-  /** Retry from a specific runtime (undefined = retry all). */
-  onRetryRuntime?: (runtimeId?: string) => void;
-  onResetSession: () => void;
-  onBackToWorldSelect: () => void;
-  onSwitchSession: (session: SessionRecord) => void;
-  onDeleteSession: (sessionId: string) => Promise<void>;
-  onLoadWorldSessions: () => void;
-  /** Load session-scoped plugin list from the server. */
-  onLoadSessionPlugins: () => Promise<void>;
-  /** Enable or disable a plugin for the current session. */
-  onTogglePlugin: (pluginId: string, enable: boolean) => Promise<void>;
-  /** Trigger a custom kernel event (e.g. image generation from a message). */
-  onTriggerEvent?: (
-    eventType: string,
-    eventData: Record<string, unknown>,
-  ) => void;
 }
 
-export function GameView({
-  session,
-  world,
-  messages,
-  executing,
-  executionError,
-  packages,
-  pluginLoadErrors,
-  sessionPlugins,
-  presets,
-  llmConfig,
-  statePatches,
-  gameState,
-  pluginData,
-  executionSteps,
-  worldSessions,
-  submittedBlockIds,
-  submittedBlockValues,
-  onBeginAdventure,
-  onSendMessage,
-  onSubmitBlock,
-  onSubmitInteraction,
-  onRetryRuntime,
-  onResetSession,
-  onBackToWorldSelect,
-  onSwitchSession,
-  onDeleteSession,
-  onLoadWorldSessions,
-  onLoadSessionPlugins,
-  onTogglePlugin,
-}: GameViewProps) {
+export function GameView({ session }: GameViewProps) {
+  const {
+    state,
+    sendMessage: onSendMessage,
+    submitBlock: onSubmitBlock,
+    submitInteraction: onSubmitInteraction,
+    beginAdventure: onBeginAdventure,
+    retryRuntime: onRetryRuntime,
+    resetSession: onResetSession,
+    backToWorldSelect: onBackToWorldSelect,
+    resumeSession: onSwitchSession,
+    deleteSession: onDeleteSession,
+    loadWorldSessions: onLoadWorldSessions,
+    loadSessionPlugins: onLoadSessionPlugins,
+    toggleSessionPlugin: onTogglePlugin,
+  } = useSession();
+  const {
+    world,
+    messages,
+    executing,
+    executionError,
+    packages,
+    pluginLoadErrors,
+    sessionPlugins,
+    presets,
+    llmConfig,
+    statePatches,
+    executionSteps,
+    worldSessions,
+    submittedBlockIds,
+    submittedBlockValues,
+  } = state;
   const { t } = useTranslation();
   const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(
     presets,
@@ -147,10 +91,7 @@ export function GameView({
   // Full-screen stage: collapse both studio rails + hide the session header so
   // the stage fills the viewport. Session-memory only (no persistence).
   const [immersive, setImmersive] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsInitialKey, setSettingsInitialKey] = useState<
-    string | undefined
-  >(undefined);
+  const settings = useSettingsDialog(refreshSlots);
 
   const {
     inputValue,
@@ -249,23 +190,11 @@ export function GameView({
   // this ref is shared so external callers can still reach the list tail.
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const handleSettingsOpenChange = (v: boolean) => {
-    setSettingsOpen(v);
-    if (!v) {
-      setSettingsInitialKey(undefined);
-      refreshSlots();
-    }
-  };
-
   // Topbar nav → in-page panel actions. The global topbar dispatches via
   // nav-events because it can't reach this component's local state directly.
   useNavTabActivation({
-    t,
     rightPanelRef,
-    onOpenPlugins: () => {
-      setSettingsInitialKey("plugin");
-      setSettingsOpen(true);
-    },
+    onOpenPlugins: () => settings.openWithKey("plugin"),
   });
 
   const direction = isMobile ? "vertical" : "horizontal";
@@ -287,9 +216,9 @@ export function GameView({
   return (
     <div className="flex h-full w-full overflow-hidden border-t border-border">
       <SettingsDialog
-        open={settingsOpen}
-        onOpenChange={handleSettingsOpenChange}
-        initialKey={settingsInitialKey}
+        open={settings.open}
+        onOpenChange={settings.onOpenChange}
+        initialKey={settings.initialKey}
       />
 
       <Dialog open={suspensionsOpen} onOpenChange={setSuspensionsOpen}>
@@ -340,7 +269,7 @@ export function GameView({
             onSwitchSession={onSwitchSession}
             onDeleteSession={onDeleteSession}
             onCloseSessionList={() => setShowSessionList(false)}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSettings={() => settings.setOpen(true)}
             onResetSession={onResetSession}
             onTogglePlugin={onTogglePlugin}
           />
@@ -370,7 +299,6 @@ export function GameView({
                 sessionId={session.id}
                 world={world}
                 statePatches={statePatches}
-                onToggleRightPanel={toggleRightPanel}
               />
             </ResizablePanel>
             <ResizableHandle
@@ -429,7 +357,7 @@ export function GameView({
                 onViewModeChange={handleViewModeChange}
                 onToggleLeftPanel={toggleLeftPanel}
                 onToggleRightPanel={toggleRightPanel}
-                onOpenSettings={() => setSettingsOpen(true)}
+                onOpenSettings={() => settings.setOpen(true)}
                 onOpenSuspensions={() => setSuspensionsOpen(true)}
                 onBackToWorldSelect={onBackToWorldSelect}
                 onResetSession={onResetSession}
@@ -530,7 +458,6 @@ export function GameView({
                 sessionId={session.id}
                 world={world}
                 statePatches={statePatches}
-                onToggleRightPanel={toggleRightPanel}
               />
             </ResizablePanel>
           </>

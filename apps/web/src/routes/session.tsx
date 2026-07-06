@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useSession } from "@/stores/session-store.js";
 import { getDataService } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
+import { useSettingsDialog } from "@/hooks/use-settings-dialog.js";
 import { resolveI18n } from "@/lib/catalog.js";
 import { initDesktopBridge } from "@/lib/desktop-bridge.js";
 import { onNavEvent } from "@/lib/nav-events.js";
@@ -32,28 +33,15 @@ function SessionPage() {
     boot,
     selectWorld,
     startGame,
-    beginAdventure,
     resumeSession,
     resumeSessionById,
-    loadWorldSessions,
     deleteSession,
-    sendMessage,
-    submitBlock,
-    submitInteraction,
-    retryRuntime,
-    resetSession,
     backToWorldSelect,
     updateWorldLocal,
     addWorldLocal,
     removeWorldLocal,
-    loadSessionPlugins,
-    toggleSessionPlugin,
-    triggerEvent,
   } = useSession();
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsInitialKey, setSettingsInitialKey] = useState<
-    string | undefined
-  >(undefined);
+  const settings = useSettingsDialog();
   const { resolvedSlots } = useSlotConfig(state.presets, state.llmConfig);
   const { sid } = Route.useSearch();
   const navigate = useNavigate();
@@ -116,8 +104,6 @@ function SessionPage() {
   }, [state.world]);
 
   // Desktop bridge: translate Electron menu events into app actions
-  const settingsOpenRef = useRef(setSettingsOpen);
-  settingsOpenRef.current = setSettingsOpen;
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
   const messagesRef = useRef(state.messages);
@@ -132,15 +118,15 @@ function SessionPage() {
   useEffect(() => {
     return onNavEvent((event) => {
       if (event === "open-plugins") {
-        setSettingsInitialKey("plugin");
-        setSettingsOpen(true);
+        settings.openWithKey("plugin");
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     return initDesktopBridge({
-      onOpenSettings: () => settingsOpenRef.current(true),
+      onOpenSettings: () => settings.setOpen(true),
       onNewWorld: () => navigateRef.current({ to: "/session", search: {} }),
       onExportChat: () => {
         const tt = tRef.current;
@@ -251,42 +237,10 @@ function SessionPage() {
     );
   }
 
-  // Game view — session is active
+  // Game view — session is active. GameView reads everything else from the
+  // session store itself; the prop just carries this branch's null-narrowing.
   if (state.session) {
-    return (
-      <GameView
-        session={state.session}
-        world={state.world}
-        messages={state.messages}
-        executing={state.executing}
-        executionError={state.executionError}
-        packages={state.packages}
-        pluginLoadErrors={state.pluginLoadErrors}
-        sessionPlugins={state.sessionPlugins}
-        presets={state.presets}
-        llmConfig={state.llmConfig}
-        statePatches={state.statePatches}
-        gameState={state.gameState}
-        pluginData={state.pluginData}
-        executionSteps={state.executionSteps}
-        worldSessions={state.worldSessions}
-        submittedBlockIds={state.submittedBlockIds}
-        submittedBlockValues={state.submittedBlockValues}
-        onSendMessage={sendMessage}
-        onSubmitBlock={submitBlock}
-        onSubmitInteraction={submitInteraction}
-        onBeginAdventure={beginAdventure}
-        onRetryRuntime={retryRuntime}
-        onResetSession={resetSession}
-        onBackToWorldSelect={backToWorldSelect}
-        onSwitchSession={resumeSession}
-        onDeleteSession={deleteSession}
-        onLoadWorldSessions={loadWorldSessions}
-        onLoadSessionPlugins={loadSessionPlugins}
-        onTogglePlugin={toggleSessionPlugin}
-        onTriggerEvent={triggerEvent}
-      />
-    );
+    return <GameView session={state.session} />;
   }
 
   // Prep screen — world selected but no session yet
@@ -301,12 +255,9 @@ function SessionPage() {
         onStart={startGame}
         onResume={resumeSession}
         onDeleteSession={deleteSession}
-        settingsOpen={settingsOpen}
-        onSettingsOpenChange={(v) => {
-          if (!v) setSettingsInitialKey(undefined);
-          setSettingsOpen(v);
-        }}
-        settingsInitialKey={settingsInitialKey}
+        settingsOpen={settings.open}
+        onSettingsOpenChange={settings.onOpenChange}
+        settingsInitialKey={settings.initialKey}
       />
     );
   }
@@ -321,12 +272,9 @@ function SessionPage() {
         worlds={state.worlds}
         packages={state.packages}
         resolvedSlots={resolvedSlots}
-        settingsOpen={settingsOpen}
-        onSettingsOpenChange={(v) => {
-          if (!v) setSettingsInitialKey(undefined);
-          setSettingsOpen(v);
-        }}
-        settingsInitialKey={settingsInitialKey}
+        settingsOpen={settings.open}
+        onSettingsOpenChange={settings.onOpenChange}
+        settingsInitialKey={settings.initialKey}
         onSelectWorld={selectWorld}
         onWorldUpdated={updateWorldLocal}
         onWorldCreated={addWorldLocal}

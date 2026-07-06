@@ -21,7 +21,7 @@ export function enrichGameStateFromSnapshot(
   snapshot: GameStateSnapshotSlice,
 ): Record<string, unknown> {
   const enrichedState: Record<string, unknown> = {
-    ...(snapshot.gameState ?? {}),
+    ...snapshot.gameState,
     characters: snapshot.characters,
   };
   if (snapshot.characterSchema) {

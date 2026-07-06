@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/tabs.js";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Badge } from "@/components/ui/badge.js";
-import { Button } from "@/components/ui/button.js";
 import { WorldDocumentPanel } from "./world-document-panel.js";
 import { PluginPanel } from "./plugin-panel.js";
 import type { PluginPanelStateCache } from "./plugin-panel.js";
@@ -32,6 +31,7 @@ import {
 } from "@/lib/plugin-panel-tabs.js";
 import { loadPluginData } from "@/stores/plugin-data-store.js";
 import { useSession } from "@/stores/session-store.js";
+import { onNavEvent } from "@/lib/nav-events.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 
 interface RightPanelTabItem {
@@ -73,7 +73,6 @@ export interface RightPanelProps {
    * whenever a new patch lands.
    */
   statePatches: Array<{ id: string }>;
-  onToggleRightPanel: () => void;
 }
 
 /**
@@ -90,7 +89,6 @@ export function RightPanel({
   sessionId,
   world,
   statePatches,
-  onToggleRightPanel,
 }: RightPanelProps) {
   const { t, i18n } = useTranslation();
   const pluginPanelStateCacheRef = useRef<PluginPanelStateCache>(new Map());
@@ -103,6 +101,7 @@ export function RightPanel({
   const [activePluginSubTab, setActivePluginSubTab] = useState<
     Record<string, number>
   >({});
+  const [activeTab, setActiveTab] = useState("world");
   const { state: sessionState } = useSession();
   const activePluginKey = useMemo(
     () =>
@@ -144,6 +143,24 @@ export function RightPanel({
       .then((h) => setStoreBackend(h.storage?.data?.backend ?? null))
       .catch(ignoreError("fetch server health"));
   }, []);
+
+  // Topbar nav → controlled tab switch. Previously this dispatched synthetic
+  // mouse events at the trigger DOM node matched by aria-label, which silently
+  // broke whenever the label translation drifted.
+  useEffect(() => {
+    return onNavEvent((event) => {
+      if (event === "open-database") {
+        setActiveTab("database");
+      } else if (event === "open-images") {
+        // ponytail: match by declared icon — a first-class "media surface"
+        // capability flag on panel specs would be sturdier if this grows.
+        const target = pluginTabGroups.find((group) =>
+          group.subPanels.some((sub) => sub.icon === "image"),
+        );
+        if (target) setActiveTab(`plugin-${target.id}`);
+      }
+    });
+  }, [pluginTabGroups]);
 
   // Load plugin panel specs from /api/ui-specs and seed plugin-data-store.
   useEffect(() => {
@@ -207,7 +224,8 @@ export function RightPanel({
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
       <Tabs
-        defaultValue="world"
+        value={activeTab}
+        onValueChange={setActiveTab}
         className="flex-1 flex min-h-0 min-w-0"
         orientation="vertical"
       >
