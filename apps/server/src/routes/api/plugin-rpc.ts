@@ -49,10 +49,13 @@ import { getCachedWorld } from "../../world-cache.js";
 import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
 import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
+import { rateLimiter } from "../../middleware/rate-limit.js";
 
 export const pluginRpcRoutes = new Hono();
 
-pluginRpcRoutes.post("/:id/plugin-rpc", async (c) => {
+// Runtime-mode dispatch runs the full turn pipeline (LLM call) — same cost
+// class as POST /api/actions, so same budget.
+pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   const store = c.get("store");
   const executor = c.get("rpcExecutor");
   const sessionId = c.req.param("id");
