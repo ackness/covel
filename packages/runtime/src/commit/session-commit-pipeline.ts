@@ -138,23 +138,65 @@ export function createCommitPipeline(
     return result;
   }
 
+  /**
+   * Warn loudly when a commitAll batch lands partially: some proposals
+   * committed while siblings were rejected. In BOTH modes this is the
+   * expected best-effort semantics — a handler *validation* failure returns
+   * `{ committed: false }` without throwing, so it never rolls back committed
+   * siblings; only a thrown store error aborts (and, in transactional mode,
+   * rolls back) the whole chain.
+   */
+  function warnPartialCommit(
+    proposals: readonly Proposal[],
+    results: readonly CommitResult[],
+    mode: string,
+  ): void {
+    const committed = results.filter((r) => r.committed).length;
+    const failures = results.flatMap((r, idx) =>
+      r.committed
+        ? []
+        : [
+            {
+              index: idx,
+              type: proposals[idx].type,
+              id: proposals[idx].id,
+              error: r.error,
+            },
+          ],
+    );
+    if (committed === 0 || failures.length === 0) return;
+    console.warn(
+      "[session-kernel] commitAll: partial commit detected (%s) — %d committed, %d failed. Failures: %s",
+      mode,
+      committed,
+      failures.length,
+      JSON.stringify(failures),
+    );
+  }
+
   async function commitAll(
     proposals: readonly Proposal[],
   ): Promise<CommitResult[]> {
     // Preferred path: a single scoped transaction. The callback writes through
-    // the tx-bound store view (and tx-bound handlers), so the whole proposal
-    // chain commits atomically and a thrown store error auto-rolls-back. On
-    // PostgreSQL each `withTransaction` runs on its own pooled connection, so
-    // concurrent turns no longer serialize behind a shared begin/commit window.
+    // the tx-bound store view (and tx-bound handlers), so a thrown store error
+    // rolls back every write in the chain. NOTE this is not proposal-level
+    // atomicity: a handler validation failure returns { committed: false }
+    // without throwing, the transaction still commits, and committed siblings
+    // stay — same best-effort semantics as the fallback below (kept identical
+    // deliberately so all store backends behave the same). On PostgreSQL each
+    // `withTransaction` runs on its own pooled connection, so concurrent turns
+    // no longer serialize behind a shared begin/commit window.
     if (typeof store.withTransaction === "function") {
-      return store.withTransaction(async (tx) => {
+      const results = await store.withTransaction(async (tx) => {
         const txHandlers = createCommitHandlers(tx);
-        const results: CommitResult[] = [];
+        const txResults: CommitResult[] = [];
         for (const p of proposals) {
-          results.push(await commitWith(txHandlers, tx, p));
+          txResults.push(await commitWith(txHandlers, tx, p));
         }
-        return results;
+        return txResults;
       });
+      warnPartialCommit(proposals, results, "transactional mode");
+      return results;
     }
 
     // Fallback: stores without scoped transactions (thin mocks / legacy
@@ -164,27 +206,7 @@ export function createCommitPipeline(
     for (const p of proposals) {
       results.push(await commit(p));
     }
-
-    const committed = results.filter((r) => r.committed);
-    const failed = results.filter((r) => !r.committed);
-    if (committed.length > 0 && failed.length > 0) {
-      const failureDetails = failed.map((r) => {
-        const idx = results.indexOf(r);
-        return {
-          index: idx,
-          type: proposals[idx].type,
-          id: proposals[idx].id,
-          error: r.error,
-        };
-      });
-      console.warn(
-        "[session-kernel] commitAll: partial commit detected (non-transactional mode) — %d committed, %d failed. Failures: %s",
-        committed.length,
-        failed.length,
-        JSON.stringify(failureDetails),
-      );
-    }
-
+    warnPartialCommit(proposals, results, "non-transactional mode");
     return results;
   }
 

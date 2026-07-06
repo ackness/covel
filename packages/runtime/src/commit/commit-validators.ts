@@ -88,20 +88,6 @@ export function requireOptionalStringArray(
 }
 
 /**
- * Require that the named store capability is present. Use for the
- * "store does not support X" guards that gate optional persistence surfaces.
- */
-export function requireStoreCapability(
-  capability: unknown,
-  message: string,
-): CommitResult | undefined {
-  if (!capability) {
-    return commitError(message);
-  }
-  return undefined;
-}
-
-/**
  * Run a sequence of validator results in order, returning the first failure
  * (if any). Mirrors the short-circuit semantics of consecutive `if` guards.
  */

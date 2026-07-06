@@ -16,14 +16,7 @@ export function schedulePostTurnMemoryUpdate(args: {
   const narrativeParts = collectNarrativeParts(turnResult);
   const narrativeText = narrativeParts.join("\n\n");
 
-  console.log(
-    `[memory] post-turn: ${narrativeParts.length} narrative parts, ${narrativeText.length} chars, statuses: [${turnResult.runtimeResults.map((r) => `${r.runtimeId}:${r.status}`).join(", ")}]`,
-  );
-
   if (!narrativeText.trim()) {
-    console.log(
-      "[memory] post-turn: no narrative text found, skipping memory update",
-    );
     return;
   }
 
@@ -42,9 +35,11 @@ export function schedulePostTurnMemoryUpdate(args: {
       locale: input.locale,
     })
     .then((result) => {
-      console.log(
-        `[memory] update result: updated=${result.updated}, blocks=[${result.blocksChanged.join(",")}]${result.error ? `, error=${result.error}` : ""}`,
-      );
+      if (result.error) {
+        console.warn(
+          `[turn-executor] memory update for ${input.sessionId} reported error: ${result.error}`,
+        );
+      }
     })
     .catch((err) => {
       console.warn(

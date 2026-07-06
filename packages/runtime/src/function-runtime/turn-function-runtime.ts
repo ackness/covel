@@ -50,6 +50,12 @@ export interface ExecuteFunctionRuntimeOptions {
   readonly recursionDepth: number;
   readonly startTime: number;
   readonly runId: string;
+  /**
+   * Total-duration hard cap for the handler (`manifest.timeoutMs` ??
+   * executor default) — the same contract the agent path enforces. Function
+   * runtimes have no retry loop, so this is a plain deadline.
+   */
+  readonly timeoutMs: number;
 }
 
 export async function executeFunctionRuntime({
@@ -64,6 +70,7 @@ export async function executeFunctionRuntime({
   recursionDepth,
   startTime,
   runId,
+  timeoutMs,
 }: ExecuteFunctionRuntimeOptions): Promise<RuntimeResult> {
   // Emit start for function runtimes (no guard to check)
   try {
@@ -214,8 +221,16 @@ export async function executeFunctionRuntime({
   });
 
   let output: Awaited<ReturnType<NonNullable<typeof loaded.handler>>>;
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   try {
-    output = await loaded.handler({
+    // Deadline race: without it a hung handler (e.g. a provider call that
+    // never resolves) blocks the whole turn forever — timeoutMs only existed
+    // for the agent path before. Promise.race subscribes to the handler
+    // promise, so a post-timeout rejection is still observed (no unhandled
+    // rejection). ponytail: the losing handler keeps running detached — we
+    // unblock the turn but can't cancel it; plumb an AbortSignal into the
+    // handler ctx if detached work ever becomes a real cost.
+    const handlerPromise = loaded.handler({
       sessionId: input.sessionId,
       turnId: input.turnId,
       pluginId: manifest.pluginId,
@@ -243,6 +258,18 @@ export async function executeFunctionRuntime({
       ...(pluginDataHandle ? { pluginData: pluginDataHandle } : {}),
       ...(loggerHandle ? { logger: loggerHandle } : {}),
     });
+    output = await Promise.race([
+      handlerPromise,
+      new Promise<never>((_, reject) => {
+        deadlineTimer = setTimeout(() => {
+          reject(
+            new Error(
+              `function runtime "${manifest.name}" timed out after ${timeoutMs}ms`,
+            ),
+          );
+        }, timeoutMs);
+      }),
+    ]);
   } catch (err) {
     // Function-layer terminal marker; rethrow so the dispatch catch emits the
     // single runtime.failed (avoids a double terminal event).
@@ -253,6 +280,8 @@ export async function executeFunctionRuntime({
       error: err instanceof Error ? err.message : String(err),
     });
     throw err;
+  } finally {
+    clearTimeout(deadlineTimer);
   }
 
   await deps.emitter?.emit("function.completed", {

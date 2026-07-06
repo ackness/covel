@@ -208,8 +208,9 @@ export type FrameworkRuntimeCapabilityTag =
  * Every capability tag the framework itself acts on — the union of the
  * plugin-level {@link FrameworkCapability} and runtime-level
  * {@link FrameworkRuntimeCapability} values. Single source of truth for:
- *  - the plugin-loader's load-time typo detection (warns when a declared
- *    capability looks like a misspelled framework-known one), and
+ *  - `validateRuntimeManifestSemantics`'s typo detection (warns at server
+ *    bootstrap when a declared capability looks like a misspelled
+ *    framework-known one), and
  *  - keeping the capability table in `docs/reference/plugins.md` honest.
  *
  * Plugins may still declare arbitrary custom capability tags beyond this set;

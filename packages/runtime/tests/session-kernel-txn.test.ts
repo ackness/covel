@@ -218,6 +218,62 @@ describe("session-kernel commitAll atomicity (S4-T1)", () => {
     expect(store.rollbackCalls.count).toBe(0);
   });
 
+  it("validation failure does NOT roll back committed siblings (best-effort) and warns", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const store = createRecordingStore();
+      const pipeline = createCommitPipeline(store);
+
+      const proposals: Proposal[] = [
+        makeProposal("narrative.append", { content: "ok", kind: "story" }, "a"),
+        // Malformed: .js plugins bypass the type layer, so table can be missing.
+        makeProposal("state.patch", { field: "hp", value: 1 }, "b"),
+        makeProposal("event.emit", { topic: "test", data: {} }, "c"),
+      ];
+
+      const results = await pipeline.commitAll(proposals);
+      expect(results[0].committed).toBe(true);
+      expect(results[1].committed).toBe(false);
+      expect(results[1].error).toMatch(/table must be a non-empty string/);
+      expect(results[2].committed).toBe(true);
+
+      // Siblings stay committed; the transaction commits (no rollback).
+      expect(store.messages).toHaveLength(1);
+      expect(store.stateChanges).toHaveLength(0);
+      expect(store.events).toHaveLength(1);
+      expect(store.commitCalls.count).toBe(1);
+      expect(store.rollbackCalls.count).toBe(0);
+
+      // The partial commit is surfaced loudly, not silently swallowed.
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("partial commit detected"),
+        "transactional mode",
+        2,
+        1,
+        expect.stringContaining("prop-b"),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("rejects state.patch/event.emit with empty identifiers instead of defaulting", async () => {
+    const store = createRecordingStore();
+    const pipeline = createCommitPipeline(store);
+
+    const results = await pipeline.commitAll([
+      makeProposal("state.patch", { table: "", field: "hp", value: 1 }, "a"),
+      makeProposal("event.emit", { data: { x: 1 } }, "b"),
+    ]);
+
+    expect(results[0].committed).toBe(false);
+    expect(results[0].error).toMatch(/table must be a non-empty string/);
+    expect(results[1].committed).toBe(false);
+    expect(results[1].error).toMatch(/topic must be a non-empty string/);
+    expect(store.stateChanges).toHaveLength(0);
+    expect(store.events).toHaveLength(0);
+  });
+
   it("store missing tx hooks: falls back to non-transactional path", async () => {
     const store: KernelStore = {
       addMessage: vi.fn().mockResolvedValue(undefined),
