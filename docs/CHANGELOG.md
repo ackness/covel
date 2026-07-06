@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.12] - 2026-07-06
+
+The media-pipeline release. Speech joins images as a first-class framework primitive: `ctx.speech` gives function runtimes a unified TTS/STT surface with the same wire-selection, dedupe, and MediaStore-persistence guarantees as `ctx.images`, and every media modality (image / speech / transcription) now routes through pluggable per-modality wire registries. Plugins can ship vendor wires declaratively via the new PLUGIN.md `wires` field — supporting a new provider no longer requires touching bundled code.
+
+### Added
+
+- **`ctx.speech` — unified TTS/STT for function runtimes.** `generate()` synthesizes speech, dedupes on `sha256(presetId, text, voice, format)`, and persists through MediaStore; `transcribe()` accepts a `MediaRef` or raw bytes and returns plain text. Assembled under the same conditions as `ctx.images`; the plugin gateway and trace layer gain `synthesizeSpeech` / `transcribeAudio` passthroughs.
+- **Plugin-declared media wires (PLUGIN.md `wires` field).** Plugins register image / speech / transcription wires declaratively; ids are namespaced `<pluginId>/<wireId>` and loading is trust-gated. Slots select wires via `providerRequestMetadata.imageWire|speechWire|transcriptionWire` in `llm.toml`.
+- **Manifest diagnostics at bootstrap.** A declared capability tag sitting one edit away from a framework-known one now warns (a misspelled tag was previously just silently never discovered), as does a plugin whose frontmatter name root differs from its directory name (a mismatch silently denies the plugin its own local tools).
+
+### Changed
+
+- **Speech/transcription move from provider adapters to pluggable wires** (builtin `openai-speech` / `openai-transcription`), completing the per-modality wire registry started with images in 0.0.11.
+- **Plugin handlers read plugin data exclusively through `ctx.pluginData`** — no more store-shape sniffing; trusted and community runtimes go through the identical scoped path. Empty `relations: {}` frontmatter dropped across all bundled plugins; runtime imports moved from devDependencies to dependencies where misfiled; world-init tests relocated to `tests/`, guide + pregame gain handler tests.
+- **Web session view slimmed.** `game-view` reads session state from the session store instead of ~20 pass-through props; a shared `useSettingsDialog` hook replaces duplicated dialog state; UI primitives trimmed to the variants actually used.
+
+### Fixed
+
+- `video_generation` models derive a video output modality instead of being misclassified as text.
+- Commit handlers reject `state.patch` / `event.emit` proposals with an empty table/field/topic instead of silently landing writes under `default`/`unknown` (JS plugins bypass the type layer, so the gate must live at commit time).
+- `POST /api/media` (10 req/min) and session `plugin-rpc` (30 req/min) are rate-limited per IP — runtime-mode RPC dispatch runs a full LLM turn, the same cost class as `POST /api/actions`.
+
 ## [0.0.11] - 2026-07-04
 
 The visual-novel release. A full-screen GalGame **stage mode** — scene backdrops, character sprites, typewriter dialog, choice overlays — built on three new framework layers: a unified event-emission layer (`events` contracts + `emit-event`), a first-class image-generation pipeline (`ctx.images` + pluggable wires), and the `scene-stage` plugin that resolves narrative locations into stage art and generates missing backdrops on demand, mid-session. Haruka Academy ships the full asset set and plays as a visual novel out of the box.
