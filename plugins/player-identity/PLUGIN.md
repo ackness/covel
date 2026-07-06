@@ -19,7 +19,6 @@ tags:
   - role:character
   - data:characters
   - cost:function
-relations: {}
 ---
 
 # Player Identity

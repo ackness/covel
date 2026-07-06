@@ -49,7 +49,6 @@ tools:
 ui:
   message:
     - ./ui/action-guide-block.json
-relations: {}
 postHistory:
   role: system
   content: |

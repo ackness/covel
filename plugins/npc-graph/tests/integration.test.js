@@ -20,6 +20,28 @@ import { getPendingProposals, tool, z, shortIdBatch } from "@covel/tools";
 import createUpsertNpcGraph from "../tools/upsert-npc-graph.js";
 import retrieverHandler from "../runtimes/rag-retriever/handler.js";
 
+/**
+ * Mirror of the kernel's PluginDataWriter handle (ctx.pluginData) over the
+ * 4-arg mock store — the retriever reads plugin data through ctx.pluginData
+ * only, matching production wiring.
+ */
+function makePluginDataView(store, sessionId, pluginId) {
+  return {
+    async get(namespace, key) {
+      const row = await store.getPluginData(
+        sessionId,
+        pluginId,
+        namespace,
+        key,
+      );
+      return row ? row.value : null;
+    },
+    async list(namespace) {
+      return store.listPluginData(sessionId, pluginId, namespace);
+    },
+  };
+}
+
 function createMockStore() {
   /** @type {Map<string, any>} */
   const data = new Map();
@@ -164,6 +186,7 @@ describe("npc-graph end-to-end (extractor → retriever)", () => {
       playerMessage: "你试着私下打听萧衍笙在灵脉盟约里的真实意图。",
       locale: "zh-CN",
       store,
+      pluginData: makePluginDataView(store, SESSION, PLUGIN),
       completedResults: new Map(),
       config: {},
     };
@@ -206,6 +229,7 @@ describe("npc-graph end-to-end (extractor → retriever)", () => {
       playerMessage: "You walk through an empty courtyard at dusk.",
       locale: "en-US",
       store,
+      pluginData: makePluginDataView(store, SESSION, PLUGIN),
       completedResults: new Map(),
       config: {},
     });
@@ -286,6 +310,7 @@ describe("npc-graph end-to-end (extractor → retriever)", () => {
       playerMessage: "You greet Alice as she packs her cart.",
       locale: "en-US",
       store,
+      pluginData: makePluginDataView(store, SESSION, PLUGIN),
       completedResults: new Map(),
       config: {},
     });

@@ -18,7 +18,6 @@ trigger:
   type: scheduled
   interval: 1
   maxTriggerCount: 1
-relations: {}
 ---
 
 # Pre-Game 初始化插件

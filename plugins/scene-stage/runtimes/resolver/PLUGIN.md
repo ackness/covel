@@ -59,7 +59,6 @@ userSettings:
 ui:
   right:
     - ./ui/scene-stage-panel.json
-relations: {}
 ---
 
 Scene Stage's resolver is a deterministic function runtime triggered by `scene.set`. It resolves the current location and time of day against the world's scene registry (and scenes generated earlier this session), then publishes `stage/current` for the visual stage to consume. Scenes with no registry match are queued for background generation via `scene-stage/background-gen`, gated by `autoGenerateScenes` and `maxGeneratedScenes`.

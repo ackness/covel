@@ -39,7 +39,6 @@ ui:
     # only the redundant debug tab is gone. (Data Explorer still shows it.)
     - ./ui/world-overview.json
     - ./ui/world-schema.json
-relations: {}
 ---
 
 你是世界维度初始化 agent。

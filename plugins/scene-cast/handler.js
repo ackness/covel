@@ -1,3 +1,4 @@
+import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
 
 const ACTIVE_CAST_NAMESPACE = "active-cast";
@@ -55,7 +56,7 @@ export default async function handler(ctx) {
         activeCastContext: formatActiveCastContext(activeCast),
         speakers: [],
       },
-      [makePluginDataProposal(ctx, activeCast)],
+      [makeActiveCastProposal(ctx, activeCast)],
     );
   }
 
@@ -82,7 +83,7 @@ export default async function handler(ctx) {
       activeCastContext: formatActiveCastContext(activeCast),
       speakers,
     },
-    [makePluginDataProposal(ctx, activeCast)],
+    [makeActiveCastProposal(ctx, activeCast)],
   );
 }
 
@@ -100,24 +101,12 @@ function signalView(signal) {
   };
 }
 
-function makePluginDataProposal(ctx, activeCast) {
-  const now = new Date().toISOString();
-  return {
-    id: crypto.randomUUID(),
-    type: "plugin.data",
-    source: {
-      pluginId: ctx.pluginId,
-      runtimeId: ctx.runtimeId ?? ctx.pluginId,
-    },
-    turnId: ctx.turnId,
-    sessionId: ctx.sessionId,
-    payload: {
-      namespace: ACTIVE_CAST_NAMESPACE,
-      key: ACTIVE_CAST_KEY,
-      value: activeCast,
-    },
-    timestamp: now,
-  };
+function makeActiveCastProposal(ctx, activeCast) {
+  return makeProposal(ctx, new Date().toISOString(), "plugin.data", {
+    namespace: ACTIVE_CAST_NAMESPACE,
+    key: ACTIVE_CAST_KEY,
+    value: activeCast,
+  });
 }
 
 function resolveMaxSpeakers(value) {
@@ -127,22 +116,14 @@ function resolveMaxSpeakers(value) {
 }
 
 async function readPreviousCast(ctx) {
-  if (ctx.pluginData && typeof ctx.pluginData.get === "function") {
-    const value = await ctx.pluginData.get(
-      ACTIVE_CAST_NAMESPACE,
-      ACTIVE_CAST_KEY,
-    );
-    return normalizePreviousCast(value);
-  }
-
-  const row = await getPluginData(
-    ctx.store,
-    ctx.sessionId,
-    ctx.pluginId,
+  // ctx.pluginData is the one scoped plugin-data path — injected whenever the
+  // kernel has a store, so no store-shape fallback is needed.
+  if (!ctx.pluginData) return [];
+  const value = await ctx.pluginData.get(
     ACTIVE_CAST_NAMESPACE,
     ACTIVE_CAST_KEY,
   );
-  return normalizePreviousCast(row?.value);
+  return normalizePreviousCast(value);
 }
 
 function normalizePreviousCast(value) {
@@ -266,21 +247,18 @@ async function listCharacters(store, sessionId) {
 async function listTurnMessages(store, sessionId, limit) {
   if (!store || typeof store !== "object") return [];
   const s = /** @type {any} */ (store);
-  if (typeof s.listTurnMessages !== "function") return [];
-  if (s.listTurnMessages.length <= 1) {
+  // "Recent context" read. Full DataStore exposes listRecentTurnMessages;
+  // the community FunctionStoreView folds the same semantics into
+  // listTurnMessages(limit). Capability check, not arity sniffing — the old
+  // full-store call (listTurnMessages(sessionId, { limit })) returned the
+  // OLDEST N messages, which was the wrong end of the timeline.
+  if (typeof s.listRecentTurnMessages === "function") {
+    return await s.listRecentTurnMessages(sessionId, limit);
+  }
+  if (typeof s.listTurnMessages === "function") {
     return await s.listTurnMessages(limit);
   }
-  return await s.listTurnMessages(sessionId, { limit });
-}
-
-async function getPluginData(store, sessionId, pluginId, namespace, key) {
-  if (!store || typeof store !== "object") return null;
-  const s = /** @type {any} */ (store);
-  if (typeof s.getPluginData !== "function") return null;
-  if (s.getPluginData.length <= 2) {
-    return await s.getPluginData(namespace, key);
-  }
-  return await s.getPluginData(sessionId, pluginId, namespace, key);
+  return [];
 }
 
 function normalizeCharacters(rows) {

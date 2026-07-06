@@ -49,7 +49,6 @@ dataSchemas:
 ui:
   right:
     - ../../ui/character-panel.json
-relations: {}
 postHistory:
   role: system
   content: |

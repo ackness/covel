@@ -7,12 +7,13 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "dependencies": {
+    "@covel/plugin-handlers-utils": "workspace:*",
+    "@covel/tools": "workspace:*"
+  },
   "devDependencies": {
     "@covel/plugin-loader": "workspace:*",
     "@covel/runtime": "workspace:*",
     "vitest": "^4.1.9"
-  },
-  "dependencies": {
-    "@covel/tools": "workspace:*"
   }
 }

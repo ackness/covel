@@ -51,7 +51,6 @@ userSettings:
     description:
       zh: 本局累计 token 达到此值后，暂停本回合（abort）。应大于软上限。留空则回退到 COST_GATE_HARD_TOKENS 环境变量或默认 200000。
       en: Once the session's accumulated tokens reach this value, the turn is aborted. Keep it above the soft cap. Leave unset to fall back to the COST_GATE_HARD_TOKENS env var or the 200000 default.
-relations: {}
 ---
 
 # Cost Gate

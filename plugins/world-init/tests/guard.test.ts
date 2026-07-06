@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createMemoryStore } from "../../packages/store/src/index.ts";
-import guard from "./guard.js";
+import { createMemoryStore } from "../../../packages/store/src/index.ts";
+import guard from "../guard.js";
 
 describe("world-init guard", () => {
   it("skips schema-only reuse and imports world dimensions for a fresh session", async () => {

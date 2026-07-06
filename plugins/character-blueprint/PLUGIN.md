@@ -35,7 +35,6 @@ dataSchemas:
 ui:
   right:
     - ./ui/blueprints-panel.json
-relations: {}
 ---
 
 # Character Blueprint

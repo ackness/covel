@@ -396,7 +396,9 @@ export default async function guard(ctx) {
     // 4. Nothing found — LLM generation needed
     return { skip: false, initialized: false };
   } catch (err) {
-    console.warn("[world-init] guard error:", err);
+    await ctx.logger?.warn?.("world-init guard error", {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return { skip: false, error: String(err) };
   }
 }

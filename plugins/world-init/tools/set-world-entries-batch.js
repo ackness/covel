@@ -14,6 +14,7 @@
  *
  * @param {{ tool: Function, z: import('zod'), store: any }} injection
  */
+import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
 
 export default function ({ tool, z, store }) {
@@ -42,15 +43,10 @@ export default function ({ tool, z, store }) {
       const now = new Date().toISOString();
 
       // 1) Legacy plugin_data write — unchanged read path for old sessions.
-      const pluginDataRecords = params.entries.map((entry) => ({
-        id: crypto.randomUUID(),
-        sessionId: context.sessionId,
-        pluginId: context.pluginId,
+      const pluginDataItems = params.entries.map((entry) => ({
         namespace: "entries",
         key: entry.key,
         value: entry.value,
-        createdAt: now,
-        updatedAt: now,
       }));
 
       // 2) Lorebook proposal — canonical destination for world dimensions.
@@ -71,42 +67,16 @@ export default function ({ tool, z, store }) {
       return withPendingProposals(
         {
           success: true,
-          count: pluginDataRecords.length,
+          count: pluginDataItems.length,
           keys: params.entries.map((e) => e.key),
         },
         [
-          {
-            id: crypto.randomUUID(),
-            type: "plugin.data.batch",
-            source: {
-              pluginId: context.pluginId,
-              runtimeId: context.runtimeId,
-            },
-            turnId: context.turnId,
-            sessionId: context.sessionId,
-            payload: {
-              items: pluginDataRecords.map((record) => ({
-                namespace: record.namespace,
-                key: record.key,
-                value: record.value,
-              })),
-            },
-            timestamp: now,
-          },
-          {
-            id: crypto.randomUUID(),
-            type: "lorebook.upsert",
-            source: {
-              pluginId: context.pluginId,
-              runtimeId: context.runtimeId,
-            },
-            turnId: context.turnId,
-            sessionId: context.sessionId,
-            payload: {
-              entries: lorebookEntries,
-            },
-            timestamp: now,
-          },
+          makeProposal(context, now, "plugin.data.batch", {
+            items: pluginDataItems,
+          }),
+          makeProposal(context, now, "lorebook.upsert", {
+            entries: lorebookEntries,
+          }),
         ],
       );
     },

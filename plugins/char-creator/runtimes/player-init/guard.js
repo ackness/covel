@@ -98,9 +98,9 @@ export default async function guard(ctx) {
             preGameDone: true,
           };
         } catch (err) {
-          console.warn(
-            "[player-init/guard] deterministic create-character failed, falling back to LLM:",
-            err,
+          await logger?.warn?.(
+            "player-init guard: deterministic create-character failed, falling back to LLM",
+            { error: err instanceof Error ? err.message : String(err) },
           );
           // Fall through to LLM branch
         }
@@ -111,7 +111,9 @@ export default async function guard(ctx) {
     await logger?.debug("player-init guard proceeding to form generation");
     return { skip: false };
   } catch (err) {
-    console.warn("[char-creator/player-init] guard error:", err);
+    await logger?.warn?.("player-init guard error", {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return { skip: false, error: String(err) };
   }
 }

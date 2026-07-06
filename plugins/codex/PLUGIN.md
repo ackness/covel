@@ -43,7 +43,6 @@ tools:
 ui:
   right:
     - ./ui/codex-panel.json
-relations: {}
 postHistory:
   role: system
   content: |

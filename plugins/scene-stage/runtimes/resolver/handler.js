@@ -1,3 +1,4 @@
+import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
 import { createHash } from "node:crypto";
 import {
@@ -264,20 +265,9 @@ function matchGenerated(rows, location) {
 }
 
 function makeStageProposal(ctx, stage) {
-  return {
-    id: crypto.randomUUID(),
-    type: "plugin.data",
-    source: {
-      pluginId: ctx.pluginId,
-      runtimeId: ctx.runtimeId ?? ctx.pluginId,
-    },
-    turnId: ctx.turnId,
-    sessionId: ctx.sessionId,
-    payload: {
-      namespace: STAGE_NS,
-      key: STAGE_KEY,
-      value: stage,
-    },
-    timestamp: new Date().toISOString(),
-  };
+  return makeProposal(ctx, new Date().toISOString(), "plugin.data", {
+    namespace: STAGE_NS,
+    key: STAGE_KEY,
+    value: stage,
+  });
 }

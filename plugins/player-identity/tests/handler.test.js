@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getPendingProposals } from "@covel/tools";
 import handler from "../handler.js";
 
-function ctx(manualPayload, store = {}) {
+function ctx(manualPayload, store = {}, pluginData) {
   return {
     sessionId: "sess-identity",
     turnId: "turn-identity",
@@ -10,6 +10,7 @@ function ctx(manualPayload, store = {}) {
     runtimeId: "player-identity",
     playerMessage: "",
     store,
+    ...(pluginData ? { pluginData } : {}),
     completedResults: new Map(),
     config: {},
     manualPayload,
@@ -90,7 +91,10 @@ describe("player-identity handler", () => {
       async listCharacters() {
         return [];
       },
-      async listPluginData(sessionId, pluginId, namespace) {
+    };
+    // ctx.pluginData is the handler's scoped plugin-data path.
+    const pluginData = {
+      async list(namespace) {
         expect(namespace).toBe("profiles");
         return [
           {
@@ -111,6 +115,7 @@ describe("player-identity handler", () => {
           bindToPlayer: false,
         },
         store,
+        pluginData,
       ),
     );
     const proposals = getPendingProposals(result);

@@ -19,7 +19,6 @@ handler: ./handler.js
 trigger:
   type: scheduled
   interval: 1
-relations: {}
 ---
 
 NPC 关系图检索器（function runtime）。

@@ -76,12 +76,7 @@ async function seedFromNarrative(ctx) {
 
   // Idempotency: never seed a turnId twice. A pre-existing record means either
   // a prior seed or a player regenerate/accept already owns this turn.
-  const existing = await readTurnRecord(
-    ctx.store,
-    ctx.sessionId,
-    ctx.pluginId,
-    targetTurnId,
-  );
+  const existing = await readTurnRecord(ctx, targetTurnId);
   if (existing) {
     return { action: "seed", turnId: targetTurnId, seeded: false };
   }
@@ -153,12 +148,7 @@ async function createCandidates(ctx, payload) {
   // the narrator's message (not branch-reply's auto-seed message) when the
   // player later accepts a variant. Read it back from the existing turn record
   // rather than trusting the click payload, which never carries it.
-  const existing = await readTurnRecord(
-    ctx.store,
-    ctx.sessionId,
-    ctx.pluginId,
-    targetTurnId,
-  );
+  const existing = await readTurnRecord(ctx, targetTurnId);
   const narrativeRuntimeId =
     typeof existing?.runtimeId === "string" ? existing.runtimeId : undefined;
 
@@ -232,12 +222,7 @@ async function acceptCandidate(ctx, payload) {
     payload.candidateId,
     "candidateId",
   );
-  const existingTurnRecord = await readTurnRecord(
-    ctx.store,
-    ctx.sessionId,
-    ctx.pluginId,
-    targetTurnId,
-  );
+  const existingTurnRecord = await readTurnRecord(ctx, targetTurnId);
   if (!existingTurnRecord) {
     throw new Error("branch-reply turn record was not found");
   }
@@ -561,16 +546,11 @@ function extractNarrativeText(completedResults) {
   };
 }
 
-async function readTurnRecord(store, sessionId, pluginId, turnId) {
-  if (!store || typeof store !== "object") return undefined;
-  const s = /** @type {any} */ (store);
-  if (typeof s.getPluginData !== "function") return undefined;
-  const row =
-    s.getPluginData.length <= 2
-      ? await s.getPluginData(TURNS_NAMESPACE, turnId)
-      : await s.getPluginData(sessionId, pluginId, TURNS_NAMESPACE, turnId);
-  if (!row || typeof row !== "object") return undefined;
-  const value = row.value;
+async function readTurnRecord(ctx, turnId) {
+  // ctx.pluginData is the one scoped plugin-data path — same shape for
+  // trusted and community runtimes, so no store arity sniffing.
+  if (!ctx.pluginData) return undefined;
+  const value = await ctx.pluginData.get(TURNS_NAMESPACE, turnId);
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
   const record = /** @type {Record<string, unknown>} */ (value);

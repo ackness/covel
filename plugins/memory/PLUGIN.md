@@ -19,7 +19,6 @@ trigger:
 ui:
   right:
     - ./ui/memory-panel.json
-relations: {}
 memoryBlocks:
   - label: story_state
     displayName: { zh: 剧情状态, en: Story State }

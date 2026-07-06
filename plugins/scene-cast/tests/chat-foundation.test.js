@@ -139,18 +139,18 @@ describe("scene-cast handler", () => {
           },
         ];
       },
-      async listTurnMessages(sessionId, opts) {
+      // Full-DataStore surface: the handler asks for the most recent N
+      // messages via listRecentTurnMessages (the old listTurnMessages(sessionId,
+      // {limit}) call returned the OLDEST N — wrong end of the timeline).
+      async listRecentTurnMessages(sessionId, limit) {
         expect(sessionId).toBe("sess-chat");
-        expect(opts.limit).toBe(12);
+        expect(limit).toBe(12);
         return [
           {
             content:
               "Mira studies the locked door while Sol waits near the altar.",
           },
         ];
-      },
-      async getPluginData() {
-        return null;
       },
     };
 

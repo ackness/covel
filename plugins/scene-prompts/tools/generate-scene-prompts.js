@@ -1,3 +1,4 @@
+import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
 
 // Labels are stored as I18nText into plugin_data so the Badge renderer resolves
@@ -14,18 +15,6 @@ const KIND_CONFIG = {
     color: "amber",
   },
 };
-
-function makePluginDataBatchProposal(context, items, timestamp) {
-  return {
-    id: crypto.randomUUID(),
-    type: "plugin.data.batch",
-    source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
-    turnId: context.turnId,
-    sessionId: context.sessionId,
-    payload: { items },
-    timestamp,
-  };
-}
 
 export default function ({ tool, z }) {
   const promptSchema = z.object({
@@ -107,7 +96,7 @@ export default function ({ tool, z }) {
           scene: params.scene,
           prompts,
         },
-        [makePluginDataBatchProposal(context, items, now)],
+        [makeProposal(context, now, "plugin.data.batch", { items })],
       );
     },
   });

@@ -42,7 +42,6 @@ userSettings:
     label:
       zh: 活跃说话人数
       en: Active speakers
-relations: {}
 ---
 
 Scene Cast is a deterministic function runtime. It reads available character and message state, chooses the current active speakers, and publishes compact cast context for `chat-mode-narrator`.

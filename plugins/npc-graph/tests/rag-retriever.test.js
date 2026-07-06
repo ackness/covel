@@ -222,6 +222,28 @@ async function seedSmallChain(store) {
   ]);
 }
 
+/**
+ * Mirror of the kernel's PluginDataWriter handle (ctx.pluginData) over the
+ * 4-arg mock store — the retriever reads plugin data through ctx.pluginData
+ * only, matching production wiring.
+ */
+function makePluginDataView(store, sessionId, pluginId) {
+  return {
+    async get(namespace, key) {
+      const row = await store.getPluginData(
+        sessionId,
+        pluginId,
+        namespace,
+        key,
+      );
+      return row ? row.value : null;
+    },
+    async list(namespace) {
+      return store.listPluginData(sessionId, pluginId, namespace);
+    },
+  };
+}
+
 function makeCtx(store, playerMessage) {
   return {
     sessionId: SESSION,
@@ -230,6 +252,7 @@ function makeCtx(store, playerMessage) {
     playerMessage,
     locale: "zh-CN",
     store,
+    pluginData: makePluginDataView(store, SESSION, "npc-graph"),
     completedResults: new Map(),
     config: {},
   };

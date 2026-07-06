@@ -11,6 +11,7 @@
  * pre-existing entries written before B2 also gain the metadata.
  */
 
+import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
 import { getCategoryMetadata } from "../category-metadata.js";
 
@@ -88,22 +89,11 @@ export default function ({ tool, z, store }) {
           ],
         },
         [
-          {
-            id: crypto.randomUUID(),
-            type: "plugin.data",
-            source: {
-              pluginId: context.pluginId,
-              runtimeId: context.runtimeId,
-            },
-            turnId: context.turnId,
-            sessionId: context.sessionId,
-            payload: {
-              namespace: "entries",
-              key: params.entryId,
-              value: updatedValue,
-            },
-            timestamp: now,
-          },
+          makeProposal(context, now, "plugin.data", {
+            namespace: "entries",
+            key: params.entryId,
+            value: updatedValue,
+          }),
         ],
       );
     },
