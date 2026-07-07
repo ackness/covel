@@ -857,6 +857,8 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 列出所有游戏会话。支持 `?worldId=` 查询参数过滤。
 
+> **隐私门禁**：当服务器以 `STORE_BACKEND=memory` 运行（前端处于 local/IndexedDB 模式，服务器端 session 只是回合执行的临时同步副本）且 `NODE_ENV=production` 且未设置 `ENABLE_DEBUG_PAGE` 时，本端点固定返回 `{ "items": [] }` —— 公网共享部署下防止玩家互相枚举 session。local 模式前端从不调用此端点（列表读浏览器 IDB），故对产品功能无影响。
+
 **响应:**
 
 ```json

@@ -1,9 +1,13 @@
 # Render Blueprint — one-click demo deployment (no PostgreSQL)
 # https://docs.render.com/infrastructure-as-code
 #
-# Data persists in the player's browser IndexedDB.
-# Server uses volatile MemoryStore — data is lost on sleep/restart,
-# but the frontend auto-syncs session context back when needed.
+# Data persists in the player's browser IndexedDB (STORE_BACKEND=memory
+# switches the frontend to local mode via /api/health). The server keeps
+# only volatile MemoryStore copies synced up for turn execution — lost on
+# sleep/restart, and never listed to other players (the session listing
+# endpoint is hidden in this mode). Provider API keys stay in the player's
+# browser and travel per-request via the X-Provider-Keys header; the server
+# never persists them.
 #
 # Deploy: connect this repo on Render Dashboard, or use the Deploy button.
 
@@ -14,9 +18,15 @@ services:
     dockerfilePath: ./docker/Dockerfile
     dockerContext: .
     plan: free
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      # Explicit — the default is sqlite, which would put every player's
+      # data in one shared server-side DB. memory ⇒ frontend local mode
+      # (browser IndexedDB), per-player isolation.
+      - key: STORE_BACKEND
+        value: memory
       - key: SERVE_STATIC
         value: "true"
       - key: STATIC_DIR
@@ -25,5 +35,5 @@ services:
         value: "3001"
       - key: DEPLOYMENT_TIER
         value: demo
-      # No STORE_BACKEND / DATABASE_URL → server uses MemoryStore
-      # All persistent data lives in the player's browser IndexedDB
+      - key: ENABLE_DEBUG_PAGE
+        value: "false"

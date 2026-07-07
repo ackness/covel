@@ -22,9 +22,11 @@ COPY packages/context/package.json packages/context/
 COPY packages/create/package.json packages/create/
 COPY packages/events/package.json packages/events/
 COPY packages/memory/package.json packages/memory/
+COPY packages/plugin-handlers-utils/package.json packages/plugin-handlers-utils/
 COPY packages/plugin-loader/package.json packages/plugin-loader/
 COPY packages/plugin-test-utils/package.json packages/plugin-test-utils/
 COPY packages/runtime/package.json packages/runtime/
+COPY packages/settings/package.json packages/settings/
 COPY packages/shared/package.json packages/shared/
 COPY packages/state/package.json packages/state/
 COPY packages/store/package.json packages/store/
@@ -38,6 +40,8 @@ COPY plugins/character-blueprint/package.json plugins/character-blueprint/
 COPY plugins/character-presence/package.json plugins/character-presence/
 COPY plugins/chat-mode-narrator/package.json plugins/chat-mode-narrator/
 COPY plugins/codex/package.json plugins/codex/
+COPY plugins/cost-gate/package.json plugins/cost-gate/
+COPY plugins/director/package.json plugins/director/
 COPY plugins/guide/package.json plugins/guide/
 COPY plugins/living-world-rules/package.json plugins/living-world-rules/
 COPY plugins/memory/package.json plugins/memory/
@@ -47,6 +51,8 @@ COPY plugins/player-identity/package.json plugins/player-identity/
 COPY plugins/pregame/package.json plugins/pregame/
 COPY plugins/scene-cast/package.json plugins/scene-cast/
 COPY plugins/scene-prompts/package.json plugins/scene-prompts/
+COPY plugins/scene-stage/package.json plugins/scene-stage/
+COPY plugins/story-guard/package.json plugins/story-guard/
 COPY plugins/world-init/package.json plugins/world-init/
 
 # ── Stage 2a: Dev dependencies for the web build ──────────────────
