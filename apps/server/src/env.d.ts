@@ -1,4 +1,4 @@
-import type { DataStore, MediaStore } from "@covel/store";
+import type { DataStore, MediaStore, StoreBackend } from "@covel/store";
 import type {
   PluginRegistry,
   LoadedRuntime,
@@ -46,6 +46,12 @@ type ActivatePluginLocalToolsFn = (pluginId: string) => Promise<void>;
 declare module "hono" {
   interface ContextVariableMap {
     store: DataStore;
+    /**
+     * Backend of the DataStore actually instantiated by `bootstrapApi()`.
+     * `memory` signals a local-mode deployment (frontend persists to browser
+     * IndexedDB; server-side sessions are transient sync copies).
+     */
+    storeBackend?: StoreBackend;
     stateManager: StateManager;
     eventBus: EventBus;
     pluginRegistry: PluginRegistry;

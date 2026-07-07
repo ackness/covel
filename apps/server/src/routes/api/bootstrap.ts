@@ -402,6 +402,7 @@ export async function bootstrapApi(
 
   app.use("*", async (c, next) => {
     c.set("store", store);
+    c.set("storeBackend", config.storeBackend);
     c.set("stateManager", stateManager);
     c.set("eventBus", eventBus);
     c.set("pluginRegistry", registry);

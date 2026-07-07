@@ -15,8 +15,14 @@
 
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
+import { readRuntimeEnv } from "@covel/shared";
 import type { PluginRegistry } from "@covel/plugin-loader";
-import type { DataStore, MediaStore, SessionRecord } from "@covel/store";
+import type {
+  DataStore,
+  MediaStore,
+  SessionRecord,
+  StoreBackend,
+} from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type { HookPipeline } from "@covel/runtime";
 import {
@@ -63,6 +69,7 @@ type Env = {
     mediaStore?: MediaStore;
     worldsDirs?: readonly string[];
     covelHome?: string;
+    storeBackend?: StoreBackend;
   };
 };
 
@@ -105,6 +112,21 @@ async function fireSessionEnd(
 
 // GET /sessions(?worldId=xxx)
 sessionRoutes.get("/", async (c) => {
+  // MemoryStore deployments serve local-mode (browser IndexedDB) frontends,
+  // which list sessions from IDB and never call this endpoint. Sessions that
+  // do exist server-side are transient copies synced up for turn execution —
+  // on a shared public host the only callers of this listing would be other
+  // players, so hide it. Dev / ENABLE_DEBUG_PAGE deployments keep it for the
+  // /debug tooling.
+  const env = readRuntimeEnv();
+  const hideSharedListing =
+    c.get("storeBackend") === "memory" &&
+    env.nodeEnv === "production" &&
+    !env.debugRoutes;
+  if (hideSharedListing) {
+    return c.json({ items: [] });
+  }
+
   const store = c.get("store");
   const worldId = c.req.query("worldId");
   const sessions = await store.listSessions();
