@@ -15,6 +15,7 @@
  */
 
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import type { HookDeclaration, HookHandler } from "./types.js";
 import type { HookPipeline } from "./pipeline.js";
 
@@ -102,7 +103,7 @@ export function registerPluginHooks(
       const lazyHandler: HookHandler<unknown> = async (ctx, payload) => {
         if (!cached) {
           try {
-            const mod = (await import(absPath)) as {
+            const mod = (await import(pathToFileURL(absPath).href)) as {
               default?: HookHandler<unknown>;
             };
             if (typeof mod.default !== "function") {
