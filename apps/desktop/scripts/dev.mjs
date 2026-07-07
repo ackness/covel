@@ -6,7 +6,6 @@
  *    (assumes `pnpm dev` is running: web on 5173, server on 3001)
  */
 
-import { spawn } from "node:child_process";
 import { build } from "esbuild";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,7 +55,6 @@ const electron = spawnCommand(
       ELECTRON_IS_DEV: "1",
     },
   },
-  { spawnImpl: spawn },
 );
 
 electron.on("close", (code) => {

@@ -17,20 +17,7 @@ const commands = [
 ];
 
 let shuttingDown = false;
-
-const children = commands.map(({ name, command, args }) => {
-  console.log(`[dev] starting ${name}: ${command} ${args.join(" ")}`);
-  const child = spawnCommand(command, args, {
-    stdio: "inherit",
-    env: process.env,
-  });
-
-  if (!child.pid) {
-    throw new Error(`Failed to start ${name} dev process`);
-  }
-
-  return { name, child };
-});
+const children = [];
 
 async function stopAll(signal = "SIGTERM") {
   if (shuttingDown) return;
@@ -49,6 +36,28 @@ for (const signal of SHUTDOWN_SIGNALS) {
   process.on(signal, () => {
     void stopAll(signal).finally(() => process.exit(0));
   });
+}
+
+// Spawn incrementally into `children` so a mid-startup failure can still
+// tear down the siblings that already launched (no orphaned dev servers).
+try {
+  for (const { name, command, args } of commands) {
+    console.log(`[dev] starting ${name}: ${command} ${args.join(" ")}`);
+    const child = spawnCommand(command, args, {
+      stdio: "inherit",
+      env: process.env,
+    });
+
+    if (!child.pid) {
+      throw new Error(`Failed to start ${name} dev process`);
+    }
+
+    children.push({ name, child });
+  }
+} catch (error) {
+  console.error("[dev] startup failed:", error);
+  await stopAll();
+  process.exit(1);
 }
 
 for (const { name, child } of children) {

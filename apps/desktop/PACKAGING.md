@@ -118,7 +118,8 @@ still lands on two files:
    and the `.zip` only. CI does **not** call this script — it runs
    `electron-builder` directly so the unpacked tree persists for the
    `Verify unpacked release resources` step before `actions/upload-artifact`
-   picks just the `.dmg` + `.zip`.
+   picks just the distributables (`.dmg` + `.zip` on macOS, `.exe` on
+   Windows).
 
 ```bash
 # macOS — between phase 1 and phase 2 the unpacked .app is still on disk:

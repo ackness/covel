@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import process from "node:process";
 import fs from "node:fs";
 import path from "node:path";
@@ -13,16 +12,11 @@ function run(command, args) {
       ...process.env,
       CI: process.env.CI ?? "true",
     };
-    const child = spawnCommand(
-      command,
-      args,
-      {
-        stdio: "inherit",
-        cwd: repoRoot,
-        env,
-      },
-      { spawnImpl: spawn, env },
-    );
+    const child = spawnCommand(command, args, {
+      stdio: "inherit",
+      cwd: repoRoot,
+      env,
+    });
 
     child.once("error", reject);
     child.once("exit", (code) => {

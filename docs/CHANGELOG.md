@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **Windows desktop CI.** `release.yml` gains a `build-electron-win` job (windows-latest): full desktop build with Electron-ABI native rebuild, staged-server smoke under Electron's Node mode, `electron-builder --win` (NSIS x64/arm64 + portable x64, unsigned until a cert is configured), and `.exe` artefacts attached to GitHub Releases alongside the macOS bundles.
+
+### Fixed
+
+- **Windows dev environment.** Dev scripts spawn through `cross-spawn` (resolves `pnpm.cmd`-style shims with correct cmd.exe quoting); plugin/runtime dynamic imports of absolute paths go through `pathToFileURL` so plugin loading works on Windows; `pnpm dev` launches web + server directly with supervised teardown; `--env-file-if-exists` tolerates a missing `.env` (raises the minimum Node to 22.9).
+- **Desktop staging smoke now exercises the Electron ABI.** The native rebuild runs before the smoke test and the staged server boots under `ELECTRON_RUN_AS_NODE`; a missing Electron binary fails the build instead of silently downgrading the check (`COVEL_SMOKE_HOST_NODE=1` opts into the weaker host-Node smoke).
+
 ## [0.0.12] - 2026-07-06
 
 The media-pipeline release. Speech joins images as a first-class framework primitive: `ctx.speech` gives function runtimes a unified TTS/STT surface with the same wire-selection, dedupe, and MediaStore-persistence guarantees as `ctx.images`, and every media modality (image / speech / transcription) now routes through pluggable per-modality wire registries. Plugins can ship vendor wires declaratively via the new PLUGIN.md `wires` field — supporting a new provider no longer requires touching bundled code.

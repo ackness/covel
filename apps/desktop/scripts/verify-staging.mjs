@@ -129,10 +129,25 @@ for (const dir of [userPluginsDir, userWorldsDir, userConfigDir, logsDir]) {
 
 const electronBinary = electronNode ? resolveElectronBinaryPath() : null;
 const useElectronNode = Boolean(electronBinary);
+// A missing Electron binary must fail the build by default: the whole point
+// of the --electron-node smoke is to load the Electron-ABI better-sqlite3
+// rebuild, and a silent host-Node + memory-backend downgrade would skip
+// exactly that check and let a broken sidecar get packaged. Machines that
+// genuinely cannot download the Electron binary can opt into the weaker
+// smoke explicitly.
+const allowHostNodeFallback = process.env.COVEL_SMOKE_HOST_NODE === "1";
 const useMemoryBackend = electronNode && !electronBinary;
 if (electronNode && !electronBinary) {
+  if (!allowHostNodeFallback) {
+    die(
+      "[smoke] --electron-node requested but the Electron binary is not installed " +
+        "(node_modules/electron/dist missing). Reinstall electron (pnpm install) or " +
+        "set COVEL_SMOKE_HOST_NODE=1 to accept a weaker host-Node + memory-backend smoke " +
+        "that does NOT exercise the Electron-ABI native modules.",
+    );
+  }
   console.warn(
-    "[smoke] Electron binary is not installed; falling back to host Node + memory backend smoke.",
+    "[smoke] COVEL_SMOKE_HOST_NODE=1 — Electron binary missing, running weaker host-Node + memory-backend smoke (Electron-ABI native modules NOT verified).",
   );
 }
 

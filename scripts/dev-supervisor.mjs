@@ -213,21 +213,16 @@ export const runCommandWithSupervisor = async (
   command,
   args,
   {
-    spawnImpl = spawn,
+    spawnImpl = spawnCommand,
     terminateProcessTreeImpl = terminateProcessTree,
     log = console.log,
     processObject = process,
   } = {},
 ) => {
-  const child = spawnCommand(
-    command,
-    args,
-    {
-      stdio: "inherit",
-      env: processObject.env,
-    },
-    { spawnImpl, env: processObject.env },
-  );
+  const child = spawnImpl(command, args, {
+    stdio: "inherit",
+    env: processObject.env,
+  });
 
   if (!child.pid) {
     throw new Error(`Failed to start command: ${command}`);

@@ -1,12 +1,12 @@
-name: Build Desktop (macOS)
+name: Build Desktop
 
 # Triggers:
 #   - push to a `v*` tag → build & publish a Release automatically.
 #   - manual dispatch     → optional tag/publish for ad-hoc reproductions.
 #
 # Primary distribution path is local builds (`pnpm build:electron`); CI is
-# the reproducible / signed path. macOS arm64 only — Windows/Linux build
-# locally on their native OS.
+# the reproducible / signed path. macOS arm64 + Windows x64/arm64 —
+# Linux builds locally on its native OS.
 on:
   push:
     tags:
@@ -86,12 +86,73 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # ── Electron shell (Windows) ────────────────────────────────────
+  # windows-latest = Windows Server 2025. VS Build Tools are pre-installed,
+  # so the better-sqlite3 → Electron-ABI rebuild inside `desktop build`
+  # works out of the box. electron-builder bundles its own NSIS (cached
+  # below); without a CSC_LINK cert it emits unsigned installers.
+  build-electron-win:
+    name: Electron windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # Electron binaries + electron-builder toolchain (bundled NSIS).
+      # Caching both avoids the per-run download and the known NSIS
+      # cache-corruption redownload loop (electron-builder#8613).
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Type check runs on the mac job only — tsc output is platform-independent.
+      - name: Build desktop (web + server staging + native rebuild for Electron)
+        run: pnpm --filter @covel/desktop build
+
+      - name: Package Electron win
+        working-directory: apps/desktop
+        run: pnpm exec electron-builder --win --publish=never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify unpacked release resources
+        run: node apps/desktop/scripts/verify-release.mjs win
+
+      - name: Upload Electron artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: covel-electron-win
+          # nsis (x64 + arm64) and portable (x64) installers; cleanup-artifacts.mjs
+          # already strips blockmaps and update-info yml.
+          path: release/electron/*.exe
+          if-no-files-found: error
+          retention-days: 7
+
   # ── Publish GitHub Release ─────────────────────────────────────
   # Auto-publishes when a `v*` tag is pushed. On manual dispatch the
   # `publish_release` toggle still gates publication.
   release:
     name: Publish GitHub Release
-    needs: [build-electron]
+    needs: [build-electron, build-electron-win]
     runs-on: ubuntu-latest
     if: |
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
@@ -178,7 +239,8 @@ jobs:
           body_path: release/notes.md
           generate_release_notes: true
           fail_on_unmatched_files: true
-          # cleanup-artifacts.mjs leaves only the two distributables behind.
+          # cleanup-artifacts.mjs leaves only the distributables behind.
           files: |
             release/electron/*.dmg
             release/electron/*.zip
+            release/electron/*.exe

@@ -32,15 +32,10 @@ const env = {
   ...envOverrides,
 };
 
-const child = spawnCommand(
-  command,
-  args,
-  {
-    stdio: "inherit",
-    env,
-  },
-  { env },
-);
+const child = spawnCommand(command, args, {
+  stdio: "inherit",
+  env,
+});
 
 child.once("error", (error) => {
   console.error(error);
