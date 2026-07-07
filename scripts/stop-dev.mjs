@@ -4,11 +4,14 @@ import { pathToFileURL } from "node:url";
 
 import { terminateProcessTree } from "./dev-supervisor.mjs";
 
-export const DEV_PORTS = [3001, 5174];
+export const DEV_PORTS = [3001, 5173, 5174];
 
 const DEV_COMMAND_PATTERNS = [
   /pnpm(?:\s+run)?\s+dev(?::web|:server|:pg)?(?:\s|$)/,
+  /pnpm(?:\.cmd)?\s+--filter\s+@covel\/(?:web|server)\s+(?:run\s+)?dev(?::pg)?(?:\s|$)/i,
+  /scripts[\\/]dev\.mjs(?:\s|$)/,
   /scripts\/dev-supervisor\.mjs\s+turbo\s+dev(?::web|:server|:pg)?(?:\s|$)/,
+  /scripts[\\/]dev-supervisor\.mjs\s+pnpm\s+--filter\s+@covel\/(?:web|server)\s+dev(?::pg)?(?:\s|$)/i,
   /(?:^|\s)turbo\s+dev(?::web|:server|:pg)?(?:\s|$)/,
   /tsx\/dist\/cli\.mjs\s+watch(?:\s|$)/,
   /vite\/bin\/vite\.js(?:\s|$)/,

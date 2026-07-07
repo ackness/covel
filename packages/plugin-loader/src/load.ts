@@ -4,6 +4,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import matter from "gray-matter";
 import { pluginRelationsSchema } from "@covel/shared";
 import type { PluginRelations, PluginTag, PluginType } from "@covel/shared";
@@ -268,7 +269,7 @@ export async function loadRuntime(
   if (parsed.manifest.runtimeType === "function" && parsed.manifest.handler) {
     const handlerPath = path.resolve(runtimeDir, parsed.manifest.handler);
     await assertInsideRoot(discovery.rootPath, handlerPath, "Handler");
-    const mod = await import(handlerPath);
+    const mod = await import(pathToFileURL(handlerPath).href);
     handler = mod.default as FunctionHandler;
   }
 
@@ -277,7 +278,7 @@ export async function loadRuntime(
   if (parsed.manifest.guard) {
     const guardPath = path.resolve(runtimeDir, parsed.manifest.guard);
     await assertInsideRoot(discovery.rootPath, guardPath, "Guard");
-    const mod = await import(guardPath);
+    const mod = await import(pathToFileURL(guardPath).href);
     if (typeof mod.default !== "function") {
       throw new Error(
         `Guard module "${parsed.manifest.guard}" does not export a default function (got ${typeof mod.default})`,

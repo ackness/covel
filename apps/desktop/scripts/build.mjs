@@ -318,32 +318,33 @@ verifyStagedServerRuntime();
 console.log("  ✓ server runtime verified");
 console.log("  ✓ server resources staged");
 
-// Step 3b: smoke-test the staged server so electron-builder never wraps a
-// known-broken sidecar. We run it twice: once with the llm.toml we copied
-// (if any), and once with llm.toml hidden to exercise the built-in default.
-// Smoke runs BEFORE the Electron-ABI rebuild because it uses plain Node;
-// after the rebuild the native addon only loads inside Electron.
-console.log("\n[3b/4] Smoke-testing staged server (with llm.toml)...");
-execSync(`node "${path.join(desktopRoot, "scripts/verify-staging.mjs")}"`, {
-  cwd: desktopRoot,
-  stdio: "inherit",
-});
-console.log("\n[3b/4] Smoke-testing staged server (without llm.toml)...");
+// Step 3b: rebuild native addons against the Electron Node ABI so they load
+// inside the Electron main process at runtime. Electron 40 has
+// NODE_MODULE_VERSION 143; a CI-default Node 24 bakes 137 into
+// better_sqlite3.node and we get ERR_DLOPEN_FAILED on first use.
+console.log("\n[3b/4] Rebuilding native addons for Electron ABI...");
+await rebuildNativeForElectron(serverStaging);
+console.log("  ✓ native addons rebuilt for Electron");
+
+// Step 3c: smoke-test the staged server so electron-builder never wraps a
+// known-broken sidecar. Run it under Electron's Node mode because the packaged
+// app launches the sidecar with process.execPath + ELECTRON_RUN_AS_NODE.
+console.log("\n[3c/4] Smoke-testing staged server (with llm.toml)...");
 execSync(
-  `node "${path.join(desktopRoot, "scripts/verify-staging.mjs")}" --no-llm-toml`,
+  `node "${path.join(desktopRoot, "scripts/verify-staging.mjs")}" --electron-node`,
   {
     cwd: desktopRoot,
     stdio: "inherit",
   },
 );
-
-// Step 3c: rebuild native addons against the Electron Node ABI so they load
-// inside the Electron main process at runtime. Electron 40 has
-// NODE_MODULE_VERSION 143; a CI-default Node 24 bakes 137 into
-// better_sqlite3.node and we get ERR_DLOPEN_FAILED on first use.
-console.log("\n[3c/4] Rebuilding native addons for Electron ABI...");
-await rebuildNativeForElectron(serverStaging);
-console.log("  ✓ native addons rebuilt for Electron");
+console.log("\n[3c/4] Smoke-testing staged server (without llm.toml)...");
+execSync(
+  `node "${path.join(desktopRoot, "scripts/verify-staging.mjs")}" --electron-node --no-llm-toml`,
+  {
+    cwd: desktopRoot,
+    stdio: "inherit",
+  },
+);
 
 // Step 4: electron-builder
 console.log("\n[4/4] Packaging with electron-builder...");

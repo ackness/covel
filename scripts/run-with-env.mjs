@@ -1,5 +1,6 @@
-import { spawn } from "node:child_process";
 import process from "node:process";
+
+import { spawnCommand } from "./lib/command-shim.mjs";
 
 const argv = process.argv.slice(2);
 const envOverrides = {};
@@ -26,12 +27,14 @@ if (!command) {
   process.exit(1);
 }
 
-const child = spawn(command, args, {
+const env = {
+  ...process.env,
+  ...envOverrides,
+};
+
+const child = spawnCommand(command, args, {
   stdio: "inherit",
-  env: {
-    ...process.env,
-    ...envOverrides,
-  },
+  env,
 });
 
 child.once("error", (error) => {

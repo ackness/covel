@@ -13,22 +13,42 @@
  * default.
  */
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
+const require = createRequire(import.meta.url);
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
 const stagingDir = path.join(desktopRoot, "staging");
 const serverStaging = path.join(stagingDir, "server");
 
 const noLlmToml = process.argv.includes("--no-llm-toml");
+const electronNode = process.argv.includes("--electron-node");
 const TIMEOUT_MS = 30_000;
 
 function die(msg, code = 1) {
   console.error(`[smoke] ${msg}`);
   process.exit(code);
+}
+
+function resolveElectronBinaryPath() {
+  let electronPackageJson;
+  try {
+    electronPackageJson = require.resolve("electron/package.json");
+  } catch {
+    return null;
+  }
+
+  const electronDir = path.dirname(electronPackageJson);
+  const pathFile = path.join(electronDir, "path.txt");
+  if (!fs.existsSync(pathFile)) return null;
+
+  const relativeBinary = fs.readFileSync(pathFile, "utf-8").trim();
+  const binaryPath = path.join(electronDir, "dist", relativeBinary);
+  return fs.existsSync(binaryPath) ? binaryPath : null;
 }
 
 if (!fs.existsSync(serverStaging)) {
@@ -107,12 +127,37 @@ for (const dir of [userPluginsDir, userWorldsDir, userConfigDir, logsDir]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
+const electronBinary = electronNode ? resolveElectronBinaryPath() : null;
+const useElectronNode = Boolean(electronBinary);
+// A missing Electron binary must fail the build by default: the whole point
+// of the --electron-node smoke is to load the Electron-ABI better-sqlite3
+// rebuild, and a silent host-Node + memory-backend downgrade would skip
+// exactly that check and let a broken sidecar get packaged. Machines that
+// genuinely cannot download the Electron binary can opt into the weaker
+// smoke explicitly.
+const allowHostNodeFallback = process.env.COVEL_SMOKE_HOST_NODE === "1";
+const useMemoryBackend = electronNode && !electronBinary;
+if (electronNode && !electronBinary) {
+  if (!allowHostNodeFallback) {
+    die(
+      "[smoke] --electron-node requested but the Electron binary is not installed " +
+        "(node_modules/electron/dist missing). Reinstall electron (pnpm install) or " +
+        "set COVEL_SMOKE_HOST_NODE=1 to accept a weaker host-Node + memory-backend smoke " +
+        "that does NOT exercise the Electron-ABI native modules.",
+    );
+  }
+  console.warn(
+    "[smoke] COVEL_SMOKE_HOST_NODE=1 — Electron binary missing, running weaker host-Node + memory-backend smoke (Electron-ABI native modules NOT verified).",
+  );
+}
+
 // The smoke env intentionally avoids any DEEPSEEK_API_KEY or similar: we're
 // verifying the server *boots* with whatever config it finds (or doesn't).
 const env = {
   ...process.env,
+  ...(useElectronNode ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
   SERVER_PORT: String(port),
-  STORE_BACKEND: "sqlite",
+  STORE_BACKEND: useMemoryBackend ? "memory" : "sqlite",
   SQLITE_PATH: tmpDb,
   NODE_ENV: "production",
   COVEL_DESKTOP_REST: "1",
@@ -128,11 +173,17 @@ const env = {
 
 console.log(
   `[smoke] spawning staged server on port ${port}` +
+    (useElectronNode
+      ? " (electron node)"
+      : useMemoryBackend
+        ? " (host node, memory backend)"
+        : "") +
     (noLlmToml ? " (without llm.toml)" : ""),
 );
 
 const stderrBuf = [];
-const child = spawn(process.execPath, [tsxCli, entry], {
+const nodeBinary = electronBinary ?? process.execPath;
+const child = spawn(nodeBinary, [tsxCli, entry], {
   cwd: serverStaging,
   env,
   stdio: ["ignore", "pipe", "pipe"],

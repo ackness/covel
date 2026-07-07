@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node ./scripts/dev-supervisor.mjs turbo dev",
-    "dev:web": "node ./scripts/dev-supervisor.mjs turbo dev --filter=@covel/web",
-    "dev:server": "node ./scripts/dev-supervisor.mjs turbo dev --filter=@covel/server",
+    "dev": "node ./scripts/dev.mjs",
+    "dev:web": "node ./scripts/dev-supervisor.mjs pnpm --filter @covel/web dev",
+    "dev:server": "node ./scripts/dev-supervisor.mjs pnpm --filter @covel/server dev",
     "dev:pg:preflight": "node ./scripts/dev-pg-preflight.mjs",
-    "dev:pg": "pnpm run dev:pg:preflight && node ./scripts/dev-supervisor.mjs turbo dev:pg --filter=@covel/server",
+    "dev:pg": "pnpm run dev:pg:preflight && node ./scripts/dev-supervisor.mjs pnpm --filter @covel/server dev:pg",
     "stop": "node ./scripts/stop-dev.mjs",
     "build": "turbo build",
     "format": "prettier --write .",
@@ -46,7 +46,7 @@
   },
   "packageManager": "pnpm@10.33.2",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.9.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0",
@@ -54,6 +54,7 @@
     "@types/node": "^26.0.0",
     "@vitest/coverage-v8": "^4.1.9",
     "better-sqlite3": "^12.11.1",
+    "cross-spawn": "^7.0.6",
     "knip": "^6.17.1",
     "playwright": "^1.61.0",
     "prettier": "^3.8.4",

@@ -1,5 +1,6 @@
 import fsSync from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   getPluginTrustInfo,
   type ParsedPluginMd,
@@ -158,7 +159,7 @@ export function createLocalToolLoader({
             );
             continue;
           }
-          const mod = await import(fullPath);
+          const mod = await import(pathToFileURL(fullPath).href);
           const exported = mod.default ?? Object.values(mod)[0];
 
           const toolModule = resolveToolModule(exported, toolInjection);

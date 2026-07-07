@@ -1,4 +1,5 @@
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { createRpcApprovalGate, type RpcApprovalGate } from "@covel/approval";
 import {
   createPluginRpcRegistry,
@@ -81,7 +82,9 @@ export function createBootstrapPluginRpc({
           `handler path "${handlerPath}" escapes plugin root for "${pluginId}"`,
         );
       }
-      const mod = (await import(absPath)) as { default?: RpcHandler };
+      const mod = (await import(pathToFileURL(absPath).href)) as {
+        default?: RpcHandler;
+      };
       if (typeof mod.default !== "function") {
         throw new Error(
           `handler at ${handlerPath} has no default export function`,

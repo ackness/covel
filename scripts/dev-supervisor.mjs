@@ -3,6 +3,8 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { constants as osConstants } from "node:os";
 
+import { spawnCommand } from "./lib/command-shim.mjs";
+
 export const SHUTDOWN_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
 
 export const collectDescendantPids = (rootPid, processes) => {
@@ -211,7 +213,7 @@ export const runCommandWithSupervisor = async (
   command,
   args,
   {
-    spawnImpl = spawn,
+    spawnImpl = spawnCommand,
     terminateProcessTreeImpl = terminateProcessTree,
     log = console.log,
     processObject = process,
