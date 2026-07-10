@@ -112,9 +112,14 @@ dmg:
 #   WIN_CSC_TIMESTAMP_SERVER — optional RFC 3161 timestamp URL
 win:
   icon: resources/icon.ico
+  # x64 only: staging/server/node_modules (extraResources) carries a
+  # better-sqlite3 rebuilt for the build host's arch, so an arm64 installer
+  # built on an x64 runner would ship an x64 addon the arm64 sidecar cannot
+  # load (ERR_DLOPEN_FAILED). Windows-on-ARM runs the x64 installer via
+  # emulation. Re-add arm64 only together with per-arch staging/rebuild.
   target:
     - target: nsis
-      arch: [x64, arm64]
+      arch: [x64]
     - target: portable
       arch: [x64]
   # electron-builder 26.x 起签名相关字段改到 signtoolOptions 下。
