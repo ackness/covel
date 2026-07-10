@@ -15,6 +15,7 @@ import { z } from "zod";
 import { runAgentToolLoop } from "../src/agent-loop/turn-agent-tool-loop.js";
 import type { AgentToolLoopCompleted } from "../src/agent-loop/turn-agent-tool-loop.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
+import { TurnAbortedError } from "../src/turn-executor/turn-control.js";
 import type {
   LLMAdapter,
   LLMResponse,
@@ -326,5 +327,101 @@ describe("runAgentToolLoop core", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  // ── W4: player turn control ─────────────────────────────────────
+
+  it("abort: a pre-fired signal rejects with TurnAbortedError before any LLM call", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const generateSpy = vi.fn(async () => prose("never"));
+    await expect(
+      run({
+        llm: { generate: generateSpy },
+        deps: { turnControl: { signal: controller.signal } },
+      }),
+    ).rejects.toThrow(TurnAbortedError);
+    expect(generateSpy).not.toHaveBeenCalled();
+  });
+
+  it("abort mid-stream: bypasses the salvage path — no partial narrative survives", async () => {
+    const controller = new AbortController();
+    const llm: LLMAdapter = {
+      generate: async () => prose("fallback"),
+      stream: async function* (): AsyncIterable<LLMStreamEvent> {
+        yield { type: "text-delta", textDelta: "Partial " };
+        // Player presses stop mid-stream; the provider then dies on its
+        // aborted fetch signal, as real adapters do.
+        controller.abort();
+        throw new DOMException("aborted", "AbortError");
+      } as never,
+    };
+    const m = manifest({ name: "plug/story", outputKind: "story", tools: {} });
+    await expect(
+      run({
+        llm,
+        manifest: m,
+        deps: {
+          toolExecutor: undefined,
+          onDelta: async () => {},
+          turnControl: { signal: controller.signal },
+        },
+      }),
+    ).rejects.toThrow(TurnAbortedError);
+  });
+
+  it("steering: story runtimes merge queued interjections before the next LLM call", async () => {
+    const queue: string[] = ["向左走，不要进森林"];
+    const seenMessages: { role: string; content: unknown }[][] = [];
+    const llm: LLMAdapter = {
+      generate: async (params: {
+        messages: readonly { role: string; content: unknown }[];
+      }) => {
+        seenMessages.push([...params.messages]);
+        return prose("story goes left");
+      },
+    } as LLMAdapter;
+    const m = manifest({ name: "plug/story", outputKind: "story", tools: {} });
+    await run({
+      llm,
+      manifest: m,
+      deps: {
+        toolExecutor: undefined,
+        turnControl: { drainSteering: () => queue.splice(0) },
+      },
+    });
+
+    const users = seenMessages[0]!.filter((msg) => msg.role === "user");
+    expect(
+      users.some((msg) => String(msg.content).includes("不要进森林")),
+    ).toBe(true);
+    expect(queue).toHaveLength(0);
+  });
+
+  it("steering: plugin runtimes never see interjections", async () => {
+    const drain = vi.fn(() => ["should not appear"]);
+    const seenMessages: { role: string; content: unknown }[][] = [];
+    const llm: LLMAdapter = {
+      generate: async (params: {
+        messages: readonly { role: string; content: unknown }[];
+      }) => {
+        seenMessages.push([...params.messages]);
+        return prose("plugin output");
+      },
+    } as LLMAdapter;
+    await run({
+      llm,
+      deps: {
+        toolExecutor: undefined,
+        turnControl: { drainSteering: drain },
+      },
+    });
+
+    expect(drain).not.toHaveBeenCalled();
+    expect(
+      seenMessages[0]!.some((msg) =>
+        String(msg.content).includes("should not appear"),
+      ),
+    ).toBe(false);
   });
 });

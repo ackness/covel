@@ -24,6 +24,8 @@ export function useGameViewComposer({
     submitBlock,
     resumeSuspension,
     cancelSuspension,
+    steerMessage,
+    abortActiveTurn,
   } = useSession();
 
   const pendingDrafts = sessionState.pendingInteractionDrafts;
@@ -36,7 +38,9 @@ export function useGameViewComposer({
     [messages, submittedBlockIds],
   );
   const composerBlocked = pendingDrafts.length > 0 || hasActiveInteractionBlock;
-  const composerDisabled = executing || composerBlocked;
+  // W4: while a turn is executing the composer stays usable — submitting
+  // steers the in-flight turn instead of starting a new one.
+  const composerDisabled = composerBlocked;
 
   const handleConfirmDrafts = useCallback(() => {
     if (pendingDrafts.length === 0) return;
@@ -79,9 +83,22 @@ export function useGameViewComposer({
   const handleSubmit = useCallback(() => {
     const val = inputValue.trim();
     if (!val || composerDisabled) return;
+    if (executing) {
+      // Steer the in-flight turn; restore the draft when no turn was active
+      // (race with turn completion) so the player can send it normally.
+      setInputValue("");
+      void steerMessage(val).then((ok) => {
+        if (!ok) setInputValue((current) => current || val);
+      });
+      return;
+    }
     onSendMessage(val);
     setInputValue("");
-  }, [inputValue, composerDisabled, onSendMessage]);
+  }, [inputValue, composerDisabled, executing, steerMessage, onSendMessage]);
+
+  const handleAbort = useCallback(() => {
+    void abortActiveTurn();
+  }, [abortActiveTurn]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -102,6 +119,7 @@ export function useGameViewComposer({
     composerDisabled,
     handleConfirmDrafts,
     handleSubmit,
+    handleAbort,
     handleKeyDown,
     removeInteractionDraft,
     resumeSuspension,

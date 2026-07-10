@@ -39,6 +39,7 @@ import {
   type TurnExecutorOptions,
 } from "./turn-executor-types.js";
 import { finalizeTurnResult } from "./turn-result-finalizer.js";
+import { PLAYER_ABORT_REASON } from "./turn-control.js";
 import { markPreGameCompletion } from "./pre-game-completion.js";
 import { schedulePostTurnMemoryUpdate } from "./post-turn-memory.js";
 import {
@@ -399,7 +400,15 @@ async function executeTurnImpl(
       recursionDepth,
     });
 
+  // W4: player abort — stop scheduling further groups/followers as soon as
+  // the signal fires. The in-flight runtime is cut by the loop/retry layer
+  // (its result surfaces as failed with a turn-aborted message and carries
+  // no proposals, so nothing partial is committed).
+  const playerAborted = (): boolean =>
+    deps.turnControl?.signal?.aborted === true;
+
   for (const group of groups) {
+    if (playerAborted()) break;
     const results = await executeParallel(group.runtimes, async (manifest) => {
       const triggerEventForRuntime =
         manualTarget &&
@@ -419,7 +428,7 @@ async function executeTurnImpl(
   const completedPreGameThisTurn = isPreGamePending
     ? await recordPreGameCompletion()
     : false;
-  if (completedPreGameThisTurn && !manualTarget) {
+  if (completedPreGameThisTurn && !manualTarget && !playerAborted()) {
     // A form-submission request can finish the last Pre-Game runtime. In that
     // same request, immediately run any already-triggered main-loop runtimes so
     // the player sees the first story beat after submitting setup inputs.
@@ -441,13 +450,16 @@ async function executeTurnImpl(
     }
   }
 
-  const deferredFollowers = await runEventChain({
-    activeRuntimes,
-    completedResults,
-    executeRuntime: (manifest, triggerEvent) => invoke(manifest, triggerEvent),
-    sessionId: input.sessionId,
-    turnNumber,
-  });
+  const deferredFollowers = playerAborted()
+    ? []
+    : await runEventChain({
+        activeRuntimes,
+        completedResults,
+        executeRuntime: (manifest, triggerEvent) =>
+          invoke(manifest, triggerEvent),
+        sessionId: input.sessionId,
+        turnNumber,
+      });
 
   // ── Pre-Game completion tracking ────────────────────────────────
   //
@@ -520,5 +532,7 @@ async function executeTurnImpl(
     },
   );
 
-  return turnResult;
+  return playerAborted()
+    ? { ...turnResult, abortReason: PLAYER_ABORT_REASON }
+    : turnResult;
 }

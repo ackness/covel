@@ -37,6 +37,7 @@ import {
   buildToolResultMessage,
 } from "./turn-agent-tool-loop-messages.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
+import { TurnAbortedError } from "../turn-executor/turn-control.js";
 
 export interface AgentToolLoopCompleted {
   readonly finalContent: string | null;
@@ -134,6 +135,7 @@ export async function runAgentToolLoop({
     effectiveMaxSteps,
     retryPolicy,
     requireToolUse,
+    acceptsSteering,
   } = buildAgentLoopPolicy({
     manifest,
     input,
@@ -183,6 +185,22 @@ export async function runAgentToolLoop({
 
   while (steps < effectiveMaxSteps && Date.now() < deadline) {
     steps++;
+
+    // ── Player turn control (W4) ─────────────────────────────────
+    // Abort: cut before spending another LLM call (the in-flight call is
+    // additionally cut by the retry layer via the same signal). Steering:
+    // merge queued player interjections into the live transcript so the
+    // next LLM step sees them.
+    if (deps.turnControl?.signal?.aborted) {
+      throw new TurnAbortedError(
+        `turn aborted by player during ${manifest.name}`,
+      );
+    }
+    if (acceptsSteering) {
+      for (const steer of deps.turnControl?.drainSteering?.() ?? []) {
+        messages.push({ role: "user", content: steer });
+      }
+    }
 
     // Model resolution chain for story runtimes:
     // API override > plugin llm.toml > manifest.model > undefined.

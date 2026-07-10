@@ -13,6 +13,13 @@ export interface SessionActions {
   deleteSession: (sessionId: string) => Promise<void>;
   sendMessage: (content: string) => void;
   /**
+   * Interject into the in-flight turn (W4). Resolves false when no turn is
+   * active — the composer falls back to a normal send.
+   */
+  steerMessage: (content: string) => Promise<boolean>;
+  /** Abort the in-flight turn (W4). No-op when nothing is running. */
+  abortActiveTurn: () => Promise<void>;
+  /**
    * Fetch the page of messages immediately older than the current window (from
    * `olderMessagesCursor`) and prepend them. No-op when the cursor is `null`
    * (start of history reached). Resolves once the store has been updated.

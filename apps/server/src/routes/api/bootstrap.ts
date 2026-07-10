@@ -41,6 +41,7 @@ import { worldRoutes } from "./worlds.js";
 import { messageRoutes } from "./messages.js";
 import { characterRoutes } from "./characters.js";
 import { actionRoutes, setMemorySystem } from "./actions.js";
+import { turnControlRoutes } from "./turn-control-routes.js";
 import { subscribeRoutes } from "./subscribe.js";
 import { pluginDataRoutes } from "./plugin-data.js";
 import { workingMemoryRoutes } from "./working-memory.js";
@@ -499,6 +500,7 @@ export async function bootstrapApi(
   app.route("/api/sessions", lorebookRoutes); // S3-T6: session-level lorebook viewer
   app.route("/api/sessions", runtimeOutputRoutes); // PR-1: translation-layer observability
   app.route("/api/sessions", pluginRpcRoutes); // PR-3: plugin RPC channel
+  app.route("/api/sessions", turnControlRoutes); // W4: mid-turn steer / abort
   app.route("/api/sessions", sessionApprovalRoutes); // PR-7: per-session approvals listing
   app.route("/api/approvals", approvalRoutes); // PR-7: approval lookup + decision
   app.route("/api/plugins", pluginRoutes);

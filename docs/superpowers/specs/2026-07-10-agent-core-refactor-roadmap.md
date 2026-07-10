@@ -79,16 +79,17 @@ export default function (covel: PluginAPI) {
 **验收（已达成）**：loop 体从 543 行降到 ~470 行且不再直接读 manifest 派生策略；
 loop 核由最小 fixture 直测（见 W2 交付）；runtime 测试套 604/604 全绿。
 
-## W4 steering / followUp / abort（玩家中途干预）
+## W4 steering / abort（玩家中途干预，已完成；followUp 裁掉）
 
-在 W3 的 loop 核上加消息队列能力：
+在 W3 的 loop 核上加消息队列能力（实施记录）：
 
-- **steer**：turn 进行中玩家输入进入队列，在下一次 LLM 调用前并入上下文（工具执行中收到 → 下一步生效）。
-- **followUp**：turn 自然结束后自动续接的排队输入。
-- **abort**：turn 级取消——中断当前 LLM 流与工具执行、丢弃未提交 proposals、会话状态干净回到可输入。
-- 协议面：SSE 增加对应事件、HTTP 增加 steer/abort 端点、前端输入区在 turn 进行中切换为"插话/停止"态。**这是四个 W 中唯一动协议面的**，需同步 `docs/reference/protocol.md` + `docs/reference/api.md`。
+- **steer**（已实现）：`POST /api/sessions/:id/steer` → 服务端 per-session 队列（`turn-control.ts` 注册表，actions 路由注册/释放）→ loop 在每次 LLM 调用前 drain（仅 `outputKind: story`，策略字段 `acceptsSteering`）→ 消息同时持久化进历史。前端：回合进行中输入框保持可用，提交即插话；409（回合已结束）时草稿还回输入框走正常发送。
+- **abort**（已实现）：`POST /api/sessions/:id/abort` → 回合级 AbortSignal 线穿 `AgentLoopDeps.turnControl` → 重试层立刻切断在途调用/流（玩家 abort 不可重试且**绕过流式 salvage**——否则半截叙事会被当作结果提交，这是实施中发现的关键坑）→ executor 停止调度后续组、跳过事件链 → `execution.completed` 带 `abortReason: "aborted-by-player"`（复用既有字段，未新增 SSE 事件类型）。前端：执行中显示停止按钮。
+- **followUp 裁掉（YAGNI）**：原设想"回合结束后自动续发的排队输入"——实施时判定多余：回合进行中输入即插话（steer），回合一结束输入框本来就能正常发送；steer 的 409 回退已覆盖临界竞态。需要时再作为纯前端队列补上，零内核改动。
+- 协议面：新增两个 HTTP 端点 + `abortReason` 语义扩展，无新 SSE 事件类型；已同步 `docs/reference/api.md` + `docs/reference/protocol.md`。
+- 已知上限（代码内注）：turn-control 注册表为进程内 Map，多 pod（PG）部署下 steer/abort 只达同 pod 回合。
 
-**验收**：e2e——长叙事流式中 steer 一条指令、下一次 LLM 调用可见；abort 后无残留 proposal 落库、下一 turn 正常。
+**验收（已达成）**：loop 直测钉住 steer 注入（story 可见 / plugin 不可见）、abort 预发信号零 LLM 调用、abort 中流绕过 salvage；executor 测试钉住组间停调度 + `abortReason` + 先完成结果保留；server 测试钉住注册表生命周期与 steer/abort 路由（200/400/404/409 + 持久化）。
 
 ## 顺序与交付
 

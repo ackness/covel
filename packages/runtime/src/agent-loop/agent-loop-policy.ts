@@ -54,6 +54,12 @@ export interface AgentLoopPolicy {
   readonly retryPolicy: RetryPolicy;
   /** Nudge a bare (no-tool-call) finish back into the loop once. */
   readonly requireToolUse: boolean;
+  /**
+   * Whether queued player steering messages are merged into the transcript
+   * before each LLM step (W4). Story runtimes only — plugin runtimes run
+   * structured tasks a player interjection would corrupt.
+   */
+  readonly acceptsSteering: boolean;
 }
 
 export interface BuildAgentLoopPolicyOptions {
@@ -110,5 +116,6 @@ export function buildAgentLoopPolicy({
       runtimeTimeoutMs: timeoutMs,
     }),
     requireToolUse: manifest.requireToolUse === true,
+    acceptsSteering: manifest.outputKind === "story",
   };
 }

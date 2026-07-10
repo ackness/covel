@@ -32,6 +32,7 @@ import {
   readWorldPluginSettings,
 } from "./plugin-user-settings.js";
 import { getCachedWorld } from "../../world-cache.js";
+import { registerActiveTurn } from "./turn-control.js";
 
 // SSE uses ProtocolEventType names directly — no legacy mapping.
 // Frontend handleSseEvent handles these standard types.
@@ -244,6 +245,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   return streamSSE(c, async (stream) => {
     let seq = 0;
     const traceId = crypto.randomUUID();
+    // W4: released in the finally below so a crashed stream never leaves a
+    // stale steer/abort target behind.
+    let releaseTurnControl: (() => void) | undefined;
 
     function makeEnvelope(
       eventType: string,
@@ -393,6 +397,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         decodePluginUserSettingsHeader(c.req.header("X-Plugin-User-Settings")),
       );
 
+      // W4: register the in-flight turn so /steer and /abort can reach it.
+      const registeredTurn = registerActiveTurn(sessionId, turnId);
+      releaseTurnControl = registeredTurn.release;
+
       const turnInput = {
         sessionId,
         turnId,
@@ -487,6 +495,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // Let the turn executor construct a unified SessionContextSnapshot.
           capabilityPluginIds,
           ...(eventDirectory ? { eventDirectory } : {}),
+          // W4: player mid-turn steering + abort.
+          turnControl: registeredTurn.turnControl,
         }),
       );
 
@@ -601,6 +611,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         data: JSON.stringify(makeEnvelope("error.occurred", { message })),
       });
     } finally {
+      releaseTurnControl?.();
       eventBusUnsubscribe();
     }
   });

@@ -102,6 +102,7 @@ export function GameView({ session }: GameViewProps) {
     composerDisabled,
     handleConfirmDrafts,
     handleSubmit,
+    handleAbort,
     handleKeyDown,
     removeInteractionDraft,
     resumeSuspension,
@@ -429,6 +430,7 @@ export function GameView({ session }: GameViewProps) {
                 composerDisabled={composerDisabled}
                 onInputValueChange={setInputValue}
                 onSubmit={handleSubmit}
+                onAbort={handleAbort}
                 onKeyDown={handleKeyDown}
               />
             </>
