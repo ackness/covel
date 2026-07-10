@@ -17,11 +17,7 @@ capabilities:
 tags:
   - role:guard
   - safety:function
-hooks:
-  - event: PostLLMResponse
-    handler: ./hooks/sanitize-response.js
-  - event: PreToolUse
-    handler: ./hooks/guard-tool.js
+entry: ./server/index.js
 ---
 
 # Story Guard

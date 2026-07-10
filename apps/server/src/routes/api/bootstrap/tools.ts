@@ -56,6 +56,9 @@ export interface PluginToolsResult {
   readonly toolExecutor: ToolExecutor;
   readonly prepareToolsForSession: (sessionId: string) => Promise<void>;
   readonly activatePluginLocalTools: (pluginId: string) => Promise<void>;
+  /** Mutable — the unified `entry` registration path (plugin-entry.ts) adds
+   *  entry-registered tool names at invocation time. */
+  readonly pluginToolAccess: Map<string, Set<string>>;
 }
 
 export async function setupPluginTools(
@@ -240,5 +243,6 @@ export async function setupPluginTools(
     toolExecutor,
     prepareToolsForSession,
     activatePluginLocalTools,
+    pluginToolAccess,
   };
 }

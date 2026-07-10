@@ -134,15 +134,18 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 
 ### C. Hook 组合行为
 
-`PLUGIN.md` 可以声明 `hooks`，用于接入工具调用、runtime 执行、状态提交、回合开始和结束等生命周期点。
+hook 在统一服务端入口（frontmatter `entry` 字段指向的模块）里用 `covel.on` 注册，接入工具调用、runtime 执行、状态提交、回合开始和结束等生命周期点：
 
-```yaml
-hooks:
-  - event: PreToolUse
-    handler: ./hooks/validate-tool.ts
-    enforce: pre
-    timeoutMs: 3000
+```js
+// server/index.js（PLUGIN.md: entry: ./server/index.js）
+import validateTool from "../hooks/validate-tool.js";
+
+export default function (covel) {
+  covel.on("PreToolUse", validateTool, { enforce: "pre", timeoutMs: 3000 });
+}
 ```
+
+> 旧的 frontmatter `hooks:` 声明式写法已弃用（保留一个发布周期），事件表与执行语义与 `covel.on` 完全一致；`covel.on` 的 `match` 是谓词函数 `(payload) => boolean`，比旧的浅层等值 map 更灵活。
 
 `PreRuntime`、`PostContextAssembly`、`PreLLMCall`、`PostLLMResponse`、`PreToolUse`、`PostToolUse`、`PreStateCommit` 使用 `sequential` 语义：handler 按顺序执行，`replace` 会成为下一个 handler 的输入，`abort` 会停止该生命周期动作。
 
@@ -187,7 +190,9 @@ plugins/<plugin-id>/
 ├── package.json           # 必需：workspace 依赖
 ├── .npmrc                 # 必需：供应链防护（minimum-release-age=10080）
 ├── vitest.config.ts       # 可选：测试配置
-├── tools/                 # 可选：本地工具
+├── server/                # 可选：统一服务端入口（frontmatter entry 指向）
+│   └── index.js           #   export default function (covel) { 注册工具/hook/RPC/wire }
+├── tools/                 # 可选：本地工具（由 server/index.js 导入并 registerTool）
 │   └── my-tool.ts
 ├── tests/                 # 可选：测试文件
 │   └── my-plugin.test.ts

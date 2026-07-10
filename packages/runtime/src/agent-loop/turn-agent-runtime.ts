@@ -147,7 +147,10 @@ export async function executeAgentRuntime({
     manifest.tools?.builtin !== undefined && manifest.tools.builtin.length > 0;
   const hasLocalTools =
     manifest.tools?.local !== undefined && manifest.tools.local.length > 0;
-  const runtimeUsesTools = hasInputTools || hasBuiltinTools || hasLocalTools;
+  const hasPluginTools =
+    manifest.tools?.plugin !== undefined && manifest.tools.plugin.length > 0;
+  const runtimeUsesTools =
+    hasInputTools || hasBuiltinTools || hasLocalTools || hasPluginTools;
   const budgetEligible =
     !runtimeUsesTools &&
     deps.estimator !== undefined &&

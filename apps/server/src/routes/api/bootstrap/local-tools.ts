@@ -26,7 +26,9 @@ export interface BootstrapLocalToolsParams {
 
 export interface BootstrapLocalTools {
   readonly activatePluginLocalTools: (pluginId: string) => Promise<void>;
-  readonly pluginToolAccess: ReadonlyMap<string, ReadonlySet<string>>;
+  /** Mutable on purpose: the unified `entry` registration path adds
+   *  entry-registered tool names at invocation time (plugin-entry.ts). */
+  readonly pluginToolAccess: Map<string, Set<string>>;
 }
 
 export async function createBootstrapLocalTools({
@@ -96,6 +98,9 @@ export function buildPluginToolAccess(
     const allowed = new Set<string>();
     for (const parsed of manifests) {
       for (const t of parsed.manifest.tools?.builtin ?? []) allowed.add(t);
+      // Entry-registered plugin tools are declared by name (registration
+      // itself happens in the plugin's `entry` module — plugin-entry.ts).
+      for (const t of parsed.manifest.tools?.plugin ?? []) allowed.add(t);
       for (const p of parsed.manifest.tools?.local ?? []) {
         const basename =
           p

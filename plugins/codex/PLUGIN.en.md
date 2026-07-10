@@ -26,10 +26,11 @@ input:
       as: "<existing-entries>"
       format: summary
       maxEntries: 100
+entry: ./server/index.js
 tools:
-  local:
-    - ./tools/unlock-codex-entries.js
-    - ./tools/update-codex-entry.js
+  plugin:
+    - unlock-codex-entries
+    - update-codex-entry
 ui:
   right:
     - ./ui/codex-panel.json

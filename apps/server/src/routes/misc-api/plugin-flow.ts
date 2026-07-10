@@ -165,7 +165,10 @@ export async function buildPluginFlowResponse() {
         })),
         tools: {
           builtin: [...(manifest.tools?.builtin ?? [])],
-          local: [...(manifest.tools?.local ?? [])].map((toolPath) => {
+          local: [
+            ...(manifest.tools?.plugin ?? []),
+            ...(manifest.tools?.local ?? []),
+          ].map((toolPath) => {
             const fileName = toolPath.split("/").at(-1) ?? toolPath;
             return fileName.replace(/\.[^.]+$/, "");
           }),

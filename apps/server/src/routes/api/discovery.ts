@@ -39,7 +39,7 @@ export interface RuntimePluginContract {
   model?: unknown;
   tools: {
     builtin: string[];
-    local: Array<{ path: string; name: string }>;
+    local: Array<{ path?: string; name: string }>;
   };
   input: {
     inject: unknown[];
@@ -90,7 +90,7 @@ export interface PluginContract {
   declaredPluginDataNamespaces: string[];
   tools: {
     builtin: string[];
-    local: Array<{ runtimeId: string; path: string; name: string }>;
+    local: Array<{ runtimeId: string; path?: string; name: string }>;
   };
   rpc: JsonRecord[];
   ui: {
@@ -252,10 +252,14 @@ function buildRuntimeContract(
     ...(manifest.model ? { model: manifest.model } : {}),
     tools: {
       builtin: [...(manifest.tools?.builtin ?? [])],
-      local: (manifest.tools?.local ?? []).map((path) => ({
-        path,
-        name: localToolName(path),
-      })),
+      local: [
+        // Entry-registered plugin tools — declared by name, no on-disk path.
+        ...(manifest.tools?.plugin ?? []).map((name) => ({ name })),
+        ...(manifest.tools?.local ?? []).map((path) => ({
+          path,
+          name: localToolName(path),
+        })),
+      ],
     },
     input: {
       inject: [...(manifest.input?.inject ?? [])],

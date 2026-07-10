@@ -175,6 +175,8 @@ export const toolsConfigSchema = z
   .object({
     builtin: z.array(z.string()).optional(),
     local: z.array(z.string()).optional(),
+    /** Names of entry-registered plugin tools this runtime exposes to its LLM. */
+    plugin: z.array(z.string()).optional(),
   })
   .strict();
 
@@ -476,6 +478,12 @@ export const runtimeManifestSchema = z
      * Constrained like rpc handlers to block path traversal at schema level.
      */
     wires: pluginRelativeJsPath.optional(),
+    /**
+     * Plugin-root-relative path to a unified server entry module
+     * (`export default function (covel) { ... }`). Declare on ONE runtime
+     * per plugin. Same traversal constraint as `wires` / rpc handlers.
+     */
+    entry: pluginRelativeJsPath.optional(),
     model: z.string().optional(),
     timeoutMs: z.number().int().positive().optional(),
     /**

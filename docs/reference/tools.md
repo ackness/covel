@@ -41,7 +41,7 @@
 ### 选择顺序
 
 1. 通用、重复、跨插件复用的能力，使用 `tools.builtin`
-2. 插件专属 schema、RAG、NPC 关系维护、图鉴整理等能力，使用 `tools.local`
+2. 插件专属 schema、RAG、NPC 关系维护、图鉴整理等能力，在插件 `entry` 模块里 `covel.registerTool()` 注册，并在 runtime manifest 用 `tools.plugin`（名字列表）声明 LLM 可见性
 3. 多个插件长期共享且契约稳定的能力，升级为新的 builtin 工具
 
 ### Builtin 的职责
@@ -69,9 +69,9 @@ Local 工具承接插件自己的业务封装，例如：
 
 ### 目录与访问边界
 
-- local 工具路径通过 `tools.local` 声明，路径基于插件根目录解析
-- bootstrap 会校验路径边界，并只加载位于插件目录内的文件
-- local 工具访问权限按 `pluginId` 隔离，调用插件只能访问自己声明的 local tool
+- local 工具在插件 `entry` 模块（frontmatter `entry` 字段，基于插件根目录解析）里用 `covel.registerTool()` 注册；旧的 `tools.local` 路径声明已弃用（保留一个发布周期），语义不变
+- bootstrap 会校验 entry 路径边界，并只加载位于插件目录内的文件
+- local 工具访问权限按 `pluginId` 隔离，调用插件只能访问自己注册（或经 `tools.plugin` / 旧 `tools.local` 声明）的 local tool
 
 ### 不是 Tool：`FunctionHandlerContext` 上的框架能力
 
@@ -477,7 +477,7 @@ Attributes:
 ### Local 工具的推荐使用方式
 
 - 文件放在插件自己的 `tools/` 或 runtime 子目录下
-- 在 `PLUGIN.md` 里通过 `tools.local` 显式声明
+- 在 `entry` 模块（`server/index.js`）里 `covel.registerTool(makeMyTool(covel.toolkit))` 注册；使用工具的 runtime 在 `PLUGIN.md` 里用 `tools.plugin` 按名字声明（旧 `tools.local` 路径声明已弃用）
 - 为每个 local tool 提供独立测试
 - 持久化写入优先返回 `withPendingProposals(...)`，让 commit chain 接管落盘
 - 通过 local tool 封装插件自己的数据 schema 和批量写入逻辑
@@ -687,13 +687,13 @@ Bootstrap 时自动分类：
 
 ### 第三方插件 local tool 现状（audit P0-4 gap）
 
-社区插件（位于 `~/.covel/plugins/` 或后续添加的非 first-dir 来源）会被 `getPluginTrustInfo` 标记为 `community`，bootstrap 在启动阶段**跳过这些插件的 `tools.local` 急加载**（见 `apps/server/src/routes/api/bootstrap/local-tools.ts` 中 `if (!trust.autoLoad) continue;`）。
+社区插件（位于 `~/.covel/plugins/` 或后续添加的非 first-dir 来源）会被 `getPluginTrustInfo` 标记为 `community`，bootstrap 在启动阶段**跳过这些插件的 `entry` 执行与 `tools.local` 急加载**（见 `apps/server/src/routes/api/bootstrap/plugin-entry.ts` / `local-tools.ts` 中 `if (!trust.autoLoad) continue;`）。
 
 完整的 approval 生命周期 **discovered → approved → import → active → revoked / uninstalled 现已实现**：
 
 - **discovered**：拖拽 zip 经 `POST /api/install/plugin` 安装（含反 shadow 校验：保留内置 ID、强制 package.json 与 PLUGIN.md 名一致）。
 - **approved**：真实的 `createRpcApprovalGate`——community 调用首次走到 `plugin-rpc` 时返回 `202 approval-required` + `approvalId`，前端弹确认框，`POST /api/approvals/:id/decision`（allow/deny，once/session）。
-- **import**：approve 后经 `activatePluginLocalTools` JIT 懒加载该插件 `tools.local`（allow 决定时 + RPC 派发时各触发一次）。
+- **import**：approve 后经 `activatePluginLocalTools` JIT 懒加载该插件的服务端代码——先执行 `entry` 工厂（`ensurePluginEntry`）、再加载旧式 `tools.local`（allow 决定时 + RPC 派发时各触发一次）。
 - **active**：运行期工具调用受真实审批规则门控（builtin allow / local allow / third-party deny）。
 - **revoked**：`DELETE /api/sessions/:id/approvals[?pluginId=]` 调 `gate.revoke` 清除该会话（可选某插件）的缓存授权，下次调用重新弹审批。
 - **uninstalled**：`DELETE /api/plugins/:id` 删除 `~/.covel/plugins/<id>` 目录（拒绝内置 ID，返回 `restartRequired:true`）；前端 Settings → Packages 面板列出已安装第三方插件并提供卸载按钮。

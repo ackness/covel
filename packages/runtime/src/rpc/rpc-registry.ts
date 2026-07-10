@@ -52,7 +52,7 @@ const TRUST_RANK: Readonly<Record<RpcTrustLevel, number>> = {
 function resolveActionTrust(
   pluginId: string,
   action: string,
-  decl: RpcActionDecl,
+  decl: Pick<RpcActionDecl, "trustLevel">,
   pluginTrust: RpcTrustLevel,
 ): RpcTrustLevel {
   if (!decl.trustLevel) return pluginTrust;
@@ -121,6 +121,22 @@ export interface PluginRpcRegistry {
     decl: RpcActionDecl,
     pluginTrust: RpcTrustLevel,
   ): void;
+  /**
+   * Register a plugin action with an inline handler (unified `entry` module
+   * registration path — no handlerPath / lazy import). Same duplicate and
+   * trust-clamping semantics as `registerPluginAction`.
+   */
+  registerPluginHandler(
+    pluginId: string,
+    action: string,
+    handler: RpcHandler,
+    options: {
+      readonly description?: string;
+      readonly streaming?: boolean;
+      readonly trustLevel?: RpcTrustLevel;
+    },
+    pluginTrust: RpcTrustLevel,
+  ): void;
   /** Register a framework default. Always succeeds; later registrations overwrite. */
   registerFrameworkDefault(
     action: string,
@@ -157,6 +173,23 @@ export function createPluginRpcRegistry(): PluginRpcRegistry {
         streaming: decl.streaming ?? false,
         description: decl.description,
         handlerPath: decl.handler,
+      });
+    },
+
+    registerPluginHandler(pluginId, action, handler, options, pluginTrust) {
+      const key = `${pluginId}::${action}`;
+      if (pluginEntries.has(key)) {
+        throw new Error(
+          `[plugin-rpc] duplicate registration: plugin "${pluginId}" already declares action "${action}"`,
+        );
+      }
+      pluginEntries.set(key, {
+        action,
+        pluginId,
+        trustLevel: resolveActionTrust(pluginId, action, options, pluginTrust),
+        streaming: options.streaming ?? false,
+        description: options.description,
+        handler,
       });
     },
 

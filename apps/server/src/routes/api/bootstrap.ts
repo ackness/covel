@@ -63,6 +63,7 @@ import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
 import { createBootstrapHookPipeline } from "./bootstrap/plugin-hooks.js";
 import { setupPluginTools } from "./bootstrap/tools.js";
 import { createBootstrapPluginWires } from "./bootstrap/plugin-wires.js";
+import { createBootstrapPluginEntries } from "./bootstrap/plugin-entry.js";
 import { createEventDirectory } from "./bootstrap/event-directory.js";
 import { createBootstrapMemorySystem } from "./bootstrap/memory.js";
 import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
@@ -275,6 +276,11 @@ export async function bootstrapApi(
     manifestCache,
   });
 
+  // Unified plugin entries are created after the tool/hook/rpc registries
+  // exist (below); loadRuntimeFn needs the activation seam earlier, so it
+  // late-binds through this holder.
+  let ensurePluginEntry: (pluginId: string) => Promise<void> = async () => {};
+
   // loadRuntime resolver (locale-aware: loads PLUGIN.en.md when locale is "en-US")
   const loadRuntimeFn = async (
     manifest: RuntimeManifest,
@@ -290,6 +296,7 @@ export async function bootstrapApi(
         // ensurePluginWires added to the activatePluginLocalTools call
         // sites too; no such plugin exists yet.
         await pluginWires.ensurePluginWires(pluginId);
+        await ensurePluginEntry(pluginId);
         return loadRuntimeFromDisk(discovery, manifest.name, locale);
       }
     }
@@ -304,9 +311,11 @@ export async function bootstrapApi(
   const {
     toolMap,
     builtinToolNames,
+    localToolNames,
     toolExecutor,
     prepareToolsForSession,
     activatePluginLocalTools,
+    pluginToolAccess,
   } = await setupPluginTools({
     store,
     registry,
@@ -364,6 +373,28 @@ export async function bootstrapApi(
     discoveryMap,
     manifestCache,
   });
+
+  // Unified plugin server entries (`entry` frontmatter field) — needs the
+  // tool map, hook pipeline, and rpc registry above. builtin/official
+  // entries run here; community entries defer to ensurePluginEntry.
+  const pluginEntries = await createBootstrapPluginEntries({
+    discoveryMap,
+    manifestCache,
+    store,
+    toolMap,
+    localToolNames,
+    pluginToolAccess,
+    hookPipeline,
+    rpcRegistry,
+  });
+  ensurePluginEntry = pluginEntries.ensurePluginEntry;
+
+  // Community activation seam: entry runs before legacy local tools so both
+  // registration styles are live once activation resolves.
+  const activatePluginServerCode = async (pluginId: string): Promise<void> => {
+    await pluginEntries.ensurePluginEntry(pluginId);
+    await activatePluginLocalTools(pluginId);
+  };
 
   const runtimeEnv = readRuntimeEnv();
   const compactorRunner = createBootstrapCompactorRunner({
@@ -427,7 +458,7 @@ export async function bootstrapApi(
     c.set("sessionLock", sessionLock);
     c.set("prepareToolsForSession", prepareToolsForSession);
     c.set("getPluginSource", getPluginSource);
-    c.set("activatePluginLocalTools", activatePluginLocalTools);
+    c.set("activatePluginLocalTools", activatePluginServerCode);
     c.set("reservedPluginIds", reservedPluginIds);
     if (config.worldsDirs) {
       c.set("worldsDirs", config.worldsDirs);

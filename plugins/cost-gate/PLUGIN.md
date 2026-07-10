@@ -17,17 +17,7 @@ capabilities:
 tags:
   - role:budget
   - cost:function
-hooks:
-  - event: PostLLMResponse
-    handler: ./hooks/accumulate-usage.js
-    enforce: post
-  - event: PreSchedule
-    handler: ./hooks/trim-downstream.js
-  - event: TurnStart
-    handler: ./hooks/enforce-cap.js
-    enforce: pre
-  - event: SessionEnd
-    handler: ./hooks/cleanup.js
+entry: ./server/index.js
 userSettings:
   - key: softTokens
     type: number

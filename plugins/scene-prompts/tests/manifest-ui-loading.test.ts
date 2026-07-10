@@ -34,8 +34,9 @@ describe("scene-prompts manifest and UI loading", () => {
         type: "scheduled",
         interval: 1,
       },
+      entry: "./server/index.js",
       tools: {
-        local: ["./tools/generate-scene-prompts.js"],
+        plugin: ["generate-scene-prompts"],
       },
       ui: {
         message: ["./ui/scene-prompts-block.json"],
