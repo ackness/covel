@@ -131,6 +131,12 @@ win:
   # for published builds but allow unsigned locally via env.
   # publisherName: "Your Organization"  # uncomment once cert is in place
 
+# Distinct artifact name — nsis and portable otherwise both emit
+# ${productName}-electron-${version}-win-${arch}.exe and the portable build
+# (built second) silently overwrites the NSIS installer.
+portable:
+  artifactName: ${productName}-electron-${version}-${os}-${arch}-portable.${ext}
+
 nsis:
   oneClick: false
   perMachine: false
