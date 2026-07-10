@@ -13,8 +13,9 @@ import {
 } from "@covel/tools";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
-import { buildToolDefinitions } from "../turn-executor/turn-executor-helpers.js";
-import { buildRetryPolicy, type RetryInfo } from "../retry/llm-retry.js";
+import type { RetryInfo } from "../retry/llm-retry.js";
+import { buildAgentLoopPolicy } from "./agent-loop-policy.js";
+import { createDeltaForwarder } from "./delta-forwarder.js";
 import { requestLLMResponse } from "./tool-loop-handler.js";
 import { handleSuspension } from "../resume/suspend-resume-handler.js";
 import { guardAgainstToolLoop, type LoopGuardState } from "./loop-detection.js";
@@ -118,67 +119,37 @@ export async function runAgentToolLoop({
   // event on resume; narrow edge case, not covered by SuspensionRecord today.
   const emittedEvents: EmittedEvent[] = [];
   let steps = 0;
-  // Count streaming text deltas so the `message.completed` trace event can
-  // report how many chunks the narrative was assembled from. Non-streaming
-  // runtimes keep this at 0; trace consumers treat that as "not streamed".
-  let streamDeltaCount = 0;
 
   const deadline = Date.now() + timeoutMs;
   let stoppedWithResponse = false;
 
-  // Build tool definitions from manifest declarations (computed once, reused across steps).
-  // The ToolCallContext is also passed so the executor can surface session-
-  // specific variants (e.g. character tools with schema-typed `fields`).
-  const toolContext = {
-    sessionId: input.sessionId,
-    turnId: input.turnId,
-    pluginId: manifest.pluginId,
-    runtimeId: manifest.name,
-  } as const;
-  const toolDefs = deps.toolExecutor
-    ? buildToolDefinitions(manifest, deps.toolExecutor, toolContext)
-    : undefined;
-  const responseFormat = loaded.outputSchema
-    ? { type: "json_schema" as const, schema: loaded.outputSchema }
-    : undefined;
-  // PR-6: per-session per-runtime slot override snapshot. Applies to all
-  // runtime kinds (story + plugin), unlike the legacy story-only API
-  // override below.
-  const sessionRuntimeSlot = input.runtimeModelOverrides?.[manifest.name];
-  const runtimeModelOverride =
-    input.modelOverride && manifest.outputKind === "story"
-      ? input.modelOverride
-      : sessionRuntimeSlot;
-
-  // Stream only for story-output runtimes. Plugin runtimes' raw LLM text is
-  // reasoning chatter that feeds into structured tool calls — it should never
-  // reach the user's narrative feed. Story runtimes that also declare tools
-  // (e.g. narrator + world-dimension-get) still stream: tool_call deltas are
-  // accumulated from the stream alongside text deltas, and if the provider
-  // cannot parse tool calls from stream chunks the loop falls back to
-  // generate() when finishReason === 'tool_calls' with an empty accumulator.
-  const useStreaming = !!(
-    deps.onDelta &&
-    deps.llm.stream &&
-    manifest.outputKind === "story"
-  );
-
-  // Per-runtime maxSteps override. Plugins that should call a tool once and
-  // stop (e.g. guide) set `maxSteps: 2` in their frontmatter to prevent
-  // the LLM from running the same tool in a loop after it already succeeds.
-  const effectiveMaxSteps = manifest.maxSteps ?? maxSteps;
-
-  // Smart retry policy derived from manifest (maxRetries / callTimeoutMs /
-  // firstTokenTimeoutMs / loopDetectionThreshold). A hung provider call now
-  // fails fast inside the helper's per-attempt budget and retries with a
-  // perturbation instead of burning the whole runtime timeout.
-  const retryPolicy = buildRetryPolicy({
-    maxRetries: manifest.maxRetries,
-    callTimeoutMs: manifest.callTimeoutMs,
-    firstTokenTimeoutMs: manifest.firstTokenTimeoutMs,
-    loopDetectionThreshold: manifest.loopDetectionThreshold,
-    runtimeTimeoutMs: timeoutMs,
+  // All HOW-to-run decisions (tool surface, response format, model override,
+  // streaming gate, step/retry budgets) live in the policy module — the loop
+  // below is control flow only.
+  const {
+    toolDefs,
+    responseFormat,
+    runtimeModelOverride,
+    useStreaming,
+    effectiveMaxSteps,
+    retryPolicy,
+    requireToolUse,
+  } = buildAgentLoopPolicy({
+    manifest,
+    input,
+    loaded,
+    deps,
+    maxSteps,
+    timeoutMs,
   });
+
+  // The loop's single narrative outlet — counts chunks for `message.completed`.
+  const delta = createDeltaForwarder({
+    onDelta: deps.onDelta,
+    runtimeId: manifest.name,
+    pluginId: manifest.pluginId,
+  });
+
   const reportRetry = (info: RetryInfo): void => {
     const cause =
       info.error instanceof Error ? info.error.message : String(info.error);
@@ -241,18 +212,7 @@ export async function runAgentToolLoop({
       deadline,
       useStreaming,
       reportRetry,
-      onStreamDelta: async (textDelta) => {
-        streamDeltaCount++;
-        try {
-          await deps.onDelta!({
-            runtimeId: manifest.name,
-            pluginId: manifest.pluginId,
-            textDelta,
-          });
-        } catch {
-          // Client disconnected — keep streaming to capture full content.
-        }
-      },
+      onStreamDelta: delta.forward,
     });
 
     // ── PostLLMResponse hook ─────────────────────────────────────
@@ -503,7 +463,7 @@ export async function runAgentToolLoop({
     // release it (maxSteps still bounds the loop) so a stubborn model cannot
     // wedge the runtime. Only fires when no tool ever executed successfully —
     // a runtime that did its work and then narrated is left alone.
-    if (manifest.requireToolUse && !executedToolCalls.some((c) => c.success)) {
+    if (requireToolUse && !executedToolCalls.some((c) => c.success)) {
       if (noToolCallCorrections === 0) {
         noToolCallCorrections++;
         console.warn(
@@ -535,7 +495,7 @@ export async function runAgentToolLoop({
     failedToolCalls,
     pendingProposals,
     emittedEvents,
-    streamDeltaCount,
+    streamDeltaCount: delta.count(),
     stoppedWithResponse,
     effectiveMaxSteps,
     deadline,

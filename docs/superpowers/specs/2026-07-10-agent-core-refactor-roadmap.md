@@ -43,33 +43,41 @@ export default function (covel: PluginAPI) {
 
 **验收**：新入口注册的工具/hook/RPC/wire 与旧方式行为逐项等价（现有插件测试套 + `@covel/plugin-test-utils` harness）；`docs/guide/plugin-authoring.md` 同步。
 
-## W2 统一 AgentLoopEvent 事件流
+## W2 统一 AgentLoopEvent 事件流（实施时修订）
 
-loop 内部只发一条类型化事件流，现有三条出口降级为订阅适配器：
+> **核实结论（2026-07-10 动手核实）**：本节最初的前提——"emit 调用散落在 loop 体各处"——不成立。
+> 实际拓扑：`TurnEmitter` 本身就是那条类型化事件流；`llm.calling/responded` 由**重试层**发
+> （attempt 序号与 provider 身份只有它知道）、`tool.*` 由 **tool-executor** 发（审批状态只有它知道）、
+> `message.completed` 在 finalize 发——分层各归其位，loop 体只有唯一一个 delta 出口。
+> 再造一层 loop 级事件流会丢失 per-attempt 粒度或沦为纯改名，且威胁 trace 字节级 parity，故**不做**。
 
-```
-runAgentToolLoop ──emit──▶ AgentLoopEvent 流
-                             ├─ delta 适配器 → onDelta（SSE，沿用 outputKind 门控）
-                             ├─ trace 适配器 → TurnEmitter（llm.* / tool.* / message.* 词汇表不变）
-                             └─ （未来观测按需订阅，不再改 loop 体）
-```
+按核实结论收窄后的交付（已完成）：
 
-- 事件词汇表（首版）：`loop_start` / `llm_call_start` / `llm_delta` / `llm_call_end` / `tool_start` / `tool_end` / `message_final` / `loop_end`，载荷带 runtimeId / pluginId / step 序号。
-- **行为保真是硬约束**：trace 适配器必须逐条复刻现有 `TurnEmitter` 事件的字段与时序，尤其 delta 记录"不重复存 prompt 历史"的约定；/debug 时间线、成本聚合、Langfuse 导出零感知。
-- `onDelta` 的 story-only 门控从 loop 体移到 delta 适配器。
+- **delta 适配器**（`agent-loop/delta-forwarder.ts`）：loop 的唯一叙事出口抽成命名模块，
+  身份注入 + 分片计数 + 断连吞错收敛于一处；streaming 门控（`outputKind: story`）移入 W3 的策略模块。
+- **loop 直测**（`tests/agent-tool-loop-core.test.ts`）：最小 fixture（脚本化 LLMAdapter + 真 ToolExecutor +
+  录制型 TurnEmitter）直接实例化 `runAgentToolLoop`，钉住 trace 序列（`llm.calling → llm.responded` 每步、
+  `tool.calling → tool.completed`）、delta 序列与身份、runtime-done 剥离、maxSteps 边界、
+  story/plugin streaming 门控、工具循环扰动一次后放弃。这正是本节原验收想要的 parity 网，
+  且对未来任何 loop 改动持续生效。
 
-**验收**：parity 测试——同一 MockLLM 剧本下，新旧实现产出的 trace 事件序列与 SSE delta 序列逐字节一致；/debug 页人工抽验一轮。
+**验收（已达成）**：runtime 全测试套通过（604/604，含 8 个新 loop 直测）；trace 词汇表与发射层零改动，/debug 零感知。
 
-## W3 loop 分层形式化
+## W3 loop 分层形式化（已完成）
 
-把接缝落成真实模块边界：
+把接缝落成真实模块边界（实施时核实：`AgentLoopDeps`/`RuntimeResult` 接缝已存在且质量良好，
+`resume/` 已与主路径共用同一 loop 入口——需要补的是策略显式化与直测，不是重切边界）：
 
-- loop 核抽为独立模块（纯函数），依赖面只有 `LLMAdapter` + `ToolExecutor` + W2 事件流 + 显式配置对象；不 import harness 类型。
-- 内联策略显式化为配置项：sentinel 识别（`runtime-done` / `suspend`）、`requireToolUse` nudge、loop 扰动阈值、schema gate、重试策略（`llm-retry.ts` 的 TTFB guard / 瞬态分类保持现状，作为 `LLMAdapter` 包装层注入）。
-- `resume/`（suspension 恢复）与主路径共用同一个 loop 核入口。
-- 产出物：loop 核可用最小 fixture（MockLLM + 两个假工具）独立实例化测试，不再需要拉起 turn executor 全家桶。
+- **策略模块**（`agent-loop/agent-loop-policy.ts`）：`buildAgentLoopPolicy()` 一处收敛全部
+  "怎么跑"的推导——工具面（含 `tools.plugin`）、schema gate（responseFormat）、模型覆写链、
+  streaming 门控、`effectiveMaxSteps`、重试策略（TTFB guard / 瞬态分类留在 `llm-retry.ts` 原位）、
+  `requireToolUse`。loop 体只剩控制流。
+- sentinel 识别（`runtime-done` / `suspend`）留在 loop 体：它们是控制流分支而非策略参数，
+  强行参数化是伪灵活性。
+- 保持 `runAgentToolLoop` 签名不变——resume 路径与 turn-agent-runtime 调用方零改动。
 
-**验收**：`turn-agent-tool-loop.ts` 主体降到策略装配 + 核调用；loop 核模块自带独立测试；现有 runtime 测试套全绿。
+**验收（已达成）**：loop 体从 543 行降到 ~470 行且不再直接读 manifest 派生策略；
+loop 核由最小 fixture 直测（见 W2 交付）；runtime 测试套 604/604 全绿。
 
 ## W4 steering / followUp / abort（玩家中途干预）
 
