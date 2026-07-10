@@ -230,6 +230,10 @@ export type SessionAction =
     }
   | { type: "SET_EXECUTING"; value: boolean }
   | { type: "SET_EXECUTION_ERROR"; error: string | null }
+  // Player abort terminal state: drop the uncommitted streaming placeholder
+  // message(s) — the server never commits partial narrative on abort, so
+  // keeping them would show text that vanishes on refresh (audit A-04).
+  | { type: "DISCARD_TURN_STREAMS"; turnId?: string }
   | {
       type: "ADD_STATE_PATCH";
       patch: {

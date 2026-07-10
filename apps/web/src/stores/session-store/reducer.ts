@@ -195,6 +195,17 @@ export function reducer(
     }
     case "SET_EXECUTING":
       return { ...state, executing: action.value };
+    case "DISCARD_TURN_STREAMS":
+      // Streaming placeholders use the `stream_<turnId>_<runtimeId>` id
+      // convention (APPEND_DELTA above). No turnId → discard all placeholders.
+      return {
+        ...state,
+        messages: state.messages.filter(
+          (m) =>
+            !m.id.startsWith("stream_") ||
+            (action.turnId !== undefined && m.turnId !== action.turnId),
+        ),
+      };
     case "SET_EXECUTION_ERROR":
       return { ...state, executionError: action.error };
     case "ADD_STATE_PATCH": {

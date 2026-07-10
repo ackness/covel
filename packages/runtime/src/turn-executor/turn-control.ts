@@ -2,12 +2,15 @@
  * Player turn-control surface — mid-turn steering and abort (roadmap W4).
  *
  * The server registers one `TurnControl` per in-flight turn and threads it
- * through `AgentLoopDeps`. Zero-import leaf module so the retry layer, the
- * agent loop, and the turn executor can all depend on it without cycles.
+ * through `AgentLoopDeps`. Leaf module (only depends on @covel/shared) so the
+ * retry layer, the agent loop, and the turn executor can all depend on it
+ * without cycles.
  */
 
-/** Abort reason surfaced on `TurnResult.abortReason` for player aborts. */
-export const PLAYER_ABORT_REASON = "aborted-by-player";
+/** Abort reason surfaced on `TurnResult.abortReason` for player aborts.
+ *  Defined in @covel/shared (wire-protocol constant — the web client keys
+ *  its abort terminal state on it); re-exported here for runtime callers. */
+export { PLAYER_ABORT_REASON } from "@covel/shared";
 
 export interface TurnControl {
   /**

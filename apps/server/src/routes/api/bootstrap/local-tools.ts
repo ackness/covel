@@ -44,9 +44,14 @@ export async function createBootstrapLocalTools({
     store,
   });
 
+  const pluginToolAccess = buildPluginToolAccess(manifestCache);
+
   // Reject collisions: builtins are registered before local tools, so a
   // duplicate name here would silently replace a builtin (or another
-  // plugin's tool) for every runtime that references it.
+  // plugin's tool) for every runtime that references it. Ownership (the
+  // allowlist entry) is granted ONLY on successful registration — a skipped
+  // collision must not leave the declaring plugin authorized to execute the
+  // other plugin's implementation via the global toolMap.
   const addLocalTool = (pluginId: string, t: ToolModule): void => {
     if (toolMap.has(t.name)) {
       console.warn(
@@ -56,6 +61,12 @@ export async function createBootstrapLocalTools({
     }
     toolMap.set(t.name, t);
     localToolNames.add(t.name);
+    let allowed = pluginToolAccess.get(pluginId);
+    if (!allowed) {
+      allowed = new Set();
+      pluginToolAccess.set(pluginId, allowed);
+    }
+    allowed.add(t.name);
   };
 
   for (const [pluginId, discovery] of discoveryMap) {
@@ -98,10 +109,19 @@ export async function createBootstrapLocalTools({
 
   return {
     activatePluginLocalTools,
-    pluginToolAccess: buildPluginToolAccess(manifestCache),
+    pluginToolAccess,
   };
 }
 
+/**
+ * Seed the per-plugin allowlist from manifest declarations — builtin names
+ * only. Local (`tools.local`) and entry-registered (`tools.plugin`) names are
+ * added at successful registration time (addLocalTool above / registerTool in
+ * plugin-entry.ts): granting them from the declaration alone would let a
+ * plugin execute another plugin's same-named tool through the global toolMap
+ * (audit 2026-07-10 A-01). A declared-but-unregistered name simply fails to
+ * resolve for the declaring plugin.
+ */
 export function buildPluginToolAccess(
   manifestCache: ReadonlyMap<string, readonly ParsedPluginMd[]>,
 ): Map<string, Set<string>> {
@@ -110,17 +130,6 @@ export function buildPluginToolAccess(
     const allowed = new Set<string>();
     for (const parsed of manifests) {
       for (const t of parsed.manifest.tools?.builtin ?? []) allowed.add(t);
-      // Entry-registered plugin tools are declared by name (registration
-      // itself happens in the plugin's `entry` module — plugin-entry.ts).
-      for (const t of parsed.manifest.tools?.plugin ?? []) allowed.add(t);
-      for (const p of parsed.manifest.tools?.local ?? []) {
-        const basename =
-          p
-            .split("/")
-            .pop()
-            ?.replace(/\.[^.]+$/, "") ?? p;
-        allowed.add(basename);
-      }
     }
     pluginToolAccess.set(pluginId, allowed);
   }

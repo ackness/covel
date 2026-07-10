@@ -208,6 +208,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - abort 后当次 action SSE 的 `execution.completed` 载荷带 `abortReason: "aborted-by-player"`；已在 abort 前正常完成的 runtime 结果照常提交。
 - steer 仅对 `outputKind: story` 的 runtime 生效（plugin runtime 执行结构化任务，不接受插话）。插话在最终响应流式期间到达时，story runtime 收尾前会追加一步 LLM 调用消化它（受 maxSteps 约束）；持久化失败则撤回队列项并返回 `500`。
 - 注册表为进程内实现——多 pod（PG）部署下 steer/abort 只能到达同 pod 上的回合。
+- 可控窗口与 session lock 对齐：注册发生在取得 session lock 之后、`executeTurn` 前，释放在 `executeTurn` 返回时——同 session 的并发 action 在锁上排队，steer/abort 永远命中真实在途的回合，不会指向排队中的下一回合；提案 commit / 后台 follower 调度等收尾阶段不再对外呈现为可控（此时 steer/abort 返回 `409`）。
 
 ### 玩家交互
 

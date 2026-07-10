@@ -397,10 +397,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         decodePluginUserSettingsHeader(c.req.header("X-Plugin-User-Settings")),
       );
 
-      // W4: register the in-flight turn so /steer and /abort can reach it.
-      const registeredTurn = registerActiveTurn(sessionId, turnId);
-      releaseTurnControl = registeredTurn.release;
-
       const turnInput = {
         sessionId,
         turnId,
@@ -416,89 +412,101 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           : {}),
         ...(type === "start_session" ? { suppressPlayerMessage: true } : {}),
       };
-      const result = await sessionLock.withLock(sessionId, () =>
-        executeTurn(turnInput, activeRuntimes, {
-          loadRuntime: loadRuntimeFn,
-          llm: llmAdapter,
-          ...(pluginGateway ? { gateway: pluginGateway } : {}),
-          ...(pluginUtils ? { utils: pluginUtils } : {}),
-          ...(getPluginSource ? { getPluginSource } : {}),
-          // bootstrapApi always supplies getConfigFn; default to a no-op so a
-          // minimal harness (or any caller that omits it) can't crash the turn
-          // executor's `deps.getConfig(...)` call. Preserves the defensiveness
-          // the removed /:id/turn route carried.
-          getConfig: getConfigFn ?? (() => ({})),
-          store,
-          ...(mediaStore ? { mediaStore } : {}),
-          toolExecutor,
-          resolveModel,
-          emitter,
-          onDelta: async (delta) => {
-            await stream.writeSSE({
-              data: JSON.stringify(
-                makeEnvelope("narrative.delta", {
-                  runtimeId: delta.runtimeId,
-                  pluginId: delta.pluginId,
-                  kind: outputKindResolver.getOutputKind(delta.runtimeId),
-                  delta: delta.textDelta,
-                }),
-              ),
-            });
-          },
-          onRuntimeStart: async (info) => {
-            await trace.runtimeStarted({
-              runtimeId: info.runtimeId,
-              pluginId: info.pluginId,
-              priority: info.priority,
-            });
-            const kind = outputKindResolver.getOutputKind(info.runtimeId);
-            await stream.writeSSE({
-              data: JSON.stringify(
-                makeEnvelope("runtime.started", {
-                  runtimeId: info.runtimeId,
-                  pluginId: info.pluginId,
-                  kind,
-                  label: info.pluginId + "/" + kind,
-                }),
-              ),
-            });
-          },
-          onRuntimeComplete: async (info) => {
-            await trace.runtimeCompleted({
-              runtimeId: info.runtimeId,
-              pluginId: info.pluginId,
-              status: info.status,
-              durationMs: info.durationMs,
-            });
-            const eventType =
-              info.status === "failed"
-                ? "runtime.failed"
-                : info.status === "skipped"
-                  ? "runtime.skipped"
-                  : "runtime.completed";
-            await stream.writeSSE({
-              data: JSON.stringify(
-                makeEnvelope(eventType, {
-                  runtimeId: info.runtimeId,
-                  pluginId: info.pluginId,
-                  durationMs: info.durationMs,
-                  status: info.status,
-                  ...(info.status === "failed" && info.error
-                    ? { error: info.error }
-                    : {}),
-                }),
-              ),
-            });
-          },
-          compactor: compactorRunner,
-          memorySystem: _memorySystem,
-          // Let the turn executor construct a unified SessionContextSnapshot.
-          capabilityPluginIds,
-          ...(eventDirectory ? { eventDirectory } : {}),
-          // W4: player mid-turn steering + abort.
-          turnControl: registeredTurn.turnControl,
-        }),
-      );
+      const result = await sessionLock.withLock(sessionId, async () => {
+        // W4: register the in-flight turn INSIDE the lock so /steer and
+        // /abort always target the turn that is actually executing — a
+        // second concurrent action for the same session queues on the lock
+        // and must not clobber the live registration (audit 2026-07-10
+        // A-02). Released right after executeTurn returns so the commit /
+        // deferred-follower tail is never advertised as controllable (A-03).
+        const registeredTurn = registerActiveTurn(sessionId, turnId);
+        releaseTurnControl = registeredTurn.release;
+        try {
+          return await executeTurn(turnInput, activeRuntimes, {
+            loadRuntime: loadRuntimeFn,
+            llm: llmAdapter,
+            ...(pluginGateway ? { gateway: pluginGateway } : {}),
+            ...(pluginUtils ? { utils: pluginUtils } : {}),
+            ...(getPluginSource ? { getPluginSource } : {}),
+            // bootstrapApi always supplies getConfigFn; default to a no-op so a
+            // minimal harness (or any caller that omits it) can't crash the turn
+            // executor's `deps.getConfig(...)` call. Preserves the defensiveness
+            // the removed /:id/turn route carried.
+            getConfig: getConfigFn ?? (() => ({})),
+            store,
+            ...(mediaStore ? { mediaStore } : {}),
+            toolExecutor,
+            resolveModel,
+            emitter,
+            onDelta: async (delta) => {
+              await stream.writeSSE({
+                data: JSON.stringify(
+                  makeEnvelope("narrative.delta", {
+                    runtimeId: delta.runtimeId,
+                    pluginId: delta.pluginId,
+                    kind: outputKindResolver.getOutputKind(delta.runtimeId),
+                    delta: delta.textDelta,
+                  }),
+                ),
+              });
+            },
+            onRuntimeStart: async (info) => {
+              await trace.runtimeStarted({
+                runtimeId: info.runtimeId,
+                pluginId: info.pluginId,
+                priority: info.priority,
+              });
+              const kind = outputKindResolver.getOutputKind(info.runtimeId);
+              await stream.writeSSE({
+                data: JSON.stringify(
+                  makeEnvelope("runtime.started", {
+                    runtimeId: info.runtimeId,
+                    pluginId: info.pluginId,
+                    kind,
+                    label: info.pluginId + "/" + kind,
+                  }),
+                ),
+              });
+            },
+            onRuntimeComplete: async (info) => {
+              await trace.runtimeCompleted({
+                runtimeId: info.runtimeId,
+                pluginId: info.pluginId,
+                status: info.status,
+                durationMs: info.durationMs,
+              });
+              const eventType =
+                info.status === "failed"
+                  ? "runtime.failed"
+                  : info.status === "skipped"
+                    ? "runtime.skipped"
+                    : "runtime.completed";
+              await stream.writeSSE({
+                data: JSON.stringify(
+                  makeEnvelope(eventType, {
+                    runtimeId: info.runtimeId,
+                    pluginId: info.pluginId,
+                    durationMs: info.durationMs,
+                    status: info.status,
+                    ...(info.status === "failed" && info.error
+                      ? { error: info.error }
+                      : {}),
+                  }),
+                ),
+              });
+            },
+            compactor: compactorRunner,
+            memorySystem: _memorySystem,
+            // Let the turn executor construct a unified SessionContextSnapshot.
+            capabilityPluginIds,
+            ...(eventDirectory ? { eventDirectory } : {}),
+            // W4: player mid-turn steering + abort.
+            turnControl: registeredTurn.turnControl,
+          });
+        } finally {
+          registeredTurn.release();
+        }
+      });
 
       // Keep lifecycle turnCount aligned with executed main-loop turns.
       // Pre-Game setup requests still save turn_results, but they do not
