@@ -5,7 +5,7 @@ name: Build Desktop
 #   - manual dispatch     → optional tag/publish for ad-hoc reproductions.
 #
 # Primary distribution path is local builds (`pnpm build:electron`); CI is
-# the reproducible / signed path. macOS arm64 + Windows x64/arm64 —
+# the reproducible / signed path. macOS arm64 + Windows x64 —
 # Linux builds locally on its native OS.
 on:
   push:
@@ -141,7 +141,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: covel-electron-win
-          # nsis (x64 + arm64) and portable (x64) installers; cleanup-artifacts.mjs
+          # nsis and portable (x64) installers; cleanup-artifacts.mjs
           # already strips blockmaps and update-info yml.
           path: release/electron/*.exe
           if-no-files-found: error

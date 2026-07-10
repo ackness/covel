@@ -1,6 +1,6 @@
 # Packaging & Signing — Covel Desktop
 
-This document describes how to build signed, notarized Covel desktop artifacts. The official GitHub Release workflow currently publishes macOS Apple Silicon artifacts; the local electron-builder config can still build Windows and Linux artifacts on their native platforms.
+This document describes how to build signed, notarized Covel desktop artifacts. The official GitHub Release workflow publishes macOS Apple Silicon and Windows x64 artifacts; the local electron-builder config can still build Linux artifacts on its native platform.
 
 ## One-off prep
 
