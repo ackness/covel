@@ -11,6 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { spawnCommand } from "../../../scripts/lib/command-shim.mjs";
+import { ensureElectronBinary } from "./ensure-electron.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
@@ -40,7 +41,8 @@ await build({
   external: ["electron"],
 });
 
-// Launch Electron
+// Launch Electron (electron@42+ no longer downloads the binary on install)
+ensureElectronBinary();
 console.log("[dev] Launching Electron...");
 console.log("[dev] Make sure 'pnpm dev' is running (web:5173 + server:3001)");
 
