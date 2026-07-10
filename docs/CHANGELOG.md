@@ -4,14 +4,19 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.13] - 2026-07-10
+
+The Windows release. The dev environment (spawn shims, plugin loading, supervised `pnpm dev`) now works on Windows, and CI builds Windows installers alongside the macOS bundles on every tag. Public web-only (browser IndexedDB) deployments are hardened: the shared session listing is hidden and the Render blueprint pins the memory backend explicitly.
+
 ### Added
 
-- **Windows desktop CI.** `release.yml` gains a `build-electron-win` job (windows-latest): full desktop build with Electron-ABI native rebuild, staged-server smoke under Electron's Node mode, `electron-builder --win` (NSIS x64/arm64 + portable x64, unsigned until a cert is configured), and `.exe` artefacts attached to GitHub Releases alongside the macOS bundles.
+- **Windows desktop CI.** `release.yml` gains a `build-electron-win` job (windows-latest): full desktop build with Electron-ABI native rebuild, staged-server smoke under Electron's Node mode, `electron-builder --win` (NSIS + portable, x64, unsigned until a cert is configured), and `.exe` artefacts attached to GitHub Releases alongside the macOS bundles. Windows targets are x64-only: the staged server ships a better-sqlite3 rebuilt for the build host's arch, so an arm64 installer from an x64 runner would carry an addon the arm64 sidecar cannot load — Windows-on-ARM runs the x64 installer via emulation.
 
 ### Fixed
 
 - **Windows dev environment.** Dev scripts spawn through `cross-spawn` (resolves `pnpm.cmd`-style shims with correct cmd.exe quoting); plugin/runtime dynamic imports of absolute paths go through `pathToFileURL` so plugin loading works on Windows; `pnpm dev` launches web + server directly with supervised teardown; `--env-file-if-exists` tolerates a missing `.env` (raises the minimum Node to 22.9).
 - **Desktop staging smoke now exercises the Electron ABI.** The native rebuild runs before the smoke test and the staged server boots under `ELECTRON_RUN_AS_NODE`; a missing Electron binary fails the build instead of silently downgrading the check (`COVEL_SMOKE_HOST_NODE=1` opts into the weaker host-Node smoke).
+- **Public web-only hosting hardening.** On memory-backend production deploys without debug routes, `GET /api/session` returns an empty list — server-side sessions there are transient sync copies of browser-IndexedDB data, and the only callers of a shared listing would be other players. `render.yaml` pins `STORE_BACKEND=memory` explicitly (the sqlite default would pool every player's data in one shared DB), adds a health check, and disables the debug page; the Docker image regains the workspace manifests (`settings`, `plugin-handlers-utils`, and four plugins) missing from its dependency-install stage.
 
 ## [0.0.12] - 2026-07-06
 
