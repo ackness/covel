@@ -15,6 +15,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 
+import { ensureElectronBinary } from "./ensure-electron.mjs";
+
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
 const projectRoot = path.resolve(desktopRoot, "../..");
@@ -329,6 +331,9 @@ console.log("  ✓ native addons rebuilt for Electron");
 // Step 3c: smoke-test the staged server so electron-builder never wraps a
 // known-broken sidecar. Run it under Electron's Node mode because the packaged
 // app launches the sidecar with process.execPath + ELECTRON_RUN_AS_NODE.
+// The runtime binary must be materialised first — electron@42+ no longer
+// downloads it on install (see ensure-electron.mjs).
+ensureElectronBinary();
 console.log("\n[3c/4] Smoke-testing staged server (with llm.toml)...");
 execSync(
   `node "${path.join(desktopRoot, "scripts/verify-staging.mjs")}" --electron-node`,
