@@ -249,6 +249,38 @@ export function useBuildSessionActions({
     [dispatch, state, runSingleAction, resyncSession],
   );
 
+  const steerMessage = useCallback(
+    async (content: string): Promise<boolean> => {
+      const session = state.session;
+      if (!session || !content) return false;
+      const ok = await api.steerTurn(session.id, content).catch(() => false);
+      if (!ok) return false;
+      // Echo locally; the server already persisted its copy (remote mode's
+      // ds.addMessage is a no-op — this write covers the local-IDB mirror).
+      const id = crypto.randomUUID();
+      const ts = new Date().toISOString();
+      dispatch({
+        type: "ADD_MESSAGE",
+        message: { id, role: "user", content, timestamp: ts },
+      });
+      ds.addMessage({
+        id,
+        sessionId: session.id,
+        role: "user",
+        content,
+        createdAt: ts,
+      }).catch(ignoreError("persist steer message"));
+      return true;
+    },
+    [ds, dispatch, state.session],
+  );
+
+  const abortActiveTurn = useCallback(async (): Promise<void> => {
+    const session = state.session;
+    if (!session) return;
+    await api.abortTurn(session.id).catch(() => false);
+  }, [state.session]);
+
   const loadOlderMessages = useCallback(async () => {
     const sid = sessionIdRef.current;
     // 从 ref 读取最新游标，避免闭包捕获陈旧值并保持该 action 引用稳定。
@@ -609,6 +641,8 @@ export function useBuildSessionActions({
       loadWorldSessions,
       deleteSession,
       sendMessage,
+      steerMessage,
+      abortActiveTurn,
       loadOlderMessages,
       submitBlock,
       submitInteraction,

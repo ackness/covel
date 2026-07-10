@@ -41,6 +41,7 @@ import { worldRoutes } from "./worlds.js";
 import { messageRoutes } from "./messages.js";
 import { characterRoutes } from "./characters.js";
 import { actionRoutes, setMemorySystem } from "./actions.js";
+import { turnControlRoutes } from "./turn-control-routes.js";
 import { subscribeRoutes } from "./subscribe.js";
 import { pluginDataRoutes } from "./plugin-data.js";
 import { workingMemoryRoutes } from "./working-memory.js";
@@ -63,6 +64,7 @@ import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
 import { createBootstrapHookPipeline } from "./bootstrap/plugin-hooks.js";
 import { setupPluginTools } from "./bootstrap/tools.js";
 import { createBootstrapPluginWires } from "./bootstrap/plugin-wires.js";
+import { createBootstrapPluginEntries } from "./bootstrap/plugin-entry.js";
 import { createEventDirectory } from "./bootstrap/event-directory.js";
 import { createBootstrapMemorySystem } from "./bootstrap/memory.js";
 import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
@@ -275,6 +277,19 @@ export async function bootstrapApi(
     manifestCache,
   });
 
+  // Unified plugin entries are created after the tool/hook/rpc registries
+  // exist (below); loadRuntimeFn needs the activation seam earlier, so it
+  // late-binds through this holder.
+  //
+  // ORDERING CONSTRAINT: `createBootstrapPluginEntries` (which assigns the
+  // real function to this holder) MUST stay after step 6b's eager UI-spec
+  // runtime loads. Those loads call `loadRuntimeFn` → `ensurePluginEntry`;
+  // while this is still the no-op, a community plugin's UI-spec load does NOT
+  // run its entry. Moving entry creation earlier would execute community
+  // entry code at boot — before any approval gate — which is exactly what the
+  // deferred-activation design prevents.
+  let ensurePluginEntry: (pluginId: string) => Promise<void> = async () => {};
+
   // loadRuntime resolver (locale-aware: loads PLUGIN.en.md when locale is "en-US")
   const loadRuntimeFn = async (
     manifest: RuntimeManifest,
@@ -290,6 +305,7 @@ export async function bootstrapApi(
         // ensurePluginWires added to the activatePluginLocalTools call
         // sites too; no such plugin exists yet.
         await pluginWires.ensurePluginWires(pluginId);
+        await ensurePluginEntry(pluginId);
         return loadRuntimeFromDisk(discovery, manifest.name, locale);
       }
     }
@@ -304,9 +320,11 @@ export async function bootstrapApi(
   const {
     toolMap,
     builtinToolNames,
+    localToolNames,
     toolExecutor,
     prepareToolsForSession,
     activatePluginLocalTools,
+    pluginToolAccess,
   } = await setupPluginTools({
     store,
     registry,
@@ -364,6 +382,28 @@ export async function bootstrapApi(
     discoveryMap,
     manifestCache,
   });
+
+  // Unified plugin server entries (`entry` frontmatter field) — needs the
+  // tool map, hook pipeline, and rpc registry above. builtin/official
+  // entries run here; community entries defer to ensurePluginEntry.
+  const pluginEntries = await createBootstrapPluginEntries({
+    discoveryMap,
+    manifestCache,
+    store,
+    toolMap,
+    localToolNames,
+    pluginToolAccess,
+    hookPipeline,
+    rpcRegistry,
+  });
+  ensurePluginEntry = pluginEntries.ensurePluginEntry;
+
+  // Community activation seam: entry runs before legacy local tools so both
+  // registration styles are live once activation resolves.
+  const activatePluginServerCode = async (pluginId: string): Promise<void> => {
+    await pluginEntries.ensurePluginEntry(pluginId);
+    await activatePluginLocalTools(pluginId);
+  };
 
   const runtimeEnv = readRuntimeEnv();
   const compactorRunner = createBootstrapCompactorRunner({
@@ -427,7 +467,8 @@ export async function bootstrapApi(
     c.set("sessionLock", sessionLock);
     c.set("prepareToolsForSession", prepareToolsForSession);
     c.set("getPluginSource", getPluginSource);
-    c.set("activatePluginLocalTools", activatePluginLocalTools);
+    c.set("activatePluginLocalTools", activatePluginServerCode);
+    c.set("hasPendingPluginEntry", pluginEntries.hasPendingEntry);
     c.set("reservedPluginIds", reservedPluginIds);
     if (config.worldsDirs) {
       c.set("worldsDirs", config.worldsDirs);
@@ -468,6 +509,7 @@ export async function bootstrapApi(
   app.route("/api/sessions", lorebookRoutes); // S3-T6: session-level lorebook viewer
   app.route("/api/sessions", runtimeOutputRoutes); // PR-1: translation-layer observability
   app.route("/api/sessions", pluginRpcRoutes); // PR-3: plugin RPC channel
+  app.route("/api/sessions", turnControlRoutes); // W4: mid-turn steer / abort
   app.route("/api/sessions", sessionApprovalRoutes); // PR-7: per-session approvals listing
   app.route("/api/approvals", approvalRoutes); // PR-7: approval lookup + decision
   app.route("/api/plugins", pluginRoutes);

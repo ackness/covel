@@ -1,4 +1,4 @@
-import { Loader2, Send } from "lucide-react";
+import { Send, Square } from "lucide-react";
 import type { Dispatch, KeyboardEvent, SetStateAction } from "react";
 import type { TFunction } from "i18next";
 import type { SessionRecord } from "@/services/api.js";
@@ -12,6 +12,7 @@ interface MessageComposerProps {
   composerDisabled: boolean;
   onInputValueChange: Dispatch<SetStateAction<string>>;
   onSubmit: () => void;
+  onAbort?: () => void;
   onKeyDown: (event: KeyboardEvent) => void;
 }
 
@@ -24,6 +25,7 @@ export function MessageComposer({
   composerDisabled,
   onInputValueChange,
   onSubmit,
+  onAbort,
   onKeyDown,
 }: MessageComposerProps) {
   const isPlaying = session.status === "active" && session.turnCount > 0;
@@ -50,28 +52,41 @@ export function MessageComposer({
               placeholder={
                 composerBlocked
                   ? t("session.composerBlockedPlaceholder")
-                  : isPlaying
-                    ? t(
-                        "session.inputPlaceholder",
-                        "Enter action or command...",
-                      )
-                    : t("session.inputPlaceholderAny", "Send a message...")
+                  : executing
+                    ? t("session.steerPlaceholder", "Interject mid-turn...")
+                    : isPlaying
+                      ? t(
+                          "session.inputPlaceholder",
+                          "Enter action or command...",
+                        )
+                      : t("session.inputPlaceholderAny", "Send a message...")
               }
               disabled={composerDisabled}
               className="flex-1 min-w-0 px-3.5 py-2.5 bg-transparent text-sm outline-none disabled:opacity-50 placeholder:text-muted-foreground"
             />
+            {executing && onAbort && (
+              <button
+                type="button"
+                onClick={onAbort}
+                aria-label={t("session.abortTurn", "Stop the current turn")}
+                title={t("session.abortTurn", "Stop the current turn")}
+                className="shrink-0 inline-flex items-center justify-center w-11 self-stretch border-l border-[var(--rule-color)] text-muted-foreground hover:text-destructive hover:bg-[color-mix(in_oklab,var(--color-foreground)_6%,transparent)] transition-colors"
+              >
+                <Square className="w-3 h-3 animate-pulse" />
+              </button>
+            )}
             <button
               type="button"
               onClick={onSubmit}
               disabled={composerDisabled || !inputValue.trim()}
-              aria-label={t("session.inputKbdHint", "send")}
+              aria-label={
+                executing
+                  ? t("session.steerSend", "interject")
+                  : t("session.inputKbdHint", "send")
+              }
               className="shrink-0 inline-flex items-center justify-center w-11 self-stretch border-l border-[var(--rule-color)] text-muted-foreground hover:text-foreground hover:bg-[color-mix(in_oklab,var(--color-foreground)_6%,transparent)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
             >
-              {executing ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Send className="w-3.5 h-3.5" />
-              )}
+              <Send className="w-3.5 h-3.5" />
             </button>
           </div>
           {composerBlocked ? (

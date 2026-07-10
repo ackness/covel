@@ -66,6 +66,10 @@ export async function buildPackagesResponse(registry: PluginRegistry): Promise<{
         id: t,
         kind: "builtin",
       })),
+      ...(m.manifest.tools?.plugin ?? []).map((t) => ({
+        id: t,
+        kind: "local",
+      })),
       ...(m.manifest.tools?.local ?? []).map((t) => {
         const basename =
           t

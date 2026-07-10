@@ -134,15 +134,18 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 
 ### C. Hook 组合行为
 
-`PLUGIN.md` 可以声明 `hooks`，用于接入工具调用、runtime 执行、状态提交、回合开始和结束等生命周期点。
+hook 在统一服务端入口（frontmatter `entry` 字段指向的模块）里用 `covel.on` 注册，接入工具调用、runtime 执行、状态提交、回合开始和结束等生命周期点：
 
-```yaml
-hooks:
-  - event: PreToolUse
-    handler: ./hooks/validate-tool.ts
-    enforce: pre
-    timeoutMs: 3000
+```js
+// server/index.js（PLUGIN.md: entry: ./server/index.js）
+import validateTool from "../hooks/validate-tool.js";
+
+export default function (covel) {
+  covel.on("PreToolUse", validateTool, { enforce: "pre", timeoutMs: 3000 });
+}
 ```
+
+> 旧的 frontmatter `hooks:` 声明式写法已弃用（保留一个发布周期），事件表与执行语义与 `covel.on` 完全一致；`covel.on` 的 `match` 是谓词函数 `(payload) => boolean`，比旧的浅层等值 map 更灵活。
 
 `PreRuntime`、`PostContextAssembly`、`PreLLMCall`、`PostLLMResponse`、`PreToolUse`、`PostToolUse`、`PreStateCommit` 使用 `sequential` 语义：handler 按顺序执行，`replace` 会成为下一个 handler 的输入，`abort` 会停止该生命周期动作。
 
@@ -153,6 +156,8 @@ hooks:
 会话级（无回合）有 `SessionStart`（会话创建后,payload `{sessionId, worldId}`）与 `SessionEnd`（状态→`ended` 或 DELETE,payload `{sessionId, reason}`）两个 `parallel` 观察 hook,适合 session 级初始化 / 清理。它们在 server 的 session 路由触发,`turnId` 为空。
 
 **所有 hook 都是 session 作用域的**：pipeline 虽是全局单例,但执行时按当前 session 的激活插件集过滤——你的 hook **只对启用了你插件的 session 触发**(框架 hook 始终触发)。无需在 handler 里自行判断插件是否激活;`HookContext.activePluginIds` 可读当前激活集。
+
+> **community 插件注意**：`entry` 里注册的 hook 从**插件激活时**（审批通过 / 首次 runtime 调度）起生效，而非 boot 时——激活点之前发生的早期事件（如本会话的 `SessionStart`）收不到。builtin/official 的 entry 在 boot 时运行,无此限制。
 
 **读取本插件的会话级设置（`ctx.getOwnSettings`）**：hook handler 的 `ctx` 上有一个只读取数器 `getOwnSettings`，让 hook 行为可以「每会话可配」——无需声明 inject、也无需做工具调用往返。它复用了上面的 session 作用域（与 `activePluginIds` 同一个 ALS scope），由 pipeline 在调用每个 handler 前按其 `pluginId` 注入：
 
@@ -187,7 +192,9 @@ plugins/<plugin-id>/
 ├── package.json           # 必需：workspace 依赖
 ├── .npmrc                 # 必需：供应链防护（minimum-release-age=10080）
 ├── vitest.config.ts       # 可选：测试配置
-├── tools/                 # 可选：本地工具
+├── server/                # 可选：统一服务端入口（frontmatter entry 指向）
+│   └── index.js           #   export default function (covel) { 注册工具/hook/RPC/wire }
+├── tools/                 # 可选：本地工具（由 server/index.js 导入并 registerTool）
 │   └── my-tool.ts
 ├── tests/                 # 可选：测试文件
 │   └── my-plugin.test.ts

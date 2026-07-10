@@ -27,6 +27,12 @@ export type {
   TurnExecutorOptions,
   ResumeSuspendedRuntimeOptions,
 } from "./turn-executor/turn-executor.js";
+export {
+  PLAYER_ABORT_REASON,
+  TurnAbortedError,
+  isTurnAbortedError,
+} from "./turn-executor/turn-control.js";
+export type { TurnControl } from "./turn-executor/turn-control.js";
 export { createRuntimeMediaContext } from "./function-runtime/runtime-media-context.js";
 export type { MediaStoreLike } from "./function-runtime/runtime-media-context.js";
 

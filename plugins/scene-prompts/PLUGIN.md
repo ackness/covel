@@ -41,9 +41,10 @@ input:
       from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
+entry: ./server/index.js
 tools:
-  local:
-    - ./tools/generate-scene-prompts.js
+  plugin:
+    - generate-scene-prompts
 ui:
   message:
     - ./ui/scene-prompts-block.json

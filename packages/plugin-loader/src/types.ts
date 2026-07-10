@@ -493,6 +493,16 @@ export interface FunctionHandlerContext {
    * Absent in test harnesses without a store.
    */
   readonly logger?: PluginLogger;
+  /**
+   * Player abort signal for THIS turn. Fires when the player stops the turn
+   * mid-flight. Handlers running long provider work (image generation, TTS,
+   * bespoke `fetch`) should thread it into their calls so an abort cuts the
+   * in-flight request instead of running to completion. Absent when the turn
+   * carries no `TurnControl` (test harnesses, non-abortable runs). Commit
+   * semantics are unchanged: a handler that ignores the signal and returns a
+   * completed result still has its proposals committed.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**

@@ -198,6 +198,18 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | ---- | ------------------------ | ------------ |
 | POST | `/api/sessions/:id/turn` | 执行玩家回合 |
 
+### 回合中控制（W4）
+
+| 方法 | 路径                      | 描述                                                                                                                                |
+| ---- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| POST | `/api/sessions/:id/steer` | 向进行中的回合插话。body `{ message: string }`。消息并入 story runtime 的下一次 LLM 调用并持久化到消息历史。无进行中回合返回 `409`  |
+| POST | `/api/sessions/:id/abort` | 中止进行中的回合：立刻切断在途 LLM 流（绕过部分内容 salvage，不落任何半截提案），停止调度后续 runtime。无进行中回合返回 `409`。幂等 |
+
+- abort 后当次 action SSE 的 `execution.completed` 载荷带 `abortReason: "aborted-by-player"`；已在 abort 前正常完成的 runtime 结果照常提交。
+- steer 仅对 `outputKind: story` 的 runtime 生效（plugin runtime 执行结构化任务，不接受插话）。插话在最终响应流式期间到达时，story runtime 收尾前会追加一步 LLM 调用消化它（受 maxSteps 约束）；持久化失败则撤回队列项并返回 `500`。
+- 注册表为进程内实现——多 pod（PG）部署下 steer/abort 只能到达同 pod 上的回合。
+- 可控窗口与 session lock 对齐：注册发生在取得 session lock 之后、`executeTurn` 前，释放在 `executeTurn` 返回时——同 session 的并发 action 在锁上排队，steer/abort 永远命中真实在途的回合，不会指向排队中的下一回合；提案 commit / 后台 follower 调度等收尾阶段不再对外呈现为可控（此时 steer/abort 返回 `409`）。
+
 ### 玩家交互
 
 | 方法   | 路径                                  | 描述                                                                                                        |
@@ -1426,6 +1438,8 @@ value         : {
 | 500    | handler 抛出未处理异常 / handler 模块加载失败 / `runtime-execution-failed` / `background-enqueue-failed`                           |
 
 > 注意: background 模式下 runtime 内部异常 **不会**映射为 5xx HTTP 状态 —— 202 已经发出,失败信息写入 `_jobs/{jobId}.value.error`,前端通过 SSE 感知。
+
+> **community 插件 + `entry` action 的延迟激活**:community 插件把 RPC 注册迁到 `entry` 模块后,其代码在审批通过前不运行,因此 action 声明在首次调用时**尚未注册**。此时 action 级请求**不会**直接 404,而是按 community trust 走审批门:返回 `202 approval-required`。审批通过后重试 → 框架激活该插件的 `entry`(注册 action)→ 正常 dispatch。若 action 确实不存在,会在激活后经一次审批往返再 404(`unknown-action`)。builtin/official 的 `entry` 在 boot 时已运行,其 action 未注册即为真正的 404,行为不变。
 
 **插件 PLUGIN.md 中声明 RPC action:**
 

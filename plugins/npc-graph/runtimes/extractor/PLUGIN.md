@@ -30,9 +30,9 @@ input:
       field: narrativeOutput
       as: narrator-output
 tools:
-  local:
-    - ./tools/upsert-npc-graph.js
-    - ./tools/list-npc-graph.js
+  plugin:
+    - upsert-npc-graph
+    - list-npc-graph
   builtin:
     - plugin-data-list
     - plugin-data-get

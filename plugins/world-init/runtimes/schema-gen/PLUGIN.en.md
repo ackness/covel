@@ -19,9 +19,9 @@ trigger:
   interval: 1
   maxTriggerCount: 1
 tools:
-  local:
-    - ./tools/set-world-schema.js
-    - ./tools/set-world-entries-batch.js
+  plugin:
+    - set-world-schema
+    - set-world-entries-batch
   builtin:
     - plugin-data-get
     - plugin-data-list
