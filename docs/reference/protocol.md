@@ -76,7 +76,7 @@
 
 回合中控制走 HTTP 端点而非 SSE 事件（见 [api.md § 回合中控制](./api.md#回合中控制w4)）：
 
-- **steer**（`POST /api/sessions/:id/steer`）：玩家在回合进行中插话。消息进入服务端 per-session 队列，story runtime 在下一次 LLM 调用前把队列并入实时 transcript；同时持久化为 user 消息（后续回合的历史自然包含）。客户端本地回显即可，无新增 SSE 事件。
+- **steer**（`POST /api/sessions/:id/steer`）：玩家在回合进行中插话。消息进入服务端 per-session 队列，story runtime 在下一次 LLM 调用前把队列并入实时 transcript；若插话在最终响应流式期间才到达，story runtime 会在收尾前追加一步 LLM 调用消化它（受 maxSteps 约束）。同时持久化为 user 消息（后续回合的历史自然包含）；持久化失败时撤回队列项并返回 500，保证队列与历史一致。客户端本地回显即可，无新增 SSE 事件。
 - **abort**（`POST /api/sessions/:id/abort`）：触发回合级 AbortSignal——重试层立刻切断在途 LLM 调用/流（玩家 abort 不可重试、**绕过流式 salvage**，不会把半截叙事当作结果提交），executor 停止调度后续 runtime 组并跳过事件链。被中止的 runtime 以 failed 上报（`runtime.failed`），其提案不产出；abort 前已完成的 runtime 结果照常提交。当次 `execution.completed` 带 `abortReason: "aborted-by-player"`。
 
 ### 会话生命周期事件

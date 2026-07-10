@@ -13,7 +13,11 @@ import { Hono } from "hono";
 import type { DataStore } from "@covel/store";
 import { errorBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
-import { abortActiveTurn, steerActiveTurn } from "./turn-control.js";
+import {
+  abortActiveTurn,
+  retractSteering,
+  steerActiveTurn,
+} from "./turn-control.js";
 
 type Env = {
   Variables: {
@@ -45,14 +49,21 @@ turnControlRoutes.post("/:id/steer", rateLimiter({ max: 30 }), async (c) => {
 
   // Persist so the interjection is part of history for subsequent turns —
   // the live injection into the current loop happens via the steering queue.
-  await store.addMessage({
-    id: crypto.randomUUID(),
-    sessionId,
-    role: "user",
-    content: message,
-    metadata: { turnId: steered.turnId, steered: true },
-    createdAt: new Date().toISOString(),
-  });
+  try {
+    await store.addMessage({
+      id: crypto.randomUUID(),
+      sessionId,
+      role: "user",
+      content: message,
+      metadata: { turnId: steered.turnId, steered: true },
+      createdAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    // Keep queue and persistence consistent: the client sees a failure and
+    // will retry, so retract the queued copy or the retry double-injects.
+    retractSteering(sessionId, message);
+    throw err;
+  }
 
   return c.json({ ok: true, turnId: steered.turnId });
 });

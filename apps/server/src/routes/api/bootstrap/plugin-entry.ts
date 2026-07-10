@@ -181,6 +181,16 @@ export async function createBootstrapPluginEntries({
           );
           return;
         }
+        // Reject collisions: a duplicate name would silently replace the
+        // existing implementation globally — for a builtin name, `findTool`
+        // resolves via builtinToolNames first and every runtime would get
+        // the replacement, bypassing the plugin access boundary.
+        if (toolMap.has(toolModule.name)) {
+          console.warn(
+            `[plugin-entry] ${pluginRelPath}: registerTool("${toolModule.name}") collides with an existing tool — skipping`,
+          );
+          return;
+        }
         toolMap.set(toolModule.name, toolModule);
         localToolNames.add(toolModule.name);
         let allowed = pluginToolAccess.get(pluginId);

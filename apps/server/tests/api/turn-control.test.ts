@@ -102,6 +102,38 @@ describe("steer/abort routes", () => {
     expect(abortNoTurn.status).toBe(409);
   });
 
+  it("retracts the queued interjection when persistence fails", async () => {
+    const { store } = await makeApp();
+    const failing = new Proxy(store, {
+      get(target, prop, receiver) {
+        if (prop === "addMessage") {
+          return () => Promise.reject(new Error("disk full"));
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    const appFailing = new Hono();
+    appFailing.use("*", async (c, next) => {
+      c.set("store" as never, failing as never);
+      await next();
+    });
+    appFailing.route("/api/sessions", turnControlRoutes);
+
+    const { turnControl, release } = registerActiveTurn("sess-r", "turn-r");
+    try {
+      const res = await appFailing.request("/api/sessions/sess-r/steer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "lost write" }),
+      });
+      expect(res.status).toBe(500);
+      // Queue and history stay consistent: nothing left for the loop to drain.
+      expect(turnControl.drainSteering?.()).toEqual([]);
+    } finally {
+      release();
+    }
+  });
+
   it("steers and aborts an active turn; steered message is persisted", async () => {
     const { app, store } = await makeApp();
     const { turnControl, release } = registerActiveTurn("sess-r", "turn-r");

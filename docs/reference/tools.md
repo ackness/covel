@@ -72,6 +72,7 @@ Local 工具承接插件自己的业务封装，例如：
 - local 工具在插件 `entry` 模块（frontmatter `entry` 字段，基于插件根目录解析）里用 `covel.registerTool()` 注册；旧的 `tools.local` 路径声明已弃用（保留一个发布周期），语义不变
 - bootstrap 会校验 entry 路径边界，并只加载位于插件目录内的文件
 - local 工具访问权限按 `pluginId` 隔离，调用插件只能访问自己注册（或经 `tools.plugin` / 旧 `tools.local` 声明）的 local tool
+- 工具名全局唯一：与 builtin 或其他插件已注册的工具重名时，注册会被拒绝（warn + skip），不会静默覆盖已有实现
 
 ### 不是 Tool：`FunctionHandlerContext` 上的框架能力
 

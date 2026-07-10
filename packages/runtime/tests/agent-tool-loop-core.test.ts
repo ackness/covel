@@ -398,6 +398,50 @@ describe("runAgentToolLoop core", () => {
     expect(queue).toHaveLength(0);
   });
 
+  it("steering: an interjection that lands during the final response triggers one more step", async () => {
+    // Queue is empty at the pre-step drain and fills while the first LLM
+    // response is in flight — the single-step story turn the pre-step drain
+    // alone would drop.
+    const drains: string[][] = [[], ["等等，回头"]];
+    const seenMessages: { role: string; content: unknown }[][] = [];
+    const llm: LLMAdapter = {
+      generate: async (params: {
+        messages: readonly { role: string; content: unknown }[];
+      }) => {
+        seenMessages.push([...params.messages]);
+        return prose(seenMessages.length === 1 ? "walks ahead" : "turns back");
+      },
+    } as LLMAdapter;
+    const m = manifest({ name: "plug/story", outputKind: "story", tools: {} });
+    const result = await run({
+      llm,
+      manifest: m,
+      deps: {
+        toolExecutor: undefined,
+        turnControl: { drainSteering: () => drains.shift() ?? [] },
+      },
+    });
+
+    // Second call sees the pre-steer prose and the interjection.
+    expect(seenMessages).toHaveLength(2);
+    const second = seenMessages[1]!;
+    expect(
+      second.some(
+        (msg) =>
+          msg.role === "assistant" &&
+          String(msg.content).includes("walks ahead"),
+      ),
+    ).toBe(true);
+    expect(
+      second.some(
+        (msg) =>
+          msg.role === "user" && String(msg.content).includes("等等，回头"),
+      ),
+    ).toBe(true);
+    // Both prose chunks survive into finalContent.
+    expect(result.finalContent).toBe("walks ahead\n\nturns back");
+  });
+
   it("steering: plugin runtimes never see interjections", async () => {
     const drain = vi.fn(() => ["should not appear"]);
     const seenMessages: { role: string; content: unknown }[][] = [];

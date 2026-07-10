@@ -182,6 +182,10 @@ export async function runAgentToolLoop({
   // finish back into the loop. Capped at one correction so a model that keeps
   // refusing to call its tool is released instead of burning maxSteps.
   let noToolCallCorrections = 0;
+  // Prose captured from steps that were extended by late steering (see the
+  // late-steering drain below). Joined into finalContent at the final break
+  // so the persisted narrative keeps both pre- and post-interjection text.
+  const steeredProse: string[] = [];
 
   while (steps < effectiveMaxSteps && Date.now() < deadline) {
     steps++;
@@ -500,8 +504,33 @@ export async function runAgentToolLoop({
       );
     }
 
+    // Late steering (W4): an interjection that arrived while THIS response
+    // was streaming would otherwise sit queued until turn release and never
+    // reach the current turn — the pre-step drain has already run, and a
+    // bare prose finish (the common single-step story turn) ends the loop
+    // here. Drain once more and take another step so the player's message
+    // lands mid-turn. Bounded by effectiveMaxSteps like any other step.
+    if (acceptsSteering && steps < effectiveMaxSteps) {
+      const lateSteering = deps.turnControl?.drainSteering?.() ?? [];
+      if (lateSteering.length > 0) {
+        if (response.content) {
+          messages.push({ role: "assistant", content: response.content });
+          // Schema-shaped outputs stay last-wins — the final envelope is
+          // the one that saw the steering; free prose is accumulated.
+          if (!responseFormat) steeredProse.push(response.content);
+        }
+        for (const steer of lateSteering) {
+          messages.push({ role: "user", content: steer });
+        }
+        continue;
+      }
+    }
+
     // Final response (no more tool calls)
-    finalContent = response.content;
+    finalContent =
+      steeredProse.length > 0
+        ? [...steeredProse, response.content].filter(Boolean).join("\n\n")
+        : response.content;
     stoppedWithResponse = true;
     break;
   }

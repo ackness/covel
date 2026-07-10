@@ -206,7 +206,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | POST | `/api/sessions/:id/abort` | 中止进行中的回合：立刻切断在途 LLM 流（绕过部分内容 salvage，不落任何半截提案），停止调度后续 runtime。无进行中回合返回 `409`。幂等 |
 
 - abort 后当次 action SSE 的 `execution.completed` 载荷带 `abortReason: "aborted-by-player"`；已在 abort 前正常完成的 runtime 结果照常提交。
-- steer 仅对 `outputKind: story` 的 runtime 生效（plugin runtime 执行结构化任务，不接受插话）。
+- steer 仅对 `outputKind: story` 的 runtime 生效（plugin runtime 执行结构化任务，不接受插话）。插话在最终响应流式期间到达时，story runtime 收尾前会追加一步 LLM 调用消化它（受 maxSteps 约束）；持久化失败则撤回队列项并返回 `500`。
 - 注册表为进程内实现——多 pod（PG）部署下 steer/abort 只能到达同 pod 上的回合。
 
 ### 玩家交互

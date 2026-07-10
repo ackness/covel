@@ -44,12 +44,25 @@ export async function createBootstrapLocalTools({
     store,
   });
 
+  // Reject collisions: builtins are registered before local tools, so a
+  // duplicate name here would silently replace a builtin (or another
+  // plugin's tool) for every runtime that references it.
+  const addLocalTool = (pluginId: string, t: ToolModule): void => {
+    if (toolMap.has(t.name)) {
+      console.warn(
+        `[plugin-loader] ${pluginId}: local tool "${t.name}" collides with an existing tool — skipping`,
+      );
+      return;
+    }
+    toolMap.set(t.name, t);
+    localToolNames.add(t.name);
+  };
+
   for (const [pluginId, discovery] of discoveryMap) {
     const trust = getPluginTrustInfo(pluginId, discovery.source);
     if (!trust.autoLoad) continue;
     for (const t of await loadLocalToolsForPlugin(pluginId)) {
-      toolMap.set(t.name, t);
-      localToolNames.add(t.name);
+      addLocalTool(pluginId, t);
     }
   }
 
@@ -72,8 +85,7 @@ export async function createBootstrapLocalTools({
     const promise = (async () => {
       try {
         for (const t of await loadLocalToolsForPlugin(pluginId)) {
-          toolMap.set(t.name, t);
-          localToolNames.add(t.name);
+          addLocalTool(pluginId, t);
         }
         activatedPluginIds.add(pluginId);
       } finally {
