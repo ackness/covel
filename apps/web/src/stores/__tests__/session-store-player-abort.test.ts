@@ -123,3 +123,83 @@ describe("sse-handler execution.completed abort terminal state", () => {
     expect(types).not.toContain("DISCARD_TURN_STREAMS");
   });
 });
+
+describe("sse-handler abort clears the pending delta rAF (H1 race)", () => {
+  function deltaEnvelope(): SseEnvelope {
+    return {
+      type: "narrative.delta",
+      requestId: "req-1",
+      traceId: "trace-1",
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      flowId: "trace-1",
+      seq: 8,
+      timestamp: "2026-07-10T00:00:00Z",
+      payload: {
+        delta: "half-written narrative…",
+        runtimeId: "narrator/main",
+        pluginId: "narrator",
+        kind: "story",
+      },
+    };
+  }
+
+  function completedAbortEnvelope(): SseEnvelope {
+    return {
+      type: "execution.completed",
+      requestId: "req-1",
+      traceId: "trace-1",
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      flowId: "trace-1",
+      seq: 9,
+      timestamp: "2026-07-10T00:00:01Z",
+      payload: {
+        runtimeCount: 1,
+        resultCount: 0,
+        durationMs: 5,
+        abortReason: PLAYER_ABORT_REASON,
+      },
+    };
+  }
+
+  it("a delta queued through the handler does not resurrect the ghost after abort", () => {
+    // Capture the rAF callback so we can flush it *after* the abort, mimicking
+    // the last delta + execution.completed arriving in one network flush.
+    let rafCb: FrameRequestCallback | null = null;
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      (cb: FrameRequestCallback): number => {
+        rafCb = cb;
+        return 1;
+      },
+    );
+    vi.stubGlobal("cancelAnimationFrame", (): void => {
+      rafCb = null;
+    });
+
+    let state = initialState;
+    const dispatch = (a: SessionAction) => {
+      state = reducer(state, a);
+    };
+    const deps: SseEventHandlerDeps = {
+      dispatch,
+      ds: {} as SseEventHandlerDeps["ds"],
+      sessionIdRef: { current: "sess-1" },
+      stateRef: { current: state },
+      runtimeKindRef: { current: new Map() },
+      deltaBufferRef: { current: new Map() },
+      deltaRafRef: { current: null },
+      lastBackfilledTurnIdRef: { current: "turn-1" },
+    };
+    const handle = createSseEventHandler(deps);
+
+    handle(deltaEnvelope()); // buffers the delta + schedules the rAF flush
+    handle(completedAbortEnvelope()); // player abort → discard + cancel rAF
+    if (rafCb) (rafCb as FrameRequestCallback)(0); // late flush must be a no-op
+
+    expect(state.messages.some((m) => m.id.startsWith("stream_"))).toBe(false);
+
+    vi.unstubAllGlobals();
+  });
+});

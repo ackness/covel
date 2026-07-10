@@ -157,6 +157,8 @@ export default function (covel) {
 
 **所有 hook 都是 session 作用域的**：pipeline 虽是全局单例,但执行时按当前 session 的激活插件集过滤——你的 hook **只对启用了你插件的 session 触发**(框架 hook 始终触发)。无需在 handler 里自行判断插件是否激活;`HookContext.activePluginIds` 可读当前激活集。
 
+> **community 插件注意**：`entry` 里注册的 hook 从**插件激活时**（审批通过 / 首次 runtime 调度）起生效，而非 boot 时——激活点之前发生的早期事件（如本会话的 `SessionStart`）收不到。builtin/official 的 entry 在 boot 时运行,无此限制。
+
 **读取本插件的会话级设置（`ctx.getOwnSettings`）**：hook handler 的 `ctx` 上有一个只读取数器 `getOwnSettings`，让 hook 行为可以「每会话可配」——无需声明 inject、也无需做工具调用往返。它复用了上面的 session 作用域（与 `activePluginIds` 同一个 ALS scope），由 pipeline 在调用每个 handler 前按其 `pluginId` 注入：
 
 ```ts

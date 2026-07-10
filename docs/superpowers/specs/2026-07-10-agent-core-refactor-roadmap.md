@@ -43,6 +43,8 @@ export default function (covel: PluginAPI) {
 
 **验收**：新入口注册的工具/hook/RPC/wire 与旧方式行为逐项等价（现有插件测试套 + `@covel/plugin-test-utils` harness）；`docs/guide/plugin-authoring.md` 同步。
 
+**已知限制（community entry hook 生效时机）**：旧 `hooks` 字段在 boot 时为所有信任级注册声明（handler 懒加载）；`entry` 里的 hook 只有在 `ensurePluginEntry` 跑过之后才进入 HookPipeline。对 community 插件，`ensurePluginEntry` 最早发生在**审批通过**（`approvals.ts` 的 `allow` 分支调用 `activatePluginServerCode`）或首次 runtime 调度/RPC 激活时——因此本会话中在激活点之前发生的 `SessionStart`/`TurnStart` 等早期事件，community entry 的 hook 收不到；每次进程重启也会为已审批的 community 插件重新打开这个窗口，直到它再次被激活。这是 deferred activation 安全模型的固有结果（未审批的第三方代码绝不能在 boot 时运行），不通过"把 entry hook 改回声明式 manifest"来消除。builtin/official entry 在 boot 时运行，无此限制。
+
 ## W2 统一 AgentLoopEvent 事件流（实施时修订）
 
 > **核实结论（2026-07-10 动手核实）**：本节最初的前提——"emit 调用散落在 loop 体各处"——不成立。
@@ -83,7 +85,7 @@ loop 核由最小 fixture 直测（见 W2 交付）；runtime 测试套 604/604 
 
 在 W3 的 loop 核上加消息队列能力（实施记录）：
 
-- **steer**（已实现）：`POST /api/sessions/:id/steer` → 服务端 per-session 队列（`turn-control.ts` 注册表，actions 路由注册/释放）→ loop 在每次 LLM 调用前 drain（仅 `outputKind: story`，策略字段 `acceptsSteering`）→ 消息同时持久化进历史。前端：回合进行中输入框保持可用，提交即插话；409（回合已结束）时草稿还回输入框走正常发送。
+- **steer**（已实现）：`POST /api/sessions/:id/steer` → 服务端 per-session 队列（`turn-control.ts` 注册表，actions 路由注册/释放）→ loop 在每次 LLM 调用前 drain（仅 `outputKind: story`，策略字段 `acceptsSteering`）→ 消息同时持久化进历史。前端：回合进行中输入框保持可用，提交即插话；409（回合已结束）时草稿还回输入框，由玩家再发送。
 - **abort**（已实现）：`POST /api/sessions/:id/abort` → 回合级 AbortSignal 线穿 `AgentLoopDeps.turnControl` → 重试层立刻切断在途调用/流（玩家 abort 不可重试且**绕过流式 salvage**——否则半截叙事会被当作结果提交，这是实施中发现的关键坑）→ executor 停止调度后续组、跳过事件链 → `execution.completed` 带 `abortReason: "aborted-by-player"`（复用既有字段，未新增 SSE 事件类型）。前端：执行中显示停止按钮。
 - **followUp 裁掉（YAGNI）**：原设想"回合结束后自动续发的排队输入"——实施时判定多余：回合进行中输入即插话（steer），回合一结束输入框本来就能正常发送；steer 的 409 回退已覆盖临界竞态。需要时再作为纯前端队列补上，零内核改动。
 - 协议面：新增两个 HTTP 端点 + `abortReason` 语义扩展，无新 SSE 事件类型；已同步 `docs/reference/api.md` + `docs/reference/protocol.md`。

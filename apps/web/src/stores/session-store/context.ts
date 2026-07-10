@@ -14,7 +14,7 @@ export interface SessionActions {
   sendMessage: (content: string) => void;
   /**
    * Interject into the in-flight turn (W4). Resolves false when no turn is
-   * active — the composer falls back to a normal send.
+   * active — the composer restores the steered text for the player to re-send.
    */
   steerMessage: (content: string) => Promise<boolean>;
   /** Abort the in-flight turn (W4). No-op when nothing is running. */

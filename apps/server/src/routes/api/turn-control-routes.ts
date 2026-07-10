@@ -4,9 +4,10 @@
  *   POST /api/sessions/:id/steer  { message }  — interject into the active turn
  *   POST /api/sessions/:id/abort                — abort the active turn
  *
- * Both 409 when the session has no in-flight turn (the client falls back to
- * a normal send / no-op). Steered messages are also persisted to the
- * messages table so they appear in history for subsequent turns.
+ * Both 409 when the session has no in-flight turn (on steer the client
+ * restores the message to the composer for the player to re-send; abort is a
+ * no-op). Steered messages are also persisted to the messages table so they
+ * appear in history for subsequent turns.
  */
 
 import { Hono } from "hono";

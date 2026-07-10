@@ -280,6 +280,14 @@ export async function bootstrapApi(
   // Unified plugin entries are created after the tool/hook/rpc registries
   // exist (below); loadRuntimeFn needs the activation seam earlier, so it
   // late-binds through this holder.
+  //
+  // ORDERING CONSTRAINT: `createBootstrapPluginEntries` (which assigns the
+  // real function to this holder) MUST stay after step 6b's eager UI-spec
+  // runtime loads. Those loads call `loadRuntimeFn` → `ensurePluginEntry`;
+  // while this is still the no-op, a community plugin's UI-spec load does NOT
+  // run its entry. Moving entry creation earlier would execute community
+  // entry code at boot — before any approval gate — which is exactly what the
+  // deferred-activation design prevents.
   let ensurePluginEntry: (pluginId: string) => Promise<void> = async () => {};
 
   // loadRuntime resolver (locale-aware: loads PLUGIN.en.md when locale is "en-US")
@@ -460,6 +468,7 @@ export async function bootstrapApi(
     c.set("prepareToolsForSession", prepareToolsForSession);
     c.set("getPluginSource", getPluginSource);
     c.set("activatePluginLocalTools", activatePluginServerCode);
+    c.set("hasPendingPluginEntry", pluginEntries.hasPendingEntry);
     c.set("reservedPluginIds", reservedPluginIds);
     if (config.worldsDirs) {
       c.set("worldsDirs", config.worldsDirs);

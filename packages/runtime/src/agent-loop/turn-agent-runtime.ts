@@ -136,11 +136,11 @@ export async function executeAgentRuntime({
 
   // TODO(S2): Tool-pair pruning safety — budget pruning does not understand
   // assistant↔tool message pairing (see T2 review I1). Skip budget injection
-  // whenever this runtime declares tools via any of the three tool-declaration
+  // whenever this runtime declares tools via any of the four tool-declaration
   // paths: `manifest.input.tools` (dependency declarations) or
-  // `manifest.tools.builtin` / `manifest.tools.local` (actual registration,
-  // consumed by buildToolDefinitions). Remove this guard when pair-aware
-  // pruning lands in S2.
+  // `manifest.tools.builtin` / `manifest.tools.local` / `manifest.tools.plugin`
+  // (actual registration, consumed by buildToolDefinitions). Remove this guard
+  // when pair-aware pruning lands in S2.
   const inputTools = manifest.input?.tools;
   const hasInputTools = Array.isArray(inputTools) && inputTools.length > 0;
   const hasBuiltinTools =

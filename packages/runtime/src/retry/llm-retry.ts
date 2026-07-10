@@ -364,15 +364,14 @@ export async function streamLLMWithRetry(
       clearTimeout(callTimeoutHandle);
       clearTimeout(ttfbHandle);
       params.abortSignal?.removeEventListener("abort", onExternalAbort);
-      // Player abort is non-retriable AND must bypass the salvage path
-      // below — salvaged partial narrative would otherwise be committed.
-      throwIfTurnAborted(params.abortSignal);
       lastError = err;
       lastReason = classifyStreamError(err, callAborter.signal, firstTokenSeen);
 
       // Pair every `llm.calling` with an `llm.responded` on the error path.
       // Without this, a streamed turn that fails mid-flight leaves a dangling
-      // `llm.calling` in trace_events and breaks trace-viewer pairing.
+      // `llm.calling` in trace_events and breaks trace-viewer pairing. This
+      // must run BEFORE the abort throw below so a player abort still emits
+      // the paired `llm.responded`.
       await emitLlmRespondedError(params.emitter, {
         runtimeId: params.runtimeId,
         pluginId: params.pluginId,
@@ -381,6 +380,10 @@ export async function streamLLMWithRetry(
         attempt,
         streaming: true,
       });
+
+      // Player abort is non-retriable AND must bypass the salvage path
+      // below — salvaged partial narrative would otherwise be committed.
+      throwIfTurnAborted(params.abortSignal);
 
       // Salvage path: stream died mid-flight but we already received useful
       // content. Always prefer salvaging over retry — perturbation on a

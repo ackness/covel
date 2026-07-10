@@ -404,6 +404,11 @@ export function createSseEventHandler(
         // placeholder instead of showing ghost text + a red retry affordance.
         const abortReason = payload.abortReason as string | undefined;
         if (abortReason === PLAYER_ABORT_REASON) {
+          // Cancel any pending rAF delta flush + drop buffered deltas first:
+          // otherwise a fast abort (last narrative.delta + execution.completed
+          // in one network flush) lets the queued rAF fire AFTER the discard
+          // and re-`APPEND_DELTA` the ghost placeholder back into view.
+          clearNarrativeDeltaBuffer(deps.deltaBufferRef, deps.deltaRafRef);
           deps.dispatch({
             type: "DISCARD_TURN_STREAMS",
             ...(turnId ? { turnId } : {}),

@@ -99,6 +99,42 @@ describe("executeTurn player abort", () => {
     expect(ids).not.toContain("plug-b");
   });
 
+  it("threads the player abort signal into function-runtime handler context", async () => {
+    const controller = new AbortController();
+    let observedSignal: AbortSignal | undefined;
+    let observedAbortedFlag: boolean | undefined;
+    const store = createMemoryStore();
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async (m) => ({
+        manifest: m,
+        promptTemplate: "prompt",
+        handler: async (ctx: { signal?: AbortSignal }) => {
+          observedSignal = ctx.signal;
+          // Player aborts while the handler runs; a cooperative handler
+          // reading ctx.signal.aborted sees the flip, so long provider work
+          // can cancel instead of running to completion.
+          controller.abort();
+          observedAbortedFlag = ctx.signal?.aborted;
+          return { narrativeOutput: "done" };
+        },
+      }),
+      llm: { generate: async () => prose("unused") } as LLMAdapter,
+      getConfig: () => ({}),
+      store,
+      turnControl: { signal: controller.signal },
+    };
+
+    await executeTurn(
+      input,
+      [manifest("fn-plug", 500, { runtimeType: "function" })],
+      deps,
+      { maxSteps: 3 },
+    );
+
+    expect(observedSignal).toBe(controller.signal);
+    expect(observedAbortedFlag).toBe(true);
+  });
+
   it("without an abort the same setup runs every group and sets no abortReason", async () => {
     const calledRuntimes: string[] = [];
     const llm: LLMAdapter = {

@@ -84,11 +84,14 @@ export function useGameViewComposer({
     const val = inputValue.trim();
     if (!val || composerDisabled) return;
     if (executing) {
-      // Steer the in-flight turn; restore the draft when no turn was active
-      // (race with turn completion) so the player can send it normally.
+      // Steer the in-flight turn; on failure (e.g. the turn ended first — 409)
+      // restore the steered text to the composer so the player can re-send it.
+      // Merge with anything typed during the round-trip instead of dropping it:
+      // steered text first, newer draft after.
       setInputValue("");
       void steerMessage(val).then((ok) => {
-        if (!ok) setInputValue((current) => current || val);
+        if (!ok)
+          setInputValue((current) => (current ? `${val}\n${current}` : val));
       });
       return;
     }

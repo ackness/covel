@@ -43,7 +43,7 @@ import {
   type HookEventName,
   type RpcTrustLevel,
 } from "@covel/shared";
-import type { DataStore } from "@covel/store";
+import type { DataStore, PluginDataRecord } from "@covel/store";
 import {
   shortId,
   shortIdBatch,
@@ -123,6 +123,62 @@ export interface BootstrapPluginEntriesParams {
 export interface BootstrapPluginEntries {
   /** Deferred entry invocation — memoized per pluginId, safe to await repeatedly. */
   readonly ensurePluginEntry: (pluginId: string) => Promise<void>;
+  /**
+   * True when `pluginId` declares an `entry`, its trust is deferred
+   * (community), and the entry has not been activated yet. The plugin-rpc
+   * action-level path uses this to route an unregistered action through the
+   * approval gate instead of a hard 404 — the action's registration lives
+   * inside the not-yet-run entry.
+   */
+  readonly hasPendingEntry: (pluginId: string) => boolean;
+}
+
+/**
+ * Wrap a DataStore so plugin-data access is clamped to `pluginId`, ignoring
+ * any pluginId the caller passes. Community entry factories close over
+ * `toolkit.store`; without this a handler could read/write another plugin's
+ * `plugin_data` namespace by supplying a different id — bypassing the
+ * per-dispatch community store view (`createRpcHandlerStoreView`).
+ *
+ * Session scoping is NOT possible here (entries register at activation time,
+ * before any request), so this scopes what it can: the pluginId dimension.
+ * Everything else forwards to the raw store unchanged via Proxy.
+ *
+ * ponytail: clamps the pluginId dimension only. Per-session scoping needs the
+ * request-time view (createRpcHandlerStoreView) — community RPC dispatch
+ * already applies that on top. Upgrade path: thread a session-scoped store
+ * into function-runtime handlers if entries ever run per-session.
+ */
+function scopeStoreToPlugin(store: DataStore, pluginId: string): DataStore {
+  const rebuildId = (record: PluginDataRecord): PluginDataRecord => ({
+    ...record,
+    pluginId,
+    id: `${record.sessionId}:${pluginId}:${record.namespace}:${record.key}`,
+  });
+  const overrides: Partial<DataStore> = {
+    setPluginData: (record) => store.setPluginData(rebuildId(record)),
+    setPluginDataBatch: (records) =>
+      store.setPluginDataBatch(records.map(rebuildId)),
+    getPluginData: (sessionId, _pluginId, namespace, key) =>
+      store.getPluginData(sessionId, pluginId, namespace, key),
+    listPluginData: (sessionId, _pluginId, namespace, pagination) =>
+      store.listPluginData(sessionId, pluginId, namespace, pagination),
+    deletePluginData: (sessionId, _pluginId, namespace, key) =>
+      store.deletePluginData(sessionId, pluginId, namespace, key),
+    listPluginDataSessionScope: () => {
+      throw new Error(
+        `[plugin-entry] ${pluginId}: listPluginDataSessionScope() is a cross-plugin read, not available to a community entry toolkit`,
+      );
+    },
+  };
+  return new Proxy(store, {
+    get(target, prop, receiver) {
+      if (Object.hasOwn(overrides, prop)) {
+        return (overrides as Record<PropertyKey, unknown>)[prop];
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  });
 }
 
 const HOOK_EVENT_SET: ReadonlySet<string> = new Set(HOOK_EVENTS);
@@ -145,14 +201,6 @@ export async function createBootstrapPluginEntries({
   hookPipeline,
   rpcRegistry,
 }: BootstrapPluginEntriesParams): Promise<BootstrapPluginEntries> {
-  const toolkit: PluginToolkit = {
-    tool,
-    z,
-    shortId,
-    shortIdBatch,
-    withPendingProposals,
-    store,
-  };
   const http = { fetchWithRetry, validateBaseUrl: validateBaseUrlForPlugin };
 
   warnLegacyRegistrationFields(manifestCache);
@@ -169,6 +217,20 @@ export async function createBootstrapPluginEntries({
         : trustInfo.source === "community"
           ? "community"
           : "official";
+
+    // Community entries get a pluginId-scoped store view; builtin/official
+    // keep the raw store (parity with the legacy tools.local factory).
+    const toolkit: PluginToolkit = {
+      tool,
+      z,
+      shortId,
+      shortIdBatch,
+      withPendingProposals,
+      store:
+        pluginTrust === "community"
+          ? scopeStoreToPlugin(store, pluginId)
+          : store,
+    };
 
     return {
       pluginId,
@@ -327,6 +389,22 @@ export async function createBootstrapPluginEntries({
   const invokedPluginIds = new Set<string>();
   const inFlight = new Map<string, Promise<void>>();
 
+  // KNOWN LIMITATION (community entry hooks miss early events).
+  //
+  // Legacy `hooks` register their declarations at boot for every trust tier
+  // (handlers lazy-load on first fire), so their hooks catch SessionStart /
+  // TurnStart from turn one. Entry hooks only enter the HookPipeline once
+  // `ensurePluginEntry` has run. For a community plugin the earliest that
+  // happens is at APPROVAL (`approvals.ts` `allow` → activatePluginServerCode)
+  // or first runtime schedule / rpc activation — never before approval, by
+  // design (unapproved third-party code must not run at boot). Consequences:
+  //   - events that fire before the activation point in the approving turn
+  //     (e.g. this session's SessionStart) are missed by the entry's hooks;
+  //   - every process restart re-opens the window for an already-approved
+  //     community plugin until it is next activated.
+  // We do NOT close this by reviving declarative hook manifests — that would
+  // trade the single-entry model for the very split it replaced. builtin /
+  // official entries ran in the boot loop above and are unaffected.
   const ensurePluginEntry = async (pluginId: string): Promise<void> => {
     if (invokedPluginIds.has(pluginId)) return;
     const pending = inFlight.get(pluginId);
@@ -353,7 +431,18 @@ export async function createBootstrapPluginEntries({
     return promise;
   };
 
-  return { ensurePluginEntry };
+  const hasPendingEntry = (pluginId: string): boolean => {
+    if (invokedPluginIds.has(pluginId)) return false;
+    const discovery = discoveryMap.get(pluginId);
+    if (!discovery) return false;
+    // builtin/official entries ran at boot, so a miss is a genuine 404.
+    if (getPluginTrustInfo(pluginId, discovery.source).autoLoad) return false;
+    const manifests = manifestCache.get(pluginId);
+    if (!manifests) return false;
+    return manifests.some((parsed) => Boolean(parsed.manifest.entry));
+  };
+
+  return { ensurePluginEntry, hasPendingEntry };
 }
 
 /** One warning per plugin still using the legacy registration fields. */

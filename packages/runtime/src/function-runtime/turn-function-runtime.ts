@@ -227,9 +227,10 @@ export async function executeFunctionRuntime({
     // never resolves) blocks the whole turn forever — timeoutMs only existed
     // for the agent path before. Promise.race subscribes to the handler
     // promise, so a post-timeout rejection is still observed (no unhandled
-    // rejection). ponytail: the losing handler keeps running detached — we
-    // unblock the turn but can't cancel it; plumb an AbortSignal into the
-    // handler ctx if detached work ever becomes a real cost.
+    // rejection). The player abort signal (ctx.signal) lets a cooperative
+    // handler cancel its own in-flight provider work; the race here only
+    // unblocks the turn — the losing handler keeps running detached unless it
+    // observes the signal.
     const handlerPromise = loaded.handler({
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -257,6 +258,7 @@ export async function executeFunctionRuntime({
         : {}),
       ...(pluginDataHandle ? { pluginData: pluginDataHandle } : {}),
       ...(loggerHandle ? { logger: loggerHandle } : {}),
+      ...(deps.turnControl?.signal ? { signal: deps.turnControl.signal } : {}),
     });
     output = await Promise.race([
       handlerPromise,

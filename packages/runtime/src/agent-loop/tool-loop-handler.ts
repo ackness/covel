@@ -44,7 +44,7 @@ export interface RequestLLMResponseOptions {
   readonly deadline: number;
   readonly useStreaming: boolean;
   readonly reportRetry: (info: RetryInfo) => void;
-  /** Called once per forwarded text delta; returns the running delta count. */
+  /** Called once per forwarded text delta; the DeltaForwarder owns the count. */
   readonly onStreamDelta: (textDelta: string) => Promise<void>;
 }
 

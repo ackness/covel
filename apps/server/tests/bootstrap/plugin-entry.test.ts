@@ -287,6 +287,155 @@ export default (covel) => {
     warn.mockRestore();
   });
 
+  it("scopes a community entry's toolkit.store to its own pluginId (M2)", async () => {
+    // The entry forges a foreign pluginId when writing plugin-data. A scoped
+    // store must clamp the write to the entry's own pluginId so it can't reach
+    // another plugin's namespace.
+    const p = writePlugin(
+      "entry-scope-a",
+      `
+export default async function (covel) {
+  await covel.toolkit.store.setPluginData({
+    id: "forged",
+    sessionId: "s1",
+    pluginId: "victim-plugin",
+    namespace: "ns",
+    key: "k",
+    value: { secret: 1 },
+    createdAt: "t",
+    updatedAt: "t",
+  });
+}
+`,
+      { source: "community" },
+    );
+    const params = makeParams([p]);
+    const { ensurePluginEntry } = await createBootstrapPluginEntries(params);
+    await ensurePluginEntry("entry-scope-a");
+
+    // Nothing landed under the forged victim pluginId…
+    expect(
+      await params.store.getPluginData("s1", "victim-plugin", "ns", "k"),
+    ).toBeNull();
+    // …the write was clamped to the entry's own pluginId.
+    const own = await params.store.getPluginData(
+      "s1",
+      "entry-scope-a",
+      "ns",
+      "k",
+    );
+    expect(own?.value).toEqual({ secret: 1 });
+    expect(own?.pluginId).toBe("entry-scope-a");
+  });
+
+  it("leaves a builtin entry's toolkit.store unscoped (parity with tools.local)", async () => {
+    const p = writePlugin(
+      "entry-raw-a",
+      `
+export default async function (covel) {
+  await covel.toolkit.store.setPluginData({
+    id: "raw",
+    sessionId: "s1",
+    pluginId: "other-plugin",
+    namespace: "ns",
+    key: "k",
+    value: { v: 2 },
+    createdAt: "t",
+    updatedAt: "t",
+  });
+}
+`,
+    );
+    const params = makeParams([p]);
+    await createBootstrapPluginEntries(params);
+
+    // Builtin trust: the raw store honoured the caller-supplied pluginId.
+    const row = await params.store.getPluginData(
+      "s1",
+      "other-plugin",
+      "ns",
+      "k",
+    );
+    expect(row?.value).toEqual({ v: 2 });
+  });
+
+  it("clamps a community entry that declares trustLevel:builtin down to community (LOW)", async () => {
+    const p = writePlugin(
+      "entry-clamp-a",
+      `
+export default function (covel) {
+  covel.registerRpc("act", async () => ({ ok: true }), { trustLevel: "builtin" });
+}
+`,
+      { source: "community" },
+    );
+    const params = makeParams([p]);
+    const { ensurePluginEntry } = await createBootstrapPluginEntries(params);
+    await ensurePluginEntry("entry-clamp-a");
+
+    const entry = params.rpcRegistry.getPluginAction("entry-clamp-a", "act");
+    expect(entry?.trustLevel).toBe("community");
+  });
+
+  it("dedupes concurrent ensurePluginEntry calls — factory runs once (LOW)", async () => {
+    const p = writePlugin(
+      "entry-inflight-a",
+      `
+let calls = 0;
+export default async function (covel) {
+  calls += 1;
+  await Promise.resolve();
+  covel.registerTool(
+    covel.toolkit.tool({
+      name: "inflight-tool-" + calls,
+      description: "d",
+      parameters: covel.toolkit.z.object({}),
+      async execute() { return { _text: "ok" }; },
+    }),
+  );
+}
+`,
+      { source: "community" },
+    );
+    const params = makeParams([p]);
+    const { ensurePluginEntry } = await createBootstrapPluginEntries(params);
+
+    // Invoke twice without awaiting the first — the second must share the
+    // in-flight promise, not start a second factory run.
+    await Promise.all([
+      ensurePluginEntry("entry-inflight-a"),
+      ensurePluginEntry("entry-inflight-a"),
+    ]);
+
+    expect(params.toolMap.has("inflight-tool-1")).toBe(true);
+    expect(params.toolMap.has("inflight-tool-2")).toBe(false);
+  });
+
+  it("hasPendingEntry: true for a deferred community entry, false once activated", async () => {
+    const community = writePlugin(
+      "entry-pending-a",
+      `export default (covel) => { covel.registerRpc("a", async () => 1); };`,
+      { source: "community" },
+    );
+    const builtin = writePlugin(
+      "entry-pending-b",
+      `export default (covel) => { covel.registerRpc("b", async () => 1); };`,
+    );
+    const params = makeParams([community, builtin]);
+    const { ensurePluginEntry, hasPendingEntry } =
+      await createBootstrapPluginEntries(params);
+
+    // Community entry not run yet → pending.
+    expect(hasPendingEntry("entry-pending-a")).toBe(true);
+    // Builtin entry ran at boot → never pending.
+    expect(hasPendingEntry("entry-pending-b")).toBe(false);
+    // Unknown plugin → not pending.
+    expect(hasPendingEntry("nope")).toBe(false);
+
+    await ensurePluginEntry("entry-pending-a");
+    expect(hasPendingEntry("entry-pending-a")).toBe(false);
+  });
+
   it("warns once per plugin still using legacy registration fields", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const legacy = writePlugin("entry-legacy-a", null);

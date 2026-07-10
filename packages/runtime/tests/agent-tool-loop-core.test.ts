@@ -346,6 +346,7 @@ describe("runAgentToolLoop core", () => {
 
   it("abort mid-stream: bypasses the salvage path — no partial narrative survives", async () => {
     const controller = new AbortController();
+    const { emitter, types } = recordingEmitter();
     const llm: LLMAdapter = {
       generate: async () => prose("fallback"),
       stream: async function* (): AsyncIterable<LLMStreamEvent> {
@@ -364,10 +365,16 @@ describe("runAgentToolLoop core", () => {
         deps: {
           toolExecutor: undefined,
           onDelta: async () => {},
+          emitter,
           turnControl: { signal: controller.signal },
         },
       }),
     ).rejects.toThrow(TurnAbortedError);
+    // Even though the abort short-circuits salvage/retry, the `llm.calling`
+    // must still be paired with an `llm.responded` (error) so trace-viewer
+    // pairing does not break.
+    const llmEvents = types.filter((t) => t.startsWith("llm."));
+    expect(llmEvents).toEqual(["llm.calling", "llm.responded"]);
   });
 
   it("steering: story runtimes merge queued interjections before the next LLM call", async () => {
