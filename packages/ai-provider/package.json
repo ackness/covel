@@ -19,6 +19,7 @@
   "dependencies": {
     "@covel/shared": "workspace:*",
     "smol-toml": "^1.6.1",
+    "undici": "^7.28.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

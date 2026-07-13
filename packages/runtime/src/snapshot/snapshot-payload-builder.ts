@@ -5,8 +5,8 @@
  * or restore. Produces a `SnapshotPayload` from live store reads at the
  * moment of capture.
  *
- * Auto-snapshots are driven by the turn-executor; manual and fork snapshots
- * by the server routes.
+ * Automatic snapshots are captured by the server after proposal commit;
+ * manual and fork snapshots are captured by the server routes as well.
  *
  * Session lorebook entries (FU-4 close-out): included once the store
  * exposes `listSessionLorebookEntries` (added in S3-T2). World- and
@@ -39,6 +39,11 @@ export async function buildSnapshotPayload(
   sessionId: string,
   turnId: string,
 ): Promise<SnapshotPayload> {
+  const session = await store.getSession(sessionId);
+  if (!session) {
+    throw new Error(`Session not found while building snapshot: ${sessionId}`);
+  }
+
   // Characters
   const characters: readonly CharacterRecord[] =
     await store.listCharacters(sessionId);
@@ -102,8 +107,17 @@ export async function buildSnapshotPayload(
   );
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     turnId,
+    session: {
+      status: session.status,
+      turnCount: session.turnCount,
+      preGameCompleted: session.preGameCompleted,
+      locale: session.locale,
+      activePlugins: session.activePlugins,
+      presetId: session.presetId,
+      runtimeModelOverrides: session.runtimeModelOverrides,
+    },
     characters,
     stateEntries,
     pluginData,

@@ -88,5 +88,8 @@ export type {
   SuspensionRecord,
   SnapshotRecord,
   SnapshotPayload,
+  SnapshotPayloadV1,
+  SnapshotPayloadV2,
+  SnapshotSessionState,
   SnapshotKind,
 } from "./types.js";

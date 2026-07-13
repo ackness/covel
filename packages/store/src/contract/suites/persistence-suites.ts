@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type {
   CharacterRecord,
   DataStore,
+  SnapshotPayloadV2,
   StateEntryRecord,
 } from "../../types.js";
 import {
@@ -19,6 +20,7 @@ import {
   makeSessionSummary,
   makeSnapshot,
   makeSnapshotPayload,
+  makeSnapshotPayloadV2,
   makeStateChange,
   makeStateEntry,
   makeStateSchema,
@@ -426,6 +428,39 @@ export function registerPersistenceStoreSuites(
       expect(result!.payload.pluginData[0].value).toEqual({ a: 1 });
       expect(result!.payload.workingMemory[0].scope).toBe("player");
       expect(result!.payload.messagesCursor).toBe("tm-last-abc");
+    });
+
+    it("should round-trip a V2 payload's session lifecycle state", async () => {
+      const payload = makeSnapshotPayloadV2();
+      const snap = makeSnapshot({ sessionId: "sess-snap-v2", payload });
+      await store.saveSnapshot(snap);
+
+      const result = (await store.getSnapshot(snap.id))!
+        .payload as SnapshotPayloadV2;
+      expect(result.schemaVersion).toBe(2);
+      expect(result.session).toEqual(payload.session);
+    });
+
+    it("should keep optional V2 session fields absent after round-trip", async () => {
+      // presetId / runtimeModelOverrides are optional — JSON serialisation
+      // must not resurrect them as null (store-backend parity contract).
+      const payload = makeSnapshotPayloadV2({
+        session: {
+          status: "paused",
+          turnCount: 0,
+          preGameCompleted: [],
+          locale: "en-US",
+          activePlugins: [],
+        },
+      });
+      const snap = makeSnapshot({ sessionId: "sess-snap-v2", payload });
+      await store.saveSnapshot(snap);
+
+      const result = (await store.getSnapshot(snap.id))!
+        .payload as SnapshotPayloadV2;
+      expect(result.session.presetId).toBeUndefined();
+      expect(result.session.runtimeModelOverrides).toBeUndefined();
+      expect(result.session.status).toBe("paused");
     });
 
     it('should record parentId for kind="fork" snapshots', async () => {

@@ -423,6 +423,139 @@ describe("POST /api/sessions/:id/plugin-rpc (PR-3)", () => {
   });
 });
 
+// ── Action-level deferred community entry (H2) ───────────────────────────
+//
+// A community plugin that migrated its rpc actions to a deferred `entry`
+// module has NO registered declaration until the entry runs, and community
+// entry code must not run before the approval gate clears. So an unregistered
+// action on such a plugin must route through the gate (approval-required),
+// not hard-404. After approval, activation runs the entry and the action
+// dispatches; a genuinely-unknown action 404s once the entry is active.
+
+describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", () => {
+  const PLUGIN_ID = "community-entry-plug";
+
+  function setupEntry(): {
+    app: Hono;
+    store: DataStore;
+    registry: PluginRpcRegistry;
+    gate: RpcApprovalGate;
+    activateCalls: () => number;
+  } {
+    const store = createMemoryStore();
+    const registry = createPluginRpcRegistry();
+    const executor = createRpcExecutor({
+      registry,
+      loadHandler: async () => async (payload) => ({ echoed: payload }),
+    });
+    const gate = createRpcApprovalGate();
+    let activated = false;
+    let activateCount = 0;
+    // Simulates activatePluginServerCode: running the entry registers the
+    // action into the rpc registry. Idempotent.
+    const activate = async (pluginId: string): Promise<void> => {
+      activateCount += 1;
+      if (pluginId === PLUGIN_ID && !activated) {
+        activated = true;
+        registry.registerPluginHandler(
+          PLUGIN_ID,
+          "entry-action",
+          async (payload) => ({ handled: payload }),
+          {},
+          "community",
+        );
+      }
+    };
+    // Pending until the entry has run (community, has entry, not yet invoked).
+    const hasPendingEntry = (pluginId: string): boolean =>
+      pluginId === PLUGIN_ID && !activated;
+
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      c.set("store", store);
+      c.set("rpcExecutor", executor);
+      c.set("rpcRegistry", registry);
+      c.set("rpcApprovalGate", gate);
+      c.set("pluginRegistry", createPluginRegistry());
+      c.set("hasPendingPluginEntry", hasPendingEntry);
+      c.set("activatePluginLocalTools", activate);
+      await next();
+    });
+    app.route("/api/sessions", pluginRpcRoutes);
+    return { app, store, registry, gate, activateCalls: () => activateCount };
+  }
+
+  function call(app: Hono, action: string) {
+    return app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pluginId: PLUGIN_ID, action, payload: { n: 1 } }),
+    });
+  }
+
+  it("routes an entry-registered action through the approval gate instead of 404", async () => {
+    const { app, store, registry, activateCalls } = setupEntry();
+    await seedSession(store);
+
+    const res = await call(app, "entry-action");
+
+    expect(res.status).toBe(202);
+    const body = (await res.json()) as { status: string; approvalId?: string };
+    expect(body.status).toBe("approval-required");
+    expect(typeof body.approvalId).toBe("string");
+    // The community entry MUST NOT have run before approval.
+    expect(activateCalls()).toBe(0);
+    expect(registry.getPluginAction(PLUGIN_ID, "entry-action")).toBeUndefined();
+  });
+
+  it("activates the entry and dispatches after the approval is granted", async () => {
+    const { app, store, gate, registry } = setupEntry();
+    await seedSession(store);
+
+    const first = await call(app, "entry-action");
+    const { approvalId } = (await first.json()) as { approvalId: string };
+    gate.decide({
+      approvalId,
+      decision: "allow",
+      scope: "session",
+      decidedAt: new Date().toISOString(),
+    });
+
+    const second = await call(app, "entry-action");
+    expect(second.status).toBe(200);
+    const body = (await second.json()) as {
+      status: string;
+      result: { handled: { n: number } };
+    };
+    expect(body.status).toBe("ok");
+    expect(body.result).toEqual({ handled: { n: 1 } });
+    // Entry ran → action now registered.
+    expect(registry.getPluginAction(PLUGIN_ID, "entry-action")).toBeDefined();
+  });
+
+  it("404s a genuinely-unknown action once the entry is active", async () => {
+    const { app, store, gate } = setupEntry();
+    await seedSession(store);
+
+    // Activate the entry via a known action first.
+    const first = await call(app, "entry-action");
+    const { approvalId } = (await first.json()) as { approvalId: string };
+    gate.decide({
+      approvalId,
+      decision: "allow",
+      scope: "session",
+      decidedAt: new Date().toISOString(),
+    });
+    await call(app, "entry-action");
+
+    // Now the entry is active; a never-registered action is a real 404.
+    const res = await call(app, "does-not-exist");
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe("unknown-action");
+  });
+});
+
 // ── Runtime-mode integration tests (plugin-rpc-runtime-pipeline M8b) ─────
 
 type FakeLlm = { generate: (...a: unknown[]) => Promise<unknown> };
@@ -742,6 +875,14 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     // Sync path must NOT write anything into the reserved _jobs namespace.
     const jobs = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
     expect(jobs).toHaveLength(0);
+
+    // runManualTurn funnels through processTurnResults → saveAutoSnapshot:
+    // every manual turn must leave an auto fork point behind, same as the
+    // main /api/actions path.
+    const snapshots = await store.listSnapshots(SESSION_ID);
+    expect(
+      snapshots.filter((s) => s.kind === "auto" && s.turnId === body.turnId),
+    ).toHaveLength(1);
   });
 
   it("simulates branch-reply create/accept through API and uses the accepted candidate in the next narrator prompt", async () => {

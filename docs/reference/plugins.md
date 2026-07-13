@@ -157,7 +157,7 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 | model         | `plugin`                                                      |
 | guard         | `../../guard.js`                                              |
 | capabilities  | `[world-data-provider]`                                       |
-| tools.local   | `set-world-schema`, `set-world-entries-batch`                 |
+| tools.plugin  | `set-world-schema`, `set-world-entries-batch`                 |
 | tools.builtin | `plugin-data-get`, `plugin-data-list`                         |
 | ui.right      | `./ui/world-entries.json`, `./ui/world-schema.json`           |
 
@@ -257,7 +257,7 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 | trigger       | `scheduled`，`interval: 1`，`cooldownTurns: 1`                               |
 | input.inject  | `narrator.narrative` → `<narrator-output>`                                   |
 | model slot    | `plugin`                                                                     |
-| tools.local   | `upsert-npc-graph`（批量写节点+边）、`list-npc-graph`（列出现有图）          |
+| tools.plugin  | `upsert-npc-graph`（批量写节点+边）、`list-npc-graph`（列出现有图）          |
 | tools.builtin | `plugin-data-list`、`plugin-data-get`                                        |
 | ui.right      | `./ui/npc-graph-panel.json`                                                  |
 
@@ -306,7 +306,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | runtimeType  | `agent`（默认，LLM 驱动）                                                                                                                     |
 | trigger      | `auto`（每轮触发；`upstreamRequired: [narrator]` 保证在 narrator 失败时 skip，不会用空 `<narrator-output>` 幻觉）                             |
 | model        | `plugin`                                                                                                                                      |
-| tools.local  | `unlock-codex-entries`, `update-codex-entry`                                                                                                  |
+| tools.plugin | `unlock-codex-entries`, `update-codex-entry`                                                                                                  |
 | ui.right     | `./ui/codex-panel.json`                                                                                                                       |
 | ui.message   | `./ui/codex-message.json`                                                                                                                     |
 | input.inject | `narrator` → `narrativeOutput` → `<narrator-output>`<br>`plugin-data[entries]` → `<existing-entries>`（`format: summary`，`maxEntries: 100`） |
@@ -395,7 +395,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | priority         | 600（Narrator-downstream 层，与 codex / extractor / character-tracker 并行）                                                                                                                                      |
 | trigger          | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                                                                                                                    |
 | model            | `plugin`                                                                                                                                                                                                          |
-| tools.local      | `generate-guide`                                                                                                                                                                                                  |
+| tools.plugin     | `generate-guide`                                                                                                                                                                                                  |
 | ui.message       | `./ui/action-guide-block.json`                                                                                                                                                                                    |
 | input.inject     | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（列出两个已知叙事引擎，缺席的解析为空，由在场的那个填充）                                                                             |
 | upstreamRequired | `[{ capability: narrative-engine }]` — 按 capability 发现当前模式的叙事引擎，传统模式下解析为 `narrator`、对话模式下解析为 `chat-mode-narrator`；该引擎失败时仍 skip。**引擎无关**，因此 guide 在两种模式下都可用 |
@@ -635,7 +635,7 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 | tags             | `mode:dialogue` · `role:quick-reply`                                                                    |
 | input.inject     | `chat-mode-narrator` + `narrator` → `narrativeOutput` → `<narrator-output>`                             |
 | upstreamRequired | `[{ capability: narrative-engine }]` — 引擎无关，按 capability 发现当前模式的叙事引擎；两种模式下都可用 |
-| tools.local      | `generate-scene-prompts`                                                                                |
+| tools.plugin     | `generate-scene-prompts`                                                                                |
 | ui.message       | `scene-prompts-block.json`                                                                              |
 
 ---
@@ -773,7 +773,9 @@ plugins/<plugin-id>/
 ├── PLUGIN.md              # 必需：frontmatter 元信息 + Markdown 提示词
 ├── package.json           # 必需：workspace 依赖声明
 ├── vitest.config.ts       # 可选：测试配置
-├── tools/                 # 可选：本地工具实现
+├── server/                # 可选：统一服务端入口（entry 字段指向）
+│   └── index.js           #   export default function (covel) { ... }
+├── tools/                 # 可选：本地工具实现（由 server/index.js 导入注册）
 │   └── my-tool.ts
 ├── tests/                 # 可选：测试文件
 │   └── my-plugin.test.ts
@@ -850,9 +852,52 @@ description: # I18nText：一句话简介
 
 `function` 类型 runtime 需要额外声明 `handler` 字段指向 JS 模块路径。
 
-### wires（媒体厂商 wire 注册）
+### entry（统一服务端入口）
 
-`wires` 指向一个**插件根目录相对**的 JS 模块（同 `tools.local` 的解析约定），default export `{ image?, speech?, transcription? }` 三组 wire 数组，或一个接受 `{ fetchWithRetry, validateBaseUrl }` 注入的工厂函数。框架加载后把每个 wire 以 `<pluginId>/<wireId>` 命名空间注册进 `@covel/ai-provider` 的对应 registry，llm.toml slot 通过 `providerRequestMetadata.imageWire / speechWire / transcriptionWire` 选中它。
+`entry` 指向一个**插件根目录相对**的 JS 模块，default 导出一个工厂函数（同步或异步），接收统一的 `PluginAPI` facade（约定参数名 `covel`），在函数体内命令式注册插件的全部服务端能力：
+
+```yaml
+entry: ./server/index.js # 整个插件声明一次（多 runtime 声明同一路径会去重，约定写在根 PLUGIN.md）
+```
+
+```js
+// server/index.js
+export default function (covel) {
+  // 本地工具（等价旧 tools.local；toolkit 即旧工厂注入包 { tool, z, shortId, shortIdBatch, withPendingProposals, store }）
+  covel.registerTool(
+    covel.toolkit.tool({
+      name: "my-tool",
+      description: "...",
+      parameters: covel.toolkit.z.object({}),
+      execute,
+    }),
+  );
+  // 生命周期 hook（等价旧 hooks 字段；16 事件语义不变，options 支持 match 谓词 / timeoutMs / enforce）
+  covel.on("PostLLMResponse", handler, { enforce: "post" });
+  // RPC action（等价旧 rpc 字段；handler 内联，信任等级仍按插件来源钳制）
+  covel.registerRpc("my-action", handler, { description: "..." });
+  // 媒体 wire（等价旧 wires 字段；仍以 <pluginId>/<wireId> 命名空间注册，SSRF 防护经 covel.http 注入）
+  covel.registerWires({ image: [myWire] });
+}
+```
+
+- **信任门控**与 local tools 一致：builtin/official 在启动时执行 entry；community 延迟到插件激活（`ensurePluginEntry`，与 runtime 加载同刻）。
+- entry 抛错 / 非函数导出 / 路径逃逸只 warn 跳过，不影响启动；工厂每插件只执行一次（幂等）。
+- **agent runtime 暴露给 LLM 的工具**仍需在各 runtime manifest 声明：entry 注册的工具用 `tools.plugin`（名字列表）声明可见性，替代旧 `tools.local` 的路径列表：
+
+```yaml
+tools:
+  plugin: # entry 注册的工具名
+    - my-tool
+  builtin: # builtin 启用列表（不变）
+    - plugin-data-get
+```
+
+> **弃用说明**：`tools.local` / `hooks` / `rpc` / `wires` 四个 frontmatter 注册字段自本版本起弃用（启动时每插件 warn 一次），保留一个发布周期后移除。内置插件已全部迁移到 `entry`。
+
+### wires（媒体厂商 wire 注册，已弃用 — 改用 entry 的 `covel.registerWires`）
+
+`wires` 指向一个**插件根目录相对**的 JS 模块（同旧 `tools.local` 的解析约定），default export `{ image?, speech?, transcription? }` 三组 wire 数组，或一个接受 `{ fetchWithRetry, validateBaseUrl }` 注入的工厂函数。框架加载后把每个 wire 以 `<pluginId>/<wireId>` 命名空间注册进 `@covel/ai-provider` 的对应 registry，llm.toml slot 通过 `providerRequestMetadata.imageWire / speechWire / transcriptionWire` 选中它。
 
 ```yaml
 wires: lib/wires.js # 整个插件声明一次即可（多 runtime 声明同一路径会去重）
@@ -989,9 +1034,9 @@ memoryBlocks:
       en: Discovered clues, physical evidence, and their links to suspects.
 ```
 
-### hooks
+### hooks（frontmatter 声明式，已弃用 — 改用 entry 的 `covel.on`）
 
-`hooks` 声明生命周期处理器。`handler` 路径相对插件目录解析，首次触发时懒加载。
+`hooks` 声明生命周期处理器。`handler` 路径相对插件目录解析，首次触发时懒加载。新代码请在 [entry](#entry统一服务端入口) 模块里用 `covel.on(event, handler, { match?, timeoutMs?, enforce? })` 注册（`match` 为谓词函数而非浅层等值 map）；事件表与执行语义两种方式完全一致。
 
 ```yaml
 hooks:
@@ -1231,9 +1276,9 @@ postHistory:
   content: Always respond in valid markdown. Never break character.
 ```
 
-### rpc(PR-3 插件 RPC 通道)
+### rpc(PR-3 插件 RPC 通道，frontmatter 声明式已弃用 — 改用 entry 的 `covel.registerRpc`)
 
-声明插件暴露给 `POST /api/sessions/:id/plugin-rpc` 的结构化 action,供前端或外部代理用统一通道调用。每个 entry 是一个 RPC handler 模块的相对路径。
+声明插件暴露给 `POST /api/sessions/:id/plugin-rpc` 的结构化 action,供前端或外部代理用统一通道调用。每个 entry 是一个 RPC handler 模块的相对路径。新代码请在 [entry](#entry统一服务端入口) 模块里用 `covel.registerRpc(action, handler, { description?, streaming?, trustLevel? })` 内联注册；路由、审批门与信任钳制语义不变。
 
 | 字段                   | 类型                                               | 说明                                                                                                                   |
 | ---------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |

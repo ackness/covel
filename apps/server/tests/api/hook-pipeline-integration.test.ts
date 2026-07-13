@@ -22,7 +22,11 @@ import {
 import { createHookPipeline, type HookPipeline } from "@covel/runtime";
 import { actionRoutes } from "../../src/routes/api/actions.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
-import { makeFakeLLM, makeFakeLoadedRuntime } from "./__helpers/fake-llm.js";
+import {
+  makeFakeLLM,
+  makeFakeLoadedRuntime,
+  type FakeLlmCall,
+} from "./__helpers/fake-llm.js";
 
 function makeSummary(overrides: Partial<PluginSummary> = {}): PluginSummary {
   return {
@@ -89,6 +93,7 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
   let registry: PluginRegistry;
   let app: Hono;
   let hookPipeline: HookPipeline;
+  let llmCalls: readonly FakeLlmCall[];
   const sessionId = "sess-hooks";
   const RUNTIME_ID = "fake-narrator";
   const NARRATIVE = "A quiet market hums at dusk.";
@@ -129,7 +134,9 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
 
     hookPipeline = createHookPipeline();
 
-    const { llm } = makeFakeLLM(NARRATIVE);
+    const fakeLlm = makeFakeLLM(NARRATIVE);
+    const { llm } = fakeLlm;
+    llmCalls = fakeLlm.calls;
     const eventBus = createEventBus(store);
     const sessionLock = createInProcessSessionLock();
 
@@ -263,5 +270,80 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
       (m) => m.role === "assistant" && m.content.includes(NARRATIVE),
     );
     expect(assistantNarratives).toHaveLength(0);
+  });
+
+  it("keeps a second action out of runtime execution until the first commit finishes", async () => {
+    let releaseCommit!: () => void;
+    let markCommitStarted!: () => void;
+    const commitStarted = new Promise<void>((resolve) => {
+      markCommitStarted = resolve;
+    });
+    let blocked = false;
+    hookPipeline.register({
+      id: "test:PreStateCommit:block-first",
+      event: "PreStateCommit",
+      handler: async () => {
+        if (blocked) return { action: "continue" };
+        blocked = true;
+        markCommitStarted();
+        await new Promise<void>((resolve) => {
+          releaseCommit = resolve;
+        });
+        return { action: "continue" };
+      },
+    });
+
+    const post = (requestId: string) =>
+      app.request("/api/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId,
+          type: "send_message",
+          sessionId,
+          payload: { content: requestId },
+        }),
+      });
+
+    const firstResponse = await post("commit-lock-1");
+    const firstDrain = drainActionStream(firstResponse);
+    await commitStarted;
+    expect(llmCalls).toHaveLength(1);
+
+    const secondResponse = await post("commit-lock-2");
+    const secondDrain = drainActionStream(secondResponse);
+    for (let i = 0; i < 20; i += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    expect(llmCalls).toHaveLength(1);
+
+    releaseCommit();
+    await Promise.all([firstDrain, secondDrain]);
+    expect(llmCalls).toHaveLength(2);
+  });
+
+  it("captures committed narrative state in the automatic snapshot", async () => {
+    const res = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-auto-snapshot",
+        type: "send_message",
+        sessionId,
+        payload: { content: "snapshot this turn" },
+      }),
+    });
+    await drainActionStream(res);
+
+    const snapshots = await store.listSnapshots(sessionId);
+    const auto = snapshots.find((snapshot) => snapshot.kind === "auto");
+    expect(auto).toBeDefined();
+    const turnMessages = await store.listTurnMessages(sessionId);
+    const committedNarrative = turnMessages.find(
+      (message) =>
+        message.role === "assistant" && message.content.includes(NARRATIVE),
+    );
+    expect(committedNarrative).toBeDefined();
+    expect(auto?.payload.messagesCursor).toBe(committedNarrative?.id);
   });
 });

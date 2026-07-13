@@ -14,6 +14,7 @@ import type {
 } from "@covel/context";
 import type { EventBus } from "@covel/events";
 import type { LLMAdapter } from "../llm/llm-adapter.js";
+import type { TurnControl } from "./turn-control.js";
 import type { ToolExecutor } from "../agent-loop/tool-executor.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import type { MediaStoreLike } from "../function-runtime/runtime-media-context.js";
@@ -73,6 +74,12 @@ export interface AgentLoopDeps {
    * Optional for backward compatibility with tests and embedders.
    */
   readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
+  /**
+   * Player mid-turn control (roadmap W4): abort signal + steering queue.
+   * Absent on server-initiated turns (background followers, plugin-rpc) and
+   * in test harnesses — all control sites are optional-chained.
+   */
+  readonly turnControl?: TurnControl;
 }
 
 export interface TurnExecutorDeps extends AgentLoopDeps {

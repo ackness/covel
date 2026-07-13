@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PluginRuntimeUtils } from "@covel/plugin-loader";
 import {
   createRuntimeMediaContext,
@@ -311,6 +311,36 @@ describe("createRuntimeMediaContext", () => {
       media.ingestUrl("https://ok.example.test/start"),
     ).rejects.toThrow(/URL rejected/);
     expect(store.puts).toHaveLength(0);
+  });
+
+  it("uses a separate guarded fetch for every redirect hop", async () => {
+    const store = createStore();
+    const fetchWithRetry = vi
+      .fn<PluginRuntimeUtils["fetchWithRetry"]>()
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: { location: "https://cdn.example.test/image.png" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(pngBytes(), { headers: { "content-type": "image/png" } }),
+      );
+    const utils: PluginRuntimeUtils = {
+      validateBaseUrl: () => ({ ok: true }),
+      fetchWithRetry,
+    };
+    const media = createRuntimeMediaContext(store, utils, TEST_OWNER);
+
+    await media.ingestUrl("https://origin.example.test/start");
+
+    expect(fetchWithRetry).toHaveBeenCalledTimes(2);
+    expect(
+      fetchWithRetry.mock.calls.map(([input]) => input.toString()),
+    ).toEqual([
+      "https://origin.example.test/start",
+      "https://cdn.example.test/image.png",
+    ]);
   });
 
   it("enforces maxBytes while reading the response body", async () => {

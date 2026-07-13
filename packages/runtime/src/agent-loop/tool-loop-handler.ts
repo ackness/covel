@@ -44,7 +44,7 @@ export interface RequestLLMResponseOptions {
   readonly deadline: number;
   readonly useStreaming: boolean;
   readonly reportRetry: (info: RetryInfo) => void;
-  /** Called once per forwarded text delta; returns the running delta count. */
+  /** Called once per forwarded text delta; the DeltaForwarder owns the count. */
   readonly onStreamDelta: (textDelta: string) => Promise<void>;
 }
 
@@ -81,6 +81,8 @@ export async function requestLLMResponse(
     emitter: deps.emitter,
     runtimeId: manifest.name,
     pluginId: manifest.pluginId,
+    // W4: player abort cuts the in-flight call/stream and bypasses salvage.
+    abortSignal: deps.turnControl?.signal,
   } as const;
 
   if (useStreaming) {

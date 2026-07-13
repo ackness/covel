@@ -32,9 +32,10 @@ input:
       from: chat-mode-narrator
       field: narrativeOutput
       as: "<narrator-output>"
+entry: ./server/index.js
 tools:
-  local:
-    - ./tools/generate-guide.js
+  plugin:
+    - generate-guide
 ui:
   message:
     - ./ui/action-guide-block.json

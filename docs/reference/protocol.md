@@ -64,13 +64,20 @@
 
 ### 执行生命周期事件
 
-| 事件类型              | 方向 | 描述              | 负载                                                                                                                                                             |
-| --------------------- | ---- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `execution.started`   | S→C  | 回合执行开始      | `{ runtimeCount }`                                                                                                                                               |
-| `runtime.started`     | S→C  | 单个 runtime 开始 | `{ runtimeId, pluginId, label }`                                                                                                                                 |
-| `runtime.completed`   | S→C  | 单个 runtime 完成 | `{ runtimeId, pluginId, durationMs }`                                                                                                                            |
-| `runtime.failed`      | S→C  | 单个 runtime 失败 | `{ runtimeId, pluginId, error }`                                                                                                                                 |
-| `execution.completed` | S→C  | 回合执行完成      | `{ runtimeCount, resultCount, durationMs, abortReason? }`（`abortReason` 仅在回合于产出前被中止时出现，如 cost-gate 硬预算上限——前端据此提示玩家而非静默空回合） |
+| 事件类型              | 方向 | 描述              | 负载                                                                                                                                                                                            |
+| --------------------- | ---- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execution.started`   | S→C  | 回合执行开始      | `{ runtimeCount }`                                                                                                                                                                              |
+| `runtime.started`     | S→C  | 单个 runtime 开始 | `{ runtimeId, pluginId, label }`                                                                                                                                                                |
+| `runtime.completed`   | S→C  | 单个 runtime 完成 | `{ runtimeId, pluginId, durationMs }`                                                                                                                                                           |
+| `runtime.failed`      | S→C  | 单个 runtime 失败 | `{ runtimeId, pluginId, error }`                                                                                                                                                                |
+| `execution.completed` | S→C  | 回合执行完成      | `{ runtimeCount, resultCount, durationMs, abortReason? }`（`abortReason` 仅在回合被中止时出现：cost-gate 硬预算上限、玩家 abort（值 `"aborted-by-player"`）等——前端据此提示玩家而非静默空回合） |
+
+### 回合中控制（W4：steer / abort）
+
+回合中控制走 HTTP 端点而非 SSE 事件（见 [api.md § 回合中控制](./api.md#回合中控制w4)）：
+
+- **steer**（`POST /api/sessions/:id/steer`）：玩家在回合进行中插话。消息进入服务端 per-session 队列，story runtime 在下一次 LLM 调用前把队列并入实时 transcript；若插话在最终响应流式期间才到达，story runtime 会在收尾前追加一步 LLM 调用消化它（受 maxSteps 约束）。同时持久化为 user 消息（后续回合的历史自然包含）；持久化失败时撤回队列项并返回 500，保证队列与历史一致。客户端本地回显即可，无新增 SSE 事件。
+- **abort**（`POST /api/sessions/:id/abort`）：触发回合级 AbortSignal——重试层立刻切断在途 LLM 调用/流（玩家 abort 不可重试、**绕过流式 salvage**，不会把半截叙事当作结果提交），executor 停止调度后续 runtime 组并跳过事件链。被中止的 runtime 以 failed 上报（`runtime.failed`），其提案不产出；abort 前已完成的 runtime 结果照常提交。当次 `execution.completed` 带 `abortReason: "aborted-by-player"`（常量 `PLAYER_ABORT_REASON`，定义于 `@covel/shared`）。客户端收到该值时把它当作玩家主动的终态而非错误：丢弃该回合未提交的流式占位消息（服务端从不提交半截叙事，保留会造成刷新后消失的“幽灵文本”），不显示错误/重试提示；其他 `abortReason`（如 cost-gate）仍按错误提示展示。
 
 ### 会话生命周期事件
 

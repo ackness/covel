@@ -27,6 +27,12 @@ export type {
   TurnExecutorOptions,
   ResumeSuspendedRuntimeOptions,
 } from "./turn-executor/turn-executor.js";
+export {
+  PLAYER_ABORT_REASON,
+  TurnAbortedError,
+  isTurnAbortedError,
+} from "./turn-executor/turn-control.js";
+export type { TurnControl } from "./turn-executor/turn-control.js";
 export { createRuntimeMediaContext } from "./function-runtime/runtime-media-context.js";
 export type { MediaStoreLike } from "./function-runtime/runtime-media-context.js";
 
@@ -113,6 +119,8 @@ export type { SnapshotStore } from "./snapshot/snapshot-builder.js";
 
 // ── Snapshot Payload Builder (S4-T2) ────────────────────────────
 export { buildSnapshotPayload } from "./snapshot/snapshot-payload-builder.js";
+export { saveAutoSnapshot } from "./snapshot/auto-snapshot.js";
+export type { SaveAutoSnapshotOptions } from "./snapshot/auto-snapshot.js";
 
 // ── Types ────────────────────────────────────────────────────────
 export type { TriggerContext, ScheduledGroup } from "./types.js";

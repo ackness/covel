@@ -100,41 +100,6 @@ async function persistTurnResult(
     durationMs: turnResult.durationMs,
     createdAt: turnResult.timestamp ?? now,
   });
-
-  try {
-    const { buildSnapshotPayload } =
-      await import("../snapshot/snapshot-payload-builder.js");
-    const payload = await buildSnapshotPayload(
-      deps.store,
-      input.sessionId,
-      input.turnId,
-    );
-    const snapshotId = crypto.randomUUID();
-    await deps.store.saveSnapshot({
-      id: snapshotId,
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      kind: "auto",
-      payload,
-      createdAt: turnResult.timestamp ?? now,
-    });
-    emitSubEvent(
-      deps.eventBus,
-      "session",
-      "state.snapshot.created",
-      input.sessionId,
-      {
-        turnId: input.turnId,
-        snapshotId,
-        kind: "auto",
-      },
-    );
-  } catch (err) {
-    console.warn(
-      `[turn-executor] auto snapshot failed for session ${input.sessionId} turn ${input.turnId}:`,
-      err instanceof Error ? err.message : String(err),
-    );
-  }
 }
 
 export async function finalizeTurnResult({

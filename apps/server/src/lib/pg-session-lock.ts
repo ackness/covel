@@ -42,7 +42,7 @@
 
 import { createHash } from "node:crypto";
 import type { Sql } from "postgres";
-import type { SessionLock } from "./session-lock.js";
+import { SessionLockTimeoutError, type SessionLock } from "./session-lock.js";
 
 export interface PgAdvisorySessionLockOptions {
   /**
@@ -156,7 +156,7 @@ async function acquireWithTimeout(
     `;
     if (rows[0]?.locked) return;
     if (Date.now() - start > timeoutMs) {
-      throw new Error(
+      throw new SessionLockTimeoutError(
         `[pg-session-lock] failed to acquire lock for session ${sessionId} within ${timeoutMs}ms`,
       );
     }

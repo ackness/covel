@@ -1,6 +1,7 @@
 import {
   createTurnEmitter,
   executeTurn,
+  saveAutoSnapshot,
   type TurnExecutorDeps,
 } from "@covel/runtime";
 import type { DataStore, SessionRecord } from "@covel/store";
@@ -64,6 +65,20 @@ export function createPluginRpcRuntimeTurnRunner(
       emitter,
     });
     await resultProcessor.processAll(turnResult.runtimeResults);
+    try {
+      await saveAutoSnapshot({
+        store: ctx.store,
+        sessionId: ctx.sessionId,
+        turnId: turnResult.turnId,
+        createdAt: turnResult.timestamp,
+        eventBus: ctx.eventBus,
+      });
+    } catch (err) {
+      console.warn(
+        `[plugin-rpc] auto snapshot failed for session ${ctx.sessionId} turn ${turnResult.turnId}:`,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
   }
 
   async function runManualTurn(
@@ -94,17 +109,17 @@ export function createPluginRpcRuntimeTurnRunner(
         : {}),
     };
 
-    const result = await ctx.sessionLock.withLock(ctx.sessionId, () =>
-      executeTurn(turnInput, ctx.activeRuntimes, {
+    const result = await ctx.sessionLock.withLock(ctx.sessionId, async () => {
+      const turnResult = await executeTurn(turnInput, ctx.activeRuntimes, {
         ...ctx.deps,
         store: ctx.store,
         eventBus: ctx.eventBus,
         emitter,
         ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
-      }),
-    );
-
-    await processTurnResults(result, emitter);
+      });
+      await processTurnResults(turnResult, emitter);
+      return turnResult;
+    });
 
     return {
       turnId: args.turnId,
@@ -153,16 +168,20 @@ export function createPluginRpcRuntimeTurnRunner(
     // released, so without this they can interleave turnNumber computation,
     // state writes, and auto-snapshots with a concurrent player turn on the same
     // session (audit 2026-04-20 finding 1).
-    const turnResult = await ctx.sessionLock.withLock(ctx.sessionId, () =>
-      executeTurn(turnInput, ctx.activeRuntimes, {
-        ...ctx.deps,
-        store: ctx.store,
-        eventBus: ctx.eventBus,
-        emitter,
-        ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
-      }),
+    const turnResult = await ctx.sessionLock.withLock(
+      ctx.sessionId,
+      async () => {
+        const result = await executeTurn(turnInput, ctx.activeRuntimes, {
+          ...ctx.deps,
+          store: ctx.store,
+          eventBus: ctx.eventBus,
+          emitter,
+          ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
+        });
+        await processTurnResults(result, emitter);
+        return result;
+      },
     );
-    await processTurnResults(turnResult, emitter);
 
     return { turnResult };
   }

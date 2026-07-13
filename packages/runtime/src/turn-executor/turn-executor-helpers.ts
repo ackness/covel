@@ -63,7 +63,11 @@ export function buildToolDefinitions(
   toolExecutor: ToolExecutor,
   context?: ToolCallContext,
 ): LLMToolDefinition[] | undefined {
-  const names: string[] = [...(manifest.tools?.builtin ?? [])];
+  const names: string[] = [
+    ...(manifest.tools?.builtin ?? []),
+    // Entry-registered plugin tools are declared by name.
+    ...(manifest.tools?.plugin ?? []),
+  ];
 
   // For local tools, extract name from path (e.g., ./tools/unlock-codex-entries.ts → unlock-codex-entries)
   for (const p of manifest.tools?.local ?? []) {

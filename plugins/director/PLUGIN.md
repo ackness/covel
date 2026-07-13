@@ -17,9 +17,7 @@ capabilities:
 tags:
   - role:director
   - cost:function
-hooks:
-  - event: PostContextAssembly
-    handler: ./hooks/inject-preamble.js
+entry: ./server/index.js
 ---
 
 # Director

@@ -66,6 +66,41 @@ export function sendAction(
   return controller;
 }
 
+// -- Mid-turn player control (W4) ----------------------------------
+
+/**
+ * Interject a player message into the session's in-flight turn. The server
+ * merges it into the next LLM step of story runtimes and persists it to
+ * history. 409 (no active turn) resolves to false so callers can fall back
+ * to a normal send.
+ */
+export async function steerTurn(
+  sessionId: string,
+  message: string,
+): Promise<boolean> {
+  const res = await fetch(
+    `/api/sessions/${encodeURIComponent(sessionId)}/steer`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    },
+  );
+  return res.ok;
+}
+
+/**
+ * Abort the session's in-flight turn. Cuts the LLM stream server-side and
+ * discards uncommitted proposals. Resolves false when no turn is active.
+ */
+export async function abortTurn(sessionId: string): Promise<boolean> {
+  const res = await fetch(
+    `/api/sessions/${encodeURIComponent(sessionId)}/abort`,
+    { method: "POST" },
+  );
+  return res.ok;
+}
+
 /**
  * Trigger a custom kernel event for the given session.
  * Useful for manual plugin triggers (e.g., image generation button).

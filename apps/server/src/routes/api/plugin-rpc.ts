@@ -409,6 +409,14 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   // unknown actions surface as a 404 instead of getting parked in the
   // approval queue forever.
   //
+  // Exception (H2): a community plugin that migrated its rpc actions to a
+  // deferred `entry` module has NO registered declaration yet — community
+  // entry code must not run before the approval gate clears. So on a miss
+  // for a plugin with a pending entry we route through the gate at community
+  // trust; once the gate allows we activate the entry and let the dispatcher
+  // re-resolve. Builtin/official entries ran at boot, so their misses stay
+  // hard 404s.
+  //
   // LOW-3: framework default actions are namespace-less but still need a
   // canonical sentinel for the request shape. The dispatcher requires
   // `pluginId === "framework"` for framework defaults. Plugin-declared
@@ -418,8 +426,12 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   const pluginId = body.pluginId;
   const registry = c.get("rpcRegistry");
   const gate = c.get("rpcApprovalGate");
+  const hasPendingPluginEntry = c.get("hasPendingPluginEntry");
   let entryTrust: "builtin" | "official" | "community" = "community";
   let entryDescription: string | undefined;
+  // When true, the action belongs to a not-yet-activated community entry —
+  // activate the entry after the gate allows, then dispatch (which re-resolves).
+  let pendingEntryActivation = false;
   const pluginEntry =
     pluginId === FRAMEWORK_PLUGIN_SENTINEL
       ? undefined
@@ -442,6 +454,13 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         404,
       );
     }
+  } else if (hasPendingPluginEntry?.(pluginId)) {
+    // Deferred community entry — trust is community, no description until the
+    // entry runs. Truly-unknown actions on such a plugin make one round-trip
+    // through approval before 404ing (we can't know the action exists without
+    // running the untrusted entry, and that must wait for approval).
+    entryTrust = "community";
+    pendingEntryActivation = true;
   } else {
     return c.json(
       {
@@ -483,6 +502,14 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       },
       429,
     );
+  }
+
+  // Deferred community entry cleared the gate — activate its server code so
+  // the entry-registered handler exists before dispatch re-resolves it.
+  // No-op for already-activated plugins (idempotent). If the entry still
+  // doesn't register `action`, dispatch throws unknown-action → 404 below.
+  if (pendingEntryActivation) {
+    await c.get("activatePluginLocalTools")?.(pluginId);
   }
 
   // Action-level dispatch.

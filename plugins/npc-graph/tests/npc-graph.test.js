@@ -124,8 +124,8 @@ describe("npc-graph manifests", () => {
     // and character-tracker. The scheduler runs all four in parallel.
     expect(extractor.priority).toBe(600);
     expect(extractor.capabilities).toContain("npc-graph");
-    expect(extractor.tools?.local).toContain("./tools/upsert-npc-graph.js");
-    expect(extractor.tools?.local).toContain("./tools/list-npc-graph.js");
+    expect(extractor.tools?.plugin).toContain("upsert-npc-graph");
+    expect(extractor.tools?.plugin).toContain("list-npc-graph");
     expect(extractor.trigger?.type).toBe("scheduled");
     expect(extractor.trigger?.interval).toBe(1);
     // Main-loop band membership is enforced by priority >= 100 server-side;

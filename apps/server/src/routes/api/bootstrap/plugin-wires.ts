@@ -44,7 +44,7 @@ export interface BootstrapPluginWires {
   readonly ensurePluginWires: (pluginId: string) => Promise<void>;
 }
 
-interface WireModuleShape {
+export interface WireModuleShape {
   readonly image?: readonly ImageWire[];
   readonly speech?: readonly SpeechWire[];
   readonly transcription?: readonly TranscriptionWire[];
@@ -67,7 +67,12 @@ function hasWireShape(value: unknown, method: string): value is { id: string } {
   );
 }
 
-function registerNamespaced(
+/**
+ * Register a wire module's wires under the `<pluginId>/<wireId>` namespace.
+ * Shared by the legacy `wires` frontmatter loader below and the unified
+ * `entry` registration path (plugin-entry.ts).
+ */
+export function registerNamespaced(
   pluginId: string,
   pluginRelPath: string,
   mod: WireModuleShape,

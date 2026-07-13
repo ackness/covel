@@ -329,8 +329,17 @@ export interface PluginRelations {
 export interface ToolsConfig {
   /** Builtin tool IDs to enable. */
   readonly builtin?: readonly string[];
-  /** Relative paths to local tool modules. */
+  /**
+   * Relative paths to local tool modules.
+   * @deprecated Register tools imperatively in the unified `entry` module and
+   * list their names under `plugin` instead. Kept working for one cycle.
+   */
   readonly local?: readonly string[];
+  /**
+   * Names of entry-registered plugin tools this runtime exposes to its LLM
+   * (registration itself happens in the plugin's `entry` module).
+   */
+  readonly plugin?: readonly string[];
 }
 
 // ── User-declared plugin settings ────────────────────────────────
@@ -454,6 +463,19 @@ export interface RuntimeManifest {
    * runtime per plugin.
    */
   readonly wires?: string;
+  /**
+   * Plugin-root-relative path to a unified server entry module. Default
+   * export: `function (covel: PluginAPI) { ... }` (sync or async) that
+   * registers the plugin's server-side capabilities imperatively —
+   * `covel.registerTool()`, `covel.on(event, handler)`,
+   * `covel.registerRpc()`, `covel.registerWires()` — replacing the legacy
+   * `tools.local` / `hooks` / `rpc` / `wires` frontmatter fields (which
+   * keep working for one deprecation cycle). Declare on ONE runtime per
+   * plugin (root PLUGIN.md by convention); loaded once per plugin,
+   * trust-gated like local tools (builtin/official at boot, community on
+   * activation).
+   */
+  readonly entry?: string;
   /**
    * Relative path to a guard function module.
    * Runs before agent execution — if it returns `{ skip: true }`, the LLM call is skipped.

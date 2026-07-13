@@ -78,7 +78,7 @@ afterEach(async () => {
 });
 
 describe("bootstrap local tools", () => {
-  it("builds per-plugin tool access from builtin names and local file basenames", () => {
+  it("seeds per-plugin tool access from builtin names only — local/plugin declarations grant nothing until registration succeeds (audit A-01)", () => {
     const access = buildPluginToolAccess(
       new Map([
         [
@@ -89,6 +89,7 @@ describe("bootstrap local tools", () => {
               tools: {
                 builtin: ["plugin-data-get"],
                 local: ["tools/unlock-door.ts", "roll.mjs"],
+                plugin: ["entry-declared-tool"],
               },
             }),
           ],
@@ -98,8 +99,6 @@ describe("bootstrap local tools", () => {
 
     expect([...(access.get("plugin-a") ?? [])].sort()).toEqual([
       "plugin-data-get",
-      "roll",
-      "unlock-door",
     ]);
   });
 
@@ -238,15 +237,81 @@ describe("bootstrap local tools", () => {
     expect(toolMap.has("builtin-tool")).toBe(true);
     expect(toolMap.has("community-tool")).toBe(false);
     expect(localToolNames.has("builtin-tool")).toBe(true);
+    // Access is granted at registration time, not from the declaration —
+    // the community tool isn't loaded yet, so it isn't authorized yet.
+    expect(
+      localTools.pluginToolAccess.get("builtin-plugin")?.has("builtin-tool"),
+    ).toBe(true);
     expect(
       localTools.pluginToolAccess
         .get("community-plugin")
         ?.has("community-tool"),
-    ).toBe(true);
+    ).toBeFalsy();
 
     await localTools.activatePluginLocalTools("community-plugin");
 
     expect(toolMap.has("community-tool")).toBe(true);
     expect(localToolNames.has("community-tool")).toBe(true);
+    expect(
+      localTools.pluginToolAccess
+        .get("community-plugin")
+        ?.has("community-tool"),
+    ).toBe(true);
+  });
+
+  it("a name collision never authorizes the declaring plugin to run the victim's tool (audit A-01)", async () => {
+    const victimRoot = await makePluginRoot();
+    const attackerRoot = await makePluginRoot();
+    // Same tool name from both plugins — victim registers first (builtin),
+    // attacker's community copy collides and is skipped.
+    await writeFactoryTool(victimRoot, "shared-tool.mjs", "shared-tool");
+    await writeFactoryTool(attackerRoot, "shared-tool.mjs", "shared-tool");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    const toolMap = new Map();
+    const localToolNames = new Set<string>();
+    const localTools = await createBootstrapLocalTools({
+      discoveryMap: new Map([
+        ["victim", discovery("victim", victimRoot, "builtin")],
+        ["attacker", discovery("attacker", attackerRoot, "community")],
+      ]),
+      manifestCache: new Map([
+        [
+          "victim",
+          [
+            parsedManifest({
+              name: "victim/main",
+              tools: { local: ["shared-tool.mjs"] },
+            }),
+          ],
+        ],
+        [
+          "attacker",
+          [
+            parsedManifest({
+              name: "attacker/main",
+              // Declares the victim's tool name both ways — neither may grant access.
+              tools: { local: ["shared-tool.mjs"], plugin: ["shared-tool"] },
+            }),
+          ],
+        ],
+      ]),
+      store: createMemoryStore(),
+      toolMap,
+      localToolNames,
+    });
+
+    await localTools.activatePluginLocalTools("attacker");
+
+    expect(warn.mock.calls.some(([msg]) => msg.includes("collides"))).toBe(
+      true,
+    );
+    expect(localTools.pluginToolAccess.get("victim")?.has("shared-tool")).toBe(
+      true,
+    );
+    // The attacker must not be able to resolve the victim's implementation.
+    expect(
+      localTools.pluginToolAccess.get("attacker")?.has("shared-tool"),
+    ).toBeFalsy();
   });
 });

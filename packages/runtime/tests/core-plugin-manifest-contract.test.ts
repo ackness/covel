@@ -47,9 +47,9 @@ describe("core plugin manifest contract", () => {
       guard: "../../guard.js",
       trigger: { type: "scheduled", interval: 1, maxTriggerCount: 1 },
     });
-    expect(schemaGen.tools?.local).toEqual([
-      "./tools/set-world-schema.js",
-      "./tools/set-world-entries-batch.js",
+    expect(schemaGen.tools?.plugin).toEqual([
+      "set-world-schema",
+      "set-world-entries-batch",
     ]);
     expect(schemaGen.tools?.builtin).toEqual([
       "plugin-data-get",

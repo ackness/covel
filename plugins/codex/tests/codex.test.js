@@ -583,10 +583,10 @@ describe("codex plugin manifest", () => {
     });
   });
 
-  it("should declare unlock + update local tools but NOT plugin-data-list", () => {
-    expect(manifest.tools?.local).toEqual([
-      "./tools/unlock-codex-entries.js",
-      "./tools/update-codex-entry.js",
+  it("should declare unlock + update plugin tools but NOT plugin-data-list", () => {
+    expect(manifest.tools?.plugin).toEqual([
+      "unlock-codex-entries",
+      "update-codex-entry",
     ]);
     // plugin-data-list was removed — existing entries now arrive via input.inject
     expect(manifest.tools?.builtin ?? []).not.toContain("plugin-data-list");

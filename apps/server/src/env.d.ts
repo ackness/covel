@@ -126,6 +126,15 @@ declare module "hono" {
      */
     activatePluginLocalTools?: ActivatePluginLocalToolsFn;
     /**
+     * Introspection for the deferred community `entry` module: true when the
+     * plugin declares an `entry` field, its trust is deferred (community), and
+     * the entry has not yet been activated. The plugin-rpc action-level path
+     * uses it to route an unregistered action through the approval gate
+     * instead of a hard 404 (its registration lives inside the not-yet-run
+     * entry). Optional so hand-built test DI need not wire it.
+     */
+    hasPendingPluginEntry?: (pluginId: string) => boolean;
+    /**
      * Session event directory (unified event emission layer, plan task 4/5).
      * Threaded into `TurnExecutorDeps.eventDirectory` at each `executeTurn`
      * call site so a runtime declaring `advertiseEvents: true` gets its

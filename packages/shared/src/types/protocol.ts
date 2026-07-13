@@ -78,6 +78,15 @@ export interface ExecutionStartedPayload {
   readonly runtimeCount: number;
 }
 
+/**
+ * `ExecutionCompletedPayload.abortReason` value for a player-initiated abort
+ * (Stop button / POST /abort). Wire-protocol constant: the runtime stamps it
+ * on `TurnResult.abortReason` and the web client keys its non-error abort
+ * terminal state on it (discard the uncommitted streaming placeholder instead
+ * of showing a retryable error).
+ */
+export const PLAYER_ABORT_REASON = "aborted-by-player";
+
 export interface ExecutionCompletedPayload {
   readonly runtimeCount: number;
   readonly resultCount: number;

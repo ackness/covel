@@ -206,7 +206,11 @@ export type {
   CovelEventPayload,
 } from "./protocol.js";
 
-export { COVEL_EVENT_META, FORWARDED_EVENT_TYPES } from "./protocol.js";
+export {
+  COVEL_EVENT_META,
+  FORWARDED_EVENT_TYPES,
+  PLAYER_ABORT_REASON,
+} from "./protocol.js";
 
 export type {
   AttributeFieldType,

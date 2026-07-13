@@ -35,6 +35,7 @@ import {
   resumeSuspendedRuntime,
   createTurnEmitter,
   runWithHookScope,
+  saveAutoSnapshot,
 } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
 import type { EventBus } from "@covel/events";
@@ -275,51 +276,75 @@ resumeRoutes.post("/:id/resume", async (c) => {
 
   try {
     return await runWithHookScope({ activePluginIds }, async () => {
-      const result = await sessionLock.withLock(sessionId, () =>
-        resumeSuspendedRuntime(suspension, data, effectiveManifest!, {
-          loadRuntime: loadRuntimeFn,
-          llm: llmAdapter,
-          ...(pluginGateway ? { gateway: pluginGateway } : {}),
-          ...(pluginUtils ? { utils: pluginUtils } : {}),
-          getConfig: c.get("getConfigFn") ?? ((_p: string, _r: string) => ({})),
-          store,
-          toolExecutor,
-          resolveModel,
+      return sessionLock.withLock(sessionId, async () => {
+        const result = await resumeSuspendedRuntime(
+          suspension,
+          data,
+          effectiveManifest!,
+          {
+            loadRuntime: loadRuntimeFn,
+            llm: llmAdapter,
+            ...(pluginGateway ? { gateway: pluginGateway } : {}),
+            ...(pluginUtils ? { utils: pluginUtils } : {}),
+            getConfig:
+              c.get("getConfigFn") ?? ((_p: string, _r: string) => ({})),
+            store,
+            toolExecutor,
+            resolveModel,
+            ...(hookPipeline ? { hookPipeline } : {}),
+            ...(eventBus ? { eventBus } : {}),
+            emitter,
+          },
+        );
+
+        if (result.status !== "success" || !result.output) {
+          await releaseClaim();
+          return c.json(
+            {
+              ...errorBody(
+                `Resume failed: ${result.error ?? `runtime ended with status ${result.status}`}`,
+              ),
+              result,
+            },
+            500,
+          );
+        }
+
+        const outputKind = effectiveManifest.outputKind ?? "plugin";
+        const processOpts = {
           ...(hookPipeline ? { hookPipeline } : {}),
           ...(eventBus ? { eventBus } : {}),
           emitter,
-        }),
-      );
-
-      if (result.status !== "success" || !result.output) {
-        await releaseClaim();
-        return c.json(
-          {
-            ...errorBody(
-              `Resume failed: ${result.error ?? `runtime ended with status ${result.status}`}`,
-            ),
-            result,
-          },
-          500,
+          capabilities: effectiveManifest.capabilities ?? [],
+        };
+        const { events } = await processRuntimeResult(
+          result,
+          store,
+          sessionId,
+          outputKind,
+          processOpts,
         );
-      }
 
-      const outputKind = effectiveManifest.outputKind ?? "plugin";
-      const processOpts = {
-        ...(hookPipeline ? { hookPipeline } : {}),
-        ...(eventBus ? { eventBus } : {}),
-        emitter,
-        capabilities: effectiveManifest.capabilities ?? [],
-      };
-      const { events } = await processRuntimeResult(
-        result,
-        store,
-        sessionId,
-        outputKind,
-        processOpts,
-      );
+        // Resume commits proposals like any other turn path, so it must leave
+        // an auto snapshot behind — without this, a fork taken after a resume
+        // silently misses the resumed runtime's writes. Same turnId as the
+        // originating suspension so the snapshot lines up with its turn.
+        try {
+          await saveAutoSnapshot({
+            store,
+            sessionId,
+            turnId: suspension.turnId,
+            ...(eventBus ? { eventBus } : {}),
+          });
+        } catch (err) {
+          console.warn(
+            `[resume] auto snapshot failed for session ${sessionId} turn ${suspension.turnId}:`,
+            err instanceof Error ? err.message : String(err),
+          );
+        }
 
-      return c.json({ result, events });
+        return c.json({ result, events });
+      });
     });
   } catch (err: unknown) {
     // Release the claim so legitimate retries can attempt again. The

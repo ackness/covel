@@ -39,6 +39,7 @@ import {
   emitLlmRespondedError,
   emitLlmRespondedSuccess,
 } from "../llm/llm-telemetry.js";
+import { TurnAbortedError } from "../turn-executor/turn-control.js";
 import {
   LLMRetryError,
   assertDeadlineNotReached,
@@ -115,6 +116,12 @@ export interface CallLLMWithRetryParams {
   readonly pluginId?: string;
   /** Provider label for trace payload (e.g. 'deepseek', 'openai'). Optional. */
   readonly provider?: string;
+  /**
+   * Player/turn-level abort (roadmap W4). Non-retriable: fires
+   * {@link TurnAbortedError} immediately — including out of the streaming
+   * salvage path, so a player abort never commits partial content.
+   */
+  readonly abortSignal?: AbortSignal;
 }
 
 export interface RetryInfo {
@@ -131,10 +138,14 @@ export async function callLLMWithRetry(
   let lastReason: RetryReason = "unknown";
 
   for (let attempt = 0; attempt <= policy.maxRetries; attempt++) {
+    throwIfTurnAborted(params.abortSignal);
     assertDeadlineNotReached(deadline, attempt, lastError);
 
     const budget = computeAttemptBudget(policy, deadline);
-    const signal = AbortSignal.timeout(budget);
+    const timeoutSignal = AbortSignal.timeout(budget);
+    const signal = params.abortSignal
+      ? AbortSignal.any([timeoutSignal, params.abortSignal])
+      : timeoutSignal;
     const attemptMessages = perturbMessages(messages, attempt, lastReason);
 
     const callStart = Date.now();
@@ -172,8 +183,9 @@ export async function callLLMWithRetry(
         durationMs: Date.now() - callStart,
         attempt,
       });
+      throwIfTurnAborted(params.abortSignal);
       lastError = err;
-      lastReason = isCallTimeout(err, signal)
+      lastReason = isCallTimeout(err, timeoutSignal)
         ? "call-timeout"
         : isTransientError(err)
           ? "transient-error"
@@ -191,6 +203,12 @@ export async function callLLMWithRetry(
 
   // Unreachable; the loop either returns or throws.
   throw exhaustedError(policy, lastReason, lastError);
+}
+
+function throwIfTurnAborted(abortSignal: AbortSignal | undefined): void {
+  if (abortSignal?.aborted) {
+    throw new TurnAbortedError();
+  }
 }
 
 function isCallTimeout(err: unknown, signal: AbortSignal): boolean {
@@ -242,14 +260,21 @@ export async function streamLLMWithRetry(
   let lastReason: RetryReason = "unknown";
 
   for (let attempt = 0; attempt <= policy.maxRetries; attempt++) {
+    throwIfTurnAborted(params.abortSignal);
     assertDeadlineNotReached(deadline, attempt, lastError);
 
     const budget = computeAttemptBudget(policy, deadline);
     // Compose three abort sources into one per-attempt signal:
     //   1. overall call budget (per-attempt)
     //   2. first-token (TTFB) guard — armed on attempt start, disarmed on first event
-    //   3. cancellation from the outer caller (none today, but easy to add)
+    //   3. player turn abort (W4) — forwarded from params.abortSignal below
     const callAborter = new AbortController();
+    const onExternalAbort = (): void => {
+      callAborter.abort(new DOMException("turn aborted", "AbortError"));
+    };
+    params.abortSignal?.addEventListener("abort", onExternalAbort, {
+      once: true,
+    });
     const callTimeoutHandle = setTimeout(() => {
       callAborter.abort(new DOMException("call timeout", "TimeoutError"));
     }, budget);
@@ -312,6 +337,7 @@ export async function streamLLMWithRetry(
 
       clearTimeout(callTimeoutHandle);
       clearTimeout(ttfbHandle);
+      params.abortSignal?.removeEventListener("abort", onExternalAbort);
 
       const finalResponse: LLMResponse = {
         content: streamedContent || null,
@@ -337,12 +363,15 @@ export async function streamLLMWithRetry(
     } catch (err) {
       clearTimeout(callTimeoutHandle);
       clearTimeout(ttfbHandle);
+      params.abortSignal?.removeEventListener("abort", onExternalAbort);
       lastError = err;
       lastReason = classifyStreamError(err, callAborter.signal, firstTokenSeen);
 
       // Pair every `llm.calling` with an `llm.responded` on the error path.
       // Without this, a streamed turn that fails mid-flight leaves a dangling
-      // `llm.calling` in trace_events and breaks trace-viewer pairing.
+      // `llm.calling` in trace_events and breaks trace-viewer pairing. This
+      // must run BEFORE the abort throw below so a player abort still emits
+      // the paired `llm.responded`.
       await emitLlmRespondedError(params.emitter, {
         runtimeId: params.runtimeId,
         pluginId: params.pluginId,
@@ -351,6 +380,10 @@ export async function streamLLMWithRetry(
         attempt,
         streaming: true,
       });
+
+      // Player abort is non-retriable AND must bypass the salvage path
+      // below — salvaged partial narrative would otherwise be committed.
+      throwIfTurnAborted(params.abortSignal);
 
       // Salvage path: stream died mid-flight but we already received useful
       // content. Always prefer salvaging over retry — perturbation on a

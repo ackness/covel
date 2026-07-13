@@ -10,7 +10,8 @@ import type {
   RuntimeResultRecord,
   SessionRecord,
   SessionSummaryRecord,
-  SnapshotPayload,
+  SnapshotPayloadV1,
+  SnapshotPayloadV2,
   SnapshotRecord,
   StateChangeRecord,
   StateEntryRecord,
@@ -396,8 +397,8 @@ export function makeLorebookEntry(
 }
 
 export function makeSnapshotPayload(
-  overrides?: Partial<SnapshotPayload>,
-): SnapshotPayload {
+  overrides?: Partial<SnapshotPayloadV1>,
+): SnapshotPayloadV1 {
   return {
     schemaVersion: 1,
     turnId: "turn-1",
@@ -408,6 +409,25 @@ export function makeSnapshotPayload(
     lorebookEntries: [],
     suspensions: [],
     messagesCursor: "",
+    ...overrides,
+  };
+}
+
+export function makeSnapshotPayloadV2(
+  overrides?: Partial<SnapshotPayloadV2>,
+): SnapshotPayloadV2 {
+  return {
+    ...makeSnapshotPayload(),
+    schemaVersion: 2,
+    session: {
+      status: "active",
+      turnCount: 3,
+      preGameCompleted: ["setup/schema"],
+      locale: "zh-CN",
+      activePlugins: ["setup", "narrator"],
+      presetId: "default",
+      runtimeModelOverrides: { narrator: "balance" },
+    },
     ...overrides,
   };
 }

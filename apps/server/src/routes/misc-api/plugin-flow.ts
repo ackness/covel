@@ -165,10 +165,17 @@ export async function buildPluginFlowResponse() {
         })),
         tools: {
           builtin: [...(manifest.tools?.builtin ?? [])],
-          local: [...(manifest.tools?.local ?? [])].map((toolPath) => {
-            const fileName = toolPath.split("/").at(-1) ?? toolPath;
-            return fileName.replace(/\.[^.]+$/, "");
-          }),
+          local: [
+            // `tools.plugin` are entry-registered tool NAMES — pass through
+            // unchanged (a dotted name like `foo.v2` must not lose its suffix).
+            ...(manifest.tools?.plugin ?? []),
+            // `tools.local` are relative file PATHS — strip dir + extension to
+            // recover the tool name (`server/tools/foo.js` → `foo`).
+            ...(manifest.tools?.local ?? []).map((toolPath) => {
+              const fileName = toolPath.split("/").at(-1) ?? toolPath;
+              return fileName.replace(/\.[^.]+$/, "");
+            }),
+          ],
         },
         uiSlots: uiSlotsOf(manifest),
         docPath,

@@ -1,4 +1,8 @@
-import { isAssetGenerateView, type CovelEventType } from "@covel/shared";
+import {
+  isAssetGenerateView,
+  PLAYER_ABORT_REASON,
+  type CovelEventType,
+} from "@covel/shared";
 import * as api from "@/services/api";
 import type { DataService } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
@@ -395,9 +399,21 @@ export function createSseEventHandler(
       case "execution.completed": {
         // A turn aborted before producing output (e.g. cost-gate's hard budget
         // cap) carries an abortReason — surface it so the player isn't left with
-        // a silent empty turn.
+        // a silent empty turn. A player-initiated abort is NOT an error: the
+        // server never commits the partial narrative, so discard the streaming
+        // placeholder instead of showing ghost text + a red retry affordance.
         const abortReason = payload.abortReason as string | undefined;
-        if (abortReason) {
+        if (abortReason === PLAYER_ABORT_REASON) {
+          // Cancel any pending rAF delta flush + drop buffered deltas first:
+          // otherwise a fast abort (last narrative.delta + execution.completed
+          // in one network flush) lets the queued rAF fire AFTER the discard
+          // and re-`APPEND_DELTA` the ghost placeholder back into view.
+          clearNarrativeDeltaBuffer(deps.deltaBufferRef, deps.deltaRafRef);
+          deps.dispatch({
+            type: "DISCARD_TURN_STREAMS",
+            ...(turnId ? { turnId } : {}),
+          });
+        } else if (abortReason) {
           deps.dispatch({ type: "SET_EXECUTION_ERROR", error: abortReason });
         }
         deps.dispatch({ type: "SET_EXECUTING", value: false });
