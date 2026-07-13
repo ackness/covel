@@ -229,14 +229,14 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 全局插件
 
-| 方法   | 路径                                    | 描述                                                                                                                                                |
-| ------ | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/api/framework/capabilities`           | 框架级能力索引：manifest 枚举、工具、proposal、world-data URI                                                                                       |
-| GET    | `/api/plugins`                          | 列出所有已加载插件                                                                                                                                  |
-| GET    | `/api/plugins/:id`                      | 获取插件详情                                                                                                                                        |
-| DELETE | `/api/plugins/:id`                      | 卸载第三方插件（删除 `~/.covel/plugins/<id>`）。错误码：id 格式非法 `400`、内置 ID `409`、未安装 `404`；成功返回 `{ ok, id, restartRequired:true }` |
-| GET    | `/api/plugins/:id/contract`             | 获取插件完整开发契约                                                                                                                                |
-| GET    | `/api/plugins/:id/plugin-data-contract` | 获取插件数据 namespace/schema 契约                                                                                                                  |
+| 方法   | 路径                                    | 描述                                                                                                                                                                                                                                                    |
+| ------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/framework/capabilities`           | 框架级能力索引：manifest 枚举、工具、proposal、world-data URI                                                                                                                                                                                           |
+| GET    | `/api/plugins`                          | 列出所有已加载插件                                                                                                                                                                                                                                      |
+| GET    | `/api/plugins/:id`                      | 获取插件详情                                                                                                                                                                                                                                            |
+| DELETE | `/api/plugins/:id`                      | 卸载第三方插件（删除 `~/.covel/plugins/<id>`）。桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。错误码：鉴权失败 `401/403`、id 格式非法 `400`、内置 ID `409`、未安装 `404`；成功返回 `{ ok, id, restartRequired:true }` |
+| GET    | `/api/plugins/:id/contract`             | 获取插件完整开发契约                                                                                                                                                                                                                                    |
+| GET    | `/api/plugins/:id/plugin-data-contract` | 获取插件数据 namespace/schema 契约                                                                                                                                                                                                                      |
 
 ### 状态查询
 
@@ -2264,7 +2264,7 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 #### `POST /api/sessions/:id/snapshot`
 
-从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 characters、stateEntries、pluginData、workingMemory、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。
+从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 session 生命周期/运行配置（status、turnCount、preGameCompleted、locale、activePlugins、presetId、runtimeModelOverrides）、characters、stateEntries、pluginData、workingMemory、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。读取和保存全程持有该 session 的执行锁，因此不会捕获正在提交回合的混合状态。PG 部署下若锁被一个执行中的回合持有超过获取超时（30s），返回 `503 { code: 'session_busy' }`，应稍后重试。
 
 **响应:**
 
@@ -2276,8 +2276,17 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
     "turnId": "turn-42",
     "kind": "manual",
     "payload": {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "turnId": "turn-42",
+      "session": {
+        "status": "active",
+        "turnCount": 42,
+        "preGameCompleted": ["world-init"],
+        "locale": "zh-CN",
+        "activePlugins": ["world-init", "narrator"],
+        "presetId": "default",
+        "runtimeModelOverrides": { "narrator": "balance" }
+      },
       "characters": [
         /* ... */
       ],
@@ -2328,7 +2337,7 @@ session 不存在时返回 `404`。
 服务端会：
 
 1. 创建新 sessionId（`{worldId}-{uuid8}`）；
-2. 复用父 session 的 locale / activePlugins / status / turnCount / preGameCompleted；
+2. 从 schema v2 snapshot payload 恢复 locale / activePlugins / status / turnCount / preGameCompleted / presetId / runtimeModelOverrides；历史 schema v1 快照缺少这些字段，读取时降级（upgrade-on-read）为父 session 的**当前**生命周期字段（即 v2 之前的 fork 行为）。快照中 `status: 'ended'` 会被钳制为 `paused`——ended 是终态且没有取消结束的 API，fork 的目的就是继续游玩；
 3. **拷贝** characters / state entries / plugin data / working memory / state schemas / unresolved suspensions 到新 session；
 4. 从 `turn_messages` 中按顺序拷贝消息直到 `payload.messagesCursor`（含），超过 cursor 的消息不拷贝。cursor 在父 session 中已丢失（compact / 删除等）时返回 `409 { code: 'cursor_missing' }`；
 5. 写入一个 `kind="fork"` 的快照到子 session，`parentId` 指向源 snapshot，供 provenance 追踪；
@@ -2347,7 +2356,7 @@ session 不存在时返回 `404`。
 
 返回 `201 Created`；快照不属于该 session、快照不存在、或父 session 不存在均返回 `404`；`fromSnapshotId` 缺失返回 `400`；`payload.messagesCursor` 指向的消息已不在父 session 中返回 `409 { code: 'cursor_missing' }`；内部写入失败返回 `500`。
 
-整个 fork 在 `withTransaction` 下写入，中途任何失败都会 rollback，不会留下半成品子 session。
+整个 fork 在父 session 执行锁内读取来源数据，并在 `withTransaction` 下写入；中途任何失败都会 rollback，不会留下半成品子 session。与手动快照一样，PG 部署下锁获取超时返回 `503 { code: 'session_busy' }`。
 
 ---
 

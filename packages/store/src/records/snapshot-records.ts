@@ -10,6 +10,7 @@ import type {
   WorkingMemoryRecord,
 } from "./memory-records.js";
 import type { PluginDataRecord } from "./plugin-records.js";
+import type { SessionRecord } from "./session-records.js";
 
 /**
  * Materialized state snapshot (S4-T2, §A6).
@@ -29,8 +30,7 @@ import type { PluginDataRecord } from "./plugin-records.js";
  */
 export type SnapshotKind = "auto" | "manual" | "fork";
 
-export interface SnapshotPayload {
-  readonly schemaVersion: 1;
+interface SnapshotPayloadBase {
   readonly turnId: string;
   readonly characters: readonly CharacterRecord[];
   readonly stateEntries: readonly StateEntryRecord[];
@@ -64,6 +64,41 @@ export interface SnapshotPayload {
    */
   readonly messagesCursor: string;
 }
+
+/** Legacy payloads created before session lifecycle state was captured. */
+export interface SnapshotPayloadV1 extends SnapshotPayloadBase {
+  readonly schemaVersion: 1;
+}
+
+/**
+ * Session-level state that must be restored from the same point in time as
+ * the materialized rows above. Fields unrelated to scheduling or runtime
+ * selection (for example embedding maintenance locks) remain session-local.
+ */
+export type SnapshotSessionState = Readonly<
+  Pick<
+    SessionRecord,
+    | "status"
+    | "turnCount"
+    | "preGameCompleted"
+    | "locale"
+    | "activePlugins"
+    | "presetId"
+    | "runtimeModelOverrides"
+  >
+>;
+
+/** Current snapshot payload, including lifecycle and runtime configuration. */
+export interface SnapshotPayloadV2 extends SnapshotPayloadBase {
+  readonly schemaVersion: 2;
+  readonly session: SnapshotSessionState;
+}
+
+/**
+ * Persisted snapshots are a versioned union. V1 remains readable for listing
+ * and inspection; safe fork requires V2 lifecycle state.
+ */
+export type SnapshotPayload = SnapshotPayloadV1 | SnapshotPayloadV2;
 
 export interface SnapshotRecord {
   readonly id: string;

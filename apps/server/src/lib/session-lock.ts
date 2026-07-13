@@ -31,6 +31,14 @@
  *     paths, including if the acquire itself times out.
  */
 
+/**
+ * Thrown by lock implementations with a bounded acquire (PG advisory lock)
+ * when the session stays busy past the acquire timeout. Routes translate it
+ * into a coded 503 instead of a generic 500. The in-process lock never
+ * throws this — it waits indefinitely.
+ */
+export class SessionLockTimeoutError extends Error {}
+
 export interface SessionLock {
   /**
    * Acquire the lock for `sessionId`, run `fn`, release. Blocks until the

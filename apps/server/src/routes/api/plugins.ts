@@ -11,6 +11,7 @@ import type { PluginRegistry } from "@covel/plugin-loader";
 import { readRuntimeEnv } from "@covel/shared";
 import { buildPluginContract, summarizePluginManifests } from "./discovery.js";
 import { errorBody } from "../../api-error.js";
+import { makeInstallApiGuard } from "../privileged-auth.js";
 
 type Env = {
   Variables: {
@@ -99,7 +100,7 @@ pluginRoutes.get("/:id", async (c) => {
 // DELETE /plugins/:id — uninstall a third-party plugin from the user plugins
 // dir. Builtin plugins cannot be removed. Mirrors the install route's id rules
 // and returns restartRequired:true (the loader only re-scans the dir at boot).
-pluginRoutes.delete("/:id", async (c) => {
+pluginRoutes.delete("/:id", makeInstallApiGuard(), async (c) => {
   const id = c.req.param("id");
   // Format guard — also blocks path traversal (no `/`, `.`, `..`).
   if (!PLUGIN_ID_RE.test(id)) {

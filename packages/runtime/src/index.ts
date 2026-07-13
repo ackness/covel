@@ -119,6 +119,8 @@ export type { SnapshotStore } from "./snapshot/snapshot-builder.js";
 
 // ── Snapshot Payload Builder (S4-T2) ────────────────────────────
 export { buildSnapshotPayload } from "./snapshot/snapshot-payload-builder.js";
+export { saveAutoSnapshot } from "./snapshot/auto-snapshot.js";
+export type { SaveAutoSnapshotOptions } from "./snapshot/auto-snapshot.js";
 
 // ── Types ────────────────────────────────────────────────────────
 export type { TriggerContext, ScheduledGroup } from "./types.js";

@@ -172,20 +172,13 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
     expect(turn1Id).toBeTruthy();
     await firstTurnStarted;
 
-    // Second action for the same session: emits execution.started (pre-lock)
-    // then queues on the session lock behind turn 1.
+    // Second action for the same session queues before emitting lifecycle
+    // events or registering turn control.
     const res2 = await post("req-2");
     expect(res2.status).toBe(200);
     const reader2 = res2.body!.getReader();
-    const started2 = await readUntil(
-      reader2,
-      (e) => e.type === "execution.started",
-    );
-    expect(started2.turnId).not.toBe(turn1Id);
 
-    // Drain the event loop so request 2 progresses past its pre-lock awaits
-    // and is genuinely queued on the session lock (pre-fix it would have
-    // reached registerActiveTurn by now and clobbered turn 1's entry).
+    // Drain the event loop so request 2 is genuinely queued on the lock.
     for (let i = 0; i < 50; i += 1) {
       await new Promise((resolve) => setImmediate(resolve));
     }

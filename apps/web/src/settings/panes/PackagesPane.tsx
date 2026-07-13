@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Package, Upload, Globe, Puzzle, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
-import { hasElectronIpc, reloadServerAndWait } from "@/lib/desktop-bridge.js";
+import {
+  getDesktopRestAuthHeaders,
+  hasElectronIpc,
+  reloadServerAndWait,
+} from "@/lib/desktop-bridge.js";
 import { text } from "@/components/world/editor-helpers.js";
 
 type InstallKind = "plugin" | "world";
@@ -76,6 +80,7 @@ export function PackagesPane() {
       form.append("file", file, file.name);
       const res = await fetch(`/api/install/${kind}`, {
         method: "POST",
+        headers: getDesktopRestAuthHeaders(),
         body: form,
       });
       const body = (await res.json()) as Partial<InstallResult> & {
@@ -114,6 +119,7 @@ export function PackagesPane() {
     try {
       const res = await fetch(`/api/plugins/${encodeURIComponent(id)}`, {
         method: "DELETE",
+        headers: getDesktopRestAuthHeaders(),
       });
       const body = (await res.json()) as {
         ok?: boolean;

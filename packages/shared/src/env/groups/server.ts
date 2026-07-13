@@ -99,7 +99,7 @@ export const SERVER_ENV_VARS = [
     status: "active",
     defaultValue: "false",
     description:
-      "Explicit production opt-in for POST /api/install/plugin and POST /api/install/world when no desktop bearer token is configured.",
+      "Explicit production opt-in for plugin/world package filesystem mutations (install and plugin uninstall) when no desktop bearer token is configured.",
   },
   {
     name: "COVEL_SUSPENSION_TTL_MS",

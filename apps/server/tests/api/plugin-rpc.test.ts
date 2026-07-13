@@ -875,6 +875,14 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     // Sync path must NOT write anything into the reserved _jobs namespace.
     const jobs = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
     expect(jobs).toHaveLength(0);
+
+    // runManualTurn funnels through processTurnResults → saveAutoSnapshot:
+    // every manual turn must leave an auto fork point behind, same as the
+    // main /api/actions path.
+    const snapshots = await store.listSnapshots(SESSION_ID);
+    expect(
+      snapshots.filter((s) => s.kind === "auto" && s.turnId === body.turnId),
+    ).toHaveLength(1);
   });
 
   it("simulates branch-reply create/accept through API and uses the accepted candidate in the next narrator prompt", async () => {

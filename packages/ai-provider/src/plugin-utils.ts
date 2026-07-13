@@ -18,6 +18,7 @@ import {
   parseRetryAfterMs,
   sleepWithAbort,
 } from "./adapters/http.js";
+import { createPinnedDispatcher } from "./adapters/http/dns-safety.js";
 
 export interface BaseUrlValidationResult {
   /** True when the URL passes SSRF policy. */
@@ -78,8 +79,30 @@ export async function fetchWithRetry(
 ): Promise<Response> {
   const { maxRetries = 3, signal, ...rest } = init;
 
-  const doFetch = (): Promise<Response> =>
-    fetch(input, { ...rest, ...(signal ? { signal } : {}) });
+  const url = new URL(input.toString());
+  const verdict = validateBaseUrlForPlugin(url.toString());
+  if (!verdict.ok) {
+    throw new Error(
+      verdict.reason ?? `baseUrl rejected by SSRF policy: ${url}`,
+    );
+  }
+
+  const doFetch = async (): Promise<Response> => {
+    // A fresh resolution + dispatcher per attempt prevents a retry from
+    // following changed DNS to an address that was never policy-checked.
+    const dispatcher = await createPinnedDispatcher(url);
+    try {
+      return await fetch(input, {
+        ...rest,
+        ...(signal ? { signal } : {}),
+        dispatcher,
+      } as RequestInit);
+    } finally {
+      // close() drains active response bodies before releasing the pool, so it
+      // is safe to start shutdown once fetch has returned the response headers.
+      void dispatcher.close();
+    }
+  };
 
   let response = await doFetch();
   for (let attempt = 0; attempt < maxRetries; attempt++) {

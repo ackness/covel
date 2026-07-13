@@ -13,10 +13,15 @@ import {
   createMemoryStore,
   type DataStore,
   type MediaStore,
+  type SnapshotPayloadV1,
 } from "@covel/store";
 import { createEventBus, type EventBus } from "@covel/events";
 import type { SubscriptionEvent } from "@covel/shared";
 import { snapshotRoutes } from "../../src/routes/api/snapshots.js";
+import {
+  createInProcessSessionLock,
+  type SessionLock,
+} from "../../src/lib/session-lock.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -24,16 +29,19 @@ function createTestApp(
   store: DataStore,
   eventBus?: EventBus,
   mediaStore?: MediaStore,
+  sessionLock: SessionLock = createInProcessSessionLock(),
 ) {
   const app = new Hono<{
     Variables: {
       store: DataStore;
+      sessionLock: SessionLock;
       eventBus?: EventBus;
       mediaStore?: MediaStore;
     };
   }>();
   app.use("*", async (c, next) => {
     c.set("store", store);
+    c.set("sessionLock", sessionLock);
     if (eventBus) c.set("eventBus", eventBus);
     if (mediaStore) c.set("mediaStore", mediaStore);
     await next();
@@ -162,7 +170,14 @@ describe("Snapshot routes", () => {
       expect(snapshot.id).toMatch(/./); // non-empty string
 
       const payload = snapshot.payload as Record<string, unknown>;
-      expect(payload.schemaVersion).toBe(1);
+      expect(payload.schemaVersion).toBe(2);
+      expect(payload.session).toEqual({
+        status: "active",
+        turnCount: 1,
+        preGameCompleted: [],
+        locale: "zh-CN",
+        activePlugins: [],
+      });
       // Characters / plugin data / working memory were seeded — must appear in payload.
       expect((payload.characters as unknown[]).length).toBe(1);
       expect((payload.pluginData as unknown[]).length).toBeGreaterThanOrEqual(
@@ -178,6 +193,31 @@ describe("Snapshot routes", () => {
       const list = await store.listSnapshots("sess-1");
       expect(list).toHaveLength(1);
       expect(list[0].kind).toBe("manual");
+    });
+
+    it("waits for the session lock before reading and saving the snapshot", async () => {
+      const sessionLock = createInProcessSessionLock();
+      const app = createTestApp(store, undefined, undefined, sessionLock);
+      let release!: () => void;
+      const blocker = sessionLock.withLock(
+        "sess-1",
+        () =>
+          new Promise<void>((resolve) => {
+            release = resolve;
+          }),
+      );
+
+      await Promise.resolve();
+      const request = app.request("/api/sessions/sess-1/snapshot", {
+        method: "POST",
+      });
+      await Promise.resolve();
+      expect(await store.listSnapshots("sess-1")).toHaveLength(0);
+
+      release();
+      await blocker;
+      expect((await request).status).toBe(201);
+      expect(await store.listSnapshots("sess-1")).toHaveLength(1);
     });
 
     it("emits state.snapshot.created on the event bus (S4-T5)", async () => {
@@ -361,6 +401,141 @@ describe("Snapshot routes", () => {
       expect(childChars).toHaveLength(parentChars.length);
       expect(childChars[0]!.name).toBe("Hero");
       expect(childChars[0]!.sessionId).toBe(childId);
+    });
+
+    it("restores lifecycle and runtime configuration from the snapshot", async () => {
+      await store.updateSession("sess-1", {
+        status: "paused",
+        turnCount: 0,
+        preGameCompleted: ["setup/schema"],
+        locale: "en-US",
+        activePlugins: ["setup", "narrator"],
+        presetId: "slow-burn",
+        runtimeModelOverrides: { narrator: "balance" },
+      });
+      const app = createTestApp(store);
+      const snapId = await createParentSnapshot(store, app);
+
+      await store.updateSession("sess-1", {
+        status: "ended",
+        turnCount: 42,
+        preGameCompleted: ["other/runtime"],
+        locale: "ja-JP",
+        activePlugins: ["other"],
+        presetId: "action",
+        runtimeModelOverrides: { narrator: "fast" },
+      });
+
+      const res = await app.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      expect(res.status).toBe(201);
+      const childId = ((await res.json()) as { sessionId: string }).sessionId;
+      expect(await store.getSession(childId)).toMatchObject({
+        status: "paused",
+        turnCount: 0,
+        preGameCompleted: ["setup/schema"],
+        locale: "en-US",
+        activePlugins: ["setup", "narrator"],
+        presetId: "slow-burn",
+        runtimeModelOverrides: { narrator: "balance" },
+      });
+    });
+
+    it("upgrades legacy V1 snapshots on read using the parent's current lifecycle", async () => {
+      const app = createTestApp(store);
+      const snapId = await createParentSnapshot(store, app);
+      const stored = await store.getSnapshot(snapId);
+      expect(stored?.payload.schemaVersion).toBe(2);
+      const { session: _session, ...legacyPayload } = stored!
+        .payload as Extract<typeof stored.payload, { schemaVersion: 2 }>;
+      await store.saveSnapshot({
+        ...stored!,
+        payload: {
+          ...legacyPayload,
+          schemaVersion: 1,
+        } satisfies SnapshotPayloadV1,
+      });
+      await store.updateSession("sess-1", {
+        status: "paused",
+        turnCount: 9,
+        preGameCompleted: ["legacy/current"],
+        locale: "en-US",
+        activePlugins: ["legacy-plugin"],
+        presetId: "legacy-current",
+        runtimeModelOverrides: { narrator: "fast" },
+      });
+
+      const res = await app.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      expect(res.status).toBe(201);
+      const childId = ((await res.json()) as { sessionId: string }).sessionId;
+      // V1 payloads predate lifecycle capture, so the fork degrades to the
+      // parent session's CURRENT lifecycle fields (the pre-V2 behavior).
+      expect(await store.getSession(childId)).toMatchObject({
+        status: "paused",
+        turnCount: 9,
+        preGameCompleted: ["legacy/current"],
+        locale: "en-US",
+        activePlugins: ["legacy-plugin"],
+        presetId: "legacy-current",
+        runtimeModelOverrides: { narrator: "fast" },
+      });
+    });
+
+    it("clamps a snapshot captured on an ended session to a resumable paused fork", async () => {
+      const app = createTestApp(store);
+      await store.updateSession("sess-1", { status: "ended" });
+      const snapId = await createParentSnapshot(store, app);
+      const stored = await store.getSnapshot(snapId);
+      expect(stored?.payload).toMatchObject({
+        schemaVersion: 2,
+        session: { status: "ended" },
+      });
+
+      const res = await app.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      expect(res.status).toBe(201);
+      const childId = ((await res.json()) as { sessionId: string }).sessionId;
+      // 'ended' is terminal with no un-end API — a fork exists to keep
+      // playing, so it lands as 'paused' (resumable via resumeSession).
+      expect((await store.getSession(childId))?.status).toBe("paused");
+    });
+
+    it("waits for the parent session lock before reading the fork source", async () => {
+      const sessionLock = createInProcessSessionLock();
+      const app = createTestApp(store, undefined, undefined, sessionLock);
+      const snapId = await createParentSnapshot(store, app);
+      let release!: () => void;
+      const blocker = sessionLock.withLock(
+        "sess-1",
+        () =>
+          new Promise<void>((resolve) => {
+            release = resolve;
+          }),
+      );
+
+      await Promise.resolve();
+      const request = app.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      await Promise.resolve();
+      expect(await store.listSessions()).toHaveLength(1);
+
+      release();
+      await blocker;
+      expect((await request).status).toBe(201);
+      expect(await store.listSessions()).toHaveLength(2);
     });
 
     it("copies plugin data and working memory to the child session", async () => {
@@ -689,7 +864,7 @@ describe("Snapshot routes", () => {
   });
 });
 
-// ── Auto snapshot from turn executor ────────────────────────────
+// ── Post-commit auto snapshot ───────────────────────────────────
 
 describe("Auto snapshot", () => {
   let store: DataStore;
@@ -700,8 +875,8 @@ describe("Auto snapshot", () => {
     await seedSessionData(store, "sess-auto");
   });
 
-  it("produces a kind=auto snapshot when the turn executor runs", async () => {
-    const { executeTurn } = await import("@covel/runtime");
+  it("produces a kind=auto snapshot after turn persistence", async () => {
+    const { executeTurn, saveAutoSnapshot } = await import("@covel/runtime");
 
     await executeTurn(
       { sessionId: "sess-auto", turnId: "turn-auto-1", playerMessage: "hi" },
@@ -721,6 +896,11 @@ describe("Auto snapshot", () => {
         store,
       },
     );
+    await saveAutoSnapshot({
+      store,
+      sessionId: "sess-auto",
+      turnId: "turn-auto-1",
+    });
 
     const snapshots = await store.listSnapshots("sess-auto");
     expect(snapshots.length).toBeGreaterThanOrEqual(1);
@@ -730,7 +910,7 @@ describe("Auto snapshot", () => {
   });
 
   it("emits state.snapshot.created (kind=auto) on the event bus (S4-T5)", async () => {
-    const { executeTurn } = await import("@covel/runtime");
+    const { executeTurn, saveAutoSnapshot } = await import("@covel/runtime");
     const eventBus = createEventBus();
     const captured = collectEvents(eventBus);
 
@@ -753,6 +933,12 @@ describe("Auto snapshot", () => {
         eventBus,
       },
     );
+    await saveAutoSnapshot({
+      store,
+      sessionId: "sess-auto",
+      turnId: "turn-auto-2",
+      eventBus,
+    });
 
     const snapshotEvents = captured.filter(
       (m) => m.type === "state.snapshot.created",

@@ -8,6 +8,9 @@ import { pluginRoutes } from "../../src/routes/api/plugins.js";
 
 let pluginsDir: string;
 let prevUserPluginsDir: string | undefined;
+let prevDesktopRestToken: string | undefined;
+let prevInstallApiEnabled: string | undefined;
+let prevNodeEnv: string | undefined;
 
 // Minimal registry stub — the uninstall route only reads `get(id)?.source`.
 function makeRegistry(builtinIds: string[] = ["narrator"]): PluginRegistry {
@@ -31,7 +34,13 @@ function createTestApp(registry: PluginRegistry = makeRegistry()): Hono {
 beforeEach(async () => {
   pluginsDir = await mkdtemp(path.join(tmpdir(), "covel-uninstall-"));
   prevUserPluginsDir = process.env.COVEL_USER_PLUGINS_DIR;
+  prevDesktopRestToken = process.env.COVEL_DESKTOP_REST_TOKEN;
+  prevInstallApiEnabled = process.env.COVEL_INSTALL_API_ENABLED;
+  prevNodeEnv = process.env.NODE_ENV;
   process.env.COVEL_USER_PLUGINS_DIR = pluginsDir;
+  delete process.env.COVEL_DESKTOP_REST_TOKEN;
+  delete process.env.COVEL_INSTALL_API_ENABLED;
+  process.env.NODE_ENV = "test";
 });
 
 afterEach(async () => {
@@ -39,6 +48,21 @@ afterEach(async () => {
     delete process.env.COVEL_USER_PLUGINS_DIR;
   } else {
     process.env.COVEL_USER_PLUGINS_DIR = prevUserPluginsDir;
+  }
+  if (prevDesktopRestToken === undefined) {
+    delete process.env.COVEL_DESKTOP_REST_TOKEN;
+  } else {
+    process.env.COVEL_DESKTOP_REST_TOKEN = prevDesktopRestToken;
+  }
+  if (prevInstallApiEnabled === undefined) {
+    delete process.env.COVEL_INSTALL_API_ENABLED;
+  } else {
+    process.env.COVEL_INSTALL_API_ENABLED = prevInstallApiEnabled;
+  }
+  if (prevNodeEnv === undefined) {
+    delete process.env.NODE_ENV;
+  } else {
+    process.env.NODE_ENV = prevNodeEnv;
   }
   await rm(pluginsDir, { recursive: true, force: true });
 });
@@ -61,6 +85,71 @@ describe("DELETE /api/plugins/:id (uninstall)", () => {
       restartRequired: true,
     });
     await expect(access(dir)).rejects.toThrow(); // dir is gone
+  });
+
+  it("requires explicit production opt-in when no bearer token is configured", async () => {
+    process.env.NODE_ENV = "production";
+    const dir = path.join(pluginsDir, "my-plugin");
+    await mkdir(dir, { recursive: true });
+    const app = createTestApp();
+
+    const blocked = await app.request("/api/plugins/my-plugin", {
+      method: "DELETE",
+    });
+
+    expect(blocked.status).toBe(403);
+    await expect(blocked.json()).resolves.toMatchObject({
+      code: "install_api_disabled",
+    });
+    await access(dir);
+  });
+
+  it("rejects a missing desktop bearer token", async () => {
+    process.env.COVEL_DESKTOP_REST_TOKEN = "uninstall-token";
+    const dir = path.join(pluginsDir, "my-plugin");
+    await mkdir(dir, { recursive: true });
+    const app = createTestApp();
+
+    const res = await app.request("/api/plugins/my-plugin", {
+      method: "DELETE",
+    });
+
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toMatchObject({
+      code: "desktop_rest_token_invalid",
+    });
+    await access(dir);
+  });
+
+  it("rejects an invalid desktop bearer token", async () => {
+    process.env.COVEL_DESKTOP_REST_TOKEN = "uninstall-token";
+    const dir = path.join(pluginsDir, "my-plugin");
+    await mkdir(dir, { recursive: true });
+    const app = createTestApp();
+
+    const res = await app.request("/api/plugins/my-plugin", {
+      method: "DELETE",
+      headers: { Authorization: "Bearer wrong-token" },
+    });
+
+    expect(res.status).toBe(401);
+    await access(dir);
+  });
+
+  it("accepts a valid desktop bearer token", async () => {
+    process.env.NODE_ENV = "production";
+    process.env.COVEL_DESKTOP_REST_TOKEN = "uninstall-token";
+    const dir = path.join(pluginsDir, "my-plugin");
+    await mkdir(dir, { recursive: true });
+    const app = createTestApp();
+
+    const res = await app.request("/api/plugins/my-plugin", {
+      method: "DELETE",
+      headers: { Authorization: "Bearer uninstall-token" },
+    });
+
+    expect(res.status).toBe(200);
+    await expect(access(dir)).rejects.toThrow();
   });
 
   it("rejects uninstalling a builtin plugin with 409", async () => {
