@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.14] - 2026-07-13
+
+The agent-core release. Server-side plugin registration converges into a single `entry` factory (`covel.registerTool / on / registerRpc / registerWires`), players can steer or abort a turn while the LLM is still streaming, and a full-codebase audit hardened the turn/snapshot/fork consistency boundaries: proposal commits are now atomic under the session lock, auto snapshots capture post-commit state, forks restore session lifecycle from the snapshot itself, and outbound plugin fetches pin DNS resolution against rebinding.
+
+### Added
+
+- **Unified PluginAPI (`entry`).** The four scattered server-side registration surfaces (local tools, hooks, RPC actions, media wires) converge into one factory declared via the new `entry` PLUGIN.md field — `export default function (covel) { ... }` with `covel.registerTool / on / registerRpc / registerWires` and `covel.toolkit`. Agent runtimes declare LLM tool visibility with the new `tools.plugin` name list. All 8 bundled plugins with server-side registrations migrated; legacy fields keep working for one release cycle with a per-plugin deprecation warning, and community entries still defer to activation (trust gating unchanged).
+- **Mid-turn player steering + abort.** `POST /api/sessions/:id/steer` merges queued player interjections into story runtimes' next LLM step (persisted to history); `POST /api/sessions/:id/abort` cuts the in-flight LLM stream immediately, is non-retriable, bypasses the streaming salvage path (no partial narrative is ever committed), and surfaces as `abortReason: "aborted-by-player"` on the existing `execution.completed` event. Both return 409 when no turn is active. The web composer stays usable during a turn — submit steers, a stop button aborts.
+- **Snapshot payload schemaVersion 2.** Snapshots now capture session lifecycle and runtime configuration (`status`, `turnCount`, `preGameCompleted`, `locale`, `activePlugins`, `presetId`, `runtimeModelOverrides`), so forking an old snapshot restores the session as it was at capture time instead of inheriting the parent's current scheduling state. V1 snapshots remain readable and fork with the previous parent-fallback behaviour.
+
+### Changed
+
+- **Agent loop layering.** All how-to-run derivation (tool defs, schema gate, model override chain, streaming gate, step/retry budgets, `requireToolUse`, `acceptsSteering`) converges into `buildAgentLoopPolicy()`; the loop's single delta outlet is extracted into `createDeltaForwarder`. The loop body is control flow only and independently instantiable — pinned by a direct loop-core test suite (trace/delta sequences, runtime-done stripping, maxSteps, streaming gates, steer/abort/salvage-bypass).
+
+### Fixed
+
+- **Turn commits are atomic under the session lock.** Player-input persistence, turn execution, proposal commit, `turnCount` sync and the auto snapshot now run inside a single `sessionLock.withLock` scope, so an overlapping same-session action can no longer read pre-commit state (stale-read / lost-update). A bounded PG advisory-lock acquire timeout surfaces as a coded, retryable 503 instead of a generic 500.
+- **Auto snapshots capture post-commit state.** Snapshot capture moved out of the turn finalizer (which ran before proposals committed) into the server pipeline after commit — forked sessions no longer inherit a turn's dialogue while missing that same turn's state, character and plugin-data writes.
+- **Manual snapshots and forks share the session lock**, so payload reads can no longer observe a mixed point-in-time while a turn is committing.
+- **Plugin uninstall honours the install privilege boundary.** `DELETE /api/plugins/:id` (which recursively deletes the plugin directory) now sits behind the same production opt-in / desktop bearer-token guard as install, instead of being callable by anyone who can reach the API.
+- **Outbound plugin fetches pin DNS resolution.** SSRF validation previously only checked the literal hostname; a public name resolving to a private/metadata address passed. `fetchWithRetry` now resolves and policy-checks addresses per attempt and pins the connection to the validated address via an undici dispatcher (DNS-rebinding defence).
+- **PR #18 review hardening.** Plugin tool-access allowlists only grant ownership after successful registration (tool-name collisions are rejected instead of leaving a dangling grant); the active turn registers inside the session lock so a queued action can no longer steal the steer/abort target; the web client clears its delta buffer and streaming placeholder on player abort (no ghost message).
+
 ## [0.0.13] - 2026-07-10
 
 The Windows release. The dev environment (spawn shims, plugin loading, supervised `pnpm dev`) now works on Windows, and CI builds Windows installers alongside the macOS bundles on every tag. Public web-only (browser IndexedDB) deployments are hardened: the shared session listing is hidden and the Render blueprint pins the memory backend explicitly.
