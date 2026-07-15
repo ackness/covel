@@ -355,7 +355,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 | 429    | `error` (`code: "queue-full"`)                                               | pending approvals 超过 cap                                                                                          |
 | 500    | `error` (`code: "runtime-execution-failed"` / `"background-enqueue-failed"`) | sync 执行异常 / 入队失败(background 模式下 runtime 内部异常走 SSE,不进 HTTP)                                        |
 
-带延迟 `entry` 的 community action 会连续返回两次 `approval-required`：先授权 `plugin:server-code`，重试后再授权真实 action。客户端逐阶段展示审批并重试原请求，最多处理两个阶段，超过上限即终止以避免异常审批循环。
+带延迟 `entry` 的 community action 会连续返回两次 `approval-required`：先授权 `covel:plugin-server-code`，重试后再授权真实 action。客户端逐阶段展示审批并重试原请求，最多处理两个阶段，超过上限即终止以避免异常审批循环。
 
 **框架默认 action:** 见 [api.md](api.md#post-apisessionsidplugin-rpc) 的"框架默认 action"小节。
 

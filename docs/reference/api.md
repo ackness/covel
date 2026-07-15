@@ -1468,7 +1468,7 @@ value         : {
 
 > 注意: background 模式下 runtime 内部异常 **不会**映射为 5xx HTTP 状态 —— 202 已经发出,失败信息写入 `_jobs/{jobId}.value.error`,前端通过 SSE 感知。
 
-> **community 插件 + `entry` action 的延迟激活**：首次调用时 action 声明尚未注册，服务端先返回固定 `action: "plugin:server-code"` 的全模块审批，避免由调用方伪造的 action label 诱导加载代码。session-scope 审批后加载 entry 并验证 action：不存在立即 404；存在则再返回该真实 action 的独立审批。客户端应处理这两个连续的 `approval-required` 响应，并为审批重试设置两阶段上限。hosted 层级两个步骤都要求 operator token。builtin/official 的 entry 在 boot 时已运行，其未知 action 直接 404。
+> **community 插件 + `entry` action 的延迟激活**：首次调用时 action 声明尚未注册，服务端先返回固定 `action: "covel:plugin-server-code"` 的全模块审批，避免由调用方伪造的 action label 诱导加载代码。session-scope 审批后加载 entry 并验证 action：不存在立即 404；存在则再返回该真实 action 的独立审批。客户端应处理这两个连续的 `approval-required` 响应，并为审批重试设置两阶段上限。hosted 层级两个步骤都要求 operator token。builtin/official 的 entry 在 boot 时已运行，其未知 action 直接 404。
 
 **插件 PLUGIN.md 中声明 RPC action:**
 
@@ -1582,10 +1582,10 @@ rpc:
 }
 ```
 
-| 字段       | 类型                    | 必需        | 说明                                                                                                                    |
-| ---------- | ----------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `decision` | `"allow"` \| `"deny"`   | 是          | 玩家选择                                                                                                                |
-| `scope`    | `"once"` \| `"session"` | 仅 allow 时 | 普通 action 可选 `once`（默认）或 `session`；`plugin:server-code` 与 `runtime:*` 会加载长生命周期模块，只接受 `session` |
+| 字段       | 类型                    | 必需        | 说明                                                                                                                          |
+| ---------- | ----------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `decision` | `"allow"` \| `"deny"`   | 是          | 玩家选择                                                                                                                      |
+| `scope`    | `"once"` \| `"session"` | 仅 allow 时 | 普通 action 可选 `once`（默认）或 `session`；`covel:plugin-server-code` 与 `runtime:*` 会加载长生命周期模块，只接受 `session` |
 
 **响应 200:**
 
@@ -2355,6 +2355,7 @@ Query 参数：`limit`（默认 50，最大 500）、`before_created_at` + `befo
       "sessionId": "mistport-a1b2c3d4",
       "turnId": "turn-42",
       "kind": "manual",
+      "parentId": null,
       "createdAt": "2026-04-13T00:00:00.000Z",
       "payloadSize": 18342
     }
@@ -2363,7 +2364,7 @@ Query 参数：`limit`（默认 50，最大 500）、`before_created_at` + `befo
 }
 ```
 
-`nextCursor` 指向本页最旧一条快照的 `(createdAt, id)` 位置，作为下一页（更旧）的 `before_*`；返回条数少于 `limit`（已到最早一份）时为 `null`。session 不存在时返回 `404`。
+`nextCursor` 指向本页最旧一条快照的 `(createdAt, id)` 位置，作为下一页（更旧）的 `before_*`；返回条数少于 `limit`（已到最早一份）时为 `null`。session 不存在时返回 `404`。`kind="fork"` 的快照 `parentId` 指向源 snapshot id，其余 kind 为 `null`。
 
 #### `GET /api/sessions/:id/snapshots/:snapshotId`
 

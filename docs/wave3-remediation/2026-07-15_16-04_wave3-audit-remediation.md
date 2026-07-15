@@ -75,7 +75,7 @@ behavior and the existing plugin/runtime architecture.
   credential; Web propagates owner/operator tokens, including fork children,
   and exposes browser-local operator credential setup with reload-based
   rehydration.
-- Community entry import uses a fixed `plugin:server-code` approval before
+- Community entry import uses a fixed `covel:plugin-server-code` approval before
   action discovery. The Web client processes the expected server-code and
   action approvals in a bounded two-stage loop. Hooks/runtime execution remain
   session-gated; entry factory store access and community guard side effects

@@ -4,9 +4,38 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.15] - 2026-07-16
+
+Security and reliability hardening release. A full-repository audit and two follow-up remediation rounds closed the credential, trust-boundary, transaction-consistency, and event-delivery gaps that made the previous build unsafe to expose on a public, multi-user, or multi-instance deployment. Local single-user `self`/desktop play is unchanged by default; the new hosted-tier controls are opt-in via `DEPLOYMENT_TIER`.
+
+### Security
+
+- **Provider keys stay bound to their trusted origin.** Server/platform API keys now flow to the gateway as `envApiKeys`, separate from request-supplied `X-Provider-Keys`; an env key attaches only when the resolved `baseUrl` origin matches trusted config (`llm.toml` / registered provider defaults). A request-scoped custom preset that redirects a provider to another origin receives no env key and no trusted default headers, closing the request-level key-exfiltration chain.
+- **Per-request slot overlays are isolated.** Custom presets register under a request-derived scoped id, so two concurrent requests using the same provider name with different base URLs can no longer share a registration — a victim's browser key can never be sent to an origin another in-flight request registered.
+- **Core provider HTTP resolves DNS through a pinning dispatcher.** `postJson` / `getJson` / `postFormData` (not just the plugin `ctx.http` helper) validate every A/AAAA answer at connect time and reject private/link-local/metadata addresses, closing the string-check-to-connect DNS-rebinding gap.
+- **Hosted deployments gate every session and global route.** A per-session owner token (minted at create, hash-persisted, returned once) guards all session-scoped routes; hosted (`demo`/`commercial`) tiers additionally require an operator credential to create/list sessions and reach global admin/model/world routes. The server binds `127.0.0.1` by default (`COVEL_BIND_HOST` opts into a public interface). A startup posture check fails closed on a hosted tier missing its media secret, CORS origin, or operator token. `self`/desktop/dev tiers remain a strict no-op.
+- **Community plugin code is import-gated behind two-phase approval.** A community (third-party) plugin's server code (`entry` / handler / hook / wire / runtime JS) is never imported until an explicit `covel:plugin-server-code` grant is approved for the session; the specific action then requires its own approval. Legacy `hooks:` handlers defer their import behind the same gate, the community entry store is default-deny (writes flow through proposals), and a timed-out agent guard has its write capabilities revoked so it cannot mutate a later turn.
+- **Desktop hardening.** Electron blocks main-frame navigation off the sidecar origin and validates the sender frame on secret-returning IPC; ZIP imports enforce entry-count / total-size / per-entry / ratio limits and no longer accept renderer-supplied arbitrary paths.
+- **Supply chain and logging.** Pinned `only-allow` and Docker image digests; Postgres binds host loopback; media and session tokens are redacted from error logs; GitHub Actions pinned to commit SHAs.
+
+### Added
+
+- **Operator Access settings pane** to save / clear / show / hide the hosted operator token, reloading session and world data on change.
+- **Pull-request / push CI** running install → lint → `lint:ci` (typecheck + dependency hygiene) → tests → build → i18n/plugin checks; `DEPLOYMENT_TIER` is parsed against an explicit enum and fails closed to the most restrictive tier on an unknown value.
+
 ### Changed
 
 - **Community plugins seeded by a world now require explicit approval on every tier.** A third-party (`community`-trust) plugin listed in a world manifest is no longer auto-activated and auto-loaded on first schedule — it is dropped from a session's active set at creation and must be explicitly enabled and approved (two phases: load the plugin's server code, then the specific action) before any of its code executes. This now applies on **all** deployment tiers, including local `self`/desktop, matching the documented community trust model (deferred `import()` until the user approves). **Bundled sample worlds are unaffected** — their plugins are `builtin`/`official` and still auto-load at boot. **Migration:** if you author a world that references a third-party community plugin, players must enable and approve it in-session; a previously-working self-tier world that relied on such a plugin auto-loading will start with it inactive until approved.
+- **Turn side effects are strictly post-commit.** Externally-visible "committed" SSE/trace broadcasts, `PostStateCommit` hooks, `turn.completed`, and post-turn memory/vector ingestion now run only after the commit transaction resolves, so a rolled-back batch emits no ghost events and never writes memory for a failed turn; a single `traceId` threads the whole turn.
+- **Snapshots are checkpoint-throttled and paginated** (`COVEL_SNAPSHOT_INTERVAL_TURNS`, default 5), with a store-level metadata projection + keyset pagination that never deserializes payloads.
+- **Streaming text is decoupled from message history** into an external store, so per-delta updates are O(1) and the chat grouping memo no longer rebuilds per token; the IDB backend and debug route move out of the main web chunk.
+
+### Fixed
+
+- **EventBus delivery is bounded and gap-aware.** A fixed-capacity ring buffer with LRU/idle eviction (active subscribers pinned), `${epoch}:${seq}` non-reusable ids, replay-gap detection that drives a `system.reset` → client re-hydrate, a per-session ordered cross-pod outbox over PG `LISTEN/NOTIFY`, and leak-free SSE cleanup with a per-session connection cap and bounded write backpressure.
+- **The compactor cascades past the first compaction** — the window starts after the last boundary and tokens are estimated from the effective prompt view, so long sessions keep compacting instead of eventually overflowing the model context.
+- **Graceful shutdown drains** watchers, event bus, store, and PG lock pool; background jobs get a startup recovery sweep and a concurrency cap; the PG advisory-lock deadline now covers pool checkout.
+- **Turn hot-path reads reduced** (working memory deduped 3→1 per turn; touched-only transaction snapshots), IDB keyset pagination with an atomic v11→v12 metadata migration, and session-owner coverage extended to `approvals` / `media` / world-sync / `ui-specs`.
 
 ## [0.0.14] - 2026-07-13
 
