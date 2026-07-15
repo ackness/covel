@@ -5,6 +5,10 @@
  * state snapshots, world overlays, submitted block UI state, etc.
  */
 
+// Backend-free schema module (constants + pure upgrade fn). A static import of
+// these runtime values from "@covel/store/idb" would pull the entire IDB
+// DataStore backend into the main chunk and defeat the dynamic import() in
+// services/storage/data-store.ts (rollup: INEFFECTIVE_DYNAMIC_IMPORT). See R-18.
 import {
   APP_KV_STORE_EXECUTION_STEPS,
   APP_KV_STORE_STATE_PATCHES,
@@ -13,7 +17,7 @@ import {
   APP_KV_STORE_WORLD_OVERLAYS,
   BROWSER_IDB_SCHEMA_VERSION,
   upgradeBrowserIdbSchema,
-} from "@covel/store/idb";
+} from "@covel/store/idb-schema";
 import {
   BROWSER_STORAGE_RESET_KEY,
   LEGACY_BROWSER_DATABASES,

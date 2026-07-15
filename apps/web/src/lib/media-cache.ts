@@ -15,11 +15,16 @@
  * function via the network fallback in `media-resolve.ts`.
  */
 
+// Import from the backend-free schema module (constants + the pure upgrade
+// function only). Importing these runtime values from "@covel/store/idb"
+// statically would drag the whole IDB DataStore backend into the main chunk
+// and defeat the dynamic import() in services/storage/data-store.ts
+// (rollup: INEFFECTIVE_DYNAMIC_IMPORT). See R-18.
 import {
   BROWSER_IDB_SCHEMA_VERSION,
   MEDIA_CACHE_STORE_BLOBS,
   upgradeBrowserIdbSchema,
-} from "@covel/store/idb";
+} from "@covel/store/idb-schema";
 import { BROWSER_STORAGE_DB_NAME } from "@/services/storage";
 
 const DB_NAME = BROWSER_STORAGE_DB_NAME;

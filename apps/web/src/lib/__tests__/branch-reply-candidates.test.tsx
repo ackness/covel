@@ -55,6 +55,7 @@ function renderBranchReply(value: Record<string, unknown>) {
           type: "BranchReplyCandidates",
           props: {
             pluginId: "branch-reply",
+            runtimeId: "branch-reply",
             value,
             title: "Reply candidates",
             draftLabel: "Draft",

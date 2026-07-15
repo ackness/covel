@@ -1,5 +1,14 @@
+import { Suspense, lazy } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { DebugRoutePage } from "./debug/-debug-route-page.js";
+
+// Lazy-load the debug page tree (trace/cost/session panels, ~a dozen modules)
+// so it never lands in the main app chunk — /debug is a dev-only surface the
+// homepage and session view never touch. See R-18 (main-chunk trimming).
+const DebugRoutePage = lazy(() =>
+  import("./debug/-debug-route-page.js").then((m) => ({
+    default: m.DebugRoutePage,
+  })),
+);
 
 export interface DebugSearchParams {
   sid?: string;
@@ -20,5 +29,9 @@ export const Route = createFileRoute("/debug")({
 
 function DebugPage() {
   const { sid } = Route.useSearch();
-  return <DebugRoutePage sid={sid} />;
+  return (
+    <Suspense fallback={null}>
+      <DebugRoutePage sid={sid} />
+    </Suspense>
+  );
 }

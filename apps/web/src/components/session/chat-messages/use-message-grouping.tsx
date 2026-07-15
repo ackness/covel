@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { ExecutionTimeline } from "../execution-timeline.js";
 import { AssetTurnSidebar } from "@/components/asset-render/index.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
@@ -21,9 +21,11 @@ interface UseMessageGroupingArgs {
  * (content-visibility) while preserving keys, refs, state, scroll anchoring,
  * streaming follow and jump-to-latest.
  *
- * Plain per-render computation (mirrors the original inline grouping) — the
- * inputs change each turn and `renderMessage` closes over live props/state, so
- * memoisation would offer no benefit and risk stale rows.
+ * The O(history) grouping maps are memoised on `[messages, executionSteps]`
+ * so renders driven by other props (hover state, jump-to-latest, load-older
+ * spinner, confirm dialog) don't rebuild them. `renderMessage` closes over
+ * live props/state and stays fresh — it is called in the render loop below,
+ * never memoised, so rows never go stale.
  */
 export function useMessageGrouping({
   messages,
@@ -33,19 +35,30 @@ export function useMessageGrouping({
   onRetryRuntime,
   renderMessage,
 }: UseMessageGroupingArgs): ReactNode[] {
-  // Group execution steps by turnId for inline rendering
-  const stepsByTurn = new Map<string, ExecutionStep[]>();
-  for (const step of executionSteps) {
-    const tid = step.turnId ?? "__unknown__";
-    if (!stepsByTurn.has(tid)) stepsByTurn.set(tid, []);
-    stepsByTurn.get(tid)!.push(step);
-  }
+  const { stepsByTurn, lastMsgIndexByTurn, lastTurnId } = useMemo(() => {
+    // Group execution steps by turnId for inline rendering
+    const steps = new Map<string, ExecutionStep[]>();
+    for (const step of executionSteps) {
+      const tid = step.turnId ?? "__unknown__";
+      if (!steps.has(tid)) steps.set(tid, []);
+      steps.get(tid)!.push(step);
+    }
 
-  // Collect the last message index per turnId so we know where to insert
-  const lastMsgIndexByTurn = new Map<string, number>();
-  messages.forEach((msg, idx) => {
-    if (msg.turnId) lastMsgIndexByTurn.set(msg.turnId, idx);
-  });
+    // Collect the last message index per turnId so we know where to insert
+    const lastIdx = new Map<string, number>();
+    for (let i = 0; i < messages.length; i += 1) {
+      const tid = messages[i].turnId;
+      if (tid) lastIdx.set(tid, i);
+    }
+
+    // The last inserted turnId — used to flag the active turn for retry/loader.
+    const turnIds = [...lastIdx.keys()];
+    return {
+      stepsByTurn: steps,
+      lastMsgIndexByTurn: lastIdx,
+      lastTurnId: turnIds.at(-1),
+    };
+  }, [messages, executionSteps]);
 
   const rendered: ReactNode[] = [];
   const insertedTurnIds = new Set<string>();
@@ -59,8 +72,7 @@ export function useMessageGrouping({
       const turnSteps = stepsByTurn.get(msg.turnId);
       if (turnSteps && turnSteps.length > 0) {
         insertedTurnIds.add(msg.turnId);
-        const isActiveTurn =
-          executing && msg.turnId === [...lastMsgIndexByTurn.keys()].at(-1);
+        const isActiveTurn = executing && msg.turnId === lastTurnId;
         rendered.push(
           <ExecutionTimeline
             key={`exec-${msg.turnId}`}

@@ -325,13 +325,6 @@ type RestartResult =
   | { readonly ok: true; readonly port: number }
   | { readonly ok: false; readonly port: number; readonly error: string };
 
-/** Convenience helper: restart the backend server. */
-export async function restartServer(): Promise<RestartResult | null> {
-  const ipc = getCovelIpc();
-  if (!ipc) return null;
-  return ipc.invoke<RestartResult>("covel:restart-server");
-}
-
 /**
  * Desktop-only: restart the backend sidecar and then hard-reload the
  * renderer so every stateful client (SSE subscriptions, TanStack Query

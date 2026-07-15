@@ -86,8 +86,14 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
     props.value ?? props.candidateSet ?? props.replySet ?? props.data ?? props;
   const { turnId, acceptedCandidateId, candidates } =
     normalizeBranchReplyCandidates(payload);
+  // pluginId / runtimeId arrive as data from the plugin's own json-render spec
+  // (ui/branch-reply-block.json) — framework code must not hardcode plugin ids
+  // in control flow (isolation rule). Absent ids simply disable the RPC-backed
+  // actions (regenerate/accept); draft/send never touch the runtime.
   const pluginId =
-    typeof props.pluginId === "string" ? props.pluginId : "branch-reply";
+    typeof props.pluginId === "string" ? props.pluginId : undefined;
+  const runtimeId =
+    typeof props.runtimeId === "string" ? props.runtimeId : undefined;
   const title =
     resolve(props.title) ||
     t("branchReply.replyCandidates", "Reply candidates");
@@ -110,7 +116,9 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
   const selectionGroup = turnId
     ? `branch-reply:${turnId}`
     : `branch-reply:${candidates[0]?.id ?? "candidate"}`;
-  const canInvokeRuntime = Boolean(sessionId && turnId);
+  const canInvokeRuntime = Boolean(
+    sessionId && turnId && pluginId && runtimeId,
+  );
 
   const draftCandidate = (candidate: BranchReplyCandidate) => {
     upsertInteractionDraft({
@@ -133,12 +141,14 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
     action: "acceptCandidate" | "createCandidates",
     payload: Record<string, unknown>,
   ) => {
-    if (!sessionId || !turnId || pendingAction) return;
+    if (!sessionId || !turnId || !pluginId || !runtimeId || pendingAction) {
+      return;
+    }
     setPendingAction(action);
     try {
       const res = await postPluginRpc(sessionId, {
         pluginId,
-        runtimeId: "branch-reply",
+        runtimeId,
         payload,
       });
       if (res.status === "error") {

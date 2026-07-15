@@ -10,6 +10,43 @@ import { isMediaRef } from "@/lib/media-ref-utils.js";
 import { resolveI18n } from "@/lib/catalog/helpers.js";
 import { isPendingInteractionMessage } from "../game-view/interaction-blocks.js";
 
+// ── Capability-driven plugin binding ────────────────────────────
+//
+// Stage layers bind to plugin-data by CAPABILITY, not by hardcoded plugin id
+// (framework↔plugin isolation rule — framework code must discover plugins via
+// declared capabilities). A plugin declares one of these capabilities in its
+// PLUGIN.md; the stage resolves the owning plugin id at runtime from the
+// session's active plugin list. The bundled plugins (scene-stage / scene-cast /
+// scene-prompts / character-presence) declare the matching capability, so
+// discovery resolves to them today; a third-party equivalent that declares the
+// same capability transparently replaces them without touching this code.
+
+export const STAGE_CAPABILITIES = {
+  scene: "scene-stage",
+  cast: "scene-cast",
+  prompts: "scene-prompts",
+  presence: "character-presence",
+} as const;
+
+interface CapabilityCarrier {
+  readonly id: string;
+  readonly capabilities?: readonly string[];
+}
+
+/**
+ * Resolve the plugin id that declares `capability` from the session's plugin
+ * list. Falls back to `capability` itself as the id: the bundled stage plugins
+ * use capability == id, so a session whose manifest predates the capability
+ * tags still binds correctly. Returns the first match (stage layers are 1:1).
+ */
+export function pluginIdForCapability(
+  plugins: readonly CapabilityCarrier[],
+  capability: string,
+): string {
+  const match = plugins.find((p) => p.capabilities?.includes(capability));
+  return match?.id ?? capability;
+}
+
 // ── Backdrop (scene-stage `stage/current`) ──────────────────────
 
 /** Shape written by `scene-stage/resolver` to `(scene-stage, "stage")["current"]`. */

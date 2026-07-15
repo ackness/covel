@@ -171,7 +171,19 @@ export function reducer(
       // "unattributed" and the timeline chips would jump to the very top of
       // the chat instead of appearing right after the turn's last message.
       const streamId = `stream_${action.turnId}_${action.runtimeId}`;
-      const idx = state.messages.findIndex((m) => m.id === streamId);
+      // Fast path: the streaming placeholder is the last message in the
+      // overwhelmingly common case (deltas arrive in order while the turn
+      // generates), so check the tail first and skip the O(n) findIndex scan.
+      // Only the redundant scan is removed here — the `.with()` copy is O(n)
+      // and inherent to keeping `messages` an immutable new reference each
+      // delta (the store re-renders on identity change).
+      // ponytail: O(n) copy per delta stays; upgrade path = hold streaming
+      // text in a separate buffer outside `messages` if profiling demands it.
+      const lastIdx = state.messages.length - 1;
+      const idx =
+        lastIdx >= 0 && state.messages[lastIdx].id === streamId
+          ? lastIdx
+          : state.messages.findIndex((m) => m.id === streamId);
       if (idx >= 0) {
         const prev = state.messages[idx];
         const newMessages = state.messages.with(idx, {
