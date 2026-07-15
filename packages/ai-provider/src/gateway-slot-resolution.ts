@@ -1,7 +1,12 @@
 import type { ProviderDefaults } from "./types.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import type { SlotRegistry } from "./slot-registry.js";
-import { applySlotOverlay, resolveSlotOverride } from "./slot-overlay.js";
+import {
+  applySlotOverlay,
+  publicPresetId,
+  resolveOverlayPresetId,
+  resolveSlotOverride,
+} from "./slot-overlay.js";
 import { targetModel, targetProvider } from "./gateway-lifecycle.js";
 import type {
   ModelParameterOverrides,
@@ -131,11 +136,21 @@ export function createGatewaySlotResolution(
     // slot-registry lookup prevents the tag-based fallback from silently
     // routing a browser-only slot name (e.g. "fast") to the first
     // llm.toml slot (e.g. "story").
+    //
+    // A preset id declared in the request's own customPresets is then
+    // mapped to its request-scoped overlay registration (H-04) — the
+    // request only ever resolves the config it declared itself, never a
+    // same-named registration from a concurrent request.
     const clientOverride = resolveSlotOverride(
       presetId,
       options?.slotOverrides,
     );
-    if (clientOverride !== presetId) return clientOverride;
+    const overlayId = resolveOverlayPresetId(
+      clientOverride,
+      options?.slotOverrides,
+      (id) => deps.presetRegistry.hasPreset?.(id) ?? false,
+    );
+    if (overlayId !== presetId) return overlayId;
 
     // Direct preset-id match trumps the slot lookup. Without this the
     // tag-based fallback below would divert calls made with a raw preset
@@ -282,7 +297,9 @@ export function createGatewaySlotResolution(
       };
 
       return {
-        presetId: effectivePresetId,
+        // Overlay registrations use internal scoped ids — surface the
+        // public id so plugins see the id the request actually asked for.
+        presetId: publicPresetId(effectivePresetId),
         provider,
         protocol: protocol as string,
         ...(baseUrl ? { baseUrl } : {}),

@@ -139,12 +139,18 @@ export function createProviderRegistry(options?: {
     },
     opts: { mode: OperationMode } = { mode: "text" },
   ): ProviderResolution {
-    const registered = providers.get(target.provider);
-    if (!registered) {
+    // Request-scoped targets (browser custom presets) may name providers
+    // that exist only in the request. Resolve them ephemerally instead of
+    // requiring a registration: nothing is written to the shared registry,
+    // so concurrent requests can never poison each other's provider config
+    // (H-04), and env keys never attach (no trusted default origin).
+    const stored = providers.get(target.provider);
+    if (!stored && !target.requestScoped) {
       throw new Error(
         `Provider registry: provider "${target.provider}" is not registered.`,
       );
     }
+    const registered: ProviderRegistration = stored ?? { requestScoped: true };
 
     const protocol = resolveProtocol(target);
     const protocolRoute = registered.protocols?.[protocol];

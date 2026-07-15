@@ -104,9 +104,11 @@ export {
 } from "./speech/wire-registry.js";
 export type { SpeechWire, TranscriptionWire } from "./speech/types.js";
 
-// Slot overlay (per-request preset/provider injection)
+// Slot overlay (per-request preset injection)
 export {
   applySlotOverlay,
+  publicPresetId,
+  resolveOverlayPresetId,
   resolveSlotOverride,
   type OverlayDeps,
 } from "./slot-overlay.js";
