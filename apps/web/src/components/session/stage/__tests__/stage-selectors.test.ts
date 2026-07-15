@@ -254,6 +254,28 @@ describe("computeSpriteLanes", () => {
     ]);
   });
 
+  it("the active speaker's lane is wider, lanes still tile the stage", () => {
+    const lanes = computeSpriteLanes(["left", "center", "right"], 1);
+    // Weighted 1.4 : 1 — active share = 1.4/3.4, others 1/3.4.
+    expect(lanes[1].widthPct).toBeCloseTo((1.4 / 3.4) * 100, 6);
+    expect(lanes[0].widthPct).toBeCloseTo((1 / 3.4) * 100, 6);
+    expect(lanes[2].widthPct).toBeCloseTo((1 / 3.4) * 100, 6);
+    // Contiguous, no overlap: each lane starts where the previous ends.
+    expect(lanes[0].leftPct).toBeCloseTo(0, 6);
+    expect(lanes[1].leftPct).toBeCloseTo(lanes[0].widthPct, 6);
+    expect(lanes[2].leftPct).toBeCloseTo(
+      lanes[1].leftPct + lanes[1].widthPct,
+      6,
+    );
+    expect(lanes[2].leftPct + lanes[2].widthPct).toBeCloseTo(100, 6);
+  });
+
+  it("a solo active speaker keeps the capped centered lane", () => {
+    expect(computeSpriteLanes(["center"], 0)).toEqual([
+      { leftPct: 20, widthPct: 60 },
+    ]);
+  });
+
   it("lanes tile the stage without overlap for any cast size", () => {
     for (const positions of [
       ["left", "center", "right"],

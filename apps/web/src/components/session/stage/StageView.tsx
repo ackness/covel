@@ -41,6 +41,7 @@ import {
   extractInteractionChoices,
   extractPendingFormMessages,
   filterStalePrompts,
+  mergeChoices,
   type PresenceRecord,
   type StageCurrentRecord,
   type StageSpeaker,
@@ -166,6 +167,13 @@ export function StageView(props: StageViewProps): ReactElement {
     [promptsNamespace, storyTurnId],
   );
   const activeForm = pendingForms.find((m) => !dismissedFormIds.has(m.id));
+  // The overlay always carries the free-input entry; only *real* choice items
+  // (interaction choices / scene-prompts) justify dimming the sprites.
+  const hasChoiceItems = useMemo(
+    () =>
+      mergeChoices(interactionChoices, freshPrompts, locale).items.length > 0,
+    [interactionChoices, freshPrompts, locale],
+  );
 
   const choicesVisible = allRead && !executing && !inputMode;
 
@@ -183,7 +191,7 @@ export function StageView(props: StageViewProps): ReactElement {
         speakers={speakers}
         presence={presence}
         sessionId={session.id}
-        dimmed={choicesVisible}
+        dimmed={choicesVisible && hasChoiceItems}
       />
       <StageHud
         sceneCurrent={sceneCurrent}
