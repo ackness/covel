@@ -241,7 +241,7 @@ data: {
 
 - `reason: "epoch-change"` —— 游标 epoch 与当前不符（含驱逐/重启后的换代，及无法解析的旧格式游标）。
 - `reason: "gap"` —— epoch 相符但环形缓存已越过游标（`afterSeq` 早于 `oldestSeq`），或游标 seq 超前于 `latestSeq`。
-- `reason: "transport-gap"` —— 跨 pod transport 检测到真实序号缺口；本地 replay 立即清空并换 epoch，所有已连接客户端收到 reset 后断线重连。
+- `reason: "transport-gap"` —— 跨 pod transport 检测到真实序号缺口。每个 `(origin, session, stream)` 从 `seq=1` 开始校验；新 stream 首帧大于 `1`，或接收状态被淘汰后首帧大于 `1`，均会触发缺口处理。本地 replay 清空并换 epoch，所有已连接客户端收到 reset 后断线重连。
 
 该帧与 `system.connected` / `system.heartbeat` 一样**不带 `id:` 头**，因此不会污染 `EventSource` 的 `lastEventId`。
 
@@ -354,6 +354,8 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 | 404    | `error` (`code: "unknown-action"` / `"runtime-not-active"`)                  | action 未注册 / runtimeId 未加载到该 session                                                                        |
 | 429    | `error` (`code: "queue-full"`)                                               | pending approvals 超过 cap                                                                                          |
 | 500    | `error` (`code: "runtime-execution-failed"` / `"background-enqueue-failed"`) | sync 执行异常 / 入队失败(background 模式下 runtime 内部异常走 SSE,不进 HTTP)                                        |
+
+带延迟 `entry` 的 community action 会连续返回两次 `approval-required`：先授权 `plugin:server-code`，重试后再授权真实 action。客户端逐阶段展示审批并重试原请求，最多处理两个阶段，超过上限即终止以避免异常审批循环。
 
 **框架默认 action:** 见 [api.md](api.md#post-apisessionsidplugin-rpc) 的"框架默认 action"小节。
 

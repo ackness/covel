@@ -8,6 +8,11 @@ import { emitToast } from "@/lib/toast-channel.js";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
+// A deferred community entry requires one grant to load its server code and a
+// second grant for the requested action. Keep the retry bounded so a broken
+// approval backend cannot trap the UI in an authorization loop.
+const MAX_PLUGIN_RPC_APPROVAL_STAGES = 2;
+
 export interface PluginRpcConfirmRequest {
   readonly title: string;
   readonly message: string;
@@ -151,67 +156,76 @@ export async function resolvePluginRpcApprovalResponse(params: {
   readonly t: Translate;
   readonly submitApproval?: typeof resolveApproval;
 }): Promise<PluginRpcResponse | null> {
-  if (params.response.status !== "approval-required") {
-    return params.response;
-  }
-  const pending =
-    params.response.pending && typeof params.response.pending === "object"
-      ? (params.response.pending as Record<string, unknown>)
-      : undefined;
-  const approvedPluginId =
-    typeof pending?.pluginId === "string" ? pending.pluginId : params.pluginId;
-  const approvedAction =
-    typeof pending?.action === "string" ? pending.action : params.actionLabel;
+  let response = params.response;
 
-  const proceed = await params.confirm({
-    title: params.t("plugin.approval.title", {
-      defaultValue: "Authorize plugin action",
-    }),
-    message: params.t("plugin.approval.confirmMessage", {
-      pluginId: approvedPluginId,
-      action: approvedAction,
-      defaultValue:
-        "Plugin {{pluginId}} requests permission to run {{action}}. Authorize all matching calls for this session?",
-    }),
-    confirmLabel: params.t("plugin.approval.allow", {
-      defaultValue: "Authorize",
-    }),
-    cancelLabel: params.t("plugin.approval.deny", {
-      defaultValue: "Deny",
-    }),
-  });
+  for (
+    let stage = 0;
+    response.status === "approval-required" &&
+    stage < MAX_PLUGIN_RPC_APPROVAL_STAGES;
+    stage += 1
+  ) {
+    const pending =
+      response.pending && typeof response.pending === "object"
+        ? (response.pending as Record<string, unknown>)
+        : undefined;
+    const approvedPluginId =
+      typeof pending?.pluginId === "string"
+        ? pending.pluginId
+        : params.pluginId;
+    const approvedAction =
+      typeof pending?.action === "string" ? pending.action : params.actionLabel;
 
-  try {
-    await (params.submitApproval ?? resolveApproval)(
-      params.response.approvalId,
-      proceed ? "allow" : "deny",
-      "session",
-      params.sessionId,
-    );
-  } catch (err) {
-    emitToast(
-      "error",
-      params.t("plugin.approval.submitFailed", {
-        error: err instanceof Error ? err.message : String(err),
-        defaultValue: "Approval submission failed: {{error}}",
+    const proceed = await params.confirm({
+      title: params.t("plugin.approval.title", {
+        defaultValue: "Authorize plugin action",
       }),
-    );
-    return null;
-  }
-
-  if (!proceed) {
-    emitToast(
-      "info",
-      params.t("plugin.approval.denied", {
-        action: params.actionLabel,
-        defaultValue: "Denied {{action}}",
+      message: params.t("plugin.approval.confirmMessage", {
+        pluginId: approvedPluginId,
+        action: approvedAction,
+        defaultValue:
+          "Plugin {{pluginId}} requests permission to run {{action}}. Authorize all matching calls for this session?",
       }),
-    );
-    return null;
+      confirmLabel: params.t("plugin.approval.allow", {
+        defaultValue: "Authorize",
+      }),
+      cancelLabel: params.t("plugin.approval.deny", {
+        defaultValue: "Deny",
+      }),
+    });
+
+    try {
+      await (params.submitApproval ?? resolveApproval)(
+        response.approvalId,
+        proceed ? "allow" : "deny",
+        "session",
+        params.sessionId,
+      );
+    } catch (err) {
+      emitToast(
+        "error",
+        params.t("plugin.approval.submitFailed", {
+          error: err instanceof Error ? err.message : String(err),
+          defaultValue: "Approval submission failed: {{error}}",
+        }),
+      );
+      return null;
+    }
+
+    if (!proceed) {
+      emitToast(
+        "info",
+        params.t("plugin.approval.denied", {
+          action: approvedAction,
+          defaultValue: "Denied {{action}}",
+        }),
+      );
+      return null;
+    }
+
+    response = await params.retry();
   }
 
-  const retryResponse = await params.retry();
-  if (retryResponse.status === "approval-required") {
+  if (response.status === "approval-required") {
     emitToast(
       "error",
       params.t("plugin.approval.unexpectedRequired", {
@@ -221,5 +235,5 @@ export async function resolvePluginRpcApprovalResponse(params: {
     );
     return null;
   }
-  return retryResponse;
+  return response;
 }

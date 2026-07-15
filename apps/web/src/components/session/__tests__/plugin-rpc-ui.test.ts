@@ -107,4 +107,102 @@ describe("plugin-rpc-ui", () => {
     expect(retry).toHaveBeenCalledTimes(1);
     expect(res).toBe(retryResponse);
   });
+
+  it("resolves deferred server-code and action approvals in sequence", async () => {
+    const actionApproval: PluginRpcResponse = {
+      status: "approval-required",
+      approvalId: "approval-action",
+      pending: {
+        pluginId: "server-plugin",
+        action: "generate-image",
+      },
+    };
+    const completed: PluginRpcResponse = { status: "ok", result: true };
+    const retry = vi
+      .fn<() => Promise<PluginRpcResponse>>()
+      .mockResolvedValueOnce(actionApproval)
+      .mockResolvedValueOnce(completed);
+    const submitApproval = vi.fn(async () => undefined);
+    const confirm = vi.fn(async () => true);
+
+    const res = await resolvePluginRpcApprovalResponse({
+      response: {
+        status: "approval-required",
+        approvalId: "approval-server-code",
+        pending: {
+          pluginId: "server-plugin",
+          action: "plugin:server-code",
+        },
+      },
+      sessionId: "session-1",
+      retry,
+      pluginId: "server-plugin",
+      actionLabel: "action generate-image",
+      confirm,
+      t,
+      submitApproval,
+    });
+
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(confirm).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        message: expect.stringContaining("plugin:server-code"),
+      }),
+    );
+    expect(confirm).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        message: expect.stringContaining("generate-image"),
+      }),
+    );
+    expect(submitApproval).toHaveBeenNthCalledWith(
+      1,
+      "approval-server-code",
+      "allow",
+      "session",
+      "session-1",
+    );
+    expect(submitApproval).toHaveBeenNthCalledWith(
+      2,
+      "approval-action",
+      "allow",
+      "session",
+      "session-1",
+    );
+    expect(retry).toHaveBeenCalledTimes(2);
+    expect(res).toBe(completed);
+  });
+
+  it("stops after the expected approval stages", async () => {
+    const approval = (id: string): PluginRpcResponse => ({
+      status: "approval-required",
+      approvalId: id,
+      pending: { pluginId: "server-plugin", action: `action-${id}` },
+    });
+    const retry = vi
+      .fn<() => Promise<PluginRpcResponse>>()
+      .mockResolvedValueOnce(approval("2"))
+      .mockResolvedValueOnce(approval("3"));
+    const submitApproval = vi.fn(async () => undefined);
+
+    const res = await resolvePluginRpcApprovalResponse({
+      response: approval("1"),
+      sessionId: "session-1",
+      retry,
+      pluginId: "server-plugin",
+      actionLabel: "action",
+      confirm: async () => true,
+      t,
+      submitApproval,
+    });
+
+    expect(submitApproval).toHaveBeenCalledTimes(2);
+    expect(retry).toHaveBeenCalledTimes(2);
+    expect(emitToast).toHaveBeenCalledWith(
+      "error",
+      expect.stringContaining("approval-required"),
+    );
+    expect(res).toBeNull();
+  });
 });

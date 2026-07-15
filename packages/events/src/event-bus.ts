@@ -129,14 +129,16 @@ export const PERSIST_QUEUE_MAX = 1000;
 export const RECEIVE_PENDING_MAX = 64;
 /** How long a receiver waits on a transport seq hole before skipping it. */
 export const RECEIVE_GAP_FLUSH_MS = 2000;
+/** FIFO cap on receive-ordering states across transport streams. */
+export const RECEIVE_STATES_MAX = 1024;
 
 const DROP_WARN_INTERVAL_MS = 10_000;
 // PG NOTIFY hard-fails payloads ≥ 8000 bytes; leave slack for frame overhead.
 const MAX_TRANSPORT_INLINE_BYTES = 7500;
 // ponytail: FIFO cap on receive-ordering states; oldest entry dropped when
-// full — worst case one very late frame from that origin/session delivers out
-// of order. Upgrade to LRU + per-entry TTL if multi-pod fleets ever grow.
-const RECEIVE_STATES_MAX = 1024;
+// full. A later frame for an evicted stream is conservatively treated as a
+// fresh stream and must start at seq 1. Upgrade to LRU + per-entry TTL if
+// multi-pod fleets ever grow.
 
 interface SessionState {
   /** Locally assigned replay sequence used only for SSE ids/buffering. */
@@ -170,8 +172,8 @@ interface TransportFrame {
 /** Per-(origin, session) receive-side ordering state. */
 interface ReceiveState {
   readonly sessionId: string;
-  /** Next expected origin seq; undefined until the first frame arrives. */
-  expected: number | undefined;
+  /** Next expected origin seq; every transport stream starts at 1. */
+  expected: number;
   /** Out-of-order frames parked until their predecessors arrive. */
   pending: Map<number, TransportFrame>;
   timer: ReturnType<typeof setTimeout> | undefined;
@@ -480,7 +482,7 @@ export function createEventBus(
       }
       rs = {
         sessionId,
-        expected: undefined,
+        expected: 1,
         pending: new Map(),
         timer: undefined,
         chain: Promise.resolve(),
@@ -542,8 +544,8 @@ export function createEventBus(
       JSON.stringify([frame.origin, sessionId, stream]),
       sessionId,
     );
-    if (rs.expected !== undefined && frame.seq < rs.expected) return; // duplicate/late
-    if (rs.expected === undefined || frame.seq === rs.expected) {
+    if (frame.seq < rs.expected) return; // duplicate/late
+    if (frame.seq === rs.expected) {
       scheduleDeliver(rs, frame);
       rs.expected = frame.seq + 1;
       // Drain any parked successors that are now consecutive.

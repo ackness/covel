@@ -72,11 +72,16 @@ behavior and the existing plugin/runtime architecture.
 ## Implemented result
 
 - Hosted global mutations and community code fail closed behind the operator
-  credential; Web propagates owner/operator tokens, including fork children.
+  credential; Web propagates owner/operator tokens, including fork children,
+  and exposes browser-local operator credential setup with reload-based
+  rehydration.
 - Community entry import uses a fixed `plugin:server-code` approval before
-  action discovery. Hooks/runtime execution remain session-gated; entry factory
-  store access and community guard side effects are denied.
-- Event transport uses per-stream ordering, reset-on-gap, bounded SSE queues and
+  action discovery. The Web client processes the expected server-code and
+  action approvals in a bounded two-stage loop. Hooks/runtime execution remain
+  session-gated; entry factory store access and community guard side effects
+  are denied.
+- Event transport validates every fresh receive stream from sequence 1, uses
+  per-stream ordering and reset-on-gap, and combines bounded SSE queues with
   revisioned Web rehydration.
 - IDB v12 stores snapshot metadata for keyset reads; streaming rows subscribe by
   message id; authoritative message ids drive completion/export dedupe.

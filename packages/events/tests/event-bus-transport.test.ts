@@ -5,7 +5,12 @@ import {
   type DataStore,
   type EventRecord,
 } from "@covel/store";
-import { createEventBus, type EventBusTransport } from "../src/event-bus.js";
+import {
+  createEventBus,
+  RECEIVE_GAP_FLUSH_MS,
+  RECEIVE_STATES_MAX,
+  type EventBusTransport,
+} from "../src/event-bus.js";
 
 function makeMessage(overrides?: Partial<CovelMessage>): CovelMessage {
   return {
@@ -276,7 +281,7 @@ describe("EventBus transport fan-out (audit R-02)", () => {
       expect(before.events.map((event) => event.type)).toEqual(["t1"]);
 
       hub.broadcast(mkFrame(3));
-      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(RECEIVE_GAP_FLUSH_MS);
 
       expect(resets).toEqual([
         { sessionId: "sess-gap", reason: "transport-gap" },
@@ -285,6 +290,105 @@ describe("EventBus transport fan-out (audit R-02)", () => {
       expect(after.epoch).not.toBe(before.epoch);
       expect(after.events.map((event) => event.type)).toEqual(["t3"]);
       expect(after.events[0]!.id.endsWith(":1")).toBe(true);
+    } finally {
+      warnSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("detects a missing first frame in a new transport stream", async () => {
+    vi.useFakeTimers();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const hub = createHub();
+      const bus = createEventBus(undefined, { transport: hub.connect() });
+      const received: SubscriptionEvent[] = [];
+      const resets: Array<{ sessionId: string; reason: string }> = [];
+      bus.onEmit((event) => received.push(event));
+      bus.onReset?.((reset) => resets.push(reset));
+
+      hub.broadcast(
+        JSON.stringify({
+          origin: "remote-missing-first",
+          stream: "boot-1",
+          seq: 2,
+          event: {
+            id: "remote:2",
+            topic: "state",
+            type: "t2",
+            sessionId: "sess-first-gap",
+            timestamp: new Date().toISOString(),
+            payload: {},
+          },
+        }),
+      );
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(received).toEqual([]);
+      expect(resets).toEqual([]);
+
+      await vi.advanceTimersByTimeAsync(RECEIVE_GAP_FLUSH_MS);
+      expect(resets).toEqual([
+        { sessionId: "sess-first-gap", reason: "transport-gap" },
+      ]);
+      expect(received.map((event) => event.type)).toEqual(["t2"]);
+      expect(received[0]!.id.endsWith(":1")).toBe(true);
+    } finally {
+      warnSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("revalidates seq 1 after a transport receive state is evicted", async () => {
+    vi.useFakeTimers();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const hub = createHub();
+      const bus = createEventBus(undefined, { transport: hub.connect() });
+      const targetEvents: SubscriptionEvent[] = [];
+      const resets: Array<{ sessionId: string; reason: string }> = [];
+      bus.onEmit((event) => {
+        if (event.type.startsWith("target-")) targetEvents.push(event);
+      });
+      bus.onReset?.((reset) => resets.push(reset));
+
+      const frame = (stream: string, seq: number, type: string): string =>
+        JSON.stringify({
+          origin: "remote-state-pressure",
+          stream,
+          seq,
+          event: {
+            id: `${stream}:${seq}`,
+            topic: "state",
+            type,
+            sessionId: "sess-state-pressure",
+            timestamp: new Date().toISOString(),
+            payload: {},
+          },
+        });
+
+      hub.broadcast(frame("evicted-stream", 1, "target-1"));
+      for (let i = 0; i < RECEIVE_STATES_MAX; i += 1) {
+        hub.broadcast(frame(`filler-${i}`, 1, `filler-${i}`));
+      }
+      await vi.advanceTimersByTimeAsync(0);
+      expect(targetEvents.map((event) => event.type)).toEqual(["target-1"]);
+
+      // The stream's old receive state is gone. Its next observed frame must
+      // re-establish continuity from seq 1; accepting seq 2 would hide a gap.
+      hub.broadcast(frame("evicted-stream", 2, "target-2"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(targetEvents.map((event) => event.type)).toEqual(["target-1"]);
+      expect(resets).toEqual([]);
+
+      await vi.advanceTimersByTimeAsync(RECEIVE_GAP_FLUSH_MS);
+      expect(resets).toEqual([
+        { sessionId: "sess-state-pressure", reason: "transport-gap" },
+      ]);
+      expect(targetEvents.map((event) => event.type)).toEqual([
+        "target-1",
+        "target-2",
+      ]);
     } finally {
       warnSpy.mockRestore();
       vi.useRealTimers();

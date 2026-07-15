@@ -27,6 +27,11 @@ const GROUP_ORDER: SettingGroup[] = [
 
 const PACKAGES_NODE_ID = "packages";
 const PACKAGES_LABEL = { "zh-CN": "导入包", "en-US": "Import Packages" };
+const OPERATOR_ACCESS_NODE_ID = "operator-access";
+const OPERATOR_ACCESS_LABEL = {
+  "zh-CN": "运维访问",
+  "en-US": "Operator Access",
+};
 
 const GROUP_LABELS: Record<SettingGroup, { "zh-CN": string; "en-US": string }> =
   {
@@ -152,6 +157,18 @@ export function buildNavTree(
       });
     }
   }
+  // Pure-web hosted deployments need an explicit browser-local credential
+  // entry point before any operator-gated management request can succeed.
+  // Append it after the normal groups so self-tier users keep their existing
+  // default Settings pane; those servers simply ignore the optional header.
+  nodes.push({
+    id: OPERATOR_ACCESS_NODE_ID,
+    label: locale.startsWith("en")
+      ? OPERATOR_ACCESS_LABEL["en-US"]
+      : OPERATOR_ACCESS_LABEL["zh-CN"],
+    kind: "group",
+    children: [],
+  });
   // Virtual node for package import (UI-only, no registered SettingEntry).
   nodes.push({
     id: PACKAGES_NODE_ID,
@@ -164,7 +181,7 @@ export function buildNavTree(
   return nodes;
 }
 
-export { PACKAGES_NODE_ID };
+export { OPERATOR_ACCESS_NODE_ID, PACKAGES_NODE_ID };
 
 export function filterNav(
   nodes: NavNode[],
