@@ -327,8 +327,15 @@ async function executeTurnImpl(
     turnNumber,
   });
   const sessionSummaries = await loadSessionSummaries({ input, deps });
-  const workingMemory = await loadWorkingMemory({ input, deps });
-  const coreMemoryBlocks = await loadCoreMemoryBlocks({ input, deps });
+  // Single listWorkingMemory read per turn: the raw records are threaded into
+  // the core-memory manager (initializeDefaults + loadBlocks) below (R-13).
+  const { entries: workingMemory, records: workingMemoryRecords } =
+    await loadWorkingMemory({ input, deps });
+  const coreMemoryBlocks = await loadCoreMemoryBlocks({
+    input,
+    deps,
+    ...(workingMemoryRecords ? { workingMemoryRecords } : {}),
+  });
   const loadSessionContext = () =>
     refreshSessionContextSnapshot({
       input,
@@ -503,7 +510,7 @@ async function executeTurnImpl(
   // one captures completion signals produced by event-chain followers.
   await recordPreGameCompletion();
 
-  const turnResult = await finalizeTurnResult({
+  const baseResult = await finalizeTurnResult({
     input,
     startTime,
     completedResults,
@@ -512,10 +519,34 @@ async function executeTurnImpl(
     turnNumber,
   });
 
-  // ── Post-turn memory update (Letta-style) ─────────────────────
-  // Fire-and-forget: memory update runs asynchronously so it doesn't
-  // block the turn response. Stale-by-one-turn is acceptable.
-  schedulePostTurnMemoryUpdate({ input, turnResult, deps, coreMemoryBlocks });
+  // ── Turn-completion barrier (audit R-06/R-09) ─────────────────
+  // The authoritative `turn.completed` event and post-turn memory ingestion
+  // must not fire before the caller commits this turn's proposals — a failed
+  // commit would otherwise leave clients with a "completed" turn and memory
+  // built from state that never landed. `completeTurn` packages both; the
+  // commit-owning caller (actions.ts / plugin-rpc runtime-turn.ts) invokes it
+  // once after commit + snapshot succeed. Idempotent via the `fired` guard.
+  // Memory stays fire-and-forget inside; per-session single-flight lives in
+  // the memory updater's pending map.
+  let completionFired = false;
+  const turnResult: TurnResult = {
+    ...baseResult,
+    completeTurn: () => {
+      if (completionFired) return;
+      completionFired = true;
+      emitSubEvent(deps.eventBus, "game", "turn.completed", input.sessionId, {
+        turnId: input.turnId,
+        sessionId: input.sessionId,
+        durationMs: baseResult.durationMs,
+      });
+      schedulePostTurnMemoryUpdate({
+        input,
+        turnResult: baseResult,
+        deps,
+        coreMemoryBlocks,
+      });
+    },
+  };
 
   // ── TurnStop hook (S4-T3) — Post* hooks cannot abort ────────
   await runTurnStopHook(

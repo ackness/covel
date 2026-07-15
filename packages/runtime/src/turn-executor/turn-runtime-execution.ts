@@ -308,6 +308,7 @@ export async function executeOneRuntime(
       recursionDepth,
       startTime,
       runId,
+      timeoutMs,
     });
     if (guardResult) return guardResult;
 

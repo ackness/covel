@@ -274,6 +274,107 @@ describe("session-kernel commitAll atomicity (S4-T1)", () => {
     expect(store.events).toHaveLength(0);
   });
 
+  it("buffers emitter fan-out until COMMIT: a later throwing proposal leaves no ghost events (R-08)", async () => {
+    const store = createRecordingStore();
+    // Proposal 1 (interaction.request) commits fine; proposal 2 throws a
+    // store error → whole tx rolls back.
+    store.failOn = { method: "addStateChange", afterN: 1 };
+
+    const emitted: Array<{ type: string; commitCount: number }> = [];
+    const emitter = {
+      sessionId: SESSION_ID,
+      turnId: TURN_ID,
+      traceId: "trace-r08",
+      async emit(type: string) {
+        emitted.push({ type, commitCount: store.commitCalls.count });
+      },
+    };
+
+    const pipeline = createCommitPipeline(
+      store,
+      undefined,
+      undefined,
+      emitter as never,
+    );
+    await expect(
+      pipeline.commitAll([
+        makeProposal(
+          "interaction.request",
+          { interactionId: "i1", type: "confirmation", prompt: "ok?" },
+          "a",
+        ),
+        makeProposal(
+          "state.patch",
+          { table: "stats", field: "hp", value: 1 },
+          "b",
+        ),
+      ]),
+    ).rejects.toThrow(/forced failure/);
+
+    // Rolled back — and the client never saw block.emitted for proposal a.
+    expect(store.rollbackCalls.count).toBe(1);
+    expect(emitted).toHaveLength(0);
+  });
+
+  it("flushes emitter fan-out strictly after COMMIT on success (R-08)", async () => {
+    const store = createRecordingStore();
+    const emitted: Array<{ type: string; commitCount: number }> = [];
+    const emitter = {
+      sessionId: SESSION_ID,
+      turnId: TURN_ID,
+      traceId: "trace-r08",
+      async emit(type: string) {
+        emitted.push({ type, commitCount: store.commitCalls.count });
+      },
+    };
+
+    const pipeline = createCommitPipeline(
+      store,
+      undefined,
+      undefined,
+      emitter as never,
+    );
+    const results = await pipeline.commitAll([
+      makeProposal(
+        "interaction.request",
+        { interactionId: "i1", type: "confirmation", prompt: "ok?" },
+        "a",
+      ),
+    ]);
+
+    expect(results[0].committed).toBe(true);
+    expect(emitted.map((e) => e.type)).toContain("block.emitted");
+    // Every fan-out event was observed AFTER the transaction committed.
+    expect(emitted.every((e) => e.commitCount === 1)).toBe(true);
+  });
+
+  it("stamps proposal.committed trace rows with the emitter's traceId, not turnId (R-14)", async () => {
+    const store = createRecordingStore();
+    const emitter = {
+      sessionId: SESSION_ID,
+      turnId: TURN_ID,
+      traceId: "sse-trace-id",
+      async emit() {},
+    };
+
+    const pipeline = createCommitPipeline(
+      store,
+      undefined,
+      undefined,
+      emitter as never,
+    );
+    await pipeline.commitAll([
+      makeProposal("narrative.append", { content: "hi", kind: "story" }, "a"),
+    ]);
+
+    const committedRows = store.traceEvents.filter(
+      (t) => t.type === "proposal.committed",
+    );
+    expect(committedRows).toHaveLength(1);
+    expect(committedRows[0].traceId).toBe("sse-trace-id");
+    expect(committedRows[0].turnId).toBe(TURN_ID);
+  });
+
   it("store missing tx hooks: falls back to non-transactional path", async () => {
     const store: KernelStore = {
       addMessage: vi.fn().mockResolvedValue(undefined),

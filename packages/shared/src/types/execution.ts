@@ -133,6 +133,17 @@ export interface TurnResult {
       readonly data: Readonly<Record<string, unknown>>;
     };
   }[];
+  /**
+   * Turn-completion barrier (commit consistency, audit R-06/R-09). Present on
+   * results returned by `executeTurn`. The caller that owns the commit
+   * boundary invokes it AFTER this turn's proposals have committed (and the
+   * auto-snapshot is captured); it then emits the authoritative
+   * `turn.completed` event and kicks off post-turn memory ingestion.
+   * Idempotent — safe to call at most once per path. Never invoked when the
+   * commit fails or the process crashes: no ghost completion event, no memory
+   * derived from uncommitted state.
+   */
+  readonly completeTurn?: () => void;
 }
 
 // ── Interaction protocol ────────────────────────────────────────

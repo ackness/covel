@@ -22,6 +22,24 @@ export type SqliteTransactions = Pick<DataStore, "withTransaction">;
  *   this same store — including writes that do NOT go through `withTransaction`
  *   — runs on the open transaction and is committed or rolled back with it.
  *   Callers must not interleave unrelated writes with a serialized transaction.
+ *
+ *   INVARIANT the turn pipeline upholds (audit R-07): correctness comes from
+ *   *ordering*, not isolation. Every write belonging to a turn (player
+ *   message, proposal commits, trace rows, lifecycle sync, auto-snapshot)
+ *   runs under that session's lock, and every externally-visible side effect
+ *   that used to fire while the commit transaction was open — committed-
+ *   proposal events, PostStateCommit hooks, `turn.completed`, post-turn
+ *   memory ingestion — is deferred until after `withTransaction` resolves
+ *   (see packages/runtime/src/commit/session-commit-pipeline.ts and
+ *   `TurnResult.completeTurn`). So no write of turn N can be captured by
+ *   turn N's own commit transaction from outside it.
+ *
+ *   Residual exposure: session locks are per-session, so a non-tx write from
+ *   session A issued while session B's transaction is open still folds into
+ *   B's transaction — harmless on COMMIT, lost on B's ROLLBACK (rollbacks
+ *   only occur on thrown store errors). Eliminating that requires per-tx
+ *   connections (as PgStore has); rearchitecting this backend's connection
+ *   model is deliberately out of scope.
  * - **Nesting deadlocks, so it is rejected.** Calling `withTransaction` from
  *   inside another `withTransaction` callback would queue the inner call behind
  *   the outer one on the serialization chain — and the outer call is awaiting

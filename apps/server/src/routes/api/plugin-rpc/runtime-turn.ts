@@ -79,6 +79,9 @@ export function createPluginRpcRuntimeTurnRunner(
         err instanceof Error ? err.message : String(err),
       );
     }
+    // Commit barrier (audit R-06/R-09): proposals committed + snapshot taken —
+    // fire the authoritative turn.completed event and memory ingestion.
+    turnResult.completeTurn?.();
   }
 
   async function runManualTurn(

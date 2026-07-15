@@ -43,6 +43,12 @@ export interface ExecuteAgentGuardOptions {
   readonly recursionDepth: number;
   readonly startTime: number;
   readonly runId: string;
+  /**
+   * Total-duration hard cap for the guard call (`manifest.timeoutMs` ??
+   * executor default) — same contract as the function-runtime handler
+   * deadline in `turn-function-runtime.ts`.
+   */
+  readonly timeoutMs: number;
 }
 
 export async function executeAgentGuard({
@@ -57,6 +63,7 @@ export async function executeAgentGuard({
   recursionDepth,
   startTime,
   runId,
+  timeoutMs,
 }: ExecuteAgentGuardOptions): Promise<RuntimeResult | undefined> {
   // ── Guard: pre-execution gate for agent runtimes ────────────
   if (loaded.guard) {
@@ -94,7 +101,12 @@ export async function executeAgentGuard({
     const guardLoggerHandle = deps.store
       ? createPluginLogger(deps.store, guardHelperCtx)
       : undefined;
-    const guardOutput = await loaded.guard({
+    // Deadline race — mirrors the function-runtime handler pattern in
+    // `turn-function-runtime.ts`: without it a hung guard blocks the whole
+    // turn (and the session lock) forever. Promise.race keeps the guard
+    // promise subscribed, so a post-timeout rejection is still observed. The
+    // player abort signal lets a cooperative guard cancel in-flight work.
+    const guardPromise = loaded.guard({
       sessionId: input.sessionId,
       turnId: input.turnId,
       pluginId: manifest.pluginId,
@@ -122,7 +134,26 @@ export async function executeAgentGuard({
       ...(guardUserSettings ? { userSettings: guardUserSettings } : {}),
       ...(guardPluginDataHandle ? { pluginData: guardPluginDataHandle } : {}),
       ...(guardLoggerHandle ? { logger: guardLoggerHandle } : {}),
+      ...(deps.turnControl?.signal ? { signal: deps.turnControl.signal } : {}),
     });
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    let guardOutput: Awaited<typeof guardPromise>;
+    try {
+      guardOutput = await Promise.race([
+        guardPromise,
+        new Promise<never>((_, reject) => {
+          deadlineTimer = setTimeout(() => {
+            reject(
+              new Error(
+                `agent guard "${manifest.name}" timed out after ${timeoutMs}ms`,
+              ),
+            );
+          }, timeoutMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(deadlineTimer);
+    }
 
     if (guardOutput.skip === true) {
       // Record `skipped` in the internal RuntimeResult so downstream

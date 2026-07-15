@@ -1820,4 +1820,22 @@ describe("createTraceRecorder", () => {
     expect(store.addTraceEvent.mock.calls[1][0].type).toBe("turn.completed");
     expect(store.addTraceEvent.mock.calls[1][0].payload.durationMs).toBe(3000);
   });
+
+  it("stamps rows with an explicit traceId when provided, falling back to turnId (R-14)", async () => {
+    const store = createMockStore();
+
+    const withTrace = createTraceRecorder(
+      store as any,
+      SESSION_ID,
+      TURN_ID,
+      "sse-trace-id",
+    );
+    await withTrace.turnStarted({ runtimeCount: 1 });
+    expect(store.addTraceEvent.mock.calls[0][0].traceId).toBe("sse-trace-id");
+    expect(store.addTraceEvent.mock.calls[0][0].turnId).toBe(TURN_ID);
+
+    const withoutTrace = createTraceRecorder(store as any, SESSION_ID, TURN_ID);
+    await withoutTrace.turnStarted({ runtimeCount: 1 });
+    expect(store.addTraceEvent.mock.calls[1][0].traceId).toBe(TURN_ID);
+  });
 });

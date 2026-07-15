@@ -46,11 +46,18 @@ export function createCommitPipeline(
    * handlers) so every write lands inside the open transaction — critical on
    * PostgreSQL, where `withTransaction` runs on an isolated connection and a
    * write through the outer store would escape the transaction.
+   *
+   * `defer` is the commit barrier: when provided (transactional mode), the
+   * externally-visible fan-out for this proposal — live SSE/trace events via
+   * the emitter and the PostStateCommit hook — is buffered instead of run
+   * inline, so a later proposal throwing (→ ROLLBACK) can never leave clients
+   * having seen "committed" events for data that no longer exists.
    */
   async function commitWith(
     handlerMap: CommitHandlerMap,
     writeStore: KernelStore,
     proposal: Proposal,
+    defer?: (fn: () => Promise<void>) => void,
   ): Promise<CommitResult> {
     // `handlerMap` is a correlated map (each value expects its own proposal
     // variant). Dispatch by `proposal.type` is sound at runtime, so we erase
@@ -106,7 +113,10 @@ export function createCommitPipeline(
         id: crypto.randomUUID(),
         sessionId: effectiveProposal.sessionId,
         type: "proposal.committed",
-        traceId: effectiveProposal.turnId,
+        // Correlate with the SSE stream's traceId (carried by the per-turn
+        // emitter) instead of falling back to turnId, so /api/traces?traceId=
+        // returns emitter + commit rows under one id (audit R-14).
+        traceId: emitter?.traceId ?? effectiveProposal.turnId,
         turnId: effectiveProposal.turnId,
         payload: {
           proposalType: effectiveProposal.type,
@@ -117,22 +127,34 @@ export function createCommitPipeline(
       });
     }
 
-    await emitCommittedProposal(emitter, effectiveProposal, result);
+    // Externally-visible fan-out. In transactional mode this runs only after
+    // the transaction COMMITs (deferred by commitAll); PostStateCommit rides
+    // the same barrier — its contract is "the state IS committed", which is
+    // only true once the enclosing transaction has resolved.
+    const runPostCommit = async (): Promise<void> => {
+      await emitCommittedProposal(emitter, effectiveProposal, result);
 
-    if (hookPipeline && result.committed) {
-      const hookCtx: HookContext = {
-        event: "PostStateCommit",
-        sessionId: effectiveProposal.sessionId,
-        turnId: effectiveProposal.turnId,
-        pluginId: effectiveProposal.source.pluginId,
-        runtimeId: effectiveProposal.source.runtimeId,
-      };
-      await hookPipeline.run(
-        "PostStateCommit",
-        hookCtx,
-        { proposal: effectiveProposal, result },
-        { eventBus, emitter },
-      );
+      if (hookPipeline && result.committed) {
+        const hookCtx: HookContext = {
+          event: "PostStateCommit",
+          sessionId: effectiveProposal.sessionId,
+          turnId: effectiveProposal.turnId,
+          pluginId: effectiveProposal.source.pluginId,
+          runtimeId: effectiveProposal.source.runtimeId,
+        };
+        await hookPipeline.run(
+          "PostStateCommit",
+          hookCtx,
+          { proposal: effectiveProposal, result },
+          { eventBus, emitter },
+        );
+      }
+    };
+
+    if (defer) {
+      defer(runPostCommit);
+    } else {
+      await runPostCommit();
     }
 
     return result;
@@ -187,14 +209,35 @@ export function createCommitPipeline(
     // `withTransaction` runs on its own pooled connection, so concurrent turns
     // no longer serialize behind a shared begin/commit window.
     if (typeof store.withTransaction === "function") {
+      // Commit barrier (audit R-08): externally-visible fan-out (emitter
+      // events + PostStateCommit hooks) is buffered while the transaction is
+      // open and flushed only after it COMMITs. A thrown store error discards
+      // the buffer along with the rollback — clients never see events for
+      // rolled-back data.
+      const postCommit: Array<() => Promise<void>> = [];
       const results = await store.withTransaction(async (tx) => {
         const txHandlers = createCommitHandlers(tx);
         const txResults: CommitResult[] = [];
         for (const p of proposals) {
-          txResults.push(await commitWith(txHandlers, tx, p));
+          txResults.push(
+            await commitWith(txHandlers, tx, p, (fn) => postCommit.push(fn)),
+          );
         }
         return txResults;
       });
+      // Transaction committed — flush in proposal order. A failing emit/hook
+      // must not masquerade as a commit failure (the data IS committed), so
+      // each thunk is isolated and surfaced as a warning.
+      for (const fn of postCommit) {
+        try {
+          await fn();
+        } catch (err) {
+          console.warn(
+            "[session-kernel] commitAll: post-commit fan-out failed:",
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
       warnPartialCommit(proposals, results, "transactional mode");
       return results;
     }

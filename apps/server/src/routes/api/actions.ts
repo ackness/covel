@@ -34,6 +34,7 @@ import {
 } from "./plugin-user-settings.js";
 import { getCachedWorld } from "../../world-cache.js";
 import { registerActiveTurn } from "./turn-control.js";
+import { checkSessionOwner } from "./session/session-guard.js";
 
 // SSE uses ProtocolEventType names directly — no legacy mapping.
 // Frontend handleSseEvent handles these standard types.
@@ -160,6 +161,11 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   if (!session) {
     return c.json(errorBody("Session not found"), 404);
   }
+
+  // Owner guard (hosted tiers, S-02): actions execute turns and spend tokens
+  // on the session's behalf.
+  const ownerDenied = checkSessionOwner(c, session);
+  if (ownerDenied) return ownerDenied;
 
   // Lazy-lock the session's embedding model once per process boot.
   // No-op when the store has no vector capability or no embed slot is
@@ -337,8 +343,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             }
           }
 
-          // Create trace recorder for this turn (persists all lifecycle events to DB)
-          const trace = createTraceRecorder(store, sessionId, turnId);
+          // Create trace recorder for this turn (persists all lifecycle events
+          // to DB). Carries the SSE traceId so recorder rows correlate with
+          // emitter + commit-pipeline rows under one traceId (audit R-14).
+          const trace = createTraceRecorder(store, sessionId, turnId, traceId);
 
           // Per-turn trace emitter — fans emit() into trace_events + eventBus. Threaded
           // down into ToolCallContext / llm-retry / hooks etc. via executeTurn deps.
@@ -559,6 +567,12 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               err instanceof Error ? err.message : String(err),
             );
           }
+
+          // Commit barrier (audit R-06/R-09): proposals are committed and the
+          // snapshot captured — only now fire the authoritative turn.completed
+          // event and post-turn memory ingestion. A commit failure throws
+          // above, so this is never reached for uncommitted state.
+          result.completeTurn?.();
 
           return { result, trace, userSettings };
         },

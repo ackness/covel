@@ -35,7 +35,14 @@ export function createTraceRecorder(
   store: Pick<KernelStore, "addTraceEvent">,
   sessionId: string,
   turnId: string,
+  /**
+   * Correlation id for persisted rows. Pass the action stream's SSE traceId
+   * so recorder rows share one traceId with emitter + commit-pipeline rows
+   * (audit R-14). Falls back to turnId for callers without an SSE stream.
+   */
+  traceId?: string,
 ): TraceRecorder {
+  const effectiveTraceId = traceId ?? turnId;
   async function record(
     type: string,
     payload: Record<string, unknown>,
@@ -44,7 +51,7 @@ export function createTraceRecorder(
       id: crypto.randomUUID(),
       sessionId,
       type,
-      traceId: turnId,
+      traceId: effectiveTraceId,
       turnId,
       payload,
       createdAt: new Date().toISOString(),
