@@ -59,15 +59,20 @@ interface CreatedSession {
   metadata?: Record<string, unknown>;
 }
 
-async function createSession(app: Hono): Promise<CreatedSession> {
+async function createSession(
+  app: Hono,
+  headers: Record<string, string> = {},
+): Promise<CreatedSession> {
   const res = await app.request("/api/sessions", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify({}),
   });
   expect(res.status).toBe(200);
   return (await res.json()) as CreatedSession;
 }
+
+const OPERATOR = { authorization: "Bearer operator-secret" };
 
 let store: DataStore;
 let app: Hono;
@@ -108,7 +113,32 @@ describe("commercial tier — owner token hard-required", () => {
 
   beforeEach(async () => {
     process.env.DEPLOYMENT_TIER = "commercial";
-    created = await createSession(app);
+    // C-02: session creation is operator-gated on hosted tiers.
+    process.env.COVEL_DESKTOP_REST_TOKEN = "operator-secret";
+    created = await createSession(app, OPERATOR);
+  });
+
+  it("rejects anonymous session creation (C-02 operator gate)", async () => {
+    const res = await app.request("/api/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe("operator_token_required");
+  });
+
+  it("rejects session creation with a non-operator token", async () => {
+    const res = await app.request("/api/sessions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer not-the-operator",
+      },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(401);
   });
 
   it("rejects session read without a token (401 session_owner_required)", async () => {
@@ -236,7 +266,6 @@ describe("commercial tier — owner token hard-required", () => {
       [],
     );
 
-    process.env.COVEL_DESKTOP_REST_TOKEN = "operator-secret";
     const operator = await app.request("/api/sessions", {
       headers: { authorization: "Bearer operator-secret" },
     });
@@ -246,7 +275,6 @@ describe("commercial tier — owner token hard-required", () => {
   });
 
   it("accepts the operator master token on session-scoped routes", async () => {
-    process.env.COVEL_DESKTOP_REST_TOKEN = "operator-secret";
     const res = await app.request(`/api/sessions/${created.id}`, {
       headers: { authorization: "Bearer operator-secret" },
     });
@@ -257,7 +285,8 @@ describe("commercial tier — owner token hard-required", () => {
 describe("demo tier — same enforcement as commercial", () => {
   it("requires the owner token", async () => {
     process.env.DEPLOYMENT_TIER = "demo";
-    const created = await createSession(app);
+    process.env.COVEL_DESKTOP_REST_TOKEN = "operator-secret";
+    const created = await createSession(app, OPERATOR);
     expect((await app.request(`/api/sessions/${created.id}`)).status).toBe(401);
     expect(
       (

@@ -34,7 +34,7 @@
  */
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Context } from "hono";
-import type { SessionRecord } from "@covel/store";
+import type { DataStore, SessionRecord } from "@covel/store";
 import { readRuntimeEnv } from "@covel/shared";
 import { errorBody } from "../../../api-error.js";
 
@@ -143,6 +143,37 @@ export function checkSessionOwner(
     }),
     401,
   );
+}
+
+/**
+ * Owner guard for routes whose session id arrives outside the `:id` route
+ * param (query string, request body, or an indirection like approvalId →
+ * pending.sessionId) — audit H-02.
+ *
+ * Returns `undefined` when access is allowed, else a ready-to-return 404
+ * (unknown session) or 401 (owner token missing/invalid) response.
+ *
+ * Strict no-op on non-hosted tiers — not even a store lookup — because
+ * several of these routes historically accepted session ids with no
+ * existence requirement (e.g. approvals listing) and self-tier behavior
+ * must not change.
+ */
+export async function checkSessionOwnerById(
+  c: Context,
+  store: DataStore,
+  sessionId: string,
+): Promise<Response | undefined> {
+  if (!isOwnerAuthEnforced()) return undefined;
+  const session = await store.getSession(sessionId);
+  if (!session) {
+    return c.json(
+      errorBody(`Session not found: ${sessionId}`, {
+        code: SESSION_NOT_FOUND_CODE,
+      }),
+      404,
+    );
+  }
+  return checkSessionOwner(c, session);
 }
 
 /**

@@ -43,15 +43,26 @@ describe("validateSecurityPosture", () => {
     ).not.toThrow();
   });
 
-  it("requires only the media secret for the demo tier", () => {
+  it("requires the media secret and operator token for the demo tier (not CORS)", () => {
     expect(() =>
       validateSecurityPosture(envFor({ DEPLOYMENT_TIER: "demo" })),
     ).toThrow(/COVEL_MEDIA_TOKEN_SECRET/);
+    // C-02: session creation is operator-gated on hosted tiers, so a demo
+    // host without the token could never mint a session — fail at boot.
     expect(() =>
       validateSecurityPosture(
         envFor({
           DEPLOYMENT_TIER: "demo",
           COVEL_MEDIA_TOKEN_SECRET: "a-real-secret",
+        }),
+      ),
+    ).toThrow(/COVEL_DESKTOP_REST_TOKEN/);
+    expect(() =>
+      validateSecurityPosture(
+        envFor({
+          DEPLOYMENT_TIER: "demo",
+          COVEL_MEDIA_TOKEN_SECRET: "a-real-secret",
+          COVEL_DESKTOP_REST_TOKEN: "bearer-token",
         }),
       ),
     ).not.toThrow();

@@ -48,10 +48,10 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 
 **分层强制（tiered enforcement）**：
 
-| `DEPLOYMENT_TIER`     | 行为                                                                                                                                                                                                                                                                                                                                                               |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `self`（默认）/ 桌面  | **不强制**。单机本地游玩零 token 可用；网络边界由默认回环监听保障（`COVEL_BIND_HOST=127.0.0.1`，见 env-registry）。带 token 也不校验。                                                                                                                                                                                                                             |
-| `demo` / `commercial` | **硬性强制**。所有会话作用域端点（session CRUD、messages、traces、actions、plugin-rpc、steer/abort、SSE subscribe、snapshots、state 等经 `resolveSessionParam` 的路由）缺失或错误 token 一律返回 `401 { code: "session_owner_required" }`。无哈希的历史会话 fail-closed。`GET /api/sessions` 列表在这两个层级仅对持有运维 token 的调用方返回内容，其余返回空列表。 |
+| `DEPLOYMENT_TIER`     | 行为                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `self`（默认）/ 桌面  | **不强制**。单机本地游玩零 token 可用；网络边界由默认回环监听保障（`COVEL_BIND_HOST=127.0.0.1`，见 env-registry）。带 token 也不校验。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `demo` / `commercial` | **硬性强制**。所有会话作用域端点（session CRUD、messages、traces、actions、plugin-rpc、steer/abort、SSE subscribe、snapshots、state 等经 `resolveSessionParam` 的路由，以及会话 id 走 query/body/间接引用的端点：approvals 列表/撤销/决策、`POST /api/media?sessionId=`、`/api/worlds/:id/world-data/preflight`、`sync-data`、`sync-dimensions`、`GET /api/ui-specs?sessionId=`）缺失或错误 token 一律返回 `401 { code: "session_owner_required" }`（未知会话返回 404）。无哈希的历史会话 fail-closed。`GET /api/sessions` 列表在这两个层级仅对持有运维 token 的调用方返回内容，其余返回空列表；`POST /api/sessions` **创建会话需运维 token**（缺失返回 `401 { code: "operator_token_required" }`）——这是单运维方门禁，完整的用户身份/租户隔离/配额属产品级工作，尚未实现。 |
 
 **Token 提交方式**（三选一）：
 
@@ -59,7 +59,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 2. `X-Session-Token: <ownerToken>`
 3. `?session_token=<ownerToken>` query 参数（供无法设置 header 的 EventSource / SSE 客户端使用）
 
-**运维 master token**：设置了 `COVEL_DESKTOP_REST_TOKEN` 时，以该值作为 Bearer token 可通过任意会话的 owner 校验（管理工具 / e2e harness 用）。`DEPLOYMENT_TIER=commercial` 启动时若未配置该 token，`validateSecurityPosture` 会直接拒绝启动。
+**运维 master token**：设置了 `COVEL_DESKTOP_REST_TOKEN` 时，以该值作为 Bearer token 可通过任意会话的 owner 校验（管理工具 / e2e harness 用），并且是 hosted 层级创建会话的唯一凭证。`DEPLOYMENT_TIER=demo|commercial` 启动时若未配置该 token，`validateSecurityPosture` 会直接拒绝启动。
 
 > CORS（`CORS_ORIGIN`）只是浏览器策略，**不构成鉴权**；真正的授权边界是 owner token + 部署层级 + 回环监听。
 
@@ -2339,9 +2339,9 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 #### `GET /api/sessions/:id/snapshots`
 
-列出指定 session 的快照元数据（`auto` / `manual` / `fork`），按 `createdAt` 升序，游标分页。**不返回 `payload`**（快照 payload 序列化整个 session 状态，全量返回会无界增长）；需要完整 payload 时按 id 单独获取（见下）。
+列出指定 session 的快照元数据（`auto` / `manual` / `fork`），**keyset（游标）分页**，与 `/messages/page`、traces 分页同一约定。**不返回 `payload`**（快照 payload 序列化整个 session 状态，全量返回会无界增长）；store 层用投影查询计算 `payloadSize` 且从不加载 payload JSON，需要完整 payload 时按 id 单独获取（见下）。
 
-Query 参数：`limit`（默认 50，最大 200）、`cursor`（上一页最后一个快照的 `id`；未知 cursor 返回 `400 { code: 'invalid_cursor' }`）。
+Query 参数：`limit`（默认 50，最大 500）、`before_created_at` + `before_id`（`(createdAt, id)` 元组游标，需成对出现；只提供一半将被忽略并回落到最新窗口）。无游标返回最新一批；带游标返回紧邻更旧的一页。页内按 `createdAt` 升序（最旧在前）。
 
 ```json
 {
@@ -2355,11 +2355,11 @@ Query 参数：`limit`（默认 50，最大 200）、`cursor`（上一页最后�
       "payloadSize": 18342
     }
   ],
-  "nextCursor": "<uuid> | null"
+  "nextCursor": { "createdAt": "2026-04-13T00:00:00.000Z", "id": "<uuid>" }
 }
 ```
 
-session 不存在时返回 `404`。
+`nextCursor` 指向本页最旧一条快照的 `(createdAt, id)` 位置，作为下一页（更旧）的 `before_*`；返回条数少于 `limit`（已到最早一份）时为 `null`。session 不存在时返回 `404`。
 
 #### `GET /api/sessions/:id/snapshots/:snapshotId`
 

@@ -153,6 +153,22 @@ sessionRoutes.get("/", async (c) => {
 
 // POST /sessions
 sessionRoutes.post("/", async (c) => {
+  // C-02 (scoped): on hosted tiers (demo/commercial) session CREATION is
+  // operator-only — otherwise any anonymous caller could mint themselves a
+  // session + owner token on a shared host. COVEL_DESKTOP_REST_TOKEN is the
+  // only auth primitive the codebase ships, so this is a single-operator
+  // gate ONLY: full principal identity, per-user tenant isolation, and
+  // quota/billing are product-level work and deliberately NOT implemented
+  // here. self/desktop/dev tiers stay open (loopback is the boundary).
+  if (isOwnerAuthEnforced() && !hasOperatorToken(c)) {
+    return c.json(
+      errorBody("Operator token required to create sessions on this tier", {
+        code: "operator_token_required",
+      }),
+      401,
+    );
+  }
+
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
   const worldsDirs = c.get("worldsDirs");

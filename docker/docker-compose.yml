@@ -9,7 +9,9 @@
 #   pnpm docker:logs      # Tail logs
 #
 # Prerequisites:
-#   1. cp .env.example .env          (edit POSTGRES_PASSWORD for non-local)
+#   1. cp .env.example .env — set POSTGRES_PASSWORD, COVEL_MEDIA_TOKEN_SECRET,
+#      COVEL_DESKTOP_REST_TOKEN, and CORS_ORIGIN. The stack is fail-closed:
+#      it refuses to start until all four are set.
 #   2. cp llm.toml.example llm.toml  (configure LLM provider slots)
 #   3. cp .env.llm.example .env.llm  (add LLM API keys, optional)
 ##
@@ -64,6 +66,21 @@ services:
       SERVE_STATIC: "true"
       STATIC_DIR: ./web-dist
       COVEL_MEDIA_TOKEN_SECRET: ${COVEL_MEDIA_TOKEN_SECRET:?Set COVEL_MEDIA_TOKEN_SECRET in .env}
+
+      # ── Auth — fail-closed hosted posture (C-01) ────────────────
+      # The container listens on 0.0.0.0 and is mapped to a host port, so it
+      # is network-reachable by default. DEPLOYMENT_TIER=commercial makes the
+      # server hard-enforce per-session owner tokens on every session-scoped
+      # route and gate session creation/listing and config endpoints behind
+      # the operator token below — anonymous access is impossible. Like
+      # POSTGRES_PASSWORD / COVEL_MEDIA_TOKEN_SECRET, compose refuses to
+      # start until the token is set in .env.
+      DEPLOYMENT_TIER: commercial
+      COVEL_DESKTOP_REST_TOKEN: ${COVEL_DESKTOP_REST_TOKEN:?Set COVEL_DESKTOP_REST_TOKEN in .env}
+      # Commercial posture also requires an explicit CORS allowlist at boot.
+      # The bundled web UI is served same-origin, so set this to the public
+      # origin players will use (e.g. https://covel.example.com).
+      CORS_ORIGIN: ${CORS_ORIGIN:?Set CORS_ORIGIN in .env (the app's public origin)}
 
       # World package seed directory (inside container)
       COVEL_WORLDS_DIR: /app/worlds

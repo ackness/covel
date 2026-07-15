@@ -21,10 +21,13 @@
 import { Hono } from "hono";
 import type { RpcApprovalGate } from "@covel/approval";
 import type { RpcApprovalDecision } from "@covel/shared";
+import type { DataStore } from "@covel/store";
 import { errorBody } from "../../api-error.js";
+import { checkSessionOwnerById } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
+    store: DataStore;
     rpcApprovalGate: RpcApprovalGate;
     /**
      * Lazy activator for community plugins' `tools.local` modules. Wired
@@ -43,18 +46,26 @@ export const approvalRoutes = new Hono<Env>();
 export const sessionApprovalRoutes = new Hono<Env>();
 
 // Per-session listing — mounted under /api/sessions
-sessionApprovalRoutes.get("/:id/approvals", (c) => {
+sessionApprovalRoutes.get("/:id/approvals", async (c) => {
   const gate = c.get("rpcApprovalGate");
   const sessionId = c.req.param("id");
+  // Owner guard (audit H-02): pending entries carry plugin RPC payloads for
+  // this session. Hosted tiers only; strict no-op on self.
+  const denied = await checkSessionOwnerById(c, c.get("store"), sessionId);
+  if (denied) return denied;
   return c.json({ pending: gate.listPending(sessionId) });
 });
 
 // Revoke cached grants for a session, optionally scoped to one plugin via
 // ?pluginId= — withdraws a previously approved community plugin mid-session so
 // its next RPC re-prompts for approval. Returns the number of grants cleared.
-sessionApprovalRoutes.delete("/:id/approvals", (c) => {
+sessionApprovalRoutes.delete("/:id/approvals", async (c) => {
   const gate = c.get("rpcApprovalGate");
   const sessionId = c.req.param("id");
+  // Owner guard (audit H-02): revoking grants mutates another player's
+  // approval state. Hosted tiers only; strict no-op on self.
+  const denied = await checkSessionOwnerById(c, c.get("store"), sessionId);
+  if (denied) return denied;
   const pluginId = c.req.query("pluginId");
   const cleared = gate.revoke(sessionId, pluginId || undefined);
   return c.json({ ok: true, cleared });
@@ -63,6 +74,21 @@ sessionApprovalRoutes.delete("/:id/approvals", (c) => {
 approvalRoutes.post("/:approvalId/decision", async (c) => {
   const gate = c.get("rpcApprovalGate");
   const approvalId = c.req.param("approvalId");
+
+  // Owner guard (audit H-02): resolve the approvalId to its session FIRST —
+  // an attacker who learns an approvalId must not be able to approve
+  // community-plugin code for another user's session. The lookup does not
+  // consume the pending entry, so a denied caller leaves it intact for the
+  // real owner. Unknown ids fall through to `decide()`'s 404 below.
+  const pendingForAuth = gate.getPending(approvalId);
+  if (pendingForAuth) {
+    const denied = await checkSessionOwnerById(
+      c,
+      c.get("store"),
+      pendingForAuth.sessionId,
+    );
+    if (denied) return denied;
+  }
 
   let body: DecisionBody;
   try {

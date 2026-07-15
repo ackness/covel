@@ -60,6 +60,12 @@ export interface RpcApprovalGate {
   /** List all pending approvals for a session. */
   listPending(sessionId: string): readonly RpcApprovalPending[];
   /**
+   * Look up a pending approval without consuming it. Lets the HTTP layer
+   * resolve an approvalId to its sessionId for owner-guard checks BEFORE
+   * `decide()` consumes the entry (audit H-02).
+   */
+  getPending(approvalId: string): RpcApprovalPending | undefined;
+  /**
    * Revoke cached session grants + fresh one-time grants for a session,
    * optionally scoped to one plugin. Returns the number of grants cleared.
    * Withdraws a previously approved community plugin mid-session.
@@ -244,6 +250,10 @@ export function createRpcApprovalGate(): RpcApprovalGate {
       return [...state.pending.values()].filter(
         (p) => p.sessionId === sessionId,
       );
+    },
+
+    getPending(approvalId) {
+      return state.pending.get(approvalId);
     },
 
     revoke(sessionId, pluginId) {

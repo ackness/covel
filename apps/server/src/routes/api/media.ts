@@ -31,6 +31,7 @@ import {
   getMediaTokenSecret,
   verifyMediaToken,
 } from "../../middleware/media-token.js";
+import { checkSessionOwnerById } from "./session/session-guard.js";
 import { rateLimiter, singleFlight } from "../../middleware/rate-limit.js";
 import { errorBody } from "../../api-error.js";
 
@@ -108,6 +109,11 @@ mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
       400,
     );
   }
+  // Owner guard (audit H-02): the upload records ownership + a media ref for
+  // `sessionId`, so on hosted tiers the caller must own that session.
+  // Strict no-op on self (store lookup skipped, historical behavior kept).
+  const denied = await checkSessionOwnerById(c, c.get("store"), sessionId);
+  if (denied) return denied;
   const mime = (c.req.header("content-type") ?? "").split(";")[0]!.trim();
   if (!mime.startsWith("image/")) {
     return jsonError(

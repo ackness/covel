@@ -14,6 +14,7 @@ import {
   syncWorldDataForSession,
   preflightWorldDataForSession,
 } from "../../../world-data/session-import.js";
+import { checkSessionOwner } from "../session/session-guard.js";
 import { type WorldEnv, formatWorldEntryContent } from "./shared.js";
 
 export const worldDataSyncRoutes = new Hono<WorldEnv>();
@@ -37,6 +38,12 @@ worldDataSyncRoutes.post("/:id/world-data/preflight", async (c) => {
       : null;
   if (typeof body.sessionId === "string" && !session) {
     return c.json(errorBody("Session not found"), 404);
+  }
+  // Owner guard (audit H-02): the plan leaks session-scoped import state.
+  // Hosted tiers only; no-op on self.
+  if (session) {
+    const denied = checkSessionOwner(c, session);
+    if (denied) return denied;
   }
   if (session && session.worldId !== worldId) {
     return c.json(errorBody("Session world mismatch"), 400);
@@ -83,6 +90,9 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
   if (!session) {
     return c.json(errorBody("Session not found"), 404);
   }
+  // Owner guard (audit H-02): sync rewrites the session's worldData rows.
+  const denied = checkSessionOwner(c, session);
+  if (denied) return denied;
   if (session.worldId !== worldId) {
     return c.json(errorBody("Session world mismatch"), 400);
   }
@@ -139,6 +149,10 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
   if (!session || session.worldId !== id) {
     return c.json(errorBody("Session not found or world mismatch"), 404);
   }
+  // Owner guard (audit H-02): dimension re-import writes the session's
+  // plugin_data + lorebook.
+  const denied = checkSessionOwner(c, session);
+  if (denied) return denied;
 
   // Discover world-data-provider plugin by capability (not hardcoded ID)
   const worldDataPluginId = pluginRegistry.findPluginByCapability(
