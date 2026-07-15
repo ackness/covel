@@ -48,6 +48,12 @@ export interface SelectOpts {
   readonly orderBy?: readonly SQL[];
   readonly limit?: number;
   readonly offset?: number;
+  /**
+   * Partial-select projection. When set, only these columns/expressions are
+   * read (Drizzle `.select(columns)`) instead of the full row — used to page
+   * a table without transferring a large JSON column (snapshot metadata).
+   */
+  readonly columns?: Record<string, Column | SQL>;
 }
 
 /** One row of an atomic batch upsert: insert payload + optional conflict. */

@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef } from "react";
+import { Suspense, lazy, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useSession } from "@/stores/session-store.js";
@@ -12,8 +12,18 @@ import { initDesktopBridge } from "@/lib/desktop-bridge.js";
 import { onNavEvent } from "@/lib/nav-events.js";
 import { WorldSelectScreen } from "@/components/session/world-select-screen.js";
 import { SessionPrepScreen } from "@/components/session/session-prep-screen.js";
-import { GameView } from "@/components/session/game-view.js";
 import { OnboardingWizard } from "@/components/onboarding-wizard.js";
+
+// Lazy-load the in-game surface (chat + stage + json-render panels + plugin
+// UI) — the single heaviest component tree in the app, but only reachable once
+// a session is active. Keeping it out of the main chunk trims first paint for
+// the marketing home / world-select / prep screens, which never touch it
+// (M-03 bundle budget). Split alongside the already-lazy /debug route.
+const GameView = lazy(() =>
+  import("@/components/session/game-view.js").then((m) => ({
+    default: m.GameView,
+  })),
+);
 
 interface SessionSearchParams {
   sid?: string;
@@ -240,7 +250,17 @@ function SessionPage() {
   // Game view — session is active. GameView reads everything else from the
   // session store itself; the prop just carries this branch's null-narrowing.
   if (state.session) {
-    return <GameView session={state.session} />;
+    return (
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        }
+      >
+        <GameView session={state.session} />
+      </Suspense>
+    );
   }
 
   // Prep screen — world selected but no session yet

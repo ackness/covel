@@ -1,9 +1,12 @@
 import type {
+  CursorPageOpts,
   SessionSummaryRecord,
+  SnapshotMetadata,
   SnapshotRecord,
   SuspensionRecord,
   TurnMessageRecord,
 } from "../types.js";
+import { applyCursorPage, sortByCursorAsc } from "../common/pagination.js";
 import type { IdbStoreContext, IdbStoreSlice } from "./idb-context.js";
 
 export function createIdbPersistenceStore(ctx: IdbStoreContext): IdbStoreSlice {
@@ -158,6 +161,29 @@ export function createIdbPersistenceStore(ctx: IdbStoreContext): IdbStoreSlice {
       );
       return (all as SnapshotRecord[]).sort((a, b) =>
         a.createdAt.localeCompare(b.createdAt),
+      );
+    },
+
+    async listSnapshotsPage(
+      sessionId: string,
+      opts: CursorPageOpts,
+    ): Promise<readonly SnapshotMetadata[]> {
+      const all = (await db.getAllFromIndex(
+        "state_snapshots",
+        "sessionId",
+        sessionId,
+      )) as SnapshotRecord[];
+      const page = applyCursorPage(sortByCursorAsc(all), opts);
+      return page.map(
+        (r): SnapshotMetadata => ({
+          id: r.id,
+          sessionId: r.sessionId,
+          turnId: r.turnId,
+          kind: r.kind,
+          ...(r.parentId != null ? { parentId: r.parentId } : {}),
+          createdAt: r.createdAt,
+          size: JSON.stringify(r.payload).length,
+        }),
       );
     },
   };

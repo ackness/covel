@@ -23,6 +23,10 @@ import {
 import { Button } from "@/components/ui/button.js";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
 import { usePluginNamespace } from "@/stores/plugin-data-store.js";
+import {
+  resolveStreamContent,
+  useSessionState,
+} from "@/stores/session-store.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import type {
   SessionRecord,
@@ -117,27 +121,21 @@ export function StageView(props: StageViewProps): ReactElement {
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
 
   // ── Plugin-data feeds ─────────────────────────────────────────
-  // Resolve the plugin id for each stage capability from the session's active
+  // Resolve the ACTIVE plugin id for each stage capability from the session's
   // plugin list (framework↔plugin isolation rule — no hardcoded plugin ids in
-  // framework code). Falls back to the capability name, which the bundled
-  // plugins also use as their id. Namespaces below ("stage", "active-cast", …)
-  // are intra-plugin data keys defined by the resolved plugin, not plugin ids.
-  const sceneStageId = pluginIdForCapability(
-    sessionPlugins,
-    STAGE_CAPABILITIES.scene,
-  );
-  const sceneCastId = pluginIdForCapability(
-    sessionPlugins,
-    STAGE_CAPABILITIES.cast,
-  );
-  const scenePromptsId = pluginIdForCapability(
-    sessionPlugins,
-    STAGE_CAPABILITIES.prompts,
-  );
-  const presenceId = pluginIdForCapability(
-    sessionPlugins,
-    STAGE_CAPABILITIES.presence,
-  );
+  // framework code). `pluginIdForCapability` returns undefined when no active
+  // plugin provides the capability; `?? ""` keeps the hook call unconditional
+  // and resolves to an empty namespace, so the layer renders empty/disabled.
+  // Namespaces below ("stage", "active-cast", …) are intra-plugin data keys
+  // defined by the resolved plugin, not plugin ids.
+  const sceneStageId =
+    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.scene) ?? "";
+  const sceneCastId =
+    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.cast) ?? "";
+  const scenePromptsId =
+    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.prompts) ?? "";
+  const presenceId =
+    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.presence) ?? "";
 
   const sceneCurrent = usePluginNamespace(sceneStageId, "stage")["current"] as
     | StageCurrentRecord
@@ -154,8 +152,16 @@ export function StageView(props: StageViewProps): ReactElement {
   >;
 
   // ── Latest story text + stream state ──────────────────────────
+  // Streaming tokens no longer live in `messages[].content` — the placeholder
+  // carries empty content and the live text is held in `state.streamingText`
+  // (reducer APPEND_DELTA, M-03). Subscribe to it so the stage re-renders per
+  // token and overlay it here; `resolveStreamContent` is a no-op for
+  // non-streaming / completed messages.
+  const { streamingText } = useSessionState();
   const storyMsg = findLatestStory(messages);
-  const storyText = storyMsg?.content ?? "";
+  const storyText = storyMsg
+    ? resolveStreamContent(storyMsg, streamingText)
+    : "";
   const storyTurnId = storyMsg?.turnId;
   const isStreaming =
     executing && (storyMsg?.id.startsWith("stream_") ?? false);

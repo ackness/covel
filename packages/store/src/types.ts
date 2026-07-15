@@ -62,6 +62,7 @@ export type {
   SnapshotPayloadV2,
   SnapshotSessionState,
   SnapshotRecord,
+  SnapshotMetadata,
   SuspensionRecord,
 } from "./records/snapshot-records.js";
 
@@ -107,6 +108,7 @@ import type {
 } from "./records/memory-records.js";
 import type {
   SnapshotRecord,
+  SnapshotMetadata,
   SuspensionRecord,
 } from "./records/snapshot-records.js";
 import type {
@@ -237,6 +239,13 @@ export interface EventStore {
     sessionId: string,
     options?: { topic?: string; limit?: number },
   ): Promise<EventRecord[]>;
+  /**
+   * Targeted by-id read (event ids are globally unique). `sessionId` is a
+   * scope guard: an id belonging to another session returns null. Used by the
+   * EventBus transport to re-fetch oversize cross-pod events without a full
+   * `listEvents` scan.
+   */
+  getEventById(sessionId: string, id: string): Promise<EventRecord | null>;
 }
 
 /** Tool-approval records. Part of `sql-session-content-records`. */
@@ -496,6 +505,21 @@ export interface SnapshotStore {
   getSnapshot(id: string): Promise<SnapshotRecord | null>;
   /** List snapshots for a session, ordered by `createdAt` asc. */
   listSnapshots(sessionId: string): Promise<readonly SnapshotRecord[]>;
+  /**
+   * Keyset page of snapshot **metadata** (no payload), newest-first window.
+   * `before` omitted ⇒ the newest `limit` snapshots; `before` set ⇒ the `limit`
+   * snapshots immediately older than that `(createdAt, id)` position. Rows are
+   * returned oldest-first within the page (mirrors {@link MessageStore.listMessagesPage}).
+   *
+   * The payload column is never selected/deserialized — a snapshot payload
+   * serializes the full session state, so listing must stay O(limit) rows and
+   * O(1) payloads. `size` is the payload's serialized character length,
+   * computed at the DB layer.
+   */
+  listSnapshotsPage(
+    sessionId: string,
+    opts: CursorPageOpts,
+  ): Promise<readonly SnapshotMetadata[]>;
 }
 
 /**

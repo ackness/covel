@@ -1,10 +1,12 @@
 /**
- * APPEND_DELTA reducer — streaming-message append behaviour (R-17).
+ * APPEND_DELTA reducer — streaming-buffer append behaviour (M-03).
  *
- * The reducer takes an O(1) last-element fast path (the streaming placeholder
- * is almost always the last message) and only falls back to the O(n) findIndex
- * scan when the placeholder is not at the tail. These tests pin both paths plus
- * the create-new-placeholder path so the optimisation can't drift.
+ * Streaming text lives OUTSIDE the `messages` array in a `streamingText` map
+ * keyed by the placeholder id. A token delta is an O(1) map write; the
+ * placeholder message is inserted into `messages` exactly ONCE (first delta)
+ * and its reference stays stable for the rest of the stream, so the O(history)
+ * chat grouping memo and autoscroll never rebuild per token. These tests pin
+ * that invariant plus the completion merge.
  */
 
 import { describe, it, expect } from "vitest";
@@ -24,103 +26,112 @@ function stateWith(messages: StreamMessage[]): SessionState {
   return { ...initialState, messages };
 }
 
+function appendDelta(
+  state: SessionState,
+  turnId: string,
+  runtimeId: string,
+  delta: string,
+): SessionState {
+  return reducer(state, {
+    type: "APPEND_DELTA",
+    turnId,
+    runtimeId,
+    pluginId: runtimeId,
+    delta,
+  });
+}
+
 describe("APPEND_DELTA", () => {
-  it("appends to the streaming placeholder when it is the last message (fast path)", () => {
-    const streamId = "stream_turn-1_narrator";
-    const before = stateWith([
-      msg({ id: "u1", role: "user" }),
-      msg({
-        id: streamId,
-        content: "Hello ",
-        turnId: "turn-1",
-        runtimeId: "narrator",
-      }),
-    ]);
-
-    const after = reducer(before, {
-      type: "APPEND_DELTA",
-      turnId: "turn-1",
-      runtimeId: "narrator",
-      pluginId: "narrator",
-      delta: "world",
-    });
-
-    expect(after.messages).toHaveLength(2);
-    expect(after.messages[1].content).toBe("Hello world");
-    expect(after.messages).not.toBe(before.messages); // new reference for re-render
-    expect(after.messages[0]).toBe(before.messages[0]); // untouched entries shared
-  });
-
-  it("falls back to findIndex when the placeholder is not the last message", () => {
-    const streamId = "stream_turn-1_narrator";
-    const before = stateWith([
-      msg({
-        id: streamId,
-        content: "Hi ",
-        turnId: "turn-1",
-        runtimeId: "narrator",
-      }),
-      msg({ id: "asset-1", kind: "plugin", turnId: "turn-1" }), // arrived after the stream started
-    ]);
-
-    const after = reducer(before, {
-      type: "APPEND_DELTA",
-      turnId: "turn-1",
-      runtimeId: "narrator",
-      pluginId: "narrator",
-      delta: "there",
-    });
-
-    expect(after.messages[0].content).toBe("Hi there");
-    expect(after.messages[1]).toBe(before.messages[1]);
-  });
-
-  it("creates a new placeholder carrying turnId/runtimeId/kind when none exists", () => {
+  it("creates the placeholder once, with empty content, on the first delta", () => {
     const before = stateWith([msg({ id: "u1", role: "user" })]);
 
-    const after = reducer(before, {
-      type: "APPEND_DELTA",
-      turnId: "turn-2",
-      runtimeId: "narrator",
-      pluginId: "narrator",
-      delta: "First token",
-    });
+    const after = appendDelta(before, "turn-2", "narrator", "First token");
 
     expect(after.messages).toHaveLength(2);
     const created = after.messages[1];
     expect(created.id).toBe("stream_turn-2_narrator");
-    expect(created.content).toBe("First token");
+    // Live text lives in streamingText — the placeholder content stays empty.
+    expect(created.content).toBe("");
     expect(created.turnId).toBe("turn-2");
     expect(created.runtimeId).toBe("narrator");
     expect(created.kind).toBe("story");
+    expect(after.streamingText["stream_turn-2_narrator"]).toBe("First token");
   });
 
-  it("keeps distinct placeholders per runtime and appends to the right one", () => {
-    const before = stateWith([
-      msg({
-        id: "stream_turn-1_narrator",
-        content: "N",
+  it("keeps the messages reference STABLE across subsequent deltas (O(1) path)", () => {
+    const first = appendDelta(
+      stateWith([msg({ id: "u1", role: "user" })]),
+      "turn-1",
+      "narrator",
+      "Hello ",
+    );
+    const second = appendDelta(first, "turn-1", "narrator", "world");
+
+    // The whole point: messages is NOT copied per token.
+    expect(second.messages).toBe(first.messages);
+    // Only the streaming buffer grows.
+    expect(second.streamingText["stream_turn-1_narrator"]).toBe("Hello world");
+    expect(second.streamingText).not.toBe(first.streamingText);
+  });
+
+  it("keeps distinct streaming buffers per runtime", () => {
+    let state = appendDelta(stateWith([]), "turn-1", "narrator", "N");
+    state = appendDelta(state, "turn-1", "codex", "C");
+    state = appendDelta(state, "turn-1", "narrator", "1");
+
+    expect(state.streamingText["stream_turn-1_narrator"]).toBe("N1");
+    expect(state.streamingText["stream_turn-1_codex"]).toBe("C");
+    // Two placeholders, both content-empty; text is overlaid at render time.
+    expect(state.messages.map((m) => m.id)).toEqual([
+      "stream_turn-1_narrator",
+      "stream_turn-1_codex",
+    ]);
+    expect(state.messages.every((m) => m.content === "")).toBe(true);
+  });
+
+  it("COMPLETE_MESSAGE merges the final text and clears the buffer", () => {
+    const streaming = appendDelta(
+      stateWith([]),
+      "turn-1",
+      "narrator",
+      "partial",
+    );
+
+    const completed = reducer(streaming, {
+      type: "COMPLETE_MESSAGE",
+      turnId: "turn-1",
+      runtimeId: "narrator",
+      message: msg({
+        id: "final-id",
+        content: "the full authoritative narrative",
         turnId: "turn-1",
         runtimeId: "narrator",
       }),
-      msg({
-        id: "stream_turn-1_codex",
-        content: "C",
-        turnId: "turn-1",
-        runtimeId: "codex",
-      }),
-    ]);
-
-    // Target the non-tail narrator placeholder.
-    const after = reducer(before, {
-      type: "APPEND_DELTA",
-      turnId: "turn-1",
-      runtimeId: "narrator",
-      pluginId: "narrator",
-      delta: "1",
     });
 
-    expect(after.messages[0].content).toBe("N1");
-    expect(after.messages[1].content).toBe("C");
+    expect(completed.messages).toHaveLength(1);
+    // Placeholder id is preserved; content becomes the authoritative full text.
+    expect(completed.messages[0].id).toBe("stream_turn-1_narrator");
+    expect(completed.messages[0].content).toBe(
+      "the full authoritative narrative",
+    );
+    // Buffer cleared so nothing overlays the completed message.
+    expect(completed.streamingText["stream_turn-1_narrator"]).toBeUndefined();
+  });
+
+  it("DISCARD_TURN_STREAMS drops placeholders and their buffers for the turn", () => {
+    let state = appendDelta(stateWith([]), "turn-1", "narrator", "a");
+    state = appendDelta(state, "turn-2", "narrator", "b");
+
+    const discarded = reducer(state, {
+      type: "DISCARD_TURN_STREAMS",
+      turnId: "turn-1",
+    });
+
+    expect(discarded.messages.map((m) => m.id)).toEqual([
+      "stream_turn-2_narrator",
+    ]);
+    expect(discarded.streamingText["stream_turn-1_narrator"]).toBeUndefined();
+    expect(discarded.streamingText["stream_turn-2_narrator"]).toBe("b");
   });
 });

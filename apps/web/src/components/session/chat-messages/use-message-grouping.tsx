@@ -23,9 +23,13 @@ interface UseMessageGroupingArgs {
  *
  * The O(history) grouping maps are memoised on `[messages, executionSteps]`
  * so renders driven by other props (hover state, jump-to-latest, load-older
- * spinner, confirm dialog) don't rebuild them. `renderMessage` closes over
- * live props/state and stays fresh — it is called in the render loop below,
- * never memoised, so rows never go stale.
+ * spinner, confirm dialog) don't rebuild them. Crucially, streaming token
+ * deltas do NOT change `messages` — the live text lives in a separate
+ * `streamingText` buffer (reducer APPEND_DELTA, M-03), so these maps are NOT
+ * rebuilt per token; the streaming placeholder is inserted once and its
+ * content is overlaid at render time. `renderMessage` closes over live
+ * props/state and stays fresh — it is called in the render loop below, never
+ * memoised, so rows never go stale.
  */
 export function useMessageGrouping({
   messages,

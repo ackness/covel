@@ -446,6 +446,15 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       expect(list).toHaveLength(1);
       expect(list[0].topic).toBe("combat");
     });
+
+    it("should fetch a single event by id scoped to its session", async () => {
+      const event = makeEvent({ sessionId: "sess-1" });
+      await store.saveEvent(event);
+      expect(await store.getEventById("sess-1", event.id)).toEqual(event);
+      // Wrong session scope and unknown id both miss.
+      expect(await store.getEventById("sess-other", event.id)).toBeNull();
+      expect(await store.getEventById("sess-1", "missing-id")).toBeNull();
+    });
   });
 
   describe("Approvals", () => {

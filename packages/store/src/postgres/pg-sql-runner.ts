@@ -11,7 +11,7 @@
  */
 
 import type { SQL, Table } from "drizzle-orm";
-import type { IndexColumn, PgTable } from "drizzle-orm/pg-core";
+import type { IndexColumn, PgTable, SelectedFields } from "drizzle-orm/pg-core";
 
 import type {
   ConflictClause,
@@ -35,8 +35,12 @@ function pgConflictConfig(conflict: ConflictClause): {
 export function createPgSqlRunner(getDb: () => PgDb): SqlRunner {
   return {
     async select<Row>(table: Table, opts?: SelectOpts): Promise<Row[]> {
-      let query = getDb()
-        .select()
+      const db = getDb();
+      let query = (
+        opts?.columns
+          ? db.select(opts.columns as unknown as SelectedFields)
+          : db.select()
+      )
         .from(table as PgTable)
         .$dynamic();
       if (opts?.where) query = query.where(opts.where);

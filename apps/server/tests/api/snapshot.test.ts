@@ -315,29 +315,34 @@ describe("Snapshot routes", () => {
       expect(body.nextCursor).toBeNull();
     });
 
-    it("paginates with limit + cursor", async () => {
+    it("keyset-paginates with limit + before cursor", async () => {
       const app = createTestApp(store);
       for (let i = 0; i < 3; i++) {
         await app.request("/api/sessions/sess-1/snapshot", { method: "POST" });
       }
 
+      type Page = {
+        snapshots: Array<{ id: string }>;
+        nextCursor: { createdAt: string; id: string } | null;
+      };
+
+      // Newest window; oldest-first inside the page.
       const page1 = (await (
         await app.request("/api/sessions/sess-1/snapshots?limit=2")
-      ).json()) as {
-        snapshots: Array<{ id: string }>;
-        nextCursor: string | null;
-      };
+      ).json()) as Page;
       expect(page1.snapshots).toHaveLength(2);
-      expect(page1.nextCursor).toBe(page1.snapshots[1]!.id);
+      // The next cursor is the oldest returned row's (createdAt, id) position.
+      expect(page1.nextCursor).not.toBeNull();
+      expect(typeof page1.nextCursor!.createdAt).toBe("string");
+      expect(page1.nextCursor!.id).toBe(page1.snapshots[0]!.id);
 
       const page2 = (await (
         await app.request(
-          `/api/sessions/sess-1/snapshots?limit=2&cursor=${page1.nextCursor}`,
+          `/api/sessions/sess-1/snapshots?limit=2` +
+            `&before_created_at=${encodeURIComponent(page1.nextCursor!.createdAt)}` +
+            `&before_id=${page1.nextCursor!.id}`,
         )
-      ).json()) as {
-        snapshots: Array<{ id: string }>;
-        nextCursor: string | null;
-      };
+      ).json()) as Page;
       expect(page2.snapshots).toHaveLength(1);
       expect(page2.nextCursor).toBeNull();
 
@@ -345,16 +350,16 @@ describe("Snapshot routes", () => {
       expect(new Set(ids).size).toBe(3);
     });
 
-    it("returns 400 for an unknown cursor", async () => {
+    it("ignores an incomplete cursor (only one half supplied)", async () => {
       const app = createTestApp(store);
       await app.request("/api/sessions/sess-1/snapshot", { method: "POST" });
+      // A cursor needs BOTH halves; a lone before_id is dropped → newest window.
       const res = await app.request(
-        "/api/sessions/sess-1/snapshots?cursor=nope",
+        "/api/sessions/sess-1/snapshots?before_id=nope",
       );
-      expect(res.status).toBe(400);
-      expect(((await res.json()) as { code?: string }).code).toBe(
-        "invalid_cursor",
-      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { snapshots: unknown[] };
+      expect(body.snapshots).toHaveLength(1);
     });
   });
 

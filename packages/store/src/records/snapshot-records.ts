@@ -110,6 +110,24 @@ export interface SnapshotRecord {
   readonly createdAt: string;
 }
 
+/**
+ * Snapshot metadata WITHOUT the payload — the projection returned by
+ * {@link SnapshotStore.listSnapshotsPage}. A snapshot payload serializes the
+ * whole session state, so the list surface (save/load UI) must never load them
+ * all just to render a row per save. `size` is the payload's serialized length
+ * (characters), computed at the DB layer so the payload column is never
+ * transferred or deserialized during a list.
+ */
+export interface SnapshotMetadata {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly kind: SnapshotKind;
+  readonly parentId?: string;
+  readonly createdAt: string;
+  readonly size: number;
+}
+
 // ── Suspensions (S4-T4) ──────────────────────────────────────────
 
 /**

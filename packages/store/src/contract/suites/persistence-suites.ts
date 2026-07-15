@@ -483,6 +483,91 @@ export function registerPersistenceStoreSuites(
     });
   });
 
+  describe("listSnapshotsPage (metadata projection + keyset pagination)", () => {
+    it("returns metadata WITHOUT the payload, sized > 0", async () => {
+      const sessionId = "sess-snap-meta";
+      const big = makeSnapshotPayload({
+        characters: Array.from({ length: 20 }, (_, i) => ({
+          id: `char-${i}`,
+          sessionId,
+          name: `Hero ${i}`,
+          type: "npc" as const,
+          version: 1,
+          createdAt: ts(),
+          updatedAt: ts(),
+        })),
+      });
+      const small = makeSnapshot({
+        id: "snap-small",
+        sessionId,
+        turnId: "turn-a",
+        kind: "manual",
+        createdAt: ts(0),
+      });
+      const large = makeSnapshot({
+        id: "snap-large",
+        sessionId,
+        turnId: "turn-b",
+        kind: "auto",
+        payload: big,
+        createdAt: ts(1000),
+      });
+      await store.saveSnapshot(small);
+      await store.saveSnapshot(large);
+
+      const page = await store.listSnapshotsPage(sessionId, { limit: 10 });
+      expect(page).toHaveLength(2);
+      // Oldest-first within the page (mirrors listMessagesPage).
+      expect(page.map((m) => m.id)).toEqual(["snap-small", "snap-large"]);
+
+      const largeMeta = page[1];
+      expect(largeMeta.turnId).toBe("turn-b");
+      expect(largeMeta.kind).toBe("auto");
+      // Payload is projected away; only its serialized length survives.
+      expect(largeMeta).not.toHaveProperty("payload");
+      expect(largeMeta.size).toBeGreaterThan(0);
+      // A heavier payload yields a larger recorded size.
+      expect(largeMeta.size).toBeGreaterThan(page[0].size);
+    });
+
+    it("keyset-paginates newest-first via the `before` cursor", async () => {
+      const sessionId = "sess-snap-page";
+      for (let i = 0; i < 5; i++) {
+        await store.saveSnapshot(
+          makeSnapshot({
+            id: `snap-${i}`,
+            sessionId,
+            turnId: `turn-${i}`,
+            createdAt: ts(i * 1000),
+          }),
+        );
+      }
+
+      // First page = newest window, oldest-first inside the page.
+      const first = await store.listSnapshotsPage(sessionId, { limit: 2 });
+      expect(first.map((m) => m.id)).toEqual(["snap-3", "snap-4"]);
+
+      // Cursor = oldest row of the page just returned; next page is older.
+      const oldest = first[0];
+      const second = await store.listSnapshotsPage(sessionId, {
+        limit: 2,
+        before: { createdAt: oldest.createdAt, id: oldest.id },
+      });
+      expect(second.map((m) => m.id)).toEqual(["snap-1", "snap-2"]);
+
+      const third = await store.listSnapshotsPage(sessionId, {
+        limit: 2,
+        before: { createdAt: second[0].createdAt, id: second[0].id },
+      });
+      expect(third.map((m) => m.id)).toEqual(["snap-0"]);
+    });
+
+    it("returns [] for limit <= 0", async () => {
+      const page = await store.listSnapshotsPage("sess-any", { limit: 0 });
+      expect(page).toEqual([]);
+    });
+  });
+
   describe("claimSuspension", () => {
     it("returns true on first claim and atomically sets resolvedAt", async () => {
       const suspension = makeSuspension({ sessionId: "sess-claim-ok" });

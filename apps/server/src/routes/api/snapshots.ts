@@ -44,6 +44,7 @@ import {
   type SessionLock,
 } from "../../lib/session-lock.js";
 import { SAFE_SESSION_ID_RE } from "../../lib/validators.js";
+import { nextCursorFrom, parseCursorQuery } from "./cursor-params.js";
 import { resolveSessionParam } from "./session/session-guard.js";
 
 type Env = {
@@ -160,18 +161,17 @@ snapshotRoutes.post("/:id/snapshot", async (c) => {
 // Snapshot payloads serialize the entire session state, so returning them all
 // in one response grows without bound (audit 2026-07-11 R-04). The list now
 // returns metadata only (id, turnId, kind, createdAt, parentId, payloadSize)
-// with cursor pagination; fetch a full payload on demand via
+// with keyset pagination — the store projects the payload column away and
+// computes `size` in-SQL, so listing stays O(limit) rows and never loads a
+// single payload (re-review M-04). Fetch a full payload on demand via
 // GET /:id/snapshots/:snapshotId.
+//
+// Keyset contract matches /messages/page and /traces turns: `?limit`,
+// `?before_created_at`, `?before_id` (see cursor-params). No cursor → the
+// newest window; cursor → the page immediately older. Rows are oldest-first
+// within each page.
 
 const SNAPSHOT_LIST_DEFAULT_LIMIT = 50;
-const SNAPSHOT_LIST_MAX_LIMIT = 200;
-
-function parseSnapshotListLimit(raw: string | undefined): number {
-  const parsed = raw === undefined ? NaN : Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed < 1)
-    return SNAPSHOT_LIST_DEFAULT_LIMIT;
-  return Math.min(parsed, SNAPSHOT_LIST_MAX_LIMIT);
-}
 
 snapshotRoutes.get("/:id/snapshots", async (c) => {
   const sessionId = c.req.param("id");
@@ -180,19 +180,8 @@ snapshotRoutes.get("/:id/snapshots", async (c) => {
   const resolved = await resolveSessionParam(c);
   if (!resolved.ok) return resolved.response;
 
-  const limit = parseSnapshotListLimit(c.req.query("limit"));
-  const cursor = c.req.query("cursor");
-
-  // ponytail: the store still reads all snapshot rows (payloads included) —
-  // acceptable now that auto-snapshots are throttled to checkpoint cadence.
-  // Add a store-level metadata projection if listing ever shows up in profiles.
-  const all = await store.listSnapshots(sessionId);
-  const startIdx =
-    cursor !== undefined ? all.findIndex((s) => s.id === cursor) + 1 : 0;
-  if (cursor !== undefined && startIdx === 0) {
-    return c.json(errorBody("Unknown cursor", { code: "invalid_cursor" }), 400);
-  }
-  const page = all.slice(startIdx, startIdx + limit);
+  const { limit, before } = parseCursorQuery(c, SNAPSHOT_LIST_DEFAULT_LIMIT);
+  const page = await store.listSnapshotsPage(sessionId, { limit, before });
 
   const snapshots = page.map((s) => ({
     id: s.id,
@@ -201,12 +190,10 @@ snapshotRoutes.get("/:id/snapshots", async (c) => {
     kind: s.kind,
     ...(s.parentId !== undefined ? { parentId: s.parentId } : {}),
     createdAt: s.createdAt,
-    payloadSize: JSON.stringify(s.payload).length,
+    payloadSize: s.size,
   }));
-  const nextCursor =
-    startIdx + limit < all.length ? (page[page.length - 1]?.id ?? null) : null;
 
-  return c.json({ snapshots, nextCursor });
+  return c.json({ snapshots, nextCursor: nextCursorFrom(page, limit) });
 });
 
 // ── GET /api/sessions/:id/snapshots/:snapshotId — full payload ────

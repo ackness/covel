@@ -13,6 +13,24 @@ import type {
 
 const EXEC_STEPS_MAX = 500;
 
+/** Streaming-placeholder id convention shared with the renderer. */
+const STREAM_ID_PREFIX = "stream_";
+
+/**
+ * Drop matching keys from the streaming-text buffer, returning the SAME
+ * reference when nothing matches so consumers don't needlessly re-render.
+ */
+function pruneStreamingText(
+  map: Readonly<Record<string, string>>,
+  shouldDrop: (key: string) => boolean,
+): Record<string, string> {
+  const keys = Object.keys(map).filter(shouldDrop);
+  if (keys.length === 0) return map as Record<string, string>;
+  const next = { ...map };
+  for (const key of keys) delete next[key];
+  return next;
+}
+
 export const initialState: SessionState = {
   presets: [],
   packages: [],
@@ -24,6 +42,7 @@ export const initialState: SessionState = {
   world: null,
   session: null,
   messages: [],
+  streamingText: {},
   olderMessagesCursor: null,
   worldSessions: [],
   executing: false,
@@ -50,6 +69,7 @@ export const initialState: SessionState = {
 const SESSION_RESET: Partial<SessionState> = {
   session: null,
   messages: [],
+  streamingText: {},
   olderMessagesCursor: null,
   statePatches: [],
   gameState: {},
@@ -141,13 +161,17 @@ export function reducer(
       return { ...state, messages: [...state.messages, action.message] };
     }
     case "COMPLETE_MESSAGE": {
-      // Replace the streaming placeholder with the final message content.
-      // Previously we skipped when a placeholder existed — but if any delta
-      // frames were dropped mid-stream the placeholder only contains the
-      // partial text the client received, and the user saw a truncated
-      // narrative. The reducer replaces the placeholder with completed content,
-      // which is always the authoritative full text; mirror that here.
-      const streamId = `stream_${action.turnId}_${action.runtimeId}`;
+      // Replace the streaming placeholder with the final message content and
+      // drop its live streaming buffer (the authoritative full text now lives
+      // in `messages`). Previously we skipped when a placeholder existed — but
+      // if any delta frames were dropped mid-stream the placeholder only held
+      // the partial text the client received, so we always overwrite with the
+      // completed content.
+      const streamId = `${STREAM_ID_PREFIX}${action.turnId}_${action.runtimeId}`;
+      const nextStreamingText = pruneStreamingText(
+        state.streamingText,
+        (k) => k === streamId,
+      );
       const idx = state.messages.findIndex((m) => m.id === streamId);
       if (idx >= 0) {
         const next = [...state.messages];
@@ -156,48 +180,43 @@ export function reducer(
           id: state.messages[idx].id,
           kind: "story",
         };
-        return { ...state, messages: next };
+        return { ...state, messages: next, streamingText: nextStreamingText };
       }
       return {
         ...state,
         messages: [...state.messages, { ...action.message, kind: "story" }],
+        streamingText: nextStreamingText,
       };
     }
     case "APPEND_DELTA": {
-      // Find existing streaming message for this runtime, or create one.
-      // IMPORTANT: carry turnId / runtimeId / kind on the placeholder from the
-      // first delta — chat-messages groups execution timelines by turnId and
-      // without these fields each streaming story message would be treated as
-      // "unattributed" and the timeline chips would jump to the very top of
-      // the chat instead of appearing right after the turn's last message.
-      const streamId = `stream_${action.turnId}_${action.runtimeId}`;
-      // Fast path: the streaming placeholder is the last message in the
-      // overwhelmingly common case (deltas arrive in order while the turn
-      // generates), so check the tail first and skip the O(n) findIndex scan.
-      // Only the redundant scan is removed here — the `.with()` copy is O(n)
-      // and inherent to keeping `messages` an immutable new reference each
-      // delta (the store re-renders on identity change).
-      // ponytail: O(n) copy per delta stays; upgrade path = hold streaming
-      // text in a separate buffer outside `messages` if profiling demands it.
-      const lastIdx = state.messages.length - 1;
-      const idx =
-        lastIdx >= 0 && state.messages[lastIdx].id === streamId
-          ? lastIdx
-          : state.messages.findIndex((m) => m.id === streamId);
-      if (idx >= 0) {
-        const prev = state.messages[idx];
-        const newMessages = state.messages.with(idx, {
-          ...prev,
-          content: prev.content + action.delta,
-        });
-        return { ...state, messages: newMessages };
+      // Streaming text is kept OUT of the `messages` array: each delta only
+      // appends to `streamingText[streamId]` (an O(1) shallow map copy), while
+      // the placeholder message is inserted into `messages` exactly ONCE (on
+      // the first delta). The `messages` reference therefore stays stable for
+      // the whole stream, so the O(history) chat grouping memo and autoscroll
+      // do not rebuild per token (M-03). The renderer overlays the live text.
+      //
+      // IMPORTANT: carry turnId / runtimeId / kind on the placeholder — chat
+      // groups execution timelines by turnId, and without these the streaming
+      // story message is "unattributed" and its timeline chips jump to the top
+      // of the chat instead of appearing right after the turn's last message.
+      const streamId = `${STREAM_ID_PREFIX}${action.turnId}_${action.runtimeId}`;
+      const hadStream = streamId in state.streamingText;
+      const nextStreamingText = {
+        ...state.streamingText,
+        [streamId]: (state.streamingText[streamId] ?? "") + action.delta,
+      };
+      if (hadStream) {
+        // O(1) fast path: placeholder already exists, only the buffer grows.
+        return { ...state, streamingText: nextStreamingText };
       }
       return {
         ...state,
+        streamingText: nextStreamingText,
         messages: state.messages.concat({
           id: streamId,
           role: "assistant",
-          content: action.delta,
+          content: "",
           timestamp: new Date().toISOString(),
           turnId: action.turnId,
           runtimeId: action.runtimeId,
@@ -207,17 +226,27 @@ export function reducer(
     }
     case "SET_EXECUTING":
       return { ...state, executing: action.value };
-    case "DISCARD_TURN_STREAMS":
+    case "DISCARD_TURN_STREAMS": {
       // Streaming placeholders use the `stream_<turnId>_<runtimeId>` id
       // convention (APPEND_DELTA above). No turnId → discard all placeholders.
+      // Drop the matching live streaming buffers alongside the placeholders so
+      // a re-stream of the same id starts clean (the placeholder-exists guard
+      // keys off `streamingText`).
+      const dropStream = (id: string, turnId?: string): boolean =>
+        id.startsWith(STREAM_ID_PREFIX) &&
+        (action.turnId === undefined || turnId === action.turnId);
+      const streamPrefix =
+        action.turnId !== undefined
+          ? `${STREAM_ID_PREFIX}${action.turnId}_`
+          : STREAM_ID_PREFIX;
       return {
         ...state,
-        messages: state.messages.filter(
-          (m) =>
-            !m.id.startsWith("stream_") ||
-            (action.turnId !== undefined && m.turnId !== action.turnId),
+        messages: state.messages.filter((m) => !dropStream(m.id, m.turnId)),
+        streamingText: pruneStreamingText(state.streamingText, (k) =>
+          k.startsWith(streamPrefix),
         ),
       };
+    }
     case "SET_EXECUTION_ERROR":
       return { ...state, executionError: action.error };
     case "ADD_STATE_PATCH": {
@@ -395,12 +424,24 @@ export function reducer(
     }
     case "REMOVE_MESSAGES_FROM_TURN": {
       // Remove messages from a specific turn, except those from cached runtimes
-      const filtered = state.messages.filter((m) => {
-        if (m.turnId !== action.turnId) return true;
-        if (m.runtimeId && action.keepRuntimeIds.has(m.runtimeId)) return true;
-        return false;
+      const keepMsg = (
+        turnId: string | undefined,
+        runtimeId?: string,
+      ): boolean =>
+        turnId !== action.turnId ||
+        (runtimeId !== undefined && action.keepRuntimeIds.has(runtimeId));
+      const filtered = state.messages.filter((m) =>
+        keepMsg(m.turnId, m.runtimeId),
+      );
+      // Drop live streaming buffers for the removed streams too. Stream ids are
+      // `stream_<turnId>_<runtimeId>`; kept runtimes' buffers survive.
+      const turnStreamPrefix = `${STREAM_ID_PREFIX}${action.turnId}_`;
+      const streamingText = pruneStreamingText(state.streamingText, (k) => {
+        if (!k.startsWith(turnStreamPrefix)) return false;
+        const runtimeId = k.slice(turnStreamPrefix.length);
+        return !action.keepRuntimeIds.has(runtimeId);
       });
-      return { ...state, messages: filtered };
+      return { ...state, messages: filtered, streamingText };
     }
     case "PLUGIN_DATA_CHANGED": {
       const { pluginId, changes } = action;
