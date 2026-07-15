@@ -632,6 +632,7 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 | runtimeType      | `agent`（model `plugin`）                                                                               |
 | trigger          | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                          |
 | outputKind       | `system`                                                                                                |
+| capabilities     | `[scene-prompts]`（舞台 choices 层按此能力发现，非硬编码插件 id）                                       |
 | tags             | `mode:dialogue` · `role:quick-reply`                                                                    |
 | input.inject     | `chat-mode-narrator` + `narrator` → `narrativeOutput` → `<narrator-output>`                             |
 | upstreamRequired | `[{ capability: narrative-engine }]` — 引擎无关，按 capability 发现当前模式的叙事引擎；两种模式下都可用 |
@@ -881,6 +882,7 @@ export default function (covel) {
 }
 ```
 
+- **类型可导入**：`PluginAPI` / `PluginToolkit` / `PluginHookOptions` / `PluginRpcOptions` / `PluginEntryFactory` 从 `@covel/runtime` 导出（Public Plugin API 的稳定契约）。JS 插件用 JSDoc `@param {import('@covel/runtime').PluginAPI} covel` 标注工厂参数，TS 插件直接 `import type`。服务端实现按同一类型做编译期对齐（`buildApi(): PluginAPI`），不会与文档 / 作者可见类型漂移。
 - **信任门控**与 local tools 一致：builtin/official 在启动时执行 entry；community 延迟到插件激活（`ensurePluginEntry`，与 runtime 加载同刻）。
 - entry 抛错 / 非函数导出 / 路径逃逸只 warn 跳过，不影响启动；工厂每插件只执行一次（幂等）。
 - **agent runtime 暴露给 LLM 的工具**仍需在各 runtime manifest 声明：entry 注册的工具用 `tools.plugin`（名字列表）声明可见性，替代旧 `tools.local` 的路径列表：

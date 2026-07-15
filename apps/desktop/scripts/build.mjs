@@ -24,11 +24,25 @@ const projectRoot = path.resolve(desktopRoot, "../..");
 console.log("=== Covel Desktop Build ===\n");
 
 // Step 1: Build web frontend
+//
+// @covel/desktop now declares a workspace dependency on @covel/web
+// (package.json), so `turbo build` already sequences web's build before
+// this script runs — building it again here would race turbo's own build
+// against the same `dist/web` output dir (both use vite's emptyOutDir).
+// Standalone invocations (`pnpm build:electron` / `pnpm --filter
+// @covel/desktop dist`, which bypass turbo) still need this fallback.
 console.log("[1/4] Building web frontend...");
-execSync("pnpm --filter @covel/web build", {
-  cwd: projectRoot,
-  stdio: "inherit",
-});
+const webDistPath = path.join(projectRoot, "dist/web");
+if (fs.existsSync(webDistPath)) {
+  console.log(
+    "  ✓ dist/web already built — skipping (turbo build already produced it)",
+  );
+} else {
+  execSync("pnpm --filter @covel/web build", {
+    cwd: projectRoot,
+    stdio: "inherit",
+  });
+}
 
 // Step 2: Bundle main process + preload
 console.log("\n[2/4] Bundling main process and preload...");

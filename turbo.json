@@ -16,7 +16,15 @@
     "test": {
       "dependsOn": ["^build"],
       "cache": true,
-      "inputs": ["src/**", "tests/**", "vitest.config.ts"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "src/**",
+        "tests/**",
+        "vitest.config.ts",
+        "$TURBO_ROOT$/plugins/**/handler.js",
+        "$TURBO_ROOT$/plugins/**/guard.js",
+        "$TURBO_ROOT$/plugins/**/PLUGIN.md"
+      ]
     },
     "lint": {
       "dependsOn": ["^build"]

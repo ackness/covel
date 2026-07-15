@@ -19,11 +19,16 @@ services:
     # pgvector/pgvector ships PostgreSQL with the `vector` extension
     # pre-installed (required by ADR-002). The app container will refuse
     # to start if the extension is missing.
-    image: pgvector/pgvector:pg17
+    # Pinned by digest (pg17 as of 2026-07-15) — bump the digest (and this
+    # comment) when intentionally upgrading Postgres.
+    image: pgvector/pgvector:pg17@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0
     container_name: covel-postgres
     restart: unless-stopped
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      # Loopback-only: Postgres must never be reachable from outside the
+      # host by default (S-10). Set POSTGRES_PORT + bind your own interface
+      # explicitly if you need remote access.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-covel}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
@@ -51,6 +56,10 @@ services:
 
       # ── Server ─────────────────────────────────────────────────
       SERVER_PORT: "3001"
+      # The server defaults to loopback (audit S-02); inside the container it
+      # must listen on the container interface to be reachable via the mapped
+      # host port. This is an explicit deployment opt-in.
+      COVEL_BIND_HOST: 0.0.0.0
       NODE_ENV: production
       SERVE_STATIC: "true"
       STATIC_DIR: ./web-dist

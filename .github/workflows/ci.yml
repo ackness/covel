@@ -1,0 +1,49 @@
+name: CI
+
+# Runs the actual verification gate that release.yml skips (lint + tests +
+# build) on every PR and every push to main / release branches. Setup steps
+# mirror release.yml (pnpm/action-setup + actions/setup-node with pnpm
+# cache) so both workflows install identically.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "*-dev"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, test, build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Check plugin/world i18n coverage + READMEs
+        run: pnpm check:i18n

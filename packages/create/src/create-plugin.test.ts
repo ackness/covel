@@ -82,7 +82,7 @@ describe("createPlugin", () => {
     );
   });
 
-  it("writes an agent plugin with a local tool skeleton", async () => {
+  it("writes an agent plugin with an entry module and a tool skeleton", async () => {
     const result = await createPlugin({
       name: "my-agent",
       template: "agent",
@@ -95,12 +95,54 @@ describe("createPlugin", () => {
     expect(tool).toContain("export default function");
     expect(tool).toContain("withPendingProposals");
     expect(tool).not.toContain("from 'zod'");
+    const entry = await readFile(
+      path.join(result.pluginDir, "server", "index.js"),
+      "utf8",
+    );
+    expect(entry).toContain("covel.registerTool(makeTool(covel.toolkit))");
+    expect(entry).toContain("from '../tools/my-agent-tool.js'");
     const pluginMd = await readFile(
       path.join(result.pluginDir, "PLUGIN.md"),
       "utf8",
     );
-    expect(pluginMd).toContain("tools:\n  local:");
-    expect(pluginMd).toContain("./tools/my-agent-tool.js");
+    expect(pluginMd).toContain("entry: ./server/index.js");
+    expect(pluginMd).toContain("tools:\n  plugin:\n    - my-agent-tool");
+  });
+
+  it.each(["zero-code", "agent", "function"] as const)(
+    "never scaffolds deprecated registration frontmatter (%s)",
+    async (template) => {
+      const result = await createPlugin({
+        name: `no-legacy-${template}`,
+        template,
+        outputDir: tmp,
+      });
+      const pluginMd = await readFile(
+        path.join(result.pluginDir, "PLUGIN.md"),
+        "utf8",
+      );
+      // tools.local / hooks / rpc / wires are deprecated (one release cycle);
+      // scaffolded plugins must be born on the unified `entry` pattern.
+      expect(pluginMd).not.toMatch(/^\s*local:/m);
+      expect(pluginMd).not.toMatch(/^hooks:/m);
+      expect(pluginMd).not.toMatch(/^rpc:/m);
+      expect(pluginMd).not.toMatch(/^wires:/m);
+    },
+  );
+
+  it("keeps the checked-in plugin-with-tools template free of deprecated frontmatter", async () => {
+    const templateMd = await readFile(
+      path.join(
+        import.meta.dirname,
+        "../../../templates/plugin-with-tools/PLUGIN.md",
+      ),
+      "utf8",
+    );
+    expect(templateMd).toContain("entry: ./server/index.js");
+    expect(templateMd).not.toMatch(/^\s*local:/m);
+    expect(templateMd).not.toMatch(/^hooks:/m);
+    expect(templateMd).not.toMatch(/^rpc:/m);
+    expect(templateMd).not.toMatch(/^wires:/m);
   });
 
   it("writes a function plugin with a runtime handler", async () => {

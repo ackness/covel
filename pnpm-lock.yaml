@@ -50,6 +50,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@covel/web':
+        specifier: workspace:*
+        version: link:../web
       smol-toml:
         specifier: ^1.6.1
         version: 1.6.1
@@ -69,6 +72,9 @@ importers:
       esbuild:
         specifier: ^0.28.1
         version: 0.28.1
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
   apps/server:
     dependencies:
@@ -465,6 +471,9 @@ importers:
 
   packages/runtime:
     dependencies:
+      '@covel/ai-provider':
+        specifier: workspace:*
+        version: link:../ai-provider
       '@covel/approval':
         specifier: workspace:*
         version: link:../approval
@@ -486,6 +495,9 @@ importers:
       '@covel/tools':
         specifier: workspace:*
         version: link:../tools
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       typescript:
         specifier: ^6.0.3
@@ -493,9 +505,6 @@ importers:
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.0)(@types/node@26.0.0)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.0.16(@types/node@26.0.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
 
   packages/settings:
     dependencies:

@@ -10,7 +10,7 @@
       ]
     },
     "apps/desktop": {
-      "ignoreDependencies": ["tsx"]
+      "ignoreDependencies": ["@covel/web"]
     },
     "plugins/*": {
       "entry": [

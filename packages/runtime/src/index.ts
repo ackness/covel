@@ -63,6 +63,15 @@ export { createModelResolver } from "./llm/model-resolver.js";
 // ── Per-Session Runtime Slot Resolver (PR-6) ───────────────────
 export { resolveRuntimeSlot } from "./llm/runtime-slot-resolver.js";
 
+// ── Public Plugin API (unified `entry` module contract) ────────
+export type {
+  PluginAPI,
+  PluginEntryFactory,
+  PluginHookOptions,
+  PluginRpcOptions,
+  PluginToolkit,
+} from "./plugin-api.js";
+
 // ── Plugin RPC (PR-3) ──────────────────────────────────────────
 export { createPluginRpcRegistry } from "./rpc/rpc-registry.js";
 export type {
@@ -119,7 +128,10 @@ export type { SnapshotStore } from "./snapshot/snapshot-builder.js";
 
 // ── Snapshot Payload Builder (S4-T2) ────────────────────────────
 export { buildSnapshotPayload } from "./snapshot/snapshot-payload-builder.js";
-export { saveAutoSnapshot } from "./snapshot/auto-snapshot.js";
+export {
+  DEFAULT_AUTO_SNAPSHOT_INTERVAL_TURNS,
+  saveAutoSnapshot,
+} from "./snapshot/auto-snapshot.js";
 export type { SaveAutoSnapshotOptions } from "./snapshot/auto-snapshot.js";
 
 // ── Types ────────────────────────────────────────────────────────

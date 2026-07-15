@@ -97,6 +97,19 @@ export function registerDesktopIpcHandlers({
   // the primary store (browser localStorage) is plain text anyway, so
   // safeStorage only bought us a macOS Keychain prompt with no real security
   // uplift on an unsigned build.
+  //
+  // TODO(S-07): `covel:keys:load` returns the real decrypted key values to the
+  // renderer. This is a deliberate tradeoff — the renderer needs the raw keys
+  // to attach them via the `X-Provider-Keys` header and to mirror them into
+  // `localStorage` (`covel:keys`) for the pure-web path. Intended proper fix:
+  // encrypt `keys.env` at rest via Electron `safeStorage` (main process) AND
+  // stop exposing raw values to the renderer — the renderer would see only a
+  // per-provider "configured" status while the main process injects keys into
+  // outbound requests. Not done here: safeStorage-at-rest alone buys nothing
+  // while the localStorage mirror stays plaintext, and on unsigned builds
+  // safeStorage degrades to a fixed key (no real encryption) plus a migration
+  // path for existing plaintext files. Doing it right requires reworking the
+  // whole key-flow (server-side injection), which is out of scope for S-07.
   ipcMain.handle("covel:keys:load", () => loadKeysEnv(paths.userKeysEnvPath));
   ipcMain.handle("covel:keys:save", async (_event, payload: unknown) => {
     if (!payload || typeof payload !== "object") return { ok: false };
@@ -169,8 +182,10 @@ export function registerDesktopIpcHandlers({
     }
   });
 
-  // Asset import — called with { sourcePath } from the web tier or from the
-  // dialog-based "pick" handlers below.
+  // Asset import — the sourcePath always originates from a native dialog in the
+  // MAIN process (see `pickAndImport` below), never from a renderer-supplied
+  // string. The old renderer-facing `covel:import:{plugin,world}` channels were
+  // removed (audit S-08: arbitrary-path vector) — they had no callers.
   async function handleImport(
     kind: ImportKind,
     payload: unknown,
@@ -197,13 +212,6 @@ export function registerDesktopIpcHandlers({
       return { ok: false, kind, message };
     }
   }
-
-  ipcMain.handle("covel:import:plugin", (_event, payload) =>
-    handleImport("plugin", payload),
-  );
-  ipcMain.handle("covel:import:world", (_event, payload) =>
-    handleImport("world", payload),
-  );
 
   // Dialog-backed entry points. Open a native file chooser, then import.
   async function pickAndImport(kind: ImportKind): Promise<ImportResult> {

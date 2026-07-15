@@ -41,10 +41,27 @@ export function errorBody<Code extends string = string>(
 }
 
 /**
+ * Redact sensitive query params (e.g. signed media `token`) from a URL before
+ * it hits logs — the raw string is kept everywhere else (routing, response).
+ */
+function redactSensitiveQueryParams(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.searchParams.has("token")) {
+      parsed.searchParams.set("token", "[redacted]");
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+/**
  * Global `app.onError` handler factory. Logs every unhandled error WITH request
- * context (method + full URL) under `logPrefix` so any 500 is greppable, then
- * returns the standard envelope — the raw message in dev, a generic string in
- * prod (`isDev` false) so stacks/paths never leak.
+ * context (method + full URL, sensitive query params redacted) under
+ * `logPrefix` so any 500 is greppable, then returns the standard envelope —
+ * the raw message in dev, a generic string in prod (`isDev` false) so
+ * stacks/paths never leak.
  */
 export function makeErrorHandler(
   logPrefix: string,
@@ -53,7 +70,7 @@ export function makeErrorHandler(
   return (err, c) => {
     const message = err instanceof Error ? err.message : String(err);
     console.error(
-      `${logPrefix}: ${c.req.method} ${c.req.url} — ${message}`,
+      `${logPrefix}: ${c.req.method} ${redactSensitiveQueryParams(c.req.url)} — ${message}`,
       err,
     );
     return c.json(errorBody(isDev ? message : "Internal server error"), 500);

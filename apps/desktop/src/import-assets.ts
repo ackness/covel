@@ -9,13 +9,17 @@
  *   - Plugin imports require a PLUGIN.md at the root or inside runtimes/*
  *   - World imports require a world.yaml at the root
  *   - Zip entries are filtered for zip-slip / absolute paths / symlinks
+ *     and capped against zip-bombs (see `zip-extract.ts`).
  *
- * The web tier can reach these via IPC (`covel:import:plugin`, `covel:import:world`).
+ * The renderer never supplies a raw path: import is reached only through the
+ * dialog-backed `covel:import:pick-{plugin,world}` channels, whose sourcePath
+ * comes from a native file chooser in the main process.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import { userPluginsDir, userWorldsDir } from "./paths.js";
+import { extractZipSafely } from "./zip-extract.js";
 import { t } from "./main-i18n.js";
 
 export type ImportKind = "plugin" | "world";
@@ -42,136 +46,6 @@ function isFileSafe(p: string): boolean {
   } catch {
     return false;
   }
-}
-
-/** Sanitize an entry name inside an archive — reject anything that escapes root. */
-function safeEntryPath(rawName: string): string | null {
-  if (!rawName) return null;
-  // Disallow absolute paths and Windows drive letters
-  if (rawName.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(rawName)) return null;
-  // Normalize and ensure we stay inside the target root
-  const normalized = path.posix.normalize(rawName.replace(/\\/g, "/"));
-  if (normalized.startsWith("..") || normalized.includes("/../")) return null;
-  // Reject names with NUL bytes
-  if (normalized.includes("\0")) return null;
-  return normalized;
-}
-
-/** Lightweight ZIP reader (central directory only, uses native zlib for inflate). */
-async function extractZipSafely(
-  zipPath: string,
-  targetDir: string,
-): Promise<{ entries: number; rootPrefix: string | null }> {
-  const zlib = await import("node:zlib");
-  const { promisify } = await import("node:util");
-  const inflateRaw = promisify(zlib.inflateRaw);
-
-  const buf = fs.readFileSync(zipPath);
-  // Find end-of-central-directory record
-  const EOCD_SIG = 0x06054b50;
-  let eocdOffset = -1;
-  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i -= 1) {
-    if (buf.readUInt32LE(i) === EOCD_SIG) {
-      eocdOffset = i;
-      break;
-    }
-  }
-  if (eocdOffset < 0) throw new Error("Invalid zip: EOCD not found");
-
-  const totalEntries = buf.readUInt16LE(eocdOffset + 10);
-  const cdSize = buf.readUInt32LE(eocdOffset + 12);
-  const cdOffset = buf.readUInt32LE(eocdOffset + 16);
-  if (cdOffset + cdSize > buf.length)
-    throw new Error("Invalid zip: CD out of range");
-
-  const CD_SIG = 0x02014b50;
-  const LFH_SIG = 0x04034b50;
-
-  let cursor = cdOffset;
-  let extracted = 0;
-  const rootPrefixes = new Set<string>();
-
-  for (let i = 0; i < totalEntries; i += 1) {
-    if (cursor + 46 > buf.length)
-      throw new Error("Invalid zip: CD header truncated");
-    if (buf.readUInt32LE(cursor) !== CD_SIG)
-      throw new Error("Invalid zip: bad CD signature");
-
-    const method = buf.readUInt16LE(cursor + 10);
-    const compressedSize = buf.readUInt32LE(cursor + 20);
-    const uncompressedSize = buf.readUInt32LE(cursor + 24);
-    const nameLen = buf.readUInt16LE(cursor + 28);
-    const extraLen = buf.readUInt16LE(cursor + 30);
-    const commentLen = buf.readUInt16LE(cursor + 32);
-    const externalAttr = buf.readUInt32LE(cursor + 38);
-    const localOffset = buf.readUInt32LE(cursor + 42);
-    const rawName = buf
-      .slice(cursor + 46, cursor + 46 + nameLen)
-      .toString("utf-8");
-
-    cursor += 46 + nameLen + extraLen + commentLen;
-
-    // Reject symlinks — the high 4 bits of externalAttr encode the Unix
-    // file type. 0xA000 = S_IFLNK.
-    if (((externalAttr >>> 16) & 0xf000) === 0xa000) {
-      throw new Error(`Zip entry refuses symlink: ${rawName}`);
-    }
-
-    const safe = safeEntryPath(rawName);
-    if (safe === null) {
-      throw new Error(`Zip entry refuses unsafe path: ${rawName}`);
-    }
-
-    // Track root-level prefix (first path segment) to detect "single top-level dir" archives
-    const firstSeg = safe.split("/")[0];
-    if (firstSeg) rootPrefixes.add(firstSeg);
-
-    const isDir =
-      safe.endsWith("/") ||
-      (uncompressedSize === 0 && compressedSize === 0 && safe.endsWith("/"));
-    const outPath = path.join(targetDir, safe);
-    // Defence in depth: ensure resolved path is still inside targetDir
-    const rel = path.relative(targetDir, outPath);
-    if (rel.startsWith("..") || path.isAbsolute(rel)) {
-      throw new Error(`Zip entry escapes target dir: ${rawName}`);
-    }
-
-    if (isDir) {
-      fs.mkdirSync(outPath, { recursive: true });
-      continue;
-    }
-
-    // Read local file header to locate the data
-    if (localOffset + 30 > buf.length)
-      throw new Error("Invalid zip: LFH truncated");
-    if (buf.readUInt32LE(localOffset) !== LFH_SIG)
-      throw new Error("Invalid zip: bad LFH signature");
-    const lfhNameLen = buf.readUInt16LE(localOffset + 26);
-    const lfhExtraLen = buf.readUInt16LE(localOffset + 28);
-    const dataStart = localOffset + 30 + lfhNameLen + lfhExtraLen;
-    const dataEnd = dataStart + compressedSize;
-    if (dataEnd > buf.length) throw new Error("Invalid zip: data out of range");
-
-    const compressed = buf.slice(dataStart, dataEnd);
-    let output: Buffer;
-    if (method === 0) {
-      output = compressed;
-    } else if (method === 8) {
-      output = await inflateRaw(compressed);
-    } else {
-      throw new Error(`Unsupported zip compression method: ${method}`);
-    }
-
-    fs.mkdirSync(path.dirname(outPath), { recursive: true });
-    fs.writeFileSync(outPath, output);
-    extracted += 1;
-  }
-
-  // If all entries share a single top-level dir we consider that the "package root"
-  const rootPrefix =
-    rootPrefixes.size === 1 ? Array.from(rootPrefixes.values())[0] : null;
-
-  return { entries: extracted, rootPrefix };
 }
 
 // ── Validators ─────────────────────────────────────────────────

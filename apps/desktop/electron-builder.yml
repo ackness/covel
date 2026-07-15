@@ -2,6 +2,16 @@ appId: com.covel.app
 productName: Covel
 copyright: Copyright © 2026 Covel
 
+# ── Signing / notarization: KNOWN, DELIBERATE gap ──────────────────
+# TODO(S-11): No code-signing certs are provisioned yet, so release builds
+# (.github/workflows/release.yml) ship unsigned macOS/Windows artifacts and
+# macOS notarize is hardcoded `false` below. This is intentional for now,
+# not an oversight. Once CSC_LINK/CSC_KEY_PASSWORD/APPLE_* secrets are
+# provisioned (see docs/CONTRIBUTING.md "代码签名"): flip `notarize` to
+# `{ teamId: "${APPLE_TEAM_ID}" }`, and make release CI fail-closed (assert
+# the signing env vars are present and abort the release job instead of
+# silently producing unsigned artifacts).
+
 directories:
   output: ../../release/electron
   buildResources: resources

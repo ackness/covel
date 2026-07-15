@@ -7,6 +7,14 @@ name: Build Desktop
 # Primary distribution path is local builds (`pnpm build:electron`); CI is
 # the reproducible / signed path. macOS arm64 + Windows x64 —
 # Linux builds locally on its native OS.
+#
+# TODO(S-11): signing/notarization is a KNOWN, DELIBERATE gap — no
+# CSC_LINK/CSC_KEY_PASSWORD/APPLE_* secrets are provisioned, so both the
+# mac and win jobs below currently produce UNSIGNED artifacts (see
+# apps/desktop/electron-builder.yml). Once certs are provisioned, this
+# workflow should fail-closed: assert the signing secrets are present
+# before packaging and abort the release job rather than silently
+# publishing unsigned artifacts.
 on:
   push:
     tags:

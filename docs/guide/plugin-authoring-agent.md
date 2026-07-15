@@ -6,10 +6,10 @@
 
 > **读完你能做到**
 >
-> - 用 `tool({ parameters: z.object(...) })` 工厂函数写一个本地工具并挂到 `tools.local`
+> - 用 `tool({ parameters: z.object(...) })` 工厂函数写一个本地工具，在 `entry` 模块里 `covel.registerTool` 注册并用 `tools.plugin` 声明可见性
 > - 用 `interaction` 返回字段让工具产出玩家交互块（form / choice / confirmation）
 > - 用 `input.inject` 声明跨 runtime 的 prompt 注入依赖
-> - 用 `rpc:` frontmatter 暴露结构化 action 给前端 / 外部代理
+> - 用 `covel.registerRpc` 暴露结构化 action 给前端 / 外部代理
 > - 用 `@covel/plugin-test-utils` 的 `TestHarness + MockLLM` 写插件集成测试
 
 ---
@@ -40,13 +40,15 @@
 plugins/my-codex/
 ├── PLUGIN.md
 ├── package.json
+├── server/
+│   └── index.js           # 统一服务端入口（frontmatter entry 指向）
 └── tools/
     └── unlock-codex-entries.js
 ```
 
 **tools/unlock-codex-entries.js：**
 
-插件本地工具使用**工厂函数**模式 — 框架在加载时注入 `{ tool, z, shortId, shortIdBatch, withPendingProposals, store }`：
+插件本地工具使用**工厂函数**模式 — entry 模块调用工厂时传入 `covel.toolkit`，即 `{ tool, z, shortId, shortIdBatch, withPendingProposals, store }` 注入包：
 
 ```javascript
 // 工厂函数接收框架注入
@@ -116,7 +118,7 @@ export default function ({ tool, z, shortIdBatch }) {
 
 **关键点：**
 
-1. **工厂函数** — `export default function ({ tool, z, shortId, shortIdBatch, withPendingProposals, store })` 接收框架注入，通常无需 import
+1. **工厂函数** — `export default function ({ tool, z, shortId, shortIdBatch, withPendingProposals, store })` 接收 `covel.toolkit` 注入，通常无需 import
 2. **Zod 定义参数** — 框架自动从 Zod schema 生成 JSON Schema 注入 LLM 上下文，LLM 才知道如何调用
 3. **`.describe()` 很重要** — 每个参数的 describe 会作为参数说明发给 LLM
 4. **`execute(params, context)`** — params 是经过 Zod 验证的输入，context 包含会话信息
@@ -124,17 +126,31 @@ export default function ({ tool, z, shortIdBatch }) {
 6. **持久化写入** — 需要写 plugin-data 时优先返回 `withPendingProposals(...)`，让 commit chain 统一落盘、trace 和触发 SSE
 7. **返回值** — 任意 JSON，会作为 tool result 返回给 LLM
 
-在 PLUGIN.md frontmatter 中声明本地工具：
+**server/index.js** — 在统一服务端入口里注册工具（`PluginAPI` facade，约定参数名 `covel`）：
+
+```javascript
+import makeUnlockCodexEntries from "../tools/unlock-codex-entries.js";
+
+/** @param {import('@covel/runtime').PluginAPI} covel */
+export default function (covel) {
+  covel.registerTool(makeUnlockCodexEntries(covel.toolkit));
+}
+```
+
+在 PLUGIN.md frontmatter 中声明 entry，并用 `tools.plugin`（工具**名字**列表）声明该 runtime 的 LLM 可见哪些 entry 注册的工具：
 
 ```yaml
+entry: ./server/index.js
 tools:
-  local:
-    - ./tools/unlock-codex-entries.js
+  plugin:
+    - unlock-codex-entries
   builtin:
     - create-notification
 ```
 
-**package.json** 需要声明对 `@covel/tools` 的依赖：
+> 旧的 `tools.local`（路径列表）frontmatter 写法已弃用（保留一个发布周期），迁移对照见 [高级指南的迁移附录](./plugin-authoring-advanced.md#附录旧注册字段迁移)。
+
+**package.json** — 工厂注入让工具在运行时无需 import 任何框架包；`@covel/runtime` 只是 JSDoc 类型引用（devDependency）：
 
 ```json
 {
@@ -142,11 +158,9 @@ tools:
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "dependencies": {
-    "@covel/tools": "workspace:*"
-  },
   "devDependencies": {
     "@covel/plugin-test-utils": "workspace:*",
+    "@covel/runtime": "workspace:*",
     "vitest": "^4.1.2"
   }
 }
@@ -253,19 +267,24 @@ input:
 
 ## 4. 暴露 RPC action
 
-如果你的插件想被前端或外部代理通过结构化指令调用(而不是触发 turn pipeline),在 PLUGIN.md 加 `rpc:` 字段:
+如果你的插件想被前端或外部代理通过结构化指令调用(而不是触发 turn pipeline),在 `entry` 模块里用 `covel.registerRpc` 注册 action:
 
-```yaml
-rpc:
-  regenerate:
-    handler: ./rpc/regenerate.js
-    description: 重新生成上一次的 narrator 输出
-  cancel:
-    handler: ./rpc/cancel.js
-    trustLevel: builtin # 跳过 PR-7 approval 流程,慎用
+```js
+// server/index.js（PLUGIN.md: entry: ./server/index.js）
+import regenerate from "../rpc/regenerate.js";
+import cancel from "../rpc/cancel.js";
+
+/** @param {import('@covel/runtime').PluginAPI} covel */
+export default function (covel) {
+  covel.registerRpc("regenerate", regenerate, {
+    description: "重新生成上一次的 narrator 输出",
+  });
+  // trustLevel 只能收紧、不能提升插件来源信任,慎用
+  covel.registerRpc("cancel", cancel, { trustLevel: "builtin" });
+}
 ```
 
-handler 是一个 ES module,默认导出一个函数:
+handler 是一个函数(可以内联,也可以放独立模块):
 
 ```js
 // plugins/my-plugin/rpc/regenerate.js
@@ -283,6 +302,8 @@ export default async function regenerate(payload, ctx) {
 }
 ```
 
+> 旧的 frontmatter `rpc:` 声明式写法（`handler` 路径 + lazy import）已弃用（保留一个发布周期），迁移对照见 [高级指南的迁移附录](./plugin-authoring-advanced.md#附录旧注册字段迁移)。
+
 调用方:
 
 ```bash
@@ -295,7 +316,7 @@ curl -X POST http://localhost:3001/api/sessions/$SESSION_ID/plugin-rpc \
 
 - action 名必须是 kebab-case
 - 不能以 `framework-` 开头(保留命名空间)
-- handler 是按需 lazy import,首次调用时才 `import()`。模块本身可以 throw,框架会捕获并返回 500
+- builtin/official 插件的 entry 在启动时执行,action 立即可用;community 插件延迟到审批通过 / 首次激活时执行 entry。handler 抛错由框架捕获并返回 500
 - payload 可以是任意 JSON,推荐在 handler 内自己用 zod 校验
 - handler 的 `store` 是 raw `DataStore`,可以读写,但**不要绕过 commit 链做大型状态变更**——那是 turn pipeline 的职责。RPC 适合小范围读 / 通知 / 重新触发的场景
 
