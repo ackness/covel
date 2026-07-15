@@ -10,6 +10,7 @@
  */
 
 import type { SubscriptionEvent, SubscriptionTopic } from "@covel/shared";
+import { getSessionToken } from "./session-credentials.js";
 import { parseJsonSseData, readSseStream } from "./sse.js";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -134,10 +135,16 @@ export function createSessionSubscription(
     setState(connectionState === "connecting" ? "connecting" : "reconnecting");
 
     try {
+      // This SSE client is fetch-based, so it can send the owner token as a
+      // header (preferred over the `?session_token=` query fallback that plain
+      // EventSource is stuck with). Re-read per connect so reconnects pick up a
+      // token stored after the first attempt. See H-01.
+      const token = getSessionToken(sessionId);
       const res = await fetch(buildUrl(), {
         signal: abortController.signal,
         headers: {
           Accept: "text/event-stream",
+          ...(token ? { "X-Session-Token": token } : {}),
         },
       });
 
@@ -157,10 +164,23 @@ export function createSessionSubscription(
         parse: (data, message) => {
           const parsed = parseJsonSseData<Record<string, unknown>>(data);
           if (!parsed) return undefined;
-          if (message.id) lastEventId = message.id;
 
           const eventType =
             message.event || (parsed.type as string) || "unknown";
+
+          // Event ids are `${epoch}:${seq}` opaque strings — stored and sent
+          // back verbatim (no numeric parsing here). On `system.reset` the
+          // server signalled a replay gap or epoch change: our cursor is
+          // stale, so clear it and the current/next connection re-subscribes
+          // from the authoritative head instead of requesting an unservable
+          // replay. The event still dispatches so consumers can re-hydrate
+          // authoritative state (H-05/H-06).
+          if (eventType === "system.reset") {
+            lastEventId = "";
+          } else if (message.id) {
+            lastEventId = message.id;
+          }
+
           // The topic prefix is derived from an untrusted wire event name, so
           // it is narrowed to SubscriptionTopic at this boundary.
           const topic = extractTopic(eventType) as SubscriptionTopic;

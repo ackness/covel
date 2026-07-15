@@ -6,8 +6,13 @@ import type {
   SessionEvent,
 } from "@covel/shared";
 import { request } from "./request.js";
+import {
+  clearSessionToken,
+  storeSessionToken,
+} from "../session-credentials.js";
 import type {
   MessageRecord,
+  SessionCreateResponse,
   SessionRecord,
   StatePatchRecord,
 } from "./types.js";
@@ -273,16 +278,23 @@ export async function createSession(
   plugins?: string[],
   locale?: string,
 ): Promise<SessionRecord> {
-  return request<SessionRecord>("/api/sessions", {
-    method: "POST",
-    body: JSON.stringify({
-      id,
-      worldId,
-      presetId,
-      ...(plugins ? { plugins } : {}),
-      ...(locale ? { locale } : {}),
-    }),
-  });
+  const { ownerToken, ...session } = await request<SessionCreateResponse>(
+    "/api/sessions",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        id,
+        worldId,
+        presetId,
+        ...(plugins ? { plugins } : {}),
+        ...(locale ? { locale } : {}),
+      }),
+    },
+  );
+  // Persist the one-time owner token immediately so every follow-up call (which
+  // never re-receives it) can present it on hosted tiers. See H-01.
+  if (ownerToken) storeSessionToken(session.id, ownerToken);
+  return session;
 }
 
 export async function updateSession(
@@ -316,6 +328,9 @@ export async function deleteSession(sessionId: string): Promise<void> {
       method: "DELETE",
     },
   );
+  // Drop the stored owner token — the session is gone, keeping it only leaks
+  // stale key material into localStorage.
+  clearSessionToken(sessionId);
 }
 
 export async function listMessages(

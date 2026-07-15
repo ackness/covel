@@ -51,6 +51,17 @@ export interface SessionRecord {
   createdAt: string;
 }
 
+/**
+ * `POST /api/sessions` response: the created session plus its one-time owner
+ * token. The token is returned exactly once (only its hash is persisted
+ * server-side) and hosted tiers require it on every follow-up call — the client
+ * strips it here and stashes it in the session-credential store, so it never
+ * reaches the stored `SessionRecord` that read endpoints return.
+ */
+export interface SessionCreateResponse extends SessionRecord {
+  ownerToken?: string;
+}
+
 export interface MessageRecord {
   id: string;
   sessionId: string;

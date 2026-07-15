@@ -9,6 +9,7 @@ import {
   extractPendingFormMessages,
   filterStalePrompts,
   mergeChoices,
+  pluginIdForCapability,
   resolveBackdrop,
   type SpritePosition,
   type StageCurrentRecord,
@@ -492,5 +493,44 @@ describe("filterStalePrompts", () => {
   it("keeps prompts with no __turnId stamp (back-compat with old data)", () => {
     const ns = { prompt1Text: "环顾四周" };
     expect(filterStalePrompts(ns, "turn-5")).toBe(ns);
+  });
+});
+
+describe("pluginIdForCapability", () => {
+  const carrier = (id: string, isActive: boolean, capabilities: string[]) => ({
+    id,
+    isActive,
+    capabilities,
+  });
+
+  it("returns the active plugin that declares the capability", () => {
+    const plugins = [
+      carrier("scene-stage", true, ["scene-stage"]),
+      carrier("other", true, ["something-else"]),
+    ];
+    expect(pluginIdForCapability(plugins, "scene-stage")).toBe("scene-stage");
+  });
+
+  it("skips an inactive provider even when it declares the capability", () => {
+    const plugins = [carrier("scene-stage", false, ["scene-stage"])];
+    expect(pluginIdForCapability(plugins, "scene-stage")).toBeUndefined();
+  });
+
+  it("returns undefined when no active plugin provides the capability", () => {
+    const plugins = [carrier("other", true, ["something-else"])];
+    // No fall back to the capability name as an id.
+    expect(pluginIdForCapability(plugins, "scene-stage")).toBeUndefined();
+  });
+
+  it("picks the lexicographically smallest id among active matches", () => {
+    // Deterministic regardless of input order.
+    const plugins = [
+      carrier("zeta-stage", true, ["scene-stage"]),
+      carrier("alpha-stage", true, ["scene-stage"]),
+    ];
+    expect(pluginIdForCapability(plugins, "scene-stage")).toBe("alpha-stage");
+    expect(pluginIdForCapability([...plugins].reverse(), "scene-stage")).toBe(
+      "alpha-stage",
+    );
   });
 });

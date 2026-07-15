@@ -30,21 +30,31 @@ export const STAGE_CAPABILITIES = {
 
 interface CapabilityCarrier {
   readonly id: string;
+  readonly isActive?: boolean;
   readonly capabilities?: readonly string[];
 }
 
 /**
- * Resolve the plugin id that declares `capability` from the session's plugin
- * list. Falls back to `capability` itself as the id: the bundled stage plugins
- * use capability == id, so a session whose manifest predates the capability
- * tags still binds correctly. Returns the first match (stage layers are 1:1).
+ * Resolve the ACTIVE plugin id that declares `capability` from the session's
+ * plugin list. Only an active plugin writes plugin-data, so binding a stage
+ * layer to an inactive (or absent) provider yields a permanently empty layer —
+ * return `undefined` in that case and let the caller disable the layer
+ * gracefully rather than guessing the capability name as a plugin id.
+ *
+ * Deterministic when several active plugins declare the same capability: pick
+ * the lexicographically smallest id, so the choice never depends on the
+ * server's plugin-list ordering (stage layers are 1:1).
  */
 export function pluginIdForCapability(
   plugins: readonly CapabilityCarrier[],
   capability: string,
-): string {
-  const match = plugins.find((p) => p.capabilities?.includes(capability));
-  return match?.id ?? capability;
+): string | undefined {
+  let best: string | undefined;
+  for (const p of plugins) {
+    if (!p.isActive || !p.capabilities?.includes(capability)) continue;
+    if (best === undefined || p.id < best) best = p.id;
+  }
+  return best;
 }
 
 // ── Backdrop (scene-stage `stage/current`) ──────────────────────

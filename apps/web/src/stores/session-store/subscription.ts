@@ -31,6 +31,19 @@ function createSubscriptionEventHandler(
 ) {
   return (event: SubscriptionEvent): void => {
     switch (event.type) {
+      case "system.reset": {
+        // The server detected a replay gap or epoch change (ring wrapped,
+        // session evicted, or pod/process restart) — our event cursor is
+        // stale and we may have silently missed events. subscription.ts has
+        // already cleared the cursor; re-hydrate the drift-prone authoritative
+        // state (session plugins + game-state snapshot), reusing the same
+        // recovery path as a reconnect. See re-review H-05/H-06.
+        const sid = options.sessionIdRef.current;
+        if (sid) {
+          refreshAfterReconnect(sid, options.dispatch);
+        }
+        break;
+      }
       case "plugin.activated":
       case "plugin.deactivated": {
         const currentSid = options.sessionIdRef.current;
