@@ -66,7 +66,8 @@ export function createEmbeddingLockHelper(opts: {
     try {
       const result = await ai.gateway.embed(
         { values: ["covel-embed-probe"] },
-        apiKeys ? { apiKeys } : undefined,
+        // Boot-path keys are env-derived → origin-gated channel (S-01).
+        apiKeys ? { envApiKeys: apiKeys } : undefined,
       );
       const vector = result.embeddings?.[0];
       if (!Array.isArray(vector) || vector.length === 0) {

@@ -68,6 +68,7 @@ export interface GatewayLike {
     },
     options?: {
       apiKeys?: Record<string, string>;
+      envApiKeys?: Record<string, string>;
       traceId?: string;
       signal?: AbortSignal;
       slotOverrides?: SlotOverridesInput;
@@ -102,6 +103,7 @@ export interface GatewayLike {
     },
     options?: {
       apiKeys?: Record<string, string>;
+      envApiKeys?: Record<string, string>;
       traceId?: string;
       signal?: AbortSignal;
       slotOverrides?: SlotOverridesInput;
@@ -114,12 +116,19 @@ export interface GatewayLike {
     name?: string;
     arguments?: string;
     reasoningContent?: string;
+    usage?: { inputTokens: number; outputTokens: number };
   }>;
 }
 
 export interface GatewayAdapterConfig {
   /** API keys from the request (e.g., from X-Provider-Keys header). */
   readonly apiKeys?: Record<string, string>;
+  /**
+   * Server-env / platform API keys. The gateway only attaches these when
+   * the resolved target's baseUrl origin matches trusted server config —
+   * request-scoped custom presets never receive them (S-01).
+   */
+  readonly envApiKeys?: Record<string, string>;
   /** Trace ID for observability. */
   readonly traceId?: string;
   /**
@@ -157,6 +166,7 @@ export function createGatewayAdapter(
         },
         {
           apiKeys: config?.apiKeys,
+          ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
           traceId: config?.traceId,
           ...(config?.slotOverrides
             ? { slotOverrides: config.slotOverrides }
@@ -204,6 +214,7 @@ export function createGatewayAdapter(
         },
         {
           apiKeys: config?.apiKeys,
+          ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
           traceId: config?.traceId,
           ...(config?.slotOverrides
             ? { slotOverrides: config.slotOverrides }
@@ -227,6 +238,7 @@ export function createGatewayAdapter(
             ...(event.reasoningContent
               ? { reasoningContent: event.reasoningContent }
               : {}),
+            ...(event.usage ? { usage: event.usage } : {}),
           };
         }
       }

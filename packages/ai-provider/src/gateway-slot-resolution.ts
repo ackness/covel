@@ -27,6 +27,7 @@ export interface GatewaySlotResolutionDependencies {
       resolution: ProviderResolution,
       apiKeys: Record<string, string>,
       providerName: string,
+      envApiKeys?: Record<string, string>,
     ): ProviderResolution;
     hasProvider?(name: string): boolean;
     addProvider?(name: string, defaults: ProviderDefaults): void;
@@ -42,8 +43,19 @@ export interface GatewaySlotResolutionDependencies {
 }
 
 export interface GatewayOptions {
-  /** Runtime API keys from request header. */
+  /**
+   * Request-supplied API keys (X-Provider-Keys header). Applied to any
+   * resolved target — the caller explicitly chose to send these keys.
+   */
   apiKeys?: Record<string, string>;
+  /**
+   * Server-env / platform API keys (S-01). Unlike `apiKeys`, these only
+   * attach when the resolved target's baseUrl origin matches trusted
+   * config (llm.toml / registered provider defaults) — a request-scoped
+   * custom preset redirecting a provider to another origin never receives
+   * them. Request keys win when both maps carry the same provider.
+   */
+  envApiKeys?: Record<string, string>;
   /** Trace ID for observability. */
   traceId?: string;
   /** Slot-level parameter overrides resolved from the slot registry. */
@@ -241,11 +253,12 @@ export function createGatewaySlotResolution(
         target.preset ?? target.profile,
         { mode: tag === "image" ? "image" : "text" },
       );
-      if (options?.apiKeys) {
+      if (options?.apiKeys || options?.envApiKeys) {
         resolved = deps.providerRegistry.withApiKeys(
           resolved,
-          options.apiKeys,
+          options.apiKeys ?? {},
           targetProvider(target),
+          options.envApiKeys,
         );
       }
 

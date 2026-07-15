@@ -38,6 +38,7 @@ export interface ProviderRegistryLike {
     resolution: ProviderResolution,
     apiKeys: Record<string, string>,
     providerName: string,
+    envApiKeys?: Record<string, string>,
   ): ProviderResolution;
 }
 
@@ -55,11 +56,12 @@ export function prepareTarget(
   let resolved = providerRegistry.resolve(target.preset ?? target.profile, {
     mode,
   });
-  if (options?.apiKeys) {
+  if (options?.apiKeys || options?.envApiKeys) {
     resolved = providerRegistry.withApiKeys(
       resolved,
-      options.apiKeys,
+      options.apiKeys ?? {},
       provider,
+      options.envApiKeys,
     );
   }
   return { provider, resolved };

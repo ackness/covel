@@ -19,6 +19,20 @@ import {
   sleepWithAbort,
 } from "./adapters/http.js";
 import { createPinnedDispatcher } from "./adapters/http/dns-safety.js";
+import type { ImageWire } from "./image/types.js";
+import type { SpeechWire, TranscriptionWire } from "./speech/types.js";
+
+/**
+ * Shape of a plugin's media-wire registrations — what a wires module
+ * default-exports (legacy `wires` frontmatter) and what
+ * `PluginAPI.registerWires()` accepts (unified `entry` path). Each wire is
+ * registered under the `<pluginId>/<wireId>` namespace.
+ */
+export interface WireModuleShape {
+  readonly image?: readonly ImageWire[];
+  readonly speech?: readonly SpeechWire[];
+  readonly transcription?: readonly TranscriptionWire[];
+}
 
 export interface BaseUrlValidationResult {
   /** True when the URL passes SSRF policy. */

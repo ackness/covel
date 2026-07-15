@@ -17,6 +17,13 @@
  * a single request. API keys provided by the browser win over any
  * server-side environment keys so the UI can override per session.
  *
+ * Env keys are passed to the gateway separately (`envApiKeys`) from the
+ * browser-supplied keys (`apiKeys`): the provider registry only attaches
+ * an env key when the resolved target's baseUrl origin matches trusted
+ * server config, so a request-scoped custom preset that redirects a
+ * built-in provider to a foreign origin can never exfiltrate a server
+ * key (S-01).
+ *
  * When neither header is present the middleware is a no-op and the
  * base-startup `llmAdapter` stays in place.
  */
@@ -76,13 +83,9 @@ export function createPerRequestLlmMiddleware(
       return;
     }
 
-    const mergedApiKeys: Record<string, string> = {
-      ...opts.envApiKeys,
-      ...requestKeys,
-    };
-
     const perRequestAdapter = createGatewayAdapter(opts.ai.gateway, {
-      apiKeys: mergedApiKeys,
+      apiKeys: requestKeys ?? {},
+      envApiKeys: opts.envApiKeys,
       ...(slotOverrides ? { slotOverrides } : {}),
     });
 
@@ -95,7 +98,8 @@ export function createPerRequestLlmMiddleware(
     const perRequestPluginGateway = createPluginRuntimeGateway(
       opts.ai.gateway,
       {
-        apiKeys: mergedApiKeys,
+        apiKeys: requestKeys ?? {},
+        envApiKeys: opts.envApiKeys,
         ...(slotOverrides ? { slotOverrides } : {}),
       },
     );

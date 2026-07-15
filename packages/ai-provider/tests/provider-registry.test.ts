@@ -106,6 +106,126 @@ describe("provider-registry", () => {
     expect(resolution.config.apiKey).toBeUndefined();
   });
 
+  // ── S-01: env-key origin binding ────────────────────────────────
+
+  describe("env-key origin binding (S-01)", () => {
+    function makeRegistry() {
+      return createProviderRegistry({
+        providerDefaults: {
+          openai: { baseUrl: "https://api.openai.com/v1" },
+        },
+      });
+    }
+
+    it("attaches env keys when the target keeps the trusted origin", () => {
+      const registry = makeRegistry();
+      const resolution = registry.resolve({ provider: "openai" });
+
+      const withKeys = registry.withApiKeys(resolution, {}, "openai", {
+        openai: "sk-env",
+      });
+
+      expect(resolution.envKeyAllowed).toBe(true);
+      expect(withKeys.config.apiKey).toBe("sk-env");
+    });
+
+    it("refuses env keys when a request-scoped target redirects the origin", () => {
+      const registry = makeRegistry();
+      const resolution = registry.resolve({
+        provider: "openai",
+        baseUrl: "https://attacker.example",
+        requestScoped: true,
+      });
+
+      const withKeys = registry.withApiKeys(resolution, {}, "openai", {
+        openai: "sk-env",
+      });
+
+      expect(resolution.envKeyAllowed).toBe(false);
+      expect(withKeys.config.apiKey).toBeUndefined();
+      // The request travels to the attacker origin, just without the key.
+      expect(withKeys.config.baseUrl).toBe("https://attacker.example");
+    });
+
+    it("still applies request-supplied keys to a redirected origin", () => {
+      const registry = makeRegistry();
+      const resolution = registry.resolve({
+        provider: "openai",
+        baseUrl: "https://my-proxy.example/v1",
+        requestScoped: true,
+      });
+
+      const withKeys = registry.withApiKeys(
+        resolution,
+        { openai: "sk-user" },
+        "openai",
+        { openai: "sk-env" },
+      );
+
+      expect(withKeys.config.apiKey).toBe("sk-user");
+    });
+
+    it("allows env keys for a request-scoped target on the trusted origin", () => {
+      const registry = makeRegistry();
+      // e.g. a browser custom preset that only changes the model.
+      const resolution = registry.resolve({
+        provider: "openai",
+        baseUrl: "https://api.openai.com/v1",
+        requestScoped: true,
+      });
+
+      const withKeys = registry.withApiKeys(resolution, {}, "openai", {
+        openai: "sk-env",
+      });
+
+      expect(resolution.envKeyAllowed).toBe(true);
+      expect(withKeys.config.apiKey).toBe("sk-env");
+    });
+
+    it("refuses env keys for a request-scoped (overlay-registered) provider", () => {
+      const registry = makeRegistry();
+      // Fresh provider name registered from an untrusted request: its
+      // defaults.baseUrl is attacker-controlled, so origin "matching" its
+      // own registration must not unlock env keys.
+      registry.addProvider(
+        "groq",
+        { baseUrl: "https://attacker.example" },
+        { requestScoped: true },
+      );
+      const resolution = registry.resolve({ provider: "groq" });
+
+      const withKeys = registry.withApiKeys(resolution, {}, "groq", {
+        groq: "sk-env",
+      });
+
+      expect(resolution.envKeyAllowed).toBe(false);
+      expect(withKeys.config.apiKey).toBeUndefined();
+    });
+
+    it("does not send trusted default headers to a redirected origin", () => {
+      const registry = createProviderRegistry({
+        providerDefaults: {
+          custom: {
+            baseUrl: "https://api.custom.example",
+            headers: { "x-secret": "trusted-header-token" },
+          },
+        },
+      });
+
+      const trusted = registry.resolve({ provider: "custom" });
+      expect(trusted.config.headers).toEqual({
+        "x-secret": "trusted-header-token",
+      });
+
+      const redirected = registry.resolve({
+        provider: "custom",
+        baseUrl: "https://attacker.example",
+        requestScoped: true,
+      });
+      expect(redirected.config.headers).toBeUndefined();
+    });
+  });
+
   // ── S2-T3: cacheStrategy auto-fill ──────────────────────────────
 
   describe("cacheStrategy auto-fill (S2-T3)", () => {

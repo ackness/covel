@@ -55,6 +55,7 @@ interface GatewayDependencies {
       resolution: ProviderResolution,
       apiKeys: Record<string, string>,
       providerName: string,
+      envApiKeys?: Record<string, string>,
     ): ProviderResolution;
     // Overlay-capable methods — populated by the real createProviderRegistry.
     // Optional so structural test mocks don't need to implement them; when
@@ -324,11 +325,12 @@ export function createGateway(deps: GatewayDependencies) {
           let resolved = deps.providerRegistry.resolve(routingTarget, {
             mode: "embed",
           });
-          if (opts?.apiKeys) {
+          if (opts?.apiKeys || opts?.envApiKeys) {
             resolved = deps.providerRegistry.withApiKeys(
               resolved,
-              opts.apiKeys,
+              opts.apiKeys ?? {},
               target.profile.provider,
+              opts.envApiKeys,
             );
           }
           return { provider: targetProvider(target), resolved };

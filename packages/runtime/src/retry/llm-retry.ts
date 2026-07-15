@@ -290,6 +290,7 @@ export async function streamLLMWithRetry(
     const streamedToolCalls: LLMToolCall[] = [];
     let streamedContent = "";
     let streamedReasoningContent = "";
+    let streamedUsage = { inputTokens: 0, outputTokens: 0 };
     let streamFinishReason: "stop" | "tool_calls" | "length" | "error" = "stop";
     const attemptMessages = perturbMessages(messages, attempt, lastReason);
     const forwardDeltas = attempt === 0; // avoid duplicate text on retry
@@ -332,6 +333,7 @@ export async function streamLLMWithRetry(
             | "error";
           if (event.reasoningContent)
             streamedReasoningContent = event.reasoningContent;
+          if (event.usage) streamedUsage = event.usage;
         }
       }
 
@@ -343,7 +345,7 @@ export async function streamLLMWithRetry(
         content: streamedContent || null,
         toolCalls: streamedToolCalls,
         finishReason: streamFinishReason,
-        usage: { inputTokens: 0, outputTokens: 0 },
+        usage: streamedUsage,
         ...(streamedReasoningContent
           ? { reasoningContent: streamedReasoningContent }
           : {}),
@@ -395,7 +397,7 @@ export async function streamLLMWithRetry(
             content: streamedContent || null,
             toolCalls: streamedToolCalls,
             finishReason: "error",
-            usage: { inputTokens: 0, outputTokens: 0 },
+            usage: streamedUsage,
             ...(streamedReasoningContent
               ? { reasoningContent: streamedReasoningContent }
               : {}),

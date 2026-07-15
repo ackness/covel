@@ -24,6 +24,7 @@ type GenerateOptions = Parameters<AiStack["gateway"]["generateText"]>[1];
 interface RecordedCall {
   presetId: string | undefined;
   apiKeys: Record<string, string> | undefined;
+  envApiKeys: Record<string, string> | undefined;
   slotOverrides: GenerateOptions extends { slotOverrides?: infer S }
     ? S
     : never;
@@ -32,6 +33,7 @@ interface RecordedCall {
 interface RecordedResolveSlotCall {
   presetId: string | undefined;
   apiKeys: Record<string, string> | undefined;
+  envApiKeys: Record<string, string> | undefined;
   slotOverrides: GenerateOptions extends { slotOverrides?: infer S }
     ? S
     : never;
@@ -74,6 +76,7 @@ function createMockAi(): {
       calls.push({
         presetId: input.presetId,
         apiKeys: options?.apiKeys,
+        envApiKeys: options?.envApiKeys,
         slotOverrides: options?.slotOverrides,
       });
       return {
@@ -96,6 +99,7 @@ function createMockAi(): {
       resolveSlotCalls.push({
         presetId,
         apiKeys: options?.apiKeys,
+        envApiKeys: options?.envApiKeys,
         slotOverrides: options?.slotOverrides,
       });
       return {
@@ -264,11 +268,11 @@ describe("per-request LLM middleware", () => {
         }),
       ],
     });
-    // Env keys act as base; per-request keys override/extend them.
-    expect(calls[0].apiKeys).toEqual({
-      deepseek: "env-only-key",
-      vendorX: "sk-vendor-LIVE",
-    });
+    // Request keys and env keys stay separate maps (S-01): env keys are
+    // origin-gated inside the gateway and must never be pre-merged into
+    // the request-key map where they would follow any custom baseUrl.
+    expect(calls[0].apiKeys).toEqual({ vendorX: "sk-vendor-LIVE" });
+    expect(calls[0].envApiKeys).toEqual({ deepseek: "env-only-key" });
   });
 
   it("leaves the default adapter in place when no request-scoped headers are present", async () => {
@@ -373,10 +377,8 @@ describe("per-request LLM middleware", () => {
 
     expect(resolveSlotCalls).toHaveLength(1);
     expect(resolveSlotCalls[0].presetId).toBe("image");
-    expect(resolveSlotCalls[0].apiKeys).toEqual({
-      deepseek: "env-key",
-      qwen: "sk-user-live",
-    });
+    expect(resolveSlotCalls[0].apiKeys).toEqual({ qwen: "sk-user-live" });
+    expect(resolveSlotCalls[0].envApiKeys).toEqual({ deepseek: "env-key" });
     expect(resolveSlotCalls[0].slotOverrides).toMatchObject({
       slotPresetOverrides: { image: "custom_dashscope" },
       customPresets: [
@@ -434,6 +436,49 @@ describe("per-request LLM middleware", () => {
     expect(res.status).toBe(200);
     expect(defaultPluginInvoked).toBe(true);
     expect(resolveSlotCalls).toHaveLength(0);
+  });
+
+  it("never merges env keys into the request-key map (S-01 exfil shape)", async () => {
+    const { ai, calls } = createMockAi();
+    const app = buildTestApp({
+      ai,
+      envApiKeys: { openai: "sk-env-SECRET" },
+      defaultAdapter: {
+        async generate() {
+          throw new Error("default adapter must not be used");
+        },
+      },
+    });
+
+    // Attack shape: a custom preset reuses an env-keyed provider name but
+    // redirects it to a foreign origin, with NO request-supplied key.
+    const slotConfig = {
+      customPresets: [
+        {
+          id: "evil",
+          name: "evil",
+          provider: "openai",
+          baseUrl: "https://attacker.example",
+          model: "gpt-4o",
+        },
+      ],
+    };
+
+    const res = await app.request("/echo", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "X-Slot-Config": b64(slotConfig),
+      },
+      body: JSON.stringify({ model: "evil" }),
+    });
+    expect(res.status).toBe(200);
+
+    expect(calls).toHaveLength(1);
+    // The env key must only travel via envApiKeys, where the gateway
+    // origin-gates it; the request-key map stays empty.
+    expect(calls[0].apiKeys).toEqual({});
+    expect(calls[0].envApiKeys).toEqual({ openai: "sk-env-SECRET" });
   });
 
   it("drops custom preset entries missing required fields", async () => {

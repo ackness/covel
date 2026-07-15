@@ -42,7 +42,11 @@ export interface OverlayDeps {
   };
   readonly providerRegistry: {
     hasProvider?(name: string): boolean;
-    addProvider?(name: string, defaults: ProviderDefaults): void;
+    addProvider?(
+      name: string,
+      defaults: ProviderDefaults,
+      opts?: { requestScoped?: boolean },
+    ): void;
     removeProvider?(name: string): void;
   };
 }
@@ -97,10 +101,16 @@ export function applySlotOverlay(
       providerRefs.set(cp.provider, (providerRefs.get(cp.provider) ?? 0) + 1);
       ownedProviderNames.push(cp.provider);
     } else if (!hasProvider.call(deps.providerRegistry, cp.provider)) {
-      addProvider.call(deps.providerRegistry, cp.provider, {
-        ...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
-        ...(cp.protocol ? { protocol: cp.protocol } : {}),
-      });
+      addProvider.call(
+        deps.providerRegistry,
+        cp.provider,
+        {
+          ...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
+          ...(cp.protocol ? { protocol: cp.protocol } : {}),
+        },
+        // Untrusted request origin — env keys must not bind to it (S-01).
+        { requestScoped: true },
+      );
       providerRefs.set(cp.provider, 1);
       ownedProviderNames.push(cp.provider);
     }
@@ -122,6 +132,8 @@ export function applySlotOverlay(
         supportedModes: ["text", "stream"],
         enabled: true,
         tag: "text",
+        // Untrusted request origin — env keys must not bind to it (S-01).
+        requestScoped: true,
       });
       presetRefs.set(cp.id, 1);
       ownedPresetIds.push(cp.id);

@@ -16,7 +16,66 @@ const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
  * the connector lookup closes the validation-to-connect DNS-rebinding gap.
  */
 export async function createPinnedDispatcher(url: URL): Promise<Agent> {
-  const hostname = normalizeHost(url.hostname);
+  const addresses = await resolveAllowedAddresses(url.hostname);
+
+  let nextAddress = 0;
+  return new Agent({
+    connect: {
+      lookup(_hostname, options, callback) {
+        if (options.all) {
+          callback(null, [...addresses]);
+          return;
+        }
+        const selected = addresses[nextAddress++ % addresses.length]!;
+        callback(null, selected.address, selected.family);
+      },
+    },
+  });
+}
+
+/**
+ * Lazy variant for the core provider HTTP path (`adapters/http/request.ts`):
+ * instead of resolving up front, the returned dispatcher runs the same
+ * resolve-and-validate policy inside the connector's lookup. Validation thus
+ * happens at connect time on the exact addresses the socket will use (no
+ * validate-to-connect DNS-rebinding gap), keep-alive reuse stays cheap, and
+ * a mocked `fetch` in tests never triggers real DNS.
+ */
+export function createConnectPinnedDispatcher(): Agent {
+  return new Agent({
+    connect: {
+      lookup(hostname, options, callback) {
+        resolveAllowedAddresses(hostname).then(
+          (addresses) => {
+            if (options.all) {
+              callback(null, [...addresses]);
+              return;
+            }
+            const first = addresses[0]!;
+            callback(null, first.address, first.family);
+          },
+          (error: unknown) => {
+            callback(
+              error instanceof Error ? error : new Error(String(error)),
+              "",
+              4,
+            );
+          },
+        );
+      },
+    },
+  });
+}
+
+/**
+ * Resolve a hostname (or accept an IP literal) and enforce the SSRF policy
+ * on every answer: loopback hostnames must resolve to loopback addresses,
+ * anything else must resolve to publicly routable addresses only.
+ */
+async function resolveAllowedAddresses(
+  rawHostname: string,
+): Promise<readonly ResolvedAddress[]> {
+  const hostname = normalizeHost(rawHostname);
   const literalFamily = isIP(hostname);
   let addresses: readonly ResolvedAddress[];
 
@@ -46,19 +105,7 @@ export async function createPinnedDispatcher(url: URL): Promise<Agent> {
     }
   }
 
-  let nextAddress = 0;
-  return new Agent({
-    connect: {
-      lookup(_hostname, options, callback) {
-        if (options.all) {
-          callback(null, [...addresses]);
-          return;
-        }
-        const selected = addresses[nextAddress++ % addresses.length]!;
-        callback(null, selected.address, selected.family);
-      },
-    },
-  });
+  return addresses;
 }
 
 function isLoopbackIpAddress(rawAddress: string): boolean {

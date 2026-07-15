@@ -117,6 +117,7 @@ export {
   fetchWithRetry,
   type BaseUrlValidationResult,
   type FetchWithRetryOptions,
+  type WireModuleShape,
 } from "./plugin-utils.js";
 
 // Capability
