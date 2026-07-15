@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { CovelMessage, SubscriptionEvent } from "@covel/shared";
+import { parseSubscriptionEventId } from "@covel/shared";
 import { createEventBus, type EventBus } from "../src/event-bus.js";
+
+/** Seq part of a `${epoch}:${seq}` wire id. */
+const seqOf = (event: SubscriptionEvent): number =>
+  parseSubscriptionEventId(event.id)!.seq;
 
 function makeMessage(overrides?: Partial<CovelMessage>): CovelMessage {
   return {
@@ -31,12 +36,8 @@ describe("EventBus Subscription Features", () => {
       bus.emit(makeMessage({ sessionId: "sess-1" }));
 
       expect(events).toHaveLength(3);
-      expect(parseInt(events[0]!.id, 10)).toBeLessThan(
-        parseInt(events[1]!.id, 10),
-      );
-      expect(parseInt(events[1]!.id, 10)).toBeLessThan(
-        parseInt(events[2]!.id, 10),
-      );
+      expect(seqOf(events[0]!)).toBeLessThan(seqOf(events[1]!));
+      expect(seqOf(events[1]!)).toBeLessThan(seqOf(events[2]!));
     });
 
     it("should use per-session sequence counters", () => {
@@ -53,10 +54,10 @@ describe("EventBus Subscription Features", () => {
       expect(sess1Events).toHaveLength(2);
       expect(sess2Events).toHaveLength(1);
       // sess-1: first event should be seq 1, second should be seq 2
-      expect(sess1Events[0]!.id).toBe("1");
-      expect(sess1Events[1]!.id).toBe("2");
+      expect(seqOf(sess1Events[0]!)).toBe(1);
+      expect(seqOf(sess1Events[1]!)).toBe(2);
       // sess-2: first event should be seq 1
-      expect(sess2Events[0]!.id).toBe("1");
+      expect(seqOf(sess2Events[0]!)).toBe(1);
     });
   });
 
@@ -67,21 +68,25 @@ describe("EventBus Subscription Features", () => {
       bus.emit(makeMessage({ sessionId: "sess-1" }));
 
       const after1 = bus.getEventsAfter("sess-1", 1);
-      expect(after1).toHaveLength(2);
-      expect(after1[0]!.id).toBe("2");
-      expect(after1[1]!.id).toBe("3");
+      expect(after1.gap).toBe(false);
+      expect(after1.events).toHaveLength(2);
+      expect(seqOf(after1.events[0]!)).toBe(2);
+      expect(seqOf(after1.events[1]!)).toBe(3);
     });
 
-    it("should return empty array when no events after given seq", () => {
+    it("should return no events when nothing is newer than the cursor", () => {
       bus.emit(makeMessage({ sessionId: "sess-1" }));
 
       const result = bus.getEventsAfter("sess-1", 1);
-      expect(result).toHaveLength(0);
+      expect(result.events).toHaveLength(0);
+      expect(result.gap).toBe(false);
     });
 
-    it("should return empty array for unknown session", () => {
+    it("should signal a gap for unknown session", () => {
       const result = bus.getEventsAfter("unknown-session", 0);
-      expect(result).toHaveLength(0);
+      expect(result.events).toHaveLength(0);
+      expect(result.gap).toBe(true);
+      expect(result.epoch).toBeUndefined();
     });
 
     it("should return all events when afterSeq is 0", () => {
@@ -89,7 +94,17 @@ describe("EventBus Subscription Features", () => {
       bus.emit(makeMessage({ sessionId: "sess-1" }));
 
       const all = bus.getEventsAfter("sess-1", 0);
-      expect(all).toHaveLength(2);
+      expect(all.events).toHaveLength(2);
+      expect(all.gap).toBe(false);
+    });
+
+    it("should signal a gap when the cursor is ahead of the latest seq", () => {
+      bus.emit(makeMessage({ sessionId: "sess-1" }));
+
+      const result = bus.getEventsAfter("sess-1", 99);
+      expect(result.events).toHaveLength(0);
+      expect(result.gap).toBe(true);
+      expect(result.latestSeq).toBe(1);
     });
   });
 
@@ -123,7 +138,7 @@ describe("EventBus Subscription Features", () => {
       expect(event.type).toBe("quest.completed");
       expect(event.payload).toEqual({ questId: "q-1" });
       expect(event.timestamp).toBeDefined();
-      expect(event.id).toBe("1");
+      expect(seqOf(event)).toBe(1);
     });
 
     it("should support multiple onEmit callbacks", () => {
@@ -155,7 +170,7 @@ describe("EventBus Subscription Features", () => {
   });
 
   describe("ring buffer overflow", () => {
-    it("should drop oldest events when buffer exceeds 1000 per session", () => {
+    it("should drop oldest events and report the gap (H-05)", () => {
       // Emit 1050 events
       for (let i = 0; i < 1050; i++) {
         bus.emit(makeMessage({ sessionId: "sess-1" }));
@@ -163,13 +178,25 @@ describe("EventBus Subscription Features", () => {
 
       // getEventsAfter(0) should return at most 1000 events
       const all = bus.getEventsAfter("sess-1", 0);
-      expect(all.length).toBeLessThanOrEqual(1000);
+      expect(all.events.length).toBeLessThanOrEqual(1000);
 
-      // The oldest events (seq 1-50) should have been dropped
-      // The first available event should be seq 51
-      expect(parseInt(all[0]!.id, 10)).toBe(51);
-      // The last event should be seq 1050
-      expect(parseInt(all[all.length - 1]!.id, 10)).toBe(1050);
+      // The oldest events (seq 1-50) were dropped: the ring wrapped past the
+      // cursor, so the replay is incomplete and must be flagged as a gap.
+      expect(all.gap).toBe(true);
+      expect(all.oldestSeq).toBe(51);
+      expect(all.latestSeq).toBe(1050);
+      expect(seqOf(all.events[0]!)).toBe(51);
+      expect(seqOf(all.events[all.events.length - 1]!)).toBe(1050);
+
+      // A cursor inside the retained window replays cleanly, no gap.
+      const tail = bus.getEventsAfter("sess-1", 1040);
+      expect(tail.gap).toBe(false);
+      expect(tail.events).toHaveLength(10);
+
+      // A cursor exactly at the retention boundary is still bridgeable.
+      expect(bus.getEventsAfter("sess-1", 50).gap).toBe(false);
+      // One before the boundary is not.
+      expect(bus.getEventsAfter("sess-1", 49).gap).toBe(true);
     });
   });
 
@@ -179,8 +206,8 @@ describe("EventBus Subscription Features", () => {
       bus.emit(makeMessage({ sessionId: "sess-1" }));
       bus.emit(makeMessage({ sessionId: "sess-2" }));
 
-      const sess1 = bus.getEventsAfter("sess-1", 0);
-      const sess2 = bus.getEventsAfter("sess-2", 0);
+      const sess1 = bus.getEventsAfter("sess-1", 0).events;
+      const sess2 = bus.getEventsAfter("sess-2", 0).events;
 
       expect(sess1).toHaveLength(2);
       expect(sess2).toHaveLength(1);

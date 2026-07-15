@@ -159,10 +159,14 @@ export type {
 export type {
   SubscriptionTopic,
   SubscriptionEvent,
+  SubscriptionEventCursor,
   SubscriptionFilter,
 } from "./subscription-events.js";
 
-export { SUBSCRIPTION_TOPICS } from "./subscription-events.js";
+export {
+  SUBSCRIPTION_TOPICS,
+  parseSubscriptionEventId,
+} from "./subscription-events.js";
 
 export type {
   ProposalPayloadMap,

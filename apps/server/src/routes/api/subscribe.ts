@@ -9,7 +9,11 @@ import { streamSSE } from "hono/streaming";
 import type { EventBus } from "@covel/events";
 import type { DataStore } from "@covel/store";
 import type { SubscriptionEvent, SubscriptionTopic } from "@covel/shared";
-import { SUBSCRIPTION_TOPICS, readRuntimeEnv } from "@covel/shared";
+import {
+  SUBSCRIPTION_TOPICS,
+  parseSubscriptionEventId,
+  readRuntimeEnv,
+} from "@covel/shared";
 import { errorBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import { checkSessionOwner } from "./session/session-guard.js";
@@ -109,37 +113,59 @@ subscribeRoutes.get(
     sessionConnections.set(sessionId, activeConnections + 1);
 
     return streamSSE(c, async (stream) => {
-      try {
-        // R-01 Bug A (event-loss race): register the live listener BEFORE
-        // computing/sending the replay batch. Events emitted during replay are
-        // buffered here and flushed afterwards, deduped by id against what
-        // replay already sent — so nothing is lost and nothing double-sends.
-        const sentIds = new Set<string>();
-        const liveBuffer: SubscriptionEvent[] = [];
-        let replaying = true;
+      // R-01 Bug A (event-loss race): register the live listener BEFORE
+      // computing/sending the replay batch. Events emitted during replay are
+      // buffered here and flushed afterwards, deduped by id against what
+      // replay already sent — so nothing is lost and nothing double-sends.
+      //
+      // H-08: everything acquired here (listener, session pin, heartbeat,
+      // connection slot) is registered before the first await and released in
+      // the single `finally` below — a throw anywhere in handshake/replay can
+      // no longer leak the listener or its closures.
+      const sentIds = new Set<string>();
+      const liveBuffer: SubscriptionEvent[] = [];
+      let replaying = true;
+      let heartbeatInterval: ReturnType<typeof setInterval> | undefined;
+      let resolveDone = (): void => {};
+      const done = new Promise<void>((resolve) => {
+        resolveDone = resolve;
+      });
 
-        const writeEvent = (event: SubscriptionEvent): Promise<void> => {
-          sentIds.add(event.id);
-          return stream.writeSSE({
+      const writeEvent = (event: SubscriptionEvent): Promise<void> => {
+        sentIds.add(event.id);
+        return stream.writeSSE({
+          id: event.id,
+          event: deriveSseEventName(event),
+          data: JSON.stringify(event),
+        });
+      };
+
+      const unsubscribe = eventBus.onEmit((event) => {
+        if (event.sessionId !== sessionId) return;
+        if (topics && !topics.has(event.topic)) return;
+        if (replaying) {
+          liveBuffer.push(event);
+          return;
+        }
+        // H-06(3): no sentIds bookkeeping on the live path — dedupe only
+        // covers the replay→live cutover window; live ids are epoch-unique.
+        stream
+          .writeSSE({
             id: event.id,
             event: deriveSseEventName(event),
             data: JSON.stringify(event),
+          })
+          .catch(() => {
+            // Connection closed — cleanup happens via abort/finally.
           });
-        };
+      });
+      // H-06(1): pin the session's replay state for the lifetime of this
+      // stream so LRU/TTL eviction can't reset its seq/epoch underneath an
+      // active subscriber.
+      const pinned = eventBus.pin(sessionId);
+      stream.onAbort(() => resolveDone());
 
-        const unsubscribe = eventBus.onEmit((event) => {
-          if (event.sessionId !== sessionId) return;
-          if (topics && !topics.has(event.topic)) return;
-          if (replaying) {
-            liveBuffer.push(event);
-            return;
-          }
-          if (sentIds.has(event.id)) return;
-          writeEvent(event).catch(() => {
-            // Connection closed — cleanup will happen via abort
-          });
-        });
-
+      try {
         // R-01 Bug B (cursor reset): the connected frame carries NO id, so the
         // frontend never clobbers its lastEventId back to "0" on reconnect
         // (mirrors the id-less heartbeat frame below).
@@ -152,12 +178,30 @@ subscribeRoutes.get(
           }),
         });
 
-        // Replay missed events if lastEventId provided.
+        // Replay missed events if lastEventId provided. Ids are epoch-scoped
+        // (`${epoch}:${seq}`): when the cursor's epoch no longer matches, or
+        // the ring buffer can't bridge the seq (H-05 gap), emit an id-less
+        // `system.reset` control frame instead of a partial replay — the
+        // client drops its cursor and re-hydrates authoritative state.
         if (lastEventId) {
-          const afterSeq = parseInt(lastEventId, 10);
-          if (!isNaN(afterSeq)) {
-            const missed = eventBus.getEventsAfter(sessionId, afterSeq);
-            for (const event of missed) {
+          const cursor = parseSubscriptionEventId(lastEventId);
+          const replay = eventBus.getEventsAfter(sessionId, cursor?.seq ?? 0);
+          const epoch = replay.epoch ?? pinned.epoch;
+          const epochChanged = !cursor || cursor.epoch !== epoch;
+          if (epochChanged || replay.gap) {
+            await stream.writeSSE({
+              event: "system.reset",
+              data: JSON.stringify({
+                sessionId,
+                reason: epochChanged ? "epoch-change" : "gap",
+                epoch,
+                oldestSeq: replay.oldestSeq,
+                latestSeq: replay.latestSeq,
+                timestamp: new Date().toISOString(),
+              }),
+            });
+          } else {
+            for (const event of replay.events) {
               if (!topics || topics.has(event.topic)) {
                 await writeEvent(event);
               }
@@ -177,9 +221,12 @@ subscribeRoutes.get(
           }
         }
         replaying = false;
+        // H-06(3): the dedupe set only guards the cutover — drop it instead
+        // of letting it grow for the connection lifetime.
+        sentIds.clear();
 
         // Heartbeat every 30 seconds
-        const heartbeatInterval = setInterval(async () => {
+        heartbeatInterval = setInterval(async () => {
           try {
             await stream.writeSSE({
               event: "system.heartbeat",
@@ -192,14 +239,18 @@ subscribeRoutes.get(
 
         // Keep the stream open until the client disconnects.
         // Without this, the async callback returns immediately and Hono closes the stream.
-        await new Promise<void>((resolve) => {
-          stream.onAbort(() => {
-            unsubscribe();
-            clearInterval(heartbeatInterval);
-            resolve();
-          });
-        });
+        await done;
+      } catch (err) {
+        // Handshake/replay write failed (client vanished mid-setup, etc.).
+        // Log with context and fall through to the unified cleanup.
+        console.error(
+          `[subscribe] SSE stream error (session ${sessionId}):`,
+          err,
+        );
       } finally {
+        unsubscribe();
+        pinned.release();
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
         const remaining = (sessionConnections.get(sessionId) ?? 1) - 1;
         if (remaining <= 0) sessionConnections.delete(sessionId);
         else sessionConnections.set(sessionId, remaining);

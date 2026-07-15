@@ -37,9 +37,10 @@ describe("session state eviction (audit R-03)", () => {
     // sess-0 before this — getEventsAfter refreshes LRU position.
     bus.emit(makeMessage({ sessionId: "sess-overflow" }));
 
-    expect(bus.getEventsAfter("sess-0", 0)).toEqual([]);
-    expect(bus.getEventsAfter("sess-1", 0)).toHaveLength(1);
-    expect(bus.getEventsAfter("sess-overflow", 0)).toHaveLength(1);
+    expect(bus.getEventsAfter("sess-0", 0).gap).toBe(true);
+    expect(bus.getEventsAfter("sess-0", 0).events).toEqual([]);
+    expect(bus.getEventsAfter("sess-1", 0).events).toHaveLength(1);
+    expect(bus.getEventsAfter("sess-overflow", 0).events).toHaveLength(1);
   });
 
   it("getEventsAfter refreshes LRU position so active sessions survive", () => {
@@ -53,27 +54,35 @@ describe("session state eviction (audit R-03)", () => {
 
     bus.emit(makeMessage({ sessionId: "sess-overflow" }));
 
-    expect(bus.getEventsAfter("sess-0", 0)).toHaveLength(1);
-    expect(bus.getEventsAfter("sess-1", 0)).toEqual([]);
+    expect(bus.getEventsAfter("sess-0", 0).events).toHaveLength(1);
+    expect(bus.getEventsAfter("sess-1", 0).gap).toBe(true);
   });
 
-  it("restarts seq at 1 after eviction (replay returns empty, documented)", () => {
+  it("mints a fresh epoch after eviction so old cursors are detectable (H-06)", () => {
     const bus = createEventBus();
 
     bus.emit(makeMessage({ sessionId: "sess-evicted" }));
+    const before = bus.getEventsAfter("sess-evicted", 0).epoch;
+    expect(before).toBeDefined();
+
     for (let i = 0; i < MAX_TRACKED_SESSIONS; i += 1) {
       bus.emit(makeMessage({ sessionId: `filler-${i}` }));
     }
-    expect(bus.getEventsAfter("sess-evicted", 0)).toEqual([]);
+    // Evicted: replay reports a gap, no epoch.
+    const evicted = bus.getEventsAfter("sess-evicted", 0);
+    expect(evicted.gap).toBe(true);
+    expect(evicted.epoch).toBeUndefined();
 
-    // Re-emitting recreates the session state with a fresh counter.
+    // Re-emitting recreates the state: seq restarts at 1 BUT under a new
+    // epoch, so the wire id `${epoch}:1` never collides with the old ":1".
     bus.emit(makeMessage({ sessionId: "sess-evicted" }));
-    const events = bus.getEventsAfter("sess-evicted", 0);
-    expect(events).toHaveLength(1);
-    expect(events[0]!.id).toBe("1");
-    // A client holding a pre-eviction cursor gets an empty replay and must
-    // fall back to a full state fetch.
-    expect(bus.getEventsAfter("sess-evicted", 500)).toEqual([]);
+    const recreated = bus.getEventsAfter("sess-evicted", 0);
+    expect(recreated.events).toHaveLength(1);
+    expect(recreated.epoch).toBeDefined();
+    expect(recreated.epoch).not.toBe(before);
+    expect(recreated.events[0]!.id).toBe(`${recreated.epoch}:1`);
+    // A client holding a pre-eviction cursor sees a gap and must reset.
+    expect(bus.getEventsAfter("sess-evicted", 500).gap).toBe(true);
   });
 
   it("evicts sessions idle beyond the TTL", () => {
@@ -85,8 +94,62 @@ describe("session state eviction (audit R-03)", () => {
     // Any touch triggers the lazy sweep.
     bus.emit(makeMessage({ sessionId: "sess-fresh" }));
 
-    expect(bus.getEventsAfter("sess-idle", 0)).toEqual([]);
-    expect(bus.getEventsAfter("sess-fresh", 0)).toHaveLength(1);
+    expect(bus.getEventsAfter("sess-idle", 0).gap).toBe(true);
+    expect(bus.getEventsAfter("sess-fresh", 0).events).toHaveLength(1);
+  });
+});
+
+describe("session pinning (re-review H-06)", () => {
+  it("a pinned session survives LRU pressure; unpinned it becomes evictable", () => {
+    const bus = createEventBus();
+
+    bus.emit(makeMessage({ sessionId: "sess-pinned" }));
+    const pin = bus.pin("sess-pinned");
+
+    // Flood way past the global cap — sess-pinned would be LRU-oldest.
+    for (let i = 0; i < MAX_TRACKED_SESSIONS + 10; i += 1) {
+      bus.emit(makeMessage({ sessionId: `filler-${i}` }));
+    }
+    const survived = bus.getEventsAfter("sess-pinned", 0);
+    expect(survived.gap).toBe(false);
+    expect(survived.events).toHaveLength(1);
+    expect(survived.epoch).toBe(pin.epoch);
+
+    // Release the pin (idempotent), then flood again — now it evicts.
+    pin.release();
+    pin.release();
+    for (let i = 0; i < MAX_TRACKED_SESSIONS + 10; i += 1) {
+      bus.emit(makeMessage({ sessionId: `filler2-${i}` }));
+    }
+    expect(bus.getEventsAfter("sess-pinned", 0).gap).toBe(true);
+  });
+
+  it("a pinned session survives the idle TTL sweep", () => {
+    vi.useFakeTimers({ now: new Date("2026-07-15T00:00:00Z") });
+    const bus = createEventBus();
+
+    bus.emit(makeMessage({ sessionId: "sess-pinned" }));
+    bus.emit(makeMessage({ sessionId: "sess-idle" }));
+    const pin = bus.pin("sess-pinned");
+
+    vi.setSystemTime(Date.now() + SESSION_IDLE_TTL_MS + 1);
+    bus.emit(makeMessage({ sessionId: "sess-fresh" }));
+
+    expect(bus.getEventsAfter("sess-pinned", 0).gap).toBe(false);
+    expect(bus.getEventsAfter("sess-idle", 0).gap).toBe(true);
+    pin.release();
+  });
+
+  it("pin() creates the state (with epoch) for a not-yet-emitted session", () => {
+    const bus = createEventBus();
+    const pin = bus.pin("sess-new");
+    expect(pin.epoch).toBeDefined();
+
+    bus.emit(makeMessage({ sessionId: "sess-new" }));
+    const replay = bus.getEventsAfter("sess-new", 0);
+    expect(replay.epoch).toBe(pin.epoch);
+    expect(replay.events[0]!.id).toBe(`${pin.epoch}:1`);
+    pin.release();
   });
 });
 
