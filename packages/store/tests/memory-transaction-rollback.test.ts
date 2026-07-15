@@ -106,6 +106,55 @@ describe("MemoryStore transaction rollback (H3 shallow snapshot)", () => {
     expect(rows.map((r) => r.key)).toEqual(["committed"]);
   });
 
+  it("snapshots only touched collections: a concurrent write to an untouched collection survives rollback (R-16)", async () => {
+    // Pre-R-16 the eager whole-store snapshot would roll this concurrent
+    // pluginData write back together with the failed tx. Touched-only capture
+    // leaves untouched collections alone.
+    await expect(
+      store.withTransaction!(async (tx) => {
+        await tx.appendTurnMessage(
+          makeTurnMessage({ id: "tm-drop", sessionId: "sess-1", order: 0 }),
+        );
+        // Concurrent non-transaction write to a collection the tx never touches.
+        await store.setPluginData(pluginData({ key: "survivor" }));
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
+
+    expect(await store.listTurnMessages("sess-1")).toHaveLength(0);
+    const rows = await store.listPluginData("sess-1", "p1");
+    expect(rows.map((r) => r.key)).toEqual(["survivor"]);
+  });
+
+  it("deleteSession inside a tx rolls back every cascaded collection", async () => {
+    await store.appendTurnMessage(
+      makeTurnMessage({ id: "tm-keep", sessionId: "sess-1", order: 0 }),
+    );
+    await store.setPluginData(pluginData({ key: "keep" }));
+
+    await expect(
+      store.withTransaction!(async (tx) => {
+        await tx.deleteSession("sess-1");
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
+
+    expect(await store.getSession("sess-1")).not.toBeNull();
+    expect(await store.listTurnMessages("sess-1")).toHaveLength(1);
+    expect(await store.listPluginData("sess-1", "p1")).toHaveLength(1);
+  });
+
+  it("every WRITE_METHOD_TOUCHES key names a real store method", async () => {
+    const { WRITE_METHOD_TOUCHES } =
+      await import("../src/memory/transaction-methods.js");
+    for (const name of Object.keys(WRITE_METHOD_TOUCHES)) {
+      expect(
+        typeof (store as unknown as Record<string, unknown>)[name],
+        `WRITE_METHOD_TOUCHES maps unknown method "${name}"`,
+      ).toBe("function");
+    }
+  });
+
   it("a record read before the tx is not corrupted by a rolled-back write", async () => {
     await store.setPluginData(pluginData({ key: "k", value: { n: 1 } }));
     const before = (await store.listPluginData("sess-1", "p1"))[0];

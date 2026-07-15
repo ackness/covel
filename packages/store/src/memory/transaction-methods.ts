@@ -13,10 +13,10 @@ import {
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
 
 /**
- * The MemoryState collections captured by a transaction snapshot.
+ * The MemoryState collections a transaction snapshot may capture.
  *
  * Derived from {@link SESSION_SCOPED_TABLES} (so a newly-registered session
- * table is snapshotted automatically) plus the parent `sessions` map and the
+ * table is snapshottable automatically) plus the parent `sessions` map and the
  * non-session-scoped mutable collections (`worlds`, `vectorRows`) a transaction
  * may also touch. `tests/table-registry-consistency.test.ts` pins this list
  * against the registry.
@@ -35,48 +35,140 @@ export const MEMORY_SNAPSHOT_COLLECTIONS: ReadonlyArray<{
   { key: "vectorRows", kind: "map" },
 ];
 
+const SNAPSHOT_KIND_BY_KEY: ReadonlyMap<
+  keyof MemoryState,
+  MemoryCollectionKind
+> = new Map(MEMORY_SNAPSHOT_COLLECTIONS.map((c) => [c.key, c.kind]));
+
+const ALL_SNAPSHOT_KEYS: readonly (keyof MemoryState)[] =
+  MEMORY_SNAPSHOT_COLLECTIONS.map((c) => c.key);
+
+type Touched = readonly (keyof MemoryState)[];
+
+/**
+ * Which snapshot collections each mutating StoreTransaction method touches.
+ *
+ * Drives touched-only snapshotting (audit 2026-07-11 R-16): a transaction
+ * captures a shallow copy of a collection lazily, the first time a method
+ * that writes it is invoked — instead of eagerly copying every collection per
+ * transaction. Methods mapped to `[]` mutate only state that was never part
+ * of the snapshot (vector model registry / session vector targets), preserving
+ * pre-existing rollback semantics for them.
+ *
+ * Safety net: a mutating method missing from this map (and not matching a
+ * read prefix) falls back to capturing ALL collections — new write methods
+ * degrade to the old eager behaviour instead of silently breaking rollback.
+ * `tests/memory-transaction-rollback.test.ts` pins that every key here names a
+ * real store method.
+ */
+export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
+  // sessions
+  createSession: ["sessions"],
+  updateSession: ["sessions"],
+  deleteSession: ALL_SNAPSHOT_KEYS, // cascades across every session-scoped collection
+  // runtime records
+  saveTurnResult: ["turnResults"],
+  saveRuntimeResult: ["runtimeResults"],
+  saveToolCall: ["toolCalls"],
+  saveStateSchema: ["stateSchemas"],
+  deleteStateSchema: ["stateSchemas"],
+  upsertStateEntry: ["stateEntries"],
+  addStateChange: ["stateChanges"],
+  saveEvent: ["events"],
+  saveApproval: ["approvals"],
+  addMessage: ["messages"],
+  upsertCharacter: ["characters"],
+  deleteCharacter: ["characters"],
+  addTraceEvent: ["traceEvents"],
+  saveRuntimeOutput: ["runtimeOutputs"],
+  saveInteractionRecord: ["interactionRecords"],
+  appendTurnMessage: ["turnMessages"],
+  tagTurnMessagesCompacted: ["turnMessages"],
+  savePlayerInput: ["playerInputs"],
+  saveSessionSummary: ["sessionSummaries"],
+  deleteSessionSummaries: ["sessionSummaries"],
+  // plugin data
+  setPluginData: ["pluginData"],
+  setPluginDataBatch: ["pluginData"],
+  deletePluginData: ["pluginData"],
+  // working memory / ledger / lorebook
+  upsertWorkingMemory: ["workingMemoryEntries"],
+  deleteWorkingMemory: ["workingMemoryEntries"],
+  saveWorldDataImportLedgerBatch: ["worldDataImportLedger"],
+  deleteWorldDataImportLedger: ["worldDataImportLedger"],
+  upsertLorebookEntries: ["lorebookEntries"],
+  deleteLorebookEntry: ["lorebookEntries"],
+  // suspensions + snapshots
+  saveSuspension: ["suspensions"],
+  claimSuspension: ["suspensions"],
+  markSuspensionResolved: ["suspensions"],
+  deleteSuspension: ["suspensions"],
+  deleteExpiredSuspensions: ["suspensions"],
+  saveSnapshot: ["snapshots"],
+  // worlds + vectors
+  upsertWorld: ["worlds"],
+  deleteWorld: ["worlds"],
+  upsertVector: ["vectorRows"],
+  deleteVectors: ["vectorRows"],
+  // Mutate only never-snapshotted state (vector model registry / targets) —
+  // parity with the previous eager snapshot, which excluded them too.
+  ensureVectorModel: [],
+  lockSessionEmbeddingModel: [],
+  resolveSessionVectorTarget: [],
+};
+
+/** Method-name prefixes that never mutate MemoryState. */
+const READ_METHOD_PREFIXES = ["get", "list", "search"] as const;
+
+function isReadMethod(name: string): boolean {
+  return READ_METHOD_PREFIXES.some((p) => name.startsWith(p));
+}
+
 /** A captured snapshot: collection key → shallow copy of its contents. */
 type MemorySnapshot = Map<keyof MemoryState, unknown>;
 
 /**
- * Capture a transaction snapshot.
+ * Lazily capture a shallow copy of one collection into the snapshot.
  *
- * Performance (audit 2026-06-04 finding H3): instead of `structuredClone`-ing
- * every collection (O(total-bytes) per transaction), we take a *shallow* copy of
- * each collection — a fresh `Map`/array holding the same record references. This
- * is O(row-count) reference copy, not a byte deep clone.
+ * Performance (audit 2026-06-04 finding H3 + 2026-07-11 R-16): instead of
+ * `structuredClone`-ing (or even shallow-copying) every collection per
+ * transaction, we shallow-copy each collection at most once, and only when a
+ * method that writes it runs — a fresh `Map`/array holding the same record
+ * references.
  *
  * Correctness invariant this relies on: MemoryStore methods never mutate a
  * stored record object in place. Every write path either pushes a new object,
  * `.set(key, newObject)`, replaces an array slot with a spread copy
  * (`arr[i] = { ...arr[i], ... }`), or `.delete()`s. A `Map`/array shallow copy
- * therefore preserves the exact membership at snapshot time, and `restoreSnapshot`
- * rewinds structure (insertions, deletions, slot replacements) faithfully — the
- * shared record references it restores were never mutated, so isolation and
- * rollback semantics are unchanged.
+ * therefore preserves the exact membership at capture time, and
+ * `restoreSnapshot` rewinds structure (insertions, deletions, slot
+ * replacements) faithfully — the shared record references it restores were
+ * never mutated, so isolation and rollback semantics are unchanged.
  *
- * If a future method mutates a stored record in place, that invariant breaks for
- * both this shallow snapshot *and* any reference-sharing reader — the fix is to
- * keep replacing whole records, not to reintroduce a blanket deep clone.
+ * If a future method mutates a stored record in place, that invariant breaks
+ * for both this shallow snapshot *and* any reference-sharing reader — the fix
+ * is to keep replacing whole records, not to reintroduce a blanket deep clone.
  */
-function captureSnapshot(state: MemoryState): MemorySnapshot {
-  const snapshot: MemorySnapshot = new Map();
-  for (const { key, kind } of MEMORY_SNAPSHOT_COLLECTIONS) {
-    const value = state[key];
-    snapshot.set(
-      key,
-      kind === "map"
-        ? new Map(value as Map<unknown, unknown>)
-        : [...(value as readonly unknown[])],
-    );
-  }
-  return snapshot;
+function captureCollection(
+  state: MemoryState,
+  snapshot: MemorySnapshot,
+  key: keyof MemoryState,
+): void {
+  if (snapshot.has(key)) return;
+  const kind = SNAPSHOT_KIND_BY_KEY.get(key);
+  if (!kind) return;
+  const value = state[key];
+  snapshot.set(
+    key,
+    kind === "map"
+      ? new Map(value as Map<unknown, unknown>)
+      : [...(value as readonly unknown[])],
+  );
 }
 
 function restoreSnapshot(state: MemoryState, snapshot: MemorySnapshot): void {
-  for (const { key, kind } of MEMORY_SNAPSHOT_COLLECTIONS) {
-    const saved = snapshot.get(key);
-    if (kind === "map") {
+  for (const [key, saved] of snapshot) {
+    if (SNAPSHOT_KIND_BY_KEY.get(key) === "map") {
       replaceMapContents(
         state[key] as unknown as Map<unknown, unknown>,
         saved as Map<unknown, unknown>,
@@ -90,17 +182,42 @@ function restoreSnapshot(state: MemoryState, snapshot: MemorySnapshot): void {
   }
 }
 
+/**
+ * Wrap the transaction scope so every write method captures the collections
+ * it touches before mutating them. Read methods pass through untouched.
+ */
+function makeTrackingScope(
+  base: StoreTransaction,
+  onTouch: (methodName: string) => void,
+): StoreTransaction {
+  return new Proxy(base, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== "function" || typeof prop !== "string") {
+        return value;
+      }
+      if (isReadMethod(prop)) return value;
+      return (...args: unknown[]) => {
+        onTouch(prop);
+        return (value as (...a: unknown[]) => unknown).apply(target, args);
+      };
+    },
+  });
+}
+
 export function createTransactionMethods(
   state: MemoryState,
   getScope: () => StoreTransaction,
 ): MemoryStoreMethods {
   // Serialize withTransaction calls so two concurrent transactions snapshot /
   // restore against a stable state rather than interleaving on shared Maps.
-  // Because a single in-flight snapshot covers the whole store, a concurrent
-  // non-withTransaction write made while a transaction's callback is mid-flight
-  // is captured by that snapshot and rolled back with it. Nesting would queue
-  // the inner call behind the outer one on this chain and deadlock, so it is
-  // rejected synchronously via the AsyncLocalStorage nesting guard.
+  // With touched-only capture, a concurrent non-withTransaction write made
+  // while a transaction's callback is mid-flight is rolled back with the
+  // transaction only when it hits a collection the transaction also touched
+  // (before the touch) — writes to untouched collections now survive a
+  // rollback. Nesting would queue the inner call behind the outer one on this
+  // chain and deadlock, so it is rejected synchronously via the
+  // AsyncLocalStorage nesting guard.
   let chain: Promise<unknown> = Promise.resolve();
   const nesting = createTxNestingGuard();
 
@@ -119,10 +236,17 @@ export function createTransactionMethods(
       }
       const task = chain.then(() =>
         nesting.runScoped(async () => {
-          const snap = captureSnapshot(state);
+          const snap: MemorySnapshot = new Map();
+          const scope = makeTrackingScope(getScope(), (methodName) => {
+            // Unknown mutating method → capture everything (safe fallback,
+            // equivalent to the pre-R-16 eager snapshot).
+            const touched =
+              WRITE_METHOD_TOUCHES[methodName] ?? ALL_SNAPSHOT_KEYS;
+            for (const key of touched) captureCollection(state, snap, key);
+          });
           try {
             // Resolve on success = commit (discard snapshot).
-            return await fn(getScope());
+            return await fn(scope);
           } catch (err) {
             restoreSnapshot(state, snap);
             throw err;

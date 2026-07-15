@@ -5,8 +5,11 @@
  * or restore. Produces a `SnapshotPayload` from live store reads at the
  * moment of capture.
  *
- * Automatic snapshots are captured by the server after proposal commit;
- * manual and fork snapshots are captured by the server routes as well.
+ * Automatic snapshots are captured by the server after proposal commit —
+ * throttled to checkpoint cadence by `saveAutoSnapshot` (audit 2026-07-11
+ * R-04), which is what keeps the full store reads below (message history in
+ * particular is O(T)) off the per-turn hot path. Manual and fork snapshots
+ * are captured by the server routes as well.
  *
  * Session lorebook entries (FU-4 close-out): included once the store
  * exposes `listSessionLorebookEntries` (added in S3-T2). World- and

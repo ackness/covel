@@ -293,6 +293,112 @@ describe("Snapshot routes", () => {
       expect(snapshots).toHaveLength(1);
       expect(snapshots[0]!.sessionId).toBe("sess-1");
     });
+
+    it("returns metadata only — no payload, with payloadSize (audit R-04)", async () => {
+      const app = createTestApp(store);
+      await app.request("/api/sessions/sess-1/snapshot", { method: "POST" });
+
+      const res = await app.request("/api/sessions/sess-1/snapshots");
+      const body = (await res.json()) as {
+        snapshots: Array<Record<string, unknown>>;
+        nextCursor: string | null;
+      };
+      expect(body.snapshots).toHaveLength(1);
+      const meta = body.snapshots[0]!;
+      expect(meta.payload).toBeUndefined();
+      expect(typeof meta.id).toBe("string");
+      expect(typeof meta.turnId).toBe("string");
+      expect(meta.kind).toBe("manual");
+      expect(typeof meta.createdAt).toBe("string");
+      expect(typeof meta.payloadSize).toBe("number");
+      expect(meta.payloadSize as number).toBeGreaterThan(0);
+      expect(body.nextCursor).toBeNull();
+    });
+
+    it("paginates with limit + cursor", async () => {
+      const app = createTestApp(store);
+      for (let i = 0; i < 3; i++) {
+        await app.request("/api/sessions/sess-1/snapshot", { method: "POST" });
+      }
+
+      const page1 = (await (
+        await app.request("/api/sessions/sess-1/snapshots?limit=2")
+      ).json()) as {
+        snapshots: Array<{ id: string }>;
+        nextCursor: string | null;
+      };
+      expect(page1.snapshots).toHaveLength(2);
+      expect(page1.nextCursor).toBe(page1.snapshots[1]!.id);
+
+      const page2 = (await (
+        await app.request(
+          `/api/sessions/sess-1/snapshots?limit=2&cursor=${page1.nextCursor}`,
+        )
+      ).json()) as {
+        snapshots: Array<{ id: string }>;
+        nextCursor: string | null;
+      };
+      expect(page2.snapshots).toHaveLength(1);
+      expect(page2.nextCursor).toBeNull();
+
+      const ids = [...page1.snapshots, ...page2.snapshots].map((s) => s.id);
+      expect(new Set(ids).size).toBe(3);
+    });
+
+    it("returns 400 for an unknown cursor", async () => {
+      const app = createTestApp(store);
+      await app.request("/api/sessions/sess-1/snapshot", { method: "POST" });
+      const res = await app.request(
+        "/api/sessions/sess-1/snapshots?cursor=nope",
+      );
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { code?: string }).code).toBe(
+        "invalid_cursor",
+      );
+    });
+  });
+
+  // ── GET /snapshots/:snapshotId ──────────────────────────────
+
+  describe("GET /api/sessions/:id/snapshots/:snapshotId", () => {
+    it("returns the full snapshot payload on demand", async () => {
+      const app = createTestApp(store);
+      const created = (await (
+        await app.request("/api/sessions/sess-1/snapshot", { method: "POST" })
+      ).json()) as { snapshot: { id: string } };
+
+      const res = await app.request(
+        `/api/sessions/sess-1/snapshots/${created.snapshot.id}`,
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        snapshot: { id: string; payload: Record<string, unknown> };
+      };
+      expect(body.snapshot.id).toBe(created.snapshot.id);
+      expect(body.snapshot.payload).toBeDefined();
+      expect(body.snapshot.payload.schemaVersion).toBe(2);
+    });
+
+    it("returns 404 for an unknown snapshot or one from another session", async () => {
+      await createSession(store, "sess-other-payload");
+      await seedSessionData(store, "sess-other-payload");
+      const app = createTestApp(store);
+      const created = (await (
+        await app.request("/api/sessions/sess-other-payload/snapshot", {
+          method: "POST",
+        })
+      ).json()) as { snapshot: { id: string } };
+
+      const missing = await app.request(
+        "/api/sessions/sess-1/snapshots/unknown-id",
+      );
+      expect(missing.status).toBe(404);
+
+      const crossSession = await app.request(
+        `/api/sessions/sess-1/snapshots/${created.snapshot.id}`,
+      );
+      expect(crossSession.status).toBe(404);
+    });
   });
 
   // ── POST /fork ──────────────────────────────────────────────

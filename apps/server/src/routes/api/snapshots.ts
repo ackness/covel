@@ -3,12 +3,14 @@
  *
  * Materialized state snapshots power save / load / fork.
  *
- *   POST   /api/sessions/:id/snapshot    — create manual snapshot
- *   GET    /api/sessions/:id/snapshots   — list snapshots
- *   POST   /api/sessions/:id/fork        — create new session from snapshot
+ *   POST   /api/sessions/:id/snapshot                — create manual snapshot
+ *   GET    /api/sessions/:id/snapshots               — list snapshot metadata (paginated)
+ *   GET    /api/sessions/:id/snapshots/:snapshotId   — fetch one full snapshot payload
+ *   POST   /api/sessions/:id/fork                    — create new session from snapshot
  *
- * Auto snapshots (kind='auto') are written by the server commit pipeline
- * after every proposal; this route module exposes the manual/fork surfaces.
+ * Auto snapshots (kind='auto') are written by the server commit pipeline at
+ * checkpoint cadence (every COVEL_SNAPSHOT_INTERVAL_TURNS turns; see
+ * saveAutoSnapshot); this route module exposes the manual/fork surfaces.
  *
  * Fork strategy: COPY. We rebuild the child session by persisting the
  * snapshot's characters / state entries / plugin data / working memory
@@ -153,7 +155,23 @@ snapshotRoutes.post("/:id/snapshot", async (c) => {
     .catch(rethrowUnlessLockBusy(c));
 });
 
-// ── GET /api/sessions/:id/snapshots — list snapshots ──────────────
+// ── GET /api/sessions/:id/snapshots — list snapshot metadata ──────
+//
+// Snapshot payloads serialize the entire session state, so returning them all
+// in one response grows without bound (audit 2026-07-11 R-04). The list now
+// returns metadata only (id, turnId, kind, createdAt, parentId, payloadSize)
+// with cursor pagination; fetch a full payload on demand via
+// GET /:id/snapshots/:snapshotId.
+
+const SNAPSHOT_LIST_DEFAULT_LIMIT = 50;
+const SNAPSHOT_LIST_MAX_LIMIT = 200;
+
+function parseSnapshotListLimit(raw: string | undefined): number {
+  const parsed = raw === undefined ? NaN : Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1)
+    return SNAPSHOT_LIST_DEFAULT_LIMIT;
+  return Math.min(parsed, SNAPSHOT_LIST_MAX_LIMIT);
+}
 
 snapshotRoutes.get("/:id/snapshots", async (c) => {
   const sessionId = c.req.param("id");
@@ -162,8 +180,50 @@ snapshotRoutes.get("/:id/snapshots", async (c) => {
   const resolved = await resolveSessionParam(c);
   if (!resolved.ok) return resolved.response;
 
-  const snapshots = await store.listSnapshots(sessionId);
-  return c.json({ snapshots });
+  const limit = parseSnapshotListLimit(c.req.query("limit"));
+  const cursor = c.req.query("cursor");
+
+  // ponytail: the store still reads all snapshot rows (payloads included) —
+  // acceptable now that auto-snapshots are throttled to checkpoint cadence.
+  // Add a store-level metadata projection if listing ever shows up in profiles.
+  const all = await store.listSnapshots(sessionId);
+  const startIdx =
+    cursor !== undefined ? all.findIndex((s) => s.id === cursor) + 1 : 0;
+  if (cursor !== undefined && startIdx === 0) {
+    return c.json(errorBody("Unknown cursor", { code: "invalid_cursor" }), 400);
+  }
+  const page = all.slice(startIdx, startIdx + limit);
+
+  const snapshots = page.map((s) => ({
+    id: s.id,
+    sessionId: s.sessionId,
+    turnId: s.turnId,
+    kind: s.kind,
+    ...(s.parentId !== undefined ? { parentId: s.parentId } : {}),
+    createdAt: s.createdAt,
+    payloadSize: JSON.stringify(s.payload).length,
+  }));
+  const nextCursor =
+    startIdx + limit < all.length ? (page[page.length - 1]?.id ?? null) : null;
+
+  return c.json({ snapshots, nextCursor });
+});
+
+// ── GET /api/sessions/:id/snapshots/:snapshotId — full payload ────
+
+snapshotRoutes.get("/:id/snapshots/:snapshotId", async (c) => {
+  const sessionId = c.req.param("id");
+  const snapshotId = c.req.param("snapshotId");
+  const store = c.get("store");
+
+  const resolved = await resolveSessionParam(c);
+  if (!resolved.ok) return resolved.response;
+
+  const snapshot = await store.getSnapshot(snapshotId);
+  if (!snapshot || snapshot.sessionId !== sessionId) {
+    return c.json(errorBody("Snapshot not found", { code: "not_found" }), 404);
+  }
+  return c.json({ snapshot });
 });
 
 // ── POST /api/sessions/:id/fork — fork from snapshot ──────────────

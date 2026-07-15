@@ -45,12 +45,16 @@ export function createIdbMutationTracker(
   ): Promise<void> {
     for (const name of names) {
       const tx = db.transaction(name as IdbStoreName, "readwrite");
-      await tx.store.clear();
       const rows = snap.get(name) ?? [];
-      for (const row of rows) {
-        await tx.store.put(row as Record<string, unknown>);
-      }
-      await tx.done;
+      // Queue clear + all puts without awaiting each request: IndexedDB
+      // executes requests within one transaction in queue order, so the
+      // clear-before-put ordering holds while the per-row await round-trips
+      // are eliminated (audit 2026-07-11 R-16). `tx.done` flushes the batch.
+      await Promise.all([
+        tx.store.clear(),
+        ...rows.map((row) => tx.store.put(row as Record<string, unknown>)),
+        tx.done,
+      ]);
     }
   }
 

@@ -16,7 +16,7 @@ import type {
   MemoryBlockSchema,
   SimpleCompletionAdapter,
 } from "@covel/shared";
-import type { DataStore } from "@covel/store";
+import type { DataStore, WorkingMemoryRecord } from "@covel/store";
 
 // ── Core Memory Blocks ──────────────────────────────────────────
 
@@ -137,8 +137,16 @@ export interface CoreMemoryConfig {
 // ── Memory Manager ──────────────────────────────────────────────
 
 export interface MemoryManager {
-  /** Load all core memory blocks for a session. Returns empty blocks if not initialized. */
-  loadBlocks(sessionId: string): Promise<readonly CoreMemoryBlock[]>;
+  /**
+   * Load all core memory blocks for a session. Returns empty blocks if not
+   * initialized. Pass `existing` (a fresh `listWorkingMemory` result) to skip
+   * the internal re-read when the caller already holds the rows — the turn
+   * pipeline reads working memory once and threads it here (R-13).
+   */
+  loadBlocks(
+    sessionId: string,
+    existing?: readonly WorkingMemoryRecord[],
+  ): Promise<readonly CoreMemoryBlock[]>;
 
   /** Read a single block. Returns null if not found. */
   getBlock(
@@ -159,8 +167,16 @@ export interface MemoryManager {
     updates: ReadonlyMap<CoreMemoryLabel, string>,
   ): Promise<void>;
 
-  /** Create empty blocks for all configured labels. Idempotent. */
-  initializeDefaults(sessionId: string): Promise<void>;
+  /**
+   * Create empty blocks for all configured labels. Idempotent. `existing`
+   * follows the same contract as {@link MemoryManager.loadBlocks} — it must be
+   * a fresh, complete `listWorkingMemory` read (a stale/partial list would
+   * blank real block content via the empty-default upsert).
+   */
+  initializeDefaults(
+    sessionId: string,
+    existing?: readonly WorkingMemoryRecord[],
+  ): Promise<void>;
 }
 
 // ── Memory Updater (post-turn LLM-driven refresh) ───────────────
