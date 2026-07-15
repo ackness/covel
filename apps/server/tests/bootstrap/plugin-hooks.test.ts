@@ -86,6 +86,7 @@ describe("createBootstrapHookPipeline trust gating (H-03)", () => {
     const hookPipeline = createBootstrapHookPipeline({
       discoveryMap,
       manifestCache,
+      isCommunityServerCodeApproved: (sessionId) => sessionId === "s1",
     });
     // Boot registered the declaration but imported nothing.
     expect(importCounts()["hook-community-a"]).toBeUndefined();
@@ -106,12 +107,21 @@ describe("createBootstrapHookPipeline trust gating (H-03)", () => {
       pluginToolAccess: new Map<string, Set<string>>(),
       hookPipeline,
       rpcRegistry: (await import("@covel/runtime")).createPluginRpcRegistry(),
+      isCommunityServerCodeApproved: (sessionId) => sessionId === "s1",
+      isCommunityHookApproved: (sessionId) => sessionId === "s1",
     });
-    await ensurePluginEntry("hook-community-a");
+    await ensurePluginEntry("hook-community-a", "s1");
 
     const after = await hookPipeline.run("TurnStart", hookCtx, {});
     expect(after).toEqual({ action: "abort", reason: "hook-community-a ran" });
     expect(importCounts()["hook-community-a"]).toBe(1);
+
+    const otherSession = await hookPipeline.run(
+      "TurnStart",
+      { ...hookCtx, sessionId: "s2" },
+      {},
+    );
+    expect(otherSession.action).toBe("continue");
   });
 
   it("builtin legacy hooks fire from the first event without any activation", async () => {

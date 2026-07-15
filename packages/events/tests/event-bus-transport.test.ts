@@ -162,6 +162,57 @@ describe("EventBus transport fan-out (audit R-02)", () => {
     expect(receivedB.map((e) => e.id.split(":")[1])).toEqual(["1", "2"]);
   });
 
+  it("keeps transport ordering independent from bidirectional local replay", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const hub = createHub();
+    const busA = createEventBus(undefined, { transport: hub.connect() });
+    const busB = createEventBus(undefined, { transport: hub.connect() });
+    const receivedA: SubscriptionEvent[] = [];
+    const receivedB: SubscriptionEvent[] = [];
+    busA.onEmit((event) => receivedA.push(event));
+    busB.onEmit((event) => receivedB.push(event));
+
+    busA.emit(
+      makeMessage({
+        sessionId: "sess-duplex",
+        topic: "state",
+        payload: { _subType: "a.first" },
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(receivedB.some((event) => event.type === "a.first")).toBe(true),
+    );
+    busB.emit(
+      makeMessage({
+        sessionId: "sess-duplex",
+        topic: "runtime",
+        payload: { _subType: "b.reply" },
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(receivedA.some((event) => event.type === "b.reply")).toBe(true),
+    );
+    busA.emit(
+      makeMessage({
+        sessionId: "sess-duplex",
+        topic: "state",
+        payload: { _subType: "a.second" },
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(receivedB.map((event) => event.type)).toEqual([
+        "a.first",
+        "b.reply",
+        "a.second",
+      ]),
+    );
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("transport seq gap"),
+    );
+    warnSpy.mockRestore();
+  });
+
   it("order-buffers out-of-order frames by origin seq (re-review H-07)", async () => {
     const hub = createHub();
     const bus = createEventBus(undefined, { transport: hub.connect() });
@@ -193,6 +244,51 @@ describe("EventBus transport fan-out (audit R-02)", () => {
     hub.broadcast(mkFrame(2));
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(received).toHaveLength(3);
+  });
+
+  it("invalidates local replay when a real transport seq hole is skipped", async () => {
+    vi.useFakeTimers();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const hub = createHub();
+      const bus = createEventBus(undefined, { transport: hub.connect() });
+      const resets: Array<{ sessionId: string; reason: string }> = [];
+      bus.onReset?.((reset) => resets.push(reset));
+
+      const mkFrame = (seq: number): string =>
+        JSON.stringify({
+          origin: "remote-with-hole",
+          stream: "boot-1",
+          seq,
+          event: {
+            id: `remote:${seq}`,
+            topic: "state",
+            type: `t${seq}`,
+            sessionId: "sess-gap",
+            timestamp: new Date().toISOString(),
+            payload: {},
+          },
+        });
+
+      hub.broadcast(mkFrame(1));
+      await vi.advanceTimersByTimeAsync(0);
+      const before = bus.getEventsAfter("sess-gap", 0);
+      expect(before.events.map((event) => event.type)).toEqual(["t1"]);
+
+      hub.broadcast(mkFrame(3));
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(resets).toEqual([
+        { sessionId: "sess-gap", reason: "transport-gap" },
+      ]);
+      const after = bus.getEventsAfter("sess-gap", 0);
+      expect(after.epoch).not.toBe(before.epoch);
+      expect(after.events.map((event) => event.type)).toEqual(["t3"]);
+      expect(after.events[0]!.id.endsWith(":1")).toBe(true);
+    } finally {
+      warnSpy.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it("ignores malformed transport frames and keeps working", () => {

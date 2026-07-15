@@ -32,6 +32,9 @@ const {
   importDimensions,
   preflightWorldData,
   listApprovals,
+  resolveApproval,
+  storeOperatorToken,
+  storeSessionToken,
 } = apiModule;
 const dataServiceModule = await import("../data-service.js");
 const { generatedWorldSaveTargetForStorageMode, storageModeForServerStorage } =
@@ -75,6 +78,7 @@ describe("world API mapping", () => {
   });
 
   it("generateWorld sends the requested save target", async () => {
+    storeOperatorToken("operator-secret");
     const stream = new ReadableStream({
       start(controller) {
         controller.enqueue(
@@ -110,6 +114,10 @@ describe("world API mapping", () => {
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/ai/generate-world");
     expect(
+      (fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>)
+        .Authorization,
+    ).toBe("Bearer operator-secret");
+    expect(
       JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
     ).toMatchObject({
       prompt: "idea",
@@ -119,6 +127,7 @@ describe("world API mapping", () => {
   });
 
   it("updateWorld maps metadata.dimensions onto the frontend record", async () => {
+    storeOperatorToken("operator-secret");
     mockFetchOnce({
       id: "world-1",
       name: "World 1",
@@ -141,6 +150,10 @@ describe("world API mapping", () => {
     });
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/worlds/world-1");
+    expect(
+      (fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>)
+        .Authorization,
+    ).toBe("Bearer operator-secret");
   });
 
   it("importDimensions maps metadata.dimensions onto the frontend record", async () => {
@@ -167,6 +180,7 @@ describe("world API mapping", () => {
   });
 
   it("preflightWorldData posts selected plugins and returns plan details", async () => {
+    storeSessionToken("sess-1", "owner-secret");
     mockFetchOnce({
       imported: true,
       diagnostics: [],
@@ -185,6 +199,7 @@ describe("world API mapping", () => {
 
     const result = await preflightWorldData("world/1", {
       plugins: ["world-notes"],
+      sessionId: "sess-1",
     });
 
     expect(result.planned).toBe(1);
@@ -198,7 +213,13 @@ describe("world API mapping", () => {
     );
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       plugins: ["world-notes"],
+      sessionId: "sess-1",
     });
+    expect(
+      (fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>)[
+        "X-Session-Token"
+      ],
+    ).toBe("owner-secret");
   });
 });
 
@@ -233,5 +254,19 @@ describe("approvals API helpers", () => {
         description: "Run plugin action",
       },
     ]);
+  });
+
+  it("sends the session owner token for an approval decision", async () => {
+    storeSessionToken("sess-1", "owner-secret");
+    mockFetchOnce({ ok: true });
+
+    await resolveApproval("approval-1", "allow", "session", "sess-1");
+
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(
+      (fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>)[
+        "X-Session-Token"
+      ],
+    ).toBe("owner-secret");
   });
 });

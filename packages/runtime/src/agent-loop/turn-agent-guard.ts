@@ -98,13 +98,22 @@ export async function executeAgentGuard({
     // Promise.race alone only unblocked the turn — the timed-out guard kept
     // running with live handles and could race a LATER turn's writes.
     const guardAbort = new AbortController();
-    let deadlineExpired = false;
+    const trustedGuard = isTrustedPluginSource(deps, manifest);
+    const inFlight = new Set<Promise<unknown>>();
+    let revokedReason: Error | undefined;
+    const revoke = (reason: Error, abortSignal = false): void => {
+      revokedReason ??= reason;
+      if (abortSignal && !guardAbort.signal.aborted) guardAbort.abort(reason);
+    };
     const assertLive = (): void => {
-      if (deadlineExpired) {
-        throw new Error(
-          `agent guard "${manifest.name}" timed out after ${timeoutMs}ms — write capability revoked`,
-        );
+      if (revokedReason) {
+        throw new Error(`${revokedReason.message} — write capability revoked`);
       }
+    };
+    const trackPromise = <T>(promise: Promise<T>): Promise<T> => {
+      const tracked = promise.finally(() => inFlight.delete(tracked));
+      inFlight.add(tracked);
+      return tracked;
     };
     const revocable = <T extends object>(target: T): T =>
       new Proxy(target, {
@@ -113,38 +122,59 @@ export async function executeAgentGuard({
           if (typeof value !== "function") return value;
           return (...args: unknown[]) => {
             assertLive();
-            return Reflect.apply(
+            const result = Reflect.apply(
               value as (...a: unknown[]) => unknown,
               t,
               args,
             );
+            if (result instanceof Promise) {
+              return trackPromise(
+                result.then((resolved) => {
+                  assertLive();
+                  return resolved;
+                }),
+              );
+            }
+            assertLive();
+            return result;
           };
         },
       });
 
     const guardStore = deps.store
       ? revocable(
-          isTrustedPluginSource(deps, manifest)
+          trustedGuard
             ? deps.store
             : createFunctionStoreView(deps.store, guardHelperCtx),
         )
       : undefined;
-    const guardPluginDataHandle = deps.store
-      ? revocable(createPluginDataWriter(deps.store, guardHelperCtx))
-      : undefined;
-    const guardLoggerHandle = deps.store
-      ? revocable(createPluginLogger(deps.store, guardHelperCtx))
-      : undefined;
-    const guardAssetProgress: typeof rawAssetProgress = rawAssetProgress
-      ? (progress) => {
-          assertLive();
-          return rawAssetProgress(progress);
-        }
-      : undefined;
+    const guardPluginDataHandle =
+      deps.store && trustedGuard
+        ? revocable(createPluginDataWriter(deps.store, guardHelperCtx))
+        : undefined;
+    const guardLoggerHandle =
+      deps.store && trustedGuard
+        ? revocable(createPluginLogger(deps.store, guardHelperCtx))
+        : undefined;
+    const guardAssetProgress: typeof rawAssetProgress =
+      rawAssetProgress && trustedGuard
+        ? (progress) => {
+            assertLive();
+            const result = rawAssetProgress(progress);
+            return result instanceof Promise ? trackPromise(result) : result;
+          }
+        : undefined;
     const rawRecursiveCall = createRecursiveCall();
     const guardRecursiveCall: typeof rawRecursiveCall = (delta, opts) => {
       assertLive();
-      return rawRecursiveCall(delta, opts);
+      if (!trustedGuard) {
+        return Promise.reject(
+          new Error(
+            `community agent guard "${manifest.name}" cannot start recursive turns`,
+          ),
+        );
+      }
+      return trackPromise(rawRecursiveCall(delta, opts));
     };
     // Combined signal: the player's turn abort OR the guard's own deadline.
     // A cooperative guard can observe either and cancel in-flight work.
@@ -152,6 +182,19 @@ export async function executeAgentGuard({
     const guardSignal = externalSignal
       ? AbortSignal.any([externalSignal, guardAbort.signal])
       : guardAbort.signal;
+    const revokeOnExternalAbort = (): void => {
+      const reason = externalSignal?.reason;
+      revoke(
+        reason instanceof Error
+          ? reason
+          : new Error(`agent guard "${manifest.name}" aborted`),
+      );
+    };
+    if (externalSignal?.aborted) revokeOnExternalAbort();
+    else
+      externalSignal?.addEventListener("abort", revokeOnExternalAbort, {
+        once: true,
+      });
 
     // Deadline race — mirrors the function-runtime handler pattern in
     // `turn-function-runtime.ts`: without it a hung guard blocks the whole
@@ -169,9 +212,13 @@ export async function executeAgentGuard({
       config: guardConfig,
       recursiveCall: guardRecursiveCall,
       recursionDepth,
-      ...(deps.gateway ? { gateway: revocable(deps.gateway) } : {}),
-      ...(guardTracedUtils ? { utils: guardTracedUtils } : {}),
-      ...(deps.mediaStore
+      ...(deps.gateway && trustedGuard
+        ? { gateway: revocable(deps.gateway) }
+        : {}),
+      ...(guardTracedUtils && trustedGuard
+        ? { utils: revocable(guardTracedUtils) }
+        : {}),
+      ...(deps.mediaStore && trustedGuard
         ? {
             media: revocable(
               createRuntimeMediaContext(deps.mediaStore, deps.utils, {
@@ -189,11 +236,21 @@ export async function executeAgentGuard({
       ...(guardLoggerHandle ? { logger: guardLoggerHandle } : {}),
       signal: guardSignal,
     });
+    const guardWork = guardPromise.then(async (output) => {
+      // A trusted guard may intentionally launch a capability call without
+      // awaiting it. Keep the lease (and deadline) active until all calls
+      // observed by our wrappers settle.
+      while (inFlight.size > 0) {
+        await Promise.allSettled(inFlight);
+      }
+      assertLive();
+      return output;
+    });
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
     let guardOutput: Awaited<typeof guardPromise>;
     try {
       guardOutput = await Promise.race([
-        guardPromise,
+        guardWork,
         new Promise<never>((_, reject) => {
           deadlineTimer = setTimeout(() => {
             const err = new Error(
@@ -202,14 +259,17 @@ export async function executeAgentGuard({
             // Revoke BEFORE rejecting: once the turn moves on, the still-
             // running guard must not be able to mutate state for a later
             // turn (H-11), and a cooperative guard sees the abort.
-            deadlineExpired = true;
-            guardAbort.abort(err);
+            revoke(err, true);
             reject(err);
           }, timeoutMs);
         }),
       ]);
     } finally {
       clearTimeout(deadlineTimer);
+      externalSignal?.removeEventListener("abort", revokeOnExternalAbort);
+      // A guard's capabilities are a lease for this invocation. Revoke
+      // retained handles even after successful completion.
+      revoke(new Error(`agent guard "${manifest.name}" completed`));
     }
 
     if (guardOutput.skip === true) {

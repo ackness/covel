@@ -50,9 +50,6 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@covel/web':
-        specifier: workspace:*
-        version: link:../web
       smol-toml:
         specifier: ^1.6.1
         version: 1.6.1
@@ -60,6 +57,9 @@ importers:
         specifier: ^4.22.4
         version: 4.22.4
     devDependencies:
+      '@covel/web':
+        specifier: workspace:*
+        version: link:../web
       '@electron/rebuild':
         specifier: ^4.0.4
         version: 4.0.4

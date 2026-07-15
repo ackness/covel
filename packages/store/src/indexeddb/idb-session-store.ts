@@ -83,6 +83,7 @@ export function createIdbSessionStore(ctx: IdbStoreContext): IdbStoreSlice {
       await cascadeByIndex("sessionSummaries", id);
       await cascadeByIndex("suspensions", id);
       await cascadeByIndex("state_snapshots", id);
+      await cascadeByIndex("state_snapshot_metadata", id);
       await cascadeByIndex("lorebook_entries", id);
       await cascadeByIndex("runtime_outputs", id);
       await cascadeByIndex("interaction_records", id);

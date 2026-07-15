@@ -69,6 +69,8 @@ function makeParams(entries: ReturnType<typeof writePlugin>[]) {
     pluginToolAccess: new Map<string, Set<string>>(),
     hookPipeline: createHookPipeline(),
     rpcRegistry: createPluginRpcRegistry(),
+    isCommunityServerCodeApproved: () => true,
+    isCommunityHookApproved: () => true,
   };
 }
 
@@ -162,6 +164,24 @@ export default function (covel) {
     // Second ensure is a no-op — the factory must not run twice.
     await ensurePluginEntry("entry-community-a");
     expect(params.toolMap.has("community-tool-2")).toBe(false);
+  });
+
+  it("rejects community entry activation without a session grant", async () => {
+    const p = writePlugin(
+      "entry-community-denied",
+      `export default function (covel) { covel.registerRpc("x", async () => true); }`,
+      { source: "community" },
+    );
+    const params = makeParams([p]);
+    params.isCommunityServerCodeApproved = () => false;
+    const { ensurePluginEntry } = await createBootstrapPluginEntries(params);
+
+    await expect(
+      ensurePluginEntry("entry-community-denied", "session-b"),
+    ).rejects.toThrow("requires explicit approval");
+    expect(
+      params.rpcRegistry.getPluginAction("entry-community-denied", "x"),
+    ).toBeUndefined();
   });
 
   it("supports async entry factories", async () => {
@@ -341,10 +361,8 @@ export default async function (covel) {
   });
 
   it("default-denies mutators on a community toolkit.store (S-03/H-03)", async () => {
-    // A community entry gets a read-only allowlist store view: scoped
-    // plugin_data reads plus read-only session/turn-message lookups.
-    // Everything else — core-entity mutators AND own-namespace plugin_data
-    // writes — must throw, not forward.
+    // A community entry factory has no request-bound session, so every store
+    // method is denied. Request/runtime handlers get scoped stores separately.
     const p = writePlugin(
       "entry-deny-a",
       `
@@ -372,7 +390,7 @@ export default async function (covel) {
   }));
   await attempt("setPluginDataBatch", () => store.setPluginDataBatch([]));
   await attempt("deletePluginData", () => store.deletePluginData("s1", "entry-deny-a", "ns", "k"));
-  // Allowlisted read-only lookups must keep working.
+  // Reads are denied too: the caller-selected session id is not an authority.
   await attempt("getSession", () => store.getSession("s1"));
   await attempt("listTurnMessages", () => store.listTurnMessages("s1"));
   await attempt("getPluginData", () => store.getPluginData("s1", "forged", "ns", "k"));
@@ -405,16 +423,14 @@ export default async function (covel) {
       "setPluginData",
       "setPluginDataBatch",
       "deletePluginData",
+      "getSession",
+      "listTurnMessages",
+      "getPluginData",
+      "listPluginData",
     ]) {
       expect(errors[method], method).toContain(DENIED);
       expect(errors[method], method).toContain(method);
     }
-    // Allowed reads did not throw.
-    expect(errors.getSession).toBe("");
-    expect(errors.listTurnMessages).toBe("");
-    expect(errors.getPluginData).toBe("");
-    expect(errors.listPluginData).toBe("");
-
     // Nothing actually landed on the raw store.
     expect(await params.store.listCharacters("other-session")).toEqual([]);
     expect(await params.store.listMessages("other-session")).toEqual([]);

@@ -307,8 +307,8 @@ describe("toggleSessionPlugin callback", () => {
       "session-1",
       "memory",
     );
-    expect(result.ok).toBe(true);
-    expect(result.active).toContain("memory");
+    expect("ok" in result && result.ok).toBe(true);
+    expect("active" in result ? result.active : []).toContain("memory");
   });
 
   it("calls disableSessionPlugin when enable=false", async () => {

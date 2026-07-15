@@ -153,7 +153,7 @@ describe("agent guard deadline (R-12)", () => {
     const result = await executeTurn(
       makeTurnInput(),
       [loaded.manifest],
-      makeDeps(loaded, { store }),
+      makeDeps(loaded, { store, getPluginSource: () => "builtin" }),
     );
     expect(result.runtimeResults[0]!.status).toBe("failed");
 
@@ -164,5 +164,53 @@ describe("agent guard deadline (R-12)", () => {
     expect(observed.writeError).toContain("write capability revoked");
     expect(observed.recursiveError).toContain("write capability revoked");
     expect(setPluginData).not.toHaveBeenCalled();
+  });
+
+  it("revokes utility calls as soon as the player aborts the turn", async () => {
+    const controller = new AbortController();
+    const fetchWithRetry = vi.fn(async () => new Response("ok"));
+    let utilityError: string | undefined;
+    let entered!: () => void;
+    const guardEntered = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let continueGuard!: () => void;
+    const continuePromise = new Promise<void>((resolve) => {
+      continueGuard = resolve;
+    });
+    const loaded: LoadedRuntime = {
+      manifest: makeAgentManifest(),
+      promptTemplate: "prompt",
+      guard: async (ctx) => {
+        entered();
+        await continuePromise;
+        try {
+          await ctx.utils?.fetchWithRetry("https://example.com");
+        } catch (err) {
+          utilityError = err instanceof Error ? err.message : String(err);
+        }
+        return { skip: true, reason: "aborted" };
+      },
+    };
+
+    const turn = executeTurn(
+      makeTurnInput(),
+      [loaded.manifest],
+      makeDeps(loaded, {
+        turnControl: { signal: controller.signal },
+        getPluginSource: () => "builtin",
+        utils: {
+          validateBaseUrl: () => ({ ok: true }),
+          fetchWithRetry,
+        },
+      }),
+    );
+    await guardEntered;
+    controller.abort(new Error("player aborted"));
+    continueGuard();
+    await turn;
+
+    expect(utilityError).toContain("write capability revoked");
+    expect(fetchWithRetry).not.toHaveBeenCalled();
   });
 });

@@ -19,6 +19,7 @@ import {
 import {
   BROWSER_IDB_DATABASE_NAME,
   BROWSER_IDB_SCHEMA_VERSION,
+  backfillSnapshotMetadata,
   upgradeBrowserIdbSchema,
 } from "./idb-schema.js";
 
@@ -52,8 +53,11 @@ export interface IndexedDbMediaStoreOptions {
 
 async function openMediaDb(dbName: string): Promise<IDBPDatabase<IdbMediaDb>> {
   return openDB<IdbMediaDb>(dbName, DB_VERSION, {
-    upgrade(db, oldVersion) {
-      upgradeBrowserIdbSchema(db, oldVersion);
+    async upgrade(db, oldVersion, _newVersion, transaction) {
+      upgradeBrowserIdbSchema(db, oldVersion, transaction);
+      if (oldVersion > 0 && oldVersion < 12) {
+        await backfillSnapshotMetadata(transaction);
+      }
     },
   });
 }

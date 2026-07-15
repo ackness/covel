@@ -68,6 +68,15 @@ export interface RegisterPluginHooksOptions {
    * path escape, malformed match). Defaults to `console.warn`.
    */
   readonly onWarn?: (message: string) => void;
+  /**
+   * Session-level authorization check for deferred community hooks. The
+   * global activation flag permits importing the module after first approval;
+   * this predicate keeps every subsequent invocation scoped to its session.
+   */
+  readonly isDeferredAuthorized?: (
+    sessionId: string,
+    pluginId: string,
+  ) => boolean;
 }
 
 /**
@@ -138,6 +147,13 @@ export function registerPluginHooks(
         // Trust gate (H-03): a deferred source's handler must not run — or
         // even be import()'d — until the plugin is approved and activated.
         if (deferred && !deferredActivations.get(pipeline)?.has(pluginId)) {
+          return { action: "continue" };
+        }
+        if (
+          deferred &&
+          (!opts.isDeferredAuthorized ||
+            !opts.isDeferredAuthorized(ctx.sessionId, pluginId))
+        ) {
           return { action: "continue" };
         }
         if (!cached) {

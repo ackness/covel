@@ -24,8 +24,14 @@ Object.defineProperty(globalThis, "localStorage", {
   configurable: true,
 });
 
-const { clearSessionToken, getSessionToken, storeSessionToken } =
-  await import("../session-credentials.js");
+const {
+  clearOperatorToken,
+  clearSessionToken,
+  getOperatorToken,
+  getSessionToken,
+  storeOperatorToken,
+  storeSessionToken,
+} = await import("../session-credentials.js");
 const { request } = await import("../api/request.js");
 
 beforeEach(() => {
@@ -79,6 +85,20 @@ describe("session-credentials store", () => {
     // A fresh write recovers cleanly.
     storeSessionToken("s1", "tok");
     expect(getSessionToken("s1")).toBe("tok");
+  });
+});
+
+describe("operator credential store", () => {
+  it("persists, reads, and clears the hosted operator token", () => {
+    storeOperatorToken("operator-secret");
+    expect(getOperatorToken()).toBe("operator-secret");
+    clearOperatorToken();
+    expect(getOperatorToken()).toBeUndefined();
+  });
+
+  it("ignores an empty operator token", () => {
+    storeOperatorToken("");
+    expect(getOperatorToken()).toBeUndefined();
   });
 });
 
@@ -137,5 +157,27 @@ describe("request() session-token injection", () => {
     await request("/api/sessions?worldId=world");
 
     expect(lastHeaders(fetchMock)["X-Session-Token"]).toBeUndefined();
+  });
+
+  it("attaches a session token when sessionId is explicit", async () => {
+    storeSessionToken("session-from-body", "owner-secret");
+    const fetchMock = vi.fn().mockResolvedValue(okRes());
+    vi.stubGlobal("fetch", fetchMock);
+
+    await request("/api/actions", { sessionId: "session-from-body" });
+
+    expect(lastHeaders(fetchMock)["X-Session-Token"]).toBe("owner-secret");
+  });
+
+  it("attaches the operator token only when explicitly requested", async () => {
+    storeOperatorToken("operator-secret");
+    const fetchMock = vi.fn().mockResolvedValue(okRes());
+    vi.stubGlobal("fetch", fetchMock);
+
+    await request("/api/worlds", { method: "POST", operatorAuth: true });
+    expect(lastHeaders(fetchMock).Authorization).toBe("Bearer operator-secret");
+
+    await request("/api/worlds");
+    expect(lastHeaders(fetchMock).Authorization).toBeUndefined();
   });
 });

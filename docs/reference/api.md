@@ -59,7 +59,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 2. `X-Session-Token: <ownerToken>`
 3. `?session_token=<ownerToken>` query 参数（供无法设置 header 的 EventSource / SSE 客户端使用）
 
-**运维 master token**：设置了 `COVEL_DESKTOP_REST_TOKEN` 时，以该值作为 Bearer token 可通过任意会话的 owner 校验（管理工具 / e2e harness 用），并且是 hosted 层级创建会话的唯一凭证。`DEPLOYMENT_TIER=demo|commercial` 启动时若未配置该 token，`validateSecurityPosture` 会直接拒绝启动。
+**运维 master token**：设置了 `COVEL_DESKTOP_REST_TOKEN` 时，以该值作为 Bearer token 可通过任意会话的 owner 校验（管理工具 / e2e harness 用），并且是 hosted 层级创建会话、世界写入/维度导入、AI 世界生成、模型探测/刷新以及 community server-code 激活的凭证。community ESM 会在服务端进程内注册全局能力，因此 hosted 层级同时要求 owner token 与 operator token；这是当前单运维方信任模型，不提供多租户代码沙箱。`DEPLOYMENT_TIER=demo|commercial` 启动时若未配置该 token，`validateSecurityPosture` 会直接拒绝启动。
 
 > CORS（`CORS_ORIGIN`）只是浏览器策略，**不构成鉴权**；真正的授权边界是 owner token + 部署层级 + 回环监听。
 
@@ -396,12 +396,14 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 > **接入状态（2026-04-27）**：服务端手动快照、列表和 fork 能力已实现并有测试覆盖；当前内置 Web UI 只直接使用 `GET /api/sessions/:id/snapshot` 做恢复/重连，暂未提供手动快照列表或 fork 操作界面。
 
-| 方法 | 路径                                      | 描述                                                               |
-| ---- | ----------------------------------------- | ------------------------------------------------------------------ |
-| POST | `/api/sessions/:id/snapshot`              | 创建一份手动快照（kind=`manual`）                                  |
-| GET  | `/api/sessions/:id/snapshots`             | 分页列出快照元数据（auto / manual / fork，不含 payload）           |
-| GET  | `/api/sessions/:id/snapshots/:snapshotId` | 按 id 获取单个快照（含完整 payload）                               |
-| POST | `/api/sessions/:id/fork`                  | 从指定 snapshotId 物化一个新 session，拷贝状态与截至 cursor 的消息 |
+| 方法 | 路径                                      | 描述                                                                                                  |
+| ---- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| POST | `/api/sessions/:id/snapshot`              | 创建一份手动快照（kind=`manual`）                                                                     |
+| GET  | `/api/sessions/:id/snapshots`             | 分页列出快照元数据（auto / manual / fork，不含 payload）                                              |
+| GET  | `/api/sessions/:id/snapshots/:snapshotId` | 按 id 获取单个快照（含完整 payload）                                                                  |
+| POST | `/api/sessions/:id/fork`                  | 从指定 snapshotId 物化一个新 session，拷贝状态与截至 cursor 的消息；响应一次性返回 child `ownerToken` |
+
+Fork 不继承 community server-code grant；child 中对应插件保持未激活，需由 operator 在新 session 内重新 enable/approve。进程重启后同样不恢复易失 grant，`GET /api/sessions/:id/plugins` 会清理缺少当前 grant 的历史 active community 项。
 
 ### 角色数据
 
@@ -427,19 +429,19 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ### AI 生成
 
-| 方法 | 路径                     | 描述                  |
-| ---- | ------------------------ | --------------------- |
-| POST | `/api/ai/ping`           | 测试 LLM 提供商连通性 |
-| POST | `/api/ai/generate-world` | AI 生成世界包         |
+| 方法 | 路径                     | 描述                                    |
+| ---- | ------------------------ | --------------------------------------- |
+| POST | `/api/ai/ping`           | 测试 LLM 提供商连通性                   |
+| POST | `/api/ai/generate-world` | AI 生成世界包；hosted 需 operator token |
 
 ### 模型数据库（Model DB）
 
-| 方法 | 路径                             | 描述               |
-| ---- | -------------------------------- | ------------------ |
-| GET  | `/api/model-db`                  | 获取模型数据库信息 |
-| GET  | `/api/model-db/search?q=xxx`     | 搜索模型           |
-| GET  | `/api/model-db/lookup?model=xxx` | 查找模型能力       |
-| POST | `/api/model-db/refresh`          | 刷新模型数据库     |
+| 方法 | 路径                             | 描述                                     |
+| ---- | -------------------------------- | ---------------------------------------- |
+| GET  | `/api/model-db`                  | 获取模型数据库信息                       |
+| GET  | `/api/model-db/search?q=xxx`     | 搜索模型                                 |
+| GET  | `/api/model-db/lookup?model=xxx` | 查找模型能力                             |
+| POST | `/api/model-db/refresh`          | 刷新模型数据库；hosted 需 operator token |
 
 ### Trace 调试
 
@@ -1464,7 +1466,7 @@ value         : {
 
 > 注意: background 模式下 runtime 内部异常 **不会**映射为 5xx HTTP 状态 —— 202 已经发出,失败信息写入 `_jobs/{jobId}.value.error`,前端通过 SSE 感知。
 
-> **community 插件 + `entry` action 的延迟激活**:community 插件把 RPC 注册迁到 `entry` 模块后,其代码在审批通过前不运行,因此 action 声明在首次调用时**尚未注册**。此时 action 级请求**不会**直接 404,而是按 community trust 走审批门:返回 `202 approval-required`。审批通过后重试 → 框架激活该插件的 `entry`(注册 action)→ 正常 dispatch。若 action 确实不存在,会在激活后经一次审批往返再 404(`unknown-action`)。builtin/official 的 `entry` 在 boot 时已运行,其 action 未注册即为真正的 404,行为不变。
+> **community 插件 + `entry` action 的延迟激活**：首次调用时 action 声明尚未注册，服务端先返回固定 `action: "plugin:server-code"` 的全模块审批，避免由调用方伪造的 action label 诱导加载代码。session-scope 审批后加载 entry 并验证 action：不存在立即 404；存在则再返回该真实 action 的独立审批。hosted 层级两个步骤都要求 operator token。builtin/official 的 entry 在 boot 时已运行，其未知 action 直接 404。
 
 **插件 PLUGIN.md 中声明 RPC action:**
 
@@ -1578,10 +1580,10 @@ rpc:
 }
 ```
 
-| 字段       | 类型                    | 必需        | 说明                                                                     |
-| ---------- | ----------------------- | ----------- | ------------------------------------------------------------------------ |
-| `decision` | `"allow"` \| `"deny"`   | 是          | 玩家选择                                                                 |
-| `scope`    | `"once"` \| `"session"` | 仅 allow 时 | `once`(默认):允许这一次后过期,需重新批准;`session`:缓存到本 session 结束 |
+| 字段       | 类型                    | 必需        | 说明                                                                                                                    |
+| ---------- | ----------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `decision` | `"allow"` \| `"deny"`   | 是          | 玩家选择                                                                                                                |
+| `scope`    | `"once"` \| `"session"` | 仅 allow 时 | 普通 action 可选 `once`（默认）或 `session`；`plugin:server-code` 与 `runtime:*` 会加载长生命周期模块，只接受 `session` |
 
 **响应 200:**
 
@@ -1598,14 +1600,14 @@ rpc:
 
 **错误响应:**
 
-| 状态码 | 触发条件                                                  |
-| ------ | --------------------------------------------------------- |
-| 400    | `decision` 字段缺失 / 非 `allow` 或 `deny` / `scope` 非法 |
-| 404    | `approvalId` 不存在或已被消费                             |
+| 状态码 | 触发条件                                                                                                |
+| ------ | ------------------------------------------------------------------------------------------------------- |
+| 400    | `decision` 字段缺失 / 非 `allow` 或 `deny` / `scope` 非法 / server-code 或 runtime 使用非 session scope |
+| 404    | `approvalId` 不存在或已被消费                                                                           |
 
 #### `DELETE /api/sessions/:id/approvals`
 
-撤销该 session 已缓存的授权（community 插件 mid-session 收回）。可选 `?pluginId=<id>` 只撤销该插件的授权；省略则撤销整个 session 的全部授权。被撤销后，该插件下次 RPC 调用会重新弹出 approval 对话框。
+撤销该 session 已缓存、一次性和未决的授权（community 插件 mid-session 收回）。可选 `?pluginId=<id>` 只撤销该插件的授权；省略则撤销整个 session 的全部授权。pending approval 按 `(session, plugin, action)` 去重；disable/冲突移除插件时也会撤销，旧 approvalId 无法在之后重新激活代码。
 
 **查询参数:**
 

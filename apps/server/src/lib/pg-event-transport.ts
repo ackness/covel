@@ -46,12 +46,9 @@ export async function createPgEventTransport(
 
   return {
     publish(payload: string): Promise<void> {
-      return sql.notify(CHANNEL, payload).then(
-        () => undefined,
-        (err: unknown) => {
-          console.error("[pg-event-transport] NOTIFY failed:", err);
-        },
-      );
+      // Propagate NOTIFY failures so EventBus's serialized outbox observes and
+      // reports a failed frame instead of treating a transport hole as sent.
+      return sql.notify(CHANNEL, payload).then(() => undefined);
     },
     subscribe(handler: (payload: string) => void): void {
       handlers.add(handler);

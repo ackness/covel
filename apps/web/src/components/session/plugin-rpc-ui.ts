@@ -132,6 +132,7 @@ export async function postPluginRpcWithApproval(params: {
   const first = await postPluginRpc(params.sessionId, params.request);
   return resolvePluginRpcApprovalResponse({
     response: first,
+    sessionId: params.sessionId,
     retry: () => postPluginRpc(params.sessionId, params.request),
     pluginId: params.pluginId,
     actionLabel: params.actionLabel,
@@ -142,6 +143,7 @@ export async function postPluginRpcWithApproval(params: {
 
 export async function resolvePluginRpcApprovalResponse(params: {
   readonly response: PluginRpcResponse;
+  readonly sessionId?: string;
   readonly retry: () => Promise<PluginRpcResponse>;
   readonly pluginId: string;
   readonly actionLabel: string;
@@ -152,14 +154,22 @@ export async function resolvePluginRpcApprovalResponse(params: {
   if (params.response.status !== "approval-required") {
     return params.response;
   }
+  const pending =
+    params.response.pending && typeof params.response.pending === "object"
+      ? (params.response.pending as Record<string, unknown>)
+      : undefined;
+  const approvedPluginId =
+    typeof pending?.pluginId === "string" ? pending.pluginId : params.pluginId;
+  const approvedAction =
+    typeof pending?.action === "string" ? pending.action : params.actionLabel;
 
   const proceed = await params.confirm({
     title: params.t("plugin.approval.title", {
       defaultValue: "Authorize plugin action",
     }),
     message: params.t("plugin.approval.confirmMessage", {
-      pluginId: params.pluginId,
-      action: params.actionLabel,
+      pluginId: approvedPluginId,
+      action: approvedAction,
       defaultValue:
         "Plugin {{pluginId}} requests permission to run {{action}}. Authorize all matching calls for this session?",
     }),
@@ -176,6 +186,7 @@ export async function resolvePluginRpcApprovalResponse(params: {
       params.response.approvalId,
       proceed ? "allow" : "deny",
       "session",
+      params.sessionId,
     );
   } catch (err) {
     emitToast(

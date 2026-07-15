@@ -18,7 +18,10 @@
 
 import { useSyncExternalStore } from "react";
 
-type PluginData = Record<string, Record<string, Record<string, unknown>>>;
+export type PluginData = Record<
+  string,
+  Record<string, Record<string, unknown>>
+>;
 
 type Listener = () => void;
 
@@ -124,6 +127,17 @@ export function loadPluginData(
   pluginNs[namespace] = ns;
   sessionStores.set(activeSessionId, { ...prev, [pluginId]: pluginNs });
   notify();
+}
+
+/** Atomically replace the active session's complete plugin-data snapshot. */
+export function replaceSessionPluginData(
+  sessionId: string,
+  data: PluginData,
+): boolean {
+  if (activeSessionId !== sessionId) return false;
+  sessionStores.set(sessionId, data);
+  notify();
+  return true;
 }
 
 /**

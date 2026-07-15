@@ -6,6 +6,14 @@
  */
 
 export { getDesktopRestToken } from "@/lib/desktop-bridge";
+export {
+  clearOperatorToken,
+  clearSessionToken,
+  getOperatorToken,
+  getSessionToken,
+  storeOperatorToken,
+  storeSessionToken,
+} from "./session-credentials.js";
 
 export * from "./api/types.js";
 export * from "./api/worlds.js";

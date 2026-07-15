@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
+import { clearAllStreamingText } from "@/stores/streaming-text-store.js";
 import {
   clearNarrativeDeltaBuffer,
   type DeltaBufferRef,
@@ -38,6 +39,7 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
     sessionIdRef.current = nextId;
     setActivePluginDataSession(nextId);
     clearNarrativeDeltaBuffer(deltaBufferRef, deltaRafRef);
+    clearAllStreamingText();
   }, [state.session]);
 
   return {

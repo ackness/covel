@@ -21,11 +21,11 @@
     "clean": "node ../../scripts/remove-paths.mjs dist staging ../../release/electron"
   },
   "dependencies": {
-    "@covel/web": "workspace:*",
     "smol-toml": "^1.6.1",
     "tsx": "^4.22.4"
   },
   "devDependencies": {
+    "@covel/web": "workspace:*",
     "@electron/rebuild": "^4.0.4",
     "electron": "^42.4.1",
     "electron-builder": "^26.15.3",

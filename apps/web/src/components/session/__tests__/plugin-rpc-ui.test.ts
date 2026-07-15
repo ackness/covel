@@ -84,7 +84,12 @@ describe("plugin-rpc-ui", () => {
       response: {
         status: "approval-required",
         approvalId: "approval-1",
+        pending: {
+          pluginId: "server-plugin",
+          action: "plugin:server-code",
+        },
       },
+      sessionId: "session-1",
       retry,
       pluginId: "plugin",
       actionLabel: "runtime rt",
@@ -97,6 +102,7 @@ describe("plugin-rpc-ui", () => {
       "approval-1",
       "allow",
       "session",
+      "session-1",
     );
     expect(retry).toHaveBeenCalledTimes(1);
     expect(res).toBe(retryResponse);

@@ -28,7 +28,6 @@ function stateFor(
     world: null,
     session: baseSession,
     messages: [],
-    streamingText: {},
     olderMessagesCursor: null,
     worldSessions: [],
     executing: false,

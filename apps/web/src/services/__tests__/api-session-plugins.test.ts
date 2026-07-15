@@ -145,6 +145,22 @@ describe("enableSessionPlugin", () => {
     expect(JSON.parse(init.body as string)).toEqual({ pluginId: "memory" });
   });
 
+  it("returns the approval envelope from a 202 response", async () => {
+    const pending = {
+      status: "approval-required" as const,
+      approvalId: "approval-1",
+      pending: {
+        pluginId: "community-memory",
+        action: "plugin:server-code",
+      },
+    };
+    mockFetchOnce(pending, 202);
+
+    await expect(
+      enableSessionPlugin("session-abc", "community-memory"),
+    ).resolves.toEqual(pending);
+  });
+
   it("should throw when server returns 404 (plugin not found)", async () => {
     mockFetchOnce({ code: "PLUGIN_NOT_FOUND" }, 404);
 

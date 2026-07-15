@@ -67,11 +67,24 @@ export interface BootstrapPluginEntriesParams {
   readonly pluginToolAccess: Map<string, Set<string>>;
   readonly hookPipeline: HookPipeline;
   readonly rpcRegistry: PluginRpcRegistry;
+  /** Fail-closed session authorization for community server code. */
+  readonly isCommunityServerCodeApproved?: (
+    sessionId: string | undefined,
+    pluginId: string,
+  ) => boolean;
+  /** Narrower grant used for lifecycle hook execution after import. */
+  readonly isCommunityHookApproved?: (
+    sessionId: string,
+    pluginId: string,
+  ) => boolean;
 }
 
 export interface BootstrapPluginEntries {
   /** Deferred entry invocation — memoized per pluginId, safe to await repeatedly. */
-  readonly ensurePluginEntry: (pluginId: string) => Promise<void>;
+  readonly ensurePluginEntry: (
+    pluginId: string,
+    sessionId?: string,
+  ) => Promise<void>;
   /**
    * True when `pluginId` declares an `entry`, its trust is deferred
    * (community), and the entry has not been activated yet. The plugin-rpc
@@ -83,27 +96,11 @@ export interface BootstrapPluginEntries {
 }
 
 /**
- * Read-only DataStore methods a community entry toolkit may call unscoped —
- * the same lookup surface `createFunctionStoreView` grants community
- * function-runtime handlers (session + turn-message reads). Everything not
- * listed here and not a scoped plugin-data override throws (S-03).
- */
-const COMMUNITY_READ_ALLOWLIST: ReadonlySet<PropertyKey> = new Set([
-  "getSession",
-  "listTurnMessages",
-  "listRecentTurnMessages",
-]);
-
-/**
- * Community-facing store view: a default-DENY allowlist proxy (S-03/H-03).
+ * Community-facing entry-factory store view: default-deny every method.
  *
  * Community entry factories close over `toolkit.store` for the lifetime of
  * the process, so this view must be safe on its own:
- *  - `plugin_data` READS are clamped to the entry's own `pluginId` — any
- *    caller-supplied id is ignored — so it cannot read another plugin's
- *    namespace;
- *  - the small read-only lookup set above forwards to the raw store;
- *  - EVERY write — including own-namespace `setPluginData` /
+ *  - EVERY read and write — including own-namespace `setPluginData` /
  *    `setPluginDataBatch` / `deletePluginData` — and every other DataStore
  *    method throws a clear error. Community writes must flow through
  *    governed, session-bound surfaces: proposals → validate → commit from
@@ -112,27 +109,14 @@ const COMMUNITY_READ_ALLOWLIST: ReadonlySet<PropertyKey> = new Set([
  *
  * Session scoping is NOT possible here (entries register at activation time,
  * before any request) — that is exactly why writes are denied outright
- * rather than clamped: an entry-level write cannot be bound to a request
- * session, so there is no safe scope for it. Reads keep working because hook
- * handlers legitimately look up the session they were invoked for
- * (`ctx.sessionId`).
+ * rather than clamped: an entry-level operation cannot be bound to a request
+ * session, so there is no safe scope for it. Request/runtime handlers receive
+ * their own session-scoped store surfaces.
  */
 function scopeStoreToPlugin(store: DataStore, pluginId: string): DataStore {
-  const overrides: Partial<DataStore> = {
-    getPluginData: (sessionId, _pluginId, namespace, key) =>
-      store.getPluginData(sessionId, pluginId, namespace, key),
-    listPluginData: (sessionId, _pluginId, namespace, pagination) =>
-      store.listPluginData(sessionId, pluginId, namespace, pagination),
-  };
   return new Proxy(store, {
     get(target, prop, receiver) {
-      if (Object.hasOwn(overrides, prop)) {
-        return (overrides as Record<PropertyKey, unknown>)[prop];
-      }
       const value = Reflect.get(target, prop, receiver);
-      if (COMMUNITY_READ_ALLOWLIST.has(prop) && typeof value === "function") {
-        return value.bind(target);
-      }
       // Non-methods forward untouched — this keeps `await`'s `then` probe,
       // Symbol.toStringTag, etc. working on the proxied store.
       if (typeof value !== "function") return value;
@@ -140,7 +124,7 @@ function scopeStoreToPlugin(store: DataStore, pluginId: string): DataStore {
         throw new Error(
           `[plugin-entry] ${pluginId}: store.${String(prop)}() is not available to a community entry toolkit — ` +
             `writes must go through proposals (or the session-scoped RPC store at dispatch time); ` +
-            `only scoped plugin_data reads and read-only session/turn-message lookups are permitted`,
+            `reads must use a request/runtime-scoped context`,
         );
       };
     },
@@ -166,6 +150,8 @@ export async function createBootstrapPluginEntries({
   pluginToolAccess,
   hookPipeline,
   rpcRegistry,
+  isCommunityServerCodeApproved,
+  isCommunityHookApproved,
 }: BootstrapPluginEntriesParams): Promise<BootstrapPluginEntries> {
   const http = { fetchWithRetry, validateBaseUrl: validateBaseUrlForPlugin };
 
@@ -242,11 +228,20 @@ export async function createBootstrapPluginEntries({
           return;
         }
         hookSeq += 1;
+        const sessionGuardedHandler: typeof handler = async (ctx, payload) => {
+          if (
+            pluginTrust === "community" &&
+            !isCommunityHookApproved?.(ctx.sessionId, pluginId)
+          ) {
+            return { action: "continue" };
+          }
+          return handler(ctx, payload);
+        };
         hookPipeline.register({
           id: `${pluginId}:${event}:entry#${hookSeq}`,
           event,
           pluginId,
-          handler,
+          handler: sessionGuardedHandler,
           ...(options?.match ? { match: options.match } : {}),
           ...(typeof options?.timeoutMs === "number"
             ? { timeoutMs: options.timeoutMs }
@@ -373,11 +368,10 @@ export async function createBootstrapPluginEntries({
   // We do NOT close this by reviving declarative hook manifests — that would
   // trade the single-entry model for the very split it replaced. builtin /
   // official entries ran in the boot loop above and are unaffected.
-  const ensurePluginEntry = async (pluginId: string): Promise<void> => {
-    if (invokedPluginIds.has(pluginId)) return;
-    const pending = inFlight.get(pluginId);
-    if (pending) return pending;
-
+  const ensurePluginEntry = async (
+    pluginId: string,
+    sessionId?: string,
+  ): Promise<void> => {
     const discovery = discoveryMap.get(pluginId);
     if (!discovery) return;
     const trust = getPluginTrustInfo(pluginId, discovery.source);
@@ -386,6 +380,14 @@ export async function createBootstrapPluginEntries({
       invokedPluginIds.add(pluginId);
       return;
     }
+    if (!isCommunityServerCodeApproved?.(sessionId, pluginId)) {
+      throw new Error(
+        `[plugin-entry] ${pluginId}: community server code requires explicit approval for session ${sessionId ?? "<missing>"}`,
+      );
+    }
+    if (invokedPluginIds.has(pluginId)) return;
+    const pending = inFlight.get(pluginId);
+    if (pending) return pending;
 
     const promise = (async () => {
       try {

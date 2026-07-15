@@ -87,6 +87,7 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
   readonly loadRuntime: (
     manifest: RuntimeManifest,
     locale?: string,
+    sessionId?: string,
   ) => Promise<LoadedRuntime | undefined>;
   /**
    * Optional narrow gateway facade forwarded to function-runtime handlers

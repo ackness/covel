@@ -6,7 +6,6 @@ import type {
   SuspensionRecord,
   TurnMessageRecord,
 } from "../types.js";
-import { applyCursorPage, sortByCursorAsc } from "../common/pagination.js";
 import type { IdbStoreContext, IdbStoreSlice } from "./idb-context.js";
 
 export function createIdbPersistenceStore(ctx: IdbStoreContext): IdbStoreSlice {
@@ -143,7 +142,30 @@ export function createIdbPersistenceStore(ctx: IdbStoreContext): IdbStoreSlice {
     },
 
     async saveSnapshot(record: SnapshotRecord): Promise<void> {
-      await mutations.putAndTrack("state_snapshots", structuredClone(record));
+      await Promise.all([
+        mutations.ensureStoreSnapshot("state_snapshots"),
+        mutations.ensureStoreSnapshot("state_snapshot_metadata"),
+      ]);
+      const tx = db.transaction(
+        ["state_snapshots", "state_snapshot_metadata"],
+        "readwrite",
+      );
+      const metadata: SnapshotMetadata = {
+        id: record.id,
+        sessionId: record.sessionId,
+        turnId: record.turnId,
+        kind: record.kind,
+        ...(record.parentId != null ? { parentId: record.parentId } : {}),
+        createdAt: record.createdAt,
+        size: JSON.stringify(record.payload).length,
+      };
+      await Promise.all([
+        tx.objectStore("state_snapshots").put(structuredClone(record)),
+        tx
+          .objectStore("state_snapshot_metadata")
+          .put(structuredClone(metadata)),
+        tx.done,
+      ]);
     },
 
     async getSnapshot(id: string): Promise<SnapshotRecord | null> {
@@ -168,23 +190,28 @@ export function createIdbPersistenceStore(ctx: IdbStoreContext): IdbStoreSlice {
       sessionId: string,
       opts: CursorPageOpts,
     ): Promise<readonly SnapshotMetadata[]> {
-      const all = (await db.getAllFromIndex(
-        "state_snapshots",
-        "sessionId",
-        sessionId,
-      )) as SnapshotRecord[];
-      const page = applyCursorPage(sortByCursorAsc(all), opts);
-      return page.map(
-        (r): SnapshotMetadata => ({
-          id: r.id,
-          sessionId: r.sessionId,
-          turnId: r.turnId,
-          kind: r.kind,
-          ...(r.parentId != null ? { parentId: r.parentId } : {}),
-          createdAt: r.createdAt,
-          size: JSON.stringify(r.payload).length,
-        }),
+      if (opts.limit <= 0) return [];
+
+      const tx = db.transaction("state_snapshot_metadata", "readonly");
+      const index = tx.store.index("session_createdAt_id");
+      const upperKey: IDBValidKey = opts.before
+        ? [sessionId, opts.before.createdAt, opts.before.id]
+        : [sessionId, []];
+      const range = IDBKeyRange.bound(
+        [sessionId],
+        upperKey,
+        false,
+        opts.before !== undefined,
       );
+      const records: SnapshotMetadata[] = [];
+      let cursor = await index.openCursor(range, "prev");
+      while (cursor && records.length < opts.limit) {
+        records.push(cursor.value as SnapshotMetadata);
+        cursor = await cursor.continue();
+      }
+      await tx.done;
+
+      return records.reverse();
     },
   };
 }

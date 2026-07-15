@@ -47,7 +47,7 @@ export function errorBody<Code extends string = string>(
  */
 const SENSITIVE_QUERY_PARAMS = ["token", "session_token"];
 
-function redactSensitiveQueryParams(url: string): string {
+export function redactSensitiveQueryParams(url: string): string {
   try {
     const parsed = new URL(url);
     for (const param of SENSITIVE_QUERY_PARAMS) {
@@ -59,6 +59,27 @@ function redactSensitiveQueryParams(url: string): string {
   } catch {
     return url;
   }
+}
+
+/** Redact sensitive query values inside preformatted request log lines. */
+export function redactSensitiveQueryParamsInText(text: string): string {
+  return text.replace(/(?:https?:\/\/|\/)[^\s]+/gi, (candidate) => {
+    try {
+      const absolute = /^https?:\/\//i.test(candidate);
+      const parsed = new URL(candidate, "http://redaction.invalid");
+      for (const param of SENSITIVE_QUERY_PARAMS) {
+        if (parsed.searchParams.has(param)) {
+          parsed.searchParams.set(param, "[redacted]");
+        }
+      }
+      const redacted = absolute
+        ? parsed.toString()
+        : `${parsed.pathname}${parsed.search}${parsed.hash}`;
+      return redacted.replaceAll("%5Bredacted%5D", "[redacted]");
+    } catch {
+      return candidate;
+    }
+  });
 }
 
 /**

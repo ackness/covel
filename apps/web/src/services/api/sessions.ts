@@ -117,13 +117,29 @@ export async function listSessionPlugins(
 }
 
 /** Enable a plugin for a session. Returns updated active list. */
+export type EnableSessionPluginResponse =
+  | { ok: boolean; active: string[] }
+  | {
+      status: "approval-required";
+      approvalId: string;
+      pending: {
+        pluginId: string;
+        action: string;
+        description?: string;
+      };
+    };
+
 export async function enableSessionPlugin(
   sessionId: string,
   pluginId: string,
-): Promise<{ ok: boolean; active: string[] }> {
-  return request<{ ok: boolean; active: string[] }>(
+): Promise<EnableSessionPluginResponse> {
+  return request<EnableSessionPluginResponse>(
     `/api/sessions/${encodeURIComponent(sessionId)}/plugins/enable`,
-    { method: "POST", body: JSON.stringify({ pluginId }) },
+    {
+      method: "POST",
+      body: JSON.stringify({ pluginId }),
+      operatorAuth: true,
+    },
   );
 }
 
@@ -196,6 +212,7 @@ export async function getSessionSnapshot(
 export async function listSessions(worldId: string): Promise<SessionRecord[]> {
   const res = await request<{ items: SessionRecord[] }>(
     `/api/sessions?worldId=${encodeURIComponent(worldId)}`,
+    { operatorAuth: true },
   );
   return res.items;
 }
@@ -282,6 +299,7 @@ export async function createSession(
     "/api/sessions",
     {
       method: "POST",
+      operatorAuth: true,
       body: JSON.stringify({
         id,
         worldId,

@@ -23,10 +23,7 @@ import {
 import { Button } from "@/components/ui/button.js";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
 import { usePluginNamespace } from "@/stores/plugin-data-store.js";
-import {
-  resolveStreamContent,
-  useSessionState,
-} from "@/stores/session-store.js";
+import { useStreamingText } from "@/stores/streaming-text-store.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import type {
   SessionRecord,
@@ -153,15 +150,11 @@ export function StageView(props: StageViewProps): ReactElement {
 
   // ── Latest story text + stream state ──────────────────────────
   // Streaming tokens no longer live in `messages[].content` — the placeholder
-  // carries empty content and the live text is held in `state.streamingText`
-  // (reducer APPEND_DELTA, M-03). Subscribe to it so the stage re-renders per
-  // token and overlay it here; `resolveStreamContent` is a no-op for
-  // non-streaming / completed messages.
-  const { streamingText } = useSessionState();
+  // carries empty content and the live text is held in a fine-grained external
+  // store. This view subscribes only to the latest story message.
   const storyMsg = findLatestStory(messages);
-  const storyText = storyMsg
-    ? resolveStreamContent(storyMsg, streamingText)
-    : "";
+  const liveStoryText = useStreamingText(storyMsg?.id ?? "");
+  const storyText = storyMsg ? (liveStoryText ?? storyMsg.content) : "";
   const storyTurnId = storyMsg?.turnId;
   const isStreaming =
     executing && (storyMsg?.id.startsWith("stream_") ?? false);

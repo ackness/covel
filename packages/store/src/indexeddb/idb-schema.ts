@@ -1,6 +1,6 @@
 // IndexedDB requires a monotonically increasing integer version for schema
 // upgrades. Keep all browser-local object stores on this single version.
-export const BROWSER_IDB_SCHEMA_VERSION = 11;
+export const BROWSER_IDB_SCHEMA_VERSION = 12;
 export const BROWSER_IDB_DATABASE_NAME = "covel-browser";
 export const APP_KV_STORE_STATE_SNAPSHOTS = "stateSnapshots";
 export const APP_KV_STORE_WORLD_OVERLAYS = "worldOverlays";
@@ -17,6 +17,21 @@ interface BrowserSchemaStore {
   ): unknown;
 }
 
+interface BrowserSchemaCursor {
+  readonly value: unknown;
+  continue(): Promise<BrowserSchemaCursor | null>;
+}
+
+interface SnapshotRecordForMigration {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly kind: string;
+  readonly parentId?: string;
+  readonly createdAt: string;
+  readonly payload: unknown;
+}
+
 interface BrowserSchemaDatabase {
   readonly objectStoreNames: DOMStringList;
   createObjectStore(
@@ -24,6 +39,40 @@ interface BrowserSchemaDatabase {
     options?: IDBObjectStoreParameters,
   ): BrowserSchemaStore;
   deleteObjectStore(name: string): void;
+}
+
+interface BrowserSchemaTransaction {
+  objectStore(name: string): BrowserSchemaStore;
+}
+
+interface BrowserMigrationStore {
+  openCursor(): Promise<BrowserSchemaCursor | null>;
+  put(value: unknown): Promise<unknown>;
+}
+
+interface BrowserMigrationTransaction {
+  objectStore(name: string): BrowserMigrationStore;
+}
+
+export async function backfillSnapshotMetadata(
+  transaction: BrowserMigrationTransaction,
+): Promise<void> {
+  const snapshots = transaction.objectStore("state_snapshots");
+  const metadata = transaction.objectStore("state_snapshot_metadata");
+  let cursor = await snapshots.openCursor();
+  while (cursor) {
+    const record = cursor.value as SnapshotRecordForMigration;
+    await metadata.put({
+      id: record.id,
+      sessionId: record.sessionId,
+      turnId: record.turnId,
+      kind: record.kind,
+      ...(record.parentId != null ? { parentId: record.parentId } : {}),
+      createdAt: record.createdAt,
+      size: JSON.stringify(record.payload).length,
+    });
+    cursor = await cursor.continue();
+  }
 }
 
 function createObjectStore(
@@ -46,6 +95,7 @@ function ensureStore(
 export function upgradeBrowserIdbSchema(
   db: BrowserSchemaDatabase,
   oldVersion: number,
+  transaction?: BrowserSchemaTransaction,
 ): void {
   if (oldVersion < 8 && db.objectStoreNames.contains("sessions")) {
     db.deleteObjectStore("sessions");
@@ -118,6 +168,27 @@ export function upgradeBrowserIdbSchema(
 
   const snapshots = ensureStore(db, "state_snapshots", { keyPath: "id" });
   snapshots?.createIndex("sessionId", "sessionId");
+  if (snapshots) {
+    snapshots.createIndex("session_createdAt_id", [
+      "sessionId",
+      "createdAt",
+      "id",
+    ]);
+  } else if (oldVersion < 12) {
+    transaction
+      ?.objectStore("state_snapshots")
+      .createIndex("session_createdAt_id", ["sessionId", "createdAt", "id"]);
+  }
+
+  const snapshotMetadata = ensureStore(db, "state_snapshot_metadata", {
+    keyPath: "id",
+  });
+  snapshotMetadata?.createIndex("sessionId", "sessionId");
+  snapshotMetadata?.createIndex("session_createdAt_id", [
+    "sessionId",
+    "createdAt",
+    "id",
+  ]);
 
   const lorebookEntries = ensureStore(db, "lorebook_entries", {
     keyPath: "id",

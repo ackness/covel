@@ -118,18 +118,6 @@ export interface SessionState {
   messages: StreamMessage[];
 
   /**
-   * In-flight streaming text, keyed by the streaming placeholder's message id
-   * (`stream_<turnId>_<runtimeId>`). Decoupled from `messages` so a token delta
-   * is an O(1) map write instead of copying the whole history array — the
-   * `messages` reference stays stable across a stream, which keeps the O(history)
-   * chat grouping memo and autoscroll from rebuilding on every token (M-03).
-   * The placeholder message carries empty `content`; the renderer overlays the
-   * live text from here. Merged into `messages` once on `COMPLETE_MESSAGE` and
-   * cleared on discard / reset.
-   */
-  streamingText: Record<string, string>;
-
-  /**
    * Keyset cursor for loading messages OLDER than the current `messages` window.
    * `messages` holds only the most-recent window (session restore no longer
    * loads the full history); this points at the position immediately before the
@@ -299,6 +287,10 @@ export type SessionAction =
         value: unknown;
         operation: string;
       }[];
+    }
+  | {
+      type: "REPLACE_PLUGIN_DATA";
+      pluginData: Record<string, Record<string, Record<string, unknown>>>;
     }
   | { type: "LOAD_MESSAGE_UI_SPECS"; specs: api.UISlotEntry[] }
   | { type: "UPSERT_PLUGIN_MESSAGE_SURFACE"; pluginId: string }

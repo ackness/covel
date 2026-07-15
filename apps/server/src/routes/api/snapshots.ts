@@ -36,6 +36,7 @@ import type {
   TurnMessageRecord,
 } from "@covel/store";
 import { buildSnapshotPayload } from "@covel/runtime";
+import { getPluginTrustInfo } from "@covel/plugin-loader";
 import { CHARACTER_NAMESPACE } from "@covel/tools";
 import type { EventBus } from "@covel/events";
 import { errorBody } from "../../api-error.js";
@@ -45,7 +46,11 @@ import {
 } from "../../lib/session-lock.js";
 import { SAFE_SESSION_ID_RE } from "../../lib/validators.js";
 import { nextCursorFrom, parseCursorQuery } from "./cursor-params.js";
-import { resolveSessionParam } from "./session/session-guard.js";
+import {
+  mintSessionOwnerToken,
+  resolveSessionParam,
+  SESSION_OWNER_TOKEN_HASH_KEY,
+} from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -285,6 +290,16 @@ snapshotRoutes.post("/:id/fork", async (c) => {
           500,
         );
       }
+      const childOwner = mintSessionOwnerToken();
+      const pluginRegistry = c.get("pluginRegistry");
+      const childActivePlugins = snapshotSession.activePlugins.filter(
+        (pluginId) => {
+          const entry = pluginRegistry?.get(pluginId);
+          if (!pluginRegistry) return true;
+          if (!entry) return true;
+          return getPluginTrustInfo(pluginId, entry?.source).autoLoad;
+        },
+      );
 
       const now = new Date().toISOString();
 
@@ -310,9 +325,12 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             turnCount: snapshotSession.turnCount,
             preGameCompleted: snapshotSession.preGameCompleted,
             locale: snapshotSession.locale,
-            activePlugins: snapshotSession.activePlugins,
+            activePlugins: childActivePlugins,
             presetId: snapshotSession.presetId,
             runtimeModelOverrides: snapshotSession.runtimeModelOverrides,
+            metadata: {
+              [SESSION_OWNER_TOKEN_HASH_KEY]: childOwner.tokenHash,
+            },
             createdAt: now,
             updatedAt: now,
           });
@@ -542,6 +560,7 @@ snapshotRoutes.post("/:id/fork", async (c) => {
           parentSessionId,
           fromSnapshotId: snapshot.id,
           forkSnapshotId: forkSnapshot.id,
+          ownerToken: childOwner.token,
         },
         201,
       );

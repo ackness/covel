@@ -30,7 +30,6 @@ export {
   mergeGameStateForReplacement,
   enrichGameStateFromSnapshot,
 } from "./session-store/game-state.js";
-export { resolveStreamContent } from "./session-store/selectors.js";
 export { useSession, useSessionActions, useSessionState };
 
 export function SessionProvider({ children }: { children: ReactNode }) {

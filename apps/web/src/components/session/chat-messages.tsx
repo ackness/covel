@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import { useSession } from "@/stores/session-store.js";
+import { subscribeToStreamingChanges } from "@/stores/streaming-text-store.js";
 import { SessionCanvasHero } from "./chat-messages/session-canvas-hero.js";
 import { ChatMessageRenderer } from "./chat-messages/chat-message-renderer.js";
 import { ChatBlockRenderer } from "./chat-messages/chat-block-renderer.js";
@@ -85,12 +86,6 @@ export function ChatMessages({
   const { t } = useTranslation();
   const { state: sessionState, loadOlderMessages } = useSession();
   const sessionId = sessionState.session?.id;
-  // Live streaming text lives outside `messages` (see reducer APPEND_DELTA):
-  // a token delta only mutates this map, keeping the `messages` reference — and
-  // thus the O(history) grouping memo — stable across a stream. The renderer
-  // overlays the live text onto the streaming placeholder below.
-  const streamingText = sessionState.streamingText;
-
   // Sticky-bottom auto-scroll. Follows the stream only while the user is
   // pinned to the bottom; surfaces a "jump to latest" button after they
   // scroll up. The Radix ScrollArea renders its scrollable element as the
@@ -99,17 +94,14 @@ export function ChatMessages({
   // 解析出的滚动视口。除自动滚动外，向上加载更旧消息的 IntersectionObserver
   // 与滚动补偿也需要它，故存入 state 以便相关 effect 在其就绪后重新运行。
   const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null);
-  // Autoscroll must follow BOTH new messages and growing streaming text. Since
-  // `messages` no longer changes per token, derive a cheap scalar signal that
-  // advances on either (message count + total live streaming length). O(active
-  // streams) — a couple of entries at most.
-  const scrollSignal = useMemo(() => {
-    let total = messages.length;
-    for (const key in streamingText) total += streamingText[key].length;
-    return total;
-  }, [messages, streamingText]);
-  const { scrollRef, bottomRef, showJumpButton, jumpToBottom } =
-    useAutoScroll(scrollSignal);
+  // Autoscroll follows both new messages and the external streaming signal;
+  // token arrival does not re-render this history-sized parent component.
+  const { scrollRef, bottomRef, showJumpButton, jumpToBottom } = useAutoScroll(
+    messages.length,
+    {
+      subscribeToStreaming: subscribeToStreamingChanges,
+    },
+  );
   useEffect(() => {
     const root = scrollRootRef.current;
     const viewport =
@@ -176,15 +168,7 @@ export function ChatMessages({
   const renderViewMode = viewMode === "stage" ? "parsed" : viewMode;
 
   const renderMessage = useCallback(
-    (rawMsg: StreamMessage, index: number) => {
-      // Overlay the live streaming buffer onto the streaming placeholder. The
-      // placeholder carries empty `content`; its growing text is held in
-      // `streamingText` keyed by the message id (`stream_<turnId>_<runtimeId>`).
-      const liveText = streamingText[rawMsg.id];
-      const msg =
-        liveText !== undefined && liveText !== rawMsg.content
-          ? { ...rawMsg, content: liveText }
-          : rawMsg;
+    (msg: StreamMessage, index: number) => {
       if (msg.block) {
         return (
           <ChatBlockRenderer
@@ -219,7 +203,6 @@ export function ChatMessages({
       );
     },
     [
-      streamingText,
       renderViewMode,
       lastUserMsgIndex,
       sessionId,

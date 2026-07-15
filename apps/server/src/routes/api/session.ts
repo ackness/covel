@@ -15,8 +15,12 @@
 
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
+import {
+  COMMUNITY_SERVER_CODE_ACTION,
+  type RpcApprovalGate,
+} from "@covel/approval";
 import { readRuntimeEnv } from "@covel/shared";
-import type { PluginRegistry } from "@covel/plugin-loader";
+import { getPluginTrustInfo, type PluginRegistry } from "@covel/plugin-loader";
 import type {
   DataStore,
   MediaStore,
@@ -45,6 +49,7 @@ import {
 } from "./session/embedding.js";
 import {
   hasOperatorToken,
+  checkHostedOperator,
   isOwnerAuthEnforced,
   mintSessionOwnerToken,
   resolveSessionParam,
@@ -78,6 +83,30 @@ type Env = {
 };
 
 export const sessionRoutes = new Hono<Env>();
+
+/**
+ * Keep persisted active plugins aligned with the in-memory approval gate.
+ * Community server code is never restored implicitly after create/fork or a
+ * process restart; the operator must enable it again for this session.
+ */
+function approvedActivePlugins(
+  pluginIds: readonly string[],
+  registry: PluginRegistry,
+  gate: RpcApprovalGate | undefined,
+  sessionId?: string,
+): string[] {
+  return pluginIds.filter((pluginId) => {
+    const entry = registry.get(pluginId);
+    const trust = getPluginTrustInfo(pluginId, entry?.source);
+    return (
+      trust.autoLoad ||
+      Boolean(
+        sessionId &&
+        gate?.hasGrant(sessionId, pluginId, COMMUNITY_SERVER_CODE_ACTION),
+      )
+    );
+  });
+}
 
 /**
  * Fire the SessionEnd lifecycle hook under the session's plugin scope, then
@@ -198,9 +227,10 @@ sessionRoutes.post("/", async (c) => {
     );
   }
 
-  const plugins = resolveSessionPlugins(
-    parsedCreate.requestedPlugins,
+  const plugins = approvedActivePlugins(
+    resolveSessionPlugins(parsedCreate.requestedPlugins, pluginRegistry),
     pluginRegistry,
+    c.get("rpcApprovalGate"),
   );
 
   // Owner token (audit S-02): minted on every tier so a session created
@@ -467,7 +497,22 @@ sessionRoutes.get("/:id/plugins", async (c) => {
   if (!guard.ok) return guard.response;
   const session = guard.session;
 
-  const active = [...(session.activePlugins ?? [])];
+  const previousActive = session.activePlugins ?? [];
+  const active = approvedActivePlugins(
+    previousActive,
+    pluginRegistry,
+    c.get("rpcApprovalGate"),
+    id,
+  );
+  if (active.length !== previousActive.length) {
+    for (const pluginId of previousActive) {
+      if (!active.includes(pluginId)) pluginRegistry.deactivate(pluginId, id);
+    }
+    await store.updateSession(id, {
+      activePlugins: active,
+      updatedAt: new Date().toISOString(),
+    });
+  }
   const available = buildAvailablePluginList(active, pluginRegistry);
 
   return c.json({ active, available });
@@ -487,6 +532,43 @@ sessionRoutes.post("/:id/plugins/enable", async (c) => {
     return c.json(errorBody(`Plugin "${body.pluginId}" not found`), 404);
   }
 
+  const pluginEntry = pluginRegistry.get(body.pluginId);
+  const trust = getPluginTrustInfo(body.pluginId, pluginEntry?.source);
+  if (trust.source === "community") {
+    const operatorDenied = checkHostedOperator(c);
+    if (operatorDenied) return operatorDenied;
+  }
+  const verdict = c.get("rpcApprovalGate").evaluate({
+    sessionId: id,
+    pluginId: body.pluginId,
+    action: COMMUNITY_SERVER_CODE_ACTION,
+    payload: { operation: "enable" },
+    trustLevel: trust.source,
+    description: `Enable server-side code for plugin ${body.pluginId}`,
+  });
+  if (verdict.status === "pending") {
+    return c.json(
+      {
+        status: "approval-required",
+        approvalId: verdict.approvalId,
+        pending: verdict.pending,
+      },
+      202,
+    );
+  }
+  if (verdict.status === "rejected") {
+    return c.json(
+      errorBody(
+        `approval queue is full (limit ${verdict.limit}); resolve pending approvals and retry`,
+      ),
+      429,
+    );
+  }
+
+  // Trusted plugins are already loaded. Community code reaches this seam
+  // only after the gate has recorded an explicit session/one-time grant.
+  await c.get("activatePluginLocalTools")?.(body.pluginId, id);
+
   const active = resolveEnabledSessionPlugins(
     session.activePlugins ?? [],
     body.pluginId,
@@ -498,6 +580,7 @@ sessionRoutes.post("/:id/plugins/enable", async (c) => {
   for (const previousPluginId of session.activePlugins ?? []) {
     if (!active.includes(previousPluginId)) {
       pluginRegistry.deactivate(previousPluginId, id);
+      c.get("rpcApprovalGate")?.revoke(id, previousPluginId);
     }
   }
   await store.updateSession(id, {
@@ -533,6 +616,7 @@ sessionRoutes.post("/:id/plugins/disable", async (c) => {
   }
 
   pluginRegistry.deactivate(body.pluginId, id);
+  c.get("rpcApprovalGate")?.revoke(id, body.pluginId);
   const active = (session.activePlugins ?? []).filter(
     (p) => p !== body.pluginId,
   );

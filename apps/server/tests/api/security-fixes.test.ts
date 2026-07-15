@@ -346,6 +346,7 @@ function registerPresenceAssetsPlugin(pluginRegistry: PluginRegistry): void {
     },
     loadedRuntimes: new Map(),
     status: "registered",
+    source: "official",
   });
 }
 
@@ -457,6 +458,7 @@ describe("[HIGH] Plugin activation happens after session persist", () => {
       },
       loadedRuntimes: new Map(),
       status: "registered",
+      source: "official",
     });
 
     const res = await app.request("/api/sessions", {

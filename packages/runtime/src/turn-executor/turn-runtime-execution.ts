@@ -268,7 +268,11 @@ export async function executeOneRuntime(
     }
 
     // Load the runtime (prompt template, references, handler, etc.)
-    const loaded = await deps.loadRuntime(manifest, input.locale);
+    const loaded = await deps.loadRuntime(
+      manifest,
+      input.locale,
+      input.sessionId,
+    );
     if (!loaded) {
       return makeFailedResult(
         manifest,

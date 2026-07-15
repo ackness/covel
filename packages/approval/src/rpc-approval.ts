@@ -66,6 +66,12 @@ export interface RpcApprovalGate {
    */
   getPending(approvalId: string): RpcApprovalPending | undefined;
   /**
+   * Check whether a community plugin currently has an explicit grant in a
+   * session without consuming a one-time grant or creating a pending request.
+   * Omitting `action` checks for any live grant belonging to the plugin.
+   */
+  hasGrant(sessionId: string, pluginId: string, action?: string): boolean;
+  /**
    * Revoke cached session grants + fresh one-time grants for a session,
    * optionally scoped to one plugin. Returns the number of grants cleared.
    * Withdraws a previously approved community plugin mid-session.
@@ -82,6 +88,9 @@ interface InternalState {
 }
 
 const ONE_TIME_GRANT_TTL_MS = 60_000;
+
+/** Generic approval action used before importing community server code. */
+export const COMMUNITY_SERVER_CODE_ACTION = "plugin:server-code";
 
 /**
  * MEDIUM-1 fix: cap the pending-approval queue so a malicious caller cannot
@@ -178,6 +187,21 @@ export function createRpcApprovalGate(): RpcApprovalGate {
       }
 
       // 4. Otherwise create a pending approval for the dialog flow.
+      // Reuse an unresolved request for the same capability. This bounds
+      // duplicate clicks and lets revoke/disable cancel one stable approval.
+      for (const pending of state.pending.values()) {
+        if (
+          pending.sessionId === input.sessionId &&
+          pending.pluginId === input.pluginId &&
+          pending.action === input.action
+        ) {
+          return {
+            status: "pending",
+            approvalId: pending.approvalId,
+            pending,
+          };
+        }
+      }
       // MEDIUM-1: enforce queue caps before allocation. Sweep stale entries
       // first so a long-lived process doesn't get pinned at the cap by
       // ancient unanswered pendings.
@@ -256,6 +280,30 @@ export function createRpcApprovalGate(): RpcApprovalGate {
       return state.pending.get(approvalId);
     },
 
+    hasGrant(sessionId, pluginId, action) {
+      const prefix = `${sessionId}::${pluginId}::`;
+      const exactKey = action
+        ? tripleKey(sessionId, pluginId, action)
+        : undefined;
+      if (
+        exactKey
+          ? state.sessionCache.has(exactKey)
+          : [...state.sessionCache].some((key) => key.startsWith(prefix))
+      ) {
+        return true;
+      }
+
+      const now = Date.now();
+      for (const [key, issued] of state.oneTimeGrants) {
+        if (now - issued > ONE_TIME_GRANT_TTL_MS) {
+          state.oneTimeGrants.delete(key);
+          continue;
+        }
+        if (exactKey ? key === exactKey : key.startsWith(prefix)) return true;
+      }
+      return false;
+    },
+
     revoke(sessionId, pluginId) {
       // Keys are `${sessionId}::${pluginId}::${action}`; the `::` delimiter and
       // the enumeration-resistant session id make this prefix match exact.
@@ -272,6 +320,15 @@ export function createRpcApprovalGate(): RpcApprovalGate {
       for (const key of [...state.oneTimeGrants.keys()]) {
         if (key.startsWith(prefix)) {
           state.oneTimeGrants.delete(key);
+          cleared += 1;
+        }
+      }
+      for (const [approvalId, pending] of state.pending) {
+        if (
+          pending.sessionId === sessionId &&
+          (!pluginId || pending.pluginId === pluginId)
+        ) {
+          state.pending.delete(approvalId);
           cleared += 1;
         }
       }

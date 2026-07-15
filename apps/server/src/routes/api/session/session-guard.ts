@@ -40,6 +40,7 @@ import { errorBody } from "../../../api-error.js";
 
 export const SESSION_NOT_FOUND_CODE = "session_not_found";
 export const SESSION_OWNER_REQUIRED_CODE = "session_owner_required";
+export const OPERATOR_TOKEN_REQUIRED_CODE = "operator_token_required";
 
 /** Metadata key holding the SHA-256 hex hash of the session owner token. */
 export const SESSION_OWNER_TOKEN_HASH_KEY = "ownerTokenHash";
@@ -104,6 +105,18 @@ export function hasOperatorToken(c: Context): boolean {
   if (!expected) return false;
   const provided = extractSessionOwnerToken(c);
   return provided !== undefined && safeEqual(provided, expected);
+}
+
+/** Require the configured operator credential for global hosted mutations. */
+export function checkHostedOperator(c: Context): Response | undefined {
+  if (!isOwnerAuthEnforced()) return undefined;
+  if (hasOperatorToken(c)) return undefined;
+  return c.json(
+    errorBody("Operator token required on this tier", {
+      code: OPERATOR_TOKEN_REQUIRED_CODE,
+    }),
+    401,
+  );
 }
 
 /**

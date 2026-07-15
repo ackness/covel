@@ -28,7 +28,10 @@ export interface AutoScrollResult {
 export function useAutoScroll(
   /** Value(s) that change as new content streams in (e.g. messages). */
   dep: unknown,
-  options?: { thresholdPx?: number },
+  options?: {
+    thresholdPx?: number;
+    subscribeToStreaming?: (listener: () => void) => () => void;
+  },
 ): AutoScrollResult {
   const thresholdPx = options?.thresholdPx ?? DEFAULT_THRESHOLD_PX;
   const viewportRef = useRef<HTMLElement | null>(null);
@@ -77,6 +80,18 @@ export function useAutoScroll(
     if (!isPinnedRef.current) return;
     bottomRef.current?.scrollIntoView({ behavior: "auto" });
   }, [dep]);
+
+  // Streaming text lives outside React session state. Follow it imperatively so
+  // token arrival does not re-render and reconcile the complete message history.
+  useEffect(() => {
+    const subscribe = options?.subscribeToStreaming;
+    if (!subscribe) return;
+    return subscribe(() => {
+      if (isPinnedRef.current) {
+        bottomRef.current?.scrollIntoView({ behavior: "auto" });
+      }
+    });
+  }, [options?.subscribeToStreaming]);
 
   return { scrollRef, bottomRef, showJumpButton, jumpToBottom };
 }

@@ -13,6 +13,7 @@
  */
 
 const STORAGE_KEY = "covel:session-tokens";
+const OPERATOR_STORAGE_KEY = "covel:operator-token";
 
 function readMap(): Record<string, string> {
   try {
@@ -57,4 +58,43 @@ export function clearSessionToken(sessionId: string): void {
   if (!(sessionId in map)) return;
   const { [sessionId]: _removed, ...rest } = map;
   writeMap(rest);
+}
+
+/** Persist the operator credential used for hosted administrative calls. */
+export function storeOperatorToken(token: string): void {
+  if (!token) return;
+  try {
+    localStorage.setItem(OPERATOR_STORAGE_KEY, token);
+  } catch {
+    // Storage can be unavailable in hardened/private browser contexts.
+  }
+}
+
+export function getOperatorToken(): string | undefined {
+  try {
+    return localStorage.getItem(OPERATOR_STORAGE_KEY) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function clearOperatorToken(): void {
+  try {
+    localStorage.removeItem(OPERATOR_STORAGE_KEY);
+  } catch {
+    // No persisted credential to clear.
+  }
+}
+
+export function sessionAuthHeaders(
+  sessionId: string | undefined,
+): Record<string, string> {
+  if (!sessionId) return {};
+  const token = getSessionToken(sessionId);
+  return token ? { "X-Session-Token": token } : {};
+}
+
+export function operatorAuthHeaders(): Record<string, string> {
+  const token = getOperatorToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }

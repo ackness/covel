@@ -30,6 +30,7 @@ import type { LLMAdapter } from "@covel/runtime";
 import { createModelResolver } from "@covel/runtime";
 import type { CompactorRunner } from "@covel/context";
 import type { ToolModule } from "@covel/tools";
+import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 
 import {
   createInProcessSessionLock,
@@ -325,24 +326,50 @@ export async function bootstrapApi(
   // run its entry. Moving entry creation earlier would execute community
   // entry code at boot — before any approval gate — which is exactly what the
   // deferred-activation design prevents.
-  let ensurePluginEntry: (pluginId: string) => Promise<void> = async () => {};
+  let ensurePluginEntry: (
+    pluginId: string,
+    sessionId?: string,
+  ) => Promise<void> = async () => {};
 
   // loadRuntime resolver (locale-aware: loads PLUGIN.en.md when locale is "en-US")
   const loadRuntimeFn = async (
     manifest: RuntimeManifest,
     locale?: string,
+    sessionId?: string,
   ): Promise<LoadedRuntime | undefined> => {
     for (const [pluginId, discovery] of discoveryMap) {
       const manifests = manifestCache.get(pluginId);
       if (manifests?.some((m) => m.manifest.name === manifest.name)) {
+        const trust = getPluginTrustInfo(pluginId, discovery.source);
+        if (
+          !trust.autoLoad &&
+          (!sessionId ||
+            (!rpcApprovalGate.hasGrant(
+              sessionId,
+              pluginId,
+              COMMUNITY_SERVER_CODE_ACTION,
+            ) &&
+              !rpcApprovalGate.hasGrant(
+                sessionId,
+                pluginId,
+                `runtime:${manifest.name}`,
+              )))
+        ) {
+          throw new Error(
+            `[runtime-loader] ${pluginId}/${manifest.name}: community runtime requires explicit session approval`,
+          );
+        }
         // Community wires register at the same moment we'd import the
         // plugin's handler.js — before any gateway call the handler makes.
         // ponytail: a community *wire-only* plugin (wires consumed by other
         // plugins' slots without its own runtime ever loading) would need
         // ensurePluginWires added to the activatePluginLocalTools call
         // sites too; no such plugin exists yet.
+        // The entry check is the fail-closed approval boundary. Keep it ahead
+        // of every other community import, including wire registration and
+        // the runtime handler itself.
+        await ensurePluginEntry(pluginId, sessionId);
         await pluginWires.ensurePluginWires(pluginId);
-        await ensurePluginEntry(pluginId);
         return loadRuntimeFromDisk(discovery, manifest.name, locale);
       }
     }
@@ -421,9 +448,21 @@ export async function bootstrapApi(
       manifestCache,
     });
 
+  const isCommunityServerCodeApproved = (
+    sessionId: string | undefined,
+    pluginId: string,
+  ): boolean =>
+    Boolean(sessionId && rpcApprovalGate.hasGrant(sessionId, pluginId));
+  const isCommunityHookApproved = (
+    sessionId: string,
+    pluginId: string,
+  ): boolean =>
+    rpcApprovalGate.hasGrant(sessionId, pluginId, COMMUNITY_SERVER_CODE_ACTION);
+
   const hookPipeline = createBootstrapHookPipeline({
     discoveryMap,
     manifestCache,
+    isCommunityServerCodeApproved: isCommunityHookApproved,
   });
 
   // Unified plugin server entries (`entry` frontmatter field) — needs the
@@ -438,13 +477,18 @@ export async function bootstrapApi(
     pluginToolAccess,
     hookPipeline,
     rpcRegistry,
+    isCommunityServerCodeApproved,
+    isCommunityHookApproved,
   });
   ensurePluginEntry = pluginEntries.ensurePluginEntry;
 
   // Community activation seam: entry runs before legacy local tools so both
   // registration styles are live once activation resolves.
-  const activatePluginServerCode = async (pluginId: string): Promise<void> => {
-    await pluginEntries.ensurePluginEntry(pluginId);
+  const activatePluginServerCode = async (
+    pluginId: string,
+    sessionId?: string,
+  ): Promise<void> => {
+    await pluginEntries.ensurePluginEntry(pluginId, sessionId);
     await activatePluginLocalTools(pluginId);
   };
 

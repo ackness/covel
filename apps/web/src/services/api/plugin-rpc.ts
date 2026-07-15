@@ -21,6 +21,6 @@ export async function postPluginRpc(
 ): Promise<PluginRpcResponse> {
   return request<PluginRpcResponse>(
     `/api/sessions/${encodeURIComponent(sessionId)}/plugin-rpc`,
-    { method: "POST", body: JSON.stringify(req) },
+    { method: "POST", body: JSON.stringify(req), operatorAuth: true },
   );
 }

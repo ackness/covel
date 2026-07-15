@@ -38,7 +38,11 @@ import { createMiscApiRoutes } from "./routes/misc-api.js";
 import { createConfigApiRoutes } from "./routes/config-api.js";
 import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
 import { createRequestBodyLimitMiddleware } from "./middleware/request-body-limit.js";
-import { errorBody, makeErrorHandler } from "./api-error.js";
+import {
+  errorBody,
+  makeErrorHandler,
+  redactSensitiveQueryParamsInText,
+} from "./api-error.js";
 import { parseEnvLines } from "./lib/env-file.js";
 import { validateSecurityPosture } from "./security-posture.js";
 import {
@@ -109,7 +113,9 @@ const QUIET_LOG_PATHS = new Set<string>(
     .map((p) => p.trim())
     .filter((p) => p.length > 0),
 );
-const honoLogger = logger();
+const honoLogger = logger((message) =>
+  console.log(redactSensitiveQueryParamsInText(message)),
+);
 app.use("*", async (c, next) => {
   if (QUIET_LOG_PATHS.has(c.req.path)) return next();
   return honoLogger(c, next);

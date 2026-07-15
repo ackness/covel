@@ -7,6 +7,7 @@ import {
   resetPluginData,
   setActiveSession as setActivePluginDataSession,
 } from "@/stores/plugin-data-store.js";
+import { clearStreamingTextsForTurn } from "@/stores/streaming-text-store.js";
 import { bootSessionStore } from "./boot.js";
 import type { SessionActions } from "./context.js";
 import { toExecutionStepStatus } from "./execution-steps.js";
@@ -444,6 +445,7 @@ export function useBuildSessionActions({
               ?.turnId
           : undefined;
       if (lastTurnId) {
+        clearStreamingTextsForTurn(lastTurnId);
         dispatch({
           type: "REMOVE_MESSAGES_FROM_TURN",
           turnId: lastTurnId,
@@ -514,7 +516,33 @@ export function useBuildSessionActions({
       dispatch({ type: "TOGGLE_SESSION_PLUGIN", pluginId, isActive: enable });
       try {
         if (enable) {
-          await api.enableSessionPlugin(sid, pluginId);
+          let result = await api.enableSessionPlugin(sid, pluginId);
+          if ("status" in result && result.status === "approval-required") {
+            const approved = window.confirm(
+              i18n.t("plugin.approval.confirmMessage", {
+                pluginId: result.pending.pluginId,
+                action: result.pending.action,
+              }),
+            );
+            await api.resolveApproval(
+              result.approvalId,
+              approved ? "allow" : "deny",
+              "session",
+              sid,
+            );
+            if (!approved) {
+              dispatch({
+                type: "TOGGLE_SESSION_PLUGIN",
+                pluginId,
+                isActive: false,
+              });
+              return;
+            }
+            result = await api.enableSessionPlugin(sid, pluginId);
+            if ("status" in result) {
+              throw new Error(i18n.t("plugin.approval.unexpectedRequired"));
+            }
+          }
         } else {
           await api.disableSessionPlugin(sid, pluginId);
         }

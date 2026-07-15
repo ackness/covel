@@ -13,11 +13,16 @@ import {
 export interface CreateBootstrapHookPipelineParams {
   readonly discoveryMap: ReadonlyMap<string, PluginDiscoveryResult>;
   readonly manifestCache: ReadonlyMap<string, readonly ParsedPluginMd[]>;
+  readonly isCommunityServerCodeApproved?: (
+    sessionId: string,
+    pluginId: string,
+  ) => boolean;
 }
 
 export function createBootstrapHookPipeline({
   discoveryMap,
   manifestCache,
+  isCommunityServerCodeApproved,
 }: CreateBootstrapHookPipelineParams): HookPipeline {
   const hookPipeline: HookPipeline = createHookPipeline();
   const hookSources: PluginHookSource[] = [];
@@ -41,7 +46,9 @@ export function createBootstrapHookPipeline({
     }
   }
 
-  const registeredHookCount = registerPluginHooks(hookPipeline, hookSources);
+  const registeredHookCount = registerPluginHooks(hookPipeline, hookSources, {
+    isDeferredAuthorized: isCommunityServerCodeApproved,
+  });
   if (registeredHookCount > 0) {
     console.log(
       `[bootstrap] registered ${registeredHookCount} plugin hook handler(s) across ${hookSources.length} source(s)`,

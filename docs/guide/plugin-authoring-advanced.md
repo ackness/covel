@@ -324,6 +324,8 @@ export default async function handler(
 | `triggerEvent`           | `{ topic, data }?`      | 仅 event 触发时存在,包含触发该 runtime 的事件                                                                                                                                                                                                                                                                   |
 | `signal`                 | `AbortSignal?`          | 玩家中止本 turn 的信号。handler 里跑长任务（图像生成、TTS、自管 `fetch`）时应把它传下去（`ctx.images.generate({ signal })` / `fetch(url, { signal })`），玩家点停即取消在途请求而非跑完。无 `TurnControl` 的运行（测试 harness）里为 `undefined`。语义不变：handler 若忽略它并正常返回,产出的 proposal 仍会提交 |
 
+> 上表描述正式 function handler。community agent guard 是只读的预执行判定面：不注入 `pluginData`、logger、gateway、utils、media、assetProgress，且 `recursiveCall` 会拒绝。需要网络、持久化、媒体或递归调用时，把逻辑移入 handler，并通过返回 proposals / `pluginData[]` 进入提交管线。builtin/official guard 的异步能力会被 lease 跟踪，并受同一个总 deadline 约束。
+
 **`ctx.gateway`:** function runtime 调用 LLM 的入口。绝不允许直接 `fetch` 文本 provider URL 或导入文本 SDK —— 这样会跳过 slot 解析、密钥管理、SSRF 防护和 replay cache。
 
 ```ts

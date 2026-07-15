@@ -1,6 +1,9 @@
 import i18n from "@/i18n";
 import { emitToast } from "@/lib/toast-channel";
-import { getSessionToken } from "../session-credentials.js";
+import {
+  operatorAuthHeaders,
+  sessionAuthHeaders,
+} from "../session-credentials.js";
 import { buildAiHeaders, needsProviderKeys } from "./model-settings.js";
 
 /**
@@ -16,12 +19,15 @@ const SESSION_PATH_RE = /\/api\/sessions\/([^/?#]+)/;
 function sessionTokenHeader(url: string): Record<string, string> {
   const id = SESSION_PATH_RE.exec(url)?.[1];
   if (!id) return {};
-  const token = getSessionToken(decodeURIComponent(id));
-  return token ? { "X-Session-Token": token } : {};
+  return sessionAuthHeaders(decodeURIComponent(id));
 }
 
 /** Options for the internal `request` fetch wrapper. */
 interface RequestOptions extends RequestInit {
+  /** Session id carried in a body, query, or non-standard route path. */
+  sessionId?: string;
+  /** Attach the hosted operator credential for global administration. */
+  operatorAuth?: boolean;
   /**
    * Suppress the global error toast for this request. Use for probe-style
    * calls where a non-2xx response is part of normal operation (e.g. auth
@@ -81,7 +87,7 @@ export async function request<T>(
   url: string,
   init?: RequestOptions,
 ): Promise<T> {
-  const { silentErrors, ...fetchInit } = init ?? {};
+  const { silentErrors, sessionId, operatorAuth, ...fetchInit } = init ?? {};
   // Only GETs are retried — they're idempotent, so a boot-race ECONNREFUSED (dev
   // server not up yet) or a transient gateway error can be retried without risk
   // of double-submitting. Non-GET requests keep the single-shot behaviour.
@@ -98,6 +104,8 @@ export async function request<T>(
           "Content-Type": "application/json",
           ...(needsProviderKeys(url) ? buildAiHeaders() : {}),
           ...sessionTokenHeader(url),
+          ...sessionAuthHeaders(sessionId),
+          ...(operatorAuth ? operatorAuthHeaders() : {}),
           ...fetchInit.headers,
         },
       });

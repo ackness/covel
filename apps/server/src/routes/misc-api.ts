@@ -19,7 +19,10 @@ import { buildPackagesResponse } from "./misc-api/plugin-catalog.js";
 import { buildPluginFlowResponse } from "./misc-api/plugin-flow.js";
 import { bearerToken } from "./misc-api/shared.js";
 import { buildUiSpecsResponse } from "./misc-api/ui-specs.js";
-import { checkSessionOwnerById } from "./api/session/session-guard.js";
+import {
+  checkHostedOperator,
+  checkSessionOwnerById,
+} from "./api/session/session-guard.js";
 import { decodeBase64Json } from "../lib/base64-json.js";
 
 export function createMiscApiRoutes(
@@ -243,6 +246,8 @@ export function createMiscApiRoutes(
   // the probe cheap — we only care about connectivity + latency, not the
   // full reply.
   app.post("/api/ai/ping", async (c) => {
+    const denied = checkHostedOperator(c);
+    if (denied) return denied;
     const body = await c.req
       .json<{ presetId?: string; slot?: string }>()
       .catch((): { presetId?: string; slot?: string } => ({}));

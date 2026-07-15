@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useSession } from "@/stores/session-store.js";
 import { getDataService } from "@/services/data-service.js";
+import { mergeChatExportMessages } from "@/lib/chat-export.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { useSettingsDialog } from "@/hooks/use-settings-dialog.js";
@@ -156,8 +157,7 @@ function SessionPage() {
             try {
               const full = await getDataService().listMessages(sid);
               if (full.length > 0) {
-                const fullIds = new Set(full.map((m) => m.id));
-                msgs = [...full, ...inMemory.filter((m) => !fullIds.has(m.id))];
+                msgs = mergeChatExportMessages(full, inMemory);
               }
             } catch {
               // 回退到内存中已加载的消息。

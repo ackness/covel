@@ -2,6 +2,7 @@ import type { TFunction } from "i18next";
 import { ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import type { StreamMessage } from "@/stores/session-store.js";
+import { useStreamingText } from "@/stores/streaming-text-store.js";
 import {
   NarrativeMessageBody,
   SystemMessageLine,
@@ -28,7 +29,7 @@ export interface ChatMessageRendererProps {
  *   raw      — show every message as JSON for inspection.
  */
 export function ChatMessageRenderer({
-  msg,
+  msg: rawMessage,
   viewMode,
   isImageGenActive,
   sessionId,
@@ -37,6 +38,11 @@ export function ChatMessageRenderer({
   onGenerateImage,
   t,
 }: ChatMessageRendererProps) {
+  const liveText = useStreamingText(rawMessage.id);
+  const msg =
+    liveText === undefined || liveText === rawMessage.content
+      ? rawMessage
+      : { ...rawMessage, content: liveText };
   // Raw mode: show everything as JSON, no filtering
   if (viewMode === "raw") {
     return (

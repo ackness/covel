@@ -20,6 +20,7 @@ import {
   __testing,
 } from "../media-resolve.js";
 import { sha256Hex } from "../media-hash.js";
+import { storeSessionToken } from "../../services/session-credentials.js";
 import type { MediaRef } from "@covel/shared";
 
 // ── Inline minimal IDB shim (same shape as media-cache.test.ts) ────
@@ -128,12 +129,25 @@ function fakeIndexedDB() {
 
 const realIDB = (globalThis as { indexedDB?: unknown }).indexedDB;
 const realFetch = globalThis.fetch;
+const realLocalStorage = Object.getOwnPropertyDescriptor(
+  globalThis,
+  "localStorage",
+);
 const realCreateObjectURL = globalThis.URL.createObjectURL;
 const realRevokeObjectURL = globalThis.URL.revokeObjectURL;
 
 let createdUrls: string[] = [];
 
 beforeEach(() => {
+  const credentials = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => credentials.get(key) ?? null,
+      setItem: (key: string, value: string) => credentials.set(key, value),
+      removeItem: (key: string) => credentials.delete(key),
+    },
+  });
   dbInstances.clear();
   __resetMediaCacheForTests();
   (globalThis as unknown as { indexedDB: unknown }).indexedDB = fakeIndexedDB();
@@ -149,6 +163,11 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  if (realLocalStorage) {
+    Object.defineProperty(globalThis, "localStorage", realLocalStorage);
+  } else {
+    delete (globalThis as { localStorage?: Storage }).localStorage;
+  }
   if (realIDB === undefined) {
     delete (globalThis as { indexedDB?: unknown }).indexedDB;
   } else {
@@ -223,6 +242,7 @@ describe("MEDIA_TOKEN_ENDPOINT", () => {
 
 describe("resolveMediaSrc", () => {
   it("uses the server-issued signed URL after authorization", async () => {
+    storeSessionToken("s1", "owner-secret");
     const baseRef = await pngRef();
     const refWithUrl: MediaRef = {
       ...baseRef,
@@ -246,6 +266,10 @@ describe("resolveMediaSrc", () => {
       MEDIA_TOKEN_ENDPOINT("s1", baseRef.id),
       "https://signed.example.com/abc.png?token=xyz",
     ]);
+    const tokenCall = vi.mocked(globalThis.fetch).mock.calls[0];
+    expect(
+      (tokenCall?.[1]?.headers as Record<string, string>)["X-Session-Token"],
+    ).toBe("owner-secret");
     expect(result.fromCache).toBe(false);
     expect(result.ok).toBe(true);
     expect(result.url.startsWith("blob:")).toBe(true);

@@ -46,6 +46,10 @@ if (underTurbo && fs.existsSync(webDistPath)) {
     "  ✓ dist/web produced by turbo this run (fresh) — skipping rebuild",
   );
 } else {
+  execSync("pnpm --filter @covel/web generate:routes", {
+    cwd: projectRoot,
+    stdio: "inherit",
+  });
   execSync("pnpm --filter @covel/web build", {
     cwd: projectRoot,
     stdio: "inherit",

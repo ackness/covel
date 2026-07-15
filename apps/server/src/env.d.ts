@@ -24,6 +24,7 @@ import type { EventDirectory } from "./routes/api/bootstrap/event-directory.js";
 type LoadRuntimeFn = (
   manifest: RuntimeManifest,
   locale?: string,
+  sessionId?: string,
 ) => Promise<LoadedRuntime | undefined>;
 type GetConfigFn = (
   pluginId: string,
@@ -41,7 +42,10 @@ type GetPluginSourceFn = (pluginId: string) => PluginSource | undefined;
  * approval. Idempotent: returns immediately on the second call. No-op for
  * builtin/official plugins (their tools are loaded at boot).
  */
-type ActivatePluginLocalToolsFn = (pluginId: string) => Promise<void>;
+type ActivatePluginLocalToolsFn = (
+  pluginId: string,
+  sessionId?: string,
+) => Promise<void>;
 
 declare module "hono" {
   interface ContextVariableMap {

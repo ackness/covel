@@ -1,4 +1,5 @@
 import type { MediaRef } from "@covel/shared";
+import { sessionAuthHeaders } from "../session-credentials.js";
 
 /**
  * Upload an image file as session-owned media. Posts the raw bytes to
@@ -14,7 +15,10 @@ export async function uploadSessionMedia(
     `/api/media?sessionId=${encodeURIComponent(sessionId)}`,
     {
       method: "POST",
-      headers: { "Content-Type": file.type || "application/octet-stream" },
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+        ...sessionAuthHeaders(sessionId),
+      },
       body: file,
     },
   );

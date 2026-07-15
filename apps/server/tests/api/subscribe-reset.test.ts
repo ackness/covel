@@ -163,6 +163,52 @@ describe("H-05/H-06 system.reset control frame", () => {
     const replayed = nonControlFrames(frames);
     expect(replayed.map((f) => f.id)).toEqual([`${epoch}:4`, `${epoch}:5`]);
   });
+
+  it("forwards a live EventBus replay invalidation and closes the stream", async () => {
+    let publishReset = (): void => {};
+    const resetAwareBus: EventBus = {
+      ...eventBus,
+      onReset(callback) {
+        publishReset = () =>
+          callback({ sessionId: SESSION_ID, reason: "transport-gap" });
+        return () => {
+          publishReset = (): void => {};
+        };
+      },
+    };
+    const resetApp = makeApp(store, resetAwareBus);
+    const ac = new AbortController();
+    try {
+      const res = await resetApp.request(
+        `/api/events/stream?sessionId=${SESSION_ID}`,
+        { signal: ac.signal },
+      );
+      expect(res.status).toBe(200);
+      const reader = res.body!.getReader();
+
+      const connected = await reader.read();
+      expect(new TextDecoder().decode(connected.value)).toContain(
+        "event: system.connected",
+      );
+      // Let the route finish its replay→live cutover after the handshake write.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      publishReset();
+
+      const frames = await drain(reader, { deadlineMs: 400, want: 1 });
+      const reset = findReset(frames);
+      expect(reset).toBeDefined();
+      expect(reset!.id).toBeUndefined();
+      expect(JSON.parse(reset!.data!) as Record<string, unknown>).toMatchObject(
+        {
+          sessionId: SESSION_ID,
+          reason: "transport-gap",
+        },
+      );
+      await reader.cancel().catch(() => {});
+    } finally {
+      ac.abort();
+    }
+  });
 });
 
 describe("H-08 cleanup on handshake/replay failure", () => {

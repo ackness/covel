@@ -229,7 +229,7 @@ Provider 图片输入矩阵：
 event: system.reset
 data: {
   "sessionId": "<sessionId>",
-  "reason": "gap" | "epoch-change",
+  "reason": "gap" | "epoch-change" | "transport-gap",
   "epoch": "<current server epoch>",
   "oldestSeq": <number>,   // 缓存中最旧保留的 seq（无保留时为 0）
   "latestSeq": <number>,   // 本 epoch 已发出的最新 seq（未发过为 0）
@@ -241,10 +241,13 @@ data: {
 
 - `reason: "epoch-change"` —— 游标 epoch 与当前不符（含驱逐/重启后的换代，及无法解析的旧格式游标）。
 - `reason: "gap"` —— epoch 相符但环形缓存已越过游标（`afterSeq` 早于 `oldestSeq`），或游标 seq 超前于 `latestSeq`。
+- `reason: "transport-gap"` —— 跨 pod transport 检测到真实序号缺口；本地 replay 立即清空并换 epoch，所有已连接客户端收到 reset 后断线重连。
 
 该帧与 `system.connected` / `system.heartbeat` 一样**不带 `id:` 头**，因此不会污染 `EventSource` 的 `lastEventId`。
 
-`DEPLOYMENT_TIER=demo|commercial` 时该端点强制 session owner token 鉴权（audit S-02）：`EventSource` 无法设置 header，因此通过 `?session_token=<ownerToken>` query 参数携带；缺失或错误返回 `401 { code: "session_owner_required" }`。`self`（默认）层级不强制，现有客户端无需改动。详见 [`docs/reference/api.md`](./api.md) 鉴权章节。
+`DEPLOYMENT_TIER=demo|commercial` 时该端点强制 session owner token 鉴权（audit S-02）。内置 Web 使用 fetch-based SSE 并提交 `X-Session-Token`；原生 `EventSource` 客户端可用 `?session_token=<ownerToken>`。缺失或错误返回 `401 { code: "session_owner_required" }`。`self`（默认）层级不强制。详见 [`docs/reference/api.md`](./api.md) 鉴权章节。
+
+Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot、plugins、全部 active plugin data、未解决 suspensions 与 world，并缓冲期间到达的 live events 后重放。服务端对 SSE write 使用单一有界串行队列（256），连接预算为每 session 8、进程总计 512；超限返回 429，慢客户端溢出时主动断开。
 
 `apps/web/src/services/subscription.ts` 默认订阅 topic `runtime / state / game / plugin / session / system`（不含 `store`），并按 `event.topic` 路由分发；新增 topic 或 enum 事件时**必须同步更新该文件**。`/api/events/stream` 接受的合法 topic 由 `@covel/shared` 的 `SUBSCRIPTION_TOPICS` 单一真相派生（`subscribe.ts` 的 `VALID_TOPICS` 从中生成）：`runtime / state / game / plugin / session / store / system / trace / hooks`。其中 `trace`（TurnEmitter）与 `hooks`（hook pipeline）为运行时内部可观测性 topic——此前被运行时发出却被 `VALID_TOPICS` 拒绝（`topics=trace` 返回 400），现已纳入 union 并对齐。`/api/actions` 的回合内事件（`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）在 actions 流里以 data-only 帧推送，由 `apps/web/src/services/api/actions.ts: sendAction` 的回调消费，不经过 `subscription.ts`。
 

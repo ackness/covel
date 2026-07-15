@@ -22,6 +22,10 @@ import {
   createInProcessSessionLock,
   type SessionLock,
 } from "../../src/lib/session-lock.js";
+import {
+  hashSessionOwnerToken,
+  SESSION_OWNER_TOKEN_HASH_KEY,
+} from "../../src/routes/api/session/session-guard.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -971,6 +975,78 @@ describe("Snapshot routes", () => {
       // child session starts with zero.
       const childSuspensions = await store.listSuspensions(childId);
       expect(childSuspensions).toHaveLength(0);
+    });
+
+    it("mints an independent child owner token on hosted tiers", async () => {
+      const previousTier = process.env.DEPLOYMENT_TIER;
+      const previousOperator = process.env.COVEL_DESKTOP_REST_TOKEN;
+      process.env.DEPLOYMENT_TIER = "demo";
+      process.env.COVEL_DESKTOP_REST_TOKEN = "operator-secret";
+      const parentToken = "parent-owner-token";
+      await store.updateSession("sess-1", {
+        metadata: {
+          [SESSION_OWNER_TOKEN_HASH_KEY]: hashSessionOwnerToken(parentToken),
+        },
+      });
+
+      try {
+        const app = createTestApp(store);
+        const snapshotRes = await app.request("/api/sessions/sess-1/snapshot", {
+          method: "POST",
+          headers: { "X-Session-Token": parentToken },
+        });
+        expect(snapshotRes.status).toBe(201);
+        const snapshotBody = (await snapshotRes.json()) as {
+          snapshot: { id: string };
+        };
+
+        const forkRes = await app.request("/api/sessions/sess-1/fork", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Session-Token": parentToken,
+          },
+          body: JSON.stringify({ fromSnapshotId: snapshotBody.snapshot.id }),
+        });
+        expect(forkRes.status).toBe(201);
+        const fork = (await forkRes.json()) as {
+          sessionId: string;
+          ownerToken?: string;
+        };
+        expect(fork.ownerToken).toBeTypeOf("string");
+        expect(fork.ownerToken).not.toBe(parentToken);
+
+        const child = await store.getSession(fork.sessionId);
+        expect(child?.metadata?.[SESSION_OWNER_TOKEN_HASH_KEY]).toBe(
+          hashSessionOwnerToken(fork.ownerToken!),
+        );
+        expect(JSON.stringify(child)).not.toContain(fork.ownerToken);
+
+        expect(
+          (await app.request(`/api/sessions/${fork.sessionId}/snapshots`))
+            .status,
+        ).toBe(401);
+        expect(
+          (
+            await app.request(`/api/sessions/${fork.sessionId}/snapshots`, {
+              headers: { "X-Session-Token": parentToken },
+            })
+          ).status,
+        ).toBe(401);
+        expect(
+          (
+            await app.request(`/api/sessions/${fork.sessionId}/snapshots`, {
+              headers: { "X-Session-Token": fork.ownerToken! },
+            })
+          ).status,
+        ).toBe(200);
+      } finally {
+        if (previousTier === undefined) delete process.env.DEPLOYMENT_TIER;
+        else process.env.DEPLOYMENT_TIER = previousTier;
+        if (previousOperator === undefined)
+          delete process.env.COVEL_DESKTOP_REST_TOKEN;
+        else process.env.COVEL_DESKTOP_REST_TOKEN = previousOperator;
+      }
     });
   });
 });

@@ -41,7 +41,12 @@ async function triggerImageFromPrompt(
     const ok = window.confirm(
       i18n.t("coreImage.panel.authorizeConfirm", { runtimeId }),
     );
-    await resolveApproval(res.approvalId, ok ? "allow" : "deny", "session");
+    await resolveApproval(
+      res.approvalId,
+      ok ? "allow" : "deny",
+      "session",
+      sessionId,
+    );
     if (!ok) return;
     res = await postPluginRpc(sessionId, req);
   }

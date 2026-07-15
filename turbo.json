@@ -14,8 +14,17 @@
       "outputs": ["dist/**"]
     },
     "@covel/web#build": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "generate:routes"],
       "outputs": ["../../dist/web/**"]
+    },
+    "@covel/desktop#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "staging/**"]
+    },
+    "generate:routes": {
+      "cache": true,
+      "inputs": ["src/routes/**", "vite.config.ts", "package.json"],
+      "outputs": ["src/routeTree.gen.ts"]
     },
     "test": {
       "dependsOn": ["^build"],
@@ -30,6 +39,9 @@
     },
     "lint": {
       "dependsOn": ["^build"]
+    },
+    "@covel/web#lint": {
+      "dependsOn": ["^build", "generate:routes"]
     },
     "clean": {
       "cache": false

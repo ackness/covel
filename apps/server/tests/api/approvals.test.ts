@@ -101,9 +101,10 @@ async function dispatchRpc(app: Hono, sessionId: string): Promise<Response> {
 describe("Plugin RPC approval flow (PR-7)", () => {
   let app: Hono;
   let store: DataStore;
+  let gate: RpcApprovalGate;
 
   beforeEach(async () => {
-    ({ app, store } = setup());
+    ({ app, store, gate } = setup());
     await seedSession(store);
   });
 
@@ -129,7 +130,7 @@ describe("Plugin RPC approval flow (PR-7)", () => {
     const res = await app.request("/api/sessions/sess-approval-1/approvals");
     expect(res.status).toBe(200);
     const body = (await res.json()) as { pending: ReadonlyArray<unknown> };
-    expect(body.pending).toHaveLength(2);
+    expect(body.pending).toHaveLength(1);
   });
 
   it("decision allow + scope=once unblocks exactly one follow-up dispatch", async () => {
@@ -203,6 +204,38 @@ describe("Plugin RPC approval flow (PR-7)", () => {
       body: JSON.stringify({ decision: "maybe" }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it("requires session scope for approvals that unlock runtime code", async () => {
+    const pending = gate.evaluate({
+      sessionId: "sess-approval-1",
+      pluginId: "untrusted",
+      action: "runtime:agent",
+      payload: {},
+      trustLevel: "community",
+    });
+    if (pending.status !== "pending") throw new Error("expected pending");
+
+    const once = await app.request(
+      `/api/approvals/${pending.approvalId}/decision`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decision: "allow", scope: "once" }),
+      },
+    );
+    expect(once.status).toBe(400);
+    expect(gate.getPending(pending.approvalId)).toBeDefined();
+
+    const session = await app.request(
+      `/api/approvals/${pending.approvalId}/decision`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decision: "allow", scope: "session" }),
+      },
+    );
+    expect(session.status).toBe(200);
   });
 
   it("POST decision with unknown approvalId returns 404", async () => {

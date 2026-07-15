@@ -193,8 +193,9 @@ describe("commercial tier — owner guard on indirect session-scoped routes", ()
       expect((await decide(bearer(attacker.ownerToken))).status).toBe(401);
       // The denied attempts must not have consumed the pending entry.
       expect(h.gate.getPending(approvalId)).toBeDefined();
-      // The real owner can still decide it.
-      expect((await decide(bearer(victim.ownerToken))).status).toBe(200);
+      // Community code is process-global, so its approval requires the
+      // operator master credential (which also satisfies the owner guard).
+      expect((await decide(OPERATOR)).status).toBe(200);
     });
   });
 

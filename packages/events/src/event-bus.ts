@@ -65,10 +65,16 @@ export interface EventReplay {
 
 /** Handle returned by {@link EventBus.pin}. */
 export interface SessionPin {
-  /** Epoch of the pinned session state (stable while the pin is held). */
+  /** Epoch at pin acquisition; a transport-gap reset can supersede it. */
   readonly epoch: string;
   /** Release the pin. Idempotent. */
   release(): void;
+}
+
+/** Control signal emitted when the local replay cursor can no longer be trusted. */
+export interface EventBusReset {
+  readonly sessionId: string;
+  readonly reason: "transport-gap";
 }
 
 export interface EventBus {
@@ -78,12 +84,14 @@ export interface EventBus {
   getEventsAfter(sessionId: string, afterSeq: number): EventReplay;
   /**
    * Pin a session's replay state while it has an active subscriber: pinned
-   * sessions are excluded from LRU/TTL eviction (H-06), so an open SSE stream
-   * never observes its session's seq/epoch being reset mid-connection.
+   * sessions are excluded from LRU/TTL eviction (H-06). A transport gap can
+   * still invalidate replay explicitly and is announced through `onReset`.
    */
   pin(sessionId: string): SessionPin;
   /** Register a callback for every emitted event (as SubscriptionEvent). Returns unsubscribe function. */
   onEmit(callback: (event: SubscriptionEvent) => void): () => void;
+  /** Register for replay invalidations that require connected clients to reset. */
+  onReset?(callback: (reset: EventBusReset) => void): () => void;
   /**
    * Await all in-flight audit-event persistence. `emit()` is intentionally
    * non-blocking (audit trail is best-effort; authoritative state is durably
@@ -131,7 +139,10 @@ const MAX_TRANSPORT_INLINE_BYTES = 7500;
 const RECEIVE_STATES_MAX = 1024;
 
 interface SessionState {
+  /** Locally assigned replay sequence used only for SSE ids/buffering. */
   seq: number;
+  /** Per-origin transport sequence; remote delivery never increments it. */
+  transportSeq: number;
   /** Changes every time this state is (re)created — wire ids never repeat. */
   epoch: string;
   /** Active subscriber count; > 0 exempts the state from eviction. */
@@ -149,6 +160,8 @@ interface SessionState {
  */
 interface TransportFrame {
   readonly origin: string;
+  /** Sender session-state generation; absent on legacy frames. */
+  readonly stream?: string;
   readonly seq: number;
   readonly event?: SubscriptionEvent;
   readonly ref?: { readonly sessionId: string; readonly eventId: string };
@@ -156,6 +169,7 @@ interface TransportFrame {
 
 /** Per-(origin, session) receive-side ordering state. */
 interface ReceiveState {
+  readonly sessionId: string;
   /** Next expected origin seq; undefined until the first frame arrives. */
   expected: number | undefined;
   /** Out-of-order frames parked until their predecessors arrive. */
@@ -201,6 +215,12 @@ function parseTransportFrame(payload: string): TransportFrame | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
   const frame = raw as Record<string, unknown>;
   if (typeof frame.origin !== "string") return undefined;
+  if (
+    frame.stream !== undefined &&
+    (typeof frame.stream !== "string" || frame.stream.length === 0)
+  ) {
+    return undefined;
+  }
   if (typeof frame.seq !== "number" || !Number.isSafeInteger(frame.seq)) {
     return undefined;
   }
@@ -242,6 +262,7 @@ export function createEventBus(
   const sessions = new Map<string, SessionState>();
   // Global onEmit callbacks
   const emitCallbacks = new Set<(event: SubscriptionEvent) => void>();
+  const resetCallbacks = new Set<(reset: EventBusReset) => void>();
   const transport = options?.transport;
   // Identifies this bus instance on the transport channel so we can drop
   // self-echoed frames (PG NOTIFY delivers to the notifying pod too).
@@ -287,6 +308,7 @@ export function createEventBus(
     } else {
       state = {
         seq: 0,
+        transportSeq: 0,
         epoch: nextEpoch(),
         pinCount: 0,
         buffer: new RingBuffer<SubscriptionEvent>(RING_BUFFER_MAX),
@@ -314,6 +336,22 @@ export function createEventBus(
         cb(event);
       } catch (err) {
         console.error("[EventBus] onEmit callback error:", err);
+      }
+    }
+  }
+
+  function invalidateReplay(sessionId: string): void {
+    const state = touchSession(sessionId);
+    state.seq = 0;
+    state.transportSeq = 0;
+    state.epoch = nextEpoch();
+    state.buffer = new RingBuffer<SubscriptionEvent>(RING_BUFFER_MAX);
+    const reset: EventBusReset = { sessionId, reason: "transport-gap" };
+    for (const cb of resetCallbacks) {
+      try {
+        cb(reset);
+      } catch (err) {
+        console.error("[EventBus] onReset callback error:", err);
       }
     }
   }
@@ -431,7 +469,7 @@ export function createEventBus(
     broadcast(event);
   }
 
-  function getReceiveState(key: string): ReceiveState {
+  function getReceiveState(key: string, sessionId: string): ReceiveState {
     let rs = receiveStates.get(key);
     if (!rs) {
       if (receiveStates.size >= RECEIVE_STATES_MAX) {
@@ -441,6 +479,7 @@ export function createEventBus(
         receiveStates.delete(oldestKey);
       }
       rs = {
+        sessionId,
         expected: undefined,
         pending: new Map(),
         timer: undefined,
@@ -475,6 +514,14 @@ export function createEventBus(
     console.warn(
       `[EventBus] transport seq gap (expected ${rs.expected}, buffered from ${seqs[0]}) — delivering ${seqs.length} buffered frame(s), skipping the hole`,
     );
+    // Invalidate after every already-scheduled predecessor has delivered and
+    // before any post-hole frame is assigned a new local replay id. This makes
+    // the skipped transport range visible to SSE clients and replay callers.
+    rs.chain = rs.chain
+      .then(() => invalidateReplay(rs.sessionId))
+      .catch((err) => {
+        console.error("[EventBus] replay invalidation failed:", err);
+      });
     for (const seq of seqs) {
       scheduleDeliver(rs, rs.pending.get(seq)!);
     }
@@ -490,7 +537,11 @@ export function createEventBus(
     }
     if (frame.origin === originId) return; // self-echo
     const sessionId = frame.event?.sessionId ?? frame.ref!.sessionId;
-    const rs = getReceiveState(`${frame.origin} ${sessionId}`);
+    const stream = frame.stream ?? "legacy";
+    const rs = getReceiveState(
+      JSON.stringify([frame.origin, sessionId, stream]),
+      sessionId,
+    );
     if (rs.expected !== undefined && frame.seq < rs.expected) return; // duplicate/late
     if (rs.expected === undefined || frame.seq === rs.expected) {
       scheduleDeliver(rs, frame);
@@ -540,9 +591,12 @@ export function createEventBus(
       // ── Cross-pod fan-out (per-session serialized outbox, H-07) ──
       let persistSettle: ((ok: boolean) => void) | undefined;
       if (transport) {
+        state.transportSeq += 1;
+        const transportSeq = state.transportSeq;
         const frame = JSON.stringify({
           origin: originId,
-          seq,
+          stream: state.epoch,
+          seq: transportSeq,
           event: subEvent,
         } satisfies TransportFrame);
         if (
@@ -557,7 +611,8 @@ export function createEventBus(
           // this session queue behind the save so seq order is preserved.
           const refFrame = JSON.stringify({
             origin: originId,
-            seq,
+            stream: state.epoch,
+            seq: transportSeq,
             ref: { sessionId: message.sessionId, eventId: message.id },
           } satisfies TransportFrame);
           let settle!: (ok: boolean) => void;
@@ -570,7 +625,7 @@ export function createEventBus(
               await transport.publish(refFrame);
             } else {
               console.warn(
-                `[EventBus] oversize event "${message.id}" was not persisted — cross-pod fan-out skipped (seq ${seq} becomes a hole)`,
+                `[EventBus] oversize event "${message.id}" was not persisted — cross-pod fan-out skipped (seq ${transportSeq} becomes a hole)`,
               );
             }
           });
@@ -659,6 +714,13 @@ export function createEventBus(
       emitCallbacks.add(callback);
       return () => {
         emitCallbacks.delete(callback);
+      };
+    },
+
+    onReset(callback: (reset: EventBusReset) => void): () => void {
+      resetCallbacks.add(callback);
+      return () => {
+        resetCallbacks.delete(callback);
       };
     },
 

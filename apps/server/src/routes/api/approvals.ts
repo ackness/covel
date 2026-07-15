@@ -19,11 +19,17 @@
  */
 
 import { Hono } from "hono";
-import type { RpcApprovalGate } from "@covel/approval";
+import {
+  COMMUNITY_SERVER_CODE_ACTION,
+  type RpcApprovalGate,
+} from "@covel/approval";
 import type { RpcApprovalDecision } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { errorBody } from "../../api-error.js";
-import { checkSessionOwnerById } from "./session/session-guard.js";
+import {
+  checkHostedOperator,
+  checkSessionOwnerById,
+} from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -33,7 +39,10 @@ type Env = {
      * Lazy activator for community plugins' `tools.local` modules. Wired
      * by bootstrap; absent in narrow test harnesses (use optional chaining).
      */
-    activatePluginLocalTools?: (pluginId: string) => Promise<void>;
+    activatePluginLocalTools?: (
+      pluginId: string,
+      sessionId?: string,
+    ) => Promise<void>;
   };
 };
 
@@ -88,6 +97,10 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
       pendingForAuth.sessionId,
     );
     if (denied) return denied;
+    if (pendingForAuth.trustLevel === "community") {
+      const operatorDenied = checkHostedOperator(c);
+      if (operatorDenied) return operatorDenied;
+    }
   }
 
   let body: DecisionBody;
@@ -113,6 +126,25 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
     );
   }
 
+  // Runtime and plugin-enable approvals unlock server modules, hooks and
+  // tool registrations that outlive a single HTTP dispatch. Their safe
+  // meaning is therefore session-scoped; action-level RPC approvals retain
+  // the existing once/session choice.
+  if (
+    body.decision === "allow" &&
+    pendingForAuth &&
+    (pendingForAuth.action === COMMUNITY_SERVER_CODE_ACTION ||
+      pendingForAuth.action.startsWith("runtime:")) &&
+    body.scope !== "session"
+  ) {
+    return c.json(
+      errorBody(
+        "runtime and plugin server-code approvals require session scope",
+      ),
+      400,
+    );
+  }
+
   const decision: RpcApprovalDecision = {
     approvalId,
     decision: body.decision,
@@ -131,7 +163,10 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
   // are already loaded. Idempotent.
   if (decision.decision === "allow") {
     try {
-      await c.get("activatePluginLocalTools")?.(result.pending.pluginId);
+      await c.get("activatePluginLocalTools")?.(
+        result.pending.pluginId,
+        result.pending.sessionId,
+      );
     } catch (err) {
       // Activation failure is logged but does not roll back the approval —
       // the user's decision stands, and the next plugin-rpc call will retry

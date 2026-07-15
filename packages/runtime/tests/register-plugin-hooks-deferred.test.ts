@@ -57,14 +57,18 @@ describe("registerPluginHooks deferred gating (H-03)", () => {
     const rootPath = writeHandler(pluginId);
     const pipeline = createHookPipeline();
 
-    const registered = registerPluginHooks(pipeline, [
-      {
-        pluginId,
-        rootPath,
-        hooks: [{ event: "TurnStart", handler: "hook.mjs" }],
-        deferred: true,
-      },
-    ]);
+    const registered = registerPluginHooks(
+      pipeline,
+      [
+        {
+          pluginId,
+          rootPath,
+          hooks: [{ event: "TurnStart", handler: "hook.mjs" }],
+          deferred: true,
+        },
+      ],
+      { isDeferredAuthorized: (sessionId) => sessionId === "s1" },
+    );
     expect(registered).toBe(1);
     // Registration alone imports nothing.
     expect(importCounts()[pluginId]).toBeUndefined();
@@ -80,6 +84,13 @@ describe("registerPluginHooks deferred gating (H-03)", () => {
     const after = await pipeline.run("TurnStart", ctx, {});
     expect(after).toEqual({ action: "abort", reason: "handler ran" });
     expect(importCounts()[pluginId]).toBe(1);
+
+    const otherSession = await pipeline.run(
+      "TurnStart",
+      { ...ctx, sessionId: "s2" },
+      {},
+    );
+    expect(otherSession.action).toBe("continue");
   });
 
   it("activation is scoped to the pipeline instance", async () => {
@@ -93,8 +104,9 @@ describe("registerPluginHooks deferred gating (H-03)", () => {
     };
     const pipelineA = createHookPipeline();
     const pipelineB = createHookPipeline();
-    registerPluginHooks(pipelineA, [source]);
-    registerPluginHooks(pipelineB, [source]);
+    const opts = { isDeferredAuthorized: () => true };
+    registerPluginHooks(pipelineA, [source], opts);
+    registerPluginHooks(pipelineB, [source], opts);
 
     // Activating on A must not unlock the same plugin's hooks on B.
     activateDeferredPluginHooks(pipelineA, pluginId);
