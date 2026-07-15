@@ -13,6 +13,10 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "@covel/web#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["../../dist/web/**"]
+    },
     "test": {
       "dependsOn": ["^build"],
       "cache": true,
@@ -21,9 +25,7 @@
         "src/**",
         "tests/**",
         "vitest.config.ts",
-        "$TURBO_ROOT$/plugins/**/handler.js",
-        "$TURBO_ROOT$/plugins/**/guard.js",
-        "$TURBO_ROOT$/plugins/**/PLUGIN.md"
+        "$TURBO_ROOT$/plugins/**"
       ]
     },
     "lint": {

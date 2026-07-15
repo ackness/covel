@@ -32,10 +32,18 @@ console.log("=== Covel Desktop Build ===\n");
 // Standalone invocations (`pnpm build:electron` / `pnpm --filter
 // @covel/desktop dist`, which bypass turbo) still need this fallback.
 console.log("[1/4] Building web frontend...");
+// H-10: NEVER gate on existsSync(dist/web) — a stale dir from an old frontend
+// would be packaged silently. Standalone builds (`pnpm build:electron`,
+// `pnpm --filter @covel/desktop dist`) bypass turbo's freshness graph, so they
+// must ALWAYS rebuild. The only safe skip is when turbo itself drives the build:
+// the @covel/web#build task is sequenced first via the workspace dep, so
+// dist/web is already fresh. Turbo sets TURBO_HASH in every in-task env — use
+// that explicit signal, not directory existence.
 const webDistPath = path.join(projectRoot, "dist/web");
-if (fs.existsSync(webDistPath)) {
+const underTurbo = Boolean(process.env.TURBO_HASH);
+if (underTurbo && fs.existsSync(webDistPath)) {
   console.log(
-    "  ✓ dist/web already built — skipping (turbo build already produced it)",
+    "  ✓ dist/web produced by turbo this run (fresh) — skipping rebuild",
   );
 } else {
   execSync("pnpm --filter @covel/web build", {

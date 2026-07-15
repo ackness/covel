@@ -12,7 +12,7 @@
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
     "lint": "tsc --noEmit",
-    "test": "tsx src/zip-extract.selfcheck.ts",
+    "test": "tsx src/zip-extract.selfcheck.ts && tsx src/trusted-origin.selfcheck.ts",
     "pack": "pnpm build && electron-builder --dir",
     "dist": "pnpm build && electron-builder",
     "dist:mac": "pnpm build && electron-builder --mac",

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   COVEL_FEATURE_FLAGS,
@@ -214,6 +214,21 @@ describe("env registry", () => {
     expect(env.serverPort).toBe(3001);
     expect(env.rateLimitRpm).toBe(60);
     expect(env.compactorContextWindow).toBe(32768);
+  });
+
+  it("lowercase-normalizes DEPLOYMENT_TIER", () => {
+    const env = readRuntimeEnv({ DEPLOYMENT_TIER: "COMMERCIAL" });
+    expect(env.deploymentTier).toBe("commercial");
+  });
+
+  it("rejects an unknown DEPLOYMENT_TIER fail-safe to the most restrictive tier (M-06)", () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const env = readRuntimeEnv({ DEPLOYMENT_TIER: "Commercial-typo" });
+    expect(env.deploymentTier).toBe("commercial");
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining("Commercial-typo"),
+    );
+    spy.mockRestore();
   });
 
   it("keeps invalid enum values on fallback", () => {

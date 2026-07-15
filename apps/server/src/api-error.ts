@@ -41,14 +41,19 @@ export function errorBody<Code extends string = string>(
 }
 
 /**
- * Redact sensitive query params (e.g. signed media `token`) from a URL before
- * it hits logs — the raw string is kept everywhere else (routing, response).
+ * Redact sensitive query params (signed media `token`, SSE `session_token`
+ * owner auth) from a URL before it hits logs — the raw string is kept
+ * everywhere else (routing, response).
  */
+const SENSITIVE_QUERY_PARAMS = ["token", "session_token"];
+
 function redactSensitiveQueryParams(url: string): string {
   try {
     const parsed = new URL(url);
-    if (parsed.searchParams.has("token")) {
-      parsed.searchParams.set("token", "[redacted]");
+    for (const param of SENSITIVE_QUERY_PARAMS) {
+      if (parsed.searchParams.has(param)) {
+        parsed.searchParams.set(param, "[redacted]");
+      }
     }
     return parsed.toString();
   } catch {

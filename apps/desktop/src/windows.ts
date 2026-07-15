@@ -17,11 +17,23 @@ import {
 import { buildSplashHtml } from "./splash-screen.js";
 import { writeLog } from "./logging.js";
 import { t } from "./main-i18n.js";
+import { isSameTrustedOrigin } from "./trusted-origin.js";
 
 let mainWindow: BrowserWindow | null = null;
 
 export function getMainWindow(): BrowserWindow | null {
   return mainWindow;
+}
+
+/**
+ * H-09: true iff `candidateUrl` matches the main window's committed loopback
+ * origin (the local sidecar / dev server). Shared with ipc-handlers.ts so a
+ * sensitive IPC can reject any sender frame that isn't the trusted app origin.
+ */
+export function isTrustedFrameUrl(
+  candidateUrl: string | null | undefined,
+): boolean {
+  return isSameTrustedOrigin(mainWindow?.webContents.getURL(), candidateUrl);
 }
 
 /** Emit a typed IPC message to the focused / main window. */
@@ -287,6 +299,31 @@ export function createMainWindow(titleSuffix?: string): BrowserWindow {
     handleExternalLinkRequest(win, linkUrl);
     return { action: "deny" };
   });
+
+  // H-09: pin the main frame to the app's own loopback origin. setWindowOpenHandler
+  // only covers window.open/_blank — an in-window navigation (plugin UI, XSS,
+  // a redirect) could otherwise land on an attacker page that then calls
+  // `covelIpc` and reads raw provider keys. Block any main-frame navigation to
+  // a different origin; genuine external links are handed to the system browser
+  // (same policy as window.open). Programmatic loads from main (splash data:
+  // URL, navigateToApp) do NOT emit will-navigate, so this never fights them.
+  const guardNavigation = (
+    event: Electron.Event,
+    targetUrl: string,
+    _isInPlace?: boolean,
+    isMainFrame?: boolean,
+  ): void => {
+    if (isMainFrame === false) return; // subframe nav is left to CSP
+    if (isSameTrustedOrigin(win.webContents.getURL(), targetUrl)) return;
+    event.preventDefault();
+    writeLog(
+      "warn",
+      `[navigation] blocked main-frame navigation → ${targetUrl.slice(0, 120)}`,
+    );
+    handleExternalLinkRequest(win, targetUrl);
+  };
+  win.webContents.on("will-navigate", guardNavigation);
+  win.webContents.on("will-redirect", guardNavigation);
   win.on("closed", () => {
     if (mainWindow === win) mainWindow = null;
   });
