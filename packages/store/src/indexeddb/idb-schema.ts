@@ -168,17 +168,9 @@ export function upgradeBrowserIdbSchema(
 
   const snapshots = ensureStore(db, "state_snapshots", { keyPath: "id" });
   snapshots?.createIndex("sessionId", "sessionId");
-  if (snapshots) {
-    snapshots.createIndex("session_createdAt_id", [
-      "sessionId",
-      "createdAt",
-      "id",
-    ]);
-  } else if (oldVersion < 12) {
-    transaction
-      ?.objectStore("state_snapshots")
-      .createIndex("session_createdAt_id", ["sessionId", "createdAt", "id"]);
-  }
+  // Snapshot listing pagination reads the metadata store's keyset index
+  // (`state_snapshot_metadata.session_createdAt_id`, below), never this
+  // store's — so `state_snapshots` needs no keyset index (audit re-review C-1).
 
   const snapshotMetadata = ensureStore(db, "state_snapshot_metadata", {
     keyPath: "id",

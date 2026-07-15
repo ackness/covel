@@ -89,8 +89,14 @@ interface InternalState {
 
 const ONE_TIME_GRANT_TTL_MS = 60_000;
 
-/** Generic approval action used before importing community server code. */
-export const COMMUNITY_SERVER_CODE_ACTION = "plugin:server-code";
+/**
+ * Generic approval action used before importing community server code.
+ * Uses the reserved `covel:` framework namespace so a third-party plugin
+ * cannot declare a real action with this exact name and thereby satisfy the
+ * phase-2 action check from the phase-1 grant, eliding the second
+ * confirmation (audit re-review F5).
+ */
+export const COMMUNITY_SERVER_CODE_ACTION = "covel:plugin-server-code";
 
 /**
  * MEDIUM-1 fix: cap the pending-approval queue so a malicious caller cannot

@@ -68,13 +68,15 @@ function isAllowed(
 describe("gate.revoke (PR-7 — withdraw community grants mid-session)", () => {
   it("reports a live grant without consuming one-time approval", () => {
     const gate = createRpcApprovalGate();
-    grantOnce(gate, "sess-1", "p", "plugin:server-code");
+    grantOnce(gate, "sess-1", "p", "covel:plugin-server-code");
 
     expect(gate.hasGrant("sess-1", "p")).toBe(true);
-    expect(gate.hasGrant("sess-1", "p", "plugin:server-code")).toBe(true);
+    expect(gate.hasGrant("sess-1", "p", "covel:plugin-server-code")).toBe(true);
     expect(gate.hasGrant("sess-2", "p")).toBe(false);
 
-    expect(isAllowed(gate, "sess-1", "p", "plugin:server-code")).toBe(true);
+    expect(isAllowed(gate, "sess-1", "p", "covel:plugin-server-code")).toBe(
+      true,
+    );
     expect(gate.hasGrant("sess-1", "p")).toBe(false);
   });
 

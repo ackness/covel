@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 type Listener = () => void;
 
@@ -68,8 +68,14 @@ export function subscribeToStreamingChanges(listener: Listener): () => void {
 
 /** Subscribe one rendered message row to its own live text only. */
 export function useStreamingText(messageId: string): string | undefined {
+  // Stabilise the subscribe closure so useSyncExternalStore doesn't
+  // unsubscribe/resubscribe on every render (audit re-review B-1).
+  const subscribe = useCallback(
+    (listener: Listener) => subscribeToStreamingText(messageId, listener),
+    [messageId],
+  );
   return useSyncExternalStore(
-    (listener) => subscribeToStreamingText(messageId, listener),
+    subscribe,
     () => getStreamingText(messageId),
     () => undefined,
   );

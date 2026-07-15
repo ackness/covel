@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Changed
+
+- **Community plugins seeded by a world now require explicit approval on every tier.** A third-party (`community`-trust) plugin listed in a world manifest is no longer auto-activated and auto-loaded on first schedule — it is dropped from a session's active set at creation and must be explicitly enabled and approved (two phases: load the plugin's server code, then the specific action) before any of its code executes. This now applies on **all** deployment tiers, including local `self`/desktop, matching the documented community trust model (deferred `import()` until the user approves). **Bundled sample worlds are unaffected** — their plugins are `builtin`/`official` and still auto-load at boot. **Migration:** if you author a world that references a third-party community plugin, players must enable and approve it in-session; a previously-working self-tier world that relied on such a plugin auto-loading will start with it inactive until approved.
+
 ## [0.0.14] - 2026-07-13
 
 The agent-core release. Server-side plugin registration converges into a single `entry` factory (`covel.registerTool / on / registerRpc / registerWires`), players can steer or abort a turn while the LLM is still streaming, and a full-codebase audit hardened the turn/snapshot/fork consistency boundaries: proposal commits are now atomic under the session lock, auto snapshots capture post-commit state, forks restore session lifecycle from the snapshot itself, and outbound plugin fetches pin DNS resolution against rebinding.

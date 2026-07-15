@@ -86,7 +86,7 @@ describe("plugin-rpc-ui", () => {
         approvalId: "approval-1",
         pending: {
           pluginId: "server-plugin",
-          action: "plugin:server-code",
+          action: "covel:plugin-server-code",
         },
       },
       sessionId: "session-1",
@@ -131,7 +131,7 @@ describe("plugin-rpc-ui", () => {
         approvalId: "approval-server-code",
         pending: {
           pluginId: "server-plugin",
-          action: "plugin:server-code",
+          action: "covel:plugin-server-code",
         },
       },
       sessionId: "session-1",
@@ -147,7 +147,7 @@ describe("plugin-rpc-ui", () => {
     expect(confirm).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        message: expect.stringContaining("plugin:server-code"),
+        message: expect.stringContaining("covel:plugin-server-code"),
       }),
     );
     expect(confirm).toHaveBeenNthCalledWith(

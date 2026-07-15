@@ -151,7 +151,7 @@ describe("enableSessionPlugin", () => {
       approvalId: "approval-1",
       pending: {
         pluginId: "community-memory",
-        action: "plugin:server-code",
+        action: "covel:plugin-server-code",
       },
     };
     mockFetchOnce(pending, 202);

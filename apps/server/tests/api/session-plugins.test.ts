@@ -404,7 +404,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       const approval = rpcApprovalGate.evaluate({
         sessionId: "sess-reverse-conflict",
         pluginId: "alternate-engine",
-        action: "plugin:server-code",
+        action: "covel:plugin-server-code",
         payload: {},
         trustLevel: "community",
       });

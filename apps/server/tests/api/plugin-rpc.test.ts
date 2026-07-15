@@ -507,7 +507,7 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
     };
     expect(body.status).toBe("approval-required");
     expect(typeof body.approvalId).toBe("string");
-    expect(body.pending?.action).toBe("plugin:server-code");
+    expect(body.pending?.action).toBe("covel:plugin-server-code");
     // The community entry MUST NOT have run before approval.
     expect(activateCalls()).toBe(0);
     expect(registry.getPluginAction(PLUGIN_ID, "entry-action")).toBeUndefined();
