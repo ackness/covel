@@ -18,8 +18,12 @@
  *
  * Original messages are NEVER deleted. They are only tagged.
  *
- * No cascade-compact: if any message in the to-compact window already has
- * a `compactedAtTurnId` set, the whole compaction is skipped for this round.
+ * Multi-round compaction: each round compacts only the uncompacted region
+ * between the last already-tagged message and the protect boundary, so long
+ * sessions keep compacting (round 2, 3, …) instead of stalling after the
+ * first summary. The token estimate mirrors the effective prompt view
+ * (summaries substitute their tagged raw messages — see
+ * `message-insertion.ts`), not the raw history.
  */
 
 import type { SimpleCompletionAdapter } from "@covel/shared";
@@ -193,10 +197,10 @@ function computeProtectStart(
  * Attempt to compact the oldest portion of the message history for a session.
  *
  * The function is a no-op when:
- * - The estimated token count is below the threshold.
- * - There are no messages to compact (the protect window covers everything).
- * - Any message in the to-compact window already has `compactedAtTurnId` set
- *   (no cascade-compaction).
+ * - The estimated token count (effective prompt view: summaries + uncompacted
+ *   messages) is below the threshold.
+ * - There are no uncompacted messages between the last compaction boundary
+ *   and the protect window.
  * - The fast LLM call fails (logs and returns `{ compacted: false }`).
  *
  * @param sessionId - Session to compact.
@@ -221,13 +225,33 @@ export async function maybeCompact(
   const focusSections = opts?.focusSections ?? [];
   const locale = opts?.locale ?? "zh-CN";
 
-  // 1. Estimate total tokens
+  // 1. Estimate tokens from the effective prompt view. Already-compacted raw
+  //    messages are substituted by their summary at prompt-build time (see
+  //    message-insertion.ts), so counting their raw content would permanently
+  //    inflate the estimate and re-trigger compaction after the first round.
   const systemTokens = deps.estimator(systemPrompt);
-  const messageTokens = messages.reduce(
-    (sum, m) => sum + deps.estimator(m.content),
-    0,
-  );
-  const totalTokens = systemTokens + messageTokens;
+  const compactedSummaryIds = new Set<string>();
+  let lastCompactedIndex = -1;
+  let messageTokens = 0;
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]!;
+    if (m.compactedAtTurnId != null) {
+      compactedSummaryIds.add(m.compactedAtTurnId);
+      lastCompactedIndex = i;
+    } else {
+      messageTokens += deps.estimator(m.content);
+    }
+  }
+  let summaryTokens = 0;
+  if (compactedSummaryIds.size > 0 && deps.store.listSessionSummaries) {
+    const summaries = await deps.store.listSessionSummaries(sessionId);
+    for (const s of summaries) {
+      if (compactedSummaryIds.has(s.id)) {
+        summaryTokens += deps.estimator(s.content);
+      }
+    }
+  }
+  const totalTokens = systemTokens + messageTokens + summaryTokens;
   const tokenThreshold = deps.contextWindow * threshold;
 
   if (totalTokens <= tokenThreshold) {
@@ -241,19 +265,17 @@ export async function maybeCompact(
     protectLastNMessages,
   );
 
-  // Nothing to compact (protect window covers everything)
-  if (protectStart === 0) {
-    return { compacted: false };
-  }
+  // Compaction window = uncompacted region between the last already-tagged
+  // message and the protect boundary. Starting after the last tagged message
+  // (instead of index 0) lets later rounds pick up the fresh region; the old
+  // slice-from-0 + "already tagged → skip" guard stalled compaction forever
+  // after the first successful round.
+  // ponytail: each round adds one more summary block to the prompt view;
+  // rolling-merge of prior summaries into the new one is deferred until
+  // summary-block accumulation measurably matters.
+  const toCompact = messages.slice(lastCompactedIndex + 1, protectStart);
 
-  const toCompact = messages.slice(0, protectStart);
-
-  // No cascade: if any message in to-compact is already tagged, skip
-  if (toCompact.some((m) => m.compactedAtTurnId != null)) {
-    return { compacted: false };
-  }
-
-  // Need at least 1 message to compact
+  // Nothing new to compact (protect window reaches the last boundary)
   if (toCompact.length === 0) {
     return { compacted: false };
   }

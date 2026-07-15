@@ -57,6 +57,16 @@ export interface SessionContextStore {
     sessionId: string,
   ): Promise<readonly LorebookEntryRecord[]>;
 
+  // ── Reads (compactor.ts) ────────────────────────────────────────
+  /**
+   * Optional — the compactor uses it to estimate the effective prompt size
+   * (summaries substitute their compacted raw messages). Older mock stores
+   * may not implement it; the estimate then skips summary tokens.
+   */
+  listSessionSummaries?(
+    sessionId: string,
+  ): Promise<readonly SessionSummaryRecord[]>;
+
   // ── Writes (compactor.ts) ───────────────────────────────────────
   saveSessionSummary(record: SessionSummaryRecord): Promise<void>;
   tagTurnMessagesCompacted(
