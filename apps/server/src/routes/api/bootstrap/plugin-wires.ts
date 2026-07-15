@@ -29,9 +29,7 @@ import {
   registerSpeechWire,
   registerTranscriptionWire,
   validateBaseUrlForPlugin,
-  type ImageWire,
-  type SpeechWire,
-  type TranscriptionWire,
+  type WireModuleShape,
 } from "@covel/ai-provider";
 
 export interface BootstrapPluginWiresParams {
@@ -44,11 +42,9 @@ export interface BootstrapPluginWires {
   readonly ensurePluginWires: (pluginId: string) => Promise<void>;
 }
 
-export interface WireModuleShape {
-  readonly image?: readonly ImageWire[];
-  readonly speech?: readonly SpeechWire[];
-  readonly transcription?: readonly TranscriptionWire[];
-}
+// The wires-module shape is part of the Public Plugin API and now lives in
+// @covel/ai-provider; re-exported here for the bootstrap modules.
+export type { WireModuleShape } from "@covel/ai-provider";
 
 /** Injected into factory-form wires modules so community plugins get the
  *  framework's SSRF guard + retrying fetch without importing @covel/ai-provider. */

@@ -241,6 +241,29 @@ async function loadUiSpecs(
 }
 
 /**
+ * Level 1.5: Load only a runtime's manifest + UI specs — no handler / guard
+ * imports. UI specs are data (JSON files, or a recorded component path), so
+ * this path never executes plugin JS and is safe for untrusted (community)
+ * plugins whose code must not run before approval (S-04).
+ */
+export async function loadRuntimeUi(
+  discovery: PluginDiscoveryResult,
+  runtimeName: string,
+  locale?: string,
+): Promise<Pick<LoadedRuntime, "manifest" | "uiSpecs">> {
+  const runtimeDir = resolveRuntimeDir(discovery, runtimeName);
+  const pluginMdPath = await resolveLocalizedPluginMd(runtimeDir, locale);
+  const content = await fs.readFile(pluginMdPath, "utf-8");
+  const parsed = parsePluginMd(content, pluginMdPath);
+  const uiSpecs = await loadUiSpecs(
+    runtimeDir,
+    discovery.rootPath,
+    parsed.manifest.ui,
+  );
+  return { manifest: parsed.manifest, uiSpecs };
+}
+
+/**
  * Level 2: Fully load a runtime for execution.
  * Reads prompt template, output schema.
  *

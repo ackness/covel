@@ -328,6 +328,74 @@ export default async function (covel) {
     expect(own?.pluginId).toBe("entry-scope-a");
   });
 
+  it("default-denies core-entity mutators on a community toolkit.store (S-03)", async () => {
+    // A community entry gets an allowlist store view: scoped plugin_data plus
+    // read-only session/turn-message lookups. Cross-session and core-entity
+    // mutators (character/session/message/…) must throw, not forward.
+    const p = writePlugin(
+      "entry-deny-a",
+      `
+export default async function (covel) {
+  const errors = {};
+  const attempt = async (name, fn) => {
+    try { await fn(); errors[name] = ""; }
+    catch (e) { errors[name] = String((e && e.message) || e); }
+  };
+  const store = covel.toolkit.store;
+  await attempt("upsertCharacter", () => store.upsertCharacter({
+    id: "c1", sessionId: "other-session", name: "Mallory",
+  }));
+  await attempt("updateSession", () => store.updateSession("other-session", { status: "ended" }));
+  await attempt("deleteSession", () => store.deleteSession("other-session"));
+  await attempt("addMessage", () => store.addMessage({
+    id: "m1", sessionId: "other-session", role: "user", content: "hi",
+  }));
+  await attempt("addTraceEvent", () => store.addTraceEvent({ id: "t1", sessionId: "other-session" }));
+  await attempt("listPluginDataSessionScope", () => store.listPluginDataSessionScope("s1"));
+  // Allowlisted read-only lookups must keep working.
+  await attempt("getSession", () => store.getSession("s1"));
+  await attempt("listTurnMessages", () => store.listTurnMessages("s1"));
+  await store.setPluginData({
+    id: "x", sessionId: "s1", pluginId: "ignored", namespace: "ns", key: "errors",
+    value: errors, createdAt: "t", updatedAt: "t",
+  });
+}
+`,
+      { source: "community" },
+    );
+    const params = makeParams([p]);
+    const { ensurePluginEntry } = await createBootstrapPluginEntries(params);
+    await ensurePluginEntry("entry-deny-a");
+
+    const row = await params.store.getPluginData(
+      "s1",
+      "entry-deny-a",
+      "ns",
+      "errors",
+    );
+    const errors = row?.value as Record<string, string>;
+    const DENIED = "not available to a community entry toolkit";
+    for (const method of [
+      "upsertCharacter",
+      "updateSession",
+      "deleteSession",
+      "addMessage",
+      "addTraceEvent",
+      "listPluginDataSessionScope",
+    ]) {
+      expect(errors[method], method).toContain(DENIED);
+      expect(errors[method], method).toContain(method);
+    }
+    // Allowed reads did not throw.
+    expect(errors.getSession).toBe("");
+    expect(errors.listTurnMessages).toBe("");
+
+    // Nothing actually landed on the raw store.
+    expect(await params.store.listCharacters("other-session")).toEqual([]);
+    expect(await params.store.listMessages("other-session")).toEqual([]);
+    expect(await params.store.getSession("other-session")).toBeNull();
+  });
+
   it("leaves a builtin entry's toolkit.store unscoped (parity with tools.local)", async () => {
     const p = writePlugin(
       "entry-raw-a",

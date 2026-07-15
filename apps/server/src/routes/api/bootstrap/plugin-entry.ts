@@ -32,17 +32,12 @@ import {
   type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
 import type {
-  HookHandler,
   HookPipeline,
+  PluginAPI,
   PluginRpcRegistry,
-  RpcHandler,
+  PluginToolkit,
 } from "@covel/runtime";
-import {
-  HOOK_EVENTS,
-  type HookEnforce,
-  type HookEventName,
-  type RpcTrustLevel,
-} from "@covel/shared";
+import { HOOK_EVENTS, type RpcTrustLevel } from "@covel/shared";
 import type { DataStore, PluginDataRecord } from "@covel/store";
 import {
   shortId,
@@ -52,60 +47,13 @@ import {
   type ToolModule,
 } from "@covel/tools";
 import { z } from "zod";
-import { registerNamespaced, type WireModuleShape } from "./plugin-wires.js";
+import { registerNamespaced } from "./plugin-wires.js";
 
-/** Helper bag handed to entry factories — same surface the legacy
- *  `tools.local` factory injection provided, so migrated tool files keep
- *  their `({ tool, z, store, ... })` signature unchanged. */
-export interface PluginToolkit {
-  readonly tool: typeof tool;
-  readonly z: typeof z;
-  readonly shortId: typeof shortId;
-  readonly shortIdBatch: typeof shortIdBatch;
-  readonly withPendingProposals: typeof withPendingProposals;
-  readonly store: DataStore;
-}
-
-export interface PluginHookOptions {
-  /** Payload predicate — handler only fires when it returns true. */
-  readonly match?: (payload: unknown) => boolean;
-  readonly timeoutMs?: number;
-  readonly enforce?: HookEnforce;
-}
-
-export interface PluginRpcOptions {
-  readonly description?: string;
-  readonly streaming?: boolean;
-  /** May only restrict (never escalate) the plugin's source trust. */
-  readonly trustLevel?: RpcTrustLevel;
-}
-
-/** The facade an entry factory receives. */
-export interface PluginAPI {
-  readonly pluginId: string;
-  readonly toolkit: PluginToolkit;
-  /** SSRF-guarded fetch helpers for wire implementations. */
-  readonly http: {
-    readonly fetchWithRetry: typeof fetchWithRetry;
-    readonly validateBaseUrl: typeof validateBaseUrlForPlugin;
-  };
-  /** Register a local tool (scoped to this plugin, like `tools.local`). */
-  registerTool(toolModule: ToolModule): void;
-  /** Register a lifecycle hook handler (16 events, same semantics as `hooks`). */
-  on(
-    event: HookEventName,
-    handler: HookHandler,
-    options?: PluginHookOptions,
-  ): void;
-  /** Register an RPC action with an inline handler (same gate as `rpc`). */
-  registerRpc(
-    action: string,
-    handler: RpcHandler,
-    options?: PluginRpcOptions,
-  ): void;
-  /** Register media wires (namespaced `<pluginId>/<wireId>`, like `wires`). */
-  registerWires(wires: WireModuleShape): void;
-}
+// `PluginAPI` / `PluginToolkit` (and the related option types) are the
+// Public Plugin API — they live in @covel/runtime so plugin authors can
+// import them. `buildApi` below is annotated `: PluginAPI`, so this
+// implementation cannot drift from the published contract without a
+// compile error.
 
 export interface BootstrapPluginEntriesParams {
   readonly discoveryMap: ReadonlyMap<string, PluginDiscoveryResult>;
@@ -134,20 +82,34 @@ export interface BootstrapPluginEntries {
 }
 
 /**
- * Wrap a DataStore so plugin-data access is clamped to `pluginId`, ignoring
- * any pluginId the caller passes. Community entry factories close over
- * `toolkit.store`; without this a handler could read/write another plugin's
- * `plugin_data` namespace by supplying a different id — bypassing the
- * per-dispatch community store view (`createRpcHandlerStoreView`).
+ * Read-only DataStore methods a community entry toolkit may call unscoped —
+ * the same lookup surface `createFunctionStoreView` grants community
+ * function-runtime handlers (session + turn-message reads). Everything not
+ * listed here and not a scoped plugin-data override throws (S-03).
+ */
+const COMMUNITY_READ_ALLOWLIST: ReadonlySet<PropertyKey> = new Set([
+  "getSession",
+  "listTurnMessages",
+  "listRecentTurnMessages",
+]);
+
+/**
+ * Community-facing store view: a default-DENY allowlist proxy (S-03).
+ *
+ * Community entry factories close over `toolkit.store` for the lifetime of
+ * the process, so this view must be safe on its own:
+ *  - `plugin_data` access is clamped to the entry's own `pluginId` — any
+ *    caller-supplied id is ignored — so it cannot reach another plugin's
+ *    namespace (bypassing the per-dispatch `createRpcHandlerStoreView`);
+ *  - the small read-only lookup set above forwards to the raw store;
+ *  - EVERY other DataStore method (session/character/world/message/trace/
+ *    state/snapshot mutators, cross-plugin reads, `withTransaction`, `close`)
+ *    throws a clear error — community writes must flow through proposals →
+ *    validate → commit, never direct store access.
  *
  * Session scoping is NOT possible here (entries register at activation time,
- * before any request), so this scopes what it can: the pluginId dimension.
- * Everything else forwards to the raw store unchanged via Proxy.
- *
- * ponytail: clamps the pluginId dimension only. Per-session scoping needs the
- * request-time view (createRpcHandlerStoreView) — community RPC dispatch
- * already applies that on top. Upgrade path: thread a session-scoped store
- * into function-runtime handlers if entries ever run per-session.
+ * before any request), so `plugin_data` reads/writes accept any sessionId;
+ * the request-time views clamp that dimension per dispatch.
  */
 function scopeStoreToPlugin(store: DataStore, pluginId: string): DataStore {
   const rebuildId = (record: PluginDataRecord): PluginDataRecord => ({
@@ -165,18 +127,25 @@ function scopeStoreToPlugin(store: DataStore, pluginId: string): DataStore {
       store.listPluginData(sessionId, pluginId, namespace, pagination),
     deletePluginData: (sessionId, _pluginId, namespace, key) =>
       store.deletePluginData(sessionId, pluginId, namespace, key),
-    listPluginDataSessionScope: () => {
-      throw new Error(
-        `[plugin-entry] ${pluginId}: listPluginDataSessionScope() is a cross-plugin read, not available to a community entry toolkit`,
-      );
-    },
   };
   return new Proxy(store, {
     get(target, prop, receiver) {
       if (Object.hasOwn(overrides, prop)) {
         return (overrides as Record<PropertyKey, unknown>)[prop];
       }
-      return Reflect.get(target, prop, receiver);
+      const value = Reflect.get(target, prop, receiver);
+      if (COMMUNITY_READ_ALLOWLIST.has(prop) && typeof value === "function") {
+        return value.bind(target);
+      }
+      // Non-methods forward untouched — this keeps `await`'s `then` probe,
+      // Symbol.toStringTag, etc. working on the proxied store.
+      if (typeof value !== "function") return value;
+      return () => {
+        throw new Error(
+          `[plugin-entry] ${pluginId}: store.${String(prop)}() is not available to a community entry toolkit — ` +
+            `writes must go through proposals; only scoped plugin_data access and read-only session/turn-message lookups are permitted`,
+        );
+      };
     },
   });
 }
