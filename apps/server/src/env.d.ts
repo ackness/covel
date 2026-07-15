@@ -106,6 +106,13 @@ declare module "hono" {
      * handlers must use optional-chaining: `await c.get('prepareToolsForSession')?.(sid)`.
      */
     prepareToolsForSession?: PrepareToolsForSessionFn;
+    /**
+     * Drop the per-session `(create|update)-character` override cache entry.
+     * Session end/delete routes call this so the cache does not leak one
+     * entry per session for the process lifetime. Optional so hand-built
+     * test DI need not wire it.
+     */
+    clearSessionToolOverrides?: (sessionId: string) => void;
     getPluginSource?: GetPluginSourceFn;
     /**
      * Reserved plugin IDs (the bundled `plugins/` set, derived at boot from

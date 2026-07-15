@@ -8,6 +8,7 @@ import type { PluginRegistry } from "@covel/plugin-loader";
 import { buildSessionDiscoverySnapshot } from "./discovery.js";
 import { nextCursorFrom, parseCursorQuery } from "./cursor-params.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
+import { resolveSessionParam } from "./session/session-guard.js";
 
 /** Default per-page event window for the paged turns endpoint. */
 const TRACE_PAGE_EVENT_LIMIT = 400;
@@ -65,6 +66,10 @@ export const traceRoutes = new Hono<Env>();
 traceRoutes.get("/:sessionId", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("sessionId");
+  // Traces contain full prompts/LLM output — session-existence + owner guard
+  // (S-02); previously this surface skipped the existence check entirely.
+  const guard = await resolveSessionParam(c, "sessionId");
+  if (!guard.ok) return guard.response;
 
   const events = await store.listTraceEvents(sessionId);
   const discovery = await buildSessionDiscoverySnapshot({
@@ -86,6 +91,8 @@ traceRoutes.get("/:sessionId", async (c) => {
 traceRoutes.get("/:sessionId/turns", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("sessionId");
+  const guard = await resolveSessionParam(c, "sessionId");
+  if (!guard.ok) return guard.response;
 
   const events = await store.listTraceEvents(sessionId);
   const discovery = await buildSessionDiscoverySnapshot({
@@ -115,6 +122,8 @@ traceRoutes.get(
   async (c) => {
     const store = c.get("store");
     const sessionId = c.req.param("sessionId");
+    const guard = await resolveSessionParam(c, "sessionId");
+    if (!guard.ok) return guard.response;
     const { limit, before } = parseCursorQuery(c, TRACE_PAGE_EVENT_LIMIT);
 
     const events = await store.listTraceEventsPage(sessionId, {

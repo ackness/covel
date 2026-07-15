@@ -222,9 +222,14 @@ export function computeAttemptBudget(
   policy: RetryPolicy,
   deadline: number,
 ): number {
+  const remainingMs = deadline - Date.now();
+  // Past the deadline: no budget. Granting the 1s floor here would let an
+  // attempt run ~1s beyond the runtime deadline. assertDeadlineNotReached
+  // usually throws first; this guards races and direct callers.
+  if (remainingMs <= 0) return 0;
   return Math.min(
     policy.callTimeoutMs,
-    Math.max(MIN_ATTEMPT_BUDGET_MS, deadline - Date.now()),
+    Math.max(MIN_ATTEMPT_BUDGET_MS, remainingMs),
   );
 }
 

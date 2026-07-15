@@ -140,6 +140,10 @@ export function readRuntimeEnv(source: EnvSource = defaultSource()) {
       source,
     ),
     serverPort: readEnvInt("SERVER_PORT", 3001, source),
+    // Loopback by default (audit S-02): T1 self-deploy / desktop must not
+    // expose the unauthenticated API on all interfaces. Containers and
+    // multi-pod deploys opt into a public interface explicitly.
+    bindHost: readEnvString("COVEL_BIND_HOST", "127.0.0.1", source)!,
     nodeEnv: readEnvChoice(
       "NODE_ENV",
       ["development", "production", "test"] as const,

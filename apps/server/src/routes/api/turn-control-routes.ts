@@ -19,6 +19,7 @@ import {
   retractSteering,
   steerActiveTurn,
 } from "./turn-control.js";
+import { checkSessionOwner } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -42,6 +43,9 @@ turnControlRoutes.post("/:id/steer", rateLimiter({ max: 30 }), async (c) => {
   if (!session) {
     return c.json(errorBody("Session not found"), 404);
   }
+  // Owner guard (hosted tiers, S-02).
+  const denied = checkSessionOwner(c, session);
+  if (denied) return denied;
 
   const steered = steerActiveTurn(sessionId, message);
   if (!steered) {
@@ -76,6 +80,9 @@ turnControlRoutes.post("/:id/abort", rateLimiter({ max: 30 }), async (c) => {
   if (!session) {
     return c.json(errorBody("Session not found"), 404);
   }
+  // Owner guard (hosted tiers, S-02).
+  const denied = checkSessionOwner(c, session);
+  if (denied) return denied;
 
   const aborted = abortActiveTurn(sessionId);
   if (!aborted) {

@@ -109,6 +109,13 @@ describe("env registry", () => {
     expect(env.mediaBackend).toBe("mirror");
     expect(env.vectorBackend).toBe("embedded");
     expect(env.serverPort).toBe(3001);
+    // Audit S-02: the server must bind loopback unless explicitly opted out.
+    expect(env.bindHost).toBe("127.0.0.1");
+  });
+
+  it("honors an explicit COVEL_BIND_HOST opt-in (containers/hosted)", () => {
+    const env = readRuntimeEnv({ COVEL_BIND_HOST: "0.0.0.0" });
+    expect(env.bindHost).toBe("0.0.0.0");
   });
 
   it("derives the default SQLite path from COVEL_DATA_ROOT when SQLITE_PATH is omitted", () => {

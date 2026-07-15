@@ -42,6 +42,27 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
   （`/api/actions`、`/api/worlds/:id/sync-data` 等）保持各自既有 404 文案不变。
 - `plugin-rpc` 通道保留其专属信封 `{ status: "error", error, code }`（见下文 plugin-rpc 小节），不并入通用信封。
 
+### 鉴权：Session owner token（audit S-02）
+
+`POST /api/sessions` 创建会话时会铸造一个不可猜测的 **owner token**，仅在创建响应中返回一次（响应字段 `ownerToken`）；服务端只保存其 SHA-256 哈希（`session.metadata.ownerTokenHash`），任何读取端点都不会再泄露原始 token。
+
+**分层强制（tiered enforcement）**：
+
+| `DEPLOYMENT_TIER`     | 行为                                                                                                                                                                                                                                                                                                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `self`（默认）/ 桌面  | **不强制**。单机本地游玩零 token 可用；网络边界由默认回环监听保障（`COVEL_BIND_HOST=127.0.0.1`，见 env-registry）。带 token 也不校验。                                                                                                                                                                                                                             |
+| `demo` / `commercial` | **硬性强制**。所有会话作用域端点（session CRUD、messages、traces、actions、plugin-rpc、steer/abort、SSE subscribe、snapshots、state 等经 `resolveSessionParam` 的路由）缺失或错误 token 一律返回 `401 { code: "session_owner_required" }`。无哈希的历史会话 fail-closed。`GET /api/sessions` 列表在这两个层级仅对持有运维 token 的调用方返回内容，其余返回空列表。 |
+
+**Token 提交方式**（三选一）：
+
+1. `Authorization: Bearer <ownerToken>`
+2. `X-Session-Token: <ownerToken>`
+3. `?session_token=<ownerToken>` query 参数（供无法设置 header 的 EventSource / SSE 客户端使用）
+
+**运维 master token**：设置了 `COVEL_DESKTOP_REST_TOKEN` 时，以该值作为 Bearer token 可通过任意会话的 owner 校验（管理工具 / e2e harness 用）。`DEPLOYMENT_TIER=commercial` 启动时若未配置该 token，`validateSecurityPosture` 会直接拒绝启动。
+
+> CORS（`CORS_ORIGIN`）只是浏览器策略，**不构成鉴权**；真正的授权边界是 owner token + 部署层级 + 回环监听。
+
 ---
 
 ## 快速开始
@@ -375,11 +396,12 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 > **接入状态（2026-04-27）**：服务端手动快照、列表和 fork 能力已实现并有测试覆盖；当前内置 Web UI 只直接使用 `GET /api/sessions/:id/snapshot` 做恢复/重连，暂未提供手动快照列表或 fork 操作界面。
 
-| 方法 | 路径                          | 描述                                                               |
-| ---- | ----------------------------- | ------------------------------------------------------------------ |
-| POST | `/api/sessions/:id/snapshot`  | 创建一份手动快照（kind=`manual`）                                  |
-| GET  | `/api/sessions/:id/snapshots` | 列出当前 session 所有物化快照（auto / manual / fork）              |
-| POST | `/api/sessions/:id/fork`      | 从指定 snapshotId 物化一个新 session，拷贝状态与截至 cursor 的消息 |
+| 方法 | 路径                                      | 描述                                                               |
+| ---- | ----------------------------------------- | ------------------------------------------------------------------ |
+| POST | `/api/sessions/:id/snapshot`              | 创建一份手动快照（kind=`manual`）                                  |
+| GET  | `/api/sessions/:id/snapshots`             | 分页列出快照元数据（auto / manual / fork，不含 payload）           |
+| GET  | `/api/sessions/:id/snapshots/:snapshotId` | 按 id 获取单个快照（含完整 payload）                               |
+| POST | `/api/sessions/:id/fork`                  | 从指定 snapshotId 物化一个新 session，拷贝状态与截至 cursor 的消息 |
 
 ### 角色数据
 
@@ -932,12 +954,15 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
   "preGameCompleted": [],
   "activePlugins": ["pregame", "narrator", "codex"],
   "createdAt": "2025-01-15T10:00:00.000Z",
-  "updatedAt": "2025-01-15T10:00:00.000Z"
+  "updatedAt": "2025-01-15T10:00:00.000Z",
+  "metadata": { "ownerTokenHash": "<sha256-hex>" },
+  "ownerToken": "e7b2c4d1-…"
 }
 ```
 
 **响应字段**:
 
+- `ownerToken`(string) — 会话 owner token，**仅此一次返回**（服务端只存哈希）。`DEPLOYMENT_TIER=demo|commercial` 下所有会话作用域端点都要求携带它（见「鉴权」章节）；`self` 层级可忽略
 - `status`(`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态（turn-band 重构后替代原先的 `phase` 字段）
 - `turnCount`(number) — 主循环轮数计数（从 0 开始，每次成功 turn +1）
 - `preGameCompleted`(string[]) — 已完成 Pre-Game 初始化的 runtime id 集合，框架据此跳过后续轮次的 Pre-Game 调度
@@ -2260,7 +2285,7 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 > **接入状态（2026-04-27）**：服务端手动快照、列表和 fork 能力已实现并有测试覆盖；当前内置 Web UI 只直接使用 `GET /api/sessions/:id/snapshot` 做恢复/重连，暂未提供手动快照列表或 fork 操作界面。
 
-物化快照是存档 / 读档 / 时间线分叉的核心 —— 每个快照把一个回合结束时的完整 session 状态序列化为 `payload`，保存在 `state_snapshots` 表。`kind` 取三种值：`auto`（每回合结束自动写入）、`manual`（`POST /snapshot` 显式创建）、`fork`（`POST /fork` 写到子 session 上记录来源）。
+物化快照是存档 / 读档 / 时间线分叉的核心 —— 每个快照把一个回合结束时的完整 session 状态序列化为 `payload`，保存在 `state_snapshots` 表。`kind` 取三种值：`auto`（按 checkpoint 节奏自动写入：`turnCount <= 1` 与每 `COVEL_SNAPSHOT_INTERVAL_TURNS`（默认 5）回合各写一份；resume 路径强制写入）、`manual`（`POST /snapshot` 显式创建）、`fork`（`POST /fork` 写到子 session 上记录来源）。
 
 #### `POST /api/sessions/:id/snapshot`
 
@@ -2314,17 +2339,31 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 #### `GET /api/sessions/:id/snapshots`
 
-列出指定 session 的所有快照（`auto` / `manual` / `fork`），按 `createdAt` 升序。
+列出指定 session 的快照元数据（`auto` / `manual` / `fork`），按 `createdAt` 升序，游标分页。**不返回 `payload`**（快照 payload 序列化整个 session 状态，全量返回会无界增长）；需要完整 payload 时按 id 单独获取（见下）。
+
+Query 参数：`limit`（默认 50，最大 200）、`cursor`（上一页最后一个快照的 `id`；未知 cursor 返回 `400 { code: 'invalid_cursor' }`）。
 
 ```json
 {
   "snapshots": [
-    /* SnapshotRecord[] */
-  ]
+    {
+      "id": "<uuid>",
+      "sessionId": "mistport-a1b2c3d4",
+      "turnId": "turn-42",
+      "kind": "manual",
+      "createdAt": "2026-04-13T00:00:00.000Z",
+      "payloadSize": 18342
+    }
+  ],
+  "nextCursor": "<uuid> | null"
 }
 ```
 
 session 不存在时返回 `404`。
+
+#### `GET /api/sessions/:id/snapshots/:snapshotId`
+
+按 id 获取单个快照（含完整 `payload`），响应 `{ "snapshot": SnapshotRecord }`。快照不存在或不属于该 session 时返回 `404`。
 
 #### `POST /api/sessions/:id/fork`
 

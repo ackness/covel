@@ -188,6 +188,37 @@ describe.skipIf(!pgAvailable)("pg-session-lock", () => {
     await holder;
     await sql.end();
   });
+
+  it("counts pool checkout time against the acquire deadline (R-15)", async () => {
+    // Pool of 1: the holder's reserved connection exhausts it, so the
+    // contender's `sql.reserve()` queues. The deadline must cover that queue
+    // wait — previously the 30s clock only started after reserve() resolved.
+    const sql = postgres(DATABASE_URL, { max: 1 });
+    const lock = createPgAdvisorySessionLock(sql, {
+      acquireTimeoutMs: 200,
+      pollIntervalMs: 20,
+    });
+
+    const holder = lock.withLock(`sess-pool-hold-${Date.now()}`, async () => {
+      await new Promise((r) => setTimeout(r, 600));
+    });
+    // Brief delay so the holder reliably reserves the only connection.
+    await new Promise((r) => setTimeout(r, 50));
+
+    const t0 = Date.now();
+    await expect(
+      lock.withLock(`sess-pool-wait-${Date.now()}`, async () => {
+        throw new Error("should-not-reach-fn");
+      }),
+    ).rejects.toThrow(
+      /failed to reserve a lock connection for session .* within 200ms/,
+    );
+    // The timeout must fire near the deadline, not after the holder releases.
+    expect(Date.now() - t0).toBeLessThan(500);
+
+    await holder;
+    await sql.end();
+  });
 });
 
 describe("hashSessionId", () => {

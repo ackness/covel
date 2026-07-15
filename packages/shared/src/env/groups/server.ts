@@ -10,6 +10,15 @@ export const SERVER_ENV_VARS = [
     description: "HTTP server listen port.",
   },
   {
+    name: "COVEL_BIND_HOST",
+    group: "server",
+    type: "string",
+    status: "active",
+    defaultValue: "127.0.0.1",
+    description:
+      "HTTP server listen host. Defaults to loopback so local/desktop deployments are not reachable from the network (audit S-02). Set to 0.0.0.0 explicitly for containers or hosted deployments.",
+  },
+  {
     name: "NODE_ENV",
     group: "server",
     type: "enum",

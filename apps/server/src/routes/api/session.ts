@@ -44,8 +44,12 @@ import {
   withEmbeddingMetadata,
 } from "./session/embedding.js";
 import {
+  hasOperatorToken,
+  isOwnerAuthEnforced,
+  mintSessionOwnerToken,
   resolveSessionParam,
   SESSION_NOT_FOUND_CODE,
+  SESSION_OWNER_TOKEN_HASH_KEY,
 } from "./session/session-guard.js";
 import {
   buildAvailablePluginList,
@@ -127,6 +131,13 @@ sessionRoutes.get("/", async (c) => {
     return c.json({ items: [] });
   }
 
+  // Hosted tiers (demo/commercial): the listing spans every tenant's sessions
+  // and there is no user identity to filter by, so it is operator-only
+  // (COVEL_DESKTOP_REST_TOKEN). Per-session access uses owner tokens instead.
+  if (isOwnerAuthEnforced(env.deploymentTier) && !hasOperatorToken(c)) {
+    return c.json({ items: [] });
+  }
+
   const store = c.get("store");
   const worldId = c.req.query("worldId");
   const sessions = await store.listSessions();
@@ -176,6 +187,11 @@ sessionRoutes.post("/", async (c) => {
     pluginRegistry,
   );
 
+  // Owner token (audit S-02): minted on every tier so a session created
+  // locally keeps working if the deployment is later promoted to a hosted
+  // tier. Only the hash is persisted; the raw token is returned once below.
+  const owner = mintSessionOwnerToken();
+
   const now = new Date().toISOString();
   const session: SessionRecord = {
     id,
@@ -190,6 +206,7 @@ sessionRoutes.post("/", async (c) => {
     activePlugins: plugins,
     createdAt: now,
     updatedAt: now,
+    metadata: { [SESSION_OWNER_TOKEN_HASH_KEY]: owner.tokenHash },
   };
 
   // Scoped transaction: createSession + world-data import + blueprint fallback
@@ -270,7 +287,9 @@ sessionRoutes.post("/", async (c) => {
     );
   }
 
-  return c.json(session);
+  // `ownerToken` is returned exactly once — it is never readable again
+  // (only its hash is stored). Clients on hosted tiers must persist it.
+  return c.json({ ...session, ownerToken: owner.token });
 });
 
 // ── Instance endpoints ──────────────────────────────────────────
@@ -278,6 +297,13 @@ sessionRoutes.post("/", async (c) => {
 // GET /sessions/:id/media-token?id=<mediaId>
 sessionRoutes.get("/:id/media-token", async (c) => {
   const sessionId = c.req.param("id");
+  // Owner guard: minting media URLs is a session-scoped read. Hosted tiers
+  // only — self/desktop keeps the historical behavior (no session-existence
+  // requirement; media access is checked against the media_refs table below).
+  if (isOwnerAuthEnforced()) {
+    const guard = await resolveSessionParam(c);
+    if (!guard.ok) return guard.response;
+  }
   const mediaId = c.req.query("id");
   if (!mediaId) {
     return c.json(
@@ -373,6 +399,9 @@ sessionRoutes.patch("/:id", async (c) => {
   // SessionEnd hook — fire only on the transition into `ended` (not on repeat
   // patches of an already-ended session).
   if (updates.status === "ended" && session.status !== "ended") {
+    // Ended sessions run no more turns — drop the per-session character-tool
+    // override cache entry so the map does not leak (audit R-19).
+    c.get("clearSessionToolOverrides")?.(id);
     await fireSessionEnd(
       c.get("hookPipeline"),
       c.get("eventBus"),
@@ -394,6 +423,8 @@ sessionRoutes.delete("/:id", async (c) => {
   if (!guard.ok) return guard.response;
   const session = guard.session;
   await store.deleteSession(id);
+  // Drop the per-session character-tool override cache entry (audit R-19).
+  c.get("clearSessionToolOverrides")?.(id);
 
   // SessionEnd hook — session removed. `session` is read above for the guard.
   if (session.status !== "ended") {

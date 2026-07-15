@@ -191,13 +191,18 @@ export function createMemoryUpdater(
         })
         .then(() => runUpdate(params));
       // Store a promise that resolves regardless of success/failure.
-      pending.set(
-        params.sessionId,
-        next.then(
-          () => undefined,
-          () => undefined,
-        ),
+      const settled = next.then(
+        () => undefined,
+        () => undefined,
       );
+      pending.set(params.sessionId, settled);
+      // Drop the entry once this chain settles (unless a newer call already
+      // replaced it) so long-lived servers don't leak one entry per session.
+      void settled.then(() => {
+        if (pending.get(params.sessionId) === settled) {
+          pending.delete(params.sessionId);
+        }
+      });
       return next;
     },
     async awaitPending(sessionId: string): Promise<void> {

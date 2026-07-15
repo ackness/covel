@@ -50,6 +50,7 @@ import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
 import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
+import { checkSessionOwner } from "./session/session-guard.js";
 
 export const pluginRpcRoutes = new Hono();
 
@@ -67,6 +68,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       404,
     );
   }
+  // Owner guard (hosted tiers, S-02): plugin-rpc can trigger manual runtimes
+  // (full turn pipeline) and mutate plugin data.
+  const ownerDenied = checkSessionOwner(c, session);
+  if (ownerDenied) return ownerDenied;
 
   let rawBody: unknown;
   try {

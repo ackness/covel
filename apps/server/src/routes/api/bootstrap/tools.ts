@@ -55,6 +55,9 @@ export interface PluginToolsResult {
   readonly localToolNames: Set<string>;
   readonly toolExecutor: ToolExecutor;
   readonly prepareToolsForSession: (sessionId: string) => Promise<void>;
+  /** Drop the per-session tool override cache entry. Called on session
+   *  end/delete so the map does not grow for the lifetime of the process. */
+  readonly clearSessionToolOverrides: (sessionId: string) => void;
   readonly activatePluginLocalTools: (pluginId: string) => Promise<void>;
   /** Mutable — the unified `entry` registration path (plugin-entry.ts) adds
    *  entry-registered tool names at invocation time. */
@@ -179,6 +182,10 @@ export async function setupPluginTools(
     sessionToolOverrides.set(sessionId, overrides);
   }
 
+  function clearSessionToolOverrides(sessionId: string): void {
+    sessionToolOverrides.delete(sessionId);
+  }
+
   // Register world-dimension query tools so agent runtimes can fetch only the
   // fields they need instead of relying on bulk prompt injection.
   for (const t of createWorldDimensionTools(store, {
@@ -242,6 +249,7 @@ export async function setupPluginTools(
     localToolNames,
     toolExecutor,
     prepareToolsForSession,
+    clearSessionToolOverrides,
     activatePluginLocalTools,
     pluginToolAccess,
   };

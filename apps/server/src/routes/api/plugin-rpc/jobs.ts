@@ -112,3 +112,90 @@ export async function writePluginJob(
     updatedAt: args.updatedAt ?? args.startedAt,
   });
 }
+
+// ── Startup crash-recovery sweep ─────────────────────────────────────
+
+/**
+ * Pending jobs older than this are presumed orphaned: background jobs run
+ * in-process via setImmediate, so a crash/restart kills the callback while
+ * the row stays `pending` forever. The threshold is generous enough that a
+ * job legitimately still running on another pod is never reaped.
+ */
+const STALE_PENDING_JOB_MS = 15 * 60_000;
+
+/**
+ * One-shot boot sweep: mark stale `pending` background-job rows as `failed`
+ * so clients polling a job that died with a previous process get a terminal
+ * status instead of an eternal spinner. Best-effort — callers fire-and-forget.
+ *
+ * ponytail: full-session plugin_data scan at boot; move to an indexed
+ * namespace query if plugin_data volume ever makes boot noticeably slower.
+ * Re-driving (instead of failing) orphaned jobs would need a durable queue
+ * with leases/idempotency — deliberately out of scope.
+ */
+export async function sweepStalePendingJobs(
+  store: DataStore,
+  opts: { readonly staleMs?: number; readonly now?: number } = {},
+): Promise<number> {
+  const staleMs = opts.staleMs ?? STALE_PENDING_JOB_MS;
+  const now = opts.now ?? Date.now();
+  let swept = 0;
+
+  for (const session of await store.listSessions()) {
+    let rows;
+    try {
+      rows = await store.listPluginDataSessionScope(session.id);
+    } catch (err) {
+      console.warn(
+        `[job-sweep] could not list plugin data for session ${session.id}:`,
+        err instanceof Error ? err.message : String(err),
+      );
+      continue;
+    }
+    for (const row of rows) {
+      if (row.namespace !== "_jobs") continue;
+      const value = row.value as Partial<PluginJobValue> & {
+        readonly startedAt?: string;
+        readonly runtimeId?: string;
+        readonly turnId?: string;
+      };
+      if (value?.status !== "pending") continue;
+      const startedAtMs = Date.parse(value.startedAt ?? row.updatedAt);
+      if (Number.isFinite(startedAtMs) && now - startedAtMs < staleMs) continue;
+
+      const startedAt = value.startedAt ?? row.createdAt;
+      const completedAt = new Date(now).toISOString();
+      try {
+        await writePluginJob(store, {
+          sessionId: row.sessionId,
+          pluginId: row.pluginId,
+          jobId: row.key,
+          startedAt,
+          updatedAt: completedAt,
+          value: makeTerminalPluginJobValue({
+            status: "failed",
+            runtimeId: value.runtimeId ?? "unknown",
+            turnId: value.turnId ?? "unknown",
+            startedAt,
+            completedAt,
+            error:
+              "orphaned pending job (server restarted before the job completed)",
+          }),
+        });
+        swept++;
+      } catch (err) {
+        console.warn(
+          `[job-sweep] could not fail orphaned job ${row.key} (session ${row.sessionId}):`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+  }
+
+  if (swept > 0) {
+    console.warn(
+      `[job-sweep] marked ${swept} orphaned pending background job(s) as failed`,
+    );
+  }
+  return swept;
+}
