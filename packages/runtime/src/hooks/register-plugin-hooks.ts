@@ -27,6 +27,39 @@ export interface PluginHookSource {
   readonly rootPath: string;
   /** Parsed `hooks:` frontmatter entries (already schema-validated). */
   readonly hooks: readonly HookDeclaration[];
+  /**
+   * Trust gate (H-03). When true the source's handlers stay DORMANT: an
+   * invocation before `activateDeferredPluginHooks(pipeline, pluginId)` is a
+   * no-op `continue` and — critically — does NOT `import()` the handler
+   * module, so unapproved community code never executes. The registrar caller
+   * sets this from the plugin's trust info (`!trust.autoLoad`), mirroring the
+   * deferred entry / local-tool / wire boot paths.
+   */
+  readonly deferred?: boolean;
+}
+
+/**
+ * Per-pipeline set of plugin ids whose deferred legacy hooks are activated.
+ * Keyed on the pipeline instance so parallel pipelines (tests, multiple
+ * bootstraps in one process) never leak activation into each other.
+ */
+const deferredActivations = new WeakMap<HookPipeline, Set<string>>();
+
+/**
+ * Unlock a deferred (community) plugin's legacy hook handlers on `pipeline`.
+ * Called from the community activation seam (`ensurePluginEntry`) once the
+ * player has approved the plugin. Idempotent.
+ */
+export function activateDeferredPluginHooks(
+  pipeline: HookPipeline,
+  pluginId: string,
+): void {
+  let activated = deferredActivations.get(pipeline);
+  if (!activated) {
+    activated = new Set();
+    deferredActivations.set(pipeline, activated);
+  }
+  activated.add(pluginId);
 }
 
 export interface RegisterPluginHooksOptions {
@@ -85,13 +118,14 @@ export function registerPluginHooks(
 
   for (const source of sources) {
     const rootPath = path.resolve(source.rootPath);
+    const { pluginId, deferred } = source;
     for (let i = 0; i < source.hooks.length; i++) {
       const decl = source.hooks[i];
       const absPath = path.resolve(rootPath, decl.handler);
 
       if (escapesRoot(rootPath, absPath)) {
         warn(
-          `[plugin-loader] hook handler "${decl.handler}" escapes plugin root for "${source.pluginId}" — skipping`,
+          `[plugin-loader] hook handler "${decl.handler}" escapes plugin root for "${pluginId}" — skipping`,
         );
         continue;
       }
@@ -101,6 +135,11 @@ export function registerPluginHooks(
       // handler for subsequent calls.
       let cached: HookHandler<unknown> | undefined;
       const lazyHandler: HookHandler<unknown> = async (ctx, payload) => {
+        // Trust gate (H-03): a deferred source's handler must not run — or
+        // even be import()'d — until the plugin is approved and activated.
+        if (deferred && !deferredActivations.get(pipeline)?.has(pluginId)) {
+          return { action: "continue" };
+        }
         if (!cached) {
           try {
             const mod = (await import(pathToFileURL(absPath).href)) as {

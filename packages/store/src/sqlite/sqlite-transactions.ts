@@ -23,23 +23,29 @@ export type SqliteTransactions = Pick<DataStore, "withTransaction">;
  *   — runs on the open transaction and is committed or rolled back with it.
  *   Callers must not interleave unrelated writes with a serialized transaction.
  *
- *   INVARIANT the turn pipeline upholds (audit R-07): correctness comes from
- *   *ordering*, not isolation. Every write belonging to a turn (player
- *   message, proposal commits, trace rows, lifecycle sync, auto-snapshot)
- *   runs under that session's lock, and every externally-visible side effect
- *   that used to fire while the commit transaction was open — committed-
- *   proposal events, PostStateCommit hooks, `turn.completed`, post-turn
- *   memory ingestion — is deferred until after `withTransaction` resolves
- *   (see packages/runtime/src/commit/session-commit-pipeline.ts and
+ *   ENFORCED INVARIANT — same-session (audit R-07, re-review H-11):
+ *   correctness within one session comes from *ordering*, not isolation.
+ *   Every write belonging to a turn (player message, proposal commits, trace
+ *   rows, lifecycle sync, auto-snapshot) runs under that session's lock, and
+ *   every externally-visible side effect that used to fire while the commit
+ *   transaction was open — committed-proposal events, PostStateCommit hooks,
+ *   `turn.completed`, post-turn memory ingestion — is deferred until after
+ *   `withTransaction` resolves (`postCommit` fan-out in
+ *   packages/runtime/src/commit/session-commit-pipeline.ts and
  *   `TurnResult.completeTurn`). So no write of turn N can be captured by
  *   turn N's own commit transaction from outside it.
  *
- *   Residual exposure: session locks are per-session, so a non-tx write from
- *   session A issued while session B's transaction is open still folds into
- *   B's transaction — harmless on COMMIT, lost on B's ROLLBACK (rollbacks
- *   only occur on thrown store errors). Eliminating that requires per-tx
- *   connections (as PgStore has); rearchitecting this backend's connection
- *   model is deliberately out of scope.
+ *   RESIDUAL GAP — cross-session / non-turn writes (re-review H-11, flagged,
+ *   NOT fixed): the session lock is per-session and is the ONLY serialization
+ *   the pipeline provides. A write issued while another session's transaction
+ *   is open — session A's turn writes, or non-turn HTTP writes that hold no
+ *   session lock at all (world imports, character edits, settings) — folds
+ *   into that open transaction: harmless on COMMIT, silently LOST on its
+ *   ROLLBACK (rollbacks only occur on thrown store errors, so the window is
+ *   small but real). This cannot be closed from inside this module without
+ *   routing every data method through the tx chain; truly eliminating it
+ *   requires per-transaction connections (as PgStore has), i.e. a
+ *   store-connection rearchitecture that is deliberately out of scope here.
  * - **Nesting deadlocks, so it is rejected.** Calling `withTransaction` from
  *   inside another `withTransaction` callback would queue the inner call behind
  *   the outer one on the serialization chain — and the outer call is awaiting

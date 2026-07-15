@@ -4,9 +4,10 @@ import {
   type HookPipeline,
   type PluginHookSource,
 } from "@covel/runtime";
-import type {
-  ParsedPluginMd,
-  PluginDiscoveryResult,
+import {
+  getPluginTrustInfo,
+  type ParsedPluginMd,
+  type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
 
 export interface CreateBootstrapHookPipelineParams {
@@ -23,6 +24,11 @@ export function createBootstrapHookPipeline({
   for (const [pluginId, manifests] of manifestCache) {
     const discovery = discoveryMap.get(pluginId);
     if (!discovery) continue;
+    // Trust gate (H-03): community (non-autoLoad) plugins register their hook
+    // DECLARATIONS at boot, but the handlers stay dormant — never import()'d
+    // nor executed — until `ensurePluginEntry` activates the plugin at
+    // approval, mirroring the deferred entry / local-tool / wire boot paths.
+    const deferred = !getPluginTrustInfo(pluginId, discovery.source).autoLoad;
     for (const parsed of manifests) {
       const hooks = parsed.manifest.hooks ?? [];
       if (hooks.length === 0) continue;
@@ -30,6 +36,7 @@ export function createBootstrapHookPipeline({
         pluginId,
         rootPath: discovery.rootPath,
         hooks,
+        deferred,
       });
     }
   }

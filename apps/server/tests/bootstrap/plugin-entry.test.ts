@@ -287,24 +287,31 @@ export default (covel) => {
     warn.mockRestore();
   });
 
-  it("scopes a community entry's toolkit.store to its own pluginId (M2)", async () => {
-    // The entry forges a foreign pluginId when writing plugin-data. A scoped
-    // store must clamp the write to the entry's own pluginId so it can't reach
-    // another plugin's namespace.
+  it("denies plugin_data writes on a community entry's toolkit.store (M2/H-03)", async () => {
+    // Entry factories run at activation time with no request session, so a
+    // community entry's plugin_data writes cannot be session-scoped — they
+    // are denied outright (writes flow through proposals or the per-dispatch
+    // RPC store), even when forging a foreign pluginId.
     const p = writePlugin(
       "entry-scope-a",
       `
 export default async function (covel) {
-  await covel.toolkit.store.setPluginData({
-    id: "forged",
-    sessionId: "s1",
-    pluginId: "victim-plugin",
-    namespace: "ns",
-    key: "k",
-    value: { secret: 1 },
-    createdAt: "t",
-    updatedAt: "t",
-  });
+  let error = "";
+  try {
+    await covel.toolkit.store.setPluginData({
+      id: "forged",
+      sessionId: "s1",
+      pluginId: "victim-plugin",
+      namespace: "ns",
+      key: "k",
+      value: { secret: 1 },
+      createdAt: "t",
+      updatedAt: "t",
+    });
+  } catch (e) {
+    error = String((e && e.message) || e);
+  }
+  covel.registerRpc("dump-error", async () => error);
 }
 `,
       { source: "community" },
@@ -313,25 +320,31 @@ export default async function (covel) {
     const { ensurePluginEntry } = await createBootstrapPluginEntries(params);
     await ensurePluginEntry("entry-scope-a");
 
-    // Nothing landed under the forged victim pluginId…
+    const dump = params.rpcRegistry.getPluginAction(
+      "entry-scope-a",
+      "dump-error",
+    );
+    const error = (await dump?.handler?.({}, {
+      sessionId: "s1",
+      pluginId: "entry-scope-a",
+    } as never)) as string;
+    expect(error).toContain("not available to a community entry toolkit");
+
+    // Nothing landed anywhere — neither the forged victim namespace nor the
+    // entry's own.
     expect(
       await params.store.getPluginData("s1", "victim-plugin", "ns", "k"),
     ).toBeNull();
-    // …the write was clamped to the entry's own pluginId.
-    const own = await params.store.getPluginData(
-      "s1",
-      "entry-scope-a",
-      "ns",
-      "k",
-    );
-    expect(own?.value).toEqual({ secret: 1 });
-    expect(own?.pluginId).toBe("entry-scope-a");
+    expect(
+      await params.store.getPluginData("s1", "entry-scope-a", "ns", "k"),
+    ).toBeNull();
   });
 
-  it("default-denies core-entity mutators on a community toolkit.store (S-03)", async () => {
-    // A community entry gets an allowlist store view: scoped plugin_data plus
-    // read-only session/turn-message lookups. Cross-session and core-entity
-    // mutators (character/session/message/…) must throw, not forward.
+  it("default-denies mutators on a community toolkit.store (S-03/H-03)", async () => {
+    // A community entry gets a read-only allowlist store view: scoped
+    // plugin_data reads plus read-only session/turn-message lookups.
+    // Everything else — core-entity mutators AND own-namespace plugin_data
+    // writes — must throw, not forward.
     const p = writePlugin(
       "entry-deny-a",
       `
@@ -352,13 +365,19 @@ export default async function (covel) {
   }));
   await attempt("addTraceEvent", () => store.addTraceEvent({ id: "t1", sessionId: "other-session" }));
   await attempt("listPluginDataSessionScope", () => store.listPluginDataSessionScope("s1"));
+  // plugin_data writes are denied too (no request session to scope them to).
+  await attempt("setPluginData", () => store.setPluginData({
+    id: "x", sessionId: "s1", pluginId: "entry-deny-a", namespace: "ns", key: "k",
+    value: 1, createdAt: "t", updatedAt: "t",
+  }));
+  await attempt("setPluginDataBatch", () => store.setPluginDataBatch([]));
+  await attempt("deletePluginData", () => store.deletePluginData("s1", "entry-deny-a", "ns", "k"));
   // Allowlisted read-only lookups must keep working.
   await attempt("getSession", () => store.getSession("s1"));
   await attempt("listTurnMessages", () => store.listTurnMessages("s1"));
-  await store.setPluginData({
-    id: "x", sessionId: "s1", pluginId: "ignored", namespace: "ns", key: "errors",
-    value: errors, createdAt: "t", updatedAt: "t",
-  });
+  await attempt("getPluginData", () => store.getPluginData("s1", "forged", "ns", "k"));
+  await attempt("listPluginData", () => store.listPluginData("s1", "forged", "ns"));
+  covel.registerRpc("dump-errors", async () => errors);
 }
 `,
       { source: "community" },
@@ -367,13 +386,14 @@ export default async function (covel) {
     const { ensurePluginEntry } = await createBootstrapPluginEntries(params);
     await ensurePluginEntry("entry-deny-a");
 
-    const row = await params.store.getPluginData(
-      "s1",
+    const dump = params.rpcRegistry.getPluginAction(
       "entry-deny-a",
-      "ns",
-      "errors",
+      "dump-errors",
     );
-    const errors = row?.value as Record<string, string>;
+    const errors = (await dump?.handler?.({}, {
+      sessionId: "s1",
+      pluginId: "entry-deny-a",
+    } as never)) as Record<string, string>;
     const DENIED = "not available to a community entry toolkit";
     for (const method of [
       "upsertCharacter",
@@ -382,6 +402,9 @@ export default async function (covel) {
       "addMessage",
       "addTraceEvent",
       "listPluginDataSessionScope",
+      "setPluginData",
+      "setPluginDataBatch",
+      "deletePluginData",
     ]) {
       expect(errors[method], method).toContain(DENIED);
       expect(errors[method], method).toContain(method);
@@ -389,6 +412,8 @@ export default async function (covel) {
     // Allowed reads did not throw.
     expect(errors.getSession).toBe("");
     expect(errors.listTurnMessages).toBe("");
+    expect(errors.getPluginData).toBe("");
+    expect(errors.listPluginData).toBe("");
 
     // Nothing actually landed on the raw store.
     expect(await params.store.listCharacters("other-session")).toEqual([]);

@@ -69,6 +69,7 @@ export type {
   PluginEntryFactory,
   PluginHookOptions,
   PluginRpcOptions,
+  PluginStoreView,
   PluginToolkit,
 } from "./plugin-api.js";
 
@@ -153,6 +154,7 @@ export {
   HookPipeline,
   createHookPipeline,
   registerPluginHooks,
+  activateDeferredPluginHooks,
   runSessionStartHook,
   runSessionEndHook,
   runWithHookScope,

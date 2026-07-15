@@ -38,13 +38,42 @@ import type { HookHandler } from "./hooks/types.js";
 import type { RpcHandler } from "./rpc/rpc-registry.js";
 
 /**
+ * The store surface the Public Plugin API guarantees to an entry factory
+ * (H-03): read-only.
+ *
+ * - `getPluginData` / `listPluginData` — for community plugins these are
+ *   clamped to the plugin's OWN `pluginId` at runtime (any caller-supplied
+ *   id is ignored).
+ * - `getSession` / `listTurnMessages` / `listRecentTurnMessages` — read-only
+ *   lookups, typically driven by the `sessionId` a hook/RPC context hands in.
+ *
+ * There are deliberately NO write methods here. Entry factories run at
+ * activation time with no request session to scope a write to, so all writes
+ * must flow through governed, session-bound surfaces instead: proposals
+ * (`withPendingProposals`) from tools/runtimes, or the session-scoped store
+ * an RPC handler receives per dispatch.
+ *
+ * Builtin/official plugins receive the full `DataStore` at runtime (parity
+ * with the legacy `tools.local` factory) because they implement framework
+ * primitives — but the published contract is this view, so third-party code
+ * cannot depend on methods the community proxy denies.
+ */
+export type PluginStoreView = Pick<
+  DataStore,
+  | "getPluginData"
+  | "listPluginData"
+  | "getSession"
+  | "listTurnMessages"
+  | "listRecentTurnMessages"
+>;
+
+/**
  * Helper bag handed to entry factories — the same surface the legacy
  * `tools.local` factory injection provided, so migrated tool files keep
  * their `({ tool, z, store, ... })` signature unchanged.
  *
- * For community plugins, `store` is a scoped view: `plugin_data` access is
- * clamped to the plugin's own id and only read-only session/turn-message
- * lookups are permitted — all other writes must flow through proposals.
+ * `store` is the read-only {@link PluginStoreView}; writes go through
+ * proposals or request-time scoped stores (see the view's docs).
  */
 export interface PluginToolkit {
   readonly tool: typeof tool;
@@ -52,7 +81,7 @@ export interface PluginToolkit {
   readonly shortId: typeof shortId;
   readonly shortIdBatch: typeof shortIdBatch;
   readonly withPendingProposals: typeof withPendingProposals;
-  readonly store: DataStore;
+  readonly store: PluginStoreView;
 }
 
 export interface PluginHookOptions {

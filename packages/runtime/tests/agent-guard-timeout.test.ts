@@ -1,15 +1,20 @@
 /**
- * Agent-guard deadline (audit R-12).
+ * Agent-guard deadline (audit R-12) and post-deadline write revocation
+ * (re-review H-11).
  *
  * `executeAgentGuard` used to await `loaded.guard(...)` with no deadline and
  * no abort signal — a hung guard blocked the turn (and the session lock)
  * forever. These tests pin the Promise.race deadline (mirroring the
- * function-runtime handler pattern) and the turnControl signal pass-through.
+ * function-runtime handler pattern), the abort-signal wiring, and the H-11
+ * guarantee: once the deadline fires, the still-running guard's write
+ * capabilities (store / pluginData / recursiveCall / …) throw instead of
+ * mutating state that now belongs to a later turn.
  */
 
 import { describe, it, expect, vi } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
+import { createMemoryStore, type DataStore } from "@covel/store";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 
@@ -79,7 +84,10 @@ describe("agent guard deadline (R-12)", () => {
     expect(String(rt.error)).toContain("timed out after 50ms");
   });
 
-  it("passes the turnControl abort signal to the guard", async () => {
+  it("propagates the turnControl abort into the guard's signal", async () => {
+    // H-11: the guard now receives a COMBINED signal (player turn abort OR
+    // the guard's own deadline), so identity with turnControl.signal is no
+    // longer expected — abort propagation is.
     const controller = new AbortController();
     let seenSignal: AbortSignal | undefined;
     const loaded: LoadedRuntime = {
@@ -97,6 +105,64 @@ describe("agent guard deadline (R-12)", () => {
       makeDeps(loaded, { turnControl: { signal: controller.signal } }),
     );
 
-    expect(seenSignal).toBe(controller.signal);
+    expect(seenSignal).toBeDefined();
+    expect(seenSignal!.aborted).toBe(false);
+    controller.abort();
+    expect(seenSignal!.aborted).toBe(true);
+  });
+
+  it("revokes a timed-out guard's write capabilities and aborts its signal (H-11)", async () => {
+    const store: DataStore = createMemoryStore();
+    const setPluginData = vi.spyOn(store, "setPluginData");
+
+    const observed: {
+      writeError?: string;
+      recursiveError?: string;
+      signalAborted?: boolean;
+    } = {};
+    let guardDone!: () => void;
+    const guardFinished = new Promise<void>((resolve) => {
+      guardDone = resolve;
+    });
+
+    const loaded: LoadedRuntime = {
+      manifest: makeAgentManifest({ timeoutMs: 30 }),
+      promptTemplate: "prompt",
+      guard: async (ctx) => {
+        // Outlive the 30ms deadline, then attempt late writes — the exact
+        // race a timed-out guard runs against a LATER turn.
+        await new Promise((resolve) => setTimeout(resolve, 90));
+        observed.signalAborted = ctx.signal?.aborted;
+        try {
+          await ctx.pluginData?.set("ns", "late", { v: 1 });
+        } catch (err) {
+          observed.writeError =
+            err instanceof Error ? err.message : String(err);
+        }
+        try {
+          await ctx.recursiveCall({ playerMessage: "late turn" });
+        } catch (err) {
+          observed.recursiveError =
+            err instanceof Error ? err.message : String(err);
+        }
+        guardDone();
+        return {};
+      },
+    };
+
+    const result = await executeTurn(
+      makeTurnInput(),
+      [loaded.manifest],
+      makeDeps(loaded, { store }),
+    );
+    expect(result.runtimeResults[0]!.status).toBe("failed");
+
+    // The guard keeps running past the deadline — wait for it, then verify
+    // every late mutation was rejected and nothing reached the store.
+    await guardFinished;
+    expect(observed.signalAborted).toBe(true);
+    expect(observed.writeError).toContain("write capability revoked");
+    expect(observed.recursiveError).toContain("write capability revoked");
+    expect(setPluginData).not.toHaveBeenCalled();
   });
 });

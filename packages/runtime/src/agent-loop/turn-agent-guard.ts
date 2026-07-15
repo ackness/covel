@@ -79,7 +79,7 @@ export async function executeAgentGuard({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
     };
-    const guardAssetProgress = createAssetProgressEmitter(deps.emitter, {
+    const rawAssetProgress = createAssetProgressEmitter(deps.emitter, {
       sessionId: input.sessionId,
       turnId: input.turnId,
       pluginId: manifest.pluginId,
@@ -90,22 +90,73 @@ export async function executeAgentGuard({
       deps.utils && deps.emitter
         ? withUtilsTrace(deps.utils, deps.emitter, guardHelperCtx)
         : deps.utils;
+
+    // H-11: write-capability revocation. The guard gets its OWN abort
+    // controller, and every write-capable capability handed to it (store,
+    // pluginData, logger, gateway, media, assetProgress, recursiveCall) is
+    // wrapped so that once the deadline fires, any further call throws.
+    // Promise.race alone only unblocked the turn — the timed-out guard kept
+    // running with live handles and could race a LATER turn's writes.
+    const guardAbort = new AbortController();
+    let deadlineExpired = false;
+    const assertLive = (): void => {
+      if (deadlineExpired) {
+        throw new Error(
+          `agent guard "${manifest.name}" timed out after ${timeoutMs}ms — write capability revoked`,
+        );
+      }
+    };
+    const revocable = <T extends object>(target: T): T =>
+      new Proxy(target, {
+        get(t, prop, receiver) {
+          const value = Reflect.get(t, prop, receiver);
+          if (typeof value !== "function") return value;
+          return (...args: unknown[]) => {
+            assertLive();
+            return Reflect.apply(
+              value as (...a: unknown[]) => unknown,
+              t,
+              args,
+            );
+          };
+        },
+      });
+
     const guardStore = deps.store
-      ? isTrustedPluginSource(deps, manifest)
-        ? deps.store
-        : createFunctionStoreView(deps.store, guardHelperCtx)
+      ? revocable(
+          isTrustedPluginSource(deps, manifest)
+            ? deps.store
+            : createFunctionStoreView(deps.store, guardHelperCtx),
+        )
       : undefined;
     const guardPluginDataHandle = deps.store
-      ? createPluginDataWriter(deps.store, guardHelperCtx)
+      ? revocable(createPluginDataWriter(deps.store, guardHelperCtx))
       : undefined;
     const guardLoggerHandle = deps.store
-      ? createPluginLogger(deps.store, guardHelperCtx)
+      ? revocable(createPluginLogger(deps.store, guardHelperCtx))
       : undefined;
+    const guardAssetProgress: typeof rawAssetProgress = rawAssetProgress
+      ? (progress) => {
+          assertLive();
+          return rawAssetProgress(progress);
+        }
+      : undefined;
+    const rawRecursiveCall = createRecursiveCall();
+    const guardRecursiveCall: typeof rawRecursiveCall = (delta, opts) => {
+      assertLive();
+      return rawRecursiveCall(delta, opts);
+    };
+    // Combined signal: the player's turn abort OR the guard's own deadline.
+    // A cooperative guard can observe either and cancel in-flight work.
+    const externalSignal = deps.turnControl?.signal;
+    const guardSignal = externalSignal
+      ? AbortSignal.any([externalSignal, guardAbort.signal])
+      : guardAbort.signal;
+
     // Deadline race — mirrors the function-runtime handler pattern in
     // `turn-function-runtime.ts`: without it a hung guard blocks the whole
     // turn (and the session lock) forever. Promise.race keeps the guard
-    // promise subscribed, so a post-timeout rejection is still observed. The
-    // player abort signal lets a cooperative guard cancel in-flight work.
+    // promise subscribed, so a post-timeout rejection is still observed.
     const guardPromise = loaded.guard({
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -116,16 +167,18 @@ export async function executeAgentGuard({
       store: guardStore,
       completedResults,
       config: guardConfig,
-      recursiveCall: createRecursiveCall(),
+      recursiveCall: guardRecursiveCall,
       recursionDepth,
-      ...(deps.gateway ? { gateway: deps.gateway } : {}),
+      ...(deps.gateway ? { gateway: revocable(deps.gateway) } : {}),
       ...(guardTracedUtils ? { utils: guardTracedUtils } : {}),
       ...(deps.mediaStore
         ? {
-            media: createRuntimeMediaContext(deps.mediaStore, deps.utils, {
-              sessionId: input.sessionId,
-              pluginId: manifest.pluginId,
-            }),
+            media: revocable(
+              createRuntimeMediaContext(deps.mediaStore, deps.utils, {
+                sessionId: input.sessionId,
+                pluginId: manifest.pluginId,
+              }),
+            ),
           }
         : {}),
       ...(guardAssetProgress ? { assetProgress: guardAssetProgress } : {}),
@@ -134,7 +187,7 @@ export async function executeAgentGuard({
       ...(guardUserSettings ? { userSettings: guardUserSettings } : {}),
       ...(guardPluginDataHandle ? { pluginData: guardPluginDataHandle } : {}),
       ...(guardLoggerHandle ? { logger: guardLoggerHandle } : {}),
-      ...(deps.turnControl?.signal ? { signal: deps.turnControl.signal } : {}),
+      signal: guardSignal,
     });
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
     let guardOutput: Awaited<typeof guardPromise>;
@@ -143,11 +196,15 @@ export async function executeAgentGuard({
         guardPromise,
         new Promise<never>((_, reject) => {
           deadlineTimer = setTimeout(() => {
-            reject(
-              new Error(
-                `agent guard "${manifest.name}" timed out after ${timeoutMs}ms`,
-              ),
+            const err = new Error(
+              `agent guard "${manifest.name}" timed out after ${timeoutMs}ms`,
             );
+            // Revoke BEFORE rejecting: once the turn moves on, the still-
+            // running guard must not be able to mutate state for a later
+            // turn (H-11), and a cooperative guard sees the abort.
+            deadlineExpired = true;
+            guardAbort.abort(err);
+            reject(err);
           }, timeoutMs);
         }),
       ]);
