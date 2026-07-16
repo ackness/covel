@@ -167,18 +167,12 @@ export async function sweepStalePendingJobs(
         readonly turnId?: string;
       };
       if (value?.status !== "pending") continue;
-      // Freshness is the most recent write to the row, not just its start:
-      // a job that writes progress bumps `updatedAt`, and the sweep now runs
-      // periodically (not only at boot), so anchoring on `startedAt` alone
-      // would force-fail a legitimately long-running job. A job that never
-      // writes progress still ages out at `staleMs` from its start (unchanged
-      // boot-recovery behavior).
-      const startedAtMs = Date.parse(value.startedAt ?? row.updatedAt);
-      const updatedAtMs = Date.parse(row.updatedAt);
-      const lastActivityMs = Math.max(
-        Number.isFinite(startedAtMs) ? startedAtMs : -Infinity,
-        Number.isFinite(updatedAtMs) ? updatedAtMs : -Infinity,
-      );
+      // Freshness is the last write to the row (`updatedAt`), not its start:
+      // the sweep now runs periodically (not only at boot), so a job that
+      // writes progress must keep itself alive. `updatedAt` starts equal to
+      // `startedAt` and only moves forward, so a job that never writes progress
+      // still ages out at `staleMs` from its start (unchanged boot behavior).
+      const lastActivityMs = Date.parse(row.updatedAt);
       if (Number.isFinite(lastActivityMs) && now - lastActivityMs < staleMs) {
         continue;
       }

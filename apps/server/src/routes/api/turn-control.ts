@@ -93,11 +93,6 @@ export function hasActiveTurn(sessionId: string): boolean {
   return activeTurns.has(sessionId);
 }
 
-/** Number of sessions with an in-flight turn (for the shutdown drain). */
-export function activeTurnCount(): number {
-  return activeTurns.size;
-}
-
 /**
  * Resolve once no session has an in-flight turn, or after `deadlineMs`
  * (whichever comes first). Graceful shutdown calls this before closing the
