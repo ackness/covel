@@ -26,6 +26,7 @@ import {
 } from "@covel/runtime";
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
 import { bootstrapApi } from "./routes/api/bootstrap.js";
+import { awaitActiveTurnsDrained } from "./routes/api/turn-control.js";
 import {
   createInProcessSessionLock,
   type SessionLock,
@@ -377,6 +378,11 @@ async function drainPhase(
 export const drainServerResources = async (): Promise<void> => {
   await drainPhase("stop world watchers", () => stopWatchers());
   await drainPhase("stop background sweeps", () => api.stopBackgroundSweeps());
+  // Let an in-flight turn finish committing before the store closes under it
+  // (L-6). Time-boxed by drainPhase, so a stuck turn can't block shutdown.
+  await drainPhase("await in-flight turns", () =>
+    awaitActiveTurnsDrained(DRAIN_PHASE_TIMEOUT_MS),
+  );
   await drainPhase("flush event bus", () => api.eventBus.flush());
   await drainPhase("close data store", () => store.close());
   if (lockSql) {
