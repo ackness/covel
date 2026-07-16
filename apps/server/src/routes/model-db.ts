@@ -8,6 +8,7 @@ import { resolve, dirname } from "node:path";
 import { readRuntimeEnv } from "@covel/shared";
 import { rateLimiter, singleFlight } from "../middleware/rate-limit.js";
 import type { AiStack } from "../ai-setup.js";
+import { checkHostedOperator } from "./api/session/session-guard.js";
 
 const MAX_SEARCH_LIMIT = 200;
 
@@ -65,6 +66,11 @@ export function createModelDbRoutes(ai: AiStack): Hono {
 
   app.post(
     "/api/model-db/refresh",
+    async (c, next) => {
+      const denied = checkHostedOperator(c);
+      if (denied) return denied;
+      await next();
+    },
     rateLimiter({ max: 1 }),
     singleFlight(),
     async (c) => {

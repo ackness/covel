@@ -34,6 +34,7 @@
  */
 
 import { Hono } from "hono";
+import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import { createRpcHandlerStoreView } from "@covel/runtime";
 import { RpcDispatchError, RpcValidationError } from "@covel/runtime";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
@@ -50,6 +51,10 @@ import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
 import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
+import {
+  checkHostedOperator,
+  checkSessionOwner,
+} from "./session/session-guard.js";
 
 export const pluginRpcRoutes = new Hono();
 
@@ -67,6 +72,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       404,
     );
   }
+  // Owner guard (hosted tiers, S-02): plugin-rpc can trigger manual runtimes
+  // (full turn pipeline) and mutate plugin data.
+  const ownerDenied = checkSessionOwner(c, session);
+  if (ownerDenied) return ownerDenied;
 
   let rawBody: unknown;
   try {
@@ -157,6 +166,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // getPluginTrustInfo) when source is absent for defense in depth.
     const entry = pluginRegistry.get(body.pluginId);
     const trustInfo = getPluginTrustInfo(body.pluginId, entry?.source);
+    if (trustInfo.source === "community") {
+      const operatorDenied = checkHostedOperator(c);
+      if (operatorDenied) return operatorDenied;
+    }
     const gate = c.get("rpcApprovalGate");
     const verdict = gate.evaluate({
       sessionId,
@@ -219,7 +232,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // otherwise tool calls would resolve to `undefined` in the executor.
     // No-op for builtin/official plugins (already loaded at boot) and for
     // already-activated community plugins (idempotent).
-    await c.get("activatePluginLocalTools")?.(body.pluginId);
+    await c.get("activatePluginLocalTools")?.(body.pluginId, sessionId);
 
     const turnId = crypto.randomUUID();
 
@@ -472,13 +485,26 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     );
   }
 
+  // Community modules execute in the server process and register global
+  // capabilities. Hosted deployments therefore require the operator
+  // credential in addition to the session owner token.
+  if (entryTrust === "community") {
+    const operatorDenied = checkHostedOperator(c);
+    if (operatorDenied) return operatorDenied;
+  }
+
+  const approvalAction = pendingEntryActivation
+    ? COMMUNITY_SERVER_CODE_ACTION
+    : action;
   const verdict = gate.evaluate({
     sessionId,
     pluginId,
-    action,
+    action: approvalAction,
     payload: body.payload,
     trustLevel: entryTrust,
-    description: entryDescription,
+    description: pendingEntryActivation
+      ? `Load server-side code for community plugin ${pluginId}`
+      : entryDescription,
   });
 
   if (verdict.status === "pending") {
@@ -509,7 +535,48 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   // No-op for already-activated plugins (idempotent). If the entry still
   // doesn't register `action`, dispatch throws unknown-action → 404 below.
   if (pendingEntryActivation) {
-    await c.get("activatePluginLocalTools")?.(pluginId);
+    await c.get("activatePluginLocalTools")?.(pluginId, sessionId);
+    const activatedEntry = registry.getPluginAction(pluginId, action);
+    if (!activatedEntry) {
+      return c.json(
+        {
+          status: "error",
+          error: `unknown action "${action}" for plugin "${pluginId}"`,
+          code: "unknown-action",
+        },
+        404,
+      );
+    }
+    entryTrust = activatedEntry.trustLevel;
+    entryDescription = activatedEntry.description;
+    const actionVerdict = gate.evaluate({
+      sessionId,
+      pluginId,
+      action,
+      payload: body.payload,
+      trustLevel: entryTrust,
+      description: entryDescription,
+    });
+    if (actionVerdict.status === "pending") {
+      return c.json(
+        {
+          status: "approval-required",
+          approvalId: actionVerdict.approvalId,
+          pending: actionVerdict.pending,
+        },
+        202,
+      );
+    }
+    if (actionVerdict.status === "rejected") {
+      return c.json(
+        {
+          status: "error",
+          error: `approval queue is full (limit ${actionVerdict.limit}); try again after resolving pending approvals`,
+          code: "queue-full",
+        },
+        429,
+      );
+    }
   }
 
   // Action-level dispatch.

@@ -181,6 +181,14 @@ export function createIdbRuntimeStore(ctx: IdbStoreContext): IdbStoreSlice {
       return filtered;
     },
 
+    async getEventById(
+      sessionId: string,
+      id: string,
+    ): Promise<EventRecord | null> {
+      const record = await db.get("events", id);
+      return record && record.sessionId === sessionId ? record : null;
+    },
+
     async saveApproval(record: ApprovalRecord): Promise<void> {
       await putClonedRecord(mutations, "approvals", record);
     },

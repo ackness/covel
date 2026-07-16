@@ -500,9 +500,14 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
     const res = await call(app, "entry-action");
 
     expect(res.status).toBe(202);
-    const body = (await res.json()) as { status: string; approvalId?: string };
+    const body = (await res.json()) as {
+      status: string;
+      approvalId?: string;
+      pending?: { action: string };
+    };
     expect(body.status).toBe("approval-required");
     expect(typeof body.approvalId).toBe("string");
+    expect(body.pending?.action).toBe("covel:plugin-server-code");
     // The community entry MUST NOT have run before approval.
     expect(activateCalls()).toBe(0);
     expect(registry.getPluginAction(PLUGIN_ID, "entry-action")).toBeUndefined();
@@ -521,9 +526,23 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
       decidedAt: new Date().toISOString(),
     });
 
-    const second = await call(app, "entry-action");
-    expect(second.status).toBe(200);
-    const body = (await second.json()) as {
+    const actionApproval = await call(app, "entry-action");
+    expect(actionApproval.status).toBe(202);
+    const secondPending = (await actionApproval.json()) as {
+      approvalId: string;
+      pending: { action: string };
+    };
+    expect(secondPending.pending.action).toBe("entry-action");
+    gate.decide({
+      approvalId: secondPending.approvalId,
+      decision: "allow",
+      scope: "session",
+      decidedAt: new Date().toISOString(),
+    });
+
+    const third = await call(app, "entry-action");
+    expect(third.status).toBe(200);
+    const body = (await third.json()) as {
       status: string;
       result: { handled: { n: number } };
     };
@@ -537,8 +556,9 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
     const { app, store, gate } = setupEntry();
     await seedSession(store);
 
-    // Activate the entry via a known action first.
-    const first = await call(app, "entry-action");
+    // Approve loading the entry, then verify an undeclared action is rejected
+    // before any action-specific approval is created.
+    const first = await call(app, "does-not-exist");
     const { approvalId } = (await first.json()) as { approvalId: string };
     gate.decide({
       approvalId,
@@ -546,9 +566,6 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
       scope: "session",
       decidedAt: new Date().toISOString(),
     });
-    await call(app, "entry-action");
-
-    // Now the entry is active; a never-registered action is a real 404.
     const res = await call(app, "does-not-exist");
     expect(res.status).toBe(404);
     const body = (await res.json()) as { code?: string };

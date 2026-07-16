@@ -24,11 +24,37 @@ const projectRoot = path.resolve(desktopRoot, "../..");
 console.log("=== Covel Desktop Build ===\n");
 
 // Step 1: Build web frontend
+//
+// @covel/desktop now declares a workspace dependency on @covel/web
+// (package.json), so `turbo build` already sequences web's build before
+// this script runs — building it again here would race turbo's own build
+// against the same `dist/web` output dir (both use vite's emptyOutDir).
+// Standalone invocations (`pnpm build:electron` / `pnpm --filter
+// @covel/desktop dist`, which bypass turbo) still need this fallback.
 console.log("[1/4] Building web frontend...");
-execSync("pnpm --filter @covel/web build", {
-  cwd: projectRoot,
-  stdio: "inherit",
-});
+// H-10: NEVER gate on existsSync(dist/web) — a stale dir from an old frontend
+// would be packaged silently. Standalone builds (`pnpm build:electron`,
+// `pnpm --filter @covel/desktop dist`) bypass turbo's freshness graph, so they
+// must ALWAYS rebuild. The only safe skip is when turbo itself drives the build:
+// the @covel/web#build task is sequenced first via the workspace dep, so
+// dist/web is already fresh. Turbo sets TURBO_HASH in every in-task env — use
+// that explicit signal, not directory existence.
+const webDistPath = path.join(projectRoot, "dist/web");
+const underTurbo = Boolean(process.env.TURBO_HASH);
+if (underTurbo && fs.existsSync(webDistPath)) {
+  console.log(
+    "  ✓ dist/web produced by turbo this run (fresh) — skipping rebuild",
+  );
+} else {
+  execSync("pnpm --filter @covel/web generate:routes", {
+    cwd: projectRoot,
+    stdio: "inherit",
+  });
+  execSync("pnpm --filter @covel/web build", {
+    cwd: projectRoot,
+    stdio: "inherit",
+  });
+}
 
 // Step 2: Bundle main process + preload
 console.log("\n[2/4] Bundling main process and preload...");

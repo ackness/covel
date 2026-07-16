@@ -5,10 +5,7 @@ import type {
   TurnInput,
   TurnResult,
 } from "@covel/shared";
-import {
-  buildRuntimeOutputFromResult,
-  emitSubEvent,
-} from "./turn-runtime-helpers.js";
+import { buildRuntimeOutputFromResult } from "./turn-runtime-helpers.js";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 
 export interface FinalizeTurnResultParams {
@@ -123,11 +120,12 @@ export async function finalizeTurnResult({
 
   await persistTurnResult(turnResult, deps, input, turnNumber);
 
-  emitSubEvent(deps.eventBus, "game", "turn.completed", input.sessionId, {
-    turnId: input.turnId,
-    sessionId: input.sessionId,
-    durationMs: turnResult.durationMs,
-  });
+  // NOTE: `turn.completed` is intentionally NOT emitted here. The persisted
+  // runtime results above are execution artefacts, not committed game state —
+  // the authoritative completion event fires via `TurnResult.completeTurn`,
+  // which the commit-owning caller invokes only after proposals + snapshot
+  // land (audit R-09). A persisted result without a completion event is the
+  // expected crash signature, tolerated by recovery.
 
   return turnResult;
 }

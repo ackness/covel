@@ -10,6 +10,53 @@ import { isMediaRef } from "@/lib/media-ref-utils.js";
 import { resolveI18n } from "@/lib/catalog/helpers.js";
 import { isPendingInteractionMessage } from "../game-view/interaction-blocks.js";
 
+// ── Capability-driven plugin binding ────────────────────────────
+//
+// Stage layers bind to plugin-data by CAPABILITY, not by hardcoded plugin id
+// (framework↔plugin isolation rule — framework code must discover plugins via
+// declared capabilities). A plugin declares one of these capabilities in its
+// PLUGIN.md; the stage resolves the owning plugin id at runtime from the
+// session's active plugin list. The bundled plugins (scene-stage / scene-cast /
+// scene-prompts / character-presence) declare the matching capability, so
+// discovery resolves to them today; a third-party equivalent that declares the
+// same capability transparently replaces them without touching this code.
+
+export const STAGE_CAPABILITIES = {
+  scene: "scene-stage",
+  cast: "scene-cast",
+  prompts: "scene-prompts",
+  presence: "character-presence",
+} as const;
+
+interface CapabilityCarrier {
+  readonly id: string;
+  readonly isActive?: boolean;
+  readonly capabilities?: readonly string[];
+}
+
+/**
+ * Resolve the ACTIVE plugin id that declares `capability` from the session's
+ * plugin list. Only an active plugin writes plugin-data, so binding a stage
+ * layer to an inactive (or absent) provider yields a permanently empty layer —
+ * return `undefined` in that case and let the caller disable the layer
+ * gracefully rather than guessing the capability name as a plugin id.
+ *
+ * Deterministic when several active plugins declare the same capability: pick
+ * the lexicographically smallest id, so the choice never depends on the
+ * server's plugin-list ordering (stage layers are 1:1).
+ */
+export function pluginIdForCapability(
+  plugins: readonly CapabilityCarrier[],
+  capability: string,
+): string | undefined {
+  let best: string | undefined;
+  for (const p of plugins) {
+    if (!p.isActive || !p.capabilities?.includes(capability)) continue;
+    if (best === undefined || p.id < best) best = p.id;
+  }
+  return best;
+}
+
 // ── Backdrop (scene-stage `stage/current`) ──────────────────────
 
 /** Shape written by `scene-stage/resolver` to `(scene-stage, "stage")["current"]`. */
@@ -197,33 +244,47 @@ export interface SpriteLane {
  * (non-transparent, scene-baked) card can't blanket the entire backdrop. */
 const MAX_SOLO_LANE_PCT = 60;
 
+/** Active speaker's lane share relative to the others'. Equal lanes let a
+ * wide (width-bound, `object-contain`) speaker sprite render *smaller* than
+ * tall neighbours; the extra share keeps the speaker visually dominant.
+ * Must stay small enough that a 2-cast active lane (w/(w+1)) ≤ the solo cap. */
+const ACTIVE_LANE_WEIGHT = 1.4;
+
 /**
- * Lane geometry for the sprite layer: the stage splits into equal-width
- * lanes, one per staged sprite, ordered left→right by station rank. Sprites
- * render *contained inside* their lane box, so occlusion is impossible by
- * construction — sprite width is bounded by stage *width* (a share of it),
- * not by stage height × image aspect, which is what let wide sprite cards
- * swallow their neighbours whenever the stage got narrower.
+ * Lane geometry for the sprite layer: the stage splits into weighted lanes,
+ * one per staged sprite, ordered left→right by station rank — the active
+ * speaker (when there is one and the cast isn't solo) gets a wider share.
+ * Sprites render *contained inside* their lane box, so occlusion is
+ * impossible by construction — sprite width is bounded by stage *width* (a
+ * share of it), not by stage height × image aspect, which is what let wide
+ * sprite cards swallow their neighbours whenever the stage got narrower.
  *
  * Returns one lane per input position, aligned with input order. Assumes
  * positions are unique (guaranteed by `assignStations`).
  */
 export function computeSpriteLanes(
   positions: readonly SpritePosition[],
+  activeIndex = -1,
 ): SpriteLane[] {
   const count = positions.length;
   if (count === 0) return [];
-  const laneWidth = 100 / count;
-  const widthPct = Math.min(laneWidth, MAX_SOLO_LANE_PCT);
+  const weights = positions.map((_, i) =>
+    i === activeIndex && count > 1 ? ACTIVE_LANE_WEIGHT : 1,
+  );
+  const total = weights.reduce((sum, w) => sum + w, 0);
 
-  return positions.map((pos) => {
-    const idx = STATION_ORDER.indexOf(pos);
-    const rank = positions.filter(
-      (other) => STATION_ORDER.indexOf(other) < idx,
-    ).length;
-    const centerPct = (rank + 0.5) * laneWidth;
-    return { leftPct: centerPct - widthPct / 2, widthPct };
-  });
+  const byRank = positions
+    .map((pos, i) => ({ i, station: STATION_ORDER.indexOf(pos) }))
+    .sort((a, b) => a.station - b.station);
+  const lanes: SpriteLane[] = new Array(count);
+  let cursor = 0;
+  for (const { i } of byRank) {
+    const share = (weights[i] / total) * 100;
+    const widthPct = Math.min(share, MAX_SOLO_LANE_PCT);
+    lanes[i] = { leftPct: cursor + (share - widthPct) / 2, widthPct };
+    cursor += share;
+  }
+  return lanes;
 }
 
 /**

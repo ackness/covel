@@ -352,4 +352,49 @@ describe("CoreMemoryManager", () => {
       expect(value.icon).toBe("Info");
     });
   });
+
+  describe("threaded working-memory reads (audit R-13)", () => {
+    it("performs zero extra listWorkingMemory reads when `existing` is threaded", async () => {
+      let listCalls = 0;
+      const original = store.listWorkingMemory.bind(store);
+      store.listWorkingMemory = async (sessionId: string) => {
+        listCalls += 1;
+        return original(sessionId);
+      };
+
+      // Simulate the turn pipeline: one read, threaded into both calls.
+      const records = await store.listWorkingMemory("sess-1");
+      await manager.initializeDefaults("sess-1", records as any);
+      const blocks = await manager.loadBlocks("sess-1", records as any);
+
+      expect(listCalls).toBe(1);
+      expect(blocks).toHaveLength(LABELS.length);
+    });
+
+    it("threading a pre-initializeDefaults read yields the same blocks as re-reading", async () => {
+      await manager.updateBlock("sess-1", "story_state", "Chapter 2");
+
+      const records = await store.listWorkingMemory("sess-1");
+      await manager.initializeDefaults("sess-1", records as any);
+      const threaded = await manager.loadBlocks("sess-1", records as any);
+      const reread = await manager.loadBlocks("sess-1");
+
+      expect(threaded.map((b) => [b.label, b.content])).toEqual(
+        reread.map((b) => [b.label, b.content]),
+      );
+      expect(threaded.find((b) => b.label === "story_state")!.content).toBe(
+        "Chapter 2",
+      );
+    });
+
+    it("initializeDefaults with a threaded complete list never blanks existing content", async () => {
+      await manager.updateBlock("sess-1", "story_state", "Do not blank me");
+
+      const records = await store.listWorkingMemory("sess-1");
+      await manager.initializeDefaults("sess-1", records as any);
+
+      const block = await manager.getBlock("sess-1", "story_state");
+      expect(block!.content).toBe("Do not blank me");
+    });
+  });
 });

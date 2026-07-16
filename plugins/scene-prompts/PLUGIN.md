@@ -15,6 +15,11 @@ timeoutMs: 120000
 # into continuing the narrative and finish with zero tool calls; the gate gives
 # one corrective retry before releasing so the choices don't silently vanish.
 requireToolUse: true
+# Discovered by the stage choices layer via this capability (not a hardcoded
+# plugin id — framework↔plugin isolation rule). A third-party plugin declaring
+# `scene-prompts` transparently replaces this one as the stage's prompt source.
+capabilities:
+  - scene-prompts
 tags:
   - mode:dialogue
   - role:quick-reply

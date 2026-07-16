@@ -8,6 +8,7 @@ import path from "node:path";
 import type { WorldRecord } from "@covel/store";
 import { errorBody } from "../../../api-error.js";
 import { resolveContainedPath } from "../../../world-data/safe-path.js";
+import { checkHostedOperator } from "../session/session-guard.js";
 import { type WorldEnv, resolveWorldMetadata } from "./shared.js";
 
 export const worldCrudRoutes = new Hono<WorldEnv>();
@@ -32,6 +33,8 @@ worldCrudRoutes.get("/:id", async (c) => {
 
 // POST /worlds
 worldCrudRoutes.post("/", async (c) => {
+  const denied = checkHostedOperator(c);
+  if (denied) return denied;
   const store = c.get("store");
   const body = await c.req.json<Record<string, unknown>>();
 
@@ -65,6 +68,8 @@ worldCrudRoutes.post("/", async (c) => {
 
 // PATCH /worlds/:id — partial update (overlay lore, tags, etc.)
 worldCrudRoutes.patch("/:id", async (c) => {
+  const denied = checkHostedOperator(c);
+  if (denied) return denied;
   const store = c.get("store");
   const id = c.req.param("id");
   const existing = await store.getWorld(id);
@@ -99,6 +104,8 @@ worldCrudRoutes.patch("/:id", async (c) => {
 
 // DELETE /worlds/:id
 worldCrudRoutes.delete("/:id", async (c) => {
+  const denied = checkHostedOperator(c);
+  if (denied) return denied;
   const store = c.get("store");
   const id = c.req.param("id");
   const world = await store.getWorld(id);

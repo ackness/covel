@@ -31,6 +31,13 @@ export interface TurnEmitter {
   readonly sessionId: string;
   readonly turnId: string;
   /**
+   * The correlation id this emitter stamps on persisted trace_events —
+   * the SSE stream's traceId when the caller provided one, else the turnId.
+   * Exposed so downstream writers (commit pipeline, trace recorder) can use
+   * the SAME id instead of re-deriving from turnId (audit R-14).
+   */
+  readonly traceId?: string;
+  /**
    * Emit a trace event. `type` is constrained to the closed `CovelEventType`
    * union so a framework emit site cannot invent a name that is absent from the
    * protocol contract (and therefore from the action-stream forwarding
@@ -57,6 +64,7 @@ export function createTurnEmitter(opts: CreateTurnEmitterOptions): TurnEmitter {
   return {
     sessionId: opts.sessionId,
     turnId: opts.turnId,
+    traceId,
     async emit(type, payload) {
       // flowId mirrors traceId (protocol.md: `flowId = traceId`) so the
       // /api/traces payload carries a populated correlation id instead of "".

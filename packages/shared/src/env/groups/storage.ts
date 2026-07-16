@@ -59,6 +59,15 @@ export const STORAGE_ENV_VARS = [
       "VectorStore backend. embedded uses the active DataStore vector capability; none disables vector search; external is reserved for an injected adapter.",
   },
   {
+    name: "COVEL_PG_LOCK_POOL_MAX",
+    group: "storage",
+    type: "integer",
+    status: "active",
+    defaultValue: "16",
+    description:
+      "Max connections in the dedicated PG advisory session-lock pool. Each in-flight turn holds one reserved connection; size at least at expected peak concurrent sessions per pod.",
+  },
+  {
     name: "POSTGRES_USER",
     group: "storage",
     type: "string",

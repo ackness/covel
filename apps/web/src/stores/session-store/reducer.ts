@@ -13,6 +13,9 @@ import type {
 
 const EXEC_STEPS_MAX = 500;
 
+/** Streaming-placeholder id convention shared with the renderer. */
+const STREAM_ID_PREFIX = "stream_";
+
 export const initialState: SessionState = {
   presets: [],
   packages: [],
@@ -141,21 +144,28 @@ export function reducer(
       return { ...state, messages: [...state.messages, action.message] };
     }
     case "COMPLETE_MESSAGE": {
-      // Replace the streaming placeholder with the final message content.
-      // Previously we skipped when a placeholder existed — but if any delta
-      // frames were dropped mid-stream the placeholder only contains the
-      // partial text the client received, and the user saw a truncated
-      // narrative. The reducer replaces the placeholder with completed content,
-      // which is always the authoritative full text; mirror that here.
-      const streamId = `stream_${action.turnId}_${action.runtimeId}`;
+      // Replace the streaming placeholder with the final message content and
+      // drop its live streaming buffer (the authoritative full text now lives
+      // in `messages`). Previously we skipped when a placeholder existed — but
+      // if any delta frames were dropped mid-stream the placeholder only held
+      // the partial text the client received, so we always overwrite with the
+      // completed content.
+      const streamId = `${STREAM_ID_PREFIX}${action.turnId}_${action.runtimeId}`;
       const idx = state.messages.findIndex((m) => m.id === streamId);
       if (idx >= 0) {
         const next = [...state.messages];
         next[idx] = {
           ...action.message,
-          id: state.messages[idx].id,
           kind: "story",
         };
+        return { ...state, messages: next };
+      }
+      const authoritativeIdx = state.messages.findIndex(
+        (message) => message.id === action.message.id,
+      );
+      if (authoritativeIdx >= 0) {
+        const next = [...state.messages];
+        next[authoritativeIdx] = { ...action.message, kind: "story" };
         return { ...state, messages: next };
       }
       return {
@@ -164,28 +174,23 @@ export function reducer(
       };
     }
     case "APPEND_DELTA": {
-      // Find existing streaming message for this runtime, or create one.
-      // IMPORTANT: carry turnId / runtimeId / kind on the placeholder from the
-      // first delta — chat-messages groups execution timelines by turnId and
-      // without these fields each streaming story message would be treated as
-      // "unattributed" and the timeline chips would jump to the very top of
-      // the chat instead of appearing right after the turn's last message.
-      const streamId = `stream_${action.turnId}_${action.runtimeId}`;
-      const idx = state.messages.findIndex((m) => m.id === streamId);
-      if (idx >= 0) {
-        const prev = state.messages[idx];
-        const newMessages = state.messages.with(idx, {
-          ...prev,
-          content: prev.content + action.delta,
-        });
-        return { ...state, messages: newMessages };
-      }
+      // Streaming text lives in a fine-grained external store. The placeholder
+      // is inserted exactly once, keeping the messages reference stable for the
+      // whole stream so O(history) grouping does not rebuild per token (M-03).
+      //
+      // IMPORTANT: carry turnId / runtimeId / kind on the placeholder — chat
+      // groups execution timelines by turnId, and without these the streaming
+      // story message is "unattributed" and its timeline chips jump to the top
+      // of the chat instead of appearing right after the turn's last message.
+      const streamId = `${STREAM_ID_PREFIX}${action.turnId}_${action.runtimeId}`;
+      if (state.messages.some((message) => message.id === streamId))
+        return state;
       return {
         ...state,
         messages: state.messages.concat({
           id: streamId,
           role: "assistant",
-          content: action.delta,
+          content: "",
           timestamp: new Date().toISOString(),
           turnId: action.turnId,
           runtimeId: action.runtimeId,
@@ -195,17 +200,17 @@ export function reducer(
     }
     case "SET_EXECUTING":
       return { ...state, executing: action.value };
-    case "DISCARD_TURN_STREAMS":
+    case "DISCARD_TURN_STREAMS": {
       // Streaming placeholders use the `stream_<turnId>_<runtimeId>` id
       // convention (APPEND_DELTA above). No turnId → discard all placeholders.
+      const dropStream = (id: string, turnId?: string): boolean =>
+        id.startsWith(STREAM_ID_PREFIX) &&
+        (action.turnId === undefined || turnId === action.turnId);
       return {
         ...state,
-        messages: state.messages.filter(
-          (m) =>
-            !m.id.startsWith("stream_") ||
-            (action.turnId !== undefined && m.turnId !== action.turnId),
-        ),
+        messages: state.messages.filter((m) => !dropStream(m.id, m.turnId)),
       };
+    }
     case "SET_EXECUTION_ERROR":
       return { ...state, executionError: action.error };
     case "ADD_STATE_PATCH": {
@@ -383,12 +388,26 @@ export function reducer(
     }
     case "REMOVE_MESSAGES_FROM_TURN": {
       // Remove messages from a specific turn, except those from cached runtimes
-      const filtered = state.messages.filter((m) => {
-        if (m.turnId !== action.turnId) return true;
-        if (m.runtimeId && action.keepRuntimeIds.has(m.runtimeId)) return true;
-        return false;
-      });
+      const keepMsg = (
+        turnId: string | undefined,
+        runtimeId?: string,
+      ): boolean =>
+        turnId !== action.turnId ||
+        (runtimeId !== undefined && action.keepRuntimeIds.has(runtimeId));
+      const filtered = state.messages.filter((m) =>
+        keepMsg(m.turnId, m.runtimeId),
+      );
       return { ...state, messages: filtered };
+    }
+    case "REPLACE_PLUGIN_DATA": {
+      let nextState: SessionState = {
+        ...state,
+        pluginData: action.pluginData,
+      };
+      for (const entry of nextState.messageUiSpecs) {
+        nextState = applyPluginMessageSurface(nextState, entry.pluginId);
+      }
+      return nextState;
     }
     case "PLUGIN_DATA_CHANGED": {
       const { pluginId, changes } = action;

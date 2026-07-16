@@ -10,9 +10,10 @@ outputKind: system
 trigger:
   type: scheduled
   interval: 1
+entry: ./server/index.js
 tools:
-  local:
-    - ./tools/record-note.js
+  plugin:
+    - record-note
 input:
   inject:
     - kind: runtime

@@ -31,19 +31,15 @@ import {
   type ParsedPluginMd,
   type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
-import type {
-  HookHandler,
-  HookPipeline,
-  PluginRpcRegistry,
-  RpcHandler,
-} from "@covel/runtime";
 import {
-  HOOK_EVENTS,
-  type HookEnforce,
-  type HookEventName,
-  type RpcTrustLevel,
-} from "@covel/shared";
-import type { DataStore, PluginDataRecord } from "@covel/store";
+  activateDeferredPluginHooks,
+  type HookPipeline,
+  type PluginAPI,
+  type PluginRpcRegistry,
+  type PluginToolkit,
+} from "@covel/runtime";
+import { HOOK_EVENTS, type RpcTrustLevel } from "@covel/shared";
+import type { DataStore } from "@covel/store";
 import {
   shortId,
   shortIdBatch,
@@ -52,60 +48,13 @@ import {
   type ToolModule,
 } from "@covel/tools";
 import { z } from "zod";
-import { registerNamespaced, type WireModuleShape } from "./plugin-wires.js";
+import { registerNamespaced } from "./plugin-wires.js";
 
-/** Helper bag handed to entry factories — same surface the legacy
- *  `tools.local` factory injection provided, so migrated tool files keep
- *  their `({ tool, z, store, ... })` signature unchanged. */
-export interface PluginToolkit {
-  readonly tool: typeof tool;
-  readonly z: typeof z;
-  readonly shortId: typeof shortId;
-  readonly shortIdBatch: typeof shortIdBatch;
-  readonly withPendingProposals: typeof withPendingProposals;
-  readonly store: DataStore;
-}
-
-export interface PluginHookOptions {
-  /** Payload predicate — handler only fires when it returns true. */
-  readonly match?: (payload: unknown) => boolean;
-  readonly timeoutMs?: number;
-  readonly enforce?: HookEnforce;
-}
-
-export interface PluginRpcOptions {
-  readonly description?: string;
-  readonly streaming?: boolean;
-  /** May only restrict (never escalate) the plugin's source trust. */
-  readonly trustLevel?: RpcTrustLevel;
-}
-
-/** The facade an entry factory receives. */
-export interface PluginAPI {
-  readonly pluginId: string;
-  readonly toolkit: PluginToolkit;
-  /** SSRF-guarded fetch helpers for wire implementations. */
-  readonly http: {
-    readonly fetchWithRetry: typeof fetchWithRetry;
-    readonly validateBaseUrl: typeof validateBaseUrlForPlugin;
-  };
-  /** Register a local tool (scoped to this plugin, like `tools.local`). */
-  registerTool(toolModule: ToolModule): void;
-  /** Register a lifecycle hook handler (16 events, same semantics as `hooks`). */
-  on(
-    event: HookEventName,
-    handler: HookHandler,
-    options?: PluginHookOptions,
-  ): void;
-  /** Register an RPC action with an inline handler (same gate as `rpc`). */
-  registerRpc(
-    action: string,
-    handler: RpcHandler,
-    options?: PluginRpcOptions,
-  ): void;
-  /** Register media wires (namespaced `<pluginId>/<wireId>`, like `wires`). */
-  registerWires(wires: WireModuleShape): void;
-}
+// `PluginAPI` / `PluginToolkit` (and the related option types) are the
+// Public Plugin API — they live in @covel/runtime so plugin authors can
+// import them. `buildApi` below is annotated `: PluginAPI`, so this
+// implementation cannot drift from the published contract without a
+// compile error.
 
 export interface BootstrapPluginEntriesParams {
   readonly discoveryMap: ReadonlyMap<string, PluginDiscoveryResult>;
@@ -118,11 +67,24 @@ export interface BootstrapPluginEntriesParams {
   readonly pluginToolAccess: Map<string, Set<string>>;
   readonly hookPipeline: HookPipeline;
   readonly rpcRegistry: PluginRpcRegistry;
+  /** Fail-closed session authorization for community server code. */
+  readonly isCommunityServerCodeApproved?: (
+    sessionId: string | undefined,
+    pluginId: string,
+  ) => boolean;
+  /** Narrower grant used for lifecycle hook execution after import. */
+  readonly isCommunityHookApproved?: (
+    sessionId: string,
+    pluginId: string,
+  ) => boolean;
 }
 
 export interface BootstrapPluginEntries {
   /** Deferred entry invocation — memoized per pluginId, safe to await repeatedly. */
-  readonly ensurePluginEntry: (pluginId: string) => Promise<void>;
+  readonly ensurePluginEntry: (
+    pluginId: string,
+    sessionId?: string,
+  ) => Promise<void>;
   /**
    * True when `pluginId` declares an `entry`, its trust is deferred
    * (community), and the entry has not been activated yet. The plugin-rpc
@@ -134,49 +96,37 @@ export interface BootstrapPluginEntries {
 }
 
 /**
- * Wrap a DataStore so plugin-data access is clamped to `pluginId`, ignoring
- * any pluginId the caller passes. Community entry factories close over
- * `toolkit.store`; without this a handler could read/write another plugin's
- * `plugin_data` namespace by supplying a different id — bypassing the
- * per-dispatch community store view (`createRpcHandlerStoreView`).
+ * Community-facing entry-factory store view: default-deny every method.
+ *
+ * Community entry factories close over `toolkit.store` for the lifetime of
+ * the process, so this view must be safe on its own:
+ *  - EVERY read and write — including own-namespace `setPluginData` /
+ *    `setPluginDataBatch` / `deletePluginData` — and every other DataStore
+ *    method throws a clear error. Community writes must flow through
+ *    governed, session-bound surfaces: proposals → validate → commit from
+ *    tools/runtimes, or the per-dispatch `createRpcHandlerStoreView` handed
+ *    to RPC handlers at request time.
  *
  * Session scoping is NOT possible here (entries register at activation time,
- * before any request), so this scopes what it can: the pluginId dimension.
- * Everything else forwards to the raw store unchanged via Proxy.
- *
- * ponytail: clamps the pluginId dimension only. Per-session scoping needs the
- * request-time view (createRpcHandlerStoreView) — community RPC dispatch
- * already applies that on top. Upgrade path: thread a session-scoped store
- * into function-runtime handlers if entries ever run per-session.
+ * before any request) — that is exactly why writes are denied outright
+ * rather than clamped: an entry-level operation cannot be bound to a request
+ * session, so there is no safe scope for it. Request/runtime handlers receive
+ * their own session-scoped store surfaces.
  */
 function scopeStoreToPlugin(store: DataStore, pluginId: string): DataStore {
-  const rebuildId = (record: PluginDataRecord): PluginDataRecord => ({
-    ...record,
-    pluginId,
-    id: `${record.sessionId}:${pluginId}:${record.namespace}:${record.key}`,
-  });
-  const overrides: Partial<DataStore> = {
-    setPluginData: (record) => store.setPluginData(rebuildId(record)),
-    setPluginDataBatch: (records) =>
-      store.setPluginDataBatch(records.map(rebuildId)),
-    getPluginData: (sessionId, _pluginId, namespace, key) =>
-      store.getPluginData(sessionId, pluginId, namespace, key),
-    listPluginData: (sessionId, _pluginId, namespace, pagination) =>
-      store.listPluginData(sessionId, pluginId, namespace, pagination),
-    deletePluginData: (sessionId, _pluginId, namespace, key) =>
-      store.deletePluginData(sessionId, pluginId, namespace, key),
-    listPluginDataSessionScope: () => {
-      throw new Error(
-        `[plugin-entry] ${pluginId}: listPluginDataSessionScope() is a cross-plugin read, not available to a community entry toolkit`,
-      );
-    },
-  };
   return new Proxy(store, {
     get(target, prop, receiver) {
-      if (Object.hasOwn(overrides, prop)) {
-        return (overrides as Record<PropertyKey, unknown>)[prop];
-      }
-      return Reflect.get(target, prop, receiver);
+      const value = Reflect.get(target, prop, receiver);
+      // Non-methods forward untouched — this keeps `await`'s `then` probe,
+      // Symbol.toStringTag, etc. working on the proxied store.
+      if (typeof value !== "function") return value;
+      return () => {
+        throw new Error(
+          `[plugin-entry] ${pluginId}: store.${String(prop)}() is not available to a community entry toolkit — ` +
+            `writes must go through proposals (or the session-scoped RPC store at dispatch time); ` +
+            `reads must use a request/runtime-scoped context`,
+        );
+      };
     },
   });
 }
@@ -200,6 +150,8 @@ export async function createBootstrapPluginEntries({
   pluginToolAccess,
   hookPipeline,
   rpcRegistry,
+  isCommunityServerCodeApproved,
+  isCommunityHookApproved,
 }: BootstrapPluginEntriesParams): Promise<BootstrapPluginEntries> {
   const http = { fetchWithRetry, validateBaseUrl: validateBaseUrlForPlugin };
 
@@ -276,11 +228,20 @@ export async function createBootstrapPluginEntries({
           return;
         }
         hookSeq += 1;
+        const sessionGuardedHandler: typeof handler = async (ctx, payload) => {
+          if (
+            pluginTrust === "community" &&
+            !isCommunityHookApproved?.(ctx.sessionId, pluginId)
+          ) {
+            return { action: "continue" };
+          }
+          return handler(ctx, payload);
+        };
         hookPipeline.register({
           id: `${pluginId}:${event}:entry#${hookSeq}`,
           event,
           pluginId,
-          handler,
+          handler: sessionGuardedHandler,
           ...(options?.match ? { match: options.match } : {}),
           ...(typeof options?.timeoutMs === "number"
             ? { timeoutMs: options.timeoutMs }
@@ -392,12 +353,14 @@ export async function createBootstrapPluginEntries({
   // KNOWN LIMITATION (community entry hooks miss early events).
   //
   // Legacy `hooks` register their declarations at boot for every trust tier
-  // (handlers lazy-load on first fire), so their hooks catch SessionStart /
-  // TurnStart from turn one. Entry hooks only enter the HookPipeline once
-  // `ensurePluginEntry` has run. For a community plugin the earliest that
-  // happens is at APPROVAL (`approvals.ts` `allow` → activatePluginServerCode)
-  // or first runtime schedule / rpc activation — never before approval, by
-  // design (unapproved third-party code must not run at boot). Consequences:
+  // (handlers lazy-load on first fire — community handlers stay dormant until
+  // `activateDeferredPluginHooks` below, H-03), so builtin/official legacy
+  // hooks catch SessionStart / TurnStart from turn one. Entry hooks only
+  // enter the HookPipeline once `ensurePluginEntry` has run. For a community
+  // plugin the earliest that either fires is at APPROVAL (`approvals.ts`
+  // `allow` → activatePluginServerCode) or first runtime schedule / rpc
+  // activation — never before approval, by design (unapproved third-party
+  // code must not run at boot). Consequences:
   //   - events that fire before the activation point in the approving turn
   //     (e.g. this session's SessionStart) are missed by the entry's hooks;
   //   - every process restart re-opens the window for an already-approved
@@ -405,11 +368,10 @@ export async function createBootstrapPluginEntries({
   // We do NOT close this by reviving declarative hook manifests — that would
   // trade the single-entry model for the very split it replaced. builtin /
   // official entries ran in the boot loop above and are unaffected.
-  const ensurePluginEntry = async (pluginId: string): Promise<void> => {
-    if (invokedPluginIds.has(pluginId)) return;
-    const pending = inFlight.get(pluginId);
-    if (pending) return pending;
-
+  const ensurePluginEntry = async (
+    pluginId: string,
+    sessionId?: string,
+  ): Promise<void> => {
     const discovery = discoveryMap.get(pluginId);
     if (!discovery) return;
     const trust = getPluginTrustInfo(pluginId, discovery.source);
@@ -418,9 +380,23 @@ export async function createBootstrapPluginEntries({
       invokedPluginIds.add(pluginId);
       return;
     }
+    if (!isCommunityServerCodeApproved?.(sessionId, pluginId)) {
+      throw new Error(
+        `[plugin-entry] ${pluginId}: community server code requires explicit approval for session ${sessionId ?? "<missing>"}`,
+      );
+    }
+    if (invokedPluginIds.has(pluginId)) return;
+    const pending = inFlight.get(pluginId);
+    if (pending) return pending;
 
     const promise = (async () => {
       try {
+        // H-03: approval also unlocks the plugin's legacy `hooks:` handlers,
+        // which were registered dormant at boot (plugin-hooks.ts). Activate
+        // BEFORE the entry runs, and regardless of whether the plugin
+        // declares an `entry` at all — a legacy-hooks-only community plugin
+        // reaches this seam through the same approval path.
+        activateDeferredPluginHooks(hookPipeline, pluginId);
         await invokeEntryForPlugin(pluginId);
         invokedPluginIds.add(pluginId);
       } finally {

@@ -66,6 +66,20 @@ function isAllowed(
 }
 
 describe("gate.revoke (PR-7 — withdraw community grants mid-session)", () => {
+  it("reports a live grant without consuming one-time approval", () => {
+    const gate = createRpcApprovalGate();
+    grantOnce(gate, "sess-1", "p", "covel:plugin-server-code");
+
+    expect(gate.hasGrant("sess-1", "p")).toBe(true);
+    expect(gate.hasGrant("sess-1", "p", "covel:plugin-server-code")).toBe(true);
+    expect(gate.hasGrant("sess-2", "p")).toBe(false);
+
+    expect(isAllowed(gate, "sess-1", "p", "covel:plugin-server-code")).toBe(
+      true,
+    );
+    expect(gate.hasGrant("sess-1", "p")).toBe(false);
+  });
+
   it("clears a session-cached grant so the next call re-prompts", () => {
     const gate = createRpcApprovalGate();
     grantSession(gate, "sess-1", "p");
@@ -104,6 +118,20 @@ describe("gate.revoke (PR-7 — withdraw community grants mid-session)", () => {
   it("returns 0 for a session with no grants", () => {
     const gate = createRpcApprovalGate();
     expect(gate.revoke("nope")).toBe(0);
+  });
+
+  it("cancels pending approvals when a plugin is revoked", () => {
+    const gate = createRpcApprovalGate();
+    const pending = gate.evaluate({
+      sessionId: "sess-1",
+      pluginId: "p",
+      action: "a",
+      payload: null,
+      trustLevel: "community",
+    });
+    expect(pending.status).toBe("pending");
+    expect(gate.revoke("sess-1", "p")).toBe(1);
+    expect(gate.listPending("sess-1")).toEqual([]);
   });
 
   it("clears an un-consumed one-time grant so the next call re-prompts", () => {

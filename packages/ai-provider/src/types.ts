@@ -235,6 +235,18 @@ export interface PresetConfig {
    * so adapters can dispatch on it.
    */
   embeddingFormat?: EmbeddingFormat;
+  /**
+   * Provenance marker: true when this preset was registered from an
+   * untrusted request context (browser `X-Slot-Config` overlay) rather
+   * than trusted config (llm.toml / programmatic registration).
+   *
+   * Security-relevant (S-01): the provider registry refuses to attach
+   * server-env/platform API keys to a resolution whose effective baseUrl
+   * came from a request-scoped source with a different origin than the
+   * trusted provider default — otherwise a request could redirect a
+   * built-in provider to an attacker origin and exfiltrate the env key.
+   */
+  requestScoped?: boolean;
 }
 
 // ── Tool Calling ──────────────────────────────────────────────────

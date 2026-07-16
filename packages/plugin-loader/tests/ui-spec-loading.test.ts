@@ -6,6 +6,7 @@ import {
   discoverPlugins,
   loadPluginManifest,
   loadRuntime,
+  loadRuntimeUi,
 } from "../src/index.js";
 
 describe("UI spec loading", () => {
@@ -70,6 +71,37 @@ Prompt.
 `,
     );
 
+    // Plugin with UI specs AND a function handler whose module import has a
+    // visible side effect — used to pin that loadRuntimeUi never runs plugin JS.
+    const handlerDir = path.join(tmpDir, "ui-handler-plugin");
+    await fs.mkdir(path.join(handlerDir, "ui"), { recursive: true });
+    await fs.writeFile(
+      path.join(handlerDir, "PLUGIN.md"),
+      `---
+name: ui-handler-plugin
+description: UI plus handler
+priority: 500
+runtimeType: function
+handler: ./handler.mjs
+ui:
+  right:
+    - ./ui/panel.json
+---
+
+Prompt.
+`,
+    );
+    await fs.writeFile(
+      path.join(handlerDir, "ui", "panel.json"),
+      JSON.stringify({ id: "handler-panel" }),
+    );
+    await fs.writeFile(
+      path.join(handlerDir, "handler.mjs"),
+      `globalThis.__covelUiHandlerImported = true;
+export default async function handler() { return { proposals: [] }; }
+`,
+    );
+
     // Plugin with path traversal attack
     const evilDir = path.join(tmpDir, "evil-plugin");
     await fs.mkdir(evilDir, { recursive: true });
@@ -91,6 +123,7 @@ Prompt.
 
   afterAll(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
+    delete (globalThis as Record<string, unknown>).__covelUiHandlerImported;
   });
 
   it("should parse ui field from PLUGIN.md frontmatter", async () => {
@@ -132,5 +165,28 @@ Prompt.
     await expect(loadRuntime(discovery, "evil-plugin")).rejects.toThrow(
       /path traversal/i,
     );
+    await expect(loadRuntimeUi(discovery, "evil-plugin")).rejects.toThrow(
+      /path traversal/i,
+    );
+  });
+
+  it("loadRuntimeUi returns UI specs without importing handler JS (S-04)", async () => {
+    const discoveries = await discoverPlugins(tmpDir);
+    const discovery = discoveries.find((d) => d.id === "ui-handler-plugin")!;
+
+    const loaded = await loadRuntimeUi(discovery, "ui-handler-plugin");
+
+    expect(loaded.uiSpecs?.right?.[0].id).toBe("handler-panel");
+    expect(loaded.manifest.name).toBe("ui-handler-plugin");
+    // The handler module's import side effect must NOT have run.
+    expect(
+      (globalThis as Record<string, unknown>).__covelUiHandlerImported,
+    ).toBeUndefined();
+
+    // Contrast: the full execution loader does import it.
+    await loadRuntime(discovery, "ui-handler-plugin");
+    expect(
+      (globalThis as Record<string, unknown>).__covelUiHandlerImported,
+    ).toBe(true);
   });
 });

@@ -1,3 +1,5 @@
+import { applyCursorPage, sortByCursorAsc } from "../common/pagination.js";
+import type { SnapshotMetadata } from "../types.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
 
 export function createSuspensionMethods(
@@ -74,6 +76,27 @@ export function createSnapshotMethods(state: MemoryState): MemoryStoreMethods {
         .filter((r) => r.sessionId === sessionId)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
         .map((r) => structuredClone(r));
+    },
+
+    async listSnapshotsPage(sessionId, opts) {
+      // JS mirror of the SQL keyset page: sort by `(createdAt, id)` then slice
+      // the window. Metadata only — `size` is the serialized payload length,
+      // matching the SQL `length(cast(payload as text))` char count.
+      const ascending = sortByCursorAsc(
+        [...state.snapshots.values()].filter((r) => r.sessionId === sessionId),
+      );
+      const page = applyCursorPage(ascending, opts);
+      return page.map(
+        (r): SnapshotMetadata => ({
+          id: r.id,
+          sessionId: r.sessionId,
+          turnId: r.turnId,
+          kind: r.kind,
+          ...(r.parentId != null ? { parentId: r.parentId } : {}),
+          createdAt: r.createdAt,
+          size: JSON.stringify(r.payload).length,
+        }),
+      );
     },
   };
 }

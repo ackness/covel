@@ -891,13 +891,20 @@
    the animated outer wrapper above) so it doesn't fight the entrance
    animation for control of `transform`. */
 .ui-stage-sprite-active {
-  transform: scale(1.03);
+  transform: scale(1.05);
+  transform-origin: bottom center;
   filter: drop-shadow(
     0 0 28px color-mix(in oklab, var(--accent-primary) 55%, transparent)
   );
 }
 
+/* Inactive sprites scale *down* with feet planted (bottom origin): with
+   `object-contain` lanes a tall inactive sprite can out-height a wide active
+   one, so the down-scale keeps the speaker the dominant figure regardless of
+   image aspect ratios. */
 .ui-stage-sprite-inactive {
+  transform: scale(0.93);
+  transform-origin: bottom center;
   filter: brightness(0.55) saturate(0.6);
 }
 

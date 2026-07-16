@@ -10,7 +10,7 @@
       ]
     },
     "apps/desktop": {
-      "ignoreDependencies": ["tsx"]
+      "ignoreDependencies": ["@covel/web"]
     },
     "plugins/*": {
       "entry": [
@@ -22,6 +22,10 @@
         "runtimes/*/handler.js",
         "runtimes/*/guard.js"
       ]
+    },
+    "apps/web": {
+      "entry": ["src/routes/**/*.{ts,tsx}"],
+      "ignoreUnresolved": ["\\./routeTree\\.gen"]
     }
   }
 }

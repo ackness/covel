@@ -48,6 +48,12 @@ interface ProviderRegistration {
   defaults?: ProviderConfig;
   protocols?: Partial<Record<ProviderProtocol, ProtocolRoute>>;
   hooks?: ProviderLifecycleHook[];
+  /**
+   * True when the provider was registered from an untrusted request
+   * context (slot overlay). Its `defaults.baseUrl` is then NOT a trusted
+   * origin for attaching server-env API keys (see `envKeyAllowed`).
+   */
+  requestScoped?: boolean;
 }
 
 export interface ProviderResolution {
@@ -55,6 +61,17 @@ export interface ProviderResolution {
   config: ProviderConfig;
   protocol: ProviderProtocol;
   hooks: ProviderLifecycleHook[];
+  /**
+   * Whether server-env/platform API keys may be attached to this
+   * resolution (S-01). False when the effective baseUrl came from a
+   * request-scoped source (overlay preset/provider) whose origin differs
+   * from the trusted registered default — env keys must then only come
+   * from the request's own explicitly supplied provider keys.
+   *
+   * Optional so structural test mocks stay valid; absent = allowed
+   * (`createProviderRegistry` always sets it explicitly).
+   */
+  envKeyAllowed?: boolean;
 }
 
 /**
@@ -117,15 +134,23 @@ export function createProviderRegistry(options?: {
       provider: string;
       baseUrl?: string;
       protocol?: ProviderProtocol;
+      /** Provenance of the target (overlay presets set this — see types.ts). */
+      requestScoped?: boolean;
     },
     opts: { mode: OperationMode } = { mode: "text" },
   ): ProviderResolution {
-    const registered = providers.get(target.provider);
-    if (!registered) {
+    // Request-scoped targets (browser custom presets) may name providers
+    // that exist only in the request. Resolve them ephemerally instead of
+    // requiring a registration: nothing is written to the shared registry,
+    // so concurrent requests can never poison each other's provider config
+    // (H-04), and env keys never attach (no trusted default origin).
+    const stored = providers.get(target.provider);
+    if (!stored && !target.requestScoped) {
       throw new Error(
         `Provider registry: provider "${target.provider}" is not registered.`,
       );
     }
+    const registered: ProviderRegistration = stored ?? { requestScoped: true };
 
     const protocol = resolveProtocol(target);
     const protocolRoute = registered.protocols?.[protocol];
@@ -152,24 +177,55 @@ export function createProviderRegistry(options?: {
       mergedConfig.cacheStrategy = defaultCacheStrategyFor(protocol);
     }
 
+    // S-01: bind server-env keys to trusted origins. The trusted baseUrl is
+    // what config alone (llm.toml preset/provider, protocol route) would
+    // produce with every request-scoped source removed. When the effective
+    // baseUrl came from a request-scoped source and points at a different
+    // origin, env keys must not follow it — only request-supplied keys may.
+    const trustedBaseUrl =
+      (target.requestScoped ? undefined : target.baseUrl) ??
+      protocolRoute?.defaults?.baseUrl ??
+      (registered.requestScoped ? undefined : registered.defaults?.baseUrl);
+    const envKeyAllowed =
+      mergedConfig.baseUrl === undefined ||
+      hasSameOrigin(mergedConfig.baseUrl, trustedBaseUrl);
+
+    // Trusted default headers (llm.toml can carry auth-bearing headers) must
+    // not follow a request-redirected origin either — same exfil channel.
+    if (!envKeyAllowed && mergedConfig.headers) {
+      delete mergedConfig.headers;
+    }
+
     return {
       adapter,
       config: mergedConfig,
       protocol,
       hooks: [...(registered.hooks ?? [])],
+      envKeyAllowed,
     };
   }
 
   /**
    * Inject runtime API keys into provider configs.
    * Returns a new resolution with the key merged.
+   *
+   * `apiKeys` are request-supplied (X-Provider-Keys) and always win.
+   * `envApiKeys` are server-env/platform keys — they only attach when the
+   * resolution's effective baseUrl origin matches trusted config
+   * (`envKeyAllowed`), so a request-scoped preset pointing a built-in
+   * provider at a foreign origin can never exfiltrate a server key.
    */
   function withApiKeys(
     resolution: ProviderResolution,
     apiKeys: Record<string, string>,
     providerName: string,
+    envApiKeys?: Record<string, string>,
   ): ProviderResolution {
-    const key = apiKeys[providerName];
+    const envKey =
+      resolution.envKeyAllowed === false
+        ? undefined
+        : envApiKeys?.[providerName];
+    const key = apiKeys[providerName] ?? envKey;
     if (!key) return resolution;
 
     return {
@@ -183,7 +239,11 @@ export function createProviderRegistry(options?: {
    * flows such as the provider-ping endpoint that accepts custom
    * providers from the client on a per-request basis.
    */
-  function addProvider(name: string, defaults: ProviderDefaults): void {
+  function addProvider(
+    name: string,
+    defaults: ProviderDefaults,
+    opts?: { requestScoped?: boolean },
+  ): void {
     const existing = providers.get(name);
     if (existing) {
       providers.set(name, {
@@ -191,7 +251,10 @@ export function createProviderRegistry(options?: {
         defaults: { ...defaults, ...existing.defaults },
       });
     } else {
-      providers.set(name, { defaults });
+      providers.set(name, {
+        defaults,
+        ...(opts?.requestScoped ? { requestScoped: true } : {}),
+      });
     }
   }
 
@@ -213,6 +276,16 @@ export function createProviderRegistry(options?: {
     hasProvider,
     reconfigure,
   };
+}
+
+/** Origin-level comparison for the env-key trust gate. Unparseable → false. */
+function hasSameOrigin(url: string, trustedUrl: string | undefined): boolean {
+  if (!trustedUrl) return false;
+  try {
+    return new URL(url).origin === new URL(trustedUrl).origin;
+  } catch {
+    return false;
+  }
 }
 
 function resolveProtocol(target: {

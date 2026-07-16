@@ -162,6 +162,13 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       return filtered;
     },
 
+    async getEventById(sessionId, id) {
+      return (
+        state.events.find((r) => r.sessionId === sessionId && r.id === id) ??
+        null
+      );
+    },
+
     async saveApproval(record) {
       state.approvals.push(record);
     },

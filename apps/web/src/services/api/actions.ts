@@ -1,4 +1,5 @@
 import { parseJsonSseData, readSseStream } from "../sse.js";
+import { sessionAuthHeaders } from "../session-credentials.js";
 import { buildAiHeaders } from "./model-settings.js";
 import type { SseEnvelope } from "./types.js";
 
@@ -38,6 +39,7 @@ export function sendAction(
         headers: {
           "Content-Type": "application/json",
           ...buildAiHeaders(),
+          ...sessionAuthHeaders(req.sessionId),
         },
         body: JSON.stringify(req),
         signal: controller.signal,
@@ -82,7 +84,10 @@ export async function steerTurn(
     `/api/sessions/${encodeURIComponent(sessionId)}/steer`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...sessionAuthHeaders(sessionId),
+      },
       body: JSON.stringify({ message }),
     },
   );
@@ -96,7 +101,7 @@ export async function steerTurn(
 export async function abortTurn(sessionId: string): Promise<boolean> {
   const res = await fetch(
     `/api/sessions/${encodeURIComponent(sessionId)}/abort`,
-    { method: "POST" },
+    { method: "POST", headers: sessionAuthHeaders(sessionId) },
   );
   return res.ok;
 }

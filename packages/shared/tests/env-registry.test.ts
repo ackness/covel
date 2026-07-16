@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   COVEL_FEATURE_FLAGS,
@@ -109,6 +109,13 @@ describe("env registry", () => {
     expect(env.mediaBackend).toBe("mirror");
     expect(env.vectorBackend).toBe("embedded");
     expect(env.serverPort).toBe(3001);
+    // Audit S-02: the server must bind loopback unless explicitly opted out.
+    expect(env.bindHost).toBe("127.0.0.1");
+  });
+
+  it("honors an explicit COVEL_BIND_HOST opt-in (containers/hosted)", () => {
+    const env = readRuntimeEnv({ COVEL_BIND_HOST: "0.0.0.0" });
+    expect(env.bindHost).toBe("0.0.0.0");
   });
 
   it("derives the default SQLite path from COVEL_DATA_ROOT when SQLITE_PATH is omitted", () => {
@@ -207,6 +214,21 @@ describe("env registry", () => {
     expect(env.serverPort).toBe(3001);
     expect(env.rateLimitRpm).toBe(60);
     expect(env.compactorContextWindow).toBe(32768);
+  });
+
+  it("lowercase-normalizes DEPLOYMENT_TIER", () => {
+    const env = readRuntimeEnv({ DEPLOYMENT_TIER: "COMMERCIAL" });
+    expect(env.deploymentTier).toBe("commercial");
+  });
+
+  it("rejects an unknown DEPLOYMENT_TIER fail-safe to the most restrictive tier (M-06)", () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const env = readRuntimeEnv({ DEPLOYMENT_TIER: "Commercial-typo" });
+    expect(env.deploymentTier).toBe("commercial");
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining("Commercial-typo"),
+    );
+    spy.mockRestore();
   });
 
   it("keeps invalid enum values on fallback", () => {

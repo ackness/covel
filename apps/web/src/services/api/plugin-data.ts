@@ -81,5 +81,5 @@ export async function fetchUiSpecs(
   sessionId?: string,
 ): Promise<UISpecsResponse> {
   const qs = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
-  return request<UISpecsResponse>(`/api/ui-specs${qs}`);
+  return request<UISpecsResponse>(`/api/ui-specs${qs}`, { sessionId });
 }

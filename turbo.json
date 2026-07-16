@@ -13,13 +13,35 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "@covel/web#build": {
+      "dependsOn": ["^build", "generate:routes"],
+      "outputs": ["../../dist/web/**"]
+    },
+    "@covel/desktop#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "staging/**"]
+    },
+    "generate:routes": {
+      "cache": true,
+      "inputs": ["src/routes/**", "vite.config.ts", "package.json"],
+      "outputs": ["src/routeTree.gen.ts"]
+    },
     "test": {
       "dependsOn": ["^build"],
       "cache": true,
-      "inputs": ["src/**", "tests/**", "vitest.config.ts"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "src/**",
+        "tests/**",
+        "vitest.config.ts",
+        "$TURBO_ROOT$/plugins/**"
+      ]
     },
     "lint": {
       "dependsOn": ["^build"]
+    },
+    "@covel/web#lint": {
+      "dependsOn": ["^build", "generate:routes"]
     },
     "clean": {
       "cache": false

@@ -9,6 +9,7 @@ import {
   extractPendingFormMessages,
   filterStalePrompts,
   mergeChoices,
+  pluginIdForCapability,
   resolveBackdrop,
   type SpritePosition,
   type StageCurrentRecord,
@@ -254,6 +255,28 @@ describe("computeSpriteLanes", () => {
     ]);
   });
 
+  it("the active speaker's lane is wider, lanes still tile the stage", () => {
+    const lanes = computeSpriteLanes(["left", "center", "right"], 1);
+    // Weighted 1.4 : 1 — active share = 1.4/3.4, others 1/3.4.
+    expect(lanes[1].widthPct).toBeCloseTo((1.4 / 3.4) * 100, 6);
+    expect(lanes[0].widthPct).toBeCloseTo((1 / 3.4) * 100, 6);
+    expect(lanes[2].widthPct).toBeCloseTo((1 / 3.4) * 100, 6);
+    // Contiguous, no overlap: each lane starts where the previous ends.
+    expect(lanes[0].leftPct).toBeCloseTo(0, 6);
+    expect(lanes[1].leftPct).toBeCloseTo(lanes[0].widthPct, 6);
+    expect(lanes[2].leftPct).toBeCloseTo(
+      lanes[1].leftPct + lanes[1].widthPct,
+      6,
+    );
+    expect(lanes[2].leftPct + lanes[2].widthPct).toBeCloseTo(100, 6);
+  });
+
+  it("a solo active speaker keeps the capped centered lane", () => {
+    expect(computeSpriteLanes(["center"], 0)).toEqual([
+      { leftPct: 20, widthPct: 60 },
+    ]);
+  });
+
   it("lanes tile the stage without overlap for any cast size", () => {
     for (const positions of [
       ["left", "center", "right"],
@@ -470,5 +493,44 @@ describe("filterStalePrompts", () => {
   it("keeps prompts with no __turnId stamp (back-compat with old data)", () => {
     const ns = { prompt1Text: "环顾四周" };
     expect(filterStalePrompts(ns, "turn-5")).toBe(ns);
+  });
+});
+
+describe("pluginIdForCapability", () => {
+  const carrier = (id: string, isActive: boolean, capabilities: string[]) => ({
+    id,
+    isActive,
+    capabilities,
+  });
+
+  it("returns the active plugin that declares the capability", () => {
+    const plugins = [
+      carrier("scene-stage", true, ["scene-stage"]),
+      carrier("other", true, ["something-else"]),
+    ];
+    expect(pluginIdForCapability(plugins, "scene-stage")).toBe("scene-stage");
+  });
+
+  it("skips an inactive provider even when it declares the capability", () => {
+    const plugins = [carrier("scene-stage", false, ["scene-stage"])];
+    expect(pluginIdForCapability(plugins, "scene-stage")).toBeUndefined();
+  });
+
+  it("returns undefined when no active plugin provides the capability", () => {
+    const plugins = [carrier("other", true, ["something-else"])];
+    // No fall back to the capability name as an id.
+    expect(pluginIdForCapability(plugins, "scene-stage")).toBeUndefined();
+  });
+
+  it("picks the lexicographically smallest id among active matches", () => {
+    // Deterministic regardless of input order.
+    const plugins = [
+      carrier("zeta-stage", true, ["scene-stage"]),
+      carrier("alpha-stage", true, ["scene-stage"]),
+    ];
+    expect(pluginIdForCapability(plugins, "scene-stage")).toBe("alpha-stage");
+    expect(pluginIdForCapability([...plugins].reverse(), "scene-stage")).toBe(
+      "alpha-stage",
+    );
   });
 });

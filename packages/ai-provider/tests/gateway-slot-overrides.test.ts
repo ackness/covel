@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createGateway } from "../src/gateway.js";
 import { createPresetRegistry } from "../src/preset-registry.js";
 import { createProviderRegistry } from "../src/provider-registry.js";
@@ -106,8 +106,8 @@ function setup() {
         },
       },
       // Custom provider declared up-front so we can record calls against it
-      // without the overlay's provider registration running (since hasProvider
-      // would then return true and short-circuit it).
+      // (the overlay never registers providers; without this entry the
+      // registry would resolve the builtin HTTP adapter ephemerally).
       vendorX: {
         adapter: createRecordingAdapter("vendorX", calls),
         defaults: {
@@ -141,7 +141,10 @@ function setup() {
 describe("gateway + slotOverrides", () => {
   beforeEach(() => {
     __internals.presetRefs.clear();
-    __internals.providerRefs.clear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("routes a slot-name request through slotPresetOverrides to a client custom preset", async () => {
@@ -177,7 +180,7 @@ describe("gateway + slotOverrides", () => {
 
     // Registry state restored after the call completes.
     expect(presetRegistry.hasPreset("custom_abc")).toBe(false);
-    expect(__internals.presetRefs.has("custom_abc")).toBe(false);
+    expect(__internals.presetRefs.size).toBe(0);
   });
 
   it("forwards slot-level parameter overrides into providerRequestMetadata", async () => {
@@ -365,7 +368,7 @@ describe("gateway + slotOverrides", () => {
 
     // Cleanup happened even though the generator completed normally.
     expect(presetRegistry.hasPreset("custom_stream")).toBe(false);
-    expect(__internals.presetRefs.has("custom_stream")).toBe(false);
+    expect(__internals.presetRefs.size).toBe(0);
   });
 
   it("rolls back the overlay even when the call throws", async () => {
@@ -438,8 +441,252 @@ describe("gateway + slotOverrides", () => {
 
     // Even with the throw, the registry must be clean again.
     expect(presetRegistry.hasPreset("custom_err")).toBe(false);
-    expect(__internals.presetRefs.has("custom_err")).toBe(false);
+    expect(__internals.presetRefs.size).toBe(0);
     expect(calls).toHaveLength(0); // we never reach the recorder
+  });
+
+  it("never leaks env keys to a custom preset that redirects an existing provider (S-01)", async () => {
+    const { gateway, calls } = setup();
+    // Attack: reuse the env-keyed provider name, redirect baseUrl, send NO
+    // request key. The env key must not follow the redirected origin.
+    const overrides: SlotOverridesInput = {
+      customPresets: [
+        {
+          id: "evil",
+          name: "evil",
+          provider: "deepseek",
+          baseUrl: "https://attacker.example",
+          model: "deepseek-chat",
+        },
+      ],
+    };
+
+    await gateway.generateText(
+      { presetId: "evil", messages: [{ role: "user", content: "hi" }] },
+      { envApiKeys: { deepseek: "sk-env-SECRET" }, slotOverrides: overrides },
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].baseUrl).toBe("https://attacker.example");
+    expect(calls[0].apiKey).toBeUndefined();
+  });
+
+  it("still applies env keys to trusted presets and custom presets without baseUrl", async () => {
+    const { gateway, calls } = setup();
+
+    // Trusted llm.toml preset — env key applies.
+    await gateway.generateText(
+      { presetId: "story", messages: [{ role: "user", content: "hi" }] },
+      { envApiKeys: { deepseek: "sk-env-SECRET" } },
+    );
+    // Custom preset that only changes the model (trusted default origin).
+    await gateway.generateText(
+      { presetId: "custom_model", messages: [{ role: "user", content: "hi" }] },
+      {
+        envApiKeys: { deepseek: "sk-env-SECRET" },
+        slotOverrides: {
+          customPresets: [
+            {
+              id: "custom_model",
+              name: "Custom model",
+              provider: "deepseek",
+              model: "deepseek-reasoner",
+            },
+          ],
+        },
+      },
+    );
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0].apiKey).toBe("sk-env-SECRET");
+    expect(calls[1].apiKey).toBe("sk-env-SECRET");
+    expect(calls[1].model).toBe("deepseek-reasoner");
+  });
+
+  it("strips env keys from resolveSlot for redirected custom presets (S-01)", () => {
+    const { gateway } = setup();
+
+    const redirected = gateway.resolveSlot("evil", {
+      envApiKeys: { deepseek: "sk-env-SECRET" },
+      slotOverrides: {
+        customPresets: [
+          {
+            id: "evil",
+            name: "evil",
+            provider: "deepseek",
+            baseUrl: "https://attacker.example",
+            model: "deepseek-chat",
+          },
+        ],
+      },
+    });
+    expect(redirected?.baseUrl).toBe("https://attacker.example");
+    expect(redirected?.apiKey).toBeUndefined();
+
+    const trusted = gateway.resolveSlot("story", {
+      envApiKeys: { deepseek: "sk-env-SECRET" },
+    });
+    expect(trusted?.apiKey).toBe("sk-env-SECRET");
+  });
+
+  it("sends no Authorization header to the redirected origin at the HTTP layer (S-01)", async () => {
+    // Real builtin openai-chat adapter (no programmatic adapter registered)
+    // + stubbed fetch: proves the outgoing request itself carries no env key.
+    const providerRegistry = createProviderRegistry({
+      providerDefaults: {
+        deepseek: {
+          baseUrl: "https://api.deepseek.com",
+          protocol: "openai-chat-v1",
+        },
+      },
+    });
+    const presetRegistry = createPresetRegistry({
+      profiles,
+      presets: basePresets,
+    });
+    const slotRegistry = createSlotRegistry({ presetRegistry });
+    const gateway = createGateway({
+      providerRegistry,
+      presetRegistry,
+      slotRegistry,
+    });
+
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 1, completion_tokens: 1 },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await gateway.generateText(
+      { presetId: "evil", messages: [{ role: "user", content: "hi" }] },
+      {
+        envApiKeys: { deepseek: "sk-env-SECRET" },
+        slotOverrides: {
+          customPresets: [
+            {
+              id: "evil",
+              name: "evil",
+              provider: "deepseek",
+              baseUrl: "https://attacker.example",
+              model: "deepseek-chat",
+              protocol: "openai-chat-v1",
+            },
+          ],
+        },
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url.startsWith("https://attacker.example")).toBe(true);
+    const headers = (init.headers ?? {}) as Record<string, string>;
+    expect(headers.authorization).toBeUndefined();
+    expect(JSON.stringify(init.headers)).not.toContain("sk-env-SECRET");
+  });
+
+  it("isolates concurrent same-name custom presets with different baseUrls (H-04)", async () => {
+    // Attack shape: base registry has NO "openai" provider (browser-key
+    // mode). Request A ("attacker") declares provider=openai pointing at
+    // its own origin and stays in flight while request B ("victim")
+    // declares provider=openai pointing at the real origin with a real
+    // key. The victim's key must go to the victim's origin only.
+    const providerRegistry = createProviderRegistry({});
+    const presetRegistry = createPresetRegistry({ profiles: [], presets: [] });
+    const gateway = createGateway({ providerRegistry, presetRegistry });
+
+    let releaseBoth: () => void = () => {};
+    const bothInFlight = new Promise<void>((resolve) => {
+      releaseBoth = resolve;
+    });
+    let started = 0;
+    let refsWhileInterleaved = -1;
+    const requests: { url: string; auth: string | undefined }[] = [];
+
+    const fetchMock = vi.fn(async (url: unknown, init?: RequestInit) => {
+      started += 1;
+      if (started === 2) {
+        // Both overlays are applied simultaneously right now.
+        refsWhileInterleaved = __internals.presetRefs.size;
+        releaseBoth();
+      }
+      await bothInFlight; // hold call 1 open until call 2 has started
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      requests.push({ url: String(url), auth: headers.authorization });
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 1, completion_tokens: 1 },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const overridesFor = (baseUrl: string): SlotOverridesInput => ({
+      customPresets: [
+        {
+          id: "custom_shared",
+          name: "Shared name",
+          provider: "openai",
+          baseUrl,
+          model: "gpt-x",
+          protocol: "openai-chat-v1",
+        },
+      ],
+    });
+
+    await Promise.all([
+      gateway.generateText(
+        {
+          presetId: "custom_shared",
+          messages: [{ role: "user", content: "hi" }],
+        },
+        {
+          apiKeys: { openai: "sk-attacker" },
+          slotOverrides: overridesFor("https://attacker.example"),
+        },
+      ),
+      gateway.generateText(
+        {
+          presetId: "custom_shared",
+          messages: [{ role: "user", content: "hi" }],
+        },
+        {
+          apiKeys: { openai: "sk-victim" },
+          slotOverrides: overridesFor("https://victim.example/v1"),
+        },
+      ),
+    ]);
+
+    // Truly interleaved: two isolated registrations coexisted.
+    expect(refsWhileInterleaved).toBe(2);
+    expect(requests).toHaveLength(2);
+
+    // Each request hit ITS OWN baseUrl with ITS OWN key — the victim's key
+    // never reaches the attacker's origin.
+    const attackerReq = requests.find((r) =>
+      r.url.startsWith("https://attacker.example"),
+    );
+    const victimReq = requests.find((r) =>
+      r.url.startsWith("https://victim.example"),
+    );
+    expect(attackerReq?.auth).toBe("Bearer sk-attacker");
+    expect(victimReq?.auth).toBe("Bearer sk-victim");
+
+    // Full rollback: no outstanding refs, no leaked registrations, and no
+    // provider was ever registered under the shared name.
+    expect(__internals.presetRefs.size).toBe(0);
+    expect(presetRegistry.listPresets()).toHaveLength(0);
+    expect(providerRegistry.hasProvider("openai")).toBe(false);
   });
 
   it("falls through to the slot registry when no client override matches", async () => {

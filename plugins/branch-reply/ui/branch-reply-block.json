@@ -5,6 +5,7 @@
     "component": "BranchReplyCandidates",
     "props": {
       "pluginId": "branch-reply",
+      "runtimeId": "branch-reply",
       "value": { "$state": "/" },
       "title": { "zh": "回复候选", "en": "Reply candidates" },
       "draftLabel": { "zh": "草稿", "en": "Draft" },

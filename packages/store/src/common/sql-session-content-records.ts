@@ -41,6 +41,7 @@ import type {
 } from "../types.js";
 
 type EventsTable = Table & {
+  id: Column;
   sessionId: Column;
   topic: Column;
   createdAt: Column;
@@ -78,6 +79,7 @@ export type SqlSessionContentRecords = Pick<
   DataStore,
   | "saveEvent"
   | "listEvents"
+  | "getEventById"
   | "saveApproval"
   | "listApprovals"
   | "addMessage"
@@ -113,6 +115,18 @@ export function createSqlSessionContentRecords(
         limit: options?.limit,
       });
       return rows.map((row) => toEventRecord(row, json));
+    },
+
+    async getEventById(
+      sessionId: string,
+      id: string,
+    ): Promise<EventRecord | null> {
+      const rows = await runner.select<EventRow>(events, {
+        where: and(eq(events.id, id), eq(events.sessionId, sessionId)),
+        limit: 1,
+      });
+      const row = rows[0];
+      return row ? toEventRecord(row, json) : null;
     },
 
     async saveApproval(record: ApprovalRecord): Promise<void> {

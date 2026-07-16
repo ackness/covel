@@ -69,6 +69,8 @@ function makeParams(entries: ReturnType<typeof writePlugin>[]) {
     pluginToolAccess: new Map<string, Set<string>>(),
     hookPipeline: createHookPipeline(),
     rpcRegistry: createPluginRpcRegistry(),
+    isCommunityServerCodeApproved: () => true,
+    isCommunityHookApproved: () => true,
   };
 }
 
@@ -162,6 +164,24 @@ export default function (covel) {
     // Second ensure is a no-op — the factory must not run twice.
     await ensurePluginEntry("entry-community-a");
     expect(params.toolMap.has("community-tool-2")).toBe(false);
+  });
+
+  it("rejects community entry activation without a session grant", async () => {
+    const p = writePlugin(
+      "entry-community-denied",
+      `export default function (covel) { covel.registerRpc("x", async () => true); }`,
+      { source: "community" },
+    );
+    const params = makeParams([p]);
+    params.isCommunityServerCodeApproved = () => false;
+    const { ensurePluginEntry } = await createBootstrapPluginEntries(params);
+
+    await expect(
+      ensurePluginEntry("entry-community-denied", "session-b"),
+    ).rejects.toThrow("requires explicit approval");
+    expect(
+      params.rpcRegistry.getPluginAction("entry-community-denied", "x"),
+    ).toBeUndefined();
   });
 
   it("supports async entry factories", async () => {
@@ -287,24 +307,31 @@ export default (covel) => {
     warn.mockRestore();
   });
 
-  it("scopes a community entry's toolkit.store to its own pluginId (M2)", async () => {
-    // The entry forges a foreign pluginId when writing plugin-data. A scoped
-    // store must clamp the write to the entry's own pluginId so it can't reach
-    // another plugin's namespace.
+  it("denies plugin_data writes on a community entry's toolkit.store (M2/H-03)", async () => {
+    // Entry factories run at activation time with no request session, so a
+    // community entry's plugin_data writes cannot be session-scoped — they
+    // are denied outright (writes flow through proposals or the per-dispatch
+    // RPC store), even when forging a foreign pluginId.
     const p = writePlugin(
       "entry-scope-a",
       `
 export default async function (covel) {
-  await covel.toolkit.store.setPluginData({
-    id: "forged",
-    sessionId: "s1",
-    pluginId: "victim-plugin",
-    namespace: "ns",
-    key: "k",
-    value: { secret: 1 },
-    createdAt: "t",
-    updatedAt: "t",
-  });
+  let error = "";
+  try {
+    await covel.toolkit.store.setPluginData({
+      id: "forged",
+      sessionId: "s1",
+      pluginId: "victim-plugin",
+      namespace: "ns",
+      key: "k",
+      value: { secret: 1 },
+      createdAt: "t",
+      updatedAt: "t",
+    });
+  } catch (e) {
+    error = String((e && e.message) || e);
+  }
+  covel.registerRpc("dump-error", async () => error);
 }
 `,
       { source: "community" },
@@ -313,19 +340,101 @@ export default async function (covel) {
     const { ensurePluginEntry } = await createBootstrapPluginEntries(params);
     await ensurePluginEntry("entry-scope-a");
 
-    // Nothing landed under the forged victim pluginId…
+    const dump = params.rpcRegistry.getPluginAction(
+      "entry-scope-a",
+      "dump-error",
+    );
+    const error = (await dump?.handler?.({}, {
+      sessionId: "s1",
+      pluginId: "entry-scope-a",
+    } as never)) as string;
+    expect(error).toContain("not available to a community entry toolkit");
+
+    // Nothing landed anywhere — neither the forged victim namespace nor the
+    // entry's own.
     expect(
       await params.store.getPluginData("s1", "victim-plugin", "ns", "k"),
     ).toBeNull();
-    // …the write was clamped to the entry's own pluginId.
-    const own = await params.store.getPluginData(
-      "s1",
-      "entry-scope-a",
-      "ns",
-      "k",
+    expect(
+      await params.store.getPluginData("s1", "entry-scope-a", "ns", "k"),
+    ).toBeNull();
+  });
+
+  it("default-denies mutators on a community toolkit.store (S-03/H-03)", async () => {
+    // A community entry factory has no request-bound session, so every store
+    // method is denied. Request/runtime handlers get scoped stores separately.
+    const p = writePlugin(
+      "entry-deny-a",
+      `
+export default async function (covel) {
+  const errors = {};
+  const attempt = async (name, fn) => {
+    try { await fn(); errors[name] = ""; }
+    catch (e) { errors[name] = String((e && e.message) || e); }
+  };
+  const store = covel.toolkit.store;
+  await attempt("upsertCharacter", () => store.upsertCharacter({
+    id: "c1", sessionId: "other-session", name: "Mallory",
+  }));
+  await attempt("updateSession", () => store.updateSession("other-session", { status: "ended" }));
+  await attempt("deleteSession", () => store.deleteSession("other-session"));
+  await attempt("addMessage", () => store.addMessage({
+    id: "m1", sessionId: "other-session", role: "user", content: "hi",
+  }));
+  await attempt("addTraceEvent", () => store.addTraceEvent({ id: "t1", sessionId: "other-session" }));
+  await attempt("listPluginDataSessionScope", () => store.listPluginDataSessionScope("s1"));
+  // plugin_data writes are denied too (no request session to scope them to).
+  await attempt("setPluginData", () => store.setPluginData({
+    id: "x", sessionId: "s1", pluginId: "entry-deny-a", namespace: "ns", key: "k",
+    value: 1, createdAt: "t", updatedAt: "t",
+  }));
+  await attempt("setPluginDataBatch", () => store.setPluginDataBatch([]));
+  await attempt("deletePluginData", () => store.deletePluginData("s1", "entry-deny-a", "ns", "k"));
+  // Reads are denied too: the caller-selected session id is not an authority.
+  await attempt("getSession", () => store.getSession("s1"));
+  await attempt("listTurnMessages", () => store.listTurnMessages("s1"));
+  await attempt("getPluginData", () => store.getPluginData("s1", "forged", "ns", "k"));
+  await attempt("listPluginData", () => store.listPluginData("s1", "forged", "ns"));
+  covel.registerRpc("dump-errors", async () => errors);
+}
+`,
+      { source: "community" },
     );
-    expect(own?.value).toEqual({ secret: 1 });
-    expect(own?.pluginId).toBe("entry-scope-a");
+    const params = makeParams([p]);
+    const { ensurePluginEntry } = await createBootstrapPluginEntries(params);
+    await ensurePluginEntry("entry-deny-a");
+
+    const dump = params.rpcRegistry.getPluginAction(
+      "entry-deny-a",
+      "dump-errors",
+    );
+    const errors = (await dump?.handler?.({}, {
+      sessionId: "s1",
+      pluginId: "entry-deny-a",
+    } as never)) as Record<string, string>;
+    const DENIED = "not available to a community entry toolkit";
+    for (const method of [
+      "upsertCharacter",
+      "updateSession",
+      "deleteSession",
+      "addMessage",
+      "addTraceEvent",
+      "listPluginDataSessionScope",
+      "setPluginData",
+      "setPluginDataBatch",
+      "deletePluginData",
+      "getSession",
+      "listTurnMessages",
+      "getPluginData",
+      "listPluginData",
+    ]) {
+      expect(errors[method], method).toContain(DENIED);
+      expect(errors[method], method).toContain(method);
+    }
+    // Nothing actually landed on the raw store.
+    expect(await params.store.listCharacters("other-session")).toEqual([]);
+    expect(await params.store.listMessages("other-session")).toEqual([]);
+    expect(await params.store.getSession("other-session")).toBeNull();
   });
 
   it("leaves a builtin entry's toolkit.store unscoped (parity with tools.local)", async () => {

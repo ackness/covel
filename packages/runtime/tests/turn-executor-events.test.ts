@@ -88,7 +88,7 @@ describe("TurnExecutor EventBus Bridge", () => {
     };
   });
 
-  it("should emit turn.started and turn.completed events when eventBus is provided", async () => {
+  it("emits turn.started during execution but turn.completed only via completeTurn() (commit barrier)", async () => {
     const events: SubscriptionEvent[] = [];
     eventBus.onEmit((e) => events.push(e));
 
@@ -100,11 +100,9 @@ describe("TurnExecutor EventBus Bridge", () => {
       store: await createMainLoopStore("sess-1"),
     };
 
-    await executeTurn(makeTurnInput(), [narratorManifest], deps);
+    const result = await executeTurn(makeTurnInput(), [narratorManifest], deps);
 
     const turnStarted = events.find((e) => e.type === "turn.started");
-    const turnCompleted = events.find((e) => e.type === "turn.completed");
-
     expect(turnStarted).toBeDefined();
     expect(turnStarted!.topic).toBe("game");
     expect(turnStarted!.sessionId).toBe("sess-1");
@@ -112,11 +110,57 @@ describe("TurnExecutor EventBus Bridge", () => {
       "turn-1",
     );
 
+    // R-09: turn.completed must NOT fire inside executeTurn — the commit
+    // owner invokes result.completeTurn() only after proposals + snapshot.
+    expect(events.find((e) => e.type === "turn.completed")).toBeUndefined();
+
+    result.completeTurn?.();
+    const turnCompleted = events.find((e) => e.type === "turn.completed");
     expect(turnCompleted).toBeDefined();
     expect(turnCompleted!.topic).toBe("game");
     expect(
       (turnCompleted!.payload as Record<string, unknown>).durationMs,
     ).toBeGreaterThanOrEqual(0);
+
+    // Idempotent: a second invocation emits nothing new.
+    result.completeTurn?.();
+    expect(events.filter((e) => e.type === "turn.completed")).toHaveLength(1);
+  });
+
+  it("defers post-turn memory ingestion behind completeTurn() and skips it when never invoked (commit barrier)", async () => {
+    const updateAfterTurn = vi.fn().mockResolvedValue({
+      updated: true,
+      blocksChanged: [],
+    });
+    const memorySystem: NonNullable<TurnExecutorDeps["memorySystem"]> = {
+      manager: {
+        loadBlocks: async () => [
+          { label: "persona", content: "seed", updatedAt: "2024-01-01" },
+        ],
+        initializeDefaults: async () => {},
+      },
+      updater: { updateAfterTurn },
+    };
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => narratorLoaded,
+      llm: mockLLM,
+      getConfig: () => ({}),
+      eventBus,
+      store: await createMainLoopStore("sess-1"),
+      memorySystem,
+    };
+
+    // Simulates a failed commit: completeTurn is never invoked → no ingestion.
+    const failed = await executeTurn(makeTurnInput(), [narratorManifest], deps);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(updateAfterTurn).not.toHaveBeenCalled();
+
+    // Successful commit path: the barrier fires exactly one ingestion.
+    failed.completeTurn?.();
+    failed.completeTurn?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(updateAfterTurn).toHaveBeenCalledTimes(1);
+    expect(updateAfterTurn.mock.calls[0][0].sessionId).toBe("sess-1");
   });
 
   it("should emit runtime.started and runtime.completed events", async () => {

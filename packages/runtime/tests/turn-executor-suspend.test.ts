@@ -656,7 +656,7 @@ describe("TurnExecutor — function runtime suspend", () => {
         .canWriteDirectly,
     ).toBe(false);
     expect(capturedStore).toHaveProperty("getPluginData");
-    expect(capturedPluginData).toHaveProperty("set");
+    expect(capturedPluginData).toBeUndefined();
   });
 });
 

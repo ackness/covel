@@ -262,13 +262,44 @@ describe("maybeCompact", () => {
     });
   });
 
-  describe("no cascade compaction", () => {
-    it("skips compaction if any to-compact message is already tagged", async () => {
-      const messages = makeSimpleHistory(20);
-      // Tag an early message to simulate existing compaction
-      (messages[0] as { compactedAtTurnId?: string }).compactedAtTurnId =
-        "existing-summary";
+  describe("multi-round compaction", () => {
+    const opts = {
+      threshold: 0.6,
+      protectLastNUserTurns: 2,
+      protectLastNMessages: 5,
+    };
 
+    function applyTags(
+      messages: readonly TurnMessageRecord[],
+      taggedIds: readonly string[],
+      summaryId: string,
+    ): TurnMessageRecord[] {
+      const tagged = new Set(taggedIds);
+      return messages.map((m) =>
+        tagged.has(m.id) ? { ...m, compactedAtTurnId: summaryId } : m,
+      );
+    }
+
+    function taggedIdsOfCall(call: number): string[] {
+      return (store.tagTurnMessagesCompacted as ReturnType<typeof vi.fn>).mock
+        .calls[call]![1] as string[];
+    }
+
+    function growHistory(from: number, to: number): TurnMessageRecord[] {
+      const msgs: TurnMessageRecord[] = [];
+      for (let i = from; i < to; i++) {
+        msgs.push(
+          makeTurnMessage(
+            `msg-${i}`,
+            i % 2 === 0 ? "user" : "assistant",
+            `message content ${i} `.repeat(50),
+          ),
+        );
+      }
+      return msgs;
+    }
+
+    it("compacts a 2nd and 3rd round as the history keeps growing", async () => {
       const deps: CompactorDeps = {
         store,
         estimator,
@@ -276,10 +307,149 @@ describe("maybeCompact", () => {
         contextWindow: 1_000,
       };
 
-      const result = await maybeCompact("sess-1", "", messages, deps);
+      // Round 1
+      let messages = growHistory(0, 20);
+      const r1 = await maybeCompact("sess-1", "", messages, deps, opts);
+      expect(r1.compacted).toBe(true);
+      const round1Ids = taggedIdsOfCall(0);
+      messages = applyTags(messages, round1Ids, r1.summaryId!);
+
+      // Round 2 — history grows past the threshold again
+      messages = [...messages, ...growHistory(20, 40)];
+      const r2 = await maybeCompact("sess-1", "", messages, deps, opts);
+      expect(r2.compacted).toBe(true);
+      expect(r2.summaryId).not.toBe(r1.summaryId);
+      const round2Ids = taggedIdsOfCall(1);
+      expect(round2Ids.length).toBeGreaterThan(0);
+      // Only the fresh region is compacted — round-1 messages stay tagged
+      // with their original summary.
+      expect(round2Ids.some((id) => round1Ids.includes(id))).toBe(false);
+      // The window starts right after the round-1 boundary.
+      const firstFresh = messages.find((m) => m.compactedAtTurnId == null);
+      expect(round2Ids[0]).toBe(firstFresh!.id);
+      messages = applyTags(messages, round2Ids, r2.summaryId!);
+
+      // Round 3
+      messages = [...messages, ...growHistory(40, 60)];
+      const r3 = await maybeCompact("sess-1", "", messages, deps, opts);
+      expect(r3.compacted).toBe(true);
+      const round3Ids = taggedIdsOfCall(2);
+      expect(
+        round3Ids.some(
+          (id) => round1Ids.includes(id) || round2Ids.includes(id),
+        ),
+      ).toBe(false);
+      expect(fastSlotLlm.complete).toHaveBeenCalledTimes(3);
+    });
+
+    it("does not re-compact when nothing new arrived since the last round", async () => {
+      const deps: CompactorDeps = {
+        store,
+        estimator,
+        fastSlotLlm,
+        contextWindow: 1_000,
+      };
+
+      let messages = growHistory(0, 20);
+      const r1 = await maybeCompact("sess-1", "", messages, deps, opts);
+      expect(r1.compacted).toBe(true);
+      messages = applyTags(messages, taggedIdsOfCall(0), r1.summaryId!);
+
+      const r2 = await maybeCompact("sess-1", "", messages, deps, opts);
+      expect(r2.compacted).toBe(false);
+      expect(fastSlotLlm.complete).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("token estimate (effective prompt view)", () => {
+    it("excludes already-compacted raw content from the estimate", async () => {
+      // Huge tagged prefix + tiny fresh tail: the effective prompt view is
+      // small, so compaction must not trigger even though the raw sum is huge.
+      const tagged = makeSimpleHistory(20).map((m) => ({
+        ...m,
+        compactedAtTurnId: "sum-old",
+      }));
+      const fresh = [
+        makeTurnMessage("f1", "user", "hi"),
+        makeTurnMessage("f2", "assistant", "hello"),
+        makeTurnMessage("f3", "user", "ok"),
+        makeTurnMessage("f4", "assistant", "sure"),
+      ];
+      const deps: CompactorDeps = {
+        store,
+        estimator,
+        fastSlotLlm,
+        contextWindow: 1_000,
+      };
+
+      const result = await maybeCompact(
+        "sess-1",
+        "",
+        [...tagged, ...fresh],
+        deps,
+        // Protection leaves a non-empty compactable window (only the last
+        // message is protected) so this pins the ESTIMATE gate, not the
+        // window-emptiness gate.
+        { threshold: 0.6, protectLastNUserTurns: 0, protectLastNMessages: 1 },
+      );
 
       expect(result.compacted).toBe(false);
       expect(fastSlotLlm.complete).not.toHaveBeenCalled();
+    });
+
+    it("counts referenced summary content toward the estimate", async () => {
+      // Fresh region alone is under the threshold; a big persisted summary
+      // (substituted into the prompt view) pushes it over.
+      const summaryId = "sum-big";
+      const tagged = makeSimpleHistory(4).map((m, i) => ({
+        ...m,
+        id: `tag-${i}`,
+        compactedAtTurnId: summaryId,
+      }));
+      const fresh: TurnMessageRecord[] = [];
+      for (let i = 0; i < 10; i++) {
+        fresh.push(
+          makeTurnMessage(
+            `fresh-${i}`,
+            i % 2 === 0 ? "user" : "assistant",
+            `fresh content ${i} `.repeat(7), // ~120 chars → ~30 tokens each
+          ),
+        );
+      }
+      const messages = [...tagged, ...fresh];
+      const deps: CompactorDeps = {
+        store,
+        estimator,
+        fastSlotLlm,
+        contextWindow: 1_000, // threshold = 600 tokens
+      };
+      const opts = {
+        threshold: 0.6,
+        protectLastNUserTurns: 2,
+        protectLastNMessages: 5,
+      };
+
+      // Without the summary record: fresh tail ≈ 300 tokens → under threshold.
+      const before = await maybeCompact("sess-1", "", messages, deps, opts);
+      expect(before.compacted).toBe(false);
+
+      // With a 3000-char (~750-token) summary: over threshold → compacts the
+      // fresh region only.
+      await store.saveSessionSummary({
+        id: summaryId,
+        sessionId: "sess-1",
+        turnRangeStart: "turn-1",
+        turnRangeEnd: "turn-1",
+        content: "x".repeat(3_000),
+        focusSections: [],
+        createdAt: new Date().toISOString(),
+      });
+      const after = await maybeCompact("sess-1", "", messages, deps, opts);
+      expect(after.compacted).toBe(true);
+      const taggedIds = (
+        store.tagTurnMessagesCompacted as ReturnType<typeof vi.fn>
+      ).mock.calls[0]![1] as string[];
+      expect(taggedIds.every((id) => id.startsWith("fresh-"))).toBe(true);
     });
   });
 

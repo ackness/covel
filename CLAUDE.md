@@ -128,6 +128,7 @@ Dependency flow (rough):
 
 ```
 shared ← context ← runtime ← server (composes all)
+shared ← ai-provider ← runtime   (runtime re-exports the Public Plugin API types)
 shared ← settings ← web
 ```
 
@@ -294,7 +295,9 @@ Each SQL backend keeps a thin public factory plus focused method modules:
 
 ## Security & Operations
 
-- **SSRF guard**: `validateBaseUrl()` in `ai-provider/adapters/http.ts` is **open by default** — any public https host is allowed. Blocks: RFC1918 / link-local IPs (`10.x` / `172.16-31.x` / `192.168.x` / `169.254.x` / `fc00::` / `fe80::`), cloud metadata hostnames (`metadata.google.internal`, `metadata.internal`), non-https on remote hosts, non-http(s) protocols. Loopback (`localhost` / `127.0.0.1` / `::1`) bypasses the https requirement for Ollama-style local dev. `COVEL_ALLOWED_LLM_HOSTS` appears in env-registry as `status: 'documented'` but **is not read** by the guard — third-party plugin authors targeting custom provider hosts do not need any env shim.
+- **SSRF guard**: `validateBaseUrl()` in `ai-provider/adapters/http.ts` is **open by default** — any public https host is allowed. Blocks: RFC1918 / link-local IPs (`10.x` / `172.16-31.x` / `192.168.x` / `169.254.x` / `fc00::` / `fe80::`), cloud metadata hostnames (`metadata.google.internal`, `metadata.internal`), non-https on remote hosts, non-http(s) protocols. Loopback (`localhost` / `127.0.0.1` / `::1`) bypasses the https requirement for Ollama-style local dev. Additionally, core provider requests (`postJson` / `getJson` / `postFormData`) and the plugin `ctx.http` helper resolve DNS through a pinning dispatcher (`adapters/http/dns-safety.ts`): every A/AAAA answer must be publicly routable (loopback hostnames must resolve to loopback), closing the string-check-to-connect DNS-rebinding gap. `COVEL_ALLOWED_LLM_HOSTS` appears in env-registry as `status: 'documented'` but **is not read** by the guard — third-party plugin authors targeting custom provider hosts do not need any env shim.
+- **Env-key origin binding (S-01)**: server-env / platform API keys flow to the gateway as `envApiKeys`, separate from request-supplied `X-Provider-Keys` (`apiKeys`). The provider registry only attaches an env key when the resolved target's baseUrl origin matches trusted config (llm.toml / registered provider defaults) — a request-scoped custom preset (`X-Slot-Config` overlay) that redirects a provider to another origin gets no env key and no trusted default headers; it must supply its own key.
+- **Hosted auth (S-02/C-01/C-02)**: `demo` / `commercial` tiers enforce a per-session **owner token** (minted at session create, hash-persisted in `SessionRecord.metadata`, returned once) on every session-scoped route, and an **operator token** (`COVEL_DESKTOP_REST_TOKEN`, also a master key that passes any owner check) on global/admin routes (session create/list, world writes, AI/model, community server-code activation). `validateSecurityPosture` fails boot on a hosted tier missing the operator token / media secret / CORS origin. The server binds `127.0.0.1` by default (`COVEL_BIND_HOST` opts into `0.0.0.0`). `self` / desktop / dev are a strict no-op (single-user local play unchanged). Community server code (`entry` / handler / hook / wire / runtime JS) is import-gated behind two-phase approval (a `covel:plugin-server-code` grant, then the action grant). Full model: [docs/reference/api.md](./docs/reference/api.md) 鉴权 section.
 - **Signed media URLs**: `middleware/media-token.ts` signs `MediaRef` URLs with `COVEL_MEDIA_TOKEN_SECRET`. Desktop shells must provision it or generated images/portraits fail to load; web uses an ephemeral per-boot secret.
 - **Session IDs**: `{worldId}-{uuid8}` via `crypto.randomUUID()` — enumeration-resistant.
 - **worldId**: `/^[a-z0-9_-]{1,64}$/i` regex whitelist.
@@ -325,10 +328,12 @@ Trace chain: `traceId → runId → branchId → turnId → runtimeId → plugin
 
 ## Deployment Tiers
 
-| Tier           | Storage              | API keys        | Notes          |
-| -------------- | -------------------- | --------------- | -------------- |
-| T1 Self-Deploy | SQLite / Browser IDB | User-managed    | No auth        |
-| T2 Demo Host   | SQLite / Browser IDB | User-managed    | HTTPS required |
-| T3 Commercial  | PostgreSQL           | Platform + user | Auth required  |
+| Tier           | Storage              | API keys        | Notes                       |
+| -------------- | -------------------- | --------------- | --------------------------- |
+| T1 Self-Deploy | SQLite / Browser IDB | User-managed    | No auth; binds loopback     |
+| T2 Demo Host   | SQLite / Browser IDB | User-managed    | HTTPS + owner/operator auth |
+| T3 Commercial  | PostgreSQL           | Platform + user | Owner + operator auth       |
 
-Key env vars: `DEPLOYMENT_TIER`, `CORS_ORIGIN`, `ENABLE_DEBUG_PAGE`, `RATE_LIMIT_RPM`, `STORE_BACKEND`.
+`demo` / `commercial` hard-enforce per-session owner tokens on session-scoped routes and gate global/admin routes on the operator token (`COVEL_DESKTOP_REST_TOKEN`); `validateSecurityPosture` fails boot without it. `self` / desktop binds `127.0.0.1` by default and treats the tokens as no-ops. See the Hosted-auth bullet under Security & Operations and [docs/reference/api.md](./docs/reference/api.md).
+
+Key env vars: `DEPLOYMENT_TIER`, `COVEL_BIND_HOST`, `COVEL_DESKTOP_REST_TOKEN`, `CORS_ORIGIN`, `ENABLE_DEBUG_PAGE`, `RATE_LIMIT_RPM`, `STORE_BACKEND`.

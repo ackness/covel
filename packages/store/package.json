@@ -1,6 +1,6 @@
 {
   "name": "@covel/store",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "type": "module",
   "private": true,
   "exports": {
@@ -11,6 +11,10 @@
     "./idb": {
       "types": "./src/indexeddb/idb-store.ts",
       "import": "./src/indexeddb/idb-store.ts"
+    },
+    "./idb-schema": {
+      "types": "./src/indexeddb/idb-schema.ts",
+      "import": "./src/indexeddb/idb-schema.ts"
     }
   },
   "scripts": {

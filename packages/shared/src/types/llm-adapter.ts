@@ -86,6 +86,14 @@ export type LLMStreamEvent =
       readonly finishReason: string;
       /** Accumulated reasoning_content emitted during the stream. */
       readonly reasoningContent?: string;
+      /**
+       * Token usage reported by the provider on stream completion. Optional
+       * because not every adapter emits it; consumers default to 0/0.
+       */
+      readonly usage?: {
+        readonly inputTokens: number;
+        readonly outputTokens: number;
+      };
     };
 
 /**

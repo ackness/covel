@@ -1,4 +1,5 @@
 import { parseJsonSseData, readSseStream } from "../sse.js";
+import { operatorAuthHeaders } from "../session-credentials.js";
 import { buildAiHeaders } from "./model-settings.js";
 import { request } from "./request.js";
 import type {
@@ -40,6 +41,7 @@ export async function createWorld(
   const raw = await request<Record<string, unknown>>("/api/worlds", {
     method: "POST",
     body: JSON.stringify({ id, name, description }),
+    operatorAuth: true,
   });
   return mapWorldRecord(raw);
 }
@@ -58,6 +60,7 @@ export async function updateWorld(
     {
       method: "PATCH",
       body: JSON.stringify(patch),
+      operatorAuth: true,
     },
   );
   return mapWorldRecord(raw);
@@ -66,6 +69,7 @@ export async function updateWorld(
 export async function deleteWorld(id: string): Promise<void> {
   await request<unknown>(`/api/worlds/${encodeURIComponent(id)}`, {
     method: "DELETE",
+    operatorAuth: true,
   });
 }
 
@@ -79,6 +83,7 @@ export async function preflightWorldData(
       method: "POST",
       body: JSON.stringify(body),
       silentErrors: true,
+      sessionId: body.sessionId,
     },
   );
 }
@@ -103,6 +108,7 @@ export async function importDimensions(
     {
       method: "POST",
       body: JSON.stringify({ dimensions }),
+      operatorAuth: true,
     },
   );
   return mapWorldRecord(raw);
@@ -116,6 +122,7 @@ export async function syncSessionDimensions(
   return request(`/api/worlds/${encodeURIComponent(worldId)}/sync-dimensions`, {
     method: "POST",
     body: JSON.stringify({ sessionId }),
+    sessionId,
   });
 }
 
@@ -162,6 +169,7 @@ export function generateWorld(
         headers: {
           "Content-Type": "application/json",
           ...buildAiHeaders(),
+          ...operatorAuthHeaders(),
         },
         body: JSON.stringify({
           prompt,

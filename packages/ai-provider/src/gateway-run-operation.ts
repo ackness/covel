@@ -54,8 +54,7 @@ import type { OperationMode, ResolvedTarget, UsageSummary } from "./types.js";
  * full dependency object is structurally assignable to this.
  */
 export interface RunOperationDeps extends OverlayDeps {
-  readonly providerRegistry: OverlayDeps["providerRegistry"] &
-    ProviderRegistryLike;
+  readonly providerRegistry: ProviderRegistryLike;
 }
 
 /** Slot-resolution helper signature (see `createGatewaySlotResolution`). */

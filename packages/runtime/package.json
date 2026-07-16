@@ -1,6 +1,6 @@
 {
   "name": "@covel/runtime",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "private": true,
   "type": "module",
   "exports": {
@@ -16,17 +16,18 @@
     "clean": "node ../../scripts/remove-paths.mjs dist"
   },
   "dependencies": {
+    "@covel/ai-provider": "workspace:*",
     "@covel/approval": "workspace:*",
     "@covel/context": "workspace:*",
     "@covel/events": "workspace:*",
     "@covel/plugin-loader": "workspace:*",
     "@covel/shared": "workspace:*",
     "@covel/store": "workspace:*",
-    "@covel/tools": "workspace:*"
+    "@covel/tools": "workspace:*",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9",
-    "zod": "^4.4.3"
+    "vitest": "^4.1.9"
   }
 }

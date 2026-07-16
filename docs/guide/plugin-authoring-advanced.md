@@ -37,7 +37,7 @@ import type {
   OutputConfig, // { schema?, recordAs? }
 
   // 工具
-  ToolsConfig, // { builtin?, local? }
+  ToolsConfig, // { builtin?, plugin?, local?(已弃用) }
 
   // 玩家可调设置（PLUGIN.md `userSettings`）
   PluginUserSettingSpec, // { key, type, default?, label, min?, max?, options? }
@@ -61,6 +61,18 @@ import type {
   PluginSource, // 'builtin' | 'official' | 'community'
   PluginTrustInfo, // { source, requiresApproval, autoLoad }
 } from "@covel/plugin-loader";
+```
+
+统一服务端入口（`entry`）的 Public Plugin API 类型从 `@covel/runtime` 导出：
+
+```typescript
+import type {
+  PluginAPI, // entry 工厂接收的 facade（registerTool / on / registerRpc / registerWires）
+  PluginToolkit, // covel.toolkit 注入包 { tool, z, shortId, shortIdBatch, withPendingProposals, store }
+  PluginEntryFactory, // entry 模块 default export 的签名
+  PluginHookOptions, // covel.on 的 options
+  PluginRpcOptions, // covel.registerRpc 的 options
+} from "@covel/runtime";
 ```
 
 ## 2. TestHarness 高级用法
@@ -172,9 +184,9 @@ const result = pipeline.check(
 - 插件 `tools/` 目录加载的工具 → `local`
 - 其他 → `third-party`（预留给社区插件）
 
-新插件只需在 PLUGIN.md 中声明 `tools.local`，bootstrap 自动发现、注册并归类，无需手动修改白名单。
+新插件只需在 `entry` 模块里 `covel.registerTool`，bootstrap 自动注册并归类为 `local`，无需手动修改白名单。
 
-**社区（community）信任级别的特殊处理：** 框架 bootstrap 不会立即 import community 插件的 `tools.local`，而是延后到首次 `POST /api/approvals/:approvalId/decision` 决策为 `allow` 时（或下一次 plugin-rpc 执行时 just-in-time），通过 `activatePluginLocalTools(pluginId)` 一次性导入并注册到 toolMap。激活是幂等的，社区插件作者无需做额外配置——声明 `tools.local` + 通过审批后即可执行。
+**社区（community）信任级别的特殊处理：** 框架 bootstrap 不会立即执行 community 插件的 `entry` 模块，而是延后到首次 `POST /api/approvals/:approvalId/decision` 决策为 `allow` 时（或下一次 plugin-rpc 执行时 just-in-time），通过 `ensurePluginEntry(pluginId)` 一次性执行并注册到 toolMap。激活是幂等的，社区插件作者无需做额外配置——entry 里注册 + 通过审批后即可执行。
 
 ## 4. World Data Schema 契约
 
@@ -312,6 +324,8 @@ export default async function handler(
 | `triggerEvent`           | `{ topic, data }?`      | 仅 event 触发时存在,包含触发该 runtime 的事件                                                                                                                                                                                                                                                                   |
 | `signal`                 | `AbortSignal?`          | 玩家中止本 turn 的信号。handler 里跑长任务（图像生成、TTS、自管 `fetch`）时应把它传下去（`ctx.images.generate({ signal })` / `fetch(url, { signal })`），玩家点停即取消在途请求而非跑完。无 `TurnControl` 的运行（测试 harness）里为 `undefined`。语义不变：handler 若忽略它并正常返回,产出的 proposal 仍会提交 |
 
+> 上表描述正式 function handler。community agent guard 是只读的预执行判定面：不注入 `pluginData`、logger、gateway、utils、media、assetProgress，且 `recursiveCall` 会拒绝。需要网络、持久化、媒体或递归调用时，把逻辑移入 handler，并通过返回 proposals / `pluginData[]` 进入提交管线。builtin/official guard 的异步能力会被 lease 跟踪，并受同一个总 deadline 约束。
+
 **`ctx.gateway`:** function runtime 调用 LLM 的入口。绝不允许直接 `fetch` 文本 provider URL 或导入文本 SDK —— 这样会跳过 slot 解析、密钥管理、SSRF 防护和 replay cache。
 
 ```ts
@@ -419,20 +433,30 @@ if (slot) {
 
 这条路径下框架不再帮你落库或去重 —— `resolveSlot` 只给凭据,provider 返回的 `b64_json` 或临时 URL 必须自己写入 `ctx.media.put()` 或 `ctx.media.ingestUrl()`,完成态返回 `assetGenerations[]`。
 
-### 注册自定义 wire:`wires` frontmatter 字段
+### 注册自定义 wire:entry 里的 `covel.registerWires`
 
 如果是一个会被反复使用的新 provider 协议(而不是一次性调试),把它注册成正式的 wire —— 图像、TTS、STT 三个模态同一套机制,任何插件(包括 `~/.covel/plugins` 下的社区插件)都可以接入,不需要提交框架 PR:
 
-**1. 在 PLUGIN.md frontmatter 声明 `wires` 字段**(插件根目录相对路径,整个插件声明一次即可):
+**1. 在 PLUGIN.md frontmatter 声明 `entry` 字段**(插件根目录相对路径,整个插件声明一次即可):
 
 ```yaml
-wires: lib/wires.js
+entry: ./server/index.js
 ```
 
-**2. wires 模块 default export 三组 wire 数组**(都可选),或一个接受注入工具的工厂函数 —— 工厂形态让插件零依赖拿到框架的 SSRF 守卫和重试 fetch:
+**2. 在 entry 工厂里调用 `covel.registerWires`**,传入 `{ image?, speech?, transcription? }` 三组 wire 数组(都可选)。框架的 SSRF 守卫和重试 fetch 经 `covel.http` 注入,插件零依赖:
 
 ```js
-// lib/wires.js — 纯 JS,无需 import 任何框架包
+// server/index.js — 纯 JS,无需 import 任何框架包
+import makeWires from "../lib/wires.js";
+
+/** @param {import('@covel/runtime').PluginAPI} covel */
+export default function (covel) {
+  covel.registerWires(makeWires(covel.http));
+}
+```
+
+```js
+// lib/wires.js
 export default ({ fetchWithRetry, validateBaseUrl }) => ({
   speech: [
     {
@@ -727,6 +751,28 @@ my-plugin/
 // ✓ 纯标识符（非自然语言），允许单字符串
 { "icon": "book-open" }
 ```
+
+---
+
+## 附录：旧注册字段迁移
+
+`tools.local` / `hooks` / `rpc` / `wires` 四个 frontmatter 注册字段已弃用（启动时每插件 warn 一次，保留一个发布周期后移除），统一迁移到 `entry` 模块的 `PluginAPI` facade。对照表：
+
+| 旧 frontmatter 字段           | 新写法（entry 工厂内）                                                          | 备注                                                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `tools.local: [./tools/x.js]` | `covel.registerTool(makeX(covel.toolkit))`                                      | 工具工厂文件本身无需修改（`covel.toolkit` 就是旧的注入包）；runtime manifest 改用 `tools.plugin` 声明工具**名字**列表 |
+| `hooks: [{event, handler}]`   | `covel.on(event, handler, { match?, timeoutMs?, enforce? })`                    | 16 事件语义不变；`match` 从浅层等值 map 变为谓词函数                                                                  |
+| `rpc: { action: {handler} }`  | `covel.registerRpc(action, handler, { description?, streaming?, trustLevel? })` | handler 内联注册，不再 lazy import；信任等级仍按插件来源钳制                                                          |
+| `wires: lib/wires.js`         | `covel.registerWires({ image?, speech?, transcription? })`                      | 命名空间仍为 `<pluginId>/<wireId>`；SSRF 守卫和重试 fetch 经 `covel.http` 注入                                        |
+
+迁移步骤：
+
+1. PLUGIN.md 增加 `entry: ./server/index.js`（整个插件声明一次，多 runtime 约定写在根 PLUGIN.md），删除四个旧字段。
+2. 新建 `server/index.js`，default 导出 `function (covel) { ... }`（同步或异步），把旧字段指向的模块 import 进来并逐一注册。
+3. agent runtime 的 frontmatter 把 `tools.local` 路径列表换成 `tools.plugin` 名字列表（LLM 可见性声明不变，只是从"路径"变为"名字"）。
+4. `PluginAPI` / `PluginToolkit` / `PluginEntryFactory` 类型从 `@covel/runtime` 导入（JS 用 JSDoc `@param {import('@covel/runtime').PluginAPI} covel`），保证和框架实现编译期对齐。
+
+信任门控、幂等性、community 插件的激活时机等运行语义见 [plugins.md #entry（统一服务端入口）](../reference/plugins.md#entry统一服务端入口)。
 
 ---
 

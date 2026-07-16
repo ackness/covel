@@ -2,6 +2,7 @@ import * as api from "@/services/api";
 import type { DataService } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
+import { clearAllStreamingText } from "@/stores/streaming-text-store.js";
 import type { SnapshotMessage, SnapshotTraceEvent } from "@covel/shared";
 import { enrichGameStateFromSnapshot } from "./game-state.js";
 import type { ExecutionStep, SessionDispatch, StreamMessage } from "./types.js";
@@ -250,6 +251,7 @@ export async function restoreSessionState({
   worlds,
   session,
 }: RestoreSessionOptions): Promise<void> {
+  clearAllStreamingText();
   dispatch({ type: "RESET_SESSION" });
 
   const world = worlds.find((candidate) => candidate.id === session.worldId);

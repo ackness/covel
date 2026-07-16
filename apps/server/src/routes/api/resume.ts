@@ -329,11 +329,14 @@ resumeRoutes.post("/:id/resume", async (c) => {
         // an auto snapshot behind — without this, a fork taken after a resume
         // silently misses the resumed runtime's writes. Same turnId as the
         // originating suspension so the snapshot lines up with its turn.
+        // `force` bypasses the checkpoint-cadence throttle: resumes are rare
+        // and this snapshot is load-bearing regardless of turn number.
         try {
           await saveAutoSnapshot({
             store,
             sessionId,
             turnId: suspension.turnId,
+            force: true,
             ...(eventBus ? { eventBus } : {}),
           });
         } catch (err) {

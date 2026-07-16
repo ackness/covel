@@ -132,9 +132,10 @@ timeoutMs: 120000
 trigger:
   type: scheduled
   interval: 1
+entry: ./server/index.js
 tools:
-  local:
-    - ./tools/${name}-tool.js
+  plugin:
+    - ${name}-tool
 ---
 
 # ${name}
@@ -172,14 +173,21 @@ function renderPackageJson(name: string, template: PluginTemplate): string {
           "@covel/plugin-test-utils": "workspace:*",
           vitest: "^4.1.4",
         }
-      : {
-          // agent / zero-code starter templates import no @covel package — the
-          // agent's local tool is plain JS — so they declare only test
-          // scaffolding. Add @covel/tools etc. to `dependencies` once your tool
-          // or handler grows to import them (see plugin-authoring.md §F).
-          "@covel/plugin-test-utils": "workspace:*",
-          vitest: "^4.1.4",
-        };
+      : template === "agent"
+        ? {
+            // JSDoc `PluginAPI` type ref in server/index.js (type-only);
+            // the tool itself is plain JS. Add @covel/tools etc. to
+            // `dependencies` once your tool grows to import them at runtime
+            // (see plugin-authoring.md §F).
+            "@covel/plugin-test-utils": "workspace:*",
+            "@covel/runtime": "workspace:*",
+            vitest: "^4.1.4",
+          }
+        : {
+            // zero-code starter imports no @covel package — only test scaffolding.
+            "@covel/plugin-test-utils": "workspace:*",
+            vitest: "^4.1.4",
+          };
   const pkg = {
     name: `@covel/plugin-${name}`,
     version: "0.0.1-beta",
@@ -228,12 +236,30 @@ ${options.description}
 `;
 }
 
+function renderAgentEntry(name: string): string {
+  return `/**
+ * Unified server entry (PLUGIN.md \`entry\`).
+ *
+ * Registers the plugin's local tools through the PluginAPI facade.
+ * \`covel.toolkit\` carries the same injection bag ({ tool, z, shortId,
+ * withPendingProposals, store, ... }) the tool factories expect.
+ */
+import makeTool from '../tools/${name}-tool.js';
+
+/** @param {import('@covel/runtime').PluginAPI} covel */
+export default function (covel) {
+  covel.registerTool(makeTool(covel.toolkit));
+}
+`;
+}
+
 function renderAgentTool(name: string): string {
   return `/**
- * ${name}-tool — local tool wired into the ${name} plugin.
+ * ${name}-tool — local tool registered by the plugin's entry module
+ * (server/index.js) via covel.registerTool(makeTool(covel.toolkit)).
  *
- * The framework injects tool, z, shortId, and withPendingProposals at load
- * time. Return pending proposals when the tool should persist plugin state.
+ * covel.toolkit injects tool, z, shortId, and withPendingProposals. Return
+ * pending proposals when the tool should persist plugin state.
  */
 
 export default function ({ tool, z, shortId, withPendingProposals }) {
@@ -351,6 +377,7 @@ export async function createPlugin(
   ];
 
   if (template === "agent") {
+    writes.push([path.join("server", "index.js"), renderAgentEntry(name)]);
     writes.push([path.join("tools", `${name}-tool.js`), renderAgentTool(name)]);
   } else if (template === "function") {
     writes.push(["handler.js", renderFunctionRuntime(name)]);

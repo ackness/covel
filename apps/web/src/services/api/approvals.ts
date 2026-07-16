@@ -26,9 +26,12 @@ export async function resolveApproval(
   approvalId: string,
   decision: "allow" | "deny",
   scope?: "once" | "session",
+  sessionId?: string,
 ): Promise<void> {
   await request(`/api/approvals/${encodeURIComponent(approvalId)}/decision`, {
     method: "POST",
     body: JSON.stringify({ decision, scope }),
+    sessionId,
+    operatorAuth: true,
   });
 }

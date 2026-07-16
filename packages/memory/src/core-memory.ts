@@ -14,7 +14,7 @@
  */
 
 import type { I18nText } from "@covel/shared";
-import type { DataStore } from "@covel/store";
+import type { DataStore, WorkingMemoryRecord } from "@covel/store";
 import type {
   CoreMemoryBlock,
   CoreMemoryBlockSchema,
@@ -82,9 +82,16 @@ export function createMemoryManager(
   }
 
   return {
-    async loadBlocks(sessionId: string): Promise<readonly CoreMemoryBlock[]> {
+    async loadBlocks(
+      sessionId: string,
+      existing?: readonly WorkingMemoryRecord[],
+    ): Promise<readonly CoreMemoryBlock[]> {
       const h = helpersFor(await resolveSchema(sessionId));
-      const all = await store.listWorkingMemory(sessionId);
+      // `existing` lets the turn pipeline thread a single listWorkingMemory
+      // read through loadWorkingMemory → initializeDefaults → loadBlocks
+      // instead of three per turn (R-13). A pre-initializeDefaults list is
+      // equivalent: missing labels synthesize the same empty block below.
+      const all = existing ?? (await store.listWorkingMemory(sessionId));
       const blockMap = new Map<string, CoreMemoryBlock>();
 
       for (const record of all) {
@@ -186,11 +193,14 @@ export function createMemoryManager(
       await Promise.all(promises);
     },
 
-    async initializeDefaults(sessionId: string): Promise<void> {
+    async initializeDefaults(
+      sessionId: string,
+      existing?: readonly WorkingMemoryRecord[],
+    ): Promise<void> {
       const h = helpersFor(await resolveSchema(sessionId));
-      const existing = await store.listWorkingMemory(sessionId);
+      const records = existing ?? (await store.listWorkingMemory(sessionId));
       const existingKeys = new Set(
-        existing.filter((r) => r.scope === SCOPE).map((r) => r.key),
+        records.filter((r) => r.scope === SCOPE).map((r) => r.key),
       );
 
       const now = new Date().toISOString();

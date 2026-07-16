@@ -31,12 +31,40 @@ export const SUBSCRIPTION_TOPICS = [
 export type SubscriptionTopic = (typeof SUBSCRIPTION_TOPICS)[number];
 
 export interface SubscriptionEvent {
-  readonly id: string; // monotonic sequence ID (e.g., "42")
+  /**
+   * Wire event id: `${epoch}:${seq}`. `seq` is a per-session monotonic
+   * counter; `epoch` changes whenever the server-side session replay state is
+   * (re)created (process restart, eviction), so ids are never reused across
+   * generations. Parse with {@link parseSubscriptionEventId}; compare epochs
+   * as opaque strings — an epoch change means the client's cursor is stale.
+   */
+  readonly id: string;
   readonly topic: SubscriptionTopic;
   readonly type: string; // e.g., "runtime.started", "state.entry.changed"
   readonly sessionId: string;
   readonly timestamp: string;
   readonly payload: Readonly<Record<string, unknown>>;
+}
+
+/** Parsed `${epoch}:${seq}` subscription event id (SSE `lastEventId` cursor). */
+export interface SubscriptionEventCursor {
+  readonly epoch: string;
+  readonly seq: number;
+}
+
+/**
+ * Parse a `${epoch}:${seq}` wire event id. Returns undefined for malformed or
+ * legacy plain-number ids — the server answers those with a `system.reset`
+ * frame, so callers can treat "unparseable" as "cursor is stale".
+ */
+export function parseSubscriptionEventId(
+  id: string,
+): SubscriptionEventCursor | undefined {
+  const sep = id.lastIndexOf(":");
+  if (sep <= 0 || sep === id.length - 1) return undefined;
+  const seq = Number(id.slice(sep + 1));
+  if (!Number.isSafeInteger(seq) || seq < 0) return undefined;
+  return { epoch: id.slice(0, sep), seq };
 }
 
 export interface SubscriptionFilter {

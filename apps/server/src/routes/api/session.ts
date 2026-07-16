@@ -15,8 +15,12 @@
 
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
+import {
+  COMMUNITY_SERVER_CODE_ACTION,
+  type RpcApprovalGate,
+} from "@covel/approval";
 import { readRuntimeEnv } from "@covel/shared";
-import type { PluginRegistry } from "@covel/plugin-loader";
+import { getPluginTrustInfo, type PluginRegistry } from "@covel/plugin-loader";
 import type {
   DataStore,
   MediaStore,
@@ -44,8 +48,13 @@ import {
   withEmbeddingMetadata,
 } from "./session/embedding.js";
 import {
+  hasOperatorToken,
+  checkHostedOperator,
+  isOwnerAuthEnforced,
+  mintSessionOwnerToken,
   resolveSessionParam,
   SESSION_NOT_FOUND_CODE,
+  SESSION_OWNER_TOKEN_HASH_KEY,
 } from "./session/session-guard.js";
 import {
   buildAvailablePluginList,
@@ -74,6 +83,30 @@ type Env = {
 };
 
 export const sessionRoutes = new Hono<Env>();
+
+/**
+ * Keep persisted active plugins aligned with the in-memory approval gate.
+ * Community server code is never restored implicitly after create/fork or a
+ * process restart; the operator must enable it again for this session.
+ */
+function approvedActivePlugins(
+  pluginIds: readonly string[],
+  registry: PluginRegistry,
+  gate: RpcApprovalGate | undefined,
+  sessionId?: string,
+): string[] {
+  return pluginIds.filter((pluginId) => {
+    const entry = registry.get(pluginId);
+    const trust = getPluginTrustInfo(pluginId, entry?.source);
+    return (
+      trust.autoLoad ||
+      Boolean(
+        sessionId &&
+        gate?.hasGrant(sessionId, pluginId, COMMUNITY_SERVER_CODE_ACTION),
+      )
+    );
+  });
+}
 
 /**
  * Fire the SessionEnd lifecycle hook under the session's plugin scope, then
@@ -127,6 +160,13 @@ sessionRoutes.get("/", async (c) => {
     return c.json({ items: [] });
   }
 
+  // Hosted tiers (demo/commercial): the listing spans every tenant's sessions
+  // and there is no user identity to filter by, so it is operator-only
+  // (COVEL_DESKTOP_REST_TOKEN). Per-session access uses owner tokens instead.
+  if (isOwnerAuthEnforced(env.deploymentTier) && !hasOperatorToken(c)) {
+    return c.json({ items: [] });
+  }
+
   const store = c.get("store");
   const worldId = c.req.query("worldId");
   const sessions = await store.listSessions();
@@ -142,6 +182,22 @@ sessionRoutes.get("/", async (c) => {
 
 // POST /sessions
 sessionRoutes.post("/", async (c) => {
+  // C-02 (scoped): on hosted tiers (demo/commercial) session CREATION is
+  // operator-only — otherwise any anonymous caller could mint themselves a
+  // session + owner token on a shared host. COVEL_DESKTOP_REST_TOKEN is the
+  // only auth primitive the codebase ships, so this is a single-operator
+  // gate ONLY: full principal identity, per-user tenant isolation, and
+  // quota/billing are product-level work and deliberately NOT implemented
+  // here. self/desktop/dev tiers stay open (loopback is the boundary).
+  if (isOwnerAuthEnforced() && !hasOperatorToken(c)) {
+    return c.json(
+      errorBody("Operator token required to create sessions on this tier", {
+        code: "operator_token_required",
+      }),
+      401,
+    );
+  }
+
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
   const worldsDirs = c.get("worldsDirs");
@@ -171,10 +227,16 @@ sessionRoutes.post("/", async (c) => {
     );
   }
 
-  const plugins = resolveSessionPlugins(
-    parsedCreate.requestedPlugins,
+  const plugins = approvedActivePlugins(
+    resolveSessionPlugins(parsedCreate.requestedPlugins, pluginRegistry),
     pluginRegistry,
+    c.get("rpcApprovalGate"),
   );
+
+  // Owner token (audit S-02): minted on every tier so a session created
+  // locally keeps working if the deployment is later promoted to a hosted
+  // tier. Only the hash is persisted; the raw token is returned once below.
+  const owner = mintSessionOwnerToken();
 
   const now = new Date().toISOString();
   const session: SessionRecord = {
@@ -190,6 +252,7 @@ sessionRoutes.post("/", async (c) => {
     activePlugins: plugins,
     createdAt: now,
     updatedAt: now,
+    metadata: { [SESSION_OWNER_TOKEN_HASH_KEY]: owner.tokenHash },
   };
 
   // Scoped transaction: createSession + world-data import + blueprint fallback
@@ -270,7 +333,9 @@ sessionRoutes.post("/", async (c) => {
     );
   }
 
-  return c.json(session);
+  // `ownerToken` is returned exactly once — it is never readable again
+  // (only its hash is stored). Clients on hosted tiers must persist it.
+  return c.json({ ...session, ownerToken: owner.token });
 });
 
 // ── Instance endpoints ──────────────────────────────────────────
@@ -278,6 +343,13 @@ sessionRoutes.post("/", async (c) => {
 // GET /sessions/:id/media-token?id=<mediaId>
 sessionRoutes.get("/:id/media-token", async (c) => {
   const sessionId = c.req.param("id");
+  // Owner guard: minting media URLs is a session-scoped read. Hosted tiers
+  // only — self/desktop keeps the historical behavior (no session-existence
+  // requirement; media access is checked against the media_refs table below).
+  if (isOwnerAuthEnforced()) {
+    const guard = await resolveSessionParam(c);
+    if (!guard.ok) return guard.response;
+  }
   const mediaId = c.req.query("id");
   if (!mediaId) {
     return c.json(
@@ -373,6 +445,9 @@ sessionRoutes.patch("/:id", async (c) => {
   // SessionEnd hook — fire only on the transition into `ended` (not on repeat
   // patches of an already-ended session).
   if (updates.status === "ended" && session.status !== "ended") {
+    // Ended sessions run no more turns — drop the per-session character-tool
+    // override cache entry so the map does not leak (audit R-19).
+    c.get("clearSessionToolOverrides")?.(id);
     await fireSessionEnd(
       c.get("hookPipeline"),
       c.get("eventBus"),
@@ -394,6 +469,8 @@ sessionRoutes.delete("/:id", async (c) => {
   if (!guard.ok) return guard.response;
   const session = guard.session;
   await store.deleteSession(id);
+  // Drop the per-session character-tool override cache entry (audit R-19).
+  c.get("clearSessionToolOverrides")?.(id);
 
   // SessionEnd hook — session removed. `session` is read above for the guard.
   if (session.status !== "ended") {
@@ -420,7 +497,22 @@ sessionRoutes.get("/:id/plugins", async (c) => {
   if (!guard.ok) return guard.response;
   const session = guard.session;
 
-  const active = [...(session.activePlugins ?? [])];
+  const previousActive = session.activePlugins ?? [];
+  const active = approvedActivePlugins(
+    previousActive,
+    pluginRegistry,
+    c.get("rpcApprovalGate"),
+    id,
+  );
+  if (active.length !== previousActive.length) {
+    for (const pluginId of previousActive) {
+      if (!active.includes(pluginId)) pluginRegistry.deactivate(pluginId, id);
+    }
+    await store.updateSession(id, {
+      activePlugins: active,
+      updatedAt: new Date().toISOString(),
+    });
+  }
   const available = buildAvailablePluginList(active, pluginRegistry);
 
   return c.json({ active, available });
@@ -440,6 +532,43 @@ sessionRoutes.post("/:id/plugins/enable", async (c) => {
     return c.json(errorBody(`Plugin "${body.pluginId}" not found`), 404);
   }
 
+  const pluginEntry = pluginRegistry.get(body.pluginId);
+  const trust = getPluginTrustInfo(body.pluginId, pluginEntry?.source);
+  if (trust.source === "community") {
+    const operatorDenied = checkHostedOperator(c);
+    if (operatorDenied) return operatorDenied;
+  }
+  const verdict = c.get("rpcApprovalGate").evaluate({
+    sessionId: id,
+    pluginId: body.pluginId,
+    action: COMMUNITY_SERVER_CODE_ACTION,
+    payload: { operation: "enable" },
+    trustLevel: trust.source,
+    description: `Enable server-side code for plugin ${body.pluginId}`,
+  });
+  if (verdict.status === "pending") {
+    return c.json(
+      {
+        status: "approval-required",
+        approvalId: verdict.approvalId,
+        pending: verdict.pending,
+      },
+      202,
+    );
+  }
+  if (verdict.status === "rejected") {
+    return c.json(
+      errorBody(
+        `approval queue is full (limit ${verdict.limit}); resolve pending approvals and retry`,
+      ),
+      429,
+    );
+  }
+
+  // Trusted plugins are already loaded. Community code reaches this seam
+  // only after the gate has recorded an explicit session/one-time grant.
+  await c.get("activatePluginLocalTools")?.(body.pluginId, id);
+
   const active = resolveEnabledSessionPlugins(
     session.activePlugins ?? [],
     body.pluginId,
@@ -451,6 +580,7 @@ sessionRoutes.post("/:id/plugins/enable", async (c) => {
   for (const previousPluginId of session.activePlugins ?? []) {
     if (!active.includes(previousPluginId)) {
       pluginRegistry.deactivate(previousPluginId, id);
+      c.get("rpcApprovalGate")?.revoke(id, previousPluginId);
     }
   }
   await store.updateSession(id, {
@@ -486,6 +616,7 @@ sessionRoutes.post("/:id/plugins/disable", async (c) => {
   }
 
   pluginRegistry.deactivate(body.pluginId, id);
+  c.get("rpcApprovalGate")?.revoke(id, body.pluginId);
   const active = (session.activePlugins ?? []).filter(
     (p) => p !== body.pluginId,
   );

@@ -24,6 +24,7 @@ import {
   DEFAULT_LOOP_THRESHOLD,
   DEFAULT_FIRST_TOKEN_TIMEOUT_MS,
 } from "../src/retry/llm-retry.js";
+import { computeAttemptBudget } from "../src/retry/retry-common.js";
 import type {
   LLMAdapter,
   LLMMessage,
@@ -473,6 +474,31 @@ describe("streamLLMWithRetry", () => {
     expect(result.attempt).toBe(0);
   });
 
+  it("propagates provider usage from the done event (not hardcoded 0/0)", async () => {
+    const llm = createScriptedStreamLLM([
+      {
+        events: [
+          { type: "text-delta", textDelta: "hi" },
+          {
+            type: "done",
+            finishReason: "stop",
+            usage: { inputTokens: 42, outputTokens: 7 },
+          },
+        ],
+      },
+    ]);
+    const policy = buildRetryPolicy({ runtimeTimeoutMs: 10_000 });
+
+    const result = await streamLLMWithRetry({
+      llm,
+      messages: baseMessages,
+      policy,
+      deadline: Date.now() + 10_000,
+    });
+
+    expect(result.response.usage).toEqual({ inputTokens: 42, outputTokens: 7 });
+  });
+
   it("salvages partial content when the stream throws mid-flight", async () => {
     const llm = createScriptedStreamLLM([
       {
@@ -785,6 +811,32 @@ describe("streamLLMWithRetry trace emissions", () => {
       usage: { inputTokens: 0, outputTokens: 0 },
     });
     expect(typeof emitter.events[1].payload.error).toBe("string");
+  });
+});
+
+// ── computeAttemptBudget (R-19: no floor past the deadline) ─────────
+
+describe("computeAttemptBudget", () => {
+  const policy = {
+    maxRetries: 1,
+    callTimeoutMs: 10_000,
+    firstTokenTimeoutMs: 30_000,
+    loopDetectionThreshold: 3,
+  };
+
+  it("returns 0 when the deadline has already passed", () => {
+    expect(computeAttemptBudget(policy, Date.now() - 1)).toBe(0);
+    expect(computeAttemptBudget(policy, Date.now() - 5_000)).toBe(0);
+  });
+
+  it("applies the 1s floor only while still before the deadline", () => {
+    const budget = computeAttemptBudget(policy, Date.now() + 200);
+    expect(budget).toBe(1_000);
+  });
+
+  it("caps the budget at callTimeoutMs", () => {
+    const budget = computeAttemptBudget(policy, Date.now() + 60_000);
+    expect(budget).toBe(policy.callTimeoutMs);
   });
 });
 

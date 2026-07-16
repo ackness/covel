@@ -46,10 +46,11 @@ import { SessionLockTimeoutError, type SessionLock } from "./session-lock.js";
 
 export interface PgAdvisorySessionLockOptions {
   /**
-   * Maximum time to wait for the advisory lock before giving up. Default
-   * 30_000ms — comfortably above a normal turn, deliberately below HTTP
-   * request timeouts so a stuck lock surfaces as a proper API error rather
-   * than a silent hang.
+   * Maximum total time to wait for the lock — covering BOTH the pool
+   * checkout (`sql.reserve()`, which queues when the pool is exhausted) and
+   * the advisory-lock polling loop. Default 30_000ms — comfortably above a
+   * normal turn, deliberately below HTTP request timeouts so a stuck lock
+   * surfaces as a proper API error rather than a silent hang.
    */
   readonly acquireTimeoutMs?: number;
   /**
@@ -86,15 +87,27 @@ export function createPgAdvisorySessionLock(
       // (which maxes out at 2^53).
       const keyLiteral = hashSessionId(sessionId).toString();
 
+      // Single deadline covering BOTH pool checkout and the advisory-lock
+      // polling loop. `sql.reserve()` queues unboundedly when the pool is
+      // exhausted; starting the clock only after it resolved (the previous
+      // behaviour) let pool exhaustion hide behind an unbounded wait.
+      const deadlineAt = Date.now() + acquireTimeoutMs;
+
       // `sql.reserve()` checks out a dedicated connection. The same handle
       // MUST be used for both the acquire and the release — advisory locks
       // are session-scoped (PG session, not Covel session).
-      const reserved = await sql.reserve();
+      const reserved = await reserveWithDeadline(
+        sql,
+        deadlineAt,
+        acquireTimeoutMs,
+        sessionId,
+      );
       let locked = false;
       try {
         await acquireWithTimeout(
           reserved,
           keyLiteral,
+          deadlineAt,
           acquireTimeoutMs,
           pollIntervalMs,
           sessionId,
@@ -139,25 +152,66 @@ export function hashSessionId(sessionId: string): bigint {
   return raw & 0x7fffffffffffffffn;
 }
 
+type ReservedConnection = Awaited<ReturnType<Sql["reserve"]>>;
+
+/**
+ * Check out a dedicated connection, bounded by the caller's absolute
+ * deadline. Without the bound, an exhausted pool queues `reserve()` calls
+ * indefinitely and the lock timeout never starts counting. If the queued
+ * reserve resolves after we already gave up, the connection is returned to
+ * the pool instead of leaking.
+ */
+async function reserveWithDeadline(
+  sql: Sql,
+  deadlineAt: number,
+  totalTimeoutMs: number,
+  sessionId: string,
+): Promise<ReservedConnection> {
+  const reservePromise = sql.reserve();
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(
+          new SessionLockTimeoutError(
+            `[pg-session-lock] failed to reserve a lock connection for session ${sessionId} within ${totalTimeoutMs}ms (lock pool exhausted?)`,
+          ),
+        ),
+      Math.max(0, deadlineAt - Date.now()),
+    );
+  });
+  try {
+    return await Promise.race([reservePromise, timeout]);
+  } catch (err) {
+    // Late-resolving reserve after a timeout: release back to the pool.
+    void reservePromise.then((r) => r.release()).catch(() => undefined);
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function acquireWithTimeout(
-  reserved: Sql,
+  reserved: ReservedConnection,
   keyLiteral: string,
-  timeoutMs: number,
+  deadlineAt: number,
+  totalTimeoutMs: number,
   pollIntervalMs: number,
   sessionId: string,
 ): Promise<void> {
-  const start = Date.now();
   // Poll `pg_try_advisory_lock` instead of blocking on `pg_advisory_lock`.
   // Non-blocking acquires keep the reserved connection interruptible and
   // let us enforce a bounded timeout without spawning a cancel goroutine.
+  // `deadlineAt` is shared with the reserve step, so reserve + acquire
+  // together never exceed the configured acquire timeout.
   while (true) {
     const rows = await reserved<{ locked: boolean }[]>`
       SELECT pg_try_advisory_lock(${keyLiteral}::bigint) AS locked
     `;
     if (rows[0]?.locked) return;
-    if (Date.now() - start > timeoutMs) {
+    if (Date.now() > deadlineAt) {
       throw new SessionLockTimeoutError(
-        `[pg-session-lock] failed to acquire lock for session ${sessionId} within ${timeoutMs}ms`,
+        `[pg-session-lock] failed to acquire lock for session ${sessionId} within ${totalTimeoutMs}ms`,
       );
     }
     await new Promise((r) => setTimeout(r, pollIntervalMs));

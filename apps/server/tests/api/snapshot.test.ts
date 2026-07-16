@@ -22,6 +22,10 @@ import {
   createInProcessSessionLock,
   type SessionLock,
 } from "../../src/lib/session-lock.js";
+import {
+  hashSessionOwnerToken,
+  SESSION_OWNER_TOKEN_HASH_KEY,
+} from "../../src/routes/api/session/session-guard.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -292,6 +296,117 @@ describe("Snapshot routes", () => {
       const snapshots = body.snapshots as Array<Record<string, unknown>>;
       expect(snapshots).toHaveLength(1);
       expect(snapshots[0]!.sessionId).toBe("sess-1");
+    });
+
+    it("returns metadata only — no payload, with payloadSize (audit R-04)", async () => {
+      const app = createTestApp(store);
+      await app.request("/api/sessions/sess-1/snapshot", { method: "POST" });
+
+      const res = await app.request("/api/sessions/sess-1/snapshots");
+      const body = (await res.json()) as {
+        snapshots: Array<Record<string, unknown>>;
+        nextCursor: string | null;
+      };
+      expect(body.snapshots).toHaveLength(1);
+      const meta = body.snapshots[0]!;
+      expect(meta.payload).toBeUndefined();
+      expect(typeof meta.id).toBe("string");
+      expect(typeof meta.turnId).toBe("string");
+      expect(meta.kind).toBe("manual");
+      expect(typeof meta.createdAt).toBe("string");
+      expect(typeof meta.payloadSize).toBe("number");
+      expect(meta.payloadSize as number).toBeGreaterThan(0);
+      expect(body.nextCursor).toBeNull();
+    });
+
+    it("keyset-paginates with limit + before cursor", async () => {
+      const app = createTestApp(store);
+      for (let i = 0; i < 3; i++) {
+        await app.request("/api/sessions/sess-1/snapshot", { method: "POST" });
+      }
+
+      type Page = {
+        snapshots: Array<{ id: string }>;
+        nextCursor: { createdAt: string; id: string } | null;
+      };
+
+      // Newest window; oldest-first inside the page.
+      const page1 = (await (
+        await app.request("/api/sessions/sess-1/snapshots?limit=2")
+      ).json()) as Page;
+      expect(page1.snapshots).toHaveLength(2);
+      // The next cursor is the oldest returned row's (createdAt, id) position.
+      expect(page1.nextCursor).not.toBeNull();
+      expect(typeof page1.nextCursor!.createdAt).toBe("string");
+      expect(page1.nextCursor!.id).toBe(page1.snapshots[0]!.id);
+
+      const page2 = (await (
+        await app.request(
+          `/api/sessions/sess-1/snapshots?limit=2` +
+            `&before_created_at=${encodeURIComponent(page1.nextCursor!.createdAt)}` +
+            `&before_id=${page1.nextCursor!.id}`,
+        )
+      ).json()) as Page;
+      expect(page2.snapshots).toHaveLength(1);
+      expect(page2.nextCursor).toBeNull();
+
+      const ids = [...page1.snapshots, ...page2.snapshots].map((s) => s.id);
+      expect(new Set(ids).size).toBe(3);
+    });
+
+    it("ignores an incomplete cursor (only one half supplied)", async () => {
+      const app = createTestApp(store);
+      await app.request("/api/sessions/sess-1/snapshot", { method: "POST" });
+      // A cursor needs BOTH halves; a lone before_id is dropped → newest window.
+      const res = await app.request(
+        "/api/sessions/sess-1/snapshots?before_id=nope",
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { snapshots: unknown[] };
+      expect(body.snapshots).toHaveLength(1);
+    });
+  });
+
+  // ── GET /snapshots/:snapshotId ──────────────────────────────
+
+  describe("GET /api/sessions/:id/snapshots/:snapshotId", () => {
+    it("returns the full snapshot payload on demand", async () => {
+      const app = createTestApp(store);
+      const created = (await (
+        await app.request("/api/sessions/sess-1/snapshot", { method: "POST" })
+      ).json()) as { snapshot: { id: string } };
+
+      const res = await app.request(
+        `/api/sessions/sess-1/snapshots/${created.snapshot.id}`,
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        snapshot: { id: string; payload: Record<string, unknown> };
+      };
+      expect(body.snapshot.id).toBe(created.snapshot.id);
+      expect(body.snapshot.payload).toBeDefined();
+      expect(body.snapshot.payload.schemaVersion).toBe(2);
+    });
+
+    it("returns 404 for an unknown snapshot or one from another session", async () => {
+      await createSession(store, "sess-other-payload");
+      await seedSessionData(store, "sess-other-payload");
+      const app = createTestApp(store);
+      const created = (await (
+        await app.request("/api/sessions/sess-other-payload/snapshot", {
+          method: "POST",
+        })
+      ).json()) as { snapshot: { id: string } };
+
+      const missing = await app.request(
+        "/api/sessions/sess-1/snapshots/unknown-id",
+      );
+      expect(missing.status).toBe(404);
+
+      const crossSession = await app.request(
+        `/api/sessions/sess-1/snapshots/${created.snapshot.id}`,
+      );
+      expect(crossSession.status).toBe(404);
     });
   });
 
@@ -860,6 +975,78 @@ describe("Snapshot routes", () => {
       // child session starts with zero.
       const childSuspensions = await store.listSuspensions(childId);
       expect(childSuspensions).toHaveLength(0);
+    });
+
+    it("mints an independent child owner token on hosted tiers", async () => {
+      const previousTier = process.env.DEPLOYMENT_TIER;
+      const previousOperator = process.env.COVEL_DESKTOP_REST_TOKEN;
+      process.env.DEPLOYMENT_TIER = "demo";
+      process.env.COVEL_DESKTOP_REST_TOKEN = "operator-secret";
+      const parentToken = "parent-owner-token";
+      await store.updateSession("sess-1", {
+        metadata: {
+          [SESSION_OWNER_TOKEN_HASH_KEY]: hashSessionOwnerToken(parentToken),
+        },
+      });
+
+      try {
+        const app = createTestApp(store);
+        const snapshotRes = await app.request("/api/sessions/sess-1/snapshot", {
+          method: "POST",
+          headers: { "X-Session-Token": parentToken },
+        });
+        expect(snapshotRes.status).toBe(201);
+        const snapshotBody = (await snapshotRes.json()) as {
+          snapshot: { id: string };
+        };
+
+        const forkRes = await app.request("/api/sessions/sess-1/fork", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Session-Token": parentToken,
+          },
+          body: JSON.stringify({ fromSnapshotId: snapshotBody.snapshot.id }),
+        });
+        expect(forkRes.status).toBe(201);
+        const fork = (await forkRes.json()) as {
+          sessionId: string;
+          ownerToken?: string;
+        };
+        expect(fork.ownerToken).toBeTypeOf("string");
+        expect(fork.ownerToken).not.toBe(parentToken);
+
+        const child = await store.getSession(fork.sessionId);
+        expect(child?.metadata?.[SESSION_OWNER_TOKEN_HASH_KEY]).toBe(
+          hashSessionOwnerToken(fork.ownerToken!),
+        );
+        expect(JSON.stringify(child)).not.toContain(fork.ownerToken);
+
+        expect(
+          (await app.request(`/api/sessions/${fork.sessionId}/snapshots`))
+            .status,
+        ).toBe(401);
+        expect(
+          (
+            await app.request(`/api/sessions/${fork.sessionId}/snapshots`, {
+              headers: { "X-Session-Token": parentToken },
+            })
+          ).status,
+        ).toBe(401);
+        expect(
+          (
+            await app.request(`/api/sessions/${fork.sessionId}/snapshots`, {
+              headers: { "X-Session-Token": fork.ownerToken! },
+            })
+          ).status,
+        ).toBe(200);
+      } finally {
+        if (previousTier === undefined) delete process.env.DEPLOYMENT_TIER;
+        else process.env.DEPLOYMENT_TIER = previousTier;
+        if (previousOperator === undefined)
+          delete process.env.COVEL_DESKTOP_REST_TOKEN;
+        else process.env.COVEL_DESKTOP_REST_TOKEN = previousOperator;
+      }
     });
   });
 });

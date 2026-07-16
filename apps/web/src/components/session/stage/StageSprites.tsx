@@ -53,13 +53,18 @@ export function StageSprites({
   const slots = sticky
     ? lastSlotsRef.current.map((slot) => ({ ...slot, active: false }))
     : fresh;
-  const lanes = computeSpriteLanes(slots.map((slot) => slot.pos));
+  const lanes = computeSpriteLanes(
+    slots.map((slot) => slot.pos),
+    slots.findIndex((slot) => slot.active),
+  );
 
   return (
     <div
       className={clsx(
-        "pointer-events-none absolute inset-x-0 top-0 bottom-[26%] transition-[filter,opacity] duration-300",
-        dimmed && "opacity-60 brightness-[.72]",
+        // Dim is brightness-only: opacity made sprites see-through against
+        // the backdrop for the whole idle wait, which read as a rendering bug.
+        "pointer-events-none absolute inset-x-0 top-0 bottom-[26%] transition-[filter] duration-300",
+        dimmed && "brightness-[.6]",
       )}
       data-testid="stage-sprites"
     >
@@ -69,10 +74,11 @@ export function StageSprites({
           // ponytail: transitions `left`/`width` (layout props, against the
           // web rules) — ≤4 absolutely-positioned sprites moving once per
           // enter/leave; FLIP/transform plumbing isn't worth it. The global
-          // prefers-reduced-motion block collapses it. Lane changes only
-          // happen on cast membership changes (assignStations), so this
-          // reads as "stepping aside", never as drift. Active speaker sits
-          // on top for the residual glow/shadow overlap at lane edges.
+          // prefers-reduced-motion block collapses it. Lanes change on cast
+          // membership changes (assignStations) and on speaker switches (the
+          // active lane is wider), so this reads as "stepping aside" / focus
+          // shifting, never as drift. Active speaker sits on top for the
+          // residual glow/shadow overlap at lane edges.
           className="ui-stage-sprite absolute bottom-0 h-[92%] px-1 transition-[left,width] duration-500 ease-out"
           style={{
             left: `${lanes[index].leftPct}%`,

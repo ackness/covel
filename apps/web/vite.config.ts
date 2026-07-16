@@ -150,6 +150,22 @@ export default defineConfig({
           if (/(?:^|\/)(framer-motion|motion)\//.test(after)) {
             return "motion-vendor";
           }
+          // json-render engine (core + react bindings) — drives every plugin
+          // panel and the message surface, so it can't be lazy, but peeling it
+          // into its own chunk trims the main bundle and lets it load in
+          // parallel (M-03 bundle budget).
+          if (/(?:^|\/)@json-render\//.test(after)) {
+            return "json-render-vendor";
+          }
+          // Radix primitives (dialog/tabs/scroll-area/…) + the umbrella
+          // `radix-ui` package — shared across screens.
+          if (/(?:^|\/)(@radix-ui\/|radix-ui\/)/.test(after)) {
+            return "radix-vendor";
+          }
+          // Schema / serialization libs used at panel + form boundaries.
+          if (/(?:^|\/)(zod|yaml)\//.test(after)) {
+            return "forms-vendor";
+          }
           return undefined;
         },
       },

@@ -3,6 +3,8 @@ import {
   createPresetRegistry,
   createProviderRegistry,
   applySlotOverlay,
+  publicPresetId,
+  resolveOverlayPresetId,
   resolveSlotOverride,
   type SlotOverridesInput,
 } from "../src/index.js";
@@ -36,17 +38,26 @@ function makeDeps() {
   return { providerRegistry, presetRegistry };
 }
 
+/** Map a public preset id through a request's own overrides to its scoped id. */
+function scopedId(
+  deps: ReturnType<typeof makeDeps>,
+  id: string,
+  overrides: SlotOverridesInput,
+): string | undefined {
+  return resolveOverlayPresetId(id, overrides, (k) =>
+    deps.presetRegistry.hasPreset(k),
+  );
+}
+
 describe("applySlotOverlay", () => {
   beforeEach(() => {
-    // Isolate the module-level ref counters between tests so a leak in one
+    // Isolate the module-level ref counter between tests so a leak in one
     // case doesn't mask or amplify a bug in another.
     __internals.presetRefs.clear();
-    __internals.providerRefs.clear();
   });
 
-  it("registers a custom preset and provider, then cleans up", () => {
+  it("registers a custom preset under a request-scoped id, then cleans up", () => {
     const deps = makeDeps();
-    expect(deps.providerRegistry.hasProvider("vendorX")).toBe(false);
     expect(deps.presetRegistry.hasPreset("custom_abc")).toBe(false);
 
     const overrides: SlotOverridesInput = {
@@ -64,21 +75,31 @@ describe("applySlotOverlay", () => {
 
     const cleanup = applySlotOverlay(deps, overrides);
 
-    expect(deps.providerRegistry.hasProvider("vendorX")).toBe(true);
-    expect(deps.presetRegistry.hasPreset("custom_abc")).toBe(true);
-    const preset = deps.presetRegistry.resolvePreset("custom_abc");
-    expect(preset).toMatchObject({
-      id: "custom_abc",
+    // Never registered under the bare public id (that's the H-04 poisoning
+    // surface) and no provider is ever registered.
+    expect(deps.presetRegistry.hasPreset("custom_abc")).toBe(false);
+    expect(deps.providerRegistry.hasProvider("vendorX")).toBe(false);
+
+    // The request's own overrides map to the scoped registration.
+    const key = scopedId(deps, "custom_abc", overrides);
+    expect(key).toBeDefined();
+    expect(key).not.toBe("custom_abc");
+    expect(publicPresetId(key!)).toBe("custom_abc");
+    expect(deps.presetRegistry.resolvePreset(key!)).toMatchObject({
+      id: key,
       provider: "vendorX",
       model: "fast-7b",
       baseUrl: "https://api.vendorx.example/v1",
       protocol: "openai-chat-v1",
+      requestScoped: true,
     });
 
     cleanup();
 
-    expect(deps.providerRegistry.hasProvider("vendorX")).toBe(false);
-    expect(deps.presetRegistry.hasPreset("custom_abc")).toBe(false);
+    expect(deps.presetRegistry.hasPreset(key!)).toBe(false);
+    // With the registration gone the mapping falls back to the public id.
+    expect(scopedId(deps, "custom_abc", overrides)).toBe("custom_abc");
+    expect(__internals.presetRefs.size).toBe(0);
   });
 
   it("is a no-op when overrides are undefined or empty", () => {
@@ -96,7 +117,7 @@ describe("applySlotOverlay", () => {
 
   it("never overwrites an entry already present in the base registry", () => {
     const deps = makeDeps();
-    const cleanup = applySlotOverlay(deps, {
+    const overrides: SlotOverridesInput = {
       customPresets: [
         {
           id: "ds-chat", // collides with base preset
@@ -107,10 +128,13 @@ describe("applySlotOverlay", () => {
           protocol: "openai-chat-v1",
         },
       ],
-    });
+    };
+    const cleanup = applySlotOverlay(deps, overrides);
 
+    // Base wins: no overlay registration, resolution keeps the public id.
+    expect(scopedId(deps, "ds-chat", overrides)).toBe("ds-chat");
     const preset = deps.presetRegistry.resolvePreset("ds-chat");
-    expect(preset?.model).toBe("deepseek-chat"); // base wins
+    expect(preset?.model).toBe("deepseek-chat");
     expect(preset?.baseUrl).not.toBe("https://evil.example");
 
     cleanup();
@@ -119,7 +143,53 @@ describe("applySlotOverlay", () => {
     expect(deps.presetRegistry.hasPreset("ds-chat")).toBe(true);
   });
 
-  it("reference-counts concurrent applies; cleanup removes only at zero", () => {
+  it("isolates concurrent same-id presets with different baseUrls (H-04)", () => {
+    const deps = makeDeps();
+    const mk = (baseUrl: string): SlotOverridesInput => ({
+      customPresets: [
+        {
+          id: "custom_shared",
+          name: "Shared",
+          provider: "openai",
+          baseUrl,
+          model: "gpt-x",
+          protocol: "openai-chat-v1",
+        },
+      ],
+    });
+    const attacker = mk("https://attacker.example");
+    const victim = mk("https://api.openai.example/v1");
+
+    // Interleaved: attacker applies first and stays alive while the victim
+    // request runs.
+    const cleanupAttacker = applySlotOverlay(deps, attacker);
+    const cleanupVictim = applySlotOverlay(deps, victim);
+
+    const attackerId = scopedId(deps, "custom_shared", attacker);
+    const victimId = scopedId(deps, "custom_shared", victim);
+    expect(attackerId).not.toBe(victimId);
+
+    // Each request resolves ITS OWN baseUrl — never the other's.
+    expect(deps.presetRegistry.resolvePreset(attackerId!)?.baseUrl).toBe(
+      "https://attacker.example",
+    );
+    expect(deps.presetRegistry.resolvePreset(victimId!)?.baseUrl).toBe(
+      "https://api.openai.example/v1",
+    );
+
+    cleanupAttacker();
+    // Victim's registration survives the attacker's rollback untouched.
+    expect(deps.presetRegistry.hasPreset(attackerId!)).toBe(false);
+    expect(deps.presetRegistry.resolvePreset(victimId!)?.baseUrl).toBe(
+      "https://api.openai.example/v1",
+    );
+
+    cleanupVictim();
+    expect(deps.presetRegistry.hasPreset(victimId!)).toBe(false);
+    expect(__internals.presetRefs.size).toBe(0);
+  });
+
+  it("reference-counts identical configs; cleanup removes only at zero", () => {
     const deps = makeDeps();
     const overrides: SlotOverridesInput = {
       customPresets: [
@@ -136,29 +206,25 @@ describe("applySlotOverlay", () => {
 
     const cleanupA = applySlotOverlay(deps, overrides);
     const cleanupB = applySlotOverlay(deps, overrides);
-    // Both callers see the overlay.
-    expect(deps.presetRegistry.hasPreset("custom_shared")).toBe(true);
-    expect(deps.providerRegistry.hasProvider("sharedProvider")).toBe(true);
-    expect(__internals.presetRefs.get("custom_shared")).toBe(2);
-    expect(__internals.providerRefs.get("sharedProvider")).toBe(2);
+    const key = scopedId(deps, "custom_shared", overrides)!;
+    // Identical (id, config) → one shared registration, two refs.
+    expect(deps.presetRegistry.hasPreset(key)).toBe(true);
+    expect(__internals.presetRefs.get(key)).toBe(2);
 
     cleanupA();
     // Still alive — B is still holding a ref.
-    expect(deps.presetRegistry.hasPreset("custom_shared")).toBe(true);
-    expect(deps.providerRegistry.hasProvider("sharedProvider")).toBe(true);
-    expect(__internals.presetRefs.get("custom_shared")).toBe(1);
+    expect(deps.presetRegistry.hasPreset(key)).toBe(true);
+    expect(__internals.presetRefs.get(key)).toBe(1);
 
     cleanupB();
     // Last ref released → gone.
-    expect(deps.presetRegistry.hasPreset("custom_shared")).toBe(false);
-    expect(deps.providerRegistry.hasProvider("sharedProvider")).toBe(false);
-    expect(__internals.presetRefs.has("custom_shared")).toBe(false);
-    expect(__internals.providerRefs.has("sharedProvider")).toBe(false);
+    expect(deps.presetRegistry.hasPreset(key)).toBe(false);
+    expect(__internals.presetRefs.size).toBe(0);
   });
 
   it("calling cleanup twice is idempotent", () => {
     const deps = makeDeps();
-    const cleanup = applySlotOverlay(deps, {
+    const overrides: SlotOverridesInput = {
       customPresets: [
         {
           id: "custom_once",
@@ -168,12 +234,13 @@ describe("applySlotOverlay", () => {
           model: "once-m",
         },
       ],
-    });
+    };
+    const cleanup = applySlotOverlay(deps, overrides);
 
     cleanup();
     cleanup(); // must not throw or underflow the ref count
-    expect(__internals.presetRefs.has("custom_once")).toBe(false);
-    expect(__internals.providerRefs.has("onceProv")).toBe(false);
+    expect(__internals.presetRefs.size).toBe(0);
+    expect(scopedId(deps, "custom_once", overrides)).toBe("custom_once");
   });
 
   it("skips malformed custom preset entries", () => {
@@ -204,8 +271,10 @@ describe("applySlotOverlay", () => {
       ],
     });
     cleanup();
-    expect(deps.presetRegistry.hasPreset("bad_1")).toBe(false);
-    expect(deps.presetRegistry.hasPreset("bad_2")).toBe(false);
+    expect(__internals.presetRefs.size).toBe(0);
+    expect(deps.presetRegistry.listPresets().map((p) => p.id)).toEqual([
+      "ds-chat",
+    ]);
   });
 
   it("degrades to no-op when the registry surface lacks overlay methods", () => {
@@ -215,12 +284,6 @@ describe("applySlotOverlay", () => {
         resolveTextTarget: () => ({ profile: null, preset: null }),
         resolveEmbeddingTarget: () => ({ profile: null, preset: null }),
         resolveTextTargetChain: () => [],
-      },
-      providerRegistry: {
-        resolve: () => {
-          throw new Error("unused");
-        },
-        withApiKeys: (r: unknown) => r,
       },
     } as unknown as Parameters<typeof applySlotOverlay>[0];
     const cleanup = applySlotOverlay(stubDeps, {
@@ -237,6 +300,31 @@ describe("applySlotOverlay", () => {
     // Must not throw, must return a callable cleanup.
     expect(typeof cleanup).toBe("function");
     cleanup();
+  });
+});
+
+describe("resolveOverlayPresetId", () => {
+  it("returns the input unchanged without overrides or hasPreset", () => {
+    expect(resolveOverlayPresetId("x", undefined, () => true)).toBe("x");
+    expect(resolveOverlayPresetId("x", { customPresets: [] }, () => true)).toBe(
+      "x",
+    );
+    expect(
+      resolveOverlayPresetId(
+        "x",
+        { customPresets: [{ id: "x", name: "X", provider: "p", model: "m" }] },
+        undefined,
+      ),
+    ).toBe("x");
+    expect(resolveOverlayPresetId(undefined, undefined, () => true)).toBe(
+      undefined,
+    );
+  });
+});
+
+describe("publicPresetId", () => {
+  it("is the identity for plain preset ids", () => {
+    expect(publicPresetId("ds-chat")).toBe("ds-chat");
   });
 });
 

@@ -9,8 +9,29 @@ import {
 } from "./import-assets.js";
 import { writeLog } from "./logging.js";
 import { writeDataRoot, type ensureUserPaths } from "./paths.js";
-import { buildAppMenu, getMainWindow } from "./windows.js";
+import { buildAppMenu, getMainWindow, isTrustedFrameUrl } from "./windows.js";
 import { setDesktopLocaleFromSettings, t } from "./main-i18n.js";
+
+/**
+ * H-09 defense-in-depth: reject secret/config IPC unless the sender frame is
+ * the trusted app origin (the local sidecar / dev server). The main-frame
+ * navigation guard (windows.ts) is the primary block; this stops any other
+ * frame (a stray iframe, a not-yet-committed cross-origin page) from reading
+ * provider keys or the REST token via the `covelIpc` bridge.
+ */
+function isTrustedSender(
+  event: Electron.IpcMainInvokeEvent,
+  channel: string,
+): boolean {
+  if (isTrustedFrameUrl(event.senderFrame?.url)) return true;
+  writeLog(
+    "warn",
+    `[ipc] blocked '${channel}' from untrusted origin: ${
+      event.senderFrame?.url ?? "unknown"
+    }`,
+  );
+  return false;
+}
 
 type DesktopPaths = ReturnType<typeof ensureUserPaths>;
 
@@ -42,24 +63,28 @@ export function registerDesktopIpcHandlers({
   saveSettingsViaSidecar,
   saveKeysViaSidecar,
 }: DesktopIpcHandlersDeps): void {
-  ipcMain.handle("covel:get-info", async () => ({
-    version: app.getVersion(),
-    platform: process.platform,
-    isDev,
-    covelHome: paths.covelHome,
-    dataRoot: paths.dataRoot,
-    logsDir: paths.logsDir,
-    dbPath: paths.dbPath,
-    configTomlPath: paths.configTomlPath,
-    llmTomlPath: paths.userLlmTomlPath,
-    keysEnvPath: paths.userKeysEnvPath,
-    serverPort: getServerPort(),
-    // The renderer attaches `Authorization: Bearer <restToken>` on
-    // privileged calls (PUT /api/config/{keys,settings,data-root},
-    // POST /api/config/open-folder). The sidecar enforces it via
-    // COVEL_DESKTOP_REST_TOKEN.
-    restToken,
-  }));
+  ipcMain.handle("covel:get-info", async (event) => {
+    // Returns `restToken` (privileged sidecar bearer) — gate on sender origin.
+    if (!isTrustedSender(event, "covel:get-info")) return null;
+    return {
+      version: app.getVersion(),
+      platform: process.platform,
+      isDev,
+      covelHome: paths.covelHome,
+      dataRoot: paths.dataRoot,
+      logsDir: paths.logsDir,
+      dbPath: paths.dbPath,
+      configTomlPath: paths.configTomlPath,
+      llmTomlPath: paths.userLlmTomlPath,
+      keysEnvPath: paths.userKeysEnvPath,
+      serverPort: getServerPort(),
+      // The renderer attaches `Authorization: Bearer <restToken>` on
+      // privileged calls (PUT /api/config/{keys,settings,data-root},
+      // POST /api/config/open-folder). The sidecar enforces it via
+      // COVEL_DESKTOP_REST_TOKEN.
+      restToken,
+    };
+  });
 
   ipcMain.handle("covel:retry-startup", () => {
     retryStartup();
@@ -97,8 +122,26 @@ export function registerDesktopIpcHandlers({
   // the primary store (browser localStorage) is plain text anyway, so
   // safeStorage only bought us a macOS Keychain prompt with no real security
   // uplift on an unsigned build.
-  ipcMain.handle("covel:keys:load", () => loadKeysEnv(paths.userKeysEnvPath));
-  ipcMain.handle("covel:keys:save", async (_event, payload: unknown) => {
+  //
+  // TODO(S-07): `covel:keys:load` returns the real decrypted key values to the
+  // renderer. This is a deliberate tradeoff — the renderer needs the raw keys
+  // to attach them via the `X-Provider-Keys` header and to mirror them into
+  // `localStorage` (`covel:keys`) for the pure-web path. Intended proper fix:
+  // encrypt `keys.env` at rest via Electron `safeStorage` (main process) AND
+  // stop exposing raw values to the renderer — the renderer would see only a
+  // per-provider "configured" status while the main process injects keys into
+  // outbound requests. Not done here: safeStorage-at-rest alone buys nothing
+  // while the localStorage mirror stays plaintext, and on unsigned builds
+  // safeStorage degrades to a fixed key (no real encryption) plus a migration
+  // path for existing plaintext files. Doing it right requires reworking the
+  // whole key-flow (server-side injection), which is out of scope for S-07.
+  ipcMain.handle("covel:keys:load", (event) => {
+    // Returns RAW provider keys — reject any untrusted sender frame (H-09).
+    if (!isTrustedSender(event, "covel:keys:load")) return {};
+    return loadKeysEnv(paths.userKeysEnvPath);
+  });
+  ipcMain.handle("covel:keys:save", async (event, payload: unknown) => {
+    if (!isTrustedSender(event, "covel:keys:save")) return { ok: false };
     if (!payload || typeof payload !== "object") return { ok: false };
     const keys: Record<string, string> = {};
     for (const [k, v] of Object.entries(payload as Record<string, unknown>)) {
@@ -121,7 +164,8 @@ export function registerDesktopIpcHandlers({
   // Settings.json round-trip — the unified SettingsStore's desktop backend.
   // Read returns the `entries` map only; writes accept the full entries blob
   // and rewrite the file atomically with a timestamp for audit purposes.
-  ipcMain.handle("covel:settings:load", () => {
+  ipcMain.handle("covel:settings:load", (event) => {
+    if (!isTrustedSender(event, "covel:settings:load")) return {};
     return getSettingsViaSidecar().catch(() => {
       try {
         const raw = fs.readFileSync(paths.userSettingsJsonPath, "utf-8");
@@ -134,7 +178,8 @@ export function registerDesktopIpcHandlers({
       }
     });
   });
-  ipcMain.handle("covel:settings:save", async (_event, payload: unknown) => {
+  ipcMain.handle("covel:settings:save", async (event, payload: unknown) => {
+    if (!isTrustedSender(event, "covel:settings:save")) return { ok: false };
     if (!payload || typeof payload !== "object") return { ok: false };
     const entries = payload as Record<string, unknown>;
     try {
@@ -169,8 +214,10 @@ export function registerDesktopIpcHandlers({
     }
   });
 
-  // Asset import — called with { sourcePath } from the web tier or from the
-  // dialog-based "pick" handlers below.
+  // Asset import — the sourcePath always originates from a native dialog in the
+  // MAIN process (see `pickAndImport` below), never from a renderer-supplied
+  // string. The old renderer-facing `covel:import:{plugin,world}` channels were
+  // removed (audit S-08: arbitrary-path vector) — they had no callers.
   async function handleImport(
     kind: ImportKind,
     payload: unknown,
@@ -197,13 +244,6 @@ export function registerDesktopIpcHandlers({
       return { ok: false, kind, message };
     }
   }
-
-  ipcMain.handle("covel:import:plugin", (_event, payload) =>
-    handleImport("plugin", payload),
-  );
-  ipcMain.handle("covel:import:world", (_event, payload) =>
-    handleImport("world", payload),
-  );
 
   // Dialog-backed entry points. Open a native file chooser, then import.
   async function pickAndImport(kind: ImportKind): Promise<ImportResult> {

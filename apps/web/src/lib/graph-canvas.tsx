@@ -17,6 +17,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
+import type { ForceGraphMethods } from "react-force-graph-2d";
 import { usePluginNamespace } from "@/stores/plugin-data-store.js";
 import type { ForceLink, ForceNode, MutableForceNode } from "./graph-types.js";
 import { createGraphDataPools, syncGraphData } from "./graph-canvas-sync.js";
@@ -182,7 +183,20 @@ const Inner = ({
   const { t } = useTranslation();
   const nodes = usePluginNamespace(pluginId, nodesNamespace);
   const edges = usePluginNamespace(pluginId, edgesNamespace);
-  const graphRef = useRef<any>(null);
+  // Untyped generics on purpose: `<ForceGraph2D ref={graphRef} .../>` infers
+  // the component's NodeType/LinkType from all props at once, and JSX gives
+  // no explicit type arguments — a ref pinned to `ForceGraphMethods<ForceNode,
+  // ForceLink>` narrows that inference and breaks against `graphData`'s
+  // actual (structurally compatible, index-signature-based) prop type.
+  //
+  // `d3VelocityDecay` is missing from react-force-graph-2d's `ForceGraphMethods`
+  // typings even though the underlying `force-graph` kapsule it wraps declares
+  // it (see force-graph/dist/*.d.ts) — patched in locally rather than losing
+  // the rest of the interface's typing to `any`.
+  const graphRef = useRef<
+    | (ForceGraphMethods & { d3VelocityDecay?(velocityDecay: number): void })
+    | undefined
+  >(undefined);
 
   const [selected, setSelected] = useState<ForceNode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);

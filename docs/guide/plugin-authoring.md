@@ -147,6 +147,8 @@ export default function (covel) {
 
 > 旧的 frontmatter `hooks:` 声明式写法已弃用（保留一个发布周期），事件表与执行语义与 `covel.on` 完全一致；`covel.on` 的 `match` 是谓词函数 `(payload) => boolean`，比旧的浅层等值 map 更灵活。
 
+entry 工厂的完整类型（`PluginAPI` / `PluginToolkit` / `PluginEntryFactory`）从 `@covel/runtime` 导入：JS 用 JSDoc `@param {import('@covel/runtime').PluginAPI} covel`，TS 直接 `import type { PluginAPI } from "@covel/runtime"`——服务端实现按同一类型做编译期对齐，作者代码与框架不会悄悄漂移。
+
 `PreRuntime`、`PostContextAssembly`、`PreLLMCall`、`PostLLMResponse`、`PreToolUse`、`PostToolUse`、`PreStateCommit` 使用 `sequential` 语义：handler 按顺序执行，`replace` 会成为下一个 handler 的输入，`abort` 会停止该生命周期动作。
 
 围绕上下文与 LLM 调用的几个事件可改写模型交互本身：`PostContextAssembly` 在 `buildContext` 之后、进 loop 之前 turn 级（每 runtime 一次）改写已装配的 `systemPrompt` / 投影历史；`PreLLMCall` 在每次调用前非破坏性改写发往模型的 `messages` / `model` / `tools`（不动底层 transcript）；`PostLLMResponse` 在响应返回后、工具派发前 patch `content` / `toolCalls`。`PostToolUse` 还可用 `replace.terminate: true` 在记录工具结果后提前结束工具循环。

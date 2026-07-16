@@ -1,9 +1,33 @@
 import i18n from "@/i18n";
 import { emitToast } from "@/lib/toast-channel";
+import {
+  operatorAuthHeaders,
+  sessionAuthHeaders,
+} from "../session-credentials.js";
 import { buildAiHeaders, needsProviderKeys } from "./model-settings.js";
+
+/**
+ * Session-scoped API paths embed the id as `/api/sessions/{id}` or
+ * `/api/sessions/{id}/...`. Pull it out so `request()` can attach that
+ * session's owner token (H-01). Cross-session paths (`/api/sessions?worldId=`,
+ * `/api/sessions` itself) have no id segment and match nothing.
+ */
+const SESSION_PATH_RE = /\/api\/sessions\/([^/?#]+)/;
+
+/** Owner-token header for a session-scoped request, or `{}` when the URL isn't
+ * session-scoped or no token is stored. Harmless on tiers that ignore it. */
+function sessionTokenHeader(url: string): Record<string, string> {
+  const id = SESSION_PATH_RE.exec(url)?.[1];
+  if (!id) return {};
+  return sessionAuthHeaders(decodeURIComponent(id));
+}
 
 /** Options for the internal `request` fetch wrapper. */
 interface RequestOptions extends RequestInit {
+  /** Session id carried in a body, query, or non-standard route path. */
+  sessionId?: string;
+  /** Attach the hosted operator credential for global administration. */
+  operatorAuth?: boolean;
   /**
    * Suppress the global error toast for this request. Use for probe-style
    * calls where a non-2xx response is part of normal operation (e.g. auth
@@ -63,7 +87,7 @@ export async function request<T>(
   url: string,
   init?: RequestOptions,
 ): Promise<T> {
-  const { silentErrors, ...fetchInit } = init ?? {};
+  const { silentErrors, sessionId, operatorAuth, ...fetchInit } = init ?? {};
   // Only GETs are retried — they're idempotent, so a boot-race ECONNREFUSED (dev
   // server not up yet) or a transient gateway error can be retried without risk
   // of double-submitting. Non-GET requests keep the single-shot behaviour.
@@ -79,6 +103,9 @@ export async function request<T>(
         headers: {
           "Content-Type": "application/json",
           ...(needsProviderKeys(url) ? buildAiHeaders() : {}),
+          ...sessionTokenHeader(url),
+          ...sessionAuthHeaders(sessionId),
+          ...(operatorAuth ? operatorAuthHeaders() : {}),
           ...fetchInit.headers,
         },
       });

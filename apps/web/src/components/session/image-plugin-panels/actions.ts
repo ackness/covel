@@ -1,11 +1,11 @@
 import i18n from "@/i18n/index.js";
-import { postPluginRpc, resolveApproval } from "@/services/api.js";
 import type { SessionPluginInfo } from "@/services/api.js";
 import { resolveMediaSrc } from "@/lib/media-resolve.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { compactJobId } from "@/lib/job-ui.js";
 import { FrameworkRuntimeCapability } from "@covel/shared";
 import type { MediaRef } from "@covel/shared";
+import { postPluginRpcWithApproval } from "../plugin-rpc-ui.js";
 import type { ImagePromptPayload } from "./image-records.js";
 
 // Discover the image-generator runtime by capability rather than baking in a
@@ -36,15 +36,15 @@ async function triggerImageFromPrompt(
     );
   }
   const req = { pluginId, runtimeId, payload };
-  let res = await postPluginRpc(sessionId, req);
-  if (res.status === "approval-required") {
-    const ok = window.confirm(
-      i18n.t("coreImage.panel.authorizeConfirm", { runtimeId }),
-    );
-    await resolveApproval(res.approvalId, ok ? "allow" : "deny", "session");
-    if (!ok) return;
-    res = await postPluginRpc(sessionId, req);
-  }
+  const res = await postPluginRpcWithApproval({
+    sessionId,
+    request: req,
+    pluginId,
+    actionLabel: `runtime ${runtimeId}`,
+    confirm: async ({ message }) => window.confirm(message),
+    t: (key, options) => i18n.t(key, options),
+  });
+  if (!res) return;
   if (res.status === "accepted") {
     emitToast(
       "info",

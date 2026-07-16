@@ -14,6 +14,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
+import { createRpcApprovalGate, type RpcApprovalGate } from "@covel/approval";
 import {
   createPluginRegistry,
   type PluginRegistry,
@@ -52,11 +53,17 @@ function makeEntry(
  * Mount the real sessionRoutes module under /api/sessions, mirroring how
  * bootstrap.ts wires it. Tests then exercise production behavior 1:1.
  */
-function createTestApp(registry: PluginRegistry, store: DataStore): Hono {
+function createTestApp(
+  registry: PluginRegistry,
+  store: DataStore,
+  rpcApprovalGate: RpcApprovalGate,
+): Hono {
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("pluginRegistry", registry);
+    c.set("rpcApprovalGate", rpcApprovalGate);
+    c.set("activatePluginLocalTools", async () => {});
     await next();
   });
   app.route("/api/sessions", sessionRoutes);
@@ -69,12 +76,14 @@ describe("Session plugin routes (real sessionRoutes)", () => {
   let registry: PluginRegistry;
   let store: DataStore;
   let app: Hono;
+  let rpcApprovalGate: RpcApprovalGate;
   const SESSION_ID = "sess-1";
 
   beforeEach(async () => {
     registry = createPluginRegistry();
     store = createMemoryStore();
-    app = createTestApp(registry, store);
+    rpcApprovalGate = createRpcApprovalGate();
+    app = createTestApp(registry, store, rpcApprovalGate);
 
     // Register plugins. `source: 'builtin'` mirrors how bootstrap.ts marks
     // shipped plugins by load path; trust is no longer inferred from any name
@@ -260,13 +269,15 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as { activePlugins: string[] };
       expect(body.activePlugins).toEqual(
-        expect.arrayContaining(["narrator", "optional-plugin"]),
+        expect.arrayContaining(["narrator", "pregame"]),
       );
+      expect(body.activePlugins).not.toContain("optional-plugin");
 
       const session = await store.getSession("sess-core-create");
       expect(session?.activePlugins).toEqual(
-        expect.arrayContaining(["narrator", "optional-plugin"]),
+        expect.arrayContaining(["narrator", "pregame"]),
       );
+      expect(session?.activePlugins).not.toContain("optional-plugin");
     });
 
     it("uses chat-mode-narrator instead of the default narrator when requested", async () => {
@@ -289,7 +300,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(body.activePlugins).toContain("player-identity");
       expect(body.activePlugins).toContain("living-world-rules");
       expect(body.activePlugins).toContain("branch-reply");
-      expect(body.activePlugins).toContain("optional-plugin");
+      expect(body.activePlugins).not.toContain("optional-plugin");
       expect(body.activePlugins).not.toContain("narrator");
 
       const session = await store.getSession("sess-chat-create");
@@ -316,7 +327,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
               conflicts: [{ target: { plugin: "relation-conflict" } }],
             },
           }),
-          source: "community",
+          source: "official",
         }),
       );
       registry.register(
@@ -326,7 +337,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
             id: "relation-required",
             name: "Relation Required",
           }),
-          source: "community",
+          source: "official",
         }),
       );
       registry.register(
@@ -336,7 +347,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
             id: "relation-conflict",
             name: "Relation Conflict",
           }),
-          source: "community",
+          source: "official",
         }),
       );
 
@@ -389,6 +400,22 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         presetId: null,
         activePlugins: ["default-engine"],
         createdAt: new Date().toISOString(),
+      });
+      const approval = rpcApprovalGate.evaluate({
+        sessionId: "sess-reverse-conflict",
+        pluginId: "alternate-engine",
+        action: "covel:plugin-server-code",
+        payload: {},
+        trustLevel: "community",
+      });
+      if (approval.status !== "pending") {
+        throw new Error("expected community enable approval");
+      }
+      rpcApprovalGate.decide({
+        approvalId: approval.approvalId,
+        decision: "allow",
+        scope: "session",
+        decidedAt: new Date().toISOString(),
       });
 
       const res = await app.request(
@@ -448,7 +475,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
               requires: ["required-plugin"],
             },
           }),
-          source: "community",
+          source: "official",
         }),
       );
       registry.register(
@@ -458,7 +485,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
             id: "required-plugin",
             name: "Required Plugin",
           }),
-          source: "community",
+          source: "official",
         }),
       );
       registry.register(
@@ -471,7 +498,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
               conflicts: ["required-plugin"],
             },
           }),
-          source: "community",
+          source: "official",
         }),
       );
 
@@ -643,6 +670,33 @@ describe("Session plugin routes (real sessionRoutes)", () => {
 
       const session = await store.getSession(SESSION_ID);
       expect(session?.activePlugins).toEqual(body.active);
+    });
+
+    it("requires a session grant before enabling community server code", async () => {
+      const requestEnable = () =>
+        app.request(`/api/sessions/${SESSION_ID}/plugins/enable`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pluginId: "optional-plugin" }),
+        });
+
+      const pendingResponse = await requestEnable();
+      expect(pendingResponse.status).toBe(202);
+      const pending = (await pendingResponse.json()) as {
+        approvalId: string;
+      };
+      rpcApprovalGate.decide({
+        approvalId: pending.approvalId,
+        decision: "allow",
+        scope: "session",
+        decidedAt: new Date().toISOString(),
+      });
+
+      const allowedResponse = await requestEnable();
+      expect(allowedResponse.status).toBe(200);
+      expect(rpcApprovalGate.hasGrant(SESSION_ID, "optional-plugin")).toBe(
+        true,
+      );
     });
 
     it("should return 403 when attempting to disable a core-plugin", async () => {

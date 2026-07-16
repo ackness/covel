@@ -15,21 +15,44 @@
  * `changes`).
  */
 
-import { and, asc, eq, isNull, lt } from "drizzle-orm";
+import { and, asc, eq, isNull, lt, sql } from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
 
+import { cursorPageOrder, cursorPageWhere } from "./cursor.js";
 import type { InsertValueBuilders } from "./insert-values.js";
 import type { JsonReader } from "./mappers.js";
 import { toSnapshotRecord, toSuspensionRecord } from "./mappers.js";
 import type { SnapshotRow, SuspensionRow } from "./mappers/snapshot-mappers.js";
 import type { SqlRunner } from "./sql-runner.js";
-import type { DataStore, SnapshotRecord, SuspensionRecord } from "../types.js";
+import type {
+  CursorPageOpts,
+  DataStore,
+  SnapshotMetadata,
+  SnapshotKind,
+  SnapshotRecord,
+  SuspensionRecord,
+} from "../types.js";
 
 type StateSnapshotsTable = Table & {
   id: Column;
   sessionId: Column;
+  turnId: Column;
+  kind: Column;
+  parentId: Column;
+  payload: Column;
   createdAt: Column;
 };
+
+/** Projected row for the payload-free metadata page. */
+interface SnapshotMetaRow {
+  id: string;
+  sessionId: string;
+  turnId: string;
+  kind: string;
+  parentId: string | null;
+  createdAt: string;
+  size: number;
+}
 type SuspensionsTable = Table & {
   id: Column;
   sessionId: Column;
@@ -60,6 +83,7 @@ export type SqlSnapshotRecords = Pick<
   | "saveSnapshot"
   | "getSnapshot"
   | "listSnapshots"
+  | "listSnapshotsPage"
   | "saveSuspension"
   | "getSuspension"
   | "markSuspensionResolved"
@@ -97,6 +121,41 @@ export function createSqlSnapshotRecords(
         orderBy: [asc(stateSnapshots.createdAt)],
       });
       return rows.map((row) => toSnapshotRecord(row, json));
+    },
+
+    async listSnapshotsPage(
+      sessionId: string,
+      opts: CursorPageOpts,
+    ): Promise<readonly SnapshotMetadata[]> {
+      if (opts.limit <= 0) return [];
+      // Partial select: the payload column is neither transferred nor
+      // deserialized. `size` is computed in-SQL via `length(cast(payload as
+      // text))` — valid on both SQLite (payload is TEXT, cast is a no-op) and
+      // PostgreSQL (jsonb → its canonical text form). Keyset `(createdAt, id)`
+      // window, newest-first, reversed to oldest-first (see cursorPageOrder).
+      const rows = await runner.select<SnapshotMetaRow>(stateSnapshots, {
+        columns: {
+          id: stateSnapshots.id,
+          sessionId: stateSnapshots.sessionId,
+          turnId: stateSnapshots.turnId,
+          kind: stateSnapshots.kind,
+          parentId: stateSnapshots.parentId,
+          createdAt: stateSnapshots.createdAt,
+          size: sql<number>`length(cast(${stateSnapshots.payload} as text))`,
+        },
+        where: cursorPageWhere(stateSnapshots, sessionId, opts.before),
+        orderBy: cursorPageOrder(stateSnapshots),
+        limit: opts.limit,
+      });
+      return rows.reverse().map((row) => ({
+        id: row.id,
+        sessionId: row.sessionId,
+        turnId: row.turnId,
+        kind: row.kind as SnapshotKind,
+        ...(row.parentId != null ? { parentId: row.parentId } : {}),
+        createdAt: row.createdAt,
+        size: Number(row.size),
+      }));
     },
 
     // ── Suspensions ──────────────────────────────────────────────

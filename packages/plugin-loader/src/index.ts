@@ -3,7 +3,12 @@ export { parsePluginMd } from "./parse-plugin-md.js";
 
 // ── Discovery & Loading ──────────────────────────────────────────
 export { discoverPlugins, discoverPluginsMulti } from "./discover.js";
-export { loadPluginSummary, loadPluginManifest, loadRuntime } from "./load.js";
+export {
+  loadPluginSummary,
+  loadPluginManifest,
+  loadRuntime,
+  loadRuntimeUi,
+} from "./load.js";
 
 // ── Registry ─────────────────────────────────────────────────────
 export { createPluginRegistry } from "./registry.js";

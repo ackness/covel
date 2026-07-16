@@ -3,12 +3,14 @@
  *
  * Materialized state snapshots power save / load / fork.
  *
- *   POST   /api/sessions/:id/snapshot    — create manual snapshot
- *   GET    /api/sessions/:id/snapshots   — list snapshots
- *   POST   /api/sessions/:id/fork        — create new session from snapshot
+ *   POST   /api/sessions/:id/snapshot                — create manual snapshot
+ *   GET    /api/sessions/:id/snapshots               — list snapshot metadata (paginated)
+ *   GET    /api/sessions/:id/snapshots/:snapshotId   — fetch one full snapshot payload
+ *   POST   /api/sessions/:id/fork                    — create new session from snapshot
  *
- * Auto snapshots (kind='auto') are written by the server commit pipeline
- * after every proposal; this route module exposes the manual/fork surfaces.
+ * Auto snapshots (kind='auto') are written by the server commit pipeline at
+ * checkpoint cadence (every COVEL_SNAPSHOT_INTERVAL_TURNS turns; see
+ * saveAutoSnapshot); this route module exposes the manual/fork surfaces.
  *
  * Fork strategy: COPY. We rebuild the child session by persisting the
  * snapshot's characters / state entries / plugin data / working memory
@@ -34,6 +36,7 @@ import type {
   TurnMessageRecord,
 } from "@covel/store";
 import { buildSnapshotPayload } from "@covel/runtime";
+import { getPluginTrustInfo } from "@covel/plugin-loader";
 import { CHARACTER_NAMESPACE } from "@covel/tools";
 import type { EventBus } from "@covel/events";
 import { errorBody } from "../../api-error.js";
@@ -42,7 +45,12 @@ import {
   type SessionLock,
 } from "../../lib/session-lock.js";
 import { SAFE_SESSION_ID_RE } from "../../lib/validators.js";
-import { resolveSessionParam } from "./session/session-guard.js";
+import { nextCursorFrom, parseCursorQuery } from "./cursor-params.js";
+import {
+  mintSessionOwnerToken,
+  resolveSessionParam,
+  SESSION_OWNER_TOKEN_HASH_KEY,
+} from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -153,7 +161,22 @@ snapshotRoutes.post("/:id/snapshot", async (c) => {
     .catch(rethrowUnlessLockBusy(c));
 });
 
-// ── GET /api/sessions/:id/snapshots — list snapshots ──────────────
+// ── GET /api/sessions/:id/snapshots — list snapshot metadata ──────
+//
+// Snapshot payloads serialize the entire session state, so returning them all
+// in one response grows without bound (audit 2026-07-11 R-04). The list now
+// returns metadata only (id, turnId, kind, createdAt, parentId, payloadSize)
+// with keyset pagination — the store projects the payload column away and
+// computes `size` in-SQL, so listing stays O(limit) rows and never loads a
+// single payload (re-review M-04). Fetch a full payload on demand via
+// GET /:id/snapshots/:snapshotId.
+//
+// Keyset contract matches /messages/page and /traces turns: `?limit`,
+// `?before_created_at`, `?before_id` (see cursor-params). No cursor → the
+// newest window; cursor → the page immediately older. Rows are oldest-first
+// within each page.
+
+const SNAPSHOT_LIST_DEFAULT_LIMIT = 50;
 
 snapshotRoutes.get("/:id/snapshots", async (c) => {
   const sessionId = c.req.param("id");
@@ -162,8 +185,37 @@ snapshotRoutes.get("/:id/snapshots", async (c) => {
   const resolved = await resolveSessionParam(c);
   if (!resolved.ok) return resolved.response;
 
-  const snapshots = await store.listSnapshots(sessionId);
-  return c.json({ snapshots });
+  const { limit, before } = parseCursorQuery(c, SNAPSHOT_LIST_DEFAULT_LIMIT);
+  const page = await store.listSnapshotsPage(sessionId, { limit, before });
+
+  const snapshots = page.map((s) => ({
+    id: s.id,
+    sessionId: s.sessionId,
+    turnId: s.turnId,
+    kind: s.kind,
+    ...(s.parentId !== undefined ? { parentId: s.parentId } : {}),
+    createdAt: s.createdAt,
+    payloadSize: s.size,
+  }));
+
+  return c.json({ snapshots, nextCursor: nextCursorFrom(page, limit) });
+});
+
+// ── GET /api/sessions/:id/snapshots/:snapshotId — full payload ────
+
+snapshotRoutes.get("/:id/snapshots/:snapshotId", async (c) => {
+  const sessionId = c.req.param("id");
+  const snapshotId = c.req.param("snapshotId");
+  const store = c.get("store");
+
+  const resolved = await resolveSessionParam(c);
+  if (!resolved.ok) return resolved.response;
+
+  const snapshot = await store.getSnapshot(snapshotId);
+  if (!snapshot || snapshot.sessionId !== sessionId) {
+    return c.json(errorBody("Snapshot not found", { code: "not_found" }), 404);
+  }
+  return c.json({ snapshot });
 });
 
 // ── POST /api/sessions/:id/fork — fork from snapshot ──────────────
@@ -238,6 +290,16 @@ snapshotRoutes.post("/:id/fork", async (c) => {
           500,
         );
       }
+      const childOwner = mintSessionOwnerToken();
+      const pluginRegistry = c.get("pluginRegistry");
+      const childActivePlugins = snapshotSession.activePlugins.filter(
+        (pluginId) => {
+          const entry = pluginRegistry?.get(pluginId);
+          if (!pluginRegistry) return true;
+          if (!entry) return true;
+          return getPluginTrustInfo(pluginId, entry?.source).autoLoad;
+        },
+      );
 
       const now = new Date().toISOString();
 
@@ -263,9 +325,12 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             turnCount: snapshotSession.turnCount,
             preGameCompleted: snapshotSession.preGameCompleted,
             locale: snapshotSession.locale,
-            activePlugins: snapshotSession.activePlugins,
+            activePlugins: childActivePlugins,
             presetId: snapshotSession.presetId,
             runtimeModelOverrides: snapshotSession.runtimeModelOverrides,
+            metadata: {
+              [SESSION_OWNER_TOKEN_HASH_KEY]: childOwner.tokenHash,
+            },
             createdAt: now,
             updatedAt: now,
           });
@@ -495,6 +560,7 @@ snapshotRoutes.post("/:id/fork", async (c) => {
           parentSessionId,
           fromSnapshotId: snapshot.id,
           forkSnapshotId: forkSnapshot.id,
+          ownerToken: childOwner.token,
         },
         201,
       );

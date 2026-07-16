@@ -12,6 +12,7 @@ import {
   loadRuntime as loadRuntimeFromDisk,
   loadPluginLlmConfig,
   deriveBuiltinPluginIds,
+  getPluginTrustInfo,
   type PluginRegistry,
   type LoadedRuntime,
   type PluginLlmConfig,
@@ -19,12 +20,17 @@ import {
   type PluginRuntimeUtils,
 } from "@covel/plugin-loader";
 import { createStateManager, type StateManager } from "@covel/state";
-import { createEventBus, type EventBus } from "@covel/events";
+import {
+  createEventBus,
+  type EventBus,
+  type EventBusTransport,
+} from "@covel/events";
 import type { DataStore, StoreBackend } from "@covel/store";
 import type { LLMAdapter } from "@covel/runtime";
 import { createModelResolver } from "@covel/runtime";
 import type { CompactorRunner } from "@covel/context";
 import type { ToolModule } from "@covel/tools";
+import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 
 import {
   createInProcessSessionLock,
@@ -53,6 +59,7 @@ import type { MediaStore } from "@covel/store";
 import type { MediaStoreBackend, VectorBackend } from "@covel/store";
 import { resumeRoutes } from "./resume.js";
 import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
+import { sweepStalePendingJobs } from "./plugin-rpc/jobs.js";
 import { snapshotRoutes } from "./snapshots.js";
 import { lorebookRoutes } from "./lorebook.js";
 import { runtimeOutputRoutes } from "./runtime-outputs.js";
@@ -201,7 +208,28 @@ export async function bootstrapApi(
 ): Promise<ApiBootstrapResult> {
   // 1. Create shared infrastructure first (eventBus needed by registry)
   const stateManager = config.stateManager ?? createStateManager(config.store);
-  const eventBus = createEventBus(config.store);
+
+  // Cross-pod EventBus fan-out (audit R-02): multi-pod PG deployments need
+  // events emitted on one pod to reach SSE subscribers on another. PG
+  // LISTEN/NOTIFY is the lowest-dependency shared transport (the deployment
+  // already runs on PG). Single-process backends (memory/sqlite/idb) pass no
+  // transport — pure in-process behavior, unchanged. A boot-time transport
+  // failure propagates: with a PG store backend, an unreachable PG is fatal
+  // anyway, and silently degrading to single-pod fan-out would be incorrect.
+  let eventTransport: EventBusTransport | undefined;
+  const databaseUrl = readRuntimeEnv().databaseUrl;
+  if (config.storeBackend === "pg" && databaseUrl) {
+    const { createPgEventTransport } =
+      await import("../../lib/pg-event-transport.js");
+    eventTransport = await createPgEventTransport(databaseUrl);
+    console.log(
+      "[bootstrap] event bus transport: pg listen/notify (cross-pod fan-out enabled)",
+    );
+  }
+  const eventBus = createEventBus(
+    config.store,
+    eventTransport ? { transport: eventTransport } : undefined,
+  );
 
   // Per-session serializer. The caller (e.g. `app.ts`) may inject a PG
   // advisory-lock implementation for multi-pod safety; otherwise we fall
@@ -226,6 +254,16 @@ export async function bootstrapApi(
         "[suspension-sweep] startup sweep failed:",
         err instanceof Error ? err.message : String(err),
       ),
+  );
+
+  // One-time startup sweep of background-job rows orphaned by a crash/restart
+  // (audit R-10): jobs run in-process via setImmediate, so a `pending` row
+  // older than the staleness threshold can never complete. Fire-and-forget.
+  void sweepStalePendingJobs(store).catch((err: unknown) =>
+    console.warn(
+      "[job-sweep] startup sweep failed:",
+      err instanceof Error ? err.message : String(err),
+    ),
   );
 
   const { registry, discoveryMap, manifestCache } =
@@ -288,24 +326,50 @@ export async function bootstrapApi(
   // run its entry. Moving entry creation earlier would execute community
   // entry code at boot — before any approval gate — which is exactly what the
   // deferred-activation design prevents.
-  let ensurePluginEntry: (pluginId: string) => Promise<void> = async () => {};
+  let ensurePluginEntry: (
+    pluginId: string,
+    sessionId?: string,
+  ) => Promise<void> = async () => {};
 
   // loadRuntime resolver (locale-aware: loads PLUGIN.en.md when locale is "en-US")
   const loadRuntimeFn = async (
     manifest: RuntimeManifest,
     locale?: string,
+    sessionId?: string,
   ): Promise<LoadedRuntime | undefined> => {
     for (const [pluginId, discovery] of discoveryMap) {
       const manifests = manifestCache.get(pluginId);
       if (manifests?.some((m) => m.manifest.name === manifest.name)) {
+        const trust = getPluginTrustInfo(pluginId, discovery.source);
+        if (
+          !trust.autoLoad &&
+          (!sessionId ||
+            (!rpcApprovalGate.hasGrant(
+              sessionId,
+              pluginId,
+              COMMUNITY_SERVER_CODE_ACTION,
+            ) &&
+              !rpcApprovalGate.hasGrant(
+                sessionId,
+                pluginId,
+                `runtime:${manifest.name}`,
+              )))
+        ) {
+          throw new Error(
+            `[runtime-loader] ${pluginId}/${manifest.name}: community runtime requires explicit session approval`,
+          );
+        }
         // Community wires register at the same moment we'd import the
         // plugin's handler.js — before any gateway call the handler makes.
         // ponytail: a community *wire-only* plugin (wires consumed by other
         // plugins' slots without its own runtime ever loading) would need
         // ensurePluginWires added to the activatePluginLocalTools call
         // sites too; no such plugin exists yet.
+        // The entry check is the fail-closed approval boundary. Keep it ahead
+        // of every other community import, including wire registration and
+        // the runtime handler itself.
+        await ensurePluginEntry(pluginId, sessionId);
         await pluginWires.ensurePluginWires(pluginId);
-        await ensurePluginEntry(pluginId);
         return loadRuntimeFromDisk(discovery, manifest.name, locale);
       }
     }
@@ -323,6 +387,7 @@ export async function bootstrapApi(
     localToolNames,
     toolExecutor,
     prepareToolsForSession,
+    clearSessionToolOverrides,
     activatePluginLocalTools,
     pluginToolAccess,
   } = await setupPluginTools({
@@ -334,8 +399,13 @@ export async function bootstrapApi(
     eventDirectory,
   });
 
-  // 6b. Eagerly load runtimes that declare UI specs so /api/ui-specs has data at boot
-  for (const [pluginId] of discoveryMap) {
+  // 6b. Eagerly load runtimes that declare UI specs so /api/ui-specs has data at boot.
+  //     Deferred-trust (community) plugins are skipped: loadRuntimeFn imports the
+  //     plugin's handler/guard/wires JS, which must never execute before approval
+  //     (S-04). Their runtimes load post-approval through the same loadRuntimeFn
+  //     path, mirroring the deferred `entry` activation.
+  for (const [pluginId, discovery] of discoveryMap) {
+    if (!getPluginTrustInfo(pluginId, discovery.source).autoLoad) continue;
     const manifests = manifestCache.get(pluginId);
     if (!manifests) continue;
     for (const parsed of manifests) {
@@ -378,9 +448,21 @@ export async function bootstrapApi(
       manifestCache,
     });
 
+  const isCommunityServerCodeApproved = (
+    sessionId: string | undefined,
+    pluginId: string,
+  ): boolean =>
+    Boolean(sessionId && rpcApprovalGate.hasGrant(sessionId, pluginId));
+  const isCommunityHookApproved = (
+    sessionId: string,
+    pluginId: string,
+  ): boolean =>
+    rpcApprovalGate.hasGrant(sessionId, pluginId, COMMUNITY_SERVER_CODE_ACTION);
+
   const hookPipeline = createBootstrapHookPipeline({
     discoveryMap,
     manifestCache,
+    isCommunityServerCodeApproved: isCommunityHookApproved,
   });
 
   // Unified plugin server entries (`entry` frontmatter field) — needs the
@@ -395,13 +477,18 @@ export async function bootstrapApi(
     pluginToolAccess,
     hookPipeline,
     rpcRegistry,
+    isCommunityServerCodeApproved,
+    isCommunityHookApproved,
   });
   ensurePluginEntry = pluginEntries.ensurePluginEntry;
 
   // Community activation seam: entry runs before legacy local tools so both
   // registration styles are live once activation resolves.
-  const activatePluginServerCode = async (pluginId: string): Promise<void> => {
-    await pluginEntries.ensurePluginEntry(pluginId);
+  const activatePluginServerCode = async (
+    pluginId: string,
+    sessionId?: string,
+  ): Promise<void> => {
+    await pluginEntries.ensurePluginEntry(pluginId, sessionId);
     await activatePluginLocalTools(pluginId);
   };
 
@@ -466,6 +553,7 @@ export async function bootstrapApi(
     c.set("rpcApprovalGate", rpcApprovalGate);
     c.set("sessionLock", sessionLock);
     c.set("prepareToolsForSession", prepareToolsForSession);
+    c.set("clearSessionToolOverrides", clearSessionToolOverrides);
     c.set("getPluginSource", getPluginSource);
     c.set("activatePluginLocalTools", activatePluginServerCode);
     c.set("hasPendingPluginEntry", pluginEntries.hasPendingEntry);

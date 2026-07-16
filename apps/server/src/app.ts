@@ -38,13 +38,20 @@ import { createMiscApiRoutes } from "./routes/misc-api.js";
 import { createConfigApiRoutes } from "./routes/config-api.js";
 import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
 import { createRequestBodyLimitMiddleware } from "./middleware/request-body-limit.js";
-import { errorBody, makeErrorHandler } from "./api-error.js";
+import {
+  errorBody,
+  makeErrorHandler,
+  redactSensitiveQueryParamsInText,
+} from "./api-error.js";
 import { parseEnvLines } from "./lib/env-file.js";
+import { validateSecurityPosture } from "./security-posture.js";
 import {
   providerApiKeysFromEnv,
   providerIdToApiKeyEnvName,
+  readEnvInt,
   readRuntimeEnv,
 } from "@covel/shared";
+import type { Sql } from "postgres";
 
 /**
  * Merge `~/.covel/keys.env` (or `$COVEL_HOME/keys.env` when overridden)
@@ -88,6 +95,10 @@ function resolvePreferredMemorySlot(slotRegistry: {
 const app = new Hono();
 const env = readRuntimeEnv();
 
+// Fail fast on an unsafe hosted posture (audit S-13) before any route is
+// wired or the caller starts listening. No-op for self-deploy/desktop.
+validateSecurityPosture(env);
+
 // ── Global error handler ────────────────────────────────────────
 const isDev = env.nodeEnv !== "production";
 app.onError(makeErrorHandler("[server] Unhandled error", isDev));
@@ -102,7 +113,9 @@ const QUIET_LOG_PATHS = new Set<string>(
     .map((p) => p.trim())
     .filter((p) => p.length > 0),
 );
-const honoLogger = logger();
+const honoLogger = logger((message) =>
+  console.log(redactSensitiveQueryParamsInText(message)),
+);
 app.use("*", async (c, next) => {
   if (QUIET_LOG_PATHS.has(c.req.path)) return next();
   return honoLogger(c, next);
@@ -175,12 +188,17 @@ const mediaStore = await createMediaStoreFromEnv(process.env);
 // the in-process implementation — those topologies are single-process
 // by construction, so the simpler lock is both sufficient and cheaper.
 let sessionLock: SessionLock;
+// Hoisted so the shutdown drain below can close the lock pool.
+let lockSql: Sql | undefined;
 if (storeBackend === "pg" && env.databaseUrl) {
   const { default: postgres } = await import("postgres");
   // `max` sizes the lock pool. Each in-flight turn holds one reserved
-  // connection for the duration of executeTurn; 16 is well above the
-  // expected peak per pod and keeps PG connection usage bounded.
-  const lockSql = postgres(env.databaseUrl!, { max: 16 });
+  // connection for the duration of executeTurn; the default 16 is well above
+  // the expected peak per pod and keeps PG connection usage bounded. Tune via
+  // COVEL_PG_LOCK_POOL_MAX for higher-concurrency pods.
+  lockSql = postgres(env.databaseUrl!, {
+    max: readEnvInt("COVEL_PG_LOCK_POOL_MAX", 16),
+  });
   sessionLock = createPgAdvisorySessionLock(lockSql);
   console.log(
     "[server] session lock: pg-advisory (cross-pod mutual exclusion enabled)",
@@ -195,7 +213,10 @@ if (storeBackend === "pg" && env.databaseUrl) {
 // Collect all *_API_KEY env vars dynamically so any provider can be added
 // to llm.toml without requiring code changes here.
 const apiKeys = providerApiKeysFromEnv(process.env);
-const llmAdapter = createGatewayAdapter(ai.gateway, { apiKeys });
+// Env-derived keys ride the `envApiKeys` channel so the provider registry
+// origin-gates them (S-01) — the startup paths never carry request-scoped
+// slot overlays today, but the provenance stays honest if that changes.
+const llmAdapter = createGatewayAdapter(ai.gateway, { envApiKeys: apiKeys });
 // Function-runtime gateway facade — shares the same preset/provider
 // registry and env apiKeys as the agent-runtime LLM adapter. Plugins
 // that need generateImage / generateText / generateObject reach it via
@@ -205,7 +226,9 @@ const llmAdapter = createGatewayAdapter(ai.gateway, { apiKeys });
 // exposing `generateObject` would require importing zod into the
 // app.ts composition root. A future PR can supply a converter if a
 // plugin genuinely needs it.
-const pluginGateway = createPluginRuntimeGateway(ai.gateway, { apiKeys });
+const pluginGateway = createPluginRuntimeGateway(ai.gateway, {
+  envApiKeys: apiKeys,
+});
 // Stateless plugin utility surface — exposed to function handlers via
 // `FunctionHandlerContext.utils`. Plugins call these in lieu of bare
 // fetch / hand-rolled SSRF checks so the framework stays the single
@@ -234,7 +257,7 @@ const memoryEmbed = async (
 ): Promise<Float32Array[]> => {
   const res = await ai.gateway.embed(
     { values: [...texts] },
-    apiKeys ? { apiKeys } : undefined,
+    apiKeys ? { envApiKeys: apiKeys } : undefined,
   );
   return res.embeddings.map((e) => Float32Array.from(e));
 };
@@ -318,8 +341,49 @@ for (const watcher of worldWatchers) watcher.start();
 const stopWatchers = () => {
   for (const watcher of worldWatchers) watcher.stop();
 };
-process.on("SIGTERM", stopWatchers);
-process.on("SIGINT", stopWatchers);
+
+// ── Graceful shutdown drain (audit R-11) ─────────────────────────
+// Ordered resource drain passed to registerGracefulShutdown() by index.ts and
+// run after the HTTP server stops accepting requests: stop watchers (no new
+// world reloads), flush pending eventBus persistence, then close the DataStore
+// and the dedicated PG lock pool. Each phase is time-boxed so one stuck
+// resource cannot eat the whole force-exit budget — a timed-out phase is
+// logged and skipped.
+const DRAIN_PHASE_TIMEOUT_MS = 2_000;
+
+async function drainPhase(
+  name: string,
+  run: () => Promise<unknown> | void,
+): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`timed out after ${DRAIN_PHASE_TIMEOUT_MS}ms`)),
+      DRAIN_PHASE_TIMEOUT_MS,
+    );
+  });
+  try {
+    await Promise.race([Promise.resolve(run()), timeout]);
+  } catch (err) {
+    console.warn(
+      `[shutdown] drain phase "${name}" failed:`,
+      err instanceof Error ? err.message : String(err),
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export const drainServerResources = async (): Promise<void> => {
+  await drainPhase("stop world watchers", () => stopWatchers());
+  await drainPhase("flush event bus", () => api.eventBus.flush());
+  await drainPhase("close data store", () => store.close());
+  if (lockSql) {
+    // `timeout: 1` (seconds) force-closes connections still held by an
+    // in-flight lock; PG auto-releases advisory locks on disconnect.
+    await drainPhase("close pg lock pool", () => lockSql!.end({ timeout: 1 }));
+  }
+};
 
 // ── Mount routes ─────────────────────────────────────────────────
 app.route("/", api.app);

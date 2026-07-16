@@ -288,6 +288,10 @@ export type SessionAction =
         operation: string;
       }[];
     }
+  | {
+      type: "REPLACE_PLUGIN_DATA";
+      pluginData: Record<string, Record<string, Record<string, unknown>>>;
+    }
   | { type: "LOAD_MESSAGE_UI_SPECS"; specs: api.UISlotEntry[] }
   | { type: "UPSERT_PLUGIN_MESSAGE_SURFACE"; pluginId: string }
   | { type: "UPSERT_DRAFT"; draft: PendingInteractionDraft }

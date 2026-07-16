@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import { useSession } from "@/stores/session-store.js";
+import { subscribeToStreamingChanges } from "@/stores/streaming-text-store.js";
 import { SessionCanvasHero } from "./chat-messages/session-canvas-hero.js";
 import { ChatMessageRenderer } from "./chat-messages/chat-message-renderer.js";
 import { ChatBlockRenderer } from "./chat-messages/chat-block-renderer.js";
@@ -85,7 +86,6 @@ export function ChatMessages({
   const { t } = useTranslation();
   const { state: sessionState, loadOlderMessages } = useSession();
   const sessionId = sessionState.session?.id;
-
   // Sticky-bottom auto-scroll. Follows the stream only while the user is
   // pinned to the bottom; surfaces a "jump to latest" button after they
   // scroll up. The Radix ScrollArea renders its scrollable element as the
@@ -94,8 +94,14 @@ export function ChatMessages({
   // 解析出的滚动视口。除自动滚动外，向上加载更旧消息的 IntersectionObserver
   // 与滚动补偿也需要它，故存入 state 以便相关 effect 在其就绪后重新运行。
   const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null);
-  const { scrollRef, bottomRef, showJumpButton, jumpToBottom } =
-    useAutoScroll(messages);
+  // Autoscroll follows both new messages and the external streaming signal;
+  // token arrival does not re-render this history-sized parent component.
+  const { scrollRef, bottomRef, showJumpButton, jumpToBottom } = useAutoScroll(
+    messages.length,
+    {
+      subscribeToStreaming: subscribeToStreamingChanges,
+    },
+  );
   useEffect(() => {
     const root = scrollRootRef.current;
     const viewport =

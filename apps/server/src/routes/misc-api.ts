@@ -7,13 +7,22 @@
 import { Hono } from "hono";
 import { readEnvString, readRuntimeEnv } from "@covel/shared";
 import { reloadAiStack, type AiStack } from "../ai-setup.js";
-import { applySlotOverlay, type SlotOverridesInput } from "@covel/ai-provider";
+import {
+  applySlotOverlay,
+  publicPresetId,
+  resolveOverlayPresetId,
+  type SlotOverridesInput,
+} from "@covel/ai-provider";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
 import { buildPackagesResponse } from "./misc-api/plugin-catalog.js";
 import { buildPluginFlowResponse } from "./misc-api/plugin-flow.js";
 import { bearerToken } from "./misc-api/shared.js";
 import { buildUiSpecsResponse } from "./misc-api/ui-specs.js";
+import {
+  checkHostedOperator,
+  checkSessionOwnerById,
+} from "./api/session/session-guard.js";
 import { decodeBase64Json } from "../lib/base64-json.js";
 
 export function createMiscApiRoutes(
@@ -112,9 +121,20 @@ export function createMiscApiRoutes(
   // (Audit Finding w2 — without this, RightPanel shows specs for plugins that
   // are loaded globally but not enabled for the active session.)
   app.get("/api/ui-specs", async (c) => {
+    const sessionId = c.req.query("sessionId");
+    // Owner guard (audit H-02): a session-scoped request both reads that
+    // session's active-plugin set and synchronously (re)writes its
+    // plugin_data UI-spec rows, so hosted tiers require the owner token
+    // BEFORE buildUiSpecsResponse touches the store. No-op on self.
+    // misc-api routes mount on the root app (no bootstrap middleware), so
+    // the closure `store` is passed explicitly.
+    if (sessionId) {
+      const denied = await checkSessionOwnerById(c, store, sessionId);
+      if (denied) return denied;
+    }
     return c.json(
       await buildUiSpecsResponse({
-        sessionId: c.req.query("sessionId"),
+        sessionId,
         registry,
         store,
       }),
@@ -226,6 +246,8 @@ export function createMiscApiRoutes(
   // the probe cheap — we only care about connectivity + latency, not the
   // full reply.
   app.post("/api/ai/ping", async (c) => {
+    const denied = checkHostedOperator(c);
+    if (denied) return denied;
     const body = await c.req
       .json<{ presetId?: string; slot?: string }>()
       .catch((): { presetId?: string; slot?: string } => ({}));
@@ -253,11 +275,20 @@ export function createMiscApiRoutes(
       slotConfig = slotParsed as SlotOverridesInput;
     }
 
-    // Register client-declared custom presets + providers via the shared
-    // overlay helper (ref-counted, base-registry-safe).
+    // Register client-declared custom presets via the shared overlay helper
+    // (request-isolated scoped ids, ref-counted, base-registry-safe).
     const cleanupTransient = applySlotOverlay(ai, slotConfig);
 
     const allPresets = ai.presetRegistry.listPresets().filter((p) => p.enabled);
+
+    // Overlay presets register under request-scoped ids (H-04) — map a
+    // public id through THIS request's own custom-preset declarations.
+    const findPresetById = (id: string | undefined) => {
+      const effective = resolveOverlayPresetId(id, slotConfig, (k) =>
+        ai.presetRegistry.hasPreset(k),
+      );
+      return allPresets.find((p) => p.id === effective);
+    };
 
     // Resolution chain:
     //   1. Direct preset id match (includes overlay-registered ones)
@@ -270,12 +301,12 @@ export function createMiscApiRoutes(
     // (i.e. the slot the user typed isn't actually configured).
     type ResolvedVia = "direct" | "slot" | "tag-fallback" | "any";
     let resolvedVia: ResolvedVia = "direct";
-    let preset = allPresets.find((p) => p.id === requested);
+    let preset = findPresetById(requested);
     if (!preset && requested.startsWith("slot-")) {
       const slotName = requested.slice("slot-".length);
       const overrideId = slotConfig.slotPresetOverrides?.[slotName];
       if (overrideId) {
-        preset = allPresets.find((p) => p.id === overrideId);
+        preset = findPresetById(overrideId);
         if (preset) resolvedVia = "slot";
       }
       if (!preset) {
@@ -326,7 +357,8 @@ export function createMiscApiRoutes(
     }
 
     const testedTarget = {
-      presetId: preset.id,
+      // Overlay presets carry internal scoped ids — echo the public form.
+      presetId: publicPresetId(preset.id),
       provider: preset.provider,
       model: preset.model,
       baseUrl: effectiveBaseUrl,

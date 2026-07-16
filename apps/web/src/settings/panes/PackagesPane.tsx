@@ -8,6 +8,7 @@ import {
   reloadServerAndWait,
 } from "@/lib/desktop-bridge.js";
 import { text } from "@/components/world/editor-helpers.js";
+import { operatorAuthHeaders } from "@/services/session-credentials.js";
 
 type InstallKind = "plugin" | "world";
 
@@ -80,7 +81,10 @@ export function PackagesPane() {
       form.append("file", file, file.name);
       const res = await fetch(`/api/install/${kind}`, {
         method: "POST",
-        headers: getDesktopRestAuthHeaders(),
+        headers: {
+          ...operatorAuthHeaders(),
+          ...getDesktopRestAuthHeaders(),
+        },
         body: form,
       });
       const body = (await res.json()) as Partial<InstallResult> & {
@@ -119,7 +123,10 @@ export function PackagesPane() {
     try {
       const res = await fetch(`/api/plugins/${encodeURIComponent(id)}`, {
         method: "DELETE",
-        headers: getDesktopRestAuthHeaders(),
+        headers: {
+          ...operatorAuthHeaders(),
+          ...getDesktopRestAuthHeaders(),
+        },
       });
       const body = (await res.json()) as {
         ok?: boolean;

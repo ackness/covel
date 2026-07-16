@@ -686,32 +686,32 @@ Bootstrap 时自动分类：
 - 插件 `tools/` 目录加载的工具 → `local`
 - 其他 → `third-party`（当前不存在，预留给社区插件）
 
-### 第三方插件 local tool 现状（audit P0-4 gap）
+### 第三方插件 server-code / local tool 审批边界
 
 社区插件（位于 `~/.covel/plugins/` 或后续添加的非 first-dir 来源）会被 `getPluginTrustInfo` 标记为 `community`，bootstrap 在启动阶段**跳过这些插件的 `entry` 执行与 `tools.local` 急加载**（见 `apps/server/src/routes/api/bootstrap/plugin-entry.ts` / `local-tools.ts` 中 `if (!trust.autoLoad) continue;`）。
 
 完整的 approval 生命周期 **discovered → approved → import → active → revoked / uninstalled 现已实现**：
 
 - **discovered**：拖拽 zip 经 `POST /api/install/plugin` 安装（含反 shadow 校验：保留内置 ID、强制 package.json 与 PLUGIN.md 名一致）。
-- **approved**：真实的 `createRpcApprovalGate`——community 调用首次走到 `plugin-rpc` 时返回 `202 approval-required` + `approvalId`，前端弹确认框，`POST /api/approvals/:id/decision`（allow/deny，once/session）。
+- **approved**：首次 deferred entry 调用先审批固定的 `covel:plugin-server-code`，加载并验证真实 action 后再做 action 审批。server-code 与 `runtime:*` 只接受 session scope；普通 action 支持 once/session。hosted 环境还要求 operator token，因为 community ESM 在服务端进程内执行。
 - **import**：approve 后经 `activatePluginLocalTools` JIT 懒加载该插件的服务端代码——先执行 `entry` 工厂（`ensurePluginEntry`）、再加载旧式 `tools.local`（allow 决定时 + RPC 派发时各触发一次）。
 - **active**：运行期工具调用受真实审批规则门控（builtin allow / local allow / third-party deny）。
-- **revoked**：`DELETE /api/sessions/:id/approvals[?pluginId=]` 调 `gate.revoke` 清除该会话（可选某插件）的缓存授权，下次调用重新弹审批。
+- **revoked**：`DELETE /api/sessions/:id/approvals[?pluginId=]` 与 plugin disable 会同时清除 session grant、one-time grant 和 pending approval。community grant 不跨 create/fork/进程重启恢复。
 - **uninstalled**：`DELETE /api/plugins/:id` 删除 `~/.covel/plugins/<id>` 目录（拒绝内置 ID，返回 `restartRequired:true`）；前端 Settings → Packages 面板列出已安装第三方插件并提供卸载按钮。
 
 实际影响：
 
 - 第三方插件可以通过 `/api/sessions/:id/plugin-rpc` 触发 runtime 调用（HITL 审批 OK）。
-- 第三方插件声明的 `tools.local` 在 toolMap 中找不到，runtime 内 `findTool` 返回 `undefined`，工具调用会失败。
-- 第三方插件目前可用的工具集 = `tools.builtin` 列表交集 + 该 runtime 自身的 `pluginToolAccess` 白名单。
+- 审批激活后，entry 与旧式 `tools.local` 会 JIT 注册；未授权 session 无法触发 community runtime/hook。
+- community entry factory 的 `toolkit.store` 不开放任何方法，因为该全局 factory 没有可绑定的 request session；RPC/function runtime 使用各自的 session/plugin-scoped store。
+- community agent guard 仅获得只读 store 与纯输入；`pluginData`、logger、gateway、utils、media、assetProgress 等副作用能力不注入，`recursiveCall` 会拒绝。写入放在 runtime handler 返回的 proposal/`pluginData[]` 中。
+- 进程内 ESM 本身不是沙箱。self 层级以本机用户为信任边界；hosted 层级把 community server-code 定义为 operator 级全局信任。真正的多租户第三方代码需要独立 worker/process 隔离。
 
 撰写第三方插件时的当前规约：
 
-- 仅依赖 `tools.builtin`（`plugin-data-*`、`create-form`、`create-character` 等）。
-- 真正的私有逻辑放进 function runtime 的 `handler.js`（见 `~/.covel/plugins/dashscope-image-gen` 的写法）。
-- 等到框架完成 community local-tool 的审批后加载，再考虑迁回 `tools.local`。
-
-跟踪修复条目：`audits/2026-04-25-docs-code-framework-alignment/RECOMMENDATIONS.md` §P0-4。
+- 优先通过 function runtime 返回 proposals / `pluginData[]` 写入。
+- entry factory 只注册 tool/hook/RPC/wire，不在 factory 顶层读取 session 或产生业务副作用。
+- guard 保持确定性与只读；网络、媒体、递归执行和持久化放入正式 runtime handler。
 
 ### 新增插件的工具
 

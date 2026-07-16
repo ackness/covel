@@ -4,7 +4,7 @@ import path from "node:path";
 import {
   discoverPluginsMulti,
   loadPluginManifest,
-  loadRuntime,
+  loadRuntimeUi,
   type PluginDiscoveryResult,
   type PluginRegistry,
 } from "@covel/plugin-loader";
@@ -134,8 +134,10 @@ async function loadValidatedSpecs(): Promise<ValidatedSpecs> {
 
       // A single bad runtime must never 500 the whole /api/ui-specs response.
       // Log with full context for fast triage, then skip it (mirrors the boot
-      // eager-load try/catch).
-      const loaded = await loadRuntime(discovery, parsed.manifest.name).catch(
+      // eager-load try/catch). `loadRuntimeUi` loads manifest + UI spec data
+      // only — it never import()s handler/guard JS, so an unapproved community
+      // plugin's code cannot execute from this request path (S-04).
+      const loaded = await loadRuntimeUi(discovery, parsed.manifest.name).catch(
         (err: unknown) => {
           console.error(
             `[ui-specs] Failed to load runtime "${discovery.id}/${parsed.manifest.name}" for UI specs:`,

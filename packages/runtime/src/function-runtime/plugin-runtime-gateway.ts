@@ -31,6 +31,8 @@ import type {
  */
 interface FullGatewayOptions {
   apiKeys?: Record<string, string>;
+  /** Server-env keys — origin-gated by the gateway (S-01), unlike apiKeys. */
+  envApiKeys?: Record<string, string>;
   traceId?: string;
   signal?: AbortSignal;
   slotOverrides?: SlotOverridesInput;
@@ -165,6 +167,7 @@ export function createPluginRuntimeGateway(
 ): PluginRuntimeGateway {
   const commonOptions = () => ({
     ...(config?.apiKeys ? { apiKeys: config.apiKeys } : {}),
+    ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
     ...(config?.traceId ? { traceId: config.traceId } : {}),
     ...(config?.slotOverrides ? { slotOverrides: config.slotOverrides } : {}),
   });

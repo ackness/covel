@@ -100,7 +100,11 @@ export async function resumeSuspendedRuntime(
     }
   }
 
-  const loaded = await deps.loadRuntime(manifest, undefined);
+  const loaded = await deps.loadRuntime(
+    manifest,
+    undefined,
+    suspension.sessionId,
+  );
   if (!loaded) {
     return finalizeWithPostRuntime({
       pluginId: manifest.pluginId,

@@ -102,6 +102,29 @@ export function providerApiKeyEnvName(providerId: string): string | null {
   return providerIdToApiKeyEnvName(providerId);
 }
 
+const DEPLOYMENT_TIERS = ["self", "demo", "commercial"] as const;
+export type DeploymentTier = (typeof DEPLOYMENT_TIERS)[number];
+
+/**
+ * DEPLOYMENT_TIER gates owner-token enforcement (session-guard.ts) and the
+ * media cleanup endpoint (media.ts) — a typo or case mismatch (e.g.
+ * "Commercial") must not silently downgrade a hosted deployment to the open
+ * "self" posture. Reject unknown values fail-safe to the most restrictive
+ * tier rather than passing the raw string through.
+ */
+function readDeploymentTier(source: EnvSource): DeploymentTier {
+  const raw = readEnvString("DEPLOYMENT_TIER", undefined, source);
+  if (raw === undefined) return "self";
+  const normalized = raw.trim().toLowerCase();
+  if ((DEPLOYMENT_TIERS as readonly string[]).includes(normalized)) {
+    return normalized as DeploymentTier;
+  }
+  console.warn(
+    `[env] Unknown DEPLOYMENT_TIER "${raw}" — falling back to "commercial" (most restrictive). Expected one of: ${DEPLOYMENT_TIERS.join(", ")}.`,
+  );
+  return "commercial";
+}
+
 function readSqlitePath(source: EnvSource): string {
   const explicit = readEnvString("SQLITE_PATH", undefined, source);
   if (explicit) return explicit;
@@ -140,6 +163,10 @@ export function readRuntimeEnv(source: EnvSource = defaultSource()) {
       source,
     ),
     serverPort: readEnvInt("SERVER_PORT", 3001, source),
+    // Loopback by default (audit S-02): T1 self-deploy / desktop must not
+    // expose the unauthenticated API on all interfaces. Containers and
+    // multi-pod deploys opt into a public interface explicitly.
+    bindHost: readEnvString("COVEL_BIND_HOST", "127.0.0.1", source)!,
     nodeEnv: readEnvChoice(
       "NODE_ENV",
       ["development", "production", "test"] as const,
@@ -148,7 +175,7 @@ export function readRuntimeEnv(source: EnvSource = defaultSource()) {
     ),
     serveStatic: isEnvTruthy("SERVE_STATIC", source),
     staticDir: readEnvString("STATIC_DIR", "./web-dist", source)!,
-    deploymentTier: readEnvString("DEPLOYMENT_TIER", "self", source)!,
+    deploymentTier: readDeploymentTier(source),
     corsOrigins: readEnvCsv("CORS_ORIGIN", source),
     debugRoutes: isEnvTruthy("ENABLE_DEBUG_PAGE", source),
     installApiEnabled: isEnvTruthy("COVEL_INSTALL_API_ENABLED", source),

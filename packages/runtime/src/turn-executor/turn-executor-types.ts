@@ -5,7 +5,7 @@ import type {
   PluginRuntimeUtils,
   PluginSource,
 } from "@covel/plugin-loader";
-import type { DataStore } from "@covel/store";
+import type { DataStore, WorkingMemoryRecord } from "@covel/store";
 import type {
   BudgetOptions,
   CompactorRunner,
@@ -87,6 +87,7 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
   readonly loadRuntime: (
     manifest: RuntimeManifest,
     locale?: string,
+    sessionId?: string,
   ) => Promise<LoadedRuntime | undefined>;
   /**
    * Optional narrow gateway facade forwarded to function-runtime handlers
@@ -169,9 +170,17 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
     readonly manager: {
       // Carries the schema-driven `displayName` (see CoreMemoryBlockView) so it
       // is not erased at the deps boundary — the turn pipeline threads it intact
-      // through to renderCoreMemory.
-      loadBlocks(sessionId: string): Promise<readonly CoreMemoryBlockView[]>;
-      initializeDefaults(sessionId: string): Promise<void>;
+      // through to renderCoreMemory. The optional `existing` param accepts the
+      // turn's single listWorkingMemory read so the manager skips its own
+      // re-read (R-13); it must be a fresh, complete list when provided.
+      loadBlocks(
+        sessionId: string,
+        existing?: readonly WorkingMemoryRecord[],
+      ): Promise<readonly CoreMemoryBlockView[]>;
+      initializeDefaults(
+        sessionId: string,
+        existing?: readonly WorkingMemoryRecord[],
+      ): Promise<void>;
     };
     readonly updater: {
       updateAfterTurn(params: {

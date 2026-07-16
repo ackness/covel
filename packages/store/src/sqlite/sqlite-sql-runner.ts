@@ -15,7 +15,11 @@
  */
 
 import type { SQL, Table } from "drizzle-orm";
-import type { IndexColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
+import type {
+  IndexColumn,
+  SelectedFields,
+  SQLiteTable,
+} from "drizzle-orm/sqlite-core";
 
 import type {
   ConflictClause,
@@ -39,8 +43,11 @@ function sqliteConflictConfig(conflict: ConflictClause): {
 export function createSqliteSqlRunner(db: SqliteDb): SqlRunner {
   return {
     select<Row>(table: Table, opts?: SelectOpts): Promise<Row[]> {
-      let query = db
-        .select()
+      let query = (
+        opts?.columns
+          ? db.select(opts.columns as unknown as SelectedFields)
+          : db.select()
+      )
         .from(table as SQLiteTable)
         .$dynamic();
       if (opts?.where) query = query.where(opts.where);

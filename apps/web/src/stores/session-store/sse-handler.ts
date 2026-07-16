@@ -7,6 +7,11 @@ import * as api from "@/services/api";
 import type { DataService } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import {
+  appendStreamingText,
+  clearStreamingText,
+  clearStreamingTextsForTurn,
+} from "@/stores/streaming-text-store.js";
+import {
   reducePluginDataChanged,
   reduceTurnResumed,
   reduceTurnSuspended,
@@ -90,20 +95,36 @@ function queueNarrativeDelta(
   if (deps.deltaRafRef.current !== null) return;
 
   deps.deltaRafRef.current = requestAnimationFrame(() => {
-    const currentSid = deps.sessionIdRef.current;
-    for (const buffered of deps.deltaBufferRef.current.values()) {
-      if (buffered.flushSessionId !== currentSid) continue;
-      deps.dispatch({
-        type: "APPEND_DELTA",
-        turnId: buffered.turnId,
-        runtimeId: buffered.runtimeId,
-        pluginId: buffered.pluginId,
-        delta: buffered.text,
-      });
-    }
-    deps.deltaBufferRef.current.clear();
-    deps.deltaRafRef.current = null;
+    flushNarrativeDeltaBuffer(deps);
   });
+}
+
+function flushNarrativeDeltaBuffer(
+  deps: Pick<
+    SseEventHandlerDeps,
+    "dispatch" | "sessionIdRef" | "deltaBufferRef" | "deltaRafRef"
+  >,
+): void {
+  if (deps.deltaRafRef.current !== null) {
+    cancelAnimationFrame(deps.deltaRafRef.current);
+    deps.deltaRafRef.current = null;
+  }
+  const bufferedEntries = [...deps.deltaBufferRef.current.values()];
+  deps.deltaBufferRef.current.clear();
+  const currentSid = deps.sessionIdRef.current;
+  for (const buffered of bufferedEntries) {
+    if (buffered.flushSessionId !== currentSid) continue;
+    const streamId = `stream_${buffered.turnId}_${buffered.runtimeId}`;
+    const firstChunk = appendStreamingText(streamId, buffered.text);
+    if (!firstChunk) continue;
+    deps.dispatch({
+      type: "APPEND_DELTA",
+      turnId: buffered.turnId,
+      runtimeId: buffered.runtimeId,
+      pluginId: buffered.pluginId,
+      delta: buffered.text,
+    });
+  }
 }
 
 function addBlockMessageFromSse(
@@ -236,6 +257,10 @@ export function createSseEventHandler(
           (payload.kind as string) ??
           deps.runtimeKindRef.current.get(runtimeId);
         if (content && completedKind === "story") {
+          // Flush a same-frame delta before replacing its placeholder, then drop
+          // the external live buffer. The completed payload is authoritative.
+          flushNarrativeDeltaBuffer(deps);
+          clearStreamingText(`stream_${turnId ?? "unknown"}_${runtimeId}`);
           const msg: StreamMessage = {
             id: msgId,
             role: "assistant",
@@ -409,6 +434,7 @@ export function createSseEventHandler(
           // in one network flush) lets the queued rAF fire AFTER the discard
           // and re-`APPEND_DELTA` the ghost placeholder back into view.
           clearNarrativeDeltaBuffer(deps.deltaBufferRef, deps.deltaRafRef);
+          if (turnId) clearStreamingTextsForTurn(turnId);
           deps.dispatch({
             type: "DISCARD_TURN_STREAMS",
             ...(turnId ? { turnId } : {}),

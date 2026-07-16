@@ -1,6 +1,6 @@
 {
   "name": "covel",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "private": true,
   "type": "module",
   "scripts": {
@@ -42,7 +42,7 @@
     "test:runtime": "tsx packages/test-runtime/src/cli.ts",
     "create-plugin": "node scripts/create-plugin.js",
     "release:preflight": "node ./scripts/release-preflight.mjs",
-    "preinstall": "npx only-allow pnpm"
+    "preinstall": "npx only-allow@1.2.2 pnpm"
   },
   "packageManager": "pnpm@10.33.2",
   "engines": {

@@ -5,6 +5,7 @@ import {
   buildSlotConfigHeaderInternal,
 } from "./model-settings.js";
 import { request } from "./request.js";
+import { operatorAuthHeaders } from "../session-credentials.js";
 
 // -- LLM Config -------------------------------------------------
 
@@ -77,6 +78,7 @@ export interface LlmReloadResult {
 export async function reloadLlmConfig(): Promise<LlmReloadResult> {
   return request<LlmReloadResult>("/api/llm-config/reload", {
     method: "POST",
+    operatorAuth: true,
     headers: getDesktopRestAuthHeaders(),
   });
 }
@@ -138,6 +140,7 @@ export async function refreshModelDb(): Promise<{
     "/api/model-db/refresh",
     {
       method: "POST",
+      operatorAuth: true,
     },
   );
 }
@@ -238,6 +241,7 @@ export async function pingPreset(presetId: string): Promise<PingResult> {
       "Content-Type": "application/json",
       ...buildProviderKeysHeader(),
       ...buildSlotConfigHeaderInternal({ includeCustomPresetIds: [presetId] }),
+      ...operatorAuthHeaders(),
     },
     body: JSON.stringify({ presetId }),
   });

@@ -40,7 +40,7 @@ pnpm --filter @covel/runtime test          # 单包
 pnpm e2e                                   # Playwright 端到端
 ```
 
-覆盖率目标 ≥ 80%（`pnpm test:coverage`）。
+覆盖率目标 ≥ 80%（`pnpm test:coverage`）——当前为参考目标，CI（[`ci.yml`](../.github/workflows/ci.yml)）尚未设阈值强制拦截。
 
 ### 框架/插件隔离（重要）
 

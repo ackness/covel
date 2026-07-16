@@ -80,7 +80,7 @@ export async function fetchTraceEvents(sessionId: string): Promise<{
   discovery?: TraceDiscovery;
   events: TraceEvent[];
 }> {
-  return request(`/api/traces/${encodeURIComponent(sessionId)}`);
+  return request(`/api/traces/${encodeURIComponent(sessionId)}`, { sessionId });
 }
 
 export async function fetchTraceTurns(sessionId: string): Promise<{
@@ -89,7 +89,9 @@ export async function fetchTraceTurns(sessionId: string): Promise<{
   discovery?: TraceDiscovery;
   turns: TurnTrace[];
 }> {
-  return request(`/api/traces/${encodeURIComponent(sessionId)}/turns`);
+  return request(`/api/traces/${encodeURIComponent(sessionId)}/turns`, {
+    sessionId,
+  });
 }
 
 /** 事件游标：定位窗口内最旧一条事件，用于向更早方向翻页。 */
@@ -124,5 +126,6 @@ export async function fetchTraceTurnsPage(
   const qs = params.toString();
   return request(
     `/api/traces/${encodeURIComponent(sessionId)}/turns/page${qs ? `?${qs}` : ""}`,
+    { sessionId },
   );
 }

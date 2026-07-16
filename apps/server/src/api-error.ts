@@ -41,10 +41,53 @@ export function errorBody<Code extends string = string>(
 }
 
 /**
+ * Redact sensitive query params (signed media `token`, SSE `session_token`
+ * owner auth) from a URL before it hits logs — the raw string is kept
+ * everywhere else (routing, response).
+ */
+const SENSITIVE_QUERY_PARAMS = ["token", "session_token"];
+
+export function redactSensitiveQueryParams(url: string): string {
+  try {
+    const parsed = new URL(url);
+    for (const param of SENSITIVE_QUERY_PARAMS) {
+      if (parsed.searchParams.has(param)) {
+        parsed.searchParams.set(param, "[redacted]");
+      }
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+/** Redact sensitive query values inside preformatted request log lines. */
+export function redactSensitiveQueryParamsInText(text: string): string {
+  return text.replace(/(?:https?:\/\/|\/)[^\s]+/gi, (candidate) => {
+    try {
+      const absolute = /^https?:\/\//i.test(candidate);
+      const parsed = new URL(candidate, "http://redaction.invalid");
+      for (const param of SENSITIVE_QUERY_PARAMS) {
+        if (parsed.searchParams.has(param)) {
+          parsed.searchParams.set(param, "[redacted]");
+        }
+      }
+      const redacted = absolute
+        ? parsed.toString()
+        : `${parsed.pathname}${parsed.search}${parsed.hash}`;
+      return redacted.replaceAll("%5Bredacted%5D", "[redacted]");
+    } catch {
+      return candidate;
+    }
+  });
+}
+
+/**
  * Global `app.onError` handler factory. Logs every unhandled error WITH request
- * context (method + full URL) under `logPrefix` so any 500 is greppable, then
- * returns the standard envelope — the raw message in dev, a generic string in
- * prod (`isDev` false) so stacks/paths never leak.
+ * context (method + full URL, sensitive query params redacted) under
+ * `logPrefix` so any 500 is greppable, then returns the standard envelope —
+ * the raw message in dev, a generic string in prod (`isDev` false) so
+ * stacks/paths never leak.
  */
 export function makeErrorHandler(
   logPrefix: string,
@@ -53,7 +96,7 @@ export function makeErrorHandler(
   return (err, c) => {
     const message = err instanceof Error ? err.message : String(err);
     console.error(
-      `${logPrefix}: ${c.req.method} ${c.req.url} — ${message}`,
+      `${logPrefix}: ${c.req.method} ${redactSensitiveQueryParams(c.req.url)} — ${message}`,
       err,
     );
     return c.json(errorBody(isDev ? message : "Internal server error"), 500);

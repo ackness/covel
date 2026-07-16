@@ -2,13 +2,14 @@
  * Structured output validation using JSON Schema (Ajv).
  */
 
-import Ajv from "ajv";
+import { Ajv } from "ajv";
 import type { ValidationResult } from "./types.js";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-const AjvCtor = (Ajv as any).default ?? Ajv;
-const ajv = new AjvCtor({ allErrors: true }) as any;
-/* eslint-enable @typescript-eslint/no-explicit-any */
+// Named import (not default): ajv's CJS `exports.default` isn't unwrapped
+// under native Node ESM interop, which made the old default import
+// non-constructable at runtime without an `any` cast. `exports.Ajv` is the
+// same class exposed as a named export and needs no such workaround.
+const ajv = new Ajv({ allErrors: true });
 
 /**
  * Validate a runtime output against a JSON Schema.

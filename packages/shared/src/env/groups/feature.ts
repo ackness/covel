@@ -10,6 +10,15 @@ export const FEATURE_ENV_VARS = [
     description: "Compactor context window used for threshold comparisons.",
   },
   {
+    name: "COVEL_SNAPSHOT_INTERVAL_TURNS",
+    group: "feature",
+    type: "integer",
+    status: "active",
+    defaultValue: "5",
+    description:
+      "Auto-snapshot checkpoint cadence: save a kind=auto snapshot every N turns (turnCount <= 1 always snapshots). 1 = every turn.",
+  },
+  {
     name: "COVEL_TRACE_TRUNCATE",
     group: "feature",
     type: "boolean",

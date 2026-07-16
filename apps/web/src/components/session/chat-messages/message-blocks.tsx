@@ -380,19 +380,3 @@ export function MessageBlockRenderer({
     </div>
   );
 }
-
-// Locked-after-user-message helper. Once the player sends the next message,
-// any previous interactive block is considered resolved and should render in
-// disabled state — mirrors the `hasLaterUserMessage` / messageToSpecDisabled
-// coupling.
-export function hasLaterUserMessage(
-  msg: StreamMessage,
-  all: StreamMessage[],
-): boolean {
-  const idx = all.findIndex((m) => m.id === msg.id);
-  if (idx < 0) return false;
-  for (let i = idx + 1; i < all.length; i += 1) {
-    if (all[i].role === "user") return true;
-  }
-  return false;
-}

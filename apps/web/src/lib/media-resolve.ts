@@ -24,6 +24,7 @@ import {
   type MediaCacheRecord,
 } from "./media-cache.js";
 import { sha256Hex, subtleAvailable } from "./media-hash.js";
+import { sessionAuthHeaders } from "../services/session-credentials.js";
 
 export interface ResolveOptions {
   readonly sessionId: string;
@@ -69,7 +70,10 @@ async function fetchSignedUrl(
     const res = await fetch(MEDIA_TOKEN_ENDPOINT(opts.sessionId, ref.id), {
       method: "GET",
       signal: opts.signal,
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        ...sessionAuthHeaders(opts.sessionId),
+      },
       credentials: "same-origin",
     });
     if (!res.ok) {

@@ -23,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button.js";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
 import { usePluginNamespace } from "@/stores/plugin-data-store.js";
+import { useStreamingText } from "@/stores/streaming-text-store.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import type {
   SessionRecord,
@@ -41,6 +42,9 @@ import {
   extractInteractionChoices,
   extractPendingFormMessages,
   filterStalePrompts,
+  mergeChoices,
+  pluginIdForCapability,
+  STAGE_CAPABILITIES,
   type PresenceRecord,
   type StageCurrentRecord,
   type StageSpeaker,
@@ -98,6 +102,7 @@ export function StageView(props: StageViewProps): ReactElement {
     messages,
     executing,
     executionError,
+    sessionPlugins,
     submittedBlockIds,
     submittedBlockValues,
     onSendMessage,
@@ -113,24 +118,43 @@ export function StageView(props: StageViewProps): ReactElement {
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
 
   // ── Plugin-data feeds ─────────────────────────────────────────
-  const sceneCurrent = usePluginNamespace("scene-stage", "stage")["current"] as
+  // Resolve the ACTIVE plugin id for each stage capability from the session's
+  // plugin list (framework↔plugin isolation rule — no hardcoded plugin ids in
+  // framework code). `pluginIdForCapability` returns undefined when no active
+  // plugin provides the capability; `?? ""` keeps the hook call unconditional
+  // and resolves to an empty namespace, so the layer renders empty/disabled.
+  // Namespaces below ("stage", "active-cast", …) are intra-plugin data keys
+  // defined by the resolved plugin, not plugin ids.
+  const sceneStageId =
+    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.scene) ?? "";
+  const sceneCastId =
+    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.cast) ?? "";
+  const scenePromptsId =
+    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.prompts) ?? "";
+  const presenceId =
+    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.presence) ?? "";
+
+  const sceneCurrent = usePluginNamespace(sceneStageId, "stage")["current"] as
     | StageCurrentRecord
     | undefined;
-  const activeCast = usePluginNamespace("scene-cast", "active-cast")[
+  const activeCast = usePluginNamespace(sceneCastId, "active-cast")[
     "current"
   ] as { speakers?: readonly StageSpeaker[] } | undefined;
   const speakers = activeCast?.speakers ?? [];
-  const promptsNamespace = usePluginNamespace("scene-prompts", "message");
+  const promptsNamespace = usePluginNamespace(scenePromptsId, "message");
   // Mirror portrait-gallery-panel: the presence namespace is consumed as a
   // characterId-keyed record of `{ sprite, avatar, ... }`.
-  const presence = usePluginNamespace(
-    "character-presence",
-    "presence",
-  ) as Readonly<Record<string, PresenceRecord | undefined>>;
+  const presence = usePluginNamespace(presenceId, "presence") as Readonly<
+    Record<string, PresenceRecord | undefined>
+  >;
 
   // ── Latest story text + stream state ──────────────────────────
+  // Streaming tokens no longer live in `messages[].content` — the placeholder
+  // carries empty content and the live text is held in a fine-grained external
+  // store. This view subscribes only to the latest story message.
   const storyMsg = findLatestStory(messages);
-  const storyText = storyMsg?.content ?? "";
+  const liveStoryText = useStreamingText(storyMsg?.id ?? "");
+  const storyText = storyMsg ? (liveStoryText ?? storyMsg.content) : "";
   const storyTurnId = storyMsg?.turnId;
   const isStreaming =
     executing && (storyMsg?.id.startsWith("stream_") ?? false);
@@ -166,6 +190,13 @@ export function StageView(props: StageViewProps): ReactElement {
     [promptsNamespace, storyTurnId],
   );
   const activeForm = pendingForms.find((m) => !dismissedFormIds.has(m.id));
+  // The overlay always carries the free-input entry; only *real* choice items
+  // (interaction choices / scene-prompts) justify dimming the sprites.
+  const hasChoiceItems = useMemo(
+    () =>
+      mergeChoices(interactionChoices, freshPrompts, locale).items.length > 0,
+    [interactionChoices, freshPrompts, locale],
+  );
 
   const choicesVisible = allRead && !executing && !inputMode;
 
@@ -183,7 +214,7 @@ export function StageView(props: StageViewProps): ReactElement {
         speakers={speakers}
         presence={presence}
         sessionId={session.id}
-        dimmed={choicesVisible}
+        dimmed={choicesVisible && hasChoiceItems}
       />
       <StageHud
         sceneCurrent={sceneCurrent}

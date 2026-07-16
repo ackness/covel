@@ -104,9 +104,11 @@ export {
 } from "./speech/wire-registry.js";
 export type { SpeechWire, TranscriptionWire } from "./speech/types.js";
 
-// Slot overlay (per-request preset/provider injection)
+// Slot overlay (per-request preset injection)
 export {
   applySlotOverlay,
+  publicPresetId,
+  resolveOverlayPresetId,
   resolveSlotOverride,
   type OverlayDeps,
 } from "./slot-overlay.js";
@@ -117,6 +119,7 @@ export {
   fetchWithRetry,
   type BaseUrlValidationResult,
   type FetchWithRetryOptions,
+  type WireModuleShape,
 } from "./plugin-utils.js";
 
 // Capability

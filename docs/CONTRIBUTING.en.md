@@ -40,7 +40,7 @@ pnpm --filter @covel/runtime test          # single package
 pnpm e2e                                   # Playwright end-to-end
 ```
 
-Coverage target: ≥ 80% (`pnpm test:coverage`).
+Coverage target: ≥ 80% (`pnpm test:coverage`) — aspirational for now; [`ci.yml`](../.github/workflows/ci.yml) does not yet enforce a coverage threshold.
 
 ### Framework / plugin isolation (important)
 

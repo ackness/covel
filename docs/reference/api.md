@@ -42,6 +42,29 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
   （`/api/actions`、`/api/worlds/:id/sync-data` 等）保持各自既有 404 文案不变。
 - `plugin-rpc` 通道保留其专属信封 `{ status: "error", error, code }`（见下文 plugin-rpc 小节），不并入通用信封。
 
+### 鉴权：Session owner token（audit S-02）
+
+`POST /api/sessions` 创建会话时会铸造一个不可猜测的 **owner token**，仅在创建响应中返回一次（响应字段 `ownerToken`）；服务端只保存其 SHA-256 哈希（`session.metadata.ownerTokenHash`），任何读取端点都不会再泄露原始 token。
+
+**分层强制（tiered enforcement）**：
+
+| `DEPLOYMENT_TIER`     | 行为                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `self`（默认）/ 桌面  | **不强制**。单机本地游玩零 token 可用；网络边界由默认回环监听保障（`COVEL_BIND_HOST=127.0.0.1`，见 env-registry）。带 token 也不校验。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `demo` / `commercial` | **硬性强制**。所有会话作用域端点（session CRUD、messages、traces、actions、plugin-rpc、steer/abort、SSE subscribe、snapshots、state 等经 `resolveSessionParam` 的路由，以及会话 id 走 query/body/间接引用的端点：approvals 列表/撤销/决策、`POST /api/media?sessionId=`、`/api/worlds/:id/world-data/preflight`、`sync-data`、`sync-dimensions`、`GET /api/ui-specs?sessionId=`）缺失或错误 token 一律返回 `401 { code: "session_owner_required" }`（未知会话返回 404）。无哈希的历史会话 fail-closed。`GET /api/sessions` 列表在这两个层级仅对持有运维 token 的调用方返回内容，其余返回空列表；`POST /api/sessions` **创建会话需运维 token**（缺失返回 `401 { code: "operator_token_required" }`）——这是单运维方门禁，完整的用户身份/租户隔离/配额属产品级工作，尚未实现。 |
+
+**Token 提交方式**（三选一）：
+
+1. `Authorization: Bearer <ownerToken>`
+2. `X-Session-Token: <ownerToken>`
+3. `?session_token=<ownerToken>` query 参数（供无法设置 header 的 EventSource / SSE 客户端使用）
+
+**运维 master token**：设置了 `COVEL_DESKTOP_REST_TOKEN` 时，以该值作为 Bearer token 可通过任意会话的 owner 校验（管理工具 / e2e harness 用），并且是 hosted 层级创建会话、世界写入/维度导入、AI 世界生成、模型探测/刷新以及 community server-code 激活的凭证。community ESM 会在服务端进程内注册全局能力，因此 hosted 层级同时要求 owner token 与 operator token；这是当前单运维方信任模型，不提供多租户代码沙箱。`DEPLOYMENT_TIER=demo|commercial` 启动时若未配置该 token，`validateSecurityPosture` 会直接拒绝启动。
+
+纯 Web 客户端可在 **Settings → Operator Access（运维访问）** 输入或清除该 token。凭据只保存在当前浏览器的 `localStorage`，仅在上述 operator-gated 同源请求中作为 `Authorization: Bearer <token>` 发送；保存或清除后客户端会重新加载，以新凭据重取会话与世界数据。`self` 层级继续允许无 token 使用，并忽略该可选凭据。
+
+> CORS（`CORS_ORIGIN`）只是浏览器策略，**不构成鉴权**；真正的授权边界是 owner token + 部署层级 + 回环监听。
+
 ---
 
 ## 快速开始
@@ -375,11 +398,14 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 > **接入状态（2026-04-27）**：服务端手动快照、列表和 fork 能力已实现并有测试覆盖；当前内置 Web UI 只直接使用 `GET /api/sessions/:id/snapshot` 做恢复/重连，暂未提供手动快照列表或 fork 操作界面。
 
-| 方法 | 路径                          | 描述                                                               |
-| ---- | ----------------------------- | ------------------------------------------------------------------ |
-| POST | `/api/sessions/:id/snapshot`  | 创建一份手动快照（kind=`manual`）                                  |
-| GET  | `/api/sessions/:id/snapshots` | 列出当前 session 所有物化快照（auto / manual / fork）              |
-| POST | `/api/sessions/:id/fork`      | 从指定 snapshotId 物化一个新 session，拷贝状态与截至 cursor 的消息 |
+| 方法 | 路径                                      | 描述                                                                                                  |
+| ---- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| POST | `/api/sessions/:id/snapshot`              | 创建一份手动快照（kind=`manual`）                                                                     |
+| GET  | `/api/sessions/:id/snapshots`             | 分页列出快照元数据（auto / manual / fork，不含 payload）                                              |
+| GET  | `/api/sessions/:id/snapshots/:snapshotId` | 按 id 获取单个快照（含完整 payload）                                                                  |
+| POST | `/api/sessions/:id/fork`                  | 从指定 snapshotId 物化一个新 session，拷贝状态与截至 cursor 的消息；响应一次性返回 child `ownerToken` |
+
+Fork 不继承 community server-code grant；child 中对应插件保持未激活，需由 operator 在新 session 内重新 enable/approve。进程重启后同样不恢复易失 grant，`GET /api/sessions/:id/plugins` 会清理缺少当前 grant 的历史 active community 项。
 
 ### 角色数据
 
@@ -405,19 +431,19 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 ### AI 生成
 
-| 方法 | 路径                     | 描述                  |
-| ---- | ------------------------ | --------------------- |
-| POST | `/api/ai/ping`           | 测试 LLM 提供商连通性 |
-| POST | `/api/ai/generate-world` | AI 生成世界包         |
+| 方法 | 路径                     | 描述                                    |
+| ---- | ------------------------ | --------------------------------------- |
+| POST | `/api/ai/ping`           | 测试 LLM 提供商连通性                   |
+| POST | `/api/ai/generate-world` | AI 生成世界包；hosted 需 operator token |
 
 ### 模型数据库（Model DB）
 
-| 方法 | 路径                             | 描述               |
-| ---- | -------------------------------- | ------------------ |
-| GET  | `/api/model-db`                  | 获取模型数据库信息 |
-| GET  | `/api/model-db/search?q=xxx`     | 搜索模型           |
-| GET  | `/api/model-db/lookup?model=xxx` | 查找模型能力       |
-| POST | `/api/model-db/refresh`          | 刷新模型数据库     |
+| 方法 | 路径                             | 描述                                     |
+| ---- | -------------------------------- | ---------------------------------------- |
+| GET  | `/api/model-db`                  | 获取模型数据库信息                       |
+| GET  | `/api/model-db/search?q=xxx`     | 搜索模型                                 |
+| GET  | `/api/model-db/lookup?model=xxx` | 查找模型能力                             |
+| POST | `/api/model-db/refresh`          | 刷新模型数据库；hosted 需 operator token |
 
 ### Trace 调试
 
@@ -932,12 +958,15 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
   "preGameCompleted": [],
   "activePlugins": ["pregame", "narrator", "codex"],
   "createdAt": "2025-01-15T10:00:00.000Z",
-  "updatedAt": "2025-01-15T10:00:00.000Z"
+  "updatedAt": "2025-01-15T10:00:00.000Z",
+  "metadata": { "ownerTokenHash": "<sha256-hex>" },
+  "ownerToken": "e7b2c4d1-…"
 }
 ```
 
 **响应字段**:
 
+- `ownerToken`(string) — 会话 owner token，**仅此一次返回**（服务端只存哈希）。`DEPLOYMENT_TIER=demo|commercial` 下所有会话作用域端点都要求携带它（见「鉴权」章节）；`self` 层级可忽略
 - `status`(`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态（turn-band 重构后替代原先的 `phase` 字段）
 - `turnCount`(number) — 主循环轮数计数（从 0 开始，每次成功 turn +1）
 - `preGameCompleted`(string[]) — 已完成 Pre-Game 初始化的 runtime id 集合，框架据此跳过后续轮次的 Pre-Game 调度
@@ -1439,7 +1468,7 @@ value         : {
 
 > 注意: background 模式下 runtime 内部异常 **不会**映射为 5xx HTTP 状态 —— 202 已经发出,失败信息写入 `_jobs/{jobId}.value.error`,前端通过 SSE 感知。
 
-> **community 插件 + `entry` action 的延迟激活**:community 插件把 RPC 注册迁到 `entry` 模块后,其代码在审批通过前不运行,因此 action 声明在首次调用时**尚未注册**。此时 action 级请求**不会**直接 404,而是按 community trust 走审批门:返回 `202 approval-required`。审批通过后重试 → 框架激活该插件的 `entry`(注册 action)→ 正常 dispatch。若 action 确实不存在,会在激活后经一次审批往返再 404(`unknown-action`)。builtin/official 的 `entry` 在 boot 时已运行,其 action 未注册即为真正的 404,行为不变。
+> **community 插件 + `entry` action 的延迟激活**：首次调用时 action 声明尚未注册，服务端先返回固定 `action: "covel:plugin-server-code"` 的全模块审批，避免由调用方伪造的 action label 诱导加载代码。session-scope 审批后加载 entry 并验证 action：不存在立即 404；存在则再返回该真实 action 的独立审批。客户端应处理这两个连续的 `approval-required` 响应，并为审批重试设置两阶段上限。hosted 层级两个步骤都要求 operator token。builtin/official 的 entry 在 boot 时已运行，其未知 action 直接 404。
 
 **插件 PLUGIN.md 中声明 RPC action:**
 
@@ -1553,10 +1582,10 @@ rpc:
 }
 ```
 
-| 字段       | 类型                    | 必需        | 说明                                                                     |
-| ---------- | ----------------------- | ----------- | ------------------------------------------------------------------------ |
-| `decision` | `"allow"` \| `"deny"`   | 是          | 玩家选择                                                                 |
-| `scope`    | `"once"` \| `"session"` | 仅 allow 时 | `once`(默认):允许这一次后过期,需重新批准;`session`:缓存到本 session 结束 |
+| 字段       | 类型                    | 必需        | 说明                                                                                                                          |
+| ---------- | ----------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `decision` | `"allow"` \| `"deny"`   | 是          | 玩家选择                                                                                                                      |
+| `scope`    | `"once"` \| `"session"` | 仅 allow 时 | 普通 action 可选 `once`（默认）或 `session`；`covel:plugin-server-code` 与 `runtime:*` 会加载长生命周期模块，只接受 `session` |
 
 **响应 200:**
 
@@ -1573,14 +1602,14 @@ rpc:
 
 **错误响应:**
 
-| 状态码 | 触发条件                                                  |
-| ------ | --------------------------------------------------------- |
-| 400    | `decision` 字段缺失 / 非 `allow` 或 `deny` / `scope` 非法 |
-| 404    | `approvalId` 不存在或已被消费                             |
+| 状态码 | 触发条件                                                                                                |
+| ------ | ------------------------------------------------------------------------------------------------------- |
+| 400    | `decision` 字段缺失 / 非 `allow` 或 `deny` / `scope` 非法 / server-code 或 runtime 使用非 session scope |
+| 404    | `approvalId` 不存在或已被消费                                                                           |
 
 #### `DELETE /api/sessions/:id/approvals`
 
-撤销该 session 已缓存的授权（community 插件 mid-session 收回）。可选 `?pluginId=<id>` 只撤销该插件的授权；省略则撤销整个 session 的全部授权。被撤销后，该插件下次 RPC 调用会重新弹出 approval 对话框。
+撤销该 session 已缓存、一次性和未决的授权（community 插件 mid-session 收回）。可选 `?pluginId=<id>` 只撤销该插件的授权；省略则撤销整个 session 的全部授权。pending approval 按 `(session, plugin, action)` 去重；disable/冲突移除插件时也会撤销，旧 approvalId 无法在之后重新激活代码。
 
 **查询参数:**
 
@@ -2260,7 +2289,7 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 > **接入状态（2026-04-27）**：服务端手动快照、列表和 fork 能力已实现并有测试覆盖；当前内置 Web UI 只直接使用 `GET /api/sessions/:id/snapshot` 做恢复/重连，暂未提供手动快照列表或 fork 操作界面。
 
-物化快照是存档 / 读档 / 时间线分叉的核心 —— 每个快照把一个回合结束时的完整 session 状态序列化为 `payload`，保存在 `state_snapshots` 表。`kind` 取三种值：`auto`（每回合结束自动写入）、`manual`（`POST /snapshot` 显式创建）、`fork`（`POST /fork` 写到子 session 上记录来源）。
+物化快照是存档 / 读档 / 时间线分叉的核心 —— 每个快照把一个回合结束时的完整 session 状态序列化为 `payload`，保存在 `state_snapshots` 表。`kind` 取三种值：`auto`（按 checkpoint 节奏自动写入：`turnCount <= 1` 与每 `COVEL_SNAPSHOT_INTERVAL_TURNS`（默认 5）回合各写一份；resume 路径强制写入）、`manual`（`POST /snapshot` 显式创建）、`fork`（`POST /fork` 写到子 session 上记录来源）。
 
 #### `POST /api/sessions/:id/snapshot`
 
@@ -2314,17 +2343,32 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 #### `GET /api/sessions/:id/snapshots`
 
-列出指定 session 的所有快照（`auto` / `manual` / `fork`），按 `createdAt` 升序。
+列出指定 session 的快照元数据（`auto` / `manual` / `fork`），**keyset（游标）分页**，与 `/messages/page`、traces 分页同一约定。**不返回 `payload`**（快照 payload 序列化整个 session 状态，全量返回会无界增长）；store 层用投影查询计算 `payloadSize` 且从不加载 payload JSON，需要完整 payload 时按 id 单独获取（见下）。
+
+Query 参数：`limit`（默认 50，最大 500）、`before_created_at` + `before_id`（`(createdAt, id)` 元组游标，需成对出现；只提供一半将被忽略并回落到最新窗口）。无游标返回最新一批；带游标返回紧邻更旧的一页。页内按 `createdAt` 升序（最旧在前）。
 
 ```json
 {
   "snapshots": [
-    /* SnapshotRecord[] */
-  ]
+    {
+      "id": "<uuid>",
+      "sessionId": "mistport-a1b2c3d4",
+      "turnId": "turn-42",
+      "kind": "manual",
+      "parentId": null,
+      "createdAt": "2026-04-13T00:00:00.000Z",
+      "payloadSize": 18342
+    }
+  ],
+  "nextCursor": { "createdAt": "2026-04-13T00:00:00.000Z", "id": "<uuid>" }
 }
 ```
 
-session 不存在时返回 `404`。
+`nextCursor` 指向本页最旧一条快照的 `(createdAt, id)` 位置，作为下一页（更旧）的 `before_*`；返回条数少于 `limit`（已到最早一份）时为 `null`。session 不存在时返回 `404`。`kind="fork"` 的快照 `parentId` 指向源 snapshot id，其余 kind 为 `null`。
+
+#### `GET /api/sessions/:id/snapshots/:snapshotId`
+
+按 id 获取单个快照（含完整 `payload`），响应 `{ "snapshot": SnapshotRecord }`。快照不存在或不属于该 session 时返回 `404`。
 
 #### `POST /api/sessions/:id/fork`
 

@@ -18,6 +18,7 @@ import type { DataStore, WorldRecord } from "@covel/store";
 import { rateLimiter, singleFlight } from "../../middleware/rate-limit.js";
 import { loadSingleWorld } from "../../world-seed-loader.js";
 import { errorBody } from "../../api-error.js";
+import { checkHostedOperator } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -99,6 +100,11 @@ function recordForStoreOnly(record: WorldRecord, saveTarget: SaveTarget) {
 // POST /ai/generate-world
 aiRoutes.post(
   "/generate-world",
+  async (c, next) => {
+    const denied = checkHostedOperator(c);
+    if (denied) return denied;
+    await next();
+  },
   rateLimiter({ max: 10 }),
   singleFlight(),
   async (c) => {
