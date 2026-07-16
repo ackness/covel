@@ -10,6 +10,7 @@ import type { DataStore } from "@covel/store";
 import type { CovelMessage } from "@covel/shared";
 import { isEnvTruthy, readRuntimeEnv } from "@covel/shared";
 import { errorBody } from "../../api-error.js";
+import { checkSessionOwnerById } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -40,6 +41,12 @@ eventRoutes.post("/emit", async (c) => {
   if (!body.topic || !body.sessionId) {
     return c.json(errorBody("topic and sessionId are required"), 400);
   }
+
+  // Audit 2026-07-16 L-3: on hosted tiers, gate event injection on the target
+  // session's owner token so a non-production demo boot can't accept arbitrary
+  // cross-session events. Strict no-op on self/desktop (unenforced tiers).
+  const denied = await checkSessionOwnerById(c, c.get("store"), body.sessionId);
+  if (denied) return denied;
 
   const message: CovelMessage = {
     id: crypto.randomUUID(),

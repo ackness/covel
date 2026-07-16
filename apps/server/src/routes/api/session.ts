@@ -85,6 +85,20 @@ type Env = {
 export const sessionRoutes = new Hono<Env>();
 
 /**
+ * Strip the persisted owner-token hash before returning a session over the
+ * wire (audit 2026-07-16 L-2). It is an internal credential check; a caller
+ * has no use for its own hash and it should not travel in responses.
+ */
+function sanitizeSessionForResponse<
+  T extends { readonly metadata?: Record<string, unknown> | null },
+>(session: T): T {
+  const metadata = session.metadata;
+  if (!metadata || !(SESSION_OWNER_TOKEN_HASH_KEY in metadata)) return session;
+  const { [SESSION_OWNER_TOKEN_HASH_KEY]: _omit, ...rest } = metadata;
+  return { ...session, metadata: rest };
+}
+
+/**
  * Keep persisted active plugins aligned with the in-memory approval gate.
  * Community server code is never restored implicitly after create/fork or a
  * process restart; the operator must enable it again for this session.
@@ -177,7 +191,7 @@ sessionRoutes.get("/", async (c) => {
   // can show RAG status badges without an extra round-trip per row.
   // listVectorModels is called once and shared across all sessions.
   const decorated = await decorateSessionList(store, filtered);
-  return c.json({ items: decorated });
+  return c.json({ items: decorated.map(sanitizeSessionForResponse) });
 });
 
 // POST /sessions
@@ -335,7 +349,10 @@ sessionRoutes.post("/", async (c) => {
 
   // `ownerToken` is returned exactly once — it is never readable again
   // (only its hash is stored). Clients on hosted tiers must persist it.
-  return c.json({ ...session, ownerToken: owner.token });
+  return c.json({
+    ...sanitizeSessionForResponse(session),
+    ownerToken: owner.token,
+  });
 });
 
 // ── Instance endpoints ──────────────────────────────────────────
@@ -421,7 +438,9 @@ sessionRoutes.get("/:id", async (c) => {
   const guard = await resolveSessionParam(c);
   if (!guard.ok) return guard.response;
   const session = guard.session;
-  return c.json(await withEmbeddingMetadata(store, session));
+  return c.json(
+    sanitizeSessionForResponse(await withEmbeddingMetadata(store, session)),
+  );
 });
 
 // PATCH /sessions/:id
@@ -458,7 +477,7 @@ sessionRoutes.patch("/:id", async (c) => {
   }
 
   // Return merged result to avoid a second DB read
-  return c.json({ ...session, ...updates });
+  return c.json(sanitizeSessionForResponse({ ...session, ...updates }));
 });
 
 // DELETE /sessions/:id
