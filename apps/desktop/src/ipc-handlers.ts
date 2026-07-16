@@ -86,28 +86,39 @@ export function registerDesktopIpcHandlers({
     };
   });
 
-  ipcMain.handle("covel:retry-startup", () => {
+  // Audit 2026-07-16 L-4: these mutate the app / open OS paths, so gate them on
+  // the same trusted-sender check the secret channels use — defense in depth
+  // behind nav-pinning, so an untrusted frame can't drive restart/dir actions.
+  ipcMain.handle("covel:retry-startup", (event) => {
+    if (!isTrustedSender(event, "covel:retry-startup")) return;
     retryStartup();
   });
 
-  ipcMain.handle("covel:open-logs-dir", async () => {
+  ipcMain.handle("covel:open-logs-dir", async (event) => {
+    if (!isTrustedSender(event, "covel:open-logs-dir")) return;
     await shell.openPath(paths.logsDir);
   });
 
-  ipcMain.handle("covel:open-config-dir", async () => {
+  ipcMain.handle("covel:open-config-dir", async (event) => {
+    if (!isTrustedSender(event, "covel:open-config-dir")) return;
     await shell.openPath(paths.covelHome);
   });
 
-  ipcMain.handle("covel:open-data-dir", async () => {
+  ipcMain.handle("covel:open-data-dir", async (event) => {
+    if (!isTrustedSender(event, "covel:open-data-dir")) return;
     await shell.openPath(paths.dataRoot);
   });
 
-  ipcMain.handle("covel:restart-server", () => restartServer());
+  ipcMain.handle("covel:restart-server", (event) => {
+    if (!isTrustedSender(event, "covel:restart-server")) return;
+    return restartServer();
+  });
 
   // Pick a directory for the next data_root. Does NOT move data — that's
   // deliberate per the "drop-old-data" UX contract; app restart starts fresh
   // in the new location.
-  ipcMain.handle("covel:pick-data-dir", async () => {
+  ipcMain.handle("covel:pick-data-dir", async (event) => {
+    if (!isTrustedSender(event, "covel:pick-data-dir")) return { path: null };
     const result = await dialog.showOpenDialog({
       title: t("dialog.dataDir.title"),
       properties: ["openDirectory", "createDirectory"],
@@ -265,6 +276,19 @@ export function registerDesktopIpcHandlers({
     return handleImport(kind, { sourcePath: picked.filePaths[0] });
   }
 
-  ipcMain.handle("covel:import:pick-plugin", () => pickAndImport("plugin"));
-  ipcMain.handle("covel:import:pick-world", () => pickAndImport("world"));
+  // Audit 2026-07-16 L-4: these drive a native import dialog (installs a
+  // plugin/world) — a strictly worse action than opening a dir — so gate them
+  // on the same trusted-sender check as the other dialog-backed channels.
+  ipcMain.handle("covel:import:pick-plugin", (event) => {
+    if (!isTrustedSender(event, "covel:import:pick-plugin")) {
+      return { ok: false, kind: "plugin", message: t("import.cancelled") };
+    }
+    return pickAndImport("plugin");
+  });
+  ipcMain.handle("covel:import:pick-world", (event) => {
+    if (!isTrustedSender(event, "covel:import:pick-world")) {
+      return { ok: false, kind: "world", message: t("import.cancelled") };
+    }
+    return pickAndImport("world");
+  });
 }
