@@ -376,6 +376,7 @@ async function drainPhase(
 
 export const drainServerResources = async (): Promise<void> => {
   await drainPhase("stop world watchers", () => stopWatchers());
+  await drainPhase("stop background sweeps", () => api.stopBackgroundSweeps());
   await drainPhase("flush event bus", () => api.eventBus.flush());
   await drainPhase("close data store", () => store.close());
   if (lockSql) {
