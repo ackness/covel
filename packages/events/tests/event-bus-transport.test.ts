@@ -9,6 +9,7 @@ import {
   createEventBus,
   RECEIVE_GAP_FLUSH_MS,
   RECEIVE_STATES_MAX,
+  TRANSPORT_HEARTBEAT_MS,
   type EventBusTransport,
 } from "../src/event-bus.js";
 
@@ -411,5 +412,162 @@ describe("EventBus transport fan-out (audit R-02)", () => {
     busA.emit(makeMessage({ sessionId: "sess-ok" }));
     expect(received).toHaveBeenCalledTimes(1);
     warnSpy.mockRestore();
+  });
+});
+
+describe("EventBus transport heartbeat (audit 2026-07-16 M-1)", () => {
+  const flushMicrotasks = () => new Promise((r) => setTimeout(r, 0));
+
+  const realFrame = (seq: number, sessionId: string, type: string): string =>
+    JSON.stringify({
+      origin: "remote-hb",
+      stream: "boot-1",
+      seq,
+      event: {
+        id: `remote:${seq}`,
+        topic: "state",
+        type,
+        sessionId,
+        timestamp: new Date().toISOString(),
+        payload: {},
+      },
+    });
+
+  const heartbeat = (seq: number, sessionId: string): string =>
+    JSON.stringify({
+      origin: "remote-hb",
+      stream: "boot-1",
+      seq,
+      heartbeat: true,
+      sessionId,
+    });
+
+  it("resets when a heartbeat reveals a lost tail frame", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const hub = createHub();
+      const bus = createEventBus(undefined, { transport: hub.connect() });
+      const received: SubscriptionEvent[] = [];
+      const resets: Array<{ sessionId: string; reason: string }> = [];
+      bus.onEmit((event) => received.push(event));
+      bus.onReset?.((reset) => resets.push(reset));
+
+      // Frame 1 arrives; the receiver is caught up (expects seq 2 next).
+      hub.broadcast(realFrame(1, "sess-tail", "t1"));
+      await flushMicrotasks();
+      expect(received.map((e) => e.type)).toEqual(["t1"]);
+      expect(resets).toEqual([]);
+
+      // Frame 2 is lost. A heartbeat announces the sender's high-water = 2,
+      // so the receiver must detect the hole and reset (no successor frame
+      // would otherwise ever trip the gap path).
+      hub.broadcast(heartbeat(2, "sess-tail"));
+      await flushMicrotasks();
+      expect(resets).toEqual([
+        { sessionId: "sess-tail", reason: "transport-gap" },
+      ]);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("does not reset when a heartbeat matches an already-delivered stream", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const hub = createHub();
+      const bus = createEventBus(undefined, { transport: hub.connect() });
+      const resets: Array<{ sessionId: string; reason: string }> = [];
+      bus.onReset?.((reset) => resets.push(reset));
+
+      hub.broadcast(realFrame(1, "sess-live", "t1"));
+      hub.broadcast(realFrame(2, "sess-live", "t2"));
+      await flushMicrotasks();
+
+      // Caught up: expected is 3, heartbeat high-water is 2 → no gap.
+      hub.broadcast(heartbeat(2, "sess-live"));
+      await flushMicrotasks();
+      expect(resets).toEqual([]);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("does not false-reset when an emit races the heartbeat tick (capture-at-enqueue)", async () => {
+    vi.useFakeTimers();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const published: string[] = [];
+      const hub = createHub();
+      const inner = hub.connect();
+      const recording: EventBusTransport = {
+        publish: (payload) => {
+          published.push(payload);
+          return inner.publish(payload);
+        },
+        subscribe: inner.subscribe,
+      };
+      const busA = createEventBus(undefined, { transport: recording });
+      const busB = createEventBus(undefined, { transport: hub.connect() });
+      const receivedB: SubscriptionEvent[] = [];
+      const resetsB: Array<{ sessionId: string; reason: string }> = [];
+      busB.onEmit((event) => receivedB.push(event));
+      busB.onReset?.((reset) => resetsB.push(reset));
+
+      // Frame 1 delivered; B is caught up.
+      busA.emit(makeMessage({ sessionId: "sess-race", topic: "a" }));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(receivedB).toHaveLength(1);
+
+      // Heartbeat tick fires (captures seq 1), THEN a second emit lands before
+      // the outbox microtasks flush — the exact race the fix targets.
+      vi.advanceTimersByTime(TRANSPORT_HEARTBEAT_MS);
+      busA.emit(makeMessage({ sessionId: "sess-race", topic: "b" }));
+      await vi.advanceTimersByTimeAsync(0);
+
+      // The heartbeat must carry seq 1 (not the raced 2), so B sees no gap and
+      // still receives frame 2.
+      const hb = published
+        .map((p) => JSON.parse(p) as Record<string, unknown>)
+        .find((f) => f.heartbeat === true);
+      expect(hb).toMatchObject({ seq: 1 });
+      expect(resetsB).toEqual([]);
+      expect(receivedB).toHaveLength(2);
+    } finally {
+      warnSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("periodically publishes a heartbeat carrying the high-water seq", async () => {
+    vi.useFakeTimers();
+    try {
+      const published: string[] = [];
+      const hub = createHub();
+      const inner = hub.connect();
+      const recording: EventBusTransport = {
+        publish: (payload) => {
+          published.push(payload);
+          return inner.publish(payload);
+        },
+        subscribe: inner.subscribe,
+      };
+      const busA = createEventBus(undefined, { transport: recording });
+
+      busA.emit(makeMessage({ sessionId: "sess-hb" }));
+      await vi.advanceTimersByTimeAsync(0); // flush the real frame's outbox
+      published.length = 0;
+
+      await vi.advanceTimersByTimeAsync(TRANSPORT_HEARTBEAT_MS);
+      const hb = published
+        .map((p) => JSON.parse(p) as Record<string, unknown>)
+        .find((f) => f.heartbeat === true);
+      expect(hb).toMatchObject({
+        heartbeat: true,
+        sessionId: "sess-hb",
+        seq: 1,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -129,6 +129,12 @@ export const PERSIST_QUEUE_MAX = 1000;
 export const RECEIVE_PENDING_MAX = 64;
 /** How long a receiver waits on a transport seq hole before skipping it. */
 export const RECEIVE_GAP_FLUSH_MS = 2000;
+/**
+ * How often an origin publishes a liveness heartbeat carrying its current
+ * high-water transportSeq per active session (audit 2026-07-16 M-1). Bounds how
+ * long a lost *tail* frame can leave a cross-pod receiver silently stale.
+ */
+export const TRANSPORT_HEARTBEAT_MS = 15_000;
 /** FIFO cap on receive-ordering states across transport streams. */
 export const RECEIVE_STATES_MAX = 1024;
 
@@ -167,6 +173,17 @@ interface TransportFrame {
   readonly seq: number;
   readonly event?: SubscriptionEvent;
   readonly ref?: { readonly sessionId: string; readonly eventId: string };
+  /**
+   * Liveness frame (audit 2026-07-16 M-1): carries the origin's current
+   * high-water `transportSeq` so a receiver can detect a lost *tail* frame that
+   * has no successor to trigger the normal reorder-gap path. Published through
+   * the same per-session outbox as real frames, so a heartbeat with seq N is
+   * only ever sent after real frame N — `seq < expected` therefore reliably
+   * means "caught up", never a false gap. Carries `sessionId` explicitly since
+   * there is no event/ref to read it from.
+   */
+  readonly heartbeat?: boolean;
+  readonly sessionId?: string;
 }
 
 /** Per-(origin, session) receive-side ordering state. */
@@ -225,6 +242,13 @@ function parseTransportFrame(payload: string): TransportFrame | undefined {
   }
   if (typeof frame.seq !== "number" || !Number.isSafeInteger(frame.seq)) {
     return undefined;
+  }
+  if (frame.heartbeat === true) {
+    // Liveness frame: no event/ref, so it must name its session explicitly.
+    if (typeof frame.sessionId !== "string" || frame.sessionId.length === 0) {
+      return undefined;
+    }
+    return raw as TransportFrame;
   }
   if (frame.event !== undefined) {
     const e = frame.event as Record<string, unknown> | null;
@@ -531,6 +555,35 @@ export function createEventBus(
     rs.pending.clear();
   }
 
+  /**
+   * A heartbeat states the origin's high-water transportSeq. Because heartbeats
+   * ride the same per-session outbox as real frames, one with seq N arrives
+   * only after real frame N. So `senderSeq < expected` means we are caught up;
+   * `senderSeq >= expected` means frame(s) in [expected, senderSeq] were lost
+   * with no successor to trip the normal gap path — surface it as a reset.
+   */
+  function handleHeartbeat(rs: ReceiveState, senderSeq: number): void {
+    if (senderSeq < rs.expected) return; // caught up (or a stale heartbeat)
+    if (rs.timer) {
+      clearTimeout(rs.timer);
+      rs.timer = undefined;
+    }
+    console.warn(
+      `[EventBus] transport tail gap (expected ${rs.expected}, sender high-water ${senderSeq}) — resetting replay`,
+    );
+    rs.chain = rs.chain
+      .then(() => invalidateReplay(rs.sessionId))
+      .catch((err) => {
+        console.error("[EventBus] replay invalidation failed:", err);
+      });
+    // Deliver whatever is parked, in order, skipping the hole(s).
+    const seqs = [...rs.pending.keys()].sort((a, b) => a - b);
+    for (const seq of seqs) scheduleDeliver(rs, rs.pending.get(seq)!);
+    rs.pending.clear();
+    const maxParked = seqs.length > 0 ? seqs[seqs.length - 1]! : 0;
+    rs.expected = Math.max(senderSeq, maxParked) + 1;
+  }
+
   function handleTransportFrame(payload: string): void {
     const frame = parseTransportFrame(payload);
     if (!frame) {
@@ -538,12 +591,18 @@ export function createEventBus(
       return;
     }
     if (frame.origin === originId) return; // self-echo
-    const sessionId = frame.event?.sessionId ?? frame.ref!.sessionId;
+    const sessionId =
+      frame.event?.sessionId ?? frame.ref?.sessionId ?? frame.sessionId;
+    if (!sessionId) return; // malformed (no session to route to)
     const stream = frame.stream ?? "legacy";
     const rs = getReceiveState(
       JSON.stringify([frame.origin, sessionId, stream]),
       sessionId,
     );
+    if (frame.heartbeat) {
+      handleHeartbeat(rs, frame.seq);
+      return;
+    }
     if (frame.seq < rs.expected) return; // duplicate/late
     if (frame.seq === rs.expected) {
       scheduleDeliver(rs, frame);
@@ -569,8 +628,49 @@ export function createEventBus(
     }
   }
 
+  /**
+   * Publish a liveness heartbeat per active fanned-out session (audit
+   * 2026-07-16 M-1). Rides the same per-session outbox as real frames, so the
+   * seq it carries is a safe high-water mark that never races ahead of an
+   * in-flight real frame.
+   */
+  function emitTransportHeartbeats(): void {
+    if (!transport) return;
+    for (const [sessionId, state] of sessions) {
+      if (state.transportSeq <= 0) continue; // never fanned out — nothing to signal
+      // Capture seq + epoch NOW, at enqueue time. Reading them inside the task
+      // would let an emit() that lands between this tick and the task's
+      // microtask bump transportSeq first, so the heartbeat would claim that
+      // frame's seq and (being enqueued earlier) publish before it — a false
+      // gap + dropped frame on the receiver. Capturing here keeps the exact
+      // invariant: heartbeat(seq N) is enqueued after frame N and before frame
+      // N+1, so FIFO publish order never lets it overtake a real frame.
+      const seq = state.transportSeq;
+      const epoch = state.epoch;
+      enqueueOutbox(sessionId, () => {
+        // Skip if replay was invalidated since enqueue (epoch rolled, seq reset).
+        if (state.epoch !== epoch) return Promise.resolve();
+        const frame = JSON.stringify({
+          origin: originId,
+          stream: epoch,
+          seq,
+          heartbeat: true,
+          sessionId,
+        } satisfies TransportFrame);
+        return Promise.resolve(transport.publish(frame));
+      });
+    }
+  }
+
   if (transport) {
     transport.subscribe(handleTransportFrame);
+    // unref so the heartbeat never keeps the process alive on its own; it dies
+    // with the process on shutdown (the bus is a process-lifetime singleton).
+    const heartbeatTimer = setInterval(
+      emitTransportHeartbeats,
+      TRANSPORT_HEARTBEAT_MS,
+    );
+    heartbeatTimer.unref?.();
   }
 
   const bus: EventBus = {
