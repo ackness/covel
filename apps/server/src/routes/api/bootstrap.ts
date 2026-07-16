@@ -59,10 +59,7 @@ import type { MediaStore } from "@covel/store";
 import type { MediaStoreBackend, VectorBackend } from "@covel/store";
 import { resumeRoutes } from "./resume.js";
 import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
-import {
-  sweepStalePendingJobs,
-  JOB_SWEEP_INTERVAL_MS,
-} from "./plugin-rpc/jobs.js";
+import { sweepStalePendingJobs } from "./plugin-rpc/jobs.js";
 import { snapshotRoutes } from "./snapshots.js";
 import { lorebookRoutes } from "./lorebook.js";
 import { runtimeOutputRoutes } from "./runtime-outputs.js";
@@ -194,12 +191,6 @@ export interface ApiBootstrapResult {
    * the cache for that session).
    */
   readonly prepareToolsForSession: (sessionId: string) => Promise<void>;
-  /**
-   * Stop the periodic background sweeps (orphaned-job reaper). Called by the
-   * graceful-shutdown drain; the timer is also `unref()`'d so it never blocks
-   * process exit on its own.
-   */
-  readonly stopBackgroundSweeps: () => void;
 }
 
 // ── Bootstrap function ───────────────────────────────────────────
@@ -274,21 +265,6 @@ export async function bootstrapApi(
       err instanceof Error ? err.message : String(err),
     ),
   );
-
-  // Audit 2026-07-16 M-2: the one-time boot sweep skips jobs younger than the
-  // staleness threshold and never re-scans, so a job that was pending for
-  // <threshold before a crash would hang `pending` forever. Re-run on an
-  // interval so such a job is reaped once it ages past the threshold. unref()'d
-  // so it never keeps the process alive; cleared on shutdown via the disposer.
-  const jobSweepTimer = setInterval(() => {
-    void sweepStalePendingJobs(store).catch((err: unknown) =>
-      console.warn(
-        "[job-sweep] periodic sweep failed:",
-        err instanceof Error ? err.message : String(err),
-      ),
-    );
-  }, JOB_SWEEP_INTERVAL_MS);
-  jobSweepTimer.unref();
 
   const { registry, discoveryMap, manifestCache } =
     await discoverAndRegisterPlugins({
@@ -651,6 +627,5 @@ export async function bootstrapApi(
     eventBus,
     compactorRunner,
     prepareToolsForSession,
-    stopBackgroundSweeps: () => clearInterval(jobSweepTimer),
   };
 }

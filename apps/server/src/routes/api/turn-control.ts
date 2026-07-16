@@ -92,21 +92,3 @@ export function abortActiveTurn(sessionId: string): { turnId: string } | null {
 export function hasActiveTurn(sessionId: string): boolean {
   return activeTurns.has(sessionId);
 }
-
-/**
- * Resolve once no session has an in-flight turn, or after `deadlineMs`
- * (whichever comes first). Graceful shutdown calls this before closing the
- * store so an in-flight commit is not torn out from under a turn (audit
- * 2026-07-16 L-6). The caller (`drainPhase`) also time-boxes it, so a stuck
- * turn can never block shutdown indefinitely — worst case the store closes and
- * the turn's transaction rolls back, exactly as before.
- */
-export async function awaitActiveTurnsDrained(
-  deadlineMs: number,
-  pollMs = 50,
-): Promise<void> {
-  const deadline = Date.now() + deadlineMs;
-  while (activeTurns.size > 0 && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, pollMs));
-  }
-}

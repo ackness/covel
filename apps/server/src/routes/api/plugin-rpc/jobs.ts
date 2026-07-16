@@ -124,13 +124,6 @@ export async function writePluginJob(
 const STALE_PENDING_JOB_MS = 15 * 60_000;
 
 /**
- * How often the periodic re-sweep runs (audit 2026-07-16 M-2). Smaller than
- * the staleness threshold so a job orphaned just before a crash is reaped soon
- * after it crosses `STALE_PENDING_JOB_MS`, instead of only at the next boot.
- */
-export const JOB_SWEEP_INTERVAL_MS = 5 * 60_000;
-
-/**
  * One-shot boot sweep: mark stale `pending` background-job rows as `failed`
  * so clients polling a job that died with a previous process get a terminal
  * status instead of an eternal spinner. Best-effort — callers fire-and-forget.
@@ -167,15 +160,8 @@ export async function sweepStalePendingJobs(
         readonly turnId?: string;
       };
       if (value?.status !== "pending") continue;
-      // Freshness is the last write to the row (`updatedAt`), not its start:
-      // the sweep now runs periodically (not only at boot), so a job that
-      // writes progress must keep itself alive. `updatedAt` starts equal to
-      // `startedAt` and only moves forward, so a job that never writes progress
-      // still ages out at `staleMs` from its start (unchanged boot behavior).
-      const lastActivityMs = Date.parse(row.updatedAt);
-      if (Number.isFinite(lastActivityMs) && now - lastActivityMs < staleMs) {
-        continue;
-      }
+      const startedAtMs = Date.parse(value.startedAt ?? row.updatedAt);
+      if (Number.isFinite(startedAtMs) && now - startedAtMs < staleMs) continue;
 
       const startedAt = value.startedAt ?? row.createdAt;
       const completedAt = new Date(now).toISOString();

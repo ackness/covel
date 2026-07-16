@@ -8,7 +8,6 @@ import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
 import {
   abortActiveTurn,
-  awaitActiveTurnsDrained,
   hasActiveTurn,
   registerActiveTurn,
   steerActiveTurn,
@@ -45,26 +44,6 @@ describe("turn-control registry", () => {
     expect(hasActiveTurn("sess-2")).toBe(true);
     second.release();
     expect(hasActiveTurn("sess-2")).toBe(false);
-  });
-
-  it("awaitActiveTurnsDrained resolves once turns release, and honors the deadline (L-6)", async () => {
-    // Resolves immediately when nothing is in flight.
-    await awaitActiveTurnsDrained(1000);
-
-    const turn = registerActiveTurn("sess-drain", "turn-d");
-    expect(hasActiveTurn("sess-drain")).toBe(true);
-    // Release shortly after; the wait must resolve once the turn is gone.
-    setTimeout(() => turn.release(), 20);
-    await awaitActiveTurnsDrained(1000, 5);
-    expect(hasActiveTurn("sess-drain")).toBe(false);
-
-    // A turn that never releases must not hang the wait past the deadline.
-    const stuck = registerActiveTurn("sess-stuck", "turn-s");
-    const start = Date.now();
-    await awaitActiveTurnsDrained(60, 5);
-    expect(Date.now() - start).toBeLessThan(1000);
-    expect(hasActiveTurn("sess-stuck")).toBe(true);
-    stuck.release();
   });
 });
 
