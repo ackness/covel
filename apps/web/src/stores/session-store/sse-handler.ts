@@ -256,25 +256,29 @@ export function createSseEventHandler(
         const completedKind =
           (payload.kind as string) ??
           deps.runtimeKindRef.current.get(runtimeId);
-        if (content && completedKind === "story") {
-          // Flush a same-frame delta before replacing its placeholder, then drop
-          // the external live buffer. The completed payload is authoritative.
+        if (completedKind === "story") {
+          // A story runtime's stream is finished. Always flush the same-frame
+          // delta and drop the external live buffer — even on empty content —
+          // so stale partial text can't linger on screen (audit 2026-07-16
+          // L-11). Only publish an authoritative message when content exists.
           flushNarrativeDeltaBuffer(deps);
           clearStreamingText(`stream_${turnId ?? "unknown"}_${runtimeId}`);
-          const msg: StreamMessage = {
-            id: msgId,
-            role: "assistant",
-            content,
-            timestamp: envelope.timestamp,
-            turnId,
-            runtimeId: runtimeId !== "unknown" ? runtimeId : undefined,
-          };
-          deps.dispatch({
-            type: "COMPLETE_MESSAGE",
-            turnId: turnId ?? "unknown",
-            runtimeId,
-            message: msg,
-          });
+          if (content) {
+            const msg: StreamMessage = {
+              id: msgId,
+              role: "assistant",
+              content,
+              timestamp: envelope.timestamp,
+              turnId,
+              runtimeId: runtimeId !== "unknown" ? runtimeId : undefined,
+            };
+            deps.dispatch({
+              type: "COMPLETE_MESSAGE",
+              turnId: turnId ?? "unknown",
+              runtimeId,
+              message: msg,
+            });
+          }
         }
 
         if (content) {
