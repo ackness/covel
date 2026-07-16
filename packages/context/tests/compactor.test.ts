@@ -159,6 +159,27 @@ describe("maybeCompact", () => {
       expect(store.tagTurnMessagesCompacted).toHaveBeenCalledOnce();
     });
 
+    it("files the context.compacted trace under the turn traceId when provided (L-8)", async () => {
+      const messages = makeSimpleHistory(20);
+      const deps: CompactorDeps = {
+        store,
+        estimator,
+        fastSlotLlm,
+        contextWindow: 1_000,
+      };
+
+      const result = await maybeCompact("sess-1", "", messages, deps, {
+        threshold: 0.6,
+        traceId: "turn-trace-123",
+      });
+
+      expect(result.compacted).toBe(true);
+      const traceCall = vi
+        .mocked(store.addTraceEvent)
+        .mock.calls.find(([e]) => e.type === "context.compacted");
+      expect(traceCall?.[0].traceId).toBe("turn-trace-123");
+    });
+
     it("skips compaction when the fast LLM returns empty/whitespace content", async () => {
       const messages = makeSimpleHistory(20);
       const deps: CompactorDeps = {

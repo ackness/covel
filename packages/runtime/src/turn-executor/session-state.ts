@@ -107,6 +107,7 @@ export async function loadTurnSessionState(args: {
         "",
         freshMessages,
         input.locale,
+        deps.emitter?.traceId,
       );
       await runPostCompactionHook(hookOpts, {
         compacted: result.compacted,
