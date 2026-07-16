@@ -562,6 +562,44 @@ describe("Resume Routes", () => {
 
       expect(res.status).toBe(404);
     });
+
+    // Audit 2026-07-16 H-1: this DELETE must enforce the session-owner guard
+    // on hosted tiers like its sibling routes, not just a sessionId consistency
+    // check. Anonymous deletion of another session's suspension is a
+    // cross-tenant destructive write.
+    it("denies anonymous suspension deletion on a hosted tier (owner guard)", async () => {
+      const prevTier = process.env.DEPLOYMENT_TIER;
+      const prevOp = process.env.COVEL_DESKTOP_REST_TOKEN;
+      process.env.DEPLOYMENT_TIER = "commercial";
+      process.env.COVEL_DESKTOP_REST_TOKEN = "operator-secret";
+      try {
+        await createSuspension(store);
+        const app = createTestApp(makeDefaultDeps(store));
+
+        const anon = await app.request(
+          "/api/sessions/sess-1/suspensions/susp-1",
+          { method: "DELETE" },
+        );
+        expect(anon.status).toBe(401);
+        // The denied attempt must not have deleted the suspension.
+        expect(await store.getSuspension("susp-1")).not.toBeNull();
+
+        // The operator master credential passes the guard and deletes.
+        const op = await app.request(
+          "/api/sessions/sess-1/suspensions/susp-1",
+          {
+            method: "DELETE",
+            headers: { authorization: "Bearer operator-secret" },
+          },
+        );
+        expect(op.status).toBe(200);
+      } finally {
+        if (prevTier === undefined) delete process.env.DEPLOYMENT_TIER;
+        else process.env.DEPLOYMENT_TIER = prevTier;
+        if (prevOp === undefined) delete process.env.COVEL_DESKTOP_REST_TOKEN;
+        else process.env.COVEL_DESKTOP_REST_TOKEN = prevOp;
+      }
+    });
   });
 
   describe("GET /api/sessions/:id/suspensions", () => {
