@@ -48,17 +48,25 @@ export function useAutoScroll(
     [thresholdPx],
   );
 
+  const scrollHandlerRef = useRef<(() => void) | null>(null);
   const scrollRef = useCallback(
     (node: HTMLElement | null) => {
       const prev = viewportRef.current;
-      if (prev) prev.onscroll = null;
+      // `addEventListener` handlers are not removed by clearing `.onscroll`, so
+      // keep the handler ref and detach it explicitly on node swap (L-12).
+      if (prev && scrollHandlerRef.current) {
+        prev.removeEventListener("scroll", scrollHandlerRef.current);
+      }
       viewportRef.current = node;
+      scrollHandlerRef.current = null;
       if (!node) return;
-      node.addEventListener("scroll", () => {
+      const handler = () => {
         const atBottom = computeIsAtBottom(node);
         isPinnedRef.current = atBottom;
         setShowJumpButton((cur) => (cur === !atBottom ? cur : !atBottom));
-      });
+      };
+      scrollHandlerRef.current = handler;
+      node.addEventListener("scroll", handler);
     },
     [computeIsAtBottom],
   );

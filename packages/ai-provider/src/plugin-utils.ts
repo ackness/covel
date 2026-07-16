@@ -106,11 +106,23 @@ export async function fetchWithRetry(
     // following changed DNS to an address that was never policy-checked.
     const dispatcher = await createPinnedDispatcher(url);
     try {
-      return await fetch(input, {
+      // Only the initial URL is SSRF-checked; a redirect Location is not, and
+      // undici skips the pinning lookup for an IP-literal host. Follow the core
+      // provider path: force manual redirect handling and fail closed on a 3xx
+      // so a `302 Location: http://169.254.169.254/…` can't reach internal
+      // hosts. `redirect` is placed after `...rest` to override any caller value.
+      const response = await fetch(input, {
         ...rest,
+        redirect: "manual",
         ...(signal ? { signal } : {}),
         dispatcher,
       } as RequestInit);
+      if (response.status >= 300 && response.status < 400) {
+        throw new Error(
+          `baseUrl rejected by SSRF policy: refusing to follow redirect (HTTP ${response.status}) from "${url}".`,
+        );
+      }
+      return response;
     } finally {
       // close() drains active response bodies before releasing the pool, so it
       // is safe to start shutdown once fetch has returned the response headers.

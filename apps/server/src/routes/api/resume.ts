@@ -363,6 +363,9 @@ resumeRoutes.post("/:id/resume", async (c) => {
 // ── DELETE (abandon) ─────────────────────────────────────────────
 
 resumeRoutes.delete("/:id/suspensions/:suspensionId", async (c) => {
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+
   const sessionId = c.req.param("id");
   const suspensionId = c.req.param("suspensionId");
   const store = c.get("store");

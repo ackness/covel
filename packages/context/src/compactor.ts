@@ -64,6 +64,12 @@ export interface CompactorOptions {
   /** Deduped list of focus sections from active plugins' summaryFocus fields. */
   readonly focusSections?: readonly string[];
   readonly locale?: "zh-CN" | "en-US";
+  /**
+   * The current turn's traceId. When set, the `context.compacted` trace event
+   * is filed under it so it is queryable alongside the rest of the turn instead
+   * of under a standalone summaryId (audit 2026-07-16 L-8).
+   */
+  readonly traceId?: string;
 }
 
 export interface CompactorResult {
@@ -90,6 +96,8 @@ export interface CompactorRunner {
      * instead of always falling back to zh-CN.
      */
     locale?: string,
+    /** Current turn's traceId, so the compaction trace joins the turn (L-8). */
+    traceId?: string,
   ): Promise<CompactorResult>;
 }
 
@@ -352,7 +360,7 @@ export async function maybeCompact(
       id: crypto.randomUUID(),
       sessionId,
       type: "context.compacted",
-      traceId: summaryId,
+      traceId: opts?.traceId ?? summaryId,
       turnId: turnRangeEnd,
       payload: {
         summaryId,

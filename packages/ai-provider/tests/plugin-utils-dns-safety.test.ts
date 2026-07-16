@@ -80,6 +80,22 @@ describe("DNS SSRF safety", () => {
     });
   });
 
+  it("refuses to follow a redirect (SSRF via 3xx Location to an IP-literal)", async () => {
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, {
+        status: 302,
+        headers: { location: "http://169.254.169.254/latest/meta-data/" },
+      }),
+    );
+
+    await expect(
+      fetchWithRetry("https://provider.example.test/v1", { maxRetries: 0 }),
+    ).rejects.toThrow(/refusing to follow redirect/);
+    // The initial request must have opted out of automatic redirect following.
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ redirect: "manual" });
+  });
+
   it("only allows localhost when every DNS answer is loopback", async () => {
     lookupMock.mockResolvedValue([{ address: "10.0.0.8", family: 4 }]);
     const fetchMock = vi.spyOn(globalThis, "fetch");
