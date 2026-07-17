@@ -54,6 +54,11 @@ export interface SelectOpts {
    * a table without transferring a large JSON column (snapshot metadata).
    */
   readonly columns?: Record<string, Column | SQL>;
+  /**
+   * GROUP BY clause — pair with an aggregate expression in `columns` (e.g.
+   * `sql\`count(*)\``) to resolve counts store-side instead of streaming rows.
+   */
+  readonly groupBy?: readonly (Column | SQL)[];
 }
 
 /** One row of an atomic batch upsert: insert payload + optional conflict. */

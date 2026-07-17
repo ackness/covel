@@ -20,7 +20,7 @@
  *    return unified across both backends.
  */
 
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
 
 import { cursorPageOrder, cursorPageWhere } from "./cursor.js";
@@ -47,6 +47,7 @@ import type {
   SessionSummaryRecord,
   TraceEventRecord,
   TurnMessageRecord,
+  TurnMessageStats,
 } from "../types.js";
 
 type TraceEventsTable = Table & {
@@ -58,6 +59,9 @@ type TurnMessagesTable = Table & {
   sessionId: Column;
   createdAt: Column;
   id: Column;
+  sourceType: Column;
+  sourceRuntimeId: Column;
+  compactedAtTurnId: Column;
 };
 type PlayerInputsTable = Table & { sessionId: Column; formId: Column };
 type SessionSummariesTable = Table & { sessionId: Column };
@@ -89,6 +93,8 @@ export type SqlSessionJournalRecords = Pick<
   | "listTraceEventsPage"
   | "appendTurnMessage"
   | "listTurnMessages"
+  | "listUncompactedTurnMessages"
+  | "getTurnMessageStats"
   | "listRecentTurnMessages"
   | "tagTurnMessagesCompacted"
   | "savePlayerInput"
@@ -150,6 +156,49 @@ export function createSqlSessionJournalRecords(
         offset: pagination?.offset,
       });
       return rows.map((row) => toTurnMessageRecord(row, json));
+    },
+
+    async listUncompactedTurnMessages(
+      sessionId: string,
+    ): Promise<TurnMessageRecord[]> {
+      const rows = await runner.select<TurnMessageRow>(turnMessages, {
+        where: and(
+          eq(turnMessages.sessionId, sessionId),
+          isNull(turnMessages.compactedAtTurnId),
+        ),
+        orderBy: [asc(turnMessages.createdAt)],
+      });
+      return rows.map((row) => toTurnMessageRecord(row, json));
+    },
+
+    async getTurnMessageStats(sessionId: string): Promise<TurnMessageStats> {
+      // Single grouped count over (sourceType, sourceRuntimeId); COUNT(*)
+      // arrives as number on SQLite and string on PG, so normalise via Number.
+      const rows = await runner.select<{
+        sourceType: string;
+        sourceRuntimeId: string | null;
+        count: number | string;
+      }>(turnMessages, {
+        columns: {
+          sourceType: turnMessages.sourceType,
+          sourceRuntimeId: turnMessages.sourceRuntimeId,
+          count: sql`count(*)`,
+        },
+        where: eq(turnMessages.sessionId, sessionId),
+        groupBy: [turnMessages.sourceType, turnMessages.sourceRuntimeId],
+      });
+      let playerMessageCount = 0;
+      const runtimeMessageCounts: Record<string, number> = {};
+      for (const row of rows) {
+        const count = Number(row.count);
+        if (row.sourceType === "player") {
+          playerMessageCount += count;
+        } else if (row.sourceType === "runtime" && row.sourceRuntimeId) {
+          runtimeMessageCounts[row.sourceRuntimeId] =
+            (runtimeMessageCounts[row.sourceRuntimeId] ?? 0) + count;
+        }
+      }
+      return { playerMessageCount, runtimeMessageCounts };
     },
 
     async listRecentTurnMessages(

@@ -423,6 +423,127 @@ export function registerRuntimeRecordStoreSuites(
       expect(list[0].compactedAtTurnId).toBe("summary-preexisting");
     });
 
+    it("listUncompactedTurnMessages returns only the raw suffix, oldest-first", async () => {
+      const compacted1 = makeTurnMessage({
+        sessionId: "sess-unc",
+        createdAt: ts(10),
+        compactedAtTurnId: "summary-1",
+      });
+      const compacted2 = makeTurnMessage({
+        sessionId: "sess-unc",
+        createdAt: ts(20),
+        compactedAtTurnId: "summary-1",
+      });
+      const raw1 = makeTurnMessage({
+        sessionId: "sess-unc",
+        createdAt: ts(40),
+      });
+      const raw2 = makeTurnMessage({
+        sessionId: "sess-unc",
+        createdAt: ts(30),
+      });
+      const otherSession = makeTurnMessage({
+        sessionId: "sess-other",
+        createdAt: ts(50),
+      });
+      await store.appendTurnMessage(compacted1);
+      await store.appendTurnMessage(compacted2);
+      await store.appendTurnMessage(raw1);
+      await store.appendTurnMessage(raw2);
+      await store.appendTurnMessage(otherSession);
+
+      const list = await store.listUncompactedTurnMessages("sess-unc");
+      expect(list.map((m) => m.id)).toEqual([raw2.id, raw1.id]);
+    });
+
+    it("listUncompactedTurnMessages reflects tagTurnMessagesCompacted", async () => {
+      const m1 = makeTurnMessage({
+        sessionId: "sess-unc-tag",
+        createdAt: ts(10),
+      });
+      const m2 = makeTurnMessage({
+        sessionId: "sess-unc-tag",
+        createdAt: ts(20),
+      });
+      await store.appendTurnMessage(m1);
+      await store.appendTurnMessage(m2);
+      await store.tagTurnMessagesCompacted(
+        "sess-unc-tag",
+        [m1.id],
+        "summary-x",
+      );
+
+      const list = await store.listUncompactedTurnMessages("sess-unc-tag");
+      expect(list.map((m) => m.id)).toEqual([m2.id]);
+    });
+
+    it("getTurnMessageStats aggregates player and per-runtime counts over the full log", async () => {
+      await store.appendTurnMessage(
+        makeTurnMessage({
+          sessionId: "sess-stats",
+          sourceType: "player",
+          role: "user",
+          createdAt: ts(10),
+        }),
+      );
+      await store.appendTurnMessage(
+        makeTurnMessage({
+          sessionId: "sess-stats",
+          sourceType: "player",
+          role: "user",
+          createdAt: ts(20),
+          // Compacted rows still count toward the aggregates.
+          compactedAtTurnId: "summary-1",
+        }),
+      );
+      await store.appendTurnMessage(
+        makeTurnMessage({
+          sessionId: "sess-stats",
+          sourceRuntimeId: "demo/narrator",
+          createdAt: ts(30),
+        }),
+      );
+      await store.appendTurnMessage(
+        makeTurnMessage({
+          sessionId: "sess-stats",
+          sourceRuntimeId: "demo/narrator",
+          createdAt: ts(40),
+        }),
+      );
+      await store.appendTurnMessage(
+        makeTurnMessage({
+          sessionId: "sess-stats",
+          sourceRuntimeId: "demo/codex",
+          createdAt: ts(50),
+        }),
+      );
+      // Runtime rows without a sourceRuntimeId and other sessions are ignored.
+      await store.appendTurnMessage(
+        makeTurnMessage({ sessionId: "sess-stats", createdAt: ts(60) }),
+      );
+      await store.appendTurnMessage(
+        makeTurnMessage({
+          sessionId: "sess-other",
+          sourceType: "player",
+          role: "user",
+          createdAt: ts(70),
+        }),
+      );
+
+      const stats = await store.getTurnMessageStats("sess-stats");
+      expect(stats.playerMessageCount).toBe(2);
+      expect(stats.runtimeMessageCounts).toEqual({
+        "demo/narrator": 2,
+        "demo/codex": 1,
+      });
+    });
+
+    it("getTurnMessageStats returns zeroed stats for an empty session", async () => {
+      const stats = await store.getTurnMessageStats("sess-none");
+      expect(stats.playerMessageCount).toBe(0);
+      expect(stats.runtimeMessageCounts).toEqual({});
+    });
+
     it("should support pagination with limit and offset", async () => {
       const m1 = makeTurnMessage({ sessionId: "sess-pg", createdAt: ts(10) });
       const m2 = makeTurnMessage({ sessionId: "sess-pg", createdAt: ts(20) });

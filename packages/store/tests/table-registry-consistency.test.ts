@@ -23,6 +23,7 @@ import {
 } from "../src/table-registry.js";
 import { createTables } from "../src/sqlite/sqlite-schema-ddl.js";
 import { ALL_TABLE_NAMES } from "../src/postgres/pg-schema-ddl.js";
+import { IDB_OBJECT_STORES } from "../src/indexeddb/idb-db.js";
 import { MEMORY_SNAPSHOT_COLLECTIONS } from "../src/memory/transaction-methods.js";
 import { createMemoryState } from "../src/memory/memory-state.js";
 import * as sqliteSchema from "../src/sqlite/schema.js";
@@ -133,6 +134,19 @@ describe("table registry consistency", () => {
       expect(dropSet.has(table), `${table} missing from ALL_TABLE_NAMES`).toBe(
         true,
       );
+    }
+  });
+
+  it("maps every registry table to a declared IDB object store", () => {
+    // Guards the IDB cascade: the browser backend derives deleteSession from
+    // `idbStore`, so a registry entry pointing at a non-existent object store
+    // would silently leak orphaned rows. A typo fails here instead of in prod.
+    const idbStores = new Set<string>(IDB_OBJECT_STORES);
+    for (const { table, idbStore } of SESSION_SCOPED_TABLES) {
+      expect(
+        idbStores.has(idbStore),
+        `registry table "${table}" points at IDB store "${idbStore}" which is not in IDB_OBJECT_STORES`,
+      ).toBe(true);
     }
   });
 

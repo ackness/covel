@@ -352,6 +352,20 @@ export interface TraceStore {
   ): Promise<TraceEventRecord[]>;
 }
 
+/**
+ * Whole-session turn-message aggregates, computed store-side so the per-turn
+ * pipeline never has to load the full message history just to count it.
+ */
+export interface TurnMessageStats {
+  /** Total messages with `sourceType === "player"` (the turn number). */
+  readonly playerMessageCount: number;
+  /**
+   * Total messages per `sourceRuntimeId` for `sourceType === "runtime"` rows
+   * (the per-runtime trigger counts used by `maxTriggerCount`).
+   */
+  readonly runtimeMessageCounts: Readonly<Record<string, number>>;
+}
+
 /** Append-only turn-message log. Part of `sql-session-journal-records`. */
 export interface TurnMessageStore {
   appendTurnMessage(record: TurnMessageRecord): Promise<void>;
@@ -359,6 +373,22 @@ export interface TurnMessageStore {
     sessionId: string,
     pagination?: PaginationOpts,
   ): Promise<TurnMessageRecord[]>;
+  /**
+   * List only messages NOT yet folded into a compaction summary
+   * (`compactedAtTurnId` unset), oldest-first. Because the compactor always
+   * tags a contiguous prefix of the timeline, this is exactly the raw suffix
+   * the prompt builder and the compactor itself operate on — the compacted
+   * prefix is represented by `listSessionSummaries` instead. With compaction
+   * enabled this read stays bounded for the life of a session, unlike
+   * {@link listTurnMessages}.
+   */
+  listUncompactedTurnMessages(sessionId: string): Promise<TurnMessageRecord[]>;
+  /**
+   * Aggregate counts over the FULL message log (compacted rows included),
+   * resolved as a grouped count query on SQL backends. Replaces the per-turn
+   * "load every row and count in JS" scan.
+   */
+  getTurnMessageStats(sessionId: string): Promise<TurnMessageStats>;
   /**
    * Return the **most recent** `limit` turn messages, ordered oldest-first
    * (the tail of {@link listTurnMessages}).
