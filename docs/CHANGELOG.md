@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.16] - 2026-07-17
+
+Performance, correctness, and reliability release. Context budgets are now derived from real model capabilities, per-turn history reads are bounded so long sessions stay fast, and a repository-wide six-dimension audit closed a batch of dead code, stale-doc, logging, and cross-backend-consistency gaps. New capability: **deferred tool loading** (`tools.defer`) lets runtimes with large tool whitelists keep the prompt small and let the model search tools on demand. Reliability fixes harden the shutdown drain, background-job sweep, event tail-frame delivery, and hosted-tier owner-token enforcement.
+
+### Added
+
+- **Deferred tool loading (`tools.defer`)** — a runtime may defer part or all of its tool whitelist; deferred tools stay registered and authorized but are withheld from the initial LLM tool list, and the framework injects a `search-tools` tool that ranks the deferred pool with a zero-dependency BM25 (CJK-aware) and activates matches for the rest of the turn. Modeled on openai/codex's `tool_search`. See [docs/reference/tools.md](./reference/tools.md#search-tools框架注入延迟工具加载).
+- **Capability-driven context budgets** — compaction thresholds and prompt budgets are derived per model from detected token limits, plus per-model USD cost estimation on the debug Cost view.
+- **Configurable chat window cap** (`ui.chatMessageWindow`, default 2000) — live message appends are bounded in memory; dropped rows remain re-fetchable via the existing scroll-up path.
+
+### Changed
+
+- **Bounded per-turn history reads** — `loadTurnSessionState` no longer full-reads the whole `turn_messages` log every turn. New `DataStore` methods `listUncompactedTurnMessages`, `listTurnMessagesAfter` (forward keyset), and `getTurnMessageStats` (grouped aggregate) keep reads bounded as a session grows; the semantic-memory recall ingestion walks the log by cursor instead of re-reading and re-sorting it.
+- **IndexedDB `deleteSession` cascade** now derives from `SESSION_SCOPED_TABLES`, matching the SQL/Memory backends — a newly registered session table can no longer silently leak rows on the browser backend.
+- **Removed two zero-caller extension seams** — the `findToolClient` tool-client resolver and the per-runtime `getConfigFn` / `ctx.config` / `{{ config.* }}` chain (always empty in production) were deleted end to end.
+- **Framework/plugin isolation and docs** — removed a write-only `blockSchemas` chain, retired an unread env-registry entry, closed authoring-contract drift, and synced all reference/guide docs to the current architecture.
+
+### Fixed
+
+- **SSRF self-tier core-provider path** — the DNS-pinning guard rejected provider hosts on machines running a TUN proxy (Clash/mihomo/sing-box/Surge fake-IP maps every domain into a private/benchmark range) or a LAN Ollama endpoint. The `self` tier now accepts any resolver answer on the user's own configured `baseUrl` (socket still pinned); plugin `ctx.http`, IP-literal URLs, and hosted tiers stay strict.
+- **Settings persistence on the REST-desktop tier** — self-host setups without the Electron IPC bridge now persist settings to `~/.covel/settings.json` instead of silently falling back to `localStorage`; the settings REST backend surfaces failed writes instead of swallowing them.
+- **Plugin-panel re-render storm** — plugin-data store snapshots are scoped per `(pluginId, namespace)`, so an unrelated plugin's data write no longer re-renders every active panel.
+- **Malformed JSON bodies** now return `400 invalid_json_body` instead of a generic 500 across ~13 API routes (shared `readJsonBody` helper).
+- **Shutdown drain** flushes in-flight turns before closing the store; **background-job sweep** periodically reclaims orphaned pending jobs; **event delivery** detects lost tail frames via a transport heartbeat.
+- **Hosted-tier auth hardening** — owner-token hash stripped from responses, event injection gated, owner guard enforced on the resume `DELETE` suspension route; desktop IPC sender-origin checks extended to the remaining channels.
+- **Observability & logging** — turn-executor and shutdown paths keep error stacks instead of `err.message` only, the Data Explorer and model-db refresh catch paths log, and `[component]` prefixes are consistent.
+
 ## [0.0.15] - 2026-07-16
 
 Security and reliability hardening release. A full-repository audit and two follow-up remediation rounds closed the credential, trust-boundary, transaction-consistency, and event-delivery gaps that made the previous build unsafe to expose on a public, multi-user, or multi-instance deployment. Local single-user `self`/desktop play is unchanged by default; the new hosted-tier controls are opt-in via `DEPLOYMENT_TIER`.
