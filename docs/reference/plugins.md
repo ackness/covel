@@ -1453,6 +1453,18 @@ Covel 的核心设计原则是**插件承载游戏逻辑，框架提供原语和
 
 当框架需要区分插件行为时，应在 `RuntimeManifest` 中添加通用字段（如 `outputKind`、`capabilities`），而非在框架代码中添加条件分支。
 
+### 延迟工具加载：`tools.defer`
+
+工具白名单较大（>~10 个）的 runtime 可以声明延迟加载，避免每次 LLM 调用都全量预载所有工具 schema：
+
+```yaml
+tools:
+  plugin: [tool-a, tool-b, tool-c, ...] # entry 注册的工具名
+  defer: true # true = 延迟整个白名单；或 [tool-a, tool-b] 精确列出
+```
+
+被延迟的工具**照常注册、照常鉴权**，只是不进初始 LLM 工具清单；框架自动注入 `search-tools`（BM25 检索，中英文均可），LLM 检索命中的工具自下一步起可直接调用，激活状态持续到本 turn 结束。`defer` 数组中不在白名单内的名字会被忽略——延迟声明永远不能授予未声明的工具。详见 [docs/reference/tools.md](./tools.md#search-tools框架注入延迟工具加载)。
+
 ### Runtime 输出字段：`preGameDone`
 
 Pre-Game 段 runtime（priority `0-99`）可在 `RuntimeOutput` 中声明：

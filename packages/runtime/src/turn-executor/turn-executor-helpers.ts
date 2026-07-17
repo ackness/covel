@@ -13,6 +13,11 @@ import type {
   ToolExecutor,
 } from "../agent-loop/tool-executor.js";
 import type { LLMToolDefinition } from "../llm/llm-adapter.js";
+import {
+  buildSearchToolsDefinition,
+  declaredToolNames,
+  resolveDeferredToolNames,
+} from "../agent-loop/tool-search.js";
 import { isPreGamePriority } from "../schedule/scheduler.js";
 
 /**
@@ -63,21 +68,13 @@ export function buildToolDefinitions(
   toolExecutor: ToolExecutor,
   context?: ToolCallContext,
 ): LLMToolDefinition[] | undefined {
-  const names: string[] = [
-    ...(manifest.tools?.builtin ?? []),
-    // Entry-registered plugin tools are declared by name.
-    ...(manifest.tools?.plugin ?? []),
-  ];
-
-  // For local tools, extract name from path (e.g., ./tools/unlock-codex-entries.ts → unlock-codex-entries)
-  for (const p of manifest.tools?.local ?? []) {
-    names.push(
-      p
-        .split("/")
-        .pop()
-        ?.replace(/\.[^.]+$/, "") ?? p,
-    );
-  }
+  // Deferred tools (tools.defer) are registered and authorized but withheld
+  // from the initial advertisement — the LLM discovers them through the
+  // injected `search-tools` tool (see agent-loop/tool-search.ts).
+  const deferred = resolveDeferredToolNames(manifest);
+  const names = declaredToolNames(manifest).filter(
+    (name) => !deferred.has(name),
+  );
 
   // Framework-contracted tool: `runtime-done` is auto-available to tool-using
   // agent runtimes so the LLM can exit immediately after completing business
@@ -88,7 +85,7 @@ export function buildToolDefinitions(
     names.push("runtime-done");
   }
 
-  if (names.length === 0) {
+  if (names.length === 0 && deferred.size === 0) {
     return undefined;
   }
 
@@ -110,6 +107,10 @@ export function buildToolDefinitions(
         parameters: { type: "object" },
       });
     }
+  }
+
+  if (deferred.size > 0) {
+    defs.push(buildSearchToolsDefinition(deferred.size, manifest.pluginId));
   }
 
   return defs.length > 0 ? defs : undefined;

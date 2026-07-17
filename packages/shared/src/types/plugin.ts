@@ -342,6 +342,18 @@ export interface ToolsConfig {
    * (registration itself happens in the plugin's `entry` module).
    */
   readonly plugin?: readonly string[];
+  /**
+   * Deferred tool loading (tool-search). `true` defers the runtime's entire
+   * whitelist; a string array defers just those tool names (for `local`
+   * entries, the name is the file basename without extension — same rule as
+   * LLM advertisement). Deferred tools stay registered and authorized but
+   * are omitted from the initial LLM tool list; the framework injects a
+   * `search-tools` tool instead, and tools the LLM discovers through it are
+   * activated for the rest of the current turn's agent loop. Use when the
+   * whitelist is large (>~10 tools) and per-call schema preloading would
+   * dominate the prompt budget.
+   */
+  readonly defer?: true | readonly string[];
 }
 
 // ── User-declared plugin settings ────────────────────────────────

@@ -58,6 +58,17 @@ export {
   isRuntimeDoneSentinel,
 } from "./builtin/runtime-done.js";
 export type { RuntimeDoneSentinel } from "./builtin/runtime-done.js";
+export {
+  SEARCH_TOOLS_TOOL_NAME,
+  SEARCH_TOOLS_DEFAULT_LIMIT,
+  SEARCH_TOOLS_MAX_LIMIT,
+  SEARCH_TOOLS_JSON_SCHEMA,
+  buildSearchToolsDescription,
+  rankToolSearchDocs,
+  tokenizeForToolSearch,
+  parameterSchemaSearchText,
+} from "./builtin/tool-search.js";
+export type { ToolSearchDoc } from "./builtin/tool-search.js";
 export { createMemoryTools } from "./builtin/memory-tools.js";
 export type { MemoryToolDeps } from "./builtin/memory-tools.js";
 export { createEmitEventTool } from "./builtin/emit-event.js";

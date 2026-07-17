@@ -19,12 +19,24 @@ import type {
   LLMToolDefinition,
 } from "../llm/llm-adapter.js";
 import { buildToolDefinitions } from "../turn-executor/turn-executor-helpers.js";
+import { resolveDeferredToolNames } from "./tool-search.js";
 import { buildRetryPolicy, type RetryPolicy } from "../retry/llm-retry.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
 
 export interface AgentLoopPolicy {
-  /** LLM tool definitions built from manifest declarations (once per run). */
+  /**
+   * LLM tool definitions built from manifest declarations (once per run).
+   * When `deferredToolNames` is non-empty this is the REDUCED surface
+   * (deferred schemas withheld, `search-tools` appended); the loop grows its
+   * own working copy as searches activate tools mid-run.
+   */
   readonly toolDefs: readonly LLMToolDefinition[] | undefined;
+  /**
+   * Tool names withheld from the initial advertisement (`tools.defer`).
+   * Non-empty ⇒ the loop intercepts `search-tools` calls and activates
+   * matches from this pool for the rest of the run.
+   */
+  readonly deferredToolNames: ReadonlySet<string>;
   /** JSON-schema response format when the runtime declares an output schema. */
   readonly responseFormat: LLMResponseFormat | undefined;
   /**
@@ -98,6 +110,9 @@ export function buildAgentLoopPolicy({
 
   return {
     toolDefs,
+    deferredToolNames: deps.toolExecutor
+      ? resolveDeferredToolNames(manifest)
+      : new Set<string>(),
     responseFormat: loaded.outputSchema
       ? { type: "json_schema" as const, schema: loaded.outputSchema }
       : undefined,

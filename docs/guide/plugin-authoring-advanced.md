@@ -245,6 +245,18 @@ interface PluginManifest {
 }
 ```
 
+### 大工具集：延迟加载（`tools.defer`）
+
+如果一个 runtime 的工具白名单很大（经验阈值 ~10 个以上），每次 LLM 调用都全量携带所有工具的 JSON schema 会持续挤占 prompt 预算。声明 `tools.defer` 可以把部分或全部工具改为**按需检索**：
+
+```yaml
+tools:
+  plugin: [attack, defend, cast-spell, brew-potion, forge-item, ...]
+  defer: true # 或 defer: [brew-potion, forge-item] 只延迟低频工具
+```
+
+行为：被延迟的工具不进初始工具清单，框架注入 `search-tools`；LLM 用能力关键词（中英文均可）检索，命中的工具**下一步起**直接可调用，激活持续到本 turn 结束。工具注册、信任门控、审批策略完全不变——只是 schema 广播时机变了。高频工具建议留在 `defer` 之外（省一步检索往返）。详细契约见 [tools.md 的 search-tools 小节](../reference/tools.md#search-tools框架注入延迟工具加载)。
+
 ## 6. 函数 Runtime、手动触发与后台执行
 
 `runtimeType: function` 表示"跳过 LLM,直接执行 JS 模块"。用于调用外部 API、做纯计算、写 plugin-data 等不需要 LLM 推理的场景。
