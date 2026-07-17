@@ -467,7 +467,6 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | ---- | ------------------------------ | --------------------------------------------------------------------------------------- |
 | GET  | `/api/presets`                 | 列出配置的模型预设                                                                      |
 | GET  | `/api/packages`                | 列出已加载插件包（含 runtime/tool/`userSettings`/`tags`/`relations` 信息）              |
-| GET  | `/api/block-schemas`           | 列出插件 block schema                                                                   |
 | GET  | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件 |
 | GET  | `/api/llm-config`              | 返回 slot 配置与能力信息；llm.toml 解析失败回退默认时附带 `error` 字段                  |
 | POST | `/api/llm-config/reload`       | 重读 llm.toml 并原地应用到运行中的 gateway（无需重启）；返回 `{ ok, slots, error? }`    |

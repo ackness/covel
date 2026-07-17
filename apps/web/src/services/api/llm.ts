@@ -173,15 +173,6 @@ export function mergeCapability(
   };
 }
 
-// -- Block Schemas -------------------------------------------------
-
-export async function fetchBlockSchemas(): Promise<Record<string, unknown>> {
-  const res = await request<{ schemas: Record<string, unknown> }>(
-    "/api/block-schemas",
-  );
-  return res.schemas;
-}
-
 // -- AI Ping -------------------------------------------------------
 
 /**

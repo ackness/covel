@@ -92,10 +92,6 @@ vi.mock("../../../services/data-service.js", () => ({
   })),
 }));
 
-vi.mock("../../../components/blocks/block-renderer.js", () => ({
-  setBlockSchemas: vi.fn(),
-}));
-
 vi.mock("i18next", () => ({
   default: { language: "zh-CN", t: vi.fn((k: string) => k) },
 }));

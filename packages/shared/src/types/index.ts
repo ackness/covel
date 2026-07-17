@@ -136,8 +136,6 @@ export type {
   UIRenderPartsInstruction,
   UIRenderLegacyInstruction,
   UIRenderInstruction,
-  BlockSchemaMeta,
-  BlockSchemaDeclaration,
 } from "./ui.js";
 
 export {

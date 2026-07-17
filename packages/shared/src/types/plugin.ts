@@ -332,7 +332,9 @@ export interface ToolsConfig {
   /**
    * Relative paths to local tool modules.
    * @deprecated Register tools imperatively in the unified `entry` module and
-   * list their names under `plugin` instead. Kept working for one cycle.
+   * list their names under `plugin` instead. All bundled plugins migrated in
+   * v0.0.14; this shim (and the legacy `hooks`/`rpc`/`wires` frontmatter
+   * fields) is planned for removal in v0.0.17.
    */
   readonly local?: readonly string[];
   /**

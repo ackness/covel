@@ -895,7 +895,7 @@ tools:
     - plugin-data-get
 ```
 
-> **弃用说明**：`tools.local` / `hooks` / `rpc` / `wires` 四个 frontmatter 注册字段自本版本起弃用（启动时每插件 warn 一次），保留一个发布周期后移除。内置插件已全部迁移到 `entry`。
+> **弃用说明**：`tools.local` / `hooks` / `rpc` / `wires` 四个 frontmatter 注册字段自 v0.0.14 起弃用（启动时每插件 warn 一次），**计划于 v0.0.17 移除**。内置插件已全部迁移到 `entry`；社区插件请尽快迁移。
 
 ### wires（媒体厂商 wire 注册，已弃用 — 改用 entry 的 `covel.registerWires`）
 

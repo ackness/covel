@@ -1,5 +1,5 @@
 /**
- * Miscellaneous API routes — presets, packages, commands, block-schemas, llm-config, provider-keys.
+ * Miscellaneous API routes — presets, packages, commands, llm-config, provider-keys.
  *
  * These endpoints are consumed by the frontend boot sequence.
  */
@@ -91,28 +91,6 @@ export function createMiscApiRoutes(
   app.get("/api/plugin-flows", async (c) => {
     const payload = await buildPluginFlowResponse();
     return c.json(payload);
-  });
-
-  // GET /api/block-schemas — list block schemas from plugin manifests
-  app.get("/api/block-schemas", (c) => {
-    const schemas: Record<string, unknown> = {};
-    const all = registry.getAll();
-    for (const [, entry] of all) {
-      const manifests =
-        entry.manifests ?? (entry.manifest ? [entry.manifest] : []);
-      for (const m of manifests) {
-        // blockSchemas may be declared in rawFrontmatter (from PLUGIN.md) or plugin.json
-        const bs = (m.rawFrontmatter as Record<string, unknown>).blockSchemas;
-        if (bs && typeof bs === "object") {
-          for (const [key, val] of Object.entries(
-            bs as Record<string, unknown>,
-          )) {
-            schemas[key] = val;
-          }
-        }
-      }
-    }
-    return c.json({ schemas });
   });
 
   // GET /api/ui-specs — list UI specs from plugin manifests, grouped by slot.

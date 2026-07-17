@@ -39,11 +39,4 @@ export const AI_ENV_VARS = [
     defaultValue: "debugs/llm-cache",
     description: "Documented dev LLM replay cache directory.",
   },
-  {
-    name: "COVEL_ALLOWED_LLM_HOSTS",
-    group: "ai",
-    type: "string",
-    status: "documented",
-    description: "Documented custom LLM host allowlist.",
-  },
 ] as const satisfies readonly EnvVarDefinition[];
