@@ -10,16 +10,16 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 
 ## 分组
 
-| group       | 用途                                                         |
-| ----------- | ------------------------------------------------------------ |
-| `storage`   | `STORE_BACKEND`、`DATABASE_URL`、SQLite / PostgreSQL 配置    |
-| `server`    | 端口、CORS、静态资源、部署层级、限流                         |
-| `desktop`   | Electron 注入给 server sidecar 的路径与桌面模式配置          |
-| `ai`        | LLM 配置、provider keys、Langfuse、模型数据库、prompt 根目录 |
-| `feature`   | 运行期功能开关                                               |
-| `web`       | Vite dev proxy 与浏览器侧公开变量                            |
-| `test`      | Playwright、live provider tests、e2e harness、开发脚本       |
-| `packaging` | Electron 签名、公证、updater 密钥                            |
+| group       | 用途                                                      |
+| ----------- | --------------------------------------------------------- |
+| `storage`   | `STORE_BACKEND`、`DATABASE_URL`、SQLite / PostgreSQL 配置 |
+| `server`    | 端口、CORS、静态资源、部署层级、限流                      |
+| `desktop`   | Electron 注入给 server sidecar 的路径与桌面模式配置       |
+| `ai`        | LLM 配置、provider keys、模型数据库、prompt 根目录        |
+| `feature`   | 运行期功能开关                                            |
+| `web`       | Vite dev proxy 与浏览器侧公开变量                         |
+| `test`      | Playwright、live provider tests、e2e harness、开发脚本    |
+| `packaging` | Electron 签名、公证、updater 密钥                         |
 
 ## 状态
 
@@ -57,6 +57,7 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 - `COVEL_BIND_HOST` 默认 `127.0.0.1`（audit S-02）：本地 / 桌面部署只监听回环接口，网络上不可达。容器或多 pod 部署需显式设置 `COVEL_BIND_HOST=0.0.0.0`（`docker/docker-compose.yml` 已内置）——这是一次显式的部署决策，公开监听前请确认 `DEPLOYMENT_TIER` 与鉴权配置。
 - `TRUSTED_PROXY_IPS`、`COVEL_LLM_REPLAY`、`COVEL_LLM_REPLAY_DIR`、`COVEL_ALLOWED_LLM_HOSTS` 目前标记为 `documented`，后续实现可以直接提升为 `active`。
 - `COVEL_TRACE_TRUNCATE` 标记为 `planned`，对应 debug trace 设计文档中的未来开关。
+- `COVEL_COMPACTOR_CONTEXT_WINDOW` 为**可选的显式覆盖**：未设置时，压缩阈值与 prompt 硬裁剪预算按当前叙事 slot（`default`，缺省为 llm.toml 首个 slot）的模型 capability `contextWindow` 动态解析（llm.toml 热重载即时生效），capability 也缺失时回退 `32768`。设置后固定使用该值，不再查 capability。
 - `COVEL_SNAPSHOT_INTERVAL_TURNS` 默认 `5`，控制 `kind=auto` 快照的 checkpoint 节奏：`turnCount <= 1`（pre-game 与首个正式回合）总是写入，其后每 N 回合写一份；`1` 表示每回合。resume 路径无视该节流强制写入。构建快照 payload 需要全量读取消息历史与全部 session-scoped 集合，逐回合写入会导致 O(T²) 成本与存储膨胀（audit 2026-07-11 R-04）。
 - `COVEL_MEDIA_CLEANUP_ENABLED` 默认 `false`，控制 `POST /api/media/cleanup` 的可用性。即使设为 `true`，`DEPLOYMENT_TIER=commercial` 时该端点仍强制 503，等待管理员鉴权中间件接入。详见 [`docs/reference/api.md`](../reference/api.md) 媒体管理章节。
 - `COVEL_PG_LOCK_POOL_MAX` 默认 `16`，控制 PG advisory session-lock 专用连接池的 `max`。每个进行中的 turn 占用一条 reserved 连接；多并发 pod 可按峰值并发会话数调大。锁获取超时（30s）覆盖连接池排队 + advisory lock 轮询全程。

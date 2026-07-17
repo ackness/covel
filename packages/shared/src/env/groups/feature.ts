@@ -6,8 +6,9 @@ export const FEATURE_ENV_VARS = [
     group: "feature",
     type: "integer",
     status: "active",
-    defaultValue: "32768",
-    description: "Compactor context window used for threshold comparisons.",
+    defaultValue: "(narrative slot model capability, else 32768)",
+    description:
+      "Explicit override for the context window used by the compactor and prompt budget. When unset, the active narrative slot's model capability contextWindow is used.",
   },
   {
     name: "COVEL_SNAPSHOT_INTERVAL_TURNS",

@@ -1,6 +1,27 @@
 import { describe, it, expect } from "vitest";
-import { applyBudget } from "@covel/context";
+import { applyBudget, estimateTokens } from "@covel/context";
 import type { TokenEstimator } from "@covel/context";
+
+describe("estimateTokens", () => {
+  it("estimates ASCII text at 4 chars per token", () => {
+    expect(estimateTokens("a".repeat(40))).toBe(10);
+  });
+
+  it("estimates CJK text at 1 token per character", () => {
+    expect(estimateTokens("春眠不觉晓")).toBe(5);
+    expect(estimateTokens("こんにちは")).toBe(5);
+    expect(estimateTokens("안녕하세요")).toBe(5);
+  });
+
+  it("handles mixed CJK and ASCII content", () => {
+    // 4 CJK chars (4 tokens) + 8 ASCII chars (2 tokens)
+    expect(estimateTokens("你好世界hello wo")).toBe(6);
+  });
+
+  it("returns 0 for empty string", () => {
+    expect(estimateTokens("")).toBe(0);
+  });
+});
 
 // Deterministic mock estimator: 1 token per 4 characters (rounded up).
 const mockEstimator: TokenEstimator = (text) => Math.ceil(text.length / 4);

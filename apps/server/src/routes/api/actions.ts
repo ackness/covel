@@ -19,6 +19,7 @@ import {
 } from "@covel/runtime";
 import type { CovelEventType, RuntimeManifest } from "@covel/shared";
 import { FORWARDED_EVENT_TYPES } from "@covel/shared";
+import { estimateTokens } from "@covel/context";
 import type { CompactorRunner } from "@covel/context";
 import { errorBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
@@ -38,6 +39,39 @@ import { checkSessionOwner } from "./session/session-guard.js";
 
 // SSE uses ProtocolEventType names directly — no legacy mapping.
 // Frontend handleSseEvent handles these standard types.
+
+/**
+ * Memory-system facade injected by bootstrap via `setMemorySystem()`. Kept
+ * out of `Env["Variables"]` because it never flows through Hono's
+ * `c.set`/`c.get` — see the module-level reference below.
+ */
+interface MemorySystemFacade {
+  readonly manager: {
+    loadBlocks(
+      sid: string,
+    ): Promise<
+      readonly { label: string; content: string; updatedAt: string }[]
+    >;
+    initializeDefaults(sid: string): Promise<void>;
+  };
+  readonly updater: {
+    updateAfterTurn(p: {
+      sessionId: string;
+      narrativeText: string;
+      toolCallSummaries?: readonly string[];
+      currentBlocks: readonly {
+        label: string;
+        content: string;
+        updatedAt: string;
+      }[];
+      locale?: string;
+    }): Promise<{
+      updated: boolean;
+      blocksChanged: readonly string[];
+      error?: string;
+    }>;
+  };
+}
 
 type Env = {
   Variables: {
@@ -61,33 +95,6 @@ type Env = {
     compactorRunner: CompactorRunner;
     mediaStore?: MediaStore;
     hookPipeline?: HookPipeline;
-    memorySystem?: {
-      readonly manager: {
-        loadBlocks(
-          sid: string,
-        ): Promise<
-          readonly { label: string; content: string; updatedAt: string }[]
-        >;
-        initializeDefaults(sid: string): Promise<void>;
-      };
-      readonly updater: {
-        updateAfterTurn(p: {
-          sessionId: string;
-          narrativeText: string;
-          toolCallSummaries?: readonly string[];
-          currentBlocks: readonly {
-            label: string;
-            content: string;
-            updatedAt: string;
-          }[];
-          locale?: string;
-        }): Promise<{
-          updated: boolean;
-          blocksChanged: readonly string[];
-          error?: string;
-        }>;
-      };
-    };
     ensureEmbeddingLock?: (sessionId: string) => Promise<void>;
   };
 };
@@ -97,8 +104,8 @@ export const actionRoutes = new Hono<Env>();
 // Module-level memory system reference, set by bootstrap via setMemorySystem().
 // Using a module variable instead of Hono context because Hono's typed
 // c.set/c.get doesn't support optional cross-module types cleanly.
-let _memorySystem: Env["Variables"]["memorySystem"] | undefined;
-export function setMemorySystem(ms: Env["Variables"]["memorySystem"]) {
+let _memorySystem: MemorySystemFacade | undefined;
+export function setMemorySystem(ms: MemorySystemFacade | undefined) {
   _memorySystem = ms;
 }
 
@@ -124,6 +131,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const resolveModel = c.get("resolveModel");
   const eventBus = c.get("eventBus");
   const compactorRunner = c.get("compactorRunner");
+  const turnContextBudget = c.get("turnContextBudget");
   const sessionLock = c.get("sessionLock");
   const mediaStore = c.get("mediaStore");
   const eventDirectory = c.get("eventDirectory");
@@ -506,6 +514,14 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 });
               },
               compactor: compactorRunner,
+              // Prompt-assembly hard prune — last line of defense when
+              // compaction is skipped/vetoed/insufficient for the model window.
+              ...(turnContextBudget
+                ? {
+                    estimator: estimateTokens,
+                    contextBudget: turnContextBudget,
+                  }
+                : {}),
               memorySystem: _memorySystem,
               // Let the turn executor construct a unified SessionContextSnapshot.
               capabilityPluginIds,
@@ -614,6 +630,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             toolExecutor,
             resolveModel,
             compactor: compactorRunner,
+            ...(turnContextBudget
+              ? { estimator: estimateTokens, contextBudget: turnContextBudget }
+              : {}),
             capabilityPluginIds,
             ...(eventDirectory ? { eventDirectory } : {}),
           },

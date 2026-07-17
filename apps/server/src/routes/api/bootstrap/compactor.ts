@@ -1,25 +1,61 @@
 import type { LLMAdapter } from "@covel/runtime";
 import type { DataStore } from "@covel/store";
 import {
+  estimateTokens,
   maybeCompact,
+  type BudgetOptions,
   type CompactorLLMAdapter,
   type CompactorRunner,
 } from "@covel/context";
 import type { ParsedPluginMd } from "@covel/plugin-loader";
 
-export interface CreateBootstrapCompactorRunnerParams {
+/**
+ * Last-resort context window when neither an explicit env override nor a
+ * model-capability lookup yields a value (e.g. an unknown model with no
+ * llm.toml capability block).
+ */
+const FALLBACK_CONTEXT_WINDOW = 32768;
+
+/** Matches applyBudget's own default; explicit here because getters can't omit. */
+const DEFAULT_RESERVED_FOR_RESPONSE = 4000;
+
+/**
+ * Live view of the main narrative slot's model budget. Implemented in the
+ * composition root (app.ts) against the AI registries so llm.toml hot-reloads
+ * are observed without a server restart — resolve on every call, never cache.
+ */
+export type ResolveNarrativeBudgetFn = () =>
+  | {
+      readonly contextWindow?: number;
+      readonly maxOutputTokens?: number;
+    }
+  | undefined;
+
+interface BudgetSourceParams {
+  /** Explicit COVEL_COMPACTOR_CONTEXT_WINDOW override — wins over capability. */
+  readonly contextWindowOverride?: number;
+  readonly resolveNarrativeBudget?: ResolveNarrativeBudgetFn;
+}
+
+/** Resolution order: env override > slot model capability > fallback. */
+function resolveContextWindow(params: BudgetSourceParams): number {
+  return (
+    params.contextWindowOverride ??
+    params.resolveNarrativeBudget?.()?.contextWindow ??
+    FALLBACK_CONTEXT_WINDOW
+  );
+}
+
+export interface CreateBootstrapCompactorRunnerParams extends BudgetSourceParams {
   readonly manifestCache: ReadonlyMap<string, readonly ParsedPluginMd[]>;
   readonly store: DataStore;
   readonly llmAdapter: LLMAdapter;
-  readonly contextWindow: number;
 }
 
-export function createBootstrapCompactorRunner({
-  manifestCache,
-  store,
-  llmAdapter,
-  contextWindow,
-}: CreateBootstrapCompactorRunnerParams): CompactorRunner {
+export function createBootstrapCompactorRunner(
+  params: CreateBootstrapCompactorRunnerParams,
+): CompactorRunner {
+  const { manifestCache, store, llmAdapter } = params;
   const allSummaryFocus = new Set<string>();
   for (const [, manifests] of manifestCache) {
     for (const parsed of manifests) {
@@ -29,15 +65,14 @@ export function createBootstrapCompactorRunner({
     }
   }
   const focusSections: readonly string[] = [...allSummaryFocus];
-  const simpleEstimator = (text: string): number => Math.ceil(text.length / 4);
 
   const fastSlotLlm: CompactorLLMAdapter = {
-    async complete(params) {
+    async complete(input) {
       const response = await llmAdapter.generate({
         model: "fast",
         messages: [
-          { role: "system", content: params.systemPrompt },
-          ...params.messages.map((m) => ({
+          { role: "system", content: input.systemPrompt },
+          ...input.messages.map((m) => ({
             role: m.role as "user",
             content: m.content,
           })),
@@ -61,15 +96,37 @@ export function createBootstrapCompactorRunner({
         messages,
         {
           store,
-          estimator: simpleEstimator,
+          estimator: estimateTokens,
           fastSlotLlm,
-          contextWindow,
+          // Resolved per run so llm.toml hot-reloads take effect immediately.
+          contextWindow: resolveContextWindow(params),
         },
         {
           focusSections,
           locale: compactorLocale,
           ...(traceId ? { traceId } : {}),
         },
+      );
+    },
+  };
+}
+
+/**
+ * Budget config for the prompt-assembly hard prune (`applyBudget`) — the last
+ * line of defense when compaction is skipped, vetoed, or insufficient.
+ * Getter-based so each turn observes the current llm.toml capability.
+ */
+export function createTurnContextBudget(
+  params: BudgetSourceParams,
+): Omit<BudgetOptions, "estimator"> {
+  return {
+    get maxInputTokens(): number {
+      return resolveContextWindow(params);
+    },
+    get reservedForResponse(): number {
+      return (
+        params.resolveNarrativeBudget?.()?.maxOutputTokens ??
+        DEFAULT_RESERVED_FOR_RESPONSE
       );
     },
   };

@@ -906,17 +906,6 @@
       "enemy": "敌人"
     }
   },
-  "lorebook": {
-    "title": "知识库",
-    "refresh": "刷新",
-    "deleteConfirm": "删除词条 \"{{id}}\"？此操作无法撤销。",
-    "noEntries": "尚无 session lorebook 词条",
-    "enable": "启用",
-    "disable": "禁用",
-    "delete": "删除",
-    "expand": "展开",
-    "collapse": "收起"
-  },
   "graph": {
     "empty": "关系图当前为空——等待 NPC 出现。",
     "clearSelection": "清除选中",
@@ -1038,7 +1027,11 @@
       "calls": "LLM 调用",
       "byRuntime": "按 runtime",
       "byTurn": "按回合",
-      "note": "token 求和来自 llm.responded / gateway.responded。美元成本为待办 follow-up（model id 尚未进入 trace 负载）。",
+      "byModel": "按模型",
+      "estCost": "估算成本 (USD)",
+      "unknownModel": "（未知模型）",
+      "noPrice": "无价格",
+      "note": "token 求和来自 llm.responded / gateway.responded。美元成本按 model-db 价格估算；无 model id 或无价格的用量不计入（此时显示为下限值）。",
       "noData": "本会话暂无 token 用量记录。",
       "windowTitle": "已加载窗口",
       "partialNote": "仅加载最近一段窗口，下方合计为部分值。",

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type * as api from "@/services/api.js";
-import { aggregate } from "../-cost-panel.js";
+import { aggregate, UNKNOWN_MODEL } from "../-cost-panel.js";
 import type { VisibleTurn } from "../-debug-page-model.js";
 
 function evt(type: string, payload: Record<string, unknown>): api.TraceEvent {
@@ -99,5 +99,91 @@ describe("cost-panel aggregate", () => {
     expect(m.totalCalls).toBe(0);
     expect(m.byRuntime).toHaveLength(0);
     expect(m.byTurn).toHaveLength(0);
+    expect(m.byModel).toHaveLength(0);
+  });
+
+  it("attributes llm.responded usage to the preceding llm.calling model", () => {
+    const turns = [
+      turn(1, "turn-1", [
+        evt("llm.calling", { runtimeId: "narrator", model: "deepseek-chat" }),
+        evt("llm.responded", {
+          runtimeId: "narrator",
+          pluginId: "narrator",
+          ...usage(100, 50),
+        }),
+        // Second tool-loop round on the same runtime, different model —
+        // sequential pairing must pick the latest calling event.
+        evt("llm.calling", { runtimeId: "narrator", model: "gpt-4o" }),
+        evt("llm.responded", {
+          runtimeId: "narrator",
+          pluginId: "narrator",
+          ...usage(30, 10),
+        }),
+      ]),
+    ];
+
+    const m = aggregate(turns);
+
+    expect(m.byModel).toHaveLength(2);
+    const deepseek = m.byModel.find((x) => x.model === "deepseek-chat")!;
+    expect(deepseek.inputTokens).toBe(100);
+    expect(deepseek.outputTokens).toBe(50);
+    const gpt = m.byModel.find((x) => x.model === "gpt-4o")!;
+    expect(gpt.inputTokens).toBe(30);
+    expect(gpt.calls).toBe(1);
+  });
+
+  it("groups unattributable usage under the unknown-model bucket", () => {
+    const turns = [
+      turn(1, "turn-1", [
+        // gateway.responded carries no model id.
+        evt("gateway.responded", {
+          runtimeId: "img",
+          pluginId: "img",
+          ...usage(5, 1),
+        }),
+        // llm.responded with no prior llm.calling for that runtime.
+        evt("llm.responded", {
+          runtimeId: "orphan",
+          pluginId: "orphan",
+          ...usage(7, 2),
+        }),
+      ]),
+    ];
+
+    const m = aggregate(turns);
+
+    expect(m.byModel).toHaveLength(1);
+    expect(m.byModel[0]!.model).toBe(UNKNOWN_MODEL);
+    expect(m.byModel[0]!.inputTokens).toBe(12);
+    expect(m.byModel[0]!.calls).toBe(2);
+  });
+
+  it("does not leak model pairing across turns", () => {
+    const turns = [
+      turn(1, "turn-1", [
+        evt("llm.calling", { runtimeId: "narrator", model: "deepseek-chat" }),
+        evt("llm.responded", {
+          runtimeId: "narrator",
+          pluginId: "narrator",
+          ...usage(10, 5),
+        }),
+      ]),
+      turn(2, "turn-2", [
+        // No llm.calling this turn — must NOT inherit turn-1's model.
+        evt("llm.responded", {
+          runtimeId: "narrator",
+          pluginId: "narrator",
+          ...usage(20, 8),
+        }),
+      ]),
+    ];
+
+    const m = aggregate(turns);
+
+    const deepseek = m.byModel.find((x) => x.model === "deepseek-chat")!;
+    expect(deepseek.inputTokens).toBe(10);
+    const unknown = m.byModel.find((x) => x.model === UNKNOWN_MODEL)!;
+    expect(unknown.inputTokens).toBe(20);
   });
 });

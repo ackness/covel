@@ -213,7 +213,9 @@ describe("env registry", () => {
     expect(env.nodeEnv).toBe("development");
     expect(env.serverPort).toBe(3001);
     expect(env.rateLimitRpm).toBe(60);
-    expect(env.compactorContextWindow).toBe(32768);
+    // Invalid → undefined (unset): the compactor then derives the window from
+    // the narrative slot's model capability instead of a fixed constant.
+    expect(env.compactorContextWindow).toBeUndefined();
   });
 
   it("lowercase-normalizes DEPLOYMENT_TIER", () => {

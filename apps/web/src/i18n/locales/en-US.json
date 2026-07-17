@@ -906,17 +906,6 @@
       "enemy": "Enemy"
     }
   },
-  "lorebook": {
-    "title": "Lorebook",
-    "refresh": "Refresh",
-    "deleteConfirm": "Delete entry \"{{id}}\"? This cannot be undone.",
-    "noEntries": "No session lorebook entries yet",
-    "enable": "Enable",
-    "disable": "Disable",
-    "delete": "Delete",
-    "expand": "Expand",
-    "collapse": "Collapse"
-  },
   "graph": {
     "empty": "Graph is currently empty — waiting for NPCs to appear.",
     "clearSelection": "Clear selection",
@@ -1038,7 +1027,11 @@
       "calls": "LLM calls",
       "byRuntime": "By runtime",
       "byTurn": "By turn",
-      "note": "Token sums from llm.responded / gateway.responded. USD cost is a pending follow-up (model id not yet in the trace payload).",
+      "byModel": "By model",
+      "estCost": "Est. cost (USD)",
+      "unknownModel": "(unknown model)",
+      "noPrice": "no price",
+      "note": "Token sums from llm.responded / gateway.responded. USD cost estimated from model-db prices; usage without a model id or price is excluded (cost shown as a lower bound).",
       "noData": "No token usage recorded for this session.",
       "windowTitle": "Loaded window",
       "partialNote": "Only the most recent window is loaded — totals below are partial.",
