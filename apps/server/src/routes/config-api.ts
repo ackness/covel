@@ -18,7 +18,7 @@
  * X-Provider-Keys header flow driven by browser localStorage.
  */
 
-import { Hono, type Context } from "hono";
+import { Hono } from "hono";
 import { resolve, join, dirname, isAbsolute } from "node:path";
 import {
   readFileSync,
@@ -35,25 +35,9 @@ import {
   readRuntimeEnv,
   toApiKeyEnvMap,
 } from "@covel/shared";
-import { errorBody } from "../api-error.js";
+import { errorBody, readJsonBody } from "../api-error.js";
 import { parseEnvLines } from "../lib/env-file.js";
 import { makeDesktopRestTokenGuard } from "./privileged-auth.js";
-
-/**
- * Parse a JSON request body, or return a 400 envelope Response. Callers do
- * `const parsed = await readJsonBody(c); if (parsed instanceof Response) return parsed;`
- * then read `parsed.body`.
- */
-async function readJsonBody(c: Context): Promise<{ body: unknown } | Response> {
-  try {
-    return { body: await c.req.json() };
-  } catch {
-    return c.json(
-      errorBody("Invalid JSON body", { code: "invalid_json_body" }),
-      400,
-    );
-  }
-}
 
 export interface ConfigApiDeps {
   /** Mutable map shared with the gateway adapter. PUT handlers mutate in-place. */

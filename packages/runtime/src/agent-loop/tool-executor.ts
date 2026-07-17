@@ -17,7 +17,6 @@ import {
   getPendingProposals,
   getToolContent,
   type EmittedEvent,
-  type ToolClient,
   type ToolModule,
 } from "@covel/tools";
 import type { DataStore } from "@covel/store";
@@ -107,11 +106,6 @@ export interface ToolExecutorConfig {
     name: string,
     context?: ToolCallContext,
   ) => ToolModule | undefined;
-  /** Tool client lookup function — returns the execution client by name. */
-  readonly findToolClient?: (
-    name: string,
-    context?: ToolCallContext,
-  ) => ToolClient | undefined;
   /** Optional DataStore for recording tool calls. */
   readonly store?: DataStore;
   /** Optional approval pipeline for permission checking. */
@@ -205,23 +199,14 @@ function resolveToolModule(
   name: string,
   context?: ToolCallContext,
 ): ToolModule | undefined {
-  const direct = config.findTool?.(name, context);
-  if (direct) return direct;
-  const client = config.findToolClient?.(name, context);
-  if (client instanceof InMemoryToolClient) {
-    return client.get(name)?.module;
-  }
-  return undefined;
+  return config.findTool?.(name, context);
 }
 
 function resolveToolClient(
   config: ToolExecutorConfig,
   name: string,
   context: ToolCallContext,
-): ToolClient | undefined {
-  const client = config.findToolClient?.(name, context);
-  if (client) return client;
-
+): InMemoryToolClient | undefined {
   const tool = config.findTool?.(name, context);
   if (!tool) return undefined;
 

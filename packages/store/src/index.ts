@@ -79,6 +79,7 @@ export type {
   RuntimeOutputFilters,
   InteractionRecordFilters,
   TurnMessageRecord,
+  TurnMessageStats,
   PlayerInputRecord,
   WorkingMemoryRecord,
   WorldDataImportLedgerRecord,

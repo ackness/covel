@@ -198,10 +198,21 @@ export function readRuntimeEnv(source: EnvSource = defaultSource()) {
     logsDir: readEnvString("COVEL_LOGS_DIR", undefined, source),
     modelDbPath: readEnvString("COVEL_MODEL_DB_PATH", undefined, source),
     promptsDir: readEnvString("COVEL_PROMPTS_DIR", undefined, source),
-    compactorContextWindow: readEnvInt(
+    // Optional explicit override. When unset (undefined) the server derives
+    // the compaction window from the active narrative slot's model capability.
+    compactorContextWindow: readEnvIntOptional(
       "COVEL_COMPACTOR_CONTEXT_WINDOW",
-      32768,
       source,
     ),
   };
+}
+
+function readEnvIntOptional(
+  name: string,
+  source: EnvSource,
+): number | undefined {
+  const raw = readEnvString(name, undefined, source);
+  if (raw === undefined) return undefined;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }

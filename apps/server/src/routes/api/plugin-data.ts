@@ -14,7 +14,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
-import { errorBody } from "../../api-error.js";
+import { errorBody, readJsonBody } from "../../api-error.js";
 import { buildPluginDataIndex } from "./discovery.js";
 import { resolveSessionParam } from "./session/session-guard.js";
 
@@ -157,7 +157,9 @@ pluginDataRoutes.put(
     const accessErr = validatePluginAccess(registry, pluginId, sessionId, true);
     if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
-    const raw = await c.req.json<unknown>();
+    const jsonBody = await readJsonBody(c);
+    if (jsonBody instanceof Response) return jsonBody;
+    const raw = jsonBody.body;
     // zod 4.4: bare z.unknown() is required; .optional() keeps 4.3 behaviour.
     const bodySchema = z.object({ value: z.unknown().optional() });
     const parsed = bodySchema.safeParse(raw);

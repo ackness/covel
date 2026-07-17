@@ -84,7 +84,7 @@ async function persistTurnResult(
     } catch (err) {
       console.warn(
         `[turn-executor] saveRuntimeOutput failed for ${rr.runtimeId}:`,
-        err instanceof Error ? err.message : String(err),
+        err,
       );
     }
   }

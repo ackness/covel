@@ -97,7 +97,7 @@ export {
  * const result = await executeTurn(
  *   { sessionId: 'sess-1', turnId: 'turn-1', playerMessage: 'Go north' },
  *   activeManifests,
- *   { loadRuntime, llm, getConfig: () => ({}), store, toolExecutor },
+ *   { loadRuntime, llm, store, toolExecutor },
  * );
  *
  * for (const rr of result.runtimeResults) {

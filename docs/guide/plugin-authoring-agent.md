@@ -10,7 +10,7 @@
 > - 用 `interaction` 返回字段让工具产出玩家交互块（form / choice / confirmation）
 > - 用 `input.inject` 声明跨 runtime 的 prompt 注入依赖
 > - 用 `covel.registerRpc` 暴露结构化 action 给前端 / 外部代理
-> - 用 `@covel/plugin-test-utils` 的 `TestHarness + MockLLM` 写插件集成测试
+> - 用 `@covel/plugin-test-utils` + `MockLLM` 写插件测试
 
 ---
 
@@ -330,11 +330,11 @@ curl -X POST http://localhost:3001/api/sessions/$SESSION_ID/plugin-rpc \
 
 ## 5. 测试你的插件
 
-使用 `@covel/plugin-test-utils` 提供的 `TestHarness` 进行集成测试。
+使用 `@covel/plugin-test-utils` 做单元测试，用 runtime cases（`pnpm test:runtime`）做端到端验证。
 
 推荐最少覆盖四类行为：
 
-1. manifest / runtime 发现与加载
+1. manifest / runtime 发现与加载（`pnpm test:runtime` 天然覆盖）
 2. local tool 参数与返回结构
 3. handler / agent runtime 的核心输出
 4. `plugin_data` 与 `ui.message / ui.right` 的契约
@@ -344,88 +344,40 @@ curl -X POST http://localhost:3001/api/sessions/$SESSION_ID/plugin-rpc \
 ```json
 {
   "devDependencies": {
-    "@covel/plugin-loader": "workspace:*",
     "@covel/plugin-test-utils": "workspace:*",
     "vitest": "^4.1.2"
   }
 }
 ```
 
-**tests/my-plugin.test.ts：**
+**local tool 单元测试（tests/my-plugin.test.js）** —— 直接 import 工具工厂，注入 toolkit 与 mock store 后调用 `execute`（完整真实范例：[`plugins/codex/tests/codex.test.js`](../../plugins/codex/tests/codex.test.js)）：
 
-```typescript
+```js
 import { describe, it, expect } from "vitest";
-import { createTestHarness, MockLLM } from "@covel/plugin-test-utils";
-import path from "node:path";
+import { tool, z, shortIdBatch, getPendingProposals } from "@covel/tools";
+import createUnlockCodexEntries from "../tools/unlock-codex-entries.js";
 
-describe("my-codex", () => {
-  it("should discover and load plugin manifest", async () => {
-    const harness = await createTestHarness({
-      pluginsDir: path.resolve(__dirname, "../../"), // 指向 plugins/ 目录
-      activePlugins: ["my-codex"], // 只激活要测试的插件
+describe("unlock-codex-entries", () => {
+  it("unlocks a location entry", async () => {
+    const unlockTool = createUnlockCodexEntries({
+      tool,
+      z,
+      shortIdBatch,
+      store: mockPluginDataStore, // in-memory stub，见 codex.test.js
     });
 
-    // 验证 manifest 被正确解析
-    expect(harness.manifests).toHaveLength(1);
-    expect(harness.manifests[0].name).toBe("my-codex");
-    expect(harness.manifests[0].priority).toBe(650);
-  });
-
-  it("should execute a turn and get result", async () => {
-    // 配置 MockLLM 返回包含工具调用的响应
-    const mockLLM = new MockLLM({
-      defaultResponse: {
-        content: "",
-        toolCalls: [
-          {
-            id: "tc-1",
-            name: "unlock-codex-entries",
-            arguments: {
-              entries: [
-                {
-                  category: "location",
-                  title: "青萍山",
-                  content: "青萍宗所在的灵脉山峰，山腰以下是外门。",
-                  tags: ["地点", "宗门"],
-                  rarity: "common",
-                },
-              ],
-            },
-          },
-        ],
-        finishReason: "tool_calls",
-        usage: { inputTokens: 200, outputTokens: 100 },
-      },
-    });
-
-    const harness = await createTestHarness({
-      pluginsDir: path.resolve(__dirname, "../../"),
-      activePlugins: ["my-codex"],
-      llm: mockLLM,
-    });
-
-    const result = await harness.executeTurn("我来到了青萍山的坊市");
-
-    // 验证 LLM 被调用
-    expect(mockLLM.calls).toHaveLength(1);
-
-    // 验证 system prompt 包含插件提示词
-    const systemMessage = mockLLM.calls[0].messages.find(
-      (m) => m.role === "system",
+    const result = await unlockTool.execute(
+      { entries: [{ category: "location", title: "青萍山", content: "…" }] },
+      { sessionId: "sess-1", turnId: "turn-1", pluginId: "my-codex" },
     );
-    expect(systemMessage?.content).toContain("知识图鉴系统");
+
+    // 写入以 proposal 形式挂在返回值上，由框架 commit
+    expect(getPendingProposals(result).length).toBeGreaterThan(0);
   });
 });
 ```
 
-**TestHarness API：**
-
-| 属性/方法                          | 类型                                                   | 说明                                  |
-| ---------------------------------- | ------------------------------------------------------ | ------------------------------------- |
-| `executeTurn(message, overrides?)` | `(string, Partial<TurnInput>?) => Promise<TurnResult>` | 执行一轮游戏                          |
-| `store`                            | `DataStore`                                            | 内存 store，可读取/断言状态           |
-| `manifests`                        | `RuntimeManifest[]`                                    | 已加载的 runtime 清单（按优先级排序） |
-| `llm`                              | `LLMAdapter`                                           | 使用的 LLM 适配器（可断言调用记录）   |
+function runtime handler 用 `makeManualFunctionContext` 直接调用（真实范例：[`plugins/character-presence/tests/handler.test.js`](../../plugins/character-presence/tests/handler.test.js)）。需要跑完整 turn（tool loop / event 链 / proposal commit）时，参考 [plugin-testing.md](./plugin-testing.md) 的手搓 turn-executor 模式。
 
 **测试数据工厂：**
 

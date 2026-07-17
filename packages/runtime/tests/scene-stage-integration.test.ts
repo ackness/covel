@@ -4,12 +4,12 @@
  * same-turn event fan-out (`runEventChain`) triggers the real scene-stage
  * resolver, and its `plugin.data` proposal commits `stage/current`.
  *
- * `@covel/plugin-test-utils`'s `createTestHarness` was tried first (per
- * docs/guide/plugin-testing.md) and found insufficient for this scenario:
- * it only discovers runtimes from a filesystem `pluginsDir` with no way to
+ * `@covel/plugin-test-utils`'s `createTestHarness` (since removed from the
+ * package) was tried first and found insufficient for this scenario:
+ * it only discovered runtimes from a filesystem `pluginsDir` with no way to
  * inject a synthetic MockLLM-driven "emitter" runtime alongside the real
- * scene-stage plugin, and it never calls `processRuntimeResult`, so a turn
- * it runs never lands anything in the store. Falls back to the
+ * scene-stage plugin, and it never called `processRuntimeResult`, so a turn
+ * it ran never landed anything in the store. Uses the
  * turn-executor direct-construction pattern from
  * emit-event-integration.test.ts, loading the real scene-stage handler via
  * `@covel/plugin-loader` instead of a hand-written stand-in.
@@ -150,7 +150,6 @@ describe("scene-stage: scene.set → resolver → stage/current (E → B integra
             ? { manifest: m, promptTemplate: "Emit scene.set via emit-event." }
             : resolverLoaded,
         llm: new SceneSetLLM(data),
-        getConfig: () => ({}),
         store,
         toolExecutor: createToolExecutor({
           findTool: (name) =>

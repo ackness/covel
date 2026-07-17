@@ -60,11 +60,11 @@ describe("interpolateTemplate", () => {
     expect(result).toBe("story");
   });
 
-  it("should replace a config variable", () => {
-    const result = interpolateTemplate("Length: {{ config.outputLength }}", {
-      config: { outputLength: 150 },
+  it("should replace a nested variable", () => {
+    const result = interpolateTemplate("World: {{ world.name }}", {
+      world: { name: "Cloudmere" },
     });
-    expect(result).toBe("Length: 150");
+    expect(result).toBe("World: Cloudmere");
   });
 
   it("should replace a missing variable with empty string", () => {
@@ -121,7 +121,6 @@ describe("buildInjectBlocks", () => {
           makeRuntimeResult({ output: { narrativeOutput: "the story" } }),
         ],
       ]),
-      config: {},
     };
 
     const result = buildInjectBlocks(params);
@@ -160,7 +159,6 @@ describe("buildInjectBlocks", () => {
           makeRuntimeResult({ output: { combatLog: "hit for 10 damage" } }),
         ],
       ]),
-      config: {},
     };
 
     const result = buildInjectBlocks(params);
@@ -186,7 +184,6 @@ describe("buildInjectBlocks", () => {
       }),
       turnInput: makeTurnInput(),
       completedResults: new Map(),
-      config: {},
     };
 
     expect(buildInjectBlocks(params)).toBe("");
@@ -198,7 +195,6 @@ describe("buildInjectBlocks", () => {
       manifest: makeManifest(),
       turnInput: makeTurnInput(),
       completedResults: new Map(),
-      config: {},
     };
 
     expect(buildInjectBlocks(params)).toBe("");
@@ -230,7 +226,6 @@ describe("buildContext", () => {
           makeRuntimeResult({ output: { narrativeOutput: "the story" } }),
         ],
       ]),
-      config: {},
     };
 
     const ctx = buildContext(params);
@@ -250,7 +245,6 @@ describe("buildContext", () => {
       manifest: makeManifest(),
       turnInput: makeTurnInput({ playerMessage: "hello" }),
       completedResults: new Map(),
-      config: {},
     };
 
     const ctx = buildContext(params);
@@ -261,28 +255,12 @@ describe("buildContext", () => {
     expect(ctx.messages).toEqual([{ role: "user", content: "hello" }]);
   });
 
-  it("should interpolate config variables in the system prompt", () => {
-    const params: ContextBuildParams = {
-      promptTemplate: "Write in {{ config.style }} style.",
-      manifest: makeManifest(),
-      turnInput: makeTurnInput({ playerMessage: "go" }),
-      completedResults: new Map(),
-      config: { style: "dramatic" },
-    };
-
-    const ctx = buildContext(params);
-    expect(ctx.systemPrompt).toBe(
-      `Write in dramatic style.${PROMPT_CACHE_BREAKPOINT_MARKER}`,
-    );
-  });
-
   it("uses a runtime execution cue when the current player message is empty", () => {
     const params: ContextBuildParams = {
       promptTemplate: "Plain instructions.",
       manifest: makeManifest(),
       turnInput: makeTurnInput({ locale: "zh-CN", playerMessage: "" }),
       completedResults: new Map(),
-      config: {},
     };
 
     const ctx = buildContext(params);
@@ -305,7 +283,6 @@ describe("buildContext", () => {
         manualTrigger: { runtimeId: "dashscope-image-gen/prompt-generator" },
       }),
       completedResults: new Map(),
-      config: {},
     };
 
     const ctx = buildContext(params);
@@ -334,7 +311,6 @@ describe("buildContext", () => {
       manifest: makeManifest(),
       turnInput: makeTurnInput({ playerMessage: "I look around" }),
       completedResults: new Map(),
-      config: {},
       messageHistory: history,
     };
 
@@ -363,7 +339,6 @@ describe("buildContext", () => {
       manifest: makeManifest(),
       turnInput: makeTurnInput({ playerMessage: "continue" }),
       completedResults: new Map(),
-      config: {},
       messageHistory: history,
     };
 
@@ -381,7 +356,6 @@ describe("buildContext", () => {
       manifest: makeManifest(),
       turnInput: makeTurnInput({ playerMessage: "hello" }),
       completedResults: new Map(),
-      config: {},
     };
 
     const ctx = buildContext(params);
@@ -408,7 +382,6 @@ describe("buildContext — summary substitution", () => {
       manifest: makeManifest(),
       turnInput: makeTurnInput({ playerMessage: "current" }),
       completedResults: new Map(),
-      config: {},
       messageHistory: history,
       summaries: [
         {
@@ -444,7 +417,6 @@ describe("buildContext — summary substitution", () => {
       manifest: makeManifest(),
       turnInput: makeTurnInput({ playerMessage: "now" }),
       completedResults: new Map(),
-      config: {},
       messageHistory: history,
       summaries: [
         { id: "sum-1", content: "All summarized.", focusSections: [] },

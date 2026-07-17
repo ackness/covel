@@ -16,6 +16,7 @@ import type { HookPipeline } from "../hooks/pipeline.js";
 import type { RetryInfo } from "../retry/llm-retry.js";
 import { buildAgentLoopPolicy } from "./agent-loop-policy.js";
 import { createDeltaForwarder } from "./delta-forwarder.js";
+import { executeToolSearch, SEARCH_TOOLS_TOOL_NAME } from "./tool-search.js";
 import { requestLLMResponse } from "./tool-loop-handler.js";
 import { handleSuspension } from "../resume/suspend-resume-handler.js";
 import { guardAgainstToolLoop, type LoopGuardState } from "./loop-detection.js";
@@ -129,6 +130,7 @@ export async function runAgentToolLoop({
   // below is control flow only.
   const {
     toolDefs,
+    deferredToolNames,
     responseFormat,
     runtimeModelOverride,
     useStreaming,
@@ -144,6 +146,11 @@ export async function runAgentToolLoop({
     maxSteps,
     timeoutMs,
   });
+
+  // Working tool surface for this run. Starts as the policy's (possibly
+  // reduced) advertisement and grows when an intercepted `search-tools` call
+  // activates deferred tools — every subsequent LLM step sees the grown list.
+  let activeToolDefs = toolDefs;
 
   // The loop's single narrative outlet — counts chunks for `message.completed`.
   const delta = createDeltaForwarder({
@@ -220,7 +227,7 @@ export async function runAgentToolLoop({
     const llmRequest = await runPreLLMCallHook(hookOpts, {
       messages,
       model: effectiveModel,
-      tools: toolDefs,
+      tools: activeToolDefs,
     });
 
     let response = await requestLLMResponse({
@@ -278,6 +285,60 @@ export async function runAgentToolLoop({
 
           // Use the (possibly replaced) toolCall from the hook outcome
           const effectiveTc = preToolOutcome.toolCall;
+
+          // ── search-tools interception (deferred tool loading) ─
+          // Framework-injected sentinel, same pattern as suspend /
+          // runtime-done: never dispatched to the executor. Ranks the
+          // still-deferred pool (BM25) and grows the working tool surface so
+          // the NEXT LLM step can call the activated tools directly.
+          if (
+            effectiveTc.name === SEARCH_TOOLS_TOOL_NAME &&
+            deferredToolNames.size > 0
+          ) {
+            const activeNames = new Set(
+              (activeToolDefs ?? []).map((d) => d.name),
+            );
+            const search = executeToolSearch({
+              argumentsJson: effectiveTc.arguments,
+              deferredNames: deferredToolNames,
+              activeNames,
+              toolExecutor: deps.toolExecutor,
+              context: {
+                sessionId: input.sessionId,
+                turnId: input.turnId,
+                pluginId: manifest.pluginId,
+                runtimeId: manifest.name,
+              },
+            });
+            if (search.activated.length > 0) {
+              activeToolDefs = [...(activeToolDefs ?? []), ...search.activated];
+            }
+            messages.push(
+              buildToolResultMessage({
+                toolCallId: effectiveTc.id,
+                content: search.resultText,
+              }),
+            );
+            executedToolCalls.push({
+              name: effectiveTc.name,
+              arguments: effectiveTc.arguments,
+              result: search.parsedResult,
+              success: true,
+            });
+            collectedToolCalls.push({
+              toolCallId: effectiveTc.id,
+              toolName: effectiveTc.name,
+              pluginId: manifest.pluginId,
+              runtimeId: manifest.name,
+              turnId: input.turnId,
+              input: { query: search.parsedResult.query },
+              output: search.parsedResult,
+              durationMs: Date.now() - tcStart,
+              approvalStatus: "auto-allowed",
+              timestamp: new Date().toISOString(),
+            });
+            continue;
+          }
 
           const result = await deps.toolExecutor.execute(
             {

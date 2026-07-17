@@ -99,8 +99,9 @@ stateRoutes.get("/:id/state", async (c) => {
         data,
       };
     }
-  } catch {
+  } catch (err) {
     // Non-critical: characters table optional on slim stores.
+    console.warn(`[state] characters query failed for session ${id}:`, err);
   }
 
   // ── plugin_data grouped by (pluginId, namespace) ──────────────────
@@ -136,8 +137,9 @@ stateRoutes.get("/:id/state", async (c) => {
         data: entry.data,
       };
     }
-  } catch {
+  } catch (err) {
     // Non-critical: session may have no plugin_data rows yet.
+    console.warn(`[state] plugin_data query failed for session ${id}:`, err);
   }
 
   return c.json({ tables });

@@ -1,6 +1,6 @@
 # 插件开发指南 · 高级（TypeScript + 审批 + 发布）
 
-> 面向**专业开发者**：要吃下完整类型系统、写复杂的 `TestHarness` 断言、自定义审批规则、拆多 runtime 插件，并最终发布到社区。
+> 面向**专业开发者**：要吃下完整类型系统、写手搓 turn-executor 的集成测试、自定义审批规则、拆多 runtime 插件，并最终发布到社区。
 
 > **前置要求**：先完成 [零代码](./plugin-authoring-zero-code.md) 和 [进阶（agent + 本地 JS）](./plugin-authoring-agent.md)。
 
@@ -75,66 +75,36 @@ import type {
 } from "@covel/runtime";
 ```
 
-## 2. TestHarness 高级用法
+## 2. 集成测试进阶
 
-**自定义 MockLLM 响应队列：**
-
-```typescript
-const mockLLM = new MockLLM();
-
-// 默认响应
-mockLLM.defaultResponse = {
-  content: "你来到了一片神秘的森林...",
-  toolCalls: [],
-  finishReason: "stop",
-  usage: { inputTokens: 100, outputTokens: 50 },
-};
-```
-
-**注入额外工具：**
+**自定义 MockLLM 响应队列**（`responses[]` 按顺序消费，耗尽后回落 `defaultResponse`）：
 
 ```typescript
-import { tool } from "@covel/tools";
-import { z } from "zod";
+import { MockLLM } from "@covel/plugin-test-utils";
 
-const customTool = tool({
-  name: "test-helper",
-  description: "Test helper tool",
-  parameters: z.object({ value: z.string() }),
-  execute: async (params) => ({ echoed: params.value }),
-});
-
-const harness = await createTestHarness({
-  pluginsDir: path.resolve(__dirname, "../../"),
-  tools: [customTool], // 额外注册的工具
+const mockLLM = new MockLLM({
+  responses: [
+    {
+      content: "",
+      toolCalls: [
+        { id: "tc-1", name: "emit-event", arguments: '{"topic":"scene.set"}' },
+      ],
+      finishReason: "tool_calls",
+      usage: { inputTokens: 10, outputTokens: 5 },
+    },
+    {
+      content: "你来到了一片神秘的森林...",
+      toolCalls: [],
+      finishReason: "stop",
+      usage: { inputTokens: 100, outputTokens: 50 },
+    },
+  ],
 });
 ```
 
-**断言 Store 状态：**
+**手搓 turn-executor 跑完整 turn**：需要验证 agent tool loop、同 turn event 链或 proposal commit 时，用 `@covel/runtime` 公开导出手工组装 —— `discoverPlugins` / `loadPluginManifest` / `loadRuntime`（`@covel/plugin-loader`）加载真实 runtime，`createMemoryStore` 做后端，`createToolExecutor` + `executeTurn` 执行，`processRuntimeResult` 落库 proposal。完整可运行范例见 [`packages/runtime/tests/scene-stage-integration.test.ts`](../../packages/runtime/tests/scene-stage-integration.test.ts) 与 [`packages/runtime/tests/emit-event-integration.test.ts`](../../packages/runtime/tests/emit-event-integration.test.ts)，入口选择见 [plugin-testing.md](./plugin-testing.md)。
 
-```typescript
-const harness = await createTestHarness({ pluginsDir: "..." });
-await harness.executeTurn("开始游戏");
-
-// 通过 store 检查持久化的数据
-const store = harness.store;
-// store 实现了 DataStore 接口，可以查询 state、events、records 等
-```
-
-**多轮测试：**
-
-```typescript
-const harness = await createTestHarness({ pluginsDir: "..." });
-
-// 第一轮
-const result1 = await harness.executeTurn("开始游戏");
-
-// 第二轮（TestHarness 自动递增 turnId）
-const result2 = await harness.executeTurn("我要去探索森林");
-
-// 断言跨轮状态变化
-expect(mockLLM.calls).toHaveLength(2);
-```
+**断言 Store 状态**：MemoryStore 实现完整 `DataStore` 接口，turn 执行 + `processRuntimeResult` 之后可直接 `store.listPluginData(...)` / `store.getState(...)` 断言持久化结果。
 
 ## 3. 审批管线
 
@@ -274,6 +244,18 @@ interface PluginManifest {
   readonly runtimes?: readonly RuntimeManifest[];
 }
 ```
+
+### 大工具集：延迟加载（`tools.defer`）
+
+如果一个 runtime 的工具白名单很大（经验阈值 ~10 个以上），每次 LLM 调用都全量携带所有工具的 JSON schema 会持续挤占 prompt 预算。声明 `tools.defer` 可以把部分或全部工具改为**按需检索**：
+
+```yaml
+tools:
+  plugin: [attack, defend, cast-spell, brew-potion, forge-item, ...]
+  defer: true # 或 defer: [brew-potion, forge-item] 只延迟低频工具
+```
+
+行为：被延迟的工具不进初始工具清单，框架注入 `search-tools`；LLM 用能力关键词（中英文均可）检索，命中的工具**下一步起**直接可调用，激活持续到本 turn 结束。工具注册、信任门控、审批策略完全不变——只是 schema 广播时机变了。高频工具建议留在 `defer` 之外（省一步检索往返）。详细契约见 [tools.md 的 search-tools 小节](../reference/tools.md#search-tools框架注入延迟工具加载)。
 
 ## 6. 函数 Runtime、手动触发与后台执行
 
@@ -710,7 +692,7 @@ my-plugin/
 
 - 数据库表名或 ORM 模型
 - 内核调度器、路由器等内部模块
-- 前端组件（UI 通过 blockSchema 或交互协议集成）
+- 前端组件（UI 通过 json-render spec 或交互协议集成）
 - 直接 SDK 调用（LLM 调用通过 model slot 绑定）
 
 ## 8. 插件国际化（i18n）

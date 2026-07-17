@@ -1,12 +1,10 @@
 import i18n from "i18next";
-import { setBlockSchemas } from "@/components/blocks/block-renderer.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { migrateLocalStorageToIdb } from "@/services/app-kv-store.js";
 import * as api from "@/services/api";
 import type { DataService } from "@/services/data-service.js";
 import { registerPluginUserSettings } from "@/settings/registry/plugin.js";
 import { getSettings, registerKnownProviders } from "@/settings/store.js";
-import type { BlockSchemaDeclaration } from "@covel/shared";
 import type { SessionDispatch } from "./types.js";
 
 interface BootSessionStoreOptions {
@@ -49,16 +47,12 @@ export async function bootSessionStore({
   await migrateLocalStorageToIdb();
 
   try {
-    const [presets, packagesRes, worlds, schemas, llmConfig] =
-      await Promise.all([
-        api.listPresets(),
-        api.listPackages(),
-        ds.listWorlds(),
-        api.fetchBlockSchemas().catch(() => ({})),
-        api.fetchLlmConfig().catch(() => null),
-      ]);
-
-    setBlockSchemas(schemas as Record<string, BlockSchemaDeclaration>);
+    const [presets, packagesRes, worlds, llmConfig] = await Promise.all([
+      api.listPresets(),
+      api.listPackages(),
+      ds.listWorlds(),
+      api.fetchLlmConfig().catch(() => null),
+    ]);
 
     for (const pkg of packagesRes.packages) {
       if (pkg.userSettings && pkg.userSettings.length > 0) {

@@ -12,8 +12,10 @@
  *     before entering the LLM tool loop. Concurrent requests with the same
  *     suspensionId lose the race and receive 409. This guarantees
  *     exactly-once execution of a suspended runtime.
- *   - The pipeline also runs under `withSessionLock(sessionId)` so sequential
- *     resumes for the same session do not interleave with turn execution.
+ *   - The pipeline also runs under the injected `sessionLock` (see
+ *     `env.d.ts`; historically a `withSessionLock` import, now DI-provided)
+ *     so sequential resumes for the same session do not interleave with turn
+ *     execution.
  *
  * Expiry (S4-T4.c): the suspension-touching routes opportunistically fire a
  * time-gated, best-effort global sweep of stale (unresolved, older-than-TTL)
@@ -53,10 +55,6 @@ type Env = {
       locale?: string,
     ) => Promise<LoadedRuntime | undefined>;
     toolExecutor: ToolExecutor;
-    getConfigFn: (
-      pluginId: string,
-      runtimeId: string,
-    ) => Readonly<Record<string, unknown>>;
     resolveModel: (
       manifest: RuntimeManifest,
       apiOverride?: string,
@@ -286,8 +284,6 @@ resumeRoutes.post("/:id/resume", async (c) => {
             llm: llmAdapter,
             ...(pluginGateway ? { gateway: pluginGateway } : {}),
             ...(pluginUtils ? { utils: pluginUtils } : {}),
-            getConfig:
-              c.get("getConfigFn") ?? ((_p: string, _r: string) => ({})),
             store,
             toolExecutor,
             resolveModel,

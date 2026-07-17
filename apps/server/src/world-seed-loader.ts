@@ -374,9 +374,7 @@ async function loadCharacterBlueprints(
  * Validates each world.yaml against worldManifestSchema.
  * Returns WorldRecord[] ready for upsert.
  */
-export async function loadWorldPackages(
-  worldsDir: string,
-): Promise<WorldRecord[]> {
+async function loadWorldPackages(worldsDir: string): Promise<WorldRecord[]> {
   if (!(await fileExists(worldsDir))) return [];
 
   const entries = await readdir(worldsDir, { withFileTypes: true });

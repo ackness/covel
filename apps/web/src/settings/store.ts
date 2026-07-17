@@ -10,18 +10,19 @@ import {
   registerProviderKeys,
 } from "./registry/index.js";
 import { cleanupLegacyLocalStorage } from "./legacy-cleanup.js";
-import { getDesktopRestAuthHeaders } from "@/lib/desktop-bridge";
-
-function isDesktopBridge(): boolean {
-  if (typeof window === "undefined") return false;
-  return Boolean((window as unknown as { covelIpc?: unknown }).covelIpc);
-}
+import { getDesktopRestAuthHeaders, isDesktopApp } from "@/lib/desktop-bridge";
 
 let singleton: SettingsStore | null = null;
 let readyPromise: Promise<void> | null = null;
 
 function createStore(): SettingsStore {
-  const adapter = isDesktopBridge()
+  // isDesktopApp() covers BOTH desktop signals: the Electron IPC bridge and
+  // the REST-desktop probe (`/api/config/info` → isDesktop, self-host setups
+  // where the sidecar owns ~/.covel). The boot sequence in main.tsx runs
+  // probeDesktopMode() BEFORE initSettings() so this decision sees the probe
+  // result; without that ordering REST-desktop silently fell back to
+  // localStorage and settings never reached ~/.covel/settings.json.
+  const adapter = isDesktopApp()
     ? createJsonFileBackend({ getAuthHeaders: getDesktopRestAuthHeaders })
     : createLocalStorageBackend();
   const store = new SettingsStore(adapter);

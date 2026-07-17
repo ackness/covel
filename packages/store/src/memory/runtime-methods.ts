@@ -1,9 +1,11 @@
 import {
+  applyCursorAfter,
   applyCursorPage,
   applyPagination,
   sortByCursorAsc,
 } from "../common/pagination.js";
 import { stateEntryKey } from "../common/keys.js";
+import { computeTurnMessageStats } from "../common/turn-message-stats.js";
 import type { SessionSummaryRecord } from "../types.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
 
@@ -242,6 +244,25 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
         .filter((r) => r.sessionId === sessionId)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       return applyPagination(filtered, pagination);
+    },
+
+    async listUncompactedTurnMessages(sessionId) {
+      return state.turnMessages
+        .filter((r) => r.sessionId === sessionId && r.compactedAtTurnId == null)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    },
+
+    async getTurnMessageStats(sessionId) {
+      return computeTurnMessageStats(
+        state.turnMessages.filter((r) => r.sessionId === sessionId),
+      );
+    },
+
+    async listTurnMessagesAfter(sessionId, after, limit) {
+      const sorted = sortByCursorAsc(
+        state.turnMessages.filter((r) => r.sessionId === sessionId),
+      );
+      return applyCursorAfter(sorted, after, limit);
     },
 
     async listRecentTurnMessages(sessionId, limit) {

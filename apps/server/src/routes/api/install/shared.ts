@@ -10,14 +10,7 @@
  *   - Target directory must not already exist (409) — upgrades require manual removal.
  */
 
-import {
-  mkdir,
-  mkdtemp,
-  rename,
-  rm,
-  writeFile,
-  access,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import yauzl, { type Entry, type ZipFile } from "yauzl";
 import { errorBody } from "../../../api-error.js";
@@ -70,15 +63,6 @@ export function errorResponse(err: unknown): {
 export interface ExtractedEntry {
   readonly relativePath: string;
   readonly content: Buffer;
-}
-
-export async function pathExists(p: string): Promise<boolean> {
-  try {
-    await access(p);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**

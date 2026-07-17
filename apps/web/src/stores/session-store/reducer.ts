@@ -9,12 +9,60 @@ import type {
   AssetProgressEvent,
   SessionAction,
   SessionState,
+  StreamMessage,
 } from "./types.js";
 
 const EXEC_STEPS_MAX = 500;
 
 /** Streaming-placeholder id convention shared with the renderer. */
 const STREAM_ID_PREFIX = "stream_";
+
+/**
+ * In-memory chat window: live appends past this cap drop the OLDEST loaded
+ * messages (a marathon tab otherwise grows without bound). Dropped rows stay
+ * re-fetchable — the cap also advances `olderMessagesCursor` to the new window
+ * edge, so the existing scroll-up path reloads them on demand. Configurable
+ * via the `ui.chatMessageWindow` setting (wired in main.tsx).
+ */
+const MESSAGES_WINDOW_DEFAULT = 2000;
+const MESSAGES_WINDOW_MIN = 200;
+let messagesWindowCap = MESSAGES_WINDOW_DEFAULT;
+
+export function configureMessagesWindowCap(cap: number): void {
+  messagesWindowCap =
+    Number.isFinite(cap) && cap >= MESSAGES_WINDOW_MIN
+      ? Math.floor(cap)
+      : MESSAGES_WINDOW_DEFAULT;
+}
+
+/**
+ * Cap a grown `messages` array. Only live-append paths call this —
+ * PREPEND_MESSAGES (the user explicitly loading history) never caps, and
+ * streaming placeholders are never dropped (they only live at the tail; a
+ * placeholder inside the drop range means assumptions broke, so skip capping).
+ */
+function capLiveMessages(
+  state: SessionState,
+  messages: StreamMessage[],
+): Pick<SessionState, "messages"> & Partial<SessionState> {
+  if (messages.length <= messagesWindowCap) return { messages };
+  const dropCount = messages.length - messagesWindowCap;
+  const dropped = messages.slice(0, dropCount);
+  if (dropped.some((m) => m.id.startsWith(STREAM_ID_PREFIX))) {
+    return { messages };
+  }
+  const kept = messages.slice(dropCount);
+  const edge = kept[0];
+  return {
+    messages: kept,
+    // Boundary rows this deep in the window are server-authoritative
+    // (timestamp = server createdAt); stream placeholders with client wall
+    // clocks never reach the front of a full window.
+    olderMessagesCursor: edge
+      ? { createdAt: edge.timestamp, id: edge.id }
+      : state.olderMessagesCursor,
+  };
+}
 
 export const initialState: SessionState = {
   presets: [],
@@ -141,7 +189,10 @@ export function reducer(
         next[existingIdx] = { ...next[existingIdx], ...action.message };
         return { ...state, messages: next };
       }
-      return { ...state, messages: [...state.messages, action.message] };
+      return {
+        ...state,
+        ...capLiveMessages(state, [...state.messages, action.message]),
+      };
     }
     case "COMPLETE_MESSAGE": {
       // Replace the streaming placeholder with the final message content and
@@ -170,7 +221,10 @@ export function reducer(
       }
       return {
         ...state,
-        messages: [...state.messages, { ...action.message, kind: "story" }],
+        ...capLiveMessages(state, [
+          ...state.messages,
+          { ...action.message, kind: "story" },
+        ]),
       };
     }
     case "APPEND_DELTA": {
@@ -187,15 +241,18 @@ export function reducer(
         return state;
       return {
         ...state,
-        messages: state.messages.concat({
-          id: streamId,
-          role: "assistant",
-          content: "",
-          timestamp: new Date().toISOString(),
-          turnId: action.turnId,
-          runtimeId: action.runtimeId,
-          kind: "story",
-        }),
+        ...capLiveMessages(
+          state,
+          state.messages.concat({
+            id: streamId,
+            role: "assistant",
+            content: "",
+            timestamp: new Date().toISOString(),
+            turnId: action.turnId,
+            runtimeId: action.runtimeId,
+            kind: "story",
+          }),
+        ),
       };
     }
     case "SET_EXECUTING":

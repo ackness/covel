@@ -438,7 +438,7 @@ function warnLegacyRegistrationFields(
     console.warn(
       `[plugin-entry] ${pluginId}: PLUGIN.md field(s) ${[...legacy].join(", ")} are deprecated — ` +
         `migrate to a single "entry" module (export default function (covel) { ... }). ` +
-        `Legacy fields keep working for this release cycle.`,
+        `Legacy fields are planned for removal in v0.0.17.`,
     );
   }
 }

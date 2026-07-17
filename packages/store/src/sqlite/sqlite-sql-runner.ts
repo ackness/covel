@@ -51,6 +51,9 @@ export function createSqliteSqlRunner(db: SqliteDb): SqlRunner {
         .from(table as SQLiteTable)
         .$dynamic();
       if (opts?.where) query = query.where(opts.where);
+      if (opts?.groupBy && opts.groupBy.length > 0) {
+        query = query.groupBy(...(opts.groupBy as SQL[]));
+      }
       if (opts?.orderBy && opts.orderBy.length > 0) {
         query = query.orderBy(...opts.orderBy);
       }

@@ -198,7 +198,7 @@ console.log('OK');
 | ----------------------------------------------- | -------------------------------------------------------------------------- |
 | 只有 PLUGIN.md（agent runtime + builtin tools） | 只跑 schema 校验（step 4）即可                                             |
 | 有 `tools/*.js` / `handler.js` / `hooks/*.js`   | + L2 单元测试（vitest，mock store）                                        |
-| 有 `input.inject` / 多 runtime / event 链       | + L3 集成测试（`createTestHarness` + `MockLLM`）或 L4 runtime case         |
+| 有 `input.inject` / 多 runtime / event 链       | + L3 集成测试（手搓 turn-executor + `MockLLM`）或 L4 runtime case          |
 | 准备发布对外（社区插件）                        | + L4 `pnpm test:runtime` mock/live；必要时 L5 HTTP E2E，**live 不要进 CI** |
 
 测试文件放 `plugins/<id>/tests/*.test.{js,ts}`，跑：

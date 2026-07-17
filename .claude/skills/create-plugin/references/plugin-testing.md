@@ -6,7 +6,7 @@
 | ------------------ | ------------------------------------------- | ------------------------------- | ---------------------------------------------------------------- |
 | L1 Schema          | `validatePluginManifest`                    | 即时                            | 每个 `PLUGIN.md`                                                 |
 | L2 单元            | Vitest + `@covel/plugin-test-utils`         | <1s                             | 写了 `tools/*.js`、`handler.js`、`hooks/*.js`                    |
-| L3 In-process turn | `createTestHarness` + `MockLLM`             | 1-3s                            | agent runtime、tool loop、`input.inject`、多 runtime/event 链    |
+| L3 In-process turn | 手搓 turn-executor + `MockLLM`              | 1-3s                            | agent runtime、tool loop、`input.inject`、多 runtime/event 链    |
 | L4 Runtime cases   | `pnpm test:runtime` (`@covel/test-runtime`) | 1-10s mock / 真实 provider 更慢 | 第三方插件、手动 runtime、后台 follower、外部 `~/.covel/plugins` |
 | L5 HTTP E2E        | `scripts/e2e-plugin-verify.ts`              | 30s+                            | 发布前验证 API/SSE/store/approval 全链路                         |
 
@@ -185,81 +185,25 @@ describe("trigger", () => {
 
 ---
 
-## L3 — `createTestHarness` + `MockLLM`
+## L3 — 手搓 turn-executor + `MockLLM`
 
-用于跑完整 runtime pipeline：发现插件 → 排序 manifests → 组装 context → 调 LLM/tool loop → commit proposals → 写 MemoryStore。
+> 旧的 `createTestHarness` 已退役（功能不足：无法注入合成 runtime，也不 commit proposal）。需要 in-process 跑完整 turn 时，用 `@covel/runtime` 公开导出手工组装；多数插件级需求优先走 L4（`pnpm test:runtime`）。
 
-```ts
-import { describe, expect, it } from "vitest";
-import path from "node:path";
-import {
-  MockLLM,
-  createTestHarness,
-  expectAssetGenerated,
-} from "@covel/plugin-test-utils";
+组装步骤（完整可运行范例：`packages/runtime/tests/scene-stage-integration.test.ts` 与 `packages/runtime/tests/emit-event-integration.test.ts`）：
 
-const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../plugins");
-
-describe("my-plugin integration", () => {
-  it("runs one turn and writes plugin-data", async () => {
-    const llm = new MockLLM({
-      responses: [
-        {
-          content: null,
-          finishReason: "tool_calls",
-          toolCalls: [
-            {
-              id: "tc-1",
-              name: "plugin-data-set",
-              arguments:
-                '{"namespace":"notes","key":"intro","value":{"title":"Intro"}}',
-            },
-          ],
-          usage: { inputTokens: 50, outputTokens: 10 },
-        },
-        {
-          content: "Done.",
-          finishReason: "stop",
-          toolCalls: [],
-          usage: { inputTokens: 60, outputTokens: 4 },
-        },
-      ],
-    });
-
-    const harness = await createTestHarness({
-      pluginsDir: PLUGINS_DIR,
-      activePlugins: ["my-plugin"],
-      llm,
-    });
-
-    const result = await harness.executeTurn("continue");
-    const rows = await harness.store.listPluginData(
-      "sess-harness",
-      "my-plugin",
-      "notes",
-    );
-
-    expect(result.runtimeResults[0]?.status).toBe("success");
-    expect(llm.calls.map((call) => call.toolNames ?? [])).toContainEqual(
-      expect.arrayContaining(["plugin-data-set"]),
-    );
-    expect(rows[0]?.key).toBe("intro");
-  });
-});
-```
+1. `discoverPlugins` / `loadPluginManifest` / `loadRuntime`（`@covel/plugin-loader`）加载真实插件 runtime；需要合成 runtime（如模拟 narrator 发 event）时手写 `RuntimeManifest` + `LLMAdapter`。
+2. `createMemoryStore()`（`@covel/store`）做后端，按需 `setPluginData` 预置数据。
+3. `createToolExecutor` + `executeTurn`（`@covel/runtime`）执行 turn，LLM 用 `MockLLM`（`responses[]` 按调用顺序消费，耗尽后回落 `defaultResponse`，多步 tool loop 优先用它）。
+4. 对每个 runtime result 调 `processRuntimeResult`（`@covel/runtime`）把 proposal commit 进 store，再断言 `store.listPluginData(...)` 等持久化结果。
 
 常用断言：
 
-| 目标                  | 写法                                                                 |
-| --------------------- | -------------------------------------------------------------------- |
-| prompt 里包含注入内容 | `llm.calls[n].messages`                                              |
-| 工具顺序              | `result.runtimeResults[0].toolCalls.map((c) => c.name)`              |
-| plugin_data 写入      | `harness.store.listPluginData("sess-harness", pluginId, namespace)`  |
-| asset.generate 输出   | `expectAssetGenerated(result, { modality: "image" })`                |
-| 手动触发              | `harness.executeTurn("", { manualTrigger: { runtimeId, payload } })` |
-| userSettings          | `harness.executeTurn("", { userSettings: { [pluginId]: {...} } })`   |
-
-`MockLLM` 的 `responses[]` 会按调用顺序消费，耗尽后回落到 `defaultResponse`。多步 tool loop 优先用 `responses[]`，不用手写 subclass。
+| 目标                  | 写法                                                    |
+| --------------------- | ------------------------------------------------------- |
+| prompt 里包含注入内容 | `llm.calls[n].messages`                                 |
+| 工具顺序              | `result.runtimeResults[0].toolCalls.map((c) => c.name)` |
+| plugin_data 写入      | `store.listPluginData(sessionId, pluginId, namespace)`  |
+| asset.generate 输出   | `expectAssetGenerated(result, { modality: "image" })`   |
 
 ---
 

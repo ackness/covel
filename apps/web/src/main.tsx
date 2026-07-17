@@ -18,6 +18,7 @@ import {
   type ColorScheme,
 } from "@/lib/appearance";
 import { getSettings, initSettings } from "@/settings/store";
+import { configureMessagesWindowCap } from "@/stores/session-store/reducer";
 import { CUSTOM_THEMES_KEY } from "@/theme-system/storage.js";
 import {
   syncThemeRegistry,
@@ -76,9 +77,13 @@ function syncNextThemesStorage(scheme: ColorScheme): void {
   window.localStorage.setItem("covel:scheme", scheme);
 }
 
-// Boot order: hydrate settings store first so appearance / locale apply
-// without a flash, then run the rest of the bootstrap in parallel.
-initSettings()
+// Boot order: probe desktop mode FIRST — the settings backend choice
+// (localStorage vs ~/.covel via IPC/REST) depends on its result — then
+// hydrate the settings store so appearance / locale apply without a flash,
+// then run the rest of the bootstrap in parallel. The probe is one same-origin
+// fetch (skipped entirely under Electron IPC) and non-fatal on failure.
+probeDesktopMode()
+  .then(() => initSettings())
   .then(async () => {
     const store = getSettings();
     await migrateLegacyThemeScheme(store);
@@ -114,11 +119,11 @@ initSettings()
         document.documentElement.lang = next;
       }
     });
-    return Promise.all([
-      syncStorageMode(),
-      probeDesktopMode(),
-      loadProviderKeysFromStorage(),
-    ]);
+    configureMessagesWindowCap(store.get<number>("ui.chatMessageWindow"));
+    store.subscribe<number>("ui.chatMessageWindow", (next) => {
+      configureMessagesWindowCap(next);
+    });
+    return Promise.all([syncStorageMode(), loadProviderKeysFromStorage()]);
   })
   .then(() => {
     createRoot(document.getElementById("root")!).render(

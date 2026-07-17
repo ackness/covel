@@ -56,7 +56,6 @@ function baselineParams(
     manifest: makeManifest(),
     turnInput: makeTurnInput(),
     completedResults: new Map(),
-    config: {},
     ...overrides,
   };
 }

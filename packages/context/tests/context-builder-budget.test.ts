@@ -39,7 +39,6 @@ const baseParams = (): ContextBuildParams => ({
   manifest: makeManifest(),
   turnInput: makeTurnInput(),
   completedResults: new Map(),
-  config: {},
   messageHistory: makeHistory(),
 });
 

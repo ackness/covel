@@ -7,8 +7,8 @@
  *   2. Recall Memory — Searchable conversation history (keyword search).
  *   3. Archival Memory — Long-term cross-plugin knowledge (lorebook + characters).
  *
- * Compaction — Older messages are summarized and replaced in prompts.
- *   Core memory blocks are updated simultaneously so key information survives.
+ * Compaction (summarizing older messages) lives in `@covel/context`'s
+ * `maybeCompact`, not this package.
  */
 
 import type {
@@ -182,7 +182,7 @@ export interface MemoryManager {
 // ── Memory Updater (post-turn LLM-driven refresh) ───────────────
 
 /**
- * Minimal LLM adapter for the memory updater/compactor. Aliased to the shared
+ * Minimal LLM adapter for the memory updater. Aliased to the shared
  * {@link SimpleCompletionAdapter} (single source of truth in `@covel/shared`)
  * with the default `"user" | "assistant"` role union, since the core-memory
  * layer models both player and assistant turns. Re-exported under this name
@@ -309,42 +309,6 @@ export interface ArchivalSearcher {
   ): Promise<readonly ArchivalSearchResult[]>;
 }
 
-// ── Compaction ──────────────────────────────────────────────────
-
-export interface CompactionConfig {
-  /** Fraction of context window that triggers compaction. Default: 0.6. */
-  readonly threshold?: number;
-  /** Number of trailing user messages to protect. Default: 2. */
-  readonly protectLastNUserTurns?: number;
-  /** Always protect at least this many tail messages. Default: 5. */
-  readonly protectLastNMessages?: number;
-  /** Model slot for the summarizer. Resolution: memory → story. */
-  readonly modelSlot?: string;
-  readonly locale?: string;
-  /**
-   * Block schema forwarded to the post-compaction core-memory refresh so the
-   * compactor uses the same labels/hints as the main updater. Defaults to
-   * {@link DEFAULT_CORE_MEMORY_BLOCKS}.
-   */
-  readonly blocks?: readonly CoreMemoryBlockSchema[];
-  /**
-   * Per-session block resolver (see {@link CoreMemoryConfig.resolveBlocks}).
-   * Forwarded to the post-compaction updater so world-declared blocks are also
-   * refreshed during compaction, not just on the normal post-turn path.
-   */
-  readonly resolveBlocks?: (
-    sessionId: string,
-  ) => Promise<readonly CoreMemoryBlockSchema[] | undefined>;
-}
-
-export interface CompactionResult {
-  readonly compacted: boolean;
-  readonly summaryId?: string;
-  readonly messagesBefore: number;
-  readonly messagesAfter: number;
-  readonly summary?: string;
-}
-
 // ── Unified Memory System ───────────────────────────────────────
 
 /**
@@ -396,21 +360,4 @@ export interface MemorySystem {
     readonly recall: number;
     readonly archival: number;
   }>;
-
-  /**
-   * Run compaction if needed.
-   * Returns the compaction result (including whether it actually compacted).
-   */
-  compact(params: {
-    sessionId: string;
-    estimatedTokens: number;
-    contextWindow: number;
-    messages: readonly {
-      id: string;
-      role: string;
-      content: string;
-      turnId?: string;
-      createdAt: string;
-    }[];
-  }): Promise<CompactionResult>;
 }

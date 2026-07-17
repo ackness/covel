@@ -32,7 +32,7 @@ See: `apps/web/src/lib/session-plugin-selection.ts`, [docs/reference/plugins.md]
 
 ## PluginType
 
-The trust/ownership tier of a plugin: `core-plugin` (bundled, auto-loaded), `official` (whitelisted), or `community` (deferred until user approves). Governs tool approval policy, prompt injection scope, and update channels.
+Two separate axes describe a plugin's provenance. `pluginType` is a manifest field with two values — `core-plugin` (bundled, non-disableable) or `plugin` (optional, disableable) — and only gates core-vs-third-party dispatch. Trust tier (`builtin`, `official`, or `community`, derived from load path, not the name) is the field that governs auto-load and tool-approval policy.
 
 See: [docs/reference/plugins.md](./reference/plugins.md), [docs/reference/tools.md](./reference/tools.md).
 

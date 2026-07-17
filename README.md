@@ -4,7 +4,7 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.14-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.14)
+[![Version](https://img.shields.io/badge/version-v0.0.15-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.15)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)]()
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,7 +13,7 @@
 
 Covel is an AI RPG where the world keeps running between your turns: NPCs track how they feel about you, lore accumulates as you play, and memory carries the thread across the session. Every mechanic behind that is an **autonomous agent shipped as a plugin** — disable one, swap one, or write your own.
 
-> **Current public release: v0.0.14**, early access — APIs, data formats, and plugin frontmatter may change between versions. Prebuilt binaries target macOS Apple Silicon and Windows x64; other platforms build from source.
+> **Current public release: v0.0.15**, early access — APIs, data formats, and plugin frontmatter may change between versions. Prebuilt binaries target macOS Apple Silicon and Windows x64; other platforms build from source.
 
 ## Highlights
 

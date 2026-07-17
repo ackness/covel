@@ -26,7 +26,7 @@ export interface RenderedDepthContribution {
   readonly order: number;
 }
 
-/** See `context-builder.ts::toLLMMessage` — kept in lock-step. */
+/** Map a persisted history record into the LLM message shape. */
 export function toLLMMessage(msg: MessageHistoryRecord): LLMMessage {
   return {
     role: msg.role as "system" | "user" | "assistant",
@@ -39,6 +39,13 @@ export function toLLMMessage(msg: MessageHistoryRecord): LLMMessage {
  * Segment 7 — history with optional compaction substitution. When a message
  * carries `compactedAtTurnId`, the first such message is replaced by its
  * summary and subsequent compacted messages are dropped.
+ *
+ * Histories read via `listUncompactedTurnMessages` contain no compacted rows
+ * at all, so summaries they reference would never be emitted by substitution.
+ * Because compaction always tags a contiguous PREFIX of the timeline, any
+ * summary not referenced by a row in `messageHistory` is emitted up front (in
+ * the given, chronological order) — for a full history this set is empty and
+ * the output is unchanged.
  */
 export function buildMessageHistoryWithSummaries(
   messageHistory: readonly MessageHistoryRecord[],
@@ -48,24 +55,36 @@ export function buildMessageHistoryWithSummaries(
     return messageHistory.map(toLLMMessage);
   }
 
+  const compactedIdOf = (msg: MessageHistoryRecord): string | undefined =>
+    (msg as MessageHistoryRecord & { compactedAtTurnId?: string })
+      .compactedAtTurnId;
+
+  const referencedIds = new Set<string>();
+  for (const msg of messageHistory) {
+    const compactedId = compactedIdOf(msg);
+    if (compactedId) referencedIds.add(compactedId);
+  }
+
+  const toSummaryMessage = (summary: SummaryRecord): LLMMessage => ({
+    role: "system",
+    content: `[Compacted history: sections=${JSON.stringify(summary.focusSections)}]\n\n${summary.content}`,
+  });
+
   const summaryById = new Map(summaries.map((s) => [s.id, s]));
   const emittedSummaryIds = new Set<string>();
-  const result: LLMMessage[] = [];
+  const result: LLMMessage[] = summaries
+    .filter((s) => !referencedIds.has(s.id))
+    .map(toSummaryMessage);
 
   for (const msg of messageHistory) {
-    const compactedId = (
-      msg as MessageHistoryRecord & { compactedAtTurnId?: string }
-    ).compactedAtTurnId;
+    const compactedId = compactedIdOf(msg);
 
     if (compactedId) {
       if (!emittedSummaryIds.has(compactedId)) {
         const summary = summaryById.get(compactedId);
         if (summary) {
           emittedSummaryIds.add(compactedId);
-          result.push({
-            role: "system",
-            content: `[Compacted history: sections=${JSON.stringify(summary.focusSections)}]\n\n${summary.content}`,
-          });
+          result.push(toSummaryMessage(summary));
         }
       }
       continue;

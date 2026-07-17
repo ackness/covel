@@ -142,7 +142,6 @@ function makeRuntimeHarness(store: DataStore): {
     deps: {
       loadRuntime: async (manifest) => loaded.get(manifest.name),
       llm: new NoopLLM(),
-      getConfig: () => ({}),
       store,
     },
   };

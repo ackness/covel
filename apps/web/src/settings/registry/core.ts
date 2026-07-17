@@ -28,6 +28,18 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
   registerThemeSettings(store);
 
   store.register({
+    key: "ui.chatMessageWindow",
+    schema: z.number().int().min(200).max(20000),
+    default: 2000,
+    group: "general",
+    widget: "number",
+    label: {
+      "zh-CN": "聊天窗口消息上限",
+      "en-US": "Chat window message limit",
+    },
+  });
+
+  store.register({
     key: "ui.onboardedVersion",
     schema: z.number().int(),
     default: 0,

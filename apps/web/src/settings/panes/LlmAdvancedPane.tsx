@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
 import { useSession } from "@/stores/session-store.js";
 
-const LEGACY_SLOTS = [
+const DEFAULT_FALLBACK_SLOTS = [
   "story",
   "plugin",
   "memory",
@@ -27,7 +27,7 @@ export function LlmAdvancedPane() {
   const configuredSlots = isConfigured
     ? Object.keys(state.llmConfig!.slots)
     : [];
-  const slots = isConfigured ? configuredSlots : LEGACY_SLOTS;
+  const slots = isConfigured ? configuredSlots : DEFAULT_FALLBACK_SLOTS;
 
   const [paramOverrides, setParamOverridesLocal] = useState<
     Record<string, ModelParameterOverrides>

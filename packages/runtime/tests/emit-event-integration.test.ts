@@ -130,7 +130,6 @@ describe("emit-event: tool-loop accumulation + finalize merge into output.events
         };
       },
       llm: new ScriptedLLM(),
-      getConfig: () => ({}),
       store,
       toolExecutor: createToolExecutor({
         findTool: (name) =>
@@ -226,7 +225,6 @@ describe("emit-event: segment 5 directory injection (plan task 5)", () => {
         promptTemplate: "You are a domain-event emitter.",
       }),
       llm: new CapturingLLM(),
-      getConfig: () => ({}),
       store,
       toolExecutor: createToolExecutor({
         findTool: (name) =>
@@ -307,7 +305,6 @@ describe("emit-event: same-turn duplicate topic no-op (plan task 1)", () => {
         promptTemplate: "Emit test.ping via emit-event.",
       }),
       llm: new RepeatingLLM(),
-      getConfig: () => ({}),
       store,
       toolExecutor: createToolExecutor({
         findTool: (name) =>

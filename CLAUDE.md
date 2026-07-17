@@ -178,7 +178,7 @@ Detailed field reference, per-plugin table, and trigger semantics: [docs/referen
 
 ### Plugin UI (declarative, json-render)
 
-All panels/blocks render through [json-render](https://github.com/vercel-labs/json-render) with a framework-defined ~25-component catalog. Plugins declare `ui: { right, message, left }` in PLUGIN.md, pointing at JSON specs under `ui/`. `GET /api/ui-specs` aggregates them; frontend discovers panels at boot. `plugin-data.changed` SSE events drive re-renders. Three-tier resolution: custom React (`.tsx`) → json-render spec (`.json`) → raw JSON fallback. Details in [docs/reference/ui-panels.md](./docs/reference/ui-panels.md).
+All panels/blocks render through [json-render](https://github.com/vercel-labs/json-render) with a framework-defined ~48-component catalog ([docs/reference/ui-components.md](./docs/reference/ui-components.md)). Plugins declare `ui: { right, message, left }` in PLUGIN.md, pointing at JSON specs under `ui/`. `GET /api/ui-specs` aggregates them; frontend discovers panels at boot. `plugin-data.changed` SSE events drive re-renders. Three-tier resolution: custom React (`.tsx`) → json-render spec (`.json`) → raw JSON fallback. Details in [docs/reference/ui-panels.md](./docs/reference/ui-panels.md).
 
 ### Model slot system
 
@@ -186,7 +186,7 @@ All panels/blocks render through [json-render](https://github.com/vercel-labs/js
 - Configured via `llm.toml` `[covel.<slot>]` sections. If missing, single `story` → DeepSeek fallback boots the app.
 - **Tag-aware fallback**: an unconfigured slot falls back to the first slot with the same tag (`text`/`image`/`embedding`/`speech`/`transcription`). Cross-tag fallback is forbidden (an image request never silently routes to text).
 - Supports OpenAI, Anthropic, DeepSeek, Qwen (Aliyun DashScope).
-- **Model capabilities** (multimodal, features, token limits, pricing) auto-detected via: frontend localStorage override → `llm.toml` manual → `known-models.ts` (~60 common) → LiteLLM DB (2597 models, `pnpm --filter @covel/ai-provider update-model-db`) → protocol defaults. Directional modality: `input: InputModality[]` = accepts, `output: OutputModality[]` = produces.
+- **Model capabilities** (multimodal, features, token limits, pricing) auto-detected via: frontend localStorage override → `llm.toml` manual → `known-models.ts` (~60 common) → LiteLLM DB (2967 models, `pnpm --filter @covel/ai-provider update-model-db`) → protocol defaults. Directional modality: `input: InputModality[]` = accepts, `output: OutputModality[]` = produces.
 - **Media generation (image / TTS / STT)**: `ctx.images.generate()` and `ctx.speech.generate()`/`.transcribe()` (function-runtime plugins, preferred) route through pluggable per-modality wire registries — builtin `openai-images` (default) + `dashscope-wan` for image, `openai-speech` / `openai-transcription` for speech — selectable per-slot via `llm.toml` `providerRequestMetadata.imageWire|speechWire|transcriptionWire`. Both `generate` paths dedupe on promptHash and persist to MediaStore. Plugins register vendor wires via the PLUGIN.md `wires` frontmatter field (ids namespaced `<pluginId>/<wireId>`, trust-gated loading in `bootstrap/plugin-wires.ts`); bundled code may call `register{Image,Speech,Transcription}Wire()` directly. See [docs/reference/slots.md](./docs/reference/slots.md), [docs/reference/media-store.md](./docs/reference/media-store.md) and [docs/guide/plugin-authoring-advanced.md](./docs/guide/plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行).
 
 ## Critical Conventions (Read These)
@@ -275,27 +275,27 @@ Each SQL backend keeps a thin public factory plus focused method modules:
 - `*-store-mappers.ts` / `*-store-values.ts` — row conversion and JSON helpers.
 - `*-data-crud.ts`, `*-runtime-records.ts`, `*-session-*`, `*-snapshot*`, `*-state*`, `*-world*` — focused persistence surfaces.
 
-22 tables via Drizzle; full list and transactions contract in [docs/reference/transactions.md](./docs/reference/transactions.md).
+27 tables via Drizzle; authoritative list in `packages/store/src/{sqlite,postgres}/schema.ts`, transactions contract in [docs/reference/transactions.md](./docs/reference/transactions.md).
 
 - **`sessions.runtime_model_overrides`** — JSONB map of `runtimeId → slot name`, snapshotted into `TurnInput` each turn and consulted by `runtime-slot-resolver` before `manifest.model` / gateway default. Keys still flow via `X-Provider-Keys` + localStorage.
 - **JSONB writes**: use `sql.json(value as JSONValue)` — **never** `JSON.stringify()` (double-serialisation bug).
 
 ## Server Bootstrap
 
-`bootstrapApi()` in `apps/server/src/routes/api/bootstrap.ts` wires a fully composed Hono app (plugin discovery + registries + middleware injection); `app.ts` is a thin composition root (~80 lines). All endpoints under `/api/` prefix. Full endpoint reference: [docs/reference/api.md](./docs/reference/api.md).
+`bootstrapApi()` in `apps/server/src/routes/api/bootstrap.ts` wires a fully composed Hono app (plugin discovery + registries + middleware injection); `app.ts` is the composition root (~420 lines: env/key loading, store + AI stack setup, middleware, then delegates to `bootstrapApi()`). All endpoints under `/api/` prefix. Full endpoint reference: [docs/reference/api.md](./docs/reference/api.md).
 
 ## Testing Conventions
 
 - **vitest** is the single runner (`vitest run` for CI, `vitest` for watch). No Node `node:test`.
 - **Contract tests** (`store-contract.ts` + `contract/suites/`): every `DataStore` backend must pass the shared suite. Required for any new backend.
-- **Plugin tests**: use `@covel/plugin-test-utils` — `MockLLM`, `createTestHarness`, `makeTurnInput`, `makeTriggerContext`, `makeRuntimeResult`.
+- **Plugin tests**: use `@covel/plugin-test-utils` — `MockLLM`, `makeManualFunctionContext`, `expectAssetGenerated`, `makeTurnInput`, `makeTriggerContext`, `makeRuntimeResult`.
 - **IDB tests**: `fake-indexeddb` polyfill. **PG tests**: real local DB (`pnpm db:up`).
 - **E2E harness**: `scripts/e2e-plugin-verify.ts` is the API-driven, plugin-level, 7-phase harness (artefacts under `debugs/e2e-logs/`) — see [docs/guide/e2e-plugin-verify.md](./docs/guide/e2e-plugin-verify.md).
 - Coverage via `@vitest/coverage-v8` on all packages (`--coverage` flag).
 
 ## Security & Operations
 
-- **SSRF guard**: `validateBaseUrl()` in `ai-provider/adapters/http.ts` is **open by default** — any public https host is allowed. Blocks: RFC1918 / link-local IPs (`10.x` / `172.16-31.x` / `192.168.x` / `169.254.x` / `fc00::` / `fe80::`), cloud metadata hostnames (`metadata.google.internal`, `metadata.internal`), non-https on remote hosts, non-http(s) protocols. Loopback (`localhost` / `127.0.0.1` / `::1`) bypasses the https requirement for Ollama-style local dev. Additionally, core provider requests (`postJson` / `getJson` / `postFormData`) and the plugin `ctx.http` helper resolve DNS through a pinning dispatcher (`adapters/http/dns-safety.ts`): every A/AAAA answer must be publicly routable (loopback hostnames must resolve to loopback), closing the string-check-to-connect DNS-rebinding gap. `COVEL_ALLOWED_LLM_HOSTS` appears in env-registry as `status: 'documented'` but **is not read** by the guard — third-party plugin authors targeting custom provider hosts do not need any env shim.
+- **SSRF guard**: `validateBaseUrl()` in `ai-provider/adapters/http.ts` is **open by default** — any public https host is allowed. Blocks: RFC1918 / link-local IPs (`10.x` / `172.16-31.x` / `192.168.x` / `169.254.x` / `fc00::` / `fe80::`), cloud metadata hostnames (`metadata.google.internal`, `metadata.internal`), non-https on remote hosts, non-http(s) protocols. Loopback (`localhost` / `127.0.0.1` / `::1`) bypasses the https requirement for Ollama-style local dev. Additionally, core provider requests (`postJson` / `getJson` / `postFormData`) and the plugin `ctx.http` helper resolve DNS through a pinning dispatcher (`adapters/http/dns-safety.ts`): every A/AAAA answer must be publicly routable (loopback hostnames must resolve to loopback), closing the string-check-to-connect DNS-rebinding gap. **Self-tier exemption (core provider path only)**: on the `self` tier (desktop/self-deploy default — already loopback-bound with owner/operator tokens as no-ops), the core provider path (the user's own configured LLM `baseUrl`) accepts any resolver answer for a hostname (the socket is still pinned to it). Single-user local machines run TUN proxies (Clash/mihomo/sing-box/Surge map every domain into a private/benchmark range and route by SNI) and LAN endpoints (Ollama at `192.168.x.x`) that the public-only rule wrongly rejected. The exemption is NOT granted to the plugin `ctx.http` path (third-party plugin code stays strict — no probing the local network even on a desktop install), to IP-literal URLs (url-safety's string check still blocks private literals), or to hosted tiers (`demo`/`commercial` may run inside a cloud network where private answers reach real internal services). There is **no host allowlist env** — the guard is open by design; third-party plugin authors targeting custom provider hosts do not need any env shim (the never-read `COVEL_ALLOWED_LLM_HOSTS` registry entry was removed).
 - **Env-key origin binding (S-01)**: server-env / platform API keys flow to the gateway as `envApiKeys`, separate from request-supplied `X-Provider-Keys` (`apiKeys`). The provider registry only attaches an env key when the resolved target's baseUrl origin matches trusted config (llm.toml / registered provider defaults) — a request-scoped custom preset (`X-Slot-Config` overlay) that redirects a provider to another origin gets no env key and no trusted default headers; it must supply its own key.
 - **Hosted auth (S-02/C-01/C-02)**: `demo` / `commercial` tiers enforce a per-session **owner token** (minted at session create, hash-persisted in `SessionRecord.metadata`, returned once) on every session-scoped route, and an **operator token** (`COVEL_DESKTOP_REST_TOKEN`, also a master key that passes any owner check) on global/admin routes (session create/list, world writes, AI/model, community server-code activation). `validateSecurityPosture` fails boot on a hosted tier missing the operator token / media secret / CORS origin. The server binds `127.0.0.1` by default (`COVEL_BIND_HOST` opts into `0.0.0.0`). `self` / desktop / dev are a strict no-op (single-user local play unchanged). Community server code (`entry` / handler / hook / wire / runtime JS) is import-gated behind two-phase approval (a `covel:plugin-server-code` grant, then the action grant). Full model: [docs/reference/api.md](./docs/reference/api.md) 鉴权 section.
 - **Signed media URLs**: `middleware/media-token.ts` signs `MediaRef` URLs with `COVEL_MEDIA_TOKEN_SECRET`. Desktop shells must provision it or generated images/portraits fail to load; web uses an ephemeral per-boot secret.
@@ -305,26 +305,14 @@ Each SQL backend keeps a thin public factory plus focused method modules:
 - **Error sanitising**: the `app.onError` handler (`routes/api/bootstrap.ts` + `app.ts`) returns `"Internal server error"` in prod (stacks/paths only to `console.error`); dev returns `err.message`.
 - **Debug artefacts**: always write under `debugs/` (never repo root) — gitignored.
 
-### Dev-mode LLM replay cache
-
-Only active when `COVEL_LLM_REPLAY` is set. Zero overhead / zero behaviour change when unset.
-
-| Mode     | Behaviour                                                 |
-| -------- | --------------------------------------------------------- |
-| `auto`   | Hit = replay, miss = call provider + record (dev default) |
-| `record` | Always call provider, overwrite cache                     |
-| `replay` | Read-only; miss throws (for breakpoint reproduction)      |
-
-Cache dir: `COVEL_LLM_REPLAY_DIR` (default `debugs/llm-cache/`). Key = `sha256(method + url + canonicalJson(body))`. `authorization` / `api_key` are redacted in hash input and on disk. Streaming is T-eed via `TransformStream` (10 MB buffer cap, skip over).
-
 ## Observability
 
 Trace chain: `traceId → runId → branchId → turnId → runtimeId → pluginId`.
 
 - **Runtime trace** (DB `trace_events`): structured turn hierarchy — LLM delta messages, tool calls, proposals, hooks, provider binding, context fragments. Delta recording avoids duplicating prompt history.
 - **Infrastructure log** (console, `[component]`-prefixed): startup, plugin loading, DB, SSE connections.
-- **Consumption**: `/api/traces/*`, `TraceExporter` interface (e.g. Langfuse), JSON export for players.
-- **Frontend `/debug`**: Session Timeline · Runtime Inspector · Prompt Viewer (full reconstruction + diff) · Data Explorer · Cost (token-usage aggregation from `llm.responded` / `gateway.responded` trace usage).
+- **Consumption**: `/api/traces/*` endpoints, JSON export for players.
+- **Frontend `/debug`**: Session Timeline · Runtime Inspector · Prompt Viewer (full reconstruction + diff) · Data Explorer · Cost (token-usage aggregation from `llm.responded` / `gateway.responded` trace usage, with per-model USD estimation via model-db pricing — model recovered by pairing each `llm.responded` with the preceding `llm.calling`).
 
 ## Deployment Tiers
 

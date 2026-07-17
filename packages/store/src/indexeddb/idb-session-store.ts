@@ -1,3 +1,4 @@
+import { SESSION_SCOPED_TABLES } from "../table-registry.js";
 import {
   mergeSessionPatch,
   normalizeSessionRecord,
@@ -10,32 +11,35 @@ import type { IdbStoreContext, IdbStoreSlice } from "./idb-context.js";
 export function createIdbSessionStore(ctx: IdbStoreContext): IdbStoreSlice {
   const { db, mutations } = ctx;
 
-  async function cascadeByIndex(
+  /**
+   * Delete every row of `storeName` owned by `sessionId`. Uses the store's
+   * `sessionId` index when it has one; otherwise falls back to a full scan
+   * filtered on the `sessionId` property (composite-index stores such as
+   * `runtimeResults` and `plugin_data` have no standalone `sessionId` index).
+   */
+  async function cascadeSession(
     storeName: IdbStoreName,
     sessionId: string,
   ): Promise<void> {
-    const rows = (await db.getAllFromIndex(
-      storeName,
-      "sessionId",
-      sessionId,
-    )) as Array<{ id: string }>;
+    const hasSessionIdIndex = db
+      .transaction(storeName)
+      .store.indexNames.contains("sessionId");
+    const rows = hasSessionIdIndex
+      ? ((await db.getAllFromIndex(
+          storeName,
+          "sessionId",
+          sessionId,
+        )) as Array<{
+          id: string;
+        }>)
+      : (
+          (await db.getAll(storeName)) as Array<{
+            id: string;
+            sessionId: string;
+          }>
+        ).filter((row) => row.sessionId === sessionId);
     for (const row of rows) {
       await mutations.deleteAndTrack(storeName, row.id);
-    }
-  }
-
-  async function cascadeByFilter(
-    storeName: IdbStoreName,
-    sessionId: string,
-  ): Promise<void> {
-    const all = (await db.getAll(storeName)) as Array<{
-      id: string;
-      sessionId: string;
-    }>;
-    for (const row of all) {
-      if (row.sessionId === sessionId) {
-        await mutations.deleteAndTrack(storeName, row.id);
-      }
     }
   }
 
@@ -66,29 +70,16 @@ export function createIdbSessionStore(ctx: IdbStoreContext): IdbStoreSlice {
     },
 
     async deleteSession(id: string): Promise<void> {
-      await cascadeByIndex("turnResults", id);
-      await cascadeByFilter("runtimeResults", id);
-      await cascadeByIndex("toolCalls", id);
-      await cascadeByIndex("stateSchemas", id);
-      await cascadeByIndex("stateEntries", id);
-      await cascadeByIndex("stateChanges", id);
-      await cascadeByIndex("events", id);
-      await cascadeByIndex("approvals", id);
-      await cascadeByIndex("messages", id);
-      await cascadeByIndex("characters", id);
-      await cascadeByIndex("traceEvents", id);
-      await cascadeByIndex("turnMessages", id);
-      await cascadeByIndex("playerInputs", id);
-      await cascadeByIndex("working_memory", id);
-      await cascadeByIndex("sessionSummaries", id);
-      await cascadeByIndex("suspensions", id);
-      await cascadeByIndex("state_snapshots", id);
-      await cascadeByIndex("state_snapshot_metadata", id);
-      await cascadeByIndex("lorebook_entries", id);
-      await cascadeByIndex("runtime_outputs", id);
-      await cascadeByIndex("interaction_records", id);
-      await cascadeByFilter("plugin_data", id);
-      await cascadeByIndex("world_data_import_ledger", id);
+      // Cascade is derived from the registry — adding a session-scoped table
+      // there extends this delete automatically, matching the SQL/Memory
+      // backends and closing the historical IDB drift gap.
+      for (const { idbStore } of SESSION_SCOPED_TABLES) {
+        await cascadeSession(idbStore, id);
+      }
+      // `state_snapshot_metadata` is an IDB-only pagination sidecar (no SQL
+      // table, so it is intentionally absent from SESSION_SCOPED_TABLES);
+      // clean it explicitly.
+      await cascadeSession("state_snapshot_metadata", id);
       await mutations.deleteAndTrack("sessions", id);
     },
 

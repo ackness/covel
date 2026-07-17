@@ -48,7 +48,6 @@ export type {
 } from "./api/model-settings.js";
 export * from "./api/overlay.js";
 export * from "./api/plugin-data.js";
-export * from "./api/lorebook.js";
 export * from "./api/plugin-rpc.js";
 export * from "./api/approvals.js";
 export * from "./api/traces.js";

@@ -105,7 +105,7 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 | character-presence             | plugin      | —      | manual（按需 / world-data 导入）                                          | —         | 角色头像 / 立绘 / 语音媒体；`dataSchemas` presence/assets                                      |
 | player-identity                | plugin      | —      | manual（按需）                                                            | —         | 玩家人设（`persona-provider`，注入 activePersona）                                             |
 | living-world-rules             | plugin      | —      | manual（按需 / world-data 导入）                                          | —         | 长期世界规则 → `lorebook.upsert` 注入叙事；`dataSchemas` rules                                 |
-| branch-reply                   | plugin      | 700    | auto（每回合播种）+ manual（重生成/采纳）                                 | `system`  | 回复候选 + `prompt-history-rewriter`（自动播种叙事原文，重生成走 LLM；投影历史折叠已采纳回合） |
+| branch-reply                   | plugin      | 700    | auto（每回合播种）+ manual（重生成/采纳）                                 | —         | 回复候选 + `prompt-history-rewriter`（自动播种叙事原文，重生成走 LLM；投影历史折叠已采纳回合） |
 | scene-stage/background-gen     | plugin      | 900    | event（topic: `scene-stage.generate.requested`，`execution: background`） | —         | 后台增量生成缺失的场景背景图（`ctx.images`），产出 `asset.generate`                            |
 | memory                         | core-plugin | —      | UI-only（无 runtime）                                                     | —         | 长期记忆摘要面板 + 通过 `memoryBlocks` 声明默认核心记忆块（剧情/角色关系/场景/玩家状态）       |
 | cost-gate                      | plugin      | —      | hook-only（opt-in，默认禁用）                                             | —         | 跨切面：每会话 token 预算门控（hooks：PostLLMResponse/PreSchedule/TurnStart/SessionEnd）       |
@@ -159,7 +159,7 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 | capabilities  | `[world-data-provider]`                                       |
 | tools.plugin  | `set-world-schema`, `set-world-entries-batch`                 |
 | tools.builtin | `plugin-data-get`, `plugin-data-list`                         |
-| ui.right      | `./ui/world-entries.json`, `./ui/world-schema.json`           |
+| ui.right      | `./ui/world-overview.json`, `./ui/world-schema.json`          |
 
 **Guard 门控**: `guard.js` 在 LLM 调用前执行（纯函数，零 LLM 开销），按优先级决定角色属性 schema，命中任一即返回 `{ skip: true }` 跳过 LLM：
 
@@ -323,7 +323,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 ## char-creator（角色子系统）
 
-🔵 core · ⚙ pure function（player-init）· 🧠 uses LLM（character-tracker）
+🔵 core · 🧠 uses LLM（player-init，guard 门控）· 🧠 uses LLM（character-tracker）
 
 **Quick use**：你要玩家在首轮填一张"角色创建表单"生成主角；并且每轮自动跟踪叙事里出现的 NPC、角色状态变化（受伤、死亡、装备、关系）并写进 `characters` 表。两个子 runtime 共用同一个 `character-panel.json` 侧边栏。
 
@@ -333,18 +333,18 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 ### char-creator/player-init
 
-| 字段        | 值                                                                                |
-| ----------- | --------------------------------------------------------------------------------- |
-| pluginType  | `core-plugin`（不可禁用）                                                         |
-| priority    | 50（Pre-Game 带）                                                                 |
-| runtimeType | `function`                                                                        |
-| handler     | `./handler.js`                                                                    |
-| trigger     | `scheduled`，`interval: 1`，`maxTriggerCount: 2`（首轮生成表单 + 表单提交后写库） |
-| guard       | `./guard.js` — 若 player 已存在则 skip                                            |
-| model       | `plugin`                                                                          |
-| ui.right    | `../../ui/character-panel.json`                                                   |
+| 字段             | 值                                                         |
+| ---------------- | ---------------------------------------------------------- |
+| pluginType       | `core-plugin`（不可禁用）                                  |
+| priority         | 50（Pre-Game 带）                                          |
+| runtimeType      | `agent`（默认，LLM 生成开场表单；guard 命中时跳过）        |
+| trigger          | `auto`（`guard` 门控）                                     |
+| upstreamRequired | `[pregame, world-init/schema-gen]`                         |
+| guard            | `./guard.js` — 若 player 已存在或已收到表单提交则 skip LLM |
+| model            | `plugin`                                                   |
+| ui.right         | `../../ui/character-panel.json`                            |
 
-**两步流程**（当前由 deterministic handler 完成）：
+**两步流程**（第 1 步由 LLM agent 完成，第 2 步由 `guard.js` 确定性完成）：
 
 1. **第 1 步 - 生成表单**（`<player-submission>` 为空时）：
    - 读取世界 schema
@@ -506,19 +506,19 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 
 **路径**: `plugins/chat-mode-narrator/`
 
-| 字段            | 值                                                                                                                                                                    |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| pluginType      | `plugin`                                                                                                                                                              |
-| priority        | 500（Narrator 带，每轮）                                                                                                                                              |
-| trigger         | `auto`                                                                                                                                                                |
-| outputKind      | `story`                                                                                                                                                               |
-| model           | `story`                                                                                                                                                               |
-| capabilities    | `[narrative, chat-mode]`                                                                                                                                              |
-| tags            | `mode:dialogue` · `role:narrator`                                                                                                                                     |
-| relations       | `conflicts: narrator`；`requires: scene-cast, scene-stage, scene-prompts, character-blueprint, character-presence, player-identity, living-world-rules, branch-reply` |
-| tools.builtin   | `emit-event`                                                                                                                                                          |
-| advertiseEvents | `true`（segment 5 注入 `<available-events>` 目录）                                                                                                                    |
-| input.inject    | `scene-cast/activeCastContext` → `<active-cast>`；`npc-graph/rag-retriever/npcContext` → `<npc-relationships>`                                                        |
+| 字段            | 值                                                                                                                                                   |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pluginType      | `plugin`                                                                                                                                             |
+| priority        | 500（Narrator 带，每轮）                                                                                                                             |
+| trigger         | `auto`                                                                                                                                               |
+| outputKind      | `story`                                                                                                                                              |
+| model           | `story`                                                                                                                                              |
+| capabilities    | `[narrative, chat-mode]`                                                                                                                             |
+| tags            | `mode:dialogue` · `role:narrator`                                                                                                                    |
+| relations       | `conflicts: narrator`；`requires: scene-cast, scene-stage, scene-prompts, character-blueprint, character-presence, living-world-rules, branch-reply` |
+| tools.builtin   | `emit-event`                                                                                                                                         |
+| advertiseEvents | `true`（segment 5 注入 `<available-events>` 目录）                                                                                                   |
+| input.inject    | `scene-cast/activeCastContext` → `<active-cast>`；`npc-graph/rag-retriever/npcContext` → `<npc-relationships>`                                       |
 
 **userSettings**（世界用 `pluginSettings.chat-mode-narrator` 预置，玩家可覆盖）：
 
@@ -895,7 +895,7 @@ tools:
     - plugin-data-get
 ```
 
-> **弃用说明**：`tools.local` / `hooks` / `rpc` / `wires` 四个 frontmatter 注册字段自本版本起弃用（启动时每插件 warn 一次），保留一个发布周期后移除。内置插件已全部迁移到 `entry`。
+> **弃用说明**：`tools.local` / `hooks` / `rpc` / `wires` 四个 frontmatter 注册字段自 v0.0.14 起弃用（启动时每插件 warn 一次），**计划于 v0.0.17 移除**。内置插件已全部迁移到 `entry`；社区插件请尽快迁移。
 
 ### wires（媒体厂商 wire 注册，已弃用 — 改用 entry 的 `covel.registerWires`）
 
@@ -997,13 +997,13 @@ maxRecursionDepth: 5
 
 ### guard
 
-Agent runtime 的前置门控函数。在 LLM 调用前执行（纯函数，零 token 开销），可用于检查前置条件、导入数据等��
+Agent runtime 的前置门控函数。在 LLM 调用前执行（纯函数，零 token 开销），可用于检查前置条件、导入数据等。
 
 ```yaml
 guard: ../../guard.js
 ```
 
-Guard 函数接收与 function runtime 相同��� `FunctionHandlerContext`，返回值规则：
+Guard 函数接收与 function runtime 相同的 `FunctionHandlerContext`，返回值规则：
 
 - `{ skip: true, ... }` — 跳过 LLM 调用，guard 输出作为 runtime 结果
 - `{ skip: false, ... }` — 继续执行 LLM agent
@@ -1452,6 +1452,18 @@ Covel 的核心设计原则是**插件承载游戏逻辑，框架提供原语和
 ### 新增 frontmatter 字段
 
 当框架需要区分插件行为时，应在 `RuntimeManifest` 中添加通用字段（如 `outputKind`、`capabilities`），而非在框架代码中添加条件分支。
+
+### 延迟工具加载：`tools.defer`
+
+工具白名单较大（>~10 个）的 runtime 可以声明延迟加载，避免每次 LLM 调用都全量预载所有工具 schema：
+
+```yaml
+tools:
+  plugin: [tool-a, tool-b, tool-c, ...] # entry 注册的工具名
+  defer: true # true = 延迟整个白名单；或 [tool-a, tool-b] 精确列出
+```
+
+被延迟的工具**照常注册、照常鉴权**，只是不进初始 LLM 工具清单；框架自动注入 `search-tools`（BM25 检索，中英文均可），LLM 检索命中的工具自下一步起可直接调用，激活状态持续到本 turn 结束。`defer` 数组中不在白名单内的名字会被忽略——延迟声明永远不能授予未声明的工具。详见 [docs/reference/tools.md](./tools.md#search-tools框架注入延迟工具加载)。
 
 ### Runtime 输出字段：`preGameDone`
 

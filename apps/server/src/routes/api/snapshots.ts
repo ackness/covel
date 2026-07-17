@@ -422,8 +422,9 @@ snapshotRoutes.post("/:id/fork", async (c) => {
 
           // Copy session-scoped lorebook entries. Missing before, so a fork lost
           // every lore/world entry the parent accumulated during play, and the
-          // child's `{{ config.worldEntries }}` came back empty. (sessionId, id) is
-          // the composite key, so keeping the original id is safe.
+          // child's world-entries prompt injection came back empty.
+          // (sessionId, id) is the composite key, so keeping the original id
+          // is safe.
           if (snapshot.payload.lorebookEntries.length > 0) {
             await tx.upsertLorebookEntries(
               snapshot.payload.lorebookEntries.map((lb) => ({

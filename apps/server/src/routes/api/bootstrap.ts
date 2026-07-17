@@ -66,7 +66,11 @@ import { runtimeOutputRoutes } from "./runtime-outputs.js";
 import { pluginRpcRoutes } from "./plugin-rpc.js";
 import { approvalRoutes, sessionApprovalRoutes } from "./approvals.js";
 export { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
-import { createBootstrapCompactorRunner } from "./bootstrap/compactor.js";
+import {
+  createBootstrapCompactorRunner,
+  createTurnContextBudget,
+  type ResolveNarrativeBudgetFn,
+} from "./bootstrap/compactor.js";
 import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
 import { createBootstrapHookPipeline } from "./bootstrap/plugin-hooks.js";
 import { setupPluginTools } from "./bootstrap/tools.js";
@@ -144,11 +148,6 @@ export interface ApiBootstrapConfig {
    * player-facing settings (`memory` → `plugin` → `story` → first text slot).
    */
   readonly preferredMemorySlot?: string;
-  /** Optional config provider for injecting world context etc. into runtime execution. */
-  readonly getConfigFn?: (
-    pluginId: string,
-    runtimeId: string,
-  ) => Readonly<Record<string, unknown>>;
   /**
    * Optional per-request middleware inserted AFTER the default dependency
    * injection middleware but BEFORE route handlers execute. Intended for
@@ -175,6 +174,13 @@ export interface ApiBootstrapConfig {
   readonly mediaStore?: MediaStore;
   readonly mediaBackend?: MediaStoreBackend;
   readonly vectorBackend?: VectorBackend;
+  /**
+   * Live view of the main narrative slot's model budget (contextWindow /
+   * maxOutputTokens), built by the composition root against the AI
+   * registries. Drives the compaction threshold and the prompt-assembly
+   * hard prune. Absent (tests, minimal harnesses) → fixed fallback window.
+   */
+  readonly resolveNarrativeBudget?: ResolveNarrativeBudgetFn;
 }
 
 export interface ApiBootstrapResult {
@@ -247,7 +253,7 @@ export async function bootstrapApi(
   const store = wrapStoreWithPluginDataEvents(config.store, eventBus);
 
   // One-time startup sweep of stale suspensions accumulated while the server
-  // was down (TODO S4-T4.c). Fire-and-forget — never blocks boot.
+  // was down (spec S4-T4.c). Fire-and-forget — never blocks boot.
   void maybeSweepExpiredSuspensions(store, { force: true }).catch(
     (err: unknown) =>
       console.warn(
@@ -431,15 +437,6 @@ export async function bootstrapApi(
     }
   }
 
-  // 7. getConfigFn — per-request config injection
-  //    Actual config pre-loading happens in the actions.ts route handler
-  //    before calling executeTurn, bridging async store reads to sync getConfig interface.
-  const getConfigFn =
-    config.getConfigFn ??
-    ((
-      _pluginId: string,
-      _runtimeId: string,
-    ): Readonly<Record<string, unknown>> => ({}));
   const getPluginSource = (pluginId: string) => registry.get(pluginId)?.source;
 
   const { rpcRegistry, rpcExecutor, rpcApprovalGate } =
@@ -493,12 +490,21 @@ export async function bootstrapApi(
   };
 
   const runtimeEnv = readRuntimeEnv();
+  const budgetSource = {
+    ...(runtimeEnv.compactorContextWindow !== undefined
+      ? { contextWindowOverride: runtimeEnv.compactorContextWindow }
+      : {}),
+    ...(config.resolveNarrativeBudget
+      ? { resolveNarrativeBudget: config.resolveNarrativeBudget }
+      : {}),
+  };
   const compactorRunner = createBootstrapCompactorRunner({
     manifestCache,
     store,
     llmAdapter: config.llmAdapter,
-    contextWindow: runtimeEnv.compactorContextWindow,
+    ...budgetSource,
   });
+  const turnContextBudget = createTurnContextBudget(budgetSource);
 
   // 8. Create memory system (Letta-style three-tier memory)
   const bootstrapMemory = createBootstrapMemorySystem({
@@ -542,9 +548,9 @@ export async function bootstrapApi(
     }
     c.set("loadRuntimeFn", loadRuntimeFn);
     c.set("toolExecutor", toolExecutor);
-    c.set("getConfigFn", getConfigFn);
     c.set("resolveModel", resolveModel);
     c.set("compactorRunner", compactorRunner);
+    c.set("turnContextBudget", turnContextBudget);
     c.set("hookPipeline", hookPipeline);
     c.set("eventDirectory", eventDirectory);
     // memorySystem injected via module-level setter, not Hono context

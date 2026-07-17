@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import type { WorldRecord } from "@covel/store";
-import { errorBody } from "../../../api-error.js";
+import { errorBody, readJsonBody } from "../../../api-error.js";
 import { resolveContainedPath } from "../../../world-data/safe-path.js";
 import { checkHostedOperator } from "../session/session-guard.js";
 import { type WorldEnv, resolveWorldMetadata } from "./shared.js";
@@ -36,7 +36,9 @@ worldCrudRoutes.post("/", async (c) => {
   const denied = checkHostedOperator(c);
   if (denied) return denied;
   const store = c.get("store");
-  const body = await c.req.json<Record<string, unknown>>();
+  const parsed = await readJsonBody<Record<string, unknown>>(c);
+  if (parsed instanceof Response) return parsed;
+  const body = parsed.body;
 
   if (!body.id || typeof body.id !== "string") {
     return c.json(errorBody("id (string) is required"), 400);
@@ -77,7 +79,9 @@ worldCrudRoutes.patch("/:id", async (c) => {
     return c.json(errorBody("World not found"), 404);
   }
 
-  const body = await c.req.json<Record<string, unknown>>();
+  const parsed = await readJsonBody<Record<string, unknown>>(c);
+  if (parsed instanceof Response) return parsed;
+  const body = parsed.body;
   const now = new Date().toISOString();
   const metadataResult = resolveWorldMetadata(body, existing.metadata);
   if (metadataResult.error) {

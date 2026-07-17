@@ -67,7 +67,6 @@ describe("executeTurn: saveTurnResult invariant", () => {
         handler: async () => ({ preGameDone: true }),
       }),
       llm: new NoopLLM(),
-      getConfig: () => ({}),
       store,
     };
     await executeTurn(
@@ -89,7 +88,6 @@ describe("executeTurn: saveTurnResult invariant", () => {
         },
       }),
       llm: new NoopLLM(),
-      getConfig: () => ({}),
       store,
     };
     await executeTurn(
@@ -115,7 +113,6 @@ describe("executeTurn: saveTurnResult invariant", () => {
         promptTemplate: "",
       }),
       llm: new NoopLLM(),
-      getConfig: () => ({}),
       store,
     };
     await executeTurn(
@@ -137,7 +134,6 @@ describe("executeTurn: saveTurnResult invariant", () => {
         promptTemplate: "",
       }),
       llm: new NoopLLM(),
-      getConfig: () => ({}),
       store,
     };
     await executeTurn(

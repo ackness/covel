@@ -9,7 +9,7 @@
 
 import { Hono } from "hono";
 import { FrameworkCapability } from "@covel/shared";
-import { errorBody } from "../../../api-error.js";
+import { errorBody, readJsonBody } from "../../../api-error.js";
 import {
   syncWorldDataForSession,
   preflightWorldDataForSession,
@@ -134,7 +134,9 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
   const pluginRegistry = c.get("pluginRegistry");
   const id = c.req.param("id");
 
-  const body = await c.req.json<Record<string, unknown>>();
+  const parsed = await readJsonBody<Record<string, unknown>>(c);
+  if (parsed instanceof Response) return parsed;
+  const body = parsed.body;
   const sessionId = body.sessionId;
   if (typeof sessionId !== "string") {
     return c.json(errorBody("sessionId (string) is required"), 400);

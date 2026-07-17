@@ -238,25 +238,26 @@ export async function maybeCompact(
   //    message-insertion.ts), so counting their raw content would permanently
   //    inflate the estimate and re-trigger compaction after the first round.
   const systemTokens = deps.estimator(systemPrompt);
-  const compactedSummaryIds = new Set<string>();
   let lastCompactedIndex = -1;
   let messageTokens = 0;
   for (let i = 0; i < messages.length; i++) {
     const m = messages[i]!;
     if (m.compactedAtTurnId != null) {
-      compactedSummaryIds.add(m.compactedAtTurnId);
       lastCompactedIndex = i;
     } else {
       messageTokens += deps.estimator(m.content);
     }
   }
+  // Count ALL session summaries, not just those referenced by `messages`:
+  // callers now pass the uncompacted suffix (listUncompactedTurnMessages),
+  // where compacted rows — and thus their summary references — are absent.
+  // Every summary is part of the effective prompt view either way (see
+  // message-insertion.ts), so a full history yields the identical total.
   let summaryTokens = 0;
-  if (compactedSummaryIds.size > 0 && deps.store.listSessionSummaries) {
+  if (deps.store.listSessionSummaries) {
     const summaries = await deps.store.listSessionSummaries(sessionId);
     for (const s of summaries) {
-      if (compactedSummaryIds.has(s.id)) {
-        summaryTokens += deps.estimator(s.content);
-      }
+      summaryTokens += deps.estimator(s.content);
     }
   }
   const totalTokens = systemTokens + messageTokens + summaryTokens;

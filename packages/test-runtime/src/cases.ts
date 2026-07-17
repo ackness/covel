@@ -15,7 +15,6 @@ export interface RuntimeCase {
   readonly pluginId?: string;
   readonly message?: string;
   readonly payload?: Record<string, unknown>;
-  readonly config?: Record<string, unknown>;
   readonly userSettings?: Record<string, unknown>;
   readonly llmResponse?: Record<string, unknown>;
   readonly llmResponses?: readonly Record<string, unknown>[];
@@ -77,7 +76,6 @@ export function buildCaseDebugOptions(args: {
     caseName: testCase.name,
     message: testCase.message ?? base.message,
     payload: testCase.payload ?? base.payload,
-    config: testCase.config ?? base.config,
     userSettings: testCase.userSettings ?? base.userSettings,
     llmResponse: testCase.llmResponse ?? base.llmResponse,
     llmResponses: testCase.llmResponses ?? base.llmResponses,

@@ -169,7 +169,6 @@ describe("npc-graph core plugin write-read-inject path", () => {
         };
       },
       llm,
-      getConfig: () => ({}),
       store,
     };
 

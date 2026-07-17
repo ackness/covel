@@ -20,7 +20,7 @@ import type { UiSlotName } from "./shared.js";
  * explicit diagnostic, so a newer plugin pack on an older server degrades
  * loudly instead of silently rendering a broken panel.
  */
-export const CURRENT_UI_SPEC_VERSION = 1;
+const CURRENT_UI_SPEC_VERSION = 1;
 
 const i18nTextSchema = z.union([z.string(), z.record(z.string(), z.string())]);
 
@@ -29,7 +29,7 @@ const i18nTextSchema = z.union([z.string(), z.record(z.string(), z.string())]);
  * (forward compatibility) — callers pass the ORIGINAL spec through to the
  * frontend untouched, so Zod's stripping never mutates what ships.
  */
-export const uiSpecSchema = z
+const uiSpecSchema = z
   .object({
     specVersion: z
       .number()
@@ -89,7 +89,7 @@ export interface UiSpecDiagnostic {
 }
 
 /** Pull a spec's declared `id` for diagnostic labelling, if any. */
-export function uiSpecId(spec: unknown): string | undefined {
+function uiSpecId(spec: unknown): string | undefined {
   if (spec && typeof spec === "object") {
     const id = (spec as Record<string, unknown>).id;
     if (typeof id === "string" && id.length > 0) return id;
@@ -98,7 +98,7 @@ export function uiSpecId(spec: unknown): string | undefined {
 }
 
 /** Validate one spec, returning concrete per-field issues on failure. */
-export function validateUiSpec(
+function validateUiSpec(
   spec: unknown,
 ): { ok: true } | { ok: false; issues: UiSpecIssue[] } {
   const result = uiSpecSchema.safeParse(spec);

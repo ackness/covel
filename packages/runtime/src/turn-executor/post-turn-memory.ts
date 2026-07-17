@@ -44,7 +44,7 @@ export function schedulePostTurnMemoryUpdate(args: {
     .catch((err) => {
       console.warn(
         `[turn-executor] memory update failed for ${input.sessionId}:`,
-        err instanceof Error ? err.message : String(err),
+        err,
       );
     });
 }

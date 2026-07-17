@@ -257,15 +257,15 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 下列事件由 server 透过 actions SSE 流转发用于 debug / trace。它们现在**已经是 `CovelEvent` union 的成员**（不再是「未进 enum 的私有事件」），并在 `COVEL_EVENT_META` 中标记 `forwardToActionStream: true`。server 的转发白名单 `FORWARDED_EVENT_TYPES` 完全从该元数据**派生**（不再手写 Set）。web 的 actions handler 对这些类型显式 no-op（它们经订阅通道驱动 `/debug` 时间线），但因已在 union 内，新增同类事件会被前端穷尽校验强制做出「处理或忽略」的决定。
 
-| 事件                                                       | 来源                                                                                           | 用途                                                                           |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                        | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过                       |
-| `character.upserted`                                       | `packages/runtime/src/commit/session-commit-handlers.ts`（`character.upsert` proposal commit） | 与 `record.updated` 平行的角色快照事件                                         |
-| `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                    | LLM 工具调用 trace                                                             |
-| `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                    | LLM 调用 trace                                                                 |
-| `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                    | 块发出 / state patch 应用 trace                                                |
-| `hook.fired` / `hook.rewrote` / `hook.aborted`             | TurnEmitter                                                                                    | Hook 行为 trace                                                                |
-| `gateway.calling` / `gateway.responded` / `gateway.failed` | TurnEmitter（`withGatewayTrace`）                                                              | function-runtime `ctx.gateway` provider 调用 trace（与 `llm.*` 对等，A2-P1-5） |
+| 事件                                                       | 来源                                                                                          | 用途                                                                           |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                       | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过                       |
+| `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts`（`character.upsert` proposal commit） | 与 `record.updated` 平行的角色快照事件                                         |
+| `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                   | LLM 工具调用 trace                                                             |
+| `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                   | LLM 调用 trace                                                                 |
+| `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                   | 块发出 / state patch 应用 trace                                                |
+| `hook.fired` / `hook.rewrote` / `hook.aborted`             | TurnEmitter                                                                                   | Hook 行为 trace                                                                |
+| `gateway.calling` / `gateway.responded` / `gateway.failed` | TurnEmitter（`withGatewayTrace`）                                                             | function-runtime `ctx.gateway` provider 调用 trace（与 `llm.*` 对等，A2-P1-5） |
 
 > `function.executing` / `function.completed` 为 function-runtime 的 handler 边界 trace 事件（TurnEmitter），`forwardToActionStream: false`——**仅经订阅通道 / trace_events 下发**，与 `recursive.*` 同类，不进入 `/api/actions`。`gateway.*` 则 `forwardToActionStream: true`（对齐 `llm.calling/responded`），故列在上表。两组都已纳入 `CovelEvent` union（发射端受 `CovelEventType` 闭合约束）。
 >
@@ -283,7 +283,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 ### 回合执行（SSE 流式响应）
 
-`/api/actions` 接受的 `type` 字段（实际由 `apps/server/src/routes/api/actions.ts:79` 的 `SUPPORTED_ACTIONS` 数组定义）：
+`/api/actions` 接受的 `type` 字段（实际由 `apps/server/src/routes/api/actions.ts:148` 的 `SUPPORTED_ACTIONS` 数组定义）：
 
 | 命令            | 方法 | 端点                                     | 响应                  |
 | --------------- | ---- | ---------------------------------------- | --------------------- |
@@ -470,9 +470,9 @@ These events ride the standard SSE envelope and are also persisted into `trace_e
 | `block.emitted`       | `{ runtimeId, pluginId, proposalId, source, block }`                                                                                                                                                                                                                                                                                       |
 | `ui.rendered`         | `{ runtimeId, pluginId, proposalId, source, render, block? }` — `/actions` SSE forwards this so chat can render committed `ui.render` blocks live; older trace-only payloads may omit `block`, in which case clients synthesize it from `render`.                                                                                          |
 | `state.patch.applied` | `{ runtimeId, pluginId, proposalId, patch: { packageName, summary, ops } }`                                                                                                                                                                                                                                                                |
-| `hook.fired`          | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType }`                                                                                                                                                                                                                                                                         |
-| `hook.rewrote`        | `{ event, hookName, pluginId, runtimeId?, targetId?, diff? }`                                                                                                                                                                                                                                                                              |
-| `hook.aborted`        | `{ event, hookName, pluginId, runtimeId?, targetId?, reason }`                                                                                                                                                                                                                                                                             |
+| `hook.fired`          | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType, proposalType? }`                                                                                                                                                                                                                                                          |
+| `hook.rewrote`        | `{ event, hookName, pluginId, runtimeId?, targetId?, diff?, proposalType? }`                                                                                                                                                                                                                                                               |
+| `hook.aborted`        | `{ event, hookName, pluginId, runtimeId?, targetId?, reason, proposalType? }`                                                                                                                                                                                                                                                              |
 
 Delta narrative continues to ride `narrative.delta` for realtime UI; only `message.completed` is persisted to keep `trace_events` compact.
 

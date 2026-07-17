@@ -34,6 +34,7 @@
  */
 
 import { Hono } from "hono";
+import { estimateTokens } from "@covel/context";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import { createRpcHandlerStoreView } from "@covel/runtime";
 import { RpcDispatchError, RpcValidationError } from "@covel/runtime";
@@ -116,6 +117,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     const resolveModel = c.get("resolveModel");
     const eventBus = c.get("eventBus");
     const compactorRunner = c.get("compactorRunner");
+    const turnContextBudget = c.get("turnContextBudget");
     const hookPipeline = c.get("hookPipeline");
     const sessionLock = c.get("sessionLock");
     const mediaStore = c.get("mediaStore");
@@ -204,9 +206,6 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       pluginRegistry,
       sessionId,
     );
-    const turnGetConfig =
-      c.get("getConfigFn") ?? ((_pluginId: string, _runtimeId: string) => ({}));
-
     // Audit F7: player-authored plugin settings travel with the request
     // as a base64-encoded JSON header (`X-Plugin-User-Settings`) sourced
     // from the unified SettingsStore. The body map keys on pluginId so
@@ -249,7 +248,6 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         ...(pluginGateway ? { gateway: pluginGateway } : {}),
         ...(pluginUtils ? { utils: pluginUtils } : {}),
         ...(getPluginSource ? { getPluginSource } : {}),
-        getConfig: turnGetConfig,
         ...(mediaStore ? { mediaStore } : {}),
         toolExecutor,
         resolveModel,
@@ -260,6 +258,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         // then can't tell the runtime ever finished. Wire it through so
         // manual-trigger turns produce the same trace surface as auto turns.
         compactor: compactorRunner,
+        ...(turnContextBudget
+          ? { estimator: estimateTokens, contextBudget: turnContextBudget }
+          : {}),
         capabilityPluginIds,
         ...(hookPipeline ? { hookPipeline } : {}),
         ...(eventDirectory ? { eventDirectory } : {}),

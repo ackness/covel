@@ -16,29 +16,6 @@ export const AI_ENV_VARS = [
     description: "Prompt template root directory override.",
   },
   {
-    name: "LANGFUSE_PUBLIC_KEY",
-    group: "ai",
-    type: "string",
-    status: "active",
-    description: "Langfuse public key for LLM trace export.",
-  },
-  {
-    name: "LANGFUSE_SECRET_KEY",
-    group: "ai",
-    type: "secret",
-    status: "active",
-    secret: true,
-    description: "Langfuse secret key for LLM trace export.",
-  },
-  {
-    name: "LANGFUSE_BASE_URL",
-    group: "ai",
-    type: "url",
-    status: "active",
-    defaultValue: "https://cloud.langfuse.com",
-    description: "Langfuse API base URL.",
-  },
-  {
     name: "COVEL_LLM_RETRY_DISABLED",
     group: "ai",
     type: "boolean",
@@ -61,12 +38,5 @@ export const AI_ENV_VARS = [
     status: "documented",
     defaultValue: "debugs/llm-cache",
     description: "Documented dev LLM replay cache directory.",
-  },
-  {
-    name: "COVEL_ALLOWED_LLM_HOSTS",
-    group: "ai",
-    type: "string",
-    status: "documented",
-    description: "Documented custom LLM host allowlist.",
   },
 ] as const satisfies readonly EnvVarDefinition[];

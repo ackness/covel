@@ -74,15 +74,6 @@ export interface TraceDiscovery {
   pluginData: PluginDataDiscoveryIndex[];
 }
 
-export async function fetchTraceEvents(sessionId: string): Promise<{
-  sessionId: string;
-  count: number;
-  discovery?: TraceDiscovery;
-  events: TraceEvent[];
-}> {
-  return request(`/api/traces/${encodeURIComponent(sessionId)}`, { sessionId });
-}
-
 export async function fetchTraceTurns(sessionId: string): Promise<{
   sessionId: string;
   turnCount: number;

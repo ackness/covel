@@ -37,6 +37,14 @@ export interface ModelCapabilityInfo {
   contextWindow?: number;
   maxOutputTokens?: number;
   pricing?: ModelPricing;
+  /**
+   * Flat per-M-token prices as actually returned by
+   * `GET /api/model-db/lookup` (see routes/model-db.ts) — that endpoint
+   * sends these alongside contextWindow/maxOutputTokens instead of a
+   * nested `pricing` object.
+   */
+  inputPerMToken?: number;
+  outputPerMToken?: number;
 }
 
 export interface LlmSlotInfo {
@@ -92,30 +100,8 @@ export interface ModelDbInfo {
   source?: string;
 }
 
-export interface ModelDbSearchResult {
-  id: string;
-  input: InputModality[];
-  output: OutputModality[];
-  features: ModelFeature[];
-  contextWindow: number;
-  maxOutputTokens: number;
-  mode: string;
-  inputPerMToken?: number;
-  outputPerMToken?: number;
-}
-
 export async function fetchModelDbInfo(): Promise<ModelDbInfo> {
   return request<ModelDbInfo>("/api/model-db");
-}
-
-export async function searchModelDb(
-  query: string,
-  limit = 20,
-): Promise<ModelDbSearchResult[]> {
-  const res = await request<{ results: ModelDbSearchResult[] }>(
-    `/api/model-db/search?q=${encodeURIComponent(query)}&limit=${limit}`,
-  );
-  return res.results;
 }
 
 export async function lookupModelCapability(
@@ -185,15 +171,6 @@ export function mergeCapability(
       ? { ...base.pricing, ...override.pricing }
       : base.pricing,
   };
-}
-
-// -- Block Schemas -------------------------------------------------
-
-export async function fetchBlockSchemas(): Promise<Record<string, unknown>> {
-  const res = await request<{ schemas: Record<string, unknown> }>(
-    "/api/block-schemas",
-  );
-  return res.schemas;
 }
 
 // -- AI Ping -------------------------------------------------------

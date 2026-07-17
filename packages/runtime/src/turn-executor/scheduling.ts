@@ -117,6 +117,14 @@ export function scheduleMainLoopFollowups(args: {
   return dag.error ? scheduleByPriority(mainLoop, args.turnNumber) : dag.groups;
 }
 
+/**
+ * `messageHistory` is the uncompacted suffix of the session timeline. If a
+ * runtime's last trigger was compacted away, the backward scan misses it and
+ * returns the not-found sentinel (999) — erring toward triggering, which is
+ * safe: the compactor's protect window keeps recent turns raw, so any message
+ * old enough to be compacted is at least a protect-window's worth of player
+ * turns in the past.
+ */
 function countPlayerMessagesSinceRuntime(
   messageHistory: readonly TurnMessageRecord[],
   runtimeId: string,

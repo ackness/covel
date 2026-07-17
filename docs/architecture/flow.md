@@ -133,7 +133,7 @@ flowchart TB
 | `0`       | `0–99`               | Pre-Game band（如 `pregame`、`world-init`、`char-creator`）                                                                                                                                    |
 | `>= 1`    | `100–1000`           | 主循环（narrator `500` / guide / codex / npc-graph extractor / character-tracker 同 `600` …）。同优先级的下游 runtime 通过 `upstreamRequired` + `input.inject` 声明依赖，由 DAG 调度器并发执行 |
 
-**Proposal 类型**（全部过 commit chain）：`narrative.append`、`interaction.request`、`state.patch`、`event.emit`、`plugin.data` / `plugin.data.batch`、`working_memory.set`、`lorebook.upsert`。runtime 输出若带 legacy `phase` 字段会被 `normalizeOutput` 静默忽略（兼容老插件，不报错、不产生 proposal）。
+**Proposal 类型**（全部过 commit chain，源自 `ProposalPayloadMap`）：`narrative.append`、`interaction.request`、`state.patch`、`event.emit`、`ui.render`、`asset.generate`、`plugin.data` / `plugin.data.batch`、`character.upsert`、`working_memory.set`、`lorebook.upsert`。runtime 输出若带 legacy `phase` 字段会被 `normalizeOutput` 静默忽略（兼容老插件，不报错、不产生 proposal）。
 
 ## 三、消息翻译层（玩家 ↔ LLM Agent）
 
@@ -353,7 +353,7 @@ plugins/my-plugin/
 │                                            │  Button      │      │
 │                                            │  EntryCard   │      │
 │                                            │  Alert       │      │
-│                                            │  ...25个组件  │      │
+│                                            │  ...48个组件  │      │
 │                                            └─────────────┘      │
 │                                                                  │
 │  plugin-data.changed ──► pluginData store  ──► MessagePluginSurface │
@@ -689,9 +689,9 @@ sequenceDiagram
 
 启动 → LLM 初始化            @covel/ai-provider               多供应商 LLM 抽象
                              ├── presetRegistry               管理 LLM 预设 (llm.toml)
-                             ├── slotRegistry                 slot 路由 (default/fast/story)
-                             ├── createGatewayAdapter()       统一 generate() 接口
-                             └── model-db                     2597 模型能力数据库
+                             ├── slotRegistry                 slot 路由 (default/fast/balance/image)
+                             ├── createGateway()              统一 generate() 接口
+                             └── model-db                     2967 模型能力数据库
 
 启动 → 依赖注入              @covel/tools                     工具系统
                              ├── tool()                       工具定义 wrapper
@@ -715,7 +715,11 @@ Turn 执行                    @covel/runtime                   核心执行引�
 上下文组装                    @covel/context                   Prompt 组装
                              ├── buildContext()               模板变量 + 注入块 + 消息历史
                              ├── interpolateTemplate()        {{ }} 占位符替换
-                             └── Compactor                    长对话压缩
+                             ├── applyBudget()                硬裁剪兜底（窗口按叙事 slot 的
+                             │                                  模型 capability 动态解析）
+                             └── Compactor                    长对话压缩（同一窗口来源，
+                                                                COVEL_COMPACTOR_CONTEXT_WINDOW
+                                                                可选覆盖）
 
 类型共享                      @covel/shared                   跨包类型定义
                              ├── types/plugin.ts              RuntimeManifest, UISpec, etc.
@@ -726,7 +730,8 @@ Turn 执行                    @covel/runtime                   核心执行引�
 
 测试支持                      @covel/plugin-test-utils         插件作者测试工具
                              ├── MockLLM                      模拟 LLM 响应
-                             ├── createTestHarness()          完整测试环境
+                             ├── makeManualFunctionContext()  function handler 测试 context
+                             ├── expectAssetGenerated()       断言 asset.generate proposal
                              └── factory functions             makeTurnInput, etc.
 ```
 
@@ -762,19 +767,19 @@ Turn 执行                    @covel/runtime                   核心执行引�
 
 ### 8.3 各包核心接口
 
-| 包                    | 核心导出                                                        | 调用方                    |
-| --------------------- | --------------------------------------------------------------- | ------------------------- |
-| **shared**            | `RuntimeManifest`, `UISpec`, `ProtocolEventType`, Zod schemas   | 所有包                    |
-| **plugin-loader**     | `discoverPlugins()`, `loadRuntime()`, `PluginRegistry`          | server bootstrap          |
-| **ai-provider**       | `createGatewayAdapter()`, `PresetRegistry`, `SlotRegistry`      | server bootstrap, runtime |
-| **context**           | `buildContext()`, `interpolateTemplate()`                       | runtime (per-runtime)     |
-| **runtime**           | `executeTurn()`, `createToolExecutor()`, `shouldTrigger()`      | server actions route      |
-| **store**             | `DataStore` interface, `createMemoryStore()`, `createPgStore()` | server, tools, runtime    |
-| **events**            | `createEventBus()`, `EventBus.emit()`, `EventBus.onEmit()`      | server, plugin-data-tools |
-| **tools**             | `tool()`, `createPluginDataTools()`, `shortIdBatch()`           | bootstrap, plugin tools   |
-| **state**             | `createStateManager()`, `StateManager`                          | server, runtime           |
-| **approval**          | `createApprovalPipeline()`, `ApprovalPipeline.check()`          | tool executor             |
-| **plugin-test-utils** | `MockLLM`, `createTestHarness()`                                | plugin tests only         |
+| 包                    | 核心导出                                                            | 调用方                    |
+| --------------------- | ------------------------------------------------------------------- | ------------------------- |
+| **shared**            | `RuntimeManifest`, `UISpec`, `ProtocolEventType`, Zod schemas       | 所有包                    |
+| **plugin-loader**     | `discoverPlugins()`, `loadRuntime()`, `PluginRegistry`              | server bootstrap          |
+| **ai-provider**       | `createGateway()`, `createPresetRegistry()`, `createSlotRegistry()` | server bootstrap, runtime |
+| **context**           | `buildContext()`, `interpolateTemplate()`                           | runtime (per-runtime)     |
+| **runtime**           | `executeTurn()`, `createToolExecutor()`, `shouldTrigger()`          | server actions route      |
+| **store**             | `DataStore` interface, `createMemoryStore()`, `createPgStore()`     | server, tools, runtime    |
+| **events**            | `createEventBus()`, `EventBus.emit()`, `EventBus.onEmit()`          | server, plugin-data-tools |
+| **tools**             | `tool()`, `createPluginDataTools()`, `shortIdBatch()`               | bootstrap, plugin tools   |
+| **state**             | `createStateManager()`, `StateManager`                              | server, runtime           |
+| **approval**          | `createApprovalPipeline()`, `ApprovalPipeline.check()`              | tool executor             |
+| **plugin-test-utils** | `MockLLM`, `makeManualFunctionContext()`, `expectAssetGenerated()`  | plugin tests only         |
 
 ## 九、设计约束与原则
 

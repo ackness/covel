@@ -6,8 +6,8 @@ import type {
   LLMAdapter,
   LLMResponse,
   LLMToolDefinition,
-  LLMMessage,
 } from "@covel/runtime";
+import type { LLMMessage } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";

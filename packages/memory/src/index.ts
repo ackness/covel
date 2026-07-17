@@ -5,7 +5,8 @@
  *   - Core Memory Blocks: editable text in the context window
  *   - Recall Memory: searchable conversation history
  *   - Archival Memory: long-term cross-plugin knowledge
- *   - Compaction: automatic summarization of old messages
+ *
+ * (Compaction lives in `@covel/context`'s `maybeCompact`, not this package.)
  *
  * Public surface is intentionally narrow: consumers compose the whole system
  * via `createMemorySystem`. The individual tier factories stay package-internal.
@@ -26,8 +27,6 @@ export type {
   RecallSearcher,
   ArchivalSearchResult,
   ArchivalSearcher,
-  CompactionConfig,
-  CompactionResult,
   MemorySystemDeps,
   MemorySystem,
 } from "./types.js";

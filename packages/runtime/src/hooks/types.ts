@@ -9,7 +9,6 @@
  * runtime and the plugin-facing `HookEventName` can never drift apart.
  */
 
-import type { EventBus } from "@covel/events";
 import type { HookEnforce, HookEventName } from "@covel/shared";
 
 // ── Hook event names ─────────────────────────────────────────────
@@ -140,21 +139,6 @@ export interface HookRegistration<P = unknown> {
   readonly timeoutMs?: number;
   /** Ordering group. Default normal. */
   readonly enforce?: HookEnforce;
-}
-
-// ── Hook pipeline interface ──────────────────────────────────────
-
-export interface HookPipelineRun<P> {
-  /**
-   * Run all registered handlers for the given event using HOOK_SEMANTICS.
-   * Sequential hooks return accumulated `replace`; parallel hooks return continue.
-   */
-  run<Q extends P>(
-    event: HookEvent,
-    ctx: HookContext,
-    payload: Q,
-    opts?: { readonly eventBus?: EventBus; readonly emitter?: unknown },
-  ): Promise<HookResult<Q>>;
 }
 
 // `HookDeclaration` (the PLUGIN.md frontmatter shape) is re-exported from

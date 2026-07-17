@@ -1,9 +1,7 @@
 /**
  * Bridge between Electron native menus / main process and the web app.
  *
- * Primary channel: window.covelIpc (contextBridge, sandboxed, allowlisted).
- * Fallback: window CustomEvent for older main-process versions that still
- * dispatch via executeJavaScript.
+ * Channel: window.covelIpc (contextBridge, sandboxed, allowlisted).
  *
  * Safe to initialize in a browser — the IPC surface is simply absent there
  * and no listeners fire.
@@ -148,12 +146,6 @@ const IPC_CHANNELS = {
   serverStatus: "covel:server:status",
 } as const;
 
-const LEGACY_EVENTS: Record<string, keyof typeof IPC_CHANNELS> = {
-  "covel:open-settings": "openSettings",
-  "covel:new-world": "newWorld",
-  "covel:export-chat": "exportChat",
-};
-
 export function initDesktopBridge(handlers: DesktopBridgeHandlers): CleanupFn {
   const cleanups: CleanupFn[] = [];
   const ipc = getCovelIpc();
@@ -199,31 +191,6 @@ export function initDesktopBridge(handlers: DesktopBridgeHandlers): CleanupFn {
       );
     }
   }
-
-  // Legacy CustomEvent fallback (kept one release for backwards compat).
-  const legacyListeners: Array<[string, EventListener]> = [];
-  for (const [eventName, handlerKey] of Object.entries(LEGACY_EVENTS)) {
-    const listener: EventListener = () => {
-      switch (handlerKey) {
-        case "openSettings":
-          handlers.onOpenSettings();
-          break;
-        case "newWorld":
-          handlers.onNewWorld();
-          break;
-        case "exportChat":
-          handlers.onExportChat();
-          break;
-      }
-    };
-    window.addEventListener(eventName, listener);
-    legacyListeners.push([eventName, listener]);
-  }
-  cleanups.push(() => {
-    for (const [event, handler] of legacyListeners) {
-      window.removeEventListener(event, handler);
-    }
-  });
 
   return () => {
     for (const cleanup of cleanups) cleanup();

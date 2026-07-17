@@ -200,7 +200,6 @@ describe("TurnExecutor — agent runtime suspend", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => agentLoaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       store,
       toolExecutor: mockToolExecutor,
       eventBus,
@@ -258,7 +257,6 @@ describe("TurnExecutor — agent runtime suspend", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => agentLoaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       store,
       toolExecutor: mockToolExecutor,
       eventBus,
@@ -329,7 +327,6 @@ describe("TurnExecutor — agent runtime suspend", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => agentLoaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       store,
       toolExecutor: mockToolExecutor,
       eventBus,
@@ -421,7 +418,6 @@ describe("TurnExecutor — agent runtime suspend", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => agentLoaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       store,
       toolExecutor: mockToolExecutor,
       eventBus,
@@ -481,7 +477,6 @@ describe("TurnExecutor — agent runtime suspend", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => agentLoaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       store,
       toolExecutor: mockToolExecutor,
       eventBus,
@@ -547,7 +542,6 @@ describe("TurnExecutor — function runtime suspend", () => {
           usage: { inputTokens: 0, outputTokens: 0 },
         }),
       },
-      getConfig: () => ({}),
       store,
       eventBus,
     };
@@ -598,7 +592,6 @@ describe("TurnExecutor — function runtime suspend", () => {
           usage: { inputTokens: 0, outputTokens: 0 },
         }),
       },
-      getConfig: () => ({}),
       getPluginSource: () => "community",
       store,
       eventBus,
@@ -642,7 +635,6 @@ describe("TurnExecutor — function runtime suspend", () => {
           usage: { inputTokens: 0, outputTokens: 0 },
         }),
       },
-      getConfig: () => ({}),
       getPluginSource: () => "community",
       store,
       eventBus,
@@ -739,7 +731,6 @@ describe("resumeSuspendedRuntime", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => loaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       store,
       toolExecutor: mockToolExecutor,
       eventBus,
@@ -794,7 +785,6 @@ describe("resumeSuspendedRuntime", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => loaded,
       llm,
-      getConfig: () => ({}),
       store,
       toolExecutor: mockToolExecutor,
       eventBus,
@@ -865,7 +855,6 @@ describe("resumeSuspendedRuntime", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => loaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       store,
       toolExecutor: mockToolExecutor,
       eventBus,
@@ -937,7 +926,6 @@ describe("resumeSuspendedRuntime", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => loaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       store,
       toolExecutor: mockToolExecutor,
       eventBus,
@@ -984,7 +972,6 @@ describe("resumeSuspendedRuntime", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => loaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       store,
       toolExecutor: mockToolExecutor,
       eventBus,
@@ -1022,7 +1009,6 @@ describe("resumeSuspendedRuntime", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => loaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       store,
       toolExecutor: mockToolExecutor,
       eventBus,
@@ -1068,7 +1054,6 @@ describe("resumeSuspendedRuntime", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => loaded,
       llm,
-      getConfig: () => ({}),
       store,
       eventBus,
     };
@@ -1130,7 +1115,6 @@ describe("resumeSuspendedRuntime", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => loaded,
       llm,
-      getConfig: () => ({}),
       store,
       eventBus,
     };
@@ -1160,7 +1144,6 @@ describe("resumeSuspendedRuntime", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => undefined,
       llm: mockLLM,
-      getConfig: () => ({}),
       store,
       eventBus,
     };

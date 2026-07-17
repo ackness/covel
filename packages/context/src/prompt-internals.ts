@@ -6,7 +6,7 @@
  * - template-variable interpolation
  * - inject-block construction
  * - variable-object assembly (the big `variables` record fed to the
- *   interpolator, including `inputs`, `config`, `world`, `session`, `player`)
+ *   interpolator, including `inputs`, `world`, `session`, `player`)
  * - locale → language-name resolution
  *
  * This module is `@internal` — exports are imported by sibling modules only
@@ -377,7 +377,6 @@ export function assemblePromptVariables(
 
   return {
     inputs: inputsMap,
-    config: params.config,
     world,
     session: {
       id: turnInput.sessionId,

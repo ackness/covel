@@ -117,11 +117,6 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
    * author-supplied `pluginType` manifest field.
    */
   readonly getPluginSource?: (pluginId: string) => PluginSource | undefined;
-  /** Get effective config for a plugin/runtime. */
-  readonly getConfig: (
-    pluginId: string,
-    runtimeId: string,
-  ) => Readonly<Record<string, unknown>>;
 
   /** Called when a runtime starts execution. */
   readonly onRuntimeStart?: (info: {

@@ -1,6 +1,7 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { Agent } from "undici";
+import { readRuntimeEnv } from "@covel/shared";
 
 interface ResolvedAddress {
   readonly address: string;
@@ -10,13 +11,51 @@ interface ResolvedAddress {
 const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
 
 /**
+ * Whether a resolver answer in a private/benchmark range may be accepted.
+ *
+ * True only for the CORE PROVIDER path (`trustedProviderPath` — the user's own
+ * configured LLM baseUrl via postJson/getJson) on the `self` tier
+ * (desktop / self-deploy, the default when DEPLOYMENT_TIER is unset — already
+ * loopback-bound with owner/operator tokens as no-ops). There, DNS-answer
+ * filtering does more harm than good: local TUN proxies (Clash / mihomo /
+ * sing-box / Surge) map every hostname into a private/benchmark range and
+ * route by SNI, and a LAN Ollama endpoint legitimately resolves to
+ * 192.168.x.x — both were wrongly rejected as "SSRF". The socket is still
+ * pinned to the exact answer, preserving the anti-rebinding guarantee.
+ *
+ * NEVER granted to:
+ *  - the plugin `ctx.http` path (`trustedProviderPath: false`) — third-party
+ *    plugin code must not reach internal services even on a local machine;
+ *  - IP-LITERAL URLs — a raw `https://10.0.0.1` stays subject to the
+ *    public-only rule (url-safety's string check also blocks it upstream);
+ *  - hosted tiers (demo / commercial) — they may run inside a cloud network
+ *    where private answers reach real internal services.
+ */
+function allowResolvedPrivateAddresses(
+  isLiteral: boolean,
+  trustedProviderPath: boolean,
+): boolean {
+  return (
+    trustedProviderPath &&
+    !isLiteral &&
+    readRuntimeEnv().deploymentTier === "self"
+  );
+}
+
+/**
  * Resolve one request target, reject every non-public answer, and return a
  * dispatcher whose socket lookup is pinned to those exact answers. Resolving
  * before creating the dispatcher makes the policy easy to audit; overriding
  * the connector lookup closes the validation-to-connect DNS-rebinding gap.
  */
-export async function createPinnedDispatcher(url: URL): Promise<Agent> {
-  const addresses = await resolveAllowedAddresses(url.hostname);
+export async function createPinnedDispatcher(
+  url: URL,
+  trustedProviderPath = false,
+): Promise<Agent> {
+  const addresses = await resolveAllowedAddresses(
+    url.hostname,
+    trustedProviderPath,
+  );
 
   let nextAddress = 0;
   return new Agent({
@@ -45,7 +84,8 @@ export function createConnectPinnedDispatcher(): Agent {
   return new Agent({
     connect: {
       lookup(hostname, options, callback) {
-        resolveAllowedAddresses(hostname).then(
+        // Core provider path — the user's own configured baseUrl.
+        resolveAllowedAddresses(hostname, true).then(
           (addresses) => {
             if (options.all) {
               callback(null, [...addresses]);
@@ -74,6 +114,7 @@ export function createConnectPinnedDispatcher(): Agent {
  */
 async function resolveAllowedAddresses(
   rawHostname: string,
+  trustedProviderPath = false,
 ): Promise<readonly ResolvedAddress[]> {
   const hostname = normalizeHost(rawHostname);
   const literalFamily = isIP(hostname);
@@ -91,6 +132,13 @@ async function resolveAllowedAddresses(
     throw new Error(
       `SSRF policy rejected ${hostname}: DNS returned no addresses`,
     );
+  }
+
+  // Core provider path on the self tier: accept any resolver answer (see the
+  // helper's rationale) — local proxies and LAN endpoints resolve to private
+  // ranges, and the socket stays pinned to these exact addresses regardless.
+  if (allowResolvedPrivateAddresses(literalFamily !== 0, trustedProviderPath)) {
+    return addresses;
   }
 
   const allowLoopback = LOOPBACK_HOSTNAMES.has(hostname);

@@ -15,9 +15,15 @@ import type {
   ToolCallRecordRow,
   TraceEventRecord,
   TurnMessageRecord,
+  TurnMessageStats,
   TurnResultRecord,
 } from "../types.js";
-import { applyCursorPage, sortByCursorAsc } from "../common/pagination.js";
+import {
+  applyCursorAfter,
+  applyCursorPage,
+  sortByCursorAsc,
+} from "../common/pagination.js";
+import { computeTurnMessageStats } from "../common/turn-message-stats.js";
 import type { IdbStoreContext, IdbStoreSlice } from "./idb-context.js";
 import {
   filterInteractionRecords,
@@ -303,6 +309,39 @@ export function createIdbRuntimeStore(ctx: IdbStoreContext): IdbStoreSlice {
         sessionId,
       );
       return paginateRows(sortByCreatedAtAsc(all), pagination);
+    },
+
+    async listUncompactedTurnMessages(
+      sessionId: string,
+    ): Promise<TurnMessageRecord[]> {
+      const all = await listBySession<TurnMessageRecord>(
+        db,
+        "turnMessages",
+        sessionId,
+      );
+      return sortByCreatedAtAsc(all.filter((r) => r.compactedAtTurnId == null));
+    },
+
+    async getTurnMessageStats(sessionId: string): Promise<TurnMessageStats> {
+      const all = await listBySession<TurnMessageRecord>(
+        db,
+        "turnMessages",
+        sessionId,
+      );
+      return computeTurnMessageStats(all);
+    },
+
+    async listTurnMessagesAfter(
+      sessionId: string,
+      after: { readonly createdAt: string; readonly id: string } | null,
+      limit: number,
+    ): Promise<TurnMessageRecord[]> {
+      const all = await listBySession<TurnMessageRecord>(
+        db,
+        "turnMessages",
+        sessionId,
+      );
+      return applyCursorAfter(sortByCursorAsc(all), after, limit);
     },
 
     async listRecentTurnMessages(

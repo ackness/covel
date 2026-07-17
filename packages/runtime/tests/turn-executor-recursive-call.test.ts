@@ -71,7 +71,6 @@ describe("executeTurn recursiveCall", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async (rt) => loaded.get(rt.name),
       llm: { generate: vi.fn() },
-      getConfig: () => ({}),
       emitter,
     };
 
@@ -129,7 +128,6 @@ describe("executeTurn recursiveCall", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async (rt) => loaded.get(rt.name),
       llm: { generate: vi.fn() },
-      getConfig: () => ({}),
       emitter,
     };
 

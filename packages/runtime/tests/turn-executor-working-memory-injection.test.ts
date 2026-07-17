@@ -146,7 +146,6 @@ describe("turn-executor → working memory injection", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => makeLoaded(manifest),
       llm,
-      getConfig: () => ({}),
       store,
     };
 
@@ -181,7 +180,6 @@ describe("turn-executor → working memory injection", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => makeLoaded(manifest),
       llm,
-      getConfig: () => ({}),
       store,
     };
 

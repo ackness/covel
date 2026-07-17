@@ -20,7 +20,7 @@
  * model column collation, so it would be a codegen/migration change).
  */
 
-import { and, desc, eq, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lt, or } from "drizzle-orm";
 import type { Column, SQL } from "drizzle-orm";
 
 import type { CursorPageOpts } from "../records/pagination-records.js";
@@ -56,4 +56,29 @@ export function cursorPageWhere(
  */
 export function cursorPageOrder(cols: CursorColumns): SQL[] {
   return [desc(cols.createdAt), desc(cols.id)];
+}
+
+/**
+ * WHERE for a forward keyset read: `sessionId = ?` plus, when a cursor is
+ * supplied, the strict `(createdAt, id) > (after.createdAt, after.id)` tuple
+ * predicate — the mirror of {@link cursorPageWhere} for oldest-first
+ * consumers that walk the log incrementally (vector-ingest's recall cursor).
+ */
+export function cursorAfterWhere(
+  cols: CursorColumns,
+  sessionId: string,
+  after?: { readonly createdAt: string; readonly id: string } | null,
+): SQL | undefined {
+  const base = eq(cols.sessionId, sessionId);
+  if (!after) return base;
+  const newer = or(
+    gt(cols.createdAt, after.createdAt),
+    and(eq(cols.createdAt, after.createdAt), gt(cols.id, after.id)),
+  );
+  return and(base, newer);
+}
+
+/** ORDER BY for a forward keyset read — oldest-first, no reverse needed. */
+export function cursorAfterOrder(cols: CursorColumns): SQL[] {
+  return [asc(cols.createdAt), asc(cols.id)];
 }

@@ -17,26 +17,26 @@ tags:
   - romance
   - slice-of-life
   - chat-mode
-requiredPlugins:
-  - pregame
-  - world-init
-  - char-creator
-recommendedPlugins:
-  - chat-mode-narrator
-  - scene-cast
-  - scene-stage
-  - scene-prompts
-  - character-blueprint
-  - character-presence
-  - living-world-rules
-  - branch-reply
-  - npc-graph
-excludedPlugins:
-  - narrator
-  - guide
-  - codex
 pluginPolicy:
   preset: dialogue-mode
+  requiredPlugins:
+    - pregame
+    - world-init
+    - char-creator
+  recommendedPlugins:
+    - chat-mode-narrator
+    - scene-cast
+    - scene-stage
+    - scene-prompts
+    - character-blueprint
+    - character-presence
+    - living-world-rules
+    - branch-reply
+    - npc-graph
+  excludedPlugins:
+    - narrator
+    - guide
+    - codex
   preferTags:
     - mode:dialogue
     - role:character

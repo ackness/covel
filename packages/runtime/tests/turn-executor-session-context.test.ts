@@ -5,8 +5,7 @@
  * memory, summary, and character data to prompt-variable resolution.
  *
  * These tests verify:
- *   1. No `config` passed via `getConfig` + world data seeded via store → the
- *      prompt still receives `{{ world.lore }}` etc.
+ *   1. World data seeded via store → the prompt receives `{{ world.lore }}` etc.
  *   2. Snapshot build failure does not crash the turn.
  */
 
@@ -142,7 +141,7 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
     vi.restoreAllMocks();
   });
 
-  it("empty getConfig → snapshot world view populates prompt", async () => {
+  it("snapshot world view populates prompt", async () => {
     const store = createMemoryStore();
     const sessionId = "sess-sc-on";
     const worldId = "w-sc-on";
@@ -156,7 +155,6 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
       llm,
       // Deliberately empty: world variables must come from
       // SessionContextSnapshot, not from runtime config.
-      getConfig: () => ({}),
       store,
       // No worldDataPluginId — world.lore / world.tone come from WorldRecord
       // metadata alone, so the snapshot does not need plugin data for this.
@@ -213,7 +211,6 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => makeLoaded(manifest),
       llm,
-      getConfig: () => ({}),
       store: breakingStore,
       // No worldDataPluginId → listPluginData in snapshot loader is not
       // invoked. The snapshot build itself therefore succeeds using the
@@ -311,7 +308,6 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
         };
       },
       llm,
-      getConfig: () => ({}),
       store,
     };
 

@@ -9,7 +9,7 @@ import type { EventBus } from "@covel/events";
 import type { DataStore } from "@covel/store";
 import type { CovelMessage } from "@covel/shared";
 import { isEnvTruthy, readRuntimeEnv } from "@covel/shared";
-import { errorBody } from "../../api-error.js";
+import { errorBody, readJsonBody } from "../../api-error.js";
 import { checkSessionOwnerById } from "./session/session-guard.js";
 
 type Env = {
@@ -31,12 +31,14 @@ eventRoutes.post("/emit", async (c) => {
   }
 
   const eventBus = c.get("eventBus");
-  const body = await c.req.json<{
+  const parsed = await readJsonBody<{
     topic?: string;
     payload?: Record<string, unknown>;
     sessionId?: string;
     targetRuntime?: string;
-  }>();
+  }>(c);
+  if (parsed instanceof Response) return parsed;
+  const body = parsed.body;
 
   if (!body.topic || !body.sessionId) {
     return c.json(errorBody("topic and sessionId are required"), 400);

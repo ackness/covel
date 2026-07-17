@@ -332,7 +332,9 @@ export interface ToolsConfig {
   /**
    * Relative paths to local tool modules.
    * @deprecated Register tools imperatively in the unified `entry` module and
-   * list their names under `plugin` instead. Kept working for one cycle.
+   * list their names under `plugin` instead. All bundled plugins migrated in
+   * v0.0.14; this shim (and the legacy `hooks`/`rpc`/`wires` frontmatter
+   * fields) is planned for removal in v0.0.17.
    */
   readonly local?: readonly string[];
   /**
@@ -340,6 +342,18 @@ export interface ToolsConfig {
    * (registration itself happens in the plugin's `entry` module).
    */
   readonly plugin?: readonly string[];
+  /**
+   * Deferred tool loading (tool-search). `true` defers the runtime's entire
+   * whitelist; a string array defers just those tool names (for `local`
+   * entries, the name is the file basename without extension — same rule as
+   * LLM advertisement). Deferred tools stay registered and authorized but
+   * are omitted from the initial LLM tool list; the framework injects a
+   * `search-tools` tool instead, and tools the LLM discovers through it are
+   * activated for the rest of the current turn's agent loop. Use when the
+   * whitelist is large (>~10 tools) and per-call schema preloading would
+   * dominate the prompt budget.
+   */
+  readonly defer?: true | readonly string[];
 }
 
 // ── User-declared plugin settings ────────────────────────────────
@@ -635,7 +649,7 @@ export interface RuntimeManifest {
    * inserted near the end of the message history, just before the Nth-from-last
    * message. Modeled after SillyTavern / NovelAI author's-note semantics.
    *
-   * The content supports template interpolation (`{{ config.xxx }}`, etc.)
+   * The content supports template interpolation (`{{ player.xxx }}`, etc.)
    * identical to the plugin body. Multiple active plugins' notes are merged
    * in priority order.
    */

@@ -77,7 +77,6 @@ async function runTurn(
       handler: handlers[m.name],
     }),
     llm: new NoopLLM(),
-    getConfig: () => ({}),
     store: await mainLoopStore("sess-1"),
   };
   return executeTurn(input, manifests, deps);
@@ -174,7 +173,6 @@ describe("executeTurn: manifest.upstreamRequired", () => {
           : {}),
       }),
       llm: new NoopLLM(),
-      getConfig: () => ({}),
       store: await mainLoopStore("sess-1"),
     };
 

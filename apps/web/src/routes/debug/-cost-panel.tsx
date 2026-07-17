@@ -1,19 +1,28 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { lookupModelCapability } from "@/services/api.js";
 import type * as api from "@/services/api.js";
 import type { VisibleTurn } from "./-debug-page-model.js";
 
 /**
- * Token usage panel — aggregates `usage` from the persisted `llm.responded` /
- * `gateway.responded` trace events (per runtime, per turn, session total).
+ * Token usage + estimated cost panel — aggregates `usage` from the persisted
+ * `llm.responded` / `gateway.responded` trace events (per runtime, per turn,
+ * per model, session total).
  *
  * Aggregates generically by event type + runtimeId, never hardcoding a plugin
- * ID. USD cost conversion is intentionally NOT done here: `llm.responded`
- * payloads do not yet carry the model id, so `usage × pricing` would be
- * incomplete — that is a separate follow-up (thread model into the trace
- * payload, then sum via the server-side `resolveCapability` for a single
- * pricing source of truth).
+ * ID. Model attribution: `llm.responded` payloads carry no model id, so each
+ * usage event is paired with the most recent `llm.calling` for the same
+ * runtimeId within the turn (events are stored in emission order, and
+ * calling/responded always pair up per call). `gateway.responded` carries a
+ * slot (presetId), not a model — its usage stays unattributed and is excluded
+ * from pricing, making the USD figure a lower bound when present.
+ *
+ * Pricing comes from `/api/model-db/lookup` (LiteLLM-derived per-M-token
+ * prices) via the existing `lookupModelCapability` service.
  */
+
+/** Sentinel for usage that cannot be attributed to a concrete model id. */
+export const UNKNOWN_MODEL = "(unknown)";
 
 interface Usage {
   readonly inputTokens: number;
@@ -50,16 +59,25 @@ interface TurnAgg {
   outputTokens: number;
 }
 
+interface ModelAgg {
+  readonly model: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
 interface CostModel {
   readonly totalCalls: number;
   readonly totalInput: number;
   readonly totalOutput: number;
   readonly byRuntime: readonly RuntimeAgg[];
   readonly byTurn: readonly TurnAgg[];
+  readonly byModel: readonly ModelAgg[];
 }
 
 export function aggregate(turns: readonly VisibleTurn[]): CostModel {
   const runtimeMap = new Map<string, RuntimeAgg>();
+  const modelMap = new Map<string, ModelAgg>();
   const byTurn: TurnAgg[] = [];
   let totalCalls = 0;
   let totalInput = 0;
@@ -69,12 +87,32 @@ export function aggregate(turns: readonly VisibleTurn[]): CostModel {
     let turnCalls = 0;
     let turnInput = 0;
     let turnOutput = 0;
+    // Sequential pairing: remember the model announced by the latest
+    // `llm.calling` per runtime so the next `llm.responded` inherits it.
+    const lastModelByRuntime = new Map<string, string>();
     for (const event of turn.events) {
+      const payload = event.payload as Record<string, unknown>;
+      if (event.type === "llm.calling") {
+        const rid = payload.runtimeId as string | undefined;
+        const mdl = payload.model as string | undefined;
+        if (rid && mdl) lastModelByRuntime.set(rid, mdl);
+        continue;
+      }
       const usage = readUsage(event);
       if (!usage) continue;
-      const payload = event.payload as Record<string, unknown>;
       const runtimeId = (payload.runtimeId as string) || "(unknown)";
       const pluginId = (payload.pluginId as string) || "";
+      const model =
+        event.type === "llm.responded"
+          ? (lastModelByRuntime.get(runtimeId) ?? UNKNOWN_MODEL)
+          : UNKNOWN_MODEL;
+      const prevModel = modelMap.get(model);
+      modelMap.set(model, {
+        model,
+        calls: (prevModel?.calls ?? 0) + 1,
+        inputTokens: (prevModel?.inputTokens ?? 0) + usage.inputTokens,
+        outputTokens: (prevModel?.outputTokens ?? 0) + usage.outputTokens,
+      });
       // Immutable accumulate: replace the map entry with a fresh object
       // rather than mutating the stored one in place.
       const prev = runtimeMap.get(runtimeId);
@@ -106,7 +144,71 @@ export function aggregate(turns: readonly VisibleTurn[]): CostModel {
   const byRuntime = [...runtimeMap.values()].sort(
     (a, b) => b.inputTokens + b.outputTokens - (a.inputTokens + a.outputTokens),
   );
-  return { totalCalls, totalInput, totalOutput, byRuntime, byTurn };
+  const byModel = [...modelMap.values()].sort(
+    (a, b) => b.inputTokens + b.outputTokens - (a.inputTokens + a.outputTokens),
+  );
+  return { totalCalls, totalInput, totalOutput, byRuntime, byTurn, byModel };
+}
+
+// ── Pricing ──────────────────────────────────────────────────────
+
+interface ModelPrice {
+  readonly inputPerMToken?: number;
+  readonly outputPerMToken?: number;
+}
+
+/** Module-level lookup cache — model prices don't change within a page visit. */
+const priceCache = new Map<string, Promise<ModelPrice | null>>();
+
+function lookupPrice(model: string): Promise<ModelPrice | null> {
+  const cached = priceCache.get(model);
+  if (cached) return cached;
+  const promise = lookupModelCapability(model)
+    .then((cap) =>
+      cap &&
+      (cap.inputPerMToken !== undefined || cap.outputPerMToken !== undefined)
+        ? {
+            ...(cap.inputPerMToken !== undefined
+              ? { inputPerMToken: cap.inputPerMToken }
+              : {}),
+            ...(cap.outputPerMToken !== undefined
+              ? { outputPerMToken: cap.outputPerMToken }
+              : {}),
+          }
+        : null,
+    )
+    .catch(() => null);
+  priceCache.set(model, promise);
+  return promise;
+}
+
+/** Resolve per-M-token prices for the given models (null = no pricing data). */
+function useModelPrices(
+  models: readonly string[],
+): Record<string, ModelPrice | null> {
+  const [prices, setPrices] = useState<Record<string, ModelPrice | null>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const missing = models.filter((m) => m !== UNKNOWN_MODEL && !(m in prices));
+    if (missing.length === 0) return;
+    void Promise.all(
+      missing.map(async (m) => [m, await lookupPrice(m)] as const),
+    ).then((entries) => {
+      if (cancelled) return;
+      setPrices((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [models, prices]);
+  return prices;
+}
+
+function costUsd(agg: ModelAgg, price: ModelPrice): number {
+  return (
+    (agg.inputTokens / 1_000_000) * (price.inputPerMToken ?? 0) +
+    (agg.outputTokens / 1_000_000) * (price.outputPerMToken ?? 0)
+  );
 }
 
 function fmt(n: number): string {
@@ -143,6 +245,27 @@ export function CostPanel({
     1,
     ...model.byRuntime.map((r) => r.inputTokens + r.outputTokens),
   );
+  const modelIds = useMemo(
+    () => model.byModel.map((m) => m.model),
+    [model.byModel],
+  );
+  const prices = useModelPrices(modelIds);
+  const cost = useMemo(() => {
+    let usd = 0;
+    let pricedTokens = 0;
+    let unpricedTokens = 0;
+    for (const agg of model.byModel) {
+      const price = agg.model === UNKNOWN_MODEL ? null : prices[agg.model];
+      const tokens = agg.inputTokens + agg.outputTokens;
+      if (price) {
+        usd += costUsd(agg, price);
+        pricedTokens += tokens;
+      } else {
+        unpricedTokens += tokens;
+      }
+    }
+    return { usd, pricedTokens, unpricedTokens };
+  }, [model.byModel, prices]);
 
   if (model.totalCalls === 0) {
     return (
@@ -200,14 +323,52 @@ export function CostPanel({
             label={t("debugger.cost.calls", "LLM calls")}
             value={fmt(model.totalCalls)}
           />
+          {cost.pricedTokens > 0 && (
+            <StatCard
+              label={t("debugger.cost.estCost", "Est. cost (USD)")}
+              value={`${cost.unpricedTokens > 0 ? "≥ " : "≈ "}$${cost.usd.toFixed(4)}`}
+            />
+          )}
         </div>
         <p className="ui-meta text-[9px] text-muted-foreground/70">
           {t(
             "debugger.cost.note",
-            "Token sums from llm.responded / gateway.responded. USD cost is a pending follow-up (model id not yet in the trace payload).",
+            "Token sums from llm.responded / gateway.responded. USD cost estimated from model-db prices; usage without a model id or price is excluded (cost shown as a lower bound).",
           )}
         </p>
       </section>
+
+      {/* By model */}
+      {model.byModel.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="ui-meta text-[10px] uppercase tracking-wider text-muted-foreground">
+            {t("debugger.cost.byModel", "By model")}
+          </h2>
+          <div className="border border-[var(--rule-color)] divide-y divide-[var(--rule-color)]">
+            {model.byModel.map((m) => {
+              const price = m.model === UNKNOWN_MODEL ? null : prices[m.model];
+              return (
+                <div
+                  key={m.model}
+                  className="flex items-baseline justify-between gap-3 px-3 py-1.5 text-[11px]"
+                >
+                  <span className="font-mono truncate text-foreground">
+                    {m.model === UNKNOWN_MODEL
+                      ? t("debugger.cost.unknownModel", "(unknown model)")
+                      : m.model}
+                  </span>
+                  <span className="font-mono tabular-nums text-muted-foreground shrink-0">
+                    {fmt(m.inputTokens)} → {fmt(m.outputTokens)} · {m.calls}× ·{" "}
+                    {price
+                      ? `$${costUsd(m, price).toFixed(4)}`
+                      : t("debugger.cost.noPrice", "no price")}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* By runtime */}
       <section className="space-y-2">

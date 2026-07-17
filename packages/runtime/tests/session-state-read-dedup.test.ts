@@ -5,11 +5,13 @@ import { loadTurnSessionState } from "../src/turn-executor/session-state.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor-types.js";
 
 /**
- * Audit 2026-07-11 R-13: loadTurnSessionState used to full-read
- * listTurnMessages twice per turn (before and after appending the player
- * message). The appended record is now concatenated locally; these tests pin
- * the single read and that the returned history still includes the player
- * message.
+ * Audit 2026-07-11 R-13 + 2026-07-17 bounded-history follow-up:
+ * loadTurnSessionState used to full-read listTurnMessages twice per turn.
+ * Today the per-turn reads are (a) one listUncompactedTurnMessages for the
+ * raw suffix, (b) one getTurnMessageStats aggregate for turnNumber / trigger
+ * counts — never a full listTurnMessages. The appended player record is
+ * concatenated locally; these tests pin the read pattern and that the
+ * returned history still includes the player message.
  */
 
 async function makeStore(): Promise<DataStore> {
@@ -41,26 +43,35 @@ async function makeStore(): Promise<DataStore> {
 
 function countingStore(store: DataStore): {
   store: DataStore;
-  counts: () => number;
+  counts: () => Record<string, number>;
 } {
-  let listTurnMessagesCalls = 0;
+  const calls: Record<string, number> = {};
+  const counted = new Set([
+    "listTurnMessages",
+    "listUncompactedTurnMessages",
+    "getTurnMessageStats",
+  ]);
   const wrapped = new Proxy(store, {
     get(target, prop, receiver) {
       const value = Reflect.get(target, prop, receiver);
-      if (prop === "listTurnMessages" && typeof value === "function") {
+      if (
+        typeof prop === "string" &&
+        counted.has(prop) &&
+        typeof value === "function"
+      ) {
         return (...args: unknown[]) => {
-          listTurnMessagesCalls += 1;
+          calls[prop] = (calls[prop] ?? 0) + 1;
           return (value as (...a: unknown[]) => unknown).apply(target, args);
         };
       }
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
-  return { store: wrapped, counts: () => listTurnMessagesCalls };
+  return { store: wrapped, counts: () => calls };
 }
 
 describe("loadTurnSessionState read dedup (audit R-13)", () => {
-  it("reads listTurnMessages once when appending the player message (no compactor)", async () => {
+  it("reads the uncompacted suffix once + one stats aggregate, never the full log", async () => {
     const { store, counts } = countingStore(await makeStore());
     const deps = { store } as unknown as TurnExecutorDeps;
 
@@ -74,7 +85,10 @@ describe("loadTurnSessionState read dedup (audit R-13)", () => {
       shouldAppendPlayerMessage: true,
     });
 
-    expect(counts()).toBe(1);
+    expect(counts()).toEqual({
+      listUncompactedTurnMessages: 1,
+      getTurnMessageStats: 1,
+    });
     // History includes both the pre-existing message and the appended one.
     expect(state.messageHistory).toHaveLength(2);
     const appended = state.messageHistory[1]!;
@@ -87,7 +101,7 @@ describe("loadTurnSessionState read dedup (audit R-13)", () => {
     expect(state.turnNumber).toBe(1);
   });
 
-  it("re-reads after compaction actually runs", async () => {
+  it("re-reads the uncompacted suffix after compaction actually runs", async () => {
     const base = await makeStore();
     const { store, counts } = countingStore(base);
     const deps = {
@@ -107,8 +121,51 @@ describe("loadTurnSessionState read dedup (audit R-13)", () => {
       shouldAppendPlayerMessage: true,
     });
 
-    // One initial read + the post-compaction reload; the pre-append second
-    // full read is gone.
-    expect(counts()).toBe(2);
+    // One initial read + the post-compaction reload; the stats aggregate
+    // still runs exactly once and the full log is never read.
+    expect(counts()).toEqual({
+      listUncompactedTurnMessages: 2,
+      getTurnMessageStats: 1,
+    });
+  });
+
+  it("excludes compacted rows from the loaded history while counts still cover the full log", async () => {
+    const base = await makeStore();
+    const now = new Date().toISOString();
+    await base.appendTurnMessage({
+      id: "tm-runtime-old",
+      sessionId: "sess-dedup",
+      turnId: "turn-0",
+      sourceType: "runtime",
+      sourceRuntimeId: "demo/narrator",
+      role: "assistant",
+      content: "old narrative",
+      order: 1,
+      createdAt: now,
+    });
+    await base.tagTurnMessagesCompacted(
+      "sess-dedup",
+      ["tm-0", "tm-runtime-old"],
+      "summary-1",
+    );
+
+    const state = await loadTurnSessionState({
+      input: {
+        sessionId: "sess-dedup",
+        turnId: "turn-1",
+        playerMessage: "hello",
+      },
+      deps: { store: base } as unknown as TurnExecutorDeps,
+      shouldAppendPlayerMessage: true,
+    });
+
+    // Compacted rows are absent from the in-memory history…
+    expect(state.messageHistory.map((m) => m.id)).toEqual(
+      state.messageHistory.map((m) => m.id).filter((id) => id !== "tm-0"),
+    );
+    expect(state.messageHistory).toHaveLength(1);
+    // …but turnNumber / trigger counts still see the whole log.
+    expect(state.turnNumber).toBe(1);
+    expect(state.runtimeTriggerCounts.get("demo/narrator")).toBe(1);
   });
 });

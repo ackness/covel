@@ -22,7 +22,7 @@ repos:
       - id: destroyed-symlinks
       - id: check-executables-have-shebangs
       - id: check-shebang-scripts-are-executable
-        exclude: ^(\.claude/|apps/desktop-tauri/src-tauri/src/main\.rs$)
+        exclude: ^\.claude/
       - id: check-added-large-files
         # 3 MB: covers tracked world character portraits (~1.7–2.4 MB PNGs)
         # while still catching accidental large blobs (videos, dumps, bundles).

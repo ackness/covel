@@ -172,7 +172,6 @@ export async function runRuntimeDebug(
       utils: PLUGIN_UTILS,
       mediaStore,
       getPluginSource: () => discovery.source,
-      getConfig: () => options.config ?? {},
       store,
       toolExecutor: createToolExecutor({
         findTool: (name) => toolMap.get(name),
@@ -221,7 +220,6 @@ export async function runRuntimeDebug(
       gateway: liveAdapters?.gateway ?? makeGateway(options),
       mediaStore,
       utils: PLUGIN_UTILS,
-      config: options.config ?? {},
       ...(options.userSettings ? { userSettings: options.userSettings } : {}),
     });
     jobs.push({

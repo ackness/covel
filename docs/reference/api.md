@@ -185,17 +185,18 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 世界管理
 
-| 方法  | 路径                                   | 描述                                                                             |
-| ----- | -------------------------------------- | -------------------------------------------------------------------------------- |
-| GET   | `/api/worlds`                          | 列出所有世界                                                                     |
-| GET   | `/api/worlds/:id`                      | 获取世界详情                                                                     |
-| POST  | `/api/worlds`                          | 创建/更新世界                                                                    |
-| PATCH | `/api/worlds/:id`                      | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                  |
-| GET   | `/api/worlds/:id/dimensions/export`    | 导出世界维度（YAML/JSON）                                                        |
-| POST  | `/api/worlds/:id/dimensions/import`    | 导入世界维度                                                                     |
-| POST  | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key |
-| POST  | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要       |
-| POST  | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force |
+| 方法   | 路径                                   | 描述                                                                              |
+| ------ | -------------------------------------- | --------------------------------------------------------------------------------- |
+| GET    | `/api/worlds`                          | 列出所有世界                                                                      |
+| GET    | `/api/worlds/:id`                      | 获取世界详情                                                                      |
+| POST   | `/api/worlds`                          | 创建/更新世界                                                                     |
+| PATCH  | `/api/worlds/:id`                      | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                   |
+| DELETE | `/api/worlds/:id`                      | 删除世界（内置 `source:"file"` 世界禁止删除，返回 403；hosted 需 operator token） |
+| GET    | `/api/worlds/:id/dimensions/export`    | 导出世界维度（YAML/JSON）                                                         |
+| POST   | `/api/worlds/:id/dimensions/import`    | 导入世界维度                                                                      |
+| POST   | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key  |
+| POST   | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要        |
+| POST   | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force  |
 
 ### 会话管理
 
@@ -252,14 +253,23 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 全局插件
 
-| 方法   | 路径                                    | 描述                                                                                                                                                                                                                                                    |
-| ------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/api/framework/capabilities`           | 框架级能力索引：manifest 枚举、工具、proposal、world-data URI                                                                                                                                                                                           |
-| GET    | `/api/plugins`                          | 列出所有已加载插件                                                                                                                                                                                                                                      |
-| GET    | `/api/plugins/:id`                      | 获取插件详情                                                                                                                                                                                                                                            |
-| DELETE | `/api/plugins/:id`                      | 卸载第三方插件（删除 `~/.covel/plugins/<id>`）。桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。错误码：鉴权失败 `401/403`、id 格式非法 `400`、内置 ID `409`、未安装 `404`；成功返回 `{ ok, id, restartRequired:true }` |
-| GET    | `/api/plugins/:id/contract`             | 获取插件完整开发契约                                                                                                                                                                                                                                    |
-| GET    | `/api/plugins/:id/plugin-data-contract` | 获取插件数据 namespace/schema 契约                                                                                                                                                                                                                      |
+| 方法   | 路径                          | 描述                                                                                                                                                                                                                                                    |
+| ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/framework/capabilities` | 框架级能力索引：manifest 枚举、工具、proposal、world-data URI                                                                                                                                                                                           |
+| GET    | `/api/plugins`                | 列出所有已加载插件                                                                                                                                                                                                                                      |
+| GET    | `/api/plugins/:id`            | 获取插件详情                                                                                                                                                                                                                                            |
+| DELETE | `/api/plugins/:id`            | 卸载第三方插件（删除 `~/.covel/plugins/<id>`）。桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。错误码：鉴权失败 `401/403`、id 格式非法 `400`、内置 ID `409`、未安装 `404`；成功返回 `{ ok, id, restartRequired:true }` |
+| GET    | `/api/plugins/:id/contract`   | 获取插件完整开发契约（含 `dataSchemas` / plugin-data namespace 契约）                                                                                                                                                                                   |
+| GET    | `/api/plugin-flows`           | 框架编排的 pre-game 流程预览数据（插件列表 + 分段步骤），供准备页可视化                                                                                                                                                                                 |
+
+### 拖拽导入（Install）
+
+`.zip` 包拖拽导入插件/世界。鉴权同 `DELETE /api/plugins/:id`：桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。
+
+| 方法 | 路径                  | 描述                                                                                                                                               |
+| ---- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST | `/api/install/plugin` | multipart 字段 `file`：接受根级 `PLUGIN.md`+`package.json` 或多 runtime 布局的 `.zip`，解压到用户插件目录，返回 `{ ok, id, restartRequired:true }` |
+| POST | `/api/install/world`  | multipart 字段 `file`：接受根级 `world.yaml`+`WORLD.md` 的 `.zip`，解压到用户世界目录，返回 `{ ok, id, restartRequired:false }`                    |
 
 ### 状态查询
 
@@ -455,11 +465,12 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 ### 媒体管理
 
-| 方法 | 路径                            | 描述                                                                                                                                       |
-| ---- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| GET  | `/api/media/:id?token=<signed>` | 内容寻址媒体下载（HMAC token + 会话引用校验）                                                                                              |
-| POST | `/api/media?sessionId=<id>`     | 玩家图片上传：原始字节 body（`Content-Type` = 文件 MIME，仅 `image/*`，≤20MB），内容寻址入库 + 记会话 owner/ref，返回 `{ id, mime, size }` |
-| POST | `/api/media/cleanup`            | 破坏性维护端点：默认禁用 (`COVEL_MEDIA_CLEANUP_ENABLED`)，商业层 503，`dryRun:false` 需 `X-Confirm-Cleanup: yes`                           |
+| 方法 | 路径                                | 描述                                                                                                                                       |
+| ---- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET  | `/api/media/:id?token=<signed>`     | 内容寻址媒体下载（HMAC token + 会话引用校验）                                                                                              |
+| GET  | `/api/sessions/:id/media-token?id=` | 为指定 mediaId 颁发短时签名 token，供上面的下载端点使用                                                                                    |
+| POST | `/api/media?sessionId=<id>`         | 玩家图片上传：原始字节 body（`Content-Type` = 文件 MIME，仅 `image/*`，≤20MB），内容寻址入库 + 记会话 owner/ref，返回 `{ id, mime, size }` |
+| POST | `/api/media/cleanup`                | 破坏性维护端点：默认禁用 (`COVEL_MEDIA_CLEANUP_ENABLED`)，商业层 503，`dryRun:false` 需 `X-Confirm-Cleanup: yes`                           |
 
 ### 配置信息
 
@@ -467,7 +478,6 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | ---- | ------------------------------ | --------------------------------------------------------------------------------------- |
 | GET  | `/api/presets`                 | 列出配置的模型预设                                                                      |
 | GET  | `/api/packages`                | 列出已加载插件包（含 runtime/tool/`userSettings`/`tags`/`relations` 信息）              |
-| GET  | `/api/block-schemas`           | 列出插件 block schema                                                                   |
 | GET  | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件 |
 | GET  | `/api/llm-config`              | 返回 slot 配置与能力信息；llm.toml 解析失败回退默认时附带 `error` 字段                  |
 | POST | `/api/llm-config/reload`       | 重读 llm.toml 并原地应用到运行中的 gateway（无需重启）；返回 `{ ok, slots, error? }`    |
@@ -1835,29 +1845,6 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 `declaredPluginDataNamespaces` 来自 `dataSchemas` 和 `input.inject: plugin-data`。运行时动态 key（如 `entries/<entryId>`、`images/<turnId>`）不会在这里枚举；需要结合 schema、插件文档或 `_index` 端点查看当前 session 的实际 key。
 
-#### `GET /api/plugins/:id/plugin-data-contract`
-
-返回 `GET /api/plugins/:id/contract` 的 plugin-data 子集，适合只关心数据保存/导入契约的工具。
-
-**响应节选:**
-
-```json
-{
-  "pluginId": "codex",
-  "dataSchemas": {
-    "entries": {
-      "namespace": "entries",
-      "schemaVersion": 1,
-      "acceptsWorldData": true,
-      "schema": "./schemas/entries.schema.json"
-    }
-  },
-  "declaredPluginDataNamespaces": ["entries"],
-  "writablePluginDataNamespaces": ["entries"],
-  "readablePluginDataNamespaces": ["entries"]
-}
-```
-
 ---
 
 ### 会话插件管理
@@ -2926,57 +2913,64 @@ Covel 有两条独立的 SSE 流，**信封格式和帧格式都不同**：
 
 > 关键差异：`/api/actions` 使用 data-only 帧，前端**无法**通过 `EventSource.addEventListener` 订阅；`/api/events/stream` 才是命名事件。
 
-### 事件类型枚举（`ProtocolEventType`）
+### 事件类型枚举（`CovelEventType`）
 
-完整定义见 `packages/shared/src/types/protocol.ts`。
+完整定义见 `packages/shared/src/types/protocol.ts`。所有 server→client 事件已收口为单一 discriminated union `CovelEvent`；`ProtocolEventType` 现为 `CovelEvent['type']` 的历史别名（保留向后兼容）。事件是否转发到 `/api/actions` 流由 `COVEL_EVENT_META[type].forwardToActionStream` 决定，转发白名单 `FORWARDED_EVENT_TYPES` 完全从该元数据派生。完整分类表见 [protocol.md § 一、事件类型](./protocol.md#一事件类型covelevent)。
 
-| 类型                       | 分类         | 说明                                                |
-| -------------------------- | ------------ | --------------------------------------------------- |
-| `narrative.delta`          | 叙事         | 叙事文本增量（逐 token 流式）                       |
-| `narrative.completed`      | 叙事         | 叙事文本完成                                        |
-| `interaction.requested`    | 交互         | 请求玩家输入（表单/选择/确认）                      |
-| `interaction.completed`    | 交互         | 玩家交互完成                                        |
-| `ui.rendered`              | UI           | `ui.render` proposal commit 后发出                  |
-| `ui.part.update`           | UI           | UI part 状态更新（每个 part 一条）                  |
-| `state.changed`            | 状态         | 游戏状态变更                                        |
-| `state.snapshot`           | 状态         | 状态快照                                            |
-| `state.snapshot.created`   | 状态         | 自动 / 手动 / fork 写入 snapshot 后发出             |
-| `session.forked`           | 会话         | `POST /api/sessions/:id/fork` 物化子 session 后发出 |
-| `execution.started`        | 执行生命周期 | Turn 执行开始                                       |
-| `runtime.started`          | 执行生命周期 | 单个 Runtime 开始执行                               |
-| `runtime.completed`        | 执行生命周期 | 单个 Runtime 执行完成                               |
-| `runtime.failed`           | 执行生命周期 | Runtime 执行失败                                    |
-| `execution.completed`      | 执行生命周期 | Turn 执行完成                                       |
-| `record.updated`           | 会话生命周期 | 记录更新（角色、任务等）                            |
-| `event.emitted`            | 会话生命周期 | 事件发射                                            |
-| `asset.progress`           | 资产         | 多模态生成进度（`0..100`）                          |
-| `asset.generated`          | 资产         | `asset.generate` proposal commit 后发出             |
-| `world.dimensions.changed` | 世界         | 世界维度文件变更（热更新）                          |
-| `plugin-data.changed`      | 插件数据     | `plugin-data-set` / DELETE / batch 等所有写路径     |
-| `turn.suspended`           | 流程控制     | `suspend()` 工具序列化 pendingContinuation          |
-| `turn.resumed`             | 流程控制     | `POST /api/sessions/:id/resume` 重启 runtime        |
-| `error.occurred`           | 系统         | 执行错误                                            |
-| `connection.restored`      | 系统         | 连接恢复                                            |
+| 类型                       | 分类         | 说明                                                                                            |
+| -------------------------- | ------------ | ----------------------------------------------------------------------------------------------- |
+| `narrative.delta`          | 叙事         | 叙事文本增量（逐 token 流式）                                                                   |
+| `narrative.completed`      | 叙事         | 叙事文本完成                                                                                    |
+| `interaction.requested`    | 交互         | 请求玩家输入（表单/选择/确认）                                                                  |
+| `interaction.completed`    | 交互         | 玩家交互完成                                                                                    |
+| `ui.rendered`              | UI           | `ui.render` proposal commit 后发出                                                              |
+| `ui.part.update`           | UI           | UI part 状态更新（每个 part 一条）                                                              |
+| `state.changed`            | 状态         | 游戏状态变更                                                                                    |
+| `state.snapshot`           | 状态         | 状态快照                                                                                        |
+| `state.snapshot.created`   | 状态         | 自动 / 手动 / fork 写入 snapshot 后发出                                                         |
+| `session.forked`           | 会话         | `POST /api/sessions/:id/fork` 物化子 session 后发出                                             |
+| `execution.started`        | 执行生命周期 | Turn 执行开始                                                                                   |
+| `runtime.started`          | 执行生命周期 | 单个 Runtime 开始执行                                                                           |
+| `runtime.completed`        | 执行生命周期 | 单个 Runtime 执行完成                                                                           |
+| `runtime.failed`           | 执行生命周期 | Runtime 执行失败                                                                                |
+| `execution.completed`      | 执行生命周期 | Turn 执行完成                                                                                   |
+| `record.updated`           | 会话生命周期 | 记录更新（角色、任务等）                                                                        |
+| `event.emitted`            | 会话生命周期 | 事件发射                                                                                        |
+| `asset.progress`           | 资产         | 多模态生成进度（`0..100`）                                                                      |
+| `asset.generated`          | 资产         | `asset.generate` proposal commit 后发出                                                         |
+| `world.dimensions.changed` | 世界         | 世界维度文件变更（热更新）                                                                      |
+| `plugin-data.changed`      | 插件数据     | `plugin-data-set` / DELETE / batch 等所有写路径                                                 |
+| `turn.suspended`           | 流程控制     | `suspend()` 工具序列化 pendingContinuation                                                      |
+| `turn.resumed`             | 流程控制     | `POST /api/sessions/:id/resume` 重启 runtime                                                    |
+| `working_memory.changed`   | 流程控制     | `working_memory.set` proposal commit 后直接写入 `/api/actions`（commit-direct，不经转发白名单） |
+| `error.occurred`           | 系统         | 执行错误                                                                                        |
+| `connection.restored`      | 系统         | 连接恢复                                                                                        |
 
-### 实现私有事件（不在 `ProtocolEventType` 内）
+### 转发的运行时内部事件（已纳入 `CovelEventType`）
 
-下列事件**只**经 `/api/actions` 流转发，未来稳定后才会进 enum。当前消费方需做兼容性处理：
+下列事件已是 `CovelEvent` union 的正式成员（不再是「未进 enum 的私有事件」），并在 `COVEL_EVENT_META` 中标记是否 `forwardToActionStream`。前端穷尽校验强制处理或显式忽略每一种：
 
-| 事件                                                  | 来源                         | 说明                                                                  |
-| ----------------------------------------------------- | ---------------------------- | --------------------------------------------------------------------- |
-| `runtime.skipped`                                     | `actions.ts`                 | runtime 因 cooldown / startTurn / maxTriggerCount 跳过                |
-| `character.upserted`                                  | `session-commit-handlers.ts` | `character.upsert` proposal commit 后发出（与 `record.updated` 平行） |
-| `tool.calling` / `tool.completed` / `tool.failed`     | TurnEmitter                  | 工具调用 trace（debug timeline 用）                                   |
-| `llm.calling` / `llm.responded` / `message.completed` | TurnEmitter                  | LLM 调用 trace                                                        |
-| `block.emitted` / `state.patch.applied`               | TurnEmitter                  | 块发出 / state patch 应用 trace                                       |
-| `hook.fired` / `hook.rewrote` / `hook.aborted`        | TurnEmitter                  | Hook 行为 trace                                                       |
+| 事件                                                                   | 来源                              | 转发到 `/api/actions` | 说明                                                                    |
+| ---------------------------------------------------------------------- | --------------------------------- | :-------------------: | ----------------------------------------------------------------------- |
+| `runtime.skipped`                                                      | `actions.ts`                      |          否           | runtime 因 cooldown / startTurn / maxTriggerCount 跳过                  |
+| `character.upserted`                                                   | `session-commit-emitter.ts`       |          是           | `character.upsert` proposal commit 后发出（与 `record.updated` 平行）   |
+| `tool.calling` / `tool.completed` / `tool.failed`                      | TurnEmitter                       |          是           | 工具调用 trace（debug timeline 用）                                     |
+| `llm.calling` / `llm.responded` / `message.completed`                  | TurnEmitter                       |          是           | LLM 调用 trace                                                          |
+| `block.emitted` / `state.patch.applied`                                | TurnEmitter                       |          是           | 块发出 / state patch 应用 trace                                         |
+| `hook.fired` / `hook.rewrote` / `hook.aborted`                         | TurnEmitter                       |          是           | Hook 行为 trace                                                         |
+| `gateway.calling` / `gateway.responded` / `gateway.failed`             | TurnEmitter（`withGatewayTrace`） |          是           | function-runtime `ctx.gateway` provider 调用 trace（与 `llm.*` 对等）   |
+| `function.executing` / `function.completed`                            | TurnEmitter                       |          否           | function-runtime handler 边界 trace，仅经订阅通道 / `trace_events`      |
+| `recursive.calling` / `recursive.completed` / `recursive.failed`       | TurnEmitter                       |          否           | 递归 runtime trace，仅经订阅通道（topic `trace`）                       |
+| `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed` | `withUtilsTrace`                  |          否           | 插件自带 wire 的 provider HTTP 调用 trace（`ctx.utils.fetchWithRetry`） |
+
+详见 [protocol.md § 转发的运行时内部事件](./protocol.md#转发的运行时内部事件apiactions-转发已纳入-covelevent)。
 
 ### 信封格式
 
 ```typescript
 // /api/actions data-only 帧每条 data: 的形态
 interface SseEnvelope {
-  type: string; // 见上表 + 实现私有事件
+  type: string; // 见上方两张事件表（CovelEventType 的成员）
   requestId: string;
   traceId: string;
   sessionId: string;

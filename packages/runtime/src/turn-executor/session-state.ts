@@ -57,14 +57,22 @@ export async function loadTurnSessionState(args: {
     await deps.memorySystem.updater.awaitPending(input.sessionId);
   }
 
+  // Bounded per-turn reads: counts come from a store-side aggregate over the
+  // FULL log, while the in-memory history is only the uncompacted suffix —
+  // the compacted prefix is represented by session summaries at prompt-build
+  // time, so a long session never re-loads its whole history every turn.
   let messageHistory: readonly TurnMessageRecord[] = [];
+  let turnNumber = 0;
+  let runtimeTriggerCounts: ReadonlyMap<string, number> = new Map();
   if (deps.store) {
-    messageHistory = await deps.store.listTurnMessages(input.sessionId);
+    const [uncompacted, stats] = await Promise.all([
+      deps.store.listUncompactedTurnMessages(input.sessionId),
+      deps.store.getTurnMessageStats(input.sessionId),
+    ]);
+    messageHistory = uncompacted;
+    turnNumber = stats.playerMessageCount;
+    runtimeTriggerCounts = new Map(Object.entries(stats.runtimeMessageCounts));
   }
-
-  const turnNumber = messageHistory.filter(
-    (m) => m.sourceType === "player",
-  ).length;
 
   if (deps.store && shouldAppendPlayerMessage) {
     const playerMessage: TurnMessageRecord = {
@@ -113,11 +121,14 @@ export async function loadTurnSessionState(args: {
         compacted: result.compacted,
         ...(result.summaryId ? { summaryId: result.summaryId } : {}),
       });
-      messageHistory = await deps.store.listTurnMessages(input.sessionId);
+      messageHistory = await deps.store.listUncompactedTurnMessages(
+        input.sessionId,
+      );
     }
   }
 
-  const runtimeTriggerCounts = buildRuntimeTriggerCounts(messageHistory);
+  // triggerCounts already came from getTurnMessageStats above; the player
+  // message appended this turn is a "player" row, so no runtime count moved.
   let sessionStatus: "active" | "paused" | "ended" = "active";
   let preGameCompleted: readonly string[] = [];
   let sessionCharacters: TurnSessionCharacter[] = [];
@@ -211,19 +222,4 @@ export function getPreGameRuntimeState(
       (rt) => !preGameCompleted.includes(rt.name),
     ),
   };
-}
-
-export function buildRuntimeTriggerCounts(
-  messageHistory: readonly TurnMessageRecord[],
-): ReadonlyMap<string, number> {
-  const counts = new Map<string, number>();
-  for (const msg of messageHistory) {
-    if (msg.sourceType === "runtime" && msg.sourceRuntimeId) {
-      counts.set(
-        msg.sourceRuntimeId,
-        (counts.get(msg.sourceRuntimeId) ?? 0) + 1,
-      );
-    }
-  }
-  return counts;
 }

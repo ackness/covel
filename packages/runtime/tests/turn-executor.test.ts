@@ -110,7 +110,6 @@ describe("TurnExecutor E2E", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       store: await createMainLoopStore("sess-1"),
     };
 
@@ -141,7 +140,6 @@ describe("TurnExecutor E2E", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       store: await createMainLoopStore("sess-1"),
     };
 
@@ -156,7 +154,6 @@ describe("TurnExecutor E2E", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       store: await createMainLoopStore("sess-1"),
     };
 
@@ -203,7 +200,6 @@ describe("TurnExecutor E2E", () => {
         return undefined;
       },
       llm: mockLLM,
-      getConfig: () => ({}),
       store: await createMainLoopStore("sess-1"),
     };
 
@@ -258,7 +254,6 @@ describe("TurnExecutor E2E", () => {
       loadRuntime: async (manifest) =>
         manifest.name === "story-runtime" ? storyLoaded : helperLoaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       resolveModel,
       store: await createMainLoopStore("sess-1"),
     };
@@ -356,7 +351,6 @@ describe("TurnExecutor E2E", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => loaded,
       llm,
-      getConfig: () => ({}),
       store,
       toolExecutor: createToolExecutor({
         findTool: (name) =>
@@ -382,7 +376,6 @@ describe("TurnExecutor E2E", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm: failingLLM,
-      getConfig: () => ({}),
       store: await createMainLoopStore("sess-1"),
     };
 
@@ -405,7 +398,6 @@ describe("TurnExecutor E2E", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       store: await createMainLoopStore("sess-1"),
     };
 
@@ -426,7 +418,6 @@ describe("TurnExecutor E2E", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       store,
     };
 
@@ -525,7 +516,6 @@ describe("TurnExecutor E2E", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => guideLoaded,
       llm: guideLLM,
-      getConfig: () => ({}),
       store,
       toolExecutor: createToolExecutor({
         findTool: (name) =>
@@ -605,7 +595,6 @@ describe("TurnExecutor E2E", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => loaded,
       llm,
-      getConfig: () => ({}),
       store,
       toolExecutor: createToolExecutor({
         findTool: (name) =>
@@ -674,7 +663,6 @@ describe("TurnExecutor E2E", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => lookupLoaded,
       llm: loopingLLM,
-      getConfig: () => ({}),
       store,
       toolExecutor: createToolExecutor({
         findTool: (name) =>
@@ -756,7 +744,6 @@ describe("TurnExecutor E2E", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => loaded,
       llm: invalidGuideLLM,
-      getConfig: () => ({}),
       store,
       toolExecutor: createToolExecutor({
         findTool: (name) =>
@@ -806,7 +793,6 @@ describe("TurnExecutor E2E", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       store,
     };
 
@@ -909,7 +895,6 @@ describe("TurnExecutor _interaction protocol", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => charLoaded,
       llm: mockLLM as LLMAdapter,
-      getConfig: () => ({}),
       store,
       toolExecutor: createToolExecutor({
         findTool: (n) => toolMap.get(n),

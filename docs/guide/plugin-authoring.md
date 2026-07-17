@@ -93,8 +93,7 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 第三方开发者和 AI Agent 可以先调用 discovery API，再决定该读哪份文档或写哪个字段：
 
 - `GET /api/framework/capabilities`：框架支持的 manifest 枚举、builtin tools、proposal types、world-data target/schema URI、plugin-data 写入路径。
-- `GET /api/plugins/:id/contract`：某个插件声明的 runtimes、capabilities、tools、rpc actions、UI slots、`dataSchemas` 和 plugin-data namespace。
-- `GET /api/plugins/:id/plugin-data-contract`：某个插件的 plugin-data namespace/schema 子集。
+- `GET /api/plugins/:id/contract`：某个插件声明的 runtimes、capabilities、tools、rpc actions、UI slots、`dataSchemas` 和 plugin-data namespace/schema 契约。
 - `GET /api/sessions/:id/plugin-data/:pluginId/_index`：某个 session 下插件实际已有的 namespace/key 索引，不返回 value。
 
 这组 API 回答“当前框架和插件声明支持什么”；具体字段含义仍以 `docs/reference/`、插件 JSON Schema 和插件自己的 `PLUGIN.md` 为准。
@@ -249,7 +248,7 @@ minimum-release-age=10080
 | 仅测试用                                | `devDependencies` | `@covel/plugin-test-utils`、`vitest`               |
 
 - `function` runtime 必须把 handler 运行时依赖放 `dependencies`；`agent` / `zero-code` 没有 handler.js，通常不声明任何 `@covel` 运行时依赖。
-- 脚手架（`@covel/create`）已按模板生成正确分层；从已有插件 fork 时手动核对，**不要把运行时依赖留在 `devDependencies`**（dev 能跑、打包后会缺）。
+- 脚手架（`scripts/create-plugin.js`）已按模板生成正确分层；从已有插件 fork 时手动核对，**不要把运行时依赖留在 `devDependencies`**（dev 能跑、打包后会缺）。
 
 **共用包提取阈值（避免过度抽象）：**
 

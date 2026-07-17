@@ -17,7 +17,7 @@ import type {
 } from "@covel/runtime";
 import type { RpcApprovalGate } from "@covel/approval";
 import type { RuntimeManifest } from "@covel/shared";
-import type { CompactorRunner } from "@covel/context";
+import type { BudgetOptions, CompactorRunner } from "@covel/context";
 import type { SessionLock } from "./lib/session-lock.js";
 import type { EventDirectory } from "./routes/api/bootstrap/event-directory.js";
 
@@ -26,10 +26,6 @@ type LoadRuntimeFn = (
   locale?: string,
   sessionId?: string,
 ) => Promise<LoadedRuntime | undefined>;
-type GetConfigFn = (
-  pluginId: string,
-  runtimeId: string,
-) => Readonly<Record<string, unknown>>;
 type ResolveModelFn = (
   manifest: RuntimeManifest,
   apiOverride?: string,
@@ -75,9 +71,14 @@ declare module "hono" {
     pluginUtils?: PluginRuntimeUtils;
     loadRuntimeFn: LoadRuntimeFn;
     toolExecutor: ToolExecutor;
-    getConfigFn: GetConfigFn;
     resolveModel: ResolveModelFn;
     compactorRunner: CompactorRunner;
+    /**
+     * Prompt-assembly hard-prune budget (`applyBudget`), derived from the
+     * narrative slot's model capability. Optional so hand-built test DI
+     * need not wire it — turn routes spread it in conditionally.
+     */
+    turnContextBudget?: Omit<BudgetOptions, "estimator">;
     rpcExecutor: RpcExecutor;
     rpcRegistry: PluginRpcRegistry;
     rpcApprovalGate: RpcApprovalGate;
@@ -88,8 +89,9 @@ declare module "hono" {
      *   - everything else → `createInProcessSessionLock()` — `Map`-based
      *     chain, correct for single-process deployments.
      *
-     * Route handlers MUST use this instead of the legacy `withSessionLock`
-     * import so PG deployments automatically get cross-pod safety.
+     * Route handlers MUST use this instead of a hand-rolled lock; the
+     * historical `withSessionLock` import was replaced by this DI-injected
+     * `sessionLock` so PG deployments automatically get cross-pod safety.
      */
     sessionLock: SessionLock;
     /**

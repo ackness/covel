@@ -135,7 +135,6 @@ describe("executeTurn main-loop DAG scheduler", () => {
         handler: makeHandler(m.name),
       }),
       llm: new NoopLLM(),
-      getConfig: () => ({}),
       store: await mainLoopStore("sess-dag"),
     };
 

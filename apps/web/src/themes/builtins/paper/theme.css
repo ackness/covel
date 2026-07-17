@@ -143,7 +143,6 @@ html[data-theme="paper"] .ui-section-title {
 }
 
 /* Dashed dividers feel right with the editorial paper tone */
-html[data-theme="paper"] .ui-rule-h,
 html[data-theme="paper"] .ui-rule {
   border-top-style: dashed;
 }

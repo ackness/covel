@@ -22,23 +22,6 @@ export async function listPluginData(
   return res.items;
 }
 
-/** Get a single plugin data entry. */
-export async function getPluginData(
-  sessionId: string,
-  pluginId: string,
-  namespace: string,
-  key: string,
-): Promise<PluginDataEntry | null> {
-  try {
-    return await request<PluginDataEntry>(
-      `/api/sessions/${encodeURIComponent(sessionId)}/plugin-data/${encodeURIComponent(pluginId)}/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`,
-      { silentErrors: true },
-    );
-  } catch {
-    return null;
-  }
-}
-
 // -- UI Specs (plugin panel discovery) -------------------------
 
 export interface UISlotSpec {

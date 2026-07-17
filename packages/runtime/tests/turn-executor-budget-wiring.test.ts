@@ -85,7 +85,6 @@ async function makeBaseDeps(
   return {
     loadRuntime: async () => makeLoaded(manifest),
     llm,
-    getConfig: () => ({}),
     store: await createMainLoopStore("sess-budget-wire"),
   };
 }

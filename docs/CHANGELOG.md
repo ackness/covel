@@ -21,7 +21,7 @@ Security and reliability hardening release. A full-repository audit and two foll
 ### Added
 
 - **Operator Access settings pane** to save / clear / show / hide the hosted operator token, reloading session and world data on change.
-- **Pull-request / push CI** running install → lint → `lint:ci` (typecheck + dependency hygiene) → tests → build → i18n/plugin checks; `DEPLOYMENT_TIER` is parsed against an explicit enum and fails closed to the most restrictive tier on an unknown value.
+- **Pull-request / push CI** running install → `pnpm lint` → `pnpm deps:check` (dependency hygiene) → tests → build → i18n/plugin checks; `DEPLOYMENT_TIER` is parsed against an explicit enum and fails closed to the most restrictive tier on an unknown value.
 
 ### Changed
 

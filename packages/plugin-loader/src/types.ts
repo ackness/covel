@@ -401,7 +401,6 @@ export interface FunctionHandlerContext {
    */
   readonly store: FunctionStoreView | unknown;
   readonly completedResults: ReadonlyMap<string, unknown>;
-  readonly config: Readonly<Record<string, unknown>>;
   /**
    * Optional gateway facade for function runtimes that need LLM / image /
    * structured-object generation. Absent when the executor was constructed

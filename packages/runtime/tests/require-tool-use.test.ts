@@ -116,7 +116,6 @@ describe("requireToolUse gate", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
       llm,
-      getConfig: () => ({}),
       store,
       toolExecutor: toolExecutor(store),
     };
@@ -153,7 +152,6 @@ describe("requireToolUse gate", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
       llm,
-      getConfig: () => ({}),
       store,
       toolExecutor: toolExecutor(store),
     };
@@ -181,7 +179,6 @@ describe("requireToolUse gate", () => {
       const deps: TurnExecutorDeps = {
         loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
         llm,
-        getConfig: () => ({}),
         store,
         toolExecutor: toolExecutor(store),
       };
@@ -215,7 +212,6 @@ describe("requireToolUse gate", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
       llm,
-      getConfig: () => ({}),
       store,
       toolExecutor: toolExecutor(store),
     };

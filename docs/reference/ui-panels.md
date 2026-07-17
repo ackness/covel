@@ -33,7 +33,7 @@
 
 ### 设计原则
 
-- **Lorebook Tab 由框架固定**，其余右侧面板由插件通过 `ui.right` 声明
+- **所有右侧面板均由插件通过 `ui.right` 声明**（无框架固定 Tab；Lorebook 只有 HTTP API，见下方「世界文档」章节后的说明）
 - **框架不知道具体插件**，通过 `/api/ui-specs` 发现面板
 - **json-render 渲染**，插件提供 JSON spec，框架提供组件 catalog
 - **pluginData 驱动数据**，通过 `plugin-data.changed` SSE 事件实时更新
@@ -53,17 +53,19 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 
 ### 当前注册的面板
 
-| 插件/runtime             | 面板 ID             | 图标               | group       | 数据 namespace | 描述                                                                                                |
-| ------------------------ | ------------------- | ------------------ | ----------- | -------------- | --------------------------------------------------------------------------------------------------- |
-| char-creator/player-init | character           | users              | character   | characters     | 角色列表（player + NPC + companion）                                                                |
-| character-blueprint      | character-blueprint | id-card            | character   | blueprints     | 预设角色（世界作者预置的登场角色模板，只读；作为 `character` 组的子 Tab）                           |
-| codex                    | codex               | book-open          | codex       | entries        | 知识图鉴                                                                                            |
-| living-world-rules       | living-world-rules  | book-marked        | world-data  | rules          | 世界规则（长期设定 / 禁忌，只读；随 world-data 导入播种，作为 `world-data` 组的子 Tab）             |
-| memory                   | memory              | brain              | memory      | （框架托管）   | 核心记忆面板：剧情摘要 / 当前场景 / 角色关系 / 玩家状态。纯 UI，由 `@covel/memory` 在每轮结束后写入 |
-| npc-graph/extractor      | npc-graph           | network            | npc-graph   | nodes + edges  | NPC 关系图（force-directed 可视化）                                                                 |
-| scene-stage/resolver     | scene-stage         | image              | scene-stage | stage          | 当前场景舞台（只读）：场景名 + 昼夜徽标 + `sourceLabel` 状态文案（`pending` 时"背景生成中…"）       |
-| world-init/schema-gen    | world-overview      | layout-dashboard   | world-data  | (汇总)         | 世界总览（词条 + 维度的概览页）                                                                     |
-| world-init/schema-gen    | world-schema        | sliders-horizontal | world-data  | schema         | 角色属性 schema                                                                                     |
+| 插件/runtime             | 面板 ID             | 图标               | group         | 数据 namespace | 描述                                                                                                |
+| ------------------------ | ------------------- | ------------------ | ------------- | -------------- | --------------------------------------------------------------------------------------------------- |
+| char-creator/player-init | character           | users              | character     | characters     | 角色列表（player + NPC + companion）                                                                |
+| character-blueprint      | character-blueprint | id-card            | character     | blueprints     | 预设角色（世界作者预置的登场角色模板，只读；作为 `character` 组的子 Tab）                           |
+| character-presence       | character-presence  | image              | character-art | presence       | 角色立绘画廊（`PortraitGallery`，只读展示 + 玩家可上传替换头像）                                    |
+| codex                    | codex               | book-open          | codex         | entries        | 知识图鉴                                                                                            |
+| living-world-rules       | living-world-rules  | book-marked        | world-data    | rules          | 世界规则（长期设定 / 禁忌，只读；随 world-data 导入播种，作为 `world-data` 组的子 Tab）             |
+| memory                   | memory              | brain              | memory        | （框架托管）   | 核心记忆面板：剧情摘要 / 当前场景 / 角色关系 / 玩家状态。纯 UI，由 `@covel/memory` 在每轮结束后写入 |
+| npc-graph/extractor      | npc-graph           | network            | npc-graph     | nodes + edges  | NPC 关系图（force-directed 可视化）                                                                 |
+| scene-cast               | scene-cast          | users-round        | （无）        | active-cast    | 当前场景在场角色（只读，仅 name + role；内部选择信号留在 plugin_data）                              |
+| scene-stage/resolver     | scene-stage         | image              | scene-stage   | stage          | 当前场景舞台（只读）：场景名 + 昼夜徽标 + `sourceLabel` 状态文案（`pending` 时"背景生成中…"）       |
+| world-init/schema-gen    | world-overview      | layout-dashboard   | world-data    | (汇总)         | 世界总览（词条 + 维度的概览页）                                                                     |
+| world-init/schema-gen    | world-schema        | sliders-horizontal | world-data    | schema         | 角色属性 schema                                                                                     |
 
 > `world-data` 组（groupLabel "世界资料"）汇聚三个 spec：`world-init` 的 `world-overview` / `world-schema`，以及 `living-world-rules` 的 `living-world-rules`（世界规则）。合并为单个 activity-bar tab，内部横向子 Tab 在总览 / 属性 / 世界规则 之间切换。（旧 `world-entries` 子 Tab 已移除：对导入型世界它只是 `world-overview` 已格式化渲染的同一份 dimensions 的原始 JSON 重复；`entries` 的 lorebook/prompt 写入不变，`/debug` Data Explorer 仍可查看。）
 > `character` 组汇聚 `char-creator` 的 character-panel（活角色列表，character-tracker runtime 共享 namespace `characters`，由 `create-character` / `update-character` builtin 工具写入）与 `character-blueprint` 的预设角色面板（世界作者预置的登场角色模板，只读）。前者是当前存档的活状态，后者是导入的只读源；同一批角色导入后会 mirror 成活的 `CharacterRecord`，两个子 Tab 分别呈现"源"与"当前"。
@@ -370,73 +372,7 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 ## 组件 Catalog
 
-框架内置 ~25 个 json-render 组件，所有插件共享：
-
-### 布局
-
-| 组件      | 用途               |
-| --------- | ------------------ |
-| Stack     | 垂直排列，可设 gap |
-| Row       | 水平排列           |
-| Grid      | 网格布局           |
-| Separator | 分隔线             |
-
-### 展示
-
-| 组件    | 用途                                 |
-| ------- | ------------------------------------ |
-| Text    | 文本（支持 variant/weight/size）     |
-| Badge   | 彩色标签                             |
-| Icon    | Lucide 图标                          |
-| TagList | 标签列表                             |
-| Prose   | Markdown 叙事文本（段落分割 + 加粗） |
-| Source  | 来源归属标签                         |
-
-### 数据
-
-| 组件      | 用途                                                    |
-| --------- | ------------------------------------------------------- |
-| Card      | 卡片容器                                                |
-| CardList  | 卡片列表                                                |
-| EntryCard | 图鉴条目卡片（分类图标 + 稀有度 + 标签）                |
-| StatBar   | 数值条（label + value/max + 进度条）                    |
-| Progress  | 进度条                                                  |
-| Accordion | 折叠面板容器（与 `repeat` + `Section` 组合）            |
-| Section   | 可折叠 section（props: `title`, `icon`, `defaultOpen`） |
-| JsonView  | 递归渲染任意 JSON 值（props: `value`）                  |
-
-### 交互
-
-| 组件        | 用途                           |
-| ----------- | ------------------------------ |
-| Button      | 按钮（default/primary/danger） |
-| Input       | 文本输入                       |
-| SearchInput | 带搜索图标的输入框             |
-| Select      | 下拉选择                       |
-| Switch      | 开关                           |
-| FilterBar   | 分类筛选栏                     |
-
-### 表单
-
-| 组件         | 用途                        |
-| ------------ | --------------------------- |
-| Form         | 表单容器                    |
-| FormHeader   | 表单标题栏                  |
-| FormField    | 单个表单字段（text/select） |
-| SubmitButton | 提交按钮（支持 disabled）   |
-
-### 消息
-
-| 组件          | 用途                               |
-| ------------- | ---------------------------------- |
-| PlayerMessage | 玩家消息气泡（右对齐）             |
-| Alert         | 通知（info/success/warning/error） |
-
-### 可视化
-
-| 组件        | 用途                                                                                                                                                                                                                                                                                                                     |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| GraphCanvas | 力导向关系图（react-force-graph-2d）。读取 `pluginId` 下两个 namespace 的数据（节点 + 边），按 `node.type` 着色，按边的 `strength` 正负染色。点击节点弹出档案。基于 lazy import，仅在打开面板时加载 ~60KB gzip 的额外 chunk。Props: `pluginId`, `nodesNamespace`, `edgesNamespace`, `height?`。当前由 `npc-graph` 使用。 |
+组件目录已抽出到独立页面，见 [docs/reference/ui-components.md](./ui-components.md)（当前 48 个组件，权威来源为 `apps/web/src/lib/catalog.tsx` 导出的 `covelRegistry`）。
 
 ## 数据流
 

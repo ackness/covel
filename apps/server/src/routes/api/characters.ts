@@ -8,7 +8,7 @@ import type { DataStore, CharacterRecord } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type { Proposal } from "@covel/shared";
 import type { HookPipeline } from "@covel/runtime";
-import { errorBody } from "../../api-error.js";
+import { errorBody, readJsonBody } from "../../api-error.js";
 import { frameworkProposalSource } from "../../lib/framework-source.js";
 import { resolveSessionParam } from "./session/session-guard.js";
 
@@ -38,7 +38,9 @@ characterRoutes.post("/:id/characters", async (c) => {
   const store = c.get("store");
   const sessionId = guard.session.id;
 
-  const body = await c.req.json<Record<string, unknown>>();
+  const parsed = await readJsonBody<Record<string, unknown>>(c);
+  if (parsed instanceof Response) return parsed;
+  const body = parsed.body;
 
   if (!body.id || typeof body.id !== "string") {
     return c.json(errorBody("id (string) is required"), 400);

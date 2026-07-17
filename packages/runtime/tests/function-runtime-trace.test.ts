@@ -110,7 +110,6 @@ describe("function-runtime trace (A2-P1-5)", () => {
     return {
       loadRuntime: async () => loaded,
       llm: baseLLM,
-      getConfig: () => ({}),
       store,
       eventBus,
       ...extra,

@@ -239,6 +239,25 @@ const pluginUtils = {
 };
 const preferredMemorySlot = resolvePreferredMemorySlot(ai.slotRegistry);
 
+// Live budget view of the main narrative slot ("default" when configured,
+// else the isDefault/first preset). Resolved per call — never cached — so
+// llm.toml hot-reloads propagate to compaction thresholds and prompt budget.
+// ponytail: ignores per-session runtime_model_overrides and X-Slot-Config
+// overlays; wire the session's actual narrative slot if that ever matters.
+const resolveNarrativeBudget = () => {
+  const presetId = ai.slotRegistry.resolveSlot("default");
+  const capability = ai.presetRegistry.resolvePreset(presetId)?.capability;
+  if (!capability) return undefined;
+  return {
+    ...(capability.contextWindow !== undefined
+      ? { contextWindow: capability.contextWindow }
+      : {}),
+    ...(capability.maxOutputTokens !== undefined
+      ? { maxOutputTokens: capability.maxOutputTokens }
+      : {}),
+  };
+};
+
 // ── Bootstrap API ───────────────────────────────────────────────
 // Bundled plugins ship inside the repo / packaged app. The desktop shell
 // can additionally mount a user plugins directory via COVEL_USER_PLUGINS_DIR
@@ -293,6 +312,7 @@ const api = await bootstrapApi({
   preferredMemorySlot,
   perRequestMiddleware: [perRequestLlm],
   sessionLock,
+  resolveNarrativeBudget,
 });
 
 const seededWorldIds = new Set<string>();
