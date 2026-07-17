@@ -83,7 +83,6 @@ async function runPregameTurn(
       guard: options?.guards?.[m.name],
     }),
     llm: new NoopLLM(),
-    getConfig: () => ({}),
     store,
   };
   const result = await executeTurn(input, manifests, deps);
@@ -177,7 +176,6 @@ describe("Pre-Game completion contract", () => {
             : { form: { formId: "character-form" } },
       }),
       llm: new NoopLLM(),
-      getConfig: () => ({}),
       store,
     };
 
@@ -226,7 +224,6 @@ describe("Pre-Game completion contract", () => {
         },
       }),
       llm: new NoopLLM(),
-      getConfig: () => ({}),
       store,
     };
 
@@ -363,7 +360,6 @@ describe("Pre-Game completion contract", () => {
         },
       }),
       llm: new NoopLLM(),
-      getConfig: () => ({}),
       store,
     };
     await executeTurn(

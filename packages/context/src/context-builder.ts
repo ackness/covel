@@ -2,7 +2,7 @@
  * Context Builder — public entrypoint for runtime prompt assembly.
  *
  * Responsibilities:
- * - Template variable interpolation (`{{ inputs.xxx }}`, `{{ config.xxx }}`, etc.)
+ * - Template variable interpolation (`{{ inputs.xxx }}`, `{{ player.xxx }}`, etc.)
  * - Inject block assembly (XML-wrapped data from other runtime outputs)
  * - Full context assembly (system prompt + message history)
  *
@@ -26,7 +26,6 @@ import type { AssembledContext, ContextBuildParams } from "./types.js";
  *
  * Supported variable paths:
  * - `{{ inputs.pluginId.runtimeId.fieldName }}` -- other runtime's output field
- * - `{{ config.fieldName }}` -- current runtime's config value
  * - `{{ session.id }}` -- session info
  * - `{{ player.message }}` -- player's current message
  *
@@ -67,7 +66,7 @@ export const buildInjectBlocks = _buildInjectBlocks;
  * This delegates to the segment-based assembler. Budget pruning runs whenever
  * the caller supplies both an estimator and context budget.
  *
- * @param params - Context build parameters: prompt template, manifest, turn input, completed results, config, and message history.
+ * @param params - Context build parameters: prompt template, manifest, turn input, completed results, and message history.
  * @returns An `AssembledContext` containing the interpolated system prompt and ordered messages.
  *
  * @example
@@ -79,7 +78,6 @@ export const buildInjectBlocks = _buildInjectBlocks;
  *   manifest,
  *   turnInput: { sessionId: 'sess-1', turnId: 'turn-1', playerMessage: 'Enter the dungeon' },
  *   completedResults: new Map(),
- *   config: {},
  * });
  *
  * console.log(ctx.systemPrompt); // Interpolated system prompt

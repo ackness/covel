@@ -15,7 +15,6 @@ export interface RunRuntimeDebugOptions {
   readonly locale?: string;
   readonly message?: string;
   readonly payload?: Record<string, unknown>;
-  readonly config?: Record<string, unknown>;
   readonly userSettings?: Record<string, unknown>;
   readonly llmResponse?: Record<string, unknown>;
   readonly llmResponses?: readonly Record<string, unknown>[];

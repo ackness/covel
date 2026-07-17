@@ -111,17 +111,6 @@ async function ingestRecall(
   embed: EmbedFn,
   sessionId: string,
 ): Promise<number> {
-  const messages = (await store.listTurnMessages(sessionId)).filter((m) =>
-    String(m.content ?? "").trim(),
-  );
-  if (messages.length === 0) return 0;
-
-  // Deterministic order (createdAt, id) so a same-millisecond tie cannot make
-  // the cursor skip a message across backends with different secondary sorts.
-  // Uses the SAME comparator as `isAfterCursor` so sort order and cursor
-  // advancement can never disagree.
-  const sorted = [...messages].sort(compareByCursor);
-
   const cursor = await readPluginJson<RecallCursor>(
     store,
     sessionId,
@@ -129,21 +118,39 @@ async function ingestRecall(
     CURSOR_KEY,
   );
 
-  const pending = sorted.filter((m) => isAfterCursor(m, cursor));
-  if (pending.length === 0) return 0;
+  // Keyset read of just the batch window past the cursor — the store orders by
+  // the same `(createdAt, id)` total order the cursor is written in, so a long
+  // session never streams its whole history through this per-turn sweep.
+  const batch = await store.listTurnMessagesAfter(
+    sessionId,
+    cursor,
+    MAX_INGEST_BATCH,
+  );
+  if (batch.length === 0) return 0;
 
-  const batch = pending.slice(0, MAX_INGEST_BATCH);
-  const vectors = await embed(batch.map((m) => String(m.content)));
+  const isEmbeddable = (m: { content?: unknown }): boolean =>
+    Boolean(String(m.content ?? "").trim());
+  const embeddable = batch.filter(isEmbeddable);
+  const vectors = embeddable.length
+    ? await embed(embeddable.map((m) => String(m.content)))
+    : [];
 
   let written = 0;
-  // Only advance the cursor past messages we actually persisted. If `embed`
-  // returns an empty/short array for some entry, we skip it WITHOUT moving the
-  // cursor beyond it, so the next sweep retries it — otherwise a transient empty
+  // Advance the cursor only past messages we handled: persisted embeddings and
+  // empty-content rows (which are never embeddable, so skipping them forward is
+  // what keeps a run of blank rows from stalling the cursor forever). If
+  // `embed` returns an empty/short array for some entry, stop WITHOUT moving
+  // past it, so the next sweep retries it — otherwise a transient empty
   // embedding would silently drop that message from recall forever.
-  let lastWritten: { createdAt: string; id: string } | null = null;
-  for (let i = 0; i < batch.length; i += 1) {
-    const msg = batch[i];
-    const embedding = vectors[i];
+  let lastHandled: RecallCursor | null = null;
+  let vectorIndex = 0;
+  for (const msg of batch) {
+    if (!isEmbeddable(msg)) {
+      lastHandled = { createdAt: msg.createdAt, id: msg.id };
+      continue;
+    }
+    const embedding = vectors[vectorIndex];
+    vectorIndex += 1;
     if (!embedding || embedding.length === 0) break;
     await store.upsertVector({
       sessionId,
@@ -159,40 +166,19 @@ async function ingestRecall(
       }),
     });
     written += 1;
-    lastWritten = { createdAt: msg.createdAt, id: msg.id };
+    lastHandled = { createdAt: msg.createdAt, id: msg.id };
   }
 
-  if (lastWritten) {
+  if (lastHandled) {
     await writePluginJson<RecallCursor>(
       store,
       sessionId,
       CURSOR_NS,
       CURSOR_KEY,
-      lastWritten,
+      lastHandled,
     );
   }
   return written;
-}
-
-/**
- * Total order on `(createdAt, id)` — the single comparator used for both the
- * ingest sort and the cursor "is this after the cursor?" check, so the two can
- * never disagree. `localeCompare` (not raw `<`/`>`) keeps the ordering stable
- * regardless of field contents.
- */
-function compareByCursor(
-  a: { createdAt: string; id: string },
-  b: { createdAt: string; id: string },
-): number {
-  return a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
-}
-
-function isAfterCursor(
-  msg: { createdAt: string; id: string },
-  cursor: RecallCursor | null,
-): boolean {
-  if (!cursor) return true;
-  return compareByCursor(msg, cursor) > 0;
 }
 
 // ── Archival (lorebook + characters, hash-incremental) ───────────

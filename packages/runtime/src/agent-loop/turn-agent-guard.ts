@@ -67,7 +67,6 @@ export async function executeAgentGuard({
 }: ExecuteAgentGuardOptions): Promise<RuntimeResult | undefined> {
   // ── Guard: pre-execution gate for agent runtimes ────────────
   if (loaded.guard) {
-    const guardConfig = deps.getConfig(manifest.pluginId, manifest.name);
     const guardManualPayload =
       input.manualTrigger?.runtimeId === manifest.name
         ? input.manualTrigger.payload
@@ -209,7 +208,6 @@ export async function executeAgentGuard({
       locale: input.locale,
       store: guardStore,
       completedResults,
-      config: guardConfig,
       recursiveCall: guardRecursiveCall,
       recursionDepth,
       ...(deps.gateway && trustedGuard

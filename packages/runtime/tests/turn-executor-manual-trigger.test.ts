@@ -105,7 +105,6 @@ async function runTurn(
       },
     }),
     llm: new NoopLLM(),
-    getConfig: () => ({}),
     store,
     ...extraDeps,
   };

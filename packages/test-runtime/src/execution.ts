@@ -91,7 +91,6 @@ export async function runDeferredFollower(args: {
   readonly gateway: PluginRuntimeGateway;
   readonly mediaStore: MediaStore;
   readonly utils: PluginRuntimeUtils;
-  readonly config: Record<string, unknown>;
   readonly userSettings?: Record<string, unknown>;
 }): Promise<DeferredFollowerJobResult> {
   const manifest = args.manifests.find(
@@ -145,7 +144,6 @@ export async function runDeferredFollower(args: {
       locale: args.locale,
       store: createFunctionStoreView(args.store, helperCtx),
       completedResults: new Map(),
-      config: args.config,
       recursiveCall: async () => {
         throw new Error(
           "recursiveCall is unavailable for test-runtime deferred followers",

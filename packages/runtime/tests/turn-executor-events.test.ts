@@ -95,7 +95,6 @@ describe("TurnExecutor EventBus Bridge", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       eventBus,
       store: await createMainLoopStore("sess-1"),
     };
@@ -144,7 +143,6 @@ describe("TurnExecutor EventBus Bridge", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       eventBus,
       store: await createMainLoopStore("sess-1"),
       memorySystem,
@@ -170,7 +168,6 @@ describe("TurnExecutor EventBus Bridge", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       eventBus,
       store: await createMainLoopStore("sess-1"),
     };
@@ -208,7 +205,6 @@ describe("TurnExecutor EventBus Bridge", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm: failingLLM,
-      getConfig: () => ({}),
       eventBus,
       store: await createMainLoopStore("sess-1"),
     };
@@ -227,7 +223,6 @@ describe("TurnExecutor EventBus Bridge", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
-      getConfig: () => ({}),
       // No eventBus
       store: await createMainLoopStore("sess-1"),
     };

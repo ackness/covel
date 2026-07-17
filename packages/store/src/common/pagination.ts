@@ -53,3 +53,25 @@ export function applyCursorPage<T extends Keyed>(
     : rowsAscending;
   return older.slice(-opts.limit);
 }
+
+/**
+ * Forward keyset read over rows already sorted ascending by `(createdAt, id)`:
+ * the first `limit` rows strictly after `after` (all rows from the start when
+ * `after` is null). The memory/idb counterpart to `cursorAfterWhere`.
+ * `limit <= 0` ⇒ `[]`.
+ */
+export function applyCursorAfter<T extends Keyed>(
+  rowsAscending: readonly T[],
+  after: { readonly createdAt: string; readonly id: string } | null,
+  limit: number,
+): T[] {
+  if (limit <= 0) return [];
+  const newer = after
+    ? rowsAscending.filter(
+        (r) =>
+          r.createdAt > after.createdAt ||
+          (r.createdAt === after.createdAt && r.id > after.id),
+      )
+    : rowsAscending;
+  return newer.slice(0, limit);
+}

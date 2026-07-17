@@ -30,7 +30,6 @@ type Deps = {
     execute: () => Promise<unknown>;
     getToolInfo: () => undefined;
   };
-  getConfigFn: () => Record<string, unknown>;
   resolveModel: () => undefined;
   hookPipeline?: HookPipeline;
 };
@@ -43,7 +42,6 @@ function createTestApp(deps: Deps) {
       llmAdapter: Deps["llmAdapter"];
       loadRuntimeFn: Deps["loadRuntimeFn"];
       toolExecutor: Deps["toolExecutor"];
-      getConfigFn: Deps["getConfigFn"];
       resolveModel: Deps["resolveModel"];
     };
   }>();
@@ -58,7 +56,6 @@ function createTestApp(deps: Deps) {
     c.set("loadRuntimeFn", deps.loadRuntimeFn as any);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     c.set("toolExecutor", deps.toolExecutor as any);
-    c.set("getConfigFn", deps.getConfigFn);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     c.set("resolveModel", deps.resolveModel as any);
     c.set("sessionLock", sessionLock);
@@ -187,7 +184,6 @@ function makeDefaultDeps(store: DataStore, overrides?: Partial<Deps>): Deps {
       }),
       getToolInfo: () => undefined,
     },
-    getConfigFn: () => ({}),
     resolveModel: () => undefined,
     ...overrides,
   };

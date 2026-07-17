@@ -63,7 +63,6 @@ describe("executeTurn player abort", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
       llm,
-      getConfig: () => ({}),
       store,
       turnControl: { signal: controller.signal },
     };
@@ -119,7 +118,6 @@ describe("executeTurn player abort", () => {
         },
       }),
       llm: { generate: async () => prose("unused") } as LLMAdapter,
-      getConfig: () => ({}),
       store,
       turnControl: { signal: controller.signal },
     };
@@ -147,7 +145,6 @@ describe("executeTurn player abort", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
       llm,
-      getConfig: () => ({}),
       store,
     };
 

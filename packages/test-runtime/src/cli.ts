@@ -11,7 +11,6 @@ interface CliOptions {
   locale?: string;
   message?: string;
   payload?: Record<string, unknown>;
-  config?: Record<string, unknown>;
   userSettings?: Record<string, unknown>;
   llmResponse?: Record<string, unknown>;
   llmResponses?: readonly Record<string, unknown>[];
@@ -40,7 +39,6 @@ Options:
   --locale <locale>          Locale. Defaults to zh-CN.
   --message <text>           Player message for context. Defaults to empty.
   --payload <json>           manualTrigger payload JSON.
-  --config <json>            Config object returned by getConfig().
   --user-settings <json>     Plugin userSettings bucket for this plugin.
   --llm-content <text>       Mock LLM content for agent runtimes.
   --llm-object <json>        Mock LLM JSON object content (auto stringified — easier than --llm-content for JSON envelopes).
@@ -119,9 +117,6 @@ function parseArgs(argv: readonly string[]): CliOptions {
         break;
       case "--payload":
         options.payload = parseJsonObject(next(), "--payload");
-        break;
-      case "--config":
-        options.config = parseJsonObject(next(), "--config");
         break;
       case "--user-settings":
         options.userSettings = parseJsonObject(next(), "--user-settings");

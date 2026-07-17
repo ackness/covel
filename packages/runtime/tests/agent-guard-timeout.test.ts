@@ -57,7 +57,6 @@ function makeDeps(
   return {
     loadRuntime: async () => loaded,
     llm: baseLLM,
-    getConfig: () => ({}),
     ...extra,
   } as TurnExecutorDeps;
 }

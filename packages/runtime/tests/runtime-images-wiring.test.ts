@@ -88,7 +88,6 @@ async function runWithHandler(
         usage: { inputTokens: 0, outputTokens: 0 },
       }),
     },
-    getConfig: () => ({}),
     store,
     ...extraDeps,
   };

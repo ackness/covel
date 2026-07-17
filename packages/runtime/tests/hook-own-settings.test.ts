@@ -259,7 +259,6 @@ describe("executeTurn → hook getOwnSettings end-to-end", () => {
         promptTemplate: "Say something.",
       }),
       llm: new SimpleMockLLM(),
-      getConfig: () => ({}),
       hookPipeline: pipeline,
       store: await createMainLoopStore(sessionId),
     };

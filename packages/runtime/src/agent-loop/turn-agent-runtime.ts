@@ -131,9 +131,6 @@ export async function executeAgentRuntime({
     }
   }
 
-  // Build context
-  const config = deps.getConfig(manifest.pluginId, manifest.name);
-
   // TODO(S2): Tool-pair pruning safety — budget pruning does not understand
   // assistant↔tool message pairing (see T2 review I1). Skip budget injection
   // whenever this runtime declares tools via any of the four tool-declaration
@@ -203,7 +200,6 @@ export async function executeAgentRuntime({
     activeManifests: [loaded.manifest],
     turnInput: input,
     completedResults,
-    config,
     messageHistory: filteredHistory,
     sessionMeta,
     summaries: sessionSummaries ?? [],

@@ -119,7 +119,6 @@ describe("char-creator core plugin guard bridge", () => {
         };
       },
       llm,
-      getConfig: () => ({}),
       getPluginSource: (pluginId) =>
         pluginId === "char-creator" || pluginId === "narrator"
           ? "builtin"

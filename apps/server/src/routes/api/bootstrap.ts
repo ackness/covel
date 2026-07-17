@@ -148,11 +148,6 @@ export interface ApiBootstrapConfig {
    * player-facing settings (`memory` → `plugin` → `story` → first text slot).
    */
   readonly preferredMemorySlot?: string;
-  /** Optional config provider for injecting world context etc. into runtime execution. */
-  readonly getConfigFn?: (
-    pluginId: string,
-    runtimeId: string,
-  ) => Readonly<Record<string, unknown>>;
   /**
    * Optional per-request middleware inserted AFTER the default dependency
    * injection middleware but BEFORE route handlers execute. Intended for
@@ -442,14 +437,6 @@ export async function bootstrapApi(
     }
   }
 
-  // 7. getConfigFn — per-runtime config injection seam. No production caller
-  //    passes it today, so ctx.config / {{ config.* }} always resolve to {}.
-  const getConfigFn =
-    config.getConfigFn ??
-    ((
-      _pluginId: string,
-      _runtimeId: string,
-    ): Readonly<Record<string, unknown>> => ({}));
   const getPluginSource = (pluginId: string) => registry.get(pluginId)?.source;
 
   const { rpcRegistry, rpcExecutor, rpcApprovalGate } =
@@ -561,7 +548,6 @@ export async function bootstrapApi(
     }
     c.set("loadRuntimeFn", loadRuntimeFn);
     c.set("toolExecutor", toolExecutor);
-    c.set("getConfigFn", getConfigFn);
     c.set("resolveModel", resolveModel);
     c.set("compactorRunner", compactorRunner);
     c.set("turnContextBudget", turnContextBudget);

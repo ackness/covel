@@ -23,7 +23,12 @@
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
 
-import { cursorPageOrder, cursorPageWhere } from "./cursor.js";
+import {
+  cursorAfterOrder,
+  cursorAfterWhere,
+  cursorPageOrder,
+  cursorPageWhere,
+} from "./cursor.js";
 import type { InsertValueBuilders } from "./insert-values.js";
 import type { JsonReader } from "./mappers.js";
 import {
@@ -94,6 +99,7 @@ export type SqlSessionJournalRecords = Pick<
   | "appendTurnMessage"
   | "listTurnMessages"
   | "listUncompactedTurnMessages"
+  | "listTurnMessagesAfter"
   | "getTurnMessageStats"
   | "listRecentTurnMessages"
   | "tagTurnMessagesCompacted"
@@ -167,6 +173,20 @@ export function createSqlSessionJournalRecords(
           isNull(turnMessages.compactedAtTurnId),
         ),
         orderBy: [asc(turnMessages.createdAt)],
+      });
+      return rows.map((row) => toTurnMessageRecord(row, json));
+    },
+
+    async listTurnMessagesAfter(
+      sessionId: string,
+      after: { readonly createdAt: string; readonly id: string } | null,
+      limit: number,
+    ): Promise<TurnMessageRecord[]> {
+      if (limit <= 0) return [];
+      const rows = await runner.select<TurnMessageRow>(turnMessages, {
+        where: cursorAfterWhere(turnMessages, sessionId, after),
+        orderBy: cursorAfterOrder(turnMessages),
+        limit,
       });
       return rows.map((row) => toTurnMessageRecord(row, json));
     },

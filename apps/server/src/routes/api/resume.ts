@@ -55,10 +55,6 @@ type Env = {
       locale?: string,
     ) => Promise<LoadedRuntime | undefined>;
     toolExecutor: ToolExecutor;
-    getConfigFn: (
-      pluginId: string,
-      runtimeId: string,
-    ) => Readonly<Record<string, unknown>>;
     resolveModel: (
       manifest: RuntimeManifest,
       apiOverride?: string,
@@ -288,8 +284,6 @@ resumeRoutes.post("/:id/resume", async (c) => {
             llm: llmAdapter,
             ...(pluginGateway ? { gateway: pluginGateway } : {}),
             ...(pluginUtils ? { utils: pluginUtils } : {}),
-            getConfig:
-              c.get("getConfigFn") ?? ((_p: string, _r: string) => ({})),
             store,
             toolExecutor,
             resolveModel,

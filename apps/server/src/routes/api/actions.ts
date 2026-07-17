@@ -83,10 +83,6 @@ type Env = {
       locale?: string,
     ) => Promise<LoadedRuntime | undefined>;
     toolExecutor: ToolExecutor;
-    getConfigFn: (
-      pluginId: string,
-      runtimeId: string,
-    ) => Readonly<Record<string, unknown>>;
     resolveModel: (
       manifest: RuntimeManifest,
       apiOverride?: string,
@@ -127,7 +123,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const getPluginSource = c.get("getPluginSource");
   const loadRuntimeFn = c.get("loadRuntimeFn");
   const toolExecutor = c.get("toolExecutor");
-  const getConfigFn = c.get("getConfigFn");
   const resolveModel = c.get("resolveModel");
   const eventBus = c.get("eventBus");
   const compactorRunner = c.get("compactorRunner");
@@ -446,11 +441,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               ...(pluginGateway ? { gateway: pluginGateway } : {}),
               ...(pluginUtils ? { utils: pluginUtils } : {}),
               ...(getPluginSource ? { getPluginSource } : {}),
-              // bootstrapApi always supplies getConfigFn; default to a no-op so a
-              // minimal harness (or any caller that omits it) can't crash the turn
-              // executor's `deps.getConfig(...)` call. Preserves the defensiveness
-              // the removed /:id/turn route carried.
-              getConfig: getConfigFn ?? (() => ({})),
               store,
               ...(mediaStore ? { mediaStore } : {}),
               toolExecutor,
@@ -625,7 +615,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             ...(pluginGateway ? { gateway: pluginGateway } : {}),
             ...(pluginUtils ? { utils: pluginUtils } : {}),
             ...(getPluginSource ? { getPluginSource } : {}),
-            getConfig: getConfigFn ?? (() => ({})),
             ...(mediaStore ? { mediaStore } : {}),
             toolExecutor,
             resolveModel,

@@ -137,7 +137,6 @@ export async function executeFunctionRuntime({
       failed,
     );
   }
-  const config = deps.getConfig(manifest.pluginId, manifest.name);
   const manualPayloadForRuntime =
     input.manualTrigger?.runtimeId === manifest.name
       ? input.manualTrigger.payload
@@ -240,7 +239,6 @@ export async function executeFunctionRuntime({
       locale: input.locale,
       store: handlerStore,
       completedResults,
-      config,
       recursiveCall: createRecursiveCall(),
       recursionDepth,
       ...(tracedGateway ? { gateway: tracedGateway } : {}),

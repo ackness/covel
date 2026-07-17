@@ -206,9 +206,6 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       pluginRegistry,
       sessionId,
     );
-    const turnGetConfig =
-      c.get("getConfigFn") ?? ((_pluginId: string, _runtimeId: string) => ({}));
-
     // Audit F7: player-authored plugin settings travel with the request
     // as a base64-encoded JSON header (`X-Plugin-User-Settings`) sourced
     // from the unified SettingsStore. The body map keys on pluginId so
@@ -251,7 +248,6 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         ...(pluginGateway ? { gateway: pluginGateway } : {}),
         ...(pluginUtils ? { utils: pluginUtils } : {}),
         ...(getPluginSource ? { getPluginSource } : {}),
-        getConfig: turnGetConfig,
         ...(mediaStore ? { mediaStore } : {}),
         toolExecutor,
         resolveModel,

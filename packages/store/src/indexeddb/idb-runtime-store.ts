@@ -18,7 +18,11 @@ import type {
   TurnMessageStats,
   TurnResultRecord,
 } from "../types.js";
-import { applyCursorPage, sortByCursorAsc } from "../common/pagination.js";
+import {
+  applyCursorAfter,
+  applyCursorPage,
+  sortByCursorAsc,
+} from "../common/pagination.js";
 import { computeTurnMessageStats } from "../common/turn-message-stats.js";
 import type { IdbStoreContext, IdbStoreSlice } from "./idb-context.js";
 import {
@@ -325,6 +329,19 @@ export function createIdbRuntimeStore(ctx: IdbStoreContext): IdbStoreSlice {
         sessionId,
       );
       return computeTurnMessageStats(all);
+    },
+
+    async listTurnMessagesAfter(
+      sessionId: string,
+      after: { readonly createdAt: string; readonly id: string } | null,
+      limit: number,
+    ): Promise<TurnMessageRecord[]> {
+      const all = await listBySession<TurnMessageRecord>(
+        db,
+        "turnMessages",
+        sessionId,
+      );
+      return applyCursorAfter(sortByCursorAsc(all), after, limit);
     },
 
     async listRecentTurnMessages(

@@ -75,7 +75,6 @@ describe("makeManualFunctionContext", () => {
     expect(ctx.runtimeId).toBe("character-blueprint/import");
     expect(ctx.playerMessage).toBe("");
     expect(ctx.completedResults).toBeInstanceOf(Map);
-    expect(ctx.config).toEqual({});
     expect(ctx.manualPayload).toEqual({ blueprint: { id: "mentor-lin" } });
   });
 
@@ -88,14 +87,12 @@ describe("makeManualFunctionContext", () => {
       turnId: "turn-custom",
       store,
       completedResults,
-      config: { tone: "quiet" },
     });
 
     expect(ctx.sessionId).toBe("sess-custom");
     expect(ctx.turnId).toBe("turn-custom");
     expect(ctx.store).toBe(store);
     expect(ctx.completedResults).toBe(completedResults);
-    expect(ctx.config).toEqual({ tone: "quiet" });
   });
 });
 

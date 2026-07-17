@@ -18,8 +18,7 @@ import type {
 } from "../src/agent-loop/tool-executor.js";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
-import { InMemoryToolClient, tool, withPendingProposals } from "@covel/tools";
-import type { ResolvedTool } from "@covel/tools";
+import { tool, withPendingProposals } from "@covel/tools";
 import { z } from "zod";
 
 const textFirstTool = tool({
@@ -68,16 +67,6 @@ const queuedTool = tool({
       ],
     ),
 });
-
-const clientResolvedTextTool: ResolvedTool = {
-  fullName: "text-first",
-  localName: "text-first",
-  pluginId: "test-plugin",
-  runtimeId: "test-rt",
-  module: textFirstTool,
-  source: "local",
-  requiresApproval: false,
-};
 
 function makeCall(name: string, args: Record<string, unknown>): ToolCall {
   return { toolCallId: `call-${name}`, name, arguments: JSON.stringify(args) };
@@ -180,31 +169,5 @@ describe("ToolExecutor text-result convention", () => {
         },
       }),
     ]);
-  });
-
-  it("executes through an InMemoryToolClient when a client resolver is configured", async () => {
-    const client = new InMemoryToolClient({
-      id: "test-plugin:test-rt",
-      tools: [clientResolvedTextTool],
-    });
-    const executor = createToolExecutor({
-      findToolClient: (name) => (name === "text-first" ? client : undefined),
-      store,
-    });
-
-    const info = executor.getToolInfo("text-first", ctx);
-    expect(info?.name).toBe("text-first");
-
-    const result = await executor.execute(
-      makeCall("text-first", { name: "Client Path" }),
-      ctx,
-    );
-
-    expect(result.success).toBe(true);
-    expect(result.result).toBe("Character Client Path created successfully");
-    expect(result.parsedResult).toMatchObject({
-      characterId: "char-123",
-      name: "Client Path",
-    });
   });
 });

@@ -216,7 +216,6 @@ function makeApp(
       loaded.get(manifest.name),
     );
     c.set("toolExecutor", undefined);
-    c.set("getConfigFn", () => ({}));
     c.set("resolveModel", () => undefined);
     c.set("eventBus", eventBus);
     c.set("sessionLock", sessionLock);

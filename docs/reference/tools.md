@@ -632,15 +632,12 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 ## ToolClient
 
-工具执行统一经过 `ToolClient`。内置工具和插件本地工具使用 `InMemoryToolClient`，registry 记录每个 tool 对应的 client，runtime 执行时解析 client 后调用 `client.call(name, args, ctx)`。
+工具执行统一经过 `ToolClient`。`ToolExecutor` 通过注入的 `findTool(name, context)` 解析出 `ToolModule`，再用 `InMemoryToolClient` 包裹后调用 `client.call(name, args, ctx)` —— 内置工具和插件本地工具都走这条内存内路径，审批、trace、结果 envelope 由 `ToolExecutor` 统一处理。
 
 接口位于 `@covel/tools`：
 
 ```typescript
-type ToolTransport = "in-memory" | "stdio" | "http" | "sse";
-
 interface ToolClient {
-  readonly transport: ToolTransport;
   readonly id: string;
   list(): Promise<readonly ToolDefinition[]>;
   call(
@@ -651,20 +648,6 @@ interface ToolClient {
   close?(): Promise<void>;
 }
 ```
-
-兼容入口继续可用：
-
-- `registry.register(resolvedTool)`
-- `registry.getByFullName(fullName)`
-- `registry.getToolsForRuntime(pluginId, runtimeId, manifest)`
-
-新增入口用于统一执行路径：
-
-- `registry.registerClient(client, tools)`
-- `registry.getClientEntry(fullName)`
-- `registry.getClientForTool(fullName)`
-
-未来的 `stdio` / `http` / `sse` 工具传输只需要实现同一个 `ToolClient` 协议，审批、trace、结果 envelope 继续由 runtime 的 `ToolExecutor` 统一处理。
 
 ---
 

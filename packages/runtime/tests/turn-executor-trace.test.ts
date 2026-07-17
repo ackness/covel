@@ -82,7 +82,6 @@ describe("turn-executor message.completed trace emission", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => loaded,
       llm,
-      getConfig: () => ({}),
       store,
       emitter,
     };
@@ -131,7 +130,6 @@ describe("turn-executor message.completed trace emission", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => loaded,
       llm,
-      getConfig: () => ({}),
       store,
       emitter,
     };
@@ -189,7 +187,6 @@ describe("turn-executor direct-generate error trace pairing (Q1)", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => loaded,
       llm,
-      getConfig: () => ({}),
       store,
       emitter,
       toolExecutor: createToolExecutor({

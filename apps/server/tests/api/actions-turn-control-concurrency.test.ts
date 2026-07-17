@@ -127,7 +127,6 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
       c.set("loadRuntimeFn", async () => loaded);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       c.set("toolExecutor", undefined as any);
-      c.set("getConfigFn", () => ({}));
       c.set("resolveModel", () => undefined);
       c.set("eventBus", eventBus);
       c.set("sessionLock", sessionLock);

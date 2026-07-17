@@ -117,8 +117,6 @@ export interface ContextBuildParams {
   readonly turnInput: TurnInput;
   /** Completed results from other runtimes (for inject). */
   readonly completedResults: ReadonlyMap<string, RuntimeResult>;
-  /** Runtime's effective config values. */
-  readonly config: Readonly<Record<string, unknown>>;
   /** Previous turn messages (append-only history from DataStore). */
   readonly messageHistory?: readonly MessageHistoryRecord[];
   /** Session-level metadata (turnNumber, characters, lastFormValues). */
@@ -186,8 +184,8 @@ export interface ContextBuildParams {
   }[];
   /**
    * Pre-assembled session context. When provided, prompt assembly reads
-   * session-level data from here instead of the scattered `config` /
-   * `sessionMeta` / `workingMemory` / `coreMemoryBlocks` fields.
+   * session-level data from here instead of the scattered `sessionMeta` /
+   * `workingMemory` / `coreMemoryBlocks` fields.
    */
   readonly sessionContext?: SessionContextSnapshot;
   /**

@@ -71,7 +71,6 @@ function makeBaseParams(
     manifest: makeManifest(),
     turnInput: makeTurnInput(),
     completedResults: new Map(),
-    config: {},
     messageHistory: history,
   };
 }

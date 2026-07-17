@@ -111,7 +111,6 @@ describe("TurnExecutor Resilience", () => {
       const deps: TurnExecutorDeps = {
         loadRuntime: async () => narratorLoaded,
         llm: mockLLM,
-        getConfig: () => ({}),
         onRuntimeStart: async () => {
           throw new Error("SSE write failed");
         },
@@ -133,7 +132,6 @@ describe("TurnExecutor Resilience", () => {
       const deps: TurnExecutorDeps = {
         loadRuntime: async () => narratorLoaded,
         llm: mockLLM,
-        getConfig: () => ({}),
         onRuntimeStart: () => Promise.reject(new Error("Connection closed")),
         store: await createMainLoopStore("sess-1"),
       };
@@ -157,7 +155,6 @@ describe("TurnExecutor Resilience", () => {
       const deps: TurnExecutorDeps = {
         loadRuntime: async () => narratorLoaded,
         llm: streamingLLM,
-        getConfig: () => ({}),
         onDelta: async () => {
           deltaCallCount++;
           throw new Error("Client disconnected");

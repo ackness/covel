@@ -26,10 +26,6 @@ type LoadRuntimeFn = (
   locale?: string,
   sessionId?: string,
 ) => Promise<LoadedRuntime | undefined>;
-type GetConfigFn = (
-  pluginId: string,
-  runtimeId: string,
-) => Readonly<Record<string, unknown>>;
 type ResolveModelFn = (
   manifest: RuntimeManifest,
   apiOverride?: string,
@@ -75,7 +71,6 @@ declare module "hono" {
     pluginUtils?: PluginRuntimeUtils;
     loadRuntimeFn: LoadRuntimeFn;
     toolExecutor: ToolExecutor;
-    getConfigFn: GetConfigFn;
     resolveModel: ResolveModelFn;
     compactorRunner: CompactorRunner;
     /**

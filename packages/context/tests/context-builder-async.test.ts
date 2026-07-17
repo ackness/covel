@@ -173,7 +173,6 @@ describe("buildContextAsync — runtime inject regression", () => {
       manifest,
       turnInput: makeTurnInput(),
       completedResults: results,
-      config: {},
     };
 
     const sync = buildContext(params);
@@ -205,7 +204,6 @@ describe("buildContextAsync — runtime inject regression", () => {
       manifest,
       turnInput: makeTurnInput(),
       completedResults: new Map(),
-      config: {},
     };
     const result = buildContext(params);
     expect(result.systemPrompt).toBe(`body${PROMPT_CACHE_BREAKPOINT_MARKER}`);
@@ -241,7 +239,6 @@ describe("buildContextAsync — plugin-data inject", () => {
       manifest,
       turnInput: makeTurnInput(),
       completedResults: new Map(),
-      config: {},
       store,
     };
   }
@@ -343,7 +340,6 @@ describe("buildContextAsync — two-pass truncation", () => {
       manifest,
       turnInput: makeTurnInput(),
       completedResults: new Map(),
-      config: {},
       store,
     });
 
@@ -393,7 +389,6 @@ describe("buildContextAsync — two-pass truncation", () => {
       manifest,
       turnInput: makeTurnInput(),
       completedResults: new Map(),
-      config: {},
       store,
     });
     expect(result.systemPrompt).toContain("- codex-a");
@@ -432,7 +427,6 @@ describe("buildContextAsync — format variants", () => {
       manifest,
       turnInput: makeTurnInput(),
       completedResults: new Map(),
-      config: {},
       store,
     });
   }

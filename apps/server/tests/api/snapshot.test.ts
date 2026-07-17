@@ -1079,7 +1079,6 @@ describe("Auto snapshot", () => {
             usage: { inputTokens: 0, outputTokens: 0 },
           }),
         } as any,
-        getConfig: () => ({}),
         store,
       },
     );
@@ -1115,7 +1114,6 @@ describe("Auto snapshot", () => {
             usage: { inputTokens: 0, outputTokens: 0 },
           }),
         } as any,
-        getConfig: () => ({}),
         store,
         eventBus,
       },

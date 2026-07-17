@@ -208,7 +208,6 @@ describe("test-runtime execution helpers", () => {
       gateway,
       mediaStore: createMemoryMediaStore(),
       utils,
-      config: { temperature: 0.1 },
       userSettings: { enabled: true },
     });
 
@@ -232,7 +231,6 @@ describe("test-runtime execution helpers", () => {
       sessionId: SESSION_ID,
       pluginId: PLUGIN_ID,
       locale: "zh-CN",
-      config: { temperature: 0.1 },
       userSettings: { enabled: true },
       triggerEvent: { topic: "test.ready", data: { ok: true } },
     });
@@ -287,7 +285,6 @@ describe("test-runtime execution helpers", () => {
       gateway,
       mediaStore: createMemoryMediaStore(),
       utils,
-      config: {},
     });
 
     expect(job.status).toBe("failed");
@@ -334,7 +331,6 @@ describe("test-runtime execution helpers", () => {
       gateway,
       mediaStore: createMemoryMediaStore(),
       utils,
-      config: {},
     });
 
     expect(job.status).toBe("failed");
@@ -378,7 +374,6 @@ describe("test-runtime execution helpers", () => {
       gateway,
       mediaStore: createMemoryMediaStore(),
       utils,
-      config: {},
     });
 
     expect(job.status).toBe("failed");
@@ -405,7 +400,6 @@ describe("test-runtime execution helpers", () => {
         gateway,
         mediaStore: createMemoryMediaStore(),
         utils,
-        config: {},
       }),
     ).rejects.toThrow("deferred follower not found: plugin/follower");
 
@@ -424,7 +418,6 @@ describe("test-runtime execution helpers", () => {
         gateway,
         mediaStore: createMemoryMediaStore(),
         utils,
-        config: {},
       }),
     ).rejects.toThrow("deferred follower has no handler: plugin/follower");
   });

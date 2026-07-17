@@ -1,4 +1,5 @@
 import {
+  applyCursorAfter,
   applyCursorPage,
   applyPagination,
   sortByCursorAsc,
@@ -255,6 +256,13 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       return computeTurnMessageStats(
         state.turnMessages.filter((r) => r.sessionId === sessionId),
       );
+    },
+
+    async listTurnMessagesAfter(sessionId, after, limit) {
+      const sorted = sortByCursorAsc(
+        state.turnMessages.filter((r) => r.sessionId === sessionId),
+      );
+      return applyCursorAfter(sorted, after, limit);
     },
 
     async listRecentTurnMessages(sessionId, limit) {

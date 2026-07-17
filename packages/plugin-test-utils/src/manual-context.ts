@@ -13,7 +13,6 @@ export interface ManualFunctionContextOptions {
   readonly locale?: string;
   readonly store?: unknown;
   readonly completedResults?: ReadonlyMap<string, unknown>;
-  readonly config?: Readonly<Record<string, unknown>>;
   readonly manualPayload?: Readonly<Record<string, unknown>>;
 }
 
@@ -26,7 +25,6 @@ export function makeManualFunctionContext({
   locale,
   store = {},
   completedResults = new Map(),
-  config = {},
   manualPayload = {},
 }: ManualFunctionContextOptions): FunctionHandlerContext {
   return {
@@ -38,7 +36,6 @@ export function makeManualFunctionContext({
     ...(locale ? { locale } : {}),
     store,
     completedResults,
-    config,
     recursiveCall: async () => {
       throw new Error("recursiveCall is not configured for this test context");
     },

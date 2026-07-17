@@ -384,6 +384,17 @@ export interface TurnMessageStore {
    */
   listUncompactedTurnMessages(sessionId: string): Promise<TurnMessageRecord[]>;
   /**
+   * Forward keyset read: the first `limit` messages strictly after the
+   * `(createdAt, id)` cursor position, oldest-first (all messages from the
+   * start when `after` is null). Lets incremental consumers (vector-ingest's
+   * recall cursor) walk the log without loading it whole. `limit <= 0` ⇒ `[]`.
+   */
+  listTurnMessagesAfter(
+    sessionId: string,
+    after: { readonly createdAt: string; readonly id: string } | null,
+    limit: number,
+  ): Promise<TurnMessageRecord[]>;
+  /**
    * Aggregate counts over the FULL message log (compacted rows included),
    * resolved as a grouped count query on SQL backends. Replaces the per-turn
    * "load every row and count in JS" scan.
@@ -462,8 +473,8 @@ export interface LorebookStore {
   /**
    * List all session-scoped lorebook entries for the given session, sorted
    * by `insertionOrder` ascending then `id` ascending for deterministic
-   * output. Used by snapshot payload builder (FU-4) and by the context
-   * loader to populate `{{ config.worldEntries }}` for backward compatibility.
+   * output. Used by the snapshot payload builder (FU-4) and by the
+   * session-context loader's world-entries injection.
    */
   listSessionLorebookEntries(
     sessionId: string,

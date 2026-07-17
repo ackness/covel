@@ -40,7 +40,6 @@ function makeParams(
       locale: undefined,
     },
     completedResults: new Map(),
-    config: {},
     ...overrides,
   };
 }

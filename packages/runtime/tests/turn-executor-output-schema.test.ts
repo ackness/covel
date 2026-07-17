@@ -62,7 +62,6 @@ describe("executeTurn: output.schema.json", () => {
         outputSchema: schema,
       }),
       llm,
-      getConfig: () => ({}),
       store: createMemoryStore(),
     };
 
@@ -109,7 +108,6 @@ describe("executeTurn: output.schema.json", () => {
         outputSchema: schema,
       }),
       llm,
-      getConfig: () => ({}),
       store: createMemoryStore(),
       toolExecutor,
     };
@@ -149,7 +147,6 @@ describe("executeTurn: output.schema.json", () => {
         outputSchema: schema,
       }),
       llm,
-      getConfig: () => ({}),
       store: createMemoryStore(),
     };
 
@@ -202,7 +199,6 @@ describe("executeTurn: output.schema.json", () => {
         outputSchema: schema,
       }),
       llm,
-      getConfig: () => ({}),
       store: createMemoryStore(),
     };
 
@@ -264,7 +260,6 @@ describe("executeTurn: output.schema.json", () => {
         outputSchema: schema,
       }),
       llm,
-      getConfig: () => ({}),
       store: createMemoryStore(),
     };
 

@@ -137,7 +137,6 @@ describe("POST /api/actions — phase.changed hygiene (Finding 4 regression)", (
       c.set("loadRuntimeFn", async (m) => loadedByName.get(m.name));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       c.set("toolExecutor", undefined as any);
-      c.set("getConfigFn", () => ({}));
       c.set("resolveModel", () => undefined);
       c.set("eventBus", eventBus);
       c.set("sessionLock", sessionLock);

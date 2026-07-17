@@ -86,7 +86,6 @@ summaryFocus:
 - `{{ player.lastFormValues }}`：最近一次 player 表单提交，JSON 字符串。
 - `{{ session.id }}` / `{{ session.turnNumber }}`。
 - `{{ inputs.<pluginId>.<runtimeId>.<field> }}`：上游 runtime 输出。
-- `{{ config.* }}`：当前 runtime 配置视图。
 - `{{ world.* }}`：由 session context snapshot 的 `world` 视图提供，例如 `world.schema`、`world.entries`、`world.dimensions`。
 - `{{ userSettings.* }}`：玩家配置的插件设置。
 

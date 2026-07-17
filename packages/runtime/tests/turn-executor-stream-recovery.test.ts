@@ -144,7 +144,6 @@ describe("TurnExecutor stream recovery (S1-T3)", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm,
-      getConfig: () => ({}),
       store: await createMainLoopStore("sess-1"),
       onDelta: async () => {
         /* consume deltas */
@@ -171,7 +170,6 @@ describe("TurnExecutor stream recovery (S1-T3)", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm,
-      getConfig: () => ({}),
       store: await createMainLoopStore("sess-1"),
       onDelta: async () => {
         /* no deltas expected */
@@ -197,7 +195,6 @@ describe("TurnExecutor stream recovery (S1-T3)", () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm,
-      getConfig: () => ({}),
       store: await createMainLoopStore("sess-1"),
       onDelta: async () => {
         /* no deltas expected */

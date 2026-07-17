@@ -637,7 +637,7 @@ export interface RuntimeManifest {
    * inserted near the end of the message history, just before the Nth-from-last
    * message. Modeled after SillyTavern / NovelAI author's-note semantics.
    *
-   * The content supports template interpolation (`{{ config.xxx }}`, etc.)
+   * The content supports template interpolation (`{{ player.xxx }}`, etc.)
    * identical to the plugin body. Multiple active plugins' notes are merged
    * in priority order.
    */

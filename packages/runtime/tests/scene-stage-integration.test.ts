@@ -150,7 +150,6 @@ describe("scene-stage: scene.set → resolver → stage/current (E → B integra
             ? { manifest: m, promptTemplate: "Emit scene.set via emit-event." }
             : resolverLoaded,
         llm: new SceneSetLLM(data),
-        getConfig: () => ({}),
         store,
         toolExecutor: createToolExecutor({
           findTool: (name) =>
