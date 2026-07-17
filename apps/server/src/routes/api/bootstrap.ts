@@ -258,7 +258,7 @@ export async function bootstrapApi(
   const store = wrapStoreWithPluginDataEvents(config.store, eventBus);
 
   // One-time startup sweep of stale suspensions accumulated while the server
-  // was down (TODO S4-T4.c). Fire-and-forget — never blocks boot.
+  // was down (spec S4-T4.c). Fire-and-forget — never blocks boot.
   void maybeSweepExpiredSuspensions(store, { force: true }).catch(
     (err: unknown) =>
       console.warn(
@@ -442,9 +442,8 @@ export async function bootstrapApi(
     }
   }
 
-  // 7. getConfigFn — per-request config injection
-  //    Actual config pre-loading happens in the actions.ts route handler
-  //    before calling executeTurn, bridging async store reads to sync getConfig interface.
+  // 7. getConfigFn — per-runtime config injection seam. No production caller
+  //    passes it today, so ctx.config / {{ config.* }} always resolve to {}.
   const getConfigFn =
     config.getConfigFn ??
     ((

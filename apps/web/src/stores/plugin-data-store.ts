@@ -16,7 +16,7 @@
  * Standalone external store using useSyncExternalStore.
  */
 
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
 export type PluginData = Record<
   string,
@@ -156,13 +156,21 @@ export function usePluginData(): PluginData {
   return useSyncExternalStore(subscribe, getSnapshot);
 }
 
-/** React hook — returns data for a specific plugin + namespace. */
+/**
+ * React hook — returns data for a specific plugin + namespace.
+ *
+ * The snapshot is the per-(pluginId, namespace) slice, not the whole tree:
+ * writers only rebuild the object identity of slices they touch, so a
+ * `plugin-data.changed` event from another plugin/namespace returns the
+ * same reference and React bails out without re-rendering this panel.
+ */
 export function usePluginNamespace(
   pluginId: string,
   namespace: string,
 ): Record<string, unknown> {
-  const all = useSyncExternalStore(subscribe, getSnapshot);
-  return all[pluginId]?.[namespace] ?? EMPTY_NAMESPACE;
+  return useSyncExternalStore(subscribe, () =>
+    getPluginNamespaceSnapshot(pluginId, namespace),
+  );
 }
 
 // ── Background job (`_jobs`) namespace helpers ──────────────────
@@ -212,16 +220,19 @@ function asJobRecord(jobId: string, value: unknown): PluginJobRecord | null {
  * new status records into `_jobs`.
  */
 export function usePluginJobs(pluginId: string): readonly PluginJobRecord[] {
-  const all = useSyncExternalStore(subscribe, getSnapshot);
-  const ns = all[pluginId]?.["_jobs"];
-  if (!ns) return EMPTY_JOBS;
-  const jobs: PluginJobRecord[] = [];
-  for (const jobId of Object.keys(ns)) {
-    const record = asJobRecord(jobId, ns[jobId]);
-    if (record) jobs.push(record);
-  }
-  jobs.sort((a, b) => (b.startedAt ?? "").localeCompare(a.startedAt ?? ""));
-  return jobs;
+  const ns = useSyncExternalStore(subscribe, () =>
+    getPluginNamespaceSnapshot(pluginId, "_jobs"),
+  );
+  return useMemo(() => {
+    if (ns === EMPTY_NAMESPACE) return EMPTY_JOBS;
+    const jobs: PluginJobRecord[] = [];
+    for (const jobId of Object.keys(ns)) {
+      const record = asJobRecord(jobId, ns[jobId]);
+      if (record) jobs.push(record);
+    }
+    jobs.sort((a, b) => (b.startedAt ?? "").localeCompare(a.startedAt ?? ""));
+    return jobs;
+  }, [ns]);
 }
 
 const EMPTY_JOBS: readonly PluginJobRecord[] = Object.freeze([]);
@@ -236,10 +247,14 @@ const EMPTY_JOBS: readonly PluginJobRecord[] = Object.freeze([]);
  * Returns `null` when no world has produced a schema yet.
  */
 export function useCharacterAttributeSchema(): unknown {
-  const all = useSyncExternalStore(subscribe, getSnapshot);
-  for (const pluginId of Object.keys(all)) {
-    const value = all[pluginId]?.["schema"]?.["character-attributes"];
-    if (value) return value;
-  }
-  return null;
+  // Snapshot is the schema value itself (stable reference while untouched),
+  // so unrelated plugin-data writes don't re-render consumers.
+  return useSyncExternalStore(subscribe, () => {
+    const all = getActiveData();
+    for (const pluginId of Object.keys(all)) {
+      const value = all[pluginId]?.["schema"]?.["character-attributes"];
+      if (value) return value;
+    }
+    return null;
+  });
 }

@@ -35,7 +35,7 @@ import {
   runSessionEndHook,
   runWithHookScope,
 } from "@covel/runtime";
-import { errorBody } from "../../api-error.js";
+import { errorBody, readJsonBody } from "../../api-error.js";
 import { normalizeLocale } from "../../lib/validators.js";
 import { signMediaTokenForSession } from "../../middleware/media-token.js";
 import {
@@ -216,7 +216,9 @@ sessionRoutes.post("/", async (c) => {
   const pluginRegistry = c.get("pluginRegistry");
   const worldsDirs = c.get("worldsDirs");
   const covelHome = c.get("covelHome");
-  const body = await c.req.json<Record<string, unknown>>();
+  const parsed = await readJsonBody<Record<string, unknown>>(c);
+  if (parsed instanceof Response) return parsed;
+  const body = parsed.body;
 
   const parsedCreate = parseCreateSessionBody(body);
   if (!parsedCreate.ok) {
@@ -451,7 +453,9 @@ sessionRoutes.patch("/:id", async (c) => {
   if (!guard.ok) return guard.response;
   const session = guard.session;
 
-  const body = await c.req.json<Record<string, unknown>>();
+  const parsed = await readJsonBody<Record<string, unknown>>(c);
+  if (parsed instanceof Response) return parsed;
+  const body = parsed.body;
   const now = new Date().toISOString();
   const parsedPatch = buildSessionPatchUpdates(body, now);
   if (!parsedPatch.ok) {
@@ -546,7 +550,9 @@ sessionRoutes.post("/:id/plugins/enable", async (c) => {
   if (!guard.ok) return guard.response;
   const session = guard.session;
 
-  const body = await c.req.json<{ pluginId: string }>();
+  const parsed = await readJsonBody<{ pluginId: string }>(c);
+  if (parsed instanceof Response) return parsed;
+  const body = parsed.body;
   if (!body.pluginId || !pluginRegistry.get(body.pluginId)) {
     return c.json(errorBody(`Plugin "${body.pluginId}" not found`), 404);
   }
@@ -618,7 +624,9 @@ sessionRoutes.post("/:id/plugins/disable", async (c) => {
   if (!guard.ok) return guard.response;
   const session = guard.session;
 
-  const body = await c.req.json<{ pluginId: string }>();
+  const parsed = await readJsonBody<{ pluginId: string }>(c);
+  if (parsed instanceof Response) return parsed;
+  const body = parsed.body;
   if (!body.pluginId || typeof body.pluginId !== "string") {
     return c.json(errorBody("pluginId is required"), 400);
   }

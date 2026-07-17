@@ -13,7 +13,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
 import { resolveSessionParam } from "./session/session-guard.js";
-import { errorBody } from "../../api-error.js";
+import { errorBody, readJsonBody } from "../../api-error.js";
 
 type Env = {
   Variables: {
@@ -86,7 +86,9 @@ workingMemoryRoutes.put("/:id/working-memory/:scope/:key", async (c) => {
     return c.json(errorBody("Key must not be empty"), 400);
   }
 
-  const raw = await c.req.json<unknown>();
+  const jsonBody = await readJsonBody(c);
+  if (jsonBody instanceof Response) return jsonBody;
+  const raw = jsonBody.body;
   const bodySchema = z.object({
     // zod 4.4: a bare z.unknown() field is required; .optional() preserves the
     // 4.3 behaviour (a missing value parsed as undefined) — don't 400 callers.

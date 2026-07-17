@@ -22,24 +22,6 @@ function squaredL2(a: Float32Array, b: Float32Array): number {
   return sum;
 }
 
-export function cloneVectorRows(
-  src: Map<string, MemoryVectorRow>,
-): Map<string, MemoryVectorRow> {
-  const out = new Map<string, MemoryVectorRow>();
-  for (const [key, row] of src) {
-    out.set(key, {
-      sessionId: row.sessionId,
-      pluginId: row.pluginId,
-      namespace: row.namespace,
-      key: row.key,
-      dim: row.dim,
-      embedding: new Float32Array(row.embedding),
-      payload: row.payload,
-    });
-  }
-  return out;
-}
-
 export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
   return {
     async upsertVector(input: UpsertVectorInput) {

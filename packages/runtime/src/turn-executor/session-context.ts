@@ -98,10 +98,7 @@ export async function refreshSessionContextSnapshot(args: {
       playerMessage: input.playerMessage,
     });
   } catch (err) {
-    console.warn(
-      "[turn-executor] SessionContextSnapshot build failed:",
-      err instanceof Error ? err.message : String(err),
-    );
+    console.warn("[turn-executor] SessionContextSnapshot build failed:", err);
     return undefined;
   }
 }

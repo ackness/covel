@@ -5,13 +5,6 @@ export { shouldTrigger } from "./trigger/trigger.js";
 export { scheduleByPriority } from "./schedule/scheduler.js";
 export { scheduleByDag } from "./schedule/dag-scheduler.js";
 
-// ── Context Builder (re-exported from @covel/context) ───────────
-export {
-  interpolateTemplate,
-  buildInjectBlocks,
-  buildContext,
-} from "@covel/context";
-
 // ── Parallel Executor ────────────────────────────────────────────
 export { executeParallel } from "./schedule/parallel-executor.js";
 export type { RuntimeExecuteFn } from "./schedule/parallel-executor.js";

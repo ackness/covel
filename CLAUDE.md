@@ -305,18 +305,6 @@ Each SQL backend keeps a thin public factory plus focused method modules:
 - **Error sanitising**: the `app.onError` handler (`routes/api/bootstrap.ts` + `app.ts`) returns `"Internal server error"` in prod (stacks/paths only to `console.error`); dev returns `err.message`.
 - **Debug artefacts**: always write under `debugs/` (never repo root) — gitignored.
 
-### Dev-mode LLM replay cache
-
-Only active when `COVEL_LLM_REPLAY` is set. Zero overhead / zero behaviour change when unset.
-
-| Mode     | Behaviour                                                 |
-| -------- | --------------------------------------------------------- |
-| `auto`   | Hit = replay, miss = call provider + record (dev default) |
-| `record` | Always call provider, overwrite cache                     |
-| `replay` | Read-only; miss throws (for breakpoint reproduction)      |
-
-Cache dir: `COVEL_LLM_REPLAY_DIR` (default `debugs/llm-cache/`). Key = `sha256(method + url + canonicalJson(body))`. `authorization` / `api_key` are redacted in hash input and on disk. Streaming is T-eed via `TransformStream` (10 MB buffer cap, skip over).
-
 ## Observability
 
 Trace chain: `traceId → runId → branchId → turnId → runtimeId → pluginId`.

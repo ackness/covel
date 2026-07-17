@@ -1,4 +1,4 @@
-import type { ErrorHandler } from "hono";
+import type { Context, ErrorHandler } from "hono";
 
 /**
  * Standard API error envelope.
@@ -38,6 +38,27 @@ export function errorBody<Code extends string = string>(
   if (options?.code !== undefined) body.code = options.code;
   if (options?.details !== undefined) body.details = options.details;
   return body;
+}
+
+/**
+ * Parse a JSON request body, or return a 400 envelope Response so a malformed
+ * body converges on the standard error shape instead of throwing into the
+ * global 500 handler. Callers do
+ * `const parsed = await readJsonBody(c); if (parsed instanceof Response) return parsed;`
+ * then read `parsed.body`. Pass a type param to preserve the shape the route
+ * expects (`readJsonBody<Record<string, unknown>>(c)`).
+ */
+export async function readJsonBody<T = unknown>(
+  c: Context,
+): Promise<{ body: T } | Response> {
+  try {
+    return { body: (await c.req.json()) as T };
+  } catch {
+    return c.json(
+      errorBody("Invalid JSON body", { code: "invalid_json_body" }),
+      400,
+    );
+  }
 }
 
 /**

@@ -32,29 +32,28 @@ export const registerGracefulShutdown = (
     }
 
     shuttingDown = true;
-    console.log(`Received ${signal}, shutting down server...`);
+    console.log(`[shutdown] Received ${signal}, shutting down server...`);
 
     const shutdownTimer = setTimeout(() => {
-      console.log(`Server shutdown timed out after ${FORCE_EXIT_AFTER_MS}ms`);
+      console.log(
+        `[shutdown] Server shutdown timed out after ${FORCE_EXIT_AFTER_MS}ms`,
+      );
       process.exit(1);
     }, FORCE_EXIT_AFTER_MS);
 
     const finish = async (error?: Error): Promise<void> => {
       if (error) {
-        console.log(`Server shutdown failed: ${error.message}`);
+        console.error("[shutdown] Server shutdown failed:", error);
         process.exit(1);
         return;
       }
 
-      console.log("Server stopped.");
+      console.log("[shutdown] Server stopped.");
       if (options.drain) {
         try {
           await options.drain();
         } catch (err) {
-          console.error(
-            "[shutdown] resource drain failed:",
-            err instanceof Error ? err.message : String(err),
-          );
+          console.error("[shutdown] resource drain failed:", err);
         }
       }
       clearTimeout(shutdownTimer);

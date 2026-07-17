@@ -68,11 +68,14 @@ export function createJsonFileBackend(
         await ipc.invoke("covel:settings:save", entries);
         return;
       }
-      await fetchImpl(endpoint, {
+      const res = await fetchImpl(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ entries }),
       });
+      if (!res.ok) {
+        throw new Error(`[settings] save failed: HTTP ${res.status}`);
+      }
     },
     async loadSecrets(): Promise<Record<string, string>> {
       const ipc = getIpc();
@@ -100,11 +103,14 @@ export function createJsonFileBackend(
         await ipc.invoke("covel:keys:save", keys);
         return;
       }
-      await fetchImpl(secretsEndpoint, {
+      const res = await fetchImpl(secretsEndpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify(keys),
       });
+      if (!res.ok) {
+        throw new Error(`[settings] secrets save failed: HTTP ${res.status}`);
+      }
     },
   };
 }

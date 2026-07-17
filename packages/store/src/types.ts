@@ -478,7 +478,7 @@ export interface SuspensionStore {
    */
   claimSuspension(id: string): Promise<boolean>;
   /**
-   * Global maintenance sweep of stale suspensions (TODO S4-T4.c).
+   * Global maintenance sweep of stale suspensions (spec S4-T4.c).
    *
    * Deletes ONLY records that are still unresolved (`resolvedAt` unset) AND
    * whose `createdAt` is strictly older than `olderThanIso`. Claimed

@@ -97,6 +97,7 @@ export function createModelDbRoutes(ai: AiStack): Hono {
         }
         return c.json({ ok: true, count: ai.modelDb.count, persisted });
       } catch (err) {
+        console.error("[model-db] refresh failed:", err);
         const message = err instanceof Error ? err.message : String(err);
         return c.json({ ok: false, error: message });
       }
