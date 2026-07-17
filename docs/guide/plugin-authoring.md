@@ -249,7 +249,7 @@ minimum-release-age=10080
 | 仅测试用                                | `devDependencies` | `@covel/plugin-test-utils`、`vitest`               |
 
 - `function` runtime 必须把 handler 运行时依赖放 `dependencies`；`agent` / `zero-code` 没有 handler.js，通常不声明任何 `@covel` 运行时依赖。
-- 脚手架（`@covel/create`）已按模板生成正确分层；从已有插件 fork 时手动核对，**不要把运行时依赖留在 `devDependencies`**（dev 能跑、打包后会缺）。
+- 脚手架（`scripts/create-plugin.js`）已按模板生成正确分层；从已有插件 fork 时手动核对，**不要把运行时依赖留在 `devDependencies`**（dev 能跑、打包后会缺）。
 
 **共用包提取阈值（避免过度抽象）：**
 
