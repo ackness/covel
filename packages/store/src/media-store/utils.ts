@@ -117,12 +117,6 @@ export function bytesToReadableStream(
   });
 }
 
-export function mediaObjectKey(id: string, prefix?: string): string {
-  const key = `${id.slice(0, 2)}/${id.slice(2, 4)}/${id}.bin`;
-  if (!prefix) return key;
-  return `${prefix.replace(/\/+$/, "")}/${key}`;
-}
-
 export function normalizeBytes(value: Uint8Array | Buffer): Uint8Array {
   return new Uint8Array(
     value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength),

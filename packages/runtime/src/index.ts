@@ -138,13 +138,6 @@ export type { SaveAutoSnapshotOptions } from "./snapshot/auto-snapshot.js";
 // ── Types ────────────────────────────────────────────────────────
 export type { TriggerContext, ScheduledGroup } from "./types.js";
 
-// Re-export context types for backward compatibility
-export type {
-  AssembledContext,
-  ContextBuildParams,
-  LLMMessage,
-} from "@covel/context";
-
 // ── Prompt Delta (PR-1 translation layer) ──────────────────────
 export { computePromptDelta, applyPromptDelta } from "./llm/prompt-delta.js";
 export type { PromptMessage } from "./llm/prompt-delta.js";

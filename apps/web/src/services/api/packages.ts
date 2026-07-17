@@ -115,21 +115,3 @@ export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
     })),
   };
 }
-
-export interface PluginDocEntry {
-  pluginId: string;
-  content: string;
-  format: string;
-}
-
-export interface PluginDocsResponse {
-  docs: PluginDocEntry[];
-}
-
-export async function fetchPluginDocs(
-  pluginId: string,
-): Promise<PluginDocsResponse> {
-  return request<PluginDocsResponse>(
-    `/api/plugins/${encodeURIComponent(pluginId)}/docs`,
-  );
-}

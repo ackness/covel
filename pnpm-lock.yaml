@@ -455,12 +455,6 @@ importers:
       '@covel/shared':
         specifier: workspace:*
         version: link:../shared
-      '@covel/store':
-        specifier: workspace:*
-        version: link:../store
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../tools
     devDependencies:
       typescript:
         specifier: ^6.0.3

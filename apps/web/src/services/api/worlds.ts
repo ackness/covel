@@ -114,18 +114,6 @@ export async function importDimensions(
   return mapWorldRecord(raw);
 }
 
-/** Re-sync world dimensions into an active session's plugin_data. */
-export async function syncSessionDimensions(
-  worldId: string,
-  sessionId: string,
-): Promise<{ success: boolean; syncedKeys: string[]; entryCount: number }> {
-  return request(`/api/worlds/${encodeURIComponent(worldId)}/sync-dimensions`, {
-    method: "POST",
-    body: JSON.stringify({ sessionId }),
-    sessionId,
-  });
-}
-
 // -- AI World Generation -------------------------------------------
 
 export interface GenerateWorldProgress {

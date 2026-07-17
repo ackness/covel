@@ -10,7 +10,7 @@ See also: [plugin-authoring.md](./plugin-authoring.md) · [e2e-plugin-verify.md]
 | --------------- | ------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------- |
 | Manifest schema | `validatePluginManifest`                    | `PLUGIN.md` frontmatter 是否符合 strict schema                                    | 否                          |
 | 单元测试        | Vitest + `@covel/plugin-test-utils`         | 纯函数、local tool、function handler、trigger helper                              | 否                          |
-| In-process turn | `createTestHarness` + `MockLLM`             | agent runtime、tool loop、plugin_data 写入、跨 runtime 协作                       | 否                          |
+| In-process turn | `@covel/runtime` `executeTurn` + `MockLLM`  | agent runtime、tool loop、plugin_data 写入、跨 runtime 协作                       | 否                          |
 | Runtime cases   | `@covel/test-runtime` / `pnpm test:runtime` | 插件自带 `tests/runtime-cases.json`、外部 `~/.covel/plugins` 调试、mock/live 切换 | mock 否，live 需要 key      |
 | HTTP E2E        | `scripts/e2e-plugin-verify.ts`              | 真实 API、SSE、session kernel、approval、store 路径                               | 需要 server，可用 mock slot |
 
@@ -18,7 +18,7 @@ See also: [plugin-authoring.md](./plugin-authoring.md) · [e2e-plugin-verify.md]
 
 - 只改 `PLUGIN.md`：跑 schema 校验。
 - 写了 `tools/*.js`、`handler.js`、`hooks/*.js`：加 Vitest 单元测试。
-- 涉及 agent tool loop、`input.inject`、多 runtime 或 event 链：加 `createTestHarness` 或 `pnpm test:runtime`。
+- 涉及 agent tool loop、`input.inject`、多 runtime 或 event 链：手搓 turn-executor 集成测试（见下）或 `pnpm test:runtime`。
 - 发布前要验证完整 HTTP 行为：跑 `scripts/e2e-plugin-verify.ts`。
 
 ## `@covel/plugin-test-utils`
@@ -26,53 +26,48 @@ See also: [plugin-authoring.md](./plugin-authoring.md) · [e2e-plugin-verify.md]
 源码入口：
 
 - [`packages/plugin-test-utils/src/index.ts`](../../packages/plugin-test-utils/src/index.ts)
-- [`packages/plugin-test-utils/src/test-harness.ts`](../../packages/plugin-test-utils/src/test-harness.ts)
 - [`packages/plugin-test-utils/src/mock-llm.ts`](../../packages/plugin-test-utils/src/mock-llm.ts)
 - [`packages/plugin-test-utils/src/manual-context.ts`](../../packages/plugin-test-utils/src/manual-context.ts)
+- [`packages/plugin-test-utils/src/contract.ts`](../../packages/plugin-test-utils/src/contract.ts)
 
 主要导出：
 
 | 导出                                                         | 用途                                                               |
 | ------------------------------------------------------------ | ------------------------------------------------------------------ |
 | `MockLLM`                                                    | 记录 LLM 调用；支持 `defaultResponse` 和按顺序消费的 `responses[]` |
-| `createTestHarness`                                          | 从 `pluginsDir` 发现插件，创建 MemoryStore，执行一整个 turn        |
 | `makeTurnInput` / `makeTriggerContext` / `makeRuntimeResult` | 减少 fixture 样板代码                                              |
 | `makeManualFunctionContext`                                  | 直接测试 function runtime handler                                  |
 | `expectAssetGenerated`                                       | 断言 runtime output 的 `assetGenerations[]` 中有合法 MediaRef      |
 
-最小 harness 示例：
+function handler 单元测试（真实范例：[`plugins/character-presence/tests/handler.test.js`](../../plugins/character-presence/tests/handler.test.js)）——用 `makeManualFunctionContext` 构造 handler context，直接调用 handler，再用 `@covel/tools` 的 `getPendingProposals` 断言 proposal：
 
-```ts
+```js
 import { describe, expect, it } from "vitest";
-import path from "node:path";
-import { MockLLM, createTestHarness } from "@covel/plugin-test-utils";
+import { makeManualFunctionContext } from "@covel/plugin-test-utils";
+import { getPendingProposals } from "@covel/tools";
+import handler from "../handler.js";
 
-const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../plugins");
+it("saves data via a plugin.data proposal", async () => {
+  const result = await handler(
+    makeManualFunctionContext({
+      pluginId: "my-plugin",
+      manualPayload: { text: "hello" },
+    }),
+  );
 
-describe("my-plugin", () => {
-  it("runs one turn", async () => {
-    const llm = new MockLLM({
-      defaultResponse: {
-        content: "Done.",
-        toolCalls: [],
-        finishReason: "stop",
-        usage: { inputTokens: 10, outputTokens: 2 },
-      },
-    });
-
-    const harness = await createTestHarness({
-      pluginsDir: PLUGINS_DIR,
-      activePlugins: ["my-plugin"],
-      llm,
-    });
-
-    const result = await harness.executeTurn("continue");
-
-    expect(result.runtimeResults[0]?.status).toBe("success");
-    expect(llm.calls).toHaveLength(1);
-  });
+  const proposals = getPendingProposals(result);
+  expect(proposals[0]).toMatchObject({ type: "plugin.data" });
 });
 ```
+
+事件触发 / 媒体生成类 handler 通常手写 context 对象（`vi.fn()` 桩掉 `pluginData` / `images` / `logger`），并用 `expectAssetGenerated` 断言产物——完整范例见 [`plugins/scene-stage/tests/background-gen.test.js`](../../plugins/scene-stage/tests/background-gen.test.js)。
+
+### In-process turn（手搓 turn-executor）
+
+需要跑完整 turn（agent tool loop、event 链、proposal commit）时，直接用 `@covel/runtime` 的公开导出手工组装：`discoverPlugins` / `loadPluginManifest` / `loadRuntime`（`@covel/plugin-loader`）发现并加载真实 runtime，`createMemoryStore` 做后端，`createToolExecutor` + `executeTurn` 执行，`processRuntimeResult` 落库 proposal，LLM 用 `MockLLM` 或按步骤出 tool-call 的自定义 `LLMAdapter`。完整范例：
+
+- [`packages/runtime/tests/scene-stage-integration.test.ts`](../../packages/runtime/tests/scene-stage-integration.test.ts) — 合成 emitter runtime 发 `scene.set`，同 turn event 链触发真实 scene-stage resolver 并 commit `plugin.data`。
+- [`packages/runtime/tests/emit-event-integration.test.ts`](../../packages/runtime/tests/emit-event-integration.test.ts) — 该模式的最初出处。
 
 运行包级测试：
 

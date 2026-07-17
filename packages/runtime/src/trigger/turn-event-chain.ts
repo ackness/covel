@@ -61,7 +61,7 @@ function eventFanoutTriggerContext(
  * Collect emitted runtime events into a topic -> payload map. First emission
  * wins inside a depth to keep fan-out deterministic.
  */
-export function collectEventsFrom(
+function collectEventsFrom(
   result: RuntimeResult,
   sink: Map<string, Record<string, unknown>>,
 ): void {

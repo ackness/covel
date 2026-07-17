@@ -726,7 +726,7 @@ Turn 执行                    @covel/runtime                   核心执行引�
 
 测试支持                      @covel/plugin-test-utils         插件作者测试工具
                              ├── MockLLM                      模拟 LLM 响应
-                             ├── createTestHarness()          完整测试环境
+                             ├── makeManualFunctionContext()  function handler 测试 context
                              └── factory functions             makeTurnInput, etc.
 ```
 
@@ -774,7 +774,7 @@ Turn 执行                    @covel/runtime                   核心执行引�
 | **tools**             | `tool()`, `createPluginDataTools()`, `shortIdBatch()`           | bootstrap, plugin tools   |
 | **state**             | `createStateManager()`, `StateManager`                          | server, runtime           |
 | **approval**          | `createApprovalPipeline()`, `ApprovalPipeline.check()`          | tool executor             |
-| **plugin-test-utils** | `MockLLM`, `createTestHarness()`                                | plugin tests only         |
+| **plugin-test-utils** | `MockLLM`, `makeManualFunctionContext()`                        | plugin tests only         |
 
 ## 九、设计约束与原则
 

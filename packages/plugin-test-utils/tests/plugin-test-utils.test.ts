@@ -1,16 +1,12 @@
 import { describe, it, expect } from "vitest";
-import path from "node:path";
 import {
   MockLLM,
-  createTestHarness,
   expectAssetGenerated,
   makeManualFunctionContext,
   makeTurnInput,
   makeTriggerContext,
   makeRuntimeResult,
 } from "@covel/plugin-test-utils";
-
-const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../plugins");
 
 // ── Factories ───────────────────────────────────────────────────
 
@@ -204,39 +200,5 @@ describe("MockLLM", () => {
       messages: [{ role: "user", content: "go" }],
     });
     expect(response.content).toBe("你进入了黑暗的洞穴。");
-  });
-});
-
-// ── TestHarness ─────────────────────────────────────────────────
-
-describe("createTestHarness", () => {
-  it("should discover plugins and create a working harness", async () => {
-    const harness = await createTestHarness({ pluginsDir: PLUGINS_DIR });
-    expect(harness.manifests.length).toBeGreaterThan(0);
-    expect(harness.store).toBeDefined();
-    expect(harness.llm).toBeDefined();
-  });
-
-  it("should execute a turn and return results", async () => {
-    const llm = new MockLLM({
-      defaultResponse: {
-        content: "你站在山脚下...",
-        toolCalls: [],
-        finishReason: "stop",
-        usage: { inputTokens: 100, outputTokens: 50 },
-      },
-    });
-    const harness = await createTestHarness({ pluginsDir: PLUGINS_DIR, llm });
-    const result = await harness.executeTurn("开始游戏");
-
-    expect(result.runtimeResults.length).toBeGreaterThan(0);
-    expect(result.runtimeResults[0].status).toBe("success");
-  });
-
-  it("should use in-memory store", async () => {
-    const harness = await createTestHarness({ pluginsDir: PLUGINS_DIR });
-    // Store should be empty initially
-    const sessions = await harness.store.listSessions("any-world");
-    expect(sessions).toEqual([]);
   });
 });

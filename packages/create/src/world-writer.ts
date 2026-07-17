@@ -10,8 +10,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 
-export const GENERATED_WORLD_DATA_PATH = "data/world.data.yaml";
-export const GENERATED_DIMENSIONS_PATH = "data/dimensions.yaml";
+const GENERATED_WORLD_DATA_PATH = "data/world.data.yaml";
+const GENERATED_DIMENSIONS_PATH = "data/dimensions.yaml";
 
 /**
  * If the manifest contains inline `dimensions`, write them through the v1

@@ -250,39 +250,7 @@ export type {
   PlayerIdentitySaveResult,
 } from "./player-identity.js";
 
-export type {
-  BranchReplyAction,
-  BranchReplyCandidate,
-  BranchReplyTurnRecord,
-  BranchReplyMessageState,
-  BranchReplyCreateCandidatesPayload,
-  BranchReplyAcceptCandidatePayload,
-  BranchReplyManualPayload,
-  BranchReplyRuntimeResult,
-} from "./branch-reply.js";
-
 export { playerIdentityToCharacterUpsert } from "./player-identity.js";
-
-export type {
-  CharacterPresenceMediaRefs,
-  CharacterPresence,
-  CharacterPresenceRecord,
-  CharacterPresenceSavePayload,
-  CharacterPresenceSaveResult,
-} from "./character-presence.js";
-
-export type {
-  LivingWorldRuleKind,
-  LivingWorldRuleCategory,
-  LivingWorldRulePosition,
-  LivingWorldRuleBudgetClass,
-  LivingWorldRuleCoordinate,
-  LivingWorldRuleOwner,
-  LivingWorldRule,
-  LivingWorldRuleRecord,
-  LivingWorldRuleSavePayload,
-  LivingWorldRuleSaveResult,
-} from "./living-world-rules.js";
 
 export type {
   RuntimeOutput,

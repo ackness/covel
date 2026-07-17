@@ -1,13 +1,13 @@
 /**
  * Unified Memory System facade.
  *
- * Creates and wires all three memory tiers + compaction into a single
- * object that the server bootstrap injects into the turn executor.
+ * Creates and wires all three memory tiers into a single object that the
+ * server bootstrap injects into the turn executor. (Compaction lives in
+ * `@covel/context`'s `maybeCompact` — this package never compacted in
+ * production.)
  */
 
 import type {
-  CompactionConfig,
-  CompactionResult,
   CoreMemoryConfig,
   MemoryLLMAdapter,
   MemoryManager,
@@ -22,7 +22,6 @@ import { createMemoryManager } from "./core-memory.js";
 import { createMemoryUpdater } from "./updater.js";
 import { createKeywordRecallSearcher } from "./recall-search.js";
 import { createKeywordArchivalSearcher } from "./archival-search.js";
-import { createCompactor } from "./compactor.js";
 import { DEFAULT_CORE_MEMORY_BLOCKS } from "./types.js";
 import { supportsVector } from "@covel/store";
 import { createVectorRecallSearcher } from "./vector-recall-search.js";
@@ -36,13 +35,12 @@ import {
 export interface CreateMemorySystemOptions {
   readonly coreMemory?: CoreMemoryConfig;
   readonly updater?: MemoryUpdaterConfig;
-  readonly compaction?: CompactionConfig;
 }
 
 /**
  * Create a fully wired memory system.
  *
- * Model slot resolution for the updater/compactor:
+ * Model slot resolution for the updater:
  *   explicit option (set by the bootstrap layer in production) → canonical
  *   "memory" slot → gateway default. See {@link resolveModelSlot}.
  *
@@ -60,12 +58,11 @@ export function createMemorySystem(
 ): MemorySystem {
   const { store, llm, resolveSlot } = deps;
 
-  const explicitModelSlot =
-    options?.updater?.modelSlot ?? options?.compaction?.modelSlot;
+  const explicitModelSlot = options?.updater?.modelSlot;
   const modelSlot = explicitModelSlot ?? resolveModelSlot(resolveSlot);
 
-  // Single source of truth for the block schema across manager/updater/compactor
-  // so post-turn extraction, rendering, and post-compaction refresh all agree.
+  // Single source of truth for the block schema across manager/updater so
+  // post-turn extraction and rendering agree.
   const blocks = options?.coreMemory?.blocks ?? DEFAULT_CORE_MEMORY_BLOCKS;
 
   const manager: MemoryManager = createMemoryManager(store, {
@@ -120,18 +117,6 @@ export function createMemorySystem(
     ingestor = createNoopIngestor();
   }
 
-  const compactor = createCompactor(
-    { store, llm, memoryManager: manager },
-    {
-      ...options?.compaction,
-      blocks,
-      ...(options?.coreMemory?.resolveBlocks
-        ? { resolveBlocks: options.coreMemory.resolveBlocks }
-        : {}),
-      modelSlot,
-    },
-  );
-
   return {
     manager,
     updater: updaterInstance,
@@ -140,10 +125,6 @@ export function createMemorySystem(
 
     async ingest(sessionId) {
       return ingestor.ingest(sessionId);
-    },
-
-    async compact(params): Promise<CompactionResult> {
-      return compactor.compact(params);
     },
   };
 }
@@ -164,8 +145,8 @@ const MEMORY_SLOT = "memory";
  * runs for a bare standalone boot or a test that omits the slot.
  *
  * It probes the single canonical `"memory"` slot; when that is unconfigured it
- * returns `undefined` and the updater/compactor fall back to the gateway's
- * default slot. No other slot names are hardcoded here — a prior `"story"`
+ * returns `undefined` and the updater falls back to the gateway's default
+ * slot. No other slot names are hardcoded here — a prior `"story"`
  * fallback was removed because it baked an unrelated magic slot id into the
  * memory package (the gateway's own default-slot resolution covers that case).
  */

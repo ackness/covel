@@ -1,6 +1,6 @@
 # 插件开发指南 · 高级（TypeScript + 审批 + 发布）
 
-> 面向**专业开发者**：要吃下完整类型系统、写复杂的 `TestHarness` 断言、自定义审批规则、拆多 runtime 插件，并最终发布到社区。
+> 面向**专业开发者**：要吃下完整类型系统、写手搓 turn-executor 的集成测试、自定义审批规则、拆多 runtime 插件，并最终发布到社区。
 
 > **前置要求**：先完成 [零代码](./plugin-authoring-zero-code.md) 和 [进阶（agent + 本地 JS）](./plugin-authoring-agent.md)。
 
@@ -75,66 +75,36 @@ import type {
 } from "@covel/runtime";
 ```
 
-## 2. TestHarness 高级用法
+## 2. 集成测试进阶
 
-**自定义 MockLLM 响应队列：**
-
-```typescript
-const mockLLM = new MockLLM();
-
-// 默认响应
-mockLLM.defaultResponse = {
-  content: "你来到了一片神秘的森林...",
-  toolCalls: [],
-  finishReason: "stop",
-  usage: { inputTokens: 100, outputTokens: 50 },
-};
-```
-
-**注入额外工具：**
+**自定义 MockLLM 响应队列**（`responses[]` 按顺序消费，耗尽后回落 `defaultResponse`）：
 
 ```typescript
-import { tool } from "@covel/tools";
-import { z } from "zod";
+import { MockLLM } from "@covel/plugin-test-utils";
 
-const customTool = tool({
-  name: "test-helper",
-  description: "Test helper tool",
-  parameters: z.object({ value: z.string() }),
-  execute: async (params) => ({ echoed: params.value }),
-});
-
-const harness = await createTestHarness({
-  pluginsDir: path.resolve(__dirname, "../../"),
-  tools: [customTool], // 额外注册的工具
+const mockLLM = new MockLLM({
+  responses: [
+    {
+      content: "",
+      toolCalls: [
+        { id: "tc-1", name: "emit-event", arguments: '{"topic":"scene.set"}' },
+      ],
+      finishReason: "tool_calls",
+      usage: { inputTokens: 10, outputTokens: 5 },
+    },
+    {
+      content: "你来到了一片神秘的森林...",
+      toolCalls: [],
+      finishReason: "stop",
+      usage: { inputTokens: 100, outputTokens: 50 },
+    },
+  ],
 });
 ```
 
-**断言 Store 状态：**
+**手搓 turn-executor 跑完整 turn**：需要验证 agent tool loop、同 turn event 链或 proposal commit 时，用 `@covel/runtime` 公开导出手工组装 —— `discoverPlugins` / `loadPluginManifest` / `loadRuntime`（`@covel/plugin-loader`）加载真实 runtime，`createMemoryStore` 做后端，`createToolExecutor` + `executeTurn` 执行，`processRuntimeResult` 落库 proposal。完整可运行范例见 [`packages/runtime/tests/scene-stage-integration.test.ts`](../../packages/runtime/tests/scene-stage-integration.test.ts) 与 [`packages/runtime/tests/emit-event-integration.test.ts`](../../packages/runtime/tests/emit-event-integration.test.ts)，入口选择见 [plugin-testing.md](./plugin-testing.md)。
 
-```typescript
-const harness = await createTestHarness({ pluginsDir: "..." });
-await harness.executeTurn("开始游戏");
-
-// 通过 store 检查持久化的数据
-const store = harness.store;
-// store 实现了 DataStore 接口，可以查询 state、events、records 等
-```
-
-**多轮测试：**
-
-```typescript
-const harness = await createTestHarness({ pluginsDir: "..." });
-
-// 第一轮
-const result1 = await harness.executeTurn("开始游戏");
-
-// 第二轮（TestHarness 自动递增 turnId）
-const result2 = await harness.executeTurn("我要去探索森林");
-
-// 断言跨轮状态变化
-expect(mockLLM.calls).toHaveLength(2);
-```
+**断言 Store 状态**：MemoryStore 实现完整 `DataStore` 接口，turn 执行 + `processRuntimeResult` 之后可直接 `store.listPluginData(...)` / `store.getState(...)` 断言持久化结果。
 
 ## 3. 审批管线
 

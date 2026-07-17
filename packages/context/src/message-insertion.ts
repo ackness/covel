@@ -26,7 +26,7 @@ export interface RenderedDepthContribution {
   readonly order: number;
 }
 
-/** See `context-builder.ts::toLLMMessage` — kept in lock-step. */
+/** Map a persisted history record into the LLM message shape. */
 export function toLLMMessage(msg: MessageHistoryRecord): LLMMessage {
   return {
     role: msg.role as "system" | "user" | "assistant",

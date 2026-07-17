@@ -135,6 +135,3 @@ export {
   type ModelDbFile,
   type ModelDbPersistence,
 } from "./capability/index.js";
-
-// Trace
-export { createLangfuseHook } from "./trace/langfuse.js";

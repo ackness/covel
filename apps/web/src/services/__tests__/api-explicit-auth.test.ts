@@ -80,7 +80,7 @@ describe("explicit session auth on indirect routes", () => {
       new File(["image"], "image.png", { type: "image/png" }),
     );
     await api.fetchUiSpecs("sess-1");
-    await api.fetchTraceEvents("sess-1");
+    await api.fetchTraceTurns("sess-1");
 
     for (let index = 0; index < 6; index++) {
       expect(headersAt(fetchMock, index)["X-Session-Token"]).toBe(
