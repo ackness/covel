@@ -670,7 +670,7 @@ interface ToolClient {
 
 ## 审批策略
 
-工具调用经过 `ApprovalPipeline` 审批检查，当前规则（配置在 `apps/server/src/routes/api/bootstrap.ts`）：
+工具调用经过 `ApprovalPipeline` 审批检查，当前规则（配置在 `apps/server/src/routes/api/bootstrap/tools.ts`）：
 
 | 来源分类        | 规则      | 说明                           |
 | --------------- | --------- | ------------------------------ |

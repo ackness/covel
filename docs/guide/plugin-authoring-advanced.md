@@ -680,7 +680,7 @@ my-plugin/
 
 - 数据库表名或 ORM 模型
 - 内核调度器、路由器等内部模块
-- 前端组件（UI 通过 blockSchema 或交互协议集成）
+- 前端组件（UI 通过 json-render spec 或交互协议集成）
 - 直接 SDK 调用（LLM 调用通过 model slot 绑定）
 
 ## 8. 插件国际化（i18n）

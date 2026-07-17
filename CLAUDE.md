@@ -178,7 +178,7 @@ Detailed field reference, per-plugin table, and trigger semantics: [docs/referen
 
 ### Plugin UI (declarative, json-render)
 
-All panels/blocks render through [json-render](https://github.com/vercel-labs/json-render) with a framework-defined ~25-component catalog. Plugins declare `ui: { right, message, left }` in PLUGIN.md, pointing at JSON specs under `ui/`. `GET /api/ui-specs` aggregates them; frontend discovers panels at boot. `plugin-data.changed` SSE events drive re-renders. Three-tier resolution: custom React (`.tsx`) → json-render spec (`.json`) → raw JSON fallback. Details in [docs/reference/ui-panels.md](./docs/reference/ui-panels.md).
+All panels/blocks render through [json-render](https://github.com/vercel-labs/json-render) with a framework-defined ~48-component catalog ([docs/reference/ui-components.md](./docs/reference/ui-components.md)). Plugins declare `ui: { right, message, left }` in PLUGIN.md, pointing at JSON specs under `ui/`. `GET /api/ui-specs` aggregates them; frontend discovers panels at boot. `plugin-data.changed` SSE events drive re-renders. Three-tier resolution: custom React (`.tsx`) → json-render spec (`.json`) → raw JSON fallback. Details in [docs/reference/ui-panels.md](./docs/reference/ui-panels.md).
 
 ### Model slot system
 
@@ -275,14 +275,14 @@ Each SQL backend keeps a thin public factory plus focused method modules:
 - `*-store-mappers.ts` / `*-store-values.ts` — row conversion and JSON helpers.
 - `*-data-crud.ts`, `*-runtime-records.ts`, `*-session-*`, `*-snapshot*`, `*-state*`, `*-world*` — focused persistence surfaces.
 
-22 tables via Drizzle; full list and transactions contract in [docs/reference/transactions.md](./docs/reference/transactions.md).
+27 tables via Drizzle; authoritative list in `packages/store/src/{sqlite,postgres}/schema.ts`, transactions contract in [docs/reference/transactions.md](./docs/reference/transactions.md).
 
 - **`sessions.runtime_model_overrides`** — JSONB map of `runtimeId → slot name`, snapshotted into `TurnInput` each turn and consulted by `runtime-slot-resolver` before `manifest.model` / gateway default. Keys still flow via `X-Provider-Keys` + localStorage.
 - **JSONB writes**: use `sql.json(value as JSONValue)` — **never** `JSON.stringify()` (double-serialisation bug).
 
 ## Server Bootstrap
 
-`bootstrapApi()` in `apps/server/src/routes/api/bootstrap.ts` wires a fully composed Hono app (plugin discovery + registries + middleware injection); `app.ts` is a thin composition root (~80 lines). All endpoints under `/api/` prefix. Full endpoint reference: [docs/reference/api.md](./docs/reference/api.md).
+`bootstrapApi()` in `apps/server/src/routes/api/bootstrap.ts` wires a fully composed Hono app (plugin discovery + registries + middleware injection); `app.ts` is the composition root (~420 lines: env/key loading, store + AI stack setup, middleware, then delegates to `bootstrapApi()`). All endpoints under `/api/` prefix. Full endpoint reference: [docs/reference/api.md](./docs/reference/api.md).
 
 ## Testing Conventions
 

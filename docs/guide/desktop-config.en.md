@@ -16,9 +16,11 @@ On first launch the desktop app creates `~/.covel/`. Config and user plugins liv
 <data_root>/                 ← default ~/.covel/data; redirectable
   covel.db                   ← SQLite database
   worlds/                    ← user-created worlds
-  logs/                      ← app logs (auto-rotated)
-    electron-*.log           ← Electron main process
-    server-*.log             ← Node backend (pino-roll)
+  logs/                      ← app logs (size-rotated, one NDJSON record per line)
+    desktop.log              ← Electron main-process events
+    server.log               ← Node sidecar stdout/stderr
+    desktop.log.1 … .N       ← rotated copies, oldest dropped past max_files
+    server.log.1 … .N
   server.port                ← last boot port (diagnostics)
 ```
 
