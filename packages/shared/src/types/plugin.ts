@@ -371,13 +371,7 @@ export interface PluginUserSettingSpec {
   // intentionally not yet supported — its keys.env storage + transport channel
   // are unresolved (see the configurable-surface spec, Open Question #4).
   readonly type:
-    | "text"
-    | "textarea"
-    | "number"
-    | "integer"
-    | "toggle"
-    | "select"
-    | "slider";
+    "text" | "textarea" | "number" | "integer" | "toggle" | "select" | "slider";
   // Optional: a setting may declare no default (e.g. cost-gate). Mirrors the
   // schema's `z.unknown().optional()` so the parsed manifest type-checks.
   readonly default?: unknown;

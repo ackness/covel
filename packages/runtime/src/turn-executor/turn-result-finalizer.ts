@@ -25,8 +25,7 @@ function collectPendingInputs(
     if (!result.output) continue;
     const out = result.output as Record<string, unknown>;
     const interactions = out.interactions as
-      | Array<Record<string, unknown>>
-      | undefined;
+      Array<Record<string, unknown>> | undefined;
     const narrativeFallback =
       typeof out.narrativeTemplate === "string"
         ? out.narrativeTemplate

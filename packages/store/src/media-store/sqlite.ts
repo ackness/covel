@@ -214,8 +214,7 @@ export function createSqliteMediaStore(
 
     async isReferencedBy(id, sessionId) {
       const ownerRow = checkOwner.get(id) as
-        | { ownerSessionId: string | null }
-        | undefined;
+        { ownerSessionId: string | null } | undefined;
       if (ownerRow?.ownerSessionId === sessionId) return true;
       const refRow = checkRef.get(sessionId, id) as { one: number } | undefined;
       return refRow !== undefined;

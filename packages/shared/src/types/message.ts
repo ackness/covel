@@ -12,11 +12,7 @@ import type { UIRenderInstruction } from "./ui.js";
 // ── Message source ───────────────────────────────────────────────
 
 export type TurnMessageSourceType =
-  | "system"
-  | "runtime"
-  | "player"
-  | "tool"
-  | "player-input";
+  "system" | "runtime" | "player" | "tool" | "player-input";
 
 export interface TurnMessageSource {
   readonly type: TurnMessageSourceType;
@@ -27,11 +23,7 @@ export interface TurnMessageSource {
 // ── Player input form (for interactive plugins) ──────────────────
 
 export type PlayerInputFieldType =
-  | "text"
-  | "textarea"
-  | "select"
-  | "checkbox"
-  | "number";
+  "text" | "textarea" | "select" | "checkbox" | "number";
 
 export interface PlayerInputField {
   readonly type: PlayerInputFieldType;

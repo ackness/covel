@@ -5,9 +5,20 @@ packages:
 
 minimumReleaseAge: 10080
 
-# Native packages allowed to run install build scripts. Moved here from the
-# package.json `pnpm` field, which pnpm 10 no longer reads.
-onlyBuiltDependencies:
-  - better-sqlite3
-  - electron
-  - esbuild
+# Native packages allowed to run install build scripts. pnpm 11 replaces
+# `onlyBuiltDependencies` with this explicit allow/deny map.
+allowBuilds:
+  better-sqlite3: true
+  electron: true
+  # Squirrel installer helper pulled in by electron-builder; its download
+  # script never ran under pnpm 10 (`onlyBuiltDependencies`) and Windows
+  # packaging works without it, so keep script execution denied.
+  electron-winstaller: false
+  esbuild: true
+
+# Keep transitive tool peers inside the same seven-day stable window as their
+# direct consumers. Newer compatible releases are still quarantined upstream.
+overrides:
+  rolldown: 1.1.4
+  tsx: 4.22.4
+  "@tanstack/router-core": 1.171.14

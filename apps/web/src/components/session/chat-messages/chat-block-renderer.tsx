@@ -79,8 +79,7 @@ export function ChatBlockRenderer({
   if (blockType === "plugin_message") {
     const pluginId =
       ((block.data as Record<string, unknown> | undefined)?.pluginId as
-        | string
-        | undefined) ?? msg.runtimeId;
+        string | undefined) ?? msg.runtimeId;
     return (
       <div className="flex flex-col gap-1.5">
         {viewMode === "detailed" && pluginId && (

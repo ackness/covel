@@ -138,8 +138,7 @@ async function restoreLocalFallback(
   }
   if (stateSnapResult.status === "fulfilled" && stateSnapResult.value) {
     const snapshotState = stateSnapResult.value.state as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     if (snapshotState) {
       dispatch({ type: "SET_GAME_STATE", state: snapshotState });
     }

@@ -37,13 +37,13 @@
     "@covel/state": "workspace:*",
     "@covel/store": "workspace:*",
     "@covel/tools": "workspace:*",
-    "@hono/node-server": "^2.0.5",
+    "@hono/node-server": "^2.0.8",
     "@types/yauzl": "^3.4.0",
     "ajv": "^8.20.0",
     "gray-matter": "^4.0.3",
-    "hono": "^4.12.26",
+    "hono": "4.12.29",
     "postgres": "^3.4.9",
-    "tsx": "^4.22.4",
+    "tsx": "4.22.4",
     "yaml": "^2.9.0",
     "yauzl": "^3.4.0",
     "zod": "^4.4.3"
@@ -51,8 +51,8 @@
   "devDependencies": {
     "@types/yazl": "^3.3.1",
     "drizzle-kit": "^0.31.10",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.9",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10",
     "yazl": "^3.3.1"
   }
 }

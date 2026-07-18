@@ -19,8 +19,7 @@ export interface WorldRow {
 
 export function toWorldRecord(row: WorldRow, json: JsonReader): WorldRecord {
   const metadata = json.read(row.metadata) as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   return {
     id: row.id,
     name: row.name,

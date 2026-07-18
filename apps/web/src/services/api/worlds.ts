@@ -132,9 +132,7 @@ export interface GenerateWorldError {
 }
 
 export type GenerateWorldEvent =
-  | GenerateWorldProgress
-  | GenerateWorldDone
-  | GenerateWorldError;
+  GenerateWorldProgress | GenerateWorldDone | GenerateWorldError;
 
 /**
  * Generate a world via AI from a text prompt.

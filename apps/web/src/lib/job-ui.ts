@@ -1,8 +1,5 @@
 export type JobStatusBadgeVariant =
-  | "default"
-  | "secondary"
-  | "destructive"
-  | "outline";
+  "default" | "secondary" | "destructive" | "outline";
 
 export function compactJobId(
   id: string,

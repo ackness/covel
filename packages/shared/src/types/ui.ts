@@ -15,11 +15,7 @@ export type UIComponentType =
   | "progress";
 
 export type UIPartStatus =
-  | "pending"
-  | "streaming"
-  | "success"
-  | "error"
-  | "paused";
+  "pending" | "streaming" | "success" | "error" | "paused";
 
 export type UIRenderLayout = "stream" | "split" | "overlay";
 
@@ -50,8 +46,7 @@ export interface UIRenderLegacyInstruction {
 }
 
 export type UIRenderInstruction =
-  | UIRenderPartsInstruction
-  | UIRenderLegacyInstruction;
+  UIRenderPartsInstruction | UIRenderLegacyInstruction;
 
 export function isUIRenderPartsInstruction(
   value: unknown,

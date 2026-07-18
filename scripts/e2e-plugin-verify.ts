@@ -210,11 +210,7 @@ interface PluginFlowStep {
   runtimeName: string;
   priority: number;
   segmentId:
-    | "start"
-    | "pre-game"
-    | "pre-narrator"
-    | "narrator"
-    | "post-narrator";
+    "start" | "pre-game" | "pre-narrator" | "narrator" | "post-narrator";
   runtimeType: string;
   outputKind: string;
   trigger: PluginFlowTrigger;

@@ -64,8 +64,7 @@ export interface JobPromptContext extends ImagePromptPayload {
 
 export function getJobPromptContext(job: PluginJobRecord): JobPromptContext {
   const output = job.runtimeResults?.[0]?.output as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const triggerData = (
     job as unknown as {
       triggerEvent?: {

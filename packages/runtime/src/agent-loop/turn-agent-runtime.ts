@@ -58,11 +58,9 @@ export interface ExecuteAgentRuntimeOptions {
     | undefined;
   readonly hookPipeline: HookPipeline | undefined;
   readonly sessionSummaries:
-    | readonly import("@covel/store").SessionSummaryRecord[]
-    | undefined;
+    readonly import("@covel/store").SessionSummaryRecord[] | undefined;
   readonly workingMemory:
-    | readonly import("@covel/context").WorkingMemoryEntry[]
-    | undefined;
+    readonly import("@covel/context").WorkingMemoryEntry[] | undefined;
   readonly coreMemoryBlocks: readonly CoreMemoryBlockView[] | undefined;
   readonly sessionContext: SessionContextSnapshot | undefined;
   readonly startTime: number;

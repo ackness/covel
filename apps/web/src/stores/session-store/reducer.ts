@@ -272,8 +272,7 @@ export function reducer(
       return { ...state, executionError: action.error };
     case "ADD_STATE_PATCH": {
       const patchData = action.patch.data as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
       const newGameState = patchData
         ? deepMerge(state.gameState, patchData)
         : state.gameState;

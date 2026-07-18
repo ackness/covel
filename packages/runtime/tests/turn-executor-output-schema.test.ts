@@ -218,8 +218,7 @@ describe("executeTurn: output.schema.json", () => {
     expect(output?.narrativeOutput).toBe(fullProse);
     // Structured diagnostic for the task UI to render.
     const diagnostic = output?.diagnostic as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     expect(diagnostic?.kind).toBe("schema-validation-prose");
     expect(diagnostic?.requiredFields).toEqual([
       "prompt",

@@ -14,8 +14,7 @@ import type { runtimeManifestSchema } from "./plugin-schemas.js";
 export type RuntimeManifestInput = z.input<typeof runtimeManifestSchema>;
 
 export type RuntimeManifestSemanticDiagnosticCode =
-  | "manual-trigger-priority"
-  | "capability-typo";
+  "manual-trigger-priority" | "capability-typo";
 
 export interface RuntimeManifestSemanticDiagnostic {
   readonly code: RuntimeManifestSemanticDiagnosticCode;

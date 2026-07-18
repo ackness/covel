@@ -450,12 +450,8 @@ export default ({ fetchWithRetry, validateBaseUrl }) => ({
       },
     },
   ],
-  image: [
-    /* { id, async generate(config, params) } */
-  ],
-  transcription: [
-    /* { id, async transcribe(config, params) } */
-  ],
+  image: [/* { id, async generate(config, params) } */],
+  transcription: [/* { id, async transcribe(config, params) } */],
 });
 ```
 

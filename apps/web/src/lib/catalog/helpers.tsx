@@ -19,8 +19,7 @@ export function resolveIcon(name: string | undefined): Icons.LucideIcon | null {
     .join("");
   return (
     ((Icons as Record<string, unknown>)[pascal] as
-      | Icons.LucideIcon
-      | undefined) ?? null
+      Icons.LucideIcon | undefined) ?? null
   );
 }
 

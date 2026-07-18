@@ -140,8 +140,7 @@ function applyResumeResponse(
       }
       case "interaction.requested": {
         const block = event.payload.block as
-          | Record<string, unknown>
-          | undefined;
+          Record<string, unknown> | undefined;
         if (!block) break;
         next = reduce(next, {
           type: "ADD_MESSAGE",

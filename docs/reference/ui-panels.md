@@ -270,12 +270,13 @@ type I18nText = string | Record<LocaleTag, string>;
 - 跨插件组合：`char-creator` 贡献角色列表，未来 `inventory` 贡献背包，都声明 `group: "character"`，自动汇聚到同一个"角色"外层 Tab
 
 **合并规则**：
-| 字段 | 行为 |
-|------|------|
-| 相同 `group` | 合并为一个外层 Tab（横向子 Tab 切换） |
-| 不同 `group` 或省略 | 独立外层 Tab（兜底 key 为 `${pluginId}::${specId}`） |
+
+| 字段                                                | 行为                                                                  |
+| --------------------------------------------------- | --------------------------------------------------------------------- |
+| 相同 `group`                                        | 合并为一个外层 Tab（横向子 Tab 切换）                                 |
+| 不同 `group` 或省略                                 | 独立外层 Tab（兜底 key 为 `${pluginId}::${specId}`）                  |
 | `groupLabel` / `shortLabel` / `icon` / `groupOrder` | 冲突时"**首个声明者赢**"，按 `/api/ui-specs` 返回顺序（插件加载顺序） |
-| `groupOrder` | 外层 Tab 在 activity bar 中的排序（数字小的排前，默认 500） |
+| `groupOrder`                                        | 外层 Tab 在 activity bar 中的排序（数字小的排前，默认 500）           |
 
 **命名空间约定**：跨插件 group key 与 CSS class name 同理 —— 作者自觉使用命名空间前缀（`core.character`、`myorg.combat`）避免冲突，框架不做 magic 前缀。
 

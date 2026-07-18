@@ -589,8 +589,7 @@ describe("executeTurn: manual trigger", () => {
     // Follower's handler should have seen the event payload via ctx.triggerEvent.
     const followerCtx = handlerCalls["plug/follower"]?.[0];
     const triggerEvent = followerCtx?.triggerEvent as
-      | { topic?: string; data?: { prompt?: string } }
-      | undefined;
+      { topic?: string; data?: { prompt?: string } } | undefined;
     expect(triggerEvent?.topic).toBe("image.prompt.ready");
     expect(triggerEvent?.data?.prompt).toBe("sunset");
   });

@@ -30,13 +30,7 @@ export type ProviderProtocol = (typeof PROVIDER_PROTOCOLS)[number];
 // ── Operation Mode ─────────────────────────────────────────────────
 
 export type OperationMode =
-  | "text"
-  | "object"
-  | "stream"
-  | "embed"
-  | "image"
-  | "speech"
-  | "transcription";
+  "text" | "object" | "stream" | "embed" | "image" | "speech" | "transcription";
 
 // ── Model Capability ──────────────────────────────────────────────
 
@@ -284,9 +278,7 @@ export interface ImagePart {
 
 export type TextMessageContentPart = TextPart | ImagePart;
 export type TextMessageContent =
-  | string
-  | null
-  | readonly TextMessageContentPart[];
+  string | null | readonly TextMessageContentPart[];
 
 // ── Text Generation ────────────────────────────────────────────────
 

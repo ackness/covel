@@ -327,10 +327,7 @@ export async function streamLLMWithRetry(
           });
         } else if (event.type === "done") {
           streamFinishReason = event.finishReason as
-            | "stop"
-            | "tool_calls"
-            | "length"
-            | "error";
+            "stop" | "tool_calls" | "length" | "error";
           if (event.reasoningContent)
             streamedReasoningContent = event.reasoningContent;
           if (event.usage) streamedUsage = event.usage;

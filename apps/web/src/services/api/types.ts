@@ -33,9 +33,7 @@ export interface WorldRecord {
 }
 
 export type GeneratedWorldSaveTarget =
-  | "server-file"
-  | "server-store"
-  | "return-only";
+  "server-file" | "server-store" | "return-only";
 
 export interface SessionRecord {
   id: string;

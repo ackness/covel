@@ -6,7 +6,7 @@
 
 [![Version](https://img.shields.io/badge/version-v0.0.16-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.16)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![Stage](https://img.shields.io/badge/stage-early--access-orange)]()
+[![Stage](https://img.shields.io/badge/stage-early--access-orange)](<>)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
 
 ![Covel 演示 —— 一局完整游戏，6 倍速](./.assets/images/demo.gif)

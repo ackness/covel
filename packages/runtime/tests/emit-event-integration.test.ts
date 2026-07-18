@@ -153,8 +153,7 @@ describe("emit-event: tool-loop accumulation + finalize merge into output.events
 
     // Follower saw the emitted event's payload via ctx.triggerEvent.
     const triggerEvent = followerCalls[0]?.triggerEvent as
-      | { topic?: string; data?: { x?: number } }
-      | undefined;
+      { topic?: string; data?: { x?: number } } | undefined;
     expect(triggerEvent?.topic).toBe("test.ping");
     expect(triggerEvent?.data?.x).toBe(1);
 

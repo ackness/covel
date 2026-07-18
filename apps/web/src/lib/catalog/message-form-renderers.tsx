@@ -98,8 +98,7 @@ export const FormField: ComponentRenderer = ({ element, bindings }) => {
   const placeholder = resolve(element.props?.placeholder);
   const required = element.props?.required as boolean;
   const options = element.props?.options as
-    | Array<{ value: string; label: string }>
-    | undefined;
+    Array<{ value: string; label: string }> | undefined;
   const value = (element.props?.value as string) ?? "";
   const disabled = element.props?.disabled as boolean;
   const { set } = useStateStore();

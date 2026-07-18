@@ -206,8 +206,7 @@ test.describe("AI World Generation", () => {
     // top-level `dimensions` field before rendering.
     const metadata = created.metadata as Record<string, unknown> | undefined;
     const dims = (created.dimensions ?? metadata?.dimensions) as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     expect(dims).toBeTruthy();
     console.log(`Dimensions keys: ${Object.keys(dims!).join(", ")}`);
 

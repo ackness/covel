@@ -73,10 +73,7 @@ export interface StageCurrentRecord {
 }
 
 export type StageBackdropKind =
-  | "scene"
-  | "previous-or-hero"
-  | "hero"
-  | "gradient";
+  "scene" | "previous-or-hero" | "hero" | "gradient";
 
 export interface StageBackdrop {
   readonly kind: StageBackdropKind;
@@ -121,11 +118,7 @@ export interface PresenceRecord {
 }
 
 export type SpritePosition =
-  | "left"
-  | "center-left"
-  | "center"
-  | "center-right"
-  | "right";
+  "left" | "center-left" | "center" | "center-right" | "right";
 
 export interface StageSpriteSlot {
   readonly characterId: string;
@@ -396,8 +389,7 @@ export function extractInteractionChoices(
 
     const meta = (block.meta ?? {}) as Record<string, unknown>;
     const rawBehavior = data.submitBehavior as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
 
     result.push({
       blockId: msg.id,
@@ -408,8 +400,7 @@ export function extractInteractionChoices(
       submitBehavior: rawBehavior
         ? {
             echoFilledNarrative: rawBehavior.echoFilledNarrative as
-              | boolean
-              | undefined,
+              boolean | undefined,
           }
         : undefined,
     });

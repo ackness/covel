@@ -25,12 +25,7 @@ export interface StateField {
 // ── State table schema ───────────────────────────────────────────
 
 export type StateFieldType =
-  | "string"
-  | "integer"
-  | "number"
-  | "boolean"
-  | "object"
-  | "array";
+  "string" | "integer" | "number" | "boolean" | "object" | "array";
 
 export interface StateFieldDef {
   readonly name: string;

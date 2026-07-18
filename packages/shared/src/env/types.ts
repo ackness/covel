@@ -7,13 +7,7 @@
  */
 
 export type EnvValueType =
-  | "boolean"
-  | "enum"
-  | "integer"
-  | "path"
-  | "secret"
-  | "string"
-  | "url";
+  "boolean" | "enum" | "integer" | "path" | "secret" | "string" | "url";
 
 export type EnvGroup =
   | "ai"

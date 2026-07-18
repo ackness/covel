@@ -148,8 +148,7 @@ export async function writeImportPlan(options: {
   }
 
   let materialized:
-    | Awaited<ReturnType<typeof materializeMediaIndexWrites>>
-    | undefined;
+    Awaited<ReturnType<typeof materializeMediaIndexWrites>> | undefined;
   try {
     materialized = await materializeMediaIndexWrites({
       mediaStore: options.mediaStore,

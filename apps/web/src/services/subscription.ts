@@ -16,10 +16,7 @@ import { parseJsonSseData, readSseStream } from "./sse.js";
 // ── Types ──────────────────────────────────────────────────────────
 
 export type ConnectionState =
-  | "connecting"
-  | "connected"
-  | "reconnecting"
-  | "closed";
+  "connecting" | "connected" | "reconnecting" | "closed";
 
 // Single source of truth for the subscription event shape lives in
 // `@covel/shared` (topic: SubscriptionTopic, payload: Readonly<Record<...>>).

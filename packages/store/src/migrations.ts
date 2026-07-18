@@ -9,10 +9,7 @@ export { BROWSER_IDB_DATABASE_NAME };
 
 export type StorageMigrationDomain = "data" | "media" | "vector" | "browser";
 export type StorageMigrationStatus =
-  | "current"
-  | "managed-by-backend"
-  | "manual-required"
-  | "not-applicable";
+  "current" | "managed-by-backend" | "manual-required" | "not-applicable";
 
 export interface StorageMigrationSummary {
   readonly id: string;

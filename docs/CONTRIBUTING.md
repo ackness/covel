@@ -8,8 +8,8 @@
 
 ## 开发环境
 
-- Node.js ≥ 22
-- pnpm 10.33.2（见根目录 `package.json` 的 `packageManager`）
+- Node.js ≥ 22.19
+- pnpm 11.9.0（见根目录 `package.json` 的 `packageManager`）
 - 可选：Docker（用于 PostgreSQL 模式）
 
 ```bash

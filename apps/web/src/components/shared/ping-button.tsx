@@ -12,8 +12,7 @@ import { pingPreset, type PingResult } from "@/services/api.js";
  * lets the UI warn when a slot silently fell through.
  */
 export type PingTarget =
-  | { kind: "preset"; presetId: string }
-  | { kind: "slot"; slotId: string };
+  { kind: "preset"; presetId: string } | { kind: "slot"; slotId: string };
 
 export type PingVariant = "inline" | "icon";
 

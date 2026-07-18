@@ -1,12 +1,7 @@
 import type { StoreBackend } from "../types.js";
 
 export type MediaStoreBackend =
-  | "mirror"
-  | "memory"
-  | "sqlite"
-  | "pg"
-  | "idb"
-  | "none";
+  "mirror" | "memory" | "sqlite" | "pg" | "idb" | "none";
 
 export interface MediaStoreConfig {
   readonly backend?: MediaStoreBackend;

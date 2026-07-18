@@ -128,8 +128,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // required after a server restart or when this is the first request
     // for this session.
     const sessionPlugins = session.activePlugins as
-      | readonly string[]
-      | undefined;
+      readonly string[] | undefined;
     if (sessionPlugins) {
       for (const pid of sessionPlugins) {
         pluginRegistry.activate(pid, sessionId);

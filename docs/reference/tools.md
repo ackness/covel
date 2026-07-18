@@ -196,11 +196,12 @@ interface UIRenderPart {
 | items | Array<{namespace, key, value}> | ✓    | 要批量写入的数据条目数组 |
 
 每个 item:
-| 字段 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| namespace | string | ✓ | 数据命名空间 |
-| key | string | ✓ | 数据键名 |
-| value | unknown | ✓ | 要存储的 JSON 数据 |
+
+| 字段      | 类型    | 必需 | 描述               |
+| --------- | ------- | ---- | ------------------ |
+| namespace | string  | ✓    | 数据命名空间       |
+| key       | string  | ✓    | 数据键名           |
+| value     | unknown | ✓    | 要存储的 JSON 数据 |
 
 **输出**: `{ success, count, items: [{ namespace, key }] }`
 
@@ -516,17 +517,18 @@ Attributes:
 | attributes | AttributeDef[] | ✓    | 角色属性定义数组（至少 1 个） |
 
 **AttributeDef**:
-| 字段 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| id | string | ✓ | 属性唯一标识 |
-| name | string | ✓ | 属性显示名称 |
-| type | enum | ✓ | `string` / `number` / `array` / `enum` / `boolean` |
-| category | enum | ✓ | `stats` / `bio` / `abilities` / `equipment` / `social` |
-| min/max | number | | 数值类型的范围 |
-| defaultValue | unknown | | 默认值 |
-| itemType | enum | | 数组元素类型（`string` / `number`） |
-| options | string[] | | 枚举选项列表 |
-| description | string | | 属性说明 |
+
+| 字段         | 类型     | 必需 | 描述                                                   |
+| ------------ | -------- | ---- | ------------------------------------------------------ |
+| id           | string   | ✓    | 属性唯一标识                                           |
+| name         | string   | ✓    | 属性显示名称                                           |
+| type         | enum     | ✓    | `string` / `number` / `array` / `enum` / `boolean`     |
+| category     | enum     | ✓    | `stats` / `bio` / `abilities` / `equipment` / `social` |
+| min/max      | number   |      | 数值类型的范围                                         |
+| defaultValue | unknown  |      | 默认值                                                 |
+| itemType     | enum     |      | 数组元素类型（`string` / `number`）                    |
+| options      | string[] |      | 枚举选项列表                                           |
+| description  | string   |      | 属性说明                                               |
 
 **输出**: `{ success, attributeCount, categories }`
 
@@ -547,10 +549,11 @@ Attributes:
 | entries | WorldEntry[] | ✓    | 世界词条数组（至少 1 个） |
 
 **WorldEntry**:
-| 字段 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| key | string | ✓ | 词条标识（如 `geography`, `factions`） |
-| value | object | ✓ | 词条内容（任意 JSON 对象） |
+
+| 字段  | 类型   | 必需 | 描述                                   |
+| ----- | ------ | ---- | -------------------------------------- |
+| key   | string | ✓    | 词条标识（如 `geography`, `factions`） |
+| value | object | ✓    | 词条内容（任意 JSON 对象）             |
 
 **输出**: `{ success, count, keys }`
 
@@ -571,14 +574,15 @@ Attributes:
 | entries | CodexEntry[] | ✓    | 要解锁的条目列表 |
 
 **CodexEntry**:
-| 字段 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| category | enum | ✓ | `monster` / `item` / `location` / `lore` / `character` / `skill` |
-| title | string | ✓ | 条目标题 |
-| content | string | ✓ | 2-3 句话描述 |
-| tags | string[] | ✓ | 标签列表（1-5 个） |
-| rarity | enum | | `common`(默认) / `uncommon` / `rare` / `legendary` |
-| imageHint | string | | 视觉描述提示 |
+
+| 字段      | 类型     | 必需 | 描述                                                             |
+| --------- | -------- | ---- | ---------------------------------------------------------------- |
+| category  | enum     | ✓    | `monster` / `item` / `location` / `lore` / `character` / `skill` |
+| title     | string   | ✓    | 条目标题                                                         |
+| content   | string   | ✓    | 2-3 句话描述                                                     |
+| tags      | string[] | ✓    | 标签列表（1-5 个）                                               |
+| rarity    | enum     |      | `common`(默认) / `uncommon` / `rare` / `legendary`               |
+| imageHint | string   |      | 视觉描述提示                                                     |
 
 **输出**: `{ unlocked, entries, ui }` — 含稀有度分级的 UI 卡片数组。每个 entry 包含 `entryId`（短 ID）。
 

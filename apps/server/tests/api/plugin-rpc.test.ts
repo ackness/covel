@@ -1772,8 +1772,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
         await followerGate;
         followerFinished = true;
         const event = ctx.triggerEvent as
-          | { topic: string; data: { prompt?: string } }
-          | undefined;
+          { topic: string; data: { prompt?: string } } | undefined;
         return {
           fromFollower: true,
           prompt: event?.data?.prompt,
@@ -2207,8 +2206,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     const { app, store, targetRuntimeId } = setupTargetAndFollower({
       followerHandler: async (ctx) => {
         const event = ctx.triggerEvent as
-          | { topic: string; data: { prompt?: string } }
-          | undefined;
+          { topic: string; data: { prompt?: string } } | undefined;
         return {
           ok: true,
           assetGenerations: [

@@ -27,20 +27,10 @@ import type { I18nText } from "./world.js";
  *   `valueType`.
  */
 export type AttributeFieldType =
-  | "string"
-  | "number"
-  | "boolean"
-  | "enum"
-  | "array"
-  | "object"
-  | "map";
+  "string" | "number" | "boolean" | "enum" | "array" | "object" | "map";
 
 export type AttributeCategory =
-  | "stats"
-  | "bio"
-  | "abilities"
-  | "equipment"
-  | "social";
+  "stats" | "bio" | "abilities" | "equipment" | "social";
 
 // ── Single attribute definition ─────────────────────────────────
 

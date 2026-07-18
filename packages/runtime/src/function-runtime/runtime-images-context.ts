@@ -74,14 +74,12 @@ export function createRuntimeImagesContext(
       // fewer images than requested and never retry the missing ones.
       if (existing.length >= wantedCount) {
         return {
-          refs: existing.slice(0, wantedCount).map(
-            (asset): MediaRef => ({
-              id: asset.id,
-              mime: asset.mime,
-              size: asset.size,
-              meta,
-            }),
-          ),
+          refs: existing.slice(0, wantedCount).map((asset): MediaRef => ({
+            id: asset.id,
+            mime: asset.mime,
+            size: asset.size,
+            meta,
+          })),
           warnings: [],
           cached: true,
         };

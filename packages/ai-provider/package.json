@@ -18,16 +18,13 @@
   },
   "dependencies": {
     "@covel/shared": "workspace:*",
-    "smol-toml": "^1.6.1",
-    "undici": "^7.28.0",
+    "smol-toml": "^1.7.0",
+    "undici": "8.6.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^26.0.0",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
-  },
-  "optionalDependencies": {
-    "langfuse": "^3.38.20"
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   }
 }

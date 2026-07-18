@@ -27,11 +27,9 @@ export function toSessionRecord(
   json: JsonReader,
 ): SessionRecord {
   const metadata = json.read(row.metadata) as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const overrides = json.read(row.runtimeModelOverrides) as
-    | Record<string, string>
-    | undefined;
+    Record<string, string> | undefined;
   return {
     id: row.id,
     worldId: row.worldId ?? undefined,

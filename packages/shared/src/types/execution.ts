@@ -194,9 +194,7 @@ export interface ConfirmationInteraction extends BaseInteraction {
 }
 
 export type InteractionPayload =
-  | FormInteraction
-  | ChoiceInteraction
-  | ConfirmationInteraction;
+  FormInteraction | ChoiceInteraction | ConfirmationInteraction;
 
 // ── Pending input info ──────────────────────────────────────────
 

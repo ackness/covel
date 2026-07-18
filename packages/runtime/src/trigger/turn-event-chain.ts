@@ -11,8 +11,7 @@ export type DeferredFollower = NonNullable<
 export type EventChainRuntimeExecutor = (
   manifest: RuntimeManifest,
   triggerEvent:
-    | { topic: string; data: Readonly<Record<string, unknown>> }
-    | undefined,
+    { topic: string; data: Readonly<Record<string, unknown>> } | undefined,
 ) => Promise<RuntimeResult>;
 
 export interface RunEventChainParams {

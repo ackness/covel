@@ -71,8 +71,7 @@ export type SessionPatchUpdates = Partial<
 >;
 
 type ParsedSessionPatch =
-  | { ok: true; updates: SessionPatchUpdates }
-  | { ok: false; error: string };
+  { ok: true; updates: SessionPatchUpdates } | { ok: false; error: string };
 
 export function buildSessionPatchUpdates(
   body: Record<string, unknown>,

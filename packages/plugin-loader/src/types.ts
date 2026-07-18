@@ -596,11 +596,7 @@ export interface LoadedRuntime {
 // ── Plugin registry ──────────────────────────────────────────────
 
 export type PluginEntryStatus =
-  | "discovered"
-  | "registered"
-  | "active"
-  | "disabled"
-  | "error";
+  "discovered" | "registered" | "active" | "disabled" | "error";
 
 export interface PluginRegistryEntry {
   readonly id: string;

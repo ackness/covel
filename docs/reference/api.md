@@ -1358,9 +1358,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 ```json
 {
   "status": "ok",
-  "result": {
-    /* 取决于 handler */
-  }
+  "result": {/* 取决于 handler */}
 }
 ```
 
@@ -1376,9 +1374,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
       "pluginId": "dashscope-image-gen",
       "status": "ok",
       "durationMs": 3421,
-      "output": {
-        /* runtime final output (parsed envelope) */
-      }
+      "output": {/* runtime final output (parsed envelope) */}
     }
   ],
   "durationMs": 3480
@@ -1555,9 +1551,7 @@ rpc:
     "sessionId": "sess-...",
     "pluginId": "third-party-plugin",
     "action": "do-thing",
-    "payload": {
-      /* 原始 payload */
-    },
+    "payload": {/* 原始 payload */},
     "trustLevel": "community",
     "requestedAt": "2026-04-15T20:00:00.000Z",
     "description": "Run the thing"
@@ -1604,9 +1598,7 @@ rpc:
   "ok": true,
   "decision": "allow",
   "scope": "once",
-  "pending": {
-    /* 原始 pending 数据,已从队列移除 */
-  }
+  "pending": {/* 原始 pending 数据,已从队列移除 */}
 }
 ```
 
@@ -2206,9 +2198,7 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 ```json
 {
   "suspensionId": "susp_abc123",
-  "data": {
-    /* shape 必须匹配 suspension.resumeSchema */
-  }
+  "data": {/* shape 必须匹配 suspension.resumeSchema */}
 }
 ```
 
@@ -2250,9 +2240,7 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
         "required": ["choice"],
         "properties": { "choice": { "type": "string" } }
       },
-      "pendingContinuation": {
-        /* runtime-internal serialized state */
-      },
+      "pendingContinuation": {/* runtime-internal serialized state */},
       "createdAt": "2026-04-12T00:00:00.000Z",
       "resolvedAt": null
     }
@@ -2303,22 +2291,12 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
         "presetId": "default",
         "runtimeModelOverrides": { "narrator": "balance" }
       },
-      "characters": [
-        /* ... */
-      ],
-      "stateEntries": [
-        /* ... */
-      ],
-      "pluginData": [
-        /* ... */
-      ],
-      "workingMemory": [
-        /* ... */
-      ],
+      "characters": [/* ... */],
+      "stateEntries": [/* ... */],
+      "pluginData": [/* ... */],
+      "workingMemory": [/* ... */],
       "lorebookEntries": [],
-      "suspensions": [
-        /* 未解决的 SuspensionRecord[] */
-      ],
+      "suspensions": [/* 未解决的 SuspensionRecord[] */],
       "messagesCursor": "tm_abc"
     },
     "createdAt": "2026-04-13T00:00:00.000Z"

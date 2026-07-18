@@ -113,7 +113,7 @@ function extractBareImports(source) {
   const stripped = stripTemplateLiterals(source);
   const required = new Set();
   const optional = new Set();
-  for (let m; (m = OPTIONAL_AWAIT_IMPORT_RE.exec(stripped)); ) {
+  for (let m; (m = OPTIONAL_AWAIT_IMPORT_RE.exec(stripped));) {
     optional.add(m[1]);
   }
   for (const re of [

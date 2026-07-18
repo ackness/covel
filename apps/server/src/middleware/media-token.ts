@@ -55,10 +55,7 @@ export type VerifyMediaTokenResult =
   | {
       readonly ok: false;
       readonly reason:
-        | "malformed"
-        | "expired"
-        | "bad_signature"
-        | "id_mismatch";
+        "malformed" | "expired" | "bad_signature" | "id_mismatch";
     };
 
 // ── Secret resolution ────────────────────────────────────────────

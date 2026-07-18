@@ -40,8 +40,7 @@ export const Tabs: ComponentRenderer = ({ element, bindings }) => {
   const { set } = useStateStore();
   const bindPath = bindings?.value;
   const onChange = element.props?.__onChange as
-    | ((next: string) => void)
-    | undefined;
+    ((next: string) => void) | undefined;
 
   return (
     <div

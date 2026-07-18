@@ -327,9 +327,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 {
   "pluginId": "framework",
   "action": "submit-form",
-  "payload": {
-    /* ... */
-  }
+  "payload": {/* ... */}
 }
 ```
 
@@ -337,9 +335,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 {
   "pluginId": "my-plugin",
   "runtimeId": "my-plugin/my-runtime",
-  "payload": {
-    /* ... */
-  }
+  "payload": {/* ... */}
 }
 ```
 

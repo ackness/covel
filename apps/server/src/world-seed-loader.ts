@@ -204,8 +204,7 @@ function foldSelectionIntoPluginPolicy(
   manifest: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
   const rawPolicy = manifest.pluginPolicy as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const folded: Record<string, unknown> = { ...rawPolicy };
   let hasSelection = rawPolicy !== undefined;
   for (const key of [
@@ -257,16 +256,13 @@ export async function loadSingleWorld(
   const worldId = manifest.id as string;
   const defaultLocale = manifest.defaultLocale as string | undefined;
   const dimensionSources = manifest.dimensionSources as
-    | Record<string, string>
-    | undefined;
+    Record<string, string> | undefined;
   const worldDataPath = manifest.worldData as string | undefined;
   const pluginPolicy = foldSelectionIntoPluginPolicy(manifest);
   const pluginSettings = manifest.pluginSettings as
-    | Record<string, Record<string, unknown>>
-    | undefined;
+    Record<string, Record<string, unknown>> | undefined;
   const memoryBlocks = manifest.memoryBlocks as
-    | readonly MemoryBlockSchema[]
-    | undefined;
+    readonly MemoryBlockSchema[] | undefined;
   const defaultViewMode = manifest.defaultViewMode as string | undefined;
 
   // Merge inline + external dimensions (external wins for same key)

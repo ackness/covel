@@ -135,8 +135,7 @@ export function StageView(props: StageViewProps): ReactElement {
     pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.presence) ?? "";
 
   const sceneCurrent = usePluginNamespace(sceneStageId, "stage")["current"] as
-    | StageCurrentRecord
-    | undefined;
+    StageCurrentRecord | undefined;
   const activeCast = usePluginNamespace(sceneCastId, "active-cast")[
     "current"
   ] as { speakers?: readonly StageSpeaker[] } | undefined;

@@ -101,8 +101,7 @@ describe("POST /api/actions — deferred background followers (Audit F1, main pa
     const followerHandler: FunctionHandler = async (ctx) => {
       followerRan = true;
       const event = ctx.triggerEvent as
-        | { data?: { value?: string } }
-        | undefined;
+        { data?: { value?: string } } | undefined;
       return {
         pluginData: [
           {

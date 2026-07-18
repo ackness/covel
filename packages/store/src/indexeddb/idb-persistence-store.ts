@@ -67,8 +67,7 @@ export function createIdbPersistenceStore(ctx: IdbStoreContext): IdbStoreSlice {
 
     async markSuspensionResolved(id: string): Promise<void> {
       const existing = (await db.get("suspensions", id)) as
-        | SuspensionRecord
-        | undefined;
+        SuspensionRecord | undefined;
       if (!existing) return;
       await mutations.putAndTrack("suspensions", {
         ...existing,
@@ -125,8 +124,7 @@ export function createIdbPersistenceStore(ctx: IdbStoreContext): IdbStoreSlice {
         // get→delete gap is negligible under browser local-mode's serial use;
         // a fully atomic read-check-delete would need a native IDB transaction.)
         const current = (await db.get("suspensions", record.id)) as
-          | SuspensionRecord
-          | undefined;
+          SuspensionRecord | undefined;
         if (
           !current ||
           current.resolvedAt ||

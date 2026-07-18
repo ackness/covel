@@ -103,11 +103,9 @@ function renderStructuredData(
 
   if (type === "llm.responded" && data) {
     const usage = data.usage as
-      | { inputTokens?: number; outputTokens?: number }
-      | undefined;
+      { inputTokens?: number; outputTokens?: number } | undefined;
     const toolCalls = data.toolCalls as
-      | Array<{ id: string; name: string; arguments: string }>
-      | undefined;
+      Array<{ id: string; name: string; arguments: string }> | undefined;
     return (
       <div className="space-y-1.5">
         {usage && (
