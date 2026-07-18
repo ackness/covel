@@ -1,0 +1,3 @@
+[tools]
+# Keep in sync with the root package.json `packageManager` field.
+pnpm = "11.9.0"
