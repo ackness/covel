@@ -309,21 +309,35 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     // a forwarded event by flipping its meta flag; this Set updates for free.
     // `ev.type` is an untrusted runtime string, so it is narrowed at this
     // boundary before the membership check.
-    const eventBusUnsubscribe = eventBus.onEmit((ev) => {
-      if (ev.sessionId !== sessionId) return;
-      if (!FORWARDED_EVENT_TYPES.has(ev.type as CovelEventType)) return;
-      const payload = { ...(ev.payload as Record<string, unknown>) };
-      stream
-        .writeSSE({ data: JSON.stringify(makeEnvelope(ev.type, payload)) })
-        .catch(() => {
-          /* stream closed, unsubscribe handles cleanup */
-        });
-    });
+    //
+    // M-05: the subscription is established INSIDE the session lock (see
+    // below), not here. Subscribing before the lock meant a second action
+    // queued on the same session received the FIRST action's events while
+    // waiting, wrapped them in its own turnId/traceId envelope, and streamed
+    // them to its client as its own turn. It stays live through the post-lock
+    // tail (deferred followers) and is torn down in the finally.
+    let eventBusUnsubscribe: (() => void) | undefined;
+    const subscribeEventForwarding = (): void => {
+      eventBusUnsubscribe = eventBus.onEmit((ev) => {
+        if (ev.sessionId !== sessionId) return;
+        if (!FORWARDED_EVENT_TYPES.has(ev.type as CovelEventType)) return;
+        const payload = { ...(ev.payload as Record<string, unknown>) };
+        stream
+          .writeSSE({ data: JSON.stringify(makeEnvelope(ev.type, payload)) })
+          .catch(() => {
+            /* stream closed, unsubscribe handles cleanup */
+          });
+      });
+    };
 
     try {
       const { result, trace, userSettings } = await sessionLock.withLock(
         sessionId,
         async () => {
+          // M-05: this execution now owns the session — events on the bus
+          // from here on belong to this turn.
+          subscribeEventForwarding();
+
           // M-03 authoritative gate: re-read the session status under the
           // lock BEFORE any write. A pause/end that raced the pre-stream
           // check must not get player messages, interaction records, or
@@ -476,6 +490,13 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             result = await executeTurn(turnInput, activeRuntimes, {
               loadRuntime: loadRuntimeFn,
               llm: llmAdapter,
+              // The main turn path never passed the eventBus, so every
+              // `emitSubEvent` inside the executor — including the
+              // completion barrier's `turn.completed` — silently no-opped on
+              // the player-facing path (found while adding the H-07
+              // fault-injection tests). Without it the barrier's only
+              // observable effect was memory ingestion.
+              eventBus,
               ...(pluginGateway ? { gateway: pluginGateway } : {}),
               ...(pluginUtils ? { utils: pluginUtils } : {}),
               ...(getPluginSource ? { getPluginSource } : {}),
@@ -750,7 +771,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       });
     } finally {
       releaseTurnControl?.();
-      eventBusUnsubscribe();
+      eventBusUnsubscribe?.();
     }
   });
 });

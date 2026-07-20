@@ -76,6 +76,10 @@ export const turnResults = pgTable(
     runtimeResults: jsonb("runtime_results").notNull(), // JSON
     conflicts: jsonb("conflicts"), // JSON
     auditResult: jsonb("audit_result"), // JSON
+    // M-02: execution origin (player/manual/follower/recursive) + parent
+    // turn for recursive executions. NULL on legacy rows (= player).
+    origin: text("origin"),
+    parentTurnId: text("parent_turn_id"),
     durationMs: integer("duration_ms").notNull(),
     createdAt: text("created_at").notNull(),
   },

@@ -163,7 +163,7 @@ Input/Event → Trigger Router → Priority Scheduler → [per priority group:]
 Session lifecycle tracked by three fields on `SessionRecord`:
 
 - `status: 'active' | 'paused' | 'ended'` — `paused`/`ended` halts scheduling.
-- `turnCount: number` — band selector. Kernel auto-advances 0 → 1 once all Pre-Game runtimes report done.
+- `turnCount: number` — count of completed **player** turns. Kernel auto-advances 0 → 1 once all Pre-Game runtimes report done. Drives the UI turn display, auto-snapshot cadence, and snapshot numbering. It is NOT the band selector — `preGameCompleted` is (band = Pre-Game while any Pre-Game runtime is unreported, main-loop after). Non-player executions (manual plugin-rpc trigger, deferred background follower, nested `recursiveCall`) each persist their own `turn_results` row stamped with `origin` and are excluded from the count; several executions sharing one `turnId` count once (2026-07-20 audit M-02).
 - `preGameCompleted: string[]` — runtimeIds that reported done.
 
 ### Plugin system

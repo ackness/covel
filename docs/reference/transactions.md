@@ -167,13 +167,25 @@ Node-only and is never pulled into the IdbStore browser bundle.
 
 ## Kernel integration
 
-Turn commit (`packages/runtime/src/commit/session-commit-pipeline.ts`) runs the
-whole proposal chain inside a single `withTransaction` callback whenever the
-underlying store implements it, so a mid-chain failure auto-rolls-back and leaves
-no partial state. `packages/runtime/src/session/session-kernel.ts` remains the
-public facade for processing runtime results. Store adapters that do not expose
-`withTransaction` still execute proposals sequentially and warn on partial commit
-failure.
+`commitAll` (`packages/runtime/src/commit/session-commit-pipeline.ts`) runs
+**one runtime's** proposal chain inside a single `withTransaction` callback
+whenever the underlying store implements it. `packages/runtime/src/session/session-kernel.ts`
+remains the public facade for processing runtime results. Store adapters that do
+not expose `withTransaction` execute proposals sequentially and warn on partial
+commit failure.
+
+> **事务边界的真实粒度（2026-07-20 审计 H-07 勘误）**：本节此前描述为"整条 turn
+> proposal chain 进入单一事务"，与实现不符。实际边界是 **per-runtime**：调用方
+> （`actions.ts` / `plugin-rpc/runtime-turn.ts`）对每个 runtimeResult 依次调用
+> `processRuntimeResult` → `commitAll`，因此第二个 runtime 的提交失败**不会**回滚
+> 第一个 runtime 已提交的写入。此外，即便在事务模式内，handler 的**校验**失败返回
+> `{ committed: false }` 而不抛出——事务照常提交，同批已成功的兄弟 proposal 保留
+> （两种模式语义刻意一致）。只有抛出的 store 错误才会中止并回滚该 runtime 的这一批。
+>
+> 失败不再被静默吞掉：每个失败 proposal 发出 `proposal.failed` 事件，且任一失败都会
+> **扣留完成屏障**——`turn.completed`、回合后记忆摄入、auto-snapshot 都不触发，回合对
+> 客户端呈现为可见的未完成态而非"成功但状态缺失"。回合级单事务（把整回合所有
+> runtime 的 proposal 聚合进一个 `withTransaction`）是已确认可行的下一步，尚未实施。
 
 ```ts
 if (typeof store.withTransaction === "function") {

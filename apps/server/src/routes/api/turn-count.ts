@@ -66,6 +66,16 @@ export async function computeSessionTurnCount(args: {
 
   const turnResults = await store.listTurnResults(sessionId);
   // Counting rule (Pre-Game-pending turns never reach here — early-returned above):
+  //  - Only `player`-origin executions count (M-02). Manual plugin-rpc
+  //    triggers, deferred background followers, and nested recursiveCall
+  //    executions each persist their own turn_results row but are NOT player
+  //    turns; counting them inflated `session.turnCount`, which drives the UI
+  //    turn display, auto-snapshot cadence, and snapshot numbering. Rows
+  //    written before the `origin` column existed have no origin and are
+  //    treated as `player` (backward compatible).
+  //  - Distinct logical turns only: several executions may share one turnId
+  //    (e.g. a Pre-Game completion request that also runs main-loop
+  //    followups), and that is ONE player turn.
   //  - An EMPTY turn_result counts. It represents a main-loop player turn where
   //    the player advanced but no runtime fired; the player still took a turn.
   //    (2026-04-12 audit Finding 3 — see turn-commit-pipeline.test.ts
@@ -73,11 +83,16 @@ export async function computeSessionTurnCount(args: {
   //    do not "optimise" it away.)
   //  - A NON-EMPTY turn_result counts only when it carries at least one
   //    non-Pre-Game runtime result, so Pre-Game-only setup requests are excluded.
-  const mainLoopResultCount = turnResults.filter((turnResult) => {
+  const countedTurnIds = new Set<string>();
+  for (const turnResult of turnResults) {
+    if (turnResult.origin && turnResult.origin !== "player") continue;
     const runtimeResults = runtimeResultsOf(turnResult);
-    if (runtimeResults.length === 0) return true;
-    return hasMainLoopRuntimeResult(turnResult, preGameRuntimeIds);
-  }).length;
+    const counts =
+      runtimeResults.length === 0 ||
+      hasMainLoopRuntimeResult(turnResult, preGameRuntimeIds);
+    if (counts) countedTurnIds.add(turnResult.turnId);
+  }
+  const mainLoopResultCount = countedTurnIds.size;
 
   const preGameFloor = preGameRuntimeIds.size > 0 ? 1 : 0;
   return Math.max(preGameFloor, mainLoopResultCount);

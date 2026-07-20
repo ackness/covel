@@ -68,6 +68,8 @@ const SESSIONS_MIGRATIONS_SQL = `
   ALTER TABLE sessions DROP COLUMN IF EXISTS playing_turn_offset;
   ALTER TABLE sessions ADD COLUMN IF NOT EXISTS runtime_model_overrides JSONB DEFAULT '{}'::jsonb;
   ALTER TABLE sessions ADD COLUMN IF NOT EXISTS metadata JSONB;
+  ALTER TABLE turn_results ADD COLUMN IF NOT EXISTS origin TEXT;
+  ALTER TABLE turn_results ADD COLUMN IF NOT EXISTS parent_turn_id TEXT;
 `;
 
 /**

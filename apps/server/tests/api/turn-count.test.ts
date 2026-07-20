@@ -51,12 +51,15 @@ async function addTurn(
   store: DataStore,
   turnId: string,
   runtimeResults: unknown[],
+  origin?: "player" | "manual" | "follower" | "recursive",
+  idSuffix = "",
 ): Promise<void> {
   await store.saveTurnResult({
-    id: `tr-${turnId}`,
+    id: `tr-${turnId}${idSuffix}`,
     sessionId: SID,
     turnId,
     runtimeResults,
+    ...(origin ? { origin } : {}),
     durationMs: 1,
     createdAt: new Date().toISOString(),
   });
@@ -112,6 +115,82 @@ describe("computeSessionTurnCount", () => {
         activeRuntimes: ACTIVE,
       }),
     ).toBe(2);
+  });
+
+  it("excludes manual / follower / recursive executions from turnCount (M-02)", async () => {
+    // Each non-player execution persists its own turn_results row. Counting
+    // them inflated session.turnCount, which drives UI turn display and the
+    // auto-snapshot cadence — one player input could read as four turns.
+    await seed(store, { turnCount: 1, preGameCompleted: ["pregame"] });
+    await addTurn(
+      store,
+      "t1",
+      [{ runtimeId: "narrator", output: {} }],
+      "player",
+    );
+    await addTurn(
+      store,
+      "t-manual",
+      [{ runtimeId: "image", output: {} }],
+      "manual",
+    );
+    await addTurn(
+      store,
+      "t-follower",
+      [{ runtimeId: "scene-stage", output: {} }],
+      "follower",
+    );
+    await addTurn(
+      store,
+      "t-recursive",
+      [{ runtimeId: "narrator", output: {} }],
+      "recursive",
+    );
+    expect(
+      await computeSessionTurnCount({
+        store,
+        sessionId: SID,
+        activeRuntimes: ACTIVE,
+      }),
+    ).toBe(1);
+  });
+
+  it("counts several executions sharing one turnId as ONE player turn (M-02)", async () => {
+    // A Pre-Game completion request can finish setup AND run main-loop
+    // followups in the same request — two executions, one logical turn.
+    await seed(store, { turnCount: 1, preGameCompleted: ["pregame"] });
+    await addTurn(
+      store,
+      "t1",
+      [{ runtimeId: "narrator", output: {} }],
+      "player",
+    );
+    await addTurn(
+      store,
+      "t1",
+      [{ runtimeId: "guide", output: {} }],
+      "player",
+      "-b",
+    );
+    expect(
+      await computeSessionTurnCount({
+        store,
+        sessionId: SID,
+        activeRuntimes: ACTIVE,
+      }),
+    ).toBe(1);
+  });
+
+  it("treats a legacy row with no origin as a player turn (M-02 back-compat)", async () => {
+    await seed(store, { turnCount: 1, preGameCompleted: ["pregame"] });
+    await addTurn(store, "t1", [{ runtimeId: "narrator", output: {} }]);
+    expect(
+      await computeSessionTurnCount({
+        store,
+        sessionId: SID,
+        activeRuntimes: ACTIVE,
+      }),
+    ).toBe(1);
   });
 
   it("floors at 1 once Pre-Game runtimes exist even with no main-loop turns", async () => {

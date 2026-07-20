@@ -198,10 +198,11 @@ Provider 图片输入矩阵：
 
 `recursive.calling` / `recursive.completed` / `recursive.failed` 为递归 runtime 的 TurnEmitter trace 事件，**仅经订阅通道（topic `trace`）下发**，`forwardToActionStream: false`，不进入 `/api/actions`。它们现在也是 `CovelEvent` union 成员——使框架所有 `TurnEmitter.emit` / `makeEvent` 的事件名都受闭合 union 约束（发射端 `type` 已收紧为 `CovelEventType`，发射 union 外事件即编译错误）。
 
-| 事件                     | 触发点                                             | 当前出口                                          | payload                                                         | 备注                                                                   |
-| ------------------------ | -------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `working_memory.changed` | commit chain 提交 `working_memory.set` proposal 后 | commit event → `/api/actions`（CovelEvent union） | `{ scope, key }`（顶层带有 sessionId/turnId/source）            | union 成员；前端显式忽略，UI 通过 `state.changed` 感知                 |
-| `context.compacted`      | Compactor 完成摘要写入后                           | `trace_events` 表                                 | `{ summaryId, messagesCompacted, tokenSavings, focusSections }` | trace-only by design，不进 union，仅可通过 `/api/traces/:sessionId` 查 |
+| 事件                     | 触发点                                             | 当前出口                                                                | payload                                                         | 备注                                                                                                                                                 |
+| ------------------------ | -------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `working_memory.changed` | commit chain 提交 `working_memory.set` proposal 后 | commit event → `/api/actions`（CovelEvent union）                       | `{ scope, key }`（顶层带有 sessionId/turnId/source）            | union 成员；前端显式忽略，UI 通过 `state.changed` 感知                                                                                               |
+| `proposal.failed`        | proposal 提交失败时（每个失败一条）                | commit-direct → `/api/actions`；manual/background 路径写 `trace_events` | `{ proposalId, proposalType, runtimeId, pluginId, error }`      | 2026-07-20 审计 H-07：失败不再被静默丢弃。任一失败都会扣留完成屏障（`turn.completed` / 记忆摄入 / auto-snapshot 均不触发），前端映射为可见的执行错误 |
+| `context.compacted`      | Compactor 完成摘要写入后                           | `trace_events` 表                                                       | `{ summaryId, messagesCompacted, tokenSavings, focusSections }` | trace-only by design，不进 union，仅可通过 `/api/traces/:sessionId` 查                                                                               |
 
 ### SSE 帧格式按通道区分
 

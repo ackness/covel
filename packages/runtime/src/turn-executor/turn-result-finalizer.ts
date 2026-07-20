@@ -99,6 +99,12 @@ async function persistTurnResult(
     sessionId: input.sessionId,
     turnId: input.turnId,
     runtimeResults: turnResult.runtimeResults,
+    // M-02: stamp the execution origin so turn accounting can exclude
+    // non-player executions (manual RPC / background follower / recursive)
+    // from `session.turnCount`, which drives UI turn display and the
+    // auto-snapshot cadence.
+    origin: input.origin ?? "player",
+    ...(input.parentTurnId ? { parentTurnId: input.parentTurnId } : {}),
     durationMs: turnResult.durationMs,
     createdAt: turnResult.timestamp ?? now,
   });

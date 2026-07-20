@@ -130,6 +130,8 @@ export function createPluginRpcRuntimeTurnRunner(
       turnId: args.turnId,
       playerMessage: "",
       locale: ctx.session.locale ?? "zh-CN",
+      // M-02: a manual RPC trigger is not a player turn.
+      origin: "manual",
       manualTrigger: {
         runtimeId: args.runtimeId,
         ...(args.payload !== undefined && args.payload !== null
@@ -186,6 +188,8 @@ export function createPluginRpcRuntimeTurnRunner(
       turnId: args.followerTurnId,
       playerMessage: "",
       locale: ctx.session.locale ?? "zh-CN",
+      // M-02: a deferred background follower is not a player turn.
+      origin: "follower",
       manualTrigger: {
         runtimeId: args.runtimeId,
         triggerEvent: args.triggerEvent,

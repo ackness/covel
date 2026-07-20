@@ -88,6 +88,15 @@ export interface TurnInput {
     };
   };
   /**
+   * Execution origin (2026-07-20 audit M-02), stamped onto the persisted
+   * `turn_results` row so turn accounting can distinguish a real player turn
+   * from a manual RPC trigger, a deferred background follower, or a nested
+   * recursiveCall. Defaults to `player` when omitted.
+   */
+  readonly origin?: "player" | "manual" | "follower" | "recursive";
+  /** Parent turnId when this execution is a nested recursiveCall (M-02). */
+  readonly parentTurnId?: string;
+  /**
    * Player-authored plugin settings, keyed by pluginId. Each plugin's bucket
    * holds the values the user has saved under `plugin.<pluginId>.<key>` in
    * the unified SettingsStore; the server merges these with the per-runtime

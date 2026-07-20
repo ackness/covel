@@ -87,9 +87,7 @@ export interface RuntimeInvocation {
    * commit-owning caller processes nested proposals through the same barrier
    * as top-level results (they were previously dropped on the floor).
    */
-  readonly collectNestedResults?: (
-    results: readonly RuntimeResult[],
-  ) => void;
+  readonly collectNestedResults?: (results: readonly RuntimeResult[]) => void;
 }
 
 export async function executeOneRuntime(
@@ -138,6 +136,10 @@ export async function executeOneRuntime(
         turnId: delta.turnId ?? input.turnId,
         playerMessage: delta.playerMessage ?? input.playerMessage,
         suppressPlayerMessage: true,
+        // M-02: a nested execution is never a player turn — stamp its origin
+        // and parent so turn accounting excludes it from `turnCount`.
+        origin: "recursive",
+        parentTurnId: input.turnId,
       };
 
       const tracePayload = {

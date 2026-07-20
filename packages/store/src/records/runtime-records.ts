@@ -11,6 +11,16 @@ export interface TurnResultRecord {
   readonly runtimeResults: unknown; // JSON — RuntimeResult[]
   readonly conflicts?: unknown; // JSON — WriteConflict[]
   readonly auditResult?: unknown; // JSON — RuntimeResult
+  /**
+   * Execution origin (2026-07-20 audit M-02): which path produced this
+   * execution artifact. `player` = main action turn; `manual` = plugin-rpc
+   * manual trigger; `follower` = deferred background follower; `recursive` =
+   * nested ctx.recursiveCall. Absent on rows written before the column
+   * existed — treated as `player` by consumers for backward compatibility.
+   */
+  readonly origin?: "player" | "manual" | "follower" | "recursive";
+  /** Parent turnId for `recursive` executions whose delta overrode turnId. */
+  readonly parentTurnId?: string;
   readonly durationMs: number;
   readonly createdAt: string;
 }
