@@ -15,6 +15,8 @@ import {
 } from "./shared-connection.js";
 
 import type { DataStore, StoreTransaction } from "../types.js";
+import { createSerializedWriteGate } from "../serialized-write-gate.js";
+import { STORE_WRITE_METHODS } from "../store-write-methods.js";
 import type { VectorModelOps, VectorStoreCapability } from "../vector-store.js";
 import * as schema from "./schema.js";
 import { createSqliteDataCrud } from "./sqlite-data-crud.js";
@@ -73,11 +75,21 @@ export function createSqliteStore(
     ...createSqliteSnapshotRecords(db),
   };
 
+  // One connection means a transaction cannot isolate: a write issued
+  // elsewhere while a transaction is open would land inside it and be lost on
+  // its rollback. The gate puts transactions and outside-of-transaction
+  // writes on one queue. The transaction scope keeps the UNGATED methods —
+  // writes inside the callback belong to that transaction and must run
+  // inline, not queue behind it.
+  const gate = createSerializedWriteGate();
+  const gatedData = gate.gateWrites(data, STORE_WRITE_METHODS);
+
   const baseStore: DataStore = {
-    ...data,
+    ...gatedData,
     ...createSqliteTransactions(
       sqlite,
       () => data as unknown as StoreTransaction,
+      gate,
     ),
 
     async close(): Promise<void> {

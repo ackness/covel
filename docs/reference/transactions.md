@@ -116,18 +116,31 @@ run on independent connections — true parallel transactions.
 The four backends honor the same observable contract (atomic commit / rollback,
 nested-call rejection) but differ in concurrency and isolation:
 
-| Backend                                  | Concurrency model                                                                                                                                                                       | Concurrent non-tx write during a callback                                 |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| **PgStore**                              | Each call runs on its **own pooled connection** (Drizzle `db.transaction`) — true parallel transactions.                                                                                | Isolated on its own connection; not folded in.                            |
-| **SqliteStore / MemoryStore / IdbStore** | **Single connection / single snapshot.** Concurrent calls are **serialized** through a promise chain — each runs its full BEGIN…COMMIT before the next starts, so neither loses writes. | **Folded into the open transaction** and committed / rolled back with it. |
+| Backend                       | Concurrency model                                                                                                                                                                                                                                                 | Concurrent non-tx write during a callback                                                                              |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **PgStore**                   | Each call runs on its **own pooled connection** (Drizzle `db.transaction`) — true parallel transactions.                                                                                                                                                          | Isolated on its own connection; not folded in.                                                                         |
+| **SqliteStore / MemoryStore** | **Single connection / single snapshot.** Concurrent calls are **serialized** through a promise chain — each runs its full BEGIN…COMMIT before the next starts, so neither loses writes. Mutating store methods share that same queue (**serialized write gate**). | **Queued until the transaction settles** — never folded in. Writes issued from _inside_ the callback still run inline. |
+| **IdbStore**                  | **Single snapshot**, serialized like above, but **without** the write gate (browser single-user local mode).                                                                                                                                                      | **Folded into the open transaction** and committed / rolled back with it.                                              |
 
-> ⚠️ **Serialized-backend caveat.** On SQLite / Memory / IndexedDB there is one
-> connection (or one in-flight snapshot) at a time, so **any** other write
-> issued on the same store while a `withTransaction` callback is mid-flight —
-> including writes that do **not** go through `withTransaction` — runs on the
-> open transaction and is committed or rolled back with it. Do not interleave
-> unrelated writes with a serialized transaction; if you need an isolated
-> concurrent write, use PgStore or a second store instance.
+> **Serialized write gate (SQLite / Memory).** One connection means a
+> transaction cannot isolate: a write issued elsewhere while a transaction is
+> open used to land inside it — harmless on COMMIT, silently **lost** on
+> ROLLBACK. The session lock orders writes belonging to one session's turn, but
+> it is per-session and some routes hold no session lock at all (world imports,
+> character edits, settings), so a write from another session could vanish.
+> `packages/store/src/serialized-write-gate.ts` puts transactions and
+> outside-of-transaction writes on **one queue**: an outside write waits for the
+> transaction instead of joining it; a write from inside the callback runs
+> inline (it belongs to that transaction, and queueing it would deadlock).
+> Inside vs outside is decided by `AsyncLocalStorage`, so a genuinely concurrent
+> caller that starts while a transaction is suspended at an `await` is not
+> mistaken for a nested one.
+>
+> Throughput is unaffected — better-sqlite3 is synchronous, so its statements
+> were already serialized. **Per-transaction connections (as PgStore has) remain
+> the long-term answer for real concurrency**; the gate closes the correctness
+> gap without a store-connection rearchitecture. Regression coverage:
+> `packages/store/tests/serialized-write-gate.test.ts`.
 
 ### Nesting is rejected on every backend
 
