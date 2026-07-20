@@ -200,6 +200,23 @@ export function applyBudget<
     prunedMessageCount += 1;
   }
 
+  // Tool-pair integrity: a `tool` message is only valid when the assistant
+  // message that requested it is still present — its `tool_call_id` points
+  // there, and providers reject a transcript that starts with an orphan.
+  // Cutting the prefix can land mid-pair, so drop any leading tool messages
+  // the cut orphaned. Without this the whole pruning pass was unusable for
+  // tool-declaring runtimes (i.e. every main agent), which is why they were
+  // excluded from hard budget enforcement entirely.
+  while (
+    firstSurvivorIndex < messages.length &&
+    prunedMessageCount > 0 &&
+    messages[firstSurvivorIndex]!.role === "tool"
+  ) {
+    total -= messageTokens[firstSurvivorIndex]!;
+    firstSurvivorIndex += 1;
+    prunedMessageCount += 1;
+  }
+
   // Nothing was actually prunable (protectLastUserTurns covered everything).
   if (prunedMessageCount === 0) {
     return {

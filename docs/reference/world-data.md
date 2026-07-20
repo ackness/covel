@@ -215,9 +215,10 @@ world load 阶段只强校验内置 schema 和本地 schema；`plugin://...` sch
 
 1. 当前 session 已有数据 → 复用。
 2. **世界声明的 `characterAttributes`（权威）** → 原样写入。
-3. 同世界历史 session → 跨 session 复用。
-4. 有 dimensions、无声明 → `deriveSchema(dimensions)` 推导通用属性（生命值、体力、货币、声望、能力阶层等）。
-5. 都没有 → 才由 `schema-gen` agent 用 LLM 生成。
+3. 有 dimensions、无声明 → `deriveSchema(dimensions)` 推导通用属性（生命值、体力、货币、声望、能力阶层等）。
+4. 都没有 → 才由 `schema-gen` agent 用 LLM 生成。
+
+> **跨 session 复用已移除**：guard 曾扫描同世界的其他 session、挑数据最多的一个把整套 `schema` + `entries` 复制过来，为「既无声明属性又无 dimensions」的世界省一次 schema-gen 调用。该分支已删除——session plugin-data 不是可信来源：通用 `PUT /plugin-data` 允许会话持有者写任意已激活插件的 namespace，所以「最佳来源 session」可能携带玩家自造的值；在 hosted 层级这些 session 还可能属于**其他用户**，复制即同时构成泄露与投毒。声明属性（2）或自带 dimensions（3）的世界本来就走不到这一步，代价仅是这类世界每个 session 多一次 schema-gen 调用。
 
 ### 在 `world.yaml` 声明 `characterAttributes`（推荐）
 
@@ -240,7 +241,7 @@ characterAttributes:
 ```
 
 - 加载后写入 `WorldRecord.metadata.characterAttributes`（兼容旧字段名 `metadata.schemas`）。
-- guard 把它**原样**写成 session 的 `(world-init, schema, character-attributes)`，**优先于跨 session 复用**——因此编辑 `characterAttributes` 会在**新 session** 生效（已开局的旧 session 在 Pre-Game 时已锁定 schema，不会回溯更新）。
+- guard 把它**原样**写成 session 的 `(world-init, schema, character-attributes)`，**权威优先**——因此编辑 `characterAttributes` 会在**新 session** 生效（已开局的旧 session 在 Pre-Game 时已锁定 schema，不会回溯更新）。
 - `name` / `description` 的 `I18nText` 由框架按 locale 解析：右栏 `CharacterFieldsView` 按当前界面语言显示，注入 prompt 的 `<world-schema>` 也会先解析成单一语言。
 - `id` 必须与角色卡（`character-blueprint`）`attributes` 里的键一致，否则字段会落到右栏的「其他」分组里显示原始键名。
 

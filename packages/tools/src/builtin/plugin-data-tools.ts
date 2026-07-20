@@ -173,6 +173,44 @@ function createPluginDataSetBatchTool(): ToolModule {
   });
 }
 
+// ── Pending-write overlay ───────────────────────────────────────
+
+/**
+ * Uncommitted `plugin.data` / `plugin.data.batch` proposals produced earlier
+ * in THIS tool loop, as an overlay keyed `namespace\u0000key`.
+ *
+ * Plugin-data writes go through proposals, which commit only at the end of the
+ * turn. Without this overlay a runtime that calls `plugin-data-set` and then
+ * reads the same key back in the same loop sees the PRE-write value, so it
+ * either writes twice or "corrects" a value that was already correct. The
+ * overlay makes a runtime read its own writes. Last write wins, matching the
+ * order the commit pipeline will apply them in.
+ */
+function buildPendingOverlay(context: {
+  readonly pluginId: string;
+  readonly pendingProposals?: readonly Proposal[];
+}): Map<string, unknown> {
+  const overlay = new Map<string, unknown>();
+  const overlayKey = (namespace: string, key: string) =>
+    `${namespace}\u0000${key}`;
+
+  for (const proposal of context.pendingProposals ?? []) {
+    // Only this plugin's own writes — the store call is already scoped to
+    // context.pluginId, and the overlay must not widen that.
+    if (proposal.source.pluginId !== context.pluginId) continue;
+
+    if (proposal.type === "plugin.data") {
+      const p = proposal.payload;
+      overlay.set(overlayKey(p.namespace, p.key), p.value);
+    } else if (proposal.type === "plugin.data.batch") {
+      for (const item of proposal.payload.items ?? []) {
+        overlay.set(overlayKey(item.namespace, item.key), item.value);
+      }
+    }
+  }
+  return overlay;
+}
+
 // ── plugin-data-get ─────────────────────────────────────────────
 
 function createPluginDataGetTool(store: PluginDataStore): ToolModule {
@@ -185,6 +223,17 @@ function createPluginDataGetTool(store: PluginDataStore): ToolModule {
     }),
     execute: async (params, context) => {
       const targetPlugin = context.pluginId;
+      const overlay = buildPendingOverlay(context);
+      const overlayKey = `${params.namespace}\u0000${params.key}`;
+      if (overlay.has(overlayKey)) {
+        return {
+          found: true,
+          namespace: params.namespace,
+          key: params.key,
+          value: overlay.get(overlayKey),
+          updatedAt: new Date().toISOString(),
+        };
+      }
       const record = await store.getPluginData(
         context.sessionId,
         targetPlugin,
@@ -224,15 +273,31 @@ function createPluginDataListTool(store: PluginDataStore): ToolModule {
         targetPlugin,
         params.namespace,
       );
-      return {
-        count: records.length,
-        items: records.map((r) => ({
+
+      const now = new Date().toISOString();
+      const merged = new Map<
+        string,
+        { namespace: string; key: string; value: unknown; updatedAt: string }
+      >();
+      for (const r of records) {
+        merged.set(`${r.namespace}\u0000${r.key}`, {
           namespace: r.namespace,
           key: r.key,
           value: r.value,
           updatedAt: r.updatedAt,
-        })),
-      };
+        });
+      }
+      for (const [overlayKey, value] of buildPendingOverlay(context)) {
+        const [namespace = "", key = ""] = overlayKey.split("\u0000");
+        // A namespace filter must apply to pending writes too.
+        if (params.namespace !== undefined && namespace !== params.namespace) {
+          continue;
+        }
+        merged.set(overlayKey, { namespace, key, value, updatedAt: now });
+      }
+
+      const items = [...merged.values()];
+      return { count: items.length, items };
     },
   });
 }

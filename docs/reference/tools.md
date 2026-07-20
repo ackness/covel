@@ -222,6 +222,8 @@ interface UIRenderPart {
 
 **输出**: `{ found, namespace, key, value?, updatedAt? }`
 
+读取会叠加**本次 tool loop 内尚未提交**的 `plugin.data` / `plugin.data.batch` proposal（read-your-own-write）。plugin-data 写入走 proposal、在回合末才提交，若不叠加，同一 loop 内先 `plugin-data-set` 再读同一个 key 会拿到写入**前**的旧值，runtime 因而重复写入或「纠正」一个本已正确的值。叠加只覆盖**本插件自己**的 pending 写入，不放宽插件作用域；同 key 多次写入以最后一次为准（与提交顺序一致）。
+
 ---
 
 ### plugin-data-list
@@ -233,6 +235,8 @@ interface UIRenderPart {
 | namespace | string |      | 数据命名空间（不传则列出所有） |
 
 **输出**: `{ count, items: [{ namespace, key, value, updatedAt }] }`
+
+与 `plugin-data-get` 一样叠加本 loop 内未提交的 pending 写入；`namespace` 过滤同样作用于 pending 项。
 
 ---
 

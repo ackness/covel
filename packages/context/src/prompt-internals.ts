@@ -477,6 +477,16 @@ export function buildFrameworkPreamble(locale?: string): string {
  * Returns an empty string when no entries exist so callers can skip the
  * segment.
  */
+/**
+ * Working memory is unbounded storage rendered into every system prompt, so
+ * without a cap a long session pays for it on every turn of every runtime and
+ * can eventually crowd out the narrative itself. These caps bound the prompt
+ * cost; the truncation notice keeps the omission visible to the model rather
+ * than silently dropping state it was told to rely on.
+ */
+const WORKING_MEMORY_MAX_ENTRIES = 60;
+const WORKING_MEMORY_MAX_VALUE_CHARS = 600;
+
 export function renderWorkingMemory(
   entries:
     | readonly {
@@ -497,9 +507,25 @@ export function renderWorkingMemory(
     return a.key.localeCompare(b.key);
   });
 
-  const lines = sorted.map(
-    (entry) => `${entry.scope}.${entry.key}: ${JSON.stringify(entry.value)}`,
-  );
+  // Deterministic cap: keep the highest-priority scopes (player → story →
+  // shared) so what survives is the state most likely to matter this turn.
+  const kept = sorted.slice(0, WORKING_MEMORY_MAX_ENTRIES);
+  const droppedCount = sorted.length - kept.length;
+
+  const lines = kept.map((entry) => {
+    const serialized = JSON.stringify(entry.value) ?? "null";
+    const value =
+      serialized.length > WORKING_MEMORY_MAX_VALUE_CHARS
+        ? `${serialized.slice(0, WORKING_MEMORY_MAX_VALUE_CHARS)}… [truncated ${serialized.length - WORKING_MEMORY_MAX_VALUE_CHARS} chars]`
+        : serialized;
+    return `${entry.scope}.${entry.key}: ${value}`;
+  });
+
+  if (droppedCount > 0) {
+    lines.push(
+      `[... ${droppedCount} more working-memory entries omitted to stay within the prompt budget ...]`,
+    );
+  }
 
   return `[Working Memory]\n${lines.join("\n")}`;
 }

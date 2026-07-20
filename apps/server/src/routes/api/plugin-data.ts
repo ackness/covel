@@ -56,6 +56,42 @@ function validatePluginAccess(
   return null;
 }
 
+/**
+ * Namespaces the generic plugin-data write API must never touch.
+ *
+ * `_`-prefixed namespaces are framework-owned bookkeeping, not plugin state:
+ * `_jobs` drives background-job scheduling and `_logs` is the per-runtime log
+ * ring. A player-issued write there could fabricate or rewrite a job record.
+ * Plugins reach these through privileged framework writers, never this route.
+ */
+function reservedNamespaceError(namespace: string): string | null {
+  if (namespace.startsWith("_")) {
+    return `Namespace "${namespace}" is reserved for framework use and cannot be written through this API`;
+  }
+  return null;
+}
+
+/**
+ * Core plugins own state the framework itself depends on (world dimension
+ * schema, character records, memory blocks). The generic API is a player-facing
+ * escape hatch for ordinary plugin state, so it must not be able to rewrite
+ * those — a forged `world-init/schema` entry would redefine the world's
+ * character attributes for every later turn. Core-plugin state changes go
+ * through that plugin's own tools and the proposal pipeline.
+ */
+function corePluginWriteError(
+  registry: PluginRegistry,
+  pluginId: string,
+): string | null {
+  const entry = registry.get(pluginId);
+  const pluginType =
+    entry?.manifest?.manifest?.pluginType ?? entry?.summary?.pluginType;
+  if (pluginType === "core-plugin") {
+    return `Plugin "${pluginId}" is a core plugin; its data is framework-owned and cannot be written through this API`;
+  }
+  return null;
+}
+
 // GET /session/:id/plugin-data/:pluginId/_index — list namespaces/keys without values
 pluginDataRoutes.get("/:id/plugin-data/:pluginId/_index", async (c) => {
   const store = c.get("store");
@@ -157,6 +193,11 @@ pluginDataRoutes.put(
     const accessErr = validatePluginAccess(registry, pluginId, sessionId, true);
     if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
+    const reservedErr = reservedNamespaceError(namespace);
+    if (reservedErr) return c.json(errorBody(reservedErr), 403);
+    const coreErr = corePluginWriteError(registry, pluginId);
+    if (coreErr) return c.json(errorBody(coreErr), 403);
+
     const jsonBody = await readJsonBody(c);
     if (jsonBody instanceof Response) return jsonBody;
     const raw = jsonBody.body;
@@ -208,6 +249,11 @@ pluginDataRoutes.delete(
     // Write: require the plugin to be active in this session
     const accessErr = validatePluginAccess(registry, pluginId, sessionId, true);
     if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
+
+    const reservedErr = reservedNamespaceError(namespace);
+    if (reservedErr) return c.json(errorBody(reservedErr), 403);
+    const coreErr = corePluginWriteError(registry, pluginId);
+    if (coreErr) return c.json(errorBody(coreErr), 403);
 
     await store.deletePluginData(sessionId, pluginId, namespace, key);
     return c.json({ success: true });

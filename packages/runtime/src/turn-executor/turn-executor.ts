@@ -416,9 +416,19 @@ async function executeTurnImpl(
     });
 
   // W4: player abort — stop scheduling further groups/followers as soon as
-  // the signal fires. The in-flight runtime is cut by the loop/retry layer
-  // (its result surfaces as failed with a turn-aborted message and carries
-  // no proposals, so nothing partial is committed).
+  // the signal fires. The in-flight runtime is cut by the loop/retry layer;
+  // its result surfaces as failed with a turn-aborted message and carries no
+  // PROPOSALS, so nothing proposal-shaped is committed.
+  //
+  // That is not the same as "nothing was written". A few builtin tools write
+  // straight to the store instead of returning a proposal — the character
+  // tools (create/update-character) and the memory tools (core-memory block
+  // updates). Whatever they wrote before the abort is already durable and is
+  // NOT rolled back, because it never entered the commit pipeline that the
+  // abort short-circuits. The same holds for a runtime that fails after such
+  // a call, and for PreStateCommit: a hook cannot veto those writes because
+  // they never reach it. Routing them through proposals is the fix; until
+  // then this is the honest guarantee.
   const playerAborted = (): boolean =>
     deps.turnControl?.signal?.aborted === true;
 

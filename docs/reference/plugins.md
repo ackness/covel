@@ -165,9 +165,10 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 
 1. **当前 session 已有 schema + 词条** → 直接复用。
 2. **世界声明了 `world.yaml` 的 `characterAttributes`**（→ `metadata.characterAttributes`，兼容旧 `metadata.schemas`）→ **原样写入**该 schema（并从 dimensions 导入词条）。这是权威来源：即使存在同世界的旧 session，也以世界声明为准，因此编辑 `characterAttributes` 会在新 session 生效。
-3. **同世界历史 session 有可复用数据** → 跨 session 复用 schema + 词条（省去 ~30s LLM）。
-4. **世界有 dimensions 但未声明属性** → `deriveSchema(dimensions)` 从世界数据推断通用属性。
-5. 以上都没有 → 才进入 `schema-gen` agent，由 LLM 生成。
+3. **世界有 dimensions 但未声明属性** → `deriveSchema(dimensions)` 从世界数据推断通用属性。
+4. 以上都没有 → 才进入 `schema-gen` agent，由 LLM 生成。
+
+> 曾有一档「同世界历史 session 跨 session 复用 schema + 词条」的快路径（省 ~30s LLM），已移除：session plugin-data 可被会话持有者经通用 `PUT /plugin-data` 写入，hosted 层级下来源 session 还可能属于其他用户，复制即泄露 + 投毒。详见 [world-data.md](./world-data.md#world-init-schema-fast-path)。
 
 `characterAttributes[*].name` / `description` 支持 `I18nText`（`{ "zh-CN": …, "en-US": … }`），右栏与 prompt 注入按 locale 解析显示。
 

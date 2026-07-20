@@ -27,7 +27,7 @@ describe("estimateTokens", () => {
 const mockEstimator: TokenEstimator = (text) => Math.ceil(text.length / 4);
 
 interface TestMessage {
-  readonly role: "system" | "user" | "assistant";
+  readonly role: "system" | "user" | "assistant" | "tool";
   readonly content: string;
 }
 
@@ -289,5 +289,74 @@ describe("applyBudget", () => {
     expect(result.budgetExceeded).toBe(true);
     const placeholderTokens = mockEstimator(result.messages[0]!.content);
     expect(result.totalTokens).toBe(50 + placeholderTokens);
+  });
+});
+
+describe("applyBudget — assistant↔tool pair integrity", () => {
+  // A `tool` message's tool_call_id points at the assistant message that
+  // requested it. If pruning cuts between them the survivor list starts with
+  // an orphan and providers reject the transcript — which is why tool-using
+  // runtimes were previously excluded from budget enforcement altogether.
+
+  it("drops tool messages orphaned by the prefix cut", () => {
+    const systemPrompt = contentOfChars(40); // 10 tokens
+    const messages: TestMessage[] = [
+      msg("user", contentOfChars(400)), // 100 — pruned
+      msg("assistant", contentOfChars(400)), // 100 — pruned (requested the tools)
+      msg("tool", contentOfChars(40)), // 10 — orphaned by the cut
+      msg("tool", contentOfChars(40)), // 10 — orphaned by the cut
+      msg("user", contentOfChars(40)), // 10 — protected
+      msg("assistant", contentOfChars(40)), // 10 — protected
+    ];
+
+    const result = applyBudget(systemPrompt, messages, {
+      maxInputTokens: 100,
+      reservedForResponse: 40,
+      protectLastUserTurns: 1,
+      estimator: mockEstimator,
+    });
+
+    // No survivor may be a leading tool message.
+    const firstReal = result.messages.filter((m) => m.role !== "system")[0];
+    expect(firstReal?.role).not.toBe("tool");
+    expect(result.messages.some((m) => m.role === "tool")).toBe(false);
+    expect(result.prunedMessageCount).toBe(4);
+  });
+
+  it("keeps a tool message whose assistant survived", () => {
+    const systemPrompt = contentOfChars(40); // 10
+    const messages: TestMessage[] = [
+      msg("user", contentOfChars(400)), // 100 — pruned
+      msg("user", contentOfChars(40)), // 10 — protected window starts here
+      msg("assistant", contentOfChars(40)), // 10
+      msg("tool", contentOfChars(40)), // 10 — paired, must survive
+    ];
+
+    const result = applyBudget(systemPrompt, messages, {
+      maxInputTokens: 120,
+      reservedForResponse: 40,
+      protectLastUserTurns: 1,
+      estimator: mockEstimator,
+    });
+
+    expect(result.prunedMessageCount).toBe(1);
+    expect(result.messages.some((m) => m.role === "tool")).toBe(true);
+  });
+
+  it("does not touch tool messages when nothing was pruned", () => {
+    const messages: TestMessage[] = [
+      msg("assistant", contentOfChars(40)),
+      msg("tool", contentOfChars(40)),
+      msg("user", contentOfChars(40)),
+    ];
+
+    const result = applyBudget(contentOfChars(40), messages, {
+      maxInputTokens: 10_000,
+      reservedForResponse: 4_000,
+      estimator: mockEstimator,
+    });
+
+    expect(result.messages).toEqual(messages);
+    expect(result.prunedMessageCount).toBe(0);
   });
 });
