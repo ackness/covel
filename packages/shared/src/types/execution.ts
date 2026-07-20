@@ -105,6 +105,15 @@ export interface TurnResult {
   readonly turnId: string;
   readonly sessionId: string;
   readonly runtimeResults: readonly RuntimeResult[];
+  /**
+   * Runtime results produced by nested `ctx.recursiveCall` executions,
+   * flattened across depths (2026-07-20 audit H-08). They are NOT part of
+   * `runtimeResults` (which persistTurnResult snapshots — nested turns
+   * persist their own turn_results rows) but the commit-owning caller MUST
+   * process them through the same proposal pipeline as the top-level
+   * results; previously their proposals were silently dropped.
+   */
+  readonly nestedRuntimeResults?: readonly RuntimeResult[];
   readonly conflicts?: readonly WriteConflict[];
   readonly auditResult?: RuntimeResult;
   /** Forms requiring player input before next turn (collected from runtime outputs). */

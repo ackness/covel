@@ -81,6 +81,15 @@ export interface RuntimeInvocation {
   readonly executeTurnFn: ExecuteTurnFn;
   /** Internal current recursion depth. Top-level callers omit it (defaults 0). */
   readonly recursionDepth?: number;
+  /**
+   * H-08: sink for runtime results produced by nested `ctx.recursiveCall`
+   * executions. The top-level executeTurn wires this to a collector so the
+   * commit-owning caller processes nested proposals through the same barrier
+   * as top-level results (they were previously dropped on the floor).
+   */
+  readonly collectNestedResults?: (
+    results: readonly RuntimeResult[],
+  ) => void;
 }
 
 export async function executeOneRuntime(
@@ -168,6 +177,14 @@ export async function executeOneRuntime(
             recursionDepth: nextDepth,
           },
         );
+        // H-08: bubble the nested execution's results (its own + any it
+        // collected from deeper levels) up to the top-level turn so the
+        // commit-owning caller processes their proposals — a nested
+        // executeTurn has no commit path of its own.
+        inv.collectNestedResults?.([
+          ...nestedResult.runtimeResults,
+          ...(nestedResult.nestedRuntimeResults ?? []),
+        ]);
         await deps.emitter?.emit("recursive.completed", {
           ...tracePayload,
           resultCount: nestedResult.runtimeResults.length,

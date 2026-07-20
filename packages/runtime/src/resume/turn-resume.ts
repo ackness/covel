@@ -234,51 +234,15 @@ export async function resumeSuspendedRuntime(
   }
   const output = finalized.output;
 
-  if (deps.store) {
-    await deps.store.markSuspensionResolved(suspension.id);
-
-    // Persist the resumed output to turn_messages, mirroring the normal agent
-    // path (turn-agent-runtime). Without this, resumed narrative landed only in
-    // the `messages` display table and was absent from prompt history / turnNumber
-    // / trigger counts, which are all derived from listTurnMessages.
-    const out = output as Record<string, unknown>;
-    const narrativeContent =
-      typeof out.narrativeOutput === "string"
-        ? out.narrativeOutput
-        : typeof out.content === "string"
-          ? out.content
-          : JSON.stringify(output);
-    const interactionsArr = out.interactions as unknown[] | undefined;
-    const pendingInput =
-      interactionsArr && interactionsArr.length > 0
-        ? interactionsArr
-        : undefined;
-    const ui = out.ui as unknown[] | undefined;
-    await deps.store.appendTurnMessage({
-      id: crypto.randomUUID(),
-      sessionId: suspension.sessionId,
-      turnId: suspension.turnId,
-      sourceType: "runtime",
-      sourcePluginId: manifest.pluginId,
-      sourceRuntimeId: manifest.name,
-      role: "assistant",
-      name: manifest.name,
-      content: narrativeContent,
-      order: manifest.priority ?? NARRATOR_PRIORITY,
-      pendingInput,
-      ui,
-      createdAt: new Date().toISOString(),
-    });
-  }
-
-  emitSubEvent(deps.eventBus, "game", "turn.resumed", suspension.sessionId, {
-    sessionId: suspension.sessionId,
-    turnId: suspension.turnId,
-    suspensionId: suspension.id,
-    pluginId: manifest.pluginId,
-    runtimeId: manifest.name,
-  });
-
+  // H-10: the runtime NO LONGER resolves the suspension or appends the
+  // assistant turn message here. Those writes belong to the commit-owning
+  // caller (apps/server resume route), which folds them into the SAME
+  // transaction as the proposal commit — resolving before commit meant a
+  // commit failure left the suspension permanently resolved and the
+  // narrative already in prompt history. The `turn.resumed` event moves
+  // with them (it must not announce a resume that then rolls back).
+  // PostRuntime runs BEFORE any persistence (M-04) — the caller persists
+  // the hook-finalized output.
   return finalizeWithPostRuntime({
     pluginId: manifest.pluginId,
     runtimeId: manifest.name,

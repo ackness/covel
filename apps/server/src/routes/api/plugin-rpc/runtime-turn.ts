@@ -64,24 +64,56 @@ export function createPluginRpcRuntimeTurnRunner(
       eventBus: ctx.eventBus,
       emitter,
     });
-    await resultProcessor.processAll(turnResult.runtimeResults);
-    try {
-      await saveAutoSnapshot({
-        store: ctx.store,
-        sessionId: ctx.sessionId,
-        turnId: turnResult.turnId,
-        createdAt: turnResult.timestamp,
-        eventBus: ctx.eventBus,
+    // H-08: nested recursiveCall results ride the same commit barrier.
+    const outputs = await resultProcessor.processAll([
+      ...turnResult.runtimeResults,
+      ...(turnResult.nestedRuntimeResults ?? []),
+    ]);
+
+    // H-07: commit failures must not report success. Surface each one as a
+    // `proposal.failed` trace event (manual/background turns have no live
+    // action stream; the /debug timeline and subscription channel carry it)
+    // and withhold the snapshot + completion barrier.
+    const failedProposals = outputs.flatMap((o) => o.failedProposals);
+    for (const fp of failedProposals) {
+      await emitter.emit("proposal.failed", {
+        proposalId: fp.proposal.id,
+        proposalType: fp.proposal.type,
+        runtimeId: fp.proposal.source.runtimeId,
+        pluginId: fp.proposal.source.pluginId,
+        error: fp.error,
       });
-    } catch (err) {
-      console.warn(
-        `[plugin-rpc] auto snapshot failed for session ${ctx.sessionId} turn ${turnResult.turnId}:`,
-        err instanceof Error ? err.message : String(err),
+    }
+
+    let snapshotFailed = false;
+    if (failedProposals.length === 0) {
+      try {
+        await saveAutoSnapshot({
+          store: ctx.store,
+          sessionId: ctx.sessionId,
+          turnId: turnResult.turnId,
+          createdAt: turnResult.timestamp,
+          eventBus: ctx.eventBus,
+        });
+      } catch (err) {
+        snapshotFailed = true;
+        console.warn(
+          `[plugin-rpc] auto snapshot failed for session ${ctx.sessionId} turn ${turnResult.turnId}:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    } else {
+      console.error(
+        `[plugin-rpc] ${failedProposals.length} proposal(s) failed to commit for session ${ctx.sessionId} turn ${turnResult.turnId} — ` +
+          "withholding auto-snapshot and turn completion (H-07)",
       );
     }
-    // Commit barrier (audit R-06/R-09): proposals committed + snapshot taken —
-    // fire the authoritative turn.completed event and memory ingestion.
-    turnResult.completeTurn?.();
+    // Commit barrier (audit R-06/R-09/H-07): fire the authoritative
+    // turn.completed event and memory ingestion only when every proposal
+    // committed and the snapshot succeeded.
+    if (failedProposals.length === 0 && !snapshotFailed) {
+      turnResult.completeTurn?.();
+    }
   }
 
   async function runManualTurn(

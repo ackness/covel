@@ -557,6 +557,19 @@ export function createSseEventHandler(
         });
         break;
       }
+      // A proposal failed to commit (H-07): part of this turn's writes did
+      // not land. Surface it as an execution error so the player sees a
+      // visible failure instead of a silently incomplete turn (the server
+      // also withholds turn.completed / auto-snapshot in this case).
+      case "proposal.failed": {
+        const proposalType = (payload.proposalType as string) ?? "proposal";
+        const error = (payload.error as string) ?? "commit failed";
+        deps.dispatch({
+          type: "SET_EXECUTION_ERROR",
+          error: `${proposalType}: ${error}`,
+        });
+        break;
+      }
       // Known CovelEvents that the action-stream handler intentionally does
       // NOT render: runtime-internal trace events forwarded onto this stream
       // (consumed by the /debug timeline via the subscription channel) plus

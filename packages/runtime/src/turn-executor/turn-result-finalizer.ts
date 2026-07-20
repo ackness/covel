@@ -15,6 +15,12 @@ export interface FinalizeTurnResultParams {
   readonly deferredFollowers: NonNullable<TurnResult["deferredFollowers"]>;
   readonly deps: TurnExecutorDeps;
   readonly turnNumber: number;
+  /**
+   * H-08: results bubbled up from nested `ctx.recursiveCall` executions.
+   * Carried on the TurnResult for the commit-owning caller; NOT re-persisted
+   * here (nested executeTurn calls persist their own turn_results rows).
+   */
+  readonly nestedRuntimeResults?: readonly RuntimeResult[];
 }
 
 function collectPendingInputs(
@@ -105,12 +111,16 @@ export async function finalizeTurnResult({
   deferredFollowers,
   deps,
   turnNumber,
+  nestedRuntimeResults,
 }: FinalizeTurnResultParams): Promise<TurnResult> {
   const pendingInputs = collectPendingInputs(completedResults);
   const turnResult: TurnResult = {
     turnId: input.turnId,
     sessionId: input.sessionId,
     runtimeResults: [...completedResults.values()],
+    ...(nestedRuntimeResults && nestedRuntimeResults.length > 0
+      ? { nestedRuntimeResults }
+      : {}),
     pendingInputs: pendingInputs.length > 0 ? pendingInputs : undefined,
     durationMs: Date.now() - startTime,
     timestamp: new Date().toISOString(),

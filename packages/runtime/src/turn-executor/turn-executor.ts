@@ -379,6 +379,11 @@ async function executeTurnImpl(
     ? input.manualTrigger?.triggerEvent
     : undefined;
 
+  // H-08: nested `ctx.recursiveCall` executions bubble their runtime results
+  // here so the commit-owning caller can process their proposals through the
+  // same barrier as top-level results.
+  const nestedRuntimeResults: RuntimeResult[] = [];
+
   // Single entry point for invoking one runtime. `sessionMeta` / `sessionContext`
   // are reassigned by recordPreGameCompletion between call sites, so this reads
   // them by closure each call rather than snapshotting a base object.
@@ -405,6 +410,9 @@ async function executeTurnImpl(
       turnOptions: options,
       executeTurnFn: executeTurn,
       recursionDepth,
+      collectNestedResults: (results) => {
+        nestedRuntimeResults.push(...results);
+      },
     });
 
   // W4: player abort — stop scheduling further groups/followers as soon as
@@ -517,6 +525,7 @@ async function executeTurnImpl(
     deferredFollowers,
     deps,
     turnNumber,
+    nestedRuntimeResults,
   });
 
   // ── Turn-completion barrier (audit R-06/R-09) ─────────────────

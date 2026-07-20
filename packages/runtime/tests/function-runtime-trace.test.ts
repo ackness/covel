@@ -257,12 +257,19 @@ describe("function-runtime trace (A2-P1-5)", () => {
 
   it("passes the raw gateway through and emits no function.* when no emitter is wired", async () => {
     const rawGateway = makeGateway();
-    let handlerGateway: unknown;
+    let inHandlerResult: unknown;
+    let capturedGateway: unknown;
     const loaded: LoadedRuntime = {
       manifest: makeFunctionManifest(),
       promptTemplate: "",
       handler: async (ctx) => {
-        handlerGateway = ctx.gateway;
+        capturedGateway = ctx.gateway;
+        // No emitter → no TRACE wrapping. H-09 still wraps every capability
+        // in a revocation proxy, so assert pass-through behaviour from
+        // INSIDE the handler (after the turn the capability is revoked).
+        inHandlerResult = await ctx.gateway?.generateText({
+          messages: [],
+        });
         return {};
       },
     };
@@ -273,8 +280,20 @@ describe("function-runtime trace (A2-P1-5)", () => {
       makeDeps(loaded, { gateway: rawGateway }),
     );
 
-    // No emitter → graceful degrade: raw gateway, no wrapping.
-    expect(handlerGateway).toBe(rawGateway);
+    expect(inHandlerResult).toEqual({
+      text: "ok",
+      finishReason: "stop",
+      usage: { inputTokens: 1, outputTokens: 2 },
+    });
+
+    // H-09: after the turn settles the captured capability is revoked — a
+    // detached handler's late call must be rejected (synchronously, before
+    // any store/provider work starts).
+    expect(() =>
+      (
+        capturedGateway as { generateText: (p: unknown) => Promise<unknown> }
+      ).generateText({}),
+    ).toThrow(/revoked/);
   });
 
   // ── Persistence integration (critique HIGH gap) ──────────────────

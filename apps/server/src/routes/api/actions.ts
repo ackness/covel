@@ -172,6 +172,18 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const ownerDenied = checkSessionOwner(c, session);
   if (ownerDenied) return ownerDenied;
 
+  // M-03 fast path: a paused/ended session takes no actions. The
+  // authoritative re-check happens under the session lock below (this read is
+  // racy), but rejecting here returns a clean 409 before the SSE stream opens.
+  if (session.status && session.status !== "active") {
+    return c.json(
+      errorBody(
+        `session is ${session.status}; it must be active to accept actions`,
+      ),
+      409,
+    );
+  }
+
   // Lazy-lock the session's embedding model once per process boot.
   // No-op when the store has no vector capability or no embed slot is
   // configured. See apps/server/src/embedding-lock.ts for rationale.
@@ -312,6 +324,21 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       const { result, trace, userSettings } = await sessionLock.withLock(
         sessionId,
         async () => {
+          // M-03 authoritative gate: re-read the session status under the
+          // lock BEFORE any write. A pause/end that raced the pre-stream
+          // check must not get player messages, interaction records, or
+          // compaction appended to a non-active session. The throw surfaces
+          // as an `error.occurred` SSE event via the outer catch.
+          const liveSession = await store.getSession(sessionId);
+          if (!liveSession) {
+            throw new Error("session was deleted while the action was queued");
+          }
+          if (liveSession.status && liveSession.status !== "active") {
+            throw new Error(
+              `session is ${liveSession.status}; it must be active to accept actions`,
+            );
+          }
+
           // Persist player message to messages table (source of truth for refresh recovery)
           if (playerMessage) {
             const now = new Date().toISOString();
@@ -549,8 +576,20 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             eventBus,
             emitter,
           });
-          for (const rr of result.runtimeResults) {
-            const { events } = await resultProcessor.process(rr);
+          // H-07: commit failures are no longer silently dropped — each one
+          // is surfaced as a `proposal.failed` SSE event, and any failure
+          // withholds the completion barrier below (turn.completed, memory
+          // ingestion, auto-snapshot success signal).
+          let commitFailureCount = 0;
+          // H-08: nested recursiveCall results ride the same commit barrier —
+          // their proposals were previously dropped (only the top-level
+          // results were processed).
+          for (const rr of [
+            ...result.runtimeResults,
+            ...(result.nestedRuntimeResults ?? []),
+          ]) {
+            const { events, failedProposals } =
+              await resultProcessor.process(rr);
 
             for (const evt of events) {
               // Emit using ProtocolEventType directly — no legacy mapping
@@ -564,32 +603,63 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 data: JSON.stringify(makeEnvelope(evt.type, ssePayload)),
               });
             }
+
+            for (const fp of failedProposals) {
+              commitFailureCount += 1;
+              await stream.writeSSE({
+                data: JSON.stringify(
+                  makeEnvelope("proposal.failed", {
+                    proposalId: fp.proposal.id,
+                    proposalType: fp.proposal.type,
+                    runtimeId: fp.proposal.source.runtimeId,
+                    pluginId: fp.proposal.source.pluginId,
+                    error: fp.error,
+                  }),
+                ),
+              });
+            }
           }
 
           // Commit-derived lifecycle fields and the automatic snapshot belong to
           // the same mutation boundary as execution. The snapshot is deliberately
-          // last so it contains every proposal from this turn.
+          // last so it contains every proposal from this turn. `turnCount` syncs
+          // unconditionally — it mirrors the turn_results rows that are already
+          // persisted, independent of proposal outcomes.
           await syncSessionTurnCount({ store, sessionId, activeRuntimes });
-          try {
-            await saveAutoSnapshot({
-              store,
-              sessionId,
-              turnId,
-              createdAt: result.timestamp,
-              eventBus,
-            });
-          } catch (err) {
-            console.warn(
-              `[actions] auto snapshot failed for session ${sessionId} turn ${turnId}:`,
-              err instanceof Error ? err.message : String(err),
+
+          let snapshotFailed = false;
+          if (commitFailureCount === 0) {
+            try {
+              await saveAutoSnapshot({
+                store,
+                sessionId,
+                turnId,
+                createdAt: result.timestamp,
+                eventBus,
+              });
+            } catch (err) {
+              snapshotFailed = true;
+              console.warn(
+                `[actions] auto snapshot failed for session ${sessionId} turn ${turnId}:`,
+                err instanceof Error ? err.message : String(err),
+              );
+            }
+          } else {
+            console.error(
+              `[actions] ${commitFailureCount} proposal(s) failed to commit for session ${sessionId} turn ${turnId} — ` +
+                "withholding auto-snapshot and turn completion (H-07)",
             );
           }
 
-          // Commit barrier (audit R-06/R-09): proposals are committed and the
-          // snapshot captured — only now fire the authoritative turn.completed
-          // event and post-turn memory ingestion. A commit failure throws
-          // above, so this is never reached for uncommitted state.
-          result.completeTurn?.();
+          // Commit barrier (audit R-06/R-09/H-07): the authoritative
+          // turn.completed event and post-turn memory ingestion fire ONLY
+          // when every proposal committed and the snapshot (if attempted)
+          // succeeded. A partial commit or snapshot failure leaves the turn
+          // visibly incomplete instead of reporting success over missing
+          // state; the player retries or resumes from the last good snapshot.
+          if (commitFailureCount === 0 && !snapshotFailed) {
+            result.completeTurn?.();
+          }
 
           return { result, trace, userSettings };
         },

@@ -373,7 +373,7 @@ export async function executeAgentRuntime({
   }
   const output = finalized.output;
 
-  const result: RuntimeResult = {
+  const rawResult: RuntimeResult = {
     pluginId: manifest.pluginId,
     runtimeId: manifest.name,
     runId,
@@ -385,27 +385,38 @@ export async function executeAgentRuntime({
     timestamp: new Date().toISOString(),
   };
 
+  // PostRuntime hook — agent success path (S4-T3). Runs BEFORE anything is
+  // persisted (M-04): prompt history, commit proposals, and SSE must all see
+  // the SAME finalized output. Previously the raw result was appended to
+  // TurnMessages first and only the commit/SSE path saw the hook rewrite —
+  // e.g. a hook downgrading success→failed still left the unrewritten
+  // narrative in history.
+  const result = await runPostRuntimeHook(postRuntimeOpts, rawResult);
+  const finalOutput = (result.output ?? output) as Record<string, unknown>;
+
   // Save runtime output as an append-only TurnMessage. Manual plugin-rpc
   // calls return their output to the caller and commit proposals through
-  // plugin-rpc, so they stay out of conversation history.
-  if (deps.store && !input.manualTrigger) {
+  // plugin-rpc, so they stay out of conversation history. Skipped when a
+  // PostRuntime hook rewrote the status to a non-success — an unsuccessful
+  // result must not enter prompt history as narrative.
+  if (deps.store && !input.manualTrigger && result.status === "success") {
     // Extract narrative content.
     const narrativeContent =
-      typeof output.narrativeOutput === "string"
-        ? output.narrativeOutput
-        : typeof output.content === "string"
-          ? output.content
-          : JSON.stringify(output);
+      typeof finalOutput.narrativeOutput === "string"
+        ? finalOutput.narrativeOutput
+        : typeof finalOutput.content === "string"
+          ? finalOutput.content
+          : JSON.stringify(finalOutput);
 
     // Extract pendingInput from the interaction array.
-    const interactionsArr = output.interactions as unknown[] | undefined;
+    const interactionsArr = finalOutput.interactions as unknown[] | undefined;
     const pendingInput =
       interactionsArr && interactionsArr.length > 0
         ? interactionsArr
         : undefined;
 
     // Extract UI render instructions if present
-    const ui = output.ui as unknown[] | undefined;
+    const ui = finalOutput.ui as unknown[] | undefined;
 
     await deps.store.appendTurnMessage({
       id: crypto.randomUUID(),
@@ -448,6 +459,5 @@ export async function executeAgentRuntime({
 
   emitRuntimeCompleted(deps, input.sessionId, manifest, result);
 
-  // PostRuntime hook — agent success path (S4-T3)
-  return runPostRuntimeHook(postRuntimeOpts, result);
+  return result;
 }

@@ -190,6 +190,16 @@ export interface WorkingMemoryChangedPayload {
   readonly pluginId?: string;
 }
 
+export interface ProposalFailedPayload {
+  /** Proposal envelope id that failed to commit. */
+  readonly proposalId: string;
+  /** Proposal type (e.g. `narrative.append`, `plugin.data`). */
+  readonly proposalType: string;
+  readonly runtimeId: string;
+  readonly pluginId: string;
+  readonly error: string;
+}
+
 export type CovelEvent =
   // Narrative
   | {
@@ -273,6 +283,13 @@ export type CovelEvent =
   | {
       readonly type: "working_memory.changed";
       readonly payload: WorkingMemoryChangedPayload;
+    }
+  // Commit outcome (2026-07-20 audit H-07): a proposal that failed to commit
+  // is surfaced explicitly instead of being silently dropped. Written
+  // directly onto the action stream by the commit-owning route.
+  | {
+      readonly type: "proposal.failed";
+      readonly payload: ProposalFailedPayload;
     }
   // System
   | { readonly type: "error.occurred"; readonly payload: ErrorOccurredPayload }
@@ -393,6 +410,9 @@ export const COVEL_EVENT_META = {
   // forward path), so forwardToActionStream stays false — the flag only governs
   // eventBus→action-stream forwarding, which this event does not use.
   "working_memory.changed": { forwardToActionStream: false },
+  // Direct write onto the action stream by the commit-owning route (like
+  // working_memory.changed) — the flag only governs eventBus forwarding.
+  "proposal.failed": { forwardToActionStream: false },
   "error.occurred": { forwardToActionStream: false },
   "connection.restored": { forwardToActionStream: false },
   "turn.suspended": { forwardToActionStream: true },

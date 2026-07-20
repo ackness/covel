@@ -10,6 +10,8 @@ import {
   createPluginDataWriter,
   createPluginLogger,
   createFunctionStoreView,
+  makeRevocableCapability,
+  makeRevocableFn,
 } from "./plugin-handler-helpers.js";
 import { createRuntimeMediaContext } from "./runtime-media-context.js";
 import { createRuntimeImagesContext } from "./runtime-images-context.js";
@@ -219,6 +221,55 @@ export async function executeFunctionRuntime({
     hasGateway: !!deps.gateway,
   });
 
+  // H-09: capability revocation. The deadline race below can leave the
+  // losing handler running detached; once the race settles (either way) all
+  // of the handler's write/spend capabilities are revoked so a late write
+  // cannot land after the session lock releases and the next turn begins.
+  // The merged AbortController also gives cooperative handlers ONE signal
+  // that covers both the player abort and the deadline.
+  let capabilitiesRevoked = false;
+  const isRevoked = () => capabilitiesRevoked;
+  const handlerAbort = new AbortController();
+  const playerSignal = deps.turnControl?.signal;
+  if (playerSignal?.aborted) {
+    handlerAbort.abort(playerSignal.reason);
+  } else if (playerSignal) {
+    playerSignal.addEventListener(
+      "abort",
+      () => handlerAbort.abort(playerSignal.reason),
+      { once: true },
+    );
+  }
+
+  const revocable = {
+    store: handlerStore
+      ? makeRevocableCapability(handlerStore, isRevoked, "store")
+      : undefined,
+    pluginData: pluginDataHandle
+      ? makeRevocableCapability(pluginDataHandle, isRevoked, "pluginData")
+      : undefined,
+    media: mediaHandle
+      ? makeRevocableCapability(mediaHandle, isRevoked, "media")
+      : undefined,
+    images: imagesHandle
+      ? makeRevocableCapability(imagesHandle, isRevoked, "images")
+      : undefined,
+    speech: speechHandle
+      ? makeRevocableCapability(speechHandle, isRevoked, "speech")
+      : undefined,
+    gateway: tracedGateway
+      ? makeRevocableCapability(tracedGateway, isRevoked, "gateway")
+      : undefined,
+    utils: tracedUtils
+      ? makeRevocableCapability(tracedUtils, isRevoked, "utils")
+      : undefined,
+    recursiveCall: makeRevocableFn(
+      createRecursiveCall(),
+      isRevoked,
+      "recursiveCall",
+    ),
+  };
+
   let output: Awaited<ReturnType<NonNullable<typeof loaded.handler>>>;
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -226,10 +277,10 @@ export async function executeFunctionRuntime({
     // never resolves) blocks the whole turn forever — timeoutMs only existed
     // for the agent path before. Promise.race subscribes to the handler
     // promise, so a post-timeout rejection is still observed (no unhandled
-    // rejection). The player abort signal (ctx.signal) lets a cooperative
-    // handler cancel its own in-flight provider work; the race here only
-    // unblocks the turn — the losing handler keeps running detached unless it
-    // observes the signal.
+    // rejection). The merged abort signal (ctx.signal) lets a cooperative
+    // handler cancel its own in-flight provider work; a NON-cooperative
+    // losing handler keeps running detached, but its capabilities are
+    // revoked in the finally below so late writes are rejected (H-09).
     const handlerPromise = loaded.handler({
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -237,15 +288,15 @@ export async function executeFunctionRuntime({
       runtimeId: manifest.name,
       playerMessage: input.playerMessage,
       locale: input.locale,
-      store: handlerStore,
+      store: revocable.store,
       completedResults,
-      recursiveCall: createRecursiveCall(),
+      recursiveCall: revocable.recursiveCall,
       recursionDepth,
-      ...(tracedGateway ? { gateway: tracedGateway } : {}),
-      ...(tracedUtils ? { utils: tracedUtils } : {}),
-      ...(mediaHandle ? { media: mediaHandle } : {}),
-      ...(imagesHandle ? { images: imagesHandle } : {}),
-      ...(speechHandle ? { speech: speechHandle } : {}),
+      ...(revocable.gateway ? { gateway: revocable.gateway } : {}),
+      ...(revocable.utils ? { utils: revocable.utils } : {}),
+      ...(revocable.media ? { media: revocable.media } : {}),
+      ...(revocable.images ? { images: revocable.images } : {}),
+      ...(revocable.speech ? { speech: revocable.speech } : {}),
       ...(assetProgress ? { assetProgress } : {}),
       ...(manualPayloadForRuntime
         ? { manualPayload: manualPayloadForRuntime }
@@ -254,19 +305,19 @@ export async function executeFunctionRuntime({
       ...(userSettingsForRuntime
         ? { userSettings: userSettingsForRuntime }
         : {}),
-      ...(pluginDataHandle ? { pluginData: pluginDataHandle } : {}),
+      ...(revocable.pluginData ? { pluginData: revocable.pluginData } : {}),
       ...(loggerHandle ? { logger: loggerHandle } : {}),
-      ...(deps.turnControl?.signal ? { signal: deps.turnControl.signal } : {}),
+      signal: handlerAbort.signal,
     });
     output = await Promise.race([
       handlerPromise,
       new Promise<never>((_, reject) => {
         deadlineTimer = setTimeout(() => {
-          reject(
-            new Error(
-              `function runtime "${manifest.name}" timed out after ${timeoutMs}ms`,
-            ),
+          const err = new Error(
+            `function runtime "${manifest.name}" timed out after ${timeoutMs}ms`,
           );
+          handlerAbort.abort(err);
+          reject(err);
         }, timeoutMs);
       }),
     ]);
@@ -282,6 +333,9 @@ export async function executeFunctionRuntime({
     throw err;
   } finally {
     clearTimeout(deadlineTimer);
+    // H-09: the race has settled — no further capability use is legitimate,
+    // whether the handler won (its output is final) or lost (it is detached).
+    capabilitiesRevoked = true;
   }
 
   await deps.emitter?.emit("function.completed", {
@@ -385,7 +439,7 @@ export async function executeFunctionRuntime({
     );
   }
 
-  const result: RuntimeResult = {
+  const rawResult: RuntimeResult = {
     pluginId: manifest.pluginId,
     runtimeId: manifest.name,
     runId,
@@ -397,16 +451,34 @@ export async function executeFunctionRuntime({
     timestamp: new Date().toISOString(),
   };
 
+  // PostRuntime hook — function runtime path (S4-T3). Runs BEFORE
+  // persistence (M-04) so prompt history, commit proposals, and SSE all see
+  // the same finalized output — see the agent-path comment for rationale.
+  const result = await runPostRuntimeHook(
+    {
+      pipeline: hookPipeline,
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      pluginId: manifest.pluginId,
+      runtimeId: manifest.name,
+      eventBus: deps.eventBus,
+      emitter: deps.emitter,
+    },
+    rawResult,
+  );
+  const finalOutput = (result.output ?? output) as Record<string, unknown>;
+
   // Save function output as TurnMessage (same as agent runtimes).
   // Manual plugin-rpc calls return their output to the caller and commit
   // proposals through plugin-rpc, so they stay out of conversation history.
-  if (deps.store && !input.manualTrigger) {
+  // Skipped when a PostRuntime hook rewrote the status to a non-success.
+  if (deps.store && !input.manualTrigger && result.status === "success") {
     const narrativeContent =
-      typeof output.narrativeOutput === "string"
-        ? output.narrativeOutput
-        : typeof output.content === "string"
-          ? output.content
-          : JSON.stringify(output);
+      typeof finalOutput.narrativeOutput === "string"
+        ? finalOutput.narrativeOutput
+        : typeof finalOutput.content === "string"
+          ? finalOutput.content
+          : JSON.stringify(finalOutput);
 
     await deps.store.appendTurnMessage({
       id: crypto.randomUUID(),
@@ -441,17 +513,5 @@ export async function executeFunctionRuntime({
     durationMs: result.durationMs,
   });
 
-  // PostRuntime hook — function runtime path (S4-T3)
-  return runPostRuntimeHook(
-    {
-      pipeline: hookPipeline,
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      pluginId: manifest.pluginId,
-      runtimeId: manifest.name,
-      eventBus: deps.eventBus,
-      emitter: deps.emitter,
-    },
-    result,
-  );
+  return result;
 }

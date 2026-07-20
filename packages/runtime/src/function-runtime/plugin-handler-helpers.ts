@@ -23,6 +23,54 @@ export interface HandlerHelperContext {
 }
 
 /**
+ * Wrap a capability object so every method call first checks a revocation
+ * flag (2026-07-20 audit H-09). A function-runtime handler that loses the
+ * deadline race keeps running detached — without revocation its
+ * store/media/gateway/pluginData capabilities remained live and could write
+ * AFTER the session lock released, the snapshot completed, and the next turn
+ * began. One shallow Proxy layer suffices: every framework capability handle
+ * is a flat method object.
+ */
+export function makeRevocableCapability<T extends object>(
+  target: T,
+  isRevoked: () => boolean,
+  label: string,
+): T {
+  return new Proxy(target, {
+    get(t, prop, receiver) {
+      const value = Reflect.get(t, prop, receiver);
+      if (typeof value !== "function") return value;
+      return (...args: unknown[]) => {
+        if (isRevoked()) {
+          throw new Error(
+            `[function-runtime] capability "${label}.${String(prop)}" is revoked — ` +
+              "the handler's deadline elapsed or its turn already completed",
+          );
+        }
+        return (value as (...a: unknown[]) => unknown).apply(t, args);
+      };
+    },
+  });
+}
+
+/** Function-shaped variant of {@link makeRevocableCapability}. */
+export function makeRevocableFn<A extends readonly unknown[], R>(
+  fn: (...args: A) => R,
+  isRevoked: () => boolean,
+  label: string,
+): (...args: A) => R {
+  return (...args: A): R => {
+    if (isRevoked()) {
+      throw new Error(
+        `[function-runtime] capability "${label}" is revoked — ` +
+          "the handler's deadline elapsed or its turn already completed",
+      );
+    }
+    return fn(...args);
+  };
+}
+
+/**
  * Build a scoped plugin-data writer. Writes bypass the proposal system
  * and land directly on the store — intended for pre-commit placeholders
  * (e.g. "pending" frames) and post-commit patches that should not be
