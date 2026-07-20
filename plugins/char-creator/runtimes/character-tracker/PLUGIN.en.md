@@ -4,18 +4,36 @@ description:
   zh: 记录故事中新出现的人物，并更新他们的状态、伤势和装备变化。
   en: Records newly appearing characters and updates changes to their condition, injuries, and equipment.
 pluginType: core-plugin
-priority: 750
+# Narrator-downstream layer — shares priority 600 with guide, codex, and
+# npc-graph extractor so scheduler runs them in parallel.
+priority: 600
 model: plugin
 outputKind: system
 timeoutMs: 120000
+tags:
+  - role:character
+  - data:characters
+  - cost:llm
 trigger:
   type: scheduled
   interval: 1
   cooldownTurns: 1
+# Engine-agnostic tracking. The upstream gate discovers the active narrative
+# engine by capability (narrative-engine → narrator in traditional,
+# chat-mode-narrator in dialogue) instead of naming one, so the tracker runs
+# in either mode and still skips when that engine failed. The inject lists
+# both known engines; the absent one resolves to nothing, so exactly the
+# active engine's fresh prose fills <narrator-output>.
+upstreamRequired:
+  - capability: narrative-engine
 input:
   inject:
     - kind: runtime
       from: narrator
+      field: narrativeOutput
+      as: "<narrator-output>"
+    - kind: runtime
+      from: chat-mode-narrator
       field: narrativeOutput
       as: "<narrator-output>"
 tools:
@@ -24,6 +42,12 @@ tools:
     - update-character
     - list-characters
     - get-character
+dataSchemas:
+  characters:
+    schemaVersion: 1
+    acceptsWorldData: true
+    schema: ./schemas/characters.schema.json
+    description: Importable session character records for the character panel.
 postHistory:
   role: system
   content: |
@@ -38,7 +62,7 @@ You are the Character Tracker agent. Your job is to maintain the state of every 
 
 ## Current narrative output
 
-<narrator-output>{{ inputs.narrator.narrator.narrativeOutput }}</narrator-output>
+This turn's narrative is provided in the `<narrator-output>` block at the end of the prompt (injected automatically by the framework's `input.inject`; the body no longer inlines a second copy).
 
 ## World character attribute schema
 

@@ -177,6 +177,12 @@ export const toolsConfigSchema = z
     local: z.array(z.string()).optional(),
     /** Names of entry-registered plugin tools this runtime exposes to its LLM. */
     plugin: z.array(z.string()).optional(),
+    /**
+     * Deferred tool loading (tool-search). `true` defers the runtime's entire
+     * whitelist; a string array defers just those names. Mirrors
+     * `ToolsConfig.defer` in types/plugin.ts.
+     */
+    defer: z.union([z.literal(true), z.array(z.string())]).optional(),
   })
   .strict();
 

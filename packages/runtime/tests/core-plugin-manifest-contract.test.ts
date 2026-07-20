@@ -5,14 +5,29 @@ import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../plugins");
 
-async function loadRuntimeManifests(): Promise<Map<string, RuntimeManifest>> {
+interface LoadedPluginMd {
+  readonly manifest: RuntimeManifest;
+  readonly promptTemplate: string;
+}
+
+async function loadParsedPlugins(): Promise<readonly LoadedPluginMd[]> {
   const discoveries = await discoverPlugins(PLUGINS_DIR);
-  const manifests: RuntimeManifest[] = [];
+  const parsed: LoadedPluginMd[] = [];
   for (const discovery of discoveries) {
-    const parsed = await loadPluginManifest(discovery);
-    manifests.push(...parsed.map((plugin) => plugin.manifest));
+    const plugins = await loadPluginManifest(discovery);
+    parsed.push(
+      ...plugins.map((plugin) => ({
+        manifest: plugin.manifest,
+        promptTemplate: plugin.promptTemplate ?? "",
+      })),
+    );
   }
-  return new Map(manifests.map((manifest) => [manifest.name, manifest]));
+  return parsed;
+}
+
+async function loadRuntimeManifests(): Promise<Map<string, RuntimeManifest>> {
+  const parsed = await loadParsedPlugins();
+  return new Map(parsed.map(({ manifest }) => [manifest.name, manifest]));
 }
 
 function requireRuntime(
@@ -128,32 +143,23 @@ describe("core plugin manifest contract", () => {
       expect(downstream.priority).toBe(600);
     }
 
-    // guide is engine-agnostic: it gates on the `narrative-engine` capability
-    // (discovering whichever narrative engine the current mode loaded) and
-    // injects from both known engines so it works under narrator OR
-    // chat-mode-narrator.
-    const guide = requireRuntime(manifests, "guide");
-    expect(guide.upstreamRequired).toEqual([
-      { capability: "narrative-engine" },
-    ]);
-    for (const engine of ["narrator", "chat-mode-narrator"]) {
-      expect(guide.input?.inject).toContainEqual({
-        kind: "runtime",
-        from: engine,
-        field: "narrativeOutput",
-        as: expect.any(String),
-      });
-    }
-
-    // The remaining downstreams stay bound to narrator by name.
-    for (const downstream of downstreams.filter((m) => m.name !== "guide")) {
-      expect(downstream.upstreamRequired).toEqual(["narrator"]);
-      expect(downstream.input?.inject).toContainEqual({
-        kind: "runtime",
-        from: "narrator",
-        field: "narrativeOutput",
-        as: expect.any(String),
-      });
+    // Every narrator-downstream runtime is engine-agnostic (H-04): it gates
+    // on the `narrative-engine` capability (discovering whichever narrative
+    // engine the current mode loaded) and injects from both known engines so
+    // it works under narrator OR chat-mode-narrator. An exact `narrator`
+    // upstream would permanently skip these runtimes in dialogue mode.
+    for (const downstream of downstreams) {
+      expect(downstream.upstreamRequired).toEqual([
+        { capability: "narrative-engine" },
+      ]);
+      for (const engine of ["narrator", "chat-mode-narrator"]) {
+        expect(downstream.input?.inject).toContainEqual({
+          kind: "runtime",
+          from: engine,
+          field: "narrativeOutput",
+          as: expect.any(String),
+        });
+      }
     }
     expect(downstreams.map((manifest) => manifest.model)).toEqual([
       "plugin",
@@ -176,6 +182,28 @@ describe("core plugin manifest contract", () => {
       const manifest = requireRuntime(manifests, runtimeId);
       expect(manifest.trigger).toMatchObject({ type: "manual" });
       expect(manifest.priority).toBeUndefined();
+    }
+  });
+
+  it("never inlines player input or upstream runtime output into PLUGIN bodies (H-05 / M-18)", async () => {
+    const parsed = await loadParsedPlugins();
+
+    for (const { manifest, promptTemplate } of parsed) {
+      // H-05: player input rides the user role exclusively. A `{{ player.message }}`
+      // interpolation would copy it un-escaped into the system prompt.
+      expect(
+        promptTemplate.includes("{{ player.message }}"),
+        `${manifest.name}: PLUGIN body must not interpolate {{ player.message }} (H-05)`,
+      ).toBe(false);
+
+      // M-18: when a runtime declares an `input.inject` for upstream output,
+      // the framework already appends an escaped XML block (segment 5). A raw
+      // `{{ inputs.* }}` interpolation in the body would inject a SECOND,
+      // un-escaped copy of the same data.
+      expect(
+        /\{\{\s*inputs\./.test(promptTemplate),
+        `${manifest.name}: PLUGIN body must not raw-interpolate {{ inputs.* }} — use input.inject (M-18)`,
+      ).toBe(false);
     }
   });
 

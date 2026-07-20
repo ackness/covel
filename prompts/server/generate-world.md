@@ -25,8 +25,11 @@ id: <kebab-case, you decide>
 name: <world name>
 version: "0.1.0"
 summary: <1-2 sentence summary>
-defaultLocale: { { locale } }
-supportedLocales: [{ { locale } }]
+# Quoting keeps the {{ locale }} placeholder intact — unquoted, Prettier's
+# embedded-YAML pass reformats it into `{ { locale } }`, which the template
+# interpolator can no longer expand (2026-07-20 audit L-01).
+defaultLocale: "{{ locale }}"
+supportedLocales: ["{{ locale }}"]
 tags: [<you decide genre tags>]
 requiredPlugins: [] # list plugin IDs the world depends on (if any)
 recommendedPlugins: [] # list plugin IDs that enhance the world (if any)

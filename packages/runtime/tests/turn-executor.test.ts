@@ -150,7 +150,7 @@ describe("TurnExecutor E2E", () => {
     ).toBe("你望向雾中的栈桥，听见远处传来钟声。");
   });
 
-  it("should pass player message to LLM in context", async () => {
+  it("passes the player message via user role only, never the system prompt (H-05)", async () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
@@ -166,12 +166,13 @@ describe("TurnExecutor E2E", () => {
     // Verify the LLM was called
     expect(mockLLM.calls).toHaveLength(1);
 
-    // System prompt should contain the interpolated player message
+    // Player input must never be interpolated into the system prompt — it
+    // rides the user role exclusively (prompt-injection guardrail, H-05).
     const systemMsg = mockLLM.calls[0].messages.find(
       (m) => m.role === "system",
     );
     expect(systemMsg).toBeDefined();
-    expect(systemMsg!.content).toContain("我攻击巨龙");
+    expect(systemMsg!.content).not.toContain("我攻击巨龙");
 
     // Current turn's user message should be the last user message.
     const userMessages = mockLLM.calls[0].messages.filter(

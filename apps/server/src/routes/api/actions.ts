@@ -140,10 +140,12 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   }
   const { requestId, type, sessionId, locale, model, payload } = body;
 
+  // `trigger_event` was removed (M-07): its payload was never read and no UI
+  // called it — the request just re-ran a full turn. Emitting kernel events
+  // belongs to plugins via the builtin `emit-event` tool.
   const SUPPORTED_ACTIONS = [
     "send_message",
     "execute_command",
-    "trigger_event",
     "start_session",
     "retry_runtime",
   ];
@@ -426,6 +428,15 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               : {}),
             ...(type === "start_session"
               ? { suppressPlayerMessage: true }
+              : {}),
+            // retry_runtime honors payload.runtimeId (M-07): scope the rerun
+            // to that runtime via the manual-trigger path instead of silently
+            // re-running the whole turn. Without a runtimeId the action keeps
+            // its historical whole-turn-retry semantics.
+            ...(type === "retry_runtime" &&
+            typeof payload.runtimeId === "string" &&
+            payload.runtimeId.length > 0
+              ? { manualTrigger: { runtimeId: payload.runtimeId } }
               : {}),
           };
           // W4: register the in-flight turn only after this action owns the

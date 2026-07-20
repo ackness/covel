@@ -497,13 +497,9 @@ export function renderWorkingMemory(
     return a.key.localeCompare(b.key);
   });
 
-  const lines = sorted.map((entry) => {
-    const valueStr =
-      typeof entry.value === "string"
-        ? JSON.stringify(entry.value)
-        : JSON.stringify(entry.value);
-    return `${entry.scope}.${entry.key}: ${valueStr}`;
-  });
+  const lines = sorted.map(
+    (entry) => `${entry.scope}.${entry.key}: ${JSON.stringify(entry.value)}`,
+  );
 
   return `[Working Memory]\n${lines.join("\n")}`;
 }

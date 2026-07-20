@@ -81,8 +81,10 @@ export function buildToolDefinitions(
   // tool calls. Schema-declared runtimes must emit final JSON text, so
   // `runtime-done` is withheld there; otherwise the early-exit branch would
   // stop before the JSON envelope that downstream event chains read.
+  const frameworkNames = new Set<string>();
   if (!manifest.output?.schema && !names.includes("runtime-done")) {
     names.push("runtime-done");
+    frameworkNames.add("runtime-done");
   }
 
   if (names.length === 0 && deferred.size === 0) {
@@ -99,13 +101,23 @@ export function buildToolDefinitions(
         description: info.description,
         parameters: info.jsonSchema as Record<string, unknown>,
       });
-    } else {
-      // Tool not found in registry — add a minimal definition so LLM knows it exists
+    } else if (frameworkNames.has(name)) {
+      // Framework-contracted sentinel pushed above, not a manifest
+      // declaration — keep a minimal definition even when the hosting
+      // registry omits it (e.g. reduced test harnesses).
       defs.push({
         name,
         description: `Tool: ${name}`,
         parameters: { type: "object" },
       });
+    } else {
+      // Manifest-declared tool not found in registry — advertising a
+      // schema-less stub would invite a call that can only fail NOT_FOUND,
+      // so warn and drop instead.
+      console.warn(
+        `[turn-executor] runtime "${manifest.name}" declares tool "${name}" ` +
+          `not found in registry — dropped from LLM advertisement`,
+      );
     }
   }
 

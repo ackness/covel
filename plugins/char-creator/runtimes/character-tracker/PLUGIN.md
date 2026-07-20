@@ -18,13 +18,22 @@ trigger:
   type: scheduled
   interval: 1
   cooldownTurns: 1
-# Tracks characters mentioned in narrator output — skip when narrator failed.
+# Engine-agnostic tracking. The upstream gate discovers the active narrative
+# engine by capability (narrative-engine → narrator in traditional,
+# chat-mode-narrator in dialogue) instead of naming one, so the tracker runs
+# in either mode and still skips when that engine failed. The inject lists
+# both known engines; the absent one resolves to nothing, so exactly the
+# active engine's fresh prose fills <narrator-output>.
 upstreamRequired:
-  - narrator
+  - capability: narrative-engine
 input:
   inject:
     - kind: runtime
       from: narrator
+      field: narrativeOutput
+      as: "<narrator-output>"
+    - kind: runtime
+      from: chat-mode-narrator
       field: narrativeOutput
       as: "<narrator-output>"
 tools:
@@ -53,7 +62,7 @@ postHistory:
 
 ## 当前叙事输出
 
-<narrator-output>{{ inputs.narrator.narrator.narrativeOutput }}</narrator-output>
+本轮叙事在 prompt 末尾的 `<narrator-output>` 块中（由框架 `input.inject` 自动注入，正文不再重复内联）。
 
 ## 世界角色属性 Schema
 

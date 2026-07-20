@@ -11,7 +11,6 @@
  */
 
 import {
-  InMemoryToolClient,
   ToolValidationError,
   getEmittedEvents,
   getPendingProposals,
@@ -202,31 +201,6 @@ function resolveToolModule(
   return config.findTool?.(name, context);
 }
 
-function resolveToolClient(
-  config: ToolExecutorConfig,
-  name: string,
-  context: ToolCallContext,
-): InMemoryToolClient | undefined {
-  const tool = config.findTool?.(name, context);
-  if (!tool) return undefined;
-
-  return new InMemoryToolClient({
-    id: `legacy:${context.pluginId}:${context.runtimeId}:${name}`,
-    tools: [
-      {
-        fullName: name,
-        localName: name,
-        pluginId: context.pluginId,
-        runtimeId: context.runtimeId,
-        module: tool,
-        source:
-          config.getToolSource?.(name) === "builtin" ? "builtin" : "local",
-        requiresApproval: false,
-      },
-    ],
-  });
-}
-
 export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
   return {
     getToolInfo(name: string, context?: ToolCallContext): ToolInfo | undefined {
@@ -245,9 +219,9 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
     ): Promise<ToolCallResult> {
       const startTime = Date.now();
 
-      // 1. Resolve tool client (scoped to calling plugin if context available)
-      const client = resolveToolClient(config, call.name, context);
-      if (!client) {
+      // 1. Resolve tool module (scoped to calling plugin if context available)
+      const tool = resolveToolModule(config, call.name, context);
+      if (!tool) {
         const errorResult = toolError(
           "NOT_FOUND",
           `Unknown tool: ${call.name}. Check the tool name and try again.`,
@@ -394,7 +368,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           pendingProposals: context.pendingProposals,
           emittedEventTopics: context.emittedEventTopics,
         };
-        const rawResult = await client.call(call.name, params, execContext);
+        const rawResult = await tool.execute(params, execContext);
         const parsedResult = getToolContent(rawResult);
         const pendingProposals = getPendingProposals(rawResult);
         const emittedEvents = getEmittedEvents(rawResult);

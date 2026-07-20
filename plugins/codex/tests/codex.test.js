@@ -561,26 +561,32 @@ describe("codex plugin manifest", () => {
     expect(manifest.handler).toBeUndefined();
   });
 
-  it("should declare both narrator runtime inject and plugin-data inject", () => {
+  it("should declare both narrative-engine runtime injects and the plugin-data inject", () => {
     const injects = manifest.input?.inject ?? [];
-    expect(injects).toHaveLength(2);
+    expect(injects).toHaveLength(3);
 
-    // First: runtime inject from narrator
-    expect(injects[0]).toMatchObject({
-      kind: "runtime",
-      from: "narrator",
-      field: "narrativeOutput",
-      as: "<narrator-output>",
-    });
+    // Engine-agnostic (H-04): one runtime inject per known narrative engine;
+    // the absent engine resolves to nothing so exactly the active one fills
+    // the <narrator-output> block.
+    for (const engine of ["narrator", "chat-mode-narrator"]) {
+      expect(injects).toContainEqual({
+        kind: "runtime",
+        from: engine,
+        field: "narrativeOutput",
+        as: "<narrator-output>",
+      });
+    }
 
-    // Second: plugin-data inject from its own `entries` namespace
-    expect(injects[1]).toMatchObject({
-      kind: "plugin-data",
-      namespace: "entries",
-      as: "<existing-entries>",
-      format: "summary",
-      maxEntries: 100,
-    });
+    // Plus: plugin-data inject from its own `entries` namespace
+    expect(injects).toContainEqual(
+      expect.objectContaining({
+        kind: "plugin-data",
+        namespace: "entries",
+        as: "<existing-entries>",
+        format: "summary",
+        maxEntries: 100,
+      }),
+    );
   });
 
   it("should declare unlock + update plugin tools but NOT plugin-data-list", () => {
@@ -601,14 +607,16 @@ describe("codex plugin manifest", () => {
     expect(loaded.promptTemplate).toContain("<existing-entries>");
   });
 
-  it("should have auto trigger (runs every turn after narrator)", () => {
+  it("should have auto trigger (runs every turn after the narrative engine)", () => {
     // Post 2026-04 refactor: codex runs every turn so no narrative is lost
-    // between discovery passes. Priority 600 plus upstreamRequired:
-    // [narrator] ensure codex (and its peers guide / extractor /
-    // character-tracker) schedule after narrator completes; on that layer
-    // the DAG scheduler executes them concurrently.
+    // between discovery passes. Priority 600 plus the narrative-engine
+    // capability gate (H-04) ensure codex (and its peers guide / extractor /
+    // character-tracker) schedule after the active engine completes; on that
+    // layer the DAG scheduler executes them concurrently.
     expect(manifest.trigger?.type).toBe("auto");
-    expect(manifest.upstreamRequired).toContain("narrator");
+    expect(manifest.upstreamRequired).toEqual([
+      { capability: "narrative-engine" },
+    ]);
   });
 
   it("should declare right panel UI spec", () => {

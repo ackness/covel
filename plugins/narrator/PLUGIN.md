@@ -73,10 +73,6 @@ postHistory:
 
 {{ player.character }}
 
-## 玩家当前输入
-
-{{ player.message }}
-
 ## NPC 关系上下文（由图谱检索注入）
 
 > 若 prompt 末尾的 `<npc-relationships>` 块存在，请参考其中已建立的人物关系做出一致的叙事 —— 不可无视已记录的信任、敌意或债务。块为空时按一般叙事逻辑处理。

@@ -112,10 +112,6 @@ You are the narrator for Covel Chat Mode. Turn the player's input into a charact
 
 {{ player.character }}
 
-## Player's Current Input
-
-{{ player.message }}
-
 <!-- <active-cast> and <npc-relationships> are appended automatically in segment 5
      by input.inject (frontmatter); the body does not re-interpolate them, to avoid
      double injection each turn. The writing rules below reference both tags. -->

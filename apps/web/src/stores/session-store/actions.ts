@@ -557,39 +557,6 @@ export function useBuildSessionActions({
     [dispatch, sessionIdRef],
   );
 
-  const triggerEvent = useCallback(
-    (eventType: string, eventData: Record<string, unknown>) => {
-      if (!canRunSessionAction(state)) return;
-      const sessionId = state.session?.id;
-      if (!sessionId) return;
-
-      dispatch({ type: "SET_EXECUTING", value: true });
-      dispatch({ type: "SET_EXECUTION_ERROR", error: null });
-
-      const fireAction = () => {
-        api.triggerEvent(
-          sessionId,
-          eventType,
-          eventData,
-          i18n.language,
-          handleSseEvent,
-          (err) => {
-            dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
-            finalizeActionExecution(dispatch);
-            resyncSession(sessionId);
-          },
-          () => {
-            finalizeActionExecution(dispatch);
-            resyncSession(sessionId);
-          },
-        );
-      };
-
-      ensureServerThenRun(ds, sessionId, fireAction);
-    },
-    [ds, dispatch, state, handleSseEvent],
-  );
-
   const upsertInteractionDraft = useCallback(
     (draft: PendingInteractionDraft) => {
       dispatch({ type: "UPSERT_DRAFT", draft });
@@ -683,7 +650,6 @@ export function useBuildSessionActions({
       removeWorldLocal,
       loadSessionPlugins,
       toggleSessionPlugin,
-      triggerEvent,
       upsertInteractionDraft,
       removeInteractionDraft,
       clearInteractionDrafts,
@@ -713,7 +679,6 @@ export function useBuildSessionActions({
       removeWorldLocal,
       loadSessionPlugins,
       toggleSessionPlugin,
-      triggerEvent,
       upsertInteractionDraft,
       removeInteractionDraft,
       clearInteractionDrafts,

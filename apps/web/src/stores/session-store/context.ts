@@ -43,7 +43,6 @@ export interface SessionActions {
   removeWorldLocal: (worldId: string) => void;
   loadSessionPlugins: () => Promise<void>;
   toggleSessionPlugin: (pluginId: string, enable: boolean) => Promise<void>;
-  triggerEvent: (eventType: string, eventData: Record<string, unknown>) => void;
   upsertInteractionDraft: (draft: PendingInteractionDraft) => void;
   removeInteractionDraft: (id: string) => void;
   clearInteractionDrafts: () => void;

@@ -74,11 +74,11 @@
 
 `upstreamRequired` 的每一项可以是 **runtime id 字符串**（该 runtime 必须本回合成功，缺席=skip，绝不当作成功），或 **`{ capability: <name> }`**（本回合在场的某个声明该 capability 的 runtime 成功即满足；零个在场提供者=不满足→skip）。capability 形态让一个下游插件按 capability 发现"当前模式的提供者"，无需写死具体插件名 —— 例如 `guide`/`scene-prompts` 用 `{ capability: narrative-engine }` 同时适配 `narrator`（传统模式）与 `chat-mode-narrator`（对话模式）。两个叙事引擎都在 `capabilities` 里声明了 `narrative-engine`。
 
-| 层                  | priority | Runtime                                                                      | 说明                                               |
-| ------------------- | -------- | ---------------------------------------------------------------------------- | -------------------------------------------------- |
-| Narrator-prep       | 400      | `npc-graph/rag-retriever`                                                    | narrator 的依赖上游（function runtime，无 LLM）    |
-| Narrator            | 500      | `narrator`                                                                   | 主叙事生成器                                       |
-| Narrator-downstream | 600      | `guide` · `codex` · `npc-graph/extractor` · `char-creator/character-tracker` | 四者都只依赖 narrator，彼此独立 → **同层并行执行** |
+| 层                  | priority | Runtime                                                                      | 说明                                                                                                    |
+| ------------------- | -------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Narrator-prep       | 400      | `npc-graph/rag-retriever`                                                    | narrator 的依赖上游（function runtime，无 LLM）                                                         |
+| Narrator            | 500      | `narrator`                                                                   | 主叙事生成器                                                                                            |
+| Narrator-downstream | 600      | `guide` · `codex` · `npc-graph/extractor` · `char-creator/character-tracker` | 四者都以 `{ capability: narrative-engine }` 依赖当前模式的叙事引擎（H-04），彼此独立 → **同层并行执行** |
 
 Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.ts` 强制）仍走 priority 串行：`pregame(10) → world-init/schema-gen(40) → char-creator/player-init(50)`。Pre-Game 插件之间存在 world context 依赖（player-init 读取 schema-gen 写出的 `world.schema`）；目前在 DAG 里不表达，所以靠 priority 顺序确保 schema 先生成、再让 player-init 读到。
 
@@ -248,18 +248,19 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 
 ### npc-graph/extractor
 
-| 字段          | 值                                                                           |
-| ------------- | ---------------------------------------------------------------------------- |
-| pluginType    | `plugin`                                                                     |
-| runtimeType   | `agent`（LLM 驱动）                                                          |
-| priority      | 600（Narrator-downstream 层，与 guide / codex / character-tracker 并行执行） |
-| capabilities  | `[npc-graph, relationship-tracking]`                                         |
-| trigger       | `scheduled`，`interval: 1`，`cooldownTurns: 1`                               |
-| input.inject  | `narrator.narrative` → `<narrator-output>`                                   |
-| model slot    | `plugin`                                                                     |
-| tools.plugin  | `upsert-npc-graph`（批量写节点+边）、`list-npc-graph`（列出现有图）          |
-| tools.builtin | `plugin-data-list`、`plugin-data-get`                                        |
-| ui.right      | `./ui/npc-graph-panel.json`                                                  |
+| 字段             | 值                                                                                                        |
+| ---------------- | --------------------------------------------------------------------------------------------------------- |
+| pluginType       | `plugin`                                                                                                  |
+| runtimeType      | `agent`（LLM 驱动）                                                                                       |
+| priority         | 600（Narrator-downstream 层，与 guide / codex / character-tracker 并行执行）                              |
+| capabilities     | `[npc-graph, relationship-tracking]`                                                                      |
+| trigger          | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                            |
+| upstreamRequired | `[{ capability: narrative-engine }]` — 引擎无关（H-04），当前模式的叙事引擎失败时 skip                    |
+| input.inject     | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空） |
+| model slot       | `plugin`                                                                                                  |
+| tools.plugin     | `upsert-npc-graph`（批量写节点+边）、`list-npc-graph`（列出现有图）                                       |
+| tools.builtin    | `plugin-data-list`、`plugin-data-get`                                                                     |
+| ui.right         | `./ui/npc-graph-panel.json`                                                                               |
 
 **职责**: 维护一张会话级的人物-关系图。从叙事文本中抽取 NPC 节点（individual / group / faction）、它们的关系（信任、结盟、欠债、背叛等）以及每条关系的自然语言事实，持久化到 `plugin_data` 的 `nodes`、`edges`、`index`、`meta` 四个 namespace。
 
@@ -299,17 +300,17 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 **路径**: `plugins/codex/`
 
-| 字段         | 值                                                                                                                                            |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| pluginType   | `plugin`（可禁用）                                                                                                                            |
-| priority     | 600（Narrator-downstream 层）                                                                                                                 |
-| runtimeType  | `agent`（默认，LLM 驱动）                                                                                                                     |
-| trigger      | `auto`（每轮触发；`upstreamRequired: [narrator]` 保证在 narrator 失败时 skip，不会用空 `<narrator-output>` 幻觉）                             |
-| model        | `plugin`                                                                                                                                      |
-| tools.plugin | `unlock-codex-entries`, `update-codex-entry`                                                                                                  |
-| ui.right     | `./ui/codex-panel.json`                                                                                                                       |
-| ui.message   | `./ui/codex-message.json`                                                                                                                     |
-| input.inject | `narrator` → `narrativeOutput` → `<narrator-output>`<br>`plugin-data[entries]` → `<existing-entries>`（`format: summary`，`maxEntries: 100`） |
+| 字段         | 值                                                                                                                                                                                                 |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pluginType   | `plugin`（可禁用）                                                                                                                                                                                 |
+| priority     | 600（Narrator-downstream 层）                                                                                                                                                                      |
+| runtimeType  | `agent`（默认，LLM 驱动）                                                                                                                                                                          |
+| trigger      | `auto`（每轮触发；`upstreamRequired: [{ capability: narrative-engine }]` 保证在当前模式的叙事引擎失败时 skip，不会用空 `<narrator-output>` 幻觉）                                                  |
+| model        | `plugin`                                                                                                                                                                                           |
+| tools.plugin | `unlock-codex-entries`, `update-codex-entry`                                                                                                                                                       |
+| ui.right     | `./ui/codex-panel.json`                                                                                                                                                                            |
+| ui.message   | `./ui/codex-message.json`                                                                                                                                                                          |
+| input.inject | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空）<br>`plugin-data[entries]` → `<existing-entries>`（`format: summary`，`maxEntries: 100`） |
 
 **职责**: 分析叙事文本，识别并登记本轮出现的知识条目（地点 / 人物 / 势力 / 物品 / 技能 / 传闻 / 怪物）。对"没有新发现"的回合直接结束。prompt 里同时看到本轮叙事 `<narrator-output>` 和已登记条目 `<existing-entries>`，所以 LLM 一次调用即可决定是 `unlock-codex-entries`（新增）还是 `update-codex-entry`（补充已有），无需额外调用 `plugin-data-list` 往返。
 
@@ -361,15 +362,15 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 ### char-creator/character-tracker
 
-| 字段             | 值                                                                         |
-| ---------------- | -------------------------------------------------------------------------- |
-| pluginType       | `core-plugin`                                                              |
-| priority         | 600（Narrator-downstream 层，与 guide / codex / extractor 并行）           |
-| trigger          | `scheduled`，`interval: 1`，`cooldownTurns: 1`                             |
-| model            | `plugin`                                                                   |
-| tools.builtin    | `create-character`, `update-character`, `list-characters`, `get-character` |
-| input.inject     | `narrator` → `narrativeOutput` → `<narrator-output>`                       |
-| upstreamRequired | `[narrator]` — 框架在 narrator 失败时 skip                                 |
+| 字段             | 值                                                                                                        |
+| ---------------- | --------------------------------------------------------------------------------------------------------- |
+| pluginType       | `core-plugin`                                                                                             |
+| priority         | 600（Narrator-downstream 层，与 guide / codex / extractor 并行）                                          |
+| trigger          | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                            |
+| model            | `plugin`                                                                                                  |
+| tools.builtin    | `create-character`, `update-character`, `list-characters`, `get-character`                                |
+| input.inject     | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空） |
+| upstreamRequired | `[{ capability: narrative-engine }]` — 引擎无关（H-04），当前模式的叙事引擎失败时 skip                    |
 
 **职责**: 每轮扫描 narrator 输出，发现新的有名字 NPC → `create-character(type="npc")`；检测叙事中的角色状态变化（受伤、死亡、装备、关系）→ `update-character(fields: {...})`。工作流：
 

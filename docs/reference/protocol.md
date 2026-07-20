@@ -285,13 +285,16 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 `/api/actions` 接受的 `type` 字段（实际由 `apps/server/src/routes/api/actions.ts:148` 的 `SUPPORTED_ACTIONS` 数组定义）：
 
-| 命令            | 方法 | 端点                                     | 响应                  |
-| --------------- | ---- | ---------------------------------------- | --------------------- |
-| `turn.submit`   | POST | `/api/actions` `type: "send_message"`    | SSE: ProtocolEvent 流 |
-| `turn.cmd`      | POST | `/api/actions` `type: "execute_command"` | SSE: ProtocolEvent 流 |
-| `turn.start`    | POST | `/api/actions` `type: "start_session"`   | SSE: ProtocolEvent 流 |
-| `turn.retry`    | POST | `/api/actions` `type: "retry_runtime"`   | SSE: ProtocolEvent 流 |
-| `event.trigger` | POST | `/api/actions` `type: "trigger_event"`   | SSE: ProtocolEvent 流 |
+| 命令          | 方法 | 端点                                     | 响应                  |
+| ------------- | ---- | ---------------------------------------- | --------------------- |
+| `turn.submit` | POST | `/api/actions` `type: "send_message"`    | SSE: ProtocolEvent 流 |
+| `turn.cmd`    | POST | `/api/actions` `type: "execute_command"` | SSE: ProtocolEvent 流 |
+| `turn.start`  | POST | `/api/actions` `type: "start_session"`   | SSE: ProtocolEvent 流 |
+| `turn.retry`  | POST | `/api/actions` `type: "retry_runtime"`   | SSE: ProtocolEvent 流 |
+
+`retry_runtime` 的 `payload.runtimeId`（可选）把重跑收窄到指定 runtime（走 manual-trigger 路径）；缺省时保持整回合重跑语义。
+
+> **移除（2026-07-20 审计 M-07）**：`type: "trigger_event"` 已删除——其 payload 从未被服务端读取、UI 无调用方，请求效果只是空跑一整回合。插件侧发事件请用 builtin `emit-event` 工具；再发送 `trigger_event` 会得到 400 `Unsupported action type`。
 
 > **注意（audit P2-10）**：旧文档曾写 `type: "player_action"`，那是早期原型，当前实现已用 `send_message` 取代。若客户端仍发送 `player_action`，actions 路由会以 `unknown action type` 返回错误。
 >

@@ -195,6 +195,47 @@ describe("parsePluginMd", () => {
     });
   });
 
+  describe("tools.defer (M-11)", () => {
+    it("accepts defer: true (defer the whole whitelist)", () => {
+      const content = md(
+        [
+          "name: scene-stage",
+          "description: Scene stage",
+          "tools:",
+          "  builtin:",
+          "    - plugin-data-get",
+          "  defer: true",
+        ].join("\n"),
+        "\nBody.\n",
+      );
+
+      const result = parsePluginMd(content, "plugins/scene-stage/PLUGIN.md");
+      expect(result.manifest.tools).toEqual({
+        builtin: ["plugin-data-get"],
+        defer: true,
+      });
+    });
+
+    it("accepts defer: [names] (defer a subset)", () => {
+      const content = md(
+        [
+          "name: scene-stage",
+          "description: Scene stage",
+          "tools:",
+          "  builtin:",
+          "    - plugin-data-get",
+          "    - plugin-data-set",
+          "  defer:",
+          "    - plugin-data-set",
+        ].join("\n"),
+        "\nBody.\n",
+      );
+
+      const result = parsePluginMd(content, "plugins/scene-stage/PLUGIN.md");
+      expect(result.manifest.tools?.defer).toEqual(["plugin-data-set"]);
+    });
+  });
+
   describe("input.inject — plugin-data source", () => {
     it("parses a plugin-data inject with explicit format and maxEntries", () => {
       const content = md(

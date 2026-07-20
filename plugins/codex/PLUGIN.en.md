@@ -7,18 +7,36 @@ description:
   zh: 自动整理新发现的地点、人物、物品和传闻，方便随时回看。
   en: Automatically collects newly discovered places, people, items, and rumors for later review.
 pluginType: plugin
-priority: 650
+# Narrator-downstream layer (see guide for the rationale). Every
+# plugin in this layer shares priority 600 so priority-based fallback
+# scheduling still runs them in parallel.
+priority: 600
 outputKind: system
 model: plugin
 timeoutMs: 120000
+tags:
+  - role:codex
+  - data:lorebook
+  - cost:llm
+  - ui:right-panel
 trigger:
-  type: scheduled
-  interval: 2
-  cooldownTurns: 1
+  type: auto
+# Codex registers discoveries from the latest narrative — skip when the
+# active narrative engine failed, to avoid the LLM hallucinating entries
+# from an empty <narrator-output>. The upstream gate discovers the engine by
+# capability (narrative-engine → narrator in traditional, chat-mode-narrator
+# in dialogue) instead of naming one; the inject lists both known engines and
+# the absent one resolves to nothing.
+upstreamRequired:
+  - capability: narrative-engine
 input:
   inject:
     - kind: runtime
       from: narrator
+      field: narrativeOutput
+      as: "<narrator-output>"
+    - kind: runtime
+      from: chat-mode-narrator
       field: narrativeOutput
       as: "<narrator-output>"
     - kind: plugin-data
@@ -51,7 +69,7 @@ You are the Knowledge Codex Tracker. Your job is to judge whether the current na
 
 ### Current narrative
 
-<narrator-output>{{ inputs.narrator.narrator.narrativeOutput }}</narrator-output>
+This turn's narrative is provided in the `<narrator-output>` block at the end of the prompt (injected automatically by the framework's `input.inject`; the body no longer inlines a second copy).
 
 ### Existing codex entries
 
@@ -153,7 +171,7 @@ A candidate must satisfy **all three** rules:
 
 **Case 3 — no qualifying new discovery → terminate immediately**
 
-Do not call any writer tool. End the turn and return the empty string `""`. A `plugin-data-list` call is still allowed once (flow requirement), but no writes afterwards.
+Do not call any writer tool. End the turn and return the empty string `""`. Existing entries are already provided in the `<existing-entries>` block — no query tool is needed.
 
 ## Hard constraints
 

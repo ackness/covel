@@ -2572,12 +2572,17 @@ id: evt-002
 }
 ```
 
-| `payload` 字段 | 适用 `type`       | 说明                                                 |
-| -------------- | ----------------- | ---------------------------------------------------- |
-| `content`      | `send_message`    | 玩家自然语言输入。`actions.ts` 优先读取此字段。      |
-| `command`      | `execute_command` | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。 |
+支持的 `type`：`send_message` · `execute_command` · `start_session` · `retry_runtime`。
+
+| `payload` 字段 | 适用 `type`       | 说明                                                                                     |
+| -------------- | ----------------- | ---------------------------------------------------------------------------------------- |
+| `content`      | `send_message`    | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                          |
+| `command`      | `execute_command` | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。                                     |
+| `runtimeId`    | `retry_runtime`   | 可选。收窄重跑到指定 runtime（走 manual-trigger 路径）；缺省保持整回合重跑语义（M-07）。 |
 
 > 旧版示例曾使用 `payload.message`，但服务端从未读取该字段，已统一为 `content` / `command`。
+>
+> **移除（2026-07-20 审计 M-07）**：`type: "trigger_event"` 已删除——其 payload 从未被服务端读取、UI 无调用方。插件侧发事件请用 builtin `emit-event` 工具；再发送会得到 400。
 
 **请求头（可选）:**
 
