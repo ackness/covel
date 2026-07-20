@@ -149,11 +149,17 @@ export async function writeImportPlan(options: {
 
   let materialized:
     Awaited<ReturnType<typeof materializeMediaIndexWrites>> | undefined;
+  // Compensation stack filled as each media asset lands, so a failure PART
+  // WAY THROUGH materialization is still cleanable. `materialized` is only
+  // assigned on full success, so relying on it alone leaked every asset put
+  // before the throw.
+  const putMediaRefs: WorldDataImportedMediaRef[] = [];
   try {
     materialized = await materializeMediaIndexWrites({
       mediaStore: options.mediaStore,
       sessionId: options.sessionId,
       writes: selected,
+      onMediaRef: (ref) => putMediaRefs.push(ref),
     });
     const materializedWrites = materialized.writes;
 
@@ -232,7 +238,7 @@ export async function writeImportPlan(options: {
   } catch (err) {
     await cleanupWorldDataMediaRefs({
       mediaStore: options.mediaStore,
-      refs: materialized?.mediaRefs ?? [],
+      refs: materialized?.mediaRefs ?? putMediaRefs,
     });
     throw err;
   }

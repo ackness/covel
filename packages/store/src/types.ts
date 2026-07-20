@@ -170,6 +170,19 @@ export interface RuntimeRecordStore {
     sessionId: string,
     limit?: number,
   ): Promise<TurnResultRecord[]>;
+  /**
+   * Settle a persisted execution artifact's commit outcome.
+   *
+   * `saveTurnResult` writes the row BEFORE proposals commit, so it starts
+   * `pending`. The commit-owning caller marks it `committed` or `failed`;
+   * a row still `pending` afterwards is a crash signature, which is otherwise
+   * indistinguishable from a successful turn. No-op when the turn has no row.
+   */
+  setTurnResultCommitStatus(
+    sessionId: string,
+    turnId: string,
+    status: NonNullable<TurnResultRecord["commitStatus"]>,
+  ): Promise<void>;
 
   // ── Runtime Results ──
   saveRuntimeResult(record: RuntimeResultRecord): Promise<void>;

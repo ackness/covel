@@ -149,12 +149,22 @@ export interface ContextBuildParams {
    */
   readonly summaries?: readonly SummaryRecord[];
   /**
-   * Active runtime manifests considered for segment-9/10 aggregation (S3-T4).
+   * Manifests whose `authorsNote` / `postHistory` feed segments 9 and 10.
    *
-   * The builder scans these manifests for their `authorsNote` and `postHistory` fields
-   * and merges all declarations into the final prompt in `priority` order
-   * (ascending, so earlier priorities render first). When omitted, it falls
-   * back to `[params.manifest]` so a runtime's own notes still apply.
+   * The builder merges every declaration it finds here in `priority` order
+   * (ascending, so earlier priorities render first). When omitted it falls
+   * back to `[params.manifest]`.
+   *
+   * The turn executor deliberately passes ONLY the executing runtime's own
+   * (locale-resolved) manifest, not the session's whole active set.
+   * `postHistory` is a runtime's private working instruction — its tool
+   * workflow, its termination contract — so aggregating across plugins would
+   * put one plugin's internal directives into another plugin's system prompt.
+   * That is a plugin-isolation leak, and it also lets an unrelated plugin's
+   * instructions steer a runtime whose author never opted in. The parameter
+   * stays plural because the builder is generic and a caller that genuinely
+   * wants a curated multi-manifest prompt can supply one; the framework's own
+   * turn path does not.
    */
   readonly activeManifests?: readonly RuntimeManifest[];
   /**

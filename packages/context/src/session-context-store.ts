@@ -75,6 +75,16 @@ export interface SessionContextStore {
     summaryId: string,
   ): Promise<void>;
   addTraceEvent(record: TraceEventRecord): Promise<void>;
+
+  /**
+   * Scoped transaction, when the backing store provides one.
+   *
+   * Optional so the many partial mock stores in tests stay assignable; the
+   * compactor falls back to sequential writes when it is absent. Used to keep
+   * the summary record and its message tags in one commit — an orphan summary
+   * renders as a system message while the untagged history is still injected.
+   */
+  withTransaction?<T>(fn: (tx: SessionContextStore) => Promise<T>): Promise<T>;
 }
 
 // Re-export the local record shapes so existing imports inside

@@ -105,6 +105,10 @@ async function persistTurnResult(
     // auto-snapshot cadence.
     origin: input.origin ?? "player",
     ...(input.parentTurnId ? { parentTurnId: input.parentTurnId } : {}),
+    // Written before the commit runs, so it starts `pending`. The
+    // commit-owning caller settles it — a row left `pending` is a crash, not
+    // a successful turn, and previously the two were indistinguishable.
+    commitStatus: "pending" as const,
     durationMs: turnResult.durationMs,
     createdAt: turnResult.timestamp ?? now,
   });

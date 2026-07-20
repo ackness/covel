@@ -111,6 +111,19 @@ export function createPluginRpcRuntimeTurnRunner(
     // Commit barrier (audit): fire the authoritative
     // turn.completed event and memory ingestion only when every proposal
     // committed and the snapshot succeeded.
+    try {
+      await ctx.store.setTurnResultCommitStatus(
+        ctx.sessionId,
+        turnResult.turnId,
+        failedProposals.length === 0 ? "committed" : "failed",
+      );
+    } catch (err) {
+      console.warn(
+        `[plugin-rpc] failed to settle commitStatus for turn ${turnResult.turnId}:`,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+
     if (failedProposals.length === 0 && !snapshotFailed) {
       turnResult.completeTurn?.();
     }

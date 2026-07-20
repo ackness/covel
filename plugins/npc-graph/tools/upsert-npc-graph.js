@@ -109,6 +109,14 @@ export default function ({ tool, z, shortIdBatch, store }) {
     execute: async (params, context) => {
       const now = new Date().toISOString();
       const currentTurnId = context.turnId ?? "unknown";
+      // Authoritative logical turn (player-message count). These fields used
+      // to be filled from the node COUNT, which measures how much has been
+      // recorded rather than when — so a graph that grew fast looked "old"
+      // and one mentioned repeatedly in a single turn advanced as if turns
+      // had passed. Anything derived from them (relationship decay, recency
+      // ranking) was meaningless. `-1` marks "unknown" for callers outside a
+      // turn rather than silently pretending turn 0.
+      const currentTurn = context.turnNumber ?? -1;
 
       const incomingNodes = params.nodes ?? [];
       const incomingEdges = params.edges ?? [];
@@ -176,7 +184,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
               ...existing.attributes,
               ...incoming.attributes,
             },
-            lastSeenTurn: existing.lastSeenTurn + 1,
+            lastSeenTurn: currentTurn,
           };
           pluginDataWrites.push({
             namespace: "nodes",
@@ -199,8 +207,8 @@ export default function ({ tool, z, shortIdBatch, store }) {
             type: incoming.type,
             labels: (incoming.labels ?? []).slice(0, 5),
             summary: incoming.summary,
-            firstSeenTurn: existingNodeRows.length,
-            lastSeenTurn: existingNodeRows.length,
+            firstSeenTurn: currentTurn,
+            lastSeenTurn: currentTurn,
             attributes: incoming.attributes ?? {},
           };
           pluginDataWrites.push({

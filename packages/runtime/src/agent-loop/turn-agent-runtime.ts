@@ -235,6 +235,9 @@ export async function executeAgentRuntime({
   const toolLoop = await runAgentToolLoop({
     manifest,
     input,
+    ...(sessionMeta?.turnNumber !== undefined
+      ? { turnNumber: sessionMeta.turnNumber }
+      : {}),
     loaded,
     deps,
     maxSteps,

@@ -11,6 +11,7 @@ import { Hono } from "hono";
 import { FrameworkCapability } from "@covel/shared";
 import { errorBody, readJsonBody } from "../../../api-error.js";
 import {
+  WorldDataSyncConflictError,
   syncWorldDataForSession,
   preflightWorldDataForSession,
 } from "../../../world-data/session-import.js";
@@ -97,23 +98,47 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
     return c.json(errorBody("Session world mismatch"), 400);
   }
 
-  const result = await syncWorldDataForSession({
-    store,
-    mediaStore,
-    sessionId,
-    worldId,
-    worldsDirs,
-    covelHome,
-    now: new Date().toISOString(),
-    dryRun: body.dryRun !== false,
-    force: body.force === true,
-    deferMediaFinalize: false,
-    locale: session.locale,
-    preflight: {
-      activePlugins: session.activePlugins ?? [],
-      registry: pluginRegistry,
-    },
-  });
+  const runSyncData = () =>
+    syncWorldDataForSession({
+      store,
+      mediaStore,
+      sessionId,
+      worldId,
+      worldsDirs,
+      covelHome,
+      now: new Date().toISOString(),
+      dryRun: body.dryRun !== false,
+      force: body.force === true,
+      deferMediaFinalize: false,
+      locale: session.locale,
+      preflight: {
+        activePlugins: session.activePlugins ?? [],
+        registry: pluginRegistry,
+      },
+    });
+
+  // Sync rewrites the session's importer-managed rows and compares them
+  // against recorded hashes. Without the session lock a turn can edit a target
+  // between the conflict scan and the apply transaction, and a `force: false`
+  // sync would overwrite an edit it just declared unmodified.
+  const sessionLock = c.get("sessionLock");
+  let result: Awaited<ReturnType<typeof syncWorldDataForSession>>;
+  try {
+    result = sessionLock
+      ? await sessionLock.withLock(sessionId, runSyncData)
+      : await runSyncData();
+  } catch (err) {
+    if (err instanceof WorldDataSyncConflictError) {
+      return c.json(
+        {
+          ...errorBody(err.message),
+          code: err.code,
+        },
+        409,
+      );
+    }
+    throw err;
+  }
 
   return c.json({
     imported: result.imported,
@@ -177,31 +202,43 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
 
   const now = new Date().toISOString();
   const nextKeys = new Set(Object.keys(dimensions));
-  const existingRecords = await store.listPluginData(
-    sessionId,
-    worldDataPluginId,
-    "entries",
-  );
-  const stalePluginDataKeys = existingRecords
-    .filter((record) => !nextKeys.has(record.key))
-    .map((record) => record.key);
-  const records = Object.entries(dimensions).map(([key, value]) => ({
-    id: crypto.randomUUID(),
-    sessionId,
-    pluginId: worldDataPluginId,
-    namespace: "entries",
-    key,
-    value,
-    createdAt: now,
-    updatedAt: now,
-  }));
 
-  for (const key of stalePluginDataKeys) {
-    await store.deletePluginData(sessionId, worldDataPluginId, "entries", key);
-  }
-  await store.setPluginDataBatch(records);
+  // Re-importing dimensions is a four-phase rewrite: delete stale plugin-data
+  // rows, batch-set the new ones, upsert lorebook entries, delete stale
+  // lorebook entries. Run bare, a failure between phases — or a turn
+  // executing concurrently — could observe half the canonical world data
+  // (e.g. entries deleted but not yet rewritten), which feeds straight into
+  // the next prompt. The session lock keeps a turn from interleaving; the
+  // transaction makes the four phases all-or-nothing.
+  const applyDimensionSync = async (
+    s: import("@covel/store").StoreTransaction | typeof store,
+  ): Promise<void> => {
+    const existingRecords = await s.listPluginData(
+      sessionId,
+      worldDataPluginId,
+      "entries",
+    );
+    const stalePluginDataKeys = existingRecords
+      .filter((record) => !nextKeys.has(record.key))
+      .map((record) => record.key);
+    const records = Object.entries(dimensions).map(([key, value]) => ({
+      id: crypto.randomUUID(),
+      sessionId,
+      pluginId: worldDataPluginId,
+      namespace: "entries",
+      key,
+      value,
+      createdAt: now,
+      updatedAt: now,
+    }));
 
-  if (typeof store.upsertLorebookEntries === "function") {
+    for (const key of stalePluginDataKeys) {
+      await s.deletePluginData(sessionId, worldDataPluginId, "entries", key);
+    }
+    await s.setPluginDataBatch(records);
+
+    if (typeof s.upsertLorebookEntries !== "function") return;
+
     const lorebookRecords = Object.entries(dimensions).map(
       ([key, value], idx) => ({
         id: `world-entry:${key}`,
@@ -217,33 +254,58 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
         updatedAt: now,
       }),
     );
-    await store.upsertLorebookEntries(lorebookRecords);
+    await s.upsertLorebookEntries(lorebookRecords);
 
     if (
-      typeof store.listSessionLorebookEntries === "function" &&
-      typeof store.deleteLorebookEntry === "function"
+      typeof s.listSessionLorebookEntries !== "function" ||
+      typeof s.deleteLorebookEntry !== "function"
     ) {
-      const staleLorebookEntries = (
-        await store.listSessionLorebookEntries(sessionId)
-      ).filter((entry) => {
-        if (
-          entry.pluginId !== worldDataPluginId ||
-          entry.strategy !== "constant"
-        )
-          return false;
-        if (!entry.id.startsWith("world-entry:")) return false;
-        const key = entry.keys[0] ?? entry.id.slice("world-entry:".length);
-        return !nextKeys.has(key);
-      });
-      for (const entry of staleLorebookEntries) {
-        await store.deleteLorebookEntry(sessionId, entry.id);
-      }
+      return;
     }
+    const staleLorebookEntries = (
+      await s.listSessionLorebookEntries(sessionId)
+    ).filter((entry) => {
+      if (entry.pluginId !== worldDataPluginId || entry.strategy !== "constant")
+        return false;
+      if (!entry.id.startsWith("world-entry:")) return false;
+      const key = entry.keys[0] ?? entry.id.slice("world-entry:".length);
+      return !nextKeys.has(key);
+    });
+    for (const entry of staleLorebookEntries) {
+      await s.deleteLorebookEntry(sessionId, entry.id);
+    }
+  };
+
+  const runSync = async (): Promise<void> => {
+    if (typeof store.withTransaction === "function") {
+      await store.withTransaction(applyDimensionSync);
+      return;
+    }
+    await applyDimensionSync(store);
+  };
+
+  const sessionLock = c.get("sessionLock");
+  try {
+    if (sessionLock) {
+      await sessionLock.withLock(sessionId, runSync);
+    } else {
+      await runSync();
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[sync-dimensions] failed for session ${sessionId} (world ${id}):`,
+      err,
+    );
+    return c.json(
+      errorBody(`Dimension sync failed and was rolled back: ${message}`),
+      500,
+    );
   }
 
   return c.json({
     success: true,
     syncedKeys: Object.keys(dimensions),
-    entryCount: records.length,
+    entryCount: Object.keys(dimensions).length,
   });
 });

@@ -22,6 +22,7 @@ export interface TurnResultRow {
   /** Execution origin; NULL on rows written before the column existed. */
   origin: string | null;
   parentTurnId: string | null;
+  commitStatus: string | null;
   durationMs: number;
   createdAt: string;
 }
@@ -84,6 +85,7 @@ export interface InteractionRow {
 }
 
 const TURN_ORIGINS = new Set(["player", "manual", "follower", "recursive"]);
+const COMMIT_STATUSES = new Set(["pending", "committed", "failed"]);
 
 export function toTurnResultRecord(
   row: TurnResultRow,
@@ -100,6 +102,9 @@ export function toTurnResultRecord(
       ? { origin: row.origin as TurnResultRecord["origin"] }
       : {}),
     ...(row.parentTurnId ? { parentTurnId: row.parentTurnId } : {}),
+    ...(row.commitStatus && COMMIT_STATUSES.has(row.commitStatus)
+      ? { commitStatus: row.commitStatus as TurnResultRecord["commitStatus"] }
+      : {}),
     durationMs: row.durationMs,
     createdAt: row.createdAt,
   };

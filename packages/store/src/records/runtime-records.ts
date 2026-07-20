@@ -21,6 +21,17 @@ export interface TurnResultRecord {
   readonly origin?: "player" | "manual" | "follower" | "recursive";
   /** Parent turnId for `recursive` executions whose delta overrode turnId. */
   readonly parentTurnId?: string;
+  /**
+   * Whether this execution's proposals were committed.
+   *
+   * The row is written BEFORE commit — it is an execution artifact, not proof
+   * of committed game state — so a row with no completion is the expected
+   * crash signature. Without this field a crash is indistinguishable from a
+   * turn whose commit failed, and both look like a successful turn to anyone
+   * reading the table. `pending` is the pre-commit state; the commit-owning
+   * caller settles it. Absent on rows written before the column existed.
+   */
+  readonly commitStatus?: "pending" | "committed" | "failed";
   readonly durationMs: number;
   readonly createdAt: string;
 }

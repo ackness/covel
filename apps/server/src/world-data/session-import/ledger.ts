@@ -105,7 +105,12 @@ export function ledgerKey(ledger: WorldDataImportLedgerRecord): string {
 }
 
 export async function currentHashForLedger(options: {
-  store: DataStore;
+  // Reads only — accepts a transaction-bound view as well as the full store,
+  // so the apply transaction can re-verify hashes before overwriting.
+  store: Pick<
+    DataStore,
+    "getPluginData" | "listCharacters" | "listSessionLorebookEntries"
+  >;
   sessionId: string;
   ledger: WorldDataImportLedgerRecord;
 }): Promise<string | null> {

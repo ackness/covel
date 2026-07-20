@@ -72,6 +72,8 @@ export interface AgentToolLoopInitialState {
 export interface RunAgentToolLoopOptions {
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
+  /** Authoritative logical turn number, forwarded into ToolCallContext. */
+  readonly turnNumber?: number;
   readonly loaded: LoadedRuntime;
   readonly deps: AgentLoopDeps;
   readonly maxSteps: number;
@@ -93,6 +95,7 @@ export interface RunAgentToolLoopOptions {
 export async function runAgentToolLoop({
   manifest,
   input,
+  turnNumber,
   loaded,
   deps,
   maxSteps,
@@ -355,6 +358,7 @@ export async function runAgentToolLoop({
               pendingProposals: pendingProposals,
               emittedEventTopics: emittedEvents.map((e) => e.topic),
               emitter: deps.emitter,
+              ...(turnNumber !== undefined ? { turnNumber } : {}),
               // Execution is bounded by the runtime's declared surface,
               // checked AFTER PreToolUse replacement produced effectiveTc.
               authorizedToolNames,

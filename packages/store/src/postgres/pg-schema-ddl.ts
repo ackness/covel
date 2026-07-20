@@ -70,6 +70,7 @@ const SESSIONS_MIGRATIONS_SQL = `
   ALTER TABLE sessions ADD COLUMN IF NOT EXISTS metadata JSONB;
   ALTER TABLE turn_results ADD COLUMN IF NOT EXISTS origin TEXT;
   ALTER TABLE turn_results ADD COLUMN IF NOT EXISTS parent_turn_id TEXT;
+  ALTER TABLE turn_results ADD COLUMN IF NOT EXISTS commit_status TEXT;
 `;
 
 /**

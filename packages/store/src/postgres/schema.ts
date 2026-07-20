@@ -80,6 +80,7 @@ export const turnResults = pgTable(
     // turn for recursive executions. NULL on legacy rows (= player).
     origin: text("origin"),
     parentTurnId: text("parent_turn_id"),
+    commitStatus: text("commit_status"),
     durationMs: integer("duration_ms").notNull(),
     createdAt: text("created_at").notNull(),
   },

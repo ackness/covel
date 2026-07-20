@@ -278,6 +278,7 @@ Each SQL backend keeps a thin public factory plus focused method modules:
 27 tables via Drizzle; authoritative list in `packages/store/src/{sqlite,postgres}/schema.ts`, transactions contract in [docs/reference/transactions.md](./docs/reference/transactions.md).
 
 - **`sessions.runtime_model_overrides`** — JSONB map of `runtimeId → slot name`, snapshotted into `TurnInput` each turn and consulted by `runtime-slot-resolver` before `manifest.model` / gateway default. Keys still flow via `X-Provider-Keys` + localStorage.
+- **`turn_results.commit_status`** — `pending` when the execution artifact is persisted (before proposals commit), settled to `committed` / `failed` by the commit-owning caller. A row still `pending` is a crash signature, not a successful turn.
 - **JSONB writes**: use `sql.json(value as JSONValue)` — **never** `JSON.stringify()` (double-serialisation bug).
 
 ## Server Bootstrap

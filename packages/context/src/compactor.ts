@@ -349,11 +349,30 @@ export async function maybeCompact(
     createdAt: now,
   };
 
-  await deps.store.saveSessionSummary(summaryRecord);
-
-  // 5. Tag the compacted messages
+  // 5. Persist the summary AND tag the compacted messages atomically.
+  //
+  // These two writes are one logical operation. Saving the summary without
+  // tagging leaves an orphan: `message-insertion.ts` renders the summary as a
+  // system message while the original history is still untagged and therefore
+  // still injected — the same content twice, with the summary carrying system
+  // authority. Tagging without a summary is worse: the history is hidden with
+  // nothing standing in for it.
   const messageIds = toCompact.map((m) => m.id);
-  await deps.store.tagTurnMessagesCompacted(sessionId, messageIds, summaryId);
+  const persistCompaction = async (
+    store: Pick<
+      typeof deps.store,
+      "saveSessionSummary" | "tagTurnMessagesCompacted"
+    >,
+  ): Promise<void> => {
+    await store.saveSessionSummary(summaryRecord);
+    await store.tagTurnMessagesCompacted(sessionId, messageIds, summaryId);
+  };
+
+  if (typeof deps.store.withTransaction === "function") {
+    await deps.store.withTransaction(persistCompaction);
+  } else {
+    await persistCompaction(deps.store);
+  }
 
   // 6. Emit trace event
   try {

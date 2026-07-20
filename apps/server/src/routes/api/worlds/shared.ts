@@ -9,6 +9,7 @@ import type { DataStore, MediaStore } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { errorBody, type ApiErrorResponse } from "../../../api-error.js";
+import type { SessionLock } from "../../../lib/session-lock.js";
 
 export type WorldEnv = {
   Variables: {
@@ -18,6 +19,11 @@ export type WorldEnv = {
     mediaStore?: MediaStore;
     worldsDirs?: readonly string[];
     covelHome?: string;
+    /**
+     * Optional so bare test harnesses that mount these routes directly keep
+     * working; production always injects it via the bootstrap middleware.
+     */
+    sessionLock?: SessionLock;
   };
 };
 

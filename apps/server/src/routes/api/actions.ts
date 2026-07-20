@@ -140,7 +140,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   }
   const { requestId, type, sessionId, locale, model, payload } = body;
 
-  // `trigger_event` was removed : its payload was never read and no UI
+  // `trigger_event` was removed: its payload was never read and no UI
   // called it — the request just re-ran a full turn. Emitting kernel events
   // belongs to plugins via the builtin `emit-event` tool.
   const SUPPORTED_ACTIONS = [
@@ -684,6 +684,22 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // succeeded. A partial commit or snapshot failure leaves the turn
           // visibly incomplete instead of reporting success over missing
           // state; the player retries or resumes from the last good snapshot.
+          // Settle the execution artifact's commit outcome. A row left
+          // `pending` means the process died between persisting it and
+          // getting here — a crash, not a completed turn.
+          try {
+            await store.setTurnResultCommitStatus(
+              sessionId,
+              turnId,
+              commitFailureCount === 0 ? "committed" : "failed",
+            );
+          } catch (err) {
+            console.warn(
+              `[actions] failed to settle commitStatus for turn ${turnId}:`,
+              err instanceof Error ? err.message : String(err),
+            );
+          }
+
           if (commitFailureCount === 0 && !snapshotFailed) {
             result.completeTurn?.();
           }

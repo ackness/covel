@@ -85,6 +85,9 @@ function applySessionColumnMigrations(sqlite: Database.Database): void {
   if (!trColNames.has("parent_turn_id")) {
     sqlite.exec("ALTER TABLE turn_results ADD COLUMN parent_turn_id TEXT");
   }
+  if (!trColNames.has("commit_status")) {
+    sqlite.exec("ALTER TABLE turn_results ADD COLUMN commit_status TEXT");
+  }
 }
 
 export function createTables(sqlite: Database.Database): void {

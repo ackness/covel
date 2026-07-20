@@ -211,6 +211,16 @@ export async function preflightWorldDataForSession(
   };
 }
 
+/**
+ * Raised when a target's hash moved between the conflict scan and the apply
+ * transaction. Surfaces as a 409 rather than a 500: the caller can re-run the
+ * sync (the fresh scan will report the edit as a normal conflict) or pass
+ * `force`.
+ */
+export class WorldDataSyncConflictError extends Error {
+  readonly code = "world_data_sync_conflict";
+}
+
 export async function syncWorldDataForSession(
   options: SyncWorldDataForSessionOptions,
 ): Promise<SyncWorldDataForSessionResult> {
@@ -414,6 +424,30 @@ export async function syncWorldDataForSession(
     // so the catch below can still clean up media written before the failure
     // (media files live outside the DB transaction).
     await options.store.withTransaction!(async (tx) => {
+      // Compare-and-swap. The conflict scan above ran BEFORE this transaction
+      // opened, so anything it declared unmodified could have been edited in
+      // between — by a turn, or by another HTTP writer — and a `force: false`
+      // sync would then silently overwrite that edit. Re-read each target's
+      // hash inside the transaction and abort the whole thing if it moved.
+      // The caller's session lock closes the turn-interleave window; this
+      // closes the rest.
+      if (!options.force) {
+        for (const ledger of [...ledgersToDelete]) {
+          const freshHash = await currentHashForLedger({
+            store: tx,
+            sessionId: options.sessionId,
+            ledger,
+          });
+          // `null` means the target is already gone — deleting it is still the
+          // right outcome, and the pre-scan reached the same conclusion.
+          if (freshHash !== null && freshHash !== ledger.valueHash) {
+            throw new WorldDataSyncConflictError(
+              `world-data sync aborted: "${ledgerKey(ledger)}" changed after the conflict check`,
+            );
+          }
+        }
+      }
+
       for (const ledger of ledgersToDelete) {
         await deleteLedgerTarget({
           store: tx,

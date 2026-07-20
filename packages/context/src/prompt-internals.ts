@@ -485,7 +485,12 @@ export function buildFrameworkPreamble(
     "[RUNTIME] You are executing an in-game runtime for an interactive narrative engine.",
     "[RUNTIME] Follow the runtime instructions and world data below as the complete task context.",
     "[RUNTIME] Produce only in-world narrative, structured runtime output, and required tool calls.",
-    `[LANGUAGE] You MUST respond in ${languageName}. All narrative output, tool parameters, and descriptions must be in ${languageName}.`,
+    // Scope the language rule to natural-language content only. The old
+    // wording covered "tool parameters" wholesale, which invited the model to
+    // translate enum members, plugin/runtime ids, event topics and schema
+    // keys — every one of which then fails Zod validation or dispatch.
+    `[LANGUAGE] You MUST write all natural-language content in ${languageName}: narrative, descriptions, summaries, and any free-text tool argument.`,
+    "[LANGUAGE] Do NOT translate machine values. Enum members, ids, keys, event topics, schema field names, and tool names must be copied EXACTLY as the schema spells them, in their original language.",
     ...completion,
   ].join("\n");
 }

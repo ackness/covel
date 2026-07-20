@@ -15,6 +15,15 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       state.turnResults.push(record);
     },
 
+    async setTurnResultCommitStatus(sessionId, turnId, status) {
+      for (let i = 0; i < state.turnResults.length; i += 1) {
+        const row = state.turnResults[i]!;
+        if (row.sessionId === sessionId && row.turnId === turnId) {
+          state.turnResults[i] = { ...row, commitStatus: status };
+        }
+      }
+    },
+
     async listTurnResults(sessionId, limit?) {
       const filtered = state.turnResults
         .filter((r) => r.sessionId === sessionId)

@@ -68,6 +68,7 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   deleteSession: ALL_SNAPSHOT_KEYS, // cascades across every session-scoped collection
   // runtime records
   saveTurnResult: ["turnResults"],
+  setTurnResultCommitStatus: ["turnResults"],
   saveRuntimeResult: ["runtimeResults"],
   saveToolCall: ["toolCalls"],
   saveStateSchema: ["stateSchemas"],

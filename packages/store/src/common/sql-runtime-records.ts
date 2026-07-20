@@ -90,6 +90,7 @@ export type SqlRuntimeRecords = Pick<
   DataStore,
   | "saveTurnResult"
   | "listTurnResults"
+  | "setTurnResultCommitStatus"
   | "saveRuntimeResult"
   | "listRuntimeResults"
   | "saveToolCall"
@@ -128,6 +129,21 @@ export function createSqlRuntimeRecords(
         limit,
       });
       return rows.map((row) => toTurnResultRecord(row, json));
+    },
+
+    async setTurnResultCommitStatus(
+      sessionId: string,
+      turnId: string,
+      status: NonNullable<TurnResultRecord["commitStatus"]>,
+    ): Promise<void> {
+      await runner.update(
+        turnResults,
+        { commitStatus: status },
+        and(
+          eq(turnResults.sessionId, sessionId),
+          eq(turnResults.turnId, turnId),
+        )!,
+      );
     },
 
     async saveRuntimeResult(record: RuntimeResultRecord): Promise<void> {

@@ -207,6 +207,7 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         auditResult: json.writeNullableJson(record.auditResult),
         origin: record.origin ?? null,
         parentTurnId: record.parentTurnId ?? null,
+        commitStatus: record.commitStatus ?? null,
         durationMs: record.durationMs,
         createdAt: record.createdAt,
       };
