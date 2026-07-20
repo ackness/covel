@@ -57,15 +57,20 @@ export async function discoverAndRegisterPlugins(
           console.warn(`[bootstrap] ${diagnostic.message}`);
         }
         // Tool access and plugin-data are keyed by the directory name
-        // (discovery.id), but findTool looks up by the frontmatter-derived
-        // manifest.pluginId. The install path enforces the two match
-        // (validatePluginBundle); bundled discovery has no such gate, and a
-        // mismatch silently denies the plugin its own local tools.
+        // (discovery.id), but findTool, the store, proposals, hooks and trust
+        // checks all use the frontmatter-derived manifest.pluginId. A
+        // mismatch splits the plugin's identity in two — the install path
+        // enforces equality (validatePluginBundle), and since the 2026-07-20
+        // audit (C-01) discovery enforces it too: registering under a forged
+        // frontmatter name would let a directory impersonate another plugin's
+        // (including a builtin's) store namespace and trust tier. Hard-fail
+        // the plugin (it registers as `status: "error"` below) instead of
+        // warn-and-continue.
         if (parsed.manifest.pluginId !== discovery.id) {
-          console.warn(
-            `[bootstrap] Plugin "${discovery.id}": frontmatter name root "${parsed.manifest.pluginId}" ` +
-              `does not match the plugin directory name "${discovery.id}". Local tools and plugin-data ` +
-              "are keyed by the directory name, so this runtime's own local tools will be denied — rename one to match.",
+          throw new Error(
+            `plugin identity mismatch: frontmatter name root "${parsed.manifest.pluginId}" ` +
+              `does not match the plugin directory name "${discovery.id}" — ` +
+              "rename one to match; the plugin was not registered",
           );
         }
       }

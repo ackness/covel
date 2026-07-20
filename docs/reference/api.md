@@ -271,6 +271,8 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | POST | `/api/install/plugin` | multipart 字段 `file`：接受根级 `PLUGIN.md`+`package.json` 或多 runtime 布局的 `.zip`，解压到用户插件目录，返回 `{ ok, id, restartRequired:true }` |
 | POST | `/api/install/world`  | multipart 字段 `file`：接受根级 `world.yaml`+`WORLD.md` 的 `.zip`，解压到用户世界目录，返回 `{ ok, id, restartRequired:false }`                    |
 
+> **canonical 插件身份（2026-07-20 审计 C-01）**：插件的唯一身份是 manifest 根 `name`（= 运行期 `pluginId`）。`package.json` basename 仅在剥离精确 `plugin-` 前缀后参与一致性校验（`@covel/plugin-foo` ↔ `name: foo`），不一致返回 400。reserved-builtin 检查、安装目录、返回的 `id` 全部使用 canonical ID——`@covel/plugin-narrator` + `name: narrator` 会命中 reserved 返回 409（旧实现只查未剥离的 npm basename，可被 scoped 包绕过冒充 builtin 身份）。启动 discovery 同样硬性校验目录名 == manifest 根 name，不一致的插件注册为 `status: "error"`、不加载任何 runtime/tool/hook/wire。
+
 ### 状态查询
 
 | 方法 | 路径                               | 描述                                        |
@@ -1475,6 +1477,8 @@ value         : {
 > 注意: background 模式下 runtime 内部异常 **不会**映射为 5xx HTTP 状态 —— 202 已经发出,失败信息写入 `_jobs/{jobId}.value.error`,前端通过 SSE 感知。
 
 > **community 插件 + `entry` action 的延迟激活**：首次调用时 action 声明尚未注册，服务端先返回固定 `action: "covel:plugin-server-code"` 的全模块审批，避免由调用方伪造的 action label 诱导加载代码。session-scope 审批后加载 entry 并验证 action：不存在立即 404；存在则再返回该真实 action 的独立审批。客户端应处理这两个连续的 `approval-required` 响应，并为审批重试设置两阶段上限。hosted 层级两个步骤都要求 operator token。builtin/official 的 entry 在 boot 时已运行，其未知 action 直接 404。
+>
+> **community 插件 + `runtimeId`（runtime 模式）同样两阶段（2026-07-20 审计 H-01）**：缺少 server-code grant 时第一次调用先返回 `covel:plugin-server-code` 审批；批准后重试返回 `runtime:<runtimeId>` 审批；两个**精确** grant 同时存在 runtime 才会加载执行（runtime loader 要求 AND，不再是任一 grant 即可）。entry import 也只认精确 `covel:plugin-server-code` grant——任意其他 action grant 不再解锁模块加载（`hasGrant` 已改为精确匹配、action 必填）。revoke 按 `(session, plugin)` 前缀清除两类 grant，语义不变。
 
 **插件 PLUGIN.md 中声明 RPC action:**
 

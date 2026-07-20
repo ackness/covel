@@ -196,14 +196,20 @@ export interface PreSchedulePayload {
 /**
  * Observe / filter the set of runtimes scheduled this turn (after trigger
  * selection, before scheduling). Handlers may return `replace.triggered` to
- * narrow the set (e.g. conditional gating, cost control). Returning a runtime
- * not in the original set is the author's responsibility — the framework uses
- * the returned list as-is, consistent with other `replace`-based hooks.
+ * narrow the set (e.g. conditional gating, cost control).
  *
- * Filter-only: only `replace.triggered` is honoured. `abort` has no defined
- * meaning for PreSchedule and is treated as "no change" — the original
- * `triggered` set runs. To schedule no runtimes, return
- * `replace: { triggered: [] }`, not `abort`.
+ * Strictly filter-only (H-03): the returned list is reconciled against the
+ * ORIGINAL `triggered` set by stable runtime identity (`manifest.name`) and
+ * the framework re-uses the original manifest objects. A hook can therefore
+ * drop or reorder runtimes but can never inject a manifest that was not
+ * selected, nor swap a selected runtime's manifest for a mutated copy —
+ * downstream trust decisions and the runtime loader key off manifest fields
+ * (`pluginId`, `pluginType`), which a fabricated manifest could forge to run
+ * community handlers with builtin identity.
+ *
+ * `abort` has no defined meaning for PreSchedule and is treated as "no
+ * change" — the original `triggered` set runs. To schedule no runtimes,
+ * return `replace: { triggered: [] }`, not `abort`.
  */
 export async function runPreScheduleHook(
   opts: BaseOpts,
@@ -213,7 +219,25 @@ export async function runPreScheduleHook(
   // `?? payload.triggered` covers both the no-pipeline path and the
   // `abort`/continue-without-replace paths. An explicit `replace: { triggered:
   // [] }` correctly returns the empty array (nullish, not falsy, coalescing).
-  return hookReplace(result)?.triggered ?? payload.triggered;
+  const replaced = hookReplace(result)?.triggered;
+  if (!replaced) return payload.triggered;
+
+  const originalByName = new Map(payload.triggered.map((m) => [m.name, m]));
+  const filtered: RuntimeManifest[] = [];
+  const seen = new Set<string>();
+  for (const candidate of replaced) {
+    const original = originalByName.get(candidate?.name);
+    if (!original) {
+      console.warn(
+        `[hooks] PreSchedule replacement injected runtime "${candidate?.name}" not in the triggered set — dropped (filter-only contract)`,
+      );
+      continue;
+    }
+    if (seen.has(original.name)) continue;
+    seen.add(original.name);
+    filtered.push(original);
+  }
+  return filtered;
 }
 
 // ── PreRuntime ───────────────────────────────────────────────────

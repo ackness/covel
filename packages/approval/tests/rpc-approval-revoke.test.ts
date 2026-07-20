@@ -70,14 +70,22 @@ describe("gate.revoke (PR-7 — withdraw community grants mid-session)", () => {
     const gate = createRpcApprovalGate();
     grantOnce(gate, "sess-1", "p", "covel:plugin-server-code");
 
-    expect(gate.hasGrant("sess-1", "p")).toBe(true);
     expect(gate.hasGrant("sess-1", "p", "covel:plugin-server-code")).toBe(true);
-    expect(gate.hasGrant("sess-2", "p")).toBe(false);
+    expect(gate.hasGrant("sess-2", "p", "covel:plugin-server-code")).toBe(
+      false,
+    );
+    // H-01: hasGrant is exact-action only — a live grant for one action never
+    // satisfies a query for a different action (the old optional-action form
+    // matched any grant by prefix, collapsing the two-phase approval).
+    expect(gate.hasGrant("sess-1", "p", "some-other-action")).toBe(false);
+    expect(gate.hasGrant("sess-1", "p", "runtime:x")).toBe(false);
 
     expect(isAllowed(gate, "sess-1", "p", "covel:plugin-server-code")).toBe(
       true,
     );
-    expect(gate.hasGrant("sess-1", "p")).toBe(false);
+    expect(gate.hasGrant("sess-1", "p", "covel:plugin-server-code")).toBe(
+      false,
+    );
   });
 
   it("clears a session-cached grant so the next call re-prompts", () => {

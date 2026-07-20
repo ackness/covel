@@ -27,6 +27,7 @@ import type { ApprovalStatus, Proposal } from "@covel/shared";
 type ToolErrorCode =
   | "NOT_FOUND"
   | "DENIED"
+  | "UNAUTHORIZED"
   | "INVALID_ARGS"
   | "VALIDATION_ERROR"
   | "EXECUTION_ERROR";
@@ -63,6 +64,15 @@ export interface ToolCallContext {
   readonly emittedEventTopics?: readonly string[];
   /** Optional trace emitter — when present, tool.calling / tool.completed / tool.failed are traced. */
   readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
+  /**
+   * The calling runtime's exact tool authorization set (declared whitelist +
+   * framework contract tools). When present, `execute` rejects any call whose
+   * name is outside the set BEFORE resolution/approval — the advertisement
+   * list alone is not an authorization boundary (2026-07-20 audit H-02: a
+   * prompt-injected or hook-rewritten name used to reach any builtin, or any
+   * local tool of a sibling runtime in the same plugin).
+   */
+  readonly authorizedToolNames?: ReadonlySet<string>;
 }
 
 export interface ToolCallResult {
@@ -218,6 +228,46 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
       context: ToolCallContext,
     ): Promise<ToolCallResult> {
       const startTime = Date.now();
+
+      // 0. Runtime-level authorization (H-02). Enforced at the execution
+      // boundary — after session overrides and PreToolUse replacement have
+      // already produced the final name — so a rewritten or hallucinated
+      // name cannot escape the calling runtime's declared surface.
+      if (
+        context.authorizedToolNames &&
+        !context.authorizedToolNames.has(call.name)
+      ) {
+        const errorResult = toolError(
+          "UNAUTHORIZED",
+          `Tool "${call.name}" is not declared by runtime "${context.runtimeId}". Only declared tools may be called.`,
+        );
+        await recordCall(
+          config.store,
+          call,
+          context,
+          errorResult,
+          startTime,
+          false,
+          "auto-allowed",
+        );
+        await emitToolFailed(
+          context,
+          call,
+          "UNAUTHORIZED",
+          `tool not declared by runtime ${context.runtimeId}`,
+          undefined,
+          Date.now() - startTime,
+          "auto-allowed",
+        );
+        return {
+          toolCallId: call.toolCallId,
+          name: call.name,
+          result: errorResult,
+          parsedResult: null,
+          success: false,
+          approvalStatus: "auto-allowed" as const,
+        };
+      }
 
       // 1. Resolve tool module (scoped to calling plugin if context available)
       const tool = resolveToolModule(config, call.name, context);

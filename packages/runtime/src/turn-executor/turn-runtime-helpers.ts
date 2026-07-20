@@ -36,13 +36,22 @@ export function emitSubEvent(
   });
 }
 
+/**
+ * Trust is derived EXCLUSIVELY from the immutable discovery registry
+ * (`getPluginSource` — set from the plugin's load path at boot, never from
+ * plugin-supplied data). The old fallback trusted the manifest's own
+ * `pluginType === "core-plugin"` claim, which is author-supplied and was
+ * reachable with a forged manifest — handing untrusted code the full
+ * un-scoped DataStore (2026-07-20 audit H-03/R-07). No registry answer ⇒
+ * NOT trusted; callers without a `getPluginSource` dep get the scoped
+ * capability view, which is the safe default.
+ */
 export function isTrustedPluginSource(
   deps: PluginSourceDeps,
   manifest: RuntimeManifest,
 ): boolean {
   const source = deps.getPluginSource?.(manifest.pluginId);
-  if (source) return source === "builtin" || source === "official";
-  return manifest.pluginType === "core-plugin";
+  return source === "builtin" || source === "official";
 }
 
 export function createAssetProgressEmitter(

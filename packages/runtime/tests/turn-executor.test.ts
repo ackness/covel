@@ -843,7 +843,13 @@ describe("TurnExecutor _interaction protocol", () => {
     const discoveries = await discoverPlugins(PLUGINS_DIR);
     const charDiscovery = discoveries.find((d) => d.id === "char-creator")!;
     const charManifests = await loadPluginManifest(charDiscovery);
-    const charManifest = charManifests[0].manifest;
+    // player-init is the runtime that declares `create-form`. Picking
+    // `charManifests[0]` used to grab character-tracker instead, and the
+    // test only passed because pre-H-02 the executor let any runtime call
+    // any builtin regardless of its declaration.
+    const charManifest = charManifests.find(
+      (m) => m.manifest.name === "char-creator/player-init",
+    )!.manifest;
     const charLoaded = await loadRuntime(charDiscovery, charManifest.name);
 
     // MockLLM that calls create-form (which now returns _interaction)

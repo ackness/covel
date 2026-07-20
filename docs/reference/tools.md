@@ -658,7 +658,9 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 ## ToolClient
 
-工具执行统一经过 `ToolClient`。`ToolExecutor` 通过注入的 `findTool(name, context)` 解析出 `ToolModule`，再用 `InMemoryToolClient` 包裹后调用 `client.call(name, args, ctx)` —— 内置工具和插件本地工具都走这条内存内路径，审批、trace、结果 envelope 由 `ToolExecutor` 统一处理。
+工具执行统一经过 `ToolExecutor`：通过注入的 `findTool(name, context)` 解析出 `ToolModule` 后直接调用 `module.execute(args, ctx)` —— 内置工具和插件本地工具都走这条内存内路径，审批、trace、结果 envelope 由 `ToolExecutor` 统一处理。
+
+**执行端授权（2026-07-20 审计 H-02）**：工具白名单不再只是 LLM 广告面。agent loop 把当前 runtime 的精确授权集（`tools.*` 声明的全部名字 + 非 schema runtime 的 `runtime-done` 框架合同工具；`defer` 名单包含在内——延迟只影响广告、不影响授权）随 `ToolCallContext.authorizedToolNames` 传给 executor，`execute` 在解析/审批之前先校验最终工具名（session override 与 `PreToolUse` 替换之后的名字）∈ 授权集，越界返回 `UNAUTHORIZED` 结构化错误。`search-tools` 在 loop 内被拦截、不达 executor。另外 `findTool` 对缺失 context 的调用 fail-closed：无 context 只能解析 builtin，local 工具一律拒绝。
 
 接口位于 `@covel/tools`：
 

@@ -71,14 +71,13 @@ function manifestRootId(name: string): string {
 }
 
 /**
- * Accept either exact equality or the Covel convention where `package.json`
- * uses `@covel/plugin-<id>` (basename: `plugin-<id>`) and `PLUGIN.md` declares
- * `name: <id>`. Both should map to the same logical plugin identity.
+ * Canonical plugin ID for an npm basename: the Covel convention names the
+ * package `@covel/plugin-<id>` while `PLUGIN.md` declares `name: <id>`, so a
+ * single exact `plugin-` prefix is stripped for identity comparison. Nothing
+ * else is normalized — the runtime identity IS the manifest root name.
  */
-function pluginIdsConsistent(pkgId: string, manifestRoot: string): boolean {
-  if (pkgId === manifestRoot) return true;
-  if (pkgId === `plugin-${manifestRoot}`) return true;
-  return false;
+function canonicalFromPackageId(pkgId: string): string {
+  return pkgId.startsWith("plugin-") ? pkgId.slice("plugin-".length) : pkgId;
 }
 
 function validatePluginBundle(
@@ -95,18 +94,6 @@ function validatePluginBundle(
       `invalid plugin id derived from package.json: ${pkgId}`,
     );
   }
-  // Reserve builtin plugin IDs — third-party installs cannot shadow a shipped
-  // plugin's `plugin_data` namespace by claiming the same name. The reserved
-  // set is derived at boot from the discovered bundled plugins (via
-  // `deriveBuiltinPluginIds` in `@covel/plugin-loader`) and injected on the
-  // request context, so it tracks the `plugins/` directory automatically.
-  const pkgRoot = manifestRootId(pkgId);
-  if (reservedPluginIds.has(pkgRoot)) {
-    throw httpError(
-      409,
-      `plugin id "${pkgRoot}" is reserved for a builtin plugin`,
-    );
-  }
 
   const manifestEntry = findPluginManifestEntry(entries);
   if (!manifestEntry) {
@@ -116,11 +103,29 @@ function validatePluginBundle(
     );
   }
 
-  // Validate every PLUGIN.md we find — multi-runtime layouts must all be valid —
-  // AND enforce that each manifest's root `name` is consistent with the package.json id.
-  // Without this check a bundle could install into dir `plugin-innocent` while
-  // declaring `name: narrator`, which the loader would then treat as the
-  // real narrator and collide with its plugin-data namespace.
+  // Single canonical identity (C-01): the runtime, store, proposals, hooks and
+  // trust checks all key on the manifest root name — so THAT is the identity
+  // the reserved-ID check, install dir, and API response must use. The
+  // package.json basename only participates as a consistency check after
+  // stripping the exact `plugin-` prefix. The old code checked reserved IDs
+  // against the un-stripped npm basename (`plugin-narrator`), letting a
+  // bundle with `name: narrator` impersonate the builtin narrator.
+  const canonicalId = canonicalFromPackageId(pkgId);
+  if (!/^[a-z0-9][a-z0-9-_]{0,63}$/i.test(canonicalId)) {
+    throw httpError(400, `invalid canonical plugin id: ${canonicalId}`);
+  }
+  if (reservedPluginIds.has(canonicalId)) {
+    throw httpError(
+      409,
+      `plugin id "${canonicalId}" is reserved for a builtin plugin`,
+    );
+  }
+
+  // Validate every PLUGIN.md we find — multi-runtime layouts must all be
+  // valid — AND enforce that each manifest's root `name` equals the canonical
+  // ID. Any mismatch is a hard failure: the loader keys everything on the
+  // manifest name, so a divergent package.json identity would let the check
+  // above and the runtime identity disagree.
   const manifests = entries.filter(
     (e) =>
       e.relativePath === "PLUGIN.md" ||
@@ -143,15 +148,15 @@ function validatePluginBundle(
       );
     }
     const declaredRoot = manifestRootId(declared);
-    if (!pluginIdsConsistent(pkgId, declaredRoot)) {
+    if (declaredRoot !== canonicalId) {
       throw httpError(
         400,
-        `plugin id mismatch: package.json name resolves to "${pkgId}" but ${m.relativePath} declares "${declaredRoot}"`,
+        `plugin id mismatch: package.json name resolves to canonical id "${canonicalId}" but ${m.relativePath} declares "${declaredRoot}"`,
       );
     }
   }
 
-  return { pluginId: pkgId };
+  return { pluginId: canonicalId };
 }
 
 pluginInstallRoutes.post("/plugin", async (c) => {

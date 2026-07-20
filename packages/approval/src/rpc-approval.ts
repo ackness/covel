@@ -66,11 +66,14 @@ export interface RpcApprovalGate {
    */
   getPending(approvalId: string): RpcApprovalPending | undefined;
   /**
-   * Check whether a community plugin currently has an explicit grant in a
-   * session without consuming a one-time grant or creating a pending request.
-   * Omitting `action` checks for any live grant belonging to the plugin.
+   * Check whether a community plugin currently holds an explicit grant for
+   * EXACTLY this action in a session, without consuming a one-time grant or
+   * creating a pending request. The action is mandatory — the old optional
+   * form matched ANY live grant by prefix, which collapsed the two-phase
+   * community approval into "any grant unlocks everything" (2026-07-20
+   * audit H-01).
    */
-  hasGrant(sessionId: string, pluginId: string, action?: string): boolean;
+  hasGrant(sessionId: string, pluginId: string, action: string): boolean;
   /**
    * Revoke cached session grants + fresh one-time grants for a session,
    * optionally scoped to one plugin. Returns the number of grants cleared.
@@ -287,15 +290,8 @@ export function createRpcApprovalGate(): RpcApprovalGate {
     },
 
     hasGrant(sessionId, pluginId, action) {
-      const prefix = `${sessionId}::${pluginId}::`;
-      const exactKey = action
-        ? tripleKey(sessionId, pluginId, action)
-        : undefined;
-      if (
-        exactKey
-          ? state.sessionCache.has(exactKey)
-          : [...state.sessionCache].some((key) => key.startsWith(prefix))
-      ) {
+      const exactKey = tripleKey(sessionId, pluginId, action);
+      if (state.sessionCache.has(exactKey)) {
         return true;
       }
 
@@ -305,7 +301,7 @@ export function createRpcApprovalGate(): RpcApprovalGate {
           state.oneTimeGrants.delete(key);
           continue;
         }
-        if (exactKey ? key === exactKey : key.startsWith(prefix)) return true;
+        if (key === exactKey) return true;
       }
       return false;
     },

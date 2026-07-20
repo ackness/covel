@@ -347,22 +347,28 @@ export async function bootstrapApi(
       const manifests = manifestCache.get(pluginId);
       if (manifests?.some((m) => m.manifest.name === manifest.name)) {
         const trust = getPluginTrustInfo(pluginId, discovery.source);
+        // H-01: loading a community runtime executes the plugin's server
+        // code (entry / handler import) AND runs that specific runtime, so
+        // BOTH grants are required — the exact server-code grant and the
+        // exact `runtime:<name>` grant. The old OR let a single runtime
+        // approval unlock the whole plugin's server code (and vice versa),
+        // collapsing the two-phase consent the UI presents.
         if (
           !trust.autoLoad &&
           (!sessionId ||
-            (!rpcApprovalGate.hasGrant(
+            !rpcApprovalGate.hasGrant(
               sessionId,
               pluginId,
               COMMUNITY_SERVER_CODE_ACTION,
-            ) &&
-              !rpcApprovalGate.hasGrant(
-                sessionId,
-                pluginId,
-                `runtime:${manifest.name}`,
-              )))
+            ) ||
+            !rpcApprovalGate.hasGrant(
+              sessionId,
+              pluginId,
+              `runtime:${manifest.name}`,
+            ))
         ) {
           throw new Error(
-            `[runtime-loader] ${pluginId}/${manifest.name}: community runtime requires explicit session approval`,
+            `[runtime-loader] ${pluginId}/${manifest.name}: community runtime requires explicit session approval (server-code AND runtime grants)`,
           );
         }
         // Community wires register at the same moment we'd import the
@@ -445,11 +451,22 @@ export async function bootstrapApi(
       manifestCache,
     });
 
+  // H-01: entry import only honors the EXACT server-code grant. The old
+  // no-action `hasGrant` matched any live grant for the plugin, so approving
+  // one ordinary RPC action (or one runtime) silently authorized importing
+  // and executing the plugin's entire server entry.
   const isCommunityServerCodeApproved = (
     sessionId: string | undefined,
     pluginId: string,
   ): boolean =>
-    Boolean(sessionId && rpcApprovalGate.hasGrant(sessionId, pluginId));
+    Boolean(
+      sessionId &&
+        rpcApprovalGate.hasGrant(
+          sessionId,
+          pluginId,
+          COMMUNITY_SERVER_CODE_ACTION,
+        ),
+    );
   const isCommunityHookApproved = (
     sessionId: string,
     pluginId: string,

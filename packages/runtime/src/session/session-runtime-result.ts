@@ -75,7 +75,22 @@ export async function processRuntimeResult(
     outputKind,
     result.toolCalls,
   );
-  proposals.push(...getPendingProposals(result.output));
+  // H-03: tool-carried proposals are authored by tool code and could claim
+  // any sessionId/turnId/source. The framework is the only identity
+  // authority — rebind the envelope to the executing runtime before commit
+  // so a tool cannot write into another session or impersonate another
+  // plugin's namespace / builtin source.
+  proposals.push(
+    ...getPendingProposals(result.output).map(
+      (p) =>
+        ({
+          ...p,
+          sessionId,
+          turnId: result.turnId,
+          source,
+        }) as Proposal,
+    ),
+  );
 
   const imageGenerationFailures: Array<{ proposal: Proposal; error: string }> =
     [];

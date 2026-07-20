@@ -172,13 +172,25 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       if (operatorDenied) return operatorDenied;
     }
     const gate = c.get("rpcApprovalGate");
+    // H-01 two-phase approval: executing a community runtime imports the
+    // plugin's server code AND runs the specific runtime, and the runtime
+    // loader now requires BOTH exact grants. Ask for the server-code grant
+    // first when it is missing (same pattern as entry-action dispatch), then
+    // the `runtime:<name>` grant; the renderer's retry walks the phases.
+    const needsServerCodeGrant =
+      trustInfo.source === "community" &&
+      !gate.hasGrant(sessionId, body.pluginId, COMMUNITY_SERVER_CODE_ACTION);
     const verdict = gate.evaluate({
       sessionId,
       pluginId: body.pluginId,
-      action: `runtime:${body.runtimeId}`,
+      action: needsServerCodeGrant
+        ? COMMUNITY_SERVER_CODE_ACTION
+        : `runtime:${body.runtimeId}`,
       payload: body.payload,
       trustLevel: trustInfo.source,
-      description: target.description,
+      description: needsServerCodeGrant
+        ? `Load server-side code for community plugin ${body.pluginId}`
+        : target.description,
     });
     if (verdict.status === "pending") {
       return c.json(

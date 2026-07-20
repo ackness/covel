@@ -102,7 +102,16 @@ export function createCommitPipeline(
         "replace" in preResult &&
         preResult.replace?.proposal
       ) {
-        effectiveProposal = preResult.replace.proposal as Proposal;
+        // H-03: a PreStateCommit hook may only rewrite the PAYLOAD. The
+        // envelope — id, type, sessionId, turnId, source — is pinned to the
+        // original proposal so a hook cannot redirect the write to another
+        // session, another plugin's namespace, or a different proposal type
+        // (which would also dodge this handler's schema validation).
+        const replacement = preResult.replace.proposal as Proposal;
+        effectiveProposal = {
+          ...proposal,
+          payload: replacement.payload,
+        } as Proposal;
       }
     }
 

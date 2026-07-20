@@ -1603,8 +1603,9 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     });
     await seedRuntimeSession(store, PLUGIN_ID, SESSION_ID);
 
-    // First call — community trust forces pending approval. Handler must NOT
-    // run. Response is 202 with an `approvalId` the frontend can resolve.
+    // H-01 two-phase flow. Phase 1: with no server-code grant yet, the first
+    // call asks for the exact COMMUNITY_SERVER_CODE_ACTION grant. Handler
+    // must NOT run.
     const first = await app.request(`/api/sessions/${SESSION_ID}/plugin-rpc`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1618,22 +1619,22 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     const firstBody = (await first.json()) as {
       status: string;
       approvalId?: string;
+      pending?: { action?: string };
     };
     expect(firstBody.status).toBe("approval-required");
     expect(typeof firstBody.approvalId).toBe("string");
+    expect(firstBody.pending?.action).toBe("covel:plugin-server-code");
     expect(handlerCalls).toBe(0);
 
-    // Resolve the approval as if the frontend called /api/approvals/:id/decision
-    // with { decision: 'allow', scope: 'session' }.
-    const decideResult = gate.decide({
+    const serverCodeDecision = gate.decide({
       approvalId: firstBody.approvalId!,
       decision: "allow",
       scope: "session",
       decidedAt: new Date().toISOString(),
     });
-    expect(decideResult.ok).toBe(true);
+    expect(serverCodeDecision.ok).toBe(true);
 
-    // Retry — now auto-allowed for the rest of the session.
+    // Phase 2: the retry now asks for the exact `runtime:<name>` grant.
     const second = await app.request(`/api/sessions/${SESSION_ID}/plugin-rpc`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1643,13 +1644,42 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
         payload: { n: 2 },
       }),
     });
-    expect(second.status).toBe(200);
+    expect(second.status).toBe(202);
     const secondBody = (await second.json()) as {
+      status: string;
+      approvalId?: string;
+      pending?: { action?: string };
+    };
+    expect(secondBody.status).toBe("approval-required");
+    expect(secondBody.pending?.action).toBe(`runtime:${SYNC_RUNTIME}`);
+    expect(handlerCalls).toBe(0);
+
+    const runtimeDecision = gate.decide({
+      approvalId: secondBody.approvalId!,
+      decision: "allow",
+      scope: "session",
+      decidedAt: new Date().toISOString(),
+    });
+    expect(runtimeDecision.ok).toBe(true);
+
+    // Both exact grants present — the runtime executes for the rest of the
+    // session.
+    const third = await app.request(`/api/sessions/${SESSION_ID}/plugin-rpc`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        pluginId: PLUGIN_ID,
+        runtimeId: SYNC_RUNTIME,
+        payload: { n: 3 },
+      }),
+    });
+    expect(third.status).toBe(200);
+    const thirdBody = (await third.json()) as {
       status: string;
       runtimeResults: ReadonlyArray<{ status: string }>;
     };
-    expect(secondBody.status).toBe("ok");
-    expect(secondBody.runtimeResults[0]?.status).toBe("success");
+    expect(thirdBody.status).toBe("ok");
+    expect(thirdBody.runtimeResults[0]?.status).toBe("success");
     expect(handlerCalls).toBe(1);
   });
 
