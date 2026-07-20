@@ -565,7 +565,7 @@ describe("codex plugin manifest", () => {
     const injects = manifest.input?.inject ?? [];
     expect(injects).toHaveLength(3);
 
-    // Engine-agnostic (H-04): one runtime inject per known narrative engine;
+    // Engine-agnostic : one runtime inject per known narrative engine;
     // the absent engine resolves to nothing so exactly the active one fills
     // the <narrator-output> block.
     for (const engine of ["narrator", "chat-mode-narrator"]) {
@@ -610,7 +610,7 @@ describe("codex plugin manifest", () => {
   it("should have auto trigger (runs every turn after the narrative engine)", () => {
     // Post 2026-04 refactor: codex runs every turn so no narrative is lost
     // between discovery passes. Priority 600 plus the narrative-engine
-    // capability gate (H-04) ensure codex (and its peers guide / extractor /
+    // capability gate  ensure codex (and its peers guide / extractor /
     // character-tracker) schedule after the active engine completes; on that
     // layer the DAG scheduler executes them concurrently.
     expect(manifest.trigger?.type).toBe("auto");

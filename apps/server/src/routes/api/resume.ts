@@ -275,7 +275,7 @@ resumeRoutes.post("/:id/resume", async (c) => {
   try {
     return await runWithHookScope({ activePluginIds }, async () => {
       return sessionLock.withLock(sessionId, async () => {
-        // M-03/H-10: active gate under the lock — a paused/ended session must
+        // Active gate under the lock — a paused/ended session must
         // not accept a resume (it would commit state and write history).
         const liveSession = await store.getSession(sessionId);
         if (
@@ -330,7 +330,7 @@ resumeRoutes.post("/:id/resume", async (c) => {
           capabilities: effectiveManifest.capabilities ?? [],
         };
 
-        // H-10 atomic finalize: proposal commit + assistant turn message +
+        // Atomic finalize: proposal commit + assistant turn message +
         // resolved marker land in ONE transaction (the runtime no longer
         // writes them — see turn-resume.ts). Any proposal failure or store
         // error throws, rolling back ALL of it; the claim is released so the

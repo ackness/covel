@@ -284,7 +284,7 @@ export type CovelEvent =
       readonly type: "working_memory.changed";
       readonly payload: WorkingMemoryChangedPayload;
     }
-  // Commit outcome (2026-07-20 audit H-07): a proposal that failed to commit
+  // Commit outcome : a proposal that failed to commit
   // is surfaced explicitly instead of being silently dropped. Written
   // directly onto the action stream by the commit-owning route.
   | {

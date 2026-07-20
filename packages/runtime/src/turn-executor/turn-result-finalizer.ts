@@ -16,7 +16,7 @@ export interface FinalizeTurnResultParams {
   readonly deps: TurnExecutorDeps;
   readonly turnNumber: number;
   /**
-   * H-08: results bubbled up from nested `ctx.recursiveCall` executions.
+   *  results bubbled up from nested `ctx.recursiveCall` executions.
    * Carried on the TurnResult for the commit-owning caller; NOT re-persisted
    * here (nested executeTurn calls persist their own turn_results rows).
    */
@@ -99,7 +99,7 @@ async function persistTurnResult(
     sessionId: input.sessionId,
     turnId: input.turnId,
     runtimeResults: turnResult.runtimeResults,
-    // M-02: stamp the execution origin so turn accounting can exclude
+    // Stamp the execution origin so turn accounting can exclude
     // non-player executions (manual RPC / background follower / recursive)
     // from `session.turnCount`, which drives UI turn display and the
     // auto-snapshot cadence.
@@ -139,7 +139,7 @@ export async function finalizeTurnResult({
   // runtime results above are execution artefacts, not committed game state —
   // the authoritative completion event fires via `TurnResult.completeTurn`,
   // which the commit-owning caller invokes only after proposals + snapshot
-  // land (audit R-09). A persisted result without a completion event is the
+  // land (audit). A persisted result without a completion event is the
   // expected crash signature, tolerated by recovery.
 
   return turnResult;

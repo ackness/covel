@@ -61,7 +61,7 @@ export async function discoverAndRegisterPlugins(
         // checks all use the frontmatter-derived manifest.pluginId. A
         // mismatch splits the plugin's identity in two — the install path
         // enforces equality (validatePluginBundle), and since the 2026-07-20
-        // audit (C-01) discovery enforces it too: registering under a forged
+        // audit  discovery enforces it too: registering under a forged
         // frontmatter name would let a directory impersonate another plugin's
         // (including a builtin's) store namespace and trust tier. Hard-fail
         // the plugin (it registers as `status: "error"` below) instead of

@@ -234,14 +234,14 @@ export async function resumeSuspendedRuntime(
   }
   const output = finalized.output;
 
-  // H-10: the runtime NO LONGER resolves the suspension or appends the
+  // The runtime NO LONGER resolves the suspension or appends the
   // assistant turn message here. Those writes belong to the commit-owning
   // caller (apps/server resume route), which folds them into the SAME
   // transaction as the proposal commit — resolving before commit meant a
   // commit failure left the suspension permanently resolved and the
   // narrative already in prompt history. The `turn.resumed` event moves
   // with them (it must not announce a resume that then rolls back).
-  // PostRuntime runs BEFORE any persistence (M-04) — the caller persists
+  // PostRuntime runs BEFORE any persistence  — the caller persists
   // the hook-finalized output.
   return finalizeWithPostRuntime({
     pluginId: manifest.pluginId,

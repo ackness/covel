@@ -64,13 +64,13 @@ export function createPluginRpcRuntimeTurnRunner(
       eventBus: ctx.eventBus,
       emitter,
     });
-    // H-08: nested recursiveCall results ride the same commit barrier.
+    // Nested recursiveCall results ride the same commit barrier.
     const outputs = await resultProcessor.processAll([
       ...turnResult.runtimeResults,
       ...(turnResult.nestedRuntimeResults ?? []),
     ]);
 
-    // H-07: commit failures must not report success. Surface each one as a
+    // Commit failures must not report success. Surface each one as a
     // `proposal.failed` trace event (manual/background turns have no live
     // action stream; the /debug timeline and subscription channel carry it)
     // and withhold the snapshot + completion barrier.
@@ -105,10 +105,10 @@ export function createPluginRpcRuntimeTurnRunner(
     } else {
       console.error(
         `[plugin-rpc] ${failedProposals.length} proposal(s) failed to commit for session ${ctx.sessionId} turn ${turnResult.turnId} — ` +
-          "withholding auto-snapshot and turn completion (H-07)",
+          "withholding auto-snapshot and turn completion",
       );
     }
-    // Commit barrier (audit R-06/R-09/H-07): fire the authoritative
+    // Commit barrier (audit): fire the authoritative
     // turn.completed event and memory ingestion only when every proposal
     // committed and the snapshot succeeded.
     if (failedProposals.length === 0 && !snapshotFailed) {
@@ -130,7 +130,7 @@ export function createPluginRpcRuntimeTurnRunner(
       turnId: args.turnId,
       playerMessage: "",
       locale: ctx.session.locale ?? "zh-CN",
-      // M-02: a manual RPC trigger is not a player turn.
+      // A manual RPC trigger is not a player turn.
       origin: "manual",
       manualTrigger: {
         runtimeId: args.runtimeId,
@@ -188,7 +188,7 @@ export function createPluginRpcRuntimeTurnRunner(
       turnId: args.followerTurnId,
       playerMessage: "",
       locale: ctx.session.locale ?? "zh-CN",
-      // M-02: a deferred background follower is not a player turn.
+      // A deferred background follower is not a player turn.
       origin: "follower",
       manualTrigger: {
         runtimeId: args.runtimeId,

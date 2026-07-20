@@ -355,7 +355,7 @@ export async function runAgentToolLoop({
               pendingProposals: pendingProposals,
               emittedEventTopics: emittedEvents.map((e) => e.topic),
               emitter: deps.emitter,
-              // H-02: execution is bounded by the runtime's declared surface,
+              // Execution is bounded by the runtime's declared surface,
               // checked AFTER PreToolUse replacement produced effectiveTc.
               authorizedToolNames,
             },

@@ -195,7 +195,7 @@ describe("parsePluginMd", () => {
     });
   });
 
-  describe("tools.defer (M-11)", () => {
+  describe("tools.defer ", () => {
     it("accepts defer: true (defer the whole whitelist)", () => {
       const content = md(
         [
@@ -1063,7 +1063,7 @@ describe("parsePluginMd", () => {
       warnSpy.mockRestore();
     });
 
-    it("rejects rpc handler with mid-path .. segment", () => {
+    it("rejects rpc handler with mid-path.. segment", () => {
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const content = md(
         [
@@ -1104,7 +1104,7 @@ describe("parsePluginMd", () => {
       warnSpy.mockRestore();
     });
 
-    it("accepts .mjs and .cjs extensions", () => {
+    it("accepts.mjs and.cjs extensions", () => {
       const content = md(
         [
           "name: test-ext-ok",

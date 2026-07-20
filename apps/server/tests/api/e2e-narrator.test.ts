@@ -183,7 +183,7 @@ describe("E2E: Narrator game flow", () => {
     const systemMsg = narratorMessages?.find((m) => m.role === "system");
     expect(systemMsg).toBeDefined();
     // System prompt carries the PLUGIN.md template; the player message rides
-    // the user role exclusively and must NOT be interpolated into it (H-05).
+    // the user role exclusively and must NOT be interpolated into it.
     expect(systemMsg!.content).toContain("叙述者");
     expect(systemMsg!.content).not.toContain("走进了黑暗的森林");
     const userMsgs = narratorMessages?.filter((m) => m.role === "user") ?? [];

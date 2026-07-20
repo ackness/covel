@@ -139,7 +139,7 @@ describe("char-creator plugin", () => {
       );
     });
 
-    it("injects narrativeOutput from both narrative engines (H-04)", () => {
+    it("injects narrativeOutput from both narrative engines ", () => {
       // Engine-agnostic: one inject per known narrative engine; the absent
       // engine resolves to nothing so exactly the active one fills the block.
       expect(manifest.input?.inject).toHaveLength(2);
@@ -153,7 +153,7 @@ describe("char-creator plugin", () => {
       }
     });
 
-    it("gates on the narrative-engine capability, not an exact runtime (H-04)", () => {
+    it("gates on the narrative-engine capability, not an exact runtime ", () => {
       expect(manifest.upstreamRequired).toEqual([
         { capability: "narrative-engine" },
       ]);

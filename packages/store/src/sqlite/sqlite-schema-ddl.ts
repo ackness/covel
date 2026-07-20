@@ -74,7 +74,7 @@ function applySessionColumnMigrations(sqlite: Database.Database): void {
     sqlite.exec("ALTER TABLE sessions ADD COLUMN metadata TEXT");
   }
 
-  // M-02: execution origin + recursive parent linkage on turn_results.
+  // Execution origin + recursive parent linkage on turn_results.
   const turnResultCols = sqlite
     .prepare("PRAGMA table_info(turn_results)")
     .all() as Array<{ name: string }>;

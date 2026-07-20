@@ -140,7 +140,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   }
   const { requestId, type, sessionId, locale, model, payload } = body;
 
-  // `trigger_event` was removed (M-07): its payload was never read and no UI
+  // `trigger_event` was removed : its payload was never read and no UI
   // called it — the request just re-ran a full turn. Emitting kernel events
   // belongs to plugins via the builtin `emit-event` tool.
   const SUPPORTED_ACTIONS = [
@@ -172,7 +172,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const ownerDenied = checkSessionOwner(c, session);
   if (ownerDenied) return ownerDenied;
 
-  // M-03 fast path: a paused/ended session takes no actions. The
+  // Fast path: a paused/ended session takes no actions. The
   // authoritative re-check happens under the session lock below (this read is
   // racy), but rejecting here returns a clean 409 before the SSE stream opens.
   if (session.status && session.status !== "active") {
@@ -310,7 +310,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     // `ev.type` is an untrusted runtime string, so it is narrowed at this
     // boundary before the membership check.
     //
-    // M-05: the subscription is established INSIDE the session lock (see
+    // the subscription is established INSIDE the session lock (see
     // below), not here. Subscribing before the lock meant a second action
     // queued on the same session received the FIRST action's events while
     // waiting, wrapped them in its own turnId/traceId envelope, and streamed
@@ -334,11 +334,11 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       const { result, trace, userSettings } = await sessionLock.withLock(
         sessionId,
         async () => {
-          // M-05: this execution now owns the session — events on the bus
+          // This execution now owns the session — events on the bus
           // from here on belong to this turn.
           subscribeEventForwarding();
 
-          // M-03 authoritative gate: re-read the session status under the
+          // Authoritative gate: re-read the session status under the
           // lock BEFORE any write. A pause/end that raced the pre-stream
           // check must not get player messages, interaction records, or
           // compaction appended to a non-active session. The throw surfaces
@@ -470,7 +470,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             ...(type === "start_session"
               ? { suppressPlayerMessage: true }
               : {}),
-            // retry_runtime honors payload.runtimeId (M-07): scope the rerun
+            // retry_runtime honors payload.runtimeId: scope the rerun
             // to that runtime via the manual-trigger path instead of silently
             // re-running the whole turn. Without a runtimeId the action keeps
             // its historical whole-turn-retry semantics.
@@ -493,7 +493,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               // The main turn path never passed the eventBus, so every
               // `emitSubEvent` inside the executor — including the
               // completion barrier's `turn.completed` — silently no-opped on
-              // the player-facing path (found while adding the H-07
+              // the player-facing path (found while adding the
               // fault-injection tests). Without it the barrier's only
               // observable effect was memory ingestion.
               eventBus,
@@ -597,12 +597,12 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             eventBus,
             emitter,
           });
-          // H-07: commit failures are no longer silently dropped — each one
+          // Commit failures are no longer silently dropped — each one
           // is surfaced as a `proposal.failed` SSE event, and any failure
           // withholds the completion barrier below (turn.completed, memory
           // ingestion, auto-snapshot success signal).
           let commitFailureCount = 0;
-          // H-08: nested recursiveCall results ride the same commit barrier —
+          // Nested recursiveCall results ride the same commit barrier —
           // their proposals were previously dropped (only the top-level
           // results were processed).
           for (const rr of [
@@ -668,11 +668,11 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           } else {
             console.error(
               `[actions] ${commitFailureCount} proposal(s) failed to commit for session ${sessionId} turn ${turnId} — ` +
-                "withholding auto-snapshot and turn completion (H-07)",
+                "withholding auto-snapshot and turn completion",
             );
           }
 
-          // Commit barrier (audit R-06/R-09/H-07): the authoritative
+          // Commit barrier (audit): the authoritative
           // turn.completed event and post-turn memory ingestion fire ONLY
           // when every proposal committed and the snapshot (if attempted)
           // succeeded. A partial commit or snapshot failure leaves the turn

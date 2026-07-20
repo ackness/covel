@@ -143,7 +143,7 @@ describe("core plugin manifest contract", () => {
       expect(downstream.priority).toBe(600);
     }
 
-    // Every narrator-downstream runtime is engine-agnostic (H-04): it gates
+    // Every narrator-downstream runtime is engine-agnostic : it gates
     // on the `narrative-engine` capability (discovering whichever narrative
     // engine the current mode loaded) and injects from both known engines so
     // it works under narrator OR chat-mode-narrator. An exact `narrator`
@@ -185,24 +185,24 @@ describe("core plugin manifest contract", () => {
     }
   });
 
-  it("never inlines player input or upstream runtime output into PLUGIN bodies (H-05 / M-18)", async () => {
+  it("never inlines player input or upstream runtime output into PLUGIN bodies", async () => {
     const parsed = await loadParsedPlugins();
 
     for (const { manifest, promptTemplate } of parsed) {
-      // H-05: player input rides the user role exclusively. A `{{ player.message }}`
+      // Player input rides the user role exclusively. A `{{ player.message }}`
       // interpolation would copy it un-escaped into the system prompt.
       expect(
         promptTemplate.includes("{{ player.message }}"),
-        `${manifest.name}: PLUGIN body must not interpolate {{ player.message }} (H-05)`,
+        `${manifest.name}: PLUGIN body must not interpolate {{ player.message }} `,
       ).toBe(false);
 
-      // M-18: when a runtime declares an `input.inject` for upstream output,
+      // When a runtime declares an `input.inject` for upstream output,
       // the framework already appends an escaped XML block (segment 5). A raw
       // `{{ inputs.* }}` interpolation in the body would inject a SECOND,
       // un-escaped copy of the same data.
       expect(
         /\{\{\s*inputs\./.test(promptTemplate),
-        `${manifest.name}: PLUGIN body must not raw-interpolate {{ inputs.* }} — use input.inject (M-18)`,
+        `${manifest.name}: PLUGIN body must not raw-interpolate {{ inputs.* }} — use input.inject `,
       ).toBe(false);
     }
   });

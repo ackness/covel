@@ -1,7 +1,7 @@
 /**
- * POST /api/actions — action-type contract tests (M-07).
+ * POST /api/actions — action-type contract tests.
  *
- * 2026-07-20 consolidated audit M-07:
+ *
  * - `trigger_event` was a dead pipeline: its payload (eventType/eventData)
  *   was never read server-side and no UI called it — the request just
  *   re-ran a full turn. The action type is removed; requests must get a
@@ -65,7 +65,7 @@ async function drainStream(res: Response): Promise<void> {
   }
 }
 
-describe("POST /api/actions — action type contract (M-07)", () => {
+describe("POST /api/actions — action type contract ", () => {
   let store: DataStore;
   let registry: PluginRegistry;
   let app: Hono;

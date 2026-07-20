@@ -1603,7 +1603,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     });
     await seedRuntimeSession(store, PLUGIN_ID, SESSION_ID);
 
-    // H-01 two-phase flow. Phase 1: with no server-code grant yet, the first
+    // Two-phase flow. Phase 1: with no server-code grant yet, the first
     // call asks for the exact COMMUNITY_SERVER_CODE_ACTION grant. Handler
     // must NOT run.
     const first = await app.request(`/api/sessions/${SESSION_ID}/plugin-rpc`, {

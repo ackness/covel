@@ -386,7 +386,7 @@ export async function executeAgentRuntime({
   };
 
   // PostRuntime hook — agent success path (S4-T3). Runs BEFORE anything is
-  // persisted (M-04): prompt history, commit proposals, and SSE must all see
+  // persisted : prompt history, commit proposals, and SSE must all see
   // the SAME finalized output. Previously the raw result was appended to
   // TurnMessages first and only the commit/SSE path saw the hook rewrite —
   // e.g. a hook downgrading success→failed still left the unrewritten

@@ -102,7 +102,7 @@ export function createCommitPipeline(
         "replace" in preResult &&
         preResult.replace?.proposal
       ) {
-        // H-03: a PreStateCommit hook may only rewrite the PAYLOAD. The
+        // A PreStateCommit hook may only rewrite the PAYLOAD. The
         // envelope — id, type, sessionId, turnId, source — is pinned to the
         // original proposal so a hook cannot redirect the write to another
         // session, another plugin's namespace, or a different proposal type
@@ -218,7 +218,7 @@ export function createCommitPipeline(
     // `withTransaction` runs on its own pooled connection, so concurrent turns
     // no longer serialize behind a shared begin/commit window.
     if (typeof store.withTransaction === "function") {
-      // Commit barrier (audit R-08): externally-visible fan-out (emitter
+      // Commit barrier (audit): externally-visible fan-out (emitter
       // events + PostStateCommit hooks) is buffered while the transaction is
       // open and flushed only after it COMMITs. A thrown store error discards
       // the buffer along with the rollback — clients never see events for

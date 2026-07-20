@@ -68,7 +68,7 @@ export interface ToolCallContext {
    * The calling runtime's exact tool authorization set (declared whitelist +
    * framework contract tools). When present, `execute` rejects any call whose
    * name is outside the set BEFORE resolution/approval — the advertisement
-   * list alone is not an authorization boundary (2026-07-20 audit H-02: a
+   * list alone is not an authorization boundary (: a
    * prompt-injected or hook-rewritten name used to reach any builtin, or any
    * local tool of a sibling runtime in the same plugin).
    */
@@ -229,7 +229,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
     ): Promise<ToolCallResult> {
       const startTime = Date.now();
 
-      // 0. Runtime-level authorization (H-02). Enforced at the execution
+      // 0. Runtime-level authorization. Enforced at the execution
       // boundary — after session overrides and PreToolUse replacement have
       // already produced the final name — so a rewritten or hallucinated
       // name cannot escape the calling runtime's declared surface.

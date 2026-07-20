@@ -83,7 +83,8 @@ class ChatModeMockLLM implements LLMAdapter {
     }
 
     if (toolNames.includes("list-characters")) {
-      // char-creator/character-tracker — engine-agnostic since H-04, so it
+      // char-creator/character-tracker — engine-agnostic since the upstream
+      // gate became capability-based, so it
       // runs in dialogue mode too (it used to be permanently skipped by an
       // exact `narrator` upstream gate). Report "no changes" and finish.
       this.trackerCalls += 1;
@@ -330,7 +331,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     expect(mockLLM.narratorCalls).toBe(3);
     expect(mockLLM.scenePromptCalls).toBe(3);
     expect(mockLLM.memoryCalls).toBe(3);
-    // H-04 acceptance: character-tracker executes in dialogue mode once the
+    // Acceptance: character-tracker executes in dialogue mode once the
     // chat engine succeeds (it gates on the narrative-engine capability now).
     expect(mockLLM.trackerCalls).toBe(3);
 

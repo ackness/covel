@@ -172,7 +172,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       if (operatorDenied) return operatorDenied;
     }
     const gate = c.get("rpcApprovalGate");
-    // H-01 two-phase approval: executing a community runtime imports the
+    // Two-phase approval: executing a community runtime imports the
     // plugin's server code AND runs the specific runtime, and the runtime
     // loader now requires BOTH exact grants. Ask for the server-code grant
     // first when it is missing (same pattern as entry-action dispatch), then

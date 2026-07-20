@@ -1,5 +1,5 @@
 /**
- * C-01 (2026-07-20 audit): a plugin whose frontmatter name root diverges from
+ * a plugin whose frontmatter name root diverges from
  * its directory name must NOT register any runtime — the split identity would
  * let a directory impersonate another plugin's (including a builtin's) store
  * namespace and trust tier. Discovery hard-fails the plugin and registers it
@@ -49,7 +49,7 @@ async function writePlugin(dirName: string, manifestName: string) {
   );
 }
 
-describe("plugin discovery identity gate (C-01)", () => {
+describe("plugin discovery identity gate ", () => {
   it("registers a matching plugin normally", async () => {
     await writePlugin("honest", "honest");
     const { registry } = await discoverAndRegisterPlugins({

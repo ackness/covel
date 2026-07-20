@@ -66,7 +66,7 @@ export async function computeSessionTurnCount(args: {
 
   const turnResults = await store.listTurnResults(sessionId);
   // Counting rule (Pre-Game-pending turns never reach here — early-returned above):
-  //  - Only `player`-origin executions count (M-02). Manual plugin-rpc
+  //  - Only `player`-origin executions count. Manual plugin-rpc
   //    triggers, deferred background followers, and nested recursiveCall
   //    executions each persist their own turn_results row but are NOT player
   //    turns; counting them inflated `session.turnCount`, which drives the UI

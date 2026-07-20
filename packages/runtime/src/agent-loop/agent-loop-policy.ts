@@ -73,7 +73,7 @@ export interface AgentLoopPolicy {
    */
   readonly acceptsSteering: boolean;
   /**
-   * The runtime's exact execution authorization set (H-02): its declared
+   * The runtime's exact execution authorization set: its declared
    * tool names (deferred names included — deferring only withholds the
    * schema advertisement, never grants or removes authorization) plus the
    * framework-contract `runtime-done` sentinel for non-schema runtimes.

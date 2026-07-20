@@ -117,7 +117,7 @@ describe("computeSessionTurnCount", () => {
     ).toBe(2);
   });
 
-  it("excludes manual / follower / recursive executions from turnCount (M-02)", async () => {
+  it("excludes manual / follower / recursive executions from turnCount ", async () => {
     // Each non-player execution persists its own turn_results row. Counting
     // them inflated session.turnCount, which drives UI turn display and the
     // auto-snapshot cadence — one player input could read as four turns.
@@ -155,7 +155,7 @@ describe("computeSessionTurnCount", () => {
     ).toBe(1);
   });
 
-  it("counts several executions sharing one turnId as ONE player turn (M-02)", async () => {
+  it("counts several executions sharing one turnId as ONE player turn ", async () => {
     // A Pre-Game completion request can finish setup AND run main-loop
     // followups in the same request — two executions, one logical turn.
     await seed(store, { turnCount: 1, preGameCompleted: ["pregame"] });
@@ -181,7 +181,7 @@ describe("computeSessionTurnCount", () => {
     ).toBe(1);
   });
 
-  it("treats a legacy row with no origin as a player turn (M-02 back-compat)", async () => {
+  it("treats a legacy row with no origin as a player turn", async () => {
     await seed(store, { turnCount: 1, preGameCompleted: ["pregame"] });
     await addTurn(store, "t1", [{ runtimeId: "narrator", output: {} }]);
     expect(

@@ -150,7 +150,7 @@ describe("TurnExecutor E2E", () => {
     ).toBe("你望向雾中的栈桥，听见远处传来钟声。");
   });
 
-  it("passes the player message via user role only, never the system prompt (H-05)", async () => {
+  it("passes the player message via user role only, never the system prompt ", async () => {
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
@@ -167,7 +167,7 @@ describe("TurnExecutor E2E", () => {
     expect(mockLLM.calls).toHaveLength(1);
 
     // Player input must never be interpolated into the system prompt — it
-    // rides the user role exclusively (prompt-injection guardrail, H-05).
+    // rides the user role exclusively (prompt-injection guardrail).
     const systemMsg = mockLLM.calls[0].messages.find(
       (m) => m.role === "system",
     );
@@ -845,8 +845,8 @@ describe("TurnExecutor _interaction protocol", () => {
     const charManifests = await loadPluginManifest(charDiscovery);
     // player-init is the runtime that declares `create-form`. Picking
     // `charManifests[0]` used to grab character-tracker instead, and the
-    // test only passed because pre-H-02 the executor let any runtime call
-    // any builtin regardless of its declaration.
+    // test only passed back when the executor let any runtime call any
+    // builtin regardless of its declaration.
     const charManifest = charManifests.find(
       (m) => m.manifest.name === "char-creator/player-init",
     )!.manifest;

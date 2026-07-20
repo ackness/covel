@@ -950,7 +950,7 @@ describe("resumeSuspendedRuntime", () => {
     ]);
   });
 
-  it("does NOT resolve the suspension itself — that is the commit-owning caller's job (H-10)", async () => {
+  it("does NOT resolve the suspension itself — that is the commit-owning caller's job ", async () => {
     const suspensionId = await createTestSuspension("tc-suspend-y");
 
     mockLLM.setResponses([
@@ -985,7 +985,7 @@ describe("resumeSuspendedRuntime", () => {
     );
     expect(result.status).toBe("success");
 
-    // H-10: resolving before the proposal commit meant a commit failure left
+    // Resolving before the proposal commit meant a commit failure left
     // the suspension permanently resolved. The runtime now leaves it
     // unresolved; the resume route folds markSuspensionResolved into the
     // same transaction as the proposal commit.
@@ -993,7 +993,7 @@ describe("resumeSuspendedRuntime", () => {
     expect(after!.resolvedAt).toBeUndefined();
   });
 
-  it("does NOT emit turn.resumed itself — the caller announces after commit (H-10)", async () => {
+  it("does NOT emit turn.resumed itself — the caller announces after commit ", async () => {
     const events: SubscriptionEvent[] = [];
     eventBus.onEmit((e) => events.push(e));
 
@@ -1030,7 +1030,7 @@ describe("resumeSuspendedRuntime", () => {
       deps,
     );
 
-    // H-10: announcing before the commit landed would desync clients when
+    // Announcing before the commit landed would desync clients when
     // the commit rolls back — the resume route emits after its transaction.
     const resumedEvent = events.find((e) => e.type === "turn.resumed");
     expect(resumedEvent).toBeUndefined();

@@ -42,7 +42,7 @@ export function emitSubEvent(
  * plugin-supplied data). The old fallback trusted the manifest's own
  * `pluginType === "core-plugin"` claim, which is author-supplied and was
  * reachable with a forged manifest — handing untrusted code the full
- * un-scoped DataStore (2026-07-20 audit H-03/R-07). No registry answer ⇒
+ * un-scoped DataStore. No registry answer ⇒
  * NOT trusted; callers without a `getPluginSource` dep get the scoped
  * capability view, which is the safe default.
  */

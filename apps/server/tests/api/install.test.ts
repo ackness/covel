@@ -333,7 +333,7 @@ describe("POST /api/install/plugin", () => {
       path?: unknown;
     };
     expect(body.ok).toBe(true);
-    // C-01: install id / dir use the canonical ID (manifest root name), not
+    // Install id / dir use the canonical ID (manifest root name), not
     // the un-stripped npm basename.
     expect(body.id).toBe("test-plugin");
     expect(body.restartRequired).toBe(true);
@@ -502,7 +502,7 @@ describe("POST /api/install/plugin", () => {
     expect(body.error).toMatch(/reserved/i);
   });
 
-  it("rejects the scoped-npm reserved-ID bypass: @covel/plugin-narrator + name:narrator (C-01)", async () => {
+  it("rejects the scoped-npm reserved-ID bypass: @covel/plugin-narrator + name:narrator ", async () => {
     // Pre-fix, the reserved check ran against the un-stripped npm basename
     // ("plugin-narrator" ∉ reserved) while the loader keyed everything on the
     // manifest root ("narrator") — a canonical-identity split that let the
@@ -525,8 +525,8 @@ describe("POST /api/install/plugin", () => {
     expect(body.error).toMatch(/reserved/i);
   });
 
-  it("rejects a manifest whose root name diverges from the canonical package id (C-01)", async () => {
-    // dir/package id says "innocent" but the loader would register "narrator".
+  it("rejects a manifest whose root name diverges from the canonical package id ", async () => {
+    // Dir/package id says "innocent" but the loader would register "narrator".
     const app = createReservedTestApp(new Set(["narrator"]));
     const zip = await buildZip({
       "PLUGIN.md": VALID_PLUGIN_MD.replace(

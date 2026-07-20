@@ -1,7 +1,7 @@
 /**
  * Plugin install route.
  *
- * POST /api/install/plugin — multipart (field `file`), accepts a .zip containing
+ * POST /api/install/plugin — multipart (field `file`), accepts a.zip containing
  *   either a root-level PLUGIN.md + package.json, or runtimes/<sub>/PLUGIN.md
  *   entries (multi-runtime layout). Extracts to the user plugins dir and
  *   returns `{ ok, id, restartRequired: true }`.
@@ -103,7 +103,7 @@ function validatePluginBundle(
     );
   }
 
-  // Single canonical identity (C-01): the runtime, store, proposals, hooks and
+  // Single canonical identity : the runtime, store, proposals, hooks and
   // trust checks all key on the manifest root name — so THAT is the identity
   // the reserved-ID check, install dir, and API response must use. The
   // package.json basename only participates as a consistency check after

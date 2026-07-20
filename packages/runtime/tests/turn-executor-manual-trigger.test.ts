@@ -288,7 +288,7 @@ describe("executeTurn: manual trigger", () => {
       { gateway: fakeGateway },
     );
 
-    // H-09 wraps ctx.gateway in a revocation proxy — behavioural equality,
+    // ctx.gateway is wrapped in a revocation proxy — behavioural equality,
     // not identity. resolvedBaseUrl below proves the call passed through.
     expect(sawGateway).toBeDefined();
     expect(resolvedBaseUrl).toBe("https://example.test/v1");

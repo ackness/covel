@@ -188,15 +188,14 @@ function buildPromptSegmentsCommon(
     .filter(Boolean)
     .join("\n\n");
 
-  // Interpolate inject blocks too so plugins may reference template variables
-  // inside injected output.
-  const interpolatedInjects = rawInjects
-    ? interpolateTemplate(rawInjects, variables)
-    : "";
-  const upstreamInjects = [
-    interpolatedInjects,
-    buildAvailableEventsBlock(params),
-  ]
+  // Inject blocks are NOT re-interpolated. Their content is already
+  // XML-escaped upstream (see resolveRuntimeInject / resolvePluginDataInject),
+  // but `escapeXmlContent` does not touch `{}` — so a second
+  // `interpolateTemplate` pass expanded any `{{ ... }}` sequence that appeared
+  // inside model-authored or player-authored DATA, and the expansion result
+  // was inserted raw, bypassing escaping entirely. The template is interpreted
+  // exactly once, over the plugin's own PLUGIN.md body; injected data is data.
+  const upstreamInjects = [rawInjects, buildAvailableEventsBlock(params)]
     .filter(Boolean)
     .join("\n");
 

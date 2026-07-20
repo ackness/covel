@@ -129,7 +129,7 @@ describe("executeTurn player abort", () => {
       { maxSteps: 3 },
     );
 
-    // H-09: handlers receive a MERGED signal (player abort + deadline), so
+    // Handlers receive a MERGED signal (player abort + deadline), so
     // identity with the player signal no longer holds — the merged signal
     // must mirror the player abort state.
     expect(observedSignal).toBeDefined();

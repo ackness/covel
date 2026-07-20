@@ -215,7 +215,7 @@ export async function bootstrapApi(
   // 1. Create shared infrastructure first (eventBus needed by registry)
   const stateManager = config.stateManager ?? createStateManager(config.store);
 
-  // Cross-pod EventBus fan-out (audit R-02): multi-pod PG deployments need
+  // Cross-pod EventBus fan-out (audit): multi-pod PG deployments need
   // events emitted on one pod to reach SSE subscribers on another. PG
   // LISTEN/NOTIFY is the lowest-dependency shared transport (the deployment
   // already runs on PG). Single-process backends (memory/sqlite/idb) pass no
@@ -347,7 +347,7 @@ export async function bootstrapApi(
       const manifests = manifestCache.get(pluginId);
       if (manifests?.some((m) => m.manifest.name === manifest.name)) {
         const trust = getPluginTrustInfo(pluginId, discovery.source);
-        // H-01: loading a community runtime executes the plugin's server
+        // Loading a community runtime executes the plugin's server
         // code (entry / handler import) AND runs that specific runtime, so
         // BOTH grants are required — the exact server-code grant and the
         // exact `runtime:<name>` grant. The old OR let a single runtime
@@ -451,7 +451,7 @@ export async function bootstrapApi(
       manifestCache,
     });
 
-  // H-01: entry import only honors the EXACT server-code grant. The old
+  // Entry import only honors the EXACT server-code grant. The old
   // no-action `hasGrant` matched any live grant for the plugin, so approving
   // one ordinary RPC action (or one runtime) silently authorized importing
   // and executing the plugin's entire server entry.
@@ -461,11 +461,11 @@ export async function bootstrapApi(
   ): boolean =>
     Boolean(
       sessionId &&
-        rpcApprovalGate.hasGrant(
-          sessionId,
-          pluginId,
-          COMMUNITY_SERVER_CODE_ACTION,
-        ),
+      rpcApprovalGate.hasGrant(
+        sessionId,
+        pluginId,
+        COMMUNITY_SERVER_CODE_ACTION,
+      ),
     );
   const isCommunityHookApproved = (
     sessionId: string,

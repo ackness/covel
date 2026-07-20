@@ -264,8 +264,8 @@ describe("function-runtime trace (A2-P1-5)", () => {
       promptTemplate: "",
       handler: async (ctx) => {
         capturedGateway = ctx.gateway;
-        // No emitter → no TRACE wrapping. H-09 still wraps every capability
-        // in a revocation proxy, so assert pass-through behaviour from
+        // No emitter → no TRACE wrapping. The runtime still wraps every
+        // capability in a revocation proxy, so assert pass-through from
         // INSIDE the handler (after the turn the capability is revoked).
         inHandlerResult = await ctx.gateway?.generateText({
           messages: [],
@@ -286,7 +286,7 @@ describe("function-runtime trace (A2-P1-5)", () => {
       usage: { inputTokens: 1, outputTokens: 2 },
     });
 
-    // H-09: after the turn settles the captured capability is revoked — a
+    // After the turn settles the captured capability is revoked — a
     // detached handler's late call must be rejected (synchronously, before
     // any store/provider work starts).
     expect(() =>

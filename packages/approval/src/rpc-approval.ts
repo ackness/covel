@@ -62,7 +62,7 @@ export interface RpcApprovalGate {
   /**
    * Look up a pending approval without consuming it. Lets the HTTP layer
    * resolve an approvalId to its sessionId for owner-guard checks BEFORE
-   * `decide()` consumes the entry (audit H-02).
+   * `decide()` consumes the entry.
    */
   getPending(approvalId: string): RpcApprovalPending | undefined;
   /**
@@ -71,7 +71,7 @@ export interface RpcApprovalGate {
    * creating a pending request. The action is mandatory — the old optional
    * form matched ANY live grant by prefix, which collapsed the two-phase
    * community approval into "any grant unlocks everything" (2026-07-20
-   * audit H-01).
+   * audit).
    */
   hasGrant(sessionId: string, pluginId: string, action: string): boolean;
   /**

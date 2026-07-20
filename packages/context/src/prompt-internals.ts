@@ -532,7 +532,18 @@ export function renderCoreMemory(
   const header = locale?.startsWith("en") ? "[Core Memory]" : "[核心记忆]";
   const sections = nonEmpty.map((b) => {
     const label = resolveI18nText(b.displayName, locale) ?? b.label;
-    return `<${b.label}>\n# ${label}\n${b.content}\n</${b.label}>`;
+    // a core-memory block is DATA that the model itself wrote in
+    // an earlier turn (the memory updater persists model output). Both halves
+    // were previously interpolated raw:
+    //   - `b.label` became an XML tag name — a crafted label could inject
+    //     arbitrary markup into the system prompt;
+    //   - `b.content` could contain `</story_state>` and close the block
+    //     early, letting persisted text escape its envelope and read as
+    //     framework instructions.
+    // Unsafe labels fall back to a generic tag rather than throwing: a bad
+    // label must not take down the whole prompt build.
+    const tag = /^[a-zA-Z0-9_-]+$/.test(b.label) ? b.label : "memory-block";
+    return `<${tag}>\n# ${escapeXmlContent(label)}\n${escapeXmlContent(b.content)}\n</${tag}>`;
   });
 
   return `${header}\n${sections.join("\n\n")}`;

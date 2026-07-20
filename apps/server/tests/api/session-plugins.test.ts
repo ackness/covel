@@ -698,7 +698,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
 
       const allowedResponse = await requestEnable();
       expect(allowedResponse.status).toBe(200);
-      // H-01: hasGrant is exact-action only — enabling server code grants
+      // `hasGrant` is exact-action only — enabling server code grants
       // exactly the COMMUNITY_SERVER_CODE_ACTION, nothing broader.
       expect(
         rpcApprovalGate.hasGrant(

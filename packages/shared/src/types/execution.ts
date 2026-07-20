@@ -88,13 +88,13 @@ export interface TurnInput {
     };
   };
   /**
-   * Execution origin (2026-07-20 audit M-02), stamped onto the persisted
+   * Execution origin , stamped onto the persisted
    * `turn_results` row so turn accounting can distinguish a real player turn
    * from a manual RPC trigger, a deferred background follower, or a nested
    * recursiveCall. Defaults to `player` when omitted.
    */
   readonly origin?: "player" | "manual" | "follower" | "recursive";
-  /** Parent turnId when this execution is a nested recursiveCall (M-02). */
+  /** Parent turnId when this execution is a nested recursiveCall. */
   readonly parentTurnId?: string;
   /**
    * Player-authored plugin settings, keyed by pluginId. Each plugin's bucket
@@ -116,7 +116,7 @@ export interface TurnResult {
   readonly runtimeResults: readonly RuntimeResult[];
   /**
    * Runtime results produced by nested `ctx.recursiveCall` executions,
-   * flattened across depths (2026-07-20 audit H-08). They are NOT part of
+   * flattened across depths. They are NOT part of
    * `runtimeResults` (which persistTurnResult snapshots — nested turns
    * persist their own turn_results rows) but the commit-owning caller MUST
    * process them through the same proposal pipeline as the top-level
@@ -152,7 +152,7 @@ export interface TurnResult {
     };
   }[];
   /**
-   * Turn-completion barrier (commit consistency, audit R-06/R-09). Present on
+   * Turn-completion barrier (commit consistency, audit). Present on
    * results returned by `executeTurn`. The caller that owns the commit
    * boundary invokes it AFTER this turn's proposals have committed (and the
    * auto-snapshot is captured); it then emits the authoritative

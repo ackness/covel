@@ -228,7 +228,7 @@ export async function setupPluginTools(
       // Builtin tools are always accessible
       if (builtinToolNames.has(name)) return toolMap.get(name);
       // Local tools require a calling-plugin context to authorize against.
-      // H-02: a missing context used to skip the whitelist entirely — any
+      // a missing context used to skip the whitelist entirely — any
       // caller without a context could resolve any plugin's local tool.
       // Fail closed instead.
       if (!context) return undefined;

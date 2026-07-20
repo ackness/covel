@@ -27,7 +27,7 @@ version: "0.1.0"
 summary: <1-2 sentence summary>
 # Quoting keeps the {{ locale }} placeholder intact — unquoted, Prettier's
 # embedded-YAML pass reformats it into `{ { locale } }`, which the template
-# interpolator can no longer expand (2026-07-20 audit L-01).
+# interpolator can no longer expand.
 defaultLocale: "{{ locale }}"
 supportedLocales: ["{{ locale }}"]
 tags: [<you decide genre tags>]

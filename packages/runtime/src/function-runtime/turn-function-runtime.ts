@@ -221,7 +221,7 @@ export async function executeFunctionRuntime({
     hasGateway: !!deps.gateway,
   });
 
-  // H-09: capability revocation. The deadline race below can leave the
+  // Capability revocation. The deadline race below can leave the
   // losing handler running detached; once the race settles (either way) all
   // of the handler's write/spend capabilities are revoked so a late write
   // cannot land after the session lock releases and the next turn begins.
@@ -280,7 +280,7 @@ export async function executeFunctionRuntime({
     // rejection). The merged abort signal (ctx.signal) lets a cooperative
     // handler cancel its own in-flight provider work; a NON-cooperative
     // losing handler keeps running detached, but its capabilities are
-    // revoked in the finally below so late writes are rejected (H-09).
+    // revoked in the finally below so late writes are rejected.
     const handlerPromise = loaded.handler({
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -333,7 +333,7 @@ export async function executeFunctionRuntime({
     throw err;
   } finally {
     clearTimeout(deadlineTimer);
-    // H-09: the race has settled — no further capability use is legitimate,
+    // The race has settled — no further capability use is legitimate,
     // whether the handler won (its output is final) or lost (it is detached).
     capabilitiesRevoked = true;
   }
@@ -452,7 +452,7 @@ export async function executeFunctionRuntime({
   };
 
   // PostRuntime hook — function runtime path (S4-T3). Runs BEFORE
-  // persistence (M-04) so prompt history, commit proposals, and SSE all see
+  // persistence  so prompt history, commit proposals, and SSE all see
   // the same finalized output — see the agent-path comment for rationale.
   const result = await runPostRuntimeHook(
     {

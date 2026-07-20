@@ -379,7 +379,7 @@ async function executeTurnImpl(
     ? input.manualTrigger?.triggerEvent
     : undefined;
 
-  // H-08: nested `ctx.recursiveCall` executions bubble their runtime results
+  // Nested `ctx.recursiveCall` executions bubble their runtime results
   // here so the commit-owning caller can process their proposals through the
   // same barrier as top-level results.
   const nestedRuntimeResults: RuntimeResult[] = [];
@@ -528,7 +528,7 @@ async function executeTurnImpl(
     nestedRuntimeResults,
   });
 
-  // ── Turn-completion barrier (audit R-06/R-09) ─────────────────
+  // ── Turn-completion barrier (audit) ─────────────────
   // The authoritative `turn.completed` event and post-turn memory ingestion
   // must not fire before the caller commits this turn's proposals — a failed
   // commit would otherwise leave clients with a "completed" turn and memory

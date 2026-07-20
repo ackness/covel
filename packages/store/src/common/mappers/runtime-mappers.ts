@@ -19,7 +19,7 @@ export interface TurnResultRow {
   runtimeResults: unknown;
   conflicts: unknown;
   auditResult: unknown;
-  /** M-02 execution origin; NULL on rows written before the column existed. */
+  /** Execution origin; NULL on rows written before the column existed. */
   origin: string | null;
   parentTurnId: string | null;
   durationMs: number;

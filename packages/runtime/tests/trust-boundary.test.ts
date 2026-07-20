@@ -1,7 +1,7 @@
 /**
  * Trust-boundary regression tests — 2026-07-20 consolidated audit, Batch 1.
  *
- * Locks the four H-02/H-03 fixes:
+ * Locks the four trust-boundary fixes:
  *  1. ToolExecutor rejects calls outside the runtime's authorization set
  *     (UNAUTHORIZED), even for registered builtins.
  *  2. Tool-carried proposals are rebound to the executing runtime's
@@ -38,7 +38,7 @@ function makeManifest(overrides: Partial<RuntimeManifest>): RuntimeManifest {
   } as RuntimeManifest;
 }
 
-describe("H-02: executor-side tool authorization", () => {
+describe("executor-side tool authorization", () => {
   const echoTool = {
     name: "echo",
     description: "echo",
@@ -106,7 +106,7 @@ describe("H-02: executor-side tool authorization", () => {
   });
 });
 
-describe("H-03: tool-carried proposal rebinding", () => {
+describe("tool-carried proposal rebinding", () => {
   it("rebinds sessionId/turnId/source of carried proposals to the executing runtime", async () => {
     const store = createMemoryStore();
     await store.createSession({
@@ -166,7 +166,7 @@ describe("H-03: tool-carried proposal rebinding", () => {
   });
 });
 
-describe("H-03: PreStateCommit replacement is payload-only", () => {
+describe("PreStateCommit replacement is payload-only", () => {
   it("pins the envelope when a hook tries to redirect the proposal", async () => {
     const store = createMemoryStore();
     await store.createSession({
@@ -243,7 +243,7 @@ describe("H-03: PreStateCommit replacement is payload-only", () => {
   });
 });
 
-describe("H-03: PreSchedule is filter-only", () => {
+describe("PreSchedule is filter-only", () => {
   const original = [
     makeManifest({ name: "a/one", pluginId: "a" }),
     makeManifest({ name: "b/two", pluginId: "b" }),
@@ -313,7 +313,7 @@ describe("H-03: PreSchedule is filter-only", () => {
   });
 });
 
-describe("H-03: isTrustedPluginSource ignores manifest claims", () => {
+describe("isTrustedPluginSource ignores manifest claims", () => {
   it("never trusts pluginType: core-plugin without a registry answer", () => {
     const forged = makeManifest({ pluginType: "core-plugin" });
     expect(isTrustedPluginSource({}, forged)).toBe(false);

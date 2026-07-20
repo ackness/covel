@@ -82,7 +82,7 @@ export interface RuntimeInvocation {
   /** Internal current recursion depth. Top-level callers omit it (defaults 0). */
   readonly recursionDepth?: number;
   /**
-   * H-08: sink for runtime results produced by nested `ctx.recursiveCall`
+   *  sink for runtime results produced by nested `ctx.recursiveCall`
    * executions. The top-level executeTurn wires this to a collector so the
    * commit-owning caller processes nested proposals through the same barrier
    * as top-level results (they were previously dropped on the floor).
@@ -136,7 +136,7 @@ export async function executeOneRuntime(
         turnId: delta.turnId ?? input.turnId,
         playerMessage: delta.playerMessage ?? input.playerMessage,
         suppressPlayerMessage: true,
-        // M-02: a nested execution is never a player turn — stamp its origin
+        // A nested execution is never a player turn — stamp its origin
         // and parent so turn accounting excludes it from `turnCount`.
         origin: "recursive",
         parentTurnId: input.turnId,
@@ -179,7 +179,7 @@ export async function executeOneRuntime(
             recursionDepth: nextDepth,
           },
         );
-        // H-08: bubble the nested execution's results (its own + any it
+        // Bubble the nested execution's results (its own + any it
         // collected from deeper levels) up to the top-level turn so the
         // commit-owning caller processes their proposals — a nested
         // executeTurn has no commit path of its own.

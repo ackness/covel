@@ -12,7 +12,7 @@ export interface TurnResultRecord {
   readonly conflicts?: unknown; // JSON — WriteConflict[]
   readonly auditResult?: unknown; // JSON — RuntimeResult
   /**
-   * Execution origin (2026-07-20 audit M-02): which path produced this
+   * Execution origin: which path produced this
    * execution artifact. `player` = main action turn; `manual` = plugin-rpc
    * manual trigger; `follower` = deferred background follower; `recursive` =
    * nested ctx.recursiveCall. Absent on rows written before the column

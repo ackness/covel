@@ -24,8 +24,7 @@ export interface HandlerHelperContext {
 
 /**
  * Wrap a capability object so every method call first checks a revocation
- * flag (2026-07-20 audit H-09). A function-runtime handler that loses the
- * deadline race keeps running detached — without revocation its
+ * flag. A function-runtime handler that loses the deadline race keeps running detached — without revocation its
  * store/media/gateway/pluginData capabilities remained live and could write
  * AFTER the session lock released, the snapshot completed, and the next turn
  * began. One shallow Proxy layer suffices: every framework capability handle

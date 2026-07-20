@@ -2,10 +2,10 @@
  * Commit-domain fault injection — 2026-07-20 consolidated audit, Batch 2.
  *
  * Locks the behaviours that used to report success over incomplete state:
- *  - H-07: a proposal that fails to commit emits `proposal.failed` and
+ *  - a proposal that fails to commit emits `proposal.failed` and
  *    withholds the completion barrier (`turn.completed`), and the
  *    auto-snapshot is not taken over a partially-committed turn.
- *  - M-03: a paused/ended session rejects actions without writing player
+ *  - a paused/ended session rejects actions without writing player
  *    messages, interactions, or compaction.
  */
 
@@ -183,7 +183,7 @@ describe("commit-domain fault injection (Batch 2)", () => {
     expect(await store.listSnapshots(SESSION_ID)).not.toHaveLength(0);
   });
 
-  it("H-07: a blocked proposal emits proposal.failed and withholds turn.completed", async () => {
+  it("a blocked proposal emits proposal.failed and withholds turn.completed", async () => {
     // A PreStateCommit hook that aborts is the cleanest fault injection: it
     // makes the commit return { committed: false } without throwing, which
     // is exactly the silently-dropped case the audit found.
@@ -216,7 +216,7 @@ describe("commit-domain fault injection (Batch 2)", () => {
     expect(types).toContain("execution.completed");
   });
 
-  it("M-03: a paused session rejects the action with 409 and writes nothing", async () => {
+  it("a paused session rejects the action with 409 and writes nothing", async () => {
     await store.updateSession(SESSION_ID, {
       status: "paused",
       updatedAt: new Date().toISOString(),
@@ -230,7 +230,7 @@ describe("commit-domain fault injection (Batch 2)", () => {
     expect(await store.listTurnResults(SESSION_ID)).toHaveLength(0);
   });
 
-  it("M-03: an ended session rejects the action with 409", async () => {
+  it("an ended session rejects the action with 409", async () => {
     await store.updateSession(SESSION_ID, {
       status: "ended",
       updatedAt: new Date().toISOString(),

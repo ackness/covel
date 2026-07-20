@@ -198,7 +198,7 @@ export interface PreSchedulePayload {
  * selection, before scheduling). Handlers may return `replace.triggered` to
  * narrow the set (e.g. conditional gating, cost control).
  *
- * Strictly filter-only (H-03): the returned list is reconciled against the
+ * Strictly filter-only: the returned list is reconciled against the
  * ORIGINAL `triggered` set by stable runtime identity (`manifest.name`) and
  * the framework re-uses the original manifest objects. A hook can therefore
  * drop or reorder runtimes but can never inject a manifest that was not

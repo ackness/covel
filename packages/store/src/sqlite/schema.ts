@@ -65,7 +65,7 @@ export const turnResults = sqliteTable(
     runtimeResults: text("runtime_results").notNull(), // JSON
     conflicts: text("conflicts"), // JSON
     auditResult: text("audit_result"), // JSON
-    // M-02: execution origin (player/manual/follower/recursive) + parent
+    // Execution origin (player/manual/follower/recursive) + parent
     // turn for recursive executions. NULL on legacy rows (= player).
     origin: text("origin"),
     parentTurnId: text("parent_turn_id"),
