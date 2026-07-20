@@ -82,3 +82,99 @@ describe("runEventChain deferred-follower dedup", () => {
     expect(warn.mock.calls[0]?.[0]).toContain("gen/background");
   });
 });
+
+describe("runEventChain honours event-runtime throttling", () => {
+  // Fan-out is the ONLY place an `event` runtime can trigger — the main
+  // scheduler evaluates it with an empty topic list, so its topic match always
+  // fails there. Feeding hardcoded "never triggered" history into fan-out
+  // therefore made maxTriggerCount / cooldownTurns dead for event runtimes
+  // everywhere: a once-only follower re-fired on every matching emission.
+  const onceOnly = {
+    name: "once/follower",
+    pluginId: "once",
+    description: "fires at most once per session",
+    runtimeType: "function",
+    trigger: { type: "event", topic: "topic-x", maxTriggerCount: 1 },
+  } as RuntimeManifest;
+
+  const cooling = {
+    name: "cool/follower",
+    pluginId: "cool",
+    description: "cools down for 5 turns",
+    runtimeType: "function",
+    trigger: { type: "event", topic: "topic-x", cooldownTurns: 5 },
+  } as RuntimeManifest;
+
+  function seed(): Map<string, RuntimeResult> {
+    const completedResults = new Map<string, RuntimeResult>();
+    completedResults.set(
+      "seed/emitter",
+      resultEmitting("seed/emitter", "topic-x", { n: 0 }),
+    );
+    return completedResults;
+  }
+
+  it("skips a follower that already hit maxTriggerCount", async () => {
+    const ran: string[] = [];
+    await runEventChain({
+      activeRuntimes: [onceOnly],
+      completedResults: seed(),
+      executeRuntime: async (manifest) => {
+        ran.push(manifest.name);
+        return resultEmitting(manifest.name, "noop", {});
+      },
+      sessionId: "sess-1",
+      turnNumber: 3,
+      runtimeTriggerCounts: new Map([["once/follower", 1]]),
+    });
+    expect(ran).toEqual([]);
+  });
+
+  it("runs that follower when it has never triggered", async () => {
+    const ran: string[] = [];
+    await runEventChain({
+      activeRuntimes: [onceOnly],
+      completedResults: seed(),
+      executeRuntime: async (manifest) => {
+        ran.push(manifest.name);
+        return resultEmitting(manifest.name, "noop", {});
+      },
+      sessionId: "sess-1",
+      turnNumber: 3,
+      runtimeTriggerCounts: new Map([["once/follower", 0]]),
+    });
+    expect(ran).toEqual(["once/follower"]);
+  });
+
+  it("skips a follower still inside its cooldown window", async () => {
+    const ran: string[] = [];
+    await runEventChain({
+      activeRuntimes: [cooling],
+      completedResults: seed(),
+      executeRuntime: async (manifest) => {
+        ran.push(manifest.name);
+        return resultEmitting(manifest.name, "noop", {});
+      },
+      sessionId: "sess-1",
+      turnNumber: 3,
+      runtimeTurnsSinceLastTrigger: new Map([["cool/follower", 2]]),
+    });
+    expect(ran).toEqual([]);
+  });
+
+  it("runs it again once the cooldown has elapsed", async () => {
+    const ran: string[] = [];
+    await runEventChain({
+      activeRuntimes: [cooling],
+      completedResults: seed(),
+      executeRuntime: async (manifest) => {
+        ran.push(manifest.name);
+        return resultEmitting(manifest.name, "noop", {});
+      },
+      sessionId: "sess-1",
+      turnNumber: 9,
+      runtimeTurnsSinceLastTrigger: new Map([["cool/follower", 6]]),
+    });
+    expect(ran).toEqual(["cool/follower"]);
+  });
+});

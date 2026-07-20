@@ -1,5 +1,18 @@
 /**
  * State manager backed by DataStore for persistence.
+ *
+ * @deprecated Legacy path with no production callers. Nothing registers a
+ * state table any more — gameplay state lives in plugin-data, characters, and
+ * working memory, all of which go through the proposal/commit pipeline. Only
+ * `GET /api/sessions/:id/state` still reads through it, and that read is
+ * always empty in practice.
+ *
+ * It is kept (rather than deleted) so an existing database with legacy
+ * `state_schemas` / `state_entries` rows can still be inspected. Do not build
+ * on it: its multi-step writes (`upsertStateEntry` + `addStateChange`) are
+ * NOT wrapped in a transaction, so a failure between them leaves an entry
+ * without its change record. If a future feature needs registered state
+ * tables, give it transactional writes first.
  */
 
 import type { StateTableSchema, StateChangeEntry } from "@covel/shared";

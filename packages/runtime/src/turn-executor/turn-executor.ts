@@ -54,6 +54,7 @@ import {
   loadTurnSessionState,
 } from "./session-state.js";
 import {
+  countPlayerMessagesSinceRuntime,
   scheduleMainLoopFollowups,
   scheduleTriggeredRuntimes,
   selectTriggeredRuntimes,
@@ -484,6 +485,15 @@ async function executeTurnImpl(
           invoke(manifest, triggerEvent),
         sessionId: input.sessionId,
         turnNumber,
+        // Fan-out is the only place an `event` runtime can trigger, so its
+        // throttle gates only work if the real history reaches them.
+        runtimeTriggerCounts,
+        runtimeTurnsSinceLastTrigger: new Map(
+          activeRuntimes.map((rt) => [
+            rt.name,
+            countPlayerMessagesSinceRuntime(messageHistory, rt.name),
+          ]),
+        ),
       });
 
   // ── Pre-Game completion tracking ────────────────────────────────

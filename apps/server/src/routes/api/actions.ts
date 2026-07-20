@@ -226,23 +226,29 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     });
   }
 
-  // Ensure session's plugins are activated in the registry (idempotent, needed after server restart).
-  // On start_session with no plugins yet, auto-activate all registered plugins and persist.
-  let sessionPlugins = session.activePlugins as readonly string[] | undefined;
+  // Ensure session's plugins are activated in the registry (idempotent, needed
+  // after server restart).
+  //
+  // A `start_session` with an empty plugin set used to activate EVERY
+  // registered plugin and persist that — including community plugins the
+  // player never chose and mutually-exclusive ones (both narrative engines at
+  // once), which then ran for the life of the session. Session creation is
+  // what picks the plugin set; an empty set here means the caller skipped that
+  // step, so fail loudly instead of inventing one.
+  const sessionPlugins = session.activePlugins as readonly string[] | undefined;
   if (
     type === "start_session" &&
     (!sessionPlugins || sessionPlugins.length === 0)
   ) {
-    const allPluginIds = Array.from(pluginRegistry.getAll().keys());
-    for (const pid of allPluginIds) {
-      pluginRegistry.activate(pid, sessionId);
-    }
-    await store.updateSession(sessionId, {
-      activePlugins: allPluginIds,
-      updatedAt: new Date().toISOString(),
-    });
-    sessionPlugins = allPluginIds;
-  } else if (sessionPlugins) {
+    return c.json(
+      errorBody(
+        "Session has no active plugins. Create the session with an explicit " +
+          "plugin set (or a world whose manifest seeds one) before starting it.",
+      ),
+      400,
+    );
+  }
+  if (sessionPlugins) {
     for (const pid of sessionPlugins) {
       pluginRegistry.activate(pid, sessionId);
     }

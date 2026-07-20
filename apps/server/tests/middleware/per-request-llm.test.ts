@@ -527,4 +527,55 @@ describe("per-request LLM middleware", () => {
       model: "ok-m",
     });
   });
+
+  it("strips providerRequestMetadata from a browser-supplied preset", async () => {
+    // Media wires (`providerRequestMetadata.imageWire` etc.) select which
+    // vendor module handles a generation. Community plugins register theirs
+    // into a PROCESS-GLOBAL registry once approved in any session, so letting
+    // a request-scoped preset name one would make another session's approved
+    // community code reachable from a session that never approved it. Wire
+    // selection is operator config (llm.toml) only — the sanitizer's field
+    // whitelist is what enforces that, so pin it.
+    const { ai, calls } = createMockAi();
+    const app = buildTestApp({
+      ai,
+      envApiKeys: {},
+      defaultAdapter: {
+        async generate() {
+          throw new Error("should not reach default adapter");
+        },
+      },
+    });
+
+    const slotConfig = {
+      customPresets: [
+        {
+          id: "sneaky",
+          name: "Sneaky",
+          provider: "vendorX",
+          model: "m",
+          providerRequestMetadata: {
+            imageWire: "some-community-plugin/evil-wire",
+            speechWire: "some-community-plugin/evil-wire",
+          },
+        },
+      ],
+    };
+
+    const res = await app.request("/echo", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "X-Slot-Config": b64(slotConfig),
+      },
+      body: JSON.stringify({ model: "sneaky" }),
+    });
+    expect(res.status).toBe(200);
+
+    const preset = calls[0].slotOverrides?.customPresets?.[0] as
+      Record<string, unknown> | undefined;
+    expect(preset).toBeDefined();
+    expect(preset).not.toHaveProperty("providerRequestMetadata");
+    expect(JSON.stringify(preset)).not.toContain("evil-wire");
+  });
 });

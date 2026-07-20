@@ -24,6 +24,18 @@ export interface RunEventChainParams {
   readonly sessionId: string;
   /** Current main-loop turn number — same purpose as `sessionId`. */
   readonly turnNumber: number;
+  /**
+   * How many times each runtime has already produced output this session,
+   * and how many turns since it last did.
+   *
+   * Fan-out is the ONLY place an `event` runtime can trigger: the main
+   * scheduler evaluates it with an empty topic list, so its topic match always
+   * fails there. Passing hardcoded "never triggered" values here therefore made
+   * `maxTriggerCount` and `cooldownTurns` dead for event runtimes everywhere —
+   * a once-only event runtime re-fired on every matching emission.
+   */
+  readonly runtimeTriggerCounts?: ReadonlyMap<string, number>;
+  readonly runtimeTurnsSinceLastTrigger?: ReadonlyMap<string, number>;
 }
 
 /**
@@ -44,12 +56,19 @@ function eventFanoutTriggerContext(
   sessionId: string,
   turnNumber: number,
   pendingEventTopics: readonly string[],
+  runtimeName: string,
+  triggerCounts: ReadonlyMap<string, number> | undefined,
+  turnsSinceLastTrigger: ReadonlyMap<string, number> | undefined,
 ): TriggerContext {
   return {
     sessionId,
     turnNumber,
-    triggerCount: 0,
-    turnsSinceLastTrigger: Number.MAX_SAFE_INTEGER,
+    // Real per-runtime history so `maxTriggerCount` / `cooldownTurns` bite.
+    // Absent maps fall back to "never triggered", which keeps direct callers
+    // (tests) working and matches the previous behaviour.
+    triggerCount: triggerCounts?.get(runtimeName) ?? 0,
+    turnsSinceLastTrigger:
+      turnsSinceLastTrigger?.get(runtimeName) ?? Number.MAX_SAFE_INTEGER,
     pendingEventTopics,
     isManualTrigger: false,
     preGameCompleted: [],
@@ -83,6 +102,8 @@ export async function runEventChain({
   maxDepth = 8,
   sessionId,
   turnNumber,
+  runtimeTriggerCounts,
+  runtimeTurnsSinceLastTrigger,
 }: RunEventChainParams): Promise<DeferredFollower[]> {
   const emittedEvents = new Map<string, Record<string, unknown>>();
   for (const [, result] of completedResults) {
@@ -112,7 +133,14 @@ export async function runEventChain({
       // to `shouldTrigger`, feeding it the freshly-emitted topics.
       return shouldTrigger(
         rt,
-        eventFanoutTriggerContext(sessionId, turnNumber, pendingEventTopics),
+        eventFanoutTriggerContext(
+          sessionId,
+          turnNumber,
+          pendingEventTopics,
+          rt.name,
+          runtimeTriggerCounts,
+          runtimeTurnsSinceLastTrigger,
+        ),
       );
     });
     if (nextBatch.length === 0) break;

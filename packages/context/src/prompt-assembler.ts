@@ -103,8 +103,11 @@ export interface PromptSegments {
  *
  * Callers may override this entirely via `ContextBuildParams.frameworkPreamble`.
  */
-function defaultFrameworkPreamble(locale: string | undefined): string {
-  return buildFrameworkPreamble(locale);
+function defaultFrameworkPreamble(
+  locale: string | undefined,
+  terminatesWithRuntimeDone: boolean,
+): string {
+  return buildFrameworkPreamble(locale, { terminatesWithRuntimeDone });
 }
 
 /**
@@ -199,9 +202,14 @@ function buildPromptSegmentsCommon(
     .filter(Boolean)
     .join("\n");
 
+  // A schema-declared runtime terminates by emitting its JSON envelope and is
+  // never given `runtime-done`, so the completion instruction must match.
   const frameworkPreamble =
     params.frameworkPreamble ??
-    defaultFrameworkPreamble(params.turnInput.locale);
+    defaultFrameworkPreamble(
+      params.turnInput.locale,
+      !params.manifest.output?.schema,
+    );
 
   // Segment 2 — Core Memory (Letta-style) + Working Memory (S3-T3)
   const coreMemory = renderCoreMemory(

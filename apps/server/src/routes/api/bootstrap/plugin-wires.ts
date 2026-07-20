@@ -13,6 +13,19 @@
  * bootstrap; community plugins load on `ensurePluginWires()` — called from
  * `loadRuntimeFn`, i.e. the same moment the framework would import the
  * plugin's handler.js anyway, so no new trust exposure.
+ *
+ * SCOPE — registration is PROCESS-GLOBAL and is not revoked. Approving a
+ * community plugin in one session registers its wires for the whole process,
+ * and revoking that approval does not unregister them; only a restart clears
+ * them. This is deliberate rather than an oversight: a wire is selected by
+ * operator-authored `llm.toml` slot config, never by player input. Browser-
+ * supplied presets arrive through `X-Slot-Config`, whose sanitizer whitelists
+ * `id/name/provider/model/baseUrl/protocol` and therefore cannot carry a
+ * `providerRequestMetadata.*Wire` selection at all (pinned by
+ * `tests/middleware/per-request-llm.test.ts`). So the effective grant level of
+ * a community wire is operator, matching who can point a slot at it. Making
+ * registration session-scoped would only matter if wire selection ever became
+ * player-reachable — if that changes, this must change with it.
  */
 
 import fsSync from "node:fs";
