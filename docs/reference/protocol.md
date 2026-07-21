@@ -271,6 +271,8 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 > `function.executing` / `function.completed` 为 function-runtime 的 handler 边界 trace 事件（TurnEmitter），`forwardToActionStream: false`——**仅经订阅通道 / trace_events 下发**，与 `recursive.*` 同类，不进入 `/api/actions`。`gateway.*` 则 `forwardToActionStream: true`（对齐 `llm.calling/responded`），故列在上表。两组都已纳入 `CovelEvent` union（发射端受 `CovelEventType` 闭合约束）。
 >
 > `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed`（A2-P1-5 follow-up）trace 插件自带 wire 的 provider HTTP 调用（`ctx.utils.fetchWithRetry`，图像生成插件走的路径，由 `withUtilsTrace` 在 function-runtime / agent-guard 注入处包裹）。`forwardToActionStream: false`——polling 可能高频，故仅经 trace_events + 订阅通道驱动 `/debug`，不进 action 流。负载仅含 host / method / status / durationMs（**绝不含完整 URL、query、api key**，PII 保护）。
+>
+> `context.pruned`（TurnEmitter，`packages/runtime/src/agent-loop/turn-agent-runtime.ts`）在某个 runtime 的 prompt 组装触发预算硬裁剪时发出一次，负载为 `{ runtimeId, pluginId, prunedMessageCount }`。`forwardToActionStream: false`——仅进 trace_events / 订阅通道，让 `/debug` 能解释「这一回合掉了历史」，玩家侧的 action 流不受影响。
 
 ## 二、命令类型（CommandType）
 
@@ -294,6 +296,8 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 | `turn.retry`  | POST | `/api/actions` `type: "retry_runtime"`   | SSE: ProtocolEvent 流 |
 
 `retry_runtime` 的 `payload.runtimeId`（可选）把重跑收窄到指定 runtime（走 manual-trigger 路径）；缺省时保持整回合重跑语义。
+
+`start_session` 要求会话已带非空 `activePlugins`（创建会话时选定）。空集合直接 400，不会退化成"激活全部注册插件"——详见 [api.md](./api.md#post-apiactions)。
 
 > **移除（2026-07-20 审计 M-07）**：`type: "trigger_event"` 已删除——其 payload 从未被服务端读取、UI 无调用方，请求效果只是空跑一整回合。插件侧发事件请用 builtin `emit-event` 工具；再发送 `trigger_event` 会得到 400 `Unsupported action type`。
 

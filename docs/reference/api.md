@@ -63,6 +63,21 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 
 纯 Web 客户端可在 **Settings → Operator Access（运维访问）** 输入或清除该 token。凭据只保存在当前浏览器的 `localStorage`，仅在上述 operator-gated 同源请求中作为 `Authorization: Bearer <token>` 发送；保存或清除后客户端会重新加载，以新凭据重取会话与世界数据。`self` 层级继续允许无 token 使用，并忽略该可选凭据。
 
+**community server-code grant 是 session 授权、进程级生效**：
+
+审批本身按 `(sessionId, pluginId, action)` 记录，但它授权的动作是把插件的 server code `import()` 进 Node 进程。ESM 模块只加载一次，entry factory 也只跑一次（按 pluginId 记忆），所以第一个批准该插件的会话就把它注册的 tool / RPC handler / media wire 装进了**进程级**注册表——之后其他会话不必再批准即可看到这些注册项存在。
+
+因此实际的边界分两层：
+
+| 层面                                                | 作用域                                                                                                                               |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **代码加载 / 能力注册**                             | 进程级、一次性、不可撤销。任一会话批准即完成。                                                                                       |
+| **调用（RPC dispatch / runtime 加载 / hook 执行）** | 每次仍按发起会话查 grant。未批准的会话拿不到 `covel:plugin-server-code`、`runtime:<name>` 校验，hook 也会被跳过（返回 `continue`）。 |
+
+**revoke 边界**：`DELETE /api/sessions/:id/approvals`（以及禁用插件）按 `(session, plugin)` 前缀清除 session-cached 与一次性 grant，并取消待决审批。它**不会**卸载已导入的模块，也不会注销已注册的 tool / RPC handler / wire——JS 没有可靠的模块卸载。撤销之后该会话的后续 dispatch、runtime 加载和 hook 执行会重新被拒，但已经在进程内的代码要到重启才消失。进程重启则清空全部易失 grant（见 Snapshot / Fork 一节）。
+
+单运维方模型下这是可接受的：批准 community 代码等同于信任它在本进程内运行。多租户隔离需要真正的代码沙箱，尚未实现。
+
 > CORS（`CORS_ORIGIN`）只是浏览器策略，**不构成鉴权**；真正的授权边界是 owner token + 部署层级 + 回环监听。
 
 ---
@@ -1472,11 +1487,15 @@ value         : {
 | 400    | `pluginId` 缺失 / `action` 与 `runtimeId` 同时设置或同时缺失 / `RpcValidationError` / `plugin-mismatch`(runtimeId 不属于 pluginId) |
 | 404    | 会话不存在 / `unknown-action`(action 未注册) / `runtime-not-active`(runtimeId 未加载到该 session)                                  |
 | 429    | `queue-full`(community trust 的待批准队列满)                                                                                       |
-| 500    | handler 抛出未处理异常 / handler 模块加载失败 / `runtime-execution-failed` / `background-enqueue-failed`                           |
+| 500    | handler 抛出未处理异常 / handler 模块加载失败 / `runtime-execution-failed` / `background-enqueue-failed` / `turn-commit-failed`    |
 
 > 注意: background 模式下 runtime 内部异常 **不会**映射为 5xx HTTP 状态 —— 202 已经发出,失败信息写入 `_jobs/{jobId}.value.error`,前端通过 SSE 感知。
 
+> **提交结果是权威判据**：runtime 可能返回 `success` 而其 proposal 提交失败。此时同步 RPC 返回 `500 turn-commit-failed`，background job 标记 `failed`（`error` 说明失败的 proposal 数量），且**不会**调度该回合的 deferred follower —— 后续 follower 不应建立在已回滚的状态上。主回合路径（`POST /api/actions`）遵循同一规则。
+
 > **community 插件 + `entry` action 的延迟激活**：首次调用时 action 声明尚未注册，服务端先返回固定 `action: "covel:plugin-server-code"` 的全模块审批，避免由调用方伪造的 action label 诱导加载代码。session-scope 审批后加载 entry 并验证 action：不存在立即 404；存在则再返回该真实 action 的独立审批。客户端应处理这两个连续的 `approval-required` 响应，并为审批重试设置两阶段上限。hosted 层级两个步骤都要求 operator token。builtin/official 的 entry 在 boot 时已运行，其未知 action 直接 404。
+>
+> **community 插件的声明式 `manifest.rpc` action 同样两阶段**：dispatch 一个声明式 action 会动态 `import()` 该插件的 handler 模块，按同一定义它就是 server code。因此缺少 server-code grant 时，第一次调用先返回 `covel:plugin-server-code` 审批；批准后重试才返回该 action 自身的审批。builtin/official 声明式 action 不受影响（照旧自动放行）。
 >
 > **community 插件 + `runtimeId`（runtime 模式）同样两阶段（2026-07-20 审计 H-01）**：缺少 server-code grant 时第一次调用先返回 `covel:plugin-server-code` 审批；批准后重试返回 `runtime:<runtimeId>` 审批；两个**精确** grant 同时存在 runtime 才会加载执行（runtime loader 要求 AND，不再是任一 grant 即可）。entry import 也只认精确 `covel:plugin-server-code` grant——任意其他 action grant 不再解锁模块加载（`hasGrant` 已改为精确匹配、action 必填）。revoke 按 `(session, plugin)` 前缀清除两类 grant，语义不变。
 
@@ -2583,6 +2602,8 @@ id: evt-002
 | `content`      | `send_message`    | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                          |
 | `command`      | `execute_command` | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。                                     |
 | `runtimeId`    | `retry_runtime`   | 可选。收窄重跑到指定 runtime（走 manual-trigger 路径）；缺省保持整回合重跑语义（M-07）。 |
+
+**`start_session` 的前置条件**：会话必须已有非空 `activePlugins`。插件集合由会话创建时决定（显式 `plugins` 数组，或世界 manifest 播种的推荐集），`start_session` 只负责在注册表里激活它们。空集合会被 **400** 拒绝（`Session has no active plugins. …`），而不是回退到"激活全部已注册插件"——那个回退会把玩家从未选择的社区插件、以及互斥的两个叙事引擎同时拉进会话，并持久化到会话生命周期结束。
 
 > 旧版示例曾使用 `payload.message`，但服务端从未读取该字段，已统一为 `content` / `command`。
 >

@@ -3,13 +3,14 @@ import { pickLocaleText as pick } from "@covel/plugin-handlers-utils";
 /**
  * guard.js — Pre-execution gate for schema-gen runtime.
  *
- * Runs before LLM is called. Checks whether world schema/entries already exist.
- * If found (from current session, a previous session of the same world, or
- * imported from world.yaml), returns { skip: true } to bypass the LLM call.
+ * Runs before LLM is called. Checks whether world schema/entries can be
+ * obtained without generation — from this session's own plugin-data, from
+ * `world.yaml` declared character attributes, or derived from world
+ * dimensions. When any of those hold it returns { skip: true } and the LLM
+ * call is bypassed. Only sessions of a world that supplies none of them pay
+ * for a schema-gen call.
  *
- * Cross-session reuse: when a new session is created for the same world,
- * the guard copies schema + entries from a previous session instead of
- * regenerating via LLM (~30s saved).
+ * Data from OTHER sessions is never read — see the note at step 2b below.
  *
  * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
  * @returns {Promise<Record<string, unknown>>}

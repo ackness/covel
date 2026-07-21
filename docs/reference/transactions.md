@@ -136,6 +136,15 @@ nested-call rejection) but differ in concurrency and isolation:
 > caller that starts while a transaction is suspended at an `await` is not
 > mistaken for a nested one.
 >
+> **The gate is per-connection, not per-store.** Everything that mutates
+> through one better-sqlite3 handle shares a single gate, resolved via
+> `getConnectionWriteGate(db)` in `sqlite/shared-connection.ts`: the `DataStore`
+> methods, the optional sqlite-vec capability (`VECTOR_WRITE_METHODS`), and the
+> mirror MediaStore that deliberately reuses the same connection
+> (`MEDIA_WRITE_METHODS`). Before this, only the `DataStore` methods were gated,
+> so a vector or media write issued from another session still joined an open
+> transaction and disappeared on its rollback.
+>
 > Throughput is unaffected — better-sqlite3 is synchronous, so its statements
 > were already serialized. **Per-transaction connections (as PgStore has) remain
 > the long-term answer for real concurrency**; the gate closes the correctness

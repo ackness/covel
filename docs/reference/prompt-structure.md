@@ -45,6 +45,8 @@ messages
 
 空段会被跳过，非空 system 段用 `\n\n` 拼接成 `AssembledContext.systemPrompt`。运行时仍消费一个 `systemPrompt: string` 与一个 `messages` 数组。
 
+段 7 里替换被压缩历史的 compactor summary 以 **`user` 角色的 `<compacted_history>` 数据信封**进入 `messages`，内容做 XML 转义。summary 是模型自己写的、会持久化、之后每回合都重新注入的文本；用 `system` 身份注入等于给一次提示注入开了一条跨回合、自我放大的通道。信封化后它只是"早先回合的故事记录"，与 core memory 的处理方式一致。
+
 ## 3. 插件扩展点
 
 插件可以在 `PLUGIN.md` frontmatter 声明 `authorsNote` 和 `postHistory`：
@@ -81,7 +83,7 @@ summaryFocus:
 
 ## 4. Template 变量
 
-`PLUGIN.md` 正文、`authorsNote.content`、`postHistory.content`、runtime inject 内容都支持 `{{ variable }}` 插值。变量来自 `assemblePromptVariables()`：
+`PLUGIN.md` 正文、`authorsNote.content`、`postHistory.content` 支持 `{{ variable }}` 插值。变量来自 `assemblePromptVariables()`：
 
 - `{{ player.message }}`：当前玩家输入。
 - `{{ player.lastFormValues }}`：最近一次 player 表单提交，JSON 字符串。
@@ -91,6 +93,8 @@ summaryFocus:
 - `{{ userSettings.* }}`：玩家配置的插件设置。
 
 Working Memory 与 Core Memory 通过 session context snapshot 进入段 2；插件模板也可以通过已有变量读取需要暴露的字段。
+
+**段 5 的 inject 内容不参与插值**。inject 块承载的是上游 runtime 输出或 plugin-data——也就是模型写的、玩家写的**数据**。这些数据在生成 inject 块时已经做过 XML 转义，但转义不处理 `{}`；如果再跑一遍插值，数据里出现的 `{{ ... }}` 会被展开，且展开结果原样插入、绕过转义，等于把玩家输入重新带回 system prompt。模板只在插件自己的 PLUGIN.md 正文上解释一次，inject 一律当数据处理。插件作者需要在 inject 里做条件逻辑时，应该在上游 runtime 输出成品文本，而不是输出模板。
 
 ## 5. Prompt Cache 标记
 

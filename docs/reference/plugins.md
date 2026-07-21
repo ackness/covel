@@ -243,7 +243,7 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 | capabilities | `[npc-graph, graph-rag]`                            |
 | trigger      | `scheduled`，`interval: 1`                          |
 
-每个非 Pre-Game 回合开始时自动运行：从 `playerMessage` 中匹配 NPC 节点名（含别名，case-insensitive），沿邻接索引做 2-hop BFS，过滤 `invalidAt` 已到期的边，按 `(validAt, |strength|)` 排序后取 top-20，输出 markdown 列表到 `npcContext` 字段。`narrator` 通过 `input.inject` 把这段文本作为 `<npc-relationships>` 块注入 prompt 末尾。
+每个非 Pre-Game 回合开始时自动运行：从 `playerMessage` 中匹配 NPC 节点名（含别名，case-insensitive），沿邻接索引做 2-hop BFS，只保留**有效区间仍开放**的边（`invalidAt === undefined`；被新版本取代的旧边保留在库里做溯源，但不进 prompt，否则同一对人物会出现两条互相矛盾的事实），按 `(validAt, |strength|)` 排序后取 top-20，输出 markdown 列表到 `npcContext` 字段。`narrator` 通过 `input.inject` 把这段文本作为 `<npc-relationships>` 块注入 prompt 末尾。
 
 **Phase 3.5 升级路径**：当 framework 层向 function handler 暴露 gateway 后，将升级为"先 embed 查询 → vector search → 子图扩展"的混合检索。当前为纯结构化版本。
 
@@ -279,6 +279,17 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 - 关系类型推荐 10 种 `TRUSTS / FEARS / RESPECTS / ALLY_OF / OPPOSES / COMPETES_WITH / WORKS_FOR / SUBORDINATE_OF / OWES_DEBT_TO / KNOWS_ABOUT`
 - LLM 使用 `upsert-npc-graph` 时通过 **name** 而非 ID 引用节点，工具内部去重并分配短 ID（`npc-xxxx`、`edge-xxxx`）
 - 每条 edge 的 `fact` 必须是完整自然语言句子 —— 这是 Phase 3 Graph-RAG 的检索单元
+
+**边的版本化（有效区间）**：一条边是「带有效区间的事实版本」，不是唯一行。同一 `(source, target, relation)` 在一个会话里可以有多个版本，其中至多一个是**开放**的（`invalidAt === undefined`）。
+
+| 再次提交同一关系            | 行为                                                                                                                                   |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `strength` 与 `fact` 都没变 | 空操作，结果里标记 `skipped: "unchanged relation"`                                                                                     |
+| 任一变化                    | 开放版本在当前回合被关闭（写入 `invalidAt = 当前回合`），同时新开一个版本（`validAt = 当前回合`），结果里带 `supersedes: <旧 edge id>` |
+
+`validAt` / `invalidAt` / `firstSeenTurn` / `lastSeenTurn` 用的都是**真实逻辑回合数**（`context.turnNumber`，即玩家消息计数）；不在回合上下文中执行时写 `-1` 表示未知。历史上 `validAt` 曾用「已存边的行数」填充——那是图的规模而不是时间，任何基于它的衰减 / 近期性排序都没有意义。
+
+向后兼容：版本化之前写入的旧行没有 `invalidAt`，因此天然被读作开放版本，老会话照常检索，并从此正常参与取代。
 
 **存储布局**（`plugin_data` 表中）:
 
@@ -798,7 +809,7 @@ plugins/<plugin-id>/
 ├── runtimes/
 │   ├── runtime-a/
 │   │   ├── PLUGIN.md      # name: plugin-id/runtime-a
-│   │   └── PLUGIN.en.md   # 可选：英文版
+│   │   └── PLUGIN.en.md   # 可选：英文版（只翻译正文与自然语言字段）
 │   └── runtime-b/
 │       ├── PLUGIN.md      # name: plugin-id/runtime-b
 │       └── handler.js     # function runtime 的 handler
@@ -980,14 +991,20 @@ Function runtime 和 guard 的 `FunctionHandlerContext` 暴露：
 ```typescript
 interface FunctionHandlerContext {
   recursiveCall(
-    delta: Partial<TurnInput>,
+    delta: RecursiveCallDelta,
     opts?: { reason?: string },
-  ): Promise<TurnResult>;
+  ): Promise<NestedTurnResult>;
   recursionDepth: number;
 }
 ```
 
-`recursiveCall()` 会用当前 turn 输入作为基底，合并 `delta` 后重新进入 turn executor。嵌套调用默认深度上限为 `10`，manifest 可用 `maxRecursionDepth` 覆盖：
+`recursiveCall()` 会用当前 turn 输入作为基底，合并 `delta` 后重新进入 turn executor。
+
+**执行身份由框架持有，插件不可覆盖**：
+
+- `RecursiveCallDelta = Omit<Partial<TurnInput>, "sessionId" | "turnId" | "origin" | "parentTurnId">`。这四个字段即使在运行时被传入也会被剥离——嵌套调用必须留在父 session 内（否则已批准的 handler 可读取并写入其他 session，绕过 hosted 的 session-owner 边界），并保留框架签发的子 `turnId`（否则其 execution artifact 无法随父回合结算）。
+- `NestedTurnResult = Omit<TurnResult, "completeTurn">`。completion barrier 只保留在顶层框架控制面；嵌套调用方若能触发它，就会在父回合 proposal 提交之前发出权威的 `turn.completed` 并启动 memory ingestion。
+  嵌套调用默认深度上限为 `10`，manifest 可用 `maxRecursionDepth` 覆盖：
 
 ```yaml
 runtimeType: function
@@ -1075,7 +1092,7 @@ hooks:
 | `PostContextAssembly` | `sequential` | turn 级（每 runtime 一次，`buildContext` 之后、进 loop 之前）改写已装配的 `systemPrompt` / 投影历史；`replace.{systemPrompt,messages}` 链式累积（对齐 pi 的 `before_agent_start`）                                                                                                                                                                                                                                                                    |
 | `PreLLMCall`          | `sequential` | 每次 LLM 调用前非破坏性改写发往模型的请求；`replace.{messages,model,tools}` 链式累积。不改写底层 transcript（对齐 pi 的 `context`）。`abort` 无意义、视为不变                                                                                                                                                                                                                                                                                         |
 | `PostLLMResponse`     | `sequential` | LLM 响应返回后、工具派发前；`replace.response` 链式改写 `content`/`toolCalls`（对齐 pi 的 `after_provider_response`）                                                                                                                                                                                                                                                                                                                                 |
-| `PostRuntime`         | `sequential` | 链式改写 runtime 输出：`replace.result` 重写该 runtime 的 `RuntimeResult`(链式累积),不改则原样                                                                                                                                                                                                                                                                                                                                                        |
+| `PostRuntime`         | `sequential` | 链式改写 runtime 输出：`replace.result` 重写该 runtime 的 `RuntimeResult`(链式累积),不改则原样。**执行身份不可改写**：`pluginId` / `runtimeId` / `runId` / `turnId` 始终被还原为框架实际选中并加载的 manifest 身份——提交阶段按这些字段重绑 proposal,否则已批准的 hook 能把写入重定向到别的插件名下                                                                                                                                                    |
 | `PreToolUse`          | `sequential` | 链式改写 tool call；`replace` 会传给下一个 handler；`abort` 会跳过该 tool（不中止回合）                                                                                                                                                                                                                                                                                                                                                               |
 | `PostToolUse`         | `sequential` | 链式 patch tool result：`replace.result` 改写结果、`replace.terminate: true` 在记录该结果后结束工具循环（对齐 pi 的 `tool_result.terminate`）。**结束循环用 `replace.terminate`，不要用 `abort`**（PostToolUse 的 `abort` 不生效，结果原样、循环继续）                                                                                                                                                                                                |
 | `PreStateCommit`      | `sequential` | 链式改写 commit payload；任一 handler 可用 `abort` 拒绝 commit                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -1197,7 +1214,7 @@ relations:
 
 Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用时长**（`callTimeoutMs` / `firstTokenTimeoutMs`）和**运行总时长**（`timeoutMs`）。框架会自动在 transient 错误、call-timeout、first-token-timeout、tool-call 循环四种情形下重试，并在每次重试时向 prompt 追加一条短 system 提示打破 KV-cache 命中。
 
-**Function runtime 只消费 `timeoutMs`**：handler 受同一运行总时长硬上限约束（默认 60000ms），超时该 runtime 以 failed 收场、turn 继续。function runtime 没有重试循环，其余字段（`maxRetries` / `callTimeoutMs` / `firstTokenTimeoutMs` / `loopDetectionThreshold` / `requireToolUse`）对其无效。注意超时只解除 turn 阻塞，已发出的 handler 调用无法被取消。
+**Function runtime 只消费 `timeoutMs`**：handler 受同一运行总时长硬上限约束（默认 60000ms），超时该 runtime 以 failed 收场、turn 继续。function runtime 没有重试循环，其余字段（`maxRetries` / `callTimeoutMs` / `firstTokenTimeoutMs` / `loopDetectionThreshold` / `requireToolUse`）对其无效。注意超时只解除 turn 阻塞，已发出的 handler 调用无法被取消。超时后框架会**吊销 handler 的全部副作用能力**——`store`、`pluginData`、`media`、`images`、`speech`、`gateway`、`utils`、`recursiveCall`、`logger`、`assetProgress`——脱离的 handler 再调用会同步抛出 `capability ... is revoked`，避免在 session lock 释放、下一回合开始后仍写入。协作式 handler 应监听 `ctx.signal` 主动取消。
 
 | 字段                     | 类型      | 默认                                              | 含义                                                                                                                                                                                                                     |
 | ------------------------ | --------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -1406,6 +1423,18 @@ input:
 | `error-retry` | ⚠️ reserved | **当前永不触发**：调度器不会上报上游失败信号，`shouldTrigger` 直接返回 false 并打印一次性 warning。对应能力落地前请勿使用                                                                                                                                                                                                               |
 
 > **可用 vs reserved**：生产实际可用的只有 `auto` / `manual` / `scheduled` / `event` 四种。`conditional` 与 `error-retry` 是为未来能力预留的占位类型，声明它们的 Runtime 会被静默跳过（并在 console 提示一次）。在对应能力落地前请使用上面四种之一。
+
+#### `event` 的调度例外：fan-out 不受优先级分带约束
+
+`event` runtime 唯一的触发点是回合内的事件扇出（`packages/runtime/src/trigger/turn-event-chain.ts`）：主调度器用空 topic 列表评估它，topic 匹配必然失败。扇出的语义是「因果反应」而不是「排班的时隙」，因此它**故意不套用当前回合的优先级分带**——Pre-Game 回合里某个 setup runtime 发出的 topic，同样能唤起主循环分带（100–1000）的订阅者，反之亦然。若按分带过滤，发射方与订阅方分处两带时订阅者会被静默丢弃且没有任何诊断信息。
+
+扇出仍然受这些约束：
+
+- **`session.preGameCompleted`**：已经报告完成的 Pre-Game runtime 不会被后续同名 topic 复活——这是「一次性 setup」契约真正的守卫，也是扇出唯一继承的分带相关语义。
+- **`maxDepth`**（默认 8）：限制事件链在单回合内的递归深度。
+- **回合内去重**：本回合已产出结果的 runtime 不会被再次执行；`execution: background` 的订阅者每回合最多被 defer 一次。
+
+`maxTriggerCount` / `cooldownTurns` 这类**按会话**计的节流由主调度器每回合应用一次，扇出内会带上真实历史一并判定。
 
 ### trigger 字段速查
 
