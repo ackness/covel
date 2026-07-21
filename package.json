@@ -1,6 +1,6 @@
 {
   "name": "covel",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "private": true,
   "type": "module",
   "scripts": {
@@ -44,23 +44,23 @@
     "release:preflight": "node ./scripts/release-preflight.mjs",
     "preinstall": "npx only-allow@1.2.2 pnpm"
   },
-  "packageManager": "pnpm@10.33.2",
+  "packageManager": "pnpm@11.9.0",
   "engines": {
-    "node": ">=22.9.0"
+    "node": ">=26.0.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.0",
+    "@playwright/test": "^1.61.1",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^26.0.0",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@types/node": "^26.1.1",
+    "@vitest/coverage-v8": "^4.1.10",
     "better-sqlite3": "^12.11.1",
     "cross-spawn": "^7.0.6",
-    "knip": "^6.17.1",
-    "playwright": "^1.61.0",
-    "prettier": "^3.8.4",
+    "knip": "6.25.0",
+    "playwright": "^1.61.1",
+    "prettier": "3.9.5",
     "sqlite-vec": "^0.1.9",
-    "tsx": "^4.22.4",
-    "turbo": "^2.9.18",
+    "tsx": "4.22.4",
+    "turbo": "2.9.18",
     "yaml": "^2.9.0"
   }
 }

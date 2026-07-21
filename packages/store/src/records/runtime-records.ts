@@ -1,5 +1,5 @@
 /**
- * Turn / runtime execution record types (PR-1 translation layer included).
+ * Turn / runtime execution record types (translation layer included).
  *
  * Split out of `../types.ts` by domain; re-exported there for compatibility.
  */
@@ -11,6 +11,27 @@ export interface TurnResultRecord {
   readonly runtimeResults: unknown; // JSON — RuntimeResult[]
   readonly conflicts?: unknown; // JSON — WriteConflict[]
   readonly auditResult?: unknown; // JSON — RuntimeResult
+  /**
+   * Execution origin: which path produced this
+   * execution artifact. `player` = main action turn; `manual` = plugin-rpc
+   * manual trigger; `follower` = deferred background follower; `recursive` =
+   * nested ctx.recursiveCall. Absent on rows written before the column
+   * existed — treated as `player` by consumers for backward compatibility.
+   */
+  readonly origin?: "player" | "manual" | "follower" | "recursive";
+  /** Parent turnId for `recursive` executions whose delta overrode turnId. */
+  readonly parentTurnId?: string;
+  /**
+   * Whether this execution's proposals were committed.
+   *
+   * The row is written BEFORE commit — it is an execution artifact, not proof
+   * of committed game state — so a row with no completion is the expected
+   * crash signature. Without this field a crash is indistinguishable from a
+   * turn whose commit failed, and both look like a successful turn to anyone
+   * reading the table. `pending` is the pre-commit state; the commit-owning
+   * caller settles it. Absent on rows written before the column existed.
+   */
+  readonly commitStatus?: "pending" | "committed" | "failed";
   readonly durationMs: number;
   readonly createdAt: string;
 }
@@ -44,7 +65,7 @@ export interface ToolCallRecordRow {
   readonly createdAt: string;
 }
 
-// ── Translation layer: RuntimeOutput + InteractionRecord (PR-1) ──
+// ── Translation layer: RuntimeOutput + InteractionRecord ──
 
 /**
  * Normalised record of one runtime execution's output. Written by

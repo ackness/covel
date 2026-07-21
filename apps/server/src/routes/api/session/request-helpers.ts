@@ -71,8 +71,7 @@ export type SessionPatchUpdates = Partial<
 >;
 
 type ParsedSessionPatch =
-  | { ok: true; updates: SessionPatchUpdates }
-  | { ok: false; error: string };
+  { ok: true; updates: SessionPatchUpdates } | { ok: false; error: string };
 
 export function buildSessionPatchUpdates(
   body: Record<string, unknown>,
@@ -93,9 +92,9 @@ export function buildSessionPatchUpdates(
     updates.status = body.status;
   }
 
-  // PR-6: per-runtime model slot overrides. Validates shape (object of
+  // Per-runtime model slot overrides. Validates shape (object of
   // string->string) before applying. Empty object clears existing overrides.
-  // MEDIUM-3: cap entry count and validate each key shape.
+  // Cap entry count and validate each key shape.
   if (body.runtimeModelOverrides !== undefined) {
     if (
       body.runtimeModelOverrides === null ||

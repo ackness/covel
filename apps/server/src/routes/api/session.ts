@@ -196,7 +196,7 @@ sessionRoutes.get("/", async (c) => {
 
 // POST /sessions
 sessionRoutes.post("/", async (c) => {
-  // C-02 (scoped): on hosted tiers (demo/commercial) session CREATION is
+  // On hosted tiers (demo/commercial) session CREATION is
   // operator-only — otherwise any anonymous caller could mint themselves a
   // session + owner token on a shared host. COVEL_DESKTOP_REST_TOKEN is the
   // only auth primitive the codebase ships, so this is a single-operator
@@ -249,7 +249,7 @@ sessionRoutes.post("/", async (c) => {
     c.get("rpcApprovalGate"),
   );
 
-  // Owner token (audit S-02): minted on every tier so a session created
+  // Owner token: minted on every tier so a session created
   // locally keeps working if the deployment is later promoted to a hosted
   // tier. Only the hash is persisted; the raw token is returned once below.
   const owner = mintSessionOwnerToken();

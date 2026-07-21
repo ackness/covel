@@ -45,8 +45,9 @@ function makeManifest(pluginId: string): RuntimeManifest {
 function registerPlugin(
   registry: PluginRegistry,
   pluginId = "test-plugin",
+  pluginType: "plugin" | "core-plugin" = "plugin",
 ): void {
-  const manifest = makeManifest(pluginId);
+  const manifest = { ...makeManifest(pluginId), pluginType };
   const parsed: ParsedPluginManifest = {
     manifest,
     rawFrontmatter: {},
@@ -58,7 +59,7 @@ function registerPlugin(
       id: pluginId,
       name: "Test Plugin",
       description: "",
-      pluginType: "plugin",
+      pluginType,
       runtimeCount: 1,
     },
     loadedRuntimes: new Map(),
@@ -260,5 +261,89 @@ describe("Plugin Data REST API routes", () => {
     ]);
     expect(JSON.stringify(body)).not.toContain("Alpha");
     expect(JSON.stringify(body)).not.toContain("hidden");
+  });
+});
+
+describe("Plugin Data write guards", () => {
+  let store: DataStore;
+  let registry: PluginRegistry;
+  let app: Hono;
+  const sessionId = "sess-guards";
+  const pluginId = "test-plugin";
+  const corePluginId = "world-init";
+
+  beforeEach(async () => {
+    store = createMemoryStore();
+    registry = createPluginRegistry();
+    registerPlugin(registry, pluginId);
+    registerPlugin(registry, corePluginId, "core-plugin");
+    registry.activate(pluginId, sessionId);
+    registry.activate(corePluginId, sessionId);
+    app = buildApp(store, registry);
+
+    await store.createSession({
+      id: sessionId,
+      worldId: "cloudmere",
+      status: "active",
+      turnCount: 1,
+      preGameCompleted: [],
+      locale: "zh-CN",
+      activePlugins: [pluginId, corePluginId],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  });
+
+  const put = (plugin: string, namespace: string, key: string) =>
+    app.request(
+      `/api/sessions/${sessionId}/plugin-data/${plugin}/${namespace}/${key}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: { forged: true } }),
+      },
+    );
+
+  it("rejects writes to framework-reserved `_` namespaces", async () => {
+    // `_jobs` drives background-job scheduling: a player-issued write there
+    // could fabricate or rewrite a job record.
+    const res = await put(pluginId, "_jobs", "job-1");
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toMatch(/reserved/i);
+    expect(
+      await store.getPluginData(sessionId, pluginId, "_jobs", "job-1"),
+    ).toBeFalsy();
+  });
+
+  it("rejects deletes from framework-reserved `_` namespaces", async () => {
+    const res = await app.request(
+      `/api/sessions/${sessionId}/plugin-data/${pluginId}/_logs/entry-1`,
+      { method: "DELETE" },
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("rejects writes to a core plugin's namespace", async () => {
+    // A forged world-init schema entry would redefine the world's character
+    // attributes for every later turn.
+    const res = await put(corePluginId, "schema", "character-attributes");
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toMatch(/core plugin/i);
+    expect(
+      await store.getPluginData(
+        sessionId,
+        corePluginId,
+        "schema",
+        "character-attributes",
+      ),
+    ).toBeFalsy();
+  });
+
+  it("still allows ordinary plugin writes", async () => {
+    const res = await put(pluginId, "entries", "k1");
+    expect(res.status).toBe(200);
+    expect(
+      await store.getPluginData(sessionId, pluginId, "entries", "k1"),
+    ).toBeDefined();
   });
 });

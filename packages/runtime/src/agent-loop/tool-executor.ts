@@ -11,7 +11,6 @@
  */
 
 import {
-  InMemoryToolClient,
   ToolValidationError,
   getEmittedEvents,
   getPendingProposals,
@@ -28,6 +27,7 @@ import type { ApprovalStatus, Proposal } from "@covel/shared";
 type ToolErrorCode =
   | "NOT_FOUND"
   | "DENIED"
+  | "UNAUTHORIZED"
   | "INVALID_ARGS"
   | "VALIDATION_ERROR"
   | "EXECUTION_ERROR";
@@ -60,10 +60,21 @@ export interface ToolCallContext {
   readonly pluginId: string;
   readonly runtimeId: string;
   readonly pendingProposals?: readonly Proposal[];
+  /** Authoritative logical turn number, forwarded to ToolExecutionContext. */
+  readonly turnNumber?: number;
   /** Topics already emitted via `emit-event` earlier in this tool loop — see @covel/tools ToolExecutionContext. */
   readonly emittedEventTopics?: readonly string[];
   /** Optional trace emitter — when present, tool.calling / tool.completed / tool.failed are traced. */
   readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
+  /**
+   * The calling runtime's exact tool authorization set (declared whitelist +
+   * framework contract tools). When present, `execute` rejects any call whose
+   * name is outside the set BEFORE resolution/approval — the advertisement
+   * list alone is not an authorization boundary (: a
+   * prompt-injected or hook-rewritten name used to reach any builtin, or any
+   * local tool of a sibling runtime in the same plugin).
+   */
+  readonly authorizedToolNames?: ReadonlySet<string>;
 }
 
 export interface ToolCallResult {
@@ -202,31 +213,6 @@ function resolveToolModule(
   return config.findTool?.(name, context);
 }
 
-function resolveToolClient(
-  config: ToolExecutorConfig,
-  name: string,
-  context: ToolCallContext,
-): InMemoryToolClient | undefined {
-  const tool = config.findTool?.(name, context);
-  if (!tool) return undefined;
-
-  return new InMemoryToolClient({
-    id: `legacy:${context.pluginId}:${context.runtimeId}:${name}`,
-    tools: [
-      {
-        fullName: name,
-        localName: name,
-        pluginId: context.pluginId,
-        runtimeId: context.runtimeId,
-        module: tool,
-        source:
-          config.getToolSource?.(name) === "builtin" ? "builtin" : "local",
-        requiresApproval: false,
-      },
-    ],
-  });
-}
-
 export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
   return {
     getToolInfo(name: string, context?: ToolCallContext): ToolInfo | undefined {
@@ -245,9 +231,49 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
     ): Promise<ToolCallResult> {
       const startTime = Date.now();
 
-      // 1. Resolve tool client (scoped to calling plugin if context available)
-      const client = resolveToolClient(config, call.name, context);
-      if (!client) {
+      // 0. Runtime-level authorization. Enforced at the execution
+      // boundary — after session overrides and PreToolUse replacement have
+      // already produced the final name — so a rewritten or hallucinated
+      // name cannot escape the calling runtime's declared surface.
+      if (
+        context.authorizedToolNames &&
+        !context.authorizedToolNames.has(call.name)
+      ) {
+        const errorResult = toolError(
+          "UNAUTHORIZED",
+          `Tool "${call.name}" is not declared by runtime "${context.runtimeId}". Only declared tools may be called.`,
+        );
+        await recordCall(
+          config.store,
+          call,
+          context,
+          errorResult,
+          startTime,
+          false,
+          "auto-allowed",
+        );
+        await emitToolFailed(
+          context,
+          call,
+          "UNAUTHORIZED",
+          `tool not declared by runtime ${context.runtimeId}`,
+          undefined,
+          Date.now() - startTime,
+          "auto-allowed",
+        );
+        return {
+          toolCallId: call.toolCallId,
+          name: call.name,
+          result: errorResult,
+          parsedResult: null,
+          success: false,
+          approvalStatus: "auto-allowed" as const,
+        };
+      }
+
+      // 1. Resolve tool module (scoped to calling plugin if context available)
+      const tool = resolveToolModule(config, call.name, context);
+      if (!tool) {
         const errorResult = toolError(
           "NOT_FOUND",
           `Unknown tool: ${call.name}. Check the tool name and try again.`,
@@ -393,8 +419,11 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           runtimeId: context.runtimeId,
           pendingProposals: context.pendingProposals,
           emittedEventTopics: context.emittedEventTopics,
+          ...(context.turnNumber !== undefined
+            ? { turnNumber: context.turnNumber }
+            : {}),
         };
-        const rawResult = await client.call(call.name, params, execContext);
+        const rawResult = await tool.execute(params, execContext);
         const parsedResult = getToolContent(rawResult);
         const pendingProposals = getPendingProposals(rawResult);
         const emittedEvents = getEmittedEvents(rawResult);

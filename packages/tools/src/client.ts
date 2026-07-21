@@ -8,8 +8,7 @@ import type { ToolExecutionEnvelope } from "./result.js";
 export type ToolDefinition = ResolvedTool;
 
 export type ToolCallResult<TOutput = unknown> =
-  | TOutput
-  | ToolExecutionEnvelope<TOutput>;
+  TOutput | ToolExecutionEnvelope<TOutput>;
 
 export interface ToolClient {
   readonly id: string;

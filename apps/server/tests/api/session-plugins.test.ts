@@ -14,7 +14,11 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
-import { createRpcApprovalGate, type RpcApprovalGate } from "@covel/approval";
+import {
+  COMMUNITY_SERVER_CODE_ACTION,
+  createRpcApprovalGate,
+  type RpcApprovalGate,
+} from "@covel/approval";
 import {
   createPluginRegistry,
   type PluginRegistry,
@@ -694,9 +698,15 @@ describe("Session plugin routes (real sessionRoutes)", () => {
 
       const allowedResponse = await requestEnable();
       expect(allowedResponse.status).toBe(200);
-      expect(rpcApprovalGate.hasGrant(SESSION_ID, "optional-plugin")).toBe(
-        true,
-      );
+      // `hasGrant` is exact-action only — enabling server code grants
+      // exactly the COMMUNITY_SERVER_CODE_ACTION, nothing broader.
+      expect(
+        rpcApprovalGate.hasGrant(
+          SESSION_ID,
+          "optional-plugin",
+          COMMUNITY_SERVER_CODE_ACTION,
+        ),
+      ).toBe(true);
     });
 
     it("should return 403 when attempting to disable a core-plugin", async () => {

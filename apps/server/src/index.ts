@@ -12,7 +12,7 @@ const { serverPort: port, bindHost } = readRuntimeEnv();
 
 console.log(`Starting server on ${bindHost}:${port}...`);
 
-// Loopback by default (audit S-02): the API has no per-request auth on the
+// Loopback by default: the API has no per-request auth on the
 // self-deploy tier, so it must not listen on public interfaces unless the
 // operator opts in explicitly (COVEL_BIND_HOST=0.0.0.0 — containers, hosted).
 const server = serve(

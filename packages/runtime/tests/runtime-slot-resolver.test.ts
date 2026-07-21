@@ -12,7 +12,7 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   };
 }
 
-describe("resolveRuntimeSlot (PR-6)", () => {
+describe("resolveRuntimeSlot", () => {
   it("returns session override when runtime ID matches", () => {
     const manifest = makeManifest({ name: "narrator", model: "fast" });
     const slot = resolveRuntimeSlot(manifest, { narrator: "balance" });

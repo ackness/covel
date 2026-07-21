@@ -106,9 +106,9 @@ describe("provider-registry", () => {
     expect(resolution.config.apiKey).toBeUndefined();
   });
 
-  // ── S-01: env-key origin binding ────────────────────────────────
+  // ── env-key origin binding ────────────────────────────────
 
-  describe("env-key origin binding (S-01)", () => {
+  describe("env-key origin binding", () => {
     function makeRegistry() {
       return createProviderRegistry({
         providerDefaults: {
@@ -226,9 +226,9 @@ describe("provider-registry", () => {
     });
   });
 
-  // ── S2-T3: cacheStrategy auto-fill ──────────────────────────────
+  // ── cacheStrategy auto-fill ──────────────────────────────
 
-  describe("cacheStrategy auto-fill (S2-T3)", () => {
+  describe("cacheStrategy auto-fill", () => {
     it("fills 'anthropic-explicit' for the anthropic protocol", () => {
       const registry = createProviderRegistry({
         providerDefaults: {

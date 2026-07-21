@@ -94,7 +94,7 @@ export async function handleSuspension(
   // Emit turn.suspended SSE event via the actions channel.
   // Include pluginId/runtimeId/suspendedAt so web clients can
   // render a suspension row without a follow-up REST fetch
-  // (F4 web suspend/resume integration).
+  // (web suspend/resume integration).
   emitSubEvent(deps.eventBus, "game", "turn.suspended", input.sessionId, {
     sessionId: input.sessionId,
     turnId: input.turnId,

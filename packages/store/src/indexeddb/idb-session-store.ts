@@ -93,8 +93,7 @@ export function createIdbSessionStore(ctx: IdbStoreContext): IdbStoreSlice {
 
     async deleteCharacter(sessionId: string, id: string): Promise<void> {
       const existing = (await db.get("characters", id)) as
-        | CharacterRecord
-        | undefined;
+        CharacterRecord | undefined;
       if (existing?.sessionId === sessionId) {
         await mutations.deleteAndTrack("characters", id);
       }

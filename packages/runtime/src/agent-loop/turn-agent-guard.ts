@@ -2,7 +2,8 @@ import type {
   RuntimeManifest,
   RuntimeResult,
   TurnInput,
-  TurnResult,
+  NestedTurnResult,
+  RecursiveCallDelta,
 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import type { HookPipeline } from "../hooks/pipeline.js";
@@ -10,6 +11,7 @@ import {
   createFunctionStoreView,
   createPluginDataWriter,
   createPluginLogger,
+  createTrustedHandlerStore,
 } from "../function-runtime/plugin-handler-helpers.js";
 import { createRuntimeMediaContext } from "../function-runtime/runtime-media-context.js";
 import { withUtilsTrace } from "../function-runtime/utils-trace.js";
@@ -37,9 +39,9 @@ export interface ExecuteAgentGuardOptions {
       }
     | undefined;
   readonly createRecursiveCall: () => (
-    delta: Partial<TurnInput>,
+    delta: RecursiveCallDelta,
     opts?: { readonly reason?: string },
-  ) => Promise<TurnResult>;
+  ) => Promise<NestedTurnResult>;
   readonly recursionDepth: number;
   readonly startTime: number;
   readonly runId: string;
@@ -90,7 +92,7 @@ export async function executeAgentGuard({
         ? withUtilsTrace(deps.utils, deps.emitter, guardHelperCtx)
         : deps.utils;
 
-    // H-11: write-capability revocation. The guard gets its OWN abort
+    // Write-capability revocation. The guard gets its OWN abort
     // controller, and every write-capable capability handed to it (store,
     // pluginData, logger, gateway, media, assetProgress, recursiveCall) is
     // wrapped so that once the deadline fires, any further call throws.
@@ -143,7 +145,7 @@ export async function executeAgentGuard({
     const guardStore = deps.store
       ? revocable(
           trustedGuard
-            ? deps.store
+            ? createTrustedHandlerStore(deps.store)
             : createFunctionStoreView(deps.store, guardHelperCtx),
         )
       : undefined;
@@ -256,7 +258,7 @@ export async function executeAgentGuard({
             );
             // Revoke BEFORE rejecting: once the turn moves on, the still-
             // running guard must not be able to mutate state for a later
-            // turn (H-11), and a cooperative guard sees the abort.
+            // turn, and a cooperative guard sees the abort.
             revoke(err, true);
             reject(err);
           }, timeoutMs);
@@ -335,7 +337,7 @@ export async function executeAgentGuard({
         },
       );
 
-      // PostRuntime hook — guard-skipped path (S4-T3)
+      // PostRuntime hook — guard-skipped path
       return runPostRuntimeHook(
         {
           pipeline: hookPipeline,

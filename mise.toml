@@ -1,0 +1,5 @@
+[tools]
+# Keep in sync with the root package.json `packageManager` field.
+pnpm = "11.9.0"
+# Satisfies engines.node (>=26); aligned with the Docker runtime.
+node = "26.5.0"

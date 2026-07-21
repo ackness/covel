@@ -54,6 +54,7 @@ import {
   loadTurnSessionState,
 } from "./session-state.js";
 import {
+  countPlayerMessagesSinceRuntime,
   scheduleMainLoopFollowups,
   scheduleTriggeredRuntimes,
   selectTriggeredRuntimes,
@@ -202,7 +203,7 @@ async function executeTurnImpl(
       : {}),
   });
 
-  // ── TurnStart hook (S4-T3) ───────────────────────────────────
+  // ── TurnStart hook ───────────────────────────────────
   {
     const tsResult = await runTurnStartHook(
       {
@@ -307,8 +308,8 @@ async function executeTurnImpl(
   //
   // Pre-Game band uses strict priority ordering while setup runtimes are
   // pending: pregame plugins
-  // have implicit write-ordering (pregame → world-init/schema-gen → player-init,
-  // audit P0-2) that is NOT captured in manifest inject declarations, so
+  // have implicit write-ordering (pregame → world-init/schema-gen →
+  // player-init) that is NOT captured in manifest inject declarations, so
   // falling back to priority is the right semantic. player-init's prompt reads
   // `{{ world.schema }}`, so schema-gen MUST land first in the same setup pass.
   //
@@ -379,6 +380,11 @@ async function executeTurnImpl(
     ? input.manualTrigger?.triggerEvent
     : undefined;
 
+  // Nested `ctx.recursiveCall` executions bubble their runtime results
+  // here so the commit-owning caller can process their proposals through the
+  // same barrier as top-level results.
+  const nestedRuntimeResults: RuntimeResult[] = [];
+
   // Single entry point for invoking one runtime. `sessionMeta` / `sessionContext`
   // are reassigned by recordPreGameCompletion between call sites, so this reads
   // them by closure each call rather than snapshotting a base object.
@@ -405,12 +411,25 @@ async function executeTurnImpl(
       turnOptions: options,
       executeTurnFn: executeTurn,
       recursionDepth,
+      collectNestedResults: (results) => {
+        nestedRuntimeResults.push(...results);
+      },
     });
 
-  // W4: player abort — stop scheduling further groups/followers as soon as
-  // the signal fires. The in-flight runtime is cut by the loop/retry layer
-  // (its result surfaces as failed with a turn-aborted message and carries
-  // no proposals, so nothing partial is committed).
+  // Player abort — stop scheduling further groups/followers as soon as
+  // the signal fires. The in-flight runtime is cut by the loop/retry layer;
+  // its result surfaces as failed with a turn-aborted message and carries no
+  // PROPOSALS, so nothing proposal-shaped is committed.
+  //
+  // That is not the same as "nothing was written". A few builtin tools write
+  // straight to the store instead of returning a proposal — the character
+  // tools (create/update-character) and the memory tools (core-memory block
+  // updates). Whatever they wrote before the abort is already durable and is
+  // NOT rolled back, because it never entered the commit pipeline that the
+  // abort short-circuits. The same holds for a runtime that fails after such
+  // a call, and for PreStateCommit: a hook cannot veto those writes because
+  // they never reach it. Routing them through proposals is the fix; until
+  // then this is the honest guarantee.
   const playerAborted = (): boolean =>
     deps.turnControl?.signal?.aborted === true;
 
@@ -466,6 +485,18 @@ async function executeTurnImpl(
           invoke(manifest, triggerEvent),
         sessionId: input.sessionId,
         turnNumber,
+        // Fan-out is the only place an `event` runtime can trigger, so its
+        // throttle gates only work if the real history reaches them. Same for
+        // the Pre-Game set: without it a completed setup runtime re-fires
+        // whenever its topic is emitted again.
+        preGameCompleted,
+        runtimeTriggerCounts,
+        runtimeTurnsSinceLastTrigger: new Map(
+          activeRuntimes.map((rt) => [
+            rt.name,
+            countPlayerMessagesSinceRuntime(messageHistory, rt.name),
+          ]),
+        ),
       });
 
   // ── Pre-Game completion tracking ────────────────────────────────
@@ -485,9 +516,10 @@ async function executeTurnImpl(
   //          branch that observes a submitted character form).
   //
   //   2. Its guard returned `{ skip: true }`
-  //        - Covers `world-init/schema-gen` when a prior session of
-  //          the same world has already generated and persisted schema
-  //          + entries; the guard skips the LLM call entirely.
+  //        - Covers a setup runtime that finds its work already done or
+  //          derivable without an LLM (e.g. `world-init/schema-gen` when this
+  //          session already holds the schema, or the world package declares
+  //          character attributes / dimensions it can import directly).
   //
   //   3. It ran out of trigger budget
   //        - Runtimes with `trigger.maxTriggerCount` that have already
@@ -517,15 +549,18 @@ async function executeTurnImpl(
     deferredFollowers,
     deps,
     turnNumber,
+    nestedRuntimeResults,
   });
 
-  // ── Turn-completion barrier (audit R-06/R-09) ─────────────────
+  // ── Turn-completion barrier ─────────────────
   // The authoritative `turn.completed` event and post-turn memory ingestion
   // must not fire before the caller commits this turn's proposals — a failed
   // commit would otherwise leave clients with a "completed" turn and memory
   // built from state that never landed. `completeTurn` packages both; the
   // commit-owning caller (actions.ts / plugin-rpc runtime-turn.ts) invokes it
-  // once after commit + snapshot succeed. Idempotent via the `fired` guard.
+  // once proposals commit. A failed auto-snapshot does NOT withhold it — the
+  // snapshot is a best-effort checkpoint, tracked separately on the outcome.
+  // Idempotent via the `fired` guard.
   // Memory stays fire-and-forget inside; per-session single-flight lives in
   // the memory updater's pending map.
   let completionFired = false;
@@ -548,7 +583,7 @@ async function executeTurnImpl(
     },
   };
 
-  // ── TurnStop hook (S4-T3) — Post* hooks cannot abort ────────
+  // ── TurnStop hook — Post* hooks cannot abort ────────
   await runTurnStopHook(
     {
       pipeline: deps.hookPipeline,

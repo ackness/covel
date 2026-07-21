@@ -15,6 +15,12 @@ export interface FinalizeTurnResultParams {
   readonly deferredFollowers: NonNullable<TurnResult["deferredFollowers"]>;
   readonly deps: TurnExecutorDeps;
   readonly turnNumber: number;
+  /**
+   *  results bubbled up from nested `ctx.recursiveCall` executions.
+   * Carried on the TurnResult for the commit-owning caller; NOT re-persisted
+   * here (nested executeTurn calls persist their own turn_results rows).
+   */
+  readonly nestedRuntimeResults?: readonly RuntimeResult[];
 }
 
 function collectPendingInputs(
@@ -25,8 +31,7 @@ function collectPendingInputs(
     if (!result.output) continue;
     const out = result.output as Record<string, unknown>;
     const interactions = out.interactions as
-      | Array<Record<string, unknown>>
-      | undefined;
+      Array<Record<string, unknown>> | undefined;
     const narrativeFallback =
       typeof out.narrativeTemplate === "string"
         ? out.narrativeTemplate
@@ -94,6 +99,16 @@ async function persistTurnResult(
     sessionId: input.sessionId,
     turnId: input.turnId,
     runtimeResults: turnResult.runtimeResults,
+    // Stamp the execution origin so turn accounting can exclude
+    // non-player executions (manual RPC / background follower / recursive)
+    // from `session.turnCount`, which drives UI turn display and the
+    // auto-snapshot cadence.
+    origin: input.origin ?? "player",
+    ...(input.parentTurnId ? { parentTurnId: input.parentTurnId } : {}),
+    // Written before the commit runs, so it starts `pending`. The
+    // commit-owning caller settles it — a row left `pending` is a crash, not
+    // a successful turn, and previously the two were indistinguishable.
+    commitStatus: "pending" as const,
     durationMs: turnResult.durationMs,
     createdAt: turnResult.timestamp ?? now,
   });
@@ -106,12 +121,16 @@ export async function finalizeTurnResult({
   deferredFollowers,
   deps,
   turnNumber,
+  nestedRuntimeResults,
 }: FinalizeTurnResultParams): Promise<TurnResult> {
   const pendingInputs = collectPendingInputs(completedResults);
   const turnResult: TurnResult = {
     turnId: input.turnId,
     sessionId: input.sessionId,
     runtimeResults: [...completedResults.values()],
+    ...(nestedRuntimeResults && nestedRuntimeResults.length > 0
+      ? { nestedRuntimeResults }
+      : {}),
     pendingInputs: pendingInputs.length > 0 ? pendingInputs : undefined,
     durationMs: Date.now() - startTime,
     timestamp: new Date().toISOString(),
@@ -123,9 +142,9 @@ export async function finalizeTurnResult({
   // NOTE: `turn.completed` is intentionally NOT emitted here. The persisted
   // runtime results above are execution artefacts, not committed game state —
   // the authoritative completion event fires via `TurnResult.completeTurn`,
-  // which the commit-owning caller invokes only after proposals + snapshot
-  // land (audit R-09). A persisted result without a completion event is the
-  // expected crash signature, tolerated by recovery.
+  // which the commit-owning caller invokes once proposals commit (a failed
+  // auto-snapshot does not withhold it). A persisted result without a
+  // completion event is the expected crash signature, tolerated by recovery.
 
   return turnResult;
 }

@@ -10,7 +10,10 @@ import type { RuntimeManifest, TurnInput } from "@covel/shared";
 
 import type { SessionLock } from "../../../lib/session-lock.js";
 import { createRuntimeResultProcessor } from "../runtime-result-processor.js";
-import type { ManualTurnSummary } from "./runtime-response.js";
+import type {
+  ManualTurnSummary,
+  TurnCommitOutcome,
+} from "./runtime-response.js";
 
 export interface PluginRpcRuntimeTurnContext {
   readonly store: DataStore;
@@ -50,12 +53,13 @@ export function createPluginRpcRuntimeTurnRunner(
   runManualTurn(args: RunManualTurnArgs): Promise<ManualTurnSummary>;
   runDeferredFollowerTurn(args: RunDeferredFollowerArgs): Promise<{
     readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
+    readonly commit: TurnCommitOutcome;
   }>;
 } {
   async function processTurnResults(
     turnResult: Awaited<ReturnType<typeof executeTurn>>,
     emitter: ReturnType<typeof createTurnEmitter>,
-  ): Promise<void> {
+  ): Promise<TurnCommitOutcome> {
     const resultProcessor = createRuntimeResultProcessor({
       store: ctx.store,
       sessionId: ctx.sessionId,
@@ -64,24 +68,82 @@ export function createPluginRpcRuntimeTurnRunner(
       eventBus: ctx.eventBus,
       emitter,
     });
-    await resultProcessor.processAll(turnResult.runtimeResults);
-    try {
-      await saveAutoSnapshot({
-        store: ctx.store,
-        sessionId: ctx.sessionId,
-        turnId: turnResult.turnId,
-        createdAt: turnResult.timestamp,
-        eventBus: ctx.eventBus,
+    // Nested recursiveCall results ride the same commit barrier.
+    const outputs = await resultProcessor.processAll([
+      ...turnResult.runtimeResults,
+      ...(turnResult.nestedRuntimeResults ?? []),
+    ]);
+
+    // Commit failures must not report success. Surface each one as a
+    // `proposal.failed` trace event (manual/background turns have no live
+    // action stream; the /debug timeline and subscription channel carry it)
+    // and withhold the snapshot + completion barrier.
+    const failedProposals = outputs.flatMap((o) => o.failedProposals);
+    for (const fp of failedProposals) {
+      await emitter.emit("proposal.failed", {
+        proposalId: fp.proposal.id,
+        proposalType: fp.proposal.type,
+        runtimeId: fp.proposal.source.runtimeId,
+        pluginId: fp.proposal.source.pluginId,
+        error: fp.error,
       });
+    }
+
+    let snapshotFailed = false;
+    if (failedProposals.length === 0) {
+      try {
+        await saveAutoSnapshot({
+          store: ctx.store,
+          sessionId: ctx.sessionId,
+          turnId: turnResult.turnId,
+          createdAt: turnResult.timestamp,
+          eventBus: ctx.eventBus,
+        });
+      } catch (err) {
+        snapshotFailed = true;
+        console.warn(
+          `[plugin-rpc] auto snapshot failed for session ${ctx.sessionId} turn ${turnResult.turnId}:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    } else {
+      console.error(
+        `[plugin-rpc] ${failedProposals.length} proposal(s) failed to commit for session ${ctx.sessionId} turn ${turnResult.turnId} — ` +
+          "withholding auto-snapshot and turn completion",
+      );
+    }
+    // Commit barrier: fire the authoritative turn.completed event and memory
+    // ingestion only when every proposal committed. A failed auto-snapshot
+    // does not withhold completion (see below).
+    try {
+      await ctx.store.setTurnResultCommitStatus(
+        ctx.sessionId,
+        turnResult.turnId,
+        failedProposals.length === 0 ? "committed" : "failed",
+      );
     } catch (err) {
       console.warn(
-        `[plugin-rpc] auto snapshot failed for session ${ctx.sessionId} turn ${turnResult.turnId}:`,
+        `[plugin-rpc] failed to settle commitStatus for turn ${turnResult.turnId}:`,
         err instanceof Error ? err.message : String(err),
       );
     }
-    // Commit barrier (audit R-06/R-09): proposals committed + snapshot taken —
-    // fire the authoritative turn.completed event and memory ingestion.
-    turnResult.completeTurn?.();
+
+    // A failed auto-snapshot does NOT fail the turn. The proposals already
+    // committed (commit_status was set to "committed" above), so business state
+    // is consistent — only the best-effort checkpoint is missing, and the next
+    // turn snapshots again. Counting it as a failure made the sync RPC return
+    // 500 and the client retry, replaying already-committed proposals. So
+    // `committed` tracks proposal commit alone, matching commit_status;
+    // `snapshotFailed` stays on the outcome for observability.
+    const committed = failedProposals.length === 0;
+    if (committed) {
+      turnResult.completeTurn?.();
+    }
+    return {
+      committed,
+      failedProposalCount: failedProposals.length,
+      snapshotFailed,
+    };
   }
 
   async function runManualTurn(
@@ -98,6 +160,8 @@ export function createPluginRpcRuntimeTurnRunner(
       turnId: args.turnId,
       playerMessage: "",
       locale: ctx.session.locale ?? "zh-CN",
+      // A manual RPC trigger is not a player turn.
+      origin: "manual",
       manualTrigger: {
         runtimeId: args.runtimeId,
         ...(args.payload !== undefined && args.payload !== null
@@ -112,19 +176,23 @@ export function createPluginRpcRuntimeTurnRunner(
         : {}),
     };
 
-    const result = await ctx.sessionLock.withLock(ctx.sessionId, async () => {
-      const turnResult = await executeTurn(turnInput, ctx.activeRuntimes, {
-        ...ctx.deps,
-        store: ctx.store,
-        eventBus: ctx.eventBus,
-        emitter,
-        ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
-      });
-      await processTurnResults(turnResult, emitter);
-      return turnResult;
-    });
+    const { result, commit } = await ctx.sessionLock.withLock(
+      ctx.sessionId,
+      async () => {
+        const turnResult = await executeTurn(turnInput, ctx.activeRuntimes, {
+          ...ctx.deps,
+          store: ctx.store,
+          eventBus: ctx.eventBus,
+          emitter,
+          ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
+        });
+        const outcome = await processTurnResults(turnResult, emitter);
+        return { result: turnResult, commit: outcome };
+      },
+    );
 
     return {
+      commit,
       turnId: args.turnId,
       runtimeResults: result.runtimeResults.map((rr) => ({
         runtimeId: rr.runtimeId,
@@ -142,7 +210,10 @@ export function createPluginRpcRuntimeTurnRunner(
 
   async function runDeferredFollowerTurn(
     args: RunDeferredFollowerArgs,
-  ): Promise<{ readonly turnResult: Awaited<ReturnType<typeof executeTurn>> }> {
+  ): Promise<{
+    readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
+    readonly commit: TurnCommitOutcome;
+  }> {
     const emitter = createTurnEmitter({
       store: ctx.store,
       eventBus: ctx.eventBus,
@@ -154,6 +225,8 @@ export function createPluginRpcRuntimeTurnRunner(
       turnId: args.followerTurnId,
       playerMessage: "",
       locale: ctx.session.locale ?? "zh-CN",
+      // A deferred background follower is not a player turn.
+      origin: "follower",
       manualTrigger: {
         runtimeId: args.runtimeId,
         triggerEvent: args.triggerEvent,
@@ -171,7 +244,7 @@ export function createPluginRpcRuntimeTurnRunner(
     // released, so without this they can interleave turnNumber computation,
     // state writes, and auto-snapshots with a concurrent player turn on the same
     // session (audit 2026-04-20 finding 1).
-    const turnResult = await ctx.sessionLock.withLock(
+    const { turnResult, commit } = await ctx.sessionLock.withLock(
       ctx.sessionId,
       async () => {
         const result = await executeTurn(turnInput, ctx.activeRuntimes, {
@@ -181,12 +254,12 @@ export function createPluginRpcRuntimeTurnRunner(
           emitter,
           ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
         });
-        await processTurnResults(result, emitter);
-        return result;
+        const outcome = await processTurnResults(result, emitter);
+        return { turnResult: result, commit: outcome };
       },
     );
 
-    return { turnResult };
+    return { turnResult, commit };
   }
 
   return { runManualTurn, runDeferredFollowerTurn };

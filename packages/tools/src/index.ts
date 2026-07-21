@@ -13,8 +13,6 @@ export type { ToolExecutionEnvelope, EmittedEvent } from "./result.js";
 export { z } from "zod";
 
 // ── Tool client ──────────────────────────────────────────────────
-export { InMemoryToolClient } from "./in-memory-client.js";
-export type { InMemoryToolClientOptions } from "./in-memory-client.js";
 export type { ToolCallResult, ToolClient, ToolDefinition } from "./client.js";
 
 // ── Output validation ────────────────────────────────────────────

@@ -54,8 +54,7 @@ export function normalizeOutput(
 
   // interaction.request — from interactions[]
   const interactions = output.interactions as
-    | Array<Record<string, unknown>>
-    | undefined;
+    Array<Record<string, unknown>> | undefined;
   if (interactions && interactions.length > 0) {
     for (const inter of interactions) {
       if (typeof inter.interactionId !== "string" || !inter.interactionId) {
@@ -90,8 +89,7 @@ export function normalizeOutput(
 
   // state.patch — from statePatches[]
   const statePatches = output.statePatches as
-    | Array<Record<string, unknown>>
-    | undefined;
+    Array<Record<string, unknown>> | undefined;
   if (statePatches && statePatches.length > 0) {
     for (const patch of statePatches) {
       proposals.push(
@@ -171,8 +169,7 @@ export function normalizeOutput(
   // `events: [{ topic: 'notification.shown', data: {...} }]` — the event.emit
   // branch above already handles that and the frontend can subscribe.
   const notifications = output.notifications as
-    | Array<Record<string, unknown>>
-    | undefined;
+    Array<Record<string, unknown>> | undefined;
   if (notifications && notifications.length > 0) {
     for (const n of notifications) {
       const title = typeof n.title === "string" ? n.title.trim() : "";

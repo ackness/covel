@@ -44,6 +44,25 @@ export function createIdbRuntimeStore(ctx: IdbStoreContext): IdbStoreSlice {
       await putClonedRecord(mutations, "turnResults", record);
     },
 
+    async setTurnResultCommitStatus(
+      sessionId: string,
+      turnId: string,
+      status: NonNullable<TurnResultRecord["commitStatus"]>,
+    ): Promise<void> {
+      const all = await db.getAllFromIndex(
+        "turnResults",
+        "sessionId",
+        sessionId,
+      );
+      for (const row of all) {
+        if (row.turnId !== turnId) continue;
+        await putClonedRecord(mutations, "turnResults", {
+          ...row,
+          commitStatus: status,
+        });
+      }
+    },
+
     async listTurnResults(
       sessionId: string,
       limit?: number,

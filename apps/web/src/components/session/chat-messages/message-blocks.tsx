@@ -36,8 +36,7 @@ export function PluginMessageBlock({
   const state = (data.state ?? {}) as Record<string, unknown>;
   const turnId =
     ((block.meta as Record<string, unknown> | undefined)?.turnId as
-      | string
-      | undefined) ?? "";
+      string | undefined) ?? "";
 
   const handlers = useMemo(
     () => ({
@@ -230,13 +229,11 @@ export function MessageBlockRenderer({
       "form";
     const turnId = (meta.turnId as string | undefined) ?? msg.turnId ?? "";
     const rawBehavior = data.submitBehavior as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     const submitBehavior = rawBehavior
       ? {
           echoFilledNarrative: rawBehavior.echoFilledNarrative as
-            | boolean
-            | undefined,
+            boolean | undefined,
         }
       : undefined;
     return { data, turnId, interactionId, submitBehavior };

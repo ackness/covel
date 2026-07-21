@@ -288,7 +288,9 @@ describe("executeTurn: manual trigger", () => {
       { gateway: fakeGateway },
     );
 
-    expect(sawGateway).toBe(fakeGateway);
+    // ctx.gateway is wrapped in a revocation proxy — behavioural equality,
+    // not identity. resolvedBaseUrl below proves the call passed through.
+    expect(sawGateway).toBeDefined();
     expect(resolvedBaseUrl).toBe("https://example.test/v1");
     expect(result.runtimeResults[0]!.status).toBe("success");
   });
@@ -422,7 +424,7 @@ describe("executeTurn: manual trigger", () => {
     );
 
     expect(result.runtimeResults[0]!.status).toBe("success");
-    // A2-P1-5: function.executing / function.completed now bracket the handler,
+    // function.executing / function.completed now bracket the handler,
     // so assert the asset.progress payload precisely via filter and pin the
     // full trace sequence separately.
     expect(emitted.filter((e) => e.type === "asset.progress")).toEqual([
@@ -448,7 +450,7 @@ describe("executeTurn: manual trigger", () => {
     ]);
   });
 
-  // ── Audit F7: userSettings merging. ────────────────────────────────
+  // ── userSettings merging. ────────────────────────────────
   //
   // Function runtimes declare `userSettings: [{key, default, ...}]` in their
   // manifest. Server-side TurnInput carries the player-authored values
@@ -589,8 +591,7 @@ describe("executeTurn: manual trigger", () => {
     // Follower's handler should have seen the event payload via ctx.triggerEvent.
     const followerCtx = handlerCalls["plug/follower"]?.[0];
     const triggerEvent = followerCtx?.triggerEvent as
-      | { topic?: string; data?: { prompt?: string } }
-      | undefined;
+      { topic?: string; data?: { prompt?: string } } | undefined;
     expect(triggerEvent?.topic).toBe("image.prompt.ready");
     expect(triggerEvent?.data?.prompt).toBe("sunset");
   });

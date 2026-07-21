@@ -63,6 +63,22 @@ describe("buildContext — budget pruning", () => {
     expect(first.content).toMatch(/older messages pruned/);
   });
 
+  it("reports the budget outcome so callers can trace a pruned turn", () => {
+    const params: ContextBuildParams = {
+      ...baseParams(),
+      estimator: mockEstimator,
+      contextBudget: {
+        maxInputTokens: 500,
+        reservedForResponse: 0,
+      },
+    };
+
+    const ctx = buildContext(params);
+
+    expect(ctx.budgetExceeded).toBe(true);
+    expect(ctx.prunedMessageCount).toBeGreaterThan(0);
+  });
+
   it("does not prune when estimator is missing", () => {
     const params: ContextBuildParams = {
       ...baseParams(),

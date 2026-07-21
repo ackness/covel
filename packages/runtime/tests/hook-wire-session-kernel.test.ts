@@ -1,5 +1,5 @@
 /**
- * Hook wire-in tests for session-kernel (S4-T3).
+ * Hook wire-in tests for session-kernel.
  *
  * Covers:
  * - PreStateCommit abort skips the proposal but commits the rest
@@ -274,7 +274,7 @@ describe("session-kernel hook wire-in", () => {
     });
   });
 
-  describe("EventBus observability (F5)", () => {
+  describe("EventBus observability", () => {
     it("emits hook.error to eventBus when a PreStateCommit hook throws", async () => {
       const store = createRecordingStore();
       const hookPipeline = createHookPipeline();

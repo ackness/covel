@@ -1,5 +1,5 @@
 /**
- * POST /api/actions — hook pipeline integration (audit 2026-04-21 finding F2).
+ * POST /api/actions — hook pipeline integration.
  *
  * Before this pass `createHookPipeline()` was never wired into bootstrap, so
  * `PreStateCommit` hooks declared in plugin manifests only ran in unit tests.

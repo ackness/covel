@@ -3,6 +3,7 @@ import { loadWorldDataDescriptor } from "./descriptor.js";
 import {
   cleanupWorldDataMediaRefs,
   finalizeWorldDataMediaRefs,
+  maybeDeleteOwnedUnreferencedMedia,
 } from "./session-import/media-handling.js";
 import { buildImportPlan } from "./session-import/planning.js";
 import {
@@ -211,6 +212,16 @@ export async function preflightWorldDataForSession(
   };
 }
 
+/**
+ * Raised when a target's hash moved between the conflict scan and the apply
+ * transaction. Surfaces as a 409 rather than a 500: the caller can re-run the
+ * sync (the fresh scan will report the edit as a normal conflict) or pass
+ * `force`.
+ */
+export class WorldDataSyncConflictError extends Error {
+  readonly code = "world_data_sync_conflict";
+}
+
 export async function syncWorldDataForSession(
   options: SyncWorldDataForSessionOptions,
 ): Promise<SyncWorldDataForSessionResult> {
@@ -408,18 +419,48 @@ export async function syncWorldDataForSession(
   }
 
   const mediaRefs: WorldDataImportedMediaRef[] = [];
+  // Media ids unreferenced by ledger deletes inside the transaction. Their
+  // removeRef + owned-media delete (which does an irreversible rmSync) is
+  // finalized only AFTER commit — the mirror of the put-side deferral — so a
+  // mid-transaction abort rolls back the DB rows without having deleted a file
+  // the restored rows still point at.
+  const pendingMediaUnrefs: string[] = [];
   try {
     // Scoped transaction: ledger deletes + plan writes commit atomically and a
     // throw auto-rolls-back the DB. `mediaRefs` is collected on the outer array
     // so the catch below can still clean up media written before the failure
     // (media files live outside the DB transaction).
     await options.store.withTransaction!(async (tx) => {
+      // Compare-and-swap. The conflict scan above ran BEFORE this transaction
+      // opened, so anything it declared unmodified could have been edited in
+      // between — by a turn, or by another HTTP writer — and a `force: false`
+      // sync would then silently overwrite that edit. Re-read each target's
+      // hash inside the transaction and abort the whole thing if it moved.
+      // The caller's session lock closes the turn-interleave window; this
+      // closes the rest.
+      if (!options.force) {
+        for (const ledger of [...ledgersToDelete]) {
+          const freshHash = await currentHashForLedger({
+            store: tx,
+            sessionId: options.sessionId,
+            ledger,
+          });
+          // `null` means the target is already gone — deleting it is still the
+          // right outcome, and the pre-scan reached the same conclusion.
+          if (freshHash !== null && freshHash !== ledger.valueHash) {
+            throw new WorldDataSyncConflictError(
+              `world-data sync aborted: "${ledgerKey(ledger)}" changed after the conflict check`,
+            );
+          }
+        }
+      }
+
       for (const ledger of ledgersToDelete) {
         await deleteLedgerTarget({
           store: tx,
-          mediaStore: options.mediaStore,
           sessionId: options.sessionId,
           ledger,
+          onMediaUnref: (mediaId) => pendingMediaUnrefs.push(mediaId),
         });
         await tx.deleteWorldDataImportLedger(options.sessionId, ledger.id);
       }
@@ -442,6 +483,26 @@ export async function syncWorldDataForSession(
       refs: mediaRefs,
     });
     throw err;
+  }
+
+  // The transaction committed. Only now delete the media unreferenced by the
+  // ledger deletes: removeRef drops the ref row, and an owned asset with no
+  // remaining refs is deleted (files and all). A failure here leaks a ref/asset
+  // (a GC concern) rather than stranding a committed reference on a missing
+  // file, so each is best-effort and independent.
+  if (options.mediaStore && pendingMediaUnrefs.length > 0) {
+    for (const mediaId of pendingMediaUnrefs) {
+      try {
+        await options.mediaStore.removeRef(mediaId, options.sessionId);
+        await maybeDeleteOwnedUnreferencedMedia({
+          mediaStore: options.mediaStore,
+          mediaId,
+          sessionId: options.sessionId,
+        });
+      } catch {
+        // Continue finalizing the remaining unrefs.
+      }
+    }
   }
 
   if (options.deferMediaFinalize) {

@@ -22,7 +22,7 @@
  * an env key when the resolved target's baseUrl origin matches trusted
  * server config, so a request-scoped custom preset that redirects a
  * built-in provider to a foreign origin can never exfiltrate a server
- * key (S-01).
+ * key.
  *
  * When neither header is present the middleware is a no-op and the
  * base-startup `llmAdapter` stays in place.
@@ -56,7 +56,7 @@ export interface PerRequestLlmOptions {
    * keys / custom presets / slot overrides as the agent-runtime LLM
    * adapter. Without this rebuild the function-runtime path silently uses
    * the startup env keys and the server-side llm.toml, defeating
-   * per-session UI settings (audit F2).
+   * per-session UI settings.
    */
   readonly defaultPluginGateway: PluginRuntimeGateway;
 }
@@ -89,7 +89,7 @@ export function createPerRequestLlmMiddleware(
       ...(slotOverrides ? { slotOverrides } : {}),
     });
 
-    // Audit F2: keep the function-runtime gateway in lock-step with the
+    // Keep the function-runtime gateway in lock-step with the
     // agent-runtime LLM adapter. Both are rebuilt from the same merged
     // keys / slot overrides so `ctx.gateway.resolveSlot(...)` inside a
     // function handler resolves the same browser-declared custom presets

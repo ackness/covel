@@ -139,12 +139,24 @@ describe("char-creator plugin", () => {
       );
     });
 
-    it("injects narrator.narrativeOutput", () => {
-      expect(manifest.input?.inject).toHaveLength(1);
-      const inject = manifest.input.inject[0];
-      expect(inject.from).toBe("narrator");
-      expect(inject.field).toBe("narrativeOutput");
-      expect(inject.as).toBe("<narrator-output>");
+    it("injects narrativeOutput from both narrative engines ", () => {
+      // Engine-agnostic: one inject per known narrative engine; the absent
+      // engine resolves to nothing so exactly the active one fills the block.
+      expect(manifest.input?.inject).toHaveLength(2);
+      for (const engine of ["narrator", "chat-mode-narrator"]) {
+        expect(manifest.input.inject).toContainEqual({
+          kind: "runtime",
+          from: engine,
+          field: "narrativeOutput",
+          as: "<narrator-output>",
+        });
+      }
+    });
+
+    it("gates on the narrative-engine capability, not an exact runtime ", () => {
+      expect(manifest.upstreamRequired).toEqual([
+        { capability: "narrative-engine" },
+      ]);
     });
   });
 });

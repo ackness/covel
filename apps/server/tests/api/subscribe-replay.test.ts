@@ -12,7 +12,7 @@
  * suspended on our reads) must be delivered exactly once — not lost, not
  * duplicated.
  *
- * Cursors are `${epoch}:${seq}` wire ids (re-review H-05/H-06); these tests
+ * Cursors are `${epoch}:${seq}` wire ids; these tests
  * use the session's current epoch so replay follows the normal (no-reset)
  * path. Reset behavior is covered in subscribe-reset.test.ts.
  */

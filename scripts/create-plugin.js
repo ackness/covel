@@ -149,7 +149,7 @@ function resolveRepoPackageManager() {
   } catch {
     // ignore — fall through to default
   }
-  return "pnpm@10.33.0";
+  return "pnpm@11.9.0";
 }
 
 function replacePlaceholders(content) {

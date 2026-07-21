@@ -49,7 +49,7 @@ export interface Session {
    */
   readonly embedding?: SessionEmbeddingInfo | null;
   /**
-   * Per-runtime model slot overrides (PR-6).
+   * Per-runtime model slot overrides.
    *
    * `key` is a runtime ID (`pluginId` for single-runtime plugins, or
    * `pluginId/runtimeName` for multi-runtime plugins). `value` is a slot

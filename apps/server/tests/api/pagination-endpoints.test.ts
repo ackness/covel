@@ -120,7 +120,7 @@ describe("GET /api/traces/:sessionId/turns/page", () => {
   beforeEach(async () => {
     store = createMemoryStore();
     app = buildApp(store);
-    // Trace routes now require the session to exist (owner guard, S-02).
+    // Trace routes now require the session to exist (owner guard).
     await seedSession(store);
     // Two turns, two events each, inserted out of order.
     const events = [

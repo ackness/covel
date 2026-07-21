@@ -13,7 +13,8 @@
  *  3. Merging updates into existing nodes (aliases, labels, summary,
  *     attributes) so one relationship turn cannot nuke prior context.
  *  4. Rewriting edge `sourceName` / `targetName` to node IDs.
- *  5. De-duplicating edges by (source, target, relation).
+ *  5. Versioning edges by (source, target, relation): an unchanged relation is
+ *     a no-op, a changed one closes the open version and opens a new one.
  *  6. Maintaining the `index` namespace — adjacency lists keyed by
  *     `by-source:{nodeId}` and `by-target:{nodeId}` for fast k-hop
  *     traversal in the forthcoming retrieval tool.
@@ -93,7 +94,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
   return tool({
     name: "upsert-npc-graph",
     description:
-      "Batch-write NPC nodes and relationship edges. Nodes are de-duplicated by name; edges by (sourceName, targetName, relation). No need to list existing data first — the tool merges and updates internally.",
+      "Batch-write NPC nodes and relationship edges. Nodes are de-duplicated by name. Edges are versioned by (sourceName, targetName, relation): resubmit a relation whose strength or fact changed and the tool supersedes the previous version; resubmitting an identical one is a no-op. No need to list existing data first — the tool merges and updates internally.",
     parameters: z.object({
       nodes: z
         .array(nodeInputSchema)
@@ -109,6 +110,14 @@ export default function ({ tool, z, shortIdBatch, store }) {
     execute: async (params, context) => {
       const now = new Date().toISOString();
       const currentTurnId = context.turnId ?? "unknown";
+      // Authoritative logical turn (player-message count). These fields used
+      // to be filled from the node COUNT, which measures how much has been
+      // recorded rather than when — so a graph that grew fast looked "old"
+      // and one mentioned repeatedly in a single turn advanced as if turns
+      // had passed. Anything derived from them (relationship decay, recency
+      // ranking) was meaningless. `-1` marks "unknown" for callers outside a
+      // turn rather than silently pretending turn 0.
+      const currentTurn = context.turnNumber ?? -1;
 
       const incomingNodes = params.nodes ?? [];
       const incomingEdges = params.edges ?? [];
@@ -176,7 +185,9 @@ export default function ({ tool, z, shortIdBatch, store }) {
               ...existing.attributes,
               ...incoming.attributes,
             },
-            lastSeenTurn: existing.lastSeenTurn + 1,
+            // Never let an unknown-turn (-1) upsert regress a real recency
+            // stamp; also keeps lastSeenTurn monotonic.
+            lastSeenTurn: Math.max(currentTurn, existing.lastSeenTurn ?? -1),
           };
           pluginDataWrites.push({
             namespace: "nodes",
@@ -199,8 +210,8 @@ export default function ({ tool, z, shortIdBatch, store }) {
             type: incoming.type,
             labels: (incoming.labels ?? []).slice(0, 5),
             summary: incoming.summary,
-            firstSeenTurn: existingNodeRows.length,
-            lastSeenTurn: existingNodeRows.length,
+            firstSeenTurn: currentTurn,
+            lastSeenTurn: currentTurn,
             attributes: incoming.attributes ?? {},
           };
           pluginDataWrites.push({
@@ -216,23 +227,62 @@ export default function ({ tool, z, shortIdBatch, store }) {
         }
       }
 
-      // ── 4. Load existing edges and de-duplicate by (source, target, relation) ──
+      // ── 4. Load existing edges and index the open version of each relation ──
+      //
+      // An edge is a *versioned* fact, not a unique row: (source, target,
+      // relation) can hold many versions over a session, of which at most one
+      // is open (`invalidAt === undefined`). Re-submitting the same relation
+      // with a new strength or a new fact closes the open version and opens a
+      // new one, so a relationship can actually evolve. Rows written before
+      // versioning existed carry no `invalidAt` and therefore read as open —
+      // an old session keeps working and simply gets superseded from here on.
       const existingEdgeRows =
         (await store.listPluginData(
           context.sessionId,
           context.pluginId,
           "edges",
         )) ?? [];
+      // Edge ids closed this call (superseded or self-healed). Their adjacency
+      // entries are pruned below so a revised relation nets zero index growth
+      // (new id in, old id out) instead of leaving the closed id to accumulate
+      // forever and slow the retriever's per-id lookup.
       /** @type {Set<string>} */
-      const existingEdgeKeys = new Set();
+      const closedEdgeIds = new Set();
+      /** @type {Map<string, any>} */
+      const openEdgeByKey = new Map();
       for (const row of existingEdgeRows) {
         const v = row.value ?? {};
-        if (v.source && v.target && v.relation) {
-          existingEdgeKeys.add(`${v.source}::${v.target}::${v.relation}`);
+        if (!v.source || !v.target || !v.relation) continue;
+        if (v.invalidAt !== undefined) continue;
+        const key = `${v.source}::${v.target}::${v.relation}`;
+        const prior = openEdgeByKey.get(key);
+        if (!prior) {
+          openEdgeByKey.set(key, v);
+          continue;
         }
+        // Two open versions of one relation must never coexist. A later tool
+        // call in the same turn (writes don't commit between calls) reads the
+        // pre-turn store and can open a second version, leaving two open rows
+        // after commit — the retriever would then inject contradictory facts
+        // forever. Self-heal on the next write: keep the newest by validAt as
+        // the live version and close the older one at the current turn.
+        const [live, stale] =
+          (v.validAt ?? -1) >= (prior.validAt ?? -1) ? [v, prior] : [prior, v];
+        openEdgeByKey.set(key, live);
+        pluginDataWrites.push({
+          namespace: "edges",
+          key: stale.id,
+          // Unknown-turn (-1) close must not stamp before the edge's own
+          // validAt, which would invert the version window.
+          value: {
+            ...stale,
+            invalidAt: Math.max(currentTurn, stale.validAt ?? currentTurn),
+          },
+        });
+        closedEdgeIds.add(stale.id);
       }
 
-      /** @type {Array<{ id: string; source: string; target: string; relation: string; fact: string; skipped?: string }>} */
+      /** @type {Array<{ id: string; source: string; target: string; relation: string; fact: string; skipped?: string; supersedes?: string }>} */
       const edgeResults = [];
       /** @type {Map<string, { byNode: Map<string, Set<string>> }>} */
       const adjacencyUpdates = new Map();
@@ -252,22 +302,54 @@ export default function ({ tool, z, shortIdBatch, store }) {
           continue;
         }
         const edgeKey = `${src.id}::${tgt.id}::${incoming.relation}`;
-        if (existingEdgeKeys.has(edgeKey)) {
+        const openEdge = openEdgeByKey.get(edgeKey);
+        if (
+          openEdge &&
+          openEdge.strength === incoming.strength &&
+          openEdge.fact === incoming.fact
+        ) {
+          // Nothing changed — re-recording it would only churn the version
+          // history and cost the retriever a slot.
           edgeResults.push({
-            id: "",
+            id: openEdge.id,
             source: src.id,
             target: tgt.id,
             relation: incoming.relation,
             fact: incoming.fact,
-            skipped: "duplicate relation",
+            skipped: "unchanged relation",
           });
           continue;
         }
-        const [edgeId] = shortIdBatch(
+        if (openEdge) {
+          // Close the previous version at the current turn. The row survives
+          // for provenance; retrieval only surfaces open edges.
+          pluginDataWrites.push({
+            namespace: "edges",
+            key: openEdge.id,
+            value: {
+              ...openEdge,
+              invalidAt: Math.max(currentTurn, openEdge.validAt ?? currentTurn),
+            },
+          });
+          closedEdgeIds.add(openEdge.id);
+        }
+        // `shortIdBatch` slugifies the label and truncates it to 24 chars, so a
+        // version suffix placed INSIDE the label is silently cut off for long
+        // endpoint names — two versions of the same relation would collapse to
+        // one id and the newer would overwrite the older's provenance. Keep the
+        // slugified part to the (endpoints + relation) base for readability and
+        // append a suffix outside the truncated slug. The suffix must be unique
+        // per version, and neither turn nor batch index guarantees that: tool
+        // calls within one turn don't commit between each other and each starts
+        // its batch index at 0, so a relation revised in three separate calls
+        // of the same turn would reuse one id. A random token needs no
+        // cross-call state and can't collide across turns, calls, or restarts.
+        const [edgeBase] = shortIdBatch(
           "edge",
           [`${src.name}-${incoming.relation}-${tgt.name}`],
           context.sessionId,
         );
+        const edgeId = `${edgeBase}-${crypto.randomUUID().slice(0, 8)}`;
         const edge = {
           id: edgeId,
           source: src.id,
@@ -275,7 +357,13 @@ export default function ({ tool, z, shortIdBatch, store }) {
           relation: incoming.relation,
           strength: incoming.strength,
           fact: incoming.fact,
-          validAt: existingEdgeRows.length,
+          // Authoritative logical turn, same clock as the node timestamps.
+          // This used to be the number of edge rows already stored, which made
+          // `validAt` a measure of graph size rather than of time — recency
+          // ranking and the retriever's staleness window both read garbage.
+          validAt: currentTurn,
+          // Each version carries only the turns that produced it; the closed
+          // predecessor keeps its own, so provenance stays per-version.
           evidenceTurnIds: [currentTurnId],
         };
         pluginDataWrites.push({
@@ -283,13 +371,14 @@ export default function ({ tool, z, shortIdBatch, store }) {
           key: edgeId,
           value: edge,
         });
-        existingEdgeKeys.add(edgeKey);
+        openEdgeByKey.set(edgeKey, edge);
         edgeResults.push({
           id: edgeId,
           source: src.id,
           target: tgt.id,
           relation: incoming.relation,
           fact: incoming.fact,
+          ...(openEdge ? { supersedes: openEdge.id } : {}),
         });
 
         // Adjacency index staging
@@ -309,7 +398,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
         const prev = Array.isArray(existing?.value) ? existing.value : [];
         const merged = Array.from(
           new Set([...prev, ...bucket.byNode.get(indexKey)]),
-        );
+        ).filter((id) => !closedEdgeIds.has(id));
         pluginDataWrites.push({
           namespace: "index",
           key: indexKey,

@@ -29,7 +29,7 @@ export interface SessionRecord {
   /** ISO 8601 timestamp; null = not locked */
   readonly embeddingLockedAt?: string | null;
   /**
-   * PR-6: Per-runtime model slot overrides. Maps runtime ID
+   * Per-runtime model slot overrides. Maps runtime ID
    * (`pluginId` or `pluginId/runtimeName`) → slot name from `llm.toml`.
    * Empty/undefined means no overrides — slot resolution falls back to
    * `manifest.model` then `"default"`.

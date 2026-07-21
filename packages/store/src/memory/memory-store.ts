@@ -21,6 +21,8 @@ import {
 import { createWorldMethods } from "./world-methods.js";
 import type { MemoryStore } from "./memory-types.js";
 import type { StoreTransaction } from "../types.js";
+import { createSerializedWriteGate } from "../serialized-write-gate.js";
+import { STORE_WRITE_METHODS } from "../store-write-methods.js";
 
 export function createMemoryStore(): MemoryStore {
   const state = createMemoryState();
@@ -40,11 +42,20 @@ export function createMemoryStore(): MemoryStore {
     ...createVectorMethods(state),
   };
 
+  // One shared state means a transaction cannot isolate: a write issued
+  // elsewhere while a transaction is open can be captured by its snapshot and
+  // rolled back with it. The gate puts transactions and outside-of-transaction
+  // writes on one queue. The transaction scope keeps the UNGATED methods —
+  // writes inside the callback belong to that transaction.
+  const gate = createSerializedWriteGate();
+  const gatedData = gate.gateWrites(data, STORE_WRITE_METHODS);
+
   return {
-    ...data,
+    ...gatedData,
     ...createTransactionMethods(
       state,
       () => data as unknown as StoreTransaction,
+      gate,
     ),
 
     async close() {

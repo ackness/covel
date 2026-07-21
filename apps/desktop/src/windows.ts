@@ -26,7 +26,7 @@ export function getMainWindow(): BrowserWindow | null {
 }
 
 /**
- * H-09: true iff `candidateUrl` matches the main window's committed loopback
+ * True iff `candidateUrl` matches the main window's committed loopback
  * origin (the local sidecar / dev server). Shared with ipc-handlers.ts so a
  * sensitive IPC can reject any sender frame that isn't the trusted app origin.
  */
@@ -300,7 +300,7 @@ export function createMainWindow(titleSuffix?: string): BrowserWindow {
     return { action: "deny" };
   });
 
-  // H-09: pin the main frame to the app's own loopback origin. setWindowOpenHandler
+  // Pin the main frame to the app's own loopback origin. setWindowOpenHandler
   // only covers window.open/_blank — an in-window navigation (plugin UI, XSS,
   // a redirect) could otherwise land on an attacker page that then calls
   // `covelIpc` and reads raw provider keys. Block any main-frame navigation to

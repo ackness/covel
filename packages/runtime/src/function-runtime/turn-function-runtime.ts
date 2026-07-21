@@ -2,7 +2,8 @@ import type {
   RuntimeManifest,
   RuntimeResult,
   TurnInput,
-  TurnResult,
+  NestedTurnResult,
+  RecursiveCallDelta,
 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import type { SuspensionRecord } from "@covel/store";
@@ -10,6 +11,9 @@ import {
   createPluginDataWriter,
   createPluginLogger,
   createFunctionStoreView,
+  createTrustedHandlerStore,
+  makeRevocableCapability,
+  makeRevocableFn,
 } from "./plugin-handler-helpers.js";
 import { createRuntimeMediaContext } from "./runtime-media-context.js";
 import { createRuntimeImagesContext } from "./runtime-images-context.js";
@@ -44,9 +48,9 @@ export interface ExecuteFunctionRuntimeOptions {
       }
     | undefined;
   readonly createRecursiveCall: () => (
-    delta: Partial<TurnInput>,
+    delta: RecursiveCallDelta,
     opts?: { readonly reason?: string },
-  ) => Promise<TurnResult>;
+  ) => Promise<NestedTurnResult>;
   readonly recursionDepth: number;
   readonly startTime: number;
   readonly runId: string;
@@ -202,7 +206,7 @@ export async function executeFunctionRuntime({
   const isTrustedSource = isTrustedPluginSource(deps, manifest);
   const handlerStore = deps.store
     ? isTrustedSource
-      ? deps.store
+      ? createTrustedHandlerStore(deps.store)
       : createFunctionStoreView(deps.store, helperCtx)
     : undefined;
 
@@ -219,6 +223,69 @@ export async function executeFunctionRuntime({
     hasGateway: !!deps.gateway,
   });
 
+  // Capability revocation. The deadline race below can leave the
+  // losing handler running detached; once the race settles (either way) all
+  // of the handler's write/spend capabilities are revoked so a late write
+  // cannot land after the session lock releases and the next turn begins.
+  // The merged AbortController also gives cooperative handlers ONE signal
+  // that covers both the player abort and the deadline.
+  let capabilitiesRevoked = false;
+  const isRevoked = () => capabilitiesRevoked;
+  const handlerAbort = new AbortController();
+  const playerSignal = deps.turnControl?.signal;
+  if (playerSignal?.aborted) {
+    handlerAbort.abort(playerSignal.reason);
+  } else if (playerSignal) {
+    playerSignal.addEventListener(
+      "abort",
+      () => handlerAbort.abort(playerSignal.reason),
+      { once: true },
+    );
+  }
+
+  const revocable = {
+    store: handlerStore
+      ? makeRevocableCapability(handlerStore, isRevoked, "store")
+      : undefined,
+    pluginData: pluginDataHandle
+      ? makeRevocableCapability(pluginDataHandle, isRevoked, "pluginData")
+      : undefined,
+    media: mediaHandle
+      ? makeRevocableCapability(mediaHandle, isRevoked, "media")
+      : undefined,
+    images: imagesHandle
+      ? makeRevocableCapability(imagesHandle, isRevoked, "images")
+      : undefined,
+    speech: speechHandle
+      ? makeRevocableCapability(speechHandle, isRevoked, "speech")
+      : undefined,
+    gateway: tracedGateway
+      ? makeRevocableCapability(tracedGateway, isRevoked, "gateway")
+      : undefined,
+    utils: tracedUtils
+      ? makeRevocableCapability(tracedUtils, isRevoked, "utils")
+      : undefined,
+    recursiveCall: makeRevocableFn(
+      createRecursiveCall(),
+      isRevoked,
+      "recursiveCall",
+    ),
+    // logger persists to the store and assetProgress emits SSE/trace events —
+    // both are side-effecting, so they belong in the revocation set too —
+    // otherwise a timed-out handler keeps appending log rows and emitting
+    // progress events after its turn is over.
+    logger: loggerHandle
+      ? makeRevocableCapability(loggerHandle, isRevoked, "logger")
+      : undefined,
+    assetProgress: assetProgress
+      ? makeRevocableFn(assetProgress, isRevoked, "assetProgress")
+      : undefined,
+  };
+  // ponytail: revocation is checked at call entry, so an effect already
+  // in flight when the deadline fires still lands. Closing that needs the
+  // deadline signal threaded into every primitive (or worker isolation) —
+  // upgrade path if late in-flight writes show up in practice.
+
   let output: Awaited<ReturnType<NonNullable<typeof loaded.handler>>>;
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -226,10 +293,10 @@ export async function executeFunctionRuntime({
     // never resolves) blocks the whole turn forever — timeoutMs only existed
     // for the agent path before. Promise.race subscribes to the handler
     // promise, so a post-timeout rejection is still observed (no unhandled
-    // rejection). The player abort signal (ctx.signal) lets a cooperative
-    // handler cancel its own in-flight provider work; the race here only
-    // unblocks the turn — the losing handler keeps running detached unless it
-    // observes the signal.
+    // rejection). The merged abort signal (ctx.signal) lets a cooperative
+    // handler cancel its own in-flight provider work; a NON-cooperative
+    // losing handler keeps running detached, but its capabilities are
+    // revoked in the finally below so late writes are rejected.
     const handlerPromise = loaded.handler({
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -237,16 +304,18 @@ export async function executeFunctionRuntime({
       runtimeId: manifest.name,
       playerMessage: input.playerMessage,
       locale: input.locale,
-      store: handlerStore,
+      store: revocable.store,
       completedResults,
-      recursiveCall: createRecursiveCall(),
+      recursiveCall: revocable.recursiveCall,
       recursionDepth,
-      ...(tracedGateway ? { gateway: tracedGateway } : {}),
-      ...(tracedUtils ? { utils: tracedUtils } : {}),
-      ...(mediaHandle ? { media: mediaHandle } : {}),
-      ...(imagesHandle ? { images: imagesHandle } : {}),
-      ...(speechHandle ? { speech: speechHandle } : {}),
-      ...(assetProgress ? { assetProgress } : {}),
+      ...(revocable.gateway ? { gateway: revocable.gateway } : {}),
+      ...(revocable.utils ? { utils: revocable.utils } : {}),
+      ...(revocable.media ? { media: revocable.media } : {}),
+      ...(revocable.images ? { images: revocable.images } : {}),
+      ...(revocable.speech ? { speech: revocable.speech } : {}),
+      ...(revocable.assetProgress
+        ? { assetProgress: revocable.assetProgress }
+        : {}),
       ...(manualPayloadForRuntime
         ? { manualPayload: manualPayloadForRuntime }
         : {}),
@@ -254,19 +323,19 @@ export async function executeFunctionRuntime({
       ...(userSettingsForRuntime
         ? { userSettings: userSettingsForRuntime }
         : {}),
-      ...(pluginDataHandle ? { pluginData: pluginDataHandle } : {}),
-      ...(loggerHandle ? { logger: loggerHandle } : {}),
-      ...(deps.turnControl?.signal ? { signal: deps.turnControl.signal } : {}),
+      ...(revocable.pluginData ? { pluginData: revocable.pluginData } : {}),
+      ...(revocable.logger ? { logger: revocable.logger } : {}),
+      signal: handlerAbort.signal,
     });
     output = await Promise.race([
       handlerPromise,
       new Promise<never>((_, reject) => {
         deadlineTimer = setTimeout(() => {
-          reject(
-            new Error(
-              `function runtime "${manifest.name}" timed out after ${timeoutMs}ms`,
-            ),
+          const err = new Error(
+            `function runtime "${manifest.name}" timed out after ${timeoutMs}ms`,
           );
+          handlerAbort.abort(err);
+          reject(err);
         }, timeoutMs);
       }),
     ]);
@@ -282,6 +351,9 @@ export async function executeFunctionRuntime({
     throw err;
   } finally {
     clearTimeout(deadlineTimer);
+    // The race has settled — no further capability use is legitimate,
+    // whether the handler won (its output is final) or lost (it is detached).
+    capabilitiesRevoked = true;
   }
 
   await deps.emitter?.emit("function.completed", {
@@ -290,7 +362,7 @@ export async function executeFunctionRuntime({
     durationMs: Date.now() - startTime,
   });
 
-  // ── Suspend detection for function runtimes (S4-T4) ────────────
+  // ── Suspend detection for function runtimes ────────────
   // If the handler returns { status: 'suspended', reason, resumeSchema },
   // persist a suspension and return status: 'suspended'.
   if (
@@ -385,7 +457,7 @@ export async function executeFunctionRuntime({
     );
   }
 
-  const result: RuntimeResult = {
+  const rawResult: RuntimeResult = {
     pluginId: manifest.pluginId,
     runtimeId: manifest.name,
     runId,
@@ -397,16 +469,34 @@ export async function executeFunctionRuntime({
     timestamp: new Date().toISOString(),
   };
 
+  // PostRuntime hook — function runtime path. Runs BEFORE
+  // persistence so prompt history, commit proposals, and SSE all see
+  // the same finalized output — see the agent-path comment for rationale.
+  const result = await runPostRuntimeHook(
+    {
+      pipeline: hookPipeline,
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      pluginId: manifest.pluginId,
+      runtimeId: manifest.name,
+      eventBus: deps.eventBus,
+      emitter: deps.emitter,
+    },
+    rawResult,
+  );
+  const finalOutput = (result.output ?? output) as Record<string, unknown>;
+
   // Save function output as TurnMessage (same as agent runtimes).
   // Manual plugin-rpc calls return their output to the caller and commit
   // proposals through plugin-rpc, so they stay out of conversation history.
-  if (deps.store && !input.manualTrigger) {
+  // Skipped when a PostRuntime hook rewrote the status to a non-success.
+  if (deps.store && !input.manualTrigger && result.status === "success") {
     const narrativeContent =
-      typeof output.narrativeOutput === "string"
-        ? output.narrativeOutput
-        : typeof output.content === "string"
-          ? output.content
-          : JSON.stringify(output);
+      typeof finalOutput.narrativeOutput === "string"
+        ? finalOutput.narrativeOutput
+        : typeof finalOutput.content === "string"
+          ? finalOutput.content
+          : JSON.stringify(finalOutput);
 
     await deps.store.appendTurnMessage({
       id: crypto.randomUUID(),
@@ -441,17 +531,5 @@ export async function executeFunctionRuntime({
     durationMs: result.durationMs,
   });
 
-  // PostRuntime hook — function runtime path (S4-T3)
-  return runPostRuntimeHook(
-    {
-      pipeline: hookPipeline,
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      pluginId: manifest.pluginId,
-      runtimeId: manifest.name,
-      eventBus: deps.eventBus,
-      emitter: deps.emitter,
-    },
-    result,
-  );
+  return result;
 }

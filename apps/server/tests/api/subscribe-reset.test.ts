@@ -1,13 +1,12 @@
 /**
- * `/api/events/stream` reset-protocol + resource-cleanup tests
- * (re-review H-05 / H-06 / H-08).
+ * `/api/events/stream` reset-protocol + resource-cleanup tests.
  *
- * - H-05: when replay cannot bridge the client's cursor (ring buffer wrapped,
+ * - When replay cannot bridge the client's cursor (ring buffer wrapped,
  *   session evicted, foreign/legacy epoch), the server emits an id-less
  *   `system.reset` control frame instead of a silent partial replay.
- * - H-06: an epoch change (state re-created) is detected via the
+ * - An epoch change (state re-created) is detected via the
  *   `${epoch}:${seq}` wire id and answered with `reason: "epoch-change"`.
- * - H-08: a throw during handshake/replay still releases the onEmit listener,
+ * - A throw during handshake/replay still releases the onEmit listener,
  *   the session pin, and the connection slot (single-finally cleanup).
  */
 
@@ -91,7 +90,7 @@ async function requestFrames(
   }
 }
 
-describe("H-05/H-06 system.reset control frame", () => {
+describe("system.reset control frame", () => {
   let store: DataStore;
   let eventBus: EventBus;
   let app: Hono;
@@ -211,7 +210,7 @@ describe("H-05/H-06 system.reset control frame", () => {
   });
 });
 
-describe("H-08 cleanup on handshake/replay failure", () => {
+describe("cleanup on handshake/replay failure", () => {
   let store: DataStore;
   let eventBus: EventBus;
 

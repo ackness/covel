@@ -1,5 +1,5 @@
 /**
- * PR-3: POST /api/sessions/:id/plugin-rpc integration tests.
+ * POST /api/sessions/:id/plugin-rpc integration tests.
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
@@ -135,7 +135,7 @@ function submitFormRequest(
   });
 }
 
-describe("POST /api/sessions/:id/plugin-rpc (PR-3)", () => {
+describe("POST /api/sessions/:id/plugin-rpc", () => {
   let app: Hono;
   let store: DataStore;
   let registry: PluginRpcRegistry;
@@ -392,7 +392,7 @@ describe("POST /api/sessions/:id/plugin-rpc (PR-3)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects framework actions when pluginId is not the canonical sentinel (LOW-3)", async () => {
+  it("rejects framework actions when pluginId is not the canonical sentinel", async () => {
     // `echo` is a framework default but the request uses pluginId="codex".
     // The canonical sentinel is "framework" — anything else gets 404.
     const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
@@ -614,7 +614,7 @@ function makeFunctionEntry(args: {
    * so happy-path tests auto-allow without explicit approvals. Community
    * coverage is exercised by the approval-required test below. */
   source?: PluginSource;
-  /** Per-runtime userSettings frontmatter (audit F7 coverage). */
+  /** Per-runtime userSettings frontmatter coverage. */
   userSettings?: ReadonlyArray<{
     readonly key: string;
     readonly type: "text" | "number" | "toggle" | "select" | "textarea";
@@ -627,7 +627,7 @@ function makeFunctionEntry(args: {
   }>;
 }): { entry: PluginRegistryEntry; loaded: LoadedRuntime } {
   // Note: `pluginType` is author-supplied and no longer affects the runtime
-  // RPC trust gate (audit F2). Trust now comes from `entry.source`, which the
+  // RPC trust gate. Trust now comes from `entry.source`, which the
   // server bootstrap derives from discovery (first-dir=bundled, others=community).
   const manifest: RuntimeManifest = {
     name: args.runtimeId,
@@ -1205,7 +1205,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     );
   });
 
-  // ── Audit F7: X-Plugin-User-Settings header → ctx.userSettings ──
+  // ── X-Plugin-User-Settings header → ctx.userSettings ──
   //
   // Player-authored plugin settings travel from the web client's
   // SettingsStore via the `X-Plugin-User-Settings` base64-JSON header.
@@ -1338,7 +1338,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
   });
 
   it("commits pluginData[] returned by a function handler into plugin_data rows", async () => {
-    // F5 regression — `output.pluginData: [{namespace,key,value}]` must
+    // Regression — `output.pluginData: [{namespace,key,value}]` must
     // land in the store through the normal commit pipeline. Before the
     // normaliser change this field was a plain runtime output field with
     // no side effects — the image gallery and _jobs writeback relied on
@@ -1523,8 +1523,8 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     });
   });
 
-  it("writes _jobs status: failed when a background runtime handler throws (F8 regression)", async () => {
-    // Audit F8: before this fix, executeTurn caught the handler exception
+  it("writes _jobs status: failed when a background runtime handler throws (regression)", async () => {
+    // Before this fix, executeTurn caught the handler exception
     // and marked the runtime as `failed` inside `runtimeResults`, but the
     // background writeback still wrote top-level `status: 'done'`. Frontend
     // watching `_jobs.status` would render a failed image as success.
@@ -1582,7 +1582,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     expect(v.runtimeResults![0]?.error).toContain("handler-exploded");
   });
 
-  // ── Audit F2 regression: trust comes from discovery source, not pluginType.
+  // ── Regression: trust comes from discovery source, not pluginType.
   //
   // A third-party plugin that forges `pluginType: 'core-plugin'` in its
   // frontmatter must NOT auto-bypass the approval gate. The server-side
@@ -1603,8 +1603,9 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     });
     await seedRuntimeSession(store, PLUGIN_ID, SESSION_ID);
 
-    // First call — community trust forces pending approval. Handler must NOT
-    // run. Response is 202 with an `approvalId` the frontend can resolve.
+    // Two-phase flow. Phase 1: with no server-code grant yet, the first
+    // call asks for the exact COMMUNITY_SERVER_CODE_ACTION grant. Handler
+    // must NOT run.
     const first = await app.request(`/api/sessions/${SESSION_ID}/plugin-rpc`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1618,22 +1619,22 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     const firstBody = (await first.json()) as {
       status: string;
       approvalId?: string;
+      pending?: { action?: string };
     };
     expect(firstBody.status).toBe("approval-required");
     expect(typeof firstBody.approvalId).toBe("string");
+    expect(firstBody.pending?.action).toBe("covel:plugin-server-code");
     expect(handlerCalls).toBe(0);
 
-    // Resolve the approval as if the frontend called /api/approvals/:id/decision
-    // with { decision: 'allow', scope: 'session' }.
-    const decideResult = gate.decide({
+    const serverCodeDecision = gate.decide({
       approvalId: firstBody.approvalId!,
       decision: "allow",
       scope: "session",
       decidedAt: new Date().toISOString(),
     });
-    expect(decideResult.ok).toBe(true);
+    expect(serverCodeDecision.ok).toBe(true);
 
-    // Retry — now auto-allowed for the rest of the session.
+    // Phase 2: the retry now asks for the exact `runtime:<name>` grant.
     const second = await app.request(`/api/sessions/${SESSION_ID}/plugin-rpc`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1643,13 +1644,42 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
         payload: { n: 2 },
       }),
     });
-    expect(second.status).toBe(200);
+    expect(second.status).toBe(202);
     const secondBody = (await second.json()) as {
+      status: string;
+      approvalId?: string;
+      pending?: { action?: string };
+    };
+    expect(secondBody.status).toBe("approval-required");
+    expect(secondBody.pending?.action).toBe(`runtime:${SYNC_RUNTIME}`);
+    expect(handlerCalls).toBe(0);
+
+    const runtimeDecision = gate.decide({
+      approvalId: secondBody.approvalId!,
+      decision: "allow",
+      scope: "session",
+      decidedAt: new Date().toISOString(),
+    });
+    expect(runtimeDecision.ok).toBe(true);
+
+    // Both exact grants present — the runtime executes for the rest of the
+    // session.
+    const third = await app.request(`/api/sessions/${SESSION_ID}/plugin-rpc`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        pluginId: PLUGIN_ID,
+        runtimeId: SYNC_RUNTIME,
+        payload: { n: 3 },
+      }),
+    });
+    expect(third.status).toBe(200);
+    const thirdBody = (await third.json()) as {
       status: string;
       runtimeResults: ReadonlyArray<{ status: string }>;
     };
-    expect(secondBody.status).toBe("ok");
-    expect(secondBody.runtimeResults[0]?.status).toBe("success");
+    expect(thirdBody.status).toBe("ok");
+    expect(thirdBody.runtimeResults[0]?.status).toBe("success");
     expect(handlerCalls).toBe(1);
   });
 
@@ -1733,7 +1763,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     expect(body.status).toBe("approval-required");
   });
 
-  // ── Audit F1: event-chain fan-out respects manifest.execution. ────
+  // ── Event-chain fan-out respects manifest.execution. ────
   //
   // A P600 sync target emitting an event that matches a P610 follower
   // with `execution: 'background'` must NOT block the sync response on
@@ -1772,8 +1802,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
         await followerGate;
         followerFinished = true;
         const event = ctx.triggerEvent as
-          | { topic: string; data: { prompt?: string } }
-          | undefined;
+          { topic: string; data: { prompt?: string } } | undefined;
         return {
           fromFollower: true,
           prompt: event?.data?.prompt,
@@ -1941,8 +1970,8 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
   // surfaces a manual-trigger turn does.
 
   // Helper: register a sync target + background follower with the given
-  // follower handler. Mirrors the F1 setup but parameterises the handler
-  // and skips the followerGate/start/finish bookkeeping the F1 case tracks
+  // follower handler. Mirrors the earlier setup but parameterises the handler
+  // and skips the followerGate/start/finish bookkeeping the earlier case tracks
   // (we care about emitter/store side effects here, not scheduling order).
   function setupTargetAndFollower(args: {
     targetHandler?: FunctionHandler;
@@ -2207,8 +2236,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     const { app, store, targetRuntimeId } = setupTargetAndFollower({
       followerHandler: async (ctx) => {
         const event = ctx.triggerEvent as
-          | { topic: string; data: { prompt?: string } }
-          | undefined;
+          { topic: string; data: { prompt?: string } } | undefined;
         return {
           ok: true,
           assetGenerations: [

@@ -1,6 +1,6 @@
 {
   "name": "@covel/desktop",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "private": true,
   "type": "module",
   "main": "dist/main.mjs",
@@ -21,15 +21,15 @@
     "clean": "node ../../scripts/remove-paths.mjs dist staging ../../release/electron"
   },
   "dependencies": {
-    "smol-toml": "^1.6.1",
-    "tsx": "^4.22.4"
+    "smol-toml": "^1.7.0",
+    "tsx": "4.22.4"
   },
   "devDependencies": {
     "@covel/web": "workspace:*",
-    "@electron/rebuild": "^4.0.4",
-    "electron": "^42.4.1",
-    "electron-builder": "^26.15.3",
+    "@electron/rebuild": "^4.2.0",
+    "electron": "43.1.0",
+    "electron-builder": "26.15.6",
     "esbuild": "^0.28.1",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   }
 }

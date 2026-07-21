@@ -72,6 +72,8 @@ export interface AgentToolLoopInitialState {
 export interface RunAgentToolLoopOptions {
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
+  /** Authoritative logical turn number, forwarded into ToolCallContext. */
+  readonly turnNumber?: number;
   readonly loaded: LoadedRuntime;
   readonly deps: AgentLoopDeps;
   readonly maxSteps: number;
@@ -93,6 +95,7 @@ export interface RunAgentToolLoopOptions {
 export async function runAgentToolLoop({
   manifest,
   input,
+  turnNumber,
   loaded,
   deps,
   maxSteps,
@@ -138,6 +141,7 @@ export async function runAgentToolLoop({
     retryPolicy,
     requireToolUse,
     acceptsSteering,
+    authorizedToolNames,
   } = buildAgentLoopPolicy({
     manifest,
     input,
@@ -197,7 +201,7 @@ export async function runAgentToolLoop({
   while (steps < effectiveMaxSteps && Date.now() < deadline) {
     steps++;
 
-    // ── Player turn control (W4) ─────────────────────────────────
+    // ── Player turn control ─────────────────────────────────
     // Abort: cut before spending another LLM call (the in-flight call is
     // additionally cut by the retry layer via the same signal). Steering:
     // merge queued player interjections into the live transcript so the
@@ -266,7 +270,7 @@ export async function runAgentToolLoop({
         if (deps.toolExecutor) {
           const tcStart = Date.now();
 
-          // ── PreToolUse hook (S4-T3) ──────────────────────────
+          // ── PreToolUse hook ──────────────────────────
           const preToolOutcome = await runPreToolUseHook(hookOpts, {
             id: tc.id,
             name: tc.name,
@@ -354,10 +358,14 @@ export async function runAgentToolLoop({
               pendingProposals: pendingProposals,
               emittedEventTopics: emittedEvents.map((e) => e.topic),
               emitter: deps.emitter,
+              ...(turnNumber !== undefined ? { turnNumber } : {}),
+              // Execution is bounded by the runtime's declared surface,
+              // checked AFTER PreToolUse replacement produced effectiveTc.
+              authorizedToolNames,
             },
           );
 
-          // ── PostToolUse hook (S4-T3) ─────────────────────────
+          // ── PostToolUse hook ─────────────────────────
           const { result: toolResult, terminate: terminateAfterTool } =
             await runPostToolUseHook(
               hookOpts,
@@ -387,7 +395,7 @@ export async function runAgentToolLoop({
             emittedEvents.push(...toolResult.emittedEvents);
           }
 
-          // ── Suspend detection (S4-T4) ────────────────────────
+          // ── Suspend detection ────────────────────────
           // When the suspend tool is called, capture the current loop state and
           // persist a SuspensionRecord. The tool result is not pushed back to
           // the LLM; instead we exit the loop with status 'suspended'.
@@ -565,7 +573,7 @@ export async function runAgentToolLoop({
       );
     }
 
-    // Late steering (W4): an interjection that arrived while THIS response
+    // Late steering: an interjection that arrived while THIS response
     // was streaming would otherwise sit queued until turn release and never
     // reach the current turn — the pre-step drain has already run, and a
     // bare prose finish (the common single-step story turn) ends the loop

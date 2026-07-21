@@ -1,5 +1,5 @@
 /**
- * Runnable self-check for the H-09 origin-trust boundary. No test framework —
+ * Runnable self-check for the origin-trust boundary. No test framework —
  * `tsx src/trusted-origin.selfcheck.ts` throws on the first failing assertion.
  */
 import assert from "node:assert/strict";

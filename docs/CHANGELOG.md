@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.17] - 2026-07-21
+
+Trust-boundary and commit-integrity release, plus a smoother story-mode opening. A consolidated full-repository audit (2026-07-20) drove three remediation batches: plugin identity and community-code approval are now enforced end to end, a turn's commit outcome is authoritative everywhere, and single-connection stores serialize writes against open transactions. The GalGame stage now pre-warms its art during pre-game and appears as soon as the player submits the opening form. Toolchain moved to pnpm 11 / TypeScript 7 / Vite 8 / Electron 43, and the runtime baseline is Node 26.
+
+### Added
+
+- **Stage media preload** — known scene backdrops and character sprites/avatars are warmed into the browser media cache as soon as a session opens (world-package media is already in the MediaStore at creation), so the opening turn paints them straight from cache instead of downloading after the pre-game turn ends.
+- **Early stage entry** — the visual stage mounts the moment the player submits the opening (character-creation) form, showing the world hero backdrop and a thinking indicator until the narrator's first `scene.set` swaps in the real scene art. Previously the player stared at the chat stream until pre-game fully completed.
+- **`turn_results.commit_status` + `origin`** — every execution artifact records whether its proposals actually committed (`pending` → `committed`/`failed`; a lingering `pending` is a crash signature) and which path produced it (`player`/`manual`/`follower`/`recursive` with `parent_turn_id`), so `session.turnCount` counts committed player turns only.
+- **`proposal.failed` SSE/trace event** — a proposal commit failure surfaces to the client and withholds the completion barrier instead of reporting turn success.
+
+### Security
+
+- **Canonical plugin identity** — install derives one canonical ID from the manifest root name; the scoped-npm impersonation bypass (e.g. `@covel/plugin-narrator` claiming the builtin `narrator`) returns 409, and boot discovery hard-fails a dir/frontmatter identity mismatch.
+- **Two-phase community approval enforced exactly** — grants are exact-action only (a prefix match previously let any grant unlock everything); community runtime dispatch, declarative RPC handlers, and entry imports all walk `covel:plugin-server-code` first, then the specific grant.
+- **Executor-side tool authorization** — the agent loop passes the runtime's exact authorized tool set and the executor rejects out-of-set names (checked on the final name, after overrides and PreToolUse replacement); local tools fail closed without context.
+- **Framework-owned identity is frozen** — tool-carried proposals are rebound to the executing runtime's session/turn/source before commit; `recursiveCall` takes a delta (no session/turn/origin override) and returns a result that cannot fire `turn.completed`; PostRuntime replacement keeps manifest identity; PreStateCommit replacement is payload-only; PreSchedule replacement is filter-only.
+- **Function-runtime capability revocation** — a timed-out or aborted handler loses every capability (store, pluginData, media, images, speech, gateway, logger, assetProgress, recursiveCall) the moment the race settles, so a detached handler cannot write after the session lock releases.
+- **Plugin-data trust gaps closed** — the reserved `_` namespace (`_jobs`, `_logs`) and core-plugin namespaces are rejected on every plugin-controlled write path (REST, commit handlers, function-runtime writer); `world-init` no longer seeds a new session by copying another session's player-writable plugin-data.
+- **Prompt-injection surface reduction** — player input never rides the system prompt (`{{ player.message }}` interpolation removed from narrator bodies); inject blocks are interpolated exactly once so escaped `{{ … }}` in player/model data cannot expand; core-memory blocks are XML-escaped with validated labels; compacted history summaries are demoted from system messages to escaped data envelopes.
+
+### Changed
+
+- **Toolchain baseline** — pnpm 11.9, TypeScript 7.0, Vite 8 (rolldown), Vitest 4.1, Electron 43, Hono 4.12, Undici 8.6; Radix umbrella replaced with per-package imports. Node runtime pins moved 22 → 26 (engines `>=26`, mise, CI, Docker base image digest-pinned to `26.5.0-alpine3.24`).
+- **Dialogue-mode parity for tracking runtimes** — character-tracker, npc-graph extractor, and codex discover the narrative engine by capability instead of naming `narrator`, so character state and the relationship graph update in chat mode too.
+- **`start_session` with an empty plugin set returns 400** instead of silently activating every registered plugin (including community and mutually-exclusive ones) for the life of the session.
+- **Comment/doc hygiene** — audit/spec/PR tracer IDs swept out of code comments and test names; docs corrected where they had drifted from the implementation (transactions boundary, turnCount semantics, postHistory scoping, emit-event dedup).
+
+### Fixed
+
+- **Commit outcome is authoritative** — synchronous plugin-rpc returns 500 `turn-commit-failed` on an uncommitted turn; background jobs settle failed and schedule no follower onto rolled-back state; nested `recursiveCall` proposals bubble to the top-level barrier instead of being dropped; a failed best-effort auto-snapshot no longer fails an already-committed turn.
+- **Turn accounting** — a scoped `retry_runtime` no longer double-advances the turn counter; a fork's inherited count is preserved; the counter advances only after commit settles.
+- **SSE isolation and ordering** — the event-bus subscription is established inside the session lock (a queued action can no longer receive the previous execution's events under its own envelope); post-commit fan-out is buffered until the enclosing transaction commits; stream writes go through one serial queue.
+- **Single-connection store writes serialize against open transactions** — on SQLite/Memory backends an unrelated write issued while a transaction was open used to join it (and vanish on rollback); a per-connection write gate now queues outside writes, covering the vector and mirror-media stores sharing the connection.
+- **World-data write atomicity** — `sync-dimensions` runs under one session lock + transaction; `sync-data` re-checks content hashes inside the transaction (409 on drift) and defers media deletion to after commit so an abort cannot leave committed references to deleted files; media materialization compensates partial failures.
+- **NPC graph runs on a real turn clock** — relationship edges are versioned (changed relations close the open version and open a new one with authoritative `validAt`/`invalidAt`), `firstSeen`/`lastSeen` no longer derive from row counts, an unknown turn can no longer rewind `lastSeenTurn`, and superseded/duplicate open edges are healed and filtered from retrieval.
+- **Event-runtime throttling restored** — fan-out now feeds real per-runtime trigger history, so `maxTriggerCount`/`cooldownTurns` bind again; fan-out also respects the real `preGameCompleted` set so a finished Pre-Game runtime is not resurrected.
+- **Prompt budget enforcement for tool-using agents** — pruning is tool-pair-aware (no orphaned `tool` messages), which lifts the exclusion that had exempted every main agent from the hard budget; working memory is capped at render time and its entry quota enforced on both write paths.
+- **Read-your-own-write for plugin data** — `get`/`list` overlay the calling plugin's own uncommitted proposals from the current tool loop.
+- **npc-graph / retry / snapshot / localization follow-ups** — adjacency index prunes closed edge ids; schema-declared runtimes get a correct completion preamble instead of being told to call a tool they don't have; the framework locale rule is scoped to natural-language content so machine values (enums, ids, topics) stay verbatim; localized manifests are verified field-by-field against the canonical manifest.
+
 ## [0.0.16] - 2026-07-17
 
 Performance, correctness, and reliability release. Context budgets are now derived from real model capabilities, per-turn history reads are bounded so long sessions stay fast, and a repository-wide six-dimension audit closed a batch of dead code, stale-doc, logging, and cross-backend-consistency gaps. New capability: **deferred tool loading** (`tools.defer`) lets runtimes with large tool whitelists keep the prompt small and let the model search tools on demand. Reliability fixes harden the shutdown drain, background-job sweep, event tail-frame delivery, and hosted-tier owner-token enforcement.
@@ -662,7 +703,15 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.9...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.17...HEAD
+[0.0.17]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.17
+[0.0.16]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.16
+[0.0.15]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.15
+[0.0.14]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.14
+[0.0.13]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.13
+[0.0.12]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.12
+[0.0.11]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.11
+[0.0.10]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.10
 [0.0.9]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.9
 [0.0.8]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.8
 [0.0.7]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.7

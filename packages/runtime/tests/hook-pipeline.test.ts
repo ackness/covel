@@ -1,5 +1,5 @@
 /**
- * Hook lifecycle pipeline tests (S4-T3).
+ * Hook lifecycle pipeline tests.
  *
  * Covers:
  * - Each HookEvent type fires in order

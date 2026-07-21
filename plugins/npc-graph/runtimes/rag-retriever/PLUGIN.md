@@ -28,7 +28,7 @@ NPC 关系图检索器（function runtime）。
 1. 读取本会话的 NPC 节点、边与邻接索引（`plugin_data[nodes/edges/index]`）
 2. 在 `playerMessage` 与最近几条 narrator 消息中字符串匹配节点名字（含别名）
 3. 对命中节点做 2-hop BFS，合并 `by-source` 与 `by-target` 索引
-4. 过滤掉 `invalidAt` 已到期的边
+4. 只保留有效区间仍开放的边（`invalidAt === undefined`）；被新版本取代的旧边留在库里溯源，但不注入 prompt
 5. 按最近度（`validAt` 降序）和强度绝对值排序，截取 top-20
 6. 输出 `npcContext` 字段（markdown 列表），由 `narrator` 通过 input.inject 消费
 

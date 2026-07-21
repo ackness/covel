@@ -231,7 +231,7 @@ export function PluginPanel({
   // Both forms emit a toast on error so the player never gets a silent
   // failure when their click went nowhere.
   //
-  // Audit F3: when `postPluginRpc` returns `approval-required`, the panel
+  // When `postPluginRpc` returns `approval-required`, the panel
   // must guide the user through the approval flow instead of silently
   // dropping the click. Community-trust plugins (including every third-party
   // plugin under `~/.covel/plugins/`) hit this path on first click.

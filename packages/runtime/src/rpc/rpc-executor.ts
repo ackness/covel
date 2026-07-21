@@ -1,5 +1,5 @@
 /**
- * PR-3: Plugin RPC dispatcher.
+ * Plugin RPC dispatcher.
  *
  * Resolves an `{ pluginId, action?, runtimeId? }` request against the
  * registry, loads the handler module if needed, and runs it with the

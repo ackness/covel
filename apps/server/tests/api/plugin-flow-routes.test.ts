@@ -48,7 +48,7 @@ describe("plugin flow routes", () => {
       "priority-band-narrator",
       "priority-band-post-narrator",
     ]);
-    // audit P0-1: Pre-Game band aligned to 1-99 to match scheduler edges.
+    // Pre-Game band aligned to 1-99 to match scheduler edges.
     expect(body.segments[1]?.rangeLabel).toBe("1-99");
     expect(
       body.steps.some(

@@ -109,7 +109,7 @@ mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
       400,
     );
   }
-  // Owner guard (audit H-02): the upload records ownership + a media ref for
+  // Owner guard: the upload records ownership + a media ref for
   // `sessionId`, so on hosted tiers the caller must own that session.
   // Strict no-op on self (store lookup skipped, historical behavior kept).
   const denied = await checkSessionOwnerById(c, c.get("store"), sessionId);

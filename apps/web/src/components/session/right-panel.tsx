@@ -49,8 +49,7 @@ function resolvePluginIcon(name: string): Icons.LucideIcon {
     .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
     .join("");
   const resolved = (Icons as Record<string, unknown>)[pascal] as
-    | Icons.LucideIcon
-    | undefined;
+    Icons.LucideIcon | undefined;
   if (resolved) return resolved;
   // Surface the mismatch loudly in dev so plugin authors notice mis-typed
   // icons without crashing the panel.

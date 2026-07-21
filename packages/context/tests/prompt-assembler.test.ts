@@ -165,7 +165,7 @@ describe("prompt-assembler", () => {
     const params = baselineParams({
       promptTemplate: "Line one.",
       // No locale → segment 1 empty. No injects → segment 5 empty.
-      // Segments 2/4/6 are always empty for S2-T1.
+      // Segments 2/4/6 are always empty in this case.
     });
 
     const result = buildSegmentedContext(params);
@@ -394,7 +394,7 @@ describe("prompt-assembler", () => {
     expect(result.messages.length).toBeLessThan(history.length + 2); // +2 = placeholder + current user
   });
 
-  // ── Segment 9: Author's Note (S3-T4) ──────────────────────────
+  // ── Segment 9: Author's Note ──────────────────────────
 
   describe("segment 9 — Author's Note", () => {
     function makeHistory(count: number): MessageHistoryRecord[] {
@@ -585,7 +585,7 @@ describe("prompt-assembler", () => {
     });
   });
 
-  // ── Segment 10: Post-History Instructions (S3-T4) ──────────────
+  // ── Segment 10: Post-History Instructions ──────────────
 
   describe("segment 10 — Post-History Instructions", () => {
     it("appends post-history instruction as the final message", () => {
@@ -776,7 +776,7 @@ describe("prompt-assembler", () => {
   });
 });
 
-// ── S2-T3: Prompt cache breakpoint markers ──────────────────────
+// ── Prompt cache breakpoint markers ──────────────────────
 
 describe("prompt-assembler — cache breakpoints", () => {
   it("emits markers after segment 1 and segment 3", () => {

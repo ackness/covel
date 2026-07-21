@@ -91,7 +91,7 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       expect(result).toBeNull();
     });
 
-    it("PR-6: persists runtimeModelOverrides on create and update", async () => {
+    it("persists runtimeModelOverrides on create and update", async () => {
       const session = makeSession();
       await store.createSession({
         ...session,
@@ -201,7 +201,7 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       expect(result?.runtimeModelOverrides).toBeUndefined();
     });
 
-    it("PR-6: clearing runtimeModelOverrides with empty object removes it", async () => {
+    it("clearing runtimeModelOverrides with empty object removes it", async () => {
       const session = makeSession();
       await store.createSession({
         ...session,

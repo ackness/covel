@@ -14,13 +14,7 @@ export interface ServerHealth {
     media?: {
       backend?: "memory" | "sqlite" | "pg" | "s3" | "idb" | "none";
       configuredBackend?:
-        | "mirror"
-        | "memory"
-        | "sqlite"
-        | "pg"
-        | "s3"
-        | "idb"
-        | "none";
+        "mirror" | "memory" | "sqlite" | "pg" | "s3" | "idb" | "none";
       enabled?: boolean;
       durable?: boolean;
     };

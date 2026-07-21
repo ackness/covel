@@ -53,7 +53,7 @@ export function useAutoScroll(
     (node: HTMLElement | null) => {
       const prev = viewportRef.current;
       // `addEventListener` handlers are not removed by clearing `.onscroll`, so
-      // keep the handler ref and detach it explicitly on node swap (L-12).
+      // keep the handler ref and detach it explicitly on node swap.
       if (prev && scrollHandlerRef.current) {
         prev.removeEventListener("scroll", scrollHandlerRef.current);
       }

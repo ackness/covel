@@ -190,6 +190,16 @@ export interface WorkingMemoryChangedPayload {
   readonly pluginId?: string;
 }
 
+export interface ProposalFailedPayload {
+  /** Proposal envelope id that failed to commit. */
+  readonly proposalId: string;
+  /** Proposal type (e.g. `narrative.append`, `plugin.data`). */
+  readonly proposalType: string;
+  readonly runtimeId: string;
+  readonly pluginId: string;
+  readonly error: string;
+}
+
 export type CovelEvent =
   // Narrative
   | {
@@ -274,16 +284,23 @@ export type CovelEvent =
       readonly type: "working_memory.changed";
       readonly payload: WorkingMemoryChangedPayload;
     }
+  // Commit outcome : a proposal that failed to commit
+  // is surfaced explicitly instead of being silently dropped. Written
+  // directly onto the action stream by the commit-owning route.
+  | {
+      readonly type: "proposal.failed";
+      readonly payload: ProposalFailedPayload;
+    }
   // System
   | { readonly type: "error.occurred"; readonly payload: ErrorOccurredPayload }
   | {
       readonly type: "connection.restored";
       readonly payload: CovelEventPayload;
     }
-  // Suspend / Resume (S4-T4)
+  // Suspend / Resume
   | { readonly type: "turn.suspended"; readonly payload: TurnSuspendedPayload }
   | { readonly type: "turn.resumed"; readonly payload: TurnResumedPayload }
-  // Snapshot / Fork (S4-T2 / S4-T5)
+  // Snapshot / Fork
   | {
       readonly type: "state.snapshot.created";
       readonly payload: CovelEventPayload;
@@ -324,7 +341,7 @@ export type CovelEvent =
   | { readonly type: "gateway.calling"; readonly payload: CovelEventPayload }
   | { readonly type: "gateway.responded"; readonly payload: CovelEventPayload }
   | { readonly type: "gateway.failed"; readonly payload: CovelEventPayload }
-  // Plugin-utils provider-call trace (A2-P1-5 follow-up). Wraps
+  // Plugin-utils provider-call trace. Wraps
   // ctx.utils.fetchWithRetry — the wire image plugins own. Trace-only
   // (forward:false): polling can be high-frequency, so keep it off the action
   // stream; /debug reads it from trace_events + the subscription channel.
@@ -339,7 +356,12 @@ export type CovelEvent =
   | {
       readonly type: "utils.fetch.failed";
       readonly payload: CovelEventPayload;
-    };
+    }
+  // Prompt-assembly hard prune (TurnEmitter). Emitted once per runtime when the
+  // assembled context did not fit the slot budget and history had to be dropped,
+  // so /debug can explain a turn that lost context instead of silently losing it.
+  // Trace-only (forward:false) — the player-facing stream is unaffected.
+  | { readonly type: "context.pruned"; readonly payload: CovelEventPayload };
 
 /** The closed vocabulary of every server→client event name. */
 export type CovelEventType = CovelEvent["type"];
@@ -393,6 +415,9 @@ export const COVEL_EVENT_META = {
   // forward path), so forwardToActionStream stays false — the flag only governs
   // eventBus→action-stream forwarding, which this event does not use.
   "working_memory.changed": { forwardToActionStream: false },
+  // Direct write onto the action stream by the commit-owning route (like
+  // working_memory.changed) — the flag only governs eventBus forwarding.
+  "proposal.failed": { forwardToActionStream: false },
   "error.occurred": { forwardToActionStream: false },
   "connection.restored": { forwardToActionStream: false },
   "turn.suspended": { forwardToActionStream: true },
@@ -426,6 +451,8 @@ export const COVEL_EVENT_META = {
   "utils.fetch.calling": { forwardToActionStream: false },
   "utils.fetch.responded": { forwardToActionStream: false },
   "utils.fetch.failed": { forwardToActionStream: false },
+  // Prompt-budget prune trace — /debug only.
+  "context.pruned": { forwardToActionStream: false },
 } satisfies Record<CovelEventType, CovelEventMeta>;
 
 /**

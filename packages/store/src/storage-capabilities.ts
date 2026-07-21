@@ -22,11 +22,7 @@ export interface StorageCapabilityDescriptor {
     readonly backend: VectorBackend;
     readonly capable: boolean;
     readonly driver:
-      | "in-memory"
-      | "sqlite-vec"
-      | "pgvector"
-      | "external"
-      | "none";
+      "in-memory" | "sqlite-vec" | "pgvector" | "external" | "none";
     readonly modelCount: number;
     readonly tableCount: number;
   };

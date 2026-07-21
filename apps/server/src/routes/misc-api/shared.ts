@@ -53,7 +53,7 @@ export function textValue(value: unknown, locale = "zh-CN"): string {
 }
 
 export function segmentForPriority(priority: number): FlowSegmentId {
-  // audit P0-1: align with packages/runtime/src/scheduler.ts band edges.
+  // Align with packages/runtime/src/scheduler.ts band edges.
   // Pre-Game is `0-99` (turn 0 only), main loop is `100-1000`. Treating
   // `priority === 100` as Pre-Game would put it in the wrong band on the
   // flow viz — same drift the audit calls out.

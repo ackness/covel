@@ -1,8 +1,10 @@
 import type { MediaRef, MediaRefRecord, MediaStore } from "@covel/shared";
 import {
   acquireSqliteConnection,
+  getConnectionWriteGate,
   releaseSqliteConnection,
 } from "../sqlite/shared-connection.js";
+import { MEDIA_WRITE_METHODS } from "../store-write-methods.js";
 import {
   createReadStream,
   existsSync,
@@ -95,7 +97,7 @@ export function createSqliteMediaStore(
     "SELECT 1 AS one FROM media_refs WHERE session_id = ? AND media_id = ? LIMIT 1",
   );
 
-  return {
+  const store: MediaStore = {
     async put(blob, mime, meta) {
       const bytes = await toBytes(blob);
       const id = sha256(bytes);
@@ -214,8 +216,7 @@ export function createSqliteMediaStore(
 
     async isReferencedBy(id, sessionId) {
       const ownerRow = checkOwner.get(id) as
-        | { ownerSessionId: string | null }
-        | undefined;
+        { ownerSessionId: string | null } | undefined;
       if (ownerRow?.ownerSessionId === sessionId) return true;
       const refRow = checkRef.get(sessionId, id) as { one: number } | undefined;
       return refRow !== undefined;
@@ -278,4 +279,13 @@ export function createSqliteMediaStore(
       releaseSqliteConnection(sqlite);
     },
   };
+
+  // Same connection as the DataStore ⇒ same write gate. Without this a media
+  // write issued while another caller's transaction is open joins that
+  // transaction and is silently lost when it rolls back.
+  // `cleanup` is deliberately NOT in MEDIA_WRITE_METHODS: it is not gated, so
+  // each `this.delete` it calls takes the queue on its own. Gating cleanup
+  // itself would deadlock — its inner deletes would wait on the chain slot
+  // cleanup is still holding.
+  return getConnectionWriteGate(sqlite).gateWrites(store, MEDIA_WRITE_METHODS);
 }

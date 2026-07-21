@@ -227,11 +227,13 @@ export async function setupPluginTools(
       }
       // Builtin tools are always accessible
       if (builtinToolNames.has(name)) return toolMap.get(name);
-      // Local tools: only accessible if declared by the calling plugin
-      if (context) {
-        const allowed = pluginToolAccess.get(context.pluginId);
-        if (!allowed?.has(name)) return undefined; // Cross-plugin call blocked
-      }
+      // Local tools require a calling-plugin context to authorize against.
+      // a missing context used to skip the whitelist entirely — any
+      // caller without a context could resolve any plugin's local tool.
+      // Fail closed instead.
+      if (!context) return undefined;
+      const allowed = pluginToolAccess.get(context.pluginId);
+      if (!allowed?.has(name)) return undefined; // Cross-plugin call blocked
       return toolMap.get(name);
     },
     store,

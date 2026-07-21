@@ -1,6 +1,6 @@
 {
   "name": "@covel/plugin-char-creator",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,6 +13,6 @@
   },
   "devDependencies": {
     "@covel/plugin-loader": "workspace:*",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   }
 }

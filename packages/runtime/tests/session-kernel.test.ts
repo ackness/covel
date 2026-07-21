@@ -1632,7 +1632,7 @@ describe("processRuntimeResult", () => {
     const result = makeRuntimeResult({
       status: "pending",
       pluginData: [
-        { namespace: "_jobs", key: "job-1", value: { status: "pending" } },
+        { namespace: "jobs", key: "job-1", value: { status: "pending" } },
       ],
     });
 
@@ -1650,7 +1650,7 @@ describe("processRuntimeResult", () => {
     expect(failedProposals).toHaveLength(0);
     expect(store.setPluginData).toHaveBeenCalledOnce();
     expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
-      namespace: "_jobs",
+      namespace: "jobs",
       key: "job-1",
       value: { status: "pending" },
     });
@@ -1666,7 +1666,7 @@ describe("processRuntimeResult", () => {
       const store = createMockStore();
       const result = makeRuntimeResult({
         status,
-        pluginData: [{ namespace: "_jobs", key: "job-1", value: { status } }],
+        pluginData: [{ namespace: "jobs", key: "job-1", value: { status } }],
       });
 
       const { events, failedProposals } = await processRuntimeResult(
@@ -1683,7 +1683,7 @@ describe("processRuntimeResult", () => {
       expect(failedProposals).toHaveLength(0);
       expect(store.setPluginData).toHaveBeenCalledOnce();
       expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
-        namespace: "_jobs",
+        namespace: "jobs",
         key: "job-1",
         value: { status },
       });

@@ -6,11 +6,7 @@ import type { SseEnvelope } from "./types.js";
 // -- Actions (SSE) -------------------------------------------------
 
 export type ActionType =
-  | "send_message"
-  | "execute_command"
-  | "start_session"
-  | "retry_runtime"
-  | "trigger_event";
+  "send_message" | "execute_command" | "start_session" | "retry_runtime";
 
 export interface ActionRequest {
   requestId: string;
@@ -68,7 +64,7 @@ export function sendAction(
   return controller;
 }
 
-// -- Mid-turn player control (W4) ----------------------------------
+// -- Mid-turn player control ----------------------------------
 
 /**
  * Interject a player message into the session's in-flight turn. The server
@@ -104,31 +100,4 @@ export async function abortTurn(sessionId: string): Promise<boolean> {
     { method: "POST", headers: sessionAuthHeaders(sessionId) },
   );
   return res.ok;
-}
-
-/**
- * Trigger a custom kernel event for the given session.
- * Useful for manual plugin triggers (e.g., image generation button).
- */
-export function triggerEvent(
-  sessionId: string,
-  eventType: string,
-  eventData: Record<string, unknown>,
-  locale: string,
-  onEvent: (envelope: SseEnvelope) => void,
-  onError?: (err: Error) => void,
-  onDone?: () => void,
-): AbortController {
-  return sendAction(
-    {
-      requestId: `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-      type: "trigger_event",
-      sessionId,
-      locale,
-      payload: { eventType, eventData },
-    },
-    onEvent,
-    onError,
-    onDone,
-  );
 }

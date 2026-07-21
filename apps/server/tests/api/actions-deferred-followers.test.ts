@@ -1,7 +1,7 @@
 /**
  * POST /api/actions — deferred background followers on the main turn path.
  *
- * Audit F1 wired sync-mode deferred-follower scheduling into plugin-rpc.ts
+ * Sync-mode deferred-follower scheduling was wired into plugin-rpc.ts
  * (see plugin-rpc.test.ts's "sync target + background follower" case), but
  * the main narrative route (/api/actions) never consumed
  * `executeTurn()`'s `result.deferredFollowers` — an `execution: 'background'`
@@ -71,7 +71,7 @@ async function waitFor(
   throw new Error("waitFor: predicate did not become true in time");
 }
 
-describe("POST /api/actions — deferred background followers (Audit F1, main path)", () => {
+describe("POST /api/actions — deferred background followers (main path)", () => {
   it("schedules and runs an execution:background follower triggered by an event from the main turn", async () => {
     const store: DataStore = createMemoryStore();
     const pluginRegistry = createPluginRegistry();
@@ -101,8 +101,7 @@ describe("POST /api/actions — deferred background followers (Audit F1, main pa
     const followerHandler: FunctionHandler = async (ctx) => {
       followerRan = true;
       const event = ctx.triggerEvent as
-        | { data?: { value?: string } }
-        | undefined;
+        { data?: { value?: string } } | undefined;
       return {
         pluginData: [
           {

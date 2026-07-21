@@ -1,5 +1,5 @@
 /**
- * Tests for TurnExecutor suspend / resume primitives (S4-T4).
+ * Tests for TurnExecutor suspend / resume primitives.
  *
  * Covers:
  * - Agent runtime: suspend tool returns sentinel → suspension persisted, status: 'suspended'
@@ -753,7 +753,7 @@ describe("resumeSuspendedRuntime", () => {
     const suspensionId = await createTestSuspension("tc-retry");
 
     // Adapter that throws a transient (retriable) error on the first attempt,
-    // then succeeds. Regression guard for F1.b: the pre-refactor resume called
+    // then succeeds. Regression guard: the pre-refactor resume called
     // deps.llm.generate() directly with NO retry, so this first transient
     // error would have propagated straight out of resumeSuspendedRuntime and
     // the resume would have thrown. Re-using the shared agent tool loop routes
@@ -950,7 +950,7 @@ describe("resumeSuspendedRuntime", () => {
     ]);
   });
 
-  it("should mark suspension as resolved after successful resume", async () => {
+  it("does NOT resolve the suspension itself — that is the commit-owning caller's job ", async () => {
     const suspensionId = await createTestSuspension("tc-suspend-y");
 
     mockLLM.setResponses([
@@ -977,14 +977,23 @@ describe("resumeSuspendedRuntime", () => {
       eventBus,
     };
 
-    await resumeSuspendedRuntime(suspension!, { name: "Bob" }, manifest, deps);
+    const result = await resumeSuspendedRuntime(
+      suspension!,
+      { name: "Bob" },
+      manifest,
+      deps,
+    );
+    expect(result.status).toBe("success");
 
-    const resolved = await store.getSuspension(suspensionId);
-    expect(resolved!.resolvedAt).toBeDefined();
-    expect(typeof resolved!.resolvedAt).toBe("string");
+    // Resolving before the proposal commit meant a commit failure left
+    // the suspension permanently resolved. The runtime now leaves it
+    // unresolved; the resume route folds markSuspensionResolved into the
+    // same transaction as the proposal commit.
+    const after = await store.getSuspension(suspensionId);
+    expect(after!.resolvedAt).toBeUndefined();
   });
 
-  it("should emit turn.resumed SSE event after resume", async () => {
+  it("does NOT emit turn.resumed itself — the caller announces after commit ", async () => {
     const events: SubscriptionEvent[] = [];
     eventBus.onEmit((e) => events.push(e));
 
@@ -1021,11 +1030,10 @@ describe("resumeSuspendedRuntime", () => {
       deps,
     );
 
+    // Announcing before the commit landed would desync clients when
+    // the commit rolls back — the resume route emits after its transaction.
     const resumedEvent = events.find((e) => e.type === "turn.resumed");
-    expect(resumedEvent).toBeDefined();
-    const payload = resumedEvent!.payload as Record<string, unknown>;
-    expect(payload.suspensionId).toBe(suspensionId);
-    expect(payload.sessionId).toBe("sess-resume");
+    expect(resumedEvent).toBeUndefined();
   });
 
   it("should append synthetic tool message for agent runtime (suspendToolCallId set)", async () => {

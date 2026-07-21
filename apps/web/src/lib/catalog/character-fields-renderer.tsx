@@ -14,13 +14,7 @@ import { resolveIcon } from "./helpers.js";
 // the catalog does not hardcode a provider.
 
 type AttributeFieldType =
-  | "string"
-  | "number"
-  | "boolean"
-  | "enum"
-  | "array"
-  | "object"
-  | "map";
+  "string" | "number" | "boolean" | "enum" | "array" | "object" | "map";
 type CatId = "stats" | "bio" | "abilities" | "equipment" | "social";
 
 interface AttrDefLite {

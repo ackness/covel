@@ -1,5 +1,5 @@
 /**
- * Working Memory context injection tests (S3-T3).
+ * Working Memory context injection tests.
  *
  * Verifies that:
  * - systemPrompt contains [Working Memory] block with correct ordering

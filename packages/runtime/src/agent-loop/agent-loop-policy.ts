@@ -9,7 +9,7 @@
  * than policy derivation, and the loop core can be instantiated in tests
  * with a hand-built policy + minimal `AgentLoopDeps` fixture.
  *
- * Roadmap W3 — docs/superpowers/specs/2026-07-10-agent-core-refactor-roadmap.md.
+ * Roadmap — docs/superpowers/specs/2026-07-10-agent-core-refactor-roadmap.md.
  */
 
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
@@ -19,7 +19,7 @@ import type {
   LLMToolDefinition,
 } from "../llm/llm-adapter.js";
 import { buildToolDefinitions } from "../turn-executor/turn-executor-helpers.js";
-import { resolveDeferredToolNames } from "./tool-search.js";
+import { declaredToolNames, resolveDeferredToolNames } from "./tool-search.js";
 import { buildRetryPolicy, type RetryPolicy } from "../retry/llm-retry.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
 
@@ -40,7 +40,7 @@ export interface AgentLoopPolicy {
   /** JSON-schema response format when the runtime declares an output schema. */
   readonly responseFormat: LLMResponseFormat | undefined;
   /**
-   * PR-6 session/API model override for this runtime. Story runtimes honour
+   * Session/API model override for this runtime. Story runtimes honour
    * the legacy story-only API override; every runtime kind honours the
    * per-session `runtimeModelOverrides` snapshot.
    */
@@ -68,10 +68,19 @@ export interface AgentLoopPolicy {
   readonly requireToolUse: boolean;
   /**
    * Whether queued player steering messages are merged into the transcript
-   * before each LLM step (W4). Story runtimes only — plugin runtimes run
+   * before each LLM step. Story runtimes only — plugin runtimes run
    * structured tasks a player interjection would corrupt.
    */
   readonly acceptsSteering: boolean;
+  /**
+   * The runtime's exact execution authorization set: its declared
+   * tool names (deferred names included — deferring only withholds the
+   * schema advertisement, never grants or removes authorization) plus the
+   * framework-contract `runtime-done` sentinel for non-schema runtimes.
+   * Passed to the ToolExecutor on every call so execution — not just
+   * advertisement — is bounded by the manifest declaration.
+   */
+  readonly authorizedToolNames: ReadonlySet<string>;
 }
 
 export interface BuildAgentLoopPolicyOptions {
@@ -101,6 +110,11 @@ export function buildAgentLoopPolicy({
         runtimeId: manifest.name,
       })
     : undefined;
+
+  const authorizedToolNames = new Set(declaredToolNames(manifest));
+  if (!manifest.output?.schema) {
+    authorizedToolNames.add("runtime-done");
+  }
 
   const sessionRuntimeSlot = input.runtimeModelOverrides?.[manifest.name];
   const runtimeModelOverride =
@@ -132,5 +146,6 @@ export function buildAgentLoopPolicy({
     }),
     requireToolUse: manifest.requireToolUse === true,
     acceptsSteering: manifest.outputKind === "story",
+    authorizedToolNames,
   };
 }

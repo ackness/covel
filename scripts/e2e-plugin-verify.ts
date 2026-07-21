@@ -210,11 +210,7 @@ interface PluginFlowStep {
   runtimeName: string;
   priority: number;
   segmentId:
-    | "start"
-    | "pre-game"
-    | "pre-narrator"
-    | "narrator"
-    | "post-narrator";
+    "start" | "pre-game" | "pre-narrator" | "narrator" | "post-narrator";
   runtimeType: string;
   outputKind: string;
   trigger: PluginFlowTrigger;
@@ -691,7 +687,7 @@ function computeExpectation(
 ): TriggerExpectation {
   const t = step.trigger;
 
-  // PR-2: startTurn is compared against playingTurnNumber, not turnNumber.
+  // startTurn is compared against playingTurnNumber, not turnNumber.
   if (t.startTurn !== undefined && playingTurnNumber < t.startTurn) {
     return {
       expected: false,
@@ -958,7 +954,7 @@ async function runTurn(
 interface PerTurnContext {
   turnNumber: number;
   /**
-   * Playing-phase turn counter (PR-2). Mirrors server-side semantics:
+   * Playing-phase turn counter. Mirrors server-side semantics:
    * 0-based from the first turn that runs after the Pre-Game band ends
    * (i.e. once `session.turnCount >= 1`). Reset back to 0 if session
    * rewinds to Pre-Game (turnCount === 0).

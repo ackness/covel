@@ -68,7 +68,7 @@ export function createBootstrapPluginRpc({
       if (!discovery) {
         throw new Error(`plugin "${pluginId}" not found in discovery map`);
       }
-      // HIGH-1 defence-in-depth: even though the schema rejects `..` and
+      // Defence-in-depth: even though the schema rejects `..` and
       // absolute paths, a future schema change or a hand-crafted manifest
       // could still produce something that escapes the plugin root. Resolve
       // and verify containment before importing.

@@ -57,7 +57,7 @@ export interface WorldDataImportLedgerRecord {
 }
 
 /**
- * Session-scoped lorebook entry persisted to the store (S3-T2).
+ * Session-scoped lorebook entry persisted to the store.
  *
  * Plain record shape carrying all lorebook entry fields. The framework
  * routes and runtime/loader handle field-level semantics; the store layer
@@ -105,12 +105,12 @@ export interface TurnMessageRecord {
    * When set, this message has been compacted into a session summary.
    * The value is the `SessionSummaryRecord.id` that replaced this message.
    * The original content is preserved; only the prompt-build path substitutes
-   * the summary in place of the compacted message span (S2-T2 Compactor).
+   * the summary in place of the compacted message span (Compactor).
    */
   readonly compactedAtTurnId?: string; // summaryId, not a turn ID despite the name
 }
 
-// ── Session Summaries (S2-T2 Compactor) ─────────────────────────
+// ── Session Summaries (Compactor) ─────────────────────────
 
 export interface SessionSummaryRecord {
   readonly id: string;

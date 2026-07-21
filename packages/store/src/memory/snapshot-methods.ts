@@ -86,17 +86,15 @@ export function createSnapshotMethods(state: MemoryState): MemoryStoreMethods {
         [...state.snapshots.values()].filter((r) => r.sessionId === sessionId),
       );
       const page = applyCursorPage(ascending, opts);
-      return page.map(
-        (r): SnapshotMetadata => ({
-          id: r.id,
-          sessionId: r.sessionId,
-          turnId: r.turnId,
-          kind: r.kind,
-          ...(r.parentId != null ? { parentId: r.parentId } : {}),
-          createdAt: r.createdAt,
-          size: JSON.stringify(r.payload).length,
-        }),
-      );
+      return page.map((r): SnapshotMetadata => ({
+        id: r.id,
+        sessionId: r.sessionId,
+        turnId: r.turnId,
+        kind: r.kind,
+        ...(r.parentId != null ? { parentId: r.parentId } : {}),
+        createdAt: r.createdAt,
+        size: JSON.stringify(r.payload).length,
+      }));
     },
   };
 }

@@ -1,9 +1,9 @@
 /**
- * S2-T3 replay test — "auto-prefix" providers stay untouched.
+ * Replay test — "auto-prefix" providers stay untouched.
  *
  * OpenAI, DeepSeek, and Qwen (all three speak `openai-chat-v1`) cache
  * prompt prefixes transparently. They need no client-side changes for
- * prompt caching to work, and S2-T3 must guarantee that the adapter
+ * prompt caching to work, and the adapter must guarantee that it
  * does NOT accidentally emit a `cache_control` field, a structured
  * `system` array, or any other Anthropic-specific shape.
  *
@@ -82,7 +82,7 @@ const BASE_MESSAGES: TextMessage[] = [
 
 // ── Tests ───────────────────────────────────────────────────────────
 
-describe("openai-chat adapter — auto-prefix cache strategy is a no-op (S2-T3)", () => {
+describe("openai-chat adapter — auto-prefix cache strategy is a no-op", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();

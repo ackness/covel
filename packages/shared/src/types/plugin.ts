@@ -371,13 +371,7 @@ export interface PluginUserSettingSpec {
   // intentionally not yet supported — its keys.env storage + transport channel
   // are unresolved (see the configurable-surface spec, Open Question #4).
   readonly type:
-    | "text"
-    | "textarea"
-    | "number"
-    | "integer"
-    | "toggle"
-    | "select"
-    | "slider";
+    "text" | "textarea" | "number" | "integer" | "toggle" | "select" | "slider";
   // Optional: a setting may declare no default (e.g. cost-gate). Mirrors the
   // schema's `z.unknown().optional()` so the parsed manifest type-checks.
   readonly default?: unknown;
@@ -637,7 +631,7 @@ export interface RuntimeManifest {
   readonly hooks?: readonly HookDeclaration[];
   /**
    * Sections of the narrative/output this runtime considers important for
-   * history compaction (S2-T2 Compactor). The compactor collects these
+   * history compaction (the Compactor). The compactor collects these
    * across all active runtimes and asks the LLM to preserve those topics
    * when summarising old message spans.
    *
@@ -662,7 +656,7 @@ export interface RuntimeManifest {
    */
   readonly postHistory?: PostHistoryDecl;
   /**
-   * PR-3: Plugin RPC action declarations.
+   * Plugin RPC action declarations.
    *
    * Maps action name → `RpcActionDecl`. Each entry registers a structured
    * command the plugin exposes through `POST /api/sessions/:id/plugin-rpc`,
@@ -670,7 +664,7 @@ export interface RuntimeManifest {
    *
    * Handlers are loaded lazily on first dispatch — there is no eager
    * import at parse time. Trust level defaults to the plugin's source
-   * trust (builtin/official auto-allowed; community gated by PR-7
+   * trust (builtin/official auto-allowed; community gated by the RPC
    * approval flow).
    *
    * Action names must be kebab-case. Names starting with `framework-`
@@ -692,7 +686,7 @@ export interface RuntimeManifest {
   readonly memoryBlocks?: readonly MemoryBlockSchema[];
 }
 
-// ── Author's note / Post-history declarations (S3-T4) ───────────
+// ── Author's note / Post-history declarations ───────────
 
 /**
  * Declaration for prompt segment 9 — "director's note" inserted

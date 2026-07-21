@@ -21,14 +21,22 @@ tags:
   - ui:right-panel
 trigger:
   type: auto
-# Codex registers discoveries from the latest narrative — skip when narrator
-# failed to avoid LLM hallucinating entries from an empty <narrator-output>.
+# Codex registers discoveries from the latest narrative — skip when the
+# active narrative engine failed, to avoid the LLM hallucinating entries
+# from an empty <narrator-output>. The upstream gate discovers the engine by
+# capability (narrative-engine → narrator in traditional, chat-mode-narrator
+# in dialogue) instead of naming one; the inject lists both known engines and
+# the absent one resolves to nothing.
 upstreamRequired:
-  - narrator
+  - capability: narrative-engine
 input:
   inject:
     - kind: runtime
       from: narrator
+      field: narrativeOutput
+      as: "<narrator-output>"
+    - kind: runtime
+      from: chat-mode-narrator
       field: narrativeOutput
       as: "<narrator-output>"
     - kind: plugin-data
@@ -61,7 +69,7 @@ postHistory:
 
 ### 本轮叙事
 
-<narrator-output>{{ inputs.narrator.narrator.narrativeOutput }}</narrator-output>
+本轮叙事在 prompt 末尾的 `<narrator-output>` 块中（由框架 `input.inject` 自动注入，正文不再重复内联）。
 
 ### 已有图鉴条目
 
@@ -163,7 +171,7 @@ postHistory:
 
 **场景 3：本轮没有合格的新发现 → 直接结束**
 
-不调用任何写入工具,终止回合,返回空字符串 `""`。`plugin-data-list` 查询仍然需要调用一次(流程要求),但之后不做任何写入。
+不调用任何写入工具,终止回合,返回空字符串 `""`。已有条目由 `<existing-entries>` 块提供,无需任何查询工具。
 
 ## 硬约束
 

@@ -44,7 +44,7 @@ export function registerPersistenceStoreSuites(
     store = getStore();
   });
 
-  describe("Suspensions (S4-T4)", () => {
+  describe("Suspensions", () => {
     it("should save and retrieve a suspension (roundtrip)", async () => {
       const suspension = makeSuspension({ sessionId: "sess-susp-1" });
       await store.saveSuspension(suspension);
@@ -144,13 +144,13 @@ export function registerPersistenceStoreSuites(
       expect(result!.resumeSchema).toEqual(complexSchema);
     });
 
-    // ── deleteExpiredSuspensions (S4-T4.c TTL sweep) ──────────────
+    // ── deleteExpiredSuspensions (TTL sweep) ──────────────
     // A global maintenance sweep: deletes ONLY records that are still
     // unresolved (resolvedAt unset) AND older than the supplied cutoff.
     // Claimed (in-flight, `claimed:<iso>`) and successfully-resolved
     // records must never be touched. Must behave identically on every
     // backend (store-backend-parity rule).
-    describe("deleteExpiredSuspensions (S4-T4.c TTL sweep)", () => {
+    describe("deleteExpiredSuspensions (TTL sweep)", () => {
       const CUTOFF = "2025-06-01T00:00:00.000Z";
       const OLD = "2020-01-01T00:00:00.000Z";
       const FRESH = "2099-01-01T00:00:00.000Z";
@@ -241,7 +241,7 @@ export function registerPersistenceStoreSuites(
     });
   });
 
-  describe("LorebookEntries (S3-T2)", () => {
+  describe("LorebookEntries", () => {
     it("returns an empty list when the session has no entries", async () => {
       const result = await store.listSessionLorebookEntries("sess-lore-empty");
       expect(result).toEqual([]);
@@ -332,7 +332,7 @@ export function registerPersistenceStoreSuites(
     });
   });
 
-  describe("Snapshots (S4-T2)", () => {
+  describe("Snapshots", () => {
     it("should save and retrieve a snapshot (roundtrip)", async () => {
       const snap = makeSnapshot({ sessionId: "sess-snap-1", kind: "manual" });
       await store.saveSnapshot(snap);

@@ -9,7 +9,7 @@ import { buildAiHeaders, needsProviderKeys } from "./model-settings.js";
 /**
  * Session-scoped API paths embed the id as `/api/sessions/{id}` or
  * `/api/sessions/{id}/...`. Pull it out so `request()` can attach that
- * session's owner token (H-01). Cross-session paths (`/api/sessions?worldId=`,
+ * session's owner token. Cross-session paths (`/api/sessions?worldId=`,
  * `/api/sessions` itself) have no id segment and match nothing.
  */
 const SESSION_PATH_RE = /\/api\/sessions\/([^/?#]+)/;

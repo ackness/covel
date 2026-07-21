@@ -136,7 +136,7 @@ async function loadValidatedSpecs(): Promise<ValidatedSpecs> {
       // Log with full context for fast triage, then skip it (mirrors the boot
       // eager-load try/catch). `loadRuntimeUi` loads manifest + UI spec data
       // only — it never import()s handler/guard JS, so an unapproved community
-      // plugin's code cannot execute from this request path (S-04).
+      // plugin's code cannot execute from this request path.
       const loaded = await loadRuntimeUi(discovery, parsed.manifest.name).catch(
         (err: unknown) => {
           console.error(

@@ -1,5 +1,5 @@
 /**
- * S2-T3 replay test — Anthropic `cache_control` injection.
+ * Replay test — Anthropic `cache_control` injection.
  *
  * Mocks `globalThis.fetch` and asserts that when the Anthropic adapter
  * receives a ProviderConfig with `cacheStrategy: 'anthropic-explicit'`
@@ -14,7 +14,7 @@
  *
  * It also pins the flag-off regression path: when `cacheStrategy` is
  * absent / `"none"` / no sentinel is present, the body reverts to the
- * pre-S2-T3 plain-string `system` field.
+ * plain-string `system` field.
  *
  * No real network calls, no snapshots — exact shape assertions.
  */
@@ -93,7 +93,7 @@ const ANTHROPIC_CONFIG_BASE: ProviderConfig = {
 
 // ── Tests ───────────────────────────────────────────────────────────
 
-describe("Anthropic adapter — cache_control injection (S2-T3)", () => {
+describe("Anthropic adapter — cache_control injection", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();

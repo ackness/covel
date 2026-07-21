@@ -20,6 +20,16 @@ export interface ToolExecutionContext {
    */
   readonly pendingProposals?: readonly Proposal[];
   /**
+   * Authoritative logical turn number (count of player messages so far).
+   *
+   * Tools that record "when" something happened need this: without it a
+   * plugin has only `turnId` (a UUID) and resorts to proxies like "how many
+   * rows exist", which does not advance with the story and makes anything
+   * derived from it — relationship decay, recency ranking — meaningless.
+   * Absent for callers outside a turn (bare tool harnesses).
+   */
+  readonly turnNumber?: number;
+  /**
    * Topics already emitted via `emit-event` earlier in the same tool loop
    * (accumulated by the agent tool loop, see turn-agent-tool-loop.ts).
    * Lets `emit-event` no-op a same-turn duplicate instead of producing a

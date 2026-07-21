@@ -11,8 +11,7 @@ export type DeferredFollower = NonNullable<
 export type EventChainRuntimeExecutor = (
   manifest: RuntimeManifest,
   triggerEvent:
-    | { topic: string; data: Readonly<Record<string, unknown>> }
-    | undefined,
+    { topic: string; data: Readonly<Record<string, unknown>> } | undefined,
 ) => Promise<RuntimeResult>;
 
 export interface RunEventChainParams {
@@ -25,6 +24,26 @@ export interface RunEventChainParams {
   readonly sessionId: string;
   /** Current main-loop turn number — same purpose as `sessionId`. */
   readonly turnNumber: number;
+  /**
+   * How many times each runtime has already produced output this session,
+   * and how many turns since it last did.
+   *
+   * Fan-out is the ONLY place an `event` runtime can trigger: the main
+   * scheduler evaluates it with an empty topic list, so its topic match always
+   * fails there. Passing hardcoded "never triggered" values here therefore made
+   * `maxTriggerCount` and `cooldownTurns` dead for event runtimes everywhere —
+   * a once-only event runtime re-fired on every matching emission.
+   */
+  readonly runtimeTriggerCounts?: ReadonlyMap<string, number>;
+  readonly runtimeTurnsSinceLastTrigger?: ReadonlyMap<string, number>;
+  /**
+   * RuntimeIds the session has already marked Pre-Game-done. A Pre-Game
+   * runtime that reported completion must not be resurrected by a later
+   * emission of the topic it subscribes to — that is the same one-shot
+   * contract the main scheduler enforces, and it is the only gate that keeps
+   * setup runtimes out of main-loop fan-out.
+   */
+  readonly preGameCompleted?: readonly string[];
 }
 
 /**
@@ -32,28 +51,41 @@ export interface RunEventChainParams {
  * single turn's event fan-out, delegating the actual topic-match (and trigger
  * gates) to the single authority, `shouldTrigger`.
  *
- * The per-session throttles (`maxTriggerCount` / `cooldownTurns`) are applied
- * **once per turn** by the main scheduler (`selectTriggeredRuntimes`). Within
- * a turn, event fan-out is bounded instead by `maxDepth`, so those fields are
- * set to non-blocking sentinels here — re-applying per-session throttles to a
- * within-turn reaction would be semantically wrong. `isManualTrigger` is
- * irrelevant to the `event` branch, and
- * `preGameCompleted` gating is a Pre-Game (turn 0) concern, not a main-loop
- * fan-out concern.
+ * The per-session throttles (`maxTriggerCount` / `cooldownTurns`) are fed the
+ * real per-runtime history (via `triggerCounts` / `turnsSinceLastTrigger`) so
+ * they bite here too; `maxDepth` additionally bounds within-turn recursion.
+ * Absent maps fall back to "never triggered" for direct callers (tests).
+ * `isManualTrigger` is irrelevant to the `event` branch.
+ *
+ * Fan-out is deliberately NOT filtered by the current priority band: it is a
+ * causal reaction to something that actually happened, not a scheduled slot.
+ * Band filtering would silently drop a subscriber whenever the emitter sat in
+ * the other band (a Pre-Game runtime announcing the world is ready, say), with
+ * no diagnostic. The gate that genuinely has to hold — "a completed setup
+ * runtime never runs again" — is `preGameCompleted`, so that one is passed
+ * through for real.
  */
 function eventFanoutTriggerContext(
   sessionId: string,
   turnNumber: number,
   pendingEventTopics: readonly string[],
+  runtimeName: string,
+  triggerCounts: ReadonlyMap<string, number> | undefined,
+  turnsSinceLastTrigger: ReadonlyMap<string, number> | undefined,
+  preGameCompleted: readonly string[],
 ): TriggerContext {
   return {
     sessionId,
     turnNumber,
-    triggerCount: 0,
-    turnsSinceLastTrigger: Number.MAX_SAFE_INTEGER,
+    // Real per-runtime history so `maxTriggerCount` / `cooldownTurns` bite.
+    // Absent maps fall back to "never triggered", which keeps direct callers
+    // (tests) working and matches the previous behaviour.
+    triggerCount: triggerCounts?.get(runtimeName) ?? 0,
+    turnsSinceLastTrigger:
+      turnsSinceLastTrigger?.get(runtimeName) ?? Number.MAX_SAFE_INTEGER,
     pendingEventTopics,
     isManualTrigger: false,
-    preGameCompleted: [],
+    preGameCompleted,
   };
 }
 
@@ -84,6 +116,9 @@ export async function runEventChain({
   maxDepth = 8,
   sessionId,
   turnNumber,
+  runtimeTriggerCounts,
+  runtimeTurnsSinceLastTrigger,
+  preGameCompleted = [],
 }: RunEventChainParams): Promise<DeferredFollower[]> {
   const emittedEvents = new Map<string, Record<string, unknown>>();
   for (const [, result] of completedResults) {
@@ -113,7 +148,15 @@ export async function runEventChain({
       // to `shouldTrigger`, feeding it the freshly-emitted topics.
       return shouldTrigger(
         rt,
-        eventFanoutTriggerContext(sessionId, turnNumber, pendingEventTopics),
+        eventFanoutTriggerContext(
+          sessionId,
+          turnNumber,
+          pendingEventTopics,
+          rt.name,
+          runtimeTriggerCounts,
+          runtimeTurnsSinceLastTrigger,
+          preGameCompleted,
+        ),
       );
     });
     if (nextBatch.length === 0) break;

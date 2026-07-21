@@ -1,5 +1,5 @@
 /**
- * S-04 regression: a community (non-autoLoad) plugin that declares a `ui`
+ * Regression: a community (non-autoLoad) plugin that declares a `ui`
  * block must NOT have its handler / wires JS imported by the boot-time
  * eager UI-spec load (bootstrap step 6b). Builtin plugins keep loading
  * fully at boot.
@@ -72,7 +72,7 @@ Fixture prompt.
   }
 }
 
-describe("bootstrap step 6b: UI-spec eager load respects plugin trust (S-04)", () => {
+describe("bootstrap step 6b: UI-spec eager load respects plugin trust", () => {
   let tmpRoot: string;
   let result: Awaited<ReturnType<typeof bootstrapApi>>;
 

@@ -1,5 +1,5 @@
 /**
- * W4 player abort at the turn-executor level: once the abort signal fires,
+ * Player abort at the turn-executor level: once the abort signal fires,
  * no further runtime groups are scheduled, the event chain is skipped, and
  * the TurnResult carries `abortReason: "aborted-by-player"`. Results from
  * runtimes that completed before the abort are preserved.
@@ -129,7 +129,11 @@ describe("executeTurn player abort", () => {
       { maxSteps: 3 },
     );
 
-    expect(observedSignal).toBe(controller.signal);
+    // Handlers receive a MERGED signal (player abort + deadline), so
+    // identity with the player signal no longer holds — the merged signal
+    // must mirror the player abort state.
+    expect(observedSignal).toBeDefined();
+    expect((observedSignal as AbortSignal).aborted).toBe(true);
     expect(observedAbortedFlag).toBe(true);
   });
 

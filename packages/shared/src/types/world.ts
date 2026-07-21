@@ -79,12 +79,7 @@ export interface WorldFaction {
 // ── Power System ─────────────────────────────────────────────────
 
 export type PowerSystemType =
-  | "magic"
-  | "technology"
-  | "cultivation"
-  | "psychic"
-  | "hybrid"
-  | "other";
+  "magic" | "technology" | "cultivation" | "psychic" | "hybrid" | "other";
 
 export interface PowerTier {
   readonly name: I18nText;

@@ -11,11 +11,15 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { characterRoutes } from "../../src/routes/api/characters.js";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
 function buildApp(store: DataStore): Hono {
   const app = new Hono();
+  // The route serializes writes on the session lock, same as the turn path.
+  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", store);
+    c.set("sessionLock", sessionLock);
     await next();
   });
   app.route("/api/sessions", characterRoutes);

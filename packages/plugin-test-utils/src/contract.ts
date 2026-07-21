@@ -12,10 +12,7 @@ export interface ExpectAssetGeneratedOptions {
 
 type RuntimeOutput = Readonly<Record<string, unknown>>;
 type AssertionSource =
-  | TurnResult
-  | RuntimeResult
-  | RuntimeOutput
-  | readonly RuntimeResult[];
+  TurnResult | RuntimeResult | RuntimeOutput | readonly RuntimeResult[];
 
 interface AssetCandidate {
   readonly value: unknown;

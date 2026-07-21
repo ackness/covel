@@ -58,11 +58,9 @@ export interface ExecuteAgentRuntimeOptions {
     | undefined;
   readonly hookPipeline: HookPipeline | undefined;
   readonly sessionSummaries:
-    | readonly import("@covel/store").SessionSummaryRecord[]
-    | undefined;
+    readonly import("@covel/store").SessionSummaryRecord[] | undefined;
   readonly workingMemory:
-    | readonly import("@covel/context").WorkingMemoryEntry[]
-    | undefined;
+    readonly import("@covel/context").WorkingMemoryEntry[] | undefined;
   readonly coreMemoryBlocks: readonly CoreMemoryBlockView[] | undefined;
   readonly sessionContext: SessionContextSnapshot | undefined;
   readonly startTime: number;
@@ -105,7 +103,7 @@ export async function executeAgentRuntime({
     priority: manifest.priority,
   });
 
-  // ── PreRuntime hook (S4-T3) ──────────────────────────────────
+  // ── PreRuntime hook ──────────────────────────────────
   {
     const preRtResult = await runPreRuntimeHook({
       pipeline: hookPipeline,
@@ -131,27 +129,14 @@ export async function executeAgentRuntime({
     }
   }
 
-  // TODO(S2): Tool-pair pruning safety — budget pruning does not understand
-  // assistant↔tool message pairing (see T2 review I1). Skip budget injection
-  // whenever this runtime declares tools via any of the four tool-declaration
-  // paths: `manifest.input.tools` (dependency declarations) or
-  // `manifest.tools.builtin` / `manifest.tools.local` / `manifest.tools.plugin`
-  // (actual registration, consumed by buildToolDefinitions). Remove this guard
-  // when pair-aware pruning lands in S2.
-  const inputTools = manifest.input?.tools;
-  const hasInputTools = Array.isArray(inputTools) && inputTools.length > 0;
-  const hasBuiltinTools =
-    manifest.tools?.builtin !== undefined && manifest.tools.builtin.length > 0;
-  const hasLocalTools =
-    manifest.tools?.local !== undefined && manifest.tools.local.length > 0;
-  const hasPluginTools =
-    manifest.tools?.plugin !== undefined && manifest.tools.plugin.length > 0;
-  const runtimeUsesTools =
-    hasInputTools || hasBuiltinTools || hasLocalTools || hasPluginTools;
+  // Tool-declaring runtimes used to be excluded from hard budget enforcement
+  // because prefix pruning could cut between an assistant message and the
+  // `tool` results it requested, leaving an orphan the provider rejects.
+  // `applyBudget` now drops orphaned leading tool messages, so every runtime
+  // — including the tool-heavy main agents that dominate long-session token
+  // spend — gets the prompt-assembly hard prune.
   const budgetEligible =
-    !runtimeUsesTools &&
-    deps.estimator !== undefined &&
-    deps.contextBudget !== undefined;
+    deps.estimator !== undefined && deps.contextBudget !== undefined;
 
   // Choose sync vs async build path based on whether the manifest
   // declares any `input.inject` entries of kind `plugin-data`. The async
@@ -219,6 +204,17 @@ export async function executeAgentRuntime({
     ? await buildContextAsync({ ...buildParams, store: deps.store })
     : buildContext(buildParams);
 
+  // A prune means this runtime's prompt lost history to fit the slot window —
+  // the single place that knows it, so record it before the hook chain can
+  // rewrite the assembled context.
+  if (assembled.budgetExceeded && deps.emitter) {
+    await deps.emitter.emit("context.pruned", {
+      runtimeId: manifest.name,
+      pluginId: manifest.pluginId,
+      prunedMessageCount: assembled.prunedMessageCount ?? 0,
+    });
+  }
+
   // ── PostContextAssembly hook ─────────────────────────────────
   // Turn-level, once per runtime: lets plugins rewrite the assembled system
   // prompt and/or projected history before the loop. Distinct from the
@@ -250,6 +246,9 @@ export async function executeAgentRuntime({
   const toolLoop = await runAgentToolLoop({
     manifest,
     input,
+    ...(sessionMeta?.turnNumber !== undefined
+      ? { turnNumber: sessionMeta.turnNumber }
+      : {}),
     loaded,
     deps,
     maxSteps,
@@ -375,7 +374,7 @@ export async function executeAgentRuntime({
   }
   const output = finalized.output;
 
-  const result: RuntimeResult = {
+  const rawResult: RuntimeResult = {
     pluginId: manifest.pluginId,
     runtimeId: manifest.name,
     runId,
@@ -387,27 +386,38 @@ export async function executeAgentRuntime({
     timestamp: new Date().toISOString(),
   };
 
+  // PostRuntime hook — agent success path. Runs BEFORE anything is
+  // persisted : prompt history, commit proposals, and SSE must all see
+  // the SAME finalized output. Previously the raw result was appended to
+  // TurnMessages first and only the commit/SSE path saw the hook rewrite —
+  // e.g. a hook downgrading success→failed still left the unrewritten
+  // narrative in history.
+  const result = await runPostRuntimeHook(postRuntimeOpts, rawResult);
+  const finalOutput = (result.output ?? output) as Record<string, unknown>;
+
   // Save runtime output as an append-only TurnMessage. Manual plugin-rpc
   // calls return their output to the caller and commit proposals through
-  // plugin-rpc, so they stay out of conversation history.
-  if (deps.store && !input.manualTrigger) {
+  // plugin-rpc, so they stay out of conversation history. Skipped when a
+  // PostRuntime hook rewrote the status to a non-success — an unsuccessful
+  // result must not enter prompt history as narrative.
+  if (deps.store && !input.manualTrigger && result.status === "success") {
     // Extract narrative content.
     const narrativeContent =
-      typeof output.narrativeOutput === "string"
-        ? output.narrativeOutput
-        : typeof output.content === "string"
-          ? output.content
-          : JSON.stringify(output);
+      typeof finalOutput.narrativeOutput === "string"
+        ? finalOutput.narrativeOutput
+        : typeof finalOutput.content === "string"
+          ? finalOutput.content
+          : JSON.stringify(finalOutput);
 
     // Extract pendingInput from the interaction array.
-    const interactionsArr = output.interactions as unknown[] | undefined;
+    const interactionsArr = finalOutput.interactions as unknown[] | undefined;
     const pendingInput =
       interactionsArr && interactionsArr.length > 0
         ? interactionsArr
         : undefined;
 
     // Extract UI render instructions if present
-    const ui = output.ui as unknown[] | undefined;
+    const ui = finalOutput.ui as unknown[] | undefined;
 
     await deps.store.appendTurnMessage({
       id: crypto.randomUUID(),
@@ -450,6 +460,5 @@ export async function executeAgentRuntime({
 
   emitRuntimeCompleted(deps, input.sessionId, manifest, result);
 
-  // PostRuntime hook — agent success path (S4-T3)
-  return runPostRuntimeHook(postRuntimeOpts, result);
+  return result;
 }

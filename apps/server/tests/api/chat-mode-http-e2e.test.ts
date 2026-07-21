@@ -24,6 +24,7 @@ class ChatModeMockLLM implements LLMAdapter {
   narratorCalls = 0;
   scenePromptCalls = 0;
   memoryCalls = 0;
+  trackerCalls = 0;
   readonly calls: Array<{
     readonly tools: readonly string[];
     readonly messages: readonly LLMMessage[];
@@ -78,6 +79,26 @@ class ChatModeMockLLM implements LLMAdapter {
         ],
         finishReason: "tool_calls",
         usage: { inputTokens: 120, outputTokens: 40 },
+      };
+    }
+
+    if (toolNames.includes("list-characters")) {
+      // char-creator/character-tracker — engine-agnostic since the upstream
+      // gate became capability-based, so it
+      // runs in dialogue mode too (it used to be permanently skipped by an
+      // exact `narrator` upstream gate). Report "no changes" and finish.
+      this.trackerCalls += 1;
+      return {
+        content: null,
+        toolCalls: [
+          {
+            id: `tc-tracker-done-${this.trackerCalls}`,
+            name: "runtime-done",
+            arguments: JSON.stringify({ reason: "no character changes" }),
+          },
+        ],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 90, outputTokens: 10 },
       };
     }
 
@@ -310,6 +331,9 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     expect(mockLLM.narratorCalls).toBe(3);
     expect(mockLLM.scenePromptCalls).toBe(3);
     expect(mockLLM.memoryCalls).toBe(3);
+    // Acceptance: character-tracker executes in dialogue mode once the
+    // chat engine succeeds (it gates on the narrative-engine capability now).
+    expect(mockLLM.trackerCalls).toBe(3);
 
     const messages = await store.listTurnMessages(sessionId);
     const storyMessages = messages.filter(

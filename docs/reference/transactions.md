@@ -116,18 +116,40 @@ run on independent connections — true parallel transactions.
 The four backends honor the same observable contract (atomic commit / rollback,
 nested-call rejection) but differ in concurrency and isolation:
 
-| Backend                                  | Concurrency model                                                                                                                                                                       | Concurrent non-tx write during a callback                                 |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| **PgStore**                              | Each call runs on its **own pooled connection** (Drizzle `db.transaction`) — true parallel transactions.                                                                                | Isolated on its own connection; not folded in.                            |
-| **SqliteStore / MemoryStore / IdbStore** | **Single connection / single snapshot.** Concurrent calls are **serialized** through a promise chain — each runs its full BEGIN…COMMIT before the next starts, so neither loses writes. | **Folded into the open transaction** and committed / rolled back with it. |
+| Backend                       | Concurrency model                                                                                                                                                                                                                                                 | Concurrent non-tx write during a callback                                                                              |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **PgStore**                   | Each call runs on its **own pooled connection** (Drizzle `db.transaction`) — true parallel transactions.                                                                                                                                                          | Isolated on its own connection; not folded in.                                                                         |
+| **SqliteStore / MemoryStore** | **Single connection / single snapshot.** Concurrent calls are **serialized** through a promise chain — each runs its full BEGIN…COMMIT before the next starts, so neither loses writes. Mutating store methods share that same queue (**serialized write gate**). | **Queued until the transaction settles** — never folded in. Writes issued from _inside_ the callback still run inline. |
+| **IdbStore**                  | **Single snapshot**, serialized like above, but **without** the write gate (browser single-user local mode).                                                                                                                                                      | **Folded into the open transaction** and committed / rolled back with it.                                              |
 
-> ⚠️ **Serialized-backend caveat.** On SQLite / Memory / IndexedDB there is one
-> connection (or one in-flight snapshot) at a time, so **any** other write
-> issued on the same store while a `withTransaction` callback is mid-flight —
-> including writes that do **not** go through `withTransaction` — runs on the
-> open transaction and is committed or rolled back with it. Do not interleave
-> unrelated writes with a serialized transaction; if you need an isolated
-> concurrent write, use PgStore or a second store instance.
+> **Serialized write gate (SQLite / Memory).** One connection means a
+> transaction cannot isolate: a write issued elsewhere while a transaction is
+> open used to land inside it — harmless on COMMIT, silently **lost** on
+> ROLLBACK. The session lock orders writes belonging to one session's turn, but
+> it is per-session and some routes hold no session lock at all (world imports,
+> character edits, settings), so a write from another session could vanish.
+> `packages/store/src/serialized-write-gate.ts` puts transactions and
+> outside-of-transaction writes on **one queue**: an outside write waits for the
+> transaction instead of joining it; a write from inside the callback runs
+> inline (it belongs to that transaction, and queueing it would deadlock).
+> Inside vs outside is decided by `AsyncLocalStorage`, so a genuinely concurrent
+> caller that starts while a transaction is suspended at an `await` is not
+> mistaken for a nested one.
+>
+> **The gate is per-connection, not per-store.** Everything that mutates
+> through one better-sqlite3 handle shares a single gate, resolved via
+> `getConnectionWriteGate(db)` in `sqlite/shared-connection.ts`: the `DataStore`
+> methods, the optional sqlite-vec capability (`VECTOR_WRITE_METHODS`), and the
+> mirror MediaStore that deliberately reuses the same connection
+> (`MEDIA_WRITE_METHODS`). Before this, only the `DataStore` methods were gated,
+> so a vector or media write issued from another session still joined an open
+> transaction and disappeared on its rollback.
+>
+> Throughput is unaffected — better-sqlite3 is synchronous, so its statements
+> were already serialized. **Per-transaction connections (as PgStore has) remain
+> the long-term answer for real concurrency**; the gate closes the correctness
+> gap without a store-connection rearchitecture. Regression coverage:
+> `packages/store/tests/serialized-write-gate.test.ts`.
 
 ### Nesting is rejected on every backend
 
@@ -167,13 +189,25 @@ Node-only and is never pulled into the IdbStore browser bundle.
 
 ## Kernel integration
 
-Turn commit (`packages/runtime/src/commit/session-commit-pipeline.ts`) runs the
-whole proposal chain inside a single `withTransaction` callback whenever the
-underlying store implements it, so a mid-chain failure auto-rolls-back and leaves
-no partial state. `packages/runtime/src/session/session-kernel.ts` remains the
-public facade for processing runtime results. Store adapters that do not expose
-`withTransaction` still execute proposals sequentially and warn on partial commit
-failure.
+`commitAll` (`packages/runtime/src/commit/session-commit-pipeline.ts`) runs
+**one runtime's** proposal chain inside a single `withTransaction` callback
+whenever the underlying store implements it. `packages/runtime/src/session/session-kernel.ts`
+remains the public facade for processing runtime results. Store adapters that do
+not expose `withTransaction` execute proposals sequentially and warn on partial
+commit failure.
+
+> **事务边界的真实粒度（2026-07-20 审计 H-07 勘误）**：本节此前描述为"整条 turn
+> proposal chain 进入单一事务"，与实现不符。实际边界是 **per-runtime**：调用方
+> （`actions.ts` / `plugin-rpc/runtime-turn.ts`）对每个 runtimeResult 依次调用
+> `processRuntimeResult` → `commitAll`，因此第二个 runtime 的提交失败**不会**回滚
+> 第一个 runtime 已提交的写入。此外，即便在事务模式内，handler 的**校验**失败返回
+> `{ committed: false }` 而不抛出——事务照常提交，同批已成功的兄弟 proposal 保留
+> （两种模式语义刻意一致）。只有抛出的 store 错误才会中止并回滚该 runtime 的这一批。
+>
+> 失败不再被静默吞掉：每个失败 proposal 发出 `proposal.failed` 事件，且任一失败都会
+> **扣留完成屏障**——`turn.completed`、回合后记忆摄入、auto-snapshot 都不触发，回合对
+> 客户端呈现为可见的未完成态而非"成功但状态缺失"。回合级单事务（把整回合所有
+> runtime 的 proposal 聚合进一个 `withTransaction`）是已确认可行的下一步，尚未实施。
 
 ```ts
 if (typeof store.withTransaction === "function") {
@@ -245,3 +279,10 @@ affected table in the relevant reference doc.
 ```
 
 ```
+
+## World data 写入的一致性边界
+
+- **`POST /worlds/:id/sync-dimensions`** — 四阶段重写（删除过期 plugin-data 行 → 批量写入 → upsert lorebook → 删除过期 lorebook）在**一个 SessionLock + 一个 store transaction** 内完成。失败整体回滚并返回 500，不会让下一轮 prompt 读到「删了一半」的世界数据。
+- **`POST /worlds/:id/sync-data`** — 冲突扫描在事务外进行（需要读文件系统的世界包），因此 apply transaction 内会对每个待覆盖目标**重读 hash 做 CAS**：扫描后被改动过就整体中止，返回 `409 { code: "world_data_sync_conflict" }`。调用方重跑（新扫描会把该改动报为正常 conflict）或显式 `force`。路由同时持 SessionLock，挡住回合并发写。
+- **媒体副作用仍在 DB 事务内**（`deferMediaFinalize: false`）。DB 回滚无法撤销已写入的 media bytes，因此 materialize 过程使用**增量补偿栈**：每次 `put` 成功立即登记，中途失败也能清理已落盘的资产（此前只有全部成功才返回 refs，第二个文件失败会泄漏第一个）。把媒体副作用移出事务、改为 commit 后 outbox/saga 仍是更彻底的方案，尚未实施。
+- **Compactor** 的 summary 写入与 message tag 在同一 transaction 内：只写 summary 会产生 orphan——`message-insertion` 会把它当 system message 发出，而未打 tag 的原始历史仍然注入，形成双份上下文。

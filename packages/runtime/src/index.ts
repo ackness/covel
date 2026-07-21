@@ -2,7 +2,11 @@
 export { shouldTrigger } from "./trigger/trigger.js";
 
 // ── Scheduler ────────────────────────────────────────────────────
-export { scheduleByPriority } from "./schedule/scheduler.js";
+export {
+  scheduleByPriority,
+  isPreGamePriority,
+  isMainLoopPriority,
+} from "./schedule/scheduler.js";
 export { scheduleByDag } from "./schedule/dag-scheduler.js";
 
 // ── Parallel Executor ────────────────────────────────────────────
@@ -53,7 +57,7 @@ export type {
 // ── Model Resolver ──────────────────────────────────────────────
 export { createModelResolver } from "./llm/model-resolver.js";
 
-// ── Per-Session Runtime Slot Resolver (PR-6) ───────────────────
+// ── Per-Session Runtime Slot Resolver ───────────────────
 export { resolveRuntimeSlot } from "./llm/runtime-slot-resolver.js";
 
 // ── Public Plugin API (unified `entry` module contract) ────────
@@ -66,7 +70,7 @@ export type {
   PluginToolkit,
 } from "./plugin-api.js";
 
-// ── Plugin RPC (PR-3) ──────────────────────────────────────────
+// ── Plugin RPC ──────────────────────────────────────────
 export { createPluginRpcRegistry } from "./rpc/rpc-registry.js";
 export type {
   PluginRpcRegistry,
@@ -120,7 +124,7 @@ export type {
 export { buildSessionSnapshot } from "./snapshot/snapshot-builder.js";
 export type { SnapshotStore } from "./snapshot/snapshot-builder.js";
 
-// ── Snapshot Payload Builder (S4-T2) ────────────────────────────
+// ── Snapshot Payload Builder ────────────────────────────
 export { buildSnapshotPayload } from "./snapshot/snapshot-payload-builder.js";
 export {
   DEFAULT_AUTO_SNAPSHOT_INTERVAL_TURNS,
@@ -131,7 +135,7 @@ export type { SaveAutoSnapshotOptions } from "./snapshot/auto-snapshot.js";
 // ── Types ────────────────────────────────────────────────────────
 export type { TriggerContext, ScheduledGroup } from "./types.js";
 
-// ── Prompt Delta (PR-1 translation layer) ──────────────────────
+// ── Prompt Delta (translation layer) ──────────────────────
 export { computePromptDelta, applyPromptDelta } from "./llm/prompt-delta.js";
 export type { PromptMessage } from "./llm/prompt-delta.js";
 
@@ -179,5 +183,6 @@ export {
   createPluginLogger,
   createFunctionStoreView,
   createRpcHandlerStoreView,
+  createTrustedHandlerStore,
 } from "./function-runtime/plugin-handler-helpers.js";
 export type { HandlerHelperContext } from "./function-runtime/plugin-handler-helpers.js";

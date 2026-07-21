@@ -198,10 +198,11 @@ Provider 图片输入矩阵：
 
 `recursive.calling` / `recursive.completed` / `recursive.failed` 为递归 runtime 的 TurnEmitter trace 事件，**仅经订阅通道（topic `trace`）下发**，`forwardToActionStream: false`，不进入 `/api/actions`。它们现在也是 `CovelEvent` union 成员——使框架所有 `TurnEmitter.emit` / `makeEvent` 的事件名都受闭合 union 约束（发射端 `type` 已收紧为 `CovelEventType`，发射 union 外事件即编译错误）。
 
-| 事件                     | 触发点                                             | 当前出口                                          | payload                                                         | 备注                                                                   |
-| ------------------------ | -------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `working_memory.changed` | commit chain 提交 `working_memory.set` proposal 后 | commit event → `/api/actions`（CovelEvent union） | `{ scope, key }`（顶层带有 sessionId/turnId/source）            | union 成员；前端显式忽略，UI 通过 `state.changed` 感知                 |
-| `context.compacted`      | Compactor 完成摘要写入后                           | `trace_events` 表                                 | `{ summaryId, messagesCompacted, tokenSavings, focusSections }` | trace-only by design，不进 union，仅可通过 `/api/traces/:sessionId` 查 |
+| 事件                     | 触发点                                             | 当前出口                                                                | payload                                                         | 备注                                                                                                                                                 |
+| ------------------------ | -------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `working_memory.changed` | commit chain 提交 `working_memory.set` proposal 后 | commit event → `/api/actions`（CovelEvent union）                       | `{ scope, key }`（顶层带有 sessionId/turnId/source）            | union 成员；前端显式忽略，UI 通过 `state.changed` 感知                                                                                               |
+| `proposal.failed`        | proposal 提交失败时（每个失败一条）                | commit-direct → `/api/actions`；manual/background 路径写 `trace_events` | `{ proposalId, proposalType, runtimeId, pluginId, error }`      | 2026-07-20 审计 H-07：失败不再被静默丢弃。任一失败都会扣留完成屏障（`turn.completed` / 记忆摄入 / auto-snapshot 均不触发），前端映射为可见的执行错误 |
+| `context.compacted`      | Compactor 完成摘要写入后                           | `trace_events` 表                                                       | `{ summaryId, messagesCompacted, tokenSavings, focusSections }` | trace-only by design，不进 union，仅可通过 `/api/traces/:sessionId` 查                                                                               |
 
 ### SSE 帧格式按通道区分
 
@@ -270,6 +271,8 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 > `function.executing` / `function.completed` 为 function-runtime 的 handler 边界 trace 事件（TurnEmitter），`forwardToActionStream: false`——**仅经订阅通道 / trace_events 下发**，与 `recursive.*` 同类，不进入 `/api/actions`。`gateway.*` 则 `forwardToActionStream: true`（对齐 `llm.calling/responded`），故列在上表。两组都已纳入 `CovelEvent` union（发射端受 `CovelEventType` 闭合约束）。
 >
 > `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed`（A2-P1-5 follow-up）trace 插件自带 wire 的 provider HTTP 调用（`ctx.utils.fetchWithRetry`，图像生成插件走的路径，由 `withUtilsTrace` 在 function-runtime / agent-guard 注入处包裹）。`forwardToActionStream: false`——polling 可能高频，故仅经 trace_events + 订阅通道驱动 `/debug`，不进 action 流。负载仅含 host / method / status / durationMs（**绝不含完整 URL、query、api key**，PII 保护）。
+>
+> `context.pruned`（TurnEmitter，`packages/runtime/src/agent-loop/turn-agent-runtime.ts`）在某个 runtime 的 prompt 组装触发预算硬裁剪时发出一次，负载为 `{ runtimeId, pluginId, prunedMessageCount }`。`forwardToActionStream: false`——仅进 trace_events / 订阅通道，让 `/debug` 能解释「这一回合掉了历史」，玩家侧的 action 流不受影响。
 
 ## 二、命令类型（CommandType）
 
@@ -285,13 +288,18 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 `/api/actions` 接受的 `type` 字段（实际由 `apps/server/src/routes/api/actions.ts:148` 的 `SUPPORTED_ACTIONS` 数组定义）：
 
-| 命令            | 方法 | 端点                                     | 响应                  |
-| --------------- | ---- | ---------------------------------------- | --------------------- |
-| `turn.submit`   | POST | `/api/actions` `type: "send_message"`    | SSE: ProtocolEvent 流 |
-| `turn.cmd`      | POST | `/api/actions` `type: "execute_command"` | SSE: ProtocolEvent 流 |
-| `turn.start`    | POST | `/api/actions` `type: "start_session"`   | SSE: ProtocolEvent 流 |
-| `turn.retry`    | POST | `/api/actions` `type: "retry_runtime"`   | SSE: ProtocolEvent 流 |
-| `event.trigger` | POST | `/api/actions` `type: "trigger_event"`   | SSE: ProtocolEvent 流 |
+| 命令          | 方法 | 端点                                     | 响应                  |
+| ------------- | ---- | ---------------------------------------- | --------------------- |
+| `turn.submit` | POST | `/api/actions` `type: "send_message"`    | SSE: ProtocolEvent 流 |
+| `turn.cmd`    | POST | `/api/actions` `type: "execute_command"` | SSE: ProtocolEvent 流 |
+| `turn.start`  | POST | `/api/actions` `type: "start_session"`   | SSE: ProtocolEvent 流 |
+| `turn.retry`  | POST | `/api/actions` `type: "retry_runtime"`   | SSE: ProtocolEvent 流 |
+
+`retry_runtime` 的 `payload.runtimeId`（可选）把重跑收窄到指定 runtime（走 manual-trigger 路径）；缺省时保持整回合重跑语义。
+
+`start_session` 要求会话已带非空 `activePlugins`（创建会话时选定）。空集合直接 400，不会退化成"激活全部注册插件"——详见 [api.md](./api.md#post-apiactions)。
+
+> **移除（2026-07-20 审计 M-07）**：`type: "trigger_event"` 已删除——其 payload 从未被服务端读取、UI 无调用方，请求效果只是空跑一整回合。插件侧发事件请用 builtin `emit-event` 工具；再发送 `trigger_event` 会得到 400 `Unsupported action type`。
 
 > **注意（audit P2-10）**：旧文档曾写 `type: "player_action"`，那是早期原型，当前实现已用 `send_message` 取代。若客户端仍发送 `player_action`，actions 路由会以 `unknown action type` 返回错误。
 >
@@ -327,9 +335,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 {
   "pluginId": "framework",
   "action": "submit-form",
-  "payload": {
-    /* ... */
-  }
+  "payload": {/* ... */}
 }
 ```
 
@@ -337,9 +343,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 {
   "pluginId": "my-plugin",
   "runtimeId": "my-plugin/my-runtime",
-  "payload": {
-    /* ... */
-  }
+  "payload": {/* ... */}
 }
 ```
 

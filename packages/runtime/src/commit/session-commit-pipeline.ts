@@ -24,7 +24,18 @@ import type { KernelStore } from "../session/session-kernel-store.js";
  */
 export interface CommitPipeline {
   commit(proposal: Proposal): Promise<CommitResult>;
-  commitAll(proposals: readonly Proposal[]): Promise<CommitResult[]>;
+  /**
+   * Commit a proposal chain. `deferPostCommit`, when provided, receives the
+   * externally-visible fan-out thunks (emitter events + PostStateCommit hooks)
+   * instead of them running here — for callers that hold their own enclosing
+   * transaction (they pass a tx-bound store view, which never exposes
+   * `withTransaction`) and must flush fan-out only after THAT transaction
+   * commits, discarding it on rollback.
+   */
+  commitAll(
+    proposals: readonly Proposal[],
+    deferPostCommit?: (fn: () => Promise<void>) => void,
+  ): Promise<CommitResult[]>;
 }
 
 export function createCommitPipeline(
@@ -102,7 +113,16 @@ export function createCommitPipeline(
         "replace" in preResult &&
         preResult.replace?.proposal
       ) {
-        effectiveProposal = preResult.replace.proposal as Proposal;
+        // A PreStateCommit hook may only rewrite the PAYLOAD. The
+        // envelope — id, type, sessionId, turnId, source — is pinned to the
+        // original proposal so a hook cannot redirect the write to another
+        // session, another plugin's namespace, or a different proposal type
+        // (which would also dodge this handler's schema validation).
+        const replacement = preResult.replace.proposal as Proposal;
+        effectiveProposal = {
+          ...proposal,
+          payload: replacement.payload,
+        } as Proposal;
       }
     }
 
@@ -115,7 +135,7 @@ export function createCommitPipeline(
         type: "proposal.committed",
         // Correlate with the SSE stream's traceId (carried by the per-turn
         // emitter) instead of falling back to turnId, so /api/traces?traceId=
-        // returns emitter + commit rows under one id (audit R-14).
+        // returns emitter + commit rows under one id.
         traceId: emitter?.traceId ?? effectiveProposal.turnId,
         turnId: effectiveProposal.turnId,
         payload: {
@@ -198,6 +218,7 @@ export function createCommitPipeline(
 
   async function commitAll(
     proposals: readonly Proposal[],
+    deferPostCommit?: (fn: () => Promise<void>) => void,
   ): Promise<CommitResult[]> {
     // Preferred path: a single scoped transaction. The callback writes through
     // the tx-bound store view (and tx-bound handlers), so a thrown store error
@@ -209,7 +230,7 @@ export function createCommitPipeline(
     // `withTransaction` runs on its own pooled connection, so concurrent turns
     // no longer serialize behind a shared begin/commit window.
     if (typeof store.withTransaction === "function") {
-      // Commit barrier (audit R-08): externally-visible fan-out (emitter
+      // Commit barrier (audit): externally-visible fan-out (emitter
       // events + PostStateCommit hooks) is buffered while the transaction is
       // open and flushed only after it COMMITs. A thrown store error discards
       // the buffer along with the rollback — clients never see events for
@@ -227,27 +248,36 @@ export function createCommitPipeline(
       });
       // Transaction committed — flush in proposal order. A failing emit/hook
       // must not masquerade as a commit failure (the data IS committed), so
-      // each thunk is isolated and surfaced as a warning.
-      for (const fn of postCommit) {
-        try {
-          await fn();
-        } catch (err) {
-          console.warn(
-            "[session-kernel] commitAll: post-commit fan-out failed:",
-            err instanceof Error ? err.message : String(err),
-          );
+      // each thunk is isolated and surfaced as a warning. A caller-supplied
+      // barrier takes over the flush: its own commit point is strictly later.
+      if (deferPostCommit) {
+        for (const fn of postCommit) deferPostCommit(fn);
+      } else {
+        for (const fn of postCommit) {
+          try {
+            await fn();
+          } catch (err) {
+            console.warn(
+              "[session-kernel] commitAll: post-commit fan-out failed:",
+              err instanceof Error ? err.message : String(err),
+            );
+          }
         }
       }
       warnPartialCommit(proposals, results, "transactional mode");
       return results;
     }
 
-    // Fallback: stores without scoped transactions (thin mocks / legacy
-    // backends) commit one proposal at a time. A mid-chain failure can leave a
-    // partial commit, so surface it loudly.
+    // Fallback: stores without scoped transactions commit one proposal at a
+    // time — thin mocks / legacy backends, but ALSO a tx-bound store view from
+    // a caller-owned enclosing transaction (tx views strip `withTransaction` —
+    // nesting is rejected). In that case the caller passes `deferPostCommit`
+    // so fan-out waits behind its commit instead of firing while the outer
+    // transaction is still open (and could still roll these writes back).
+    // A mid-chain failure can leave a partial commit, so surface it loudly.
     const results: CommitResult[] = [];
     for (const p of proposals) {
-      results.push(await commit(p));
+      results.push(await commitWith(handlers, store, p, deferPostCommit));
     }
     warnPartialCommit(proposals, results, "non-transactional mode");
     return results;

@@ -67,7 +67,7 @@ traceRoutes.get("/:sessionId", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("sessionId");
   // Traces contain full prompts/LLM output — session-existence + owner guard
-  // (S-02); previously this surface skipped the existence check entirely.
+  // previously this surface skipped the existence check entirely.
   const guard = await resolveSessionParam(c, "sessionId");
   if (!guard.ok) return guard.response;
 

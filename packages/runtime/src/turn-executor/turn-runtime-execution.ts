@@ -1,4 +1,6 @@
 import type {
+  NestedTurnResult,
+  RecursiveCallDelta,
   RuntimeManifest,
   RuntimeResult,
   TurnInput,
@@ -40,7 +42,7 @@ export type ExecuteTurnFn = (
  * (`resumeSuspendedRuntime`) stays a distinct entry point because it is driven
  * by the resume API outside the scheduler, but it now shares the same tool loop
  * (`runAgentToolLoop`) and output finalization (`finalizeAgentOutput`) as the
- * normal agent path — the duplicated loop/finalize clone was removed in F1.b.
+ * normal agent path — the duplicated loop/finalize clone was removed.
  */
 export interface RuntimeInvocation {
   readonly manifest: RuntimeManifest;
@@ -66,11 +68,9 @@ export interface RuntimeInvocation {
     | undefined;
   readonly hookPipeline: HookPipeline | undefined;
   readonly sessionSummaries:
-    | readonly import("@covel/store").SessionSummaryRecord[]
-    | undefined;
+    readonly import("@covel/store").SessionSummaryRecord[] | undefined;
   readonly workingMemory:
-    | readonly import("@covel/context").WorkingMemoryEntry[]
-    | undefined;
+    readonly import("@covel/context").WorkingMemoryEntry[] | undefined;
   readonly coreMemoryBlocks: readonly CoreMemoryBlockView[] | undefined;
   readonly sessionContext: SessionContextSnapshot | undefined;
   readonly triggerEvent:
@@ -83,6 +83,13 @@ export interface RuntimeInvocation {
   readonly executeTurnFn: ExecuteTurnFn;
   /** Internal current recursion depth. Top-level callers omit it (defaults 0). */
   readonly recursionDepth?: number;
+  /**
+   *  sink for runtime results produced by nested `ctx.recursiveCall`
+   * executions. The top-level executeTurn wires this to a collector so the
+   * commit-owning caller processes nested proposals through the same barrier
+   * as top-level results (they were previously dropped on the floor).
+   */
+  readonly collectNestedResults?: (results: readonly RuntimeResult[]) => void;
 }
 
 export async function executeOneRuntime(
@@ -113,9 +120,9 @@ export async function executeOneRuntime(
   const timeoutMs = manifest.timeoutMs ?? defaultTimeoutMs;
   const createRecursiveCall = () => {
     return async (
-      delta: Partial<TurnInput>,
+      rawDelta: RecursiveCallDelta,
       opts?: { readonly reason?: string },
-    ): Promise<TurnResult> => {
+    ): Promise<NestedTurnResult> => {
       const maxDepth =
         manifest.maxRecursionDepth ?? turnOptions?.maxRecursionDepth ?? 10;
       const nextDepth = recursionDepth + 1;
@@ -124,13 +131,29 @@ export async function executeOneRuntime(
           ? opts.reason
           : undefined;
 
+      // Execution identity is framework-owned. The public delta type already
+      // omits these, but plugin code is untyped JS at runtime — strip them so
+      // a handler cannot hop sessions or forge a child turnId that the parent
+      // turn can never settle.
+      const {
+        sessionId: _s,
+        turnId: _t,
+        origin: _o,
+        parentTurnId: _p,
+        ...delta
+      } = rawDelta as Partial<TurnInput>;
+
       const nestedInput: RecursiveTurnInput = {
         ...input,
         ...delta,
-        sessionId: delta.sessionId ?? input.sessionId,
-        turnId: delta.turnId ?? input.turnId,
+        sessionId: input.sessionId,
+        turnId: input.turnId,
         playerMessage: delta.playerMessage ?? input.playerMessage,
         suppressPlayerMessage: true,
+        // A nested execution is never a player turn — stamp its origin
+        // and parent so turn accounting excludes it from `turnCount`.
+        origin: "recursive",
+        parentTurnId: input.turnId,
       };
 
       const tracePayload = {
@@ -170,12 +193,24 @@ export async function executeOneRuntime(
             recursionDepth: nextDepth,
           },
         );
+        // Bubble the nested execution's results (its own + any it
+        // collected from deeper levels) up to the top-level turn so the
+        // commit-owning caller processes their proposals — a nested
+        // executeTurn has no commit path of its own.
+        inv.collectNestedResults?.([
+          ...nestedResult.runtimeResults,
+          ...(nestedResult.nestedRuntimeResults ?? []),
+        ]);
         await deps.emitter?.emit("recursive.completed", {
           ...tracePayload,
           resultCount: nestedResult.runtimeResults.length,
           durationMs: nestedResult.durationMs,
         });
-        return nestedResult;
+        // Hand back a de-capabilitised DTO: `completeTurn` would let plugin
+        // code emit the authoritative `turn.completed` (and kick memory
+        // ingestion) before the parent's proposals ever commit.
+        const { completeTurn: _drop, ...nestedView } = nestedResult;
+        return nestedView;
       } catch (err) {
         await deps.emitter?.emit("recursive.failed", {
           ...tracePayload,
@@ -359,7 +394,7 @@ export async function executeOneRuntime(
       error: message,
     });
 
-    // PostRuntime hook — failure path (S4-T3)
+    // PostRuntime hook — failure path
     return runPostRuntimeHook(
       {
         pipeline: hookPipeline,
@@ -375,4 +410,4 @@ export async function executeOneRuntime(
   }
 }
 
-// buildToolDefinitions and makeFailedResult extracted to turn-executor-helpers.ts (S4-T3)
+// buildToolDefinitions and makeFailedResult extracted to turn-executor-helpers.ts

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRpcApprovalGate } from "../src/rpc-approval.js";
 
-describe("createRpcApprovalGate (PR-7)", () => {
+describe("createRpcApprovalGate", () => {
   it("auto-allows builtin trust level", () => {
     const gate = createRpcApprovalGate();
     const result = gate.evaluate({
@@ -224,7 +224,7 @@ describe("createRpcApprovalGate (PR-7)", () => {
     expect(a2.status).toBe("pending");
   });
 
-  it("rejects new pending entries when the per-session cap is reached (MEDIUM-1)", () => {
+  it("rejects new pending entries when the per-session cap is reached", () => {
     const gate = createRpcApprovalGate();
     // 64 is the MAX_PENDING_PER_SESSION default.
     for (let i = 0; i < 64; i++) {
@@ -261,7 +261,7 @@ describe("createRpcApprovalGate (PR-7)", () => {
     expect(otherSession.status).toBe("pending");
   });
 
-  it("cap recovers after deciding pending entries (MEDIUM-1)", () => {
+  it("cap recovers after deciding pending entries", () => {
     const gate = createRpcApprovalGate();
     const first = gate.evaluate({
       sessionId: "sess-1",

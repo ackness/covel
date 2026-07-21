@@ -88,6 +88,10 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 - **写给模型 / 通知的纯文本**（如 prompt 前言、欢迎通知）：用 `ctx.locale`（function runtime）或 hook payload 的 `locale` 在写入时解析成单一语言。例：`director` 的导演前言、`pregame` 的欢迎语。
 - **agent runtime 的 `PLUGIN.md` 正文**（agent skill prompt）按 locale 解析 `PLUGIN.<locale>.md` → `PLUGIN.md`。正文含 CJK 的 agent 插件应配套提供 `PLUGIN.en.md`（如 `narrator` / `chat-mode-narrator`），否则 en 会话喂给模型的是中文指令。
 
+> **`PLUGIN.<locale>.md` 只能翻译，不能改契约。** 语言变体的正文和自然语言字段（`description` / `displayName` / `label` / `authorsNote.content` / `postHistory.content` / `i18n` 等）取自变体文件；`priority`、`trigger`、`capabilities`、`tags`、`tools`、`input.inject`、`dataSchemas`、超时参数等**结构字段一律取自 canonical `PLUGIN.md`**。loader 每次加载语言变体时都会比对，逐字段报告差异并用 canonical 值覆盖（`[plugin-loader] … locale variant diverges from PLUGIN.md on non-translatable field(s) …`）。
+>
+> 这条规则的原因很直接：如果变体能改结构字段，同一个 runtime 会因为玩家界面语言不同而排在不同优先级、拿到不同的工具白名单。看到这条 warning 就把改动挪回 `PLUGIN.md`。
+
 ## 程序化发现能力
 
 第三方开发者和 AI Agent 可以先调用 discovery API，再决定该读哪份文档或写哪个字段：

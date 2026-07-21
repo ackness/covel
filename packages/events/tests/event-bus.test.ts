@@ -104,7 +104,7 @@ describe("EventBus", () => {
       expect(replay.epoch).toBeDefined();
     });
 
-    it("should signal a gap for an unknown session (H-05)", () => {
+    it("should signal a gap for an unknown session", () => {
       expect(bus.getEventsAfter("unknown", 0)).toEqual({
         events: [],
         gap: true,

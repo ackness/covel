@@ -97,7 +97,7 @@ export default defineConfig({
     // this floor higher would hide regressions, lower would noise on
     // every CI run.
     chunkSizeWarningLimit: 600,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
         // Stage 6 (audit): split heavy vendors and feature surfaces out of
         // the main chunk so the first-paint critical path doesn't ship
@@ -158,8 +158,8 @@ export default defineConfig({
             return "json-render-vendor";
           }
           // Radix primitives (dialog/tabs/scroll-area/…) + the umbrella
-          // `radix-ui` package — shared across screens.
-          if (/(?:^|\/)(@radix-ui\/|radix-ui\/)/.test(after)) {
+          // Radix UI packages — shared across screens.
+          if (/(?:^|\/)@radix-ui\//.test(after)) {
             return "radix-vendor";
           }
           // Schema / serialization libs used at panel + form boundaries.

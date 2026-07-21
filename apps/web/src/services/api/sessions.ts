@@ -98,7 +98,7 @@ export async function listSessionPlugins(
     active: string[];
     available: Array<Record<string, unknown>>;
   }>(`/api/sessions/${encodeURIComponent(sessionId)}/plugins`);
-  // Map API field `active` -�� frontend field `isActive`
+  // Map API field `active` → frontend field `isActive`
   const available: SessionPluginInfo[] = raw.available.map((p) => ({
     ...p,
     id: p.id as string,
@@ -310,7 +310,7 @@ export async function createSession(
     },
   );
   // Persist the one-time owner token immediately so every follow-up call (which
-  // never re-receives it) can present it on hosted tiers. See H-01.
+  // never re-receives it) can present it on hosted tiers.
   if (ownerToken) storeSessionToken(session.id, ownerToken);
   return session;
 }
@@ -403,10 +403,10 @@ export async function syncMessages(
 
 // -- Suspensions (suspend / resume) -------------------------------
 //
-// Mirrors the S4-T4 backend surface:
-//   GET    /api/sessions/:id/suspensions                   -�� list active
-//   POST   /api/sessions/:id/resume                        -�� resume one
-//   DELETE /api/sessions/:id/suspensions/:suspensionId     -�� cancel one
+// Mirrors the backend surface:
+//   GET    /api/sessions/:id/suspensions                   → list active
+//   POST   /api/sessions/:id/resume                        → resume one
+//   DELETE /api/sessions/:id/suspensions/:suspensionId     → cancel one
 //
 // The web client surfaces suspensions inside GameView (badge + dialog) so
 // players can feed resume data for runtimes that declared a wait-point

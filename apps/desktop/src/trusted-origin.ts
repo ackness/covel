@@ -8,7 +8,7 @@
  * (http://127.0.0.1:<port>) in production, the Vite dev server
  * (http://localhost:5173) in dev. Anything else reaching a main-frame
  * navigation or a key/secret IPC is an XSS / redirect pivot that could then
- * call `covelIpc` and read raw provider keys — it must be refused (H-09).
+ * call `covelIpc` and read raw provider keys — it must be refused.
  */
 
 /** Return the origin iff `rawUrl` parses to a loopback **http** URL, else null. */

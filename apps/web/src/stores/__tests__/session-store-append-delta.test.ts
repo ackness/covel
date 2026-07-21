@@ -1,5 +1,5 @@
 /**
- * APPEND_DELTA reducer — streaming-buffer append behaviour (M-03).
+ * APPEND_DELTA reducer — streaming-buffer append behaviour.
  *
  * Streaming text lives OUTSIDE the `messages` array in a fine-grained external
  * store keyed by the placeholder id. A token delta is an O(1) map write; the

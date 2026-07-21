@@ -9,7 +9,7 @@
  * that the gateway applies transiently: register the declared custom
  * presets for the duration of the call, then roll back.
  *
- * Isolation model (H-04): overlay presets are registered under a
+ * Isolation model: overlay presets are registered under a
  * request-derived scoped id — the canonical (id, provider, model,
  * baseUrl, protocol, name) tuple. Two concurrent requests using the same
  * preset id with DIFFERENT configs therefore never share a registration:
@@ -154,9 +154,8 @@ export function applySlotOverlay(
         supportedModes: ["text", "stream"],
         enabled: true,
         tag: "text",
-        // Untrusted request origin — env keys must not bind to it (S-01),
-        // and the provider registry resolves unknown providers ephemerally
-        // for it (H-04).
+        // Untrusted request origin — env keys must not bind to it, and the
+        // provider registry resolves unknown providers ephemerally for it.
         requestScoped: true,
       });
       presetRefs.set(key, 1);
@@ -185,7 +184,7 @@ export function applySlotOverlay(
  * THIS request's overlay.
  *
  * Only consults the caller's own `overrides` — a request can never reach
- * an overlay registration it didn't declare itself (H-04). Falls through
+ * an overlay registration it didn't declare itself. Falls through
  * to the input unchanged when the id names no usable custom preset, when
  * the scoped id isn't registered (overlay not applied), or when a base
  * registry preset shadows the custom one.

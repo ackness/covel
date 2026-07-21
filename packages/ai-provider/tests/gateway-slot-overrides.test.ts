@@ -445,7 +445,7 @@ describe("gateway + slotOverrides", () => {
     expect(calls).toHaveLength(0); // we never reach the recorder
   });
 
-  it("never leaks env keys to a custom preset that redirects an existing provider (S-01)", async () => {
+  it("never leaks env keys to a custom preset that redirects an existing provider", async () => {
     const { gateway, calls } = setup();
     // Attack: reuse the env-keyed provider name, redirect baseUrl, send NO
     // request key. The env key must not follow the redirected origin.
@@ -503,7 +503,7 @@ describe("gateway + slotOverrides", () => {
     expect(calls[1].model).toBe("deepseek-reasoner");
   });
 
-  it("strips env keys from resolveSlot for redirected custom presets (S-01)", () => {
+  it("strips env keys from resolveSlot for redirected custom presets", () => {
     const { gateway } = setup();
 
     const redirected = gateway.resolveSlot("evil", {
@@ -529,7 +529,7 @@ describe("gateway + slotOverrides", () => {
     expect(trusted?.apiKey).toBe("sk-env-SECRET");
   });
 
-  it("sends no Authorization header to the redirected origin at the HTTP layer (S-01)", async () => {
+  it("sends no Authorization header to the redirected origin at the HTTP layer", async () => {
     // Real builtin openai-chat adapter (no programmatic adapter registered)
     // + stubbed fetch: proves the outgoing request itself carries no env key.
     const providerRegistry = createProviderRegistry({
@@ -593,7 +593,7 @@ describe("gateway + slotOverrides", () => {
     expect(JSON.stringify(init.headers)).not.toContain("sk-env-SECRET");
   });
 
-  it("isolates concurrent same-name custom presets with different baseUrls (H-04)", async () => {
+  it("isolates concurrent same-name custom presets with different baseUrls", async () => {
     // Attack shape: base registry has NO "openai" provider (browser-key
     // mode). Request A ("attacker") declares provider=openai pointing at
     // its own origin and stays in flight while request B ("victim")

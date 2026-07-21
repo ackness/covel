@@ -1,6 +1,6 @@
 {
   "name": "@covel/plugin-loader",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "private": true,
   "type": "module",
   "exports": {
@@ -19,11 +19,11 @@
     "@covel/events": "workspace:*",
     "@covel/shared": "workspace:*",
     "gray-matter": "^4.0.3",
-    "smol-toml": "^1.6.1",
+    "smol-toml": "^1.7.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   }
 }

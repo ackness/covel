@@ -20,15 +20,24 @@ trigger:
   type: scheduled
   interval: 1
   cooldownTurns: 1
-# Extractor parses narrator output — skip when narrator failed.
+# Engine-agnostic extraction. The upstream gate discovers the active
+# narrative engine by capability (narrative-engine → narrator in traditional,
+# chat-mode-narrator in dialogue) instead of naming one, so the extractor
+# runs in either mode and still skips when that engine failed. The inject
+# lists both known engines; the absent one resolves to nothing, so exactly
+# the active engine's fresh prose fills <narrator-output>.
 upstreamRequired:
-  - narrator
+  - capability: narrative-engine
 input:
   inject:
     - kind: runtime
       from: narrator
       field: narrativeOutput
-      as: narrator-output
+      as: "<narrator-output>"
+    - kind: runtime
+      from: chat-mode-narrator
+      field: narrativeOutput
+      as: "<narrator-output>"
 tools:
   plugin:
     - upsert-npc-graph
@@ -53,9 +62,7 @@ postHistory:
 
 ## 叙事上下文
 
-<narrator-output>
-{{ inputs.narrator.narrator.narrativeOutput }}
-</narrator-output>
+本轮叙事在 prompt 末尾的 `<narrator-output>` 块中（由框架 `input.inject` 自动注入，正文不再重复内联）。
 
 ## 已有图谱
 
@@ -80,7 +87,8 @@ postHistory:
 3. **抽取**：
    - 对**新出现**的人物/群体/势力 → 登记为新节点
    - 对已有节点的**新发现** → 在 attributes 中补充
-   - 对**表现出的关系**（信任、背叛、结盟、欠债…）→ 记录一条新 edge，`fact` 字段是一句自然语言事实
+   - 对**表现出的关系**（信任、背叛、结盟、欠债…）→ 记录一条 edge，`fact` 字段是一句自然语言事实
+   - 对**已有关系的变化**（信任转为怀疑、结盟破裂、强度升降）→ 用同一组 `sourceName / targetName / relation` 重新提交，带上新的 `strength` 和新的 `fact`；工具会关闭旧版本并开启新版本
 4. **写入**：一次调用 `upsert-npc-graph`，批量提交所有 nodes 和 edges
 
 ## 硬规则
@@ -89,7 +97,7 @@ postHistory:
   - ✅ `"萧衍笙作为碧波宗宗主，是灵脉盟约的最大受益者，他以傲慢著称但修为最高。"`
   - ❌ `"萧衍笙 受益者"`
 - `source` 和 `target` 必须是已存在或本次正在创建的节点 `id`
-- 不要重复已经登记的关系事实 — 如果一条边的语义已经被记录，跳过
+- 不要重复已经登记的关系事实 — 如果一条边的语义**没有变化**，跳过；关系本身发生变化时才重新提交（见工作流第 3 步）
 - 如果本轮叙事没有显著的人物互动，**不要**强行创造关系；直接结束（不调用 upsert-npc-graph）
 - 一次 upsert 最多 8 个节点 + 12 条边，避免 prompt 爆炸
 - 不输出额外的叙事文本，所有信息通过工具调用传达

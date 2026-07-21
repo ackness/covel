@@ -1,5 +1,5 @@
 /**
- * Snapshot and suspension record types (S4-T2 / S4-T4).
+ * Snapshot and suspension record types.
  *
  * Split out of `../types.ts` by domain; re-exported there for compatibility.
  */
@@ -13,7 +13,7 @@ import type { PluginDataRecord } from "./plugin-records.js";
 import type { SessionRecord } from "./session-records.js";
 
 /**
- * Materialized state snapshot (S4-T2, §A6).
+ * Materialized state snapshot.
  *
  * Each record captures the full session state at the end of a given turn as a
  * serialized payload. Snapshots power save / load / fork — every new session
@@ -37,7 +37,7 @@ interface SnapshotPayloadBase {
   readonly pluginData: readonly PluginDataRecord[];
   readonly workingMemory: readonly WorkingMemoryRecord[];
   /**
-   * Session-scoped lorebook entries (S3-T2). Captured from the
+   * Session-scoped lorebook entries. Captured from the
    * `lorebook_entries` table at snapshot time so forks can rehydrate the
    * session-layer lorebook without re-running world-init plugins.
    */
@@ -128,10 +128,10 @@ export interface SnapshotMetadata {
   readonly size: number;
 }
 
-// ── Suspensions (S4-T4) ──────────────────────────────────────────
+// ── Suspensions ──────────────────────────────────────────
 
 /**
- * Persisted state for a suspended runtime (S4-T4 suspend/resume primitive).
+ * Persisted state for a suspended runtime (suspend/resume primitive).
  *
  * When an agent runtime calls the `suspend` builtin tool, the turn-executor
  * captures the current LLM message array and tool-call history, writes a

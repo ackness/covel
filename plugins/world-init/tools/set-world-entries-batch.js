@@ -2,7 +2,7 @@
  * set-world-entries-batch — Batch-write world entries (geography, factions, etc.).
  * Single call to create all entries, avoiding N separate tool calls.
  *
- * Data destinations (FU-8, S3-T2 follow-up):
+ * Data destinations:
  *   1. `plugin_data` namespace=entries — structured data mirror used by
  *      admin/debug surfaces.
  *   2. `lorebook_entries` (session-scoped, constant strategy) — prompt

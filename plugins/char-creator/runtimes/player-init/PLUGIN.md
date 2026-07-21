@@ -62,7 +62,7 @@ postHistory:
 
 ## 开场摘要（由 pregame 在 Pre-Game 阶段生成）
 
-<pregame-opening>{{ inputs.pregame.pregame.narrativeOutput }}</pregame-opening>
+开场摘要在 prompt 末尾的 `<pregame-opening>` 块中（由框架 `input.inject` 自动注入，正文不再重复内联）。
 
 ## 世界观
 

@@ -63,7 +63,7 @@ export interface ProviderResolution {
   hooks: ProviderLifecycleHook[];
   /**
    * Whether server-env/platform API keys may be attached to this
-   * resolution (S-01). False when the effective baseUrl came from a
+   * resolution. False when the effective baseUrl came from a
    * request-scoped source (overlay preset/provider) whose origin differs
    * from the trusted registered default — env keys must then only come
    * from the request's own explicitly supplied provider keys.
@@ -143,7 +143,7 @@ export function createProviderRegistry(options?: {
     // that exist only in the request. Resolve them ephemerally instead of
     // requiring a registration: nothing is written to the shared registry,
     // so concurrent requests can never poison each other's provider config
-    // (H-04), and env keys never attach (no trusted default origin).
+    // and env keys never attach (no trusted default origin).
     const stored = providers.get(target.provider);
     if (!stored && !target.requestScoped) {
       throw new Error(
@@ -163,7 +163,7 @@ export function createProviderRegistry(options?: {
       );
     }
 
-    // Prompt cache strategy (S2-T3): the provider-registered defaults take
+    // Prompt cache strategy: the provider-registered defaults take
     // precedence so tests and specific deployments can override; otherwise
     // we fall back to the protocol-wide default. An explicit `undefined`
     // in the merged config is replaced with the protocol default so the
@@ -177,7 +177,7 @@ export function createProviderRegistry(options?: {
       mergedConfig.cacheStrategy = defaultCacheStrategyFor(protocol);
     }
 
-    // S-01: bind server-env keys to trusted origins. The trusted baseUrl is
+    // Bind server-env keys to trusted origins. The trusted baseUrl is
     // what config alone (llm.toml preset/provider, protocol route) would
     // produce with every request-scoped source removed. When the effective
     // baseUrl came from a request-scoped source and points at a different

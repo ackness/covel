@@ -10,7 +10,7 @@ export type RuntimeStatus =
   | "success"
   | "failed"
   | "skipped"
-  /** S4-T4: runtime suspended, waiting for player input via resume API. */
+  /** Runtime suspended, waiting for player input via resume API. */
   | "suspended";
 
 // ── Tool call record ─────────────────────────────────────────────
@@ -61,7 +61,7 @@ export interface TurnInput {
   /** API-level model override. Takes highest priority over plugin config. */
   readonly modelOverride?: string;
   /**
-   * PR-6: Per-runtime model slot overrides snapshotted from the session
+   * Per-runtime model slot overrides snapshotted from the session
    * record. Maps runtime ID (`pluginId` or `pluginId/runtimeName`) → slot
    * name. Looked up by the resolver before falling back to `manifest.model`.
    */
@@ -88,11 +88,20 @@ export interface TurnInput {
     };
   };
   /**
+   * Execution origin, stamped onto the persisted
+   * `turn_results` row so turn accounting can distinguish a real player turn
+   * from a manual RPC trigger, a deferred background follower, or a nested
+   * recursiveCall. Defaults to `player` when omitted.
+   */
+  readonly origin?: "player" | "manual" | "follower" | "recursive";
+  /** Parent turnId when this execution is a nested recursiveCall. */
+  readonly parentTurnId?: string;
+  /**
    * Player-authored plugin settings, keyed by pluginId. Each plugin's bucket
    * holds the values the user has saved under `plugin.<pluginId>.<key>` in
    * the unified SettingsStore; the server merges these with the per-runtime
    * `manifest.userSettings[].default` before invoking function handlers so
-   * plugins can rely on every declared key being present (audit F7).
+   * plugins can rely on every declared key being present.
    *
    * Absent on programmatic / test callers that don't carry player context.
    */
@@ -101,10 +110,41 @@ export interface TurnInput {
   >;
 }
 
+/**
+ * Business-input subset a plugin may override on `ctx.recursiveCall()`.
+ * Execution identity (`sessionId`, `turnId`, `origin`, `parentTurnId`) is
+ * framework-generated and immutable: a nested call must stay inside the parent
+ * session — otherwise an approved handler could read another session's context
+ * and persist under it, bypassing the hosted session-owner boundary — and
+ * reuses the parent `turnId` so its execution artifact settles together with
+ * the parent turn.
+ */
+export type RecursiveCallDelta = Omit<
+  Partial<TurnInput>,
+  "sessionId" | "turnId" | "origin" | "parentTurnId"
+>;
+
+/**
+ * Nested-turn view handed back to plugin code. Strips `completeTurn`: the
+ * completion barrier belongs to the top-level framework control plane, and a
+ * nested caller invoking it would emit an authoritative `turn.completed`
+ * before the parent's proposals commit.
+ */
+export type NestedTurnResult = Omit<TurnResult, "completeTurn">;
+
 export interface TurnResult {
   readonly turnId: string;
   readonly sessionId: string;
   readonly runtimeResults: readonly RuntimeResult[];
+  /**
+   * Runtime results produced by nested `ctx.recursiveCall` executions,
+   * flattened across depths. They are NOT part of
+   * `runtimeResults` (which persistTurnResult snapshots — nested turns
+   * persist their own turn_results rows) but the commit-owning caller MUST
+   * process them through the same proposal pipeline as the top-level
+   * results; previously their proposals were silently dropped.
+   */
+  readonly nestedRuntimeResults?: readonly RuntimeResult[];
   readonly conflicts?: readonly WriteConflict[];
   readonly auditResult?: RuntimeResult;
   /** Forms requiring player input before next turn (collected from runtime outputs). */
@@ -119,7 +159,7 @@ export interface TurnResult {
   /**
    * Event-chain followers with `manifest.execution === 'background'` that
    * were matched in this turn but intentionally NOT executed, so the sync
-   * caller can schedule them as `_jobs` and return immediately (audit F1).
+   * caller can schedule them as `_jobs` and return immediately.
    *
    * Each entry carries the triggering event so the caller can re-enter the
    * runtime without reconstructing it. Empty / absent when no background
@@ -134,7 +174,7 @@ export interface TurnResult {
     };
   }[];
   /**
-   * Turn-completion barrier (commit consistency, audit R-06/R-09). Present on
+   * Turn-completion barrier (commit consistency, audit). Present on
    * results returned by `executeTurn`. The caller that owns the commit
    * boundary invokes it AFTER this turn's proposals have committed (and the
    * auto-snapshot is captured); it then emits the authoritative
@@ -194,9 +234,7 @@ export interface ConfirmationInteraction extends BaseInteraction {
 }
 
 export type InteractionPayload =
-  | FormInteraction
-  | ChoiceInteraction
-  | ConfirmationInteraction;
+  FormInteraction | ChoiceInteraction | ConfirmationInteraction;
 
 // ── Pending input info ──────────────────────────────────────────
 

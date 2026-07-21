@@ -27,7 +27,7 @@ import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
 import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
 import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
-import { syncSessionTurnCount } from "./turn-count.js";
+import { advanceSessionTurnCount, isPreGamePending } from "./turn-count.js";
 import { decodePluginUserSettingsHeader } from "./plugin-rpc/body.js";
 import {
   mergePluginUserSettings,
@@ -140,10 +140,12 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   }
   const { requestId, type, sessionId, locale, model, payload } = body;
 
+  // `trigger_event` was removed: its payload was never read and no UI
+  // called it — the request just re-ran a full turn. Emitting kernel events
+  // belongs to plugins via the builtin `emit-event` tool.
   const SUPPORTED_ACTIONS = [
     "send_message",
     "execute_command",
-    "trigger_event",
     "start_session",
     "retry_runtime",
   ];
@@ -165,10 +167,22 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     return c.json(errorBody("Session not found"), 404);
   }
 
-  // Owner guard (hosted tiers, S-02): actions execute turns and spend tokens
+  // Owner guard (hosted tiers): actions execute turns and spend tokens
   // on the session's behalf.
   const ownerDenied = checkSessionOwner(c, session);
   if (ownerDenied) return ownerDenied;
+
+  // Fast path: a paused/ended session takes no actions. The
+  // authoritative re-check happens under the session lock below (this read is
+  // racy), but rejecting here returns a clean 409 before the SSE stream opens.
+  if (session.status && session.status !== "active") {
+    return c.json(
+      errorBody(
+        `session is ${session.status}; it must be active to accept actions`,
+      ),
+      409,
+    );
+  }
 
   // Lazy-lock the session's embedding model once per process boot.
   // No-op when the store has no vector capability or no embed slot is
@@ -212,23 +226,29 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     });
   }
 
-  // Ensure session's plugins are activated in the registry (idempotent, needed after server restart).
-  // On start_session with no plugins yet, auto-activate all registered plugins and persist.
-  let sessionPlugins = session.activePlugins as readonly string[] | undefined;
+  // Ensure session's plugins are activated in the registry (idempotent, needed
+  // after server restart).
+  //
+  // A `start_session` with an empty plugin set used to activate EVERY
+  // registered plugin and persist that — including community plugins the
+  // player never chose and mutually-exclusive ones (both narrative engines at
+  // once), which then ran for the life of the session. Session creation is
+  // what picks the plugin set; an empty set here means the caller skipped that
+  // step, so fail loudly instead of inventing one.
+  const sessionPlugins = session.activePlugins as readonly string[] | undefined;
   if (
     type === "start_session" &&
     (!sessionPlugins || sessionPlugins.length === 0)
   ) {
-    const allPluginIds = Array.from(pluginRegistry.getAll().keys());
-    for (const pid of allPluginIds) {
-      pluginRegistry.activate(pid, sessionId);
-    }
-    await store.updateSession(sessionId, {
-      activePlugins: allPluginIds,
-      updatedAt: new Date().toISOString(),
-    });
-    sessionPlugins = allPluginIds;
-  } else if (sessionPlugins) {
+    return c.json(
+      errorBody(
+        "Session has no active plugins. Create the session with an explicit " +
+          "plugin set (or a world whose manifest seeds one) before starting it.",
+      ),
+      400,
+    );
+  }
+  if (sessionPlugins) {
     for (const pid of sessionPlugins) {
       pluginRegistry.activate(pid, sessionId);
     }
@@ -255,9 +275,14 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   return streamSSE(c, async (stream) => {
     let seq = 0;
     const traceId = crypto.randomUUID();
-    // W4: released in the finally below so a crashed stream never leaves a
+    // Released in the finally below so a crashed stream never leaves a
     // stale steer/abort target behind.
     let releaseTurnControl: (() => void) | undefined;
+    // Whether this turn's execution artifact had its commitStatus settled.
+    // Consulted by the outer catch: an error after the artifact was persisted
+    // but before settlement is a known failure, not a crash, so the row must
+    // not be left `pending` forever.
+    let commitStatusSettled = false;
 
     function makeEnvelope(
       eventType: string,
@@ -275,6 +300,24 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         payload: eventPayload,
       };
     }
+
+    // Single serial write queue for the SSE connection. The envelope (and its
+    // seq) is assigned synchronously at enqueue time and chunks are flushed in
+    // that order, so a fire-and-forget event-bus forward can never interleave
+    // with — or overtake — an awaited write. The returned promise carries the
+    // individual write's outcome (awaiting callers still observe a closed
+    // stream as an error); the chain itself swallows failures so one broken
+    // write does not wedge every later one.
+    let writeChain: Promise<void> = Promise.resolve();
+    const writeEvent = (
+      eventType: string,
+      eventPayload: Record<string, unknown>,
+    ): Promise<void> => {
+      const data = JSON.stringify(makeEnvelope(eventType, eventPayload));
+      const next = writeChain.then(() => stream.writeSSE({ data }));
+      writeChain = next.catch(() => {});
+      return next;
+    };
 
     // Subscribe to out-of-band eventBus events (e.g. plugin-data.changed from
     // store proxy writes) and forward them to the action SSE stream. Without
@@ -295,294 +338,428 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     // a forwarded event by flipping its meta flag; this Set updates for free.
     // `ev.type` is an untrusted runtime string, so it is narrowed at this
     // boundary before the membership check.
-    const eventBusUnsubscribe = eventBus.onEmit((ev) => {
-      if (ev.sessionId !== sessionId) return;
-      if (!FORWARDED_EVENT_TYPES.has(ev.type as CovelEventType)) return;
-      const payload = { ...(ev.payload as Record<string, unknown>) };
-      stream
-        .writeSSE({ data: JSON.stringify(makeEnvelope(ev.type, payload)) })
-        .catch(() => {
-          /* stream closed, unsubscribe handles cleanup */
+    //
+    // The subscription's lifetime is exactly the session-lock tenure: it is
+    // established INSIDE the lock (see below) and torn down while the lock is
+    // still held. Subscribing before the lock meant a second action queued on
+    // the same session received the FIRST action's events while waiting;
+    // unsubscribing after release (previously in the outer finally) meant the
+    // reverse — once the next action acquired the lock, this stream was still
+    // subscribed and wrapped the NEW turn's events in the OLD turnId/traceId
+    // envelope. Bus events emitted outside this turn's lock tenure (e.g. by
+    // deferred followers scheduled in the post-lock tail) reach clients via
+    // the /api/events/stream subscription channel, not this per-turn stream.
+    let eventBusUnsubscribe: (() => void) | undefined;
+    const subscribeEventForwarding = (): void => {
+      eventBusUnsubscribe = eventBus.onEmit((ev) => {
+        if (ev.sessionId !== sessionId) return;
+        if (!FORWARDED_EVENT_TYPES.has(ev.type as CovelEventType)) return;
+        writeEvent(ev.type, {
+          ...(ev.payload as Record<string, unknown>),
+        }).catch(() => {
+          /* stream closed, teardown handles cleanup */
         });
-    });
+      });
+    };
 
     try {
-      const { result, trace, userSettings } = await sessionLock.withLock(
-        sessionId,
-        async () => {
-          // Persist player message to messages table (source of truth for refresh recovery)
-          if (playerMessage) {
-            const now = new Date().toISOString();
-            await store.addMessage({
-              id: crypto.randomUUID(),
-              sessionId,
-              role: "user",
-              content: playerMessage,
-              metadata: { turnId },
-              createdAt: now,
-            });
-
-            // PR-1: also emit a normalised InteractionRecord so observability and
-            // downstream consumers see the player's input as part of the unified
-            // event stream (paired with RuntimeOutput records written by the
-            // turn executor).
-            try {
-              await store.saveInteractionRecord({
-                id: crypto.randomUUID(),
-                sessionId,
-                turnId,
-                timestamp: now,
-                source: "player",
-                channel: "web",
-                type: type === "send_message" ? "message" : "rpc-call",
-                payload: { content: playerMessage, actionType: type },
-                createdAt: now,
-              });
-            } catch (err) {
-              console.warn(
-                "[actions] saveInteractionRecord failed:",
-                err instanceof Error ? err.message : String(err),
+      const { result, trace, userSettings, committed } =
+        await sessionLock.withLock(sessionId, async () => {
+          // This execution now owns the session — events on the bus
+          // from here on belong to this turn.
+          subscribeEventForwarding();
+          try {
+            // Authoritative gate: re-read the session status under the
+            // lock BEFORE any write. A pause/end that raced the pre-stream
+            // check must not get player messages, interaction records, or
+            // compaction appended to a non-active session. The throw surfaces
+            // as an `error.occurred` SSE event via the outer catch.
+            const liveSession = await store.getSession(sessionId);
+            if (!liveSession) {
+              throw new Error(
+                "session was deleted while the action was queued",
               );
             }
-          }
-
-          // Create trace recorder for this turn (persists all lifecycle events
-          // to DB). Carries the SSE traceId so recorder rows correlate with
-          // emitter + commit-pipeline rows under one traceId (audit R-14).
-          const trace = createTraceRecorder(store, sessionId, turnId, traceId);
-
-          // Per-turn trace emitter — fans emit() into trace_events + eventBus. Threaded
-          // down into ToolCallContext / llm-retry / hooks etc. via executeTurn deps.
-          // Pass the SSE envelope's traceId so persisted trace_events.traceId matches
-          // the live-streamed traceId/flowId (without it the emitter falls back to
-          // turnId, breaking traceId correlation between SSE and /api/traces).
-          const emitter = createTurnEmitter({
-            store,
-            eventBus,
-            sessionId,
-            turnId,
-            traceId,
-          });
-
-          // NOTE: Session `phase` is no longer a first-class field. The state
-          // model is `status + turnCount + preGameCompleted`, so there is no
-          // `phase.changed` event to emit here — callers that still care about a
-          // coarse "pre-game vs playing" display label derive it from
-          // `turnCount === 0` vs `> 0`. See audits/2026-04-21-architecture-code-audit.
-
-          // Emit execution started (protocol: execution.started)
-          await trace.turnStarted({ runtimeCount: activeRuntimes.length });
-          await stream.writeSSE({
-            data: JSON.stringify(
-              makeEnvelope("execution.started", {
-                status: "executing",
-                runtimeCount: activeRuntimes.length,
-              }),
-            ),
-          });
-
-          // Refresh the per-session character-tool overrides so create/update-
-          // character expose the world's CharacterAttributeSchema directly to
-          // the LLM (Phase 2). No-op when the schema isn't yet populated for
-          // this session — handlers stay correct on schema-less sessions. The
-          // optional-chain keeps tests with hand-built DI middleware working.
-          await prepareToolsForSession?.(sessionId);
-
-          // Execute turn through the API pipeline.
-          //
-          // The outer session lock serializes the complete mutation pipeline:
-          // player input, execution, proposal commits, lifecycle sync, and the
-          // final automatic snapshot. For PG-backed deployments it uses
-          // `pg_advisory_lock`; memory/sqlite use the in-process chain lock.
-          // Resolve plugin userSettings for this turn: world-authored defaults
-          // (WorldRecord.metadata.pluginSettings) merged under the player's
-          // per-session overrides (X-Plugin-User-Settings header). The runtime's
-          // resolveUserSettings fills any still-missing declared key from the
-          // manifest default. Without this the scheduled loop only ever saw
-          // manifest defaults — player + world tuning were silently dropped on the
-          // main route (only plugin-rpc read the header).
-          const world = session.worldId
-            ? await getCachedWorld(store, session.worldId)
-            : null;
-          const userSettings = mergePluginUserSettings(
-            readWorldPluginSettings(world?.metadata),
-            decodePluginUserSettingsHeader(
-              c.req.header("X-Plugin-User-Settings"),
-            ),
-          );
-
-          const turnInput = {
-            sessionId,
-            turnId,
-            playerMessage,
-            locale: effectiveLocale,
-            modelOverride: model,
-            ...(userSettings ? { userSettings } : {}),
-            // PR-6: snapshot session-level per-runtime slot overrides so the
-            // turn executor can consult them when resolving each runtime's
-            // model. The session record was loaded above (line ~67).
-            ...(session?.runtimeModelOverrides
-              ? { runtimeModelOverrides: session.runtimeModelOverrides }
-              : {}),
-            ...(type === "start_session"
-              ? { suppressPlayerMessage: true }
-              : {}),
-          };
-          // W4: register the in-flight turn only after this action owns the
-          // session lock. Release control after execution while retaining the
-          // lock through proposal commit, lifecycle sync, and snapshot capture.
-          const registeredTurn = registerActiveTurn(sessionId, turnId);
-          releaseTurnControl = registeredTurn.release;
-          let result;
-          try {
-            result = await executeTurn(turnInput, activeRuntimes, {
-              loadRuntime: loadRuntimeFn,
-              llm: llmAdapter,
-              ...(pluginGateway ? { gateway: pluginGateway } : {}),
-              ...(pluginUtils ? { utils: pluginUtils } : {}),
-              ...(getPluginSource ? { getPluginSource } : {}),
-              store,
-              ...(mediaStore ? { mediaStore } : {}),
-              toolExecutor,
-              resolveModel,
-              emitter,
-              onDelta: async (delta) => {
-                await stream.writeSSE({
-                  data: JSON.stringify(
-                    makeEnvelope("narrative.delta", {
-                      runtimeId: delta.runtimeId,
-                      pluginId: delta.pluginId,
-                      kind: outputKindResolver.getOutputKind(delta.runtimeId),
-                      delta: delta.textDelta,
-                    }),
-                  ),
-                });
-              },
-              onRuntimeStart: async (info) => {
-                await trace.runtimeStarted({
-                  runtimeId: info.runtimeId,
-                  pluginId: info.pluginId,
-                  priority: info.priority,
-                });
-                const kind = outputKindResolver.getOutputKind(info.runtimeId);
-                await stream.writeSSE({
-                  data: JSON.stringify(
-                    makeEnvelope("runtime.started", {
-                      runtimeId: info.runtimeId,
-                      pluginId: info.pluginId,
-                      kind,
-                      label: info.pluginId + "/" + kind,
-                    }),
-                  ),
-                });
-              },
-              onRuntimeComplete: async (info) => {
-                await trace.runtimeCompleted({
-                  runtimeId: info.runtimeId,
-                  pluginId: info.pluginId,
-                  status: info.status,
-                  durationMs: info.durationMs,
-                });
-                const eventType =
-                  info.status === "failed"
-                    ? "runtime.failed"
-                    : info.status === "skipped"
-                      ? "runtime.skipped"
-                      : "runtime.completed";
-                await stream.writeSSE({
-                  data: JSON.stringify(
-                    makeEnvelope(eventType, {
-                      runtimeId: info.runtimeId,
-                      pluginId: info.pluginId,
-                      durationMs: info.durationMs,
-                      status: info.status,
-                      ...(info.status === "failed" && info.error
-                        ? { error: info.error }
-                        : {}),
-                    }),
-                  ),
-                });
-              },
-              compactor: compactorRunner,
-              // Prompt-assembly hard prune — last line of defense when
-              // compaction is skipped/vetoed/insufficient for the model window.
-              ...(turnContextBudget
-                ? {
-                    estimator: estimateTokens,
-                    contextBudget: turnContextBudget,
-                  }
-                : {}),
-              memorySystem: _memorySystem,
-              // Let the turn executor construct a unified SessionContextSnapshot.
-              capabilityPluginIds,
-              ...(eventDirectory ? { eventDirectory } : {}),
-              // W4: player mid-turn steering + abort.
-              turnControl: registeredTurn.turnControl,
-            });
-          } finally {
-            registeredTurn.release();
-          }
-
-          // Process all runtime results through Session Kernel:
-          // normalize output → commit to Store → emit SessionEvents as SSE.
-          //
-          // hookPipeline / eventBus are forwarded so `PreStateCommit` and
-          // `PostStateCommit` hooks declared by plugins actually fire on the
-          // production write path (previously they only ran in tests).
-          const hookPipeline = c.get("hookPipeline");
-          const resultProcessor = createRuntimeResultProcessor({
-            store,
-            sessionId,
-            runtimes: activeRuntimes,
-            ...(hookPipeline ? { hookPipeline } : {}),
-            eventBus,
-            emitter,
-          });
-          for (const rr of result.runtimeResults) {
-            const { events } = await resultProcessor.process(rr);
-
-            for (const evt of events) {
-              // Emit using ProtocolEventType directly — no legacy mapping
-              const ssePayload: Record<string, unknown> = {
-                ...evt.payload,
-                runtimeId: evt.source.runtimeId,
-                pluginId: evt.source.pluginId,
-              };
-
-              await stream.writeSSE({
-                data: JSON.stringify(makeEnvelope(evt.type, ssePayload)),
-              });
+            if (liveSession.status && liveSession.status !== "active") {
+              throw new Error(
+                `session is ${liveSession.status}; it must be active to accept actions`,
+              );
             }
-          }
 
-          // Commit-derived lifecycle fields and the automatic snapshot belong to
-          // the same mutation boundary as execution. The snapshot is deliberately
-          // last so it contains every proposal from this turn.
-          await syncSessionTurnCount({ store, sessionId, activeRuntimes });
-          try {
-            await saveAutoSnapshot({
+            // Captured BEFORE the turn runs: the execution may complete
+            // Pre-Game itself, and turn accounting must know whether this
+            // request started as a setup request (see advanceSessionTurnCount).
+            const wasPreGamePending = isPreGamePending(
+              activeRuntimes,
+              liveSession.preGameCompleted,
+            );
+
+            // Persist player message to messages table (source of truth for refresh recovery)
+            if (playerMessage) {
+              const now = new Date().toISOString();
+              await store.addMessage({
+                id: crypto.randomUUID(),
+                sessionId,
+                role: "user",
+                content: playerMessage,
+                metadata: { turnId },
+                createdAt: now,
+              });
+
+              // Also emit a normalised InteractionRecord so observability and
+              // downstream consumers see the player's input as part of the unified
+              // event stream (paired with RuntimeOutput records written by the
+              // turn executor).
+              try {
+                await store.saveInteractionRecord({
+                  id: crypto.randomUUID(),
+                  sessionId,
+                  turnId,
+                  timestamp: now,
+                  source: "player",
+                  channel: "web",
+                  type: type === "send_message" ? "message" : "rpc-call",
+                  payload: { content: playerMessage, actionType: type },
+                  createdAt: now,
+                });
+              } catch (err) {
+                console.warn(
+                  "[actions] saveInteractionRecord failed:",
+                  err instanceof Error ? err.message : String(err),
+                );
+              }
+            }
+
+            // Create trace recorder for this turn (persists all lifecycle events
+            // to DB). Carries the SSE traceId so recorder rows correlate with
+            // emitter + commit-pipeline rows under one traceId.
+            const trace = createTraceRecorder(
               store,
               sessionId,
               turnId,
-              createdAt: result.timestamp,
-              eventBus,
-            });
-          } catch (err) {
-            console.warn(
-              `[actions] auto snapshot failed for session ${sessionId} turn ${turnId}:`,
-              err instanceof Error ? err.message : String(err),
+              traceId,
             );
+
+            // Per-turn trace emitter — fans emit() into trace_events + eventBus. Threaded
+            // down into ToolCallContext / llm-retry / hooks etc. via executeTurn deps.
+            // Pass the SSE envelope's traceId so persisted trace_events.traceId matches
+            // the live-streamed traceId/flowId (without it the emitter falls back to
+            // turnId, breaking traceId correlation between SSE and /api/traces).
+            const emitter = createTurnEmitter({
+              store,
+              eventBus,
+              sessionId,
+              turnId,
+              traceId,
+            });
+
+            // NOTE: Session `phase` is no longer a first-class field. The state
+            // model is `status + turnCount + preGameCompleted`, so there is no
+            // `phase.changed` event to emit here — callers that still care about a
+            // coarse "pre-game vs playing" display label derive it from
+            // `turnCount === 0` vs `> 0`. See audits/2026-04-21-architecture-code-audit.
+
+            // Emit execution started (protocol: execution.started). Goes
+            // through the serial write queue like every other stream write, so
+            // it keeps its envelope order relative to forwarded bus events.
+            await trace.turnStarted({ runtimeCount: activeRuntimes.length });
+            await writeEvent("execution.started", {
+              status: "executing",
+              runtimeCount: activeRuntimes.length,
+            });
+
+            // Refresh the per-session character-tool overrides so create/update-
+            // character expose the world's CharacterAttributeSchema directly to
+            // the LLM (Phase 2). No-op when the schema isn't yet populated for
+            // this session — handlers stay correct on schema-less sessions. The
+            // optional-chain keeps tests with hand-built DI middleware working.
+            await prepareToolsForSession?.(sessionId);
+
+            // Execute turn through the API pipeline.
+            //
+            // The outer session lock serializes the complete mutation pipeline:
+            // player input, execution, proposal commits, lifecycle sync, and the
+            // final automatic snapshot. For PG-backed deployments it uses
+            // `pg_advisory_lock`; memory/sqlite use the in-process chain lock.
+            // Resolve plugin userSettings for this turn: world-authored defaults
+            // (WorldRecord.metadata.pluginSettings) merged under the player's
+            // per-session overrides (X-Plugin-User-Settings header). The runtime's
+            // resolveUserSettings fills any still-missing declared key from the
+            // manifest default. Without this the scheduled loop only ever saw
+            // manifest defaults — player + world tuning were silently dropped on the
+            // main route (only plugin-rpc read the header).
+            const world = session.worldId
+              ? await getCachedWorld(store, session.worldId)
+              : null;
+            const userSettings = mergePluginUserSettings(
+              readWorldPluginSettings(world?.metadata),
+              decodePluginUserSettingsHeader(
+                c.req.header("X-Plugin-User-Settings"),
+              ),
+            );
+
+            // A scoped retry_runtime (payload.runtimeId set) reruns ONE
+            // runtime, not a new player turn. Stamp it non-player origin and
+            // keep it out of turnCount so retrying doesn't advance the counter
+            // a second time over the same logical turn.
+            const isScopedRetry =
+              type === "retry_runtime" &&
+              typeof payload?.runtimeId === "string" &&
+              payload.runtimeId.length > 0;
+
+            const turnInput = {
+              sessionId,
+              turnId,
+              playerMessage,
+              locale: effectiveLocale,
+              modelOverride: model,
+              ...(userSettings ? { userSettings } : {}),
+              // Snapshot session-level per-runtime slot overrides so the
+              // turn executor can consult them when resolving each runtime's
+              // model. The session record was loaded above (line ~67).
+              ...(session?.runtimeModelOverrides
+                ? { runtimeModelOverrides: session.runtimeModelOverrides }
+                : {}),
+              ...(type === "start_session"
+                ? { suppressPlayerMessage: true }
+                : {}),
+              // retry_runtime honors payload.runtimeId: scope the rerun to
+              // that runtime via the manual-trigger path instead of silently
+              // re-running the whole turn. Without a runtimeId the action keeps
+              // its historical whole-turn-retry semantics.
+              ...(isScopedRetry
+                ? {
+                    manualTrigger: { runtimeId: payload.runtimeId as string },
+                    origin: "manual" as const,
+                  }
+                : {}),
+            };
+            // Register the in-flight turn only after this action owns the
+            // session lock. Release control after execution while retaining the
+            // lock through proposal commit, lifecycle sync, and snapshot capture.
+            const registeredTurn = registerActiveTurn(sessionId, turnId);
+            releaseTurnControl = registeredTurn.release;
+            let result;
+            try {
+              result = await executeTurn(turnInput, activeRuntimes, {
+                loadRuntime: loadRuntimeFn,
+                llm: llmAdapter,
+                // The main turn path never passed the eventBus, so every
+                // `emitSubEvent` inside the executor — including the
+                // completion barrier's `turn.completed` — silently no-opped on
+                // the player-facing path (found while adding the
+                // fault-injection tests). Without it the barrier's only
+                // observable effect was memory ingestion.
+                eventBus,
+                ...(pluginGateway ? { gateway: pluginGateway } : {}),
+                ...(pluginUtils ? { utils: pluginUtils } : {}),
+                ...(getPluginSource ? { getPluginSource } : {}),
+                store,
+                ...(mediaStore ? { mediaStore } : {}),
+                toolExecutor,
+                resolveModel,
+                emitter,
+                onDelta: async (delta) => {
+                  await writeEvent("narrative.delta", {
+                    runtimeId: delta.runtimeId,
+                    pluginId: delta.pluginId,
+                    kind: outputKindResolver.getOutputKind(delta.runtimeId),
+                    delta: delta.textDelta,
+                  });
+                },
+                onRuntimeStart: async (info) => {
+                  await trace.runtimeStarted({
+                    runtimeId: info.runtimeId,
+                    pluginId: info.pluginId,
+                    priority: info.priority,
+                  });
+                  const kind = outputKindResolver.getOutputKind(info.runtimeId);
+                  await writeEvent("runtime.started", {
+                    runtimeId: info.runtimeId,
+                    pluginId: info.pluginId,
+                    kind,
+                    label: info.pluginId + "/" + kind,
+                  });
+                },
+                onRuntimeComplete: async (info) => {
+                  await trace.runtimeCompleted({
+                    runtimeId: info.runtimeId,
+                    pluginId: info.pluginId,
+                    status: info.status,
+                    durationMs: info.durationMs,
+                  });
+                  const eventType =
+                    info.status === "failed"
+                      ? "runtime.failed"
+                      : info.status === "skipped"
+                        ? "runtime.skipped"
+                        : "runtime.completed";
+                  await writeEvent(eventType, {
+                    runtimeId: info.runtimeId,
+                    pluginId: info.pluginId,
+                    durationMs: info.durationMs,
+                    status: info.status,
+                    ...(info.status === "failed" && info.error
+                      ? { error: info.error }
+                      : {}),
+                  });
+                },
+                compactor: compactorRunner,
+                // Prompt-assembly hard prune — last line of defense when
+                // compaction is skipped/vetoed/insufficient for the model window.
+                ...(turnContextBudget
+                  ? {
+                      estimator: estimateTokens,
+                      contextBudget: turnContextBudget,
+                    }
+                  : {}),
+                memorySystem: _memorySystem,
+                // Let the turn executor construct a unified SessionContextSnapshot.
+                capabilityPluginIds,
+                ...(eventDirectory ? { eventDirectory } : {}),
+                // Player mid-turn steering + abort.
+                turnControl: registeredTurn.turnControl,
+              });
+            } finally {
+              registeredTurn.release();
+            }
+
+            // Process all runtime results through Session Kernel:
+            // normalize output → commit to Store → emit SessionEvents as SSE.
+            //
+            // hookPipeline / eventBus are forwarded so `PreStateCommit` and
+            // `PostStateCommit` hooks declared by plugins actually fire on the
+            // production write path (previously they only ran in tests).
+            const hookPipeline = c.get("hookPipeline");
+            const resultProcessor = createRuntimeResultProcessor({
+              store,
+              sessionId,
+              runtimes: activeRuntimes,
+              ...(hookPipeline ? { hookPipeline } : {}),
+              eventBus,
+              emitter,
+            });
+            // Commit failures are no longer silently dropped — each one
+            // is surfaced as a `proposal.failed` SSE event, and any failure
+            // withholds the completion barrier below (turn.completed, memory
+            // ingestion, auto-snapshot success signal).
+            let commitFailureCount = 0;
+            // Nested recursiveCall results ride the same commit barrier —
+            // their proposals were previously dropped (only the top-level
+            // results were processed).
+            for (const rr of [
+              ...result.runtimeResults,
+              ...(result.nestedRuntimeResults ?? []),
+            ]) {
+              const { events, failedProposals } =
+                await resultProcessor.process(rr);
+
+              for (const evt of events) {
+                // Emit using ProtocolEventType directly — no legacy mapping
+                const ssePayload: Record<string, unknown> = {
+                  ...evt.payload,
+                  runtimeId: evt.source.runtimeId,
+                  pluginId: evt.source.pluginId,
+                };
+
+                await writeEvent(evt.type, ssePayload);
+              }
+
+              for (const fp of failedProposals) {
+                commitFailureCount += 1;
+                await writeEvent("proposal.failed", {
+                  proposalId: fp.proposal.id,
+                  proposalType: fp.proposal.type,
+                  runtimeId: fp.proposal.source.runtimeId,
+                  pluginId: fp.proposal.source.pluginId,
+                  error: fp.error,
+                });
+              }
+            }
+
+            // Commit-derived lifecycle fields and the automatic snapshot belong
+            // to the same mutation boundary as execution.
+            //
+            // Order matters:
+            //  1. Settle the execution artifact's commitStatus — a row left
+            //     `pending` means the process died between persisting it and
+            //     getting here (a crash), which must stay distinguishable from a
+            //     turn whose commit failed.
+            //  2. Advance turnCount only for a fully committed player execution
+            //     — the count drives the UI turn display, auto-snapshot cadence,
+            //     and snapshot numbering, so a failed commit must not move it.
+            //  3. Capture the automatic snapshot last so it contains every
+            //     committed proposal AND the turn number it belongs to.
+            try {
+              await store.setTurnResultCommitStatus(
+                sessionId,
+                turnId,
+                commitFailureCount === 0 ? "committed" : "failed",
+              );
+              commitStatusSettled = true;
+            } catch (err) {
+              console.warn(
+                `[actions] failed to settle commitStatus for turn ${turnId}:`,
+                err instanceof Error ? err.message : String(err),
+              );
+            }
+
+            await advanceSessionTurnCount({
+              store,
+              sessionId,
+              turnId,
+              activeRuntimes,
+              wasPreGamePending,
+              // A scoped retry reruns one runtime over the same logical turn —
+              // it must not advance the counter even when its proposals commit.
+              committed: commitFailureCount === 0 && !isScopedRetry,
+            });
+
+            if (commitFailureCount === 0) {
+              try {
+                await saveAutoSnapshot({
+                  store,
+                  sessionId,
+                  turnId,
+                  createdAt: result.timestamp,
+                  eventBus,
+                });
+              } catch (err) {
+                // Best-effort checkpoint: a failed snapshot is logged but does
+                // not fail the turn — the proposals are already durable.
+                console.warn(
+                  `[actions] auto snapshot failed for session ${sessionId} turn ${turnId}:`,
+                  err instanceof Error ? err.message : String(err),
+                );
+              }
+            } else {
+              console.error(
+                `[actions] ${commitFailureCount} proposal(s) failed to commit for session ${sessionId} turn ${turnId} — ` +
+                  "withholding auto-snapshot and turn completion",
+              );
+            }
+
+            // Commit barrier: the authoritative turn.completed event and
+            // post-turn memory ingestion fire once every proposal committed.
+            // A failed auto-snapshot does NOT hold them back — the business
+            // state is already durable (turnCount advanced above on the same
+            // proposal-only condition), only the best-effort checkpoint is
+            // missing and the next turn snapshots again. Gating completion on
+            // the snapshot would strand a fully-committed turn as "incomplete".
+            const committed = commitFailureCount === 0;
+            if (committed) {
+              result.completeTurn?.();
+            }
+
+            return { result, trace, userSettings, committed };
+          } finally {
+            // Torn down while the lock is still held: after release the next
+            // action owns the session, and its events must not be wrapped in
+            // this stream's turnId/traceId envelope.
+            eventBusUnsubscribe?.();
+            eventBusUnsubscribe = undefined;
           }
-
-          // Commit barrier (audit R-06/R-09): proposals are committed and the
-          // snapshot captured — only now fire the authoritative turn.completed
-          // event and post-turn memory ingestion. A commit failure throws
-          // above, so this is never reached for uncommitted state.
-          result.completeTurn?.();
-
-          return { result, trace, userSettings };
-        },
-      );
+        });
 
       // ——— Post-lock tail ———
       // Deferred-follower scheduling and the final SSE writes deliberately run
@@ -592,13 +769,15 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       // execution.completed must not extend the critical section.
       const hookPipeline = c.get("hookPipeline");
 
-      // Audit F1 (main turn path): `executeTurn` can surface `deferredFollowers`
+      // Main turn path: `executeTurn` can surface `deferredFollowers`
       // — event-chain followers with `execution: 'background'` that were
       // skipped so the player gets an immediate response (e.g. scene-stage's
       // background-gen). Schedule them the same way plugin-rpc.ts's sync mode
       // does: a pending `_jobs` row + `setImmediate`, so they actually run
       // instead of silently never firing on the main narrative path.
-      if (result.deferredFollowers?.length) {
+      // Only when this turn's writes actually landed — a follower chained onto
+      // a rolled-back turn operates on state that no longer exists.
+      if (committed && result.deferredFollowers?.length) {
         const runtimeTurnRunner = createPluginRpcRuntimeTurnRunner({
           store,
           eventBus,
@@ -649,27 +828,31 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         durationMs: result.durationMs,
         resultCount: result.runtimeResults.length,
       });
-      await stream.writeSSE({
-        data: JSON.stringify(
-          makeEnvelope("execution.completed", {
-            runtimeCount: activeRuntimes.length,
-            resultCount: result.runtimeResults.length,
-            durationMs: result.durationMs,
-            // Surface a turn that was aborted before producing output (e.g.
-            // cost-gate's hard budget cap) so the player gets a visible reason
-            // instead of a silent empty turn.
-            ...(result.abortReason ? { abortReason: result.abortReason } : {}),
-          }),
-        ),
+      await writeEvent("execution.completed", {
+        runtimeCount: activeRuntimes.length,
+        resultCount: result.runtimeResults.length,
+        durationMs: result.durationMs,
+        // Surface a turn that was aborted before producing output (e.g.
+        // cost-gate's hard budget cap) so the player gets a visible reason
+        // instead of a silent empty turn.
+        ...(result.abortReason ? { abortReason: result.abortReason } : {}),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      await stream.writeSSE({
-        data: JSON.stringify(makeEnvelope("error.occurred", { message })),
-      });
+      // A known failure must not leave the execution artifact `pending` —
+      // that state is reserved for crashes. No-op when the turn never
+      // persisted a row (error before/inside execution). Best-effort: the
+      // stream error event below matters more than this bookkeeping write.
+      if (!commitStatusSettled) {
+        commitStatusSettled = true;
+        await store
+          .setTurnResultCommitStatus(sessionId, turnId, "failed")
+          .catch(() => {});
+      }
+      await writeEvent("error.occurred", { message }).catch(() => {});
     } finally {
       releaseTurnControl?.();
-      eventBusUnsubscribe();
+      eventBusUnsubscribe?.();
     }
   });
 });

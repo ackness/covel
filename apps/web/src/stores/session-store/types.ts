@@ -57,7 +57,7 @@ export interface ExecutionStep {
 }
 
 /**
- * Suspended runtime awaiting external input (F4 — suspend/resume web integration).
+ * Suspended runtime awaiting external input (suspend/resume web integration).
  *
  * The backend persists a fuller record in the store (pendingContinuation etc.);
  * only the UI-visible fields travel through api.ts via `listSuspensions` and
@@ -136,7 +136,7 @@ export interface SessionState {
   executionSteps: ExecutionStep[];
 
   /**
-   * Active suspensions awaiting external resume (F4).
+   * Active suspensions awaiting external resume.
    *
    * Populated from `GET /api/sessions/:id/suspensions` on session restore and
    * maintained live via `turn.suspended` / `turn.resumed` SSE events. Cleared

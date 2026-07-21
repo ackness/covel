@@ -14,6 +14,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
+import { reservedPluginDataNamespaceError } from "@covel/shared";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { buildPluginDataIndex } from "./discovery.js";
 import { resolveSessionParam } from "./session/session-guard.js";
@@ -52,6 +53,27 @@ function validatePluginAccess(
         status: 403,
       };
     }
+  }
+  return null;
+}
+
+/**
+ * Core plugins own state the framework itself depends on (world dimension
+ * schema, character records, memory blocks). The generic API is a player-facing
+ * escape hatch for ordinary plugin state, so it must not be able to rewrite
+ * those — a forged `world-init/schema` entry would redefine the world's
+ * character attributes for every later turn. Core-plugin state changes go
+ * through that plugin's own tools and the proposal pipeline.
+ */
+function corePluginWriteError(
+  registry: PluginRegistry,
+  pluginId: string,
+): string | null {
+  const entry = registry.get(pluginId);
+  const pluginType =
+    entry?.manifest?.manifest?.pluginType ?? entry?.summary?.pluginType;
+  if (pluginType === "core-plugin") {
+    return `Plugin "${pluginId}" is a core plugin; its data is framework-owned and cannot be written through this API`;
   }
   return null;
 }
@@ -157,6 +179,11 @@ pluginDataRoutes.put(
     const accessErr = validatePluginAccess(registry, pluginId, sessionId, true);
     if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
+    const reservedErr = reservedPluginDataNamespaceError(namespace);
+    if (reservedErr) return c.json(errorBody(reservedErr), 403);
+    const coreErr = corePluginWriteError(registry, pluginId);
+    if (coreErr) return c.json(errorBody(coreErr), 403);
+
     const jsonBody = await readJsonBody(c);
     if (jsonBody instanceof Response) return jsonBody;
     const raw = jsonBody.body;
@@ -208,6 +235,11 @@ pluginDataRoutes.delete(
     // Write: require the plugin to be active in this session
     const accessErr = validatePluginAccess(registry, pluginId, sessionId, true);
     if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
+
+    const reservedErr = reservedPluginDataNamespaceError(namespace);
+    if (reservedErr) return c.json(errorBody(reservedErr), 403);
+    const coreErr = corePluginWriteError(registry, pluginId);
+    if (coreErr) return c.json(errorBody(coreErr), 403);
 
     await store.deletePluginData(sessionId, pluginId, namespace, key);
     return c.json({ success: true });

@@ -65,6 +65,11 @@ export const turnResults = sqliteTable(
     runtimeResults: text("runtime_results").notNull(), // JSON
     conflicts: text("conflicts"), // JSON
     auditResult: text("audit_result"), // JSON
+    // Execution origin (player/manual/follower/recursive) + parent
+    // turn for recursive executions. NULL on legacy rows (= player).
+    origin: text("origin"),
+    parentTurnId: text("parent_turn_id"),
+    commitStatus: text("commit_status"),
     durationMs: integer("duration_ms").notNull(),
     createdAt: text("created_at").notNull(),
   },
@@ -338,7 +343,7 @@ export const traceEvents = sqliteTable(
   ],
 );
 
-// ── Runtime Outputs (PR-1 translation layer) ────────────────────
+// ── Runtime Outputs (translation layer) ────────────────────
 
 export const runtimeOutputs = sqliteTable(
   "runtime_outputs",
@@ -364,7 +369,7 @@ export const runtimeOutputs = sqliteTable(
   ],
 );
 
-// ── Interaction Records (PR-1 translation layer) ────────────────
+// ── Interaction Records (translation layer) ────────────────
 
 export const interactionRecords = sqliteTable(
   "interaction_records",
@@ -417,7 +422,7 @@ export const turnMessages = sqliteTable(
   ],
 );
 
-// ── Session Summaries (S2-T2 Compactor) ────────────────────────
+// ── Session Summaries (Compactor) ────────────────────────
 
 export const sessionSummaries = sqliteTable(
   "session_summaries",
@@ -448,7 +453,7 @@ export const playerInputs = sqliteTable(
   (table) => [index("player_inputs_session_id_idx").on(table.sessionId)],
 );
 
-// ── Working Memory (S3-T3) ────────────────────────────────────
+// ── Working Memory ────────────────────────────────────
 
 export const workingMemory = sqliteTable(
   "working_memory",
@@ -513,7 +518,7 @@ export const mediaRefs = sqliteTable(
   ],
 );
 
-// ── Lorebook Entries (S3-T2) ──────────────────────────────────
+// ── Lorebook Entries ──────────────────────────────────
 
 export const lorebookEntries = sqliteTable(
   "lorebook_entries",
@@ -537,7 +542,7 @@ export const lorebookEntries = sqliteTable(
   ],
 );
 
-// ── State Snapshots (S4-T2) ────────────────────────────────────
+// ── State Snapshots ────────────────────────────────────
 
 export const stateSnapshots = sqliteTable(
   "state_snapshots",
@@ -553,7 +558,7 @@ export const stateSnapshots = sqliteTable(
   (table) => [index("state_snapshots_session_id_idx").on(table.sessionId)],
 );
 
-// ── Suspensions (S4-T4) ────────────────────────────────────────
+// ── Suspensions ────────────────────────────────────────
 
 export const suspensions = sqliteTable(
   "suspensions",

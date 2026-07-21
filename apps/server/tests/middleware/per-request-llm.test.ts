@@ -170,7 +170,7 @@ function buildTestApp(opts: {
 
   // Slot-resolve route — exercises the pluginGateway path so we can
   // assert that request-scoped provider keys + slot overrides propagate
-  // into function-runtime slot resolution (audit F2). Plugins call
+  // into function-runtime slot resolution. Plugins call
   // `ctx.gateway.resolveSlot()` to get baseUrl/apiKey for their own
   // wire (image generation, custom HTTP). The middleware must rebuild
   // the gateway with merged keys so the plugin sees the same browser-
@@ -268,7 +268,7 @@ describe("per-request LLM middleware", () => {
         }),
       ],
     });
-    // Request keys and env keys stay separate maps (S-01): env keys are
+    // Request keys and env keys stay separate maps: env keys are
     // origin-gated inside the gateway and must never be pre-merged into
     // the request-key map where they would follow any custom baseUrl.
     expect(calls[0].apiKeys).toEqual({ vendorX: "sk-vendor-LIVE" });
@@ -337,7 +337,7 @@ describe("per-request LLM middleware", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("rebuilds pluginGateway with merged apiKeys and slotOverrides when headers are present (audit F2)", async () => {
+  it("rebuilds pluginGateway with merged apiKeys and slotOverrides when headers are present", async () => {
     const { ai, resolveSlotCalls } = createMockAi();
     const defaultAdapter: LLMAdapter = {
       async generate() {
@@ -438,7 +438,7 @@ describe("per-request LLM middleware", () => {
     expect(resolveSlotCalls).toHaveLength(0);
   });
 
-  it("never merges env keys into the request-key map (S-01 exfil shape)", async () => {
+  it("never merges env keys into the request-key map (exfil shape)", async () => {
     const { ai, calls } = createMockAi();
     const app = buildTestApp({
       ai,
@@ -526,5 +526,56 @@ describe("per-request LLM middleware", () => {
       provider: "vendorX",
       model: "ok-m",
     });
+  });
+
+  it("strips providerRequestMetadata from a browser-supplied preset", async () => {
+    // Media wires (`providerRequestMetadata.imageWire` etc.) select which
+    // vendor module handles a generation. Community plugins register theirs
+    // into a PROCESS-GLOBAL registry once approved in any session, so letting
+    // a request-scoped preset name one would make another session's approved
+    // community code reachable from a session that never approved it. Wire
+    // selection is operator config (llm.toml) only — the sanitizer's field
+    // whitelist is what enforces that, so pin it.
+    const { ai, calls } = createMockAi();
+    const app = buildTestApp({
+      ai,
+      envApiKeys: {},
+      defaultAdapter: {
+        async generate() {
+          throw new Error("should not reach default adapter");
+        },
+      },
+    });
+
+    const slotConfig = {
+      customPresets: [
+        {
+          id: "sneaky",
+          name: "Sneaky",
+          provider: "vendorX",
+          model: "m",
+          providerRequestMetadata: {
+            imageWire: "some-community-plugin/evil-wire",
+            speechWire: "some-community-plugin/evil-wire",
+          },
+        },
+      ],
+    };
+
+    const res = await app.request("/echo", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "X-Slot-Config": b64(slotConfig),
+      },
+      body: JSON.stringify({ model: "sneaky" }),
+    });
+    expect(res.status).toBe(200);
+
+    const preset = calls[0].slotOverrides?.customPresets?.[0] as
+      Record<string, unknown> | undefined;
+    expect(preset).toBeDefined();
+    expect(preset).not.toHaveProperty("providerRequestMetadata");
+    expect(JSON.stringify(preset)).not.toContain("evil-wire");
   });
 });

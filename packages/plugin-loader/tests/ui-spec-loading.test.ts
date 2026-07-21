@@ -170,7 +170,7 @@ Prompt.
     );
   });
 
-  it("loadRuntimeUi returns UI specs without importing handler JS (S-04)", async () => {
+  it("loadRuntimeUi returns UI specs without importing handler JS", async () => {
     const discoveries = await discoverPlugins(tmpDir);
     const discovery = discoveries.find((d) => d.id === "ui-handler-plugin")!;
 

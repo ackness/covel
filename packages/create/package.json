@@ -1,6 +1,6 @@
 {
   "name": "@covel/create",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "private": true,
   "type": "module",
   "exports": {
@@ -21,7 +21,7 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   }
 }

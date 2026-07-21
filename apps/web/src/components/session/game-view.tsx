@@ -20,6 +20,8 @@ import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
 import { ChatMessages } from "./chat-messages.js";
 import { StageView } from "./stage/StageView.js";
+import { hasSubmittedForm } from "./stage/stage-selectors.js";
+import { useStageMediaPreload } from "./stage/use-stage-media-preload.js";
 import { useSession } from "@/stores/session-store.js";
 import type { SessionRecord } from "@/services/api.js";
 import { useSettingsDialog } from "@/hooks/use-settings-dialog.js";
@@ -91,6 +93,15 @@ export function GameView({ session }: GameViewProps) {
   // Full-screen stage: collapse both studio rails + hide the session header so
   // the stage fills the viewport. Session-memory only (no persistence).
   const [immersive, setImmersive] = useState(false);
+  // Warm the media cache with known stage art (sprites + scene backdrops)
+  // during pre-game, so the opening turn paints them without a download stall.
+  useStageMediaPreload(session.id, sessionPlugins);
+  // Enter the stage as soon as the player submits the opening (character
+  // creation) form, instead of waiting for pre-game to fully complete —
+  // the backdrop shows the world hero image until the narrator's first
+  // scene.set lands.
+  const stageReady =
+    session.turnCount >= 1 || hasSubmittedForm(messages, submittedBlockIds);
   const settings = useSettingsDialog(refreshSlots);
 
   const {
@@ -368,7 +379,7 @@ export function GameView({ session }: GameViewProps) {
           )}
 
           {/* Messages */}
-          {viewMode === "stage" && session.turnCount >= 1 ? (
+          {viewMode === "stage" && stageReady ? (
             <StageView
               session={session}
               world={world}

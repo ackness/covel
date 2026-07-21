@@ -1,5 +1,5 @@
 /**
- * Unit tests for the S2-T2 Compactor.
+ * Unit tests for the Compactor.
  */
 
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";

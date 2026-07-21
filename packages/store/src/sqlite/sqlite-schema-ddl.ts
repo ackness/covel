@@ -73,6 +73,21 @@ function applySessionColumnMigrations(sqlite: Database.Database): void {
   if (!colNames.has("metadata")) {
     sqlite.exec("ALTER TABLE sessions ADD COLUMN metadata TEXT");
   }
+
+  // Execution origin + recursive parent linkage on turn_results.
+  const turnResultCols = sqlite
+    .prepare("PRAGMA table_info(turn_results)")
+    .all() as Array<{ name: string }>;
+  const trColNames = new Set(turnResultCols.map((c) => c.name));
+  if (!trColNames.has("origin")) {
+    sqlite.exec("ALTER TABLE turn_results ADD COLUMN origin TEXT");
+  }
+  if (!trColNames.has("parent_turn_id")) {
+    sqlite.exec("ALTER TABLE turn_results ADD COLUMN parent_turn_id TEXT");
+  }
+  if (!trColNames.has("commit_status")) {
+    sqlite.exec("ALTER TABLE turn_results ADD COLUMN commit_status TEXT");
+  }
 }
 
 export function createTables(sqlite: Database.Database): void {

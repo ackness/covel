@@ -1,6 +1,6 @@
 /**
  * app.onError logs request context on every 500 — the URL must not leak
- * signed media tokens or SSE session_token owner auth into logs (M-06).
+ * signed media tokens or SSE session_token owner auth into logs.
  */
 
 import { describe, expect, it, vi } from "vitest";

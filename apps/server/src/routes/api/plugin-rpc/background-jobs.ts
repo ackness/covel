@@ -1,9 +1,11 @@
 import type { DataStore } from "@covel/store";
 import type { RuntimeResult, TurnResult } from "@covel/shared";
 import {
+  commitFailureMessage,
   deriveBackgroundJobCompletion,
   deriveFollowerRuntimeJobResult,
   type ManualTurnSummary,
+  type TurnCommitOutcome,
 } from "./runtime-response.js";
 import {
   makePendingPluginJobValue,
@@ -37,7 +39,10 @@ interface PluginRpcJobRunnerOptions {
     readonly userSettings?: Readonly<
       Record<string, Readonly<Record<string, unknown>>>
     >;
-  }) => Promise<{ readonly turnResult: TurnResult }>;
+  }) => Promise<{
+    readonly turnResult: TurnResult;
+    readonly commit: TurnCommitOutcome;
+  }>;
   readonly hasActiveRuntime: (runtimeId: string) => boolean;
 }
 
@@ -135,7 +140,7 @@ export function createPluginRpcJobRunner(
     }
 
     try {
-      const { turnResult } = await options.runDeferredFollowerTurn({
+      const { turnResult, commit } = await options.runDeferredFollowerTurn({
         followerTurnId: args.followerTurnId,
         runtimeId: args.runtimeId,
         triggerEvent: args.triggerEvent,
@@ -145,13 +150,16 @@ export function createPluginRpcJobRunner(
       const followerResult = turnResult.runtimeResults.find(
         (result) => result.runtimeId === args.runtimeId,
       );
-      if (turnResult.deferredFollowers?.length) {
+      // Only chain further followers off a turn whose writes actually landed —
+      // otherwise the chain builds on state that rolled back.
+      if (commit.committed && turnResult.deferredFollowers?.length) {
         await scheduleDeferredFollowers(turnResult.deferredFollowers);
       }
 
       const jobResult = deriveFollowerRuntimeJobResult({
         followerResult,
         turnDurationMs: turnResult.durationMs,
+        commit,
       });
       const completedAt = new Date().toISOString();
       await persistJob({
@@ -328,6 +336,32 @@ export function createPluginRpcJobRunner(
     scheduleBackgroundJob(async (): Promise<void> => {
       try {
         const summary = await options.runManualTurn();
+        // A runtime can report success while its proposals fail to commit.
+        // Scheduling the expected follower onto rolled-back state — or marking
+        // the parent job done — would build on writes that never landed.
+        if (!summary.commit.committed) {
+          const completedAt = new Date().toISOString();
+          await persistJob({
+            pluginId: args.pluginId,
+            jobId,
+            startedAt,
+            updatedAt: completedAt,
+            value: makeTerminalPluginJobValue({
+              status: "failed",
+              runtimeId: args.runtimeId,
+              turnId: summary.turnId,
+              startedAt,
+              completedAt,
+              durationMs: summary.durationMs,
+              error: commitFailureMessage(summary.commit),
+              runtimeResults: summary.runtimeResults,
+              ...(summary.abortReason
+                ? { abortReason: summary.abortReason }
+                : {}),
+            }),
+          });
+          return;
+        }
         const deferredJobs = summary.deferredFollowers.length
           ? await scheduleDeferredFollowers(summary.deferredFollowers)
           : [];

@@ -188,21 +188,21 @@ function parseLenientField(
  */
 const LENIENT_FIELDS: readonly LenientFieldSpec[] = [
   {
-    // S3-T4: author's note — wrong type on e.g. `depth` should not crash load.
+    // Author's note — wrong type on e.g. `depth` should not crash load.
     key: "authorsNote",
     schema: authorsNoteDeclSchema,
     problem: "malformed authorsNote skipped",
     fix: 'An authorsNote must have `content: string` and optional `depth: number` / `role: "system" | "user" | "assistant"`.',
   },
   {
-    // S3-T4: post-history note.
+    // Post-history note.
     key: "postHistory",
     schema: postHistoryDeclSchema,
     problem: "malformed postHistory skipped",
     fix: 'A postHistory entry must have `content: string` and optional `role: "system" | "user" | "assistant"`.',
   },
   {
-    // PR-3: rpc declarations — drop the whole rpc block on structural error so
+    // rpc declarations — drop the whole rpc block on structural error so
     // a typo in one action doesn't crash the load.
     key: "rpc",
     schema: rpcDeclMapSchema,
@@ -292,7 +292,7 @@ export function parsePluginMd(
     if (Array.isArray(data.hooks)) {
       // Validate per-entry (not per-array) so a single malformed entry only drops
       // itself with a warning, instead of silently dropping the entire hooks
-      // list when one entry has e.g. `handler: 123`. See S4-T3 code review I1.
+      // list when one entry has e.g. `handler: 123`.
       const hooksLine = findYamlKeyLine(content, "hooks");
       for (const rawEntry of data.hooks) {
         const parsed = lenientHookDeclarationSchema.safeParse(rawEntry);

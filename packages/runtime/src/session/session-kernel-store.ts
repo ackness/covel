@@ -82,7 +82,7 @@ export interface KernelStore {
     }[],
   ): Promise<void>;
   /**
-   * Working Memory upsert (S3-T3). Optional so the kernel stays compatible
+   * Working Memory upsert. Optional so the kernel stays compatible
    * with thin mock stores in existing tests that don't need WM.
    */
   upsertWorkingMemory?(record: {
@@ -95,7 +95,18 @@ export interface KernelStore {
     updatedAt: string;
   }): Promise<void>;
   /**
-   * Session lorebook upsert (S3-T2). Optional for the same reason as
+   * Working Memory listing — used by the `working_memory.set` commit handler to
+   * enforce the per-session entry quota. Optional for the same reason as
+   * `upsertWorkingMemory`; when absent the quota check is skipped.
+   */
+  listWorkingMemory?(sessionId: string): Promise<
+    readonly {
+      key: string;
+      scope: "player" | "story" | "shared";
+    }[]
+  >;
+  /**
+   * Session lorebook upsert. Optional for the same reason as
    * upsertWorkingMemory — thin mock stores may not implement it.
    */
   upsertLorebookEntries?(

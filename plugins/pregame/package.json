@@ -1,6 +1,6 @@
 {
   "name": "@covel/plugin-pregame",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,6 +11,6 @@
     "@covel/plugin-handlers-utils": "workspace:*"
   },
   "devDependencies": {
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   }
 }

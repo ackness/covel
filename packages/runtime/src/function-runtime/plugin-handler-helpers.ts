@@ -13,13 +13,113 @@ import type {
   PluginLogger,
   FunctionStoreView,
 } from "@covel/plugin-loader";
-import type { RpcHandlerStore } from "@covel/shared";
+import {
+  reservedPluginDataNamespaceError,
+  type RpcHandlerStore,
+} from "@covel/shared";
 
 export interface HandlerHelperContext {
   readonly sessionId: string;
   readonly turnId: string;
   readonly pluginId: string;
   readonly runtimeId: string;
+}
+
+/**
+ * Wrap a capability object so every method call first checks a revocation
+ * flag. A function-runtime handler that loses the deadline race keeps running detached — without revocation its
+ * store/media/gateway/pluginData capabilities remained live and could write
+ * AFTER the session lock released, the snapshot completed, and the next turn
+ * began. One shallow Proxy layer suffices: every framework capability handle
+ * is a flat method object.
+ */
+export function makeRevocableCapability<T extends object>(
+  target: T,
+  isRevoked: () => boolean,
+  label: string,
+): T {
+  return new Proxy(target, {
+    get(t, prop, receiver) {
+      const value = Reflect.get(t, prop, receiver);
+      if (typeof value !== "function") return value;
+      return (...args: unknown[]) => {
+        if (isRevoked()) {
+          throw new Error(
+            `[function-runtime] capability "${label}.${String(prop)}" is revoked — ` +
+              "the handler's deadline elapsed or its turn already completed",
+          );
+        }
+        return (value as (...a: unknown[]) => unknown).apply(t, args);
+      };
+    },
+  });
+}
+
+/** Function-shaped variant of {@link makeRevocableCapability}. */
+export function makeRevocableFn<A extends readonly unknown[], R>(
+  fn: (...args: A) => R,
+  isRevoked: () => boolean,
+  label: string,
+): (...args: A) => R {
+  return (...args: A): R => {
+    if (isRevoked()) {
+      throw new Error(
+        `[function-runtime] capability "${label}" is revoked — ` +
+          "the handler's deadline elapsed or its turn already completed",
+      );
+    }
+    return fn(...args);
+  };
+}
+
+/**
+ * Framework-owned (`_`-prefixed) namespaces are off-limits to plugin code —
+ * these handles are the plugin-facing store surface, so they enforce the same
+ * guard as the REST API and the commit boundary. Framework writers keep using
+ * the raw store.
+ */
+function assertWritableNamespace(namespace: string): void {
+  const reserved = reservedPluginDataNamespaceError(namespace);
+  if (reserved) throw new Error(reserved);
+}
+
+/**
+ * Wrap a full DataStore so plugin-data writes into framework-reserved
+ * (`_`-prefixed) namespaces throw. Trusted (builtin/official) handlers keep
+ * the full store surface because their logic implements framework primitives,
+ * but they are still plugin code — a stray write into `_jobs`/`_logs` would
+ * corrupt background-job or log-ring bookkeeping. Reads (including of
+ * reserved namespaces) and every other store method pass through unchanged.
+ * Framework writers (the job runner, the runtime logger, asset output) call
+ * the raw store directly and never receive this wrapper.
+ */
+export function createTrustedHandlerStore(store: DataStore): DataStore {
+  const guarded: Pick<
+    DataStore,
+    "setPluginData" | "setPluginDataBatch" | "deletePluginData"
+  > = {
+    setPluginData(record) {
+      assertWritableNamespace(record.namespace);
+      return store.setPluginData(record);
+    },
+    setPluginDataBatch(records) {
+      for (const record of records) assertWritableNamespace(record.namespace);
+      return store.setPluginDataBatch(records);
+    },
+    deletePluginData(sessionId, pluginId, namespace, key) {
+      assertWritableNamespace(namespace);
+      return store.deletePluginData(sessionId, pluginId, namespace, key);
+    },
+  };
+  return new Proxy(store, {
+    get(target, prop, receiver) {
+      if (prop in guarded) return guarded[prop as keyof typeof guarded];
+      const value = Reflect.get(target, prop, receiver);
+      // Bind pass-through methods to the raw store so implementations that
+      // rely on `this` never see the proxy as their receiver.
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
 }
 
 /**
@@ -35,6 +135,7 @@ export function createPluginDataWriter(
   const { sessionId, pluginId } = ctx;
   return {
     async set(namespace: string, key: string, value: unknown) {
+      assertWritableNamespace(namespace);
       if (value === null) {
         await store.deletePluginData(sessionId, pluginId, namespace, key);
         return;
@@ -65,6 +166,7 @@ export function createPluginDataWriter(
       return rows.map((r) => ({ key: r.key, value: r.value }));
     },
     async delete(namespace: string, key: string) {
+      assertWritableNamespace(namespace);
       await store.deletePluginData(sessionId, pluginId, namespace, key);
     },
   };
@@ -159,16 +261,16 @@ export function createPluginLogger(
 
 /**
  * Build a narrow `FunctionStoreView` for community function-runtime
- * handlers (audit P0-3). Only the four documented read methods are
+ * handlers. Only the four documented read methods are
  * exposed — handlers that try to call `setPluginData`, `upsertCharacter`,
  * etc. will get `undefined` and a runtime TypeError, surfacing the
  * misuse loudly instead of letting third-party code silently bypass
  * proposal/tool governance.
  *
  * Builtin / official plugins keep the full DataStore because their guard /
- * handler logic implements framework primitives
- * (e.g. `world-init`'s historical-session reuse, `char-creator`'s
- * deterministic player upsert). The runtime decides which to inject.
+ * handler logic implements framework primitives — e.g. importing a world
+ * package's declared character schema into the session, or a deterministic
+ * player-character upsert. The runtime decides which to inject.
  */
 export function createFunctionStoreView(
   store: DataStore,
@@ -220,6 +322,7 @@ export function createRpcHandlerStoreView(
       });
     },
     async setPluginData(record) {
+      assertWritableNamespace(record.namespace);
       const now = new Date().toISOString();
       await store.setPluginData({
         id: `${ctx.sessionId}:${ctx.pluginId}:${record.namespace}:${record.key}`,

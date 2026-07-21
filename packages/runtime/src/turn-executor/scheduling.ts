@@ -125,7 +125,7 @@ export function scheduleMainLoopFollowups(args: {
  * old enough to be compacted is at least a protect-window's worth of player
  * turns in the past.
  */
-function countPlayerMessagesSinceRuntime(
+export function countPlayerMessagesSinceRuntime(
   messageHistory: readonly TurnMessageRecord[],
   runtimeId: string,
 ): number {

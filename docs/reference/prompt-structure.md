@@ -40,10 +40,12 @@ messages
 | 6   | WorldInfo after-plugin       | session context contributions                                                                                                                                                       | `systemPrompt`  |
 | 7   | Message history              | store 中的 turn messages + compactor summaries                                                                                                                                      | `messages`      |
 | 8   | At-depth contributions       | session context contributions                                                                                                                                                       | `messages`      |
-| 9   | Author's Note                | active manifests 的 `authorsNote`                                                                                                                                                   | `messages`      |
-| 10  | Post-History Instructions    | active manifests 的 `postHistory`                                                                                                                                                   | `messages` 末尾 |
+| 9   | Author's Note                | 当前执行 runtime 的 `authorsNote`                                                                                                                                                   | `messages`      |
+| 10  | Post-History Instructions    | 当前执行 runtime 的 `postHistory`                                                                                                                                                   | `messages` 末尾 |
 
 空段会被跳过，非空 system 段用 `\n\n` 拼接成 `AssembledContext.systemPrompt`。运行时仍消费一个 `systemPrompt: string` 与一个 `messages` 数组。
+
+段 7 里替换被压缩历史的 compactor summary 以 **`user` 角色的 `<compacted_history>` 数据信封**进入 `messages`，内容做 XML 转义。summary 是模型自己写的、会持久化、之后每回合都重新注入的文本；用 `system` 身份注入等于给一次提示注入开了一条跨回合、自我放大的通道。信封化后它只是"早先回合的故事记录"，与 core memory 的处理方式一致。
 
 ## 3. 插件扩展点
 
@@ -73,14 +75,15 @@ summaryFocus:
 
 合并规则：
 
-- 多个 active manifests 按 `RuntimeManifest.priority` 升序合并。
+- **作用域是「当前执行的 runtime 自己」**，不聚合 session 内其他插件。`postHistory` 是 runtime 的私有工作指令（它的工具流程、终止契约），跨插件聚合会把一个插件的内部指令塞进另一个插件的 system prompt——既是插件隔离泄露，也让无关插件能操纵一个作者从未选择接受它的 runtime。`ContextBuildParams.activeManifests` 参数保留复数形态是因为 builder 本身通用，调用方若确实需要可以自行传入一组；框架的回合路径只传当前 runtime 的（locale 解析后的）manifest。
+- 传入多个 manifest 时按 `RuntimeManifest.priority` 升序合并。
 - 相同 `(role, depth)` 的 `authorsNote` 用空行合并成一条消息。
 - 不同 depth 的 `authorsNote` 分别插入到对应历史位置。
 - `postHistory` 按 role 分组，相同 role 合并后追加到消息末尾。
 
 ## 4. Template 变量
 
-`PLUGIN.md` 正文、`authorsNote.content`、`postHistory.content`、runtime inject 内容都支持 `{{ variable }}` 插值。变量来自 `assemblePromptVariables()`：
+`PLUGIN.md` 正文、`authorsNote.content`、`postHistory.content` 支持 `{{ variable }}` 插值。变量来自 `assemblePromptVariables()`：
 
 - `{{ player.message }}`：当前玩家输入。
 - `{{ player.lastFormValues }}`：最近一次 player 表单提交，JSON 字符串。
@@ -90,6 +93,8 @@ summaryFocus:
 - `{{ userSettings.* }}`：玩家配置的插件设置。
 
 Working Memory 与 Core Memory 通过 session context snapshot 进入段 2；插件模板也可以通过已有变量读取需要暴露的字段。
+
+**段 5 的 inject 内容不参与插值**。inject 块承载的是上游 runtime 输出或 plugin-data——也就是模型写的、玩家写的**数据**。这些数据在生成 inject 块时已经做过 XML 转义，但转义不处理 `{}`；如果再跑一遍插值，数据里出现的 `{{ ... }}` 会被展开，且展开结果原样插入、绕过转义，等于把玩家输入重新带回 system prompt。模板只在插件自己的 PLUGIN.md 正文上解释一次，inject 一律当数据处理。插件作者需要在 inject 里做条件逻辑时，应该在上游 runtime 输出成品文本，而不是输出模板。
 
 ## 5. Prompt Cache 标记
 

@@ -1,9 +1,5 @@
 export type WorldDataSourceKind =
-  | "yaml"
-  | "json"
-  | "markdown"
-  | "text"
-  | "media";
+  "yaml" | "json" | "markdown" | "text" | "media";
 
 export type WorldDataMergeMode = "replace" | "skipExisting";
 

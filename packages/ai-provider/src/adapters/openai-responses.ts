@@ -295,11 +295,9 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
 
         if (payload.type === "response.completed") {
           const responseObj = payload.response as
-            | Record<string, unknown>
-            | undefined;
+            Record<string, unknown> | undefined;
           const responseUsage = responseObj?.usage as
-            | Record<string, unknown>
-            | undefined;
+            Record<string, unknown> | undefined;
           usage = {
             inputTokens: Number(responseUsage?.input_tokens ?? 0),
             outputTokens: Number(responseUsage?.output_tokens ?? 0),

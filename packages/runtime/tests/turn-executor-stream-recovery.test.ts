@@ -1,5 +1,5 @@
 /**
- * S1-T3: Stream fallback in TurnExecutor.
+ * Stream fallback in TurnExecutor.
  *
  * When the streaming LLM call throws mid-stream, the runtime either:
  *  - salvages accumulated content (and marks finishReason='error'), or
@@ -57,14 +57,12 @@ function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
  * `generate` is a spy so tests can assert it was (or was not) invoked as fallback.
  */
 class PartialStreamThenThrowLLM implements LLMAdapter {
-  generate = vi.fn<LLMAdapter["generate"]>(
-    async (): Promise<LLMResponse> => ({
-      content: "FALLBACK_OUTPUT",
-      toolCalls: [],
-      finishReason: "stop",
-      usage: { inputTokens: 1, outputTokens: 1 },
-    }),
-  );
+  generate = vi.fn<LLMAdapter["generate"]>(async (): Promise<LLMResponse> => ({
+    content: "FALLBACK_OUTPUT",
+    toolCalls: [],
+    finishReason: "stop",
+    usage: { inputTokens: 1, outputTokens: 1 },
+  }));
 
   // eslint-disable-next-line @typescript-eslint/require-await
   async *stream(): AsyncGenerator<LLMStreamEvent> {
@@ -79,14 +77,12 @@ class PartialStreamThenThrowLLM implements LLMAdapter {
  * `generate` is a spy so tests can assert fallback invocation count.
  */
 class EmptyStreamThrowLLM implements LLMAdapter {
-  generate = vi.fn<LLMAdapter["generate"]>(
-    async (): Promise<LLMResponse> => ({
-      content: "NON_STREAM_RESCUE",
-      toolCalls: [],
-      finishReason: "stop",
-      usage: { inputTokens: 2, outputTokens: 2 },
-    }),
-  );
+  generate = vi.fn<LLMAdapter["generate"]>(async (): Promise<LLMResponse> => ({
+    content: "NON_STREAM_RESCUE",
+    toolCalls: [],
+    finishReason: "stop",
+    usage: { inputTokens: 2, outputTokens: 2 },
+  }));
 
   // eslint-disable-next-line @typescript-eslint/require-await, require-yield
   async *stream(): AsyncGenerator<LLMStreamEvent> {
@@ -111,7 +107,7 @@ class BothFailLLM implements LLMAdapter {
 
 // ── Tests ─────────────────────────────────────────────────────────
 
-describe("TurnExecutor stream recovery (S1-T3)", () => {
+describe("TurnExecutor stream recovery", () => {
   let narratorManifest: RuntimeManifest;
   let narratorLoaded: LoadedRuntime;
   // Use a tool-free manifest to force the streaming path in turn-executor.

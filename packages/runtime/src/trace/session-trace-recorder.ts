@@ -38,7 +38,8 @@ export function createTraceRecorder(
   /**
    * Correlation id for persisted rows. Pass the action stream's SSE traceId
    * so recorder rows share one traceId with emitter + commit-pipeline rows
-   * (audit R-14). Falls back to turnId for callers without an SSE stream.
+   * so the whole turn reads as one timeline. Falls back to turnId for
+   * callers without an SSE stream.
    */
   traceId?: string,
 ): TraceRecorder {

@@ -29,7 +29,7 @@ export function createBootstrapHookPipeline({
   for (const [pluginId, manifests] of manifestCache) {
     const discovery = discoveryMap.get(pluginId);
     if (!discovery) continue;
-    // Trust gate (H-03): community (non-autoLoad) plugins register their hook
+    // Trust gate: community (non-autoLoad) plugins register their hook
     // DECLARATIONS at boot, but the handlers stay dormant — never import()'d
     // nor executed — until `ensurePluginEntry` activates the plugin at
     // approval, mirroring the deferred entry / local-tool / wire boot paths.

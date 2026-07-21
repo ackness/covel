@@ -437,7 +437,21 @@ export function buildCurrentTurnUserMessage(
  * frame, then appends the `[LANGUAGE]` constraint. When no locale is
  * supplied this returns an empty string so segment 1 is skipped.
  */
-export function buildFrameworkPreamble(locale?: string): string {
+export function buildFrameworkPreamble(
+  locale?: string,
+  options?: {
+    /**
+     * Whether this runtime terminates by calling `runtime-done`.
+     *
+     * Schema-declared runtimes do NOT get that tool — `buildToolDefinitions`
+     * withholds it so the early-exit branch cannot fire before the JSON
+     * envelope downstream consumers read. Instructing them to call it anyway
+     * asks for a tool that was never advertised: the model either hallucinates
+     * the call (rejected, wasting a round-trip) or stalls looking for it.
+     */
+    readonly terminatesWithRuntimeDone?: boolean;
+  },
+): string {
   if (!locale) {
     return "";
   }
@@ -449,26 +463,40 @@ export function buildFrameworkPreamble(locale?: string): string {
   // every successful tool call. Emitted in the session locale (matching the
   // [LANGUAGE] constraint above) rather than every locale at once.
   const isZh = locale.toLowerCase().startsWith("zh");
-  const completion = isZh
-    ? [
-        "[COMPLETION] 本 runtime 完成所有业务工具调用后，必须立即调用 `runtime-done` 工具结束。不要输出额外终止文本——调用 `runtime-done` 就是结束信号。",
-        "[COMPLETION] 如果判断本回合无需任何工具调用，直接调用 `runtime-done` 结束（优先）或返回空字符串。不要反复调用同一个业务工具。",
-      ]
-    : [
-        "[COMPLETION] When you have finished all tool work for this runtime, call the `runtime-done` tool IMMEDIATELY. Do not emit terminator text — calling `runtime-done` is the end signal.",
-        "[COMPLETION] If no tool call is needed this turn, just call `runtime-done` to finish (preferred), or return an empty string. Do not repeatedly call the same business tool.",
-      ];
+  const usesRuntimeDone = options?.terminatesWithRuntimeDone ?? true;
+  const completion = usesRuntimeDone
+    ? isZh
+      ? [
+          "[COMPLETION] 本 runtime 完成所有业务工具调用后，必须立即调用 `runtime-done` 工具结束。不要输出额外终止文本——调用 `runtime-done` 就是结束信号。",
+          "[COMPLETION] 如果判断本回合无需任何工具调用，直接调用 `runtime-done` 结束（优先）或返回空字符串。不要反复调用同一个业务工具。",
+        ]
+      : [
+          "[COMPLETION] When you have finished all tool work for this runtime, call the `runtime-done` tool IMMEDIATELY. Do not emit terminator text — calling `runtime-done` is the end signal.",
+          "[COMPLETION] If no tool call is needed this turn, just call `runtime-done` to finish (preferred), or return an empty string. Do not repeatedly call the same business tool.",
+        ]
+    : isZh
+      ? [
+          "[COMPLETION] 本 runtime 以**结构化 JSON 输出**结束：完成所有业务工具调用后，直接返回符合 schema 的 JSON。不要调用 `runtime-done`——本 runtime 没有该工具。",
+        ]
+      : [
+          "[COMPLETION] This runtime finishes by emitting its **structured JSON output**: once all tool work is done, return the JSON matching the declared schema. Do NOT call `runtime-done` — this runtime does not have that tool.",
+        ];
   return [
     "[RUNTIME] You are executing an in-game runtime for an interactive narrative engine.",
     "[RUNTIME] Follow the runtime instructions and world data below as the complete task context.",
     "[RUNTIME] Produce only in-world narrative, structured runtime output, and required tool calls.",
-    `[LANGUAGE] You MUST respond in ${languageName}. All narrative output, tool parameters, and descriptions must be in ${languageName}.`,
+    // Scope the language rule to natural-language content only. The old
+    // wording covered "tool parameters" wholesale, which invited the model to
+    // translate enum members, plugin/runtime ids, event topics and schema
+    // keys — every one of which then fails Zod validation or dispatch.
+    `[LANGUAGE] You MUST write all natural-language content in ${languageName}: narrative, descriptions, summaries, and any free-text tool argument.`,
+    "[LANGUAGE] Do NOT translate machine values. Enum members, ids, keys, event topics, schema field names, and tool names must be copied EXACTLY as the schema spells them, in their original language.",
     ...completion,
   ].join("\n");
 }
 
 /**
- * Render Working Memory entries as a prompt segment (S3-T3).
+ * Render Working Memory entries as a prompt segment.
  *
  * Sorting is deterministic: scope order `player` → `story` → `shared`,
  * then alphabetical key within scope. If no entries exist, returns an
@@ -477,6 +505,16 @@ export function buildFrameworkPreamble(locale?: string): string {
  * Returns an empty string when no entries exist so callers can skip the
  * segment.
  */
+/**
+ * Working memory is unbounded storage rendered into every system prompt, so
+ * without a cap a long session pays for it on every turn of every runtime and
+ * can eventually crowd out the narrative itself. These caps bound the prompt
+ * cost; the truncation notice keeps the omission visible to the model rather
+ * than silently dropping state it was told to rely on.
+ */
+const WORKING_MEMORY_MAX_ENTRIES = 60;
+const WORKING_MEMORY_MAX_VALUE_CHARS = 600;
+
 export function renderWorkingMemory(
   entries:
     | readonly {
@@ -497,13 +535,25 @@ export function renderWorkingMemory(
     return a.key.localeCompare(b.key);
   });
 
-  const lines = sorted.map((entry) => {
-    const valueStr =
-      typeof entry.value === "string"
-        ? JSON.stringify(entry.value)
-        : JSON.stringify(entry.value);
-    return `${entry.scope}.${entry.key}: ${valueStr}`;
+  // Deterministic cap: keep the highest-priority scopes (player → story →
+  // shared) so what survives is the state most likely to matter this turn.
+  const kept = sorted.slice(0, WORKING_MEMORY_MAX_ENTRIES);
+  const droppedCount = sorted.length - kept.length;
+
+  const lines = kept.map((entry) => {
+    const serialized = JSON.stringify(entry.value) ?? "null";
+    const value =
+      serialized.length > WORKING_MEMORY_MAX_VALUE_CHARS
+        ? `${serialized.slice(0, WORKING_MEMORY_MAX_VALUE_CHARS)}… [truncated ${serialized.length - WORKING_MEMORY_MAX_VALUE_CHARS} chars]`
+        : serialized;
+    return `${entry.scope}.${entry.key}: ${value}`;
   });
+
+  if (droppedCount > 0) {
+    lines.push(
+      `[... ${droppedCount} more working-memory entries omitted to stay within the prompt budget ...]`,
+    );
+  }
 
   return `[Working Memory]\n${lines.join("\n")}`;
 }
@@ -536,7 +586,18 @@ export function renderCoreMemory(
   const header = locale?.startsWith("en") ? "[Core Memory]" : "[核心记忆]";
   const sections = nonEmpty.map((b) => {
     const label = resolveI18nText(b.displayName, locale) ?? b.label;
-    return `<${b.label}>\n# ${label}\n${b.content}\n</${b.label}>`;
+    // a core-memory block is DATA that the model itself wrote in
+    // an earlier turn (the memory updater persists model output). Both halves
+    // were previously interpolated raw:
+    //   - `b.label` became an XML tag name — a crafted label could inject
+    //     arbitrary markup into the system prompt;
+    //   - `b.content` could contain `</story_state>` and close the block
+    //     early, letting persisted text escape its envelope and read as
+    //     framework instructions.
+    // Unsafe labels fall back to a generic tag rather than throwing: a bad
+    // label must not take down the whole prompt build.
+    const tag = /^[a-zA-Z0-9_-]+$/.test(b.label) ? b.label : "memory-block";
+    return `<${tag}>\n# ${escapeXmlContent(label)}\n${escapeXmlContent(b.content)}\n</${tag}>`;
   });
 
   return `${header}\n${sections.join("\n\n")}`;

@@ -13,14 +13,7 @@ import {
 } from "lucide-react";
 
 export type EventCategory =
-  | "flow"
-  | "runtime"
-  | "llm"
-  | "tool"
-  | "message"
-  | "block"
-  | "state"
-  | "hook";
+  "flow" | "runtime" | "llm" | "tool" | "message" | "block" | "state" | "hook";
 
 export function categorize(type: string): EventCategory {
   if (type.startsWith("flow.")) return "flow";
@@ -272,8 +265,7 @@ export function extractDetail(event: api.TraceEvent): string {
         ? (data.toolCalls as unknown[]).length
         : 0;
       const usage = data?.usage as
-        | { inputTokens?: number; outputTokens?: number }
-        | undefined;
+        { inputTokens?: number; outputTokens?: number } | undefined;
       const usageStr = usage
         ? ` [${usage.inputTokens ?? 0}->${usage.outputTokens ?? 0} tok]`
         : "";

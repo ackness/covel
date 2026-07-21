@@ -1,5 +1,5 @@
 /**
- * PR-3: Plugin RPC channel types.
+ * Plugin RPC channel types.
  *
  * Two RPC modes flow through the same channel:
  *
@@ -16,13 +16,13 @@
  * Trust levels mirror the plugin source taxonomy:
  *   - `builtin`: shipped with the framework, auto-allowed
  *   - `official`: in the maintained whitelist, auto-allowed
- *   - `community`: third-party, requires explicit per-action approval (PR-7)
+ *   - `community`: third-party, requires explicit per-action approval
  */
 
 export type RpcTrustLevel = "builtin" | "official" | "community";
 
 /**
- * Narrow structural store interface exposed to RPC handlers (LOW-2 fix).
+ * Narrow structural store interface exposed to RPC handlers.
  *
  * Plugin authors compile against this surface — not the full `DataStore` —
  * so they get autocomplete and type checking inside their handlers without

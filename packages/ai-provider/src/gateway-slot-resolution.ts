@@ -54,7 +54,7 @@ export interface GatewayOptions {
    */
   apiKeys?: Record<string, string>;
   /**
-   * Server-env / platform API keys (S-01). Unlike `apiKeys`, these only
+   * Server-env / platform API keys. Unlike `apiKeys`, these only
    * attach when the resolved target's baseUrl origin matches trusted
    * config (llm.toml / registered provider defaults) — a request-scoped
    * custom preset redirecting a provider to another origin never receives
@@ -138,7 +138,7 @@ export function createGatewaySlotResolution(
     // llm.toml slot (e.g. "story").
     //
     // A preset id declared in the request's own customPresets is then
-    // mapped to its request-scoped overlay registration (H-04) — the
+    // mapped to its request-scoped overlay registration — the
     // request only ever resolves the config it declared itself, never a
     // same-named registration from a concurrent request.
     const clientOverride = resolveSlotOverride(

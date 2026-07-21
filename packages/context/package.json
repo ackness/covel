@@ -1,6 +1,6 @@
 {
   "name": "@covel/context",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "private": true,
   "type": "module",
   "exports": {
@@ -18,7 +18,7 @@
   },
   "devDependencies": {
     "@covel/store": "workspace:*",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   }
 }

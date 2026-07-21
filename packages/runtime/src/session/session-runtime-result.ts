@@ -57,6 +57,14 @@ export async function processRuntimeResult(
     readonly eventBus?: EventBus;
     readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
     readonly capabilities?: readonly string[];
+    /**
+     * Commit barrier for callers running this inside their own store
+     * transaction (passing a tx-bound view as `store`): externally-visible
+     * fan-out (emitter events + PostStateCommit hooks) is handed to this
+     * callback instead of firing inline, so the caller can flush it after its
+     * transaction commits — or drop it on rollback.
+     */
+    readonly deferPostCommit?: (fn: () => Promise<void>) => void;
   },
 ): Promise<ProcessRuntimeResultOutput> {
   const empty: ProcessRuntimeResultOutput = { events: [], failedProposals: [] };
@@ -75,7 +83,22 @@ export async function processRuntimeResult(
     outputKind,
     result.toolCalls,
   );
-  proposals.push(...getPendingProposals(result.output));
+  // Tool-carried proposals are authored by tool code and could claim
+  // any sessionId/turnId/source. The framework is the only identity
+  // authority — rebind the envelope to the executing runtime before commit
+  // so a tool cannot write into another session or impersonate another
+  // plugin's namespace / builtin source.
+  proposals.push(
+    ...getPendingProposals(result.output).map(
+      (p) =>
+        ({
+          ...p,
+          sessionId,
+          turnId: result.turnId,
+          source,
+        }) as Proposal,
+    ),
+  );
 
   const imageGenerationFailures: Array<{ proposal: Proposal; error: string }> =
     [];
@@ -117,7 +140,10 @@ export async function processRuntimeResult(
     opts?.eventBus,
     opts?.emitter,
   );
-  const commitResults = await pipeline.commitAll(proposals);
+  const commitResults = await pipeline.commitAll(
+    proposals,
+    opts?.deferPostCommit,
+  );
 
   const events: SessionEvent[] = [];
   const failedProposals: Array<{ proposal: Proposal; error: string }> = [];

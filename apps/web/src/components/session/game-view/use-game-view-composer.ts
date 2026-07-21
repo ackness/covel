@@ -38,7 +38,7 @@ export function useGameViewComposer({
     [messages, submittedBlockIds],
   );
   const composerBlocked = pendingDrafts.length > 0 || hasActiveInteractionBlock;
-  // W4: while a turn is executing the composer stays usable — submitting
+  // While a turn is executing the composer stays usable — submitting
   // steers the in-flight turn instead of starting a new one.
   const composerDisabled = composerBlocked;
 

@@ -1,5 +1,5 @@
 /**
- * In-flight turn control registry (roadmap W4) — one entry per session with
+ * In-flight turn control registry — one entry per session with
  * an active player-initiated turn. The actions route registers on turn
  * start and releases on stream end; the steer/abort routes look entries up
  * to inject player interjections or fire the abort signal.

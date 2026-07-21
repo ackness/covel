@@ -177,6 +177,12 @@ export const toolsConfigSchema = z
     local: z.array(z.string()).optional(),
     /** Names of entry-registered plugin tools this runtime exposes to its LLM. */
     plugin: z.array(z.string()).optional(),
+    /**
+     * Deferred tool loading (tool-search). `true` defers the runtime's entire
+     * whitelist; a string array defers just those names. Mirrors
+     * `ToolsConfig.defer` in types/plugin.ts.
+     */
+    defer: z.union([z.literal(true), z.array(z.string())]).optional(),
   })
   .strict();
 
@@ -194,7 +200,7 @@ export const hookDeclarationSchema = z
   })
   .strict();
 
-// ── Author's note / Post-history declarations (S3-T4) ──────────
+// ── Author's note / Post-history declarations ──────────
 
 /**
  * Segment 9 — Author's note. Inserted near the end of the message history,
@@ -220,14 +226,14 @@ export const postHistoryDeclSchema = z
   })
   .strict();
 
-// ── PR-3 Plugin RPC declarations ───────────────────────────────
+// ── Plugin RPC declarations ───────────────────────────────
 
 /**
  * RPC action declaration for `RuntimeManifest.rpc[actionName]`. Validates
  * the per-action shape declared in PLUGIN.md frontmatter.
  *
  * `handler` and `input` are constrained to plugin-relative paths to block
- * path-traversal at the schema level (HIGH-1 fix from the code review):
+ * path-traversal at the schema level:
  *
  *   - Must NOT start with `/` (absolute paths reset `path.resolve` base).
  *   - Must NOT contain `..` segments (would escape the plugin root).

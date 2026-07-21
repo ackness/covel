@@ -16,6 +16,7 @@ import type {
   FunctionHandler,
 } from "./types.js";
 import { parsePluginMd } from "./parse-plugin-md.js";
+import { reconcileLocalizedManifest } from "./localized-manifest.js";
 
 /**
  * Resolve a locale-aware PLUGIN.md path.
@@ -49,6 +50,41 @@ async function resolveLocalizedPluginMd(
   }
 
   return base;
+}
+
+/**
+ * Read + parse a plugin's PLUGIN.md for a locale.
+ *
+ * The prompt body comes from the locale variant (that is the point of having
+ * one); the manifest is reconciled against the canonical PLUGIN.md so a
+ * translation cannot change the runtime's execution contract — see
+ * {@link reconcileLocalizedManifest}.
+ */
+async function parsePluginMdForLocale(
+  dir: string,
+  locale?: string,
+): Promise<ParsedPluginMd> {
+  const localizedPath = await resolveLocalizedPluginMd(dir, locale);
+  const parsed = parsePluginMd(
+    await fs.readFile(localizedPath, "utf-8"),
+    localizedPath,
+  );
+
+  const basePath = path.join(dir, "PLUGIN.md");
+  if (localizedPath === basePath) return parsed;
+
+  const canonical = parsePluginMd(
+    await fs.readFile(basePath, "utf-8"),
+    basePath,
+  );
+  return {
+    ...parsed,
+    manifest: reconcileLocalizedManifest(
+      canonical.manifest,
+      parsed.manifest,
+      localizedPath,
+    ),
+  };
 }
 
 /**
@@ -159,10 +195,7 @@ export async function loadPluginManifest(
 
   for (const mdPath of discovery.pluginMdPaths) {
     // Resolve localized version if available
-    const dir = path.dirname(mdPath);
-    const localizedPath = await resolveLocalizedPluginMd(dir, locale);
-    const content = await fs.readFile(localizedPath, "utf-8");
-    const parsed = parsePluginMd(content, localizedPath);
+    const parsed = await parsePluginMdForLocale(path.dirname(mdPath), locale);
     results.push(parsed);
   }
 
@@ -244,7 +277,7 @@ async function loadUiSpecs(
  * Level 1.5: Load only a runtime's manifest + UI specs — no handler / guard
  * imports. UI specs are data (JSON files, or a recorded component path), so
  * this path never executes plugin JS and is safe for untrusted (community)
- * plugins whose code must not run before approval (S-04).
+ * plugins whose code must not run before approval.
  */
 export async function loadRuntimeUi(
   discovery: PluginDiscoveryResult,
@@ -252,9 +285,7 @@ export async function loadRuntimeUi(
   locale?: string,
 ): Promise<Pick<LoadedRuntime, "manifest" | "uiSpecs">> {
   const runtimeDir = resolveRuntimeDir(discovery, runtimeName);
-  const pluginMdPath = await resolveLocalizedPluginMd(runtimeDir, locale);
-  const content = await fs.readFile(pluginMdPath, "utf-8");
-  const parsed = parsePluginMd(content, pluginMdPath);
+  const parsed = await parsePluginMdForLocale(runtimeDir, locale);
   const uiSpecs = await loadUiSpecs(
     runtimeDir,
     discovery.rootPath,
@@ -275,10 +306,7 @@ export async function loadRuntime(
   locale?: string,
 ): Promise<LoadedRuntime> {
   const runtimeDir = resolveRuntimeDir(discovery, runtimeName);
-  const pluginMdPath = await resolveLocalizedPluginMd(runtimeDir, locale);
-
-  const content = await fs.readFile(pluginMdPath, "utf-8");
-  const parsed = parsePluginMd(content, pluginMdPath);
+  const parsed = await parsePluginMdForLocale(runtimeDir, locale);
 
   const schemaPath = path.join(runtimeDir, "output.schema.json");
   let outputSchema: Readonly<Record<string, unknown>> | undefined;

@@ -3,13 +3,14 @@ import { pickLocaleText as pick } from "@covel/plugin-handlers-utils";
 /**
  * guard.js — Pre-execution gate for schema-gen runtime.
  *
- * Runs before LLM is called. Checks whether world schema/entries already exist.
- * If found (from current session, a previous session of the same world, or
- * imported from world.yaml), returns { skip: true } to bypass the LLM call.
+ * Runs before LLM is called. Checks whether world schema/entries can be
+ * obtained without generation — from this session's own plugin-data, from
+ * `world.yaml` declared character attributes, or derived from world
+ * dimensions. When any of those hold it returns { skip: true } and the LLM
+ * call is bypassed. Only sessions of a world that supplies none of them pay
+ * for a schema-gen call.
  *
- * Cross-session reuse: when a new session is created for the same world,
- * the guard copies schema + entries from a previous session instead of
- * regenerating via LLM (~30s saved).
+ * Data from OTHER sessions is never read — see the note at step 2b below.
  *
  * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
  * @returns {Promise<Record<string, unknown>>}
@@ -253,90 +254,20 @@ export default async function guard(ctx) {
       };
     }
 
-    // 2b. Check previous sessions of the same world for reusable data
-    if (worldId) {
-      const allSessions = await s.listSessions();
-      const previousSessions = allSessions.filter(
-        (/** @type {any} */ ss) =>
-          ss.worldId === worldId && ss.id !== sessionId,
-      );
-
-      /** @type {Array<{ prev: any; prevSchema: any[]; prevEntries: any[]; totalCount: number; updatedAt: string }>} */
-      const reusableSessions = [];
-
-      for (const prev of previousSessions) {
-        const prevSchema = await s.listPluginData(prev.id, pluginId, "schema");
-        if (!prevSchema || prevSchema.length === 0) {
-          continue;
-        }
-
-        const prevEntries = await s.listPluginData(
-          prev.id,
-          pluginId,
-          "entries",
-        );
-        const entryCount = prevEntries?.length ?? 0;
-        if (entryCount === 0) {
-          continue;
-        }
-
-        reusableSessions.push({
-          prev,
-          prevSchema,
-          prevEntries: prevEntries ?? [],
-          totalCount: prevSchema.length + entryCount,
-          updatedAt: prev.updatedAt ?? prev.createdAt ?? "",
-        });
-      }
-
-      reusableSessions.sort((a, b) => {
-        if (b.totalCount !== a.totalCount) return b.totalCount - a.totalCount;
-        return b.updatedAt.localeCompare(a.updatedAt);
-      });
-
-      const bestReuse = reusableSessions[0];
-      if (bestReuse) {
-        const now = new Date().toISOString();
-        const records = [
-          ...bestReuse.prevSchema.map((/** @type {any} */ r) => ({
-            id: crypto.randomUUID(),
-            sessionId,
-            pluginId,
-            namespace: r.namespace,
-            key: r.key,
-            value: r.value,
-            createdAt: now,
-            updatedAt: now,
-          })),
-          ...bestReuse.prevEntries.map((/** @type {any} */ r) => ({
-            id: crypto.randomUUID(),
-            sessionId,
-            pluginId,
-            namespace: r.namespace,
-            key: r.key,
-            value: r.value,
-            createdAt: now,
-            updatedAt: now,
-          })),
-        ];
-
-        await s.setPluginDataBatch(records);
-
-        return {
-          skip: true,
-          initialized: true,
-          reusedFrom: bestReuse.prev.id,
-          schemaCount: bestReuse.prevSchema.length,
-          entryCount: bestReuse.prevEntries.length,
-          narrativeOutput: pick(
-            locale,
-            `[系统] 从历史会话复用世界维度数据（${bestReuse.prevSchema.length} 个 schema, ${bestReuse.prevEntries.length} 个词条）`,
-            `[System] Reused world dimension data from a prior session (${bestReuse.prevSchema.length} schema, ${bestReuse.prevEntries.length} entries)`,
-          ),
-          preGameDone: true,
-        };
-      }
-    }
+    // NOTE: there used to be a step 2b here that scanned every OTHER session
+    // of the same world, picked whichever had the most plugin-data rows, and
+    // copied its whole `schema` + `entries` namespaces into this session. It
+    // was a cache for worlds that declare neither character attributes nor
+    // dimensions (step 3 / the LLM path below), saving one schema-gen call.
+    //
+    // It is gone because session plugin-data is not a trustworthy source: the
+    // generic `PUT /plugin-data` route lets a session owner write any active
+    // plugin's namespace, so the "best" source session could carry
+    // player-authored values — and on hosted tiers those sessions can belong
+    // to a different user entirely, making this a cross-user read. Copying it
+    // in would both leak and poison. Worlds that declare attributes (2a) or
+    // ship dimensions (3) never reached this branch anyway; the only cost is
+    // one schema-gen call per session on a world that supplies neither.
 
     // 3. World has pre-built dimensions but no declared attributes: import
     //    entries + derive a generic schema from world data, then skip the LLM.

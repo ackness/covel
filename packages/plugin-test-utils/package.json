@@ -1,6 +1,6 @@
 {
   "name": "@covel/plugin-test-utils",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "private": true,
   "type": "module",
   "exports": {
@@ -19,7 +19,7 @@
     "@covel/shared": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   }
 }

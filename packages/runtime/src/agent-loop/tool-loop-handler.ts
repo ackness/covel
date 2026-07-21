@@ -81,7 +81,7 @@ export async function requestLLMResponse(
     emitter: deps.emitter,
     runtimeId: manifest.name,
     pluginId: manifest.pluginId,
-    // W4: player abort cuts the in-flight call/stream and bypasses salvage.
+    // Player abort cuts the in-flight call/stream and bypasses salvage.
     abortSignal: deps.turnControl?.signal,
   } as const;
 

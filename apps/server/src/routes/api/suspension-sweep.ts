@@ -1,5 +1,5 @@
 /**
- * Stale-suspension TTL sweep (spec S4-T4.c).
+ * Stale-suspension TTL sweep.
  *
  * Covel has no general scheduler, so expiry runs opportunistically — the
  * cutoff + cadence live ONLY here so every caller stays consistent:

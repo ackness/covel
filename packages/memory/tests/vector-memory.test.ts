@@ -333,7 +333,7 @@ describe("graceful degradation", () => {
   });
 });
 
-describe("audit fixes (W3 vector recall)", () => {
+describe("vector recall", () => {
   let store: DataStore;
   const sessionId = "sess-vec-fixes";
 

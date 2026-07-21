@@ -170,6 +170,19 @@ export interface RuntimeRecordStore {
     sessionId: string,
     limit?: number,
   ): Promise<TurnResultRecord[]>;
+  /**
+   * Settle a persisted execution artifact's commit outcome.
+   *
+   * `saveTurnResult` writes the row BEFORE proposals commit, so it starts
+   * `pending`. The commit-owning caller marks it `committed` or `failed`;
+   * a row still `pending` afterwards is a crash signature, which is otherwise
+   * indistinguishable from a successful turn. No-op when the turn has no row.
+   */
+  setTurnResultCommitStatus(
+    sessionId: string,
+    turnId: string,
+    status: NonNullable<TurnResultRecord["commitStatus"]>,
+  ): Promise<void>;
 
   // ── Runtime Results ──
   saveRuntimeResult(record: RuntimeResultRecord): Promise<void>;
@@ -185,7 +198,7 @@ export interface RuntimeRecordStore {
     turnId?: string,
   ): Promise<ToolCallRecordRow[]>;
 
-  // ── Runtime Outputs (PR-1 translation layer) ──
+  // ── Runtime Outputs (translation layer) ──
   saveRuntimeOutput(record: RuntimeOutputRecord): Promise<void>;
   getRuntimeOutput(
     sessionId: string,
@@ -196,7 +209,7 @@ export interface RuntimeRecordStore {
     filters?: RuntimeOutputFilters,
   ): Promise<RuntimeOutputRecord[]>;
 
-  // ── Interaction Records (PR-1 translation layer) ──
+  // ── Interaction Records (translation layer) ──
   saveInteractionRecord(record: InteractionRecordRow): Promise<void>;
   listInteractionRecords(
     sessionId: string,
@@ -434,7 +447,7 @@ export interface PlayerInputStore {
   listPlayerInputs(sessionId: string): Promise<PlayerInputRecord[]>;
 }
 
-/** Working memory KV (S3-T3, `common/sql-data-crud.ts`). */
+/** Working memory KV (`common/sql-data-crud.ts`). */
 export interface WorkingMemoryStore {
   upsertWorkingMemory(record: WorkingMemoryRecord): Promise<void>;
   getWorkingMemory(
@@ -461,13 +474,13 @@ export interface WorldDataImportLedgerStore {
   deleteWorldDataImportLedger(sessionId: string, id: string): Promise<void>;
 }
 
-/** Session-scoped lorebook entries (S3-T2, `common/sql-data-crud.ts`). */
+/** Session-scoped lorebook entries (`common/sql-data-crud.ts`). */
 export interface LorebookStore {
   /**
    * Upsert a batch of session-scoped lorebook entries. Same `(sessionId, id)`
    * replaces the existing row. Used by the `lorebook.upsert` proposal commit
    * handler and by plugins that emit world data through the lorebook
-   * pipeline (S3-T2 §A3).
+   * pipeline.
    */
   upsertLorebookEntries(records: readonly LorebookEntryRecord[]): Promise<void>;
   /**
@@ -483,7 +496,7 @@ export interface LorebookStore {
   deleteLorebookEntry(sessionId: string, id: string): Promise<void>;
 }
 
-/** Compactor summaries (S2-T2). Part of `sql-session-journal-records`. */
+/** Compactor summaries. Part of `sql-session-journal-records`. */
 export interface SessionSummaryStore {
   saveSessionSummary(record: SessionSummaryRecord): Promise<void>;
   listSessionSummaries(
@@ -492,7 +505,7 @@ export interface SessionSummaryStore {
   deleteSessionSummaries(sessionId: string): Promise<void>;
 }
 
-/** Runtime suspension records (S4-T4). Part of `sql-snapshot-records`. */
+/** Runtime suspension records. Part of `sql-snapshot-records`. */
 export interface SuspensionStore {
   saveSuspension(record: SuspensionRecord): Promise<void>;
   getSuspension(id: string): Promise<SuspensionRecord | null>;
@@ -519,7 +532,7 @@ export interface SuspensionStore {
    */
   claimSuspension(id: string): Promise<boolean>;
   /**
-   * Global maintenance sweep of stale suspensions (spec S4-T4.c).
+   * Global maintenance sweep of stale suspensions.
    *
    * Deletes ONLY records that are still unresolved (`resolvedAt` unset) AND
    * whose `createdAt` is strictly older than `olderThanIso`. Claimed
@@ -536,7 +549,7 @@ export interface SuspensionStore {
   deleteExpiredSuspensions(olderThanIso: string): Promise<number>;
 }
 
-/** Materialized state snapshots (S4-T2). Part of `sql-snapshot-records`. */
+/** Materialized state snapshots. Part of `sql-snapshot-records`. */
 export interface SnapshotStore {
   /**
    * Persist a materialized state snapshot. Used by auto / manual / fork flows.
@@ -564,7 +577,7 @@ export interface SnapshotStore {
 }
 
 /**
- * Transaction control (S4-T1). Held separate from the data domains because
+ * Transaction control. Held separate from the data domains because
  * {@link StoreTransaction} omits `withTransaction` — a transaction body must
  * not open a nested transaction from inside the scope.
  */

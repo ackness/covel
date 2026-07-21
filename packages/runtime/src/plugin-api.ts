@@ -38,8 +38,8 @@ import type { HookHandler } from "./hooks/types.js";
 import type { RpcHandler } from "./rpc/rpc-registry.js";
 
 /**
- * The store surface the Public Plugin API guarantees to an entry factory
- * (H-03): read-only.
+ * The store surface the Public Plugin API guarantees to an entry factory:
+ * read-only.
  *
  * - `getPluginData` / `listPluginData` — for community plugins these are
  *   clamped to the plugin's OWN `pluginId` at runtime (any caller-supplied

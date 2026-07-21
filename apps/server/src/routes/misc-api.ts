@@ -100,7 +100,7 @@ export function createMiscApiRoutes(
   // are loaded globally but not enabled for the active session.)
   app.get("/api/ui-specs", async (c) => {
     const sessionId = c.req.query("sessionId");
-    // Owner guard (audit H-02): a session-scoped request both reads that
+    // Owner guard: a session-scoped request both reads that
     // session's active-plugin set and synchronously (re)writes its
     // plugin_data UI-spec rows, so hosted tiers require the owner token
     // BEFORE buildUiSpecsResponse touches the store. No-op on self.
@@ -259,7 +259,7 @@ export function createMiscApiRoutes(
 
     const allPresets = ai.presetRegistry.listPresets().filter((p) => p.enabled);
 
-    // Overlay presets register under request-scoped ids (H-04) — map a
+    // Overlay presets register under request-scoped ids — map a
     // public id through THIS request's own custom-preset declarations.
     const findPresetById = (id: string | undefined) => {
       const effective = resolveOverlayPresetId(id, slotConfig, (k) =>

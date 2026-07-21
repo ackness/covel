@@ -19,7 +19,7 @@
  *     `/api/actions` requests to the same session read the same
  *     `listTurnResults().length`, compute the same turnNumber, and
  *     interleave state patches / auto-snapshots.
- *   - Audit 2026-04-21 F5: the previous `Map`-based lock was process-local,
+ *   - The previous `Map`-based lock was process-local,
  *     invisible across pods. Multi-instance PG deployments (the documented
  *     production topology) had no cross-pod mutual exclusion.
  *

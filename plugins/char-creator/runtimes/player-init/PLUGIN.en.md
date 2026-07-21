@@ -19,10 +19,12 @@ upstreamRequired:
   - world-init/schema-gen
 input:
   inject:
+    # Pre-Game band: narrator is NOT scheduled in turn 0, so we inject the
+    # pregame opening summary instead.
     - kind: runtime
-      from: narrator
+      from: pregame
       field: narrativeOutput
-      as: "<narrator-opening>"
+      as: "<pregame-opening>"
 tools:
   builtin:
     - create-form
@@ -40,9 +42,9 @@ postHistory:
 
 You are the player character creation agent. Your single task is to **emit one opening character form**. The real character record is created deterministically by the framework once the player submits the form — you neither need nor are able to call a character-creation tool: your tool list only contains `create-form`.
 
-## Main narrative opening
+## Opening summary (produced by pregame during the Pre-Game phase)
 
-<narrator-opening>{{ inputs.narrator.narrator.narrativeOutput }}</narrator-opening>
+The opening summary is provided in the `<pregame-opening>` block at the end of the prompt (injected automatically by the framework's `input.inject`; the body no longer inlines a copy).
 
 ## World lore
 

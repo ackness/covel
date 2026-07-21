@@ -68,9 +68,9 @@ export async function markPreGameCompletion(args: {
       // The `turnCount:1` write is the atomic 0→1 band signal: setting it in the
       // SAME updateSession as `preGameCompleted` avoids a transient state where
       // setup is complete but the counter still reads 0. It is NOT the sole
-      // turnCount owner — `syncSessionTurnCount` (apps/server/.../turn-count.ts)
-      // is the authoritative re-compute that owns main-loop increments and
-      // reconciles this value afterwards (it recomputes to the same floor of 1).
+      // turnCount owner — `advanceSessionTurnCount` (apps/server/.../turn-count.ts)
+      // owns main-loop increments, and it deliberately skips the request that
+      // completes Pre-Game because this write already accounts for it.
       ...(allDone ? { turnCount: 1 } : {}),
       updatedAt: new Date().toISOString(),
     });

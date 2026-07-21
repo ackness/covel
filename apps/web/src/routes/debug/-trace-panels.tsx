@@ -65,8 +65,7 @@ export function TurnCard({
     for (const event of turn.events) {
       if (event.type !== "turn.started") continue;
       const manual = event.payload?.manualTrigger as
-        | { runtimeId?: string; pluginId?: string }
-        | undefined;
+        { runtimeId?: string; pluginId?: string } | undefined;
       if (manual && typeof manual.runtimeId === "string") {
         return { runtimeId: manual.runtimeId, pluginId: manual.pluginId };
       }

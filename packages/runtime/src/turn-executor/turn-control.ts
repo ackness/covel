@@ -1,5 +1,5 @@
 /**
- * Player turn-control surface — mid-turn steering and abort (roadmap W4).
+ * Player turn-control surface — mid-turn steering and abort.
  *
  * The server registers one `TurnControl` per in-flight turn and threads it
  * through `AgentLoopDeps`. Leaf module (only depends on @covel/shared) so the

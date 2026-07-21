@@ -25,7 +25,7 @@ interface UseMessageGroupingArgs {
  * so renders driven by other props (hover state, jump-to-latest, load-older
  * spinner, confirm dialog) don't rebuild them. Crucially, streaming token
  * deltas do NOT change `messages` — the live text lives in a separate
- * fine-grained external store (M-03), so these maps are NOT rebuilt per token;
+ * fine-grained external store, so these maps are NOT rebuilt per token;
  * the streaming placeholder is inserted once and its row subscribes by id.
  * `renderMessage` closes over live
  * props/state and stays fresh — it is called in the render loop below, never

@@ -12,7 +12,7 @@ function makeStore(deleted = 0) {
   return { deleteExpiredSuspensions: vi.fn(async () => deleted) };
 }
 
-describe("suspension-sweep helper (S4-T4.c)", () => {
+describe("suspension-sweep helper", () => {
   const original = process.env[TTL_ENV];
 
   beforeEach(() => {

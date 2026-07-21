@@ -333,16 +333,14 @@ describe("POST /api/install/plugin", () => {
       path?: unknown;
     };
     expect(body.ok).toBe(true);
-    expect(body.id).toBe("plugin-test-plugin");
+    // Install id / dir use the canonical ID (manifest root name), not
+    // the un-stripped npm basename.
+    expect(body.id).toBe("test-plugin");
     expect(body.restartRequired).toBe(true);
     // Absolute filesystem path must not leak to the client.
     expect(body.path).toBeUndefined();
 
-    const installedPlugin = path.join(
-      pluginsDir,
-      "plugin-test-plugin",
-      "PLUGIN.md",
-    );
+    const installedPlugin = path.join(pluginsDir, "test-plugin", "PLUGIN.md");
     await expect(readFile(installedPlugin, "utf-8")).resolves.toContain(
       "name: test-plugin",
     );
@@ -421,7 +419,7 @@ describe("POST /api/install/plugin", () => {
   it("rejects overwrite (target exists)", async () => {
     const app = createTestApp();
     // Simulate a previously-installed plugin: the dir is non-empty.
-    const existingDir = path.join(pluginsDir, "plugin-test-plugin");
+    const existingDir = path.join(pluginsDir, "test-plugin");
     await mkdir(existingDir, { recursive: true });
     await writeFile(path.join(existingDir, "marker.txt"), "existing-install");
 
@@ -504,6 +502,49 @@ describe("POST /api/install/plugin", () => {
     expect(body.error).toMatch(/reserved/i);
   });
 
+  it("rejects the scoped-npm reserved-ID bypass: @covel/plugin-narrator + name:narrator ", async () => {
+    // Pre-fix, the reserved check ran against the un-stripped npm basename
+    // ("plugin-narrator" ∉ reserved) while the loader keyed everything on the
+    // manifest root ("narrator") — a canonical-identity split that let the
+    // bundle impersonate the builtin narrator's store/proposal/hook identity.
+    const app = createReservedTestApp(new Set(["narrator"]));
+    const zip = await buildZip({
+      "PLUGIN.md": VALID_PLUGIN_MD.replace(
+        "name: test-plugin",
+        "name: narrator",
+      ),
+      "package.json": JSON.stringify({
+        name: "@covel/plugin-narrator",
+        version: "0.0.1",
+        type: "module",
+      }),
+    });
+    const res = await postZip(app, "/api/install/plugin", zip);
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/reserved/i);
+  });
+
+  it("rejects a manifest whose root name diverges from the canonical package id ", async () => {
+    // Dir/package id says "innocent" but the loader would register "narrator".
+    const app = createReservedTestApp(new Set(["narrator"]));
+    const zip = await buildZip({
+      "PLUGIN.md": VALID_PLUGIN_MD.replace(
+        "name: test-plugin",
+        "name: narrator",
+      ),
+      "package.json": JSON.stringify({
+        name: "@covel/plugin-innocent",
+        version: "0.0.1",
+        type: "module",
+      }),
+    });
+    const res = await postZip(app, "/api/install/plugin", zip);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/mismatch/i);
+  });
+
   it("still accepts a non-reserved id when the reserved set is wired", async () => {
     const app = createReservedTestApp(new Set(["narrator"]));
     const zip = await buildZip({
@@ -513,7 +554,7 @@ describe("POST /api/install/plugin", () => {
     const res = await postZip(app, "/api/install/plugin", zip);
     expect(res.status).toBe(200);
     const body = (await res.json()) as { id: string };
-    expect(body.id).toBe("plugin-test-plugin");
+    expect(body.id).toBe("test-plugin");
   });
 
   it("rejects symlink entries", async () => {
@@ -581,7 +622,7 @@ describe("POST /api/install/plugin", () => {
     expect(statuses).toEqual([200, 409]);
 
     // The winning install must leave a valid plugin on disk.
-    const installed = path.join(pluginsDir, "plugin-test-plugin", "PLUGIN.md");
+    const installed = path.join(pluginsDir, "test-plugin", "PLUGIN.md");
     await expect(readFile(installed, "utf-8")).resolves.toContain(
       "name: test-plugin",
     );

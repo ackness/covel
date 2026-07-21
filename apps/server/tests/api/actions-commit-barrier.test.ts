@@ -96,13 +96,17 @@ describe("POST /api/actions — turn commit barrier", () => {
     registry = createPluginRegistry();
     registry.register(makeEntry(makeFakeLoadedRuntime({ name: RUNTIME_ID })));
 
+    // turnCount 0 with no turn_results rows: this turn advances the counter
+    // to 1, which is always an auto-snapshot checkpoint (turnCount <= 1
+    // bypasses the cadence gate), so the barrier assertions below can rely on
+    // a snapshot existing.
     await store.createSession({
       id: SESSION_ID,
       worldId: null,
       status: "active",
       presetId: null,
       activePlugins: [RUNTIME_ID],
-      turnCount: 1,
+      turnCount: 0,
       preGameCompleted: [],
       createdAt: new Date().toISOString(),
     });
@@ -208,5 +212,97 @@ describe("POST /api/actions — turn commit barrier", () => {
     expect(rows.some((r) => r.type === "proposal.committed")).toBe(true);
     expect(rows.some((r) => r.type === "turn.started")).toBe(true);
     expect(rows.some((r) => r.type === "turn.completed")).toBe(true);
+  });
+});
+
+describe("POST /api/actions — turn accounting follows the commit outcome", () => {
+  it("does not advance turnCount when the turn's proposals fail to commit", async () => {
+    const store = createMemoryStore();
+    const registry = createPluginRegistry();
+    registry.register(makeEntry(makeFakeLoadedRuntime({ name: RUNTIME_ID })));
+    setMemorySystem(undefined);
+
+    await store.createSession({
+      id: SESSION_ID,
+      worldId: null,
+      status: "active",
+      presetId: null,
+      activePlugins: [RUNTIME_ID],
+      turnCount: 1,
+      preGameCompleted: [],
+      createdAt: new Date().toISOString(),
+    });
+    // A prior completed player turn: turn accounting must count history
+    // exactly once, and the failing turn below must not add to it.
+    await store.saveTurnResult({
+      id: "tr-prior",
+      sessionId: SESSION_ID,
+      turnId: "turn-prior",
+      runtimeResults: [{ runtimeId: RUNTIME_ID, output: {} }],
+      origin: "player",
+      commitStatus: "committed",
+      durationMs: 1,
+      createdAt: "2024-01-01T00:00:00Z",
+    });
+
+    // Veto every commit via a PreStateCommit abort: the handler returns
+    // `{ committed: false }` without throwing, which is the proposal-failure
+    // path (a thrown store error would instead abort the whole turn as
+    // `error.occurred`).
+    const vetoPipeline = {
+      run: async (event: string) =>
+        event === "PreStateCommit"
+          ? { action: "abort", reason: "injected commit veto" }
+          : { action: "continue" },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+
+    const eventBus = createEventBus(store);
+    const { llm } = makeFakeLLM("A narrative line that will fail to commit.");
+    const sessionLock = createInProcessSessionLock();
+    const loaded = makeFakeLoadedRuntime({ name: RUNTIME_ID });
+
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      c.set("store", store);
+      c.set("pluginRegistry", registry);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      c.set("llmAdapter", llm as any);
+      c.set("loadRuntimeFn", async () => loaded);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      c.set("toolExecutor", undefined as any);
+      c.set("resolveModel", () => undefined);
+      c.set("eventBus", eventBus);
+      c.set("sessionLock", sessionLock);
+      c.set("hookPipeline", vetoPipeline);
+      await next();
+    });
+    app.route("/api/actions", actionRoutes);
+
+    const res = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-fail-commit",
+        type: "send_message",
+        sessionId: SESSION_ID,
+        payload: { content: "hello" },
+      }),
+    });
+    expect(res.status).toBe(200);
+    const envelopes = await drainActionStream(res);
+    expect(envelopes.map((e) => e.type)).toContain("proposal.failed");
+
+    // The failed execution persisted its artifact, settled as failed…
+    const failedTurn = (await store.listTurnResults(SESSION_ID)).find(
+      (tr) => tr.turnId !== "turn-prior",
+    );
+    expect(failedTurn?.commitStatus).toBe("failed");
+
+    // …and a failed player execution is NOT a completed player turn: the
+    // counter that drives the UI turn display and auto-snapshot cadence must
+    // stay where it was.
+    const session = await store.getSession(SESSION_ID);
+    expect(session?.turnCount).toBe(1);
   });
 });

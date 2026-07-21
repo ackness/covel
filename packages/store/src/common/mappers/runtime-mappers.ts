@@ -19,6 +19,10 @@ export interface TurnResultRow {
   runtimeResults: unknown;
   conflicts: unknown;
   auditResult: unknown;
+  /** Execution origin; NULL on rows written before the column existed. */
+  origin: string | null;
+  parentTurnId: string | null;
+  commitStatus: string | null;
   durationMs: number;
   createdAt: string;
 }
@@ -80,6 +84,9 @@ export interface InteractionRow {
   createdAt: string;
 }
 
+const TURN_ORIGINS = new Set(["player", "manual", "follower", "recursive"]);
+const COMMIT_STATUSES = new Set(["pending", "committed", "failed"]);
+
 export function toTurnResultRecord(
   row: TurnResultRow,
   json: JsonReader,
@@ -91,6 +98,13 @@ export function toTurnResultRecord(
     runtimeResults: json.readRequired(row.runtimeResults),
     conflicts: json.read(row.conflicts),
     auditResult: json.read(row.auditResult),
+    ...(row.origin && TURN_ORIGINS.has(row.origin)
+      ? { origin: row.origin as TurnResultRecord["origin"] }
+      : {}),
+    ...(row.parentTurnId ? { parentTurnId: row.parentTurnId } : {}),
+    ...(row.commitStatus && COMMIT_STATUSES.has(row.commitStatus)
+      ? { commitStatus: row.commitStatus as TurnResultRecord["commitStatus"] }
+      : {}),
     durationMs: row.durationMs,
     createdAt: row.createdAt,
   };

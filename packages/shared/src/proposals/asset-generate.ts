@@ -29,8 +29,7 @@ export interface AssetGenerateLLMImagePart {
 }
 
 export type AssetGenerateLLMPart =
-  | AssetGenerateLLMTextPart
-  | AssetGenerateLLMImagePart;
+  AssetGenerateLLMTextPart | AssetGenerateLLMImagePart;
 export type AssetGenerateLLMContent = readonly AssetGenerateLLMPart[];
 
 export function isAssetGeneratePayload(

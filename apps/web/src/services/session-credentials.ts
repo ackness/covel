@@ -1,5 +1,5 @@
 /**
- * Per-session owner-token store (audit H-01).
+ * Per-session owner-token store.
  *
  * `POST /api/sessions` mints an owner token and returns it exactly once. On
  * hosted tiers (demo/commercial) the server requires it on every session-scoped

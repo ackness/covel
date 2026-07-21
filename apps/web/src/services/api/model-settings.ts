@@ -64,7 +64,7 @@ function persistCustomPresetKeyToProvider(
 /**
  * Build the `X-Plugin-User-Settings` header from SettingsStore entries
  * keyed `plugin.<pluginId>.<setting>`. Groups by plugin id so the server
- * can route each bucket to the matching runtime (audit F7).
+ * can route each bucket to the matching runtime.
  *
  * Only carries settings the player has **explicitly set** (`store.has(key)`).
  * `listEntries()` returns every registered plugin setting (registered at boot

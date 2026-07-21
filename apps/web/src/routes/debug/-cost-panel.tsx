@@ -34,8 +34,7 @@ function readUsage(event: api.TraceEvent): Usage | null {
     return null;
   }
   const usage = (event.payload as Record<string, unknown>).usage as
-    | { inputTokens?: number; outputTokens?: number }
-    | undefined;
+    { inputTokens?: number; outputTokens?: number } | undefined;
   if (!usage) return null;
   return {
     inputTokens: Number(usage.inputTokens) || 0,

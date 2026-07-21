@@ -1,5 +1,5 @@
 /**
- * PR-3: Plugin RPC route.
+ * Plugin RPC route.
  *
  * Single channel for all structured plugin commands:
  *
@@ -36,7 +36,10 @@
 import { Hono } from "hono";
 import { estimateTokens } from "@covel/context";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
-import { createRpcHandlerStoreView } from "@covel/runtime";
+import {
+  createRpcHandlerStoreView,
+  createTrustedHandlerStore,
+} from "@covel/runtime";
 import { RpcDispatchError, RpcValidationError } from "@covel/runtime";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import {
@@ -50,6 +53,7 @@ import {
 import { getCachedWorld } from "../../world-cache.js";
 import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
+import { commitFailureMessage } from "./plugin-rpc/runtime-response.js";
 import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import {
@@ -73,7 +77,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       404,
     );
   }
-  // Owner guard (hosted tiers, S-02): plugin-rpc can trigger manual runtimes
+  // Owner guard (hosted tiers): plugin-rpc can trigger manual runtimes
   // (full turn pipeline) and mutate plugin data.
   const ownerDenied = checkSessionOwner(c, session);
   if (ownerDenied) return ownerDenied;
@@ -128,8 +132,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // required after a server restart or when this is the first request
     // for this session.
     const sessionPlugins = session.activePlugins as
-      | readonly string[]
-      | undefined;
+      readonly string[] | undefined;
     if (sessionPlugins) {
       for (const pid of sessionPlugins) {
         pluginRegistry.activate(pid, sessionId);
@@ -173,13 +176,25 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       if (operatorDenied) return operatorDenied;
     }
     const gate = c.get("rpcApprovalGate");
+    // Two-phase approval: executing a community runtime imports the
+    // plugin's server code AND runs the specific runtime, and the runtime
+    // loader now requires BOTH exact grants. Ask for the server-code grant
+    // first when it is missing (same pattern as entry-action dispatch), then
+    // the `runtime:<name>` grant; the renderer's retry walks the phases.
+    const needsServerCodeGrant =
+      trustInfo.source === "community" &&
+      !gate.hasGrant(sessionId, body.pluginId, COMMUNITY_SERVER_CODE_ACTION);
     const verdict = gate.evaluate({
       sessionId,
       pluginId: body.pluginId,
-      action: `runtime:${body.runtimeId}`,
+      action: needsServerCodeGrant
+        ? COMMUNITY_SERVER_CODE_ACTION
+        : `runtime:${body.runtimeId}`,
       payload: body.payload,
       trustLevel: trustInfo.source,
-      description: target.description,
+      description: needsServerCodeGrant
+        ? `Load server-side code for community plugin ${body.pluginId}`
+        : target.description,
     });
     if (verdict.status === "pending") {
       return c.json(
@@ -206,7 +221,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       pluginRegistry,
       sessionId,
     );
-    // Audit F7: player-authored plugin settings travel with the request
+    // Player-authored plugin settings travel with the request
     // as a base64-encoded JSON header (`X-Plugin-User-Settings`) sourced
     // from the unified SettingsStore. The body map keys on pluginId so
     // executor merges per-runtime defaults with the matching player
@@ -339,7 +354,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
 
     // ── Sync mode ──────────────────────────────────────────────────
     //
-    // Audit F1: the sync turn may surface `deferredFollowers` — event-chain
+    // The sync turn may surface `deferredFollowers` — event-chain
     // followers with `execution: 'background'` that were skipped so the
     // user gets an immediate response. Persist one `_jobs/<jobId>` pending
     // row per follower BEFORE responding so the frontend can render a
@@ -389,6 +404,21 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
 
     try {
       const summary = await runManualTurn();
+      // The runtime can report success while its proposals fail to land. A
+      // turn whose writes never committed is not a successful turn: report it
+      // as an error and do not chain followers onto rolled-back state.
+      if (!summary.commit.committed) {
+        return c.json(
+          {
+            status: "error",
+            error: commitFailureMessage(summary.commit),
+            code: "turn-commit-failed",
+            turnId: summary.turnId,
+            runtimeResults: summary.runtimeResults,
+          },
+          500,
+        );
+      }
       const deferredJobs =
         summary.deferredFollowers.length > 0
           ? await jobRunner.scheduleDeferredFollowers(summary.deferredFollowers)
@@ -414,7 +444,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     }
   }
 
-  // PR-7: approval gate. Look up the resolved entry first so we know its
+  // Approval gate. Look up the resolved entry first so we know its
   // trust level, then ask the gate whether the call can proceed. Builtin
   // and official trust auto-allow; community trust either re-uses a cached
   // session approval or returns approval-required for the dialog flow.
@@ -431,7 +461,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   // re-resolve. Builtin/official entries ran at boot, so their misses stay
   // hard 404s.
   //
-  // LOW-3: framework default actions are namespace-less but still need a
+  // Framework default actions are namespace-less but still need a
   // canonical sentinel for the request shape. The dispatcher requires
   // `pluginId === "framework"` for framework defaults. Plugin-declared
   // actions still use the real plugin ID.
@@ -494,18 +524,30 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     if (operatorDenied) return operatorDenied;
   }
 
-  const approvalAction = pendingEntryActivation
-    ? COMMUNITY_SERVER_CODE_ACTION
-    : action;
+  // Two-phase approval for every community server module, not just deferred
+  // entries: dispatching a declarative `manifest.rpc` action dynamically
+  // imports the plugin's handler JS, which is server code by the same
+  // definition as an entry/runtime module. Ask for the server-code grant
+  // first when it is missing, then the precise action grant below.
+  const needsServerCodeGrant =
+    entryTrust === "community" &&
+    !gate.hasGrant(sessionId, pluginId, COMMUNITY_SERVER_CODE_ACTION);
+  // A deferred entry always takes the server-code phase first: we cannot know
+  // whether `action` even exists until the (untrusted) entry has run.
+  const approvalAction =
+    needsServerCodeGrant || pendingEntryActivation
+      ? COMMUNITY_SERVER_CODE_ACTION
+      : action;
   const verdict = gate.evaluate({
     sessionId,
     pluginId,
     action: approvalAction,
     payload: body.payload,
     trustLevel: entryTrust,
-    description: pendingEntryActivation
-      ? `Load server-side code for community plugin ${pluginId}`
-      : entryDescription,
+    description:
+      approvalAction === COMMUNITY_SERVER_CODE_ACTION
+        ? `Load server-side code for community plugin ${pluginId}`
+        : entryDescription,
   });
 
   if (verdict.status === "pending") {
@@ -520,7 +562,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   }
 
   if (verdict.status === "rejected") {
-    // MEDIUM-1: pending queue is full. Map to 429 so clients back off.
+    // Pending queue is full. Map to 429 so clients back off.
     return c.json(
       {
         status: "error",
@@ -535,21 +577,23 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   // the entry-registered handler exists before dispatch re-resolves it.
   // No-op for already-activated plugins (idempotent). If the entry still
   // doesn't register `action`, dispatch throws unknown-action → 404 below.
-  if (pendingEntryActivation) {
-    await c.get("activatePluginLocalTools")?.(pluginId, sessionId);
-    const activatedEntry = registry.getPluginAction(pluginId, action);
-    if (!activatedEntry) {
-      return c.json(
-        {
-          status: "error",
-          error: `unknown action "${action}" for plugin "${pluginId}"`,
-          code: "unknown-action",
-        },
-        404,
-      );
+  if (pendingEntryActivation || needsServerCodeGrant) {
+    if (pendingEntryActivation) {
+      await c.get("activatePluginLocalTools")?.(pluginId, sessionId);
+      const activatedEntry = registry.getPluginAction(pluginId, action);
+      if (!activatedEntry) {
+        return c.json(
+          {
+            status: "error",
+            error: `unknown action "${action}" for plugin "${pluginId}"`,
+            code: "unknown-action",
+          },
+          404,
+        );
+      }
+      entryTrust = activatedEntry.trustLevel;
+      entryDescription = activatedEntry.description;
     }
-    entryTrust = activatedEntry.trustLevel;
-    entryDescription = activatedEntry.description;
     const actionVerdict = gate.evaluate({
       sessionId,
       pluginId,
@@ -582,9 +626,12 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
 
   // Action-level dispatch.
   try {
+    // Trusted handlers keep the full store surface, minus writes into
+    // framework-reserved `_` namespaces (the job runner and other framework
+    // writers use the raw store, not this handle).
     const rpcStore =
       entryTrust === "builtin" || entryTrust === "official"
-        ? store
+        ? createTrustedHandlerStore(store)
         : createRpcHandlerStoreView(store, {
             sessionId,
             pluginId,

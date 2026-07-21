@@ -117,7 +117,7 @@ export interface CallLLMWithRetryParams {
   /** Provider label for trace payload (e.g. 'deepseek', 'openai'). Optional. */
   readonly provider?: string;
   /**
-   * Player/turn-level abort (roadmap W4). Non-retriable: fires
+   * Player/turn-level abort. Non-retriable: fires
    * {@link TurnAbortedError} immediately — including out of the streaming
    * salvage path, so a player abort never commits partial content.
    */
@@ -267,7 +267,7 @@ export async function streamLLMWithRetry(
     // Compose three abort sources into one per-attempt signal:
     //   1. overall call budget (per-attempt)
     //   2. first-token (TTFB) guard — armed on attempt start, disarmed on first event
-    //   3. player turn abort (W4) — forwarded from params.abortSignal below
+    //   3. player turn abort — forwarded from params.abortSignal below
     const callAborter = new AbortController();
     const onExternalAbort = (): void => {
       callAborter.abort(new DOMException("turn aborted", "AbortError"));
@@ -327,10 +327,7 @@ export async function streamLLMWithRetry(
           });
         } else if (event.type === "done") {
           streamFinishReason = event.finishReason as
-            | "stop"
-            | "tool_calls"
-            | "length"
-            | "error";
+            "stop" | "tool_calls" | "length" | "error";
           if (event.reasoningContent)
             streamedReasoningContent = event.reasoningContent;
           if (event.usage) streamedUsage = event.usage;

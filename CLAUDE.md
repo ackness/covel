@@ -100,7 +100,7 @@ Provider API keys flow through the `SettingsStore` too: writes end up in `keys.e
 
 ## Monorepo Structure
 
-- pnpm workspaces + Turborepo. `pnpm@10.33.2`, Node ≥ 22.9 (dev scripts use `--env-file-if-exists`).
+- pnpm workspaces + Turborepo. `pnpm@11.9.0`, Node ≥ 26 (dev scripts use `--env-file-if-exists`).
 - ESM-only (`"type": "module"`), TypeScript strict, ES2022, NodeNext module resolution — **use `.js` extensions in TS imports**.
 - Packages export TS source directly (`"import": "./src/index.ts"`) — no build step for dev.
 
@@ -163,7 +163,7 @@ Input/Event → Trigger Router → Priority Scheduler → [per priority group:]
 Session lifecycle tracked by three fields on `SessionRecord`:
 
 - `status: 'active' | 'paused' | 'ended'` — `paused`/`ended` halts scheduling.
-- `turnCount: number` — band selector. Kernel auto-advances 0 → 1 once all Pre-Game runtimes report done.
+- `turnCount: number` — count of completed **player** turns. Kernel auto-advances 0 → 1 once all Pre-Game runtimes report done. Drives the UI turn display, auto-snapshot cadence, and snapshot numbering. It is NOT the band selector — `preGameCompleted` is (band = Pre-Game while any Pre-Game runtime is unreported, main-loop after). Non-player executions (manual plugin-rpc trigger, deferred background follower, nested `recursiveCall`) each persist their own `turn_results` row stamped with `origin` and are excluded from the count; several executions sharing one `turnId` count once.
 - `preGameCompleted: string[]` — runtimeIds that reported done.
 
 ### Plugin system
@@ -207,7 +207,7 @@ Correct approach:
 - Test files may use real plugin IDs as fixtures; production code must not.
 - **UI curation/preset data may list concrete plugin IDs as _data_** (e.g. the front-end plugin packs in `apps/web/src/lib/session-plugin-selection.ts`, which a player picks from). The rule bans hardcoded IDs in **dispatch/control flow** — `if`/`switch` on a plugin ID to change behavior — not curated, user-overridable selection lists. The runtime still discovers and dispatches by `outputKind`/`capabilities`.
 
-**Character creation convention**: forms marked with `_createCharacter: true` cause the framework to auto-create a `CharacterRecord`.
+**Character creation convention**: the framework never auto-creates `CharacterRecord`s from forms (the old `_createCharacter: true` marker is gone). Player creation is plugin-owned: the character plugin's pre-game guard reads the submitted opening-form values and synthesises the player deterministically (no LLM) via the character proposal/tool surface.
 
 ### Identity model: pluginId vs runtimeId
 
@@ -278,6 +278,7 @@ Each SQL backend keeps a thin public factory plus focused method modules:
 27 tables via Drizzle; authoritative list in `packages/store/src/{sqlite,postgres}/schema.ts`, transactions contract in [docs/reference/transactions.md](./docs/reference/transactions.md).
 
 - **`sessions.runtime_model_overrides`** — JSONB map of `runtimeId → slot name`, snapshotted into `TurnInput` each turn and consulted by `runtime-slot-resolver` before `manifest.model` / gateway default. Keys still flow via `X-Provider-Keys` + localStorage.
+- **`turn_results.commit_status`** — `pending` when the execution artifact is persisted (before proposals commit), settled to `committed` / `failed` by the commit-owning caller. A row still `pending` is a crash signature, not a successful turn.
 - **JSONB writes**: use `sql.json(value as JSONValue)` — **never** `JSON.stringify()` (double-serialisation bug).
 
 ## Server Bootstrap

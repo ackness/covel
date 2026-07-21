@@ -58,7 +58,7 @@ describe("session state eviction (audit R-03)", () => {
     expect(bus.getEventsAfter("sess-1", 0).gap).toBe(true);
   });
 
-  it("mints a fresh epoch after eviction so old cursors are detectable (H-06)", () => {
+  it("mints a fresh epoch after eviction so old cursors are detectable", () => {
     const bus = createEventBus();
 
     bus.emit(makeMessage({ sessionId: "sess-evicted" }));
@@ -99,7 +99,7 @@ describe("session state eviction (audit R-03)", () => {
   });
 });
 
-describe("session pinning (re-review H-06)", () => {
+describe("session pinning", () => {
   it("a pinned session survives LRU pressure; unpinned it becomes evictable", () => {
     const bus = createEventBus();
 

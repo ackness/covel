@@ -2,10 +2,7 @@ import type { CharacterUpsertPayload } from "./proposal.js";
 import type { MediaRef } from "./media.js";
 
 export type CharacterBlueprintRole =
-  | "player"
-  | "npc"
-  | "companion"
-  | (string & {});
+  "player" | "npc" | "companion" | (string & {});
 
 export interface CharacterBlueprintI18nText {
   readonly default: string;

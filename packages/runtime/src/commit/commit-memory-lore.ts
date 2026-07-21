@@ -1,6 +1,7 @@
 /** Commit handlers for `working_memory.set` and `lorebook.upsert`. */
 
 import type { CommitResult, ProposalFor } from "@covel/shared";
+import { workingMemoryQuotaViolation } from "@covel/shared";
 import { makeEvent } from "../session/session-kernel-helpers.js";
 import type { KernelStore } from "../session/session-kernel-store.js";
 import type { CommitHandlerMap } from "./commit-handler-types.js";
@@ -11,6 +12,29 @@ import {
   requireNonEmptyString,
   requireOptionalString,
 } from "./commit-validators.js";
+
+/**
+ * Storage-quota check shared with the REST working-memory route — the limits
+ * and off-by-one semantics live in `@covel/shared` (`working-memory-quota.ts`)
+ * so the two write paths cannot drift apart. `listWorkingMemory` is optional
+ * on KernelStore; without it the entry-count check is skipped and only the
+ * value-size cap applies.
+ */
+async function workingMemoryQuotaFailure(
+  store: KernelStore,
+  sessionId: string,
+  scope: string,
+  key: string,
+  value: unknown,
+): Promise<CommitResult | undefined> {
+  const existing = store.listWorkingMemory
+    ? await store.listWorkingMemory(sessionId)
+    : undefined;
+  const violation = workingMemoryQuotaViolation(scope, key, value, existing);
+  return violation
+    ? commitError(`working_memory.set: ${violation.message}`)
+    : undefined;
+}
 
 export function createMemoryLoreCommitHandlers(
   store: KernelStore,
@@ -36,8 +60,8 @@ export function createMemoryLoreCommitHandlers(
       payload.value === undefined
         ? commitError("working_memory.set: value must not be undefined")
         : undefined,
-      // TODO(S3-T3.b): resolve schemaRef against a framework-level Zod schema
-      // registry (A9 refinement) and validate payload.value against the schema.
+      // TODO: resolve schemaRef against a framework-level Zod schema
+      // registry and validate payload.value against the schema.
       // For now, schemaRef is accepted as an opaque string.
       requireOptionalString(
         payload.schemaRef,
@@ -54,6 +78,15 @@ export function createMemoryLoreCommitHandlers(
     }
 
     const { scope, key } = payload;
+    const overQuota = await workingMemoryQuotaFailure(
+      store,
+      proposal.sessionId,
+      scope,
+      key,
+      payload.value,
+    );
+    if (overQuota) return overQuota;
+
     await upsertWorkingMemory({
       id: crypto.randomUUID(),
       sessionId: proposal.sessionId,

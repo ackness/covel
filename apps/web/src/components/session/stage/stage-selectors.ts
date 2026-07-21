@@ -73,10 +73,7 @@ export interface StageCurrentRecord {
 }
 
 export type StageBackdropKind =
-  | "scene"
-  | "previous-or-hero"
-  | "hero"
-  | "gradient";
+  "scene" | "previous-or-hero" | "hero" | "gradient";
 
 export interface StageBackdrop {
   readonly kind: StageBackdropKind;
@@ -121,11 +118,7 @@ export interface PresenceRecord {
 }
 
 export type SpritePosition =
-  | "left"
-  | "center-left"
-  | "center"
-  | "center-right"
-  | "right";
+  "left" | "center-left" | "center" | "center-right" | "right";
 
 export interface StageSpriteSlot {
   readonly characterId: string;
@@ -396,8 +389,7 @@ export function extractInteractionChoices(
 
     const meta = (block.meta ?? {}) as Record<string, unknown>;
     const rawBehavior = data.submitBehavior as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
 
     result.push({
       blockId: msg.id,
@@ -408,8 +400,7 @@ export function extractInteractionChoices(
       submitBehavior: rawBehavior
         ? {
             echoFilledNarrative: rawBehavior.echoFilledNarrative as
-              | boolean
-              | undefined,
+              boolean | undefined,
           }
         : undefined,
     });
@@ -444,6 +435,25 @@ function isFormBlock(block: Record<string, unknown>): boolean {
     data.type === "form" ||
     block.type === "interactive_form" ||
     (Array.isArray(data.fields) && data.fields.length > 0)
+  );
+}
+
+/**
+ * Whether the player has submitted any form-type interaction. During
+ * pre-game (turnCount 0) this is the "opening form is done" signal — the
+ * stage mounts from that moment instead of waiting for turnCount >= 1, so
+ * the scene (world hero backdrop until the narrator sets a real scene)
+ * appears right after the player names their character.
+ */
+export function hasSubmittedForm(
+  messages: readonly StreamMessage[],
+  submittedBlockIds: ReadonlySet<string>,
+): boolean {
+  return messages.some(
+    (msg) =>
+      msg.block != null &&
+      submittedBlockIds.has(msg.id) &&
+      isFormBlock(msg.block as Record<string, unknown>),
   );
 }
 

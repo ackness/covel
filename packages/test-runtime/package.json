@@ -1,6 +1,6 @@
 {
   "name": "@covel/test-runtime",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "private": true,
   "type": "module",
   "bin": {
@@ -28,7 +28,7 @@
     "@covel/tools": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   }
 }

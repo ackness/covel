@@ -47,6 +47,14 @@ export async function materializeMediaIndexWrites(options: {
   mediaStore?: MediaStore;
   sessionId: string;
   writes: readonly PlannedWrite[];
+  /**
+   * Called immediately after each successful `put`, before the next file is
+   * read. The caller records these so a mid-loop failure can still compensate
+   * for what already landed: this function only RETURNS its refs on success,
+   * so a throw on the second file used to leave the first asset orphaned in
+   * the MediaStore with nothing referencing it.
+   */
+  onMediaRef?: (ref: WorldDataImportedMediaRef) => void;
 }): Promise<{
   readonly writes: readonly PlannedWrite[];
   readonly mediaRefs: readonly WorldDataImportedMediaRef[];
@@ -84,12 +92,16 @@ export async function materializeMediaIndexWrites(options: {
       filename: path.basename(mediaPath),
       sourceId: write.source.id,
     });
-    mediaRefs.push({
+    const importedRef = {
       id: ref.id,
       sessionId: options.sessionId,
       pluginId: write.pluginId,
       cleanupOnFailure,
-    });
+    };
+    mediaRefs.push(importedRef);
+    // Register with the caller's compensation stack before touching the next
+    // file, so a later throw can still roll this one back.
+    options.onMediaRef?.(importedRef);
     out.push({
       ...write,
       value: {

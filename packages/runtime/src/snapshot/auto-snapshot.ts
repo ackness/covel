@@ -52,7 +52,7 @@ function resolveIntervalTurns(intervalTurns?: number): number {
  *
  * Callers must invoke this only after every proposal and lifecycle update for
  * the turn has committed, while still holding the session's mutation lock —
- * on the main action path that means after `syncSessionTurnCount`, so the
+ * on the main action path that means after `advanceSessionTurnCount`, so the
  * cadence check sees the post-turn count.
  */
 export async function saveAutoSnapshot(

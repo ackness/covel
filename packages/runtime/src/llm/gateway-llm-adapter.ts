@@ -126,7 +126,7 @@ export interface GatewayAdapterConfig {
   /**
    * Server-env / platform API keys. The gateway only attaches these when
    * the resolved target's baseUrl origin matches trusted server config —
-   * request-scoped custom presets never receive them (S-01).
+   * request-scoped custom presets never receive them.
    */
   readonly envApiKeys?: Record<string, string>;
   /** Trace ID for observability. */

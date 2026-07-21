@@ -31,7 +31,7 @@ import type {
  */
 interface FullGatewayOptions {
   apiKeys?: Record<string, string>;
-  /** Server-env keys — origin-gated by the gateway (S-01), unlike apiKeys. */
+  /** Server-env keys — origin-gated by the gateway, unlike apiKeys. */
   envApiKeys?: Record<string, string>;
   traceId?: string;
   signal?: AbortSignal;
@@ -224,7 +224,7 @@ export function createPluginRuntimeGateway(
           [
             "PluginRuntimeGateway.generateObject is unavailable in this host.",
             "The framework intentionally ships without a JSON Schema → Zod",
-            "converter injected (audit F9): structured output for agent",
+            "converter injected: structured output for agent",
             "runtimes is already handled by the executor via `output.schema`",
             "and `responseFormat`, and no function-runtime caller needs this",
             "path yet. Prefer an agent runtime; if you genuinely need",

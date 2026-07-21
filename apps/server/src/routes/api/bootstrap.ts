@@ -162,7 +162,7 @@ export interface ApiBootstrapConfig {
    * Multi-pod PG deployments MUST pass a distributed implementation —
    * typically `createPgAdvisorySessionLock(sql)` from
    * `../../lib/pg-session-lock.ts` — so mutual exclusion is enforced
-   * across processes. See `docs/architecture-audit-followups/F5-*`.
+   * across processes.
    */
   readonly sessionLock?: SessionLock;
   /**
@@ -215,7 +215,7 @@ export async function bootstrapApi(
   // 1. Create shared infrastructure first (eventBus needed by registry)
   const stateManager = config.stateManager ?? createStateManager(config.store);
 
-  // Cross-pod EventBus fan-out (audit R-02): multi-pod PG deployments need
+  // Cross-pod EventBus fan-out (audit): multi-pod PG deployments need
   // events emitted on one pod to reach SSE subscribers on another. PG
   // LISTEN/NOTIFY is the lowest-dependency shared transport (the deployment
   // already runs on PG). Single-process backends (memory/sqlite/idb) pass no
@@ -253,7 +253,7 @@ export async function bootstrapApi(
   const store = wrapStoreWithPluginDataEvents(config.store, eventBus);
 
   // One-time startup sweep of stale suspensions accumulated while the server
-  // was down (spec S4-T4.c). Fire-and-forget — never blocks boot.
+  // was down. Fire-and-forget — never blocks boot.
   void maybeSweepExpiredSuspensions(store, { force: true }).catch(
     (err: unknown) =>
       console.warn(
@@ -284,7 +284,12 @@ export async function bootstrapApi(
   // reservation list tracks the `plugins/` directory automatically instead of a
   // hand-edited array. Injected via middleware below and consumed by the plugin
   // install route to reject third-party packages that claim a builtin id.
-  const reservedPluginIds = deriveBuiltinPluginIds(discoveryMap.values());
+  //
+  // Derived from the registry, not discoveryMap: a builtin whose load failed is
+  // quarantined out of discoveryMap, but it is still registered as an `error`
+  // entry carrying its `source`. Its id must stay reserved so a community
+  // package cannot claim the vacated builtin id while the directory lingers.
+  const reservedPluginIds = deriveBuiltinPluginIds(registry.getAll().values());
 
   // Session event directory — aggregates active plugins' `events` manifest
   // contracts (union, first-wins on cross-plugin topic conflicts) so the
@@ -347,22 +352,28 @@ export async function bootstrapApi(
       const manifests = manifestCache.get(pluginId);
       if (manifests?.some((m) => m.manifest.name === manifest.name)) {
         const trust = getPluginTrustInfo(pluginId, discovery.source);
+        // Loading a community runtime executes the plugin's server
+        // code (entry / handler import) AND runs that specific runtime, so
+        // BOTH grants are required — the exact server-code grant and the
+        // exact `runtime:<name>` grant. The old OR let a single runtime
+        // approval unlock the whole plugin's server code (and vice versa),
+        // collapsing the two-phase consent the UI presents.
         if (
           !trust.autoLoad &&
           (!sessionId ||
-            (!rpcApprovalGate.hasGrant(
+            !rpcApprovalGate.hasGrant(
               sessionId,
               pluginId,
               COMMUNITY_SERVER_CODE_ACTION,
-            ) &&
-              !rpcApprovalGate.hasGrant(
-                sessionId,
-                pluginId,
-                `runtime:${manifest.name}`,
-              )))
+            ) ||
+            !rpcApprovalGate.hasGrant(
+              sessionId,
+              pluginId,
+              `runtime:${manifest.name}`,
+            ))
         ) {
           throw new Error(
-            `[runtime-loader] ${pluginId}/${manifest.name}: community runtime requires explicit session approval`,
+            `[runtime-loader] ${pluginId}/${manifest.name}: community runtime requires explicit session approval (server-code AND runtime grants)`,
           );
         }
         // Community wires register at the same moment we'd import the
@@ -408,7 +419,7 @@ export async function bootstrapApi(
   // 6b. Eagerly load runtimes that declare UI specs so /api/ui-specs has data at boot.
   //     Deferred-trust (community) plugins are skipped: loadRuntimeFn imports the
   //     plugin's handler/guard/wires JS, which must never execute before approval
-  //     (S-04). Their runtimes load post-approval through the same loadRuntimeFn
+  //     Their runtimes load post-approval through the same loadRuntimeFn
   //     path, mirroring the deferred `entry` activation.
   for (const [pluginId, discovery] of discoveryMap) {
     if (!getPluginTrustInfo(pluginId, discovery.source).autoLoad) continue;
@@ -445,11 +456,22 @@ export async function bootstrapApi(
       manifestCache,
     });
 
+  // Entry import only honors the EXACT server-code grant. The old
+  // no-action `hasGrant` matched any live grant for the plugin, so approving
+  // one ordinary RPC action (or one runtime) silently authorized importing
+  // and executing the plugin's entire server entry.
   const isCommunityServerCodeApproved = (
     sessionId: string | undefined,
     pluginId: string,
   ): boolean =>
-    Boolean(sessionId && rpcApprovalGate.hasGrant(sessionId, pluginId));
+    Boolean(
+      sessionId &&
+      rpcApprovalGate.hasGrant(
+        sessionId,
+        pluginId,
+        COMMUNITY_SERVER_CODE_ACTION,
+      ),
+    );
   const isCommunityHookApproved = (
     sessionId: string,
     pluginId: string,
@@ -598,14 +620,14 @@ export async function bootstrapApi(
   app.route("/api/sessions", characterRoutes);
   app.route("/api/sessions", pluginDataRoutes);
   app.route("/api/sessions", workingMemoryRoutes);
-  app.route("/api/sessions", resumeRoutes); // S4-T4: suspend/resume (resume + suspensions list/delete)
-  app.route("/api/sessions", snapshotRoutes); // S4-T2: state snapshots + fork
-  app.route("/api/sessions", lorebookRoutes); // S3-T6: session-level lorebook viewer
-  app.route("/api/sessions", runtimeOutputRoutes); // PR-1: translation-layer observability
-  app.route("/api/sessions", pluginRpcRoutes); // PR-3: plugin RPC channel
-  app.route("/api/sessions", turnControlRoutes); // W4: mid-turn steer / abort
-  app.route("/api/sessions", sessionApprovalRoutes); // PR-7: per-session approvals listing
-  app.route("/api/approvals", approvalRoutes); // PR-7: approval lookup + decision
+  app.route("/api/sessions", resumeRoutes); // suspend/resume (resume + suspensions list/delete)
+  app.route("/api/sessions", snapshotRoutes); // state snapshots + fork
+  app.route("/api/sessions", lorebookRoutes); // session-level lorebook viewer
+  app.route("/api/sessions", runtimeOutputRoutes); // translation-layer observability
+  app.route("/api/sessions", pluginRpcRoutes); // plugin RPC channel
+  app.route("/api/sessions", turnControlRoutes); // mid-turn steer / abort
+  app.route("/api/sessions", sessionApprovalRoutes); // per-session approvals listing
+  app.route("/api/approvals", approvalRoutes); // approval lookup + decision
   app.route("/api/plugins", pluginRoutes);
   app.route("/api/framework", frameworkRoutes);
   app.route("/api/events", eventRoutes);

@@ -1,5 +1,5 @@
 /**
- * Resume route — resumes a suspended runtime (S4-T4).
+ * Resume route — resumes a suspended runtime.
  *
  * POST /api/sessions/:id/resume
  *   Body: { suspensionId: string, data: unknown }
@@ -17,7 +17,7 @@
  *     so sequential resumes for the same session do not interleave with turn
  *     execution.
  *
- * Expiry (S4-T4.c): the suspension-touching routes opportunistically fire a
+ * Expiry: the suspension-touching routes opportunistically fire a
  * time-gated, best-effort global sweep of stale (unresolved, older-than-TTL)
  * suspensions via `maybeSweepExpiredSuspensions`; a one-time forced sweep also
  * runs at server startup (see bootstrap). Claimed / resolved records are never
@@ -275,6 +275,22 @@ resumeRoutes.post("/:id/resume", async (c) => {
   try {
     return await runWithHookScope({ activePluginIds }, async () => {
       return sessionLock.withLock(sessionId, async () => {
+        // Active gate under the lock — a paused/ended session must
+        // not accept a resume (it would commit state and write history).
+        const liveSession = await store.getSession(sessionId);
+        if (
+          !liveSession ||
+          (liveSession.status && liveSession.status !== "active")
+        ) {
+          await releaseClaim();
+          return c.json(
+            errorBody(
+              `session is ${liveSession?.status ?? "missing"}; it must be active to resume`,
+            ),
+            409,
+          );
+        }
+
         const result = await resumeSuspendedRuntime(
           suspension,
           data,
@@ -307,19 +323,138 @@ resumeRoutes.post("/:id/resume", async (c) => {
         }
 
         const outputKind = effectiveManifest.outputKind ?? "plugin";
+        // Post-commit fan-out barrier: proposals commit through the tx-bound
+        // store view below, which never exposes `withTransaction` — so the
+        // commit pipeline cannot buffer its externally-visible fan-out
+        // (emitter events + PostStateCommit hooks) behind a transaction of its
+        // own. This route owns the transaction, so it owns the barrier:
+        // buffer the thunks here, flush only after `withTransaction` resolves,
+        // and drop them on rollback — clients and hooks must never observe
+        // "committed" for writes the rollback then undoes. Without a
+        // transactional store the fallback runs unwrapped and fan-out stays
+        // inline (nothing later can roll the writes back atomically anyway).
+        const postCommit: Array<() => Promise<void>> = [];
         const processOpts = {
           ...(hookPipeline ? { hookPipeline } : {}),
           ...(eventBus ? { eventBus } : {}),
           emitter,
           capabilities: effectiveManifest.capabilities ?? [],
+          ...(typeof store.withTransaction === "function"
+            ? {
+                deferPostCommit: (fn: () => Promise<void>) => {
+                  postCommit.push(fn);
+                },
+              }
+            : {}),
         };
-        const { events } = await processRuntimeResult(
-          result,
-          store,
+
+        // Atomic finalize: proposal commit + assistant turn message +
+        // resolved marker land in ONE transaction (the runtime no longer
+        // writes them — see turn-resume.ts). Any proposal failure or store
+        // error throws, rolling back ALL of it; the claim is released so the
+        // suspension stays retryable. On stores without transactions the same
+        // sequence runs unwrapped (proposal failure still precedes the
+        // history/resolved writes, preserving retryability).
+        const finalizeResume = async (
+          s: import("@covel/store").StoreTransaction,
+        ) => {
+          const { events, failedProposals } = await processRuntimeResult(
+            result,
+            s,
+            sessionId,
+            outputKind,
+            processOpts,
+          );
+          if (failedProposals.length > 0) {
+            throw new Error(
+              `${failedProposals.length} proposal(s) failed to commit: ` +
+                failedProposals
+                  .map((fp) => `${fp.proposal.type}: ${fp.error}`)
+                  .join("; "),
+            );
+          }
+
+          const out = result.output as Record<string, unknown>;
+          const narrativeContent =
+            typeof out.narrativeOutput === "string"
+              ? out.narrativeOutput
+              : typeof out.content === "string"
+                ? out.content
+                : JSON.stringify(result.output);
+          const interactionsArr = out.interactions as unknown[] | undefined;
+          const pendingInput =
+            interactionsArr && interactionsArr.length > 0
+              ? interactionsArr
+              : undefined;
+          const ui = out.ui as unknown[] | undefined;
+          await s.appendTurnMessage({
+            id: crypto.randomUUID(),
+            sessionId,
+            turnId: suspension.turnId,
+            sourceType: "runtime",
+            sourcePluginId: effectiveManifest!.pluginId,
+            sourceRuntimeId: effectiveManifest!.name,
+            role: "assistant",
+            name: effectiveManifest!.name,
+            content: narrativeContent,
+            order: effectiveManifest!.priority ?? 500,
+            pendingInput,
+            ui,
+            createdAt: new Date().toISOString(),
+          });
+          await s.markSuspensionResolved(suspension.id);
+          return events;
+        };
+
+        let events;
+        try {
+          events =
+            typeof store.withTransaction === "function"
+              ? await store.withTransaction(finalizeResume)
+              : await finalizeResume(store);
+        } catch (err) {
+          await releaseClaim();
+          const message = err instanceof Error ? err.message : String(err);
+          return c.json(
+            errorBody(
+              `Resume commit failed: ${message}. The suspension remains unresolved and can be retried.`,
+            ),
+            500,
+          );
+        }
+
+        // Transaction landed — flush the buffered proposal fan-out in commit
+        // order before announcing the resume. A failing emit/hook must not
+        // fail the resume (the data IS committed), so each thunk is isolated.
+        for (const fn of postCommit) {
+          try {
+            await fn();
+          } catch (flushErr) {
+            console.warn(
+              "[resume] post-commit fan-out failed:",
+              flushErr instanceof Error ? flushErr.message : String(flushErr),
+            );
+          }
+        }
+
+        // Announce the resume only after the transaction landed — an event
+        // for a rolled-back resume would desync clients.
+        eventBus?.emit({
+          id: crypto.randomUUID(),
+          type: "event",
+          topic: "game",
           sessionId,
-          outputKind,
-          processOpts,
-        );
+          timestamp: new Date().toISOString(),
+          payload: {
+            _subTopic: "game",
+            _subType: "turn.resumed",
+            sessionId,
+            turnId: suspension.turnId,
+            suspensionId: suspension.id,
+            pluginId: effectiveManifest!.pluginId,
+            runtimeId: effectiveManifest!.name,
+          },
+        });
 
         // Resume commits proposals like any other turn path, so it must leave
         // an auto snapshot behind — without this, a fork taken after a resume

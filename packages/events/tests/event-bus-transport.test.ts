@@ -115,7 +115,7 @@ describe("EventBus transport fan-out (audit R-02)", () => {
     expect(busB.getEventsAfter("sess-big", 0).events).toHaveLength(1);
   });
 
-  it("delivers oversize-then-inline frames in seq order (re-review H-07)", async () => {
+  it("delivers oversize-then-inline frames in seq order", async () => {
     const hub = createHub();
     const shared = createMemoryStore();
     // Gate the oversize save so the inline event provably arrives while the
@@ -218,7 +218,7 @@ describe("EventBus transport fan-out (audit R-02)", () => {
     warnSpy.mockRestore();
   });
 
-  it("order-buffers out-of-order frames by origin seq (re-review H-07)", async () => {
+  it("order-buffers out-of-order frames by origin seq", async () => {
     const hub = createHub();
     const bus = createEventBus(undefined, { transport: hub.connect() });
     const received: SubscriptionEvent[] = [];

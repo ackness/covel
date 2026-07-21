@@ -1,12 +1,12 @@
 /**
- * Wiring tests for the S1-T5 context-budget plumbing in turn-executor.
+ * Wiring tests for the context-budget plumbing in turn-executor.
  *
- * These tests lock in the gates on budget injection:
- *
- *   1. Injected when: estimator + contextBudget + no declared tools
- *   2. Skipped when: manifest declares `input.tools` (I1 tool-pair guard)
- *   3. Skipped when: manifest declares `tools.builtin` (I1 tool-pair guard)
- *   4. Skipped when: manifest declares `tools.local` (I1 tool-pair guard)
+ * The budget pass runs whenever both `estimator` and `contextBudget` are
+ * supplied — including for tool-declaring runtimes. Those were previously
+ * excluded because prefix pruning could split an assistant↔tool pair; pruning
+ * now drops orphaned leading tool messages, so the exclusion (which covered
+ * every main agent, i.e. the runtimes that actually dominate long-session
+ * token spend) is gone.
  *
  * Turn-executor's job is to thread the dependency references through. We
  * verify the thread by spying on the estimator — if it gets called at least
@@ -122,13 +122,14 @@ describe("turn-executor → context budget wiring", () => {
     expect(estimator).toHaveBeenCalled();
   });
 
-  it("skips the estimator when the manifest declares input.tools (I1 guard)", async () => {
+  it("applies the budget even when the manifest declares input.tools", async () => {
     const estimator: TokenEstimator = vi.fn((text: string) => text.length);
     const llm: LLMAdapter = {
       generate: vi.fn(async () => makeResponse('{"narrativeOutput":"ok"}')),
     };
 
-    // Declare at least one input tool — turn-executor must NOT inject budget.
+    // Tool-declaring runtimes are budget-eligible now that pruning drops
+    // orphaned leading tool messages instead of splitting a pair.
     const manifest = makeManifest({
       input: {
         tools: [{ plugin: "other-plugin", runtime: "other-runtime" }],
@@ -148,17 +149,17 @@ describe("turn-executor → context budget wiring", () => {
     const result = await executeTurn(makeTurnInput(), [manifest], deps);
 
     expect(result.runtimeResults).toHaveLength(1);
-    expect(estimator).not.toHaveBeenCalled();
+    expect(estimator).toHaveBeenCalled();
   });
 
-  it("skips the estimator when the manifest declares tools.builtin (I1 guard)", async () => {
+  it("applies the budget even when the manifest declares tools.builtin", async () => {
     const estimator: TokenEstimator = vi.fn((text: string) => text.length);
     const llm: LLMAdapter = {
       generate: vi.fn(async () => makeResponse('{"narrativeOutput":"ok"}')),
     };
 
-    // Declare a builtin tool — buildToolDefinitions would register it, so budget
-    // injection must be skipped to avoid splitting assistant↔tool pairs.
+    // buildToolDefinitions registers this tool; the runtime is still
+    // budget-eligible because pruning is pair-aware.
     const manifest = makeManifest({
       tools: {
         builtin: ["plugin-data-set"],
@@ -178,10 +179,10 @@ describe("turn-executor → context budget wiring", () => {
     const result = await executeTurn(makeTurnInput(), [manifest], deps);
 
     expect(result.runtimeResults).toHaveLength(1);
-    expect(estimator).not.toHaveBeenCalled();
+    expect(estimator).toHaveBeenCalled();
   });
 
-  it("skips the estimator when the manifest declares tools.local (I1 guard)", async () => {
+  it("applies the budget even when the manifest declares tools.local", async () => {
     const estimator: TokenEstimator = vi.fn((text: string) => text.length);
     const llm: LLMAdapter = {
       generate: vi.fn(async () => makeResponse('{"narrativeOutput":"ok"}')),
@@ -208,6 +209,6 @@ describe("turn-executor → context budget wiring", () => {
     const result = await executeTurn(makeTurnInput(), [manifest], deps);
 
     expect(result.runtimeResults).toHaveLength(1);
-    expect(estimator).not.toHaveBeenCalled();
+    expect(estimator).toHaveBeenCalled();
   });
 });

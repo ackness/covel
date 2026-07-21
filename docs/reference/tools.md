@@ -185,6 +185,8 @@ interface UIRenderPart {
 
 **治理路径**: 写入经 Session Kernel commit chain 提交，统一进入 `PreStateCommit` / `PostStateCommit`、trace 与 store 事务。
 
+**保留命名空间**: `_` 前缀的 namespace（`_jobs` 后台任务、`_logs` runtime 日志环）属于框架簿记，插件不可写。该限制由 `reservedPluginDataNamespaceError()`（`packages/shared/src/utils/plugin-data-namespace.ts`）统一实施，覆盖全部插件侧写入口：REST `PUT /api/sessions/:id/plugin-data/...`、`plugin.data` / `plugin.data.batch` commit handler（含 function runtime 输出规范化出的 proposal）、function runtime 的 `ctx.pluginData`、RPC handler 的 store view，以及 builtin/official 插件 handler 拿到的完整 store 句柄（function runtime / agent guard 的 `ctx.store` 与 RPC action handler 的 store 均经 `createTrustedHandlerStore()` 包装——保留 namespace 的读取不受影响，只拦截写入）。框架自身的特权写入者（后台 job runner、runtime logger）直接调 store，不走这些通路。
+
 ---
 
 ### plugin-data-set-batch
@@ -196,11 +198,12 @@ interface UIRenderPart {
 | items | Array<{namespace, key, value}> | ✓    | 要批量写入的数据条目数组 |
 
 每个 item:
-| 字段 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| namespace | string | ✓ | 数据命名空间 |
-| key | string | ✓ | 数据键名 |
-| value | unknown | ✓ | 要存储的 JSON 数据 |
+
+| 字段      | 类型    | 必需 | 描述               |
+| --------- | ------- | ---- | ------------------ |
+| namespace | string  | ✓    | 数据命名空间       |
+| key       | string  | ✓    | 数据键名           |
+| value     | unknown | ✓    | 要存储的 JSON 数据 |
 
 **输出**: `{ success, count, items: [{ namespace, key }] }`
 
@@ -221,6 +224,8 @@ interface UIRenderPart {
 
 **输出**: `{ found, namespace, key, value?, updatedAt? }`
 
+读取会叠加**本次 tool loop 内尚未提交**的 `plugin.data` / `plugin.data.batch` proposal（read-your-own-write）。plugin-data 写入走 proposal、在回合末才提交，若不叠加，同一 loop 内先 `plugin-data-set` 再读同一个 key 会拿到写入**前**的旧值，runtime 因而重复写入或「纠正」一个本已正确的值。叠加只覆盖**本插件自己**的 pending 写入，不放宽插件作用域；同 key 多次写入以最后一次为准（与提交顺序一致）。
+
 ---
 
 ### plugin-data-list
@@ -232,6 +237,8 @@ interface UIRenderPart {
 | namespace | string |      | 数据命名空间（不传则列出所有） |
 
 **输出**: `{ count, items: [{ namespace, key, value, updatedAt }] }`
+
+与 `plugin-data-get` 一样叠加本 loop 内未提交的 pending 写入；`namespace` 过滤同样作用于 pending 项。
 
 ---
 
@@ -320,6 +327,8 @@ interface UIRenderPart {
 4. 全部通过 → `event "<topic>" emitted`，结果携带 `emittedEvents`
 
 **一次一个 topic**：单次调用只发射一条事件；需要发多个领域事件时多次调用 `emit-event`。
+
+**去重的作用域是单个 tool loop**：`emittedEventTopics` 由 agent tool loop 逐次累积，因此同一 runtime 在同一回合内重复发同一 topic 会被 no-op。它**不跨 runtime**——同优先级并行组里的两个 runtime 可以各自发同一 topic。这不是缺陷：事件 fan-out 收集阶段按 topic 汇聚（同一深度内 first-emission-wins，见 `collectEventsFrom`），所以下游订阅者仍只被触发一次。
 
 **使用者**：任何声明了 `advertiseEvents: true` 且在 `tools.builtin` 里包含 `emit-event` 的 agent runtime，例如 `narrator`、`chat-mode-narrator`。
 
@@ -516,17 +525,18 @@ Attributes:
 | attributes | AttributeDef[] | ✓    | 角色属性定义数组（至少 1 个） |
 
 **AttributeDef**:
-| 字段 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| id | string | ✓ | 属性唯一标识 |
-| name | string | ✓ | 属性显示名称 |
-| type | enum | ✓ | `string` / `number` / `array` / `enum` / `boolean` |
-| category | enum | ✓ | `stats` / `bio` / `abilities` / `equipment` / `social` |
-| min/max | number | | 数值类型的范围 |
-| defaultValue | unknown | | 默认值 |
-| itemType | enum | | 数组元素类型（`string` / `number`） |
-| options | string[] | | 枚举选项列表 |
-| description | string | | 属性说明 |
+
+| 字段         | 类型     | 必需 | 描述                                                   |
+| ------------ | -------- | ---- | ------------------------------------------------------ |
+| id           | string   | ✓    | 属性唯一标识                                           |
+| name         | string   | ✓    | 属性显示名称                                           |
+| type         | enum     | ✓    | `string` / `number` / `array` / `enum` / `boolean`     |
+| category     | enum     | ✓    | `stats` / `bio` / `abilities` / `equipment` / `social` |
+| min/max      | number   |      | 数值类型的范围                                         |
+| defaultValue | unknown  |      | 默认值                                                 |
+| itemType     | enum     |      | 数组元素类型（`string` / `number`）                    |
+| options      | string[] |      | 枚举选项列表                                           |
+| description  | string   |      | 属性说明                                               |
 
 **输出**: `{ success, attributeCount, categories }`
 
@@ -547,10 +557,11 @@ Attributes:
 | entries | WorldEntry[] | ✓    | 世界词条数组（至少 1 个） |
 
 **WorldEntry**:
-| 字段 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| key | string | ✓ | 词条标识（如 `geography`, `factions`） |
-| value | object | ✓ | 词条内容（任意 JSON 对象） |
+
+| 字段  | 类型   | 必需 | 描述                                   |
+| ----- | ------ | ---- | -------------------------------------- |
+| key   | string | ✓    | 词条标识（如 `geography`, `factions`） |
+| value | object | ✓    | 词条内容（任意 JSON 对象）             |
 
 **输出**: `{ success, count, keys }`
 
@@ -571,14 +582,15 @@ Attributes:
 | entries | CodexEntry[] | ✓    | 要解锁的条目列表 |
 
 **CodexEntry**:
-| 字段 | 类型 | 必需 | 描述 |
-|------|------|------|------|
-| category | enum | ✓ | `monster` / `item` / `location` / `lore` / `character` / `skill` |
-| title | string | ✓ | 条目标题 |
-| content | string | ✓ | 2-3 句话描述 |
-| tags | string[] | ✓ | 标签列表（1-5 个） |
-| rarity | enum | | `common`(默认) / `uncommon` / `rare` / `legendary` |
-| imageHint | string | | 视觉描述提示 |
+
+| 字段      | 类型     | 必需 | 描述                                                             |
+| --------- | -------- | ---- | ---------------------------------------------------------------- |
+| category  | enum     | ✓    | `monster` / `item` / `location` / `lore` / `character` / `skill` |
+| title     | string   | ✓    | 条目标题                                                         |
+| content   | string   | ✓    | 2-3 句话描述                                                     |
+| tags      | string[] | ✓    | 标签列表（1-5 个）                                               |
+| rarity    | enum     |      | `common`(默认) / `uncommon` / `rare` / `legendary`               |
+| imageHint | string   |      | 视觉描述提示                                                     |
 
 **输出**: `{ unlocked, entries, ui }` — 含稀有度分级的 UI 卡片数组。每个 entry 包含 `entryId`（短 ID）。
 
@@ -654,7 +666,9 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 ## ToolClient
 
-工具执行统一经过 `ToolClient`。`ToolExecutor` 通过注入的 `findTool(name, context)` 解析出 `ToolModule`，再用 `InMemoryToolClient` 包裹后调用 `client.call(name, args, ctx)` —— 内置工具和插件本地工具都走这条内存内路径，审批、trace、结果 envelope 由 `ToolExecutor` 统一处理。
+工具执行统一经过 `ToolExecutor`：通过注入的 `findTool(name, context)` 解析出 `ToolModule` 后直接调用 `module.execute(args, ctx)` —— 内置工具和插件本地工具都走这条内存内路径，审批、trace、结果 envelope 由 `ToolExecutor` 统一处理。
+
+**执行端授权（2026-07-20 审计 H-02）**：工具白名单不再只是 LLM 广告面。agent loop 把当前 runtime 的精确授权集（`tools.*` 声明的全部名字 + 非 schema runtime 的 `runtime-done` 框架合同工具；`defer` 名单包含在内——延迟只影响广告、不影响授权）随 `ToolCallContext.authorizedToolNames` 传给 executor，`execute` 在解析/审批之前先校验最终工具名（session override 与 `PreToolUse` 替换之后的名字）∈ 授权集，越界返回 `UNAUTHORIZED` 结构化错误。`search-tools` 在 loop 内被拦截、不达 executor。另外 `findTool` 对缺失 context 的调用 fail-closed：无 context 只能解析 builtin，local 工具一律拒绝。
 
 接口位于 `@covel/tools`：
 
@@ -926,6 +940,8 @@ commit trace 会记录 `ui.rendered`，并为每个 part 记录 `ui.part.update`
 
 - runtime 端：通过 `Proposal` 输出 `{ type: 'working_memory.set', payload: { scope, key, value, schemaRef? } }`
 - HTTP 端：`PUT /api/sessions/:id/working-memory/:scope/:key` 直接调 store，不经 commit chain（详见 `docs/reference/api.md`）
+
+**存储配额：** 工作记忆常驻每回合 prompt，因此除渲染端的截断（60 条 / 每条 600 字符）外还实施存储配额：单条 value 序列化后上限 8000 字符，单 session 上限 200 条。超限时写入失败并返回错误，**已存在的 key 仍可更新**——只拒绝新 key，避免淘汰 session 正依赖的条目（core memory blocks 也存在这里）。配额定义在 `packages/shared/src/utils/working-memory-quota.ts`，由 commit handler 与 REST `PUT` 路由共同实施（两条写入路径共享同一份常量与语义）。批量状态应写 plugin-data，它不常驻 prompt。
 
 **KernelEvent 输出：**
 

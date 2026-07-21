@@ -1,5 +1,5 @@
 /**
- * Working Memory commit handler tests (S3-T3).
+ * Working Memory commit handler tests.
  *
  * Verifies that `working_memory.set` proposals flow through `commitAll`,
  * persist to store, and emit `working_memory.changed`.
@@ -38,6 +38,12 @@ function makeRecordingStore(): RecordingStore {
     },
     async upsertWorkingMemory(record) {
       wmEntries.push(record as Record<string, unknown>);
+    },
+    async listWorkingMemory() {
+      return wmEntries.map((e) => ({
+        key: e.key as string,
+        scope: e.scope as "player" | "story" | "shared",
+      }));
     },
   };
 }
@@ -172,5 +178,43 @@ describe("working_memory.set commit handler", () => {
         schemaRef: "some-schema-name",
       });
     });
+  });
+});
+
+describe("working_memory storage quota", () => {
+  it("refuses new keys past the entry cap and oversized values, but still updates existing keys", async () => {
+    const store = makeRecordingStore();
+    const pipeline = createCommitPipeline(store);
+
+    for (let i = 0; i < 200; i++) {
+      const result = await pipeline.commit(
+        makeWmProposal({
+          payload: { scope: "player", key: `k${i}`, value: i },
+        }),
+      );
+      expect(result.committed).toBe(true);
+    }
+
+    const overflow = await pipeline.commit(
+      makeWmProposal({
+        payload: { scope: "player", key: "k200", value: 1 },
+      }),
+    );
+    expect(overflow.committed).toBe(false);
+    expect(overflow.error).toContain("limit");
+
+    // Updating an entry the session already relies on stays allowed.
+    const update = await pipeline.commit(
+      makeWmProposal({ payload: { scope: "player", key: "k0", value: 42 } }),
+    );
+    expect(update.committed).toBe(true);
+
+    const oversized = await pipeline.commit(
+      makeWmProposal({
+        payload: { scope: "player", key: "k0", value: "x".repeat(9000) },
+      }),
+    );
+    expect(oversized.committed).toBe(false);
+    expect(oversized.error).toContain("char limit");
   });
 });

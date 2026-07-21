@@ -1,5 +1,5 @@
 /**
- * PR-7: Plugin RPC approval gate.
+ * Plugin RPC approval gate.
  *
  * Sits in front of `POST /api/sessions/:id/plugin-rpc`. For every incoming
  * action-level dispatch the route asks the gate `evaluate({ pluginId,
@@ -62,15 +62,18 @@ export interface RpcApprovalGate {
   /**
    * Look up a pending approval without consuming it. Lets the HTTP layer
    * resolve an approvalId to its sessionId for owner-guard checks BEFORE
-   * `decide()` consumes the entry (audit H-02).
+   * `decide()` consumes the entry.
    */
   getPending(approvalId: string): RpcApprovalPending | undefined;
   /**
-   * Check whether a community plugin currently has an explicit grant in a
-   * session without consuming a one-time grant or creating a pending request.
-   * Omitting `action` checks for any live grant belonging to the plugin.
+   * Check whether a community plugin currently holds an explicit grant for
+   * EXACTLY this action in a session, without consuming a one-time grant or
+   * creating a pending request. The action is mandatory — the old optional
+   * form matched ANY live grant by prefix, which collapsed the two-phase
+   * community approval into "any grant unlocks everything" (2026-07-20
+   * audit).
    */
-  hasGrant(sessionId: string, pluginId: string, action?: string): boolean;
+  hasGrant(sessionId: string, pluginId: string, action: string): boolean;
   /**
    * Revoke cached session grants + fresh one-time grants for a session,
    * optionally scoped to one plugin. Returns the number of grants cleared.
@@ -94,12 +97,12 @@ const ONE_TIME_GRANT_TTL_MS = 60_000;
  * Uses the reserved `covel:` framework namespace so a third-party plugin
  * cannot declare a real action with this exact name and thereby satisfy the
  * phase-2 action check from the phase-1 grant, eliding the second
- * confirmation (audit re-review F5).
+ * confirmation.
  */
 export const COMMUNITY_SERVER_CODE_ACTION = "covel:plugin-server-code";
 
 /**
- * MEDIUM-1 fix: cap the pending-approval queue so a malicious caller cannot
+ * Cap the pending-approval queue so a malicious caller cannot
  * leak memory by spamming community-trust dispatches.
  *
  *   - `MAX_PENDING_PER_SESSION`: hard cap per (sessionId). Once reached the
@@ -208,7 +211,7 @@ export function createRpcApprovalGate(): RpcApprovalGate {
           };
         }
       }
-      // MEDIUM-1: enforce queue caps before allocation. Sweep stale entries
+      // Enforce queue caps before allocation. Sweep stale entries
       // first so a long-lived process doesn't get pinned at the cap by
       // ancient unanswered pendings.
       sweepStalePending();
@@ -287,15 +290,8 @@ export function createRpcApprovalGate(): RpcApprovalGate {
     },
 
     hasGrant(sessionId, pluginId, action) {
-      const prefix = `${sessionId}::${pluginId}::`;
-      const exactKey = action
-        ? tripleKey(sessionId, pluginId, action)
-        : undefined;
-      if (
-        exactKey
-          ? state.sessionCache.has(exactKey)
-          : [...state.sessionCache].some((key) => key.startsWith(prefix))
-      ) {
+      const exactKey = tripleKey(sessionId, pluginId, action);
+      if (state.sessionCache.has(exactKey)) {
         return true;
       }
 
@@ -305,7 +301,7 @@ export function createRpcApprovalGate(): RpcApprovalGate {
           state.oneTimeGrants.delete(key);
           continue;
         }
-        if (exactKey ? key === exactKey : key.startsWith(prefix)) return true;
+        if (key === exactKey) return true;
       }
       return false;
     },

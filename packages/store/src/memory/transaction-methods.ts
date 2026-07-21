@@ -5,7 +5,7 @@ import {
   nestedWithTransactionError,
   SERIALIZED_NESTING_REASON,
 } from "../tx-nesting-error.js";
-import { createTxNestingGuard } from "../tx-nesting-guard.js";
+import type { SerializedWriteGate } from "../serialized-write-gate.js";
 import {
   replaceArrayContents,
   replaceMapContents,
@@ -68,6 +68,7 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   deleteSession: ALL_SNAPSHOT_KEYS, // cascades across every session-scoped collection
   // runtime records
   saveTurnResult: ["turnResults"],
+  setTurnResultCommitStatus: ["turnResults"],
   saveRuntimeResult: ["runtimeResults"],
   saveToolCall: ["toolCalls"],
   saveStateSchema: ["stateSchemas"],
@@ -208,57 +209,44 @@ function makeTrackingScope(
 export function createTransactionMethods(
   state: MemoryState,
   getScope: () => StoreTransaction,
+  gate: SerializedWriteGate,
 ): MemoryStoreMethods {
-  // Serialize withTransaction calls so two concurrent transactions snapshot /
-  // restore against a stable state rather than interleaving on shared Maps.
-  // With touched-only capture, a concurrent non-withTransaction write made
-  // while a transaction's callback is mid-flight is rolled back with the
-  // transaction only when it hits a collection the transaction also touched
-  // (before the touch) — writes to untouched collections now survive a
-  // rollback. Nesting would queue the inner call behind the outer one on this
-  // chain and deadlock, so it is rejected synchronously via the
-  // AsyncLocalStorage nesting guard.
-  let chain: Promise<unknown> = Promise.resolve();
-  const nesting = createTxNestingGuard();
-
+  // Transactions are serialized so two concurrent ones snapshot / restore
+  // against a stable state rather than interleaving on shared Maps. Writes
+  // issued from outside a transaction share the same queue (see
+  // ../serialized-write-gate.ts), so a write from another session can no
+  // longer be captured by — and rolled back with — this transaction's
+  // snapshot. Nesting would queue the inner call behind the outer one and
+  // deadlock, so it is rejected synchronously via the AsyncLocalStorage guard.
   return {
     async withTransaction<T>(
       fn: (tx: StoreTransaction) => Promise<T>,
     ): Promise<T> {
       // Synchronous nesting guard — checked at CALL time (before chaining), so a
       // nested call rejects instead of deadlocking behind the outer transaction.
-      if (nesting.isNested()) {
+      if (gate.isInTransaction()) {
         throw nestedWithTransactionError(
           "MemoryStore",
           "memory",
           SERIALIZED_NESTING_REASON,
         );
       }
-      const task = chain.then(() =>
-        nesting.runScoped(async () => {
-          const snap: MemorySnapshot = new Map();
-          const scope = makeTrackingScope(getScope(), (methodName) => {
-            // Unknown mutating method → capture everything (safe fallback,
-            // equivalent to the pre-R-16 eager snapshot).
-            const touched =
-              WRITE_METHOD_TOUCHES[methodName] ?? ALL_SNAPSHOT_KEYS;
-            for (const key of touched) captureCollection(state, snap, key);
-          });
-          try {
-            // Resolve on success = commit (discard snapshot).
-            return await fn(scope);
-          } catch (err) {
-            restoreSnapshot(state, snap);
-            throw err;
-          }
-        }),
-      );
-      // Keep the chain alive regardless of this call's outcome.
-      chain = task.then(
-        () => undefined,
-        () => undefined,
-      );
-      return task;
+      return gate.runExclusive(async () => {
+        const snap: MemorySnapshot = new Map();
+        const scope = makeTrackingScope(getScope(), (methodName) => {
+          // Unknown mutating method → capture everything (safe fallback,
+          // equivalent to the pre-touched-only eager snapshot).
+          const touched = WRITE_METHOD_TOUCHES[methodName] ?? ALL_SNAPSHOT_KEYS;
+          for (const key of touched) captureCollection(state, snap, key);
+        });
+        try {
+          // Resolve on success = commit (discard snapshot).
+          return await fn(scope);
+        } catch (err) {
+          restoreSnapshot(state, snap);
+          throw err;
+        }
+      });
     },
   };
 }
