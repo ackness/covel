@@ -235,6 +235,41 @@ describe("upsert-npc-graph", () => {
     expect(list.nodes[0].summary).toMatch(/古老的阵法/);
   });
 
+  it("keeps an existing lastSeenTurn when a re-upsert carries no turnNumber", async () => {
+    const seeded = await executeAndCommit(
+      upsertTool,
+      {
+        nodes: [
+          { name: "陆沉渊", type: "individual", summary: "青萍宗宗主。" },
+        ],
+      },
+      { ...ctx, turnNumber: 5 },
+      store,
+    );
+    const nodeId = seeded.nodes.results[0].id;
+
+    // Re-upsert without turnNumber (currentTurn = -1). The node's real
+    // lastSeenTurn must not regress to the "unknown" sentinel.
+    await executeAndCommit(
+      upsertTool,
+      {
+        nodes: [
+          { name: "陆沉渊", type: "individual", summary: "更新后的简介。" },
+        ],
+      },
+      { ...ctx, turnNumber: undefined },
+      store,
+    );
+
+    const row = await store.getPluginData(
+      ctx.sessionId,
+      ctx.pluginId,
+      "nodes",
+      nodeId,
+    );
+    expect(row.value.lastSeenTurn).toBe(5);
+  });
+
   it("resolves edge sourceName/targetName to node IDs and persists the adjacency index", async () => {
     const out = await executeAndCommit(
       upsertTool,

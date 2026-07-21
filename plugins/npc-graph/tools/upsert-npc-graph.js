@@ -185,7 +185,9 @@ export default function ({ tool, z, shortIdBatch, store }) {
               ...existing.attributes,
               ...incoming.attributes,
             },
-            lastSeenTurn: currentTurn,
+            // Never let an unknown-turn (-1) upsert regress a real recency
+            // stamp; also keeps lastSeenTurn monotonic.
+            lastSeenTurn: Math.max(currentTurn, existing.lastSeenTurn ?? -1),
           };
           pluginDataWrites.push({
             namespace: "nodes",
@@ -270,7 +272,12 @@ export default function ({ tool, z, shortIdBatch, store }) {
         pluginDataWrites.push({
           namespace: "edges",
           key: stale.id,
-          value: { ...stale, invalidAt: currentTurn },
+          // Unknown-turn (-1) close must not stamp before the edge's own
+          // validAt, which would invert the version window.
+          value: {
+            ...stale,
+            invalidAt: Math.max(currentTurn, stale.validAt ?? currentTurn),
+          },
         });
         closedEdgeIds.add(stale.id);
       }
@@ -319,7 +326,10 @@ export default function ({ tool, z, shortIdBatch, store }) {
           pluginDataWrites.push({
             namespace: "edges",
             key: openEdge.id,
-            value: { ...openEdge, invalidAt: currentTurn },
+            value: {
+              ...openEdge,
+              invalidAt: Math.max(currentTurn, openEdge.validAt ?? currentTurn),
+            },
           });
           closedEdgeIds.add(openEdge.id);
         }
