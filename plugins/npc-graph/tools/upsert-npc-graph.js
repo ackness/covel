@@ -13,7 +13,8 @@
  *  3. Merging updates into existing nodes (aliases, labels, summary,
  *     attributes) so one relationship turn cannot nuke prior context.
  *  4. Rewriting edge `sourceName` / `targetName` to node IDs.
- *  5. De-duplicating edges by (source, target, relation).
+ *  5. Versioning edges by (source, target, relation): an unchanged relation is
+ *     a no-op, a changed one closes the open version and opens a new one.
  *  6. Maintaining the `index` namespace — adjacency lists keyed by
  *     `by-source:{nodeId}` and `by-target:{nodeId}` for fast k-hop
  *     traversal in the forthcoming retrieval tool.
@@ -93,7 +94,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
   return tool({
     name: "upsert-npc-graph",
     description:
-      "Batch-write NPC nodes and relationship edges. Nodes are de-duplicated by name; edges by (sourceName, targetName, relation). No need to list existing data first — the tool merges and updates internally.",
+      "Batch-write NPC nodes and relationship edges. Nodes are de-duplicated by name. Edges are versioned by (sourceName, targetName, relation): resubmit a relation whose strength or fact changed and the tool supersedes the previous version; resubmitting an identical one is a no-op. No need to list existing data first — the tool merges and updates internally.",
     parameters: z.object({
       nodes: z
         .array(nodeInputSchema)
@@ -224,23 +225,31 @@ export default function ({ tool, z, shortIdBatch, store }) {
         }
       }
 
-      // ── 4. Load existing edges and de-duplicate by (source, target, relation) ──
+      // ── 4. Load existing edges and index the open version of each relation ──
+      //
+      // An edge is a *versioned* fact, not a unique row: (source, target,
+      // relation) can hold many versions over a session, of which at most one
+      // is open (`invalidAt === undefined`). Re-submitting the same relation
+      // with a new strength or a new fact closes the open version and opens a
+      // new one, so a relationship can actually evolve. Rows written before
+      // versioning existed carry no `invalidAt` and therefore read as open —
+      // an old session keeps working and simply gets superseded from here on.
       const existingEdgeRows =
         (await store.listPluginData(
           context.sessionId,
           context.pluginId,
           "edges",
         )) ?? [];
-      /** @type {Set<string>} */
-      const existingEdgeKeys = new Set();
+      /** @type {Map<string, any>} */
+      const openEdgeByKey = new Map();
       for (const row of existingEdgeRows) {
         const v = row.value ?? {};
-        if (v.source && v.target && v.relation) {
-          existingEdgeKeys.add(`${v.source}::${v.target}::${v.relation}`);
-        }
+        if (!v.source || !v.target || !v.relation) continue;
+        if (v.invalidAt !== undefined) continue;
+        openEdgeByKey.set(`${v.source}::${v.target}::${v.relation}`, v);
       }
 
-      /** @type {Array<{ id: string; source: string; target: string; relation: string; fact: string; skipped?: string }>} */
+      /** @type {Array<{ id: string; source: string; target: string; relation: string; fact: string; skipped?: string; supersedes?: string }>} */
       const edgeResults = [];
       /** @type {Map<string, { byNode: Map<string, Set<string>> }>} */
       const adjacencyUpdates = new Map();
@@ -260,22 +269,50 @@ export default function ({ tool, z, shortIdBatch, store }) {
           continue;
         }
         const edgeKey = `${src.id}::${tgt.id}::${incoming.relation}`;
-        if (existingEdgeKeys.has(edgeKey)) {
+        const openEdge = openEdgeByKey.get(edgeKey);
+        if (
+          openEdge &&
+          openEdge.strength === incoming.strength &&
+          openEdge.fact === incoming.fact
+        ) {
+          // Nothing changed — re-recording it would only churn the version
+          // history and cost the retriever a slot.
           edgeResults.push({
-            id: "",
+            id: openEdge.id,
             source: src.id,
             target: tgt.id,
             relation: incoming.relation,
             fact: incoming.fact,
-            skipped: "duplicate relation",
+            skipped: "unchanged relation",
           });
           continue;
         }
-        const [edgeId] = shortIdBatch(
+        if (openEdge) {
+          // Close the previous version at the current turn. The row survives
+          // for provenance; retrieval only surfaces open edges.
+          pluginDataWrites.push({
+            namespace: "edges",
+            key: openEdge.id,
+            value: { ...openEdge, invalidAt: currentTurn },
+          });
+        }
+        // `shortIdBatch` slugifies the label and truncates it to 24 chars, so a
+        // version suffix placed INSIDE the label is silently cut off for long
+        // endpoint names — two versions of the same relation would collapse to
+        // one id and the newer would overwrite the older's provenance. Keep the
+        // slugified part to the (endpoints + relation) base for readability and
+        // append a suffix outside the truncated slug. The suffix must be unique
+        // per version, and neither turn nor batch index guarantees that: tool
+        // calls within one turn don't commit between each other and each starts
+        // its batch index at 0, so a relation revised in three separate calls
+        // of the same turn would reuse one id. A random token needs no
+        // cross-call state and can't collide across turns, calls, or restarts.
+        const [edgeBase] = shortIdBatch(
           "edge",
           [`${src.name}-${incoming.relation}-${tgt.name}`],
           context.sessionId,
         );
+        const edgeId = `${edgeBase}-${crypto.randomUUID().slice(0, 8)}`;
         const edge = {
           id: edgeId,
           source: src.id,
@@ -283,7 +320,13 @@ export default function ({ tool, z, shortIdBatch, store }) {
           relation: incoming.relation,
           strength: incoming.strength,
           fact: incoming.fact,
-          validAt: existingEdgeRows.length,
+          // Authoritative logical turn, same clock as the node timestamps.
+          // This used to be the number of edge rows already stored, which made
+          // `validAt` a measure of graph size rather than of time — recency
+          // ranking and the retriever's staleness window both read garbage.
+          validAt: currentTurn,
+          // Each version carries only the turns that produced it; the closed
+          // predecessor keeps its own, so provenance stays per-version.
           evidenceTurnIds: [currentTurnId],
         };
         pluginDataWrites.push({
@@ -291,13 +334,14 @@ export default function ({ tool, z, shortIdBatch, store }) {
           key: edgeId,
           value: edge,
         });
-        existingEdgeKeys.add(edgeKey);
+        openEdgeByKey.set(edgeKey, edge);
         edgeResults.push({
           id: edgeId,
           source: src.id,
           target: tgt.id,
           relation: incoming.relation,
           fact: incoming.fact,
+          ...(openEdge ? { supersedes: openEdge.id } : {}),
         });
 
         // Adjacency index staging

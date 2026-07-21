@@ -108,11 +108,22 @@ export default async function handler(ctx) {
       frontier = Array.from(nextFrontier);
     }
 
-    // ── 3. Select, filter time, rank, cap ────────────────────────
-    const turnCount = edges.length; // rough clock — Phase 4 will use a real turn index
+    // ── 3. Select, filter by valid interval, rank, cap ───────────
+    //
+    // Only edges whose valid interval is still open reach the narrator. A
+    // superseded version keeps its row for provenance but must not be
+    // injected — otherwise the prompt carries two contradictory facts about
+    // the same pair. Rows written before edge versioning have no `invalidAt`
+    // and read as open, so old sessions keep rendering.
+    //
+    // The previous filter compared `invalidAt` against `edges.length`, i.e.
+    // the number of stored edges used as a stand-in clock. Nothing ever set
+    // `invalidAt`, so it was a no-op; now that the upsert tool closes
+    // superseded versions at a real turn index, plain openness is the whole
+    // predicate and no clock is needed here.
     const eligibleEdges = edges
       .filter((e) => collectedEdgeIds.has(e.id))
-      .filter((e) => e.invalidAt === undefined || e.invalidAt > turnCount - 20);
+      .filter((e) => e.invalidAt === undefined);
 
     eligibleEdges.sort((a, b) => {
       const recencyDiff = (b.validAt ?? 0) - (a.validAt ?? 0);
