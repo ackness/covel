@@ -20,6 +20,7 @@ import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
 import { ChatMessages } from "./chat-messages.js";
 import { StageView } from "./stage/StageView.js";
+import { useStageMediaPreload } from "./stage/use-stage-media-preload.js";
 import { useSession } from "@/stores/session-store.js";
 import type { SessionRecord } from "@/services/api.js";
 import { useSettingsDialog } from "@/hooks/use-settings-dialog.js";
@@ -91,6 +92,9 @@ export function GameView({ session }: GameViewProps) {
   // Full-screen stage: collapse both studio rails + hide the session header so
   // the stage fills the viewport. Session-memory only (no persistence).
   const [immersive, setImmersive] = useState(false);
+  // Warm the media cache with known stage art (sprites + scene backdrops)
+  // during pre-game, so the opening turn paints them without a download stall.
+  useStageMediaPreload(session.id, sessionPlugins);
   const settings = useSettingsDialog(refreshSlots);
 
   const {
