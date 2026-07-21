@@ -619,6 +619,8 @@ export function createSseEventHandler(
       case "utils.fetch.calling":
       case "utils.fetch.responded":
       case "utils.fetch.failed":
+      // Prompt-budget prune trace: /debug reads it from trace_events.
+      case "context.pruned":
         break;
       default:
         assertNeverEvent(eventType);

@@ -392,10 +392,10 @@ describe("buildContext — summary substitution", () => {
       ],
     });
 
-    // Should have: [summary_system, recent_user, current_player]
+    // Should have: [summary_envelope, recent_user, current_player]
     expect(ctx.messages).toHaveLength(3);
     expect(ctx.messages[0]).toMatchObject({
-      role: "system",
+      role: "user",
       content: expect.stringContaining("The hero defeated the goblin."),
     });
     expect(ctx.messages[1]).toMatchObject({
@@ -423,8 +423,12 @@ describe("buildContext — summary substitution", () => {
       ],
     });
 
-    // Only one summary message + the current user message
-    const systemMessages = ctx.messages.filter((m) => m.role === "system");
-    expect(systemMessages).toHaveLength(1);
+    // Only one summary envelope + the current user message
+    const summaryMessages = ctx.messages.filter(
+      (m) =>
+        typeof m.content === "string" && m.content.includes("All summarized."),
+    );
+    expect(summaryMessages).toHaveLength(1);
+    expect(ctx.messages).toHaveLength(2);
   });
 });

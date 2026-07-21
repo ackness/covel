@@ -204,6 +204,17 @@ export async function executeAgentRuntime({
     ? await buildContextAsync({ ...buildParams, store: deps.store })
     : buildContext(buildParams);
 
+  // A prune means this runtime's prompt lost history to fit the slot window —
+  // the single place that knows it, so record it before the hook chain can
+  // rewrite the assembled context.
+  if (assembled.budgetExceeded && deps.emitter) {
+    await deps.emitter.emit("context.pruned", {
+      runtimeId: manifest.name,
+      pluginId: manifest.pluginId,
+      prunedMessageCount: assembled.prunedMessageCount ?? 0,
+    });
+  }
+
   // ── PostContextAssembly hook ─────────────────────────────────
   // Turn-level, once per runtime: lets plugins rewrite the assembled system
   // prompt and/or projected history before the loop. Distinct from the

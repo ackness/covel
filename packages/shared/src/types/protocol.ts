@@ -356,7 +356,12 @@ export type CovelEvent =
   | {
       readonly type: "utils.fetch.failed";
       readonly payload: CovelEventPayload;
-    };
+    }
+  // Prompt-assembly hard prune (TurnEmitter). Emitted once per runtime when the
+  // assembled context did not fit the slot budget and history had to be dropped,
+  // so /debug can explain a turn that lost context instead of silently losing it.
+  // Trace-only (forward:false) — the player-facing stream is unaffected.
+  | { readonly type: "context.pruned"; readonly payload: CovelEventPayload };
 
 /** The closed vocabulary of every server→client event name. */
 export type CovelEventType = CovelEvent["type"];
@@ -446,6 +451,8 @@ export const COVEL_EVENT_META = {
   "utils.fetch.calling": { forwardToActionStream: false },
   "utils.fetch.responded": { forwardToActionStream: false },
   "utils.fetch.failed": { forwardToActionStream: false },
+  // Prompt-budget prune trace — /debug only.
+  "context.pruned": { forwardToActionStream: false },
 } satisfies Record<CovelEventType, CovelEventMeta>;
 
 /**

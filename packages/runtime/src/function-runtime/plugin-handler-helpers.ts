@@ -13,7 +13,10 @@ import type {
   PluginLogger,
   FunctionStoreView,
 } from "@covel/plugin-loader";
-import type { RpcHandlerStore } from "@covel/shared";
+import {
+  reservedPluginDataNamespaceError,
+  type RpcHandlerStore,
+} from "@covel/shared";
 
 export interface HandlerHelperContext {
   readonly sessionId: string;
@@ -70,6 +73,17 @@ export function makeRevocableFn<A extends readonly unknown[], R>(
 }
 
 /**
+ * Framework-owned (`_`-prefixed) namespaces are off-limits to plugin code —
+ * these handles are the plugin-facing store surface, so they enforce the same
+ * guard as the REST API and the commit boundary. Framework writers keep using
+ * the raw store.
+ */
+function assertWritableNamespace(namespace: string): void {
+  const reserved = reservedPluginDataNamespaceError(namespace);
+  if (reserved) throw new Error(reserved);
+}
+
+/**
  * Build a scoped plugin-data writer. Writes bypass the proposal system
  * and land directly on the store — intended for pre-commit placeholders
  * (e.g. "pending" frames) and post-commit patches that should not be
@@ -82,6 +96,7 @@ export function createPluginDataWriter(
   const { sessionId, pluginId } = ctx;
   return {
     async set(namespace: string, key: string, value: unknown) {
+      assertWritableNamespace(namespace);
       if (value === null) {
         await store.deletePluginData(sessionId, pluginId, namespace, key);
         return;
@@ -112,6 +127,7 @@ export function createPluginDataWriter(
       return rows.map((r) => ({ key: r.key, value: r.value }));
     },
     async delete(namespace: string, key: string) {
+      assertWritableNamespace(namespace);
       await store.deletePluginData(sessionId, pluginId, namespace, key);
     },
   };
@@ -206,16 +222,16 @@ export function createPluginLogger(
 
 /**
  * Build a narrow `FunctionStoreView` for community function-runtime
- * handlers (audit P0-3). Only the four documented read methods are
+ * handlers. Only the four documented read methods are
  * exposed — handlers that try to call `setPluginData`, `upsertCharacter`,
  * etc. will get `undefined` and a runtime TypeError, surfacing the
  * misuse loudly instead of letting third-party code silently bypass
  * proposal/tool governance.
  *
  * Builtin / official plugins keep the full DataStore because their guard /
- * handler logic implements framework primitives
- * (e.g. `world-init`'s historical-session reuse, `char-creator`'s
- * deterministic player upsert). The runtime decides which to inject.
+ * handler logic implements framework primitives — e.g. importing a world
+ * package's declared character schema into the session, or a deterministic
+ * player-character upsert. The runtime decides which to inject.
  */
 export function createFunctionStoreView(
   store: DataStore,
@@ -267,6 +283,7 @@ export function createRpcHandlerStoreView(
       });
     },
     async setPluginData(record) {
+      assertWritableNamespace(record.namespace);
       const now = new Date().toISOString();
       await store.setPluginData({
         id: `${ctx.sessionId}:${ctx.pluginId}:${record.namespace}:${record.key}`,

@@ -38,6 +38,14 @@ export interface AssembledContext {
   readonly systemPrompt: string;
   /** Conversation messages (history + current user message). */
   readonly messages: readonly LLMMessage[];
+  /**
+   * Set when the budget pass had to drop history to fit the slot's input
+   * window. Callers surface it as a trace signal so a turn that silently lost
+   * context is visible in /debug. Absent when no budget was configured.
+   */
+  readonly budgetExceeded?: boolean;
+  /** Messages dropped by the budget pass (0 when nothing was pruned). */
+  readonly prunedMessageCount?: number;
 }
 
 /** Message record from the store (minimal shape needed by context builder). */

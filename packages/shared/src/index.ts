@@ -5,6 +5,7 @@ export * from "./types/index.js";
 export { deepMerge } from "./utils/deep-merge.js";
 export { resolveI18nText, resolveI18nDeep } from "./utils/i18n.js";
 export { collectMediaRefIds } from "./utils/media-ref-scan.js";
+export { reservedPluginDataNamespaceError } from "./utils/plugin-data-namespace.js";
 export {
   MAX_CACHE_BREAKPOINTS,
   PROMPT_CACHE_BREAKPOINT_MARKER,

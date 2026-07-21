@@ -1,6 +1,10 @@
 /** Commit handlers for `plugin.data` and `plugin.data.batch` KV writes. */
 
-import type { CommitResult, ProposalFor } from "@covel/shared";
+import {
+  reservedPluginDataNamespaceError,
+  type CommitResult,
+  type ProposalFor,
+} from "@covel/shared";
 import type { KernelStore } from "../session/session-kernel-store.js";
 import type { CommitHandlerMap } from "./commit-handler-types.js";
 import {
@@ -9,6 +13,20 @@ import {
   requireNonEmptyArray,
   requireNonEmptyString,
 } from "./commit-validators.js";
+
+/**
+ * Proposals carry plugin-authored namespaces, so the commit boundary applies
+ * the same framework-namespace guard as the REST write API. Framework writers
+ * (job runner, runtime logger) bypass proposals and reach the store directly.
+ */
+function reservedNamespaceFailure(
+  proposalType: string,
+  namespace: unknown,
+): CommitResult | undefined {
+  if (typeof namespace !== "string") return undefined;
+  const reserved = reservedPluginDataNamespaceError(namespace);
+  return reserved ? commitError(`${proposalType}: ${reserved}`) : undefined;
+}
 
 export function createPluginDataCommitHandlers(
   store: KernelStore,
@@ -32,6 +50,7 @@ export function createPluginDataCommitHandlers(
         payload.key,
         "plugin.data: key must be a non-empty string",
       ),
+      reservedNamespaceFailure("plugin.data", payload.namespace),
     );
     if (invalid) return invalid;
 
@@ -78,6 +97,7 @@ export function createPluginDataCommitHandlers(
           item.key,
           "plugin.data.batch: every item needs a non-empty key",
         ),
+        reservedNamespaceFailure("plugin.data.batch", item.namespace),
       );
       if (itemInvalid) return itemInvalid;
       records.push({

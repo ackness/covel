@@ -14,6 +14,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
+import { reservedPluginDataNamespaceError } from "@covel/shared";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { buildPluginDataIndex } from "./discovery.js";
 import { resolveSessionParam } from "./session/session-guard.js";
@@ -52,21 +53,6 @@ function validatePluginAccess(
         status: 403,
       };
     }
-  }
-  return null;
-}
-
-/**
- * Namespaces the generic plugin-data write API must never touch.
- *
- * `_`-prefixed namespaces are framework-owned bookkeeping, not plugin state:
- * `_jobs` drives background-job scheduling and `_logs` is the per-runtime log
- * ring. A player-issued write there could fabricate or rewrite a job record.
- * Plugins reach these through privileged framework writers, never this route.
- */
-function reservedNamespaceError(namespace: string): string | null {
-  if (namespace.startsWith("_")) {
-    return `Namespace "${namespace}" is reserved for framework use and cannot be written through this API`;
   }
   return null;
 }
@@ -193,7 +179,7 @@ pluginDataRoutes.put(
     const accessErr = validatePluginAccess(registry, pluginId, sessionId, true);
     if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
-    const reservedErr = reservedNamespaceError(namespace);
+    const reservedErr = reservedPluginDataNamespaceError(namespace);
     if (reservedErr) return c.json(errorBody(reservedErr), 403);
     const coreErr = corePluginWriteError(registry, pluginId);
     if (coreErr) return c.json(errorBody(coreErr), 403);
@@ -250,7 +236,7 @@ pluginDataRoutes.delete(
     const accessErr = validatePluginAccess(registry, pluginId, sessionId, true);
     if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
-    const reservedErr = reservedNamespaceError(namespace);
+    const reservedErr = reservedPluginDataNamespaceError(namespace);
     if (reservedErr) return c.json(errorBody(reservedErr), 403);
     const coreErr = corePluginWriteError(registry, pluginId);
     if (coreErr) return c.json(errorBody(coreErr), 403);

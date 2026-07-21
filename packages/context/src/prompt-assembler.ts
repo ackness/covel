@@ -328,7 +328,12 @@ function finalizeSegmentedContext(
       ...params.contextBudget!,
       estimator: params.estimator!,
     });
-    return { systemPrompt, messages: result.messages };
+    return {
+      systemPrompt,
+      messages: result.messages,
+      budgetExceeded: result.budgetExceeded,
+      prunedMessageCount: result.prunedMessageCount,
+    };
   }
 
   return { systemPrompt, messages };

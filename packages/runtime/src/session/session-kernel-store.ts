@@ -95,6 +95,17 @@ export interface KernelStore {
     updatedAt: string;
   }): Promise<void>;
   /**
+   * Working Memory listing — used by the `working_memory.set` commit handler to
+   * enforce the per-session entry quota. Optional for the same reason as
+   * `upsertWorkingMemory`; when absent the quota check is skipped.
+   */
+  listWorkingMemory?(sessionId: string): Promise<
+    readonly {
+      key: string;
+      scope: "player" | "story" | "shared";
+    }[]
+  >;
+  /**
    * Session lorebook upsert (S3-T2). Optional for the same reason as
    * upsertWorkingMemory — thin mock stores may not implement it.
    */
