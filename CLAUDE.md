@@ -100,7 +100,7 @@ Provider API keys flow through the `SettingsStore` too: writes end up in `keys.e
 
 ## Monorepo Structure
 
-- pnpm workspaces + Turborepo. `pnpm@11.9.0`, Node ≥ 22.19 (dev scripts use `--env-file-if-exists`).
+- pnpm workspaces + Turborepo. `pnpm@11.9.0`, Node ≥ 26 (dev scripts use `--env-file-if-exists`).
 - ESM-only (`"type": "module"`), TypeScript strict, ES2022, NodeNext module resolution — **use `.js` extensions in TS imports**.
 - Packages export TS source directly (`"import": "./src/index.ts"`) — no build step for dev.
 

@@ -1,7 +1,7 @@
-# node:22-alpine (22.23.1-alpine3.24 as of 2026-07-15) — pinned by digest so
+# node:26-alpine (26.5.0-alpine3.24 as of 2026-07-21) — pinned by digest so
 # the base image can't silently drift; bump the digest (and this comment)
 # when intentionally upgrading Node.
-FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS base
+FROM node:26-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66 AS base
 RUN apk add --no-cache libc6-compat libstdc++
 RUN corepack enable pnpm
 WORKDIR /app
