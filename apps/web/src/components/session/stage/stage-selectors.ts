@@ -438,6 +438,25 @@ function isFormBlock(block: Record<string, unknown>): boolean {
   );
 }
 
+/**
+ * Whether the player has submitted any form-type interaction. During
+ * pre-game (turnCount 0) this is the "opening form is done" signal — the
+ * stage mounts from that moment instead of waiting for turnCount >= 1, so
+ * the scene (world hero backdrop until the narrator sets a real scene)
+ * appears right after the player names their character.
+ */
+export function hasSubmittedForm(
+  messages: readonly StreamMessage[],
+  submittedBlockIds: ReadonlySet<string>,
+): boolean {
+  return messages.some(
+    (msg) =>
+      msg.block != null &&
+      submittedBlockIds.has(msg.id) &&
+      isFormBlock(msg.block as Record<string, unknown>),
+  );
+}
+
 /** A single renderable entry in the stage choice overlay. */
 export type StageChoiceItem =
   | {

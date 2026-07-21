@@ -8,6 +8,7 @@ import {
   extractInteractionChoices,
   extractPendingFormMessages,
   filterStalePrompts,
+  hasSubmittedForm,
   mergeChoices,
   pluginIdForCapability,
   resolveBackdrop,
@@ -400,6 +401,26 @@ describe("extractPendingFormMessages", () => {
     expect(
       extractPendingFormMessages([formMessage], new Set(["msg-form-1"])),
     ).toEqual([]);
+  });
+
+  describe("hasSubmittedForm", () => {
+    it("is false while the opening form is still pending", () => {
+      expect(hasSubmittedForm([formMessage, choiceMessage], new Set())).toBe(
+        false,
+      );
+    });
+
+    it("is true once a form block has been submitted", () => {
+      expect(hasSubmittedForm([formMessage], new Set(["msg-form-1"]))).toBe(
+        true,
+      );
+    });
+
+    it("ignores submitted non-form blocks (choices)", () => {
+      expect(hasSubmittedForm([choiceMessage], new Set(["msg-choice-1"]))).toBe(
+        false,
+      );
+    });
   });
 });
 

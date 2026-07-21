@@ -207,7 +207,7 @@ Correct approach:
 - Test files may use real plugin IDs as fixtures; production code must not.
 - **UI curation/preset data may list concrete plugin IDs as _data_** (e.g. the front-end plugin packs in `apps/web/src/lib/session-plugin-selection.ts`, which a player picks from). The rule bans hardcoded IDs in **dispatch/control flow** — `if`/`switch` on a plugin ID to change behavior — not curated, user-overridable selection lists. The runtime still discovers and dispatches by `outputKind`/`capabilities`.
 
-**Character creation convention**: forms marked with `_createCharacter: true` cause the framework to auto-create a `CharacterRecord`.
+**Character creation convention**: the framework never auto-creates `CharacterRecord`s from forms (the old `_createCharacter: true` marker is gone). Player creation is plugin-owned: the character plugin's pre-game guard reads the submitted opening-form values and synthesises the player deterministically (no LLM) via the character proposal/tool surface.
 
 ### Identity model: pluginId vs runtimeId
 
