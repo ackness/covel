@@ -1,8 +1,10 @@
 import type { MediaRef, MediaRefRecord, MediaStore } from "@covel/shared";
 import {
   acquireSqliteConnection,
+  getConnectionWriteGate,
   releaseSqliteConnection,
 } from "../sqlite/shared-connection.js";
+import { MEDIA_WRITE_METHODS } from "../store-write-methods.js";
 import {
   createReadStream,
   existsSync,
@@ -95,7 +97,7 @@ export function createSqliteMediaStore(
     "SELECT 1 AS one FROM media_refs WHERE session_id = ? AND media_id = ? LIMIT 1",
   );
 
-  return {
+  const store: MediaStore = {
     async put(blob, mime, meta) {
       const bytes = await toBytes(blob);
       const id = sha256(bytes);
@@ -277,4 +279,11 @@ export function createSqliteMediaStore(
       releaseSqliteConnection(sqlite);
     },
   };
+
+  // Same connection as the DataStore ⇒ same write gate. Without this a media
+  // write issued while another caller's transaction is open joins that
+  // transaction and is silently lost when it rolls back.
+  // ponytail: `cleanup` queues once and its inner `this.delete` calls then run
+  // inline, which is what we want — they belong to that one maintenance unit.
+  return getConnectionWriteGate(sqlite).gateWrites(store, MEDIA_WRITE_METHODS);
 }

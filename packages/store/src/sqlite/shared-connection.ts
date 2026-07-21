@@ -19,6 +19,29 @@
 
 import Database from "better-sqlite3";
 import { resolve } from "node:path";
+import {
+  createSerializedWriteGate,
+  type SerializedWriteGate,
+} from "../serialized-write-gate.js";
+
+const gates = new WeakMap<Database.Database, SerializedWriteGate>();
+
+/**
+ * The write-serialization gate for a connection. Everything that mutates
+ * through this handle — DataStore methods, the vector capability, the mirror
+ * media store — must share ONE gate, otherwise an ungated write still lands
+ * inside another caller's open transaction and disappears on its rollback.
+ * Keyed on the handle so `:memory:` connections (never pooled) work too.
+ */
+export function getConnectionWriteGate(
+  db: Database.Database,
+): SerializedWriteGate {
+  const existing = gates.get(db);
+  if (existing) return existing;
+  const gate = createSerializedWriteGate();
+  gates.set(db, gate);
+  return gate;
+}
 
 interface PoolEntry {
   db: Database.Database;

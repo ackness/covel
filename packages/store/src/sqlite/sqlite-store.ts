@@ -11,12 +11,15 @@ import { dirname } from "node:path";
 
 import {
   acquireSqliteConnection,
+  getConnectionWriteGate,
   releaseSqliteConnection,
 } from "./shared-connection.js";
 
 import type { DataStore, StoreTransaction } from "../types.js";
-import { createSerializedWriteGate } from "../serialized-write-gate.js";
-import { STORE_WRITE_METHODS } from "../store-write-methods.js";
+import {
+  STORE_WRITE_METHODS,
+  VECTOR_WRITE_METHODS,
+} from "../store-write-methods.js";
 import type { VectorModelOps, VectorStoreCapability } from "../vector-store.js";
 import * as schema from "./schema.js";
 import { createSqliteDataCrud } from "./sqlite-data-crud.js";
@@ -81,7 +84,8 @@ export function createSqliteStore(
   // writes on one queue. The transaction scope keeps the UNGATED methods —
   // writes inside the callback belong to that transaction and must run
   // inline, not queue behind it.
-  const gate = createSerializedWriteGate();
+  // Shared per-connection so the mirror media store queues on the same gate.
+  const gate = getConnectionWriteGate(sqlite);
   const gatedData = gate.gateWrites(data, STORE_WRITE_METHODS);
 
   const baseStore: DataStore = {
@@ -101,7 +105,13 @@ export function createSqliteStore(
   // sqlite-vec could not be loaded, the returned store has no vector
   // methods and `supportsVector(store)` returns false.
   if (vectorCapability) {
-    return Object.assign(baseStore, vectorCapability);
+    // Vector mutators run on the same connection as `data`, so they need the
+    // same gate — an ungated upsert issued while another session's
+    // transaction is open would join it and vanish on its rollback.
+    return Object.assign(
+      baseStore,
+      gate.gateWrites(vectorCapability, VECTOR_WRITE_METHODS),
+    );
   }
   return baseStore;
 }

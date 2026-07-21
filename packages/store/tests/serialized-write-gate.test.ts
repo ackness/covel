@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createMemoryStore } from "../src/memory/memory-store.js";
 import { createSqliteStore } from "../src/sqlite/sqlite-store.js";
+import { createSqliteMediaStore } from "../src/media-store/sqlite.js";
 import type { DataStore } from "../src/types.js";
 
 const tempDirs: string[] = [];
@@ -160,6 +161,48 @@ describe.each(backends)("%s serialized write gate", (_name, makeStore) => {
       await store.getPluginData("sess-other", "p", "ns", "queued"),
     ).toBeDefined();
 
+    await store.close?.();
+  });
+});
+
+describe("SqliteStore shared-connection gate covers media writes", () => {
+  it("a media write survives a concurrent DataStore transaction's rollback", async () => {
+    // The mirror media store reuses the DataStore's better-sqlite3
+    // connection, so an ungated `put` issued while a transaction is open joins
+    // that transaction and disappears when it rolls back.
+    const dir = mkdtempSync(path.join(tmpdir(), "covel-write-gate-media-"));
+    tempDirs.push(dir);
+    const dbPath = path.join(dir, "test.db");
+    const store = createSqliteStore(dbPath);
+    const media = createSqliteMediaStore(dbPath, {
+      mediaRoot: path.join(dir, "media"),
+    });
+    await seedSession(store, "sess-tx");
+
+    let releaseTx!: () => void;
+    const txHeldOpen = new Promise<void>((resolve) => {
+      releaseTx = resolve;
+    });
+    const txPromise = store.withTransaction!(async (tx) => {
+      await tx.setPluginData(pluginDataRow("sess-tx", "inside"));
+      await txHeldOpen;
+      throw new Error("boom");
+    });
+    await Promise.resolve();
+
+    const putDone = media.put(new Uint8Array([1, 2, 3]), "image/png");
+
+    releaseTx();
+    await expect(txPromise).rejects.toThrow("boom");
+    const ref = await putDone;
+
+    expect(
+      await store.getPluginData("sess-tx", "p", "ns", "inside"),
+    ).toBeFalsy();
+    // The media row is still there — it was never part of that transaction.
+    await expect(media.get(ref)).resolves.toEqual(new Uint8Array([1, 2, 3]));
+
+    media.close?.();
     await store.close?.();
   });
 });

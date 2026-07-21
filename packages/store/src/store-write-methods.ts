@@ -15,3 +15,26 @@ import { WRITE_METHOD_TOUCHES } from "./memory/transaction-methods.js";
 export const STORE_WRITE_METHODS: ReadonlySet<string> = new Set(
   Object.keys(WRITE_METHOD_TOUCHES),
 );
+
+/**
+ * Mutators of the optional vector capability. Not part of `DataStore`, so they
+ * are absent from `WRITE_METHOD_TOUCHES`, but on SQLite they share the store's
+ * single connection and must queue on the same gate.
+ */
+export const VECTOR_WRITE_METHODS: ReadonlySet<string> = new Set([
+  "upsertVector",
+  "deleteVectors",
+  "ensureVectorModel",
+  "lockSessionEmbeddingModel",
+]);
+
+/**
+ * Mutators of the SQLite mirror media store — same connection, same gate.
+ */
+export const MEDIA_WRITE_METHODS: ReadonlySet<string> = new Set([
+  "put",
+  "delete",
+  "recordOwnership",
+  "addRef",
+  "removeRef",
+]);
