@@ -36,6 +36,14 @@ export interface RunEventChainParams {
    */
   readonly runtimeTriggerCounts?: ReadonlyMap<string, number>;
   readonly runtimeTurnsSinceLastTrigger?: ReadonlyMap<string, number>;
+  /**
+   * RuntimeIds the session has already marked Pre-Game-done. A Pre-Game
+   * runtime that reported completion must not be resurrected by a later
+   * emission of the topic it subscribes to — that is the same one-shot
+   * contract the main scheduler enforces, and it is the only gate that keeps
+   * setup runtimes out of main-loop fan-out.
+   */
+  readonly preGameCompleted?: readonly string[];
 }
 
 /**
@@ -48,9 +56,15 @@ export interface RunEventChainParams {
  * a turn, event fan-out is bounded instead by `maxDepth`, so those fields are
  * set to non-blocking sentinels here — re-applying per-session throttles to a
  * within-turn reaction would be semantically wrong. `isManualTrigger` is
- * irrelevant to the `event` branch, and
- * `preGameCompleted` gating is a Pre-Game (turn 0) concern, not a main-loop
- * fan-out concern.
+ * irrelevant to the `event` branch.
+ *
+ * Fan-out is deliberately NOT filtered by the current priority band: it is a
+ * causal reaction to something that actually happened, not a scheduled slot.
+ * Band filtering would silently drop a subscriber whenever the emitter sat in
+ * the other band (a Pre-Game runtime announcing the world is ready, say), with
+ * no diagnostic. The gate that genuinely has to hold — "a completed setup
+ * runtime never runs again" — is `preGameCompleted`, so that one is passed
+ * through for real.
  */
 function eventFanoutTriggerContext(
   sessionId: string,
@@ -59,6 +73,7 @@ function eventFanoutTriggerContext(
   runtimeName: string,
   triggerCounts: ReadonlyMap<string, number> | undefined,
   turnsSinceLastTrigger: ReadonlyMap<string, number> | undefined,
+  preGameCompleted: readonly string[],
 ): TriggerContext {
   return {
     sessionId,
@@ -71,7 +86,7 @@ function eventFanoutTriggerContext(
       turnsSinceLastTrigger?.get(runtimeName) ?? Number.MAX_SAFE_INTEGER,
     pendingEventTopics,
     isManualTrigger: false,
-    preGameCompleted: [],
+    preGameCompleted,
   };
 }
 
@@ -104,6 +119,7 @@ export async function runEventChain({
   turnNumber,
   runtimeTriggerCounts,
   runtimeTurnsSinceLastTrigger,
+  preGameCompleted = [],
 }: RunEventChainParams): Promise<DeferredFollower[]> {
   const emittedEvents = new Map<string, Record<string, unknown>>();
   for (const [, result] of completedResults) {
@@ -140,6 +156,7 @@ export async function runEventChain({
           rt.name,
           runtimeTriggerCounts,
           runtimeTurnsSinceLastTrigger,
+          preGameCompleted,
         ),
       );
     });

@@ -177,4 +177,49 @@ describe("runEventChain honours event-runtime throttling", () => {
     });
     expect(ran).toEqual(["cool/follower"]);
   });
+
+  // Fan-out is intentionally cross-band (a reaction, not a scheduled slot), so
+  // `preGameCompleted` is the only thing keeping a finished setup runtime from
+  // being resurrected by a later emission of its topic. Passing a hardcoded
+  // empty set here made that gate dead.
+  const preGameFollower = {
+    name: "setup/follower",
+    pluginId: "setup",
+    description: "Pre-Game follower that reports done once",
+    priority: 50,
+    runtimeType: "function",
+    trigger: { type: "event", topic: "topic-x" },
+  } as RuntimeManifest;
+
+  it("skips a Pre-Game follower the session already marked done", async () => {
+    const ran: string[] = [];
+    await runEventChain({
+      activeRuntimes: [preGameFollower],
+      completedResults: seed(),
+      executeRuntime: async (manifest) => {
+        ran.push(manifest.name);
+        return resultEmitting(manifest.name, "noop", {});
+      },
+      sessionId: "sess-1",
+      turnNumber: 4,
+      preGameCompleted: ["setup/follower"],
+    });
+    expect(ran).toEqual([]);
+  });
+
+  it("still runs it while Pre-Game has not reported it done", async () => {
+    const ran: string[] = [];
+    await runEventChain({
+      activeRuntimes: [preGameFollower],
+      completedResults: seed(),
+      executeRuntime: async (manifest) => {
+        ran.push(manifest.name);
+        return resultEmitting(manifest.name, "noop", {});
+      },
+      sessionId: "sess-1",
+      turnNumber: 0,
+      preGameCompleted: [],
+    });
+    expect(ran).toEqual(["setup/follower"]);
+  });
 });

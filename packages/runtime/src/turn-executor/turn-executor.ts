@@ -486,7 +486,10 @@ async function executeTurnImpl(
         sessionId: input.sessionId,
         turnNumber,
         // Fan-out is the only place an `event` runtime can trigger, so its
-        // throttle gates only work if the real history reaches them.
+        // throttle gates only work if the real history reaches them. Same for
+        // the Pre-Game set: without it a completed setup runtime re-fires
+        // whenever its topic is emitted again.
+        preGameCompleted,
         runtimeTriggerCounts,
         runtimeTurnsSinceLastTrigger: new Map(
           activeRuntimes.map((rt) => [
@@ -513,9 +516,10 @@ async function executeTurnImpl(
   //          branch that observes a submitted character form).
   //
   //   2. Its guard returned `{ skip: true }`
-  //        - Covers `world-init/schema-gen` when a prior session of
-  //          the same world has already generated and persisted schema
-  //          + entries; the guard skips the LLM call entirely.
+  //        - Covers a setup runtime that finds its work already done or
+  //          derivable without an LLM (e.g. `world-init/schema-gen` when this
+  //          session already holds the schema, or the world package declares
+  //          character attributes / dimensions it can import directly).
   //
   //   3. It ran out of trigger budget
   //        - Runtimes with `trigger.maxTriggerCount` that have already
