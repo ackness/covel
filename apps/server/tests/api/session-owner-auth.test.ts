@@ -1,5 +1,5 @@
 /**
- * Session owner-token authorization (audit S-02).
+ * Session owner-token authorization.
  *
  * Tiered model:
  *   - self (default): owner tokens are minted but NOT enforced — local play
@@ -113,12 +113,12 @@ describe("commercial tier — owner token hard-required", () => {
 
   beforeEach(async () => {
     process.env.DEPLOYMENT_TIER = "commercial";
-    // C-02: session creation is operator-gated on hosted tiers.
+    // Session creation is operator-gated on hosted tiers.
     process.env.COVEL_DESKTOP_REST_TOKEN = "operator-secret";
     created = await createSession(app, OPERATOR);
   });
 
-  it("rejects anonymous session creation (C-02 operator gate)", async () => {
+  it("rejects anonymous session creation (operator gate)", async () => {
     const res = await app.request("/api/sessions", {
       method: "POST",
       headers: { "content-type": "application/json" },

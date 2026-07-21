@@ -23,7 +23,7 @@ const INVOKE_CHANNELS = [
   "covel:settings:load",
   "covel:settings:save",
   // Import is dialog-only: the renderer triggers a native file chooser in the
-  // main process (audit S-08). No renderer-supplied path channels.
+  // main process. No renderer-supplied path channels.
   "covel:import:pick-plugin",
   "covel:import:pick-world",
 ] as const;

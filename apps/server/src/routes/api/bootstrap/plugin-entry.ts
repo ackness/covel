@@ -354,7 +354,7 @@ export async function createBootstrapPluginEntries({
   //
   // Legacy `hooks` register their declarations at boot for every trust tier
   // (handlers lazy-load on first fire — community handlers stay dormant until
-  // `activateDeferredPluginHooks` below, H-03), so builtin/official legacy
+  // `activateDeferredPluginHooks` below), so builtin/official legacy
   // hooks catch SessionStart / TurnStart from turn one. Entry hooks only
   // enter the HookPipeline once `ensurePluginEntry` has run. For a community
   // plugin the earliest that either fires is at APPROVAL (`approvals.ts`
@@ -391,7 +391,7 @@ export async function createBootstrapPluginEntries({
 
     const promise = (async () => {
       try {
-        // H-03: approval also unlocks the plugin's legacy `hooks:` handlers,
+        // Approval also unlocks the plugin's legacy `hooks:` handlers,
         // which were registered dormant at boot (plugin-hooks.ts). Activate
         // BEFORE the entry runs, and regardless of whether the plugin
         // declares an `entry` at all — a legacy-hooks-only community plugin

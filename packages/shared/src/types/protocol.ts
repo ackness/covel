@@ -297,10 +297,10 @@ export type CovelEvent =
       readonly type: "connection.restored";
       readonly payload: CovelEventPayload;
     }
-  // Suspend / Resume (S4-T4)
+  // Suspend / Resume
   | { readonly type: "turn.suspended"; readonly payload: TurnSuspendedPayload }
   | { readonly type: "turn.resumed"; readonly payload: TurnResumedPayload }
-  // Snapshot / Fork (S4-T2 / S4-T5)
+  // Snapshot / Fork
   | {
       readonly type: "state.snapshot.created";
       readonly payload: CovelEventPayload;
@@ -341,7 +341,7 @@ export type CovelEvent =
   | { readonly type: "gateway.calling"; readonly payload: CovelEventPayload }
   | { readonly type: "gateway.responded"; readonly payload: CovelEventPayload }
   | { readonly type: "gateway.failed"; readonly payload: CovelEventPayload }
-  // Plugin-utils provider-call trace (A2-P1-5 follow-up). Wraps
+  // Plugin-utils provider-call trace. Wraps
   // ctx.utils.fetchWithRetry — the wire image plugins own. Trace-only
   // (forward:false): polling can be high-frequency, so keep it off the action
   // stream; /debug reads it from trace_events + the subscription channel.

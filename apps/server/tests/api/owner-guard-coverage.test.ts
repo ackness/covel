@@ -1,5 +1,5 @@
 /**
- * Audit H-02 — owner-guard coverage for session-scoped routes that receive
+ * Owner-guard coverage for session-scoped routes that receive
  * the session id outside the `:id` route param (query, body, or via an
  * approvalId indirection):
  *
@@ -301,7 +301,7 @@ describe("self tier (default) — guards are strict no-ops", () => {
     h = createHarness();
   });
 
-  it("allows anonymous session creation (C-02 gate is hosted-only)", async () => {
+  it("allows anonymous session creation (gate is hosted-only)", async () => {
     const created = await createSession(h.app);
     expect(typeof created.ownerToken).toBe("string");
   });

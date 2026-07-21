@@ -30,7 +30,7 @@ function makeUtils(
   } as PluginRuntimeUtils;
 }
 
-describe("withUtilsTrace (A2-P1-5 follow-up)", () => {
+describe("withUtilsTrace (follow-up)", () => {
   it("emits utils.fetch.calling then responded with host/method/status/durationMs", async () => {
     const { emitter, events } = captureEmitter();
     const utils = makeUtils({

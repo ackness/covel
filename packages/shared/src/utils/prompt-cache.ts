@@ -1,7 +1,7 @@
 /**
  * Prompt cache breakpoint marker — §A15 of the improvement plan.
  *
- * S2-T3 introduces a cross-provider prompt cache abstraction. The context
+ * A cross-provider prompt cache abstraction. The context
  * assembler (`@covel/context`) and provider adapters (`@covel/ai-provider`)
  * need to agree on a sentinel string that marks logical cache breakpoints
  * inside a single concatenated `systemPrompt`. Defining the constant here

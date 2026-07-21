@@ -40,7 +40,7 @@ worldDataSyncRoutes.post("/:id/world-data/preflight", async (c) => {
   if (typeof body.sessionId === "string" && !session) {
     return c.json(errorBody("Session not found"), 404);
   }
-  // Owner guard (audit H-02): the plan leaks session-scoped import state.
+  // Owner guard: the plan leaks session-scoped import state.
   // Hosted tiers only; no-op on self.
   if (session) {
     const denied = checkSessionOwner(c, session);
@@ -91,7 +91,7 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
   if (!session) {
     return c.json(errorBody("Session not found"), 404);
   }
-  // Owner guard (audit H-02): sync rewrites the session's worldData rows.
+  // Owner guard: sync rewrites the session's worldData rows.
   const denied = checkSessionOwner(c, session);
   if (denied) return denied;
   if (session.worldId !== worldId) {
@@ -176,7 +176,7 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
   if (!session || session.worldId !== id) {
     return c.json(errorBody("Session not found or world mismatch"), 404);
   }
-  // Owner guard (audit H-02): dimension re-import writes the session's
+  // Owner guard: dimension re-import writes the session's
   // plugin_data + lorebook.
   const denied = checkSessionOwner(c, session);
   if (denied) return denied;

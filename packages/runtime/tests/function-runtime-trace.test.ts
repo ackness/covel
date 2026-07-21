@@ -1,5 +1,5 @@
 /**
- * function-runtime trace coverage (A2-P1-5).
+ * function-runtime trace coverage.
  *
  * Function runtimes used to be near-invisible in the trace timeline: nothing
  * between runtime.started/completed, zero rows for ctx.gateway provider calls,
@@ -94,7 +94,7 @@ const baseLLM = {
   }),
 };
 
-describe("function-runtime trace (A2-P1-5)", () => {
+describe("function-runtime trace", () => {
   let store: DataStore;
   let eventBus: EventBus;
 

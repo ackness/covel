@@ -1,11 +1,10 @@
 /**
- * Agent-guard deadline (audit R-12) and post-deadline write revocation
- * (re-review H-11).
+ * Agent-guard deadline and post-deadline write revocation.
  *
  * `executeAgentGuard` used to await `loaded.guard(...)` with no deadline and
  * no abort signal — a hung guard blocked the turn (and the session lock)
  * forever. These tests pin the Promise.race deadline (mirroring the
- * function-runtime handler pattern), the abort-signal wiring, and the H-11
+ * function-runtime handler pattern), the abort-signal wiring, and the
  * guarantee: once the deadline fires, the still-running guard's write
  * capabilities (store / pluginData / recursiveCall / …) throw instead of
  * mutating state that now belongs to a later turn.
@@ -84,7 +83,7 @@ describe("agent guard deadline (R-12)", () => {
   });
 
   it("propagates the turnControl abort into the guard's signal", async () => {
-    // H-11: the guard now receives a COMBINED signal (player turn abort OR
+    // The guard now receives a COMBINED signal (player turn abort OR
     // the guard's own deadline), so identity with turnControl.signal is no
     // longer expected — abort propagation is.
     const controller = new AbortController();
@@ -110,7 +109,7 @@ describe("agent guard deadline (R-12)", () => {
     expect(seenSignal!.aborted).toBe(true);
   });
 
-  it("revokes a timed-out guard's write capabilities and aborts its signal (H-11)", async () => {
+  it("revokes a timed-out guard's write capabilities and aborts its signal", async () => {
     const store: DataStore = createMemoryStore();
     const setPluginData = vi.spyOn(store, "setPluginData");
 

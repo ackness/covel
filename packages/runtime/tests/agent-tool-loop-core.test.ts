@@ -2,9 +2,8 @@
  * Direct tests for the agent tool-call loop core (`runAgentToolLoop`),
  * instantiated with a minimal fixture — a scripted LLMAdapter, a real
  * ToolExecutor over one test tool, and a recording TurnEmitter. No turn
- * executor, scheduler, or store required (roadmap W2/W3 acceptance:
- * the loop core is independently instantiable and its trace/delta
- * sequences are pinned).
+ * executor, scheduler, or store required: the loop core is independently
+ * instantiable and its trace/delta sequences are pinned.
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -329,7 +328,7 @@ describe("runAgentToolLoop core", () => {
     }
   });
 
-  // ── W4: player turn control ─────────────────────────────────────
+  // ── Player turn control ─────────────────────────────────────
 
   it("abort: a pre-fired signal rejects with TurnAbortedError before any LLM call", async () => {
     const controller = new AbortController();

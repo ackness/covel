@@ -3,7 +3,7 @@
  * emits `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed`
  * trace events through the turn-scoped `TurnEmitter`.
  *
- * This is the A2-P1-5 follow-up: image plugins (dashscope-image-gen,
+ * This is a follow-up: image plugins (dashscope-image-gen,
  * openai-image-gen) and any plugin that owns its wire format call provider
  * endpoints via `ctx.utils.fetchWithRetry` rather than the gateway facade, so
  * those calls were invisible in the trace timeline. Tracing the generic utils

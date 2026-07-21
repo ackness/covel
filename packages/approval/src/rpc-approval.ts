@@ -1,5 +1,5 @@
 /**
- * PR-7: Plugin RPC approval gate.
+ * Plugin RPC approval gate.
  *
  * Sits in front of `POST /api/sessions/:id/plugin-rpc`. For every incoming
  * action-level dispatch the route asks the gate `evaluate({ pluginId,
@@ -97,12 +97,12 @@ const ONE_TIME_GRANT_TTL_MS = 60_000;
  * Uses the reserved `covel:` framework namespace so a third-party plugin
  * cannot declare a real action with this exact name and thereby satisfy the
  * phase-2 action check from the phase-1 grant, eliding the second
- * confirmation (audit re-review F5).
+ * confirmation.
  */
 export const COMMUNITY_SERVER_CODE_ACTION = "covel:plugin-server-code";
 
 /**
- * MEDIUM-1 fix: cap the pending-approval queue so a malicious caller cannot
+ * Cap the pending-approval queue so a malicious caller cannot
  * leak memory by spamming community-trust dispatches.
  *
  *   - `MAX_PENDING_PER_SESSION`: hard cap per (sessionId). Once reached the
@@ -211,7 +211,7 @@ export function createRpcApprovalGate(): RpcApprovalGate {
           };
         }
       }
-      // MEDIUM-1: enforce queue caps before allocation. Sweep stale entries
+      // Enforce queue caps before allocation. Sweep stale entries
       // first so a long-lived process doesn't get pinned at the cap by
       // ancient unanswered pendings.
       sweepStalePending();

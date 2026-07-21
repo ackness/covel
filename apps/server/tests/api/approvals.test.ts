@@ -1,5 +1,5 @@
 /**
- * PR-7: end-to-end approval flow tests.
+ * End-to-end approval flow tests.
  *
  * Covers:
  *   - community-trust dispatch → 202 approval-required
@@ -117,7 +117,7 @@ async function clearServerCodePhase(
   return dispatchRpc(app, sessionId);
 }
 
-describe("Plugin RPC approval flow (PR-7)", () => {
+describe("Plugin RPC approval flow", () => {
   let app: Hono;
   let store: DataStore;
   let gate: RpcApprovalGate;

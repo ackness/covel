@@ -1,5 +1,5 @@
 /**
- * Working Memory REST API route tests (S3-T3).
+ * Working Memory REST API route tests.
  *
  * Tests the PUT/GET/DELETE round-trip for /api/sessions/:id/working-memory/:scope/:key
  */

@@ -1,5 +1,5 @@
 /**
- * Deferred (community) legacy hook gating (re-review H-03).
+ * Deferred (community) legacy hook gating.
  *
  * A community plugin's `hooks:` handler module must NOT be import()'d — and
  * therefore must not execute any code — until the plugin is approved and
@@ -51,7 +51,7 @@ export default async () => ({ action: "abort", reason: "handler ran" });
 
 const ctx = { sessionId: "s1", turnId: "t1" } as unknown as HookContext;
 
-describe("registerPluginHooks deferred gating (H-03)", () => {
+describe("registerPluginHooks deferred gating", () => {
   it("does not import a deferred handler at registration or invocation; activation unlocks it", async () => {
     const pluginId = "deferred-community";
     const rootPath = writeHandler(pluginId);

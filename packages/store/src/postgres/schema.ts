@@ -62,7 +62,7 @@ export const sessions = pgTable("sessions", {
   updatedAt: text("updated_at").notNull(),
   embeddingModelId: integer("embedding_model_id"), // FK → vector_models.id; NULL = RAG disabled
   embeddingLockedAt: text("embedding_locked_at"), // ISO 8601 timestamp
-  runtimeModelOverrides: jsonb("runtime_model_overrides").default({}), // PR-6: per-runtime slot overrides
+  runtimeModelOverrides: jsonb("runtime_model_overrides").default({}), // per-runtime slot overrides
 });
 
 // ── Turn Results ────────────────────────────────────────────────
@@ -354,7 +354,7 @@ export const traceEvents = pgTable(
   ],
 );
 
-// ── Runtime Outputs (PR-1 translation layer) ────────────────────
+// ── Runtime Outputs (translation layer) ────────────────────
 
 export const runtimeOutputs = pgTable(
   "runtime_outputs",
@@ -383,7 +383,7 @@ export const runtimeOutputs = pgTable(
   ],
 );
 
-// ── Interaction Records (PR-1 translation layer) ────────────────
+// ── Interaction Records (translation layer) ────────────────
 
 export const interactionRecords = pgTable(
   "interaction_records",
@@ -436,7 +436,7 @@ export const turnMessages = pgTable(
   ],
 );
 
-// ── Session Summaries (S2-T2 Compactor) ────────────────────────
+// ── Session Summaries (Compactor) ────────────────────────
 
 export const sessionSummaries = pgTable(
   "session_summaries",
@@ -467,7 +467,7 @@ export const playerInputs = pgTable(
   (table) => [index("pg_player_inputs_session_id_idx").on(table.sessionId)],
 );
 
-// ── Working Memory (S3-T3) ────────────────────────────────────
+// ── Working Memory ────────────────────────────────────
 
 export const workingMemory = pgTable(
   "working_memory",
@@ -490,7 +490,7 @@ export const workingMemory = pgTable(
   ],
 );
 
-// ── Lorebook Entries (S3-T2) ──────────────────────────────────
+// ── Lorebook Entries ──────────────────────────────────
 
 export const lorebookEntries = pgTable(
   "lorebook_entries",
@@ -517,7 +517,7 @@ export const lorebookEntries = pgTable(
   ],
 );
 
-// ── State Snapshots (S4-T2) ────────────────────────────────────
+// ── State Snapshots ────────────────────────────────────
 
 export const stateSnapshots = pgTable(
   "state_snapshots",
@@ -577,7 +577,7 @@ export const mediaRefs = pgTable(
   ],
 );
 
-// ── Suspensions (S4-T4) ────────────────────────────────────────
+// ── Suspensions ────────────────────────────────────────
 
 export const suspensions = pgTable(
   "suspensions",

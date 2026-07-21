@@ -39,7 +39,7 @@ function makeGateway(
   } as PluginRuntimeGateway;
 }
 
-describe("withGatewayTrace (A2-P1-5)", () => {
+describe("withGatewayTrace", () => {
   it("generateText emits gateway.calling then gateway.responded with finishReason/usage/durationMs", async () => {
     const { emitter, events } = captureEmitter();
     const gateway = makeGateway({

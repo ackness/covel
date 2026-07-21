@@ -1,5 +1,5 @@
 /**
- * PR-3: Plugin RPC registry.
+ * Plugin RPC registry.
  *
  * Holds the lookup table for RPC handlers exposed via
  * `POST /api/sessions/:id/plugin-rpc`. Two kinds of registrations:
@@ -25,7 +25,7 @@ import type {
 /**
  * Trust ranking — higher rank = more permissive (auto-allows the call).
  *
- * The PR-7 approval gate uses this so plugin-declared `decl.trustLevel` can
+ * The approval gate uses this so plugin-declared `decl.trustLevel` can
  * only ever **raise restrictions** relative to the plugin's source trust:
  * a community plugin can't quietly opt itself into `builtin` and bypass
  * the dialog. See CRITICAL-1 fix in the code review report.

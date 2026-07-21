@@ -230,7 +230,7 @@ export function reducer(
     case "APPEND_DELTA": {
       // Streaming text lives in a fine-grained external store. The placeholder
       // is inserted exactly once, keeping the messages reference stable for the
-      // whole stream so O(history) grouping does not rebuild per token (M-03).
+      // whole stream so O(history) grouping does not rebuild per token.
       //
       // IMPORTANT: carry turnId / runtimeId / kind on the placeholder — chat
       // groups execution timelines by turnId, and without these the streaming

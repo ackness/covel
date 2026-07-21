@@ -11,7 +11,7 @@
  * postgres.js maintains its own dedicated connection for LISTEN, so `max: 1`
  * covers the NOTIFY sends without inflating PG connection usage.
  *
- * Ordering (re-review H-07): the bus publishes each session's frames through
+ * Ordering: the bus publishes each session's frames through
  * a serialized outbox and every frame carries the origin seq, so this
  * transport only needs best-effort ordering — `max: 1` sends NOTIFYs in call
  * order and PG delivers them in commit order; the bus's receive side

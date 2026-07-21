@@ -104,7 +104,7 @@ export interface ModelCapability {
 
 export type ModelTier = "small" | "medium" | "large" | "embed-default";
 
-// ── Prompt Cache Strategy (S2-T3) ─────────────────────────────────
+// ── Prompt Cache Strategy ─────────────────────────────────
 
 /**
  * How a provider handles prompt caching.
@@ -120,9 +120,9 @@ export type ModelTier = "small" | "medium" | "large" | "embed-default";
  * - `auto-prefix` — OpenAI, DeepSeek, and Qwen transparently cache any
  *   prompt prefix they see repeatedly. The adapter needs no change; the
  *   only requirement is that prefixes stay byte-stable across turns,
- *   which the S2-T1 three-tier assembler already guarantees.
+ *   which the three-tier assembler already guarantees.
  * - `none` — fallback for providers with no prompt caching support.
- *   Adapters behave exactly as they did before S2-T3.
+ *   Adapters behave exactly as they did before cache strategies existed.
  */
 export type CacheStrategy = "anthropic-explicit" | "auto-prefix" | "none";
 
@@ -135,11 +135,11 @@ export interface ProviderConfig {
   /** Abort signal for request cancellation. */
   signal?: AbortSignal;
   /**
-   * Prompt cache strategy for this provider (S2-T3).
+   * Prompt cache strategy for this provider.
    *
    * Filled in by the provider registry based on the resolved protocol;
    * callers do not normally set this directly. When omitted or set to
-   * `"none"` the adapter uses its pre-S2-T3 request construction.
+   * `"none"` the adapter uses its default request construction.
    */
   cacheStrategy?: CacheStrategy;
 }
@@ -234,7 +234,7 @@ export interface PresetConfig {
    * untrusted request context (browser `X-Slot-Config` overlay) rather
    * than trusted config (llm.toml / programmatic registration).
    *
-   * Security-relevant (S-01): the provider registry refuses to attach
+   * Security-relevant: the provider registry refuses to attach
    * server-env/platform API keys to a resolution whose effective baseUrl
    * came from a request-scoped source with a different origin than the
    * trusted provider default — otherwise a request could redirect a

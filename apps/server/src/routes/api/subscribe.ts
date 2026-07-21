@@ -181,7 +181,7 @@ subscribeRoutes.get(
     const session = await store.getSession(sessionId);
     if (!session) return c.json(errorBody("Session not found"), 404);
 
-    // Owner guard (hosted tiers, S-02). EventSource cannot set headers, so
+    // Owner guard (hosted tiers). EventSource cannot set headers, so
     // clients pass `?session_token=` — see extractSessionOwnerToken.
     const denied = checkSessionOwner(c, session);
     if (denied) return denied;
@@ -236,7 +236,7 @@ subscribeRoutes.get(
         // buffered here and flushed afterwards, deduped by id against what
         // replay already sent — so nothing is lost and nothing double-sends.
         //
-        // H-08: everything acquired here (listener, reset listener, session
+        // Everything acquired here (listener, reset listener, session
         // pin, heartbeat, queue, connection slot) is released in one finally.
         const sentIds = new Set<string>();
         const liveBuffer: SubscriptionEvent[] = [];
@@ -298,7 +298,7 @@ subscribeRoutes.get(
               liveBuffer.push(event);
               return;
             }
-            // H-06(3): no sentIds bookkeeping on the live path — dedupe only
+            // No sentIds bookkeeping on the live path — dedupe only
             // covers the replay→live cutover window; live ids are epoch-unique.
             writes.enqueue(() =>
               stream.writeSSE({
@@ -325,7 +325,7 @@ subscribeRoutes.get(
               closeStream();
             });
           });
-          // H-06(1): pin the session's replay state for the lifetime of this
+          // Pin the session's replay state for the lifetime of this
           // stream so LRU/TTL eviction can't reset its seq/epoch underneath an
           // active subscriber. Transport gaps explicitly invalidate pinned
           // state and are surfaced through onReset above.
@@ -350,7 +350,7 @@ subscribeRoutes.get(
 
           // Replay missed events if lastEventId provided. Ids are epoch-scoped
           // (`${epoch}:${seq}`): when the cursor's epoch no longer matches, or
-          // the ring buffer can't bridge the seq (H-05 gap), emit an id-less
+          // the ring buffer can't bridge the seq (gap), emit an id-less
           // `system.reset` control frame instead of a partial replay.
           if (lastEventId) {
             const cursor = parseSubscriptionEventId(lastEventId);

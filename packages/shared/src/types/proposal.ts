@@ -104,7 +104,7 @@ export interface WorkingMemorySetPayload {
 }
 
 /**
- * Payload for `lorebook.upsert` proposals (S3-T2).
+ * Payload for `lorebook.upsert` proposals.
  *
  * Each entry in `entries` becomes one row in the `lorebook_entries` table.
  * The commit handler stamps the proposal's `sessionId` and the source

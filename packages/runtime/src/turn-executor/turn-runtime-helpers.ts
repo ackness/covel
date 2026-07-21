@@ -91,7 +91,7 @@ export function createAssetProgressEmitter(
 }
 
 /**
- * PR-1 translation layer: convert a `RuntimeResult` into a normalized
+ * Translation layer: convert a `RuntimeResult` into a normalized
  * `RuntimeOutputRecord` for downstream consumers.
  */
 export function buildRuntimeOutputFromResult(

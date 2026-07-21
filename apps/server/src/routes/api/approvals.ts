@@ -1,5 +1,5 @@
 /**
- * PR-7: Plugin RPC approval routes.
+ * Plugin RPC approval routes.
  *
  *   GET  /api/sessions/:id/approvals
  *     List pending approvals for a session (so the frontend can resync
@@ -58,7 +58,7 @@ export const sessionApprovalRoutes = new Hono<Env>();
 sessionApprovalRoutes.get("/:id/approvals", async (c) => {
   const gate = c.get("rpcApprovalGate");
   const sessionId = c.req.param("id");
-  // Owner guard (audit H-02): pending entries carry plugin RPC payloads for
+  // Owner guard: pending entries carry plugin RPC payloads for
   // this session. Hosted tiers only; strict no-op on self.
   const denied = await checkSessionOwnerById(c, c.get("store"), sessionId);
   if (denied) return denied;
@@ -71,7 +71,7 @@ sessionApprovalRoutes.get("/:id/approvals", async (c) => {
 sessionApprovalRoutes.delete("/:id/approvals", async (c) => {
   const gate = c.get("rpcApprovalGate");
   const sessionId = c.req.param("id");
-  // Owner guard (audit H-02): revoking grants mutates another player's
+  // Owner guard: revoking grants mutates another player's
   // approval state. Hosted tiers only; strict no-op on self.
   const denied = await checkSessionOwnerById(c, c.get("store"), sessionId);
   if (denied) return denied;
@@ -84,7 +84,7 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
   const gate = c.get("rpcApprovalGate");
   const approvalId = c.req.param("approvalId");
 
-  // Owner guard (audit H-02): resolve the approvalId to its session FIRST —
+  // Owner guard: resolve the approvalId to its session FIRST —
   // an attacker who learns an approvalId must not be able to approve
   // community-plugin code for another user's session. The lookup does not
   // consume the pending entry, so a denied caller leaves it intact for the

@@ -75,7 +75,7 @@ describe("applySlotOverlay", () => {
 
     const cleanup = applySlotOverlay(deps, overrides);
 
-    // Never registered under the bare public id (that's the H-04 poisoning
+    // Never registered under the bare public id (that's the poisoning
     // surface) and no provider is ever registered.
     expect(deps.presetRegistry.hasPreset("custom_abc")).toBe(false);
     expect(deps.providerRegistry.hasProvider("vendorX")).toBe(false);
@@ -143,7 +143,7 @@ describe("applySlotOverlay", () => {
     expect(deps.presetRegistry.hasPreset("ds-chat")).toBe(true);
   });
 
-  it("isolates concurrent same-id presets with different baseUrls (H-04)", () => {
+  it("isolates concurrent same-id presets with different baseUrls", () => {
     const deps = makeDeps();
     const mk = (baseUrl: string): SlotOverridesInput => ({
       customPresets: [

@@ -1,5 +1,5 @@
 /**
- * S-05: the core provider HTTP path (postJson / getJson) must route through
+ * The core provider HTTP path (postJson / getJson) must route through
  * the DNS-pinning dispatcher, so a hostname that passes the string-level
  * `validateBaseUrl` check but resolves to a private / loopback address is
  * rejected at connect time (closing the SSRF / DNS-rebinding gap that
@@ -26,7 +26,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe("core request DNS SSRF safety (S-05)", () => {
+describe("core request DNS SSRF safety", () => {
   // Hosted tiers keep the strict public-only policy on the core provider path.
   it("rejects a POST to a hostname resolving to a private IP (hosted tier)", async () => {
     vi.stubEnv("DEPLOYMENT_TIER", "demo");

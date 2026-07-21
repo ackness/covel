@@ -95,7 +95,7 @@ function resolvePreferredMemorySlot(slotRegistry: {
 const app = new Hono();
 const env = readRuntimeEnv();
 
-// Fail fast on an unsafe hosted posture (audit S-13) before any route is
+// Fail fast on an unsafe hosted posture before any route is
 // wired or the caller starts listening. No-op for self-deploy/desktop.
 validateSecurityPosture(env);
 
@@ -214,7 +214,7 @@ if (storeBackend === "pg" && env.databaseUrl) {
 // to llm.toml without requiring code changes here.
 const apiKeys = providerApiKeysFromEnv(process.env);
 // Env-derived keys ride the `envApiKeys` channel so the provider registry
-// origin-gates them (S-01) — the startup paths never carry request-scoped
+// origin-gates them — the startup paths never carry request-scoped
 // slot overlays today, but the provenance stays honest if that changes.
 const llmAdapter = createGatewayAdapter(ai.gateway, { envApiKeys: apiKeys });
 // Function-runtime gateway facade — shares the same preset/provider

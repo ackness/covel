@@ -424,7 +424,7 @@ describe("executeTurn: manual trigger", () => {
     );
 
     expect(result.runtimeResults[0]!.status).toBe("success");
-    // A2-P1-5: function.executing / function.completed now bracket the handler,
+    // function.executing / function.completed now bracket the handler,
     // so assert the asset.progress payload precisely via filter and pin the
     // full trace sequence separately.
     expect(emitted.filter((e) => e.type === "asset.progress")).toEqual([
@@ -450,7 +450,7 @@ describe("executeTurn: manual trigger", () => {
     ]);
   });
 
-  // ── Audit F7: userSettings merging. ────────────────────────────────
+  // ── userSettings merging. ────────────────────────────────
   //
   // Function runtimes declare `userSettings: [{key, default, ...}]` in their
   // manifest. Server-side TurnInput carries the player-authored values

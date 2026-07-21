@@ -496,7 +496,7 @@ export function buildFrameworkPreamble(
 }
 
 /**
- * Render Working Memory entries as a prompt segment (S3-T3).
+ * Render Working Memory entries as a prompt segment.
  *
  * Sorting is deterministic: scope order `player` → `story` → `shared`,
  * then alphabetical key within scope. If no entries exist, returns an

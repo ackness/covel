@@ -1,5 +1,5 @@
 /**
- * PR-3: Plugin RPC route.
+ * Plugin RPC route.
  *
  * Single channel for all structured plugin commands:
  *
@@ -77,7 +77,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       404,
     );
   }
-  // Owner guard (hosted tiers, S-02): plugin-rpc can trigger manual runtimes
+  // Owner guard (hosted tiers): plugin-rpc can trigger manual runtimes
   // (full turn pipeline) and mutate plugin data.
   const ownerDenied = checkSessionOwner(c, session);
   if (ownerDenied) return ownerDenied;
@@ -221,7 +221,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       pluginRegistry,
       sessionId,
     );
-    // Audit F7: player-authored plugin settings travel with the request
+    // Player-authored plugin settings travel with the request
     // as a base64-encoded JSON header (`X-Plugin-User-Settings`) sourced
     // from the unified SettingsStore. The body map keys on pluginId so
     // executor merges per-runtime defaults with the matching player
@@ -354,7 +354,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
 
     // ── Sync mode ──────────────────────────────────────────────────
     //
-    // Audit F1: the sync turn may surface `deferredFollowers` — event-chain
+    // The sync turn may surface `deferredFollowers` — event-chain
     // followers with `execution: 'background'` that were skipped so the
     // user gets an immediate response. Persist one `_jobs/<jobId>` pending
     // row per follower BEFORE responding so the frontend can render a
@@ -444,7 +444,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     }
   }
 
-  // PR-7: approval gate. Look up the resolved entry first so we know its
+  // Approval gate. Look up the resolved entry first so we know its
   // trust level, then ask the gate whether the call can proceed. Builtin
   // and official trust auto-allow; community trust either re-uses a cached
   // session approval or returns approval-required for the dialog flow.
@@ -461,7 +461,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   // re-resolve. Builtin/official entries ran at boot, so their misses stay
   // hard 404s.
   //
-  // LOW-3: framework default actions are namespace-less but still need a
+  // Framework default actions are namespace-less but still need a
   // canonical sentinel for the request shape. The dispatcher requires
   // `pluginId === "framework"` for framework defaults. Plugin-declared
   // actions still use the real plugin ID.
@@ -562,7 +562,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   }
 
   if (verdict.status === "rejected") {
-    // MEDIUM-1: pending queue is full. Map to 429 so clients back off.
+    // Pending queue is full. Map to 429 so clients back off.
     return c.json(
       {
         status: "error",

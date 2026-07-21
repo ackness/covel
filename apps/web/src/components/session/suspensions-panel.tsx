@@ -1,5 +1,5 @@
 /**
- * SuspensionsPanel — UI surface for the F4 suspend/resume flow.
+ * SuspensionsPanel — UI surface for the suspend/resume flow.
  *
  * Renders the active suspensions list plus a minimal resume form. The form
  * accepts free-form JSON or text and submits through the api.resumeSuspension

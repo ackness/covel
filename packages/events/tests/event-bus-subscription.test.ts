@@ -170,7 +170,7 @@ describe("EventBus Subscription Features", () => {
   });
 
   describe("ring buffer overflow", () => {
-    it("should drop oldest events and report the gap (H-05)", () => {
+    it("should drop oldest events and report the gap", () => {
       // Emit 1050 events
       for (let i = 0; i < 1050; i++) {
         bus.emit(makeMessage({ sessionId: "sess-1" }));

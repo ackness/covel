@@ -1,5 +1,5 @@
 /**
- * Tests for the suspend builtin tool (S4-T4).
+ * Tests for the suspend builtin tool.
  */
 
 import { describe, it, expect } from "vitest";

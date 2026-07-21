@@ -1,5 +1,5 @@
 /**
- * Runtime outputs and interaction records routes (PR-1 translation layer).
+ * Runtime outputs and interaction records routes (translation layer).
  *
  *   GET /api/sessions/:id/runtime-outputs?runtimeId=&pluginId=&since=&limit=
  *     — list normalised runtime execution records
@@ -80,7 +80,7 @@ runtimeOutputRoutes.get("/:id/runtime-outputs/:outputId", async (c) => {
 // Rebuilds the complete prompt history that was sent to the runtime on the
 // call captured by this RuntimeOutput record.
 //
-// Rebuild strategy (best-effort — PR-1 accepts that the reconstruction may
+// Rebuild strategy (best-effort — accepts that the reconstruction may
 // be approximate for runtimes that rewrote history mid-turn):
 //   1. Pull all `turn_messages` for the session up to and including the
 //      record's own turnId, sorted by `order`.

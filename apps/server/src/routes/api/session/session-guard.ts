@@ -1,5 +1,5 @@
 /**
- * Session-param resolution guard + session owner-token authorization (S-02).
+ * Session-param resolution guard + session owner-token authorization.
  *
  * 13 session-scoped route files repeated the same pattern:
  *
@@ -14,7 +14,7 @@
  *
  * Routes call `resolveSessionParam(c)` and branch on the discriminated result.
  *
- * ── Owner-token model (audit S-02) ───────────────────────────────
+ * ── Owner-token model ───────────────────────────────
  *
  * Every session created via `POST /api/sessions` mints an unguessable owner
  * token. Only its SHA-256 hash is persisted (`session.metadata.ownerTokenHash`)
@@ -161,7 +161,7 @@ export function checkSessionOwner(
 /**
  * Owner guard for routes whose session id arrives outside the `:id` route
  * param (query string, request body, or an indirection like approvalId →
- * pending.sessionId) — audit H-02.
+ * pending.sessionId).
  *
  * Returns `undefined` when access is allowed, else a ready-to-return 404
  * (unknown session) or 401 (owner token missing/invalid) response.

@@ -1,5 +1,5 @@
 /**
- * F4 regression tests for the suspend/resume slice of session-store.tsx.
+ * Regression tests for the suspend/resume slice of session-store.tsx.
  *
  * The reducer itself is an internal module-private function; following the
  * precedent set by session-store-plugins.test.ts we re-implement the exact
@@ -61,7 +61,7 @@ type Action =
   | { type: "ADD_MESSAGE"; message: MessageRecord }
   | { type: "UPSERT_EXECUTION_STEP"; step: ExecutionStep };
 
-/** Mirrors the F4 reducer slice added to session-store.tsx. */
+/** Mirrors the reducer slice added to session-store.tsx. */
 function reduce(state: State, action: Action): State {
   switch (action.type) {
     case "SET_SUSPENSIONS":
@@ -211,7 +211,7 @@ const makeSuspension = (
 
 // ── Tests ────────────────────────────────────────────────────────
 
-describe("session-store — F4 suspensions slice", () => {
+describe("session-store — suspensions slice", () => {
   const empty: State = { executionSteps: [], suspensions: [], messages: [] };
 
   it("SET_SUSPENSIONS: hydrates the list from the server snapshot", () => {
@@ -266,7 +266,7 @@ describe("session-store — F4 suspensions slice", () => {
   });
 
   it("runtime.completed: reads payload.status — 'suspended' no longer reported as 'completed'", () => {
-    // Pre-F4 bug: the handler hard-coded status: "completed", so the chat
+    // Prior bug: the handler hard-coded status: "completed", so the chat
     // timeline lied about suspended runtimes and the amber clock chip never
     // showed up. Reading payload.status is what unlocks the honest state.
     expect(resolveRuntimeCompletedStatus({ status: "suspended" })).toBe(

@@ -1,5 +1,5 @@
 /**
- * Hook event single-source-of-truth contract (T10).
+ * Hook event single-source-of-truth contract.
  *
  * Guards the convergence of the hook event list onto one tuple, `HOOK_EVENTS`
  * in `@covel/shared`. If anyone adds, removes, or renames a hook event in just

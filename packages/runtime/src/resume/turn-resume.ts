@@ -30,7 +30,7 @@ export interface ResumeSuspendedRuntimeOptions {
  * It rebuilds the mid-turn state from the persisted suspension and re-enters the
  * **shared** agent tool loop (`runAgentToolLoop`) with that state seeded in, then
  * finalizes through the **shared** `finalizeAgentOutput`. It no longer hand-rolls
- * its own copy of the loop / finalize blocks (F1.b): resume now goes through the
+ * its own copy of the loop / finalize blocks: resume now goes through the
  * same `requestLLMResponse` + retry / loop-detection / streaming machinery as the
  * main loop, so `maxRetries` / `firstTokenTimeoutMs` / `loopDetectionThreshold`
  * apply on resume too.

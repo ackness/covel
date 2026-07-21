@@ -1,5 +1,5 @@
 /**
- * Centralized security fail-fast (audit S-13).
+ * Centralized security fail-fast.
  *
  * Called once from `app.ts` at boot, before the server starts listening.
  * Hosted tiers must not come up with an unsafe posture; T1 self-deploy /
@@ -22,7 +22,7 @@ type RuntimeEnv = ReturnType<typeof readRuntimeEnv>;
  *   (`COVEL_DESKTOP_REST_TOKEN`). Session-scoped routes are authorized by
  *   per-session owner tokens (minted at session creation and hard-enforced
  *   on `demo`/`commercial` — see `routes/api/session/session-guard.ts`),
- *   but session CREATION (C-02) and cross-session admin surfaces (session
+ *   but session CREATION and cross-session admin surfaces (session
  *   listing, config/install) require the operator token; without it a
  *   hosted deployment could never mint a session at all — fail loudly at
  *   boot instead of shipping a silently bricked (or unauthenticated) host.

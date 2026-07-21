@@ -1,5 +1,5 @@
 /**
- * Compactor (S2-T2) — summarize old history into a structured summary block.
+ * Compactor — summarize old history into a structured summary block.
  *
  * When the estimated token count of the current prompt assembly exceeds a
  * configurable threshold (default 60% of the slot's contextWindow), the

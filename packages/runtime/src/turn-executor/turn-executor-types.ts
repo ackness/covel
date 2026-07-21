@@ -75,7 +75,7 @@ export interface AgentLoopDeps {
    */
   readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
   /**
-   * Player mid-turn control (roadmap W4): abort signal + steering queue.
+   * Player mid-turn control: abort signal + steering queue.
    * Absent on server-initiated turns (background followers, plugin-rpc) and
    * in test harnesses — all control sites are optional-chained.
    */

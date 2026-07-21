@@ -1,5 +1,5 @@
 /**
- * PR-3: Framework default `submit-form` RPC handler.
+ * Framework default `submit-form` RPC handler.
  *
  * Persists player inputs and fills the originating interaction template.
  * This framework default is registered as `plugin-rpc` action

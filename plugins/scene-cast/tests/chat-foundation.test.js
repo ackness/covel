@@ -75,7 +75,7 @@ describe("chat foundation manifests", () => {
       "relationship-change",
       "emotional-hook",
     ]);
-    // F5: the body must NOT inline-interpolate the cast context — that would
+    // The body must NOT inline-interpolate the cast context — that would
     // double-inject (once inline, once via the input.inject segment-5 append).
     // The body references the <active-cast> tag; segment 5 fills it once.
     expect(loadedChatNarrator.promptTemplate).not.toContain(

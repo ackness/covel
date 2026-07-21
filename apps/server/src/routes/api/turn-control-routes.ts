@@ -1,5 +1,5 @@
 /**
- * Player turn-control endpoints (roadmap W4):
+ * Player turn-control endpoints:
  *
  *   POST /api/sessions/:id/steer  { message }  — interject into the active turn
  *   POST /api/sessions/:id/abort                — abort the active turn
@@ -43,7 +43,7 @@ turnControlRoutes.post("/:id/steer", rateLimiter({ max: 30 }), async (c) => {
   if (!session) {
     return c.json(errorBody("Session not found"), 404);
   }
-  // Owner guard (hosted tiers, S-02).
+  // Owner guard (hosted tiers).
   const denied = checkSessionOwner(c, session);
   if (denied) return denied;
 
@@ -80,7 +80,7 @@ turnControlRoutes.post("/:id/abort", rateLimiter({ max: 30 }), async (c) => {
   if (!session) {
     return c.json(errorBody("Session not found"), 404);
   }
-  // Owner guard (hosted tiers, S-02).
+  // Owner guard (hosted tiers).
   const denied = checkSessionOwner(c, session);
   if (denied) return denied;
 

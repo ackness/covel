@@ -1,5 +1,5 @@
 /**
- * Session kernel commit-atomicity tests (S4-T1).
+ * Session kernel commit-atomicity tests.
  *
  * Verifies that `commitAll()` wraps the proposal chain in a single scoped
  * `withTransaction` callback by default (writes flow through the tx-bound store
@@ -154,7 +154,7 @@ function makeProposal(
   };
 }
 
-describe("session-kernel commitAll atomicity (S4-T1)", () => {
+describe("session-kernel commitAll atomicity", () => {
   it("rolls back earlier writes when a later commit throws", async () => {
     const store = createRecordingStore();
     store.failOn = { method: "addStateChange", afterN: 1 };

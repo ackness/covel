@@ -1,5 +1,5 @@
 /**
- * Turn / runtime execution record types (PR-1 translation layer included).
+ * Turn / runtime execution record types (translation layer included).
  *
  * Split out of `../types.ts` by domain; re-exported there for compatibility.
  */
@@ -65,7 +65,7 @@ export interface ToolCallRecordRow {
   readonly createdAt: string;
 }
 
-// ── Translation layer: RuntimeOutput + InteractionRecord (PR-1) ──
+// ── Translation layer: RuntimeOutput + InteractionRecord ──
 
 /**
  * Normalised record of one runtime execution's output. Written by

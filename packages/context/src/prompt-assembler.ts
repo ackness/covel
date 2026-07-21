@@ -5,16 +5,16 @@
  *
  * ```
  * [1 Framework Preamble]        ← session-stable header (locale, rules)
- * [2 Working Memory]            ← session-stable slow-vary (S3-T3)
+ * [2 Working Memory]            ← session-stable slow-vary
  * [3 Plugin Instructions]       ← PLUGIN.md body, per-plugin stable
- * [4 WorldInfo: before-plugin]  ← keyword-triggered (S3-T1)
+ * [4 WorldInfo: before-plugin]  ← keyword-triggered
  * [5 Injects from upstream]     ← dynamic (this turn's upstream outputs)
- * [6 WorldInfo: after-plugin]   ← keyword-triggered (S3-T1)
+ * [6 WorldInfo: after-plugin]   ← keyword-triggered
  * ---- messages ----
  * [7 history (after pruning)]   ← dynamic (handled as messages)
  * [8 WorldInfo: at-depth:N]     ← placed before Nth-from-last message (depthContributions)
- * [9 Author's Note]             ← depth-4 instruction (S3-T4)
- * [10 Post-History Instructions]← director-grade high-weight (S3-T4)
+ * [9 Author's Note]             ← depth-4 instruction
+ * [10 Post-History Instructions]← director-grade high-weight
  * ```
  *
  * Empty segments are skipped during final concatenation so the output stays
@@ -80,14 +80,14 @@ export interface PromptSegments {
   /** Segment 6 — lorebook `after-plugin` position. */
   readonly worldInfoAfterPlugin: string;
   /**
-   * Segment 9 — Author's notes aggregated across active plugins (S3-T4).
+   * Segment 9 — Author's notes aggregated across active plugins.
    * Grouped by `(role, depth)`; each bundle is inserted before
    * `messages[length - depth]` as its own message.
    */
   readonly authorsNotes: readonly RenderedAuthorsNote[];
   /**
    * Segment 10 — Post-history instructions aggregated across active
-   * plugins (S3-T4). One message per unique role, appended at the
+   * plugins. One message per unique role, appended at the
    * very end of the message array.
    */
   readonly postHistoryInstructions: readonly LLMMessage[];
@@ -211,7 +211,7 @@ function buildPromptSegmentsCommon(
       !params.manifest.output?.schema,
     );
 
-  // Segment 2 — Core Memory (Letta-style) + Working Memory (S3-T3)
+  // Segment 2 — Core Memory (Letta-style) + Working Memory
   const coreMemory = renderCoreMemory(
     params.coreMemoryBlocks,
     params.turnInput.locale,
@@ -220,7 +220,7 @@ function buildPromptSegmentsCommon(
     .filter(Boolean)
     .join("\n\n");
 
-  // Segments 9 & 10 — Author's Note + Post-History Instructions (S3-T4).
+  // Segments 9 & 10 — Author's Note + Post-History Instructions.
   // Both segments aggregate across all active plugin manifests.
   const activeManifests = resolveActiveManifests(params);
   const authorsNotes = collectAuthorsNotes(activeManifests, variables);
@@ -287,7 +287,7 @@ function finalizeSegmentedContext(
 ): AssembledContext {
   const systemPrompt = serializeSystemPrompt(segments, true);
 
-  // Segment 7: history with optional compaction substitution (S2-T2)
+  // Segment 7: history with optional compaction substitution
   const historyMessages: LLMMessage[] = buildMessageHistoryWithSummaries(
     params.messageHistory ?? [],
     params.summaries ?? [],

@@ -1,5 +1,5 @@
 /**
- * Snapshot / Fork routes (S4-T2, §A6).
+ * Snapshot / Fork routes.
  *
  * Materialized state snapshots power save / load / fork.
  *
@@ -136,7 +136,7 @@ snapshotRoutes.post("/:id/snapshot", async (c) => {
 
       await store.saveSnapshot(snapshot);
 
-      // S4-T5: Emit state.snapshot.created so reactive UI can refresh snapshot lists.
+      // Emit state.snapshot.created so reactive UI can refresh snapshot lists.
       // EventBus is optional in tests; only emit when bound.
       const eventBus = c.get("eventBus");
       if (eventBus) {
@@ -168,7 +168,7 @@ snapshotRoutes.post("/:id/snapshot", async (c) => {
 // returns metadata only (id, turnId, kind, createdAt, parentId, payloadSize)
 // with keyset pagination — the store projects the payload column away and
 // computes `size` in-SQL, so listing stays O(limit) rows and never loads a
-// single payload (re-review M-04). Fetch a full payload on demand via
+// single payload. Fetch a full payload on demand via
 // GET /:id/snapshots/:snapshotId.
 //
 // Keyset contract matches /messages/page and /traces turns: `?limit`,
@@ -520,7 +520,7 @@ snapshotRoutes.post("/:id/fork", async (c) => {
       // absent in tests.
       const eventBus = c.get("eventBus");
       if (eventBus) {
-        // S4-T5: also publish state.snapshot.created (kind='fork') so a
+        // Also publish state.snapshot.created (kind='fork') so a
         // forked session's snapshot list reacts immediately.
         eventBus.emit({
           id: randomUUID(),

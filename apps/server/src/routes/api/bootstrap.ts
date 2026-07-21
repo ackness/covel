@@ -162,7 +162,7 @@ export interface ApiBootstrapConfig {
    * Multi-pod PG deployments MUST pass a distributed implementation —
    * typically `createPgAdvisorySessionLock(sql)` from
    * `../../lib/pg-session-lock.ts` — so mutual exclusion is enforced
-   * across processes. See `docs/architecture-audit-followups/F5-*`.
+   * across processes.
    */
   readonly sessionLock?: SessionLock;
   /**
@@ -253,7 +253,7 @@ export async function bootstrapApi(
   const store = wrapStoreWithPluginDataEvents(config.store, eventBus);
 
   // One-time startup sweep of stale suspensions accumulated while the server
-  // was down (spec S4-T4.c). Fire-and-forget — never blocks boot.
+  // was down. Fire-and-forget — never blocks boot.
   void maybeSweepExpiredSuspensions(store, { force: true }).catch(
     (err: unknown) =>
       console.warn(
@@ -419,7 +419,7 @@ export async function bootstrapApi(
   // 6b. Eagerly load runtimes that declare UI specs so /api/ui-specs has data at boot.
   //     Deferred-trust (community) plugins are skipped: loadRuntimeFn imports the
   //     plugin's handler/guard/wires JS, which must never execute before approval
-  //     (S-04). Their runtimes load post-approval through the same loadRuntimeFn
+  //     Their runtimes load post-approval through the same loadRuntimeFn
   //     path, mirroring the deferred `entry` activation.
   for (const [pluginId, discovery] of discoveryMap) {
     if (!getPluginTrustInfo(pluginId, discovery.source).autoLoad) continue;
@@ -620,14 +620,14 @@ export async function bootstrapApi(
   app.route("/api/sessions", characterRoutes);
   app.route("/api/sessions", pluginDataRoutes);
   app.route("/api/sessions", workingMemoryRoutes);
-  app.route("/api/sessions", resumeRoutes); // S4-T4: suspend/resume (resume + suspensions list/delete)
-  app.route("/api/sessions", snapshotRoutes); // S4-T2: state snapshots + fork
-  app.route("/api/sessions", lorebookRoutes); // S3-T6: session-level lorebook viewer
-  app.route("/api/sessions", runtimeOutputRoutes); // PR-1: translation-layer observability
-  app.route("/api/sessions", pluginRpcRoutes); // PR-3: plugin RPC channel
-  app.route("/api/sessions", turnControlRoutes); // W4: mid-turn steer / abort
-  app.route("/api/sessions", sessionApprovalRoutes); // PR-7: per-session approvals listing
-  app.route("/api/approvals", approvalRoutes); // PR-7: approval lookup + decision
+  app.route("/api/sessions", resumeRoutes); // suspend/resume (resume + suspensions list/delete)
+  app.route("/api/sessions", snapshotRoutes); // state snapshots + fork
+  app.route("/api/sessions", lorebookRoutes); // session-level lorebook viewer
+  app.route("/api/sessions", runtimeOutputRoutes); // translation-layer observability
+  app.route("/api/sessions", pluginRpcRoutes); // plugin RPC channel
+  app.route("/api/sessions", turnControlRoutes); // mid-turn steer / abort
+  app.route("/api/sessions", sessionApprovalRoutes); // per-session approvals listing
+  app.route("/api/approvals", approvalRoutes); // approval lookup + decision
   app.route("/api/plugins", pluginRoutes);
   app.route("/api/framework", frameworkRoutes);
   app.route("/api/events", eventRoutes);

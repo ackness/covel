@@ -362,7 +362,7 @@ export async function executeFunctionRuntime({
     durationMs: Date.now() - startTime,
   });
 
-  // ── Suspend detection for function runtimes (S4-T4) ────────────
+  // ── Suspend detection for function runtimes ────────────
   // If the handler returns { status: 'suspended', reason, resumeSchema },
   // persist a suspension and return status: 'suspended'.
   if (

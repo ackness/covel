@@ -11,7 +11,7 @@
  * and HookContext construction out of turn-executor.ts to keep it
  * under the 1000-line budget.
  *
- * Boilerplate convergence (T10): every helper used to repeat the same
+ * Boilerplate convergence: every helper used to repeat the same
  * `if (!opts.pipeline) … pipeline.run(event, { event, sessionId, turnId, … },
  * payload, { eventBus, emitter })` block. That plumbing now lives once in
  * `runHook()` (+ `buildHookCtx`/`hookReplace`); each helper only keeps its

@@ -1,5 +1,5 @@
 /**
- * W4 turn-control registry + steer/abort routes.
+ * Turn-control registry + steer/abort routes.
  */
 
 import { describe, it, expect } from "vitest";

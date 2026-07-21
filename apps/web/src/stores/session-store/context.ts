@@ -13,11 +13,11 @@ export interface SessionActions {
   deleteSession: (sessionId: string) => Promise<void>;
   sendMessage: (content: string) => void;
   /**
-   * Interject into the in-flight turn (W4). Resolves false when no turn is
+   * Interject into the in-flight turn. Resolves false when no turn is
    * active — the composer restores the steered text for the player to re-send.
    */
   steerMessage: (content: string) => Promise<boolean>;
-  /** Abort the in-flight turn (W4). No-op when nothing is running. */
+  /** Abort the in-flight turn. No-op when nothing is running. */
   abortActiveTurn: () => Promise<void>;
   /**
    * Fetch the page of messages immediately older than the current window (from

@@ -1,5 +1,5 @@
 /**
- * Boot-time security fail-fast (audit S-13).
+ * Boot-time security fail-fast.
  */
 
 import { describe, expect, it } from "vitest";
@@ -47,7 +47,7 @@ describe("validateSecurityPosture", () => {
     expect(() =>
       validateSecurityPosture(envFor({ DEPLOYMENT_TIER: "demo" })),
     ).toThrow(/COVEL_MEDIA_TOKEN_SECRET/);
-    // C-02: session creation is operator-gated on hosted tiers, so a demo
+    // Session creation is operator-gated on hosted tiers, so a demo
     // host without the token could never mint a session — fail at boot.
     expect(() =>
       validateSecurityPosture(

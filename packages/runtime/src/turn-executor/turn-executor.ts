@@ -416,7 +416,7 @@ async function executeTurnImpl(
       },
     });
 
-  // W4: player abort — stop scheduling further groups/followers as soon as
+  // Player abort — stop scheduling further groups/followers as soon as
   // the signal fires. The in-flight runtime is cut by the loop/retry layer;
   // its result surfaces as failed with a turn-aborted message and carries no
   // PROPOSALS, so nothing proposal-shaped is committed.

@@ -1,5 +1,5 @@
 /**
- * Lorebook REST API route tests (S3-T6).
+ * Lorebook REST API route tests.
  *
  * Tests the framework-owned session lorebook viewer endpoints:
  *   GET    /api/sessions/:id/lorebook

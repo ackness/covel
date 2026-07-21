@@ -1,5 +1,5 @@
 /**
- * Tests for TurnExecutor suspend / resume primitives (S4-T4).
+ * Tests for TurnExecutor suspend / resume primitives.
  *
  * Covers:
  * - Agent runtime: suspend tool returns sentinel → suspension persisted, status: 'suspended'
@@ -753,7 +753,7 @@ describe("resumeSuspendedRuntime", () => {
     const suspensionId = await createTestSuspension("tc-retry");
 
     // Adapter that throws a transient (retriable) error on the first attempt,
-    // then succeeds. Regression guard for F1.b: the pre-refactor resume called
+    // then succeeds. Regression guard: the pre-refactor resume called
     // deps.llm.generate() directly with NO retry, so this first transient
     // error would have propagated straight out of resumeSuspendedRuntime and
     // the resume would have thrown. Re-using the shared agent tool loop routes

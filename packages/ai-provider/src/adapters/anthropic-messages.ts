@@ -85,7 +85,7 @@ function extractAnthropicParameterOverrides(
  *
  * For any other strategy, or when the sentinel is absent, the function
  * returns a plain string so the request body is byte-identical to the
- * pre-S2-T3 path.
+ * uncached path.
  *
  * `optionalSuffix` is appended to the final segment when present — used
  * by `generateObject` to inject the JSON directive without breaking the
@@ -197,7 +197,7 @@ function readAnthropicUsage(payload: Record<string, unknown>): UsageSummary {
  * Narrow helper — we only want to emit a `system` key on the wire when the
  * value is non-empty. Treats the string "" and the array [] as absent and
  * returns true otherwise. Keeps the original "omit empty system" contract
- * from the pre-S2-T3 adapter.
+ * from the original adapter.
  */
 function hasSystem(value: string | AnthropicSystemBlock[]): boolean {
   if (typeof value === "string") return value.length > 0;

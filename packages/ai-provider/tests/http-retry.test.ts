@@ -1,5 +1,5 @@
 /**
- * S1-T3: Retry wrapper for postJson().
+ * Retry wrapper for postJson().
  *
  * Verifies exponential-backoff retry on HTTP 429/5xx, Retry-After honoring,
  * AbortSignal propagation, and the COVEL_LLM_RETRY_DISABLED escape hatch.
@@ -55,7 +55,7 @@ const CONFIG: ProviderConfig = {
 
 // ── Setup ─────────────────────────────────────────────────────────
 
-describe("postJson retry wrapper (S1-T3)", () => {
+describe("postJson retry wrapper", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     // Seed Math.random for deterministic jitter (doesn't matter much since

@@ -11,7 +11,7 @@ import {
 import { buildProviderUrl, validateBaseUrl } from "./url-safety.js";
 
 /**
- * Shared SSRF-pinned dispatcher for all core provider requests (S-05).
+ * Shared SSRF-pinned dispatcher for all core provider requests.
  * `validateBaseUrl` only string-checks the hostname; this dispatcher
  * additionally resolves A/AAAA at connect time and rejects private /
  * link-local / metadata answers (loopback stays allowed for local

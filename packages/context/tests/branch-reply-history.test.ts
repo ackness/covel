@@ -117,7 +117,7 @@ describe("applyBranchReplyAcceptedCandidates", () => {
   });
 
   it("rewrites the narrator's message, not branch-reply's own seed message", () => {
-    // Regression guard (F1 HIGH): branch-reply is now an auto runtime, so its
+    // Regression guard: branch-reply is now an auto runtime, so its
     // seed output is ALSO appended as an assistant message for the turn —
     // LATER in history than the narrator's. Without a runtimeId on the accepted
     // record, the rewriter (which scans from the end) would rewrite

@@ -1,7 +1,7 @@
 /**
  * Wiring tests for the B1 fix: Working Memory injection in turn-executor.
  *
- * Background: S3-T3 added the `working_memory` table, the `listWorkingMemory`
+ * Background: an earlier change added the `working_memory` table, the `listWorkingMemory`
  * store method, and the `[Working Memory]` prompt segment in
  * `@covel/context`. The unified review found that the turn-executor hot path
  * never actually called `listWorkingMemory()`, so any data written to the

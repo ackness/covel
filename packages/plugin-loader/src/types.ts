@@ -468,7 +468,7 @@ export interface FunctionHandlerContext {
   /**
    * Resolved player-authored plugin settings for THIS plugin, with
    * `manifest.userSettings[].default` applied for any key the player
-   * hasn't overridden (audit F7). Every key declared in the manifest is
+   * hasn't overridden. Every key declared in the manifest is
    * guaranteed to be present. Absent when no `userSettings` were declared
    * — callers don't need to defensively read it in that case.
    *
@@ -506,7 +506,7 @@ export interface FunctionHandlerContext {
 
 /**
  * Narrow read-only view of `DataStore` exposed to community function
- * runtimes via `FunctionHandlerContext.store` (audit P0-3). Replaces the
+ * runtimes via `FunctionHandlerContext.store`. Replaces the
  * historical "the-whole-DataStore" exposure which let third-party
  * plugins bypass proposal/tool governance and write into any other
  * plugin's data through `setPluginData(...)`.

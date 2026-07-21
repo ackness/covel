@@ -10,7 +10,7 @@ export type RuntimeStatus =
   | "success"
   | "failed"
   | "skipped"
-  /** S4-T4: runtime suspended, waiting for player input via resume API. */
+  /** Runtime suspended, waiting for player input via resume API. */
   | "suspended";
 
 // ── Tool call record ─────────────────────────────────────────────
@@ -61,7 +61,7 @@ export interface TurnInput {
   /** API-level model override. Takes highest priority over plugin config. */
   readonly modelOverride?: string;
   /**
-   * PR-6: Per-runtime model slot overrides snapshotted from the session
+   * Per-runtime model slot overrides snapshotted from the session
    * record. Maps runtime ID (`pluginId` or `pluginId/runtimeName`) → slot
    * name. Looked up by the resolver before falling back to `manifest.model`.
    */
@@ -159,7 +159,7 @@ export interface TurnResult {
   /**
    * Event-chain followers with `manifest.execution === 'background'` that
    * were matched in this turn but intentionally NOT executed, so the sync
-   * caller can schedule them as `_jobs` and return immediately (audit F1).
+   * caller can schedule them as `_jobs` and return immediately.
    *
    * Each entry carries the triggering event so the caller can re-enter the
    * runtime without reconstructing it. Empty / absent when no background

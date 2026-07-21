@@ -9,7 +9,7 @@
  * than policy derivation, and the loop core can be instantiated in tests
  * with a hand-built policy + minimal `AgentLoopDeps` fixture.
  *
- * Roadmap W3 — docs/superpowers/specs/2026-07-10-agent-core-refactor-roadmap.md.
+ * Roadmap — docs/superpowers/specs/2026-07-10-agent-core-refactor-roadmap.md.
  */
 
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
@@ -40,7 +40,7 @@ export interface AgentLoopPolicy {
   /** JSON-schema response format when the runtime declares an output schema. */
   readonly responseFormat: LLMResponseFormat | undefined;
   /**
-   * PR-6 session/API model override for this runtime. Story runtimes honour
+   * Session/API model override for this runtime. Story runtimes honour
    * the legacy story-only API override; every runtime kind honours the
    * per-session `runtimeModelOverrides` snapshot.
    */
@@ -68,7 +68,7 @@ export interface AgentLoopPolicy {
   readonly requireToolUse: boolean;
   /**
    * Whether queued player steering messages are merged into the transcript
-   * before each LLM step (W4). Story runtimes only — plugin runtimes run
+   * before each LLM step. Story runtimes only — plugin runtimes run
    * structured tasks a player interjection would corrupt.
    */
   readonly acceptsSteering: boolean;

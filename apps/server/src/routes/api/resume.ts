@@ -1,5 +1,5 @@
 /**
- * Resume route — resumes a suspended runtime (S4-T4).
+ * Resume route — resumes a suspended runtime.
  *
  * POST /api/sessions/:id/resume
  *   Body: { suspensionId: string, data: unknown }
@@ -17,7 +17,7 @@
  *     so sequential resumes for the same session do not interleave with turn
  *     execution.
  *
- * Expiry (S4-T4.c): the suspension-touching routes opportunistically fire a
+ * Expiry: the suspension-touching routes opportunistically fire a
  * time-gated, best-effort global sweep of stale (unresolved, older-than-TTL)
  * suspensions via `maybeSweepExpiredSuspensions`; a one-time forced sweep also
  * runs at server startup (see bootstrap). Claimed / resolved records are never

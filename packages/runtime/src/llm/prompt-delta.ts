@@ -1,5 +1,5 @@
 /**
- * Prompt delta computation (PR-1, translation layer).
+ * Prompt delta computation (translation layer).
  *
  * Computes the "delta" between the prompt sent to a runtime on its previous
  * LLM call and the prompt sent on the current call. The delta is what

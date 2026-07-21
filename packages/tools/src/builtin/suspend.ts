@@ -1,5 +1,5 @@
 /**
- * Suspend builtin tool (S4-T4).
+ * Suspend builtin tool.
  *
  * When called by an agent runtime, returns a sentinel object that the
  * turn-executor recognises as a suspend signal.

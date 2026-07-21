@@ -1,5 +1,5 @@
 /**
- * Tests for the snapshot / fork API routes (S4-T2).
+ * Tests for the snapshot / fork API routes.
  *
  * POST   /api/sessions/:id/snapshot   — create manual snapshot
  * GET    /api/sessions/:id/snapshots  — list snapshots
@@ -224,7 +224,7 @@ describe("Snapshot routes", () => {
       expect(await store.listSnapshots("sess-1")).toHaveLength(1);
     });
 
-    it("emits state.snapshot.created on the event bus (S4-T5)", async () => {
+    it("emits state.snapshot.created on the event bus", async () => {
       const eventBus = createEventBus();
       const captured = collectEvents(eventBus);
       const app = createTestApp(store, eventBus);
@@ -805,7 +805,7 @@ describe("Snapshot routes", () => {
       expect(childMessages[0]!.content).toBe("The story begins.");
     });
 
-    it("emits state.snapshot.created (kind=fork) and session.forked on fork (S4-T5)", async () => {
+    it("emits state.snapshot.created (kind=fork) and session.forked on fork", async () => {
       const eventBus = createEventBus();
       const captured = collectEvents(eventBus);
       const app = createTestApp(store, eventBus);
@@ -1095,7 +1095,7 @@ describe("Auto snapshot", () => {
     expect(auto!.turnId).toBe("turn-auto-1");
   });
 
-  it("emits state.snapshot.created (kind=auto) on the event bus (S4-T5)", async () => {
+  it("emits state.snapshot.created (kind=auto) on the event bus", async () => {
     const { executeTurn, saveAutoSnapshot } = await import("@covel/runtime");
     const eventBus = createEventBus();
     const captured = collectEvents(eventBus);

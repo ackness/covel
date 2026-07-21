@@ -8,7 +8,7 @@ export type {
   PermissionRule,
 } from "./approval-pipeline.js";
 
-// PR-7: Plugin RPC approval gate
+// Plugin RPC approval gate
 export {
   COMMUNITY_SERVER_CODE_ACTION,
   createRpcApprovalGate,

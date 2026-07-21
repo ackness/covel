@@ -1,5 +1,5 @@
 /**
- * PR-1 runtime-outputs API integration tests.
+ * Runtime-outputs API integration tests.
  *
  * Covers the new translation-layer endpoints:
  *   GET /api/sessions/:id/runtime-outputs

@@ -277,7 +277,7 @@ async function loadUiSpecs(
  * Level 1.5: Load only a runtime's manifest + UI specs — no handler / guard
  * imports. UI specs are data (JSON files, or a recorded component path), so
  * this path never executes plugin JS and is safe for untrusted (community)
- * plugins whose code must not run before approval (S-04).
+ * plugins whose code must not run before approval.
  */
 export async function loadRuntimeUi(
   discovery: PluginDiscoveryResult,

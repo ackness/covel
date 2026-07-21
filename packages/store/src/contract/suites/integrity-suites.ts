@@ -134,7 +134,7 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
     });
   });
 
-  describe("withTransaction (T12 scoped transactions)", () => {
+  describe("withTransaction (scoped transactions)", () => {
     it("is implemented by every bundled backend", () => {
       expect(typeof store.withTransaction).toBe("function");
     });

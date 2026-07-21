@@ -527,7 +527,7 @@ describe("parsePluginMd", () => {
     });
   });
 
-  describe("hooks: field (S4-T3)", () => {
+  describe("hooks: field", () => {
     it("parses a valid hooks declaration with all optional fields", () => {
       const content = md(
         [
@@ -738,7 +738,7 @@ describe("parsePluginMd", () => {
     });
   });
 
-  describe("authorsNote field (S3-T4)", () => {
+  describe("authorsNote field", () => {
     it("parses a minimal authorsNote declaration", () => {
       const content = md(
         [
@@ -830,7 +830,7 @@ describe("parsePluginMd", () => {
     });
   });
 
-  describe("postHistory field (S3-T4)", () => {
+  describe("postHistory field", () => {
     it("parses a minimal postHistory declaration", () => {
       const content = md(
         [
@@ -932,7 +932,7 @@ describe("parsePluginMd", () => {
     });
   });
 
-  describe("rpc field (PR-3)", () => {
+  describe("rpc field", () => {
     it("parses a single rpc action declaration", () => {
       const content = md(
         [
@@ -1022,7 +1022,7 @@ describe("parsePluginMd", () => {
       warnSpy.mockRestore();
     });
 
-    it("rejects rpc handler with absolute path (HIGH-1 fix)", () => {
+    it("rejects rpc handler with absolute path", () => {
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const content = md(
         [
@@ -1044,7 +1044,7 @@ describe("parsePluginMd", () => {
       warnSpy.mockRestore();
     });
 
-    it("rejects rpc handler with parent-directory traversal (HIGH-1 fix)", () => {
+    it("rejects rpc handler with parent-directory traversal", () => {
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const content = md(
         [
@@ -1161,7 +1161,7 @@ describe("parsePluginMd", () => {
     });
   });
 
-  describe("summaryFocus field (S2-T2)", () => {
+  describe("summaryFocus field", () => {
     it("parses summaryFocus as array of strings", () => {
       const content = md(
         [

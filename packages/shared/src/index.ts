@@ -114,7 +114,7 @@ export type {
   ManifestValidationError,
 } from "./schemas/validate.js";
 
-// ── Translation-layer Schemas (PR-1) ─────────────────────────────
+// ── Translation-layer Schemas ─────────────────────────────
 export {
   runtimeOutputResultSchema,
   runtimeOutputToolCallSchema,

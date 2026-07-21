@@ -1,5 +1,5 @@
 /**
- * Snapshot payload builder (S4-T2, §A6).
+ * Snapshot payload builder.
  *
  * Aggregates all session-scoped state needed to rebuild a session on fork
  * or restore. Produces a `SnapshotPayload` from live store reads at the
@@ -11,8 +11,8 @@
  * particular is O(T)) off the per-turn hot path. Manual and fork snapshots
  * are captured by the server routes as well.
  *
- * Session lorebook entries (FU-4 close-out): included once the store
- * exposes `listSessionLorebookEntries` (added in S3-T2). World- and
+ * Session lorebook entries: included once the store
+ * exposes `listSessionLorebookEntries`. World- and
  * plugin-level lorebook data remain file-backed and are re-resolved by
  * the registry on the forked session — only session-scoped entries need
  * to travel with the snapshot.

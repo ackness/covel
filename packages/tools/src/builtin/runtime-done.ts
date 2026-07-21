@@ -14,7 +14,7 @@
  * breaks out of the agent loop, using the preceding business tool calls as
  * the runtime's final output.
  *
- * Pattern mirrors `suspend` (S4-T4) — sentinel + type guard + early exit.
+ * Pattern mirrors `suspend` — sentinel + type guard + early exit.
  */
 
 import { z } from "zod";

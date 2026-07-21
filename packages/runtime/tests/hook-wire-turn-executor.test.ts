@@ -1,5 +1,5 @@
 /**
- * Hook wire-in tests for turn-executor (S4-T3).
+ * Hook wire-in tests for turn-executor.
  *
  * Verifies:
  * - PreToolUse abort skips the tool and feeds a synthetic error message to the LLM
@@ -37,7 +37,7 @@ async function createMainLoopStore(sessionId: string): Promise<DataStore> {
   return store;
 }
 
-// ── Helpers ────────────────────────────────────────────────���─────
+// ── Helpers ────────────────────────────────────────────────────────
 
 function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   return {
@@ -351,7 +351,7 @@ describe("Turn executor hook wire-in", () => {
         usage: { inputTokens: 0, outputTokens: 0 },
       });
 
-      // Spy that captures every call's arguments so we can assert they were replaced (W1)
+      // Spy that captures every call's arguments so we can assert they were replaced
       const executedArgs: string[] = [];
       const toolExecutor = {
         execute: vi
@@ -415,7 +415,7 @@ describe("Turn executor hook wire-in", () => {
       expect(result.runtimeResults[0].status).toBe("success");
       // Tool was called exactly once (hook returned continue, not abort)
       expect(toolExecutor.execute).toHaveBeenCalledOnce();
-      // W1: assert the executor received the REPLACED arguments, not the original
+      // Assert the executor received the REPLACED arguments, not the original
       expect(executedArgs[0]).toBe('{"name":"rewritten"}');
     });
   });
@@ -709,7 +709,7 @@ describe("Turn executor hook wire-in", () => {
       expect(result.runtimeResults[0].status).toBe("success");
     });
 
-    it("still strips runtime-done from output when a hook terminates in the same response (P1-2)", async () => {
+    it("still strips runtime-done from output when a hook terminates in the same response", async () => {
       const llm = new SimpleMockLLM();
       // Same response: runtime-done is processed first, then a business tool
       // whose PostToolUse hook terminates. The runtime-done sentinel must still

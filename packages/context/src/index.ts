@@ -33,7 +33,7 @@ export type { TokenEstimator, BudgetOptions, BudgetResult } from "./budget.js";
 // ── Prompt Loader ────────────────────────────────────────────────
 export { loadPrompt, interpolate, setPromptsRoot } from "./prompts-loader.js";
 
-// ── Compactor (S2-T2) ────────────────────────────────────────────
+// ── Compactor ────────────────────────────────────────────
 export { maybeCompact } from "./compactor.js";
 export type {
   CompactorDeps,

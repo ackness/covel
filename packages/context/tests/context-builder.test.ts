@@ -363,7 +363,7 @@ describe("buildContext", () => {
   });
 });
 
-// ── Summary substitution (S2-T2) ────────────────────────────────
+// ── Summary substitution ────────────────────────────────
 
 describe("buildContext — summary substitution", () => {
   it("substitutes compacted spans with summary", () => {

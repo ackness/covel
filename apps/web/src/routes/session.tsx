@@ -20,7 +20,7 @@ import { OnboardingWizard } from "@/components/onboarding-wizard.js";
 // UI) — the single heaviest component tree in the app, but only reachable once
 // a session is active. Keeping it out of the main chunk trims first paint for
 // the marketing home / world-select / prep screens, which never touch it
-// (M-03 bundle budget). Split alongside the already-lazy /debug route.
+// (bundle budget). Split alongside the already-lazy /debug route.
 const GameView = lazy(() =>
   import("@/components/session/game-view.js").then((m) => ({
     default: m.GameView,
@@ -175,7 +175,7 @@ function SessionPage() {
             const text = msgs
               // A message still streaming has an empty `content` (live text
               // lives in the external store); resolve it so a mid-stream export
-              // keeps the partial assistant text instead of a blank row (L-10).
+              // keeps the partial assistant text instead of a blank row.
               .map(
                 (m) =>
                   `[${m.role}] ${m.content || getStreamingText(m.id) || ""}`,

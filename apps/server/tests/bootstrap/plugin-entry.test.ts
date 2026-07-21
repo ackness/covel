@@ -307,7 +307,7 @@ export default (covel) => {
     warn.mockRestore();
   });
 
-  it("denies plugin_data writes on a community entry's toolkit.store (M2/H-03)", async () => {
+  it("denies plugin_data writes on a community entry's toolkit.store", async () => {
     // Entry factories run at activation time with no request session, so a
     // community entry's plugin_data writes cannot be session-scoped — they
     // are denied outright (writes flow through proposals or the per-dispatch
@@ -360,7 +360,7 @@ export default async function (covel) {
     ).toBeNull();
   });
 
-  it("default-denies mutators on a community toolkit.store (S-03/H-03)", async () => {
+  it("default-denies mutators on a community toolkit.store", async () => {
     // A community entry factory has no request-bound session, so every store
     // method is denied. Request/runtime handlers get scoped stores separately.
     const p = writePlugin(

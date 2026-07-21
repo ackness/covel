@@ -60,8 +60,8 @@ export function createMemoryLoreCommitHandlers(
       payload.value === undefined
         ? commitError("working_memory.set: value must not be undefined")
         : undefined,
-      // TODO(S3-T3.b): resolve schemaRef against a framework-level Zod schema
-      // registry (A9 refinement) and validate payload.value against the schema.
+      // TODO: resolve schemaRef against a framework-level Zod schema
+      // registry and validate payload.value against the schema.
       // For now, schemaRef is accepted as an opaque string.
       requireOptionalString(
         payload.schemaRef,

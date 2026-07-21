@@ -1,5 +1,5 @@
 /**
- * Token budget + message pruning (S1-T2).
+ * Token budget + message pruning.
  *
  * Pure utility used by the context builder to drop the oldest conversation
  * messages when the estimated input-token total would overflow the LLM's

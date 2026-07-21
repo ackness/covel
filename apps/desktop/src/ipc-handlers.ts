@@ -13,7 +13,7 @@ import { buildAppMenu, getMainWindow, isTrustedFrameUrl } from "./windows.js";
 import { setDesktopLocaleFromSettings, t } from "./main-i18n.js";
 
 /**
- * H-09 defense-in-depth: reject secret/config IPC unless the sender frame is
+ * Defense-in-depth: reject secret/config IPC unless the sender frame is
  * the trusted app origin (the local sidecar / dev server). The main-frame
  * navigation guard (windows.ts) is the primary block; this stops any other
  * frame (a stray iframe, a not-yet-committed cross-origin page) from reading
@@ -134,7 +134,7 @@ export function registerDesktopIpcHandlers({
   // safeStorage only bought us a macOS Keychain prompt with no real security
   // uplift on an unsigned build.
   //
-  // TODO(S-07): `covel:keys:load` returns the real decrypted key values to the
+  // TODO: `covel:keys:load` returns the real decrypted key values to the
   // renderer. This is a deliberate tradeoff — the renderer needs the raw keys
   // to attach them via the `X-Provider-Keys` header and to mirror them into
   // `localStorage` (`covel:keys`) for the pure-web path. Intended proper fix:
@@ -145,9 +145,9 @@ export function registerDesktopIpcHandlers({
   // while the localStorage mirror stays plaintext, and on unsigned builds
   // safeStorage degrades to a fixed key (no real encryption) plus a migration
   // path for existing plaintext files. Doing it right requires reworking the
-  // whole key-flow (server-side injection), which is out of scope for S-07.
+  // whole key-flow (server-side injection), which is out of scope here.
   ipcMain.handle("covel:keys:load", (event) => {
-    // Returns RAW provider keys — reject any untrusted sender frame (H-09).
+    // Returns RAW provider keys — reject any untrusted sender frame.
     if (!isTrustedSender(event, "covel:keys:load")) return {};
     return loadKeysEnv(paths.userKeysEnvPath);
   });
@@ -228,7 +228,7 @@ export function registerDesktopIpcHandlers({
   // Asset import — the sourcePath always originates from a native dialog in the
   // MAIN process (see `pickAndImport` below), never from a renderer-supplied
   // string. The old renderer-facing `covel:import:{plugin,world}` channels were
-  // removed (audit S-08: arbitrary-path vector) — they had no callers.
+  // removed (arbitrary-path vector) — they had no callers.
   async function handleImport(
     kind: ImportKind,
     payload: unknown,

@@ -64,7 +64,7 @@ export function sendAction(
   return controller;
 }
 
-// -- Mid-turn player control (W4) ----------------------------------
+// -- Mid-turn player control ----------------------------------
 
 /**
  * Interject a player message into the session's in-flight turn. The server

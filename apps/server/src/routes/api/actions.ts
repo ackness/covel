@@ -167,7 +167,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     return c.json(errorBody("Session not found"), 404);
   }
 
-  // Owner guard (hosted tiers, S-02): actions execute turns and spend tokens
+  // Owner guard (hosted tiers): actions execute turns and spend tokens
   // on the session's behalf.
   const ownerDenied = checkSessionOwner(c, session);
   if (ownerDenied) return ownerDenied;
@@ -275,7 +275,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   return streamSSE(c, async (stream) => {
     let seq = 0;
     const traceId = crypto.randomUUID();
-    // W4: released in the finally below so a crashed stream never leaves a
+    // Released in the finally below so a crashed stream never leaves a
     // stale steer/abort target behind.
     let releaseTurnControl: (() => void) | undefined;
     // Whether this turn's execution artifact had its commitStatus settled.
@@ -406,7 +406,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 createdAt: now,
               });
 
-              // PR-1: also emit a normalised InteractionRecord so observability and
+              // Also emit a normalised InteractionRecord so observability and
               // downstream consumers see the player's input as part of the unified
               // event stream (paired with RuntimeOutput records written by the
               // turn executor).
@@ -514,7 +514,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               locale: effectiveLocale,
               modelOverride: model,
               ...(userSettings ? { userSettings } : {}),
-              // PR-6: snapshot session-level per-runtime slot overrides so the
+              // Snapshot session-level per-runtime slot overrides so the
               // turn executor can consult them when resolving each runtime's
               // model. The session record was loaded above (line ~67).
               ...(session?.runtimeModelOverrides
@@ -534,7 +534,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                   }
                 : {}),
             };
-            // W4: register the in-flight turn only after this action owns the
+            // Register the in-flight turn only after this action owns the
             // session lock. Release control after execution while retaining the
             // lock through proposal commit, lifecycle sync, and snapshot capture.
             const registeredTurn = registerActiveTurn(sessionId, turnId);
@@ -617,7 +617,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 // Let the turn executor construct a unified SessionContextSnapshot.
                 capabilityPluginIds,
                 ...(eventDirectory ? { eventDirectory } : {}),
-                // W4: player mid-turn steering + abort.
+                // Player mid-turn steering + abort.
                 turnControl: registeredTurn.turnControl,
               });
             } finally {
@@ -769,7 +769,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       // execution.completed must not extend the critical section.
       const hookPipeline = c.get("hookPipeline");
 
-      // Audit F1 (main turn path): `executeTurn` can surface `deferredFollowers`
+      // Main turn path: `executeTurn` can surface `deferredFollowers`
       // — event-chain followers with `execution: 'background'` that were
       // skipped so the player gets an immediate response (e.g. scene-stage's
       // background-gen). Schedule them the same way plugin-rpc.ts's sync mode

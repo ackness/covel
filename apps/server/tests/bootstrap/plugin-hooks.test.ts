@@ -1,5 +1,5 @@
 /**
- * Legacy `hooks:` trust gating at the bootstrap seam (re-review H-03).
+ * Legacy `hooks:` trust gating at the bootstrap seam.
  *
  * `createBootstrapHookPipeline` registers hook declarations for every trust
  * tier, but community (non-autoLoad) handlers must stay dormant — never
@@ -73,7 +73,7 @@ export default async () => ({ action: "abort", reason: "${pluginId} ran" });
 
 const hookCtx = { sessionId: "s1", turnId: "t1" } as unknown as HookContext;
 
-describe("createBootstrapHookPipeline trust gating (H-03)", () => {
+describe("createBootstrapHookPipeline trust gating", () => {
   it("keeps a community legacy hook dormant until ensurePluginEntry approves it", async () => {
     const community = writeHookPlugin("hook-community-a", "community");
     const discoveryMap = new Map([

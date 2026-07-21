@@ -42,7 +42,7 @@ export type ExecuteTurnFn = (
  * (`resumeSuspendedRuntime`) stays a distinct entry point because it is driven
  * by the resume API outside the scheduler, but it now shares the same tool loop
  * (`runAgentToolLoop`) and output finalization (`finalizeAgentOutput`) as the
- * normal agent path — the duplicated loop/finalize clone was removed in F1.b.
+ * normal agent path — the duplicated loop/finalize clone was removed.
  */
 export interface RuntimeInvocation {
   readonly manifest: RuntimeManifest;
@@ -394,7 +394,7 @@ export async function executeOneRuntime(
       error: message,
     });
 
-    // PostRuntime hook — failure path (S4-T3)
+    // PostRuntime hook — failure path
     return runPostRuntimeHook(
       {
         pipeline: hookPipeline,
@@ -410,4 +410,4 @@ export async function executeOneRuntime(
   }
 }
 
-// buildToolDefinitions and makeFailedResult extracted to turn-executor-helpers.ts (S4-T3)
+// buildToolDefinitions and makeFailedResult extracted to turn-executor-helpers.ts

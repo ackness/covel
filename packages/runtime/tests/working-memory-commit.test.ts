@@ -1,5 +1,5 @@
 /**
- * Working Memory commit handler tests (S3-T3).
+ * Working Memory commit handler tests.
  *
  * Verifies that `working_memory.set` proposals flow through `commitAll`,
  * persist to store, and emit `working_memory.changed`.

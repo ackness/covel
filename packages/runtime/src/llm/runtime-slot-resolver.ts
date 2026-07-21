@@ -1,5 +1,5 @@
 /**
- * PR-6: Per-runtime model slot resolver.
+ * Per-runtime model slot resolver.
  *
  * Sits in front of the existing `model-resolver.ts` chain. Given a runtime
  * manifest plus the session-level overrides map, returns the effective slot

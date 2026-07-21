@@ -109,7 +109,7 @@ describe("env registry", () => {
     expect(env.mediaBackend).toBe("mirror");
     expect(env.vectorBackend).toBe("embedded");
     expect(env.serverPort).toBe(3001);
-    // Audit S-02: the server must bind loopback unless explicitly opted out.
+    // The server must bind loopback unless explicitly opted out.
     expect(env.bindHost).toBe("127.0.0.1");
   });
 
@@ -223,7 +223,7 @@ describe("env registry", () => {
     expect(env.deploymentTier).toBe("commercial");
   });
 
-  it("rejects an unknown DEPLOYMENT_TIER fail-safe to the most restrictive tier (M-06)", () => {
+  it("rejects an unknown DEPLOYMENT_TIER fail-safe to the most restrictive tier", () => {
     const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const env = readRuntimeEnv({ DEPLOYMENT_TIER: "Commercial-typo" });
     expect(env.deploymentTier).toBe("commercial");

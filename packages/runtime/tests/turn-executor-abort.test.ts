@@ -1,5 +1,5 @@
 /**
- * W4 player abort at the turn-executor level: once the abort signal fires,
+ * Player abort at the turn-executor level: once the abort signal fires,
  * no further runtime groups are scheduled, the event chain is skipped, and
  * the TurnResult carries `abortReason: "aborted-by-player"`. Results from
  * runtimes that completed before the abort are preserved.

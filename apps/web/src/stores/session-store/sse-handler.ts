@@ -259,8 +259,8 @@ export function createSseEventHandler(
         if (completedKind === "story") {
           // A story runtime's stream is finished. Always flush the same-frame
           // delta and drop the external live buffer — even on empty content —
-          // so stale partial text can't linger on screen (audit 2026-07-16
-          // L-11). Only publish an authoritative message when content exists.
+          // so stale partial text can't linger on screen.
+          // Only publish an authoritative message when content exists.
           flushNarrativeDeltaBuffer(deps);
           clearStreamingText(`stream_${turnId ?? "unknown"}_${runtimeId}`);
           if (content) {
@@ -615,7 +615,7 @@ export function createSseEventHandler(
       case "gateway.calling":
       case "gateway.responded":
       case "gateway.failed":
-      // Plugin-utils provider-call trace (A2-P1-5): /debug-only, same as gateway.*
+      // Plugin-utils provider-call trace: /debug-only, same as gateway.*
       case "utils.fetch.calling":
       case "utils.fetch.responded":
       case "utils.fetch.failed":

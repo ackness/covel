@@ -1,5 +1,5 @@
 /**
- * S1-T3: Stream fallback in TurnExecutor.
+ * Stream fallback in TurnExecutor.
  *
  * When the streaming LLM call throws mid-stream, the runtime either:
  *  - salvages accumulated content (and marks finishReason='error'), or
@@ -107,7 +107,7 @@ class BothFailLLM implements LLMAdapter {
 
 // ── Tests ─────────────────────────────────────────────────────────
 
-describe("TurnExecutor stream recovery (S1-T3)", () => {
+describe("TurnExecutor stream recovery", () => {
   let narratorManifest: RuntimeManifest;
   let narratorLoaded: LoadedRuntime;
   // Use a tool-free manifest to force the streaming path in turn-executor.

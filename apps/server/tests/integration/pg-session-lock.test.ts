@@ -10,7 +10,7 @@
  *      without waiting for the timeout.
  *   4. Two independent `Sql` clients (simulating two Node pods) serialize
  *      on the same sessionId. This is the core cross-pod guarantee the
- *      in-process lock cannot provide (audit 2026-04-21 F5).
+ *      in-process lock cannot provide.
  *
  * Skipped automatically when `DATABASE_URL` is not set or the server is
  * unreachable within 2s — matches the pattern used by
@@ -130,7 +130,7 @@ describe.skipIf(!pgAvailable)("pg-session-lock", () => {
   });
 
   it("serializes across two independent Sql clients (simulating two pods)", async () => {
-    // This is the core F5 guarantee — mutual exclusion across processes.
+    // This is the core guarantee — mutual exclusion across processes.
     // Two clients, two connection pools, same DB: the advisory lock must
     // still force strict ordering on the same sessionId.
     const sqlA = postgres(DATABASE_URL, { max: 4 });

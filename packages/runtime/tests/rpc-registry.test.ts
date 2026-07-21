@@ -7,7 +7,7 @@ import {
 } from "../src/index.js";
 import type { RpcHandler } from "../src/index.js";
 
-describe("PluginRpcRegistry (PR-3)", () => {
+describe("PluginRpcRegistry", () => {
   it("registers a plugin action and looks it up by (pluginId, action)", () => {
     const registry = createPluginRpcRegistry();
     registry.registerPluginAction(
@@ -121,7 +121,7 @@ describe("PluginRpcRegistry (PR-3)", () => {
   });
 });
 
-describe("createRpcExecutor (PR-3)", () => {
+describe("createRpcExecutor", () => {
   function makeExecutor(opts?: { loadHandler?: () => Promise<RpcHandler> }) {
     const registry = createPluginRpcRegistry();
     const loadHandler = vi.fn(

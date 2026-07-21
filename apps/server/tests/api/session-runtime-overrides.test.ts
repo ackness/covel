@@ -1,5 +1,5 @@
 /**
- * PR-6: PATCH /api/sessions/:id runtimeModelOverrides field.
+ * PATCH /api/sessions/:id runtimeModelOverrides field.
  *
  * Verifies the new payload shape is validated, persisted, and returned.
  */
@@ -51,7 +51,7 @@ function makeSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
   };
 }
 
-describe("PATCH /api/sessions/:id runtimeModelOverrides (PR-6)", () => {
+describe("PATCH /api/sessions/:id runtimeModelOverrides", () => {
   let store: DataStore;
   let app: Hono;
 
@@ -121,7 +121,7 @@ describe("PATCH /api/sessions/:id runtimeModelOverrides (PR-6)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects more than 64 entries (MEDIUM-3)", async () => {
+  it("rejects more than 64 entries", async () => {
     const big: Record<string, string> = {};
     for (let i = 0; i < 65; i++) big[`runtime-${i}`] = "fast";
     const res = await app.request("/api/sessions/sess-overrides-1", {
@@ -132,7 +132,7 @@ describe("PATCH /api/sessions/:id runtimeModelOverrides (PR-6)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("strips entries with non-runtime-ID keys (MEDIUM-3)", async () => {
+  it("strips entries with non-runtime-ID keys", async () => {
     const res = await app.request("/api/sessions/sess-overrides-1", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -154,7 +154,7 @@ describe("PATCH /api/sessions/:id runtimeModelOverrides (PR-6)", () => {
     });
   });
 
-  it("rejects invalid status value with 400 (MEDIUM-2)", async () => {
+  it("rejects invalid status value with 400", async () => {
     const res = await app.request("/api/sessions/sess-overrides-1", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -163,7 +163,7 @@ describe("PATCH /api/sessions/:id runtimeModelOverrides (PR-6)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("accepts a valid status value (MEDIUM-2)", async () => {
+  it("accepts a valid status value", async () => {
     const res = await app.request("/api/sessions/sess-overrides-1", {
       method: "PATCH",
       headers: { "content-type": "application/json" },

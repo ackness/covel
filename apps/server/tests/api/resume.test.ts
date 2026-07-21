@@ -1,5 +1,5 @@
 /**
- * Tests for the suspend/resume API routes (S4-T4).
+ * Tests for the suspend/resume API routes.
  *
  * POST   /api/sessions/:id/resume
  * DELETE /api/sessions/:id/suspensions/:suspensionId
@@ -710,7 +710,7 @@ describe("Resume Routes", () => {
     });
   });
 
-  describe("TTL sweep wiring (S4-T4.c)", () => {
+  describe("TTL sweep wiring", () => {
     const OLD = "2020-01-01T00:00:00.000Z";
 
     // The sweep is fired-and-forgotten inside the handler; let it settle.

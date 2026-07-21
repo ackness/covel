@@ -23,7 +23,7 @@ export interface ApprovalRecord {
   readonly sessionId: string;
 }
 
-// ── PR-7: Plugin RPC approval ────────────────────────────────────
+// ── Plugin RPC approval ────────────────────────────────────
 
 /**
  * Pending RPC approval request — created when a community-trust RPC call

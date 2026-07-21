@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { summarizeTraceError } from "../src/function-runtime/trace-error.js";
 
-describe("summarizeTraceError (review LOW-2 — bound the one soft PII spot)", () => {
+describe("summarizeTraceError (bound the one soft PII spot)", () => {
   it("returns a short Error message unchanged", () => {
     expect(summarizeTraceError(new Error("ECONNREFUSED"))).toBe("ECONNREFUSED");
   });

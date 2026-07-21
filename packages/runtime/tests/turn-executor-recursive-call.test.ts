@@ -81,7 +81,7 @@ describe("executeTurn recursiveCall", () => {
       depth: 0,
       nestedDepth: 1,
     });
-    // A2-P1-5: function.executing/completed now also flow through the emitter;
+    // function.executing/completed now also flow through the emitter;
     // filter to the recursive.* trace events this test pins.
     const recursiveEvents = emitter.events.filter((event) =>
       event.type.startsWith("recursive."),

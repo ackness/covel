@@ -29,7 +29,7 @@ export type InteractionRecordType =
   | "message" // Free-text player input
   | "click" // Plugin UI button / choice click
   | "form-submit" // Structured form submission
-  | "rpc-call" // Plugin RPC invocation (PR-3)
+  | "rpc-call" // Plugin RPC invocation
   | "skill-invoke"; // External agent invoked a Covel skill
 
 // ── Top-level record ──────────────────────────────────────────────

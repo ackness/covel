@@ -1,11 +1,11 @@
 /**
- * TDD tests for HIGH/MEDIUM issues:
+ * TDD tests for reliability and hardening issues:
  *
- * HIGH-1: Anthropic adapter must send x-api-key + anthropic-version instead of Bearer
- * HIGH-2: providerRequestMetadata must not allow overriding model/messages/stream/max_tokens/response_format
- * HIGH-3: fetchLiteLlmModels must have a 30s timeout
- * MEDIUM: shouldFallback must NOT trigger on SCHEMA_VALIDATION_FAILED
- * MEDIUM: slotNames dead code removed from llm-loader.ts
+ * - Anthropic adapter must send x-api-key + anthropic-version instead of Bearer
+ * - providerRequestMetadata must not allow overriding model/messages/stream/max_tokens/response_format
+ * - fetchLiteLlmModels must have a 30s timeout
+ * - shouldFallback must NOT trigger on SCHEMA_VALIDATION_FAILED
+ * - slotNames dead code removed from llm-loader.ts
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -20,9 +20,9 @@ import { createProviderRegistry } from "../src/provider-registry.js";
 import type { ModelProviderAdapter } from "../src/adapters/adapter.js";
 import type { ModelProfile, PresetConfig } from "../src/types.js";
 
-// ── HIGH-1: Anthropic auth headers ───────────────────────────────────
+// ── Anthropic auth headers ───────────────────────────────────
 
-describe("HIGH-1: Anthropic adapter uses x-api-key header", () => {
+describe("Anthropic adapter uses x-api-key header", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -139,9 +139,9 @@ describe("HIGH-1: Anthropic adapter uses x-api-key header", () => {
   });
 });
 
-// ── HIGH-2: providerRequestMetadata dangerous key stripping ──────────
+// ── providerRequestMetadata dangerous key stripping ──────────
 
-describe("HIGH-2: providerRequestMetadata cannot override critical fields", () => {
+describe("providerRequestMetadata cannot override critical fields", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -366,9 +366,9 @@ describe("HIGH-2: providerRequestMetadata cannot override critical fields", () =
   });
 });
 
-// ── HIGH-3: fetchLiteLlmModels timeout ───────────────────────────────
+// ── fetchLiteLlmModels timeout ───────────────────────────────
 
-describe("HIGH-3: fetchLiteLlmModels has 30s AbortController timeout", () => {
+describe("fetchLiteLlmModels has 30s AbortController timeout", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
