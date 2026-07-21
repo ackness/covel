@@ -2195,6 +2195,8 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 { "success": true }
 ```
 
+**存储配额**：与 `working_memory.set` commit handler 共用同一份配额定义（`packages/shared/src/utils/working-memory-quota.ts`）：单条 value 序列化后上限 8000 字符（超限返回 `413`，`code: "value-too-large"`）；单 session 上限 200 条（达到上限后新 key 返回 `409`，`code: "entries-exhausted"`，**已存在的 key 仍可更新**）。
+
 #### `DELETE /api/sessions/:id/working-memory/:scope/:key`
 
 删除工作记忆条目。

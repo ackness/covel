@@ -197,4 +197,27 @@ describe("advanceSessionTurnCount", () => {
     });
     expect(await turnCountOf(store)).toBe(43);
   });
+
+  it("under-counts a fork taken exactly at turnCount 1 (known limitation)", async () => {
+    // A fork copies turnCount but not turn_results. At the ambiguous
+    // turnCount===1 boundary the floor check scans the child's (empty)
+    // turn_results and can't tell an inherited "1" (the parent finished one
+    // main-loop turn) from a Pre-Game floor "1", so it absorbs the floor and
+    // the child's next turn stays at 1 instead of advancing to 2.
+    //
+    // Correct behaviour is 2. Fixing it needs an explicit "this count is an
+    // established baseline, not a floor" marker set at fork time; the window
+    // (a fork taken at exactly count 1) is narrow enough that the limitation is
+    // documented rather than fixed. Pinned so the behaviour can't drift.
+    await seed(store, { turnCount: 1, preGameCompleted: ["pregame"] });
+    await advanceSessionTurnCount({
+      store,
+      sessionId: SID,
+      turnId: "turn-current",
+      activeRuntimes: ACTIVE,
+      wasPreGamePending: false,
+      committed: true,
+    });
+    expect(await turnCountOf(store)).toBe(1); // known limitation: ideally 2
+  });
 });

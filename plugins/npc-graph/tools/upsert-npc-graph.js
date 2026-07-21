@@ -240,6 +240,12 @@ export default function ({ tool, z, shortIdBatch, store }) {
           context.pluginId,
           "edges",
         )) ?? [];
+      // Edge ids closed this call (superseded or self-healed). Their adjacency
+      // entries are pruned below so a revised relation nets zero index growth
+      // (new id in, old id out) instead of leaving the closed id to accumulate
+      // forever and slow the retriever's per-id lookup.
+      /** @type {Set<string>} */
+      const closedEdgeIds = new Set();
       /** @type {Map<string, any>} */
       const openEdgeByKey = new Map();
       for (const row of existingEdgeRows) {
@@ -266,6 +272,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
           key: stale.id,
           value: { ...stale, invalidAt: currentTurn },
         });
+        closedEdgeIds.add(stale.id);
       }
 
       /** @type {Array<{ id: string; source: string; target: string; relation: string; fact: string; skipped?: string; supersedes?: string }>} */
@@ -314,6 +321,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
             key: openEdge.id,
             value: { ...openEdge, invalidAt: currentTurn },
           });
+          closedEdgeIds.add(openEdge.id);
         }
         // `shortIdBatch` slugifies the label and truncates it to 24 chars, so a
         // version suffix placed INSIDE the label is silently cut off for long
@@ -380,7 +388,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
         const prev = Array.isArray(existing?.value) ? existing.value : [];
         const merged = Array.from(
           new Set([...prev, ...bucket.byNode.get(indexKey)]),
-        );
+        ).filter((id) => !closedEdgeIds.has(id));
         pluginDataWrites.push({
           namespace: "index",
           key: indexKey,

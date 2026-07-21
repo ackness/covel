@@ -11,6 +11,7 @@ import {
   createFunctionStoreView,
   createPluginDataWriter,
   createPluginLogger,
+  createTrustedHandlerStore,
 } from "../function-runtime/plugin-handler-helpers.js";
 import { createRuntimeMediaContext } from "../function-runtime/runtime-media-context.js";
 import { withUtilsTrace } from "../function-runtime/utils-trace.js";
@@ -144,7 +145,7 @@ export async function executeAgentGuard({
     const guardStore = deps.store
       ? revocable(
           trustedGuard
-            ? deps.store
+            ? createTrustedHandlerStore(deps.store)
             : createFunctionStoreView(deps.store, guardHelperCtx),
         )
       : undefined;

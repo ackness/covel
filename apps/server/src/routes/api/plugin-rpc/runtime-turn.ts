@@ -128,7 +128,14 @@ export function createPluginRpcRuntimeTurnRunner(
       );
     }
 
-    const committed = failedProposals.length === 0 && !snapshotFailed;
+    // A failed auto-snapshot does NOT fail the turn. The proposals already
+    // committed (commit_status was set to "committed" above), so business state
+    // is consistent — only the best-effort checkpoint is missing, and the next
+    // turn snapshots again. Counting it as a failure made the sync RPC return
+    // 500 and the client retry, replaying already-committed proposals. So
+    // `committed` tracks proposal commit alone, matching commit_status;
+    // `snapshotFailed` stays on the outcome for observability.
+    const committed = failedProposals.length === 0;
     if (committed) {
       turnResult.completeTurn?.();
     }

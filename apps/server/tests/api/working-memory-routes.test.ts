@@ -6,6 +6,10 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Hono } from "hono";
+import {
+  MAX_WORKING_MEMORY_ENTRIES,
+  MAX_WORKING_MEMORY_VALUE_CHARS,
+} from "@covel/shared";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { workingMemoryRoutes } from "../../src/routes/api/working-memory.js";
 
@@ -147,6 +151,79 @@ describe("Working Memory API routes", () => {
         },
       );
       expect(res.status).toBe(400);
+    });
+
+    it("PUT rejects a value over the serialized-size cap", async () => {
+      const res = await app.request(
+        `/api/sessions/${SESSION_ID}/working-memory/player/huge`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            value: "x".repeat(MAX_WORKING_MEMORY_VALUE_CHARS + 1),
+          }),
+        },
+      );
+      expect(res.status).toBe(413);
+      expect(
+        await store.getWorkingMemory(SESSION_ID, "player", "huge"),
+      ).toBeNull();
+    });
+
+    it("PUT enforces the entry-count quota with the commit-handler semantics", async () => {
+      // Fill to one below the cap: the write that lands exactly at the limit
+      // must still pass (same off-by-one as the working_memory.set commit).
+      for (let i = 0; i < MAX_WORKING_MEMORY_ENTRIES - 1; i++) {
+        await store.upsertWorkingMemory({
+          id: `wm-fill-${i}`,
+          sessionId: SESSION_ID,
+          scope: "story",
+          key: `fill-${i}`,
+          value: i,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      const atLimit = await app.request(
+        `/api/sessions/${SESSION_ID}/working-memory/story/last-slot`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: "fits" }),
+        },
+      );
+      expect(atLimit.status).toBe(200);
+
+      // Session is now at capacity: a new key is refused…
+      const overflow = await app.request(
+        `/api/sessions/${SESSION_ID}/working-memory/story/one-too-many`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: "rejected" }),
+        },
+      );
+      expect(overflow.status).toBe(409);
+      expect(
+        await store.getWorkingMemory(SESSION_ID, "story", "one-too-many"),
+      ).toBeNull();
+
+      // …but updating an existing key still lands.
+      const update = await app.request(
+        `/api/sessions/${SESSION_ID}/working-memory/story/last-slot`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: "updated" }),
+        },
+      );
+      expect(update.status).toBe(200);
+      const entry = await store.getWorkingMemory(
+        SESSION_ID,
+        "story",
+        "last-slot",
+      );
+      expect(entry?.value).toBe("updated");
     });
 
     it("PUT for unknown session returns 404", async () => {

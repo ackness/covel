@@ -1,6 +1,7 @@
 /** Commit handlers for `working_memory.set` and `lorebook.upsert`. */
 
 import type { CommitResult, ProposalFor } from "@covel/shared";
+import { workingMemoryQuotaViolation } from "@covel/shared";
 import { makeEvent } from "../session/session-kernel-helpers.js";
 import type { KernelStore } from "../session/session-kernel-store.js";
 import type { CommitHandlerMap } from "./commit-handler-types.js";
@@ -13,17 +14,12 @@ import {
 } from "./commit-validators.js";
 
 /**
- * Working memory is session-scoped state rendered into prompts, not a general
- * data store: the prompt renderer already caps what it shows, but without a
- * storage quota a looping plugin can grow the table without bound and pay for
- * it on every turn's read. Updates to an existing entry are always allowed —
- * only new keys are refused once the session is at capacity, so nothing a
- * session already relies on (core memory blocks included) is ever evicted.
- * Plugins with bulk state belong in plugin-data, which is not prompt-resident.
+ * Storage-quota check shared with the REST working-memory route — the limits
+ * and off-by-one semantics live in `@covel/shared` (`working-memory-quota.ts`)
+ * so the two write paths cannot drift apart. `listWorkingMemory` is optional
+ * on KernelStore; without it the entry-count check is skipped and only the
+ * value-size cap applies.
  */
-const MAX_WORKING_MEMORY_ENTRIES = 200;
-const MAX_WORKING_MEMORY_VALUE_CHARS = 8_000;
-
 async function workingMemoryQuotaFailure(
   store: KernelStore,
   sessionId: string,
@@ -31,24 +27,13 @@ async function workingMemoryQuotaFailure(
   key: string,
   value: unknown,
 ): Promise<CommitResult | undefined> {
-  const serialized = JSON.stringify(value) ?? "null";
-  if (serialized.length > MAX_WORKING_MEMORY_VALUE_CHARS) {
-    return commitError(
-      `working_memory.set: value for "${scope}.${key}" is ${serialized.length} chars, ` +
-        `over the ${MAX_WORKING_MEMORY_VALUE_CHARS}-char limit — store bulk data in plugin data instead`,
-    );
-  }
-
-  const listWorkingMemory = store.listWorkingMemory;
-  if (!listWorkingMemory) return undefined;
-  const existing = await listWorkingMemory(sessionId);
-  if (existing.length < MAX_WORKING_MEMORY_ENTRIES) return undefined;
-  const isUpdate = existing.some((e) => e.scope === scope && e.key === key);
-  if (isUpdate) return undefined;
-  return commitError(
-    `working_memory.set: session already holds ${existing.length} working-memory entries ` +
-      `(limit ${MAX_WORKING_MEMORY_ENTRIES}) — delete stale entries or use plugin data`,
-  );
+  const existing = store.listWorkingMemory
+    ? await store.listWorkingMemory(sessionId)
+    : undefined;
+  const violation = workingMemoryQuotaViolation(scope, key, value, existing);
+  return violation
+    ? commitError(`working_memory.set: ${violation.message}`)
+    : undefined;
 }
 
 export function createMemoryLoreCommitHandlers(

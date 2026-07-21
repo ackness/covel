@@ -11,6 +11,7 @@ import {
   createPluginDataWriter,
   createPluginLogger,
   createFunctionStoreView,
+  createTrustedHandlerStore,
   makeRevocableCapability,
   makeRevocableFn,
 } from "./plugin-handler-helpers.js";
@@ -205,7 +206,7 @@ export async function executeFunctionRuntime({
   const isTrustedSource = isTrustedPluginSource(deps, manifest);
   const handlerStore = deps.store
     ? isTrustedSource
-      ? deps.store
+      ? createTrustedHandlerStore(deps.store)
       : createFunctionStoreView(deps.store, helperCtx)
     : undefined;
 

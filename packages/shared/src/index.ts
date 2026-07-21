@@ -7,6 +7,12 @@ export { resolveI18nText, resolveI18nDeep } from "./utils/i18n.js";
 export { collectMediaRefIds } from "./utils/media-ref-scan.js";
 export { reservedPluginDataNamespaceError } from "./utils/plugin-data-namespace.js";
 export {
+  MAX_WORKING_MEMORY_ENTRIES,
+  MAX_WORKING_MEMORY_VALUE_CHARS,
+  workingMemoryQuotaViolation,
+} from "./utils/working-memory-quota.js";
+export type { WorkingMemoryQuotaViolation } from "./utils/working-memory-quota.js";
+export {
   MAX_CACHE_BREAKPOINTS,
   PROMPT_CACHE_BREAKPOINT_MARKER,
   splitPromptCacheSegments,

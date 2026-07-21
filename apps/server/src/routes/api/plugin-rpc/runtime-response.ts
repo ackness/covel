@@ -52,10 +52,11 @@ export function deriveBackgroundJobCompletion(
 }
 
 export function commitFailureMessage(outcome: TurnCommitOutcome): string {
+  // A turn is only "not committed" when proposals failed — a failed snapshot no
+  // longer flips `committed`, so this is reached solely on proposal failure.
   if (outcome.failedProposalCount > 0) {
     return `${outcome.failedProposalCount} proposal(s) failed to commit`;
   }
-  if (outcome.snapshotFailed) return "auto-snapshot failed after commit";
   return "turn did not commit";
 }
 

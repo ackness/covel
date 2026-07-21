@@ -2,7 +2,11 @@
 export { shouldTrigger } from "./trigger/trigger.js";
 
 // ── Scheduler ────────────────────────────────────────────────────
-export { scheduleByPriority } from "./schedule/scheduler.js";
+export {
+  scheduleByPriority,
+  isPreGamePriority,
+  isMainLoopPriority,
+} from "./schedule/scheduler.js";
 export { scheduleByDag } from "./schedule/dag-scheduler.js";
 
 // ── Parallel Executor ────────────────────────────────────────────
@@ -179,5 +183,6 @@ export {
   createPluginLogger,
   createFunctionStoreView,
   createRpcHandlerStoreView,
+  createTrustedHandlerStore,
 } from "./function-runtime/plugin-handler-helpers.js";
 export type { HandlerHelperContext } from "./function-runtime/plugin-handler-helpers.js";

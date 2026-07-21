@@ -185,7 +185,7 @@ interface UIRenderPart {
 
 **治理路径**: 写入经 Session Kernel commit chain 提交，统一进入 `PreStateCommit` / `PostStateCommit`、trace 与 store 事务。
 
-**保留命名空间**: `_` 前缀的 namespace（`_jobs` 后台任务、`_logs` runtime 日志环）属于框架簿记，插件不可写。该限制由 `reservedPluginDataNamespaceError()`（`packages/shared/src/utils/plugin-data-namespace.ts`）统一实施，覆盖全部插件侧写入口：REST `PUT /api/sessions/:id/plugin-data/...`、`plugin.data` / `plugin.data.batch` commit handler（含 function runtime 输出规范化出的 proposal）、function runtime 的 `ctx.pluginData`、以及 RPC handler 的 store view。框架自身的特权写入者（后台 job runner、runtime logger）直接调 store，不走这些通路。
+**保留命名空间**: `_` 前缀的 namespace（`_jobs` 后台任务、`_logs` runtime 日志环）属于框架簿记，插件不可写。该限制由 `reservedPluginDataNamespaceError()`（`packages/shared/src/utils/plugin-data-namespace.ts`）统一实施，覆盖全部插件侧写入口：REST `PUT /api/sessions/:id/plugin-data/...`、`plugin.data` / `plugin.data.batch` commit handler（含 function runtime 输出规范化出的 proposal）、function runtime 的 `ctx.pluginData`、RPC handler 的 store view，以及 builtin/official 插件 handler 拿到的完整 store 句柄（function runtime / agent guard 的 `ctx.store` 与 RPC action handler 的 store 均经 `createTrustedHandlerStore()` 包装——保留 namespace 的读取不受影响，只拦截写入）。框架自身的特权写入者（后台 job runner、runtime logger）直接调 store，不走这些通路。
 
 ---
 
@@ -941,7 +941,7 @@ commit trace 会记录 `ui.rendered`，并为每个 part 记录 `ui.part.update`
 - runtime 端：通过 `Proposal` 输出 `{ type: 'working_memory.set', payload: { scope, key, value, schemaRef? } }`
 - HTTP 端：`PUT /api/sessions/:id/working-memory/:scope/:key` 直接调 store，不经 commit chain（详见 `docs/reference/api.md`）
 
-**存储配额（commit 边界）：** 工作记忆常驻每回合 prompt，因此除渲染端的截断（60 条 / 每条 600 字符）外，commit handler 还实施存储配额：单条 value 序列化后上限 8000 字符，单 session 上限 200 条。超限时提交失败并返回错误，**已存在的 key 仍可更新**——只拒绝新 key，避免淘汰 session 正依赖的条目（core memory blocks 也存在这里）。批量状态应写 plugin-data，它不常驻 prompt。
+**存储配额：** 工作记忆常驻每回合 prompt，因此除渲染端的截断（60 条 / 每条 600 字符）外还实施存储配额：单条 value 序列化后上限 8000 字符，单 session 上限 200 条。超限时写入失败并返回错误，**已存在的 key 仍可更新**——只拒绝新 key，避免淘汰 session 正依赖的条目（core memory blocks 也存在这里）。配额定义在 `packages/shared/src/utils/working-memory-quota.ts`，由 commit handler 与 REST `PUT` 路由共同实施（两条写入路径共享同一份常量与语义）。批量状态应写 plugin-data，它不常驻 prompt。
 
 **KernelEvent 输出：**
 

@@ -36,7 +36,10 @@
 import { Hono } from "hono";
 import { estimateTokens } from "@covel/context";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
-import { createRpcHandlerStoreView } from "@covel/runtime";
+import {
+  createRpcHandlerStoreView,
+  createTrustedHandlerStore,
+} from "@covel/runtime";
 import { RpcDispatchError, RpcValidationError } from "@covel/runtime";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import {
@@ -623,9 +626,12 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
 
   // Action-level dispatch.
   try {
+    // Trusted handlers keep the full store surface, minus writes into
+    // framework-reserved `_` namespaces (the job runner and other framework
+    // writers use the raw store, not this handle).
     const rpcStore =
       entryTrust === "builtin" || entryTrust === "official"
-        ? store
+        ? createTrustedHandlerStore(store)
         : createRpcHandlerStoreView(store, {
             sessionId,
             pluginId,

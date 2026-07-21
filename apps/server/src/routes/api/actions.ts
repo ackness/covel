@@ -703,7 +703,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               committed: commitFailureCount === 0,
             });
 
-            let snapshotFailed = false;
             if (commitFailureCount === 0) {
               try {
                 await saveAutoSnapshot({
@@ -714,7 +713,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                   eventBus,
                 });
               } catch (err) {
-                snapshotFailed = true;
+                // Best-effort checkpoint: a failed snapshot is logged but does
+                // not fail the turn — the proposals are already durable.
                 console.warn(
                   `[actions] auto snapshot failed for session ${sessionId} turn ${turnId}:`,
                   err instanceof Error ? err.message : String(err),
@@ -727,13 +727,14 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               );
             }
 
-            // Commit barrier (audit): the authoritative
-            // turn.completed event and post-turn memory ingestion fire ONLY
-            // when every proposal committed and the snapshot (if attempted)
-            // succeeded. A partial commit or snapshot failure leaves the turn
-            // visibly incomplete instead of reporting success over missing
-            // state; the player retries or resumes from the last good snapshot.
-            const committed = commitFailureCount === 0 && !snapshotFailed;
+            // Commit barrier: the authoritative turn.completed event and
+            // post-turn memory ingestion fire once every proposal committed.
+            // A failed auto-snapshot does NOT hold them back — the business
+            // state is already durable (turnCount advanced above on the same
+            // proposal-only condition), only the best-effort checkpoint is
+            // missing and the next turn snapshots again. Gating completion on
+            // the snapshot would strand a fully-committed turn as "incomplete".
+            const committed = commitFailureCount === 0;
             if (committed) {
               result.completeTurn?.();
             }

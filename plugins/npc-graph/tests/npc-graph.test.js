@@ -376,6 +376,19 @@ describe("upsert-npc-graph", () => {
     expect(current.invalidAt).toBeUndefined();
     expect(current.validAt).toBe(9);
     expect(current.strength).toBe(-0.4);
+
+    // The superseded id is pruned from the adjacency index — a revised relation
+    // nets zero index growth (new id in, closed id out) rather than piling up
+    // closed ids forever.
+    const aNode = list.nodes.find((n) => n.name === "A");
+    const idx = await store.getPluginData(
+      ctx.sessionId,
+      ctx.pluginId,
+      "index",
+      `by-source:${aNode.id}`,
+    );
+    expect(idx.value).toContain(current.id);
+    expect(idx.value).not.toContain(originalId);
   });
 
   it("keeps distinct versions when the same relation is revised across calls in one turn", async () => {

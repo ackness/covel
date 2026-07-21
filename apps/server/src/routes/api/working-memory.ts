@@ -11,6 +11,7 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
+import { workingMemoryQuotaViolation } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { resolveSessionParam } from "./session/session-guard.js";
 import { errorBody, readJsonBody } from "../../api-error.js";
@@ -102,6 +103,24 @@ workingMemoryRoutes.put("/:id/working-memory/:scope/:key", async (c) => {
 
   if (parsed.data.value === undefined) {
     return c.json(errorBody("value must not be undefined"), 400);
+  }
+
+  // Same storage quota as the working_memory.set commit handler (shared
+  // definition in @covel/shared): value-size cap, and at capacity only
+  // updates to existing keys pass — a direct API client must not be able to
+  // grow the table past what the proposal path allows.
+  const existing = await store.listWorkingMemory(sessionId);
+  const violation = workingMemoryQuotaViolation(
+    scope,
+    key,
+    parsed.data.value,
+    existing,
+  );
+  if (violation) {
+    return c.json(
+      errorBody(violation.message, { code: violation.kind }),
+      violation.kind === "value-too-large" ? 413 : 409,
+    );
   }
 
   const now = new Date().toISOString();

@@ -84,6 +84,45 @@ function assertWritableNamespace(namespace: string): void {
 }
 
 /**
+ * Wrap a full DataStore so plugin-data writes into framework-reserved
+ * (`_`-prefixed) namespaces throw. Trusted (builtin/official) handlers keep
+ * the full store surface because their logic implements framework primitives,
+ * but they are still plugin code — a stray write into `_jobs`/`_logs` would
+ * corrupt background-job or log-ring bookkeeping. Reads (including of
+ * reserved namespaces) and every other store method pass through unchanged.
+ * Framework writers (the job runner, the runtime logger, asset output) call
+ * the raw store directly and never receive this wrapper.
+ */
+export function createTrustedHandlerStore(store: DataStore): DataStore {
+  const guarded: Pick<
+    DataStore,
+    "setPluginData" | "setPluginDataBatch" | "deletePluginData"
+  > = {
+    setPluginData(record) {
+      assertWritableNamespace(record.namespace);
+      return store.setPluginData(record);
+    },
+    setPluginDataBatch(records) {
+      for (const record of records) assertWritableNamespace(record.namespace);
+      return store.setPluginDataBatch(records);
+    },
+    deletePluginData(sessionId, pluginId, namespace, key) {
+      assertWritableNamespace(namespace);
+      return store.deletePluginData(sessionId, pluginId, namespace, key);
+    },
+  };
+  return new Proxy(store, {
+    get(target, prop, receiver) {
+      if (prop in guarded) return guarded[prop as keyof typeof guarded];
+      const value = Reflect.get(target, prop, receiver);
+      // Bind pass-through methods to the raw store so implementations that
+      // rely on `this` never see the proxy as their receiver.
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+/**
  * Build a scoped plugin-data writer. Writes bypass the proposal system
  * and land directly on the store — intended for pre-commit placeholders
  * (e.g. "pending" frames) and post-commit patches that should not be
