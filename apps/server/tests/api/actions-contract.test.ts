@@ -165,6 +165,38 @@ describe("POST /api/actions — action type contract ", () => {
     expect(ranRuntimeIds).not.toContain(NARRATOR_ID);
   });
 
+  it("scoped retry_runtime does not advance turnCount", async () => {
+    // Rerunning one runtime over the same logical turn is not a new player
+    // turn. It used to be stamped origin=player and committed, so retrying
+    // pushed turnCount a second time (UI turn number / snapshot cadence drift).
+    const before = (await store.getSession(sessionId))!.turnCount;
+    const res = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-retry-count",
+        type: "retry_runtime",
+        sessionId,
+        payload: { runtimeId: SIDE_ID },
+      }),
+    });
+    expect(res.status).toBe(200);
+    await drainStream(res);
+
+    const after = (await store.getSession(sessionId))!.turnCount;
+    expect(after).toBe(before);
+
+    // The rerun's persisted row is stamped non-player origin.
+    const results = await store.listTurnResults(sessionId);
+    const retryRow = results.find(
+      (r) =>
+        (r.runtimeResults as { runtimeId: string }[]).some(
+          (rr) => rr.runtimeId === SIDE_ID,
+        ) && r.origin === "manual",
+    );
+    expect(retryRow).toBeDefined();
+  });
+
   it("rejects start_session for a session with no active plugins", async () => {
     // An empty plugin set used to mean "activate every registered plugin",
     // which pulled in plugins the player never chose — including mutually

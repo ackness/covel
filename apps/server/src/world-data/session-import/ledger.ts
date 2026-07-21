@@ -3,12 +3,10 @@ import type {
   CharacterRecord,
   DataStore,
   LorebookEntryRecord,
-  MediaStore,
   StoreTransaction,
   WorldDataImportLedgerRecord,
 } from "@covel/store";
 import { canonicalJson, sha256Hex } from "../digest.js";
-import { maybeDeleteOwnedUnreferencedMedia } from "./media-handling.js";
 import type { PlannedWrite, SyncWorldDataForSessionResult } from "./types.js";
 import { isRecord } from "./utils.js";
 
@@ -152,9 +150,15 @@ export async function deleteLedgerTarget(options: {
   // Runs inside `syncWorldDataForSession`'s `withTransaction`, so it accepts a
   // tx-scoped view. A full `DataStore` remains assignable.
   store: StoreTransaction;
-  mediaStore?: MediaStore;
   sessionId: string;
   ledger: WorldDataImportLedgerRecord;
+  // Media unref/delete must NOT run inside the transaction: removeRef and the
+  // owned-media delete touch the disk (rmSync) irreversibly, so a later abort
+  // in the same transaction would roll back the DB rows but not the deleted
+  // file — leaving a committed reference pointing at a missing asset. The
+  // caller collects the media id here and finalizes the deletion only AFTER
+  // the transaction commits (see the delete side of media finalization).
+  onMediaUnref?: (mediaId: string) => void;
 }): Promise<void> {
   const { store, sessionId, ledger } = options;
   if (
@@ -175,25 +179,12 @@ export async function deleteLedgerTarget(options: {
       ledger.namespace,
       ledger.key,
     );
-    if (options.mediaStore) {
-      const ref =
-        isRecord(existing?.value) && isRecord(existing.value.ref)
-          ? existing.value.ref
-          : undefined;
-      const mediaId = typeof ref?.id === "string" ? ref.id : undefined;
-      if (mediaId) {
-        try {
-          await options.mediaStore.removeRef(mediaId, sessionId);
-          await maybeDeleteOwnedUnreferencedMedia({
-            mediaStore: options.mediaStore,
-            mediaId,
-            sessionId,
-          });
-        } catch {
-          // Data sync should continue deleting the remaining managed rows.
-        }
-      }
-    }
+    const ref =
+      isRecord(existing?.value) && isRecord(existing.value.ref)
+        ? existing.value.ref
+        : undefined;
+    const mediaId = typeof ref?.id === "string" ? ref.id : undefined;
+    if (mediaId) options.onMediaUnref?.(mediaId);
     return;
   }
   if (ledger.target === "characters" && ledger.key) {

@@ -498,6 +498,15 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               ),
             );
 
+            // A scoped retry_runtime (payload.runtimeId set) reruns ONE
+            // runtime, not a new player turn. Stamp it non-player origin and
+            // keep it out of turnCount so retrying doesn't advance the counter
+            // a second time over the same logical turn.
+            const isScopedRetry =
+              type === "retry_runtime" &&
+              typeof payload?.runtimeId === "string" &&
+              payload.runtimeId.length > 0;
+
             const turnInput = {
               sessionId,
               turnId,
@@ -514,14 +523,15 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               ...(type === "start_session"
                 ? { suppressPlayerMessage: true }
                 : {}),
-              // retry_runtime honors payload.runtimeId: scope the rerun
-              // to that runtime via the manual-trigger path instead of silently
+              // retry_runtime honors payload.runtimeId: scope the rerun to
+              // that runtime via the manual-trigger path instead of silently
               // re-running the whole turn. Without a runtimeId the action keeps
               // its historical whole-turn-retry semantics.
-              ...(type === "retry_runtime" &&
-              typeof payload.runtimeId === "string" &&
-              payload.runtimeId.length > 0
-                ? { manualTrigger: { runtimeId: payload.runtimeId } }
+              ...(isScopedRetry
+                ? {
+                    manualTrigger: { runtimeId: payload.runtimeId as string },
+                    origin: "manual" as const,
+                  }
                 : {}),
             };
             // W4: register the in-flight turn only after this action owns the
@@ -700,7 +710,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               turnId,
               activeRuntimes,
               wasPreGamePending,
-              committed: commitFailureCount === 0,
+              // A scoped retry reruns one runtime over the same logical turn —
+              // it must not advance the counter even when its proposals commit.
+              committed: commitFailureCount === 0 && !isScopedRetry,
             });
 
             if (commitFailureCount === 0) {

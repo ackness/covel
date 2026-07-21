@@ -3,6 +3,7 @@ import { loadWorldDataDescriptor } from "./descriptor.js";
 import {
   cleanupWorldDataMediaRefs,
   finalizeWorldDataMediaRefs,
+  maybeDeleteOwnedUnreferencedMedia,
 } from "./session-import/media-handling.js";
 import { buildImportPlan } from "./session-import/planning.js";
 import {
@@ -418,6 +419,12 @@ export async function syncWorldDataForSession(
   }
 
   const mediaRefs: WorldDataImportedMediaRef[] = [];
+  // Media ids unreferenced by ledger deletes inside the transaction. Their
+  // removeRef + owned-media delete (which does an irreversible rmSync) is
+  // finalized only AFTER commit — the mirror of the put-side deferral — so a
+  // mid-transaction abort rolls back the DB rows without having deleted a file
+  // the restored rows still point at.
+  const pendingMediaUnrefs: string[] = [];
   try {
     // Scoped transaction: ledger deletes + plan writes commit atomically and a
     // throw auto-rolls-back the DB. `mediaRefs` is collected on the outer array
@@ -451,9 +458,9 @@ export async function syncWorldDataForSession(
       for (const ledger of ledgersToDelete) {
         await deleteLedgerTarget({
           store: tx,
-          mediaStore: options.mediaStore,
           sessionId: options.sessionId,
           ledger,
+          onMediaUnref: (mediaId) => pendingMediaUnrefs.push(mediaId),
         });
         await tx.deleteWorldDataImportLedger(options.sessionId, ledger.id);
       }
@@ -476,6 +483,26 @@ export async function syncWorldDataForSession(
       refs: mediaRefs,
     });
     throw err;
+  }
+
+  // The transaction committed. Only now delete the media unreferenced by the
+  // ledger deletes: removeRef drops the ref row, and an owned asset with no
+  // remaining refs is deleted (files and all). A failure here leaks a ref/asset
+  // (a GC concern) rather than stranding a committed reference on a missing
+  // file, so each is best-effort and independent.
+  if (options.mediaStore && pendingMediaUnrefs.length > 0) {
+    for (const mediaId of pendingMediaUnrefs) {
+      try {
+        await options.mediaStore.removeRef(mediaId, options.sessionId);
+        await maybeDeleteOwnedUnreferencedMedia({
+          mediaStore: options.mediaStore,
+          mediaId,
+          sessionId: options.sessionId,
+        });
+      } catch {
+        // Continue finalizing the remaining unrefs.
+      }
+    }
   }
 
   if (options.deferMediaFinalize) {

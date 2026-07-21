@@ -1230,6 +1230,93 @@ sources: {}
     ).not.toContainEqual(expect.objectContaining({ sessionId: "sess-a" }));
   });
 
+  it("keeps media undeleted when a delete-sync transaction aborts", async () => {
+    const { worldsDir, worldId, worldRoot } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: plugin:character-presence/assets
+    key: filename
+`,
+      files: { "media/portraits/mio.png": "png-ish" },
+    });
+    const store = createMemoryStore();
+    await addSession(store, "sess-a", ["character-presence"], worldId);
+    const mediaStore = createMemoryMediaStore();
+    const preflight = {
+      activePlugins: ["character-presence"],
+      registry: registry({ "character-presence": ["assets"] }),
+    };
+
+    await importWorldDataForSession({
+      store,
+      mediaStore,
+      sessionId: "sess-a",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      preflight,
+    });
+    const assetsBefore = (await mediaStore.listAssets()).map((a) => a.id);
+    expect(assetsBefore).toHaveLength(1);
+
+    // Empty sources ⇒ the imported media's ledger goes to ledgersToDelete.
+    await writeFile(
+      path.join(worldRoot, "data/world.data.yaml"),
+      `schemaVersion: 1
+sources: {}
+`,
+    );
+
+    // Fail the ledger delete INSIDE the transaction, after deleteLedgerTarget
+    // has collected the media for post-commit deletion. A pre-fix build deleted
+    // the file inside the transaction, so the rollback left the committed DB
+    // row pointing at a now-missing asset.
+    const failingStore = new Proxy(store, {
+      get(target, prop, receiver) {
+        if (prop === "withTransaction") {
+          return async (fn: (tx: unknown) => Promise<unknown>) =>
+            store.withTransaction!(async (tx) => {
+              const failingTx = new Proxy(tx as object, {
+                get(t, p, r) {
+                  if (p === "deleteWorldDataImportLedger") {
+                    return async () => {
+                      throw new Error("simulated ledger delete failure");
+                    };
+                  }
+                  return Reflect.get(t, p, r);
+                },
+              });
+              return fn(failingTx);
+            });
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as DataStore;
+
+    await expect(
+      syncWorldDataForSession({
+        store: failingStore,
+        mediaStore,
+        sessionId: "sess-a",
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+        dryRun: false,
+        preflight,
+      }),
+    ).rejects.toThrow(/simulated ledger delete failure/);
+
+    // The media survived: deletion was deferred to post-commit and the
+    // transaction never committed, so the rolled-back DB row still resolves.
+    expect((await mediaStore.listAssets()).map((a) => a.id)).toEqual(
+      assetsBefore,
+    );
+  });
+
   it("imports bundled haruka academy data with real plugin schemas", async () => {
     const worldsDir = path.resolve(import.meta.dirname, "../../../../worlds");
     const worldId = "haruka-academy";
