@@ -323,11 +323,29 @@ resumeRoutes.post("/:id/resume", async (c) => {
         }
 
         const outputKind = effectiveManifest.outputKind ?? "plugin";
+        // Post-commit fan-out barrier: proposals commit through the tx-bound
+        // store view below, which never exposes `withTransaction` — so the
+        // commit pipeline cannot buffer its externally-visible fan-out
+        // (emitter events + PostStateCommit hooks) behind a transaction of its
+        // own. This route owns the transaction, so it owns the barrier:
+        // buffer the thunks here, flush only after `withTransaction` resolves,
+        // and drop them on rollback — clients and hooks must never observe
+        // "committed" for writes the rollback then undoes. Without a
+        // transactional store the fallback runs unwrapped and fan-out stays
+        // inline (nothing later can roll the writes back atomically anyway).
+        const postCommit: Array<() => Promise<void>> = [];
         const processOpts = {
           ...(hookPipeline ? { hookPipeline } : {}),
           ...(eventBus ? { eventBus } : {}),
           emitter,
           capabilities: effectiveManifest.capabilities ?? [],
+          ...(typeof store.withTransaction === "function"
+            ? {
+                deferPostCommit: (fn: () => Promise<void>) => {
+                  postCommit.push(fn);
+                },
+              }
+            : {}),
         };
 
         // Atomic finalize: proposal commit + assistant turn message +
@@ -403,6 +421,20 @@ resumeRoutes.post("/:id/resume", async (c) => {
             ),
             500,
           );
+        }
+
+        // Transaction landed — flush the buffered proposal fan-out in commit
+        // order before announcing the resume. A failing emit/hook must not
+        // fail the resume (the data IS committed), so each thunk is isolated.
+        for (const fn of postCommit) {
+          try {
+            await fn();
+          } catch (flushErr) {
+            console.warn(
+              "[resume] post-commit fan-out failed:",
+              flushErr instanceof Error ? flushErr.message : String(flushErr),
+            );
+          }
         }
 
         // Announce the resume only after the transaction landed — an event

@@ -57,6 +57,14 @@ export async function processRuntimeResult(
     readonly eventBus?: EventBus;
     readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
     readonly capabilities?: readonly string[];
+    /**
+     * Commit barrier for callers running this inside their own store
+     * transaction (passing a tx-bound view as `store`): externally-visible
+     * fan-out (emitter events + PostStateCommit hooks) is handed to this
+     * callback instead of firing inline, so the caller can flush it after its
+     * transaction commits — or drop it on rollback.
+     */
+    readonly deferPostCommit?: (fn: () => Promise<void>) => void;
   },
 ): Promise<ProcessRuntimeResultOutput> {
   const empty: ProcessRuntimeResultOutput = { events: [], failedProposals: [] };
@@ -132,7 +140,10 @@ export async function processRuntimeResult(
     opts?.eventBus,
     opts?.emitter,
   );
-  const commitResults = await pipeline.commitAll(proposals);
+  const commitResults = await pipeline.commitAll(
+    proposals,
+    opts?.deferPostCommit,
+  );
 
   const events: SessionEvent[] = [];
   const failedProposals: Array<{ proposal: Proposal; error: string }> = [];

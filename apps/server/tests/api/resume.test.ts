@@ -471,6 +471,68 @@ describe("Resume Routes", () => {
       );
     });
 
+    it("buffers post-commit fan-out until the finalize transaction commits: a rollback leaves hooks unobserved", async () => {
+      // Proposals commit through the tx-bound store view inside the route's
+      // finalize transaction. If a LATER write in that transaction throws
+      // (here: markSuspensionResolved), the whole transaction rolls back —
+      // so PostStateCommit must never have fired for the rolled-back
+      // proposals. Before the barrier existed, the commit pipeline's
+      // non-transactional fallback ran the fan-out inline while the outer
+      // transaction was still open.
+      const hookPipeline = createHookPipeline();
+      const postStateCommit = vi.fn().mockResolvedValue({ action: "continue" });
+      hookPipeline.register({
+        id: "test-plugin:PostStateCommit",
+        event: "PostStateCommit",
+        pluginId: "test-plugin",
+        handler: postStateCommit,
+      });
+
+      await createSuspension(store);
+      // Fail the finalize step AFTER the proposal commits, inside the same
+      // transaction. The tx scope comes from the real store, so the override
+      // must wrap withTransaction and patch the scope it hands out.
+      const failingStore = {
+        ...store,
+        withTransaction: <T>(
+          fn: (tx: import("@covel/store").StoreTransaction) => Promise<T>,
+        ) =>
+          store.withTransaction!((tx) =>
+            fn({
+              ...tx,
+              markSuspensionResolved: async () => {
+                throw new Error("forced finalize failure");
+              },
+            }),
+          ),
+      } as DataStore;
+      const app = createTestApp(
+        makeDefaultDeps(failingStore, { hookPipeline }),
+      );
+
+      const res = await app.request("/api/sessions/sess-1/resume", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Provider-Keys": "dGVzdA==",
+        },
+        body: JSON.stringify({
+          suspensionId: "susp-1",
+          data: { name: "Alice" },
+        }),
+      });
+
+      expect(res.status).toBe(500);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.error).toMatch(/Resume commit failed/);
+
+      // The rollback undid the narrative write…
+      const messages = await store.listMessages("sess-1");
+      expect(messages.map((m) => m.content)).not.toContain("Resume complete.");
+      // …and no hook ever observed a "committed" state for it.
+      expect(postStateCommit).not.toHaveBeenCalled();
+    });
+
     it("commits resumed runtime output to the store before returning", async () => {
       await createSuspension(store);
       const app = createTestApp(makeDefaultDeps(store));

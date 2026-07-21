@@ -93,12 +93,20 @@ characterRoutes.post("/:id/characters", async (c) => {
     c.get("hookPipeline"),
     c.get("eventBus"),
   );
+  // Take the per-session lock, like the turn and resume paths. A player editing
+  // a character from the UI can otherwise interleave with a turn's
+  // read-modify-write on the same record (update-character reads, the API
+  // upserts, the tool writes back a stale copy) and silently lose the edit.
   // Commit fires PreStateCommit / PostStateCommit — scope to this session's
   // active plugins so only their hooks run (see hooks/hook-scope.ts).
-  const result = await runWithHookScope(
-    { activePluginIds: new Set(guard.session.activePlugins ?? []) },
-    () => pipeline.commit(proposal),
-  );
+  const result = await c
+    .get("sessionLock")
+    .withLock(sessionId, () =>
+      runWithHookScope(
+        { activePluginIds: new Set(guard.session.activePlugins ?? []) },
+        () => pipeline.commit(proposal),
+      ),
+    );
   if (!result.committed) {
     return c.json(errorBody(result.error ?? "Failed to upsert character"), 500);
   }

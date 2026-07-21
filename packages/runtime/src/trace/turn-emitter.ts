@@ -34,7 +34,8 @@ export interface TurnEmitter {
    * The correlation id this emitter stamps on persisted trace_events —
    * the SSE stream's traceId when the caller provided one, else the turnId.
    * Exposed so downstream writers (commit pipeline, trace recorder) can use
-   * the SAME id instead of re-deriving from turnId (audit R-14).
+   * the SAME id instead of re-deriving from turnId — otherwise a turn's
+   * rows land under two correlation ids and /debug shows a split timeline.
    */
   readonly traceId?: string;
   /**

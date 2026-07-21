@@ -165,6 +165,41 @@ describe("POST /api/actions — action type contract ", () => {
     expect(ranRuntimeIds).not.toContain(NARRATOR_ID);
   });
 
+  it("rejects start_session for a session with no active plugins", async () => {
+    // An empty plugin set used to mean "activate every registered plugin",
+    // which pulled in plugins the player never chose — including mutually
+    // exclusive narrative engines — and persisted that for the session's life.
+    // The plugin set is chosen at session creation; an empty one is a caller
+    // bug, not a request for the whole catalogue.
+    const emptySessionId = "sess-no-plugins";
+    await store.createSession({
+      id: emptySessionId,
+      worldId: null,
+      status: "active",
+      presetId: null,
+      activePlugins: [],
+      turnCount: 0,
+      preGameCompleted: [],
+      createdAt: new Date().toISOString(),
+    });
+
+    const res = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-empty-plugins",
+        type: "start_session",
+        sessionId: emptySessionId,
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error?: string };
+    expect(body.error).toContain("no active plugins");
+    // No turn ran, so nothing was persisted for the session.
+    expect(await store.listTurnResults(emptySessionId)).toHaveLength(0);
+  });
+
   it("retry_runtime without runtimeId keeps whole-turn-retry semantics", async () => {
     const res = await app.request("/api/actions", {
       method: "POST",

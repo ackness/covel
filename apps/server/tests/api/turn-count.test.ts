@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import type { RuntimeManifest } from "@covel/shared";
-import { computeSessionTurnCount } from "../../src/routes/api/turn-count.js";
+import {
+  advanceSessionTurnCount,
+  isPreGamePending,
+} from "../../src/routes/api/turn-count.js";
 
 const SID = "sess-tc";
 
@@ -47,163 +50,151 @@ async function seed(
   });
 }
 
-async function addTurn(
-  store: DataStore,
-  turnId: string,
-  runtimeResults: unknown[],
-  origin?: "player" | "manual" | "follower" | "recursive",
-  idSuffix = "",
-): Promise<void> {
-  await store.saveTurnResult({
-    id: `tr-${turnId}${idSuffix}`,
-    sessionId: SID,
-    turnId,
-    runtimeResults,
-    ...(origin ? { origin } : {}),
-    durationMs: 1,
-    createdAt: new Date().toISOString(),
-  });
+async function turnCountOf(store: DataStore): Promise<number | undefined> {
+  return (await store.getSession(SID))?.turnCount;
 }
 
-describe("computeSessionTurnCount", () => {
+describe("isPreGamePending", () => {
+  it("is pending while any Pre-Game runtime has not reported done", () => {
+    expect(isPreGamePending(ACTIVE, [])).toBe(true);
+    expect(isPreGamePending(ACTIVE, ["pregame"])).toBe(false);
+  });
+
+  it("is never pending for a session without Pre-Game runtimes", () => {
+    expect(isPreGamePending([mainLoopRuntime("narrator")], [])).toBe(false);
+  });
+});
+
+describe("advanceSessionTurnCount", () => {
   let store: DataStore;
   beforeEach(() => {
     store = createMemoryStore();
   });
 
-  it("keeps the existing turnCount while Pre-Game is pending", async () => {
+  it("advances a committed main-loop player turn by exactly one", async () => {
+    await seed(store, { turnCount: 3, preGameCompleted: ["pregame"] });
+    await advanceSessionTurnCount({
+      store,
+      sessionId: SID,
+      turnId: "turn-current",
+      activeRuntimes: ACTIVE,
+      wasPreGamePending: false,
+      committed: true,
+    });
+    expect(await turnCountOf(store)).toBe(4);
+  });
+
+  it("does not advance when the turn's proposals failed to commit", async () => {
+    // A failed (or crashed) turn is not a completed player turn — counting it
+    // inflated session.turnCount, which drives the UI turn display and the
+    // auto-snapshot cadence.
+    await seed(store, { turnCount: 3, preGameCompleted: ["pregame"] });
+    await advanceSessionTurnCount({
+      store,
+      sessionId: SID,
+      turnId: "turn-current",
+      activeRuntimes: ACTIVE,
+      wasPreGamePending: false,
+      committed: false,
+    });
+    expect(await turnCountOf(store)).toBe(3);
+  });
+
+  it("does not advance a request that started in Pre-Game", async () => {
+    // Setup requests don't count; the request that completes Pre-Game is
+    // accounted for by pre-game-completion's atomic `turnCount: 1` write —
+    // one logical turn even when main-loop followups ran in the same request.
     await seed(store, { turnCount: 0, preGameCompleted: [] });
-    expect(
-      await computeSessionTurnCount({
-        store,
-        sessionId: SID,
-        activeRuntimes: ACTIVE,
-      }),
-    ).toBe(0);
+    await advanceSessionTurnCount({
+      store,
+      sessionId: SID,
+      turnId: "turn-current",
+      activeRuntimes: ACTIVE,
+      wasPreGamePending: true,
+      committed: true,
+    });
+    expect(await turnCountOf(store)).toBe(0);
   });
 
-  it("counts only main-loop turn_results once Pre-Game is complete", async () => {
-    await seed(store, { turnCount: 1, preGameCompleted: ["pregame"] });
-    // Pre-Game-only setup result — excluded.
-    await addTurn(store, "t0", [
-      { runtimeId: "pregame", output: { preGameDone: true } },
-    ]);
-    await addTurn(store, "t1", [{ runtimeId: "narrator", output: {} }]);
-    await addTurn(store, "t2", [{ runtimeId: "narrator", output: {} }]);
-    expect(
-      await computeSessionTurnCount({
-        store,
-        sessionId: SID,
-        activeRuntimes: ACTIVE,
-      }),
-    ).toBe(2);
+  it("does not advance a session that is no longer active", async () => {
+    await seed(store, {
+      turnCount: 3,
+      preGameCompleted: ["pregame"],
+      status: "paused",
+    });
+    await advanceSessionTurnCount({
+      store,
+      sessionId: SID,
+      turnId: "turn-current",
+      activeRuntimes: ACTIVE,
+      wasPreGamePending: false,
+      committed: true,
+    });
+    expect(await turnCountOf(store)).toBe(3);
   });
 
-  it("counts an empty turn_result as a main-loop player turn (no runtime fired)", async () => {
-    // Intentional (2026-04-12 audit Finding 3): a main-loop turn where the
-    // player advanced but no runtime fired still persists an empty turn_result
-    // and counts — the player took a turn. Mirrors the integration assertion in
-    // turn-commit-pipeline.test.ts "counts main-loop turns even when no runtime
-    // fires". (Pre-Game-only turn_results are still excluded; see below.)
+  it("absorbs the Pre-Game floor: the first main-loop turn stays turn 1", async () => {
+    // Pre-Game finished without running any main-loop runtime, so the "1" the
+    // completion write left behind is a floor placeholder — the first real
+    // main-loop turn IS turn 1, not turn 2.
     await seed(store, { turnCount: 1, preGameCompleted: ["pregame"] });
-    await addTurn(store, "t1", [{ runtimeId: "narrator", output: {} }]);
-    await addTurn(store, "t-empty", []);
-    expect(
-      await computeSessionTurnCount({
-        store,
-        sessionId: SID,
-        activeRuntimes: ACTIVE,
-      }),
-    ).toBe(2);
+    await store.saveTurnResult({
+      id: "tr-setup",
+      sessionId: SID,
+      turnId: "turn-setup",
+      runtimeResults: [{ runtimeId: "pregame", output: { preGameDone: true } }],
+      origin: "player",
+      commitStatus: "committed",
+      durationMs: 1,
+      createdAt: "2024-01-01T00:00:00Z",
+    });
+    await advanceSessionTurnCount({
+      store,
+      sessionId: SID,
+      turnId: "turn-current",
+      activeRuntimes: ACTIVE,
+      wasPreGamePending: false,
+      committed: true,
+    });
+    expect(await turnCountOf(store)).toBe(1);
   });
 
-  it("excludes manual / follower / recursive executions from turnCount ", async () => {
-    // Each non-player execution persists its own turn_results row. Counting
-    // them inflated session.turnCount, which drives UI turn display and the
-    // auto-snapshot cadence — one player input could read as four turns.
+  it("advances past 1 once a main-loop turn already completed", async () => {
     await seed(store, { turnCount: 1, preGameCompleted: ["pregame"] });
-    await addTurn(
+    await store.saveTurnResult({
+      id: "tr-first",
+      sessionId: SID,
+      turnId: "turn-first",
+      runtimeResults: [{ runtimeId: "narrator", output: {} }],
+      origin: "player",
+      commitStatus: "committed",
+      durationMs: 1,
+      createdAt: "2024-01-01T00:00:00Z",
+    });
+    await advanceSessionTurnCount({
       store,
-      "t1",
-      [{ runtimeId: "narrator", output: {} }],
-      "player",
-    );
-    await addTurn(
-      store,
-      "t-manual",
-      [{ runtimeId: "image", output: {} }],
-      "manual",
-    );
-    await addTurn(
-      store,
-      "t-follower",
-      [{ runtimeId: "scene-stage", output: {} }],
-      "follower",
-    );
-    await addTurn(
-      store,
-      "t-recursive",
-      [{ runtimeId: "narrator", output: {} }],
-      "recursive",
-    );
-    expect(
-      await computeSessionTurnCount({
-        store,
-        sessionId: SID,
-        activeRuntimes: ACTIVE,
-      }),
-    ).toBe(1);
+      sessionId: SID,
+      turnId: "turn-current",
+      activeRuntimes: ACTIVE,
+      wasPreGamePending: false,
+      committed: true,
+    });
+    expect(await turnCountOf(store)).toBe(2);
   });
 
-  it("counts several executions sharing one turnId as ONE player turn ", async () => {
-    // A Pre-Game completion request can finish setup AND run main-loop
-    // followups in the same request — two executions, one logical turn.
-    await seed(store, { turnCount: 1, preGameCompleted: ["pregame"] });
-    await addTurn(
+  it("moves forward from an inherited count (forked session)", async () => {
+    // Forks copy `turnCount` from the snapshot but NOT the parent's
+    // turn_results rows. The counter is incremental, so the restored value is
+    // the baseline — a full recount over turn_results would have collapsed it.
+    await seed(store, { turnCount: 42, preGameCompleted: ["pregame"] });
+    await advanceSessionTurnCount({
       store,
-      "t1",
-      [{ runtimeId: "narrator", output: {} }],
-      "player",
-    );
-    await addTurn(
-      store,
-      "t1",
-      [{ runtimeId: "guide", output: {} }],
-      "player",
-      "-b",
-    );
-    expect(
-      await computeSessionTurnCount({
-        store,
-        sessionId: SID,
-        activeRuntimes: ACTIVE,
-      }),
-    ).toBe(1);
-  });
-
-  it("treats a legacy row with no origin as a player turn", async () => {
-    await seed(store, { turnCount: 1, preGameCompleted: ["pregame"] });
-    await addTurn(store, "t1", [{ runtimeId: "narrator", output: {} }]);
-    expect(
-      await computeSessionTurnCount({
-        store,
-        sessionId: SID,
-        activeRuntimes: ACTIVE,
-      }),
-    ).toBe(1);
-  });
-
-  it("floors at 1 once Pre-Game runtimes exist even with no main-loop turns", async () => {
-    await seed(store, { turnCount: 1, preGameCompleted: ["pregame"] });
-    await addTurn(store, "t0", [
-      { runtimeId: "pregame", output: { preGameDone: true } },
-    ]);
-    expect(
-      await computeSessionTurnCount({
-        store,
-        sessionId: SID,
-        activeRuntimes: ACTIVE,
-      }),
-    ).toBe(1);
+      sessionId: SID,
+      turnId: "turn-current",
+      activeRuntimes: ACTIVE,
+      wasPreGamePending: false,
+      committed: true,
+    });
+    expect(await turnCountOf(store)).toBe(43);
   });
 });
