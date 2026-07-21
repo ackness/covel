@@ -37,6 +37,21 @@ const NATURAL_LANGUAGE_KEYS: ReadonlySet<string> = new Set([
   "i18n",
 ]);
 
+/**
+ * Field paths whose key is in NATURAL_LANGUAGE_KEYS but that are a stable
+ * machine identifier at that specific location, not display text. They must be
+ * taken from the canonical file so a translation can't change them.
+ *
+ * `memoryBlocks[*].label` is a working_memory key / prompt XML tag / plugin-data
+ * mirror key (the human-facing name is `displayName`); translating it would
+ * split a memory block's key per UI language.
+ */
+const MACHINE_FIELD_PATHS: readonly RegExp[] = [/^memoryBlocks\[\d+\]\.label$/];
+
+function isMachineFieldPath(path: string): boolean {
+  return MACHINE_FIELD_PATHS.some((re) => re.test(path));
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -54,9 +69,10 @@ function reconcileValue(
       ...Object.keys(localized),
     ])) {
       const childPath = path ? `${path}.${key}` : key;
-      const value = NATURAL_LANGUAGE_KEYS.has(key)
-        ? (localized[key] ?? canonical[key])
-        : reconcileValue(canonical[key], localized[key], childPath, drift);
+      const value =
+        NATURAL_LANGUAGE_KEYS.has(key) && !isMachineFieldPath(childPath)
+          ? (localized[key] ?? canonical[key])
+          : reconcileValue(canonical[key], localized[key], childPath, drift);
       if (value !== undefined) out[key] = value;
     }
     return out;

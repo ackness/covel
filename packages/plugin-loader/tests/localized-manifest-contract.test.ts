@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadRuntime } from "../src/load.js";
+import { reconcileLocalizedManifest } from "../src/localized-manifest.js";
 import type { PluginDiscoveryResult } from "../src/types.js";
 
 /**
@@ -72,6 +73,44 @@ English prompt body.
     expect(loaded.promptTemplate).toContain("English prompt body.");
     // The drift is reported rather than swallowed.
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("PLUGIN.en.md"));
+    warn.mockRestore();
+  });
+});
+
+describe("reconcileLocalizedManifest machine-field paths", () => {
+  it("keeps memoryBlocks[*].label from canonical while translating real prose", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // `label` is display prose in most places (userSettings here) but a stable
+    // machine key inside memoryBlocks — translating it would split the block's
+    // working_memory key per UI language.
+    const canonical = {
+      name: "demo",
+      memoryBlocks: [{ label: "core", displayName: "Core", content: "seed" }],
+      userSettings: [{ key: "tone", label: "Tone" }],
+    } as unknown as import("@covel/shared").RuntimeManifest;
+    const localized = {
+      name: "demo",
+      memoryBlocks: [
+        { label: "核心", displayName: "核心记忆", content: "种子" },
+      ],
+      userSettings: [{ key: "tone", label: "语气" }],
+    } as unknown as import("@covel/shared").RuntimeManifest;
+
+    const merged = reconcileLocalizedManifest(
+      canonical,
+      localized,
+      "PLUGIN.zh.md",
+    ) as unknown as {
+      memoryBlocks: { label: string; displayName: string }[];
+      userSettings: { label: string }[];
+    };
+
+    expect(merged.memoryBlocks[0].label).toBe("core"); // machine key: canonical
+    expect(merged.memoryBlocks[0].displayName).toBe("核心记忆"); // prose: translated
+    expect(merged.userSettings[0].label).toBe("语气"); // genuine I18nText: translated
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("memoryBlocks[0].label"),
+    );
     warn.mockRestore();
   });
 });

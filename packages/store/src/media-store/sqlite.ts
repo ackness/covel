@@ -283,7 +283,9 @@ export function createSqliteMediaStore(
   // Same connection as the DataStore ⇒ same write gate. Without this a media
   // write issued while another caller's transaction is open joins that
   // transaction and is silently lost when it rolls back.
-  // ponytail: `cleanup` queues once and its inner `this.delete` calls then run
-  // inline, which is what we want — they belong to that one maintenance unit.
+  // `cleanup` is deliberately NOT in MEDIA_WRITE_METHODS: it is not gated, so
+  // each `this.delete` it calls takes the queue on its own. Gating cleanup
+  // itself would deadlock — its inner deletes would wait on the chain slot
+  // cleanup is still holding.
   return getConnectionWriteGate(sqlite).gateWrites(store, MEDIA_WRITE_METHODS);
 }

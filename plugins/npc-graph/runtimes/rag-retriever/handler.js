@@ -121,9 +121,23 @@ export default async function handler(ctx) {
     // `invalidAt`, so it was a no-op; now that the upsert tool closes
     // superseded versions at a real turn index, plain openness is the whole
     // predicate and no clock is needed here.
-    const eligibleEdges = edges
+    const openEdges = edges
       .filter((e) => collectedEdgeIds.has(e.id))
       .filter((e) => e.invalidAt === undefined);
+
+    // Defence in depth against a relation that momentarily has two open
+    // versions (a same-turn double revision the upsert tool heals on its next
+    // write): inject only the newest by validAt per (source, target, relation)
+    // so the narrator never sees two contradictory facts about one pair.
+    const openByRelation = new Map();
+    for (const e of openEdges) {
+      const key = `${e.source}::${e.target}::${e.relation}`;
+      const prior = openByRelation.get(key);
+      if (!prior || (e.validAt ?? -1) > (prior.validAt ?? -1)) {
+        openByRelation.set(key, e);
+      }
+    }
+    const eligibleEdges = Array.from(openByRelation.values());
 
     eligibleEdges.sort((a, b) => {
       const recencyDiff = (b.validAt ?? 0) - (a.validAt ?? 0);

@@ -2,7 +2,8 @@ import type {
   RuntimeManifest,
   RuntimeResult,
   TurnInput,
-  TurnResult,
+  NestedTurnResult,
+  RecursiveCallDelta,
 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import type { SuspensionRecord } from "@covel/store";
@@ -46,9 +47,9 @@ export interface ExecuteFunctionRuntimeOptions {
       }
     | undefined;
   readonly createRecursiveCall: () => (
-    delta: Partial<TurnInput>,
+    delta: RecursiveCallDelta,
     opts?: { readonly reason?: string },
-  ) => Promise<TurnResult>;
+  ) => Promise<NestedTurnResult>;
   readonly recursionDepth: number;
   readonly startTime: number;
   readonly runId: string;

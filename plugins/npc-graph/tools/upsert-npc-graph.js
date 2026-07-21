@@ -246,7 +246,26 @@ export default function ({ tool, z, shortIdBatch, store }) {
         const v = row.value ?? {};
         if (!v.source || !v.target || !v.relation) continue;
         if (v.invalidAt !== undefined) continue;
-        openEdgeByKey.set(`${v.source}::${v.target}::${v.relation}`, v);
+        const key = `${v.source}::${v.target}::${v.relation}`;
+        const prior = openEdgeByKey.get(key);
+        if (!prior) {
+          openEdgeByKey.set(key, v);
+          continue;
+        }
+        // Two open versions of one relation must never coexist. A later tool
+        // call in the same turn (writes don't commit between calls) reads the
+        // pre-turn store and can open a second version, leaving two open rows
+        // after commit — the retriever would then inject contradictory facts
+        // forever. Self-heal on the next write: keep the newest by validAt as
+        // the live version and close the older one at the current turn.
+        const [live, stale] =
+          (v.validAt ?? -1) >= (prior.validAt ?? -1) ? [v, prior] : [prior, v];
+        openEdgeByKey.set(key, live);
+        pluginDataWrites.push({
+          namespace: "edges",
+          key: stale.id,
+          value: { ...stale, invalidAt: currentTurn },
+        });
       }
 
       /** @type {Array<{ id: string; source: string; target: string; relation: string; fact: string; skipped?: string; supersedes?: string }>} */

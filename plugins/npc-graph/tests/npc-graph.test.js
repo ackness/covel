@@ -428,6 +428,77 @@ describe("upsert-npc-graph", () => {
     );
   });
 
+  it("self-heals a relation that already has two open versions", async () => {
+    // Corrupted state a pre-fix same-turn double revision could leave: two open
+    // rows for one relation (writes don't commit between tool calls in a turn,
+    // so each call opened its own version). The next write must close all but
+    // the newest so retrieval never carries two contradictory facts forever.
+    await store.setPluginDataBatch([
+      {
+        sessionId: ctx.sessionId,
+        pluginId: ctx.pluginId,
+        namespace: "nodes",
+        key: "npc-a",
+        value: { id: "npc-a", name: "A", type: "individual" },
+        updatedAt: "2026-01-01T00:00:00Z",
+      },
+      {
+        sessionId: ctx.sessionId,
+        pluginId: ctx.pluginId,
+        namespace: "nodes",
+        key: "npc-b",
+        value: { id: "npc-b", name: "B", type: "individual" },
+        updatedAt: "2026-01-01T00:00:00Z",
+      },
+    ]);
+    const seedOpen = (id, validAt, strength) =>
+      store.setPluginData({
+        sessionId: ctx.sessionId,
+        pluginId: ctx.pluginId,
+        namespace: "edges",
+        key: id,
+        value: {
+          id,
+          source: "npc-a",
+          target: "npc-b",
+          relation: "TRUSTS",
+          strength,
+          fact: `Open version at turn ${validAt}.`,
+          validAt,
+        },
+        updatedAt: "2026-01-01T00:00:00Z",
+      });
+    await seedOpen("edge-old-3", 3, 0.3);
+    await seedOpen("edge-old-5", 5, 0.5);
+
+    await executeAndCommit(
+      upsertTool,
+      {
+        edges: [
+          {
+            sourceName: "A",
+            targetName: "B",
+            relation: "TRUSTS",
+            strength: -0.2,
+            fact: "A grows wary of B.",
+          },
+        ],
+      },
+      { ...ctx, turnNumber: 9 },
+      store,
+    );
+
+    const list = await listTool.execute({}, ctx);
+    const trust = list.edges.filter((e) => e.relation === "TRUSTS");
+    const open = trust.filter((e) => e.invalidAt === undefined);
+    // Exactly one open version survives — the brand-new revision.
+    expect(open).toHaveLength(1);
+    expect(open[0].strength).toBe(-0.2);
+    // Both pre-existing open rows were closed at the current turn.
+    expect(trust.find((e) => e.id === "edge-old-3").invalidAt).toBe(9);
+    expect(trust.find((e) => e.id === "edge-old-5").invalidAt).toBe(9);
+  });
+
   it("gives superseding versions distinct ids even when endpoint names are long", async () => {
     // Edge ids slugify (source + relation + target) and truncate to 24 chars.
     // With long names the truncated slug is identical across versions, so the

@@ -284,7 +284,12 @@ export async function bootstrapApi(
   // reservation list tracks the `plugins/` directory automatically instead of a
   // hand-edited array. Injected via middleware below and consumed by the plugin
   // install route to reject third-party packages that claim a builtin id.
-  const reservedPluginIds = deriveBuiltinPluginIds(discoveryMap.values());
+  //
+  // Derived from the registry, not discoveryMap: a builtin whose load failed is
+  // quarantined out of discoveryMap, but it is still registered as an `error`
+  // entry carrying its `source`. Its id must stay reserved so a community
+  // package cannot claim the vacated builtin id while the directory lingers.
+  const reservedPluginIds = deriveBuiltinPluginIds(registry.getAll().values());
 
   // Session event directory — aggregates active plugins' `events` manifest
   // contracts (union, first-wins on cross-plugin topic conflicts) so the
