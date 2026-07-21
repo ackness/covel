@@ -50,6 +50,7 @@ import {
 import { getCachedWorld } from "../../world-cache.js";
 import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
+import { commitFailureMessage } from "./plugin-rpc/runtime-response.js";
 import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import {
@@ -400,6 +401,21 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
 
     try {
       const summary = await runManualTurn();
+      // The runtime can report success while its proposals fail to land. A
+      // turn whose writes never committed is not a successful turn: report it
+      // as an error and do not chain followers onto rolled-back state.
+      if (!summary.commit.committed) {
+        return c.json(
+          {
+            status: "error",
+            error: commitFailureMessage(summary.commit),
+            code: "turn-commit-failed",
+            turnId: summary.turnId,
+            runtimeResults: summary.runtimeResults,
+          },
+          500,
+        );
+      }
       const deferredJobs =
         summary.deferredFollowers.length > 0
           ? await jobRunner.scheduleDeferredFollowers(summary.deferredFollowers)
@@ -505,18 +521,30 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     if (operatorDenied) return operatorDenied;
   }
 
-  const approvalAction = pendingEntryActivation
-    ? COMMUNITY_SERVER_CODE_ACTION
-    : action;
+  // Two-phase approval for every community server module, not just deferred
+  // entries: dispatching a declarative `manifest.rpc` action dynamically
+  // imports the plugin's handler JS, which is server code by the same
+  // definition as an entry/runtime module. Ask for the server-code grant
+  // first when it is missing, then the precise action grant below.
+  const needsServerCodeGrant =
+    entryTrust === "community" &&
+    !gate.hasGrant(sessionId, pluginId, COMMUNITY_SERVER_CODE_ACTION);
+  // A deferred entry always takes the server-code phase first: we cannot know
+  // whether `action` even exists until the (untrusted) entry has run.
+  const approvalAction =
+    needsServerCodeGrant || pendingEntryActivation
+      ? COMMUNITY_SERVER_CODE_ACTION
+      : action;
   const verdict = gate.evaluate({
     sessionId,
     pluginId,
     action: approvalAction,
     payload: body.payload,
     trustLevel: entryTrust,
-    description: pendingEntryActivation
-      ? `Load server-side code for community plugin ${pluginId}`
-      : entryDescription,
+    description:
+      approvalAction === COMMUNITY_SERVER_CODE_ACTION
+        ? `Load server-side code for community plugin ${pluginId}`
+        : entryDescription,
   });
 
   if (verdict.status === "pending") {
@@ -546,21 +574,23 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   // the entry-registered handler exists before dispatch re-resolves it.
   // No-op for already-activated plugins (idempotent). If the entry still
   // doesn't register `action`, dispatch throws unknown-action → 404 below.
-  if (pendingEntryActivation) {
-    await c.get("activatePluginLocalTools")?.(pluginId, sessionId);
-    const activatedEntry = registry.getPluginAction(pluginId, action);
-    if (!activatedEntry) {
-      return c.json(
-        {
-          status: "error",
-          error: `unknown action "${action}" for plugin "${pluginId}"`,
-          code: "unknown-action",
-        },
-        404,
-      );
+  if (pendingEntryActivation || needsServerCodeGrant) {
+    if (pendingEntryActivation) {
+      await c.get("activatePluginLocalTools")?.(pluginId, sessionId);
+      const activatedEntry = registry.getPluginAction(pluginId, action);
+      if (!activatedEntry) {
+        return c.json(
+          {
+            status: "error",
+            error: `unknown action "${action}" for plugin "${pluginId}"`,
+            code: "unknown-action",
+          },
+          404,
+        );
+      }
+      entryTrust = activatedEntry.trustLevel;
+      entryDescription = activatedEntry.description;
     }
-    entryTrust = activatedEntry.trustLevel;
-    entryDescription = activatedEntry.description;
     const actionVerdict = gate.evaluate({
       sessionId,
       pluginId,

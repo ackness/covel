@@ -1,6 +1,19 @@
 import type { PluginRpcRuntimeResultSummary } from "@covel/shared";
 
+/**
+ * Authoritative outcome of a turn's commit phase. A runtime can report
+ * `success` while its proposals fail to land — every caller that reports
+ * completion (RPC response, background job status, deferred scheduling) must
+ * consume this rather than runtime status alone.
+ */
+export interface TurnCommitOutcome {
+  readonly committed: boolean;
+  readonly failedProposalCount: number;
+  readonly snapshotFailed: boolean;
+}
+
 export interface ManualTurnSummary {
+  readonly commit: TurnCommitOutcome;
   readonly turnId: string;
   readonly runtimeResults: readonly PluginRpcRuntimeResultSummary[];
   readonly durationMs: number;
@@ -21,16 +34,29 @@ export interface BackgroundJobCompletion {
 }
 
 export function deriveBackgroundJobCompletion(
-  summary: Pick<ManualTurnSummary, "runtimeResults">,
+  summary: Pick<ManualTurnSummary, "runtimeResults" | "commit">,
 ): BackgroundJobCompletion {
   const failedResult = summary.runtimeResults.find(
     (result) => result.status === "failed",
   );
-  if (!failedResult) return { status: "done" };
-  return {
-    status: "failed",
-    error: failedResult.error ?? "runtime reported failure",
-  };
+  if (failedResult) {
+    return {
+      status: "failed",
+      error: failedResult.error ?? "runtime reported failure",
+    };
+  }
+  if (!summary.commit.committed) {
+    return { status: "failed", error: commitFailureMessage(summary.commit) };
+  }
+  return { status: "done" };
+}
+
+export function commitFailureMessage(outcome: TurnCommitOutcome): string {
+  if (outcome.failedProposalCount > 0) {
+    return `${outcome.failedProposalCount} proposal(s) failed to commit`;
+  }
+  if (outcome.snapshotFailed) return "auto-snapshot failed after commit";
+  return "turn did not commit";
 }
 
 export interface FollowerRuntimeJobResult {
@@ -44,6 +70,7 @@ export interface FollowerRuntimeJobResult {
 export function deriveFollowerRuntimeJobResult(args: {
   readonly followerResult?: PluginRpcRuntimeResultSummary;
   readonly turnDurationMs: number;
+  readonly commit: TurnCommitOutcome;
 }): FollowerRuntimeJobResult {
   const outputRecord = (args.followerResult?.output ?? {}) as Record<
     string,
@@ -55,14 +82,17 @@ export function deriveFollowerRuntimeJobResult(args: {
   const handlerSaysFailed =
     outputRecord.status === "failed" ||
     (typeof outputRecord.error === "string" && outputRecord.error.length > 0);
-  const isFailure = executorReportedFailure || handlerSaysFailed;
+  const isFailure =
+    executorReportedFailure || handlerSaysFailed || !args.commit.committed;
   const error =
     args.followerResult?.error ??
     (handlerSaysFailed && typeof outputRecord.error === "string"
       ? outputRecord.error
-      : isFailure
-        ? "runtime reported failure"
-        : undefined);
+      : !args.commit.committed
+        ? commitFailureMessage(args.commit)
+        : isFailure
+          ? "runtime reported failure"
+          : undefined);
 
   return {
     jobStatus: isFailure ? "failed" : "done",

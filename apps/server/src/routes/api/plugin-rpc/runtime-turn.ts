@@ -10,7 +10,10 @@ import type { RuntimeManifest, TurnInput } from "@covel/shared";
 
 import type { SessionLock } from "../../../lib/session-lock.js";
 import { createRuntimeResultProcessor } from "../runtime-result-processor.js";
-import type { ManualTurnSummary } from "./runtime-response.js";
+import type {
+  ManualTurnSummary,
+  TurnCommitOutcome,
+} from "./runtime-response.js";
 
 export interface PluginRpcRuntimeTurnContext {
   readonly store: DataStore;
@@ -50,12 +53,13 @@ export function createPluginRpcRuntimeTurnRunner(
   runManualTurn(args: RunManualTurnArgs): Promise<ManualTurnSummary>;
   runDeferredFollowerTurn(args: RunDeferredFollowerArgs): Promise<{
     readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
+    readonly commit: TurnCommitOutcome;
   }>;
 } {
   async function processTurnResults(
     turnResult: Awaited<ReturnType<typeof executeTurn>>,
     emitter: ReturnType<typeof createTurnEmitter>,
-  ): Promise<void> {
+  ): Promise<TurnCommitOutcome> {
     const resultProcessor = createRuntimeResultProcessor({
       store: ctx.store,
       sessionId: ctx.sessionId,
@@ -124,9 +128,15 @@ export function createPluginRpcRuntimeTurnRunner(
       );
     }
 
-    if (failedProposals.length === 0 && !snapshotFailed) {
+    const committed = failedProposals.length === 0 && !snapshotFailed;
+    if (committed) {
       turnResult.completeTurn?.();
     }
+    return {
+      committed,
+      failedProposalCount: failedProposals.length,
+      snapshotFailed,
+    };
   }
 
   async function runManualTurn(
@@ -159,19 +169,23 @@ export function createPluginRpcRuntimeTurnRunner(
         : {}),
     };
 
-    const result = await ctx.sessionLock.withLock(ctx.sessionId, async () => {
-      const turnResult = await executeTurn(turnInput, ctx.activeRuntimes, {
-        ...ctx.deps,
-        store: ctx.store,
-        eventBus: ctx.eventBus,
-        emitter,
-        ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
-      });
-      await processTurnResults(turnResult, emitter);
-      return turnResult;
-    });
+    const { result, commit } = await ctx.sessionLock.withLock(
+      ctx.sessionId,
+      async () => {
+        const turnResult = await executeTurn(turnInput, ctx.activeRuntimes, {
+          ...ctx.deps,
+          store: ctx.store,
+          eventBus: ctx.eventBus,
+          emitter,
+          ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
+        });
+        const outcome = await processTurnResults(turnResult, emitter);
+        return { result: turnResult, commit: outcome };
+      },
+    );
 
     return {
+      commit,
       turnId: args.turnId,
       runtimeResults: result.runtimeResults.map((rr) => ({
         runtimeId: rr.runtimeId,
@@ -189,7 +203,10 @@ export function createPluginRpcRuntimeTurnRunner(
 
   async function runDeferredFollowerTurn(
     args: RunDeferredFollowerArgs,
-  ): Promise<{ readonly turnResult: Awaited<ReturnType<typeof executeTurn>> }> {
+  ): Promise<{
+    readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
+    readonly commit: TurnCommitOutcome;
+  }> {
     const emitter = createTurnEmitter({
       store: ctx.store,
       eventBus: ctx.eventBus,
@@ -220,7 +237,7 @@ export function createPluginRpcRuntimeTurnRunner(
     // released, so without this they can interleave turnNumber computation,
     // state writes, and auto-snapshots with a concurrent player turn on the same
     // session (audit 2026-04-20 finding 1).
-    const turnResult = await ctx.sessionLock.withLock(
+    const { turnResult, commit } = await ctx.sessionLock.withLock(
       ctx.sessionId,
       async () => {
         const result = await executeTurn(turnInput, ctx.activeRuntimes, {
@@ -230,12 +247,12 @@ export function createPluginRpcRuntimeTurnRunner(
           emitter,
           ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
         });
-        await processTurnResults(result, emitter);
-        return result;
+        const outcome = await processTurnResults(result, emitter);
+        return { turnResult: result, commit: outcome };
       },
     );
 
-    return { turnResult };
+    return { turnResult, commit };
   }
 
   return { runManualTurn, runDeferredFollowerTurn };

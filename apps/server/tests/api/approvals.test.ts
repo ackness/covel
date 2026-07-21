@@ -98,6 +98,25 @@ async function dispatchRpc(app: Hono, sessionId: string): Promise<Response> {
   });
 }
 
+/**
+ * Community server code is two-phase: a `covel:plugin-server-code` grant to
+ * import the plugin's handler module, then the precise action grant. Clears
+ * phase 1 with a session-scoped grant and returns the phase-2 response.
+ */
+async function clearServerCodePhase(
+  app: Hono,
+  sessionId: string,
+): Promise<Response> {
+  const first = await dispatchRpc(app, sessionId);
+  const { approvalId } = (await first.json()) as { approvalId: string };
+  await app.request(`/api/approvals/${approvalId}/decision`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ decision: "allow", scope: "session" }),
+  });
+  return dispatchRpc(app, sessionId);
+}
+
 describe("Plugin RPC approval flow (PR-7)", () => {
   let app: Hono;
   let store: DataStore;
@@ -119,8 +138,17 @@ describe("Plugin RPC approval flow (PR-7)", () => {
     expect(body.status).toBe("approval-required");
     expect(body.approvalId).toMatch(/^[0-9a-f-]{36}$/);
     expect(body.pending.pluginId).toBe("untrusted");
-    expect(body.pending.action).toBe("do-thing");
-    expect(body.pending.description).toBe("Run the thing");
+    // Phase 1: importing the community handler module is itself server code.
+    expect(body.pending.action).toBe("covel:plugin-server-code");
+
+    // Phase 2 only after the server-code grant exists.
+    const second = await clearServerCodePhase(app, "sess-approval-1");
+    expect(second.status).toBe(202);
+    const secondBody = (await second.json()) as {
+      pending: { action: string; description?: string };
+    };
+    expect(secondBody.pending.action).toBe("do-thing");
+    expect(secondBody.pending.description).toBe("Run the thing");
   });
 
   it("GET /api/sessions/:id/approvals lists session pending entries", async () => {
@@ -134,7 +162,7 @@ describe("Plugin RPC approval flow (PR-7)", () => {
   });
 
   it("decision allow + scope=once unblocks exactly one follow-up dispatch", async () => {
-    const initial = await dispatchRpc(app, "sess-approval-1");
+    const initial = await clearServerCodePhase(app, "sess-approval-1");
     const { approvalId } = (await initial.json()) as { approvalId: string };
 
     // Approve once.
@@ -164,7 +192,7 @@ describe("Plugin RPC approval flow (PR-7)", () => {
   });
 
   it("decision allow + scope=session caches for the rest of the session", async () => {
-    const initial = await dispatchRpc(app, "sess-approval-1");
+    const initial = await clearServerCodePhase(app, "sess-approval-1");
     const { approvalId } = (await initial.json()) as { approvalId: string };
 
     await app.request(`/api/approvals/${approvalId}/decision`, {
