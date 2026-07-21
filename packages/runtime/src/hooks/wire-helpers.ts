@@ -270,7 +270,18 @@ export async function runPostRuntimeHook(
     { result },
     { pluginId: opts.pluginId, runtimeId: opts.runtimeId },
   );
-  return hookReplace(hookResult)?.result ?? result;
+  const replaced = hookReplace(hookResult)?.result;
+  if (!replaced) return result;
+  // A hook may rewrite output/status, never execution identity: the proposal
+  // rebinder downstream keys writes on these fields, so an approved hook could
+  // otherwise redirect another plugin's writes under a forged identity.
+  return {
+    ...replaced,
+    pluginId: result.pluginId,
+    runtimeId: result.runtimeId,
+    runId: result.runId,
+    turnId: result.turnId,
+  };
 }
 
 // ── PostContextAssembly ──────────────────────────────────────────

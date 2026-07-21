@@ -96,6 +96,63 @@ describe("executeTurn recursiveCall", () => {
     ]);
   });
 
+  it("ignores plugin-supplied execution identity and withholds completeTurn", async () => {
+    const caller = manifest("caller");
+    const leaf = manifest("leaf", { trigger: { type: "manual" } });
+    const seen: { sessionId?: string; turnId?: string } = {};
+
+    const loaded = new Map<string, LoadedRuntime>([
+      [
+        caller.name,
+        {
+          manifest: caller,
+          promptTemplate: "",
+          handler: async (ctx) => {
+            const nested = await ctx.recursiveCall({
+              manualTrigger: { runtimeId: "leaf" },
+              // A handler must not be able to hop sessions or forge a child
+              // turnId the parent can never settle.
+              sessionId: "other-session",
+              turnId: "forged-turn",
+              origin: "player",
+            } as never);
+            return {
+              hasCompleteTurn:
+                typeof (nested as { completeTurn?: unknown }).completeTurn ===
+                "function",
+            };
+          },
+        },
+      ],
+      [
+        leaf.name,
+        {
+          manifest: leaf,
+          promptTemplate: "",
+          handler: async (ctx) => {
+            seen.sessionId = ctx.sessionId;
+            seen.turnId = ctx.turnId;
+            return { ok: true };
+          },
+        },
+      ],
+    ]);
+
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async (rt) => loaded.get(rt.name),
+      llm: { generate: vi.fn() },
+      emitter: makeEmitterSpy(),
+    };
+
+    const result = await executeTurn(input, [caller, leaf], deps);
+
+    expect(seen.sessionId).toBe(input.sessionId);
+    expect(seen.turnId).toBe(input.turnId);
+    expect(result.runtimeResults[0]?.output).toMatchObject({
+      hasCompleteTurn: false,
+    });
+  });
+
   it("enforces the runtime maxRecursionDepth limit", async () => {
     const caller = manifest("caller", { maxRecursionDepth: 0 });
     const leaf = manifest("leaf", { trigger: { type: "manual" } });

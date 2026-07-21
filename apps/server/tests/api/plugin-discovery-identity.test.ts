@@ -49,6 +49,49 @@ async function writePlugin(dirName: string, manifestName: string) {
   );
 }
 
+/**
+ * A multi-runtime plugin whose two runtimes declare the SAME dataSchemas
+ * namespace with different `schemaVersion`. Identity validation passes (both
+ * frontmatter roots match the directory), but `registry.register` throws while
+ * merging the conflicting schemas — the failure path that must still leave no
+ * capability caches behind.
+ */
+async function writeConflictingSchemaPlugin(dirName: string) {
+  const base = path.join(root, dirName);
+  const runtimes = [
+    { rt: "a", version: 1 },
+    { rt: "b", version: 2 },
+  ];
+  for (const { rt, version } of runtimes) {
+    const dir = path.join(base, "runtimes", rt);
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      path.join(dir, "PLUGIN.md"),
+      [
+        "---",
+        `name: ${dirName}/${rt}`,
+        "pluginType: plugin",
+        "description: conflicting schema fixture",
+        "trigger:",
+        "  type: manual",
+        "dataSchemas:",
+        "  shared:",
+        `    schemaVersion: ${version}`,
+        "    acceptsWorldData: true",
+        "    schema: ./schemas/shared.schema.json",
+        "---",
+        "",
+        "Body.",
+        "",
+      ].join("\n"),
+    );
+  }
+  await writeFile(
+    path.join(base, "package.json"),
+    JSON.stringify({ name: dirName, version: "0.0.1", type: "module" }),
+  );
+}
+
 describe("plugin discovery identity gate ", () => {
   it("registers a matching plugin normally", async () => {
     await writePlugin("honest", "honest");
@@ -76,5 +119,38 @@ describe("plugin discovery identity gate ", () => {
     expect(entry?.manifests ?? []).toHaveLength(0);
     // Nothing registered under the impersonated id either.
     expect(registry.get("narrator")).toBeUndefined();
+  });
+
+  it("leaves no discovery capability behind for a rejected plugin", async () => {
+    // Quarantine, not just registry status: bootstrap wires tools, hooks,
+    // wires and RPC actions off discoveryMap/manifestCache, so a plugin that
+    // failed validation must be absent from both.
+    await writePlugin("innocent", "narrator");
+    await writePlugin("honest", "honest");
+    const { discoveryMap, manifestCache } = await discoverAndRegisterPlugins({
+      pluginsDir: root,
+      eventBus: createEventBus(createMemoryStore()),
+    });
+
+    expect(discoveryMap.has("innocent")).toBe(false);
+    expect(manifestCache.has("innocent")).toBe(false);
+    expect(discoveryMap.has("honest")).toBe(true);
+    expect(manifestCache.has("honest")).toBe(true);
+  });
+
+  it("leaves no discovery capability behind when registry.register throws", async () => {
+    // The caches are published just before register(); register() itself can
+    // throw (here: a dataSchemas namespace conflict) after they were set, so
+    // the failure path must undo them or the plugin stays visible to wiring.
+    await writeConflictingSchemaPlugin("conflicted");
+    const { registry, discoveryMap, manifestCache } =
+      await discoverAndRegisterPlugins({
+        pluginsDir: root,
+        eventBus: createEventBus(createMemoryStore()),
+      });
+
+    expect(registry.get("conflicted")?.status).toBe("error");
+    expect(discoveryMap.has("conflicted")).toBe(false);
+    expect(manifestCache.has("conflicted")).toBe(false);
   });
 });

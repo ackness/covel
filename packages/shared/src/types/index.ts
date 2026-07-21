@@ -92,6 +92,8 @@ export type {
   RuntimeResult,
   TurnInput,
   TurnResult,
+  NestedTurnResult,
+  RecursiveCallDelta,
   InteractionType,
   FormInteraction,
   ChoiceInteraction,

@@ -47,9 +47,6 @@ export async function discoverAndRegisterPlugins(
       const summary = await loadPluginSummary(discovery);
       const manifests = await loadPluginManifest(discovery);
 
-      discoveryMap.set(discovery.id, discovery);
-      manifestCache.set(discovery.id, manifests);
-
       for (const parsed of manifests) {
         for (const diagnostic of validateRuntimeManifestSemantics(
           parsed.manifest,
@@ -75,6 +72,13 @@ export async function discoverAndRegisterPlugins(
         }
       }
 
+      // Publish the discovery caches only after every manifest passed
+      // validation: bootstrap's tool/hook/wire/RPC wiring consumes these maps
+      // directly, so a plugin that fails identity validation below must leave
+      // no capability behind (quarantine, not warn-and-continue).
+      discoveryMap.set(discovery.id, discovery);
+      manifestCache.set(discovery.id, manifests);
+
       // Register with all manifests (first is primary for getActiveRuntimes).
       // `source` comes from `discoverPluginsMulti`: bundled first-dir plugins
       // keep their prefix-derived trust, everything else is clamped to
@@ -91,6 +95,14 @@ export async function discoverAndRegisterPlugins(
         ...(discovery.source ? { source: discovery.source } : {}),
       });
     } catch (err) {
+      // Undo any capability caches published before the failure. registry
+      // registration itself can throw (e.g. a dataSchemas conflict) after the
+      // sets above ran, so without this a plugin left in `error` status would
+      // still be visible to the tool/hook/wire/RPC wiring. delete is a no-op
+      // when validation failed before the sets executed.
+      discoveryMap.delete(discovery.id);
+      manifestCache.delete(discovery.id);
+
       const message = err instanceof Error ? err.message : String(err);
       console.error(
         `[bootstrap] Failed to load plugin ${discovery.id}:`,

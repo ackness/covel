@@ -268,7 +268,21 @@ export async function executeFunctionRuntime({
       isRevoked,
       "recursiveCall",
     ),
+    // logger persists to the store and assetProgress emits SSE/trace events —
+    // both are side-effecting, so they belong in the revocation set too —
+    // otherwise a timed-out handler keeps appending log rows and emitting
+    // progress events after its turn is over.
+    logger: loggerHandle
+      ? makeRevocableCapability(loggerHandle, isRevoked, "logger")
+      : undefined,
+    assetProgress: assetProgress
+      ? makeRevocableFn(assetProgress, isRevoked, "assetProgress")
+      : undefined,
   };
+  // ponytail: revocation is checked at call entry, so an effect already
+  // in flight when the deadline fires still lands. Closing that needs the
+  // deadline signal threaded into every primitive (or worker isolation) —
+  // upgrade path if late in-flight writes show up in practice.
 
   let output: Awaited<ReturnType<NonNullable<typeof loaded.handler>>>;
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
@@ -297,7 +311,9 @@ export async function executeFunctionRuntime({
       ...(revocable.media ? { media: revocable.media } : {}),
       ...(revocable.images ? { images: revocable.images } : {}),
       ...(revocable.speech ? { speech: revocable.speech } : {}),
-      ...(assetProgress ? { assetProgress } : {}),
+      ...(revocable.assetProgress
+        ? { assetProgress: revocable.assetProgress }
+        : {}),
       ...(manualPayloadForRuntime
         ? { manualPayload: manualPayloadForRuntime }
         : {}),
@@ -306,7 +322,7 @@ export async function executeFunctionRuntime({
         ? { userSettings: userSettingsForRuntime }
         : {}),
       ...(revocable.pluginData ? { pluginData: revocable.pluginData } : {}),
-      ...(loggerHandle ? { logger: loggerHandle } : {}),
+      ...(revocable.logger ? { logger: revocable.logger } : {}),
       signal: handlerAbort.signal,
     });
     output = await Promise.race([

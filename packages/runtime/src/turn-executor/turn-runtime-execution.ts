@@ -1,4 +1,6 @@
 import type {
+  NestedTurnResult,
+  RecursiveCallDelta,
   RuntimeManifest,
   RuntimeResult,
   TurnInput,
@@ -118,9 +120,9 @@ export async function executeOneRuntime(
   const timeoutMs = manifest.timeoutMs ?? defaultTimeoutMs;
   const createRecursiveCall = () => {
     return async (
-      delta: Partial<TurnInput>,
+      rawDelta: RecursiveCallDelta,
       opts?: { readonly reason?: string },
-    ): Promise<TurnResult> => {
+    ): Promise<NestedTurnResult> => {
       const maxDepth =
         manifest.maxRecursionDepth ?? turnOptions?.maxRecursionDepth ?? 10;
       const nextDepth = recursionDepth + 1;
@@ -129,11 +131,23 @@ export async function executeOneRuntime(
           ? opts.reason
           : undefined;
 
+      // Execution identity is framework-owned. The public delta type already
+      // omits these, but plugin code is untyped JS at runtime — strip them so
+      // a handler cannot hop sessions or forge a child turnId that the parent
+      // turn can never settle.
+      const {
+        sessionId: _s,
+        turnId: _t,
+        origin: _o,
+        parentTurnId: _p,
+        ...delta
+      } = rawDelta as Partial<TurnInput>;
+
       const nestedInput: RecursiveTurnInput = {
         ...input,
         ...delta,
-        sessionId: delta.sessionId ?? input.sessionId,
-        turnId: delta.turnId ?? input.turnId,
+        sessionId: input.sessionId,
+        turnId: input.turnId,
         playerMessage: delta.playerMessage ?? input.playerMessage,
         suppressPlayerMessage: true,
         // A nested execution is never a player turn — stamp its origin
@@ -192,7 +206,11 @@ export async function executeOneRuntime(
           resultCount: nestedResult.runtimeResults.length,
           durationMs: nestedResult.durationMs,
         });
-        return nestedResult;
+        // Hand back a de-capabilitised DTO: `completeTurn` would let plugin
+        // code emit the authoritative `turn.completed` (and kick memory
+        // ingestion) before the parent's proposals ever commit.
+        const { completeTurn: _drop, ...nestedView } = nestedResult;
+        return nestedView;
       } catch (err) {
         await deps.emitter?.emit("recursive.failed", {
           ...tracePayload,

@@ -9,8 +9,8 @@ import type {
   MediaRef,
   PluginType,
   RuntimeManifest,
-  TurnInput,
-  TurnResult,
+  NestedTurnResult,
+  RecursiveCallDelta,
 } from "@covel/shared";
 
 // ── Parsed PLUGIN.md ─────────────────────────────────────────────
@@ -441,9 +441,9 @@ export interface FunctionHandlerContext {
   readonly assetProgress?: (progress: AssetProgressInput) => Promise<void>;
   /** Run a nested turn with a partial input override. Depth is bounded by runtime governance. */
   readonly recursiveCall: (
-    delta: Partial<TurnInput>,
+    delta: RecursiveCallDelta,
     opts?: { readonly reason?: string },
-  ) => Promise<TurnResult>;
+  ) => Promise<NestedTurnResult>;
   /** Current recursiveCall depth. Top-level runtime executions start at 0. */
   readonly recursionDepth: number;
   /**

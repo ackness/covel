@@ -296,6 +296,37 @@ describe("function-runtime trace (A2-P1-5)", () => {
     ).toThrow(/revoked/);
   });
 
+  it("revokes logger and assetProgress after the turn settles", async () => {
+    // Both are side-effecting (logger persists rows, assetProgress emits
+    // trace/SSE events), so a handler that lost the deadline race must not be
+    // able to reach them after the session lock has released.
+    let capturedLogger: unknown;
+    let capturedAssetProgress: unknown;
+    const loaded: LoadedRuntime = {
+      manifest: makeFunctionManifest(),
+      promptTemplate: "",
+      handler: async (ctx) => {
+        capturedLogger = ctx.logger;
+        capturedAssetProgress = ctx.assetProgress;
+        return {};
+      },
+    };
+
+    const { emitter } = captureEmitter();
+    await executeTurn(
+      makeTurnInput(),
+      [loaded.manifest],
+      makeDeps(loaded, { emitter }),
+    );
+
+    expect(() =>
+      (capturedLogger as { info: (m: string) => unknown }).info("late"),
+    ).toThrow(/revoked/);
+    expect(() =>
+      (capturedAssetProgress as (p: unknown) => unknown)({ status: "late" }),
+    ).toThrow(/revoked/);
+  });
+
   // ── Persistence integration (critique HIGH gap) ──────────────────
   // Proves the headline claim: with a real TurnEmitter the new events actually
   // land in trace_events (the table /debug reads), not just a capturing stub.

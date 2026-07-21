@@ -110,6 +110,28 @@ export interface TurnInput {
   >;
 }
 
+/**
+ * Business-input subset a plugin may override on `ctx.recursiveCall()`.
+ * Execution identity (`sessionId`, `turnId`, `origin`, `parentTurnId`) is
+ * framework-generated and immutable: a nested call must stay inside the parent
+ * session — otherwise an approved handler could read another session's context
+ * and persist under it, bypassing the hosted session-owner boundary — and must
+ * keep a framework-issued child `turnId` so its execution artifact settles with
+ * the parent turn.
+ */
+export type RecursiveCallDelta = Omit<
+  Partial<TurnInput>,
+  "sessionId" | "turnId" | "origin" | "parentTurnId"
+>;
+
+/**
+ * Nested-turn view handed back to plugin code. Strips `completeTurn`: the
+ * completion barrier belongs to the top-level framework control plane, and a
+ * nested caller invoking it would emit an authoritative `turn.completed`
+ * before the parent's proposals commit.
+ */
+export type NestedTurnResult = Omit<TurnResult, "completeTurn">;
+
 export interface TurnResult {
   readonly turnId: string;
   readonly sessionId: string;
