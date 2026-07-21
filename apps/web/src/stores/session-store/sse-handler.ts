@@ -557,7 +557,7 @@ export function createSseEventHandler(
         });
         break;
       }
-      // A proposal failed to commit : part of this turn's writes did
+      // A proposal failed to commit: part of this turn's writes did
       // not land. Surface it as an execution error so the player sees a
       // visible failure instead of a silently incomplete turn (the server
       // also withholds turn.completed / auto-snapshot in this case).

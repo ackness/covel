@@ -43,7 +43,7 @@ function createSubscriptionEventHandler(
         // stale and we may have silently missed events. subscription.ts has
         // already cleared the cursor; re-hydrate the drift-prone authoritative
         // state (session plugins + game-state snapshot), reusing the same
-        // recovery path as a reconnect. See re-review H-05/H-06.
+        // recovery path as a reconnect.
         options.onReset();
         break;
       }
@@ -247,7 +247,7 @@ export function useSessionSubscription({
     };
 
     // plugin-data.changed arrives on topic="plugin" with
-    // _subType="plugin-data.changed". `game` carries F4 turn.suspended/resumed.
+    // _subType="plugin-data.changed". `game` carries turn.suspended/resumed.
     const sub = createSessionSubscription(sessionId, {
       topics: ["plugin", "system", "game"],
       onStateChange: handleConnectionStateChange,

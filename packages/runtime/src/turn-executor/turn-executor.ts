@@ -203,7 +203,7 @@ async function executeTurnImpl(
       : {}),
   });
 
-  // ── TurnStart hook (S4-T3) ───────────────────────────────────
+  // ── TurnStart hook ───────────────────────────────────
   {
     const tsResult = await runTurnStartHook(
       {
@@ -308,8 +308,8 @@ async function executeTurnImpl(
   //
   // Pre-Game band uses strict priority ordering while setup runtimes are
   // pending: pregame plugins
-  // have implicit write-ordering (pregame → world-init/schema-gen → player-init,
-  // audit P0-2) that is NOT captured in manifest inject declarations, so
+  // have implicit write-ordering (pregame → world-init/schema-gen →
+  // player-init) that is NOT captured in manifest inject declarations, so
   // falling back to priority is the right semantic. player-init's prompt reads
   // `{{ world.schema }}`, so schema-gen MUST land first in the same setup pass.
   //
@@ -552,13 +552,15 @@ async function executeTurnImpl(
     nestedRuntimeResults,
   });
 
-  // ── Turn-completion barrier (audit) ─────────────────
+  // ── Turn-completion barrier ─────────────────
   // The authoritative `turn.completed` event and post-turn memory ingestion
   // must not fire before the caller commits this turn's proposals — a failed
   // commit would otherwise leave clients with a "completed" turn and memory
   // built from state that never landed. `completeTurn` packages both; the
   // commit-owning caller (actions.ts / plugin-rpc runtime-turn.ts) invokes it
-  // once after commit + snapshot succeed. Idempotent via the `fired` guard.
+  // once proposals commit. A failed auto-snapshot does NOT withhold it — the
+  // snapshot is a best-effort checkpoint, tracked separately on the outcome.
+  // Idempotent via the `fired` guard.
   // Memory stays fire-and-forget inside; per-session single-flight lives in
   // the memory updater's pending map.
   let completionFired = false;
@@ -581,7 +583,7 @@ async function executeTurnImpl(
     },
   };
 
-  // ── TurnStop hook (S4-T3) — Post* hooks cannot abort ────────
+  // ── TurnStop hook — Post* hooks cannot abort ────────
   await runTurnStopHook(
     {
       pipeline: deps.hookPipeline,

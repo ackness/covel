@@ -8,7 +8,7 @@
  * Used by `/api/events/stream` (subscribe.ts) for the out-of-band SSE channel.
  * The primary `/api/actions` channel does not use replay (it's per-turn lifecycle).
  *
- * Epochs + gap detection (re-review H-05/H-06):
+ * Epochs + gap detection:
  * Every session replay state carries an `epoch` minted when the state is
  * (re)created; wire event ids are `${epoch}:${seq}` so ids are never reused
  * across eviction or process restart. `getEventsAfter()` reports `gap: true`
@@ -17,7 +17,7 @@
  * translates that into a `system.reset` control frame. `pin()` keeps a
  * session's state out of LRU/TTL eviction while it has active subscribers.
  *
- * Memory bounds (audit R-03):
+ * Memory bounds:
  * - Per-session state (seq counter + ring buffer) is LRU-tracked with a global
  *   cap (MAX_TRACKED_SESSIONS) and an idle TTL (SESSION_IDLE_TTL_MS); pinned
  *   sessions are exempt (their count is bounded by the SSE connection caps).
@@ -26,7 +26,7 @@
  *   rate-limited warning (the audit trail is best-effort — authoritative
  *   state is durably committed via the commit pipeline).
  *
- * Cross-pod fan-out (audit R-02, re-review H-07):
+ * Cross-pod fan-out:
  * An optional `EventBusTransport` (e.g. PG LISTEN/NOTIFY) mirrors emitted
  * events to sibling pods. Frames carry the origin's per-session seq and are
  * published through a per-session serialized outbox (an oversize event's ref
@@ -84,7 +84,7 @@ export interface EventBus {
   getEventsAfter(sessionId: string, afterSeq: number): EventReplay;
   /**
    * Pin a session's replay state while it has an active subscriber: pinned
-   * sessions are excluded from LRU/TTL eviction (H-06). A transport gap can
+   * sessions are excluded from LRU/TTL eviction. A transport gap can
    * still invalidate replay explicitly and is announced through `onReset`.
    */
   pin(sessionId: string): SessionPin;
@@ -276,7 +276,7 @@ export function createEventBus(
   let epochGeneration = 0;
   const nextEpoch = (): string => `${epochPrefix}-${++epochGeneration}`;
 
-  // ── Bounded persist queue (audit R-03) ─────────────────────────
+  // ── Bounded persist queue ─────────────────────────
   interface PersistItem {
     readonly record: EventRecord;
     /** Always called exactly once: true after a successful save, false on error/drop. */
@@ -288,7 +288,7 @@ export function createEventBus(
   let droppedSinceWarn = 0;
   let lastDropWarnMs = 0;
 
-  // ── Transport ordering state (re-review H-07) ──────────────────
+  // ── Transport ordering state ──────────────────
   // Publisher: per-session promise chain so frames leave in seq order.
   const outboxTails = new Map<string, Promise<void>>();
   // Receiver: per-(origin, session) seq ordering + serialized delivery.
@@ -410,7 +410,7 @@ export function createEventBus(
   /**
    * Per-session serialized publish: each task runs after the previous one for
    * the same session settles, so inline frames cannot overtake an oversize
-   * ref frame that is still waiting on its store save (H-07).
+   * ref frame that is still waiting on its store save.
    */
   function enqueueOutbox(sessionId: string, task: () => Promise<void>): void {
     const tail = outboxTails.get(sessionId) ?? Promise.resolve();
@@ -590,7 +590,7 @@ export function createEventBus(
       state.buffer.push(subEvent);
       broadcast(subEvent);
 
-      // ── Cross-pod fan-out (per-session serialized outbox, H-07) ──
+      // ── Cross-pod fan-out (per-session serialized outbox) ──
       let persistSettle: ((ok: boolean) => void) | undefined;
       if (transport) {
         state.transportSeq += 1;
@@ -658,7 +658,7 @@ export function createEventBus(
 
     getEventsAfter(sessionId: string, afterSeq: number): EventReplay {
       const state = sessions.get(sessionId);
-      // Unknown OR evicted session — the cursor cannot be bridged (H-05).
+      // Unknown OR evicted session — the cursor cannot be bridged.
       if (!state) {
         return {
           events: [],

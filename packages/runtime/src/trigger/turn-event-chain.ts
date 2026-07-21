@@ -51,12 +51,11 @@ export interface RunEventChainParams {
  * single turn's event fan-out, delegating the actual topic-match (and trigger
  * gates) to the single authority, `shouldTrigger`.
  *
- * The per-session throttles (`maxTriggerCount` / `cooldownTurns`) are applied
- * **once per turn** by the main scheduler (`selectTriggeredRuntimes`). Within
- * a turn, event fan-out is bounded instead by `maxDepth`, so those fields are
- * set to non-blocking sentinels here — re-applying per-session throttles to a
- * within-turn reaction would be semantically wrong. `isManualTrigger` is
- * irrelevant to the `event` branch.
+ * The per-session throttles (`maxTriggerCount` / `cooldownTurns`) are fed the
+ * real per-runtime history (via `triggerCounts` / `turnsSinceLastTrigger`) so
+ * they bite here too; `maxDepth` additionally bounds within-turn recursion.
+ * Absent maps fall back to "never triggered" for direct callers (tests).
+ * `isManualTrigger` is irrelevant to the `event` branch.
  *
  * Fan-out is deliberately NOT filtered by the current priority band: it is a
  * causal reaction to something that actually happened, not a scheduled slot.

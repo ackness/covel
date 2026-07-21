@@ -135,7 +135,7 @@ export function createSessionSubscription(
       // This SSE client is fetch-based, so it can send the owner token as a
       // header (preferred over the `?session_token=` query fallback that plain
       // EventSource is stuck with). Re-read per connect so reconnects pick up a
-      // token stored after the first attempt. See H-01.
+      // token stored after the first attempt.
       const token = getSessionToken(sessionId);
       const res = await fetch(buildUrl(), {
         signal: abortController.signal,
@@ -171,7 +171,7 @@ export function createSessionSubscription(
           // stale, so clear it and the current/next connection re-subscribes
           // from the authoritative head instead of requesting an unservable
           // replay. The event still dispatches so consumers can re-hydrate
-          // authoritative state (H-05/H-06).
+          // authoritative state.
           if (eventType === "system.reset") {
             lastEventId = "";
           } else if (message.id) {

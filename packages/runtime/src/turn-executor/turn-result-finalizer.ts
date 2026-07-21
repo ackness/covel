@@ -142,9 +142,9 @@ export async function finalizeTurnResult({
   // NOTE: `turn.completed` is intentionally NOT emitted here. The persisted
   // runtime results above are execution artefacts, not committed game state —
   // the authoritative completion event fires via `TurnResult.completeTurn`,
-  // which the commit-owning caller invokes only after proposals + snapshot
-  // land (audit). A persisted result without a completion event is the
-  // expected crash signature, tolerated by recovery.
+  // which the commit-owning caller invokes once proposals commit (a failed
+  // auto-snapshot does not withhold it). A persisted result without a
+  // completion event is the expected crash signature, tolerated by recovery.
 
   return turnResult;
 }

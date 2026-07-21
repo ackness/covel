@@ -241,7 +241,7 @@ export async function resumeSuspendedRuntime(
   // commit failure left the suspension permanently resolved and the
   // narrative already in prompt history. The `turn.resumed` event moves
   // with them (it must not announce a resume that then rolls back).
-  // PostRuntime runs BEFORE any persistence  — the caller persists
+  // PostRuntime runs BEFORE any persistence — the caller persists
   // the hook-finalized output.
   return finalizeWithPostRuntime({
     pluginId: manifest.pluginId,

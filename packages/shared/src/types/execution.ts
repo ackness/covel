@@ -88,7 +88,7 @@ export interface TurnInput {
     };
   };
   /**
-   * Execution origin , stamped onto the persisted
+   * Execution origin, stamped onto the persisted
    * `turn_results` row so turn accounting can distinguish a real player turn
    * from a manual RPC trigger, a deferred background follower, or a nested
    * recursiveCall. Defaults to `player` when omitted.
@@ -101,7 +101,7 @@ export interface TurnInput {
    * holds the values the user has saved under `plugin.<pluginId>.<key>` in
    * the unified SettingsStore; the server merges these with the per-runtime
    * `manifest.userSettings[].default` before invoking function handlers so
-   * plugins can rely on every declared key being present (audit F7).
+   * plugins can rely on every declared key being present.
    *
    * Absent on programmatic / test callers that don't carry player context.
    */
@@ -115,8 +115,8 @@ export interface TurnInput {
  * Execution identity (`sessionId`, `turnId`, `origin`, `parentTurnId`) is
  * framework-generated and immutable: a nested call must stay inside the parent
  * session — otherwise an approved handler could read another session's context
- * and persist under it, bypassing the hosted session-owner boundary — and must
- * keep a framework-issued child `turnId` so its execution artifact settles with
+ * and persist under it, bypassing the hosted session-owner boundary — and
+ * reuses the parent `turnId` so its execution artifact settles together with
  * the parent turn.
  */
 export type RecursiveCallDelta = Omit<

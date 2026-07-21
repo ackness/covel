@@ -469,8 +469,8 @@ export async function executeFunctionRuntime({
     timestamp: new Date().toISOString(),
   };
 
-  // PostRuntime hook — function runtime path (S4-T3). Runs BEFORE
-  // persistence  so prompt history, commit proposals, and SSE all see
+  // PostRuntime hook — function runtime path. Runs BEFORE
+  // persistence so prompt history, commit proposals, and SSE all see
   // the same finalized output — see the agent-path comment for rationale.
   const result = await runPostRuntimeHook(
     {

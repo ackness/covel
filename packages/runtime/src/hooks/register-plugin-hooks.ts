@@ -28,7 +28,7 @@ export interface PluginHookSource {
   /** Parsed `hooks:` frontmatter entries (already schema-validated). */
   readonly hooks: readonly HookDeclaration[];
   /**
-   * Trust gate (H-03). When true the source's handlers stay DORMANT: an
+   * Trust gate. When true the source's handlers stay DORMANT: an
    * invocation before `activateDeferredPluginHooks(pipeline, pluginId)` is a
    * no-op `continue` and — critically — does NOT `import()` the handler
    * module, so unapproved community code never executes. The registrar caller
@@ -144,7 +144,7 @@ export function registerPluginHooks(
       // handler for subsequent calls.
       let cached: HookHandler<unknown> | undefined;
       const lazyHandler: HookHandler<unknown> = async (ctx, payload) => {
-        // Trust gate (H-03): a deferred source's handler must not run — or
+        // Trust gate: a deferred source's handler must not run — or
         // even be import()'d — until the plugin is approved and activated.
         if (deferred && !deferredActivations.get(pipeline)?.has(pluginId)) {
           return { action: "continue" };

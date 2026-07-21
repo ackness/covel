@@ -112,9 +112,9 @@ export function createPluginRpcRuntimeTurnRunner(
           "withholding auto-snapshot and turn completion",
       );
     }
-    // Commit barrier (audit): fire the authoritative
-    // turn.completed event and memory ingestion only when every proposal
-    // committed and the snapshot succeeded.
+    // Commit barrier: fire the authoritative turn.completed event and memory
+    // ingestion only when every proposal committed. A failed auto-snapshot
+    // does not withhold completion (see below).
     try {
       await ctx.store.setTurnResultCommitStatus(
         ctx.sessionId,
