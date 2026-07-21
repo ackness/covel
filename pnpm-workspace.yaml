@@ -21,4 +21,3 @@ allowBuilds:
 overrides:
   rolldown: 1.1.4
   tsx: 4.22.4
-  "@tanstack/router-core": 1.171.14

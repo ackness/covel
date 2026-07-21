@@ -12,6 +12,6 @@
     "@covel/runtime": "workspace:*",
     "@covel/shared": "workspace:*",
     "@covel/tools": "workspace:*",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.10"
   }
 }
