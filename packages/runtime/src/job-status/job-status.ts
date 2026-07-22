@@ -16,10 +16,14 @@
 
 import type { DataStore } from "@covel/store";
 import type { EventBus } from "@covel/events";
-import type { JobStatusRecord, JobStatusState } from "@covel/shared";
+import type { JobStatusRecord, JobStatusState, JsonValue } from "@covel/shared";
 import { assertJsonValue } from "@covel/shared";
 import type { ProgressEffect, ProgressReporter } from "@covel/plugin-loader";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
+import {
+  canonicalizeMediaRefs,
+  type MediaOwnershipStore,
+} from "../media/canonicalize-media-refs.js";
 
 /** The out-of-band SSE event this channel emits (see COVEL_EVENT_META). */
 const JOB_STATUS_EVENT = "job-status.updated";
@@ -33,6 +37,13 @@ export interface ProgressReporterDeps {
   readonly progressScopeId: string;
   readonly pluginId: string;
   readonly runtimeId: string;
+  /**
+   * MediaStore read surface: when present, `report` canonicalizes + ownership-
+   * checks any MediaRef in the job `data` (docs 02 §2.1). A rejection throws
+   * back to the handler. Absent (finalizer terminal writes, tests) ⇒ no media
+   * processing — terminal job records carry no data anyway.
+   */
+  readonly mediaStore?: MediaOwnershipStore;
 }
 
 function buildRecord(
@@ -78,10 +89,25 @@ export function createProgressReporter(
 ): ProgressReporter {
   return {
     async report(effect: ProgressEffect): Promise<void> {
+      let reportEffect = effect;
       if (effect.data !== undefined) {
         assertJsonValue(effect.data, "job data at data");
+        if (deps.mediaStore) {
+          const canon = await canonicalizeMediaRefs(effect.data as JsonValue, {
+            store: deps.mediaStore,
+            sessionId: deps.sessionId,
+          });
+          if (canon.rejections.length > 0) {
+            throw new Error(
+              `job data media rejected: ${canon.rejections
+                .map((r) => `${r.id}:${r.reason}`)
+                .join("; ")}`,
+            );
+          }
+          reportEffect = { ...effect, data: canon.value };
+        }
       }
-      const record = buildRecord(deps, effect);
+      const record = buildRecord(deps, reportEffect);
       const inserted = await appendAndEmit(deps, record);
       if (!inserted) {
         console.debug(

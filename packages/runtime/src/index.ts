@@ -47,6 +47,16 @@ export type { TurnControl } from "./turn-executor/turn-control.js";
 export { createRuntimeMediaContext } from "./function-runtime/runtime-media-context.js";
 export type { MediaStoreLike } from "./function-runtime/runtime-media-context.js";
 
+// ── MediaRef canonicalization (shared boundary scanner) ─────────
+export { canonicalizeMediaRefs } from "./media/canonicalize-media-refs.js";
+export type {
+  MediaOwnershipStore,
+  MediaCanonicalization,
+  MediaRejection,
+  MediaRejectionReason,
+  MediaDiagnostic,
+} from "./media/canonicalize-media-refs.js";
+
 // ── Job status (kernel-owned, append-only progress channel) ─────
 export {
   createProgressReporter,

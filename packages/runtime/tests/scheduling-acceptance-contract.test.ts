@@ -953,6 +953,9 @@ describe("blocked control (maxTriggerCount / retry / waive)", () => {
 
 describe("media pipeline & job-status", () => {
   // needs: kernel-owned append-only job-status store + ctx.progress.report (release step 2); legacy tracks/images view projector (release step 4/6 compat)
+  // LIT (partial) IN: media-boundaries-acceptance.test.ts — progress→terminal
+  // failed chain + non-success envelope observability-only stripping. The
+  // legacy tracks/images compat projector remains a Step 4/6 todo there.
   it.todo(
     "scenario 9: 媒体任务在 provider 调用前经 ctx.progress.report 提交 pending/progress，失败后 finalizer 追加 terminal failed；非 success 信封只接受 jobStatus/diagnostics，领域写被拒；compat projector 只按 manifest 声明投影本插件旧 tracks/images view，新 UI 直接订阅 kernel job-status — 断言实时进度与终态提交的边界",
   );
@@ -960,6 +963,11 @@ describe("media pipeline & job-status", () => {
 
 describe("MediaRef canonicalization boundaries", () => {
   // needs: shared MediaRef canonicalizer across activation/binding/export/resume/job-data + ownership validation (release step 3)
+  // LIT IN: media-boundaries-acceptance.test.ts (activation / binding / export /
+  // job-data boundaries share one canonicalizer; ownership reject; url strip;
+  // per-position caption in canonicalize-media-refs.test.ts) and
+  // apps/server/tests/api/snapshot.test.ts (fork atomic addRef + missing-asset
+  // whole-fork failure). Resume-boundary canonicalization is a later wave.
   it.todo(
     "scenario 10: MediaRef 在 activation/绑定/export/resume/job data 各边界使用同一 canonicalizer；当前 session 无 MediaRefRecord 时拒绝；持久值去掉临时 URL；同一 asset 的位置/caption 可不同；fork 为 child 原子增加 reference，缺 asset 时整次失败 — 断言各边界共享同一校验结果",
   );

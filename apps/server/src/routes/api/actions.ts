@@ -694,6 +694,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                   ? (await loadRuntimeFn(rt, effectiveLocale))?.outputSchema
                   : undefined;
               },
+              // MediaRef canonicalization / ownership for published export values.
+              ...(mediaStore ? { mediaStore } : {}),
             });
             // finalize owns the commit_status settle (committed or failed).
             commitStatusSettled = true;

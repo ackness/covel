@@ -37,6 +37,7 @@ import {
   projectSchemaBySelect,
   resolveJsonPointer,
 } from "./accepts-compat.js";
+import type { MediaCanonicalization } from "../media/canonicalize-media-refs.js";
 
 type Schema = Readonly<Record<string, unknown>>;
 
@@ -48,7 +49,8 @@ export type BindingSkipReason =
   | "input-missing"
   | "input-schema-invalid"
   | "input-schema-incompatible"
-  | "invalid-detached-contract";
+  | "invalid-detached-contract"
+  | "media-ownership-invalid";
 
 export type BindingResolution =
   | {
@@ -73,6 +75,53 @@ export interface ResolveBindingsInput {
   readonly loadProducerSchema: (
     producer: RuntimeManifest,
   ) => Promise<Schema | undefined>;
+  /**
+   * Canonicalize + ownership-check the MediaRefs in an about-to-be-injected
+   * value (docs 02 §2.1). Injected before `accepts` runs, so `accepts` sees the
+   * canonical value. Absent (test harnesses / no MediaStore) ⇒ values inject
+   * unchanged — a media-free value is identical either way.
+   */
+  readonly canonicalizeValue?: (
+    value: JsonValue,
+  ) => Promise<MediaCanonicalization>;
+}
+
+/**
+ * Canonicalize one binding value's MediaRefs, recording canonicalization
+ * diagnostics and (on rejection) a single `media-ownership-invalid` diagnostic.
+ * Shared by the `one` and `all` branches so both map rejections identically.
+ */
+async function canonicalizeBindingValue(
+  canonicalize: (value: JsonValue) => Promise<MediaCanonicalization>,
+  value: JsonValue,
+  ctx: { runtimeId: string; bindingName: string; required: boolean },
+  diagnostics: SchedulingDiagnostic[],
+): Promise<{ value: JsonValue; rejected: boolean }> {
+  const result = await canonicalize(value);
+  for (const d of result.diagnostics) {
+    diagnostics.push(
+      diag(
+        d.code,
+        "warn",
+        ctx.runtimeId,
+        `binding "${ctx.bindingName}": ${d.message}`,
+      ),
+    );
+  }
+  if (result.rejections.length > 0) {
+    diagnostics.push(
+      diag(
+        "media-ownership-invalid",
+        ctx.required ? "error" : "warn",
+        ctx.runtimeId,
+        `binding "${ctx.bindingName}": ${result.rejections
+          .map((r) => `${r.id}:${r.reason}`)
+          .join("; ")}`,
+      ),
+    );
+    return { value: result.value, rejected: true };
+  }
+  return { value: result.value, rejected: false };
 }
 
 /**
@@ -305,6 +354,32 @@ export async function resolveInputBindings(
         if (required) return { ok: false, skipReason: failed, diagnostics };
         continue;
       }
+      // Canonicalize each item's MediaRefs before the array accepts check.
+      if (args.canonicalizeValue) {
+        let rejected = false;
+        for (let i = 0; i < items.length; i++) {
+          const c = await canonicalizeBindingValue(
+            args.canonicalizeValue,
+            items[i]!.value,
+            { runtimeId: manifest.name, bindingName: name, required },
+            diagnostics,
+          );
+          if (c.rejected) {
+            rejected = true;
+            break;
+          }
+          items[i] = { value: c.value, source: items[i]!.source };
+        }
+        if (rejected) {
+          if (required)
+            return {
+              ok: false,
+              skipReason: "media-ownership-invalid",
+              diagnostics,
+            };
+          continue;
+        }
+      }
       // Runtime full-schema check over the whole array (docs 02 §3.1).
       if (acceptsSchema) {
         const array = items.map((i) => i.value);
@@ -344,8 +419,27 @@ export async function resolveInputBindings(
       if (required) return { ok: false, skipReason: got.reason, diagnostics };
       continue;
     }
+    let value = got.value;
+    if (args.canonicalizeValue) {
+      const c = await canonicalizeBindingValue(
+        args.canonicalizeValue,
+        value,
+        { runtimeId: manifest.name, bindingName: name, required },
+        diagnostics,
+      );
+      if (c.rejected) {
+        if (required)
+          return {
+            ok: false,
+            skipReason: "media-ownership-invalid",
+            diagnostics,
+          };
+        continue;
+      }
+      value = c.value;
+    }
     if (acceptsSchema) {
-      const validation = validateOutput(got.value, acceptsSchema);
+      const validation = validateOutput(value, acceptsSchema);
       if (!validation.valid) {
         diagnostics.push(
           diag(
@@ -360,7 +454,7 @@ export async function resolveInputBindings(
         continue;
       }
     }
-    slots[name] = { cardinality: "one", value: got.value, source: got.source };
+    slots[name] = { cardinality: "one", value, source: got.source };
   }
 
   return { ok: true, slots, diagnostics };

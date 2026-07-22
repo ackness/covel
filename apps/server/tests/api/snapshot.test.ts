@@ -825,6 +825,73 @@ describe("Snapshot routes", () => {
       expect(await mediaStore.isReferencedBy(ref.id, childId)).toBe(true);
     });
 
+    it("references media embedded in a copied export atomically on fork (docs 02 §2.1.5)", async () => {
+      // A MediaRef that lives ONLY inside a recordAs export value (never in the
+      // snapshot payload). The fork scan must reach it too, so the child ends up
+      // referencing it.
+      const mediaStore = createMemoryMediaStore();
+      const ref = await mediaStore.put(new Uint8Array([9, 9]), "audio/wav", {
+        prompt: "track",
+      });
+      await mediaStore.recordOwnership(ref.id, "sess-1", "p");
+      await store.appendRuntimeExport({
+        sessionId: "sess-1",
+        producerPluginId: "p",
+        producerRuntimeId: "p/gen",
+        recordAs: "latest-track",
+        revision: 1,
+        pluginVersion: "1.0.0",
+        schemaDigest: "digest",
+        resultId: "r-1",
+        value: { audio: ref },
+        committedAt: "2020-01-01T00:00:00.000Z",
+      });
+
+      const app = createTestApp(store, undefined, mediaStore);
+      const snapId = await createParentSnapshot(store, app);
+      const res = await app.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      expect(res.status).toBe(201);
+      const childId = ((await res.json()) as { sessionId: string }).sessionId;
+      expect(await mediaStore.isReferencedBy(ref.id, childId)).toBe(true);
+    });
+
+    it("fails the whole fork (409) when a referenced media asset is missing", async () => {
+      // A MediaRef pointing at an asset that does not exist in the MediaStore.
+      // The fork gate must reject the entire operation — no child session is
+      // created (docs 02 §2.1.5).
+      const mediaStore = createMemoryMediaStore();
+      const missingId = "d".repeat(64);
+      await store.setPluginData({
+        id: "sess-1-pd-missing-media",
+        sessionId: "sess-1",
+        pluginId: "test-plugin",
+        namespace: "images",
+        key: "ghost",
+        value: { ref: { id: missingId, mime: "image/png", size: 3 } },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      const app = createTestApp(store, undefined, mediaStore);
+      const snapId = await createParentSnapshot(store, app);
+      const before = (await store.listSessions()).length;
+      const res = await app.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      expect(res.status).toBe(409);
+      expect(((await res.json()) as { code?: string }).code).toBe(
+        "media_reference_missing",
+      );
+      // The transaction rolled back — no orphan child persisted.
+      expect(await store.listSessions()).toHaveLength(before);
+    });
+
     it("copies turn messages up to the snapshot cursor", async () => {
       const app = createTestApp(store);
       const snapId = await createParentSnapshot(store, app);

@@ -92,6 +92,8 @@ export function createPluginRpcRuntimeTurnRunner(
               ?.outputSchema
           : undefined;
       },
+      // MediaRef canonicalization / ownership for published export values.
+      ...(ctx.deps.mediaStore ? { mediaStore: ctx.deps.mediaStore } : {}),
     });
 
     // Commit failures must not report success. Surface each one as a

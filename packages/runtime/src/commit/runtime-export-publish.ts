@@ -19,6 +19,7 @@
 import { createHash } from "node:crypto";
 import type { JsonValue, RuntimeExportRecord } from "@covel/shared";
 import { validateOutput } from "@covel/tools";
+import type { MediaCanonicalization } from "../media/canonicalize-media-refs.js";
 
 type Schema = Readonly<Record<string, unknown>>;
 
@@ -58,6 +59,14 @@ export interface PublishExecutionExportsArgs {
   readonly loadOutputSchema: (runtimeId: string) => Promise<Schema | undefined>;
   /** Publish instant — shared with the session-clock write so a series is monotonic in time. */
   readonly committedAt: string;
+  /**
+   * Canonicalize + ownership-check the export value's MediaRefs before it is
+   * persisted (docs 02 §2.1 / §3.4): the transient `url` is stripped and each
+   * ref is proven owned, so a consumer reads a canonical value with no second
+   * pass. A rejection withholds the export (like `export-schema-invalid`) —
+   * never rolls back the committed execution. Absent ⇒ no media processing.
+   */
+  readonly canonicalize?: (value: JsonValue) => Promise<MediaCanonicalization>;
 }
 
 /**
@@ -90,8 +99,15 @@ function digestOf(schema: Schema): string {
 export async function publishExecutionExports(
   args: PublishExecutionExportsArgs,
 ): Promise<void> {
-  const { sink, sessionId, results, declFor, loadOutputSchema, committedAt } =
-    args;
+  const {
+    sink,
+    sessionId,
+    results,
+    declFor,
+    loadOutputSchema,
+    committedAt,
+    canonicalize,
+  } = args;
   for (const result of results) {
     if (result.status !== "success") continue;
     const decl = declFor(result.runtimeId);
@@ -107,7 +123,22 @@ export async function publishExecutionExports(
         );
         continue;
       }
-      const value = (result.output ?? null) as JsonValue;
+      let value = (result.output ?? null) as JsonValue;
+      // Canonicalize BEFORE schema validation (docs 02 §2): the stored value
+      // has its transient url stripped and every MediaRef proven owned. A media
+      // rejection withholds the export without touching the domain outcome.
+      if (canonicalize) {
+        const canon = await canonicalize(value);
+        if (canon.rejections.length > 0) {
+          console.warn(
+            `[runtime-export] ${result.runtimeId}: media rejected for recordAs "${decl.recordAs}" — export withheld: ${canon.rejections
+              .map((r) => `${r.id}:${r.reason}`)
+              .join("; ")}`,
+          );
+          continue;
+        }
+        value = canon.value;
+      }
       const validation = validateOutput(value, schema);
       if (!validation.valid) {
         // export-schema-invalid: the value fails the producer's own schema (or

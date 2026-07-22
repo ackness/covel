@@ -228,6 +228,8 @@ export async function executeFunctionRuntime({
         progressScopeId: executionId ?? input.turnId,
         pluginId: manifest.pluginId,
         runtimeId: manifest.name,
+        // Canonicalize + ownership-check MediaRefs in job `data` reports.
+        ...(deps.mediaStore ? { mediaStore: deps.mediaStore } : {}),
       })
     : undefined;
   const mediaHandle = deps.mediaStore

@@ -47,6 +47,10 @@ import {
   publishExecutionExports,
   type ExportDecl,
 } from "./runtime-export-publish.js";
+import {
+  canonicalizeMediaRefs,
+  type MediaOwnershipStore,
+} from "../media/canonicalize-media-refs.js";
 
 /**
  * The subset of a manifest needed to resolve output kind, capabilities, scope
@@ -127,6 +131,12 @@ export interface FinalizeExecutionArgs {
   readonly loadOutputSchema?: (
     runtimeId: string,
   ) => Promise<Readonly<Record<string, unknown>> | undefined>;
+  /**
+   * MediaStore read surface used to canonicalize + ownership-check MediaRefs in
+   * published `recordAs` export values (docs 02 §2.1 / §3.4). Absent (thin
+   * callers / tests) ⇒ export values are published without media processing.
+   */
+  readonly mediaStore?: MediaOwnershipStore;
 }
 
 export interface FinalizeExecutionOutcome {
@@ -291,6 +301,7 @@ export async function finalizeExecution(
     sink: Parameters<typeof publishExecutionExports>[0]["sink"],
   ): Promise<void> => {
     if (!args.loadOutputSchema || exportDeclByRuntime.size === 0) return;
+    const mediaStore = args.mediaStore;
     await publishExecutionExports({
       sink,
       sessionId,
@@ -298,6 +309,12 @@ export async function finalizeExecution(
       declFor: (runtimeId) => exportDeclByRuntime.get(runtimeId),
       loadOutputSchema: args.loadOutputSchema,
       committedAt: sessionClock?.now ?? new Date().toISOString(),
+      ...(mediaStore
+        ? {
+            canonicalize: (value) =>
+              canonicalizeMediaRefs(value, { store: mediaStore, sessionId }),
+          }
+        : {}),
     });
   };
 

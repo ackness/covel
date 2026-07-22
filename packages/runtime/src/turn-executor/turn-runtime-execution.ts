@@ -20,6 +20,7 @@ import {
   resolveExportBindings,
   resolveInputBindings,
 } from "../schedule/input-bindings.js";
+import { canonicalizeMediaRefs } from "../media/canonicalize-media-refs.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import {
   makeFailedResult,
@@ -466,7 +467,36 @@ export async function executeOneRuntime(
     // payload against `input.schema`, then resolve `inputs` bindings into
     // provenance slots (or a gate skip). Manual activations project turn
     // bindings away; detached activations that still carry them are rejected.
-    const activation = deriveActivation(manifest, input, triggerEvent);
+    let activation = deriveActivation(manifest, input, triggerEvent);
+
+    // Boundary: canonicalize + ownership-check every MediaRef in the activation
+    // payload BEFORE input.schema and dispatch (docs 02 §3.3 order). A ref the
+    // session cannot prove it holds fails the activation with an explainable
+    // reason; both function (`ctx.activation.payload`) and agent (activation
+    // segment) then see the same canonical payload. Skipped without a
+    // mediaStore (test harnesses) — a media-free payload is unchanged either way.
+    if (deps.mediaStore) {
+      const canon = await canonicalizeMediaRefs(activation.payload, {
+        store: deps.mediaStore,
+        sessionId: input.sessionId,
+      });
+      if (canon.rejections.length > 0) {
+        const detail = canon.rejections
+          .map((r) => `${r.id}: ${r.reason}`)
+          .join("; ");
+        return emitGateTerminal(
+          makeFailedResult(
+            manifest,
+            input,
+            runId,
+            startTime,
+            `activation payload media rejected: ${detail}`,
+          ),
+          canon.rejections[0]!.reason,
+        );
+      }
+      activation = { ...activation, payload: canon.value };
+    }
 
     if (loaded.inputSchema) {
       const validation = validateOutput(activation.payload, loaded.inputSchema);
@@ -489,6 +519,19 @@ export async function executeOneRuntime(
       activeRuntimes,
       completedResults,
       acceptsSchemas: loaded.bindingAcceptsSchemas ?? {},
+      // Same shared canonicalizer as the activation boundary: an injected
+      // same-execution value carries the producer's raw MediaRefs (they have
+      // not passed an output boundary), so ownership is checked here before
+      // `accepts` validates the canonical value (docs 02 §2.1.4 / §3.1).
+      ...(deps.mediaStore
+        ? {
+            canonicalizeValue: (value) =>
+              canonicalizeMediaRefs(value, {
+                store: deps.mediaStore!,
+                sessionId: input.sessionId,
+              }),
+          }
+        : {}),
       // ponytail: re-loads the producer only for its declared output.schema, and
       // only when the consumer declares `accepts`. ES import is cached, so this
       // is a cheap re-parse; add a per-turn schema cache if it ever shows up.
