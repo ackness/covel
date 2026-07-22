@@ -478,6 +478,13 @@ export interface FunctionHandlerContext {
    */
   readonly inputs?: Readonly<Record<string, InputSlot>>;
   /**
+   * Resolved cross-execution `recordAs` exports (`input.inject` runtime-export),
+   * each provenance-wrapped. Reads the producer's latest revision committed
+   * before this execution started (docs 02 §3.4). Same shape as `ctx.inputs`:
+   * `ctx.exports.<name>.value` (`one`) or `.items[]` (`all`).
+   */
+  readonly exports?: Readonly<Record<string, InputSlot>>;
+  /**
    * Canonical activation for this run (docs 02 §3.3). `payload` is the
    * `input.schema`-validated manual/event payload (`null` for a stage run).
    * `ctx.manualPayload` / `ctx.triggerEvent.data` are compat aliases of the
@@ -648,6 +655,14 @@ export interface LoadedRuntime {
    * injected same-execution binding value (docs 02 §3.1).
    */
   readonly bindingAcceptsSchemas?: Readonly<
+    Record<string, Readonly<Record<string, unknown>>>
+  >;
+  /**
+   * Per-export-binding `accepts` JSON Schemas, keyed by the `input.inject`
+   * runtime-export `name`. Validates the frozen cross-execution export value at
+   * consume time (docs 02 §3.4.4).
+   */
+  readonly exportAcceptsSchemas?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
   /** Handler function for `runtimeType: 'function'` runtimes. */

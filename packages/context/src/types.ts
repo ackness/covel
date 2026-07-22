@@ -235,6 +235,14 @@ export interface ContextBuildParams {
    */
   readonly inputSlots?: Readonly<Record<string, InputSlot>>;
   /**
+   * Resolved cross-execution `recordAs` exports (`input.inject` runtime-export),
+   * provenance-wrapped. Rendered into segment 5 as a framework-only
+   * `<runtime-exports>` block (same JSON shape as function `ctx.exports`) so an
+   * agent runtime reads the same frozen export values a function handler would
+   * (docs 02 §3.4.3). Absent → no block.
+   */
+  readonly exportSlots?: Readonly<Record<string, InputSlot>>;
+  /**
    * Canonical activation for this run. Rendered into segment 5 as the reserved
    * `<runtime-activation>` block (`{ source, detached, payload }` JSON) that a
    * plugin template cannot override or omit (docs 02 §3.3). Absent → no block.

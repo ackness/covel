@@ -371,6 +371,31 @@ async function loadBindingAcceptsSchemas(
 }
 
 /**
+ * Load every `input.inject` runtime-export `accepts` schema, keyed by the
+ * binding `name`. Same containment / omit-on-missing rules as the same-execution
+ * `inputs.<name>.accepts` loader (docs 02 §3.4.4).
+ */
+async function loadExportAcceptsSchemas(
+  runtimeDir: string,
+  pluginRoot: string,
+  inject: NonNullable<RuntimeManifest["input"]>["inject"],
+): Promise<Record<string, Readonly<Record<string, unknown>>> | undefined> {
+  if (!inject) return undefined;
+  const out: Record<string, Readonly<Record<string, unknown>>> = {};
+  for (const decl of inject) {
+    if (decl.kind !== "runtime-export" || !decl.accepts) continue;
+    const schema = await loadDeclaredSchema(
+      runtimeDir,
+      pluginRoot,
+      decl.accepts,
+      `export accepts schema (${decl.name})`,
+    );
+    if (schema) out[decl.name] = schema;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
  * Level 1.5: Load only a runtime's manifest + UI specs — no handler / guard
  * imports. UI specs are data (JSON files, or a recorded component path), so
  * this path never executes plugin JS and is safe for untrusted (community)
@@ -435,6 +460,12 @@ export async function loadRuntime(
     parsed.manifest.inputs,
   );
 
+  const exportAcceptsSchemas = await loadExportAcceptsSchemas(
+    runtimeDir,
+    discovery.rootPath,
+    parsed.manifest.input?.inject,
+  );
+
   // Load function handler for runtimeType: 'function'
   let handler: FunctionHandler | undefined;
   if (parsed.manifest.runtimeType === "function" && parsed.manifest.handler) {
@@ -471,6 +502,7 @@ export async function loadRuntime(
     outputSchema,
     ...(inputSchema ? { inputSchema } : {}),
     ...(bindingAcceptsSchemas ? { bindingAcceptsSchemas } : {}),
+    ...(exportAcceptsSchemas ? { exportAcceptsSchemas } : {}),
     handler,
     guard,
     uiSpecs,

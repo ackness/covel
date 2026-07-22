@@ -712,6 +712,53 @@ describe("Snapshot routes", () => {
       expect(childLore[0]!.sessionId).toBe(childId);
     });
 
+    it("copies the recordAs export revision visible at the snapshot instant, dropping later ones", async () => {
+      // rev 1 is committed in the past (visible at the snapshot instant); rev 2
+      // carries a future committedAt so it post-dates the snapshot and must NOT
+      // fork. The child inherits the frozen rev 1, revision preserved.
+      const exp = (
+        revision: number,
+        threshold: number,
+        committedAt: string,
+      ) => ({
+        sessionId: "sess-1",
+        producerPluginId: "p",
+        producerRuntimeId: "p/gen",
+        recordAs: "cfg",
+        revision,
+        pluginVersion: "1.0.0",
+        schemaDigest: "digest",
+        resultId: `r-${revision}`,
+        value: { threshold },
+        committedAt,
+      });
+      await store.appendRuntimeExport(exp(1, 3, "2020-01-01T00:00:00.000Z"));
+      await store.appendRuntimeExport(exp(2, 4, "2099-01-01T00:00:00.000Z"));
+
+      const app = createTestApp(store);
+      const snapId = await createParentSnapshot(store, app);
+      const res = await app.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      const childId = ((await res.json()) as { sessionId: string }).sessionId;
+
+      const childLatest = await store.getLatestRuntimeExport(
+        childId,
+        "p/gen",
+        "cfg",
+      );
+      expect(childLatest?.revision).toBe(1);
+      expect(childLatest?.value).toEqual({ threshold: 3 });
+      expect(childLatest?.sessionId).toBe(childId);
+      // The parent keeps its own later revision — the two diverge post-fork.
+      expect(
+        (await store.getLatestRuntimeExport("sess-1", "p/gen", "cfg"))
+          ?.revision,
+      ).toBe(2);
+    });
+
     it("remaps character-mirror plugin-data to the child's re-minted character ids", async () => {
       // The mirror namespace keys a row by the character id and stores
       // value.id = same id; characters are re-minted on fork, so both must move.

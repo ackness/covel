@@ -190,6 +190,10 @@ async function executeTurnImpl(
   options?: TurnExecutorOptions,
 ): Promise<TurnResult> {
   const startTime = Date.now();
+  // Frozen execution-start instant: pins `atOrBefore` on every recordAs export
+  // read so this execution sees a stable snapshot of committed exports even if a
+  // producer publishes a new revision while the turn is still running (02 §3.4.2).
+  const executionStartedAt = new Date().toISOString();
   const maxSteps = options?.maxSteps ?? 10;
   const defaultTimeoutMs = options?.timeoutMs ?? 60000;
   const recursionDepth = options?.recursionDepth ?? 0;
@@ -529,6 +533,7 @@ async function executeTurnImpl(
       recursionDepth,
       executionId: executionContext.executionId,
       executionContext,
+      executionStartedAt,
       pluginSetupReady,
       ...(isSetupRuntime(manifest)
         ? {

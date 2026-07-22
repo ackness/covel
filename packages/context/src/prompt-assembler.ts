@@ -161,6 +161,17 @@ function buildInputsBindingBlock(params: ContextBuildParams): string {
 }
 
 /**
+ * Reserved `<runtime-exports>` block (docs 02 §3.4.3): the provenance-wrapped
+ * cross-execution `recordAs` export slots as JSON, the same shape a function
+ * handler reads from `ctx.exports`. Absent when no export binding resolved.
+ */
+function buildExportsBindingBlock(params: ContextBuildParams): string {
+  const slots = params.exportSlots;
+  if (!slots || Object.keys(slots).length === 0) return "";
+  return `<runtime-exports>\n${escapeXmlContent(JSON.stringify(slots))}\n</runtime-exports>`;
+}
+
+/**
  * Build the 10 prompt segments for a single runtime context.
  *
  * Internal helper — used by the exported segmented context builder so tests
@@ -231,6 +242,7 @@ function buildPromptSegmentsCommon(
     rawInjects,
     buildAvailableEventsBlock(params),
     buildInputsBindingBlock(params),
+    buildExportsBindingBlock(params),
     buildRuntimeActivationBlock(params),
   ]
     .filter(Boolean)

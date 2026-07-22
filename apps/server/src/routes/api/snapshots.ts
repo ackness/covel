@@ -491,6 +491,32 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             );
           }
 
+          // Copy persistent recordAs exports visible at the snapshot instant
+          // (docs 02 §3.4.5). The snapshot payload carries no export field, so
+          // its createdAt is the visibility cutoff: for each (producerRuntimeId,
+          // recordAs) series, take the latest revision committed at or before it.
+          // The revision number is preserved so parent and child share history up
+          // to the fork, then diverge on their own subsequent publishes.
+          const parentExports = await tx.listRuntimeExports(parentSessionId);
+          const visibleLatest = new Map<
+            string,
+            (typeof parentExports)[number]
+          >();
+          for (const exp of parentExports) {
+            if (exp.committedAt > snapshot.createdAt) continue;
+            const key = `${exp.producerRuntimeId} ${exp.recordAs}`;
+            const prev = visibleLatest.get(key);
+            if (!prev || exp.revision > prev.revision) {
+              visibleLatest.set(key, exp);
+            }
+          }
+          for (const exp of visibleLatest.values()) {
+            await tx.appendRuntimeExport({
+              ...exp,
+              sessionId: childSessionId,
+            });
+          }
+
           // Copy turn messages up to and including the snapshot's cursor.
           // Strategy: read all parent messages in order, verify the cursor still
           // exists (was not compacted away / deleted), then copy 0..cursorIdx

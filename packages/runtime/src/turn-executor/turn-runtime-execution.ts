@@ -1,5 +1,6 @@
 import type {
   ExecutionContext,
+  InputSlot,
   NestedTurnResult,
   RecursiveCallDelta,
   RuntimeManifest,
@@ -12,10 +13,11 @@ import type {
   CoreMemoryBlockView,
   SessionContextSnapshot,
 } from "@covel/context";
-import { isSetupRuntime } from "@covel/shared";
+import { getRuntimeSpec, isSetupRuntime } from "@covel/shared";
 import { validateOutput } from "@covel/tools";
 import {
   deriveActivation,
+  resolveExportBindings,
   resolveInputBindings,
 } from "../schedule/input-bindings.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
@@ -101,6 +103,12 @@ export interface RuntimeInvocation {
    * for thin direct callers / tests.
    */
   readonly executionContext?: ExecutionContext;
+  /**
+   * Execution-start instant (ISO), frozen once per turn. Pins `atOrBefore` on
+   * every `recordAs` export read so a consumer sees the revision that was live
+   * when its execution began, never one published mid-plan (docs 02 §3.4.2).
+   */
+  readonly executionStartedAt?: string;
   /**
    * Generation of this setup runtime's mirror, for the attempt-ledger `started`
    * insert. Present only for setup runtimes; absent means "not a setup run".
@@ -508,6 +516,50 @@ export async function executeOneRuntime(
     }
     const inputSlots = binding.slots;
 
+    // ── Persistent export bindings (input.inject: runtime-export) ─
+    // Cross-execution consumption of a producer's `recordAs` export, read at
+    // the execution's frozen start instant. Not turn bindings, so they resolve
+    // for every activation source (a manual/detached target still reads them).
+    const exportSpec = getRuntimeSpec(manifest).exportBindings;
+    let exportSlots: Readonly<Record<string, InputSlot>> = {};
+    if (Object.keys(exportSpec).length > 0) {
+      const atOrBefore = inv.executionStartedAt;
+      const exportRes = await resolveExportBindings({
+        consumerRuntimeId: manifest.name,
+        exportBindings: exportSpec,
+        activeRuntimes,
+        acceptsSchemas: loaded.exportAcceptsSchemas ?? {},
+        getFrozenExport: (producerRuntimeId, recordAs) =>
+          deps.store
+            ? deps.store.getLatestRuntimeExport(
+                input.sessionId,
+                producerRuntimeId,
+                recordAs,
+                atOrBefore ? { atOrBefore } : undefined,
+              )
+            : Promise.resolve(null),
+      });
+      for (const d of exportRes.diagnostics) {
+        if (d.severity === "error") {
+          console.warn(
+            `[turn-executor] ${manifest.name}: ${d.code} — ${d.message}`,
+          );
+        }
+      }
+      if (!exportRes.ok) {
+        return emitGateTerminal(
+          makeSkippedResult(
+            manifest,
+            input,
+            exportRes.skipReason,
+            "framework:exportBinding",
+          ),
+          exportRes.skipReason,
+        );
+      }
+      exportSlots = exportRes.slots;
+    }
+
     if (manifest.runtimeType === "function") {
       return await executeFunctionRuntime({
         manifest,
@@ -519,6 +571,7 @@ export async function executeOneRuntime(
         triggerEvent,
         activation,
         inputs: inputSlots,
+        exports: exportSlots,
         ...(executionContext ? { executionContext } : {}),
         createRecursiveCall,
         recursionDepth,
@@ -562,6 +615,7 @@ export async function executeOneRuntime(
       sessionContext,
       activation,
       inputs: inputSlots,
+      exports: exportSlots,
       startTime,
       runId,
     });

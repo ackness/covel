@@ -74,6 +74,8 @@ export interface ExecuteAgentRuntimeOptions {
   readonly activation?: RuntimeActivation;
   /** Resolved input bindings — rendered into the reserved inputs prompt block. */
   readonly inputs?: Readonly<Record<string, InputSlot>>;
+  /** Frozen cross-execution `recordAs` exports — rendered into the reserved exports block. */
+  readonly exports?: Readonly<Record<string, InputSlot>>;
   readonly startTime: number;
   readonly runId: string;
 }
@@ -95,6 +97,7 @@ export async function executeAgentRuntime({
   sessionContext,
   activation,
   inputs,
+  exports: exportSlots,
   startTime,
   runId,
 }: ExecuteAgentRuntimeOptions): Promise<RuntimeResult> {
@@ -210,6 +213,9 @@ export async function executeAgentRuntime({
     ...(eventCatalogText ? { eventCatalogText } : {}),
     ...(activation ? { activation } : {}),
     ...(inputs && Object.keys(inputs).length > 0 ? { inputSlots: inputs } : {}),
+    ...(exportSlots && Object.keys(exportSlots).length > 0
+      ? { exportSlots }
+      : {}),
     ...(budgetEligible
       ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
       : {}),

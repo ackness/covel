@@ -85,6 +85,8 @@ export interface ExecuteFunctionRuntimeOptions {
   readonly activation?: RuntimeActivation;
   /** Resolved provenance-wrapped input bindings — exposed as `ctx.inputs`. */
   readonly inputs?: Readonly<Record<string, InputSlot>>;
+  /** Frozen cross-execution `recordAs` exports — exposed as `ctx.exports`. */
+  readonly exports?: Readonly<Record<string, InputSlot>>;
   /** Full execution identity — exposed as `ctx.execution`. */
   readonly executionContext?: ExecutionContext;
   readonly createRecursiveCall: () => (
@@ -119,6 +121,7 @@ export async function executeFunctionRuntime({
   triggerEvent,
   activation,
   inputs,
+  exports: exportSlots,
   executionContext,
   createRecursiveCall,
   recursionDepth,
@@ -389,6 +392,9 @@ export async function executeFunctionRuntime({
         manifest.name,
       ),
       ...(inputs && Object.keys(inputs).length > 0 ? { inputs } : {}),
+      ...(exportSlots && Object.keys(exportSlots).length > 0
+        ? { exports: exportSlots }
+        : {}),
       ...(activation ? { activation } : {}),
       ...(executionContext ? { execution: executionContext } : {}),
       recursiveCall: revocable.recursiveCall,

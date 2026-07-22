@@ -83,6 +83,15 @@ export function createPluginRpcRuntimeTurnRunner(
       // Manual / late-setup runs settle their setup attempts too (a manual
       // retrigger of a pending setup runtime burns an attempt).
       ...(turnResult.setupRan ? { setupRan: turnResult.setupRan } : {}),
+      // Publishes recordAs exports inside the commit transaction — a manual /
+      // background execution can publish just like a player turn.
+      loadOutputSchema: async (runtimeId) => {
+        const rt = ctx.activeRuntimes.find((r) => r.name === runtimeId);
+        return rt
+          ? (await ctx.deps.loadRuntime(rt, ctx.session.locale ?? undefined))
+              ?.outputSchema
+          : undefined;
+      },
     });
 
     // Commit failures must not report success. Surface each one as a

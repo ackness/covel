@@ -686,6 +686,14 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               // the commit transaction (a rolled-back commit still burns an
               // attempt, so deterministic failures reach `blocked`).
               ...(result.setupRan ? { setupRan: result.setupRan } : {}),
+              // Publishes recordAs exports inside the commit transaction —
+              // loaded lazily, only for a success result that declares one.
+              loadOutputSchema: async (runtimeId) => {
+                const rt = activeRuntimes.find((r) => r.name === runtimeId);
+                return rt
+                  ? (await loadRuntimeFn(rt, effectiveLocale))?.outputSchema
+                  : undefined;
+              },
             });
             // finalize owns the commit_status settle (committed or failed).
             commitStatusSettled = true;

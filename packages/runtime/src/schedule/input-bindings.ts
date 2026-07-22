@@ -19,6 +19,8 @@ import type {
   JsonValue,
   RuntimeActivation,
   RuntimeBinding,
+  RuntimeExportBinding,
+  RuntimeExportRecord,
   RuntimeManifest,
   RuntimeResult,
   SchedulingDiagnostic,
@@ -368,4 +370,166 @@ function asSchema(value: unknown): Schema | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Schema)
     : undefined;
+}
+
+// ── Persistent export consumption (docs 02 §3.4) ─────────────────
+
+/** Machine-readable skip reasons an export-binding gate can emit. */
+export type ExportBindingSkipReason =
+  "export-missing" | "export-schema-invalid";
+
+export type ExportBindingResolution =
+  | {
+      readonly ok: true;
+      readonly slots: Readonly<Record<string, InputSlot>>;
+      readonly diagnostics: readonly SchedulingDiagnostic[];
+    }
+  | {
+      readonly ok: false;
+      readonly skipReason: ExportBindingSkipReason;
+      readonly diagnostics: readonly SchedulingDiagnostic[];
+    };
+
+export interface ResolveExportBindingsInput {
+  readonly consumerRuntimeId: string;
+  readonly exportBindings: Readonly<Record<string, RuntimeExportBinding>>;
+  readonly activeRuntimes: readonly RuntimeManifest[];
+  /** Consumer's loaded export `accepts` schemas, keyed by binding name. */
+  readonly acceptsSchemas: Readonly<Record<string, Schema>>;
+  /**
+   * Frozen read of a producer's latest committed export at execution start —
+   * the caller pins `atOrBefore` to the execution's start instant so a revision
+   * published mid-plan stays invisible to an already-running consumer.
+   */
+  readonly getFrozenExport: (
+    producerRuntimeId: string,
+    recordAs: string,
+  ) => Promise<RuntimeExportRecord | null>;
+}
+
+/**
+ * Resolve every `input.inject` `kind: runtime-export` binding into
+ * provenance-wrapped slots, or a single gate skip. Unlike `inputs` bindings
+ * (same-execution, in-memory), exports are cross-execution: the provider must be
+ * in the active set and must have a committed revision frozen at execution
+ * start, else a required binding skips the consumer (docs 02 §3.4.4). Runs for
+ * every activation source — exports are not turn bindings, so manual / detached
+ * activations still see them.
+ */
+export async function resolveExportBindings(
+  args: ResolveExportBindingsInput,
+): Promise<ExportBindingResolution> {
+  const { exportBindings, activeRuntimes, acceptsSchemas, getFrozenExport } =
+    args;
+  const consumerRuntimeId = args.consumerRuntimeId;
+  const entries = Object.entries(exportBindings);
+  const diagnostics: SchedulingDiagnostic[] = [];
+  if (entries.length === 0) return { ok: true, slots: {}, diagnostics };
+
+  const slots: Record<string, InputSlot> = {};
+
+  for (const [name, eb] of entries) {
+    const required = eb.required !== false;
+    const acceptsSchema = acceptsSchemas[name];
+    const { providers, cardinality } = providersFor(
+      { from: eb.from } as RuntimeBinding,
+      activeRuntimes,
+    );
+
+    const gateMissing = (msg: string): ExportBindingResolution | undefined => {
+      diagnostics.push(
+        diag(
+          "export-missing",
+          required ? "error" : "warn",
+          consumerRuntimeId,
+          `export "${name}": ${msg}`,
+        ),
+      );
+      return required
+        ? { ok: false, skipReason: "export-missing", diagnostics }
+        : undefined;
+    };
+
+    if (providers.length === 0) {
+      const skip = gateMissing("provider not in active set");
+      if (skip) return skip;
+      continue;
+    }
+    if (cardinality === "one" && providers.length > 1) {
+      const skip = gateMissing(
+        `cardinality:one but ${providers.length} providers matched`,
+      );
+      if (skip) return skip;
+      continue;
+    }
+
+    const targets =
+      cardinality === "all"
+        ? [...providers].sort((a, b) => a.name.localeCompare(b.name))
+        : [providers[0]!];
+
+    const items: { value: JsonValue; source: InputSource }[] = [];
+    let skipReason: ExportBindingSkipReason | undefined;
+    for (const provider of targets) {
+      const record = await getFrozenExport(provider.name, eb.recordAs);
+      if (!record) {
+        skipReason = "export-missing";
+        break;
+      }
+      // Runtime actual-value check against the consumer's `accepts` (docs 02
+      // §3.1 / §3.4.4): a producer whose export shape the consumer cannot accept
+      // (an incompatible schema digest manifests here) fails this validation.
+      if (acceptsSchema) {
+        const validation = validateOutput(record.value, acceptsSchema);
+        if (!validation.valid) {
+          diagnostics.push(
+            diag(
+              "export-schema-invalid",
+              required ? "error" : "warn",
+              consumerRuntimeId,
+              `export "${name}" failed accepts: ${(validation.errors ?? [])
+                .slice(0, 3)
+                .join("; ")}`,
+            ),
+          );
+          skipReason = "export-schema-invalid";
+          break;
+        }
+      }
+      items.push({
+        value: record.value,
+        source: {
+          pluginId: record.producerPluginId,
+          runtimeId: record.producerRuntimeId,
+          resultId: record.resultId,
+        },
+      });
+    }
+
+    if (skipReason) {
+      if (skipReason === "export-missing") {
+        diagnostics.push(
+          diag(
+            "export-missing",
+            required ? "error" : "warn",
+            consumerRuntimeId,
+            `export "${name}" has no committed revision`,
+          ),
+        );
+      }
+      if (required) return { ok: false, skipReason, diagnostics };
+      continue; // optional → omit slot
+    }
+
+    slots[name] =
+      cardinality === "all"
+        ? { cardinality: "all", items }
+        : {
+            cardinality: "one",
+            value: items[0]!.value,
+            source: items[0]!.source,
+          };
+  }
+
+  return { ok: true, slots, diagnostics };
 }

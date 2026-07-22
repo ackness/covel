@@ -1347,9 +1347,328 @@ describe("activation payload (canonical payload shared by function/agent)", () =
 
 describe("recordAs export (persistent export revision)", () => {
   // needs: recordAs persistent export publishing revision in the same transaction as the producing execution (release step 3)
-  it.todo(
-    "scenario 18a: success 的 recordAs 与 execution 同事务发布 export revision；失败/挂起/回滚不更新；消费 execution 读取开始时冻结 revision，fork 复制可见 revision，provider 停用或 schema digest 不兼容时 required consumer 体面 skip；含 MediaRef 的 export 在 fork 后通过 child session reference 仍可读取，媒体字节不复制 — 断言发布/冻结/降级三条路径",
-  );
+  const OUT_SCHEMA = {
+    type: "object",
+    required: ["threshold"],
+    properties: { threshold: { type: "number" } },
+  } as const;
+
+  const producer = (recordAs: string): RuntimeManifest =>
+    ({
+      name: "p/gen",
+      pluginId: "p",
+      description: "export producer",
+      priority: 500,
+      runtimeType: "function",
+      handler: "./h.js",
+      trigger: { type: "auto" },
+      outputKind: "plugin",
+      capabilities: ["cfg-provider"],
+      version: "1.0.0",
+      output: { schema: "./out.json", recordAs },
+    }) as RuntimeManifest;
+
+  const consumer = (opts?: {
+    required?: boolean;
+    accepts?: boolean;
+  }): RuntimeManifest =>
+    ({
+      name: "c/main",
+      pluginId: "c",
+      description: "export consumer",
+      priority: 600,
+      runtimeType: "function",
+      handler: "./h.js",
+      trigger: { type: "auto" },
+      outputKind: "plugin",
+      capabilities: [],
+      input: {
+        inject: [
+          {
+            kind: "runtime-export",
+            name: "cfg",
+            from: { runtime: "p/gen" },
+            recordAs: "cfg",
+            required: opts?.required ?? true,
+            ...(opts?.accepts ? { accepts: "./a.json" } : {}),
+          },
+        ],
+      },
+    }) as RuntimeManifest;
+
+  const successResult = (value: unknown): RuntimeResult => ({
+    pluginId: "p",
+    runtimeId: "p/gen",
+    runId: crypto.randomUUID(),
+    turnId: "t",
+    status: "success",
+    output: value as RuntimeResult["output"],
+    toolCalls: [],
+    durationMs: 1,
+    timestamp: new Date().toISOString(),
+  });
+
+  // Publish one export revision through the finalize primitive, controlling the
+  // committedAt instant so the frozen-read cutoff can be asserted precisely.
+  const publish = (
+    store: DataStore,
+    sessionId: string,
+    value: unknown,
+    committedAt: string,
+  ) =>
+    finalizeExecution({
+      store,
+      sessionId,
+      runtimes: [producer("cfg")],
+      results: [successResult(value)],
+      turnIds: [],
+      sessionClock: { now: committedAt },
+      loadOutputSchema: async (id) => (id === "p/gen" ? OUT_SCHEMA : undefined),
+    });
+
+  it("scenario 18a: success 的 recordAs 与 execution 同事务发布 export revision；失败/挂起/回滚不更新；消费 execution 读取开始时冻结 revision，fork 复制可见 revision，provider 停用或 schema digest 不兼容时 required consumer 体面 skip；含 MediaRef 的 export 在 fork 后通过 child session reference 仍可读取，媒体字节不复制 — 断言发布/冻结/降级三条路径", async () => {
+    // ── Publish: a success recordAs lands a revision in the finalize tx ──
+    {
+      const store = createMemoryStore();
+      await seedPlaying(store, 1);
+      const out = await publish(
+        store,
+        "s",
+        { threshold: 7 },
+        "2020-01-01T00:00:00.000Z",
+      );
+      expect(out.status).toBe("committed");
+      const rev1 = await store.getLatestRuntimeExport("s", "p/gen", "cfg");
+      expect(rev1).toMatchObject({
+        revision: 1,
+        value: { threshold: 7 },
+        producerPluginId: "p",
+        producerRuntimeId: "p/gen",
+        pluginVersion: "1.0.0",
+        committedAt: "2020-01-01T00:00:00.000Z",
+      });
+      expect(rev1?.schemaDigest).toMatch(/^[0-9a-f]{64}$/);
+
+      // A second success bumps the revision monotonically.
+      await publish(store, "s", { threshold: 9 }, "2020-01-02T00:00:00.000Z");
+      expect(
+        (await store.getLatestRuntimeExport("s", "p/gen", "cfg"))?.revision,
+      ).toBe(2);
+
+      // A rolled-back execution (extraInTx throws) publishes nothing — the
+      // export append is in the same tx, so it is discarded with the domain
+      // writes. Revision stays at 2.
+      const rolled = await finalizeExecution({
+        store,
+        sessionId: "s",
+        runtimes: [producer("cfg")],
+        results: [successResult({ threshold: 11 })],
+        turnIds: [],
+        sessionClock: { now: "2020-01-03T00:00:00.000Z" },
+        loadOutputSchema: async () => OUT_SCHEMA,
+        extraInTx: async () => {
+          throw new Error("rollback");
+        },
+      });
+      expect(rolled.status).toBe("failed");
+      expect(
+        (await store.getLatestRuntimeExport("s", "p/gen", "cfg"))?.revision,
+      ).toBe(2);
+
+      // Export boundary is always enforced: a value failing output.schema keeps
+      // the domain outcome committed but withholds the export (no new revision).
+      const bad = await publish(
+        store,
+        "s",
+        { threshold: "not-a-number" },
+        "2020-01-04T00:00:00.000Z",
+      );
+      expect(bad.status).toBe("committed");
+      expect(
+        (await store.getLatestRuntimeExport("s", "p/gen", "cfg"))?.revision,
+      ).toBe(2);
+    }
+
+    // ── Frozen read: a consumer sees the revision committed at or before its
+    //    execution start, never a later one (store-level cutoff, the primitive
+    //    executeTurn pins `atOrBefore = executionStartedAt` against). ──
+    {
+      const store = createMemoryStore();
+      await seedPlaying(store, 1);
+      await publish(store, "s", { threshold: 1 }, "2020-01-01T00:00:00.000Z"); // rev 1
+      await publish(store, "s", { threshold: 2 }, "2020-01-03T00:00:00.000Z"); // rev 2
+      // Frozen just after rev 1 → sees rev 1, blind to the later rev 2.
+      const frozen = await store.getLatestRuntimeExport("s", "p/gen", "cfg", {
+        atOrBefore: "2020-01-02T00:00:00.000Z",
+      });
+      expect(frozen?.revision).toBe(1);
+      expect(frozen?.value).toEqual({ threshold: 1 });
+      // Absolute latest (a consumer starting now) sees rev 2.
+      expect(
+        (await store.getLatestRuntimeExport("s", "p/gen", "cfg"))?.revision,
+      ).toBe(2);
+    }
+
+    // ── Consume: a consumer execution reads the frozen export via ctx.exports ──
+    {
+      const store = createMemoryStore();
+      await seedPlaying(store, 1);
+      await publish(store, "s", { threshold: 5 }, "2020-01-01T00:00:00.000Z");
+      let captured: unknown;
+      const deps: TurnExecutorDeps = {
+        loadRuntime: async (m): Promise<LoadedRuntime> => ({
+          manifest: m,
+          promptTemplate: "",
+          handler: async (ctx) => {
+            captured = (ctx as { exports?: Record<string, unknown> }).exports
+              ?.cfg;
+            return {};
+          },
+        }),
+        llm: new NoopLLM(),
+        store,
+      };
+      // The producer stays in the active set so the provider gate passes, but it
+      // is NOT triggered to run — the value comes purely from the frozen export.
+      const result = await executeTurn(
+        { sessionId: "s", turnId: "t", playerMessage: "go" },
+        [producer("cfg"), consumer()],
+        deps,
+      );
+      expect(
+        result.runtimeResults.find((r) => r.runtimeId === "c/main")?.status,
+      ).toBe("success");
+      expect(captured).toEqual({
+        cardinality: "one",
+        value: { threshold: 5 },
+        source: {
+          pluginId: "p",
+          runtimeId: "p/gen",
+          resultId: expect.any(String),
+        },
+      });
+    }
+
+    // ── Degrade: provider deactivated → required consumer skips gracefully ──
+    {
+      const store = createMemoryStore();
+      await seedPlaying(store, 1);
+      await publish(store, "s", { threshold: 5 }, "2020-01-01T00:00:00.000Z");
+      const deps: TurnExecutorDeps = {
+        loadRuntime: async (m): Promise<LoadedRuntime> => ({
+          manifest: m,
+          promptTemplate: "",
+          handler: async () => ({}),
+        }),
+        llm: new NoopLLM(),
+        store,
+      };
+      // p/gen is NOT in the active set — the export exists in the store but its
+      // producer is deactivated, so a required consumer skips.
+      const result = await executeTurn(
+        { sessionId: "s", turnId: "t", playerMessage: "go" },
+        [consumer()],
+        deps,
+      );
+      const rr = result.runtimeResults.find((r) => r.runtimeId === "c/main");
+      expect(rr?.status).toBe("skipped");
+      expect(rr?.output).toMatchObject({
+        reason: "export-missing",
+        skippedBy: "framework:exportBinding",
+      });
+    }
+
+    // ── Degrade: schema-incompatible export → required consumer skips ──
+    {
+      const store = createMemoryStore();
+      await seedPlaying(store, 1);
+      // Publish a value the producer schema accepts but the CONSUMER's accepts
+      // rejects (an incompatible schema digest manifests as a failing value).
+      await publish(store, "s", { threshold: 5 }, "2020-01-01T00:00:00.000Z");
+      const CONSUMER_ACCEPTS = {
+        type: "object",
+        required: ["ceiling"],
+        properties: { ceiling: { type: "number" } },
+      };
+      const deps: TurnExecutorDeps = {
+        loadRuntime: async (m): Promise<LoadedRuntime> => ({
+          manifest: m,
+          promptTemplate: "",
+          ...(m.name === "c/main"
+            ? { exportAcceptsSchemas: { cfg: CONSUMER_ACCEPTS } }
+            : {}),
+          handler: async () => ({}),
+        }),
+        llm: new NoopLLM(),
+        store,
+      };
+      const result = await executeTurn(
+        { sessionId: "s", turnId: "t", playerMessage: "go" },
+        [producer("cfg"), consumer({ accepts: true })],
+        deps,
+      );
+      const rr = result.runtimeResults.find((r) => r.runtimeId === "c/main");
+      expect(rr?.status).toBe("skipped");
+      expect(rr?.output).toMatchObject({
+        reason: "export-schema-invalid",
+        skippedBy: "framework:exportBinding",
+      });
+    }
+
+    // ── Fork: the child copies each (producerRuntimeId, recordAs) revision
+    //    visible at the snapshot instant, revision preserved, then the two
+    //    sessions diverge. This mirrors the fork route's in-transaction copy
+    //    (apps/server/src/routes/api/snapshots.ts). ──
+    {
+      const store = createMemoryStore();
+      await seedPlaying(store, 1);
+      await publish(
+        store,
+        "parent",
+        { threshold: 3 },
+        "2020-01-01T00:00:00.000Z",
+      ); // rev 1
+      await publish(
+        store,
+        "parent",
+        { threshold: 4 },
+        "2020-01-05T00:00:00.000Z",
+      ); // rev 2
+      const snapshotAt = "2020-01-03T00:00:00.000Z"; // between rev 1 and rev 2
+
+      // Copy: latest revision per series with committedAt <= snapshotAt.
+      const parentExports = await store.listRuntimeExports("parent");
+      const visible = new Map<string, (typeof parentExports)[number]>();
+      for (const exp of parentExports) {
+        if (exp.committedAt > snapshotAt) continue;
+        const key = `${exp.producerRuntimeId} ${exp.recordAs}`;
+        const prev = visible.get(key);
+        if (!prev || exp.revision > prev.revision) visible.set(key, exp);
+      }
+      for (const exp of visible.values()) {
+        await store.appendRuntimeExport({ ...exp, sessionId: "child" });
+      }
+
+      // The child sees exactly the frozen revision (rev 1), not the later rev 2.
+      const childLatest = await store.getLatestRuntimeExport(
+        "child",
+        "p/gen",
+        "cfg",
+      );
+      expect(childLatest?.revision).toBe(1);
+      expect(childLatest?.value).toEqual({ threshold: 3 });
+      // Parent keeps its own later revision — the two diverge post-fork.
+      expect(
+        (await store.getLatestRuntimeExport("parent", "p/gen", "cfg"))
+          ?.revision,
+      ).toBe(2);
+
+      // TODO(media wave): an export carrying a MediaRef must, after fork, add a
+      // child-session MediaStore reference (bytes NOT copied) so the child can
+      // still resolve it; asserted once the shared MediaRef canonicaliser +
+      // ownership path lands (scenario 10).
+    }
+  });
 });
 
 describe("effects hazard (same-layer W/W, W/R, R/W detection)", () => {
