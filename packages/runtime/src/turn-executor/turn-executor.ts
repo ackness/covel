@@ -39,6 +39,7 @@ import {
   type TurnExecutorOptions,
 } from "./turn-executor-types.js";
 import { finalizeTurnResult } from "./turn-result-finalizer.js";
+import { createExecutionContext } from "./execution-context.js";
 import { PLAYER_ABORT_REASON } from "./turn-control.js";
 import { markPreGameCompletion } from "./pre-game-completion.js";
 import { schedulePostTurnMemoryUpdate } from "./post-turn-memory.js";
@@ -177,6 +178,10 @@ async function executeTurnImpl(
   const maxSteps = options?.maxSteps ?? 10;
   const defaultTimeoutMs = options?.timeoutMs ?? 60000;
   const recursionDepth = options?.recursionDepth ?? 0;
+  // Single creation point for the run's identity. Origin is normalized here
+  // (legacy `follower` → `background`) and every kernel read below consults
+  // this, not the raw transitional `input.origin`.
+  const executionContext = createExecutionContext(input);
   const executionFlags = input as RecursiveTurnInput;
   const shouldAppendPlayerMessage =
     !input.manualTrigger &&
@@ -223,6 +228,7 @@ async function executeTurnImpl(
         turnId: input.turnId,
         sessionId: input.sessionId,
         runtimeResults: [],
+        executionContext,
         durationMs: Date.now() - startTime,
         timestamp: new Date().toISOString(),
         abortReason: tsResult.reason,
@@ -244,6 +250,7 @@ async function executeTurnImpl(
       turnId: input.turnId,
       sessionId: input.sessionId,
       runtimeResults: [],
+      executionContext,
       durationMs: Date.now() - startTime,
       timestamp: new Date().toISOString(),
     };
@@ -274,6 +281,7 @@ async function executeTurnImpl(
       turnId: input.turnId,
       sessionId: input.sessionId,
       runtimeResults: [],
+      executionContext,
       durationMs: Date.now() - startTime,
       timestamp: new Date().toISOString(),
       abortReason,
@@ -544,6 +552,7 @@ async function executeTurnImpl(
 
   const baseResult = await finalizeTurnResult({
     input,
+    executionContext,
     startTime,
     completedResults,
     deferredFollowers,

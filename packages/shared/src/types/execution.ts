@@ -2,6 +2,8 @@
  * Execution types for turns, runtime results, and tool calls.
  */
 
+import type { ExecutionContext } from "./runtime-scheduling.js";
+
 // ── Runtime execution status ─────────────────────────────────────
 
 export type RuntimeStatus =
@@ -94,6 +96,14 @@ export interface TurnInput {
    * recursiveCall. Defaults to `player` when omitted.
    */
   readonly origin?: "player" | "manual" | "follower" | "recursive";
+  /**
+   * Transition field: whether the session was still in the Pre-Game band when
+   * the caller snapshotted it (before this execution ran). Only the player
+   * actions route feeds it; other entries omit it (treated as `false`). Read
+   * once at execution creation to fix `ExecutionContext.countPolicy`. Removed
+   * once the persisted phase field lands and the kernel derives this itself.
+   */
+  readonly preGamePending?: boolean;
   /** Parent turnId when this execution is a nested recursiveCall. */
   readonly parentTurnId?: string;
   /**
@@ -136,6 +146,14 @@ export interface TurnResult {
   readonly turnId: string;
   readonly sessionId: string;
   readonly runtimeResults: readonly RuntimeResult[];
+  /**
+   * Immutable identity of the scheduling run that produced this result,
+   * created once at `executeTurn` entry. Carries the normalized
+   * `ExecutionOrigin` and counting responsibility for the commit-owning caller
+   * and later scheduling waves. Optional: entries not yet threaded through it
+   * (e.g. approval-resume) omit it during the redesign.
+   */
+  readonly executionContext?: ExecutionContext;
   /**
    * Runtime results produced by nested `ctx.recursiveCall` executions,
    * flattened across depths. They are NOT part of

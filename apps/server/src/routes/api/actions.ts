@@ -513,6 +513,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               playerMessage,
               locale: effectiveLocale,
               modelOverride: model,
+              // Feed the pre-turn Pre-Game snapshot so the executor can fix the
+              // execution's countPolicy at creation. Transition field — the
+              // kernel derives this itself once the persisted phase lands.
+              preGamePending: wasPreGamePending,
               ...(userSettings ? { userSettings } : {}),
               // Snapshot session-level per-runtime slot overrides so the
               // turn executor can consult them when resolving each runtime's

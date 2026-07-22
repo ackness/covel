@@ -1,4 +1,5 @@
 import type {
+  ExecutionContext,
   InteractionPayload,
   PendingInputInfo,
   RuntimeResult,
@@ -6,10 +7,13 @@ import type {
   TurnResult,
 } from "@covel/shared";
 import { buildRuntimeOutputFromResult } from "./turn-runtime-helpers.js";
+import { toLegacyOrigin } from "./execution-context.js";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 
 export interface FinalizeTurnResultParams {
   readonly input: TurnInput;
+  /** Run identity created at `executeTurn` entry; owns the normalized origin. */
+  readonly executionContext: ExecutionContext;
   readonly startTime: number;
   readonly completedResults: ReadonlyMap<string, RuntimeResult>;
   readonly deferredFollowers: NonNullable<TurnResult["deferredFollowers"]>;
@@ -63,6 +67,7 @@ async function persistTurnResult(
   deps: TurnExecutorDeps,
   input: TurnInput,
   turnNumber: number,
+  executionContext: ExecutionContext,
 ): Promise<void> {
   if (!deps.store) return;
   const now = new Date().toISOString();
@@ -102,8 +107,9 @@ async function persistTurnResult(
     // Stamp the execution origin so turn accounting can exclude
     // non-player executions (manual RPC / background follower / recursive)
     // from `session.turnCount`, which drives UI turn display and the
-    // auto-snapshot cadence.
-    origin: input.origin ?? "player",
+    // auto-snapshot cadence. Projected back to the legacy label so the
+    // persisted column stays byte-identical (`background` → `follower`).
+    origin: toLegacyOrigin(executionContext.origin),
     ...(input.parentTurnId ? { parentTurnId: input.parentTurnId } : {}),
     // Written before the commit runs, so it starts `pending`. The
     // commit-owning caller settles it — a row left `pending` is a crash, not
@@ -116,6 +122,7 @@ async function persistTurnResult(
 
 export async function finalizeTurnResult({
   input,
+  executionContext,
   startTime,
   completedResults,
   deferredFollowers,
@@ -128,6 +135,7 @@ export async function finalizeTurnResult({
     turnId: input.turnId,
     sessionId: input.sessionId,
     runtimeResults: [...completedResults.values()],
+    executionContext,
     ...(nestedRuntimeResults && nestedRuntimeResults.length > 0
       ? { nestedRuntimeResults }
       : {}),
@@ -137,7 +145,13 @@ export async function finalizeTurnResult({
     ...(deferredFollowers.length > 0 ? { deferredFollowers } : {}),
   };
 
-  await persistTurnResult(turnResult, deps, input, turnNumber);
+  await persistTurnResult(
+    turnResult,
+    deps,
+    input,
+    turnNumber,
+    executionContext,
+  );
 
   // NOTE: `turn.completed` is intentionally NOT emitted here. The persisted
   // runtime results above are execution artefacts, not committed game state —
