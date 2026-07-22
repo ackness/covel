@@ -262,4 +262,69 @@ describe("finalizeExecution", () => {
     );
     expect(await commitStatusOf(store)).toBe("committed");
   });
+
+  describe("job-status terminalisation", () => {
+    const EXECUTION_ID = "exec-jobs";
+    const executionContext = {
+      executionId: EXECUTION_ID,
+      origin: "player" as const,
+      countPolicy: "none" as const,
+    };
+
+    async function seedRunningJob(store: DataStore, runtimeId: string) {
+      await store.appendJobStatus({
+        sessionId: SESSION_ID,
+        progressScopeId: EXECUTION_ID,
+        pluginId: runtimeId,
+        runtimeId,
+        jobId: "job-1",
+        state: "running",
+        sequence: 1,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    async function latestJobState(store: DataStore): Promise<string> {
+      const rows = await store.listJobStatus(SESSION_ID, { jobId: "job-1" });
+      return rows[rows.length - 1]!.state;
+    }
+
+    it("maps a committed execution's unterminated jobs to succeeded", async () => {
+      const store = createMemoryStore();
+      await savePendingTurn(store);
+      await seedRunningJob(store, "rt-a");
+
+      const outcome = await finalizeExecution({
+        store,
+        sessionId: SESSION_ID,
+        executionContext,
+        runtimes: [makeRuntime("rt-a")],
+        results: [makeResult("rt-a", statePatch("hp", 3))],
+        turnIds: [TURN_ID],
+      });
+
+      expect(outcome.status).toBe("committed");
+      expect(await latestJobState(store)).toBe("succeeded");
+    });
+
+    it("fails a rolled-back execution's jobs without touching settled ones", async () => {
+      const store = createMemoryStore();
+      await savePendingTurn(store);
+      await seedRunningJob(store, "rt-a");
+
+      const outcome = await finalizeExecution({
+        store,
+        sessionId: SESSION_ID,
+        executionContext,
+        runtimes: [makeRuntime("rt-a")],
+        results: [makeResult("rt-a", badStatePatch())],
+        turnIds: [TURN_ID],
+      });
+
+      expect(outcome.status).toBe("failed");
+      // Job-status is append-only and outside the domain transaction: the
+      // rollback erases domain writes but the terminal failed marker lands.
+      expect(await latestJobState(store)).toBe("failed");
+    });
+  });
 });
