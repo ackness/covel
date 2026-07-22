@@ -18,6 +18,7 @@ import {
   sqliteTable,
   text,
   integer,
+  real,
   index,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
@@ -52,6 +53,10 @@ export const sessions = sqliteTable("sessions", {
   embeddingModelId: integer("embedding_model_id"),
   embeddingLockedAt: text("embedding_locked_at"),
   runtimeModelOverrides: text("runtime_model_overrides").default("{}"),
+  // Scheduling-redesign lifecycle fields (nullable; absent on legacy rows).
+  phase: text("phase"), // 'setup' | 'playing'
+  completedPlayerTurns: integer("completed_player_turns"),
+  setupRuntimes: text("setup_runtimes"), // JSON Record<runtimeId, SetupRuntimeState>
 });
 
 // ── Turn Results ────────────────────────────────────────────────
@@ -575,6 +580,90 @@ export const suspensions = sqliteTable(
     resolvedAt: text("resolved_at"), // nullable — set on resume
   },
   (table) => [index("suspensions_session_id_idx").on(table.sessionId)],
+);
+
+// ── Logical Turn Ledger (scheduling redesign) ──────────────────
+//
+// Idempotency ledger: the (session_id, logical_turn_id) unique index is the
+// "count this logical turn at most once" guarantee (insert-ignore on conflict).
+// No surrogate PK — the composite unique key is the identity.
+
+export const logicalTurnLedger = sqliteTable(
+  "logical_turn_ledger",
+  {
+    sessionId: text("session_id").notNull(),
+    logicalTurnId: text("logical_turn_id").notNull(),
+    completedByExecutionId: text("completed_by_execution_id").notNull(),
+    completedAt: text("completed_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("logical_turn_ledger_unique_idx").on(
+      table.sessionId,
+      table.logicalTurnId,
+    ),
+  ],
+);
+
+// ── Setup Attempts (scheduling redesign) ───────────────────────
+//
+// Setup-runtime attempt log. Unique on
+// (session_id, runtime_id, generation, execution_id) — insert is idempotent,
+// then the attempt is terminalised in place (state / finished_at / error).
+
+export const setupAttempts = sqliteTable(
+  "setup_attempts",
+  {
+    sessionId: text("session_id").notNull(),
+    runtimeId: text("runtime_id").notNull(),
+    pluginVersion: text("plugin_version").notNull(),
+    generation: integer("generation").notNull(),
+    executionId: text("execution_id").notNull(),
+    state: text("state").notNull(),
+    startedAt: text("started_at").notNull(),
+    finishedAt: text("finished_at"),
+    error: text("error"),
+  },
+  (table) => [
+    uniqueIndex("setup_attempts_unique_idx").on(
+      table.sessionId,
+      table.runtimeId,
+      table.generation,
+      table.executionId,
+    ),
+  ],
+);
+
+// ── Job Status (scheduling redesign) ───────────────────────────
+//
+// Append-only background-job progress stream. Unique on the full
+// (session_id, progress_scope_id, plugin_id, runtime_id, job_id, sequence) key —
+// a duplicate (job_id, sequence) is rejected (append-only, earlier event wins).
+
+export const jobStatus = sqliteTable(
+  "job_status",
+  {
+    sessionId: text("session_id").notNull(),
+    progressScopeId: text("progress_scope_id").notNull(),
+    pluginId: text("plugin_id").notNull(),
+    runtimeId: text("runtime_id").notNull(),
+    jobId: text("job_id").notNull(),
+    state: text("state").notNull(),
+    progress: real("progress"), // float 0..1 / 0..100 — undecided, stored lossless
+    message: text("message"),
+    data: text("data"), // JSON — JsonValue payload
+    sequence: integer("sequence").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("job_status_unique_idx").on(
+      table.sessionId,
+      table.progressScopeId,
+      table.pluginId,
+      table.runtimeId,
+      table.jobId,
+      table.sequence,
+    ),
+  ],
 );
 
 // ── Vector Models (per-model embedding isolation) ──────────────

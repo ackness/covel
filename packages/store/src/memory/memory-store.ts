@@ -3,6 +3,7 @@
  * Used for testing and ephemeral sessions.
  */
 
+import { createLifecycleMethods } from "./lifecycle-methods.js";
 import { createMemoryState } from "./memory-state.js";
 import { createPluginDataMethods } from "./plugin-data-methods.js";
 import { createRuntimeMethods } from "./runtime-methods.js";
@@ -39,6 +40,7 @@ export function createMemoryStore(): MemoryStore {
     ...createLorebookMethods(state),
     ...createSuspensionMethods(state),
     ...createSnapshotMethods(state),
+    ...createLifecycleMethods(state),
     ...createVectorMethods(state),
   };
 

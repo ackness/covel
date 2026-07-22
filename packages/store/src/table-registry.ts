@@ -68,6 +68,9 @@ export type SessionScopedMemoryKey = Extract<
   | "sessionSummaries"
   | "suspensions"
   | "snapshots"
+  | "logicalTurnLedger"
+  | "setupAttempts"
+  | "jobStatus"
 >;
 
 export type MemoryCollectionKind = "map" | "array";
@@ -227,6 +230,24 @@ export const SESSION_SCOPED_TABLES: readonly SessionScopedTable[] = [
     memoryKey: "snapshots",
     memoryKind: "map",
     idbStore: "state_snapshots",
+  },
+  {
+    table: "logical_turn_ledger",
+    memoryKey: "logicalTurnLedger",
+    memoryKind: "map",
+    idbStore: "logical_turn_ledger",
+  },
+  {
+    table: "setup_attempts",
+    memoryKey: "setupAttempts",
+    memoryKind: "map",
+    idbStore: "setup_attempts",
+  },
+  {
+    table: "job_status",
+    memoryKey: "jobStatus",
+    memoryKind: "map",
+    idbStore: "job_status",
   },
 ];
 

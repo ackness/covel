@@ -73,6 +73,18 @@ function applySessionColumnMigrations(sqlite: Database.Database): void {
   if (!colNames.has("metadata")) {
     sqlite.exec("ALTER TABLE sessions ADD COLUMN metadata TEXT");
   }
+  // Scheduling-redesign lifecycle fields (all nullable; safe on legacy rows).
+  if (!colNames.has("phase")) {
+    sqlite.exec("ALTER TABLE sessions ADD COLUMN phase TEXT");
+  }
+  if (!colNames.has("completed_player_turns")) {
+    sqlite.exec(
+      "ALTER TABLE sessions ADD COLUMN completed_player_turns INTEGER",
+    );
+  }
+  if (!colNames.has("setup_runtimes")) {
+    sqlite.exec("ALTER TABLE sessions ADD COLUMN setup_runtimes TEXT");
+  }
 
   // Execution origin + recursive parent linkage on turn_results.
   const turnResultCols = sqlite

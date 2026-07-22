@@ -15,6 +15,7 @@ import type { IndexColumn, PgTable, SelectedFields } from "drizzle-orm/pg-core";
 
 import type {
   ConflictClause,
+  ConflictTarget,
   SelectOpts,
   SqlRunner,
   UpsertRow,
@@ -77,6 +78,24 @@ export function createPgSqlRunner(getDb: () => PgDb): SqlRunner {
       } else {
         await stmt;
       }
+    },
+
+    async insertIgnoreReturningCount(
+      table: Table,
+      values: Record<string, unknown>,
+      target?: ConflictTarget,
+    ): Promise<number> {
+      const stmt = getDb()
+        .insert(table as PgTable)
+        .values(values);
+      const rows = await (
+        target
+          ? stmt.onConflictDoNothing({
+              target: target as IndexColumn | IndexColumn[],
+            })
+          : stmt.onConflictDoNothing()
+      ).returning();
+      return rows.length;
     },
 
     async insertManyAtomic(

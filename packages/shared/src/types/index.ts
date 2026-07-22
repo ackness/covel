@@ -351,3 +351,12 @@ export type {
 } from "./runtime-scheduling.js";
 
 export { STAGE_ORDER } from "./runtime-scheduling.js";
+
+export type {
+  SetupRuntimeState,
+  SetupAttemptState,
+  SetupAttemptRecord,
+  LogicalTurnLedgerRecord,
+  JobStatusState,
+  JobStatusRecord,
+} from "./runtime-lifecycle.js";

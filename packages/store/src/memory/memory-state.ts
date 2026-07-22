@@ -30,5 +30,8 @@ export function createMemoryState(): MemoryState {
     worldDataImportLedger: new Map(),
     lorebookEntries: new Map(),
     sessionSummaries: [],
+    logicalTurnLedger: new Map(),
+    setupAttempts: new Map(),
+    jobStatus: new Map(),
   };
 }

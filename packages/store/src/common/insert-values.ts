@@ -18,6 +18,8 @@ import type {
   CharacterRecord,
   EventRecord,
   InteractionRecordRow,
+  JobStatusRecord,
+  LogicalTurnLedgerRecord,
   LorebookEntryRecord,
   MessageRecord,
   PlayerInputRecord,
@@ -26,6 +28,7 @@ import type {
   RuntimeResultRecord,
   SessionRecord,
   SessionSummaryRecord,
+  SetupAttemptRecord,
   SnapshotRecord,
   StateChangeRecord,
   StateEntryRecord,
@@ -58,6 +61,9 @@ export type SessionUpdatePatch = Partial<
     | "embeddingModelId"
     | "embeddingLockedAt"
     | "runtimeModelOverrides"
+    | "phase"
+    | "completedPlayerTurns"
+    | "setupRuntimes"
   >
 >;
 
@@ -123,6 +129,11 @@ export interface InsertValueBuilders {
   snapshotUpdate(record: SnapshotRecord): Record<string, unknown>;
   suspensionInsert(record: SuspensionRecord): Record<string, unknown>;
   suspensionUpdate(record: SuspensionRecord): Record<string, unknown>;
+  logicalTurnLedgerInsert(
+    record: LogicalTurnLedgerRecord,
+  ): Record<string, unknown>;
+  setupAttemptInsert(record: SetupAttemptRecord): Record<string, unknown>;
+  jobStatusInsert(record: JobStatusRecord): Record<string, unknown>;
 }
 
 export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
@@ -538,6 +549,9 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         runtimeModelOverrides: json.writeNullableJson(
           record.runtimeModelOverrides,
         ),
+        phase: record.phase ?? null,
+        completedPlayerTurns: record.completedPlayerTurns ?? null,
+        setupRuntimes: json.writeNullableJson(record.setupRuntimes),
       };
     },
 
@@ -566,6 +580,13 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         values.runtimeModelOverrides = json.writeNullableJson(
           patch.runtimeModelOverrides,
         );
+      }
+      if ("phase" in patch) values.phase = patch.phase ?? null;
+      if ("completedPlayerTurns" in patch) {
+        values.completedPlayerTurns = patch.completedPlayerTurns ?? null;
+      }
+      if ("setupRuntimes" in patch) {
+        values.setupRuntimes = json.writeNullableJson(patch.setupRuntimes);
       }
       return values;
     },
@@ -619,6 +640,51 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         resumeSchema: json.writeJson(record.resumeSchema),
         pendingContinuation: json.writeJson(record.pendingContinuation),
         resolvedAt: record.resolvedAt ?? null,
+      };
+    },
+
+    // ── Scheduling-redesign lifecycle records ─────────────────────
+    // No upsert set builders: these are insert-ignore ledgers (the composite
+    // unique index is the identity). `setup_attempts` is terminalised through a
+    // dedicated partial UPDATE built in sql-lifecycle-records. `job_status.data`
+    // is the only JSON column (nullable → `writeNullableJson`).
+
+    logicalTurnLedgerInsert(record) {
+      return {
+        sessionId: record.sessionId,
+        logicalTurnId: record.logicalTurnId,
+        completedByExecutionId: record.completedByExecutionId,
+        completedAt: record.completedAt,
+      };
+    },
+
+    setupAttemptInsert(record) {
+      return {
+        sessionId: record.sessionId,
+        runtimeId: record.runtimeId,
+        pluginVersion: record.pluginVersion,
+        generation: record.generation,
+        executionId: record.executionId,
+        state: record.state,
+        startedAt: record.startedAt,
+        finishedAt: record.finishedAt ?? null,
+        error: record.error ?? null,
+      };
+    },
+
+    jobStatusInsert(record) {
+      return {
+        sessionId: record.sessionId,
+        progressScopeId: record.progressScopeId,
+        pluginId: record.pluginId,
+        runtimeId: record.runtimeId,
+        jobId: record.jobId,
+        state: record.state,
+        progress: record.progress ?? null,
+        message: record.message ?? null,
+        data: json.writeNullableJson(record.data),
+        sequence: record.sequence,
+        createdAt: record.createdAt,
       };
     },
   };

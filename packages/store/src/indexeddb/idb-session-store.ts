@@ -12,10 +12,14 @@ export function createIdbSessionStore(ctx: IdbStoreContext): IdbStoreSlice {
   const { db, mutations } = ctx;
 
   /**
-   * Delete every row of `storeName` owned by `sessionId`. Uses the store's
-   * `sessionId` index when it has one; otherwise falls back to a full scan
-   * filtered on the `sessionId` property (composite-index stores such as
-   * `runtimeResults` and `plugin_data` have no standalone `sessionId` index).
+   * Delete every row of `storeName` owned by `sessionId`. When the store has a
+   * `sessionId` index, enumerate the matching PRIMARY KEYS and delete by key —
+   * this works for both `id`-keyPath stores (their key IS `id`) and the
+   * scheduling-redesign lifecycle stores whose primary key is a composite array
+   * keyPath (no `id` property to read). Otherwise fall back to a full scan
+   * filtered on the `sessionId` property + delete by `id` (composite-index
+   * stores such as `runtimeResults` and `plugin_data` have no standalone
+   * `sessionId` index but do carry an `id` keyPath).
    */
   async function cascadeSession(
     storeName: IdbStoreName,
@@ -24,20 +28,23 @@ export function createIdbSessionStore(ctx: IdbStoreContext): IdbStoreSlice {
     const hasSessionIdIndex = db
       .transaction(storeName)
       .store.indexNames.contains("sessionId");
-    const rows = hasSessionIdIndex
-      ? ((await db.getAllFromIndex(
-          storeName,
-          "sessionId",
-          sessionId,
-        )) as Array<{
-          id: string;
-        }>)
-      : (
-          (await db.getAll(storeName)) as Array<{
-            id: string;
-            sessionId: string;
-          }>
-        ).filter((row) => row.sessionId === sessionId);
+    if (hasSessionIdIndex) {
+      const keys = await db.getAllKeysFromIndex(
+        storeName,
+        "sessionId",
+        sessionId,
+      );
+      for (const key of keys) {
+        await mutations.deleteAndTrack(storeName, key);
+      }
+      return;
+    }
+    const rows = (
+      (await db.getAll(storeName)) as Array<{
+        id: string;
+        sessionId: string;
+      }>
+    ).filter((row) => row.sessionId === sessionId);
     for (const row of rows) {
       await mutations.deleteAndTrack(storeName, row.id);
     }

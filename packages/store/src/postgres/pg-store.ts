@@ -20,6 +20,7 @@ import { createPgDataCrud } from "./pg-data-crud.js";
 import { createPgRuntimeRecords } from "./pg-runtime-records.js";
 import { createPgSessionContentRecords } from "./pg-session-content-records.js";
 import { createPgSessionJournalRecords } from "./pg-session-journal-records.js";
+import { createPgLifecycleRecords } from "./pg-lifecycle-records.js";
 import { createPgSessionRecords } from "./pg-session-records.js";
 import { createPgSnapshotRecords } from "./pg-snapshot-records.js";
 import { CREATE_TABLES_SQL, DROP_ALL_SQL } from "./pg-store-mappers.js";
@@ -49,6 +50,7 @@ function buildPgData(getDb: () => PgDb): StoreTransaction {
     ...createPgWorldRecords(getDb),
     ...createPgSessionJournalRecords(getDb),
     ...createPgSnapshotRecords(getDb),
+    ...createPgLifecycleRecords(getDb),
   };
 }
 

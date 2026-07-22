@@ -2,7 +2,7 @@
  * Backend-agnostic canonical row→record mappers for the session domain.
  */
 
-import type { SessionStatus } from "@covel/shared";
+import type { SessionStatus, SetupRuntimeState } from "@covel/shared";
 import type { SessionRecord } from "../../types.js";
 import type { JsonReader } from "./json-reader.js";
 
@@ -20,6 +20,9 @@ export interface SessionRow {
   embeddingModelId: number | null;
   embeddingLockedAt: string | null;
   runtimeModelOverrides: unknown;
+  phase: string | null;
+  completedPlayerTurns: number | null;
+  setupRuntimes: unknown;
 }
 
 export function toSessionRecord(
@@ -30,6 +33,8 @@ export function toSessionRecord(
     Record<string, unknown> | undefined;
   const overrides = json.read(row.runtimeModelOverrides) as
     Record<string, string> | undefined;
+  const setupRuntimes = json.read(row.setupRuntimes) as
+    Record<string, SetupRuntimeState> | undefined;
   return {
     id: row.id,
     worldId: row.worldId ?? undefined,
@@ -53,6 +58,13 @@ export function toSessionRecord(
       : {}),
     ...(overrides && Object.keys(overrides).length > 0
       ? { runtimeModelOverrides: overrides }
+      : {}),
+    ...(row.phase != null ? { phase: row.phase as "setup" | "playing" } : {}),
+    ...(row.completedPlayerTurns != null
+      ? { completedPlayerTurns: row.completedPlayerTurns }
+      : {}),
+    ...(setupRuntimes && Object.keys(setupRuntimes).length > 0
+      ? { setupRuntimes }
       : {}),
   };
 }

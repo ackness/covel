@@ -3,6 +3,8 @@ import type {
   CharacterRecord,
   EventRecord,
   InteractionRecordRow,
+  JobStatusRecord,
+  LogicalTurnLedgerRecord,
   LorebookEntryRecord,
   MessageRecord,
   PlayerInputRecord,
@@ -10,8 +12,10 @@ import type {
   RuntimeResultRecord,
   SessionRecord,
   SessionSummaryRecord,
+  SetupAttemptRecord,
   SnapshotPayloadV1,
   SnapshotPayloadV2,
+  SnapshotPayloadV3,
   SnapshotRecord,
   StateChangeRecord,
   StateEntryRecord,
@@ -432,6 +436,37 @@ export function makeSnapshotPayloadV2(
   };
 }
 
+export function makeSnapshotPayloadV3(
+  overrides?: Partial<SnapshotPayloadV3>,
+): SnapshotPayloadV3 {
+  return {
+    ...makeSnapshotPayload(),
+    schemaVersion: 3,
+    session: {
+      status: "active",
+      turnCount: 3,
+      preGameCompleted: ["setup/schema"],
+      locale: "zh-CN",
+      activePlugins: ["setup", "narrator"],
+      presetId: "default",
+      runtimeModelOverrides: { narrator: "balance" },
+      phase: "playing",
+      completedPlayerTurns: 2,
+      setupRuntimes: {
+        "setup/schema": {
+          state: "done",
+          resolution: "completed",
+          generation: 1,
+          attempts: 1,
+          completedAt: ts(),
+          pluginVersion: "1.0.0",
+        },
+      },
+    },
+    ...overrides,
+  };
+}
+
 export function makeSnapshot(
   overrides?: Partial<SnapshotRecord>,
 ): SnapshotRecord {
@@ -442,6 +477,49 @@ export function makeSnapshot(
     kind: "manual",
     parentId: undefined,
     payload: makeSnapshotPayload(),
+    createdAt: ts(),
+    ...overrides,
+  };
+}
+
+export function makeLogicalTurnCompletion(
+  overrides?: Partial<LogicalTurnLedgerRecord>,
+): LogicalTurnLedgerRecord {
+  return {
+    sessionId: "sess-1",
+    logicalTurnId: id(),
+    completedByExecutionId: id(),
+    completedAt: ts(),
+    ...overrides,
+  };
+}
+
+export function makeSetupAttempt(
+  overrides?: Partial<SetupAttemptRecord>,
+): SetupAttemptRecord {
+  return {
+    sessionId: "sess-1",
+    runtimeId: "setup/schema",
+    pluginVersion: "1.0.0",
+    generation: 1,
+    executionId: id(),
+    state: "started",
+    startedAt: ts(),
+    ...overrides,
+  };
+}
+
+export function makeJobStatus(
+  overrides?: Partial<JobStatusRecord>,
+): JobStatusRecord {
+  return {
+    sessionId: "sess-1",
+    progressScopeId: "scope-1",
+    pluginId: "plugin-1",
+    runtimeId: "runtime-1",
+    jobId: "job-1",
+    state: "queued",
+    sequence: 0,
     createdAt: ts(),
     ...overrides,
   };

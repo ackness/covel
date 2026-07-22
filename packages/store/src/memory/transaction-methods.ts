@@ -106,6 +106,11 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   deleteSuspension: ["suspensions"],
   deleteExpiredSuspensions: ["suspensions"],
   saveSnapshot: ["snapshots"],
+  // scheduling-redesign lifecycle records
+  insertLogicalTurnCompletion: ["logicalTurnLedger"],
+  insertSetupAttempt: ["setupAttempts"],
+  updateSetupAttempt: ["setupAttempts"],
+  appendJobStatus: ["jobStatus"],
   // worlds + vectors
   upsertWorld: ["worlds"],
   deleteWorld: ["worlds"],

@@ -20,6 +20,7 @@ import {
   text,
   integer,
   bigint,
+  doublePrecision,
   jsonb,
   serial,
   index,
@@ -63,6 +64,10 @@ export const sessions = pgTable("sessions", {
   embeddingModelId: integer("embedding_model_id"), // FK → vector_models.id; NULL = RAG disabled
   embeddingLockedAt: text("embedding_locked_at"), // ISO 8601 timestamp
   runtimeModelOverrides: jsonb("runtime_model_overrides").default({}), // per-runtime slot overrides
+  // Scheduling-redesign lifecycle fields (nullable; absent on legacy rows).
+  phase: text("phase"), // 'setup' | 'playing'
+  completedPlayerTurns: integer("completed_player_turns"),
+  setupRuntimes: jsonb("setup_runtimes"), // Record<runtimeId, SetupRuntimeState>
 });
 
 // ── Turn Results ────────────────────────────────────────────────
@@ -594,6 +599,90 @@ export const suspensions = pgTable(
     resolvedAt: text("resolved_at"), // nullable — set on resume
   },
   (table) => [index("pg_suspensions_session_id_idx").on(table.sessionId)],
+);
+
+// ── Logical Turn Ledger (scheduling redesign) ──────────────────
+//
+// Idempotency ledger: the (session_id, logical_turn_id) unique index is the
+// "count this logical turn at most once" guarantee (insert-ignore on conflict).
+// No surrogate PK — the composite unique key is the identity.
+
+export const logicalTurnLedger = pgTable(
+  "logical_turn_ledger",
+  {
+    sessionId: text("session_id").notNull(),
+    logicalTurnId: text("logical_turn_id").notNull(),
+    completedByExecutionId: text("completed_by_execution_id").notNull(),
+    completedAt: text("completed_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("pg_logical_turn_ledger_unique_idx").on(
+      table.sessionId,
+      table.logicalTurnId,
+    ),
+  ],
+);
+
+// ── Setup Attempts (scheduling redesign) ───────────────────────
+//
+// Setup-runtime attempt log. Unique on
+// (session_id, runtime_id, generation, execution_id) — insert is idempotent,
+// then the attempt is terminalised in place (state / finished_at / error).
+
+export const setupAttempts = pgTable(
+  "setup_attempts",
+  {
+    sessionId: text("session_id").notNull(),
+    runtimeId: text("runtime_id").notNull(),
+    pluginVersion: text("plugin_version").notNull(),
+    generation: integer("generation").notNull(),
+    executionId: text("execution_id").notNull(),
+    state: text("state").notNull(),
+    startedAt: text("started_at").notNull(),
+    finishedAt: text("finished_at"),
+    error: text("error"),
+  },
+  (table) => [
+    uniqueIndex("pg_setup_attempts_unique_idx").on(
+      table.sessionId,
+      table.runtimeId,
+      table.generation,
+      table.executionId,
+    ),
+  ],
+);
+
+// ── Job Status (scheduling redesign) ───────────────────────────
+//
+// Append-only background-job progress stream. Unique on the full
+// (session_id, progress_scope_id, plugin_id, runtime_id, job_id, sequence) key —
+// a duplicate (job_id, sequence) is rejected (append-only, earlier event wins).
+
+export const jobStatus = pgTable(
+  "job_status",
+  {
+    sessionId: text("session_id").notNull(),
+    progressScopeId: text("progress_scope_id").notNull(),
+    pluginId: text("plugin_id").notNull(),
+    runtimeId: text("runtime_id").notNull(),
+    jobId: text("job_id").notNull(),
+    state: text("state").notNull(),
+    progress: doublePrecision("progress"), // float — undecided scale, stored lossless
+    message: text("message"),
+    data: jsonb("data"), // JsonValue payload
+    sequence: integer("sequence").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("pg_job_status_unique_idx").on(
+      table.sessionId,
+      table.progressScopeId,
+      table.pluginId,
+      table.runtimeId,
+      table.jobId,
+      table.sequence,
+    ),
+  ],
 );
 
 // ── Vector Models (per-model embedding isolation) ──────────────

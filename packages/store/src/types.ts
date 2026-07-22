@@ -60,11 +60,24 @@ export type {
   SnapshotPayload,
   SnapshotPayloadV1,
   SnapshotPayloadV2,
+  SnapshotPayloadV3,
   SnapshotSessionState,
+  SnapshotSessionStateV3,
   SnapshotRecord,
   SnapshotMetadata,
   SuspensionRecord,
 } from "./records/snapshot-records.js";
+
+// Session-lifecycle records live in @covel/shared (the cross-layer contract);
+// re-exported here so store consumers import them alongside the store records.
+export type {
+  SetupRuntimeState,
+  SetupAttemptState,
+  SetupAttemptRecord,
+  LogicalTurnLedgerRecord,
+  JobStatusState,
+  JobStatusRecord,
+} from "@covel/shared";
 
 export type {
   PaginationOpts,
@@ -115,6 +128,12 @@ import type {
   PaginationOpts,
   CursorPageOpts,
 } from "./records/pagination-records.js";
+import type {
+  SetupAttemptRecord,
+  SetupAttemptState,
+  LogicalTurnLedgerRecord,
+  JobStatusRecord,
+} from "@covel/shared";
 
 // ── Domain sub-interfaces ────────────────────────────────────────
 //
@@ -150,6 +169,9 @@ export interface SessionStore {
         | "embeddingModelId"
         | "embeddingLockedAt"
         | "runtimeModelOverrides"
+        | "phase"
+        | "completedPlayerTurns"
+        | "setupRuntimes"
       >
     >,
   ): Promise<void>;
@@ -549,6 +571,70 @@ export interface SuspensionStore {
   deleteExpiredSuspensions(olderThanIso: string): Promise<number>;
 }
 
+/**
+ * Session-lifecycle records for the scheduling redesign (`sql-lifecycle-records`):
+ * the logical-turn completion ledger, the setup-runtime attempt log, and the
+ * append-only job-status stream. Every method is usable inside a
+ * {@link TransactionalStore.withTransaction} handler.
+ */
+export interface LifecycleStore {
+  /**
+   * Record that a logical turn completed. Idempotent on
+   * `(sessionId, logicalTurnId)`: returns `true` when this call inserted the
+   * ledger row, `false` when the turn was already recorded (no overwrite, no
+   * throw). This boolean is the "count this turn at most once" guarantee.
+   */
+  insertLogicalTurnCompletion(
+    record: LogicalTurnLedgerRecord,
+  ): Promise<boolean>;
+  getLogicalTurnCompletion(
+    sessionId: string,
+    logicalTurnId: string,
+  ): Promise<LogicalTurnLedgerRecord | null>;
+
+  /**
+   * Insert a setup-runtime attempt. Idempotent on
+   * `(sessionId, runtimeId, generation, executionId)`: returns `true` when this
+   * call inserted the row, `false` when the attempt already existed (no
+   * overwrite, no throw).
+   */
+  insertSetupAttempt(record: SetupAttemptRecord): Promise<boolean>;
+  /**
+   * Terminalise an existing setup attempt (identified by its full unique key)
+   * with a new `state` and optional `finishedAt` / `error`. No-op when the
+   * attempt does not exist.
+   */
+  updateSetupAttempt(
+    sessionId: string,
+    runtimeId: string,
+    generation: number,
+    executionId: string,
+    patch: {
+      readonly state: SetupAttemptState;
+      readonly finishedAt?: string;
+      readonly error?: string;
+    },
+  ): Promise<void>;
+  listSetupAttempts(
+    sessionId: string,
+    filter?: { readonly runtimeId?: string; readonly generation?: number },
+  ): Promise<readonly SetupAttemptRecord[]>;
+
+  /**
+   * Append a job-status event. Append-only and idempotent on
+   * `(sessionId, progressScopeId, pluginId, runtimeId, jobId, sequence)`:
+   * returns `true` when this call inserted the event, `false` when a duplicate
+   * `sequence` for the same job was already stored (the earlier event wins; no
+   * overwrite, no throw).
+   */
+  appendJobStatus(record: JobStatusRecord): Promise<boolean>;
+  /** List job-status events for a session, ordered by `(jobId, sequence)` asc. */
+  listJobStatus(
+    sessionId: string,
+    filter?: { readonly progressScopeId?: string; readonly jobId?: string },
+  ): Promise<readonly JobStatusRecord[]>;
+}
+
 /** Materialized state snapshots. Part of `sql-snapshot-records`. */
 export interface SnapshotStore {
   /**
@@ -647,6 +733,7 @@ export interface DataStore
     SessionSummaryStore,
     SuspensionStore,
     SnapshotStore,
+    LifecycleStore,
     TransactionalStore,
     StoreLifecycle {}
 

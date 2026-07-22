@@ -1,6 +1,9 @@
 // IndexedDB requires a monotonically increasing integer version for schema
 // upgrades. Keep all browser-local object stores on this single version.
-export const BROWSER_IDB_SCHEMA_VERSION = 12;
+// v13: scheduling-redesign lifecycle stores (logical_turn_ledger /
+// setup_attempts / job_status). `ensureStore` is idempotent, so the bump
+// creates only the newly-added stores on an existing database.
+export const BROWSER_IDB_SCHEMA_VERSION = 13;
 export const BROWSER_IDB_DATABASE_NAME = "covel-browser";
 export const APP_KV_STORE_STATE_SNAPSHOTS = "stateSnapshots";
 export const APP_KV_STORE_WORLD_OVERLAYS = "worldOverlays";
@@ -204,6 +207,34 @@ export function upgradeBrowserIdbSchema(
   });
   ledger?.createIndex("sessionId", "sessionId");
   ledger?.createIndex("source", ["sessionId", "sourceWorldId", "sourceId"]);
+
+  // ── Scheduling-redesign lifecycle stores (v13) ─────────────────
+  // No surrogate `id` — the composite array keyPath IS the primary key, which
+  // natively enforces the same uniqueness the SQL unique indexes do. Each also
+  // carries a `sessionId` index so the session-delete cascade can enumerate its
+  // rows (the cascade deletes by primary key via getAllKeysFromIndex).
+
+  const logicalTurnLedger = ensureStore(db, "logical_turn_ledger", {
+    keyPath: ["sessionId", "logicalTurnId"],
+  });
+  logicalTurnLedger?.createIndex("sessionId", "sessionId");
+
+  const setupAttempts = ensureStore(db, "setup_attempts", {
+    keyPath: ["sessionId", "runtimeId", "generation", "executionId"],
+  });
+  setupAttempts?.createIndex("sessionId", "sessionId");
+
+  const jobStatus = ensureStore(db, "job_status", {
+    keyPath: [
+      "sessionId",
+      "progressScopeId",
+      "pluginId",
+      "runtimeId",
+      "jobId",
+      "sequence",
+    ],
+  });
+  jobStatus?.createIndex("sessionId", "sessionId");
 
   const mediaAssets = ensureStore(db, "media_assets", { keyPath: "id" });
   mediaAssets?.createIndex("owner", ["ownerSessionId", "ownerPluginId"]);
