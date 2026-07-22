@@ -204,10 +204,8 @@ async function handleCharacterCreation(page: Page) {
     }
   }
 
-  // Submit
-  const submitBtn = page.locator("button", {
-    hasText: /confirm|确认|submit|提交|create|创建/i,
-  });
+  // Submit — target the stable data-testid, not the LLM-generated label.
+  const submitBtn = page.getByTestId("interaction-submit");
   if (
     await submitBtn
       .first()

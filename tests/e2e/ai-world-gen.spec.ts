@@ -357,8 +357,11 @@ test.describe("AI World Generation", () => {
       );
     }
 
-    // The character_creation block should have a submit button
-    const submitBtn = formArea.locator("button").last();
+    // The character_creation block should have a submit button. Target it by its
+    // stable data-testid — the label is LLM-generated (e.g. "觉醒·踏入云海"), so
+    // neither text-matching nor position (`.last()` grabs the execution-timeline
+    // indicator) reliably finds it.
+    const submitBtn = page.getByTestId("interaction-submit");
     await expect(submitBtn.first()).toBeVisible({ timeout: 5_000 });
 
     // ── Fill the form and submit ──

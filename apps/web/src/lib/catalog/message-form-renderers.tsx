@@ -152,6 +152,7 @@ export const SubmitButton: ComponentRenderer = ({ element, emit }) => {
   return (
     <button
       type="button"
+      data-testid="interaction-submit"
       onClick={() => emit("click")}
       disabled={disabled}
       className={clsx(
