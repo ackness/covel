@@ -17,6 +17,7 @@ import {
   makeRevocableFn,
 } from "./plugin-handler-helpers.js";
 import { createExecutionWriteBuffer } from "./execution-write-buffer.js";
+import { normalizeHandlerResult } from "../commit/normalize-handler-result.js";
 import { createRuntimeMediaContext } from "./runtime-media-context.js";
 import { createRuntimeImagesContext } from "./runtime-images-context.js";
 import { createRuntimeSpeechContext } from "./runtime-speech-context.js";
@@ -494,27 +495,24 @@ export async function executeFunctionRuntime({
     );
   }
 
-  // Step 0 observe-only schema check for envelope-v1 function runtimes.
-  // A runtime that opted into `resultFormat: "envelope-v1"` and declared an
-  // `output.schema` promised a `{ outcome, value, ... }` envelope whose `value`
-  // matches the schema. Here we only OBSERVE — validate `value` and warn on a
-  // mismatch, leaving the result byte-identical. Enforcement lands in a later
-  // step. Legacy runtimes (the default), missing schemas, and non-object
-  // returns skip entirely, so their behaviour is unchanged. Reuses the same
-  // ajv-backed `validateOutput` as the agent schema gate.
-  if (
-    manifest.resultFormat === "envelope-v1" &&
-    loaded.outputSchema &&
-    output !== null &&
-    typeof output === "object"
-  ) {
-    const validation = validateOutput(
-      (output as Record<string, unknown>).value,
-      loaded.outputSchema,
-    );
+  // Observe-only `output.schema` check (compat window — neither format enforces
+  // here; a mismatch logs one warn and leaves the result unchanged). Reuses the
+  // same ajv-backed `validateOutput` as the agent schema gate.
+  //   - envelope-v1: validate the envelope `value` (Step 0).
+  //   - legacy: validate the whole preserved object (docs 02 §4.3 — a minor
+  //     observe-only cycle before Step 6 removes the legacy face).
+  // Missing schemas and non-object returns skip entirely, so behaviour is
+  // unchanged for runtimes without a declared schema.
+  const resultFormat = manifest.resultFormat ?? "legacy";
+  if (loaded.outputSchema && output !== null && typeof output === "object") {
+    const validationTarget =
+      resultFormat === "envelope-v1"
+        ? (output as Record<string, unknown>).value
+        : output;
+    const validation = validateOutput(validationTarget, loaded.outputSchema);
     if (!validation.valid) {
       console.warn(
-        `[runtime] ${manifest.name} envelope-v1 output.value did not match output.schema: ` +
+        `[runtime] ${manifest.name} ${resultFormat} output did not match output.schema: ` +
           (validation.errors ?? ["unknown schema validation error"])
             .slice(0, 5)
             .join("; "),
@@ -522,15 +520,47 @@ export async function executeFunctionRuntime({
     }
   }
 
+  // Classify the handler return through the unified normalizer and map its
+  // outcome onto the persisted RuntimeResult.status. Legacy success keeps the
+  // whole object as `output`, so the commit path's proposals/effects stay
+  // byte-identical; a business failed / skipped demotes the status so the
+  // commit path skips it (no domain writes on a non-success outcome).
+  const { outcome: handlerOutcome, diagnostics } = normalizeHandlerResult(
+    output,
+    { resultFormat, runtimeType: "function" },
+  );
+  for (const d of diagnostics) {
+    console.warn(`[runtime] ${manifest.name}: ${d.code} — ${d.message}`);
+  }
+  // Compat guard: a legacy handler that buffered domain writes before returning
+  // a non-success status is relying on the pre-redesign commit-on-non-success
+  // behaviour. Keep it as `success` during the compat window so those writes
+  // still commit byte-identically; a pure non-success (empty buffer) demotes.
+  // ponytail: writeBuffer-only check — the sole legacy non-success producer
+  // buffers via ctx.pluginData, never inline control keys. Upgrade to also scan
+  // output control keys if a producer emits them on a non-success return.
+  const demote =
+    (handlerOutcome.outcome === "failed" ||
+      handlerOutcome.outcome === "skipped") &&
+    writeBuffer.length === 0;
+  if (!demote && handlerOutcome.outcome !== "success") {
+    console.warn(
+      `[runtime] ${manifest.name}: legacy ${handlerOutcome.outcome} return with buffered writes kept as success (compat)`,
+    );
+  }
+
   const rawResult: RuntimeResult = {
     pluginId: manifest.pluginId,
     runtimeId: manifest.name,
     runId,
     turnId: input.turnId,
-    status: "success",
+    status: demote ? handlerOutcome.outcome : "success",
     output,
     toolCalls: [],
     durationMs: Date.now() - startTime,
+    ...(demote && handlerOutcome.outcome === "failed"
+      ? { error: handlerOutcome.error }
+      : {}),
     timestamp: new Date().toISOString(),
   };
 

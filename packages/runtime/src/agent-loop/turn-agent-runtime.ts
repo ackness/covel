@@ -20,6 +20,7 @@ import {
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { finalizeAgentOutput } from "./finalize-agent-output.js";
+import { normalizeHandlerResult } from "../commit/normalize-handler-result.js";
 import { filterHistoryForStory } from "./message-filter.js";
 import {
   checkSchemaProseFailure,
@@ -373,6 +374,28 @@ export async function executeAgentRuntime({
     return finalizeFailure(finalized.result);
   }
   const output = finalized.output;
+
+  // Observe-only normalization cross-check (docs 02 §4). The agent path keeps
+  // producing its result unchanged; here we run the same unified normalizer and
+  // surface any divergence as diagnostics (e.g. a legacy agent output carrying
+  // a business `status: failed/skipped`, or domain effects on a non-success
+  // shape). The full agent switch to the normalizer lands in a later wave.
+  {
+    const { outcome, diagnostics } = normalizeHandlerResult(output, {
+      resultFormat: manifest.resultFormat ?? "legacy",
+      runtimeType: "agent",
+    });
+    for (const d of diagnostics) {
+      console.warn(
+        `[runtime] ${manifest.name} (observe): ${d.code} — ${d.message}`,
+      );
+    }
+    if (outcome.outcome !== "success") {
+      console.warn(
+        `[runtime] ${manifest.name} (observe): normalizer classified agent output as "${outcome.outcome}" but the agent path keeps status: success`,
+      );
+    }
+  }
 
   const rawResult: RuntimeResult = {
     pluginId: manifest.pluginId,

@@ -38,7 +38,9 @@ import {
 } from "@covel/shared";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
+import type { LoadedRuntime } from "@covel/plugin-loader";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
+import { processRuntimeResult } from "../src/session/session-kernel.js";
 import { buildSnapshotPayload } from "../src/snapshot/snapshot-payload-builder.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 
@@ -622,10 +624,78 @@ describe("MediaRef canonicalization boundaries", () => {
 });
 
 describe("legacy handler compat (mixed return shape)", () => {
-  // needs: resultFormat: legacy adapter preserving value + copying control keys (release step 3)
-  it.todo(
-    "scenario 11: legacy handler 混装返回：value 完整保留（ref 等公共字段可被下游绑定读取）、控制键复制执行、业务 failed 映射 status: failed — 断言适配器不剥离下游需要的字段",
-  );
+  const fnManifest = (name: string): RuntimeManifest =>
+    ({
+      name,
+      pluginId: name.split("/")[0],
+      description: "legacy mixed-shape function runtime",
+      priority: 500,
+      outputKind: "plugin",
+      runtimeType: "function",
+      trigger: { type: "auto" },
+    }) as RuntimeManifest;
+
+  const runFn = async (
+    sessionId: string,
+    manifest: RuntimeManifest,
+    ret: Record<string, unknown>,
+  ) => {
+    const store = createMemoryStore();
+    const loaded: LoadedRuntime = {
+      manifest,
+      promptTemplate: "",
+      handler: async () => ret,
+    };
+    const deps = {
+      loadRuntime: async () => loaded,
+      store,
+    } as unknown as TurnExecutorDeps;
+    const result = await executeTurn(
+      { sessionId, turnId: `${sessionId}-t`, playerMessage: "go" },
+      [manifest],
+      deps,
+    );
+    return { store, rr: result.runtimeResults[0]! };
+  };
+
+  it("scenario 11: legacy mixed success return — value preserved, control keys committed", async () => {
+    const manifest = fnManifest("legacy-mixed/ok");
+    // A mixed shape: a public field a downstream binding would read (`ref`) plus
+    // a `pluginData` control key that must still commit.
+    const ref = { id: "r".repeat(64), mime: "image/png", size: 42 };
+    const ret = {
+      ref,
+      note: "public field",
+      pluginData: [{ namespace: "gallery", key: "latest", value: { ref } }],
+    };
+    const { store, rr } = await runFn("sess-legacy-ok", manifest, ret);
+
+    // Business success stays success; the whole object is preserved so a
+    // downstream consumer can still read `ref` / `note` (the adapter does not
+    // strip fields it does not recognise).
+    expect(rr.status).toBe("success");
+    expect(rr.output).toMatchObject({ ref, note: "public field" });
+
+    // Control keys are copied + executed: the plugin.data proposal commits.
+    await processRuntimeResult(rr, store, "sess-legacy-ok", "plugin", {});
+    const stored = await store.getPluginData(
+      "sess-legacy-ok",
+      "legacy-mixed",
+      "gallery",
+      "latest",
+    );
+    expect(stored?.value).toEqual({ ref });
+  });
+
+  it("scenario 11: business status: failed maps to RuntimeResult.status failed", async () => {
+    const manifest = fnManifest("legacy-mixed/bad");
+    const { rr } = await runFn("sess-legacy-bad", manifest, {
+      status: "failed",
+      error: "provider down",
+    });
+    expect(rr.status).toBe("failed");
+    expect(rr.error).toBe("provider down");
+  });
 });
 
 describe("suspension & resume", () => {

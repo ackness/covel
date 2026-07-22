@@ -2,7 +2,7 @@
  * Execution types for turns, runtime results, and tool calls.
  */
 
-import type { ExecutionContext } from "./runtime-scheduling.js";
+import type { ExecutionContext, JsonValue } from "./runtime-scheduling.js";
 import type {
   RanSetupRuntime,
   SetupRuntimeState,
@@ -29,8 +29,14 @@ export interface ToolCallRecord {
   readonly pluginId: string;
   readonly runtimeId: string;
   readonly turnId: string;
-  readonly input: Readonly<Record<string, unknown>>;
-  readonly output: unknown;
+  /**
+   * JSON wire value only (docs 02 §2). Callers pass tool arguments / results
+   * through the serialization boundary (`toJsonValueOrDiagnostic`) before
+   * constructing the record, so a non-serialisable value collapses to a bounded
+   * diagnostic string rather than an arbitrary object.
+   */
+  readonly input: JsonValue;
+  readonly output: JsonValue;
   readonly durationMs: number;
   readonly approvalStatus: ApprovalStatus;
   readonly timestamp: string;

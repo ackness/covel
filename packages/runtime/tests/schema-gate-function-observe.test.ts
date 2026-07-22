@@ -10,7 +10,8 @@
  * Pinned behaviours (via `executeTurn` → `executeFunctionRuntime`):
  *   1. envelope-v1 + value conforms → no warn, result unchanged.
  *   2. envelope-v1 + value violates schema → exactly one warn, result unchanged.
- *   3. legacy (no resultFormat) + violating return → no validation, no warn.
+ *   3. legacy + violating return → observe-only warn on the WHOLE object
+ *      (docs 02 §4.3), result unchanged.
  *   4. envelope-v1 + no output.schema declared → skipped, no warn.
  */
 
@@ -111,11 +112,12 @@ describe("function envelope-v1 schema observe (Step 0)", () => {
     expect(result.runtimeResults[0]?.output).toEqual(returned);
   });
 
-  it("does not validate legacy (default resultFormat) runtimes even with a violating return", async () => {
+  it("observes (warns once, result unchanged) legacy runtimes with a violating return", async () => {
+    // No resultFormat → legacy default. Task 4 (docs 02 §4.3) validates the
+    // WHOLE preserved object observe-only: a declared schema now warns on a
+    // mismatch but leaves the result byte-identical.
     const returned = { value: { wrong: "shape" } };
     const loaded: LoadedRuntime = {
-      // No resultFormat → legacy default. A declared schema must NOT trigger
-      // validation on the legacy path.
       manifest: manifest({ output: { schema: "./output.schema.json" } }),
       promptTemplate: "",
       outputSchema: { ...VALUE_SCHEMA },
@@ -128,8 +130,13 @@ describe("function envelope-v1 schema observe (Step 0)", () => {
       makeDeps(loaded),
     );
 
-    expect(warnSpy).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const message = String(warnSpy.mock.calls[0]?.[0]);
+    expect(message).toContain("fn-plugin/observer");
+    expect(message).toContain("did not match output.schema");
+    // Observe-only: the returned output is passed through untouched.
     expect(result.runtimeResults[0]?.status).toBe("success");
+    expect(result.runtimeResults[0]?.output).toEqual(returned);
   });
 
   it("skips when envelope-v1 is declared but no output.schema was loaded", async () => {

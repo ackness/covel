@@ -362,4 +362,16 @@ export type {
   JobStatusRecord,
 } from "./runtime-lifecycle.js";
 
+export type {
+  JsonSchema,
+  JobStatusEffect,
+  RuntimeDiagnostic,
+  ObservabilityEffects,
+  RuntimeEffects,
+  HandlerResult,
+  RuntimeResultBase,
+  RuntimeOutcome,
+  RuntimeResultV2,
+} from "./runtime-result-v2.js";
+
 export type { RuntimeExportRecord } from "./runtime-exports.js";

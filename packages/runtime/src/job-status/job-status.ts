@@ -17,6 +17,7 @@
 import type { DataStore } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type { JobStatusRecord, JobStatusState } from "@covel/shared";
+import { assertJsonValue } from "@covel/shared";
 import type { ProgressEffect, ProgressReporter } from "@covel/plugin-loader";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 
@@ -32,42 +33,6 @@ export interface ProgressReporterDeps {
   readonly progressScopeId: string;
   readonly pluginId: string;
   readonly runtimeId: string;
-}
-
-/**
- * Walk a value and throw if any node is not a JSON wire value. Cycle detection
- * is path-scoped (add on descent, remove on ascent), so a value shared by two
- * siblings is allowed — only a true back-reference is rejected.
- */
-function assertJsonValue(
-  value: unknown,
-  path: string,
-  seen: Set<object>,
-): void {
-  if (value === null) return;
-  const kind = typeof value;
-  if (kind === "string" || kind === "boolean") return;
-  if (kind === "number") {
-    if (!Number.isFinite(value)) {
-      throw new Error(`job data at ${path} is a non-finite number`);
-    }
-    return;
-  }
-  if (kind !== "object") {
-    // undefined, function, symbol, bigint
-    throw new Error(`job data at ${path} is not JSON-serialisable (${kind})`);
-  }
-  const obj = value as object;
-  if (seen.has(obj)) throw new Error(`job data at ${path} is circular`);
-  seen.add(obj);
-  if (Array.isArray(obj)) {
-    obj.forEach((v, i) => assertJsonValue(v, `${path}[${i}]`, seen));
-  } else {
-    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-      assertJsonValue(v, `${path}.${k}`, seen);
-    }
-  }
-  seen.delete(obj);
 }
 
 function buildRecord(
@@ -114,7 +79,7 @@ export function createProgressReporter(
   return {
     async report(effect: ProgressEffect): Promise<void> {
       if (effect.data !== undefined) {
-        assertJsonValue(effect.data, "data", new Set());
+        assertJsonValue(effect.data, "job data at data");
       }
       const record = buildRecord(deps, effect);
       const inserted = await appendAndEmit(deps, record);
