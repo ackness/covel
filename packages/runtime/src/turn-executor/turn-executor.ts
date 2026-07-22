@@ -528,6 +528,7 @@ async function executeTurnImpl(
       executeTurnFn: executeTurn,
       recursionDepth,
       executionId: executionContext.executionId,
+      executionContext,
       pluginSetupReady,
       ...(isSetupRuntime(manifest)
         ? {

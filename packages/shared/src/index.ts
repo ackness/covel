@@ -39,6 +39,7 @@ export {
   normalizeRuntimeManifest,
   stageForPriority,
   getRuntimeSpec,
+  hasIllegalDetachedContract,
 } from "./scheduling/normalize.js";
 export {
   deriveLegacyClockFields,

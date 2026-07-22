@@ -132,6 +132,35 @@ function buildAvailableEventsBlock(params: ContextBuildParams): string {
 }
 
 /**
+ * Reserved `<runtime-activation>` block (docs 02 §3.3): the canonical
+ * `{ source, detached, payload }` JSON, identical to what a function handler
+ * reads from `ctx.activation`. Framework-built inside segment 5, so a plugin
+ * template can neither override nor omit it. Absent when no activation was
+ * threaded (legacy callers) — keeps existing prompts byte-identical.
+ */
+function buildRuntimeActivationBlock(params: ContextBuildParams): string {
+  const activation = params.activation;
+  if (!activation) return "";
+  const json = JSON.stringify({
+    source: activation.source,
+    detached: activation.detached,
+    payload: activation.payload,
+  });
+  return `<runtime-activation>\n${escapeXmlContent(json)}\n</runtime-activation>`;
+}
+
+/**
+ * Reserved `<runtime-inputs>` block (docs 02 §3.2): the provenance-wrapped
+ * `inputs.<name>` slots as JSON, the same shape a function handler reads from
+ * `ctx.inputs`. Absent when no bindings resolved.
+ */
+function buildInputsBindingBlock(params: ContextBuildParams): string {
+  const slots = params.inputSlots;
+  if (!slots || Object.keys(slots).length === 0) return "";
+  return `<runtime-inputs>\n${escapeXmlContent(JSON.stringify(slots))}\n</runtime-inputs>`;
+}
+
+/**
  * Build the 10 prompt segments for a single runtime context.
  *
  * Internal helper — used by the exported segmented context builder so tests
@@ -198,7 +227,12 @@ function buildPromptSegmentsCommon(
   // inside model-authored or player-authored DATA, and the expansion result
   // was inserted raw, bypassing escaping entirely. The template is interpreted
   // exactly once, over the plugin's own PLUGIN.md body; injected data is data.
-  const upstreamInjects = [rawInjects, buildAvailableEventsBlock(params)]
+  const upstreamInjects = [
+    rawInjects,
+    buildAvailableEventsBlock(params),
+    buildInputsBindingBlock(params),
+    buildRuntimeActivationBlock(params),
+  ]
     .filter(Boolean)
     .join("\n");
 

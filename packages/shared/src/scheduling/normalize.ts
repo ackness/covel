@@ -183,3 +183,19 @@ export function getRuntimeSpec(
   specCache.set(manifest, spec);
   return spec;
 }
+
+/**
+ * Static detached-contract check (01 §4 rule 3): a spec whose declared entry is
+ * ALWAYS detached (`event` / `manual` trigger + `backgroundWhenDetached`) may
+ * not carry turn bindings — no activation of it could ever satisfy them, so the
+ * loader rejects it deterministically. The activation-scoped twin (a stage spec
+ * activated detached) is handled at run time, not here.
+ */
+export function hasIllegalDetachedContract(manifest: RuntimeManifest): boolean {
+  const spec = getRuntimeSpec(manifest);
+  const triggerType = spec.declaredTrigger.type;
+  const alwaysDetached =
+    (triggerType === "event" || triggerType === "manual") &&
+    spec.backgroundWhenDetached;
+  return alwaysDetached && Object.keys(spec.bindings).length > 0;
+}

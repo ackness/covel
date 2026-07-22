@@ -12,6 +12,9 @@ import type {
   NestedTurnResult,
   RecursiveCallDelta,
   JobStatusRecord,
+  InputSlot,
+  RuntimeActivation,
+  ExecutionContext,
 } from "@covel/shared";
 
 // ── Parsed PLUGIN.md ─────────────────────────────────────────────
@@ -467,6 +470,23 @@ export interface FunctionHandlerContext {
     readonly data: Readonly<Record<string, unknown>>;
   };
   /**
+   * Resolved same-execution input bindings (`inputs.<name>`), each wrapped in
+   * provenance (`InputSlot`). Populated for `stage` / `event` activations that
+   * pass the binding gate; a `manual` activation projects turn bindings away,
+   * leaving this empty (docs 02 §3.2, 01 §4). Read `ctx.inputs.<name>.value`
+   * (`one`) or `ctx.inputs.<name>.items[]` (`all`).
+   */
+  readonly inputs?: Readonly<Record<string, InputSlot>>;
+  /**
+   * Canonical activation for this run (docs 02 §3.3). `payload` is the
+   * `input.schema`-validated manual/event payload (`null` for a stage run).
+   * `ctx.manualPayload` / `ctx.triggerEvent.data` are compat aliases of the
+   * same value.
+   */
+  readonly activation?: RuntimeActivation;
+  /** Execution identity of this scheduling run (docs 01 §4). */
+  readonly execution?: ExecutionContext;
+  /**
    * Resolved player-authored plugin settings for THIS plugin, with
    * `manifest.userSettings[].default` applied for any key the player
    * hasn't overridden. Every key declared in the manifest is
@@ -617,6 +637,19 @@ export interface LoadedRuntime {
   readonly manifest: RuntimeManifest;
   readonly promptTemplate: string;
   readonly outputSchema?: Readonly<Record<string, unknown>>;
+  /**
+   * Activation-payload JSON Schema loaded from `input.schema` — enforced on
+   * `RuntimeActivation.payload` before dispatch for both function and agent
+   * runtimes (docs 02 §3.3).
+   */
+  readonly inputSchema?: Readonly<Record<string, unknown>>;
+  /**
+   * Per-binding `accepts` JSON Schemas, keyed by `inputs.<name>`. Validates the
+   * injected same-execution binding value (docs 02 §3.1).
+   */
+  readonly bindingAcceptsSchemas?: Readonly<
+    Record<string, Readonly<Record<string, unknown>>>
+  >;
   /** Handler function for `runtimeType: 'function'` runtimes. */
   readonly handler?: FunctionHandler;
   /** Guard function — runs before agent execution, returns `{ skip: true }` to bypass LLM. */

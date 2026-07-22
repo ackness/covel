@@ -4,6 +4,9 @@ import type {
   TurnInput,
   NestedTurnResult,
   RecursiveCallDelta,
+  RuntimeActivation,
+  ExecutionContext,
+  InputSlot,
 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import type { SuspensionRecord } from "@covel/store";
@@ -38,6 +41,33 @@ import { withUtilsTrace } from "./utils-trace.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { NARRATOR_PRIORITY } from "../schedule/scheduler.js";
 
+/** Runtimes already warned about bare `completedResults` access (once per process). */
+const warnedBareCompletedResults = new Set<string>();
+
+/**
+ * Wrap `completedResults` so the first property access from a handler logs one
+ * compat warning per runtime per process, then behaves exactly like the raw
+ * map. Steers authors toward `ctx.inputs` bindings without changing behaviour.
+ */
+function warnOnceCompletedResults<K, V>(
+  map: ReadonlyMap<K, V>,
+  runtimeId: string,
+): ReadonlyMap<K, V> {
+  return new Proxy(map, {
+    get(target, prop) {
+      if (!warnedBareCompletedResults.has(runtimeId)) {
+        warnedBareCompletedResults.add(runtimeId);
+        console.warn(
+          `[runtime] ${runtimeId}: ctx.completedResults is a compat shim — ` +
+            `migrate to declared \`inputs\` bindings (ctx.inputs).`,
+        );
+      }
+      const value = Reflect.get(target, prop, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  }) as ReadonlyMap<K, V>;
+}
+
 export interface ExecuteFunctionRuntimeOptions {
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
@@ -51,6 +81,12 @@ export interface ExecuteFunctionRuntimeOptions {
         readonly data: Readonly<Record<string, unknown>>;
       }
     | undefined;
+  /** Canonical activation for this run — exposed as `ctx.activation`. */
+  readonly activation?: RuntimeActivation;
+  /** Resolved provenance-wrapped input bindings — exposed as `ctx.inputs`. */
+  readonly inputs?: Readonly<Record<string, InputSlot>>;
+  /** Full execution identity — exposed as `ctx.execution`. */
+  readonly executionContext?: ExecutionContext;
   readonly createRecursiveCall: () => (
     delta: RecursiveCallDelta,
     opts?: { readonly reason?: string },
@@ -81,6 +117,9 @@ export async function executeFunctionRuntime({
   deps,
   hookPipeline,
   triggerEvent,
+  activation,
+  inputs,
+  executionContext,
   createRecursiveCall,
   recursionDepth,
   startTime,
@@ -342,7 +381,16 @@ export async function executeFunctionRuntime({
       playerMessage: input.playerMessage,
       locale: input.locale,
       store: revocable.store,
-      completedResults,
+      // Bare `completedResults` is a compat shim (docs 02 §3): the same-execution
+      // input surface is `ctx.inputs`. Wrap so first access warns once per
+      // runtime per process; behaviour is otherwise unchanged.
+      completedResults: warnOnceCompletedResults(
+        completedResults,
+        manifest.name,
+      ),
+      ...(inputs && Object.keys(inputs).length > 0 ? { inputs } : {}),
+      ...(activation ? { activation } : {}),
+      ...(executionContext ? { execution: executionContext } : {}),
       recursiveCall: revocable.recursiveCall,
       recursionDepth,
       ...(revocable.gateway ? { gateway: revocable.gateway } : {}),

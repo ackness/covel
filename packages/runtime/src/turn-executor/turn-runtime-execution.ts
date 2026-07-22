@@ -1,4 +1,5 @@
 import type {
+  ExecutionContext,
   NestedTurnResult,
   RecursiveCallDelta,
   RuntimeManifest,
@@ -12,8 +13,16 @@ import type {
   SessionContextSnapshot,
 } from "@covel/context";
 import { isSetupRuntime } from "@covel/shared";
+import { validateOutput } from "@covel/tools";
+import {
+  deriveActivation,
+  resolveInputBindings,
+} from "../schedule/input-bindings.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
-import { makeFailedResult, makeSkippedResult } from "./turn-executor-helpers.js";
+import {
+  makeFailedResult,
+  makeSkippedResult,
+} from "./turn-executor-helpers.js";
 import { runPostRuntimeHook } from "../hooks/wire-helpers.js";
 import { emitSubEvent } from "./turn-runtime-helpers.js";
 import { isRequiredUpstreamSatisfied } from "./turn-output-helpers.js";
@@ -87,6 +96,12 @@ export interface RuntimeInvocation {
   /** Execution identity — forwarded to the function-runtime `ctx.progress` scope. */
   readonly executionId?: string;
   /**
+   * Full execution identity for this scheduling run — exposed to function
+   * handlers as `ctx.execution` and to the agent activation segment. Absent
+   * for thin direct callers / tests.
+   */
+  readonly executionContext?: ExecutionContext;
+  /**
    * Generation of this setup runtime's mirror, for the attempt-ledger `started`
    * insert. Present only for setup runtimes; absent means "not a setup run".
    */
@@ -129,6 +144,7 @@ export async function executeOneRuntime(
     executeTurnFn,
     recursionDepth = 0,
     executionId,
+    executionContext,
   } = inv;
   const startTime = Date.now();
   const runId = crypto.randomUUID();
@@ -234,6 +250,40 @@ export async function executeOneRuntime(
         throw err;
       }
     };
+  };
+
+  // Emit a terminal `runtime.completed` for a pre-dispatch gate result
+  // (input.schema failure, binding gate skip) — no `runtime.started` fired yet,
+  // mirroring the upstream/session gates above.
+  const emitGateTerminal = async (
+    result: RuntimeResult,
+    reason?: string,
+  ): Promise<RuntimeResult> => {
+    try {
+      await deps.onRuntimeComplete?.({
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        status: result.status,
+        durationMs: result.durationMs,
+        ...(result.error ? { error: result.error } : {}),
+      });
+    } catch {
+      /* callback error must not kill runtime */
+    }
+    emitSubEvent(
+      deps.eventBus,
+      "runtime",
+      "runtime.completed",
+      input.sessionId,
+      {
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        status: result.status,
+        durationMs: result.durationMs,
+        ...(reason ? { reason } : {}),
+      },
+    );
+    return result;
   };
 
   try {
@@ -403,6 +453,61 @@ export async function executeOneRuntime(
       );
     }
 
+    // ── Activation, input.schema enforce, input bindings ──────────
+    // Derive this activation (stage / event / manual), enforce the activation
+    // payload against `input.schema`, then resolve `inputs` bindings into
+    // provenance slots (or a gate skip). Manual activations project turn
+    // bindings away; detached activations that still carry them are rejected.
+    const activation = deriveActivation(manifest, input, triggerEvent);
+
+    if (loaded.inputSchema) {
+      const validation = validateOutput(activation.payload, loaded.inputSchema);
+      if (!validation.valid) {
+        const error = `activation payload failed input.schema: ${(
+          validation.errors ?? ["unknown schema validation error"]
+        )
+          .slice(0, 3)
+          .join("; ")}`;
+        return emitGateTerminal(
+          makeFailedResult(manifest, input, runId, startTime, error),
+          "input-schema-invalid",
+        );
+      }
+    }
+
+    const binding = await resolveInputBindings({
+      manifest,
+      activation,
+      activeRuntimes,
+      completedResults,
+      acceptsSchemas: loaded.bindingAcceptsSchemas ?? {},
+      // ponytail: re-loads the producer only for its declared output.schema, and
+      // only when the consumer declares `accepts`. ES import is cached, so this
+      // is a cheap re-parse; add a per-turn schema cache if it ever shows up.
+      loadProducerSchema: async (producer) =>
+        (await deps.loadRuntime(producer, input.locale, input.sessionId))
+          ?.outputSchema,
+    });
+    for (const d of binding.diagnostics) {
+      if (d.severity === "error") {
+        console.warn(
+          `[turn-executor] ${manifest.name}: ${d.code} — ${d.message}`,
+        );
+      }
+    }
+    if (!binding.ok) {
+      return emitGateTerminal(
+        makeSkippedResult(
+          manifest,
+          input,
+          binding.skipReason,
+          "framework:inputBinding",
+        ),
+        binding.skipReason,
+      );
+    }
+    const inputSlots = binding.slots;
+
     if (manifest.runtimeType === "function") {
       return await executeFunctionRuntime({
         manifest,
@@ -412,6 +517,9 @@ export async function executeOneRuntime(
         deps,
         hookPipeline,
         triggerEvent,
+        activation,
+        inputs: inputSlots,
+        ...(executionContext ? { executionContext } : {}),
         createRecursiveCall,
         recursionDepth,
         startTime,
@@ -452,6 +560,8 @@ export async function executeOneRuntime(
       workingMemory,
       coreMemoryBlocks,
       sessionContext,
+      activation,
+      inputs: inputSlots,
       startTime,
       runId,
     });

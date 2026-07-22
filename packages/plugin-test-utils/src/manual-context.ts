@@ -6,6 +6,11 @@ import type {
   FunctionHandlerContext,
   ProgressReporter,
 } from "@covel/plugin-loader";
+import type {
+  InputSlot,
+  RuntimeActivation,
+  ExecutionContext,
+} from "@covel/shared";
 
 export interface ManualFunctionContextOptions {
   readonly pluginId: string;
@@ -17,6 +22,12 @@ export interface ManualFunctionContextOptions {
   readonly store?: unknown;
   readonly completedResults?: ReadonlyMap<string, unknown>;
   readonly manualPayload?: Readonly<Record<string, unknown>>;
+  /** Provenance-wrapped input bindings exposed as `ctx.inputs`. */
+  readonly inputs?: Readonly<Record<string, InputSlot>>;
+  /** Canonical activation exposed as `ctx.activation`. */
+  readonly activation?: RuntimeActivation;
+  /** Execution identity exposed as `ctx.execution`. */
+  readonly execution?: ExecutionContext;
   /** Wire the real-time progress channel for tests exercising `ctx.progress`. */
   readonly progress?: ProgressReporter;
 }
@@ -31,6 +42,9 @@ export function makeManualFunctionContext({
   store = {},
   completedResults = new Map(),
   manualPayload = {},
+  inputs,
+  activation,
+  execution,
   progress,
 }: ManualFunctionContextOptions): FunctionHandlerContext {
   return {
@@ -47,6 +61,9 @@ export function makeManualFunctionContext({
     },
     recursionDepth: 0,
     manualPayload,
+    ...(inputs ? { inputs } : {}),
+    ...(activation ? { activation } : {}),
+    ...(execution ? { execution } : {}),
     ...(progress ? { progress } : {}),
   };
 }

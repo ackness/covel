@@ -8,6 +8,8 @@ import type {
   RuntimeManifest,
   RuntimeResult,
   TurnInput,
+  InputSlot,
+  RuntimeActivation,
 } from "@covel/shared";
 import type { SessionContextStore } from "./session-context-store.js";
 import type { BudgetOptions, TokenEstimator } from "./budget.js";
@@ -225,6 +227,19 @@ export interface ContextBuildParams {
    * `<available-events>` block is rendered.
    */
   readonly eventCatalogText?: string;
+  /**
+   * Resolved same-execution input bindings (`inputs.<name>`), provenance-
+   * wrapped. Rendered into segment 5 as a framework-only `<runtime-inputs>`
+   * block (JSON shape identical to function `ctx.inputs`) so an agent runtime
+   * sees the same bound values a function handler would. Absent → no block.
+   */
+  readonly inputSlots?: Readonly<Record<string, InputSlot>>;
+  /**
+   * Canonical activation for this run. Rendered into segment 5 as the reserved
+   * `<runtime-activation>` block (`{ source, detached, payload }` JSON) that a
+   * plugin template cannot override or omit (docs 02 §3.3). Absent → no block.
+   */
+  readonly activation?: RuntimeActivation;
 }
 
 // ── Session Context Snapshot ─────────────────────────────────────

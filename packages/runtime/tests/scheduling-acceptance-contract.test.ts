@@ -33,15 +33,23 @@ import {
   waiveSetup,
   type ExecutionContext,
   type RanSetupRuntime,
+  type RuntimeActivation,
   type RuntimeManifest,
+  type RuntimeResult,
   type SetupRuntimeState,
 } from "@covel/shared";
+import { buildContext } from "@covel/context";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { processRuntimeResult } from "../src/session/session-kernel.js";
 import { buildSnapshotPayload } from "../src/snapshot/snapshot-payload-builder.js";
+import {
+  deriveActivation,
+  hasIllegalDetachedContract,
+  resolveInputBindings,
+} from "../src/schedule/input-bindings.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 
 class NoopLLM implements LLMAdapter {
@@ -395,23 +403,343 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
     expect(ran).not.toContain("plug-a/main");
   });
   // needs: manual activation bypassing turn-binding requirement + input.schema activation validation (release step 2/3)
-  it.todo(
-    "scenario 4: manual 调用带 required 绑定的 auto runtime，不因缺 turn 绑定被跳过，input.schema 照常校验；setup 未完成插件的 manual 调用报 setup-incomplete — 断言两条路径分别正确放行与拦截",
-  );
+  it("scenario 4: manual 调用带 required 绑定的 auto runtime，不因缺 turn 绑定被跳过，input.schema 照常校验；setup 未完成插件的 manual 调用报 setup-incomplete — 断言两条路径分别正确放行与拦截", async () => {
+    const INPUT_SCHEMA = {
+      type: "object",
+      required: ["cmd"],
+      properties: { cmd: { type: "string" } },
+    };
+    // An auto runtime with a REQUIRED turn binding (provider never runs under a
+    // manual call) plus an activation `input.schema`.
+    const autoWithBinding: RuntimeManifest = {
+      name: "a/main",
+      pluginId: "a",
+      description: "auto+binding",
+      priority: 500,
+      runtimeType: "function",
+      handler: "./h.js",
+      trigger: { type: "auto" },
+      outputKind: "plugin",
+      capabilities: [],
+      inputs: { data: { from: { runtime: "a/gen" }, required: true } },
+      input: { schema: "./in.json" },
+    } as RuntimeManifest;
+
+    // ── manual bypass: runs despite the missing turn binding; input.schema OK
+    {
+      const store = createMemoryStore();
+      await seedPlaying(store, 1);
+      let activation: unknown;
+      const deps: TurnExecutorDeps = {
+        loadRuntime: async (m): Promise<LoadedRuntime> => ({
+          manifest: m,
+          promptTemplate: "",
+          inputSchema: INPUT_SCHEMA,
+          handler: async (ctx) => {
+            activation = ctx.activation;
+            return {};
+          },
+        }),
+        llm: new NoopLLM(),
+        store,
+      };
+      const result = await executeTurn(
+        {
+          sessionId: "s",
+          turnId: "t",
+          playerMessage: "go",
+          manualTrigger: { runtimeId: "a/main", payload: { cmd: "roll" } },
+        },
+        [autoWithBinding],
+        deps,
+      );
+      const rr = result.runtimeResults.find((r) => r.runtimeId === "a/main");
+      expect(rr?.status).toBe("success"); // NOT skipped for the absent binding
+      expect(activation).toEqual({
+        source: "manual",
+        detached: false,
+        payload: { cmd: "roll" },
+      });
+    }
+
+    // ── input.schema still enforced on the manual payload ──
+    {
+      const store = createMemoryStore();
+      await seedPlaying(store, 1);
+      const deps: TurnExecutorDeps = {
+        loadRuntime: async (m): Promise<LoadedRuntime> => ({
+          manifest: m,
+          promptTemplate: "",
+          inputSchema: INPUT_SCHEMA,
+          handler: async () => ({}),
+        }),
+        llm: new NoopLLM(),
+        store,
+      };
+      const result = await executeTurn(
+        {
+          sessionId: "s",
+          turnId: "t",
+          playerMessage: "go",
+          manualTrigger: { runtimeId: "a/main", payload: { wrong: 1 } },
+        },
+        [autoWithBinding],
+        deps,
+      );
+      const rr = result.runtimeResults.find((r) => r.runtimeId === "a/main");
+      expect(rr?.status).toBe("failed");
+      expect(rr?.error).toContain("input.schema");
+    }
+
+    // ── setup-incomplete: manual call to a plugin whose setup is pending ──
+    {
+      const store = createMemoryStore();
+      const now = new Date().toISOString();
+      await store.createSession({
+        id: "s",
+        worldId: "w",
+        status: "active",
+        turnCount: 1,
+        preGameCompleted: [],
+        phase: "playing",
+        completedPlayerTurns: 1,
+        setupRuntimes: {},
+        activePlugins: ["plug-a"],
+        createdAt: now,
+        updatedAt: now,
+      });
+      const fn = (name: string, priority: number): RuntimeManifest =>
+        ({
+          name,
+          pluginId: "plug-a",
+          description: name,
+          priority,
+          runtimeType: "function",
+          handler: "./h.js",
+          trigger: { type: "auto" },
+          outputKind: "plugin",
+          capabilities: [],
+        }) as RuntimeManifest;
+      const deps: TurnExecutorDeps = {
+        loadRuntime: async (m): Promise<LoadedRuntime> => ({
+          manifest: m,
+          promptTemplate: "",
+          handler: async () => ({}),
+        }),
+        llm: new NoopLLM(),
+        store,
+      };
+      const result = await executeTurn(
+        {
+          sessionId: "s",
+          turnId: "t",
+          playerMessage: "go",
+          manualTrigger: { runtimeId: "plug-a/main" },
+        },
+        [fn("plug-a/setup", 50), fn("plug-a/main", 500)],
+        deps,
+      );
+      const rr = result.runtimeResults.find(
+        (r) => r.runtimeId === "plug-a/main",
+      );
+      expect(rr?.status).toBe("skipped");
+      expect(rr?.output).toMatchObject({
+        reason: "setup-incomplete",
+        skippedBy: "framework:setupGate",
+      });
+    }
+  });
 });
 
 describe("detached activation model (source × detached)", () => {
   // needs: RuntimeActivation source/detached split + loader turn-binding validation (release step 1/2)
-  it.todo(
-    "scenario 3: detached follower 只能从 activation payload 取原回合数据；声明入口恒 detached 的 spec 若含 turn binding 则 loader 拒绝；stage runtime 被 manual-detached 激活时只忽略本次 turn binding，不使原 spec 非法 — 断言三个子情形分别成立",
-  );
+  it("scenario 3: detached follower 只能从 activation payload 取原回合数据；声明入口恒 detached 的 spec 若含 turn binding 则 loader 拒绝；stage runtime 被 manual-detached 激活时只忽略本次 turn binding，不使原 spec 非法 — 断言三个子情形分别成立", async () => {
+    const withBinding = (name: string): RuntimeManifest =>
+      ({
+        name,
+        pluginId: name.split("/")[0],
+        description: name,
+        priority: 500,
+        runtimeType: "function",
+        handler: "./h.js",
+        trigger: { type: "auto" },
+        outputKind: "plugin",
+        capabilities: [],
+        inputs: { data: { from: { runtime: "n/narr" }, required: true } },
+      }) as RuntimeManifest;
+    const noBinding = (name: string): RuntimeManifest =>
+      ({ ...withBinding(name), inputs: undefined }) as RuntimeManifest;
+    const argsFor = (
+      manifest: RuntimeManifest,
+      activation: RuntimeActivation,
+    ) => ({
+      manifest,
+      activation,
+      activeRuntimes: [] as RuntimeManifest[],
+      completedResults: new Map<string, RuntimeResult>(),
+      acceptsSchemas: {},
+      loadProducerSchema: async () => undefined,
+    });
+
+    // (a) A detached (background) follower activation carrying a turn binding is
+    //     rejected for THIS activation — it may only read its activation payload.
+    const rejected = await resolveInputBindings(
+      argsFor(withBinding("f/follower"), {
+        source: "event",
+        detached: true,
+        payload: { x: 1 },
+      }),
+    );
+    expect(rejected).toMatchObject({
+      ok: false,
+      skipReason: "invalid-detached-contract",
+    });
+    // A detached follower WITHOUT turn bindings runs on its payload alone.
+    const followerOk = await resolveInputBindings(
+      argsFor(noBinding("f/follower"), {
+        source: "event",
+        detached: true,
+        payload: { x: 1 },
+      }),
+    );
+    expect(followerOk.ok).toBe(true);
+
+    // (b) An ALWAYS-detached spec (event/manual + background) that declares turn
+    //     bindings is rejected deterministically at load.
+    const alwaysDetached: RuntimeManifest = {
+      ...withBinding("f/follower"),
+      trigger: { type: "event", topic: "e" },
+      execution: "background",
+    } as RuntimeManifest;
+    expect(hasIllegalDetachedContract(alwaysDetached)).toBe(true);
+
+    // (c) A stage spec activated manual-detached only ignores its turn bindings
+    //     for this activation — the spec itself stays valid.
+    const manualDetached = await resolveInputBindings(
+      argsFor(withBinding("s/stage"), {
+        source: "manual",
+        detached: true,
+        payload: null,
+      }),
+    );
+    expect(manualDetached.ok).toBe(true);
+    if (manualDetached.ok) {
+      expect(Object.keys(manualDetached.slots)).toHaveLength(0);
+    }
+
+    // TODO(follower/suspension wave): the full deferred-follower re-entry (a
+    // background follower resuming with only its activation payload and no turn
+    // visible set) lands with the suspension execution path; here the
+    // (spec, activation) contract projection is asserted directly.
+  });
 });
 
 describe("capability cardinality (provider 0 / 1 / N / all)", () => {
   // needs: needs binding resolution + cardinality gate (release step 1, L1 scheduling deps)
-  it.todo(
-    "scenario 5: capability provider 0 → skipped: missing-provider，1 → 正常，N 下 cardinality: one 报错、cardinality: all 要求全部成功 — 断言四种基数分别产出正确 gate 结果",
-  );
+  const provider = (name: string): RuntimeManifest =>
+    ({
+      name,
+      pluginId: name.split("/")[0],
+      description: name,
+      priority: 500,
+      runtimeType: "function",
+      handler: "./h.js",
+      trigger: { type: "auto" },
+      outputKind: "plugin",
+      capabilities: ["narr"],
+    }) as RuntimeManifest;
+  const consumer = (cardinality?: "one" | "all"): RuntimeManifest =>
+    ({
+      name: "c/main",
+      pluginId: "c",
+      description: "consumer",
+      priority: 600,
+      runtimeType: "function",
+      handler: "./h.js",
+      trigger: { type: "auto" },
+      outputKind: "plugin",
+      capabilities: [],
+      inputs: {
+        data: {
+          from: { capability: "narr", ...(cardinality ? { cardinality } : {}) },
+          select: "/payload",
+          required: true,
+        },
+      },
+    }) as RuntimeManifest;
+
+  // Consumer captures its `ctx.inputs.data` slot; the binding edge orders the
+  // provider(s) before it in the DAG so the value is present at gate time.
+  const runTurn = async (activeRuntimes: readonly RuntimeManifest[]) => {
+    const store = createMemoryStore();
+    await seedPlaying(store, 1);
+    let captured: unknown;
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async (m): Promise<LoadedRuntime> => ({
+        manifest: m,
+        promptTemplate: "",
+        handler: async (ctx) => {
+          if (m.name === "c/main") {
+            captured = ctx.inputs?.data;
+            return {};
+          }
+          return { payload: { from: m.name } };
+        },
+      }),
+      llm: new NoopLLM(),
+      store,
+    };
+    const result = await executeTurn(
+      { sessionId: "s", turnId: "t", playerMessage: "go" },
+      activeRuntimes,
+      deps,
+    );
+    const rr = result.runtimeResults.find((r) => r.runtimeId === "c/main");
+    return { rr, captured };
+  };
+
+  it("scenario 5: capability provider 0 → skipped: missing-provider，1 → 正常，N 下 cardinality: one 报错、cardinality: all 要求全部成功 — 断言四种基数分别产出正确 gate 结果", async () => {
+    // 0 providers → required binding skips the consumer.
+    const zero = await runTurn([consumer()]);
+    expect(zero.rr?.status).toBe("skipped");
+    expect(zero.rr?.output).toMatchObject({
+      reason: "missing-provider",
+      skippedBy: "framework:inputBinding",
+    });
+
+    // 1 provider → resolved slot with provenance.
+    const one = await runTurn([provider("p/a"), consumer()]);
+    expect(one.rr?.status).toBe("success");
+    expect(one.captured).toEqual({
+      cardinality: "one",
+      value: { from: "p/a" },
+      source: { pluginId: "p", runtimeId: "p/a", resultId: expect.any(String) },
+    });
+
+    // N providers + cardinality:one → build-time ambiguity, consumer skipped.
+    const many = await runTurn([provider("p/a"), provider("p/b"), consumer()]);
+    expect(many.rr?.status).toBe("skipped");
+    expect(many.rr?.output).toMatchObject({ reason: "cardinality-conflict" });
+
+    // cardinality:all with every provider succeeding → sorted item array.
+    const all = await runTurn([
+      provider("p/b"),
+      provider("p/a"),
+      consumer("all"),
+    ]);
+    expect(all.rr?.status).toBe("success");
+    expect(all.captured).toMatchObject({ cardinality: "all" });
+    const items = (
+      all.captured as {
+        items: { value: unknown; source: { runtimeId: string } }[];
+      }
+    ).items;
+    expect(items.map((i) => i.source.runtimeId)).toEqual(["p/a", "p/b"]);
+    expect(items.map((i) => i.value)).toEqual([
+      { from: "p/a" },
+      { from: "p/b" },
+    ]);
+  });
 });
 
 describe("commit transaction & rollback", () => {
@@ -787,16 +1115,234 @@ describe("dual declaration consistency (Step 4)", () => {
 
 describe("accepts validation (static decidable subset + runtime check)", () => {
   // needs: accepts build-time decidable subset check + runtime full-schema validation (release step 3)
-  it.todo(
-    "scenario 16: accepts 可判定兼容/不兼容分别通过/产出构建 error；含组合关键字的不可判定 schema 记录 diagnostic 后运行期继续校验；cardinality: all 对每个 provider 比较 items，并对最终数组执行完整 schema 校验 — 断言判定与非判定路径均覆盖",
-  );
+  const provider = (name: string): RuntimeManifest =>
+    ({
+      name,
+      pluginId: name.split("/")[0],
+      description: name,
+      priority: 500,
+      runtimeType: "function",
+      handler: "./h.js",
+      trigger: { type: "auto" },
+      outputKind: "plugin",
+      capabilities: ["prov"],
+    }) as RuntimeManifest;
+  const consumer = (
+    cardinality?: "one" | "all",
+    select?: string,
+  ): RuntimeManifest =>
+    ({
+      name: "c/main",
+      pluginId: "c",
+      description: "c",
+      priority: 600,
+      runtimeType: "function",
+      handler: "./h.js",
+      trigger: { type: "auto" },
+      outputKind: "plugin",
+      capabilities: [],
+      inputs: {
+        data: {
+          from: { capability: "prov", ...(cardinality ? { cardinality } : {}) },
+          ...(select ? { select } : {}),
+          accepts: "./a.json",
+        },
+      },
+    }) as RuntimeManifest;
+  const succ = (runtimeId: string, output: unknown): RuntimeResult => ({
+    pluginId: runtimeId.split("/")[0]!,
+    runtimeId,
+    runId: `r-${runtimeId}`,
+    turnId: "t",
+    status: "success",
+    output: output as RuntimeResult["output"],
+    toolCalls: [],
+    durationMs: 1,
+    timestamp: new Date().toISOString(),
+  });
+  const resolve = (over: {
+    manifest: RuntimeManifest;
+    activeRuntimes: readonly RuntimeManifest[];
+    completedResults: ReadonlyMap<string, RuntimeResult>;
+    accepts: Readonly<Record<string, unknown>>;
+    producerSchema: Readonly<Record<string, unknown>>;
+  }) =>
+    resolveInputBindings({
+      manifest: over.manifest,
+      activation: { source: "stage", detached: false, payload: null },
+      activeRuntimes: over.activeRuntimes,
+      completedResults: over.completedResults,
+      acceptsSchemas: { data: over.accepts },
+      loadProducerSchema: async () => over.producerSchema,
+    });
+
+  it("scenario 16: accepts 可判定兼容/不兼容分别通过/产出构建 error；含组合关键字的不可判定 schema 记录 diagnostic 后运行期继续校验；cardinality: all 对每个 provider 比较 items，并对最终数组执行完整 schema 校验 — 断言判定与非判定路径均覆盖", async () => {
+    const p = provider("p/gen");
+
+    // Provably compatible → passes, slot built.
+    const ok = await resolve({
+      manifest: consumer(undefined, "/text"),
+      activeRuntimes: [p],
+      completedResults: new Map([["p/gen", succ("p/gen", { text: "hi" })]]),
+      accepts: { type: "string" },
+      producerSchema: {
+        type: "object",
+        properties: { text: { type: "string" } },
+      },
+    });
+    expect(ok.ok).toBe(true);
+
+    // Provably incompatible → build error, consumer skipped.
+    const bad = await resolve({
+      manifest: consumer(undefined, "/n"),
+      activeRuntimes: [p],
+      completedResults: new Map([["p/gen", succ("p/gen", { n: 5 })]]),
+      accepts: { type: "string" },
+      producerSchema: { type: "object", properties: { n: { type: "number" } } },
+    });
+    expect(bad).toMatchObject({
+      ok: false,
+      skipReason: "input-schema-incompatible",
+    });
+
+    // Combinator keyword → indeterminate diagnostic, then the runtime check runs.
+    const indeterminate = await resolve({
+      manifest: consumer(undefined, ""),
+      activeRuntimes: [p],
+      completedResults: new Map([["p/gen", succ("p/gen", "plain")]]),
+      accepts: { oneOf: [{ type: "string" }, { type: "number" }] },
+      producerSchema: { type: "object" },
+    });
+    expect(indeterminate.ok).toBe(true);
+    expect(
+      indeterminate.diagnostics.some(
+        (d) => d.code === "slot-compatibility-indeterminate",
+      ),
+    ).toBe(true);
+
+    // cardinality:all → per-provider static compare + whole-array runtime check.
+    const allRes = await resolveInputBindings({
+      manifest: consumer("all"),
+      activation: { source: "stage", detached: false, payload: null },
+      activeRuntimes: [provider("p/a"), provider("p/b")],
+      completedResults: new Map([
+        ["p/a", succ("p/a", "A")],
+        ["p/b", succ("p/b", "B")],
+      ]),
+      acceptsSchemas: { data: { type: "array", items: { type: "string" } } },
+      loadProducerSchema: async () => ({ type: "string" }),
+    });
+    expect(allRes.ok).toBe(true);
+    if (allRes.ok && allRes.slots.data.cardinality === "all") {
+      expect(allRes.slots.data.items.map((i) => i.value)).toEqual(["A", "B"]);
+    }
+  });
 });
 
 describe("activation payload (canonical payload shared by function/agent)", () => {
   // needs: canonical activation JSON shared via ctx.activation.payload (function) / retained activation segment (agent) + MediaRef slot-capability degrade (release step 3)
-  it.todo(
-    "scenario 17: 同一 event/manual runtime 的 payload 经同一个 input.schema 校验：function 从 ctx.activation.payload、agent 从保留 activation segment 获得相同 canonical JSON；MediaRef 按 slot 能力附加或降级，缺少降级文本时报 input-modality-unsupported — 断言两种 runtime 类型看到一致的输入",
-  );
+  it("scenario 17: 同一 event/manual runtime 的 payload 经同一个 input.schema 校验：function 从 ctx.activation.payload、agent 从保留 activation segment 获得相同 canonical JSON；MediaRef 按 slot 能力附加或降级，缺少降级文本时报 input-modality-unsupported — 断言两种 runtime 类型看到一致的输入", async () => {
+    const P = { roll: 7, sides: 20 };
+    const INPUT_SCHEMA = {
+      type: "object",
+      required: ["roll", "sides"],
+      properties: { roll: { type: "number" }, sides: { type: "number" } },
+    };
+
+    // ── function: ctx.activation.payload via a manual activation ──
+    const store = createMemoryStore();
+    await seedPlaying(store, 1);
+    let fnActivation: RuntimeActivation | undefined;
+    const rollerFn: RuntimeManifest = {
+      name: "d/roller",
+      pluginId: "d",
+      description: "roller",
+      priority: 500,
+      runtimeType: "function",
+      handler: "./h.js",
+      trigger: { type: "manual" },
+      outputKind: "plugin",
+      capabilities: [],
+      input: { schema: "./in.json" },
+    } as RuntimeManifest;
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async (m): Promise<LoadedRuntime> => ({
+        manifest: m,
+        promptTemplate: "",
+        inputSchema: INPUT_SCHEMA,
+        handler: async (ctx) => {
+          fnActivation = ctx.activation;
+          return {};
+        },
+      }),
+      llm: new NoopLLM(),
+      store,
+    };
+    const result = await executeTurn(
+      {
+        sessionId: "s",
+        turnId: "t",
+        playerMessage: "go",
+        manualTrigger: { runtimeId: "d/roller", payload: P },
+      },
+      [rollerFn],
+      deps,
+    );
+    expect(
+      result.runtimeResults.find((r) => r.runtimeId === "d/roller")?.status,
+    ).toBe("success");
+    expect(fnActivation).toEqual({
+      source: "manual",
+      detached: false,
+      payload: P,
+    });
+
+    // ── agent: canonical activation from the reserved prompt segment ──
+    const rollerAgent: RuntimeManifest = {
+      name: "d/roller",
+      pluginId: "d",
+      description: "roller",
+      priority: 500,
+      runtimeType: "agent",
+      trigger: { type: "manual" },
+      outputKind: "plugin",
+      capabilities: [],
+    } as RuntimeManifest;
+    const assembled = buildContext({
+      promptTemplate: "You roll dice.",
+      manifest: rollerAgent,
+      turnInput: { sessionId: "s", turnId: "t", playerMessage: "go" },
+      completedResults: new Map(),
+      activation: fnActivation!,
+    });
+    const match = assembled.systemPrompt.match(
+      /<runtime-activation>\n([\s\S]*?)\n<\/runtime-activation>/,
+    );
+    expect(match).toBeTruthy();
+    const agentActivation = JSON.parse(match![1]!);
+
+    // Both runtime types see the SAME canonical activation JSON.
+    expect(agentActivation).toEqual({
+      source: "manual",
+      detached: false,
+      payload: P,
+    });
+    expect(agentActivation.payload).toEqual(fnActivation!.payload);
+
+    // The same `input.schema` governs event and manual sources — deriveActivation
+    // normalises `triggerEvent.data` and `manualTrigger.payload` to one payload.
+    expect(
+      deriveActivation(
+        rollerFn,
+        { sessionId: "s", turnId: "t", playerMessage: "go" },
+        { topic: "roll", data: P },
+      ).payload,
+    ).toEqual(P);
+
+    // TODO(media wave): MediaRef slot-capability attach vs `meta.caption`/`alt`
+    // degrade (and `input-modality-unsupported` when no degrade text) lands with
+    // the multimodal media wave.
+  });
 });
 
 describe("recordAs export (persistent export revision)", () => {

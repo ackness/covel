@@ -64,6 +64,19 @@ function collectDependencies(
       }
     }
   }
+  // `inputs` bindings imply ordering edges too: `required: true` → needs(turn),
+  // `false` → after — both need the producer scheduled first. Runtime/capability
+  // resolution mirrors upstreamRequired above.
+  for (const binding of Object.values(getRuntimeSpec(manifest).bindings)) {
+    if ("runtime" in binding.from) {
+      if (binding.from.runtime.length > 0) deps.add(binding.from.runtime);
+    } else {
+      for (const name of capabilityProviders.get(binding.from.capability) ??
+        []) {
+        deps.add(name);
+      }
+    }
+  }
   return [...deps];
 }
 

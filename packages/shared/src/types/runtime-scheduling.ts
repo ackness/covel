@@ -97,6 +97,32 @@ export interface RuntimeBinding {
 }
 
 /**
+ * Provenance wrapper for an injected binding value (02 §3.2). `accepts`
+ * validates the business value BEFORE this wrapper (`value` for `one`,
+ * `items.map(i => i.value)` for `all`) — metadata never attaches to the bare
+ * value, so a value object that itself carries a `source` field cannot clash.
+ */
+export interface InputSource {
+  readonly pluginId: string;
+  readonly runtimeId: string;
+  readonly resultId: string;
+}
+
+export type InputSlot<T extends JsonValue = JsonValue> =
+  | {
+      readonly cardinality: "one";
+      readonly value: T;
+      readonly source: InputSource;
+    }
+  | {
+      readonly cardinality: "all";
+      readonly items: readonly {
+        readonly value: T;
+        readonly source: InputSource;
+      }[];
+    };
+
+/**
  * Cross-execution consumption of a producer's persisted `recordAs` export
  * (declared inside `input.inject` with `kind: runtime-export`). The consumer
  * reads the latest revision committed before this execution started.

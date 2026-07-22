@@ -330,6 +330,8 @@ export type {
   DependencyRef,
   BindingSource,
   RuntimeBinding,
+  InputSource,
+  InputSlot,
   RuntimeExportBinding,
   EffectResource,
   EffectsDecl,

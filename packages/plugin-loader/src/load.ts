@@ -6,8 +6,16 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import matter from "gray-matter";
-import { pluginRelationsSchema } from "@covel/shared";
-import type { PluginRelations, PluginTag, PluginType } from "@covel/shared";
+import {
+  pluginRelationsSchema,
+  hasIllegalDetachedContract,
+} from "@covel/shared";
+import type {
+  PluginRelations,
+  PluginTag,
+  PluginType,
+  RuntimeManifest,
+} from "@covel/shared";
 import type {
   PluginDiscoveryResult,
   PluginSummary,
@@ -311,6 +319,58 @@ async function loadOutputSchema(
 }
 
 /**
+ * Load a declared runtime-dir-relative JSON Schema (no convention fallback).
+ * Used for `input.schema` (activation payload) and `inputs.<name>.accepts`
+ * (binding value). Same containment + warn-on-missing contract as
+ * {@link loadOutputSchema} — a bad reference degrades to `undefined`, never
+ * aborts the load.
+ */
+async function loadDeclaredSchema(
+  runtimeDir: string,
+  pluginRoot: string,
+  declaredPath: string,
+  label: string,
+): Promise<Readonly<Record<string, unknown>> | undefined> {
+  const fullPath = path.resolve(runtimeDir, declaredPath);
+  await assertInsideRoot(pluginRoot, fullPath, label);
+  if (!(await fileExists(fullPath))) {
+    console.warn(
+      `[plugin-loader] declared ${label} not found: ${declaredPath}`,
+    );
+    return undefined;
+  }
+  return JSON.parse(await fs.readFile(fullPath, "utf-8")) as Record<
+    string,
+    unknown
+  >;
+}
+
+/**
+ * Load every `inputs.<name>.accepts` schema declared on the manifest, keyed by
+ * binding name. Absent / missing files are simply omitted (the runtime Ajv
+ * check only runs where a schema resolved).
+ */
+async function loadBindingAcceptsSchemas(
+  runtimeDir: string,
+  pluginRoot: string,
+  inputs: RuntimeManifest["inputs"],
+): Promise<Record<string, Readonly<Record<string, unknown>>> | undefined> {
+  if (!inputs) return undefined;
+  const out: Record<string, Readonly<Record<string, unknown>>> = {};
+  for (const [name, binding] of Object.entries(inputs)) {
+    if (!binding.accepts) continue;
+    const schema = await loadDeclaredSchema(
+      runtimeDir,
+      pluginRoot,
+      binding.accepts,
+      `binding accepts schema (${name})`,
+    );
+    if (schema) out[name] = schema;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
  * Level 1.5: Load only a runtime's manifest + UI specs — no handler / guard
  * imports. UI specs are data (JSON files, or a recorded component path), so
  * this path never executes plugin JS and is safe for untrusted (community)
@@ -345,10 +405,34 @@ export async function loadRuntime(
   const runtimeDir = resolveRuntimeDir(discovery, runtimeName);
   const parsed = await parsePluginMdForLocale(runtimeDir, locale);
 
+  // Deterministic loader rejection (01 §4): a recurrently-detached spec that
+  // still declares turn bindings can never satisfy them.
+  if (hasIllegalDetachedContract(parsed.manifest)) {
+    throw new Error(
+      `Runtime "${parsed.manifest.name}" is always-detached (event/manual + background) ` +
+        `but declares turn bindings (inputs) — no activation can satisfy them.`,
+    );
+  }
+
   const outputSchema = await loadOutputSchema(
     runtimeDir,
     discovery.rootPath,
     parsed.manifest.output?.schema,
+  );
+
+  const inputSchema = parsed.manifest.input?.schema
+    ? await loadDeclaredSchema(
+        runtimeDir,
+        discovery.rootPath,
+        parsed.manifest.input.schema,
+        "input schema",
+      )
+    : undefined;
+
+  const bindingAcceptsSchemas = await loadBindingAcceptsSchemas(
+    runtimeDir,
+    discovery.rootPath,
+    parsed.manifest.inputs,
   );
 
   // Load function handler for runtimeType: 'function'
@@ -385,6 +469,8 @@ export async function loadRuntime(
     manifest: parsed.manifest,
     promptTemplate: parsed.promptTemplate,
     outputSchema,
+    ...(inputSchema ? { inputSchema } : {}),
+    ...(bindingAcceptsSchemas ? { bindingAcceptsSchemas } : {}),
     handler,
     guard,
     uiSpecs,

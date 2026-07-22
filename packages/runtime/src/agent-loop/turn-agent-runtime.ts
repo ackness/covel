@@ -1,4 +1,10 @@
-import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
+import type {
+  RuntimeManifest,
+  RuntimeResult,
+  TurnInput,
+  RuntimeActivation,
+  InputSlot,
+} from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import {
   buildContext,
@@ -64,6 +70,10 @@ export interface ExecuteAgentRuntimeOptions {
     readonly import("@covel/context").WorkingMemoryEntry[] | undefined;
   readonly coreMemoryBlocks: readonly CoreMemoryBlockView[] | undefined;
   readonly sessionContext: SessionContextSnapshot | undefined;
+  /** Canonical activation — rendered into the reserved prompt segment. */
+  readonly activation?: RuntimeActivation;
+  /** Resolved input bindings — rendered into the reserved inputs prompt block. */
+  readonly inputs?: Readonly<Record<string, InputSlot>>;
   readonly startTime: number;
   readonly runId: string;
 }
@@ -83,6 +93,8 @@ export async function executeAgentRuntime({
   workingMemory,
   coreMemoryBlocks,
   sessionContext,
+  activation,
+  inputs,
   startTime,
   runId,
 }: ExecuteAgentRuntimeOptions): Promise<RuntimeResult> {
@@ -196,6 +208,8 @@ export async function executeAgentRuntime({
     ...(sessionContext ? { sessionContext } : {}),
     ...(agentUserSettings ? { userSettings: agentUserSettings } : {}),
     ...(eventCatalogText ? { eventCatalogText } : {}),
+    ...(activation ? { activation } : {}),
+    ...(inputs && Object.keys(inputs).length > 0 ? { inputSlots: inputs } : {}),
     ...(budgetEligible
       ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
       : {}),

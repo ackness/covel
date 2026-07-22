@@ -152,8 +152,8 @@ export interface InputConfig {
   /**
    * Runtime-dir-relative JSON Schema path validating this runtime's
    * activation payload (manual RPC payload / event payload). Function and
-   * agent runtimes consume the same validated canonical payload. Declared
-   * but not yet enforced — enforcement lands with the I/O-contract step.
+   * agent runtimes consume the same validated canonical payload; enforced
+   * on `RuntimeActivation.payload` before dispatch.
    */
   readonly schema?: string;
   readonly inject?: readonly InputInjectDecl[];
@@ -637,7 +637,9 @@ export interface RuntimeManifest {
   readonly needs?: readonly import("./runtime-scheduling.js").DependencyRef[];
   /**
    * Typed same-execution data bindings. `required: true` implies
-   * `needs(turn)`, `false` implies `after`. Declared but not yet consumed.
+   * `needs(turn)`, `false` implies `after`. Resolved into provenance-wrapped
+   * `ctx.inputs` slots (function) / a reserved prompt block (agent), with a
+   * turn gate on required bindings.
    */
   readonly inputs?: Readonly<
     Record<string, import("./runtime-scheduling.js").RuntimeBinding>
