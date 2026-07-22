@@ -83,6 +83,8 @@ export interface RuntimeInvocation {
   readonly executeTurnFn: ExecuteTurnFn;
   /** Internal current recursion depth. Top-level callers omit it (defaults 0). */
   readonly recursionDepth?: number;
+  /** Execution identity — forwarded to the function-runtime `ctx.progress` scope. */
+  readonly executionId?: string;
   /**
    *  sink for runtime results produced by nested `ctx.recursiveCall`
    * executions. The top-level executeTurn wires this to a collector so the
@@ -114,6 +116,7 @@ export async function executeOneRuntime(
     turnOptions,
     executeTurnFn,
     recursionDepth = 0,
+    executionId,
   } = inv;
   const startTime = Date.now();
   const runId = crypto.randomUUID();
@@ -332,6 +335,7 @@ export async function executeOneRuntime(
         startTime,
         runId,
         timeoutMs,
+        executionId,
       });
     }
 

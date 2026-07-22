@@ -103,6 +103,16 @@
 
 `plugin-data-set` / `plugin-data-set-batch` / DELETE `/plugin-data/...` 等所有写路径均会触发此事件。`operation` 字段为 `'set'` 或 `'delete'`（删除时 `value` 为 `null`），由 `wrapStoreWithPluginDataEvents` 在 store 层统一拦截，前端可实时响应插件状态变更。
 
+### 作业进度事件（job-status，实验性）
+
+| 事件类型             | 方向 | 描述                     | 负载（完整 `JobStatusRecord`）                                                                                       |
+| -------------------- | ---- | ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `job-status.updated` | S→C  | 长任务作业进度（追加式） | `{ sessionId, progressScopeId, pluginId, runtimeId, jobId, state, progress?, message?, data?, sequence, createdAt }` |
+
+长耗时的 function runtime（媒体生成等）在 finalizer 提交之前，通过 `ctx.progress.report({ jobId, state, progress?, message?, data?, sequence })` 实时上报进度。这是 effects 隔离的**唯一实时例外**：上报写入内核 job-status 存储（追加式、按 `(sessionId, progressScopeId, pluginId, runtimeId, jobId, sequence)` 幂等），成功后立即发出本事件并经 `/actions` SSE 转发；它不写游戏态、不满足 binding/gate、不随领域事务回滚。`state` 取值为 `queued | running | progress | waiting-input | succeeded | failed | cancelled`；身份字段全部由内核注入，插件只提供作业业务字段。
+
+> 兼容期说明：本通道与旧的 `plugin-data` `_jobs` 占位路径并存，待后者退役后统一。
+
 ### 媒体资产事件
 
 图像生成插件的完成态输出使用 `assetGenerations[]`。runtime normalizer 会把每一项转成 `asset.generate` proposal,并在 commit 后写入 trace / SSE 视图。

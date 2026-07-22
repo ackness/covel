@@ -419,6 +419,7 @@ async function executeTurnImpl(
       turnOptions: options,
       executeTurnFn: executeTurn,
       recursionDepth,
+      executionId: executionContext.executionId,
       collectNestedResults: (results) => {
         nestedRuntimeResults.push(...results);
       },

@@ -2,7 +2,10 @@
  * Function handler context factory for direct handler unit tests.
  */
 
-import type { FunctionHandlerContext } from "@covel/plugin-loader";
+import type {
+  FunctionHandlerContext,
+  ProgressReporter,
+} from "@covel/plugin-loader";
 
 export interface ManualFunctionContextOptions {
   readonly pluginId: string;
@@ -14,6 +17,8 @@ export interface ManualFunctionContextOptions {
   readonly store?: unknown;
   readonly completedResults?: ReadonlyMap<string, unknown>;
   readonly manualPayload?: Readonly<Record<string, unknown>>;
+  /** Wire the real-time progress channel for tests exercising `ctx.progress`. */
+  readonly progress?: ProgressReporter;
 }
 
 export function makeManualFunctionContext({
@@ -26,6 +31,7 @@ export function makeManualFunctionContext({
   store = {},
   completedResults = new Map(),
   manualPayload = {},
+  progress,
 }: ManualFunctionContextOptions): FunctionHandlerContext {
   return {
     sessionId,
@@ -41,5 +47,6 @@ export function makeManualFunctionContext({
     },
     recursionDepth: 0,
     manualPayload,
+    ...(progress ? { progress } : {}),
   };
 }

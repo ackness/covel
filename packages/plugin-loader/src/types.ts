@@ -11,6 +11,7 @@ import type {
   RuntimeManifest,
   NestedTurnResult,
   RecursiveCallDelta,
+  JobStatusRecord,
 } from "@covel/shared";
 
 // ── Parsed PLUGIN.md ─────────────────────────────────────────────
@@ -493,6 +494,14 @@ export interface FunctionHandlerContext {
    */
   readonly logger?: PluginLogger;
   /**
+   * Real-time progress channel for long-running work (media generation, etc.).
+   * Reports append to the kernel job-status stream and emit an SSE event before
+   * the turn's finalizer runs — the ONE effect a handler may surface live. The
+   * durable domain output still flows through the return value / proposals.
+   * Absent when the executor was constructed without a `store` dep.
+   */
+  readonly progress?: ProgressReporter;
+  /**
    * Player abort signal for THIS turn. Fires when the player stops the turn
    * mid-flight. Handlers running long provider work (image generation, TTS,
    * bespoke `fetch`) should thread it into their calls so an abort cuts the
@@ -569,6 +578,33 @@ export interface PluginLogger {
   info(message: string, meta?: Record<string, unknown>): Promise<void>;
   warn(message: string, meta?: Record<string, unknown>): Promise<void>;
   error(message: string, meta?: Record<string, unknown>): Promise<void>;
+}
+
+/**
+ * Job business fields a handler supplies to `ctx.progress.report`. The kernel
+ * injects the identity (session / scope / plugin / runtime) and timestamp, so a
+ * handler cannot forge another plugin's or runtime's job.
+ */
+export type ProgressEffect = Omit<
+  JobStatusRecord,
+  "sessionId" | "progressScopeId" | "pluginId" | "runtimeId" | "createdAt"
+>;
+
+/**
+ * The sole real-time channel exposed to a long-running function runtime.
+ * Progress reports append to the kernel job-status store and emit an SSE event
+ * immediately — they do NOT write gameplay state and do NOT roll back with the
+ * domain transaction. All domain writes still flow through the handler's return
+ * value / proposals.
+ */
+export interface ProgressReporter {
+  /**
+   * Append one progress event. Append-only + idempotent on `sequence`: a
+   * duplicate/older sequence for the same job is silently dropped. `data` is
+   * validated against the JSON wire boundary and rejected with a throw on
+   * non-serialisable values (undefined / function / circular / non-finite).
+   */
+  report(effect: ProgressEffect): Promise<void>;
 }
 
 /** Function handler signature for `runtimeType: 'function'` runtimes. */

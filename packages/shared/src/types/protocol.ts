@@ -12,6 +12,8 @@
  * command/capability abstraction was never implemented and has been removed.
  */
 
+import type { JobStatusRecord } from "./runtime-lifecycle.js";
+
 // ── Covel Event Union (server → client) — single source of truth ─
 //
 // `CovelEvent` is the ONE authoritative discriminated union for every
@@ -361,7 +363,14 @@ export type CovelEvent =
   // assembled context did not fit the slot budget and history had to be dropped,
   // so /debug can explain a turn that lost context instead of silently losing it.
   // Trace-only (forward:false) — the player-facing stream is unaffected.
-  | { readonly type: "context.pruned"; readonly payload: CovelEventPayload };
+  | { readonly type: "context.pruned"; readonly payload: CovelEventPayload }
+  // Kernel job-status channel (append-only). Emitted whenever a long-running
+  // function runtime reports progress via `ctx.progress` — the sole real-time
+  // exception to effects isolation. Forwarded to the action stream so media
+  // generation progress reaches the client live. Payload is the full record.
+  // Experimental / compat-period: coexists with the legacy `plugin-data` `_jobs`
+  // placeholder path until that is retired.
+  | { readonly type: "job-status.updated"; readonly payload: JobStatusRecord };
 
 /** The closed vocabulary of every server→client event name. */
 export type CovelEventType = CovelEvent["type"];
@@ -453,6 +462,9 @@ export const COVEL_EVENT_META = {
   "utils.fetch.failed": { forwardToActionStream: false },
   // Prompt-budget prune trace — /debug only.
   "context.pruned": { forwardToActionStream: false },
+  // Kernel job-status progress — forwarded live so media-generation progress
+  // reaches the client without waiting for the domain commit.
+  "job-status.updated": { forwardToActionStream: true },
 } satisfies Record<CovelEventType, CovelEventMeta>;
 
 /**

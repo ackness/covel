@@ -49,6 +49,8 @@ export type {
   ResolvedSlotForPlugin,
   PluginDataWriter,
   PluginLogger,
+  ProgressReporter,
+  ProgressEffect,
   FunctionStoreView,
   ImagesContext,
   ImageGenerateInput,

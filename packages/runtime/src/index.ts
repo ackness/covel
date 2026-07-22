@@ -33,6 +33,16 @@ export type { TurnControl } from "./turn-executor/turn-control.js";
 export { createRuntimeMediaContext } from "./function-runtime/runtime-media-context.js";
 export type { MediaStoreLike } from "./function-runtime/runtime-media-context.js";
 
+// ── Job status (kernel-owned, append-only progress channel) ─────
+export {
+  createProgressReporter,
+  finalizeJobStatuses,
+} from "./job-status/job-status.js";
+export type {
+  ProgressReporterDeps,
+  ExecutionJobOutcome,
+} from "./job-status/job-status.js";
+
 // ── LLM Adapter ─────────────────────────────────────────────────
 export type {
   LLMAdapter,

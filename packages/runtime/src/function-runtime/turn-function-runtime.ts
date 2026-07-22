@@ -19,6 +19,7 @@ import {
 import { createRuntimeMediaContext } from "./runtime-media-context.js";
 import { createRuntimeImagesContext } from "./runtime-images-context.js";
 import { createRuntimeSpeechContext } from "./runtime-speech-context.js";
+import { createProgressReporter } from "../job-status/job-status.js";
 import { runPostRuntimeHook } from "../hooks/wire-helpers.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import {
@@ -61,6 +62,13 @@ export interface ExecuteFunctionRuntimeOptions {
    * runtimes have no retry loop, so this is a plain deadline.
    */
   readonly timeoutMs: number;
+  /**
+   * Execution identity of this scheduling run — the default `progressScopeId`
+   * for `ctx.progress`. Absent for entry points that don't thread an
+   * `ExecutionContext` (thin test harnesses); the reporter falls back to the
+   * turnId scope in that case.
+   */
+  readonly executionId?: string;
 }
 
 export async function executeFunctionRuntime({
@@ -76,6 +84,7 @@ export async function executeFunctionRuntime({
   startTime,
   runId,
   timeoutMs,
+  executionId,
 }: ExecuteFunctionRuntimeOptions): Promise<RuntimeResult> {
   // Emit start for function runtimes (no guard to check)
   try {
@@ -156,6 +165,19 @@ export async function executeFunctionRuntime({
     : undefined;
   const loggerHandle = deps.store
     ? createPluginLogger(deps.store, helperCtx)
+    : undefined;
+  // Real-time job-status channel. Scoped to this execution (progressScopeId =
+  // executionId) so a job cannot be spoofed across executions; falls back to
+  // the turnId scope when no ExecutionContext was threaded (test harnesses).
+  const progressHandle = deps.store
+    ? createProgressReporter({
+        store: deps.store,
+        eventBus: deps.eventBus,
+        sessionId: input.sessionId,
+        progressScopeId: executionId ?? input.turnId,
+        pluginId: manifest.pluginId,
+        runtimeId: manifest.name,
+      })
     : undefined;
   const mediaHandle = deps.mediaStore
     ? createRuntimeMediaContext(deps.mediaStore, deps.utils, {
@@ -281,6 +303,12 @@ export async function executeFunctionRuntime({
     assetProgress: assetProgress
       ? makeRevocableFn(assetProgress, isRevoked, "assetProgress")
       : undefined,
+    // Progress reports append to the store and emit SSE — side-effecting, so
+    // revoked with the rest once the deadline race settles. The finalizer uses
+    // the raw (un-revoked) reporter, not this handle.
+    progress: progressHandle
+      ? makeRevocableCapability(progressHandle, isRevoked, "progress")
+      : undefined,
   };
   // ponytail: revocation is checked at call entry, so an effect already
   // in flight when the deadline fires still lands. Closing that needs the
@@ -326,6 +354,7 @@ export async function executeFunctionRuntime({
         : {}),
       ...(revocable.pluginData ? { pluginData: revocable.pluginData } : {}),
       ...(revocable.logger ? { logger: revocable.logger } : {}),
+      ...(revocable.progress ? { progress: revocable.progress } : {}),
       signal: handlerAbort.signal,
     });
     output = await Promise.race([
