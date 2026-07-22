@@ -11,6 +11,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
 import { text } from "@/components/world/editor-helpers.js";
+import { stageLabel } from "@/lib/stage-label.js";
 import { formatSlotLabel } from "@/hooks/use-slot-config.js";
 import { useRuntimeModelSlotOverride } from "./runtime-model-slot-override.js";
 import { SetupRecovery } from "./setup-recovery.js";
@@ -97,12 +98,12 @@ export function PluginItem({
               )}
             </Badge>
           )}
-          {mainRuntime && (
+          {mainRuntime && stageLabel(mainRuntime.stage, t) && (
             <Badge
               variant="secondary"
               className="ui-chip text-[9px] px-1.5 py-0 h-4 shrink-0"
             >
-              P{mainRuntime.priority}
+              {stageLabel(mainRuntime.stage, t)}
             </Badge>
           )}
           {isLocked && (

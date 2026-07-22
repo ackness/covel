@@ -10,6 +10,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
 import { resolveI18n } from "@/lib/catalog/helpers.js";
+import { stageLabel } from "@/lib/stage-label.js";
 import { useRuntimeModelSlotOverride } from "./runtime-model-slot-override.js";
 import { SetupRecovery } from "./setup-recovery.js";
 import {
@@ -106,12 +107,12 @@ export function SessionPluginItem({
           <span className="text-xs font-medium truncate flex-1 min-w-0">
             {displayName}
           </span>
-          {plugin.priority !== undefined && (
+          {stageLabel(plugin.stage, t) && (
             <Badge
               variant="secondary"
               className="ui-chip text-[9px] px-1.5 py-0 h-4 shrink-0"
             >
-              P{plugin.priority}
+              {stageLabel(plugin.stage, t)}
             </Badge>
           )}
           <Badge

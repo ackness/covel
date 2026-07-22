@@ -42,14 +42,15 @@ describe("plugin flow routes", () => {
     };
 
     expect(body.segments.map((segment) => segment.id)).toEqual([
-      "start",
-      "pre-game",
-      "priority-band-pre-narrator",
-      "priority-band-narrator",
-      "priority-band-post-narrator",
+      "setup",
+      "pre-turn",
+      "narrative",
+      "post-turn",
+      "audit",
+      "event-manual",
     ]);
-    // Pre-Game band aligned to 1-99 to match scheduler edges.
-    expect(body.segments[1]?.rangeLabel).toBe("1-99");
+    // Setup stage folds the old 0-99 band.
+    expect(body.segments[0]?.rangeLabel).toBe("0-99");
     expect(
       body.steps.some(
         (step) => step.runtimeId === "narrator" && step.isStoryRuntime,
@@ -57,20 +58,25 @@ describe("plugin flow routes", () => {
     ).toBe(true);
     expect(
       body.steps.some(
-        (step) => step.runtimeId === "pregame" && step.segmentId === "pre-game",
+        (step) => step.runtimeId === "pregame" && step.segmentId === "setup",
       ),
     ).toBe(true);
     expect(
       body.steps.some(
-        (step) =>
-          step.priority === 500 && step.segmentId === "priority-band-narrator",
+        (step) => step.priority === 500 && step.segmentId === "narrative",
       ),
     ).toBe(true);
     expect(
       body.steps.some(
+        (step) => step.priority > 500 && step.segmentId === "post-turn",
+      ),
+    ).toBe(true);
+    // Event runtimes are stage-less → grouped under the event-manual bucket.
+    expect(
+      body.steps.some(
         (step) =>
-          step.priority > 500 &&
-          step.segmentId === "priority-band-post-narrator",
+          step.runtimeId === "scene-stage/resolver" &&
+          step.segmentId === "event-manual",
       ),
     ).toBe(true);
   });

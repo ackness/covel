@@ -5,6 +5,7 @@
  * through session-kernel.ts unless a caller intentionally needs this boundary.
  */
 
+import type { Stage } from "@covel/shared";
 import type { KernelStore } from "../commit/session-commit-pipeline.js";
 
 export interface TraceRecorder {
@@ -16,6 +17,9 @@ export interface TraceRecorder {
   runtimeStarted(info: {
     runtimeId: string;
     pluginId: string;
+    /** Named stage (setup/pre-turn/…); absent for event/manual/UI-only. */
+    stage?: Stage;
+    /** Kept until Step 6; `stage` supersedes it as the readable order axis. */
     priority: number | undefined;
   }): Promise<void>;
   runtimeCompleted(info: {

@@ -5,6 +5,7 @@ import type {
   NestedTurnResult,
   RecursiveCallDelta,
 } from "@covel/shared";
+import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { withPendingProposals } from "@covel/tools";
 import type { HookPipeline } from "../hooks/pipeline.js";
@@ -24,7 +25,6 @@ import {
   isTrustedPluginSource,
 } from "../turn-executor/turn-runtime-helpers.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
-import { NARRATOR_PRIORITY } from "../schedule/scheduler.js";
 
 export interface ExecuteAgentGuardOptions {
   readonly manifest: RuntimeManifest;
@@ -329,7 +329,7 @@ export async function executeAgentGuard({
           role: "assistant",
           name: manifest.name,
           content: guardOutput.narrativeOutput as string,
-          order: manifest.priority ?? NARRATOR_PRIORITY,
+          order: stageMessageOrder(getRuntimeSpec(manifest).stage),
           createdAt: new Date().toISOString(),
         });
       }

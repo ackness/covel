@@ -567,5 +567,8 @@ export interface SnapshotPluginStatus {
   readonly id: string;
   readonly name: string;
   readonly isActive: boolean;
+  /** Named stage; absent for event/manual/UI-only plugins. */
+  readonly stage?: import("./runtime-scheduling.js").Stage;
+  /** Kept until Step 6; `stage` is the replacement order axis. */
   readonly priority: number;
 }

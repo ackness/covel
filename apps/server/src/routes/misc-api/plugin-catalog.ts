@@ -1,4 +1,5 @@
 import { getPluginTrustInfo, type PluginRegistry } from "@covel/plugin-loader";
+import { getRuntimeSpec } from "@covel/shared";
 import { loadLivePluginMaps } from "./live-plugin-maps.js";
 import { normalizeRuntimeTrigger } from "./shared.js";
 
@@ -39,6 +40,9 @@ export async function buildPackagesResponse(registry: PluginRegistry): Promise<{
     const runtimes = liveManifests.map((m) => ({
       id: m.manifest.name,
       kind: m.manifest.runtimeType ?? "agent",
+      ...(getRuntimeSpec(m.manifest).stage !== undefined
+        ? { stage: getRuntimeSpec(m.manifest).stage }
+        : {}),
       priority: m.manifest.priority ?? 500,
       trigger: normalizeRuntimeTrigger(m.manifest.trigger),
       ...(m.manifest.model ? { model: m.manifest.model } : {}),

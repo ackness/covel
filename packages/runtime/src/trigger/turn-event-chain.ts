@@ -1,7 +1,6 @@
 import type { RuntimeManifest, RuntimeResult, TurnResult } from "@covel/shared";
 import { getRuntimeSpec } from "@covel/shared";
 import { executeParallel } from "../schedule/parallel-executor.js";
-import { NARRATOR_PRIORITY } from "../schedule/scheduler.js";
 import { shouldTrigger } from "./trigger.js";
 import type { TriggerContext } from "../types.js";
 
@@ -173,11 +172,12 @@ export async function runEventChain({
     });
     if (nextBatch.length === 0) break;
 
-    const ordered = [...nextBatch].sort(
-      (a, b) =>
-        (getRuntimeSpec(a).legacyOrder ?? NARRATOR_PRIORITY) -
-        (getRuntimeSpec(b).legacyOrder ?? NARRATOR_PRIORITY),
-    );
+    // Event subscribers have no dependency-edge mechanism between them (and no
+    // stage — event runtimes are stage-less), so name is the stable tie-break.
+    // Replaces the old `legacyOrder ?? 500` priority sort. Bundled plugins have
+    // a single subscriber per topic, so no fan-out batch ever contains two
+    // runtimes whose relative order is observable.
+    const ordered = [...nextBatch].sort((a, b) => a.name.localeCompare(b.name));
 
     const currentDepthEvents = new Map(emittedEvents);
     const newEvents = new Map<string, Record<string, unknown>>();

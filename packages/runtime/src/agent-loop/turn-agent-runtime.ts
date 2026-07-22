@@ -5,6 +5,7 @@ import type {
   RuntimeActivation,
   InputSlot,
 } from "@covel/shared";
+import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import {
   buildContext,
@@ -39,7 +40,6 @@ import {
 } from "../trace/runtime-telemetry.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { runAgentToolLoop } from "./turn-agent-tool-loop.js";
-import { NARRATOR_PRIORITY } from "../schedule/scheduler.js";
 
 export interface ExecuteAgentRuntimeOptions {
   readonly manifest: RuntimeManifest;
@@ -104,10 +104,12 @@ export async function executeAgentRuntime({
   // ── Agent runtime: LLM pipeline ─────────────────────────────
   // Emit start AFTER guard passes (or no guard exists) — prevents
   // frontend showing an infinite spinner for guard-skipped runtimes.
+  const stage = getRuntimeSpec(manifest).stage;
   try {
     await deps.onRuntimeStart?.({
       runtimeId: manifest.name,
       pluginId: manifest.pluginId,
+      ...(stage !== undefined ? { stage } : {}),
       priority: manifest.priority,
     });
   } catch {
@@ -116,6 +118,7 @@ export async function executeAgentRuntime({
   emitSubEvent(deps.eventBus, "runtime", "runtime.started", input.sessionId, {
     runtimeId: manifest.name,
     pluginId: manifest.pluginId,
+    ...(stage !== undefined ? { stage } : {}),
     priority: manifest.priority,
   });
 
@@ -472,7 +475,7 @@ export async function executeAgentRuntime({
       role: "assistant",
       name: manifest.name,
       content: narrativeContent,
-      order: manifest.priority ?? NARRATOR_PRIORITY,
+      order: stageMessageOrder(getRuntimeSpec(manifest).stage),
       pendingInput,
       ui,
       createdAt: new Date().toISOString(),

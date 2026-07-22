@@ -3,13 +3,13 @@ import {
   loadPluginManifest,
   loadPluginSummary,
 } from "@covel/plugin-loader";
-import type { I18nText } from "@covel/shared";
+import type { I18nText, Stage } from "@covel/shared";
+import { getRuntimeSpec, stageRank } from "@covel/shared";
 import { resolve } from "node:path";
 import {
   docPathFromAbsolute,
   isStoryRuntime,
   resolvePluginsDirs,
-  segmentForPriority,
   textValue,
   uiSlotsOf,
   type FlowSegmentId,
@@ -34,6 +34,7 @@ export async function buildPluginFlowResponse() {
     runtimeName: string;
     description: string;
     pluginType: string;
+    stage?: Stage;
     priority: number;
     segmentId: FlowSegmentId;
     runtimeType: string;
@@ -61,6 +62,9 @@ export async function buildPluginFlowResponse() {
     docPath: string;
     isStoryRuntime: boolean;
   }> = [];
+  // Stage-driven segments (player-facing plain-language labels). `minPriority` /
+  // `maxPriority` describe the legacy band each stage folds from — kept for
+  // reference; the frontend groups by `segmentId`, not the range.
   const flowSegments: Array<{
     id: FlowSegmentId;
     labelText: I18nText;
@@ -69,39 +73,46 @@ export async function buildPluginFlowResponse() {
     maxPriority: number;
   }> = [
     {
-      id: "start",
-      labelText: { "zh-CN": "开始游戏", "en-US": "Start" },
-      rangeLabel: "0",
+      id: "setup",
+      labelText: { "zh-CN": "开场准备", "en-US": "Setup" },
+      rangeLabel: "0-99",
       minPriority: 0,
-      maxPriority: 0,
-    },
-    {
-      id: "pre-game",
-      labelText: { "zh-CN": "开局前", "en-US": "Pre-Game" },
-      rangeLabel: "1-99",
-      minPriority: 1,
       maxPriority: 99,
     },
     {
-      id: "priority-band-pre-narrator",
-      labelText: { "zh-CN": "叙事前", "en-US": "Pre-Narrator" },
+      id: "pre-turn",
+      labelText: { "zh-CN": "叙事前", "en-US": "Pre-Turn" },
       rangeLabel: "100-499",
       minPriority: 100,
       maxPriority: 499,
     },
     {
-      id: "priority-band-narrator",
-      labelText: { "zh-CN": "叙事器", "en-US": "Narrator" },
+      id: "narrative",
+      labelText: { "zh-CN": "叙事", "en-US": "Narrative" },
       rangeLabel: "500",
       minPriority: 500,
       maxPriority: 500,
     },
     {
-      id: "priority-band-post-narrator",
-      labelText: { "zh-CN": "叙事后", "en-US": "Post-Narrator" },
-      rangeLabel: "501-1000",
+      id: "post-turn",
+      labelText: { "zh-CN": "叙事后", "en-US": "Post-Turn" },
+      rangeLabel: "501-999",
       minPriority: 501,
+      maxPriority: 999,
+    },
+    {
+      id: "audit",
+      labelText: { "zh-CN": "审计", "en-US": "Audit" },
+      rangeLabel: "1000",
+      minPriority: 1000,
       maxPriority: 1000,
+    },
+    {
+      id: "event-manual",
+      labelText: { "zh-CN": "事件 / 手动", "en-US": "Event & Manual" },
+      rangeLabel: "—",
+      minPriority: Number.MAX_SAFE_INTEGER,
+      maxPriority: Number.MAX_SAFE_INTEGER,
     },
   ];
 
@@ -133,6 +144,10 @@ export async function buildPluginFlowResponse() {
         ? (runtimeId.split("/").at(-1) ?? runtimeId)
         : runtimeId;
       const priority = manifest.priority ?? 500;
+      const stage = getRuntimeSpec(manifest).stage;
+      // Staged runtimes map 1:1 to their stage segment; stage-less ones
+      // (event / manual) group under the dedicated "event-manual" bucket.
+      const segmentId: FlowSegmentId = stage ?? "event-manual";
       const mdPath =
         discovery.pluginMdPaths[index] ?? discovery.pluginMdPaths[0];
       const discoveryRoot = resolve(discovery.rootPath, "..");
@@ -146,8 +161,9 @@ export async function buildPluginFlowResponse() {
         runtimeName,
         description: textValue(manifest.description),
         pluginType: summary.pluginType,
+        ...(stage !== undefined ? { stage } : {}),
         priority,
-        segmentId: segmentForPriority(priority),
+        segmentId,
         runtimeType: manifest.runtimeType ?? "agent",
         outputKind: manifest.outputKind ?? "plugin",
         model: manifest.model,
@@ -191,8 +207,11 @@ export async function buildPluginFlowResponse() {
     }
   }
 
+  // Order by (stage, name): earlier stages first, stage-less runtimes last.
   steps.sort(
-    (a, b) => a.priority - b.priority || a.runtimeId.localeCompare(b.runtimeId),
+    (a, b) =>
+      stageRank(a.stage) - stageRank(b.stage) ||
+      a.runtimeId.localeCompare(b.runtimeId),
   );
   plugins.sort((a, b) => a.id.localeCompare(b.id));
 

@@ -739,7 +739,7 @@ export interface RuntimeManifest {
    *
    * The content supports template interpolation (`{{ player.xxx }}`, etc.)
    * identical to the plugin body. Multiple active plugins' notes are merged
-   * in priority order.
+   * in (stage, name) order.
    */
   readonly authorsNote?: AuthorsNoteDecl;
   /**

@@ -191,7 +191,7 @@ export function PluginShowcase() {
           <p className="md:col-span-5 text-base md:text-lg text-muted-foreground font-light leading-relaxed">
             {t(
               "home.plugins.subtitle",
-              "Every plugin declares a priority band, a trigger mode, and a tool whitelist. The kernel discovers them by capability — never by ID.",
+              "Every plugin declares an execution stage, a trigger mode, and a tool whitelist. The kernel discovers them by capability — never by ID.",
             )}
           </p>
         </div>

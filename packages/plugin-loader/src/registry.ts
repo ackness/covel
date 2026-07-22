@@ -5,6 +5,7 @@
 import {
   getRuntimeSpec,
   pluginDataSchemaMapSchema,
+  stageRank,
   type PluginDataSchemaDecl,
   type RuntimeManifest,
 } from "@covel/shared";
@@ -221,13 +222,14 @@ export function createPluginRegistry(
         }
       }
 
-      // UI-only plugins (priority === undefined) sort to the end —
-      // they are never scheduled but can appear in listings.
-      return manifests.sort(
-        (a, b) =>
-          (getRuntimeSpec(a).legacyOrder ?? Infinity) -
-          (getRuntimeSpec(b).legacyOrder ?? Infinity),
-      );
+      // Sort by (stage, name). Stage-less runtimes (event / manual / UI-only)
+      // rank last — they are never band-scheduled but can appear in listings.
+      // event-directory's first-wins topic resolution consumes this order.
+      return manifests.sort((a, b) => {
+        const ra = stageRank(getRuntimeSpec(a).stage);
+        const rb = stageRank(getRuntimeSpec(b).stage);
+        return ra - rb || a.name.localeCompare(b.name);
+      });
     },
   };
 }

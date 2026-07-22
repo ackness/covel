@@ -12,8 +12,10 @@
  * `upstreamRequired[]`, performs a Kahn-style topological sort, and returns
  * "levels" — each level is a set of runtimes whose dependencies have all
  * completed and may therefore run concurrently. Within a level, runtimes are
- * ordered by `priority` ascending so traces stay readable and so ties break
- * deterministically.
+ * ordered by name so traces stay readable and ties break deterministically.
+ * A level runs via `executeParallel` (Promise.allSettled), so the intra-level
+ * order is cosmetic — it does not drive the committed narrative order, which
+ * follows real completion time (`createdAt`).
  *
  * Dependencies that point to runtimes outside `activeRuntimes` are ignored
  * (the scheduler only knows about runtimes in scope). Cycles are reported via
@@ -82,8 +84,9 @@ function collectDependencies(
 
 /**
  * Topologically sort `runtimes` into levels. Returns one group per level;
- * each group keeps the synthetic `priority` field populated for telemetry,
- * using the lowest priority inside that level.
+ * each group carries its level index in the synthetic `priority` field
+ * (telemetry only — nothing schedules on it; kept as a number until Step 6
+ * removes the field).
  */
 export function scheduleByDag(
   runtimes: readonly RuntimeManifest[],
@@ -121,7 +124,8 @@ export function scheduleByDag(
   }
 
   const levels: ScheduledGroup[] = [];
-  // Ready = runtimes with inDegree 0, sorted by priority asc then name asc.
+  // Ready = runtimes with inDegree 0, sorted by name (the deterministic
+  // tie-break — a level runs in parallel, so this is trace order only).
   const pickReady = (): RuntimeManifest[] => {
     const ready: RuntimeManifest[] = [];
     for (const [name, deg] of inDegree) {
@@ -130,12 +134,7 @@ export function scheduleByDag(
         if (rt) ready.push(rt);
       }
     }
-    ready.sort((a, b) => {
-      const pa = getRuntimeSpec(a).legacyOrder ?? 0;
-      const pb = getRuntimeSpec(b).legacyOrder ?? 0;
-      if (pa !== pb) return pa - pb;
-      return a.name.localeCompare(b.name);
-    });
+    ready.sort((a, b) => a.name.localeCompare(b.name));
     return ready;
   };
 
@@ -153,8 +152,8 @@ export function scheduleByDag(
       };
     }
 
-    const priority = getRuntimeSpec(ready[0]!).legacyOrder ?? 0;
-    levels.push({ priority, runtimes: ready });
+    // Synthetic telemetry value = level index (no priority read).
+    levels.push({ priority: levels.length, runtimes: ready });
 
     for (const rt of ready) {
       inDegree.delete(rt.name);

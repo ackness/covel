@@ -1,4 +1,4 @@
-import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import type { RuntimeManifest, Stage, TurnInput } from "@covel/shared";
 import type {
   LoadedRuntime,
   PluginRuntimeGateway,
@@ -122,6 +122,9 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
   readonly onRuntimeStart?: (info: {
     runtimeId: string;
     pluginId: string;
+    /** Named stage; absent for event/manual/UI-only runtimes. */
+    stage?: Stage;
+    /** Kept until Step 6; `stage` supersedes it as the readable order axis. */
     priority: number | undefined;
   }) => Promise<void>;
 

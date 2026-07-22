@@ -161,9 +161,9 @@ export interface ContextBuildParams {
   /**
    * Manifests whose `authorsNote` / `postHistory` feed segments 9 and 10.
    *
-   * The builder merges every declaration it finds here in `priority` order
-   * (ascending, so earlier priorities render first). When omitted it falls
-   * back to `[params.manifest]`.
+   * The builder merges every declaration it finds here in `(stage, name)` order
+   * (earlier stages render first). When omitted it falls back to
+   * `[params.manifest]`.
    *
    * The turn executor deliberately passes ONLY the executing runtime's own
    * (locale-resolved) manifest, not the session's whole active set.

@@ -62,17 +62,21 @@ describe("scheduleByDag — same-priority tiebreaker", () => {
     ]);
   });
 
-  it("lower priority wins before alphabetical tiebreaker takes effect", () => {
+  it("orders a level by name only — priority never enters the tiebreak", () => {
+    // W6: the DAG tie-break switched from `(priority, name)` to name only. A
+    // level runs in parallel (Promise.allSettled), so intra-level order is
+    // trace-cosmetic; name is the single deterministic key. `zzzz` has the
+    // lowest priority but sorts last by name.
     const a = [
-      rt("zzzz", 100), // alphabetically last but lowest priority
+      rt("zzzz", 100), // lowest priority, but alphabetically last
       rt("aaaa", 200),
       rt("mmmm", 200),
     ];
     const { groups } = scheduleByDag(a);
     expect(groups[0].runtimes.map((r) => r.name)).toEqual([
-      "zzzz",
       "aaaa",
       "mmmm",
+      "zzzz",
     ]);
   });
 });

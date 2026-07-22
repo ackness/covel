@@ -8,6 +8,7 @@ import type {
   ExecutionContext,
   InputSlot,
 } from "@covel/shared";
+import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import type { SuspensionRecord } from "@covel/store";
 import { validateOutput, withPendingProposals } from "@covel/tools";
@@ -41,7 +42,6 @@ import { withGatewayTrace } from "./gateway-trace.js";
 import { withUtilsTrace } from "./utils-trace.js";
 import { enforceHttpPermissions } from "./http-permissions.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
-import { NARRATOR_PRIORITY } from "../schedule/scheduler.js";
 
 /** Runtimes already warned about bare `completedResults` access (once per process). */
 const warnedBareCompletedResults = new Set<string>();
@@ -133,10 +133,12 @@ export async function executeFunctionRuntime({
   executionId,
 }: ExecuteFunctionRuntimeOptions): Promise<RuntimeResult> {
   // Emit start for function runtimes (no guard to check)
+  const stage = getRuntimeSpec(manifest).stage;
   try {
     await deps.onRuntimeStart?.({
       runtimeId: manifest.name,
       pluginId: manifest.pluginId,
+      ...(stage !== undefined ? { stage } : {}),
       priority: manifest.priority,
     });
   } catch {
@@ -145,6 +147,7 @@ export async function executeFunctionRuntime({
   emitSubEvent(deps.eventBus, "runtime", "runtime.started", input.sessionId, {
     runtimeId: manifest.name,
     pluginId: manifest.pluginId,
+    ...(stage !== undefined ? { stage } : {}),
     priority: manifest.priority,
   });
 
@@ -714,7 +717,7 @@ export async function executeFunctionRuntime({
       role: "assistant",
       name: manifest.name,
       content: narrativeContent,
-      order: manifest.priority ?? NARRATOR_PRIORITY,
+      order: stageMessageOrder(getRuntimeSpec(manifest).stage),
       createdAt: new Date().toISOString(),
     });
   }

@@ -3,8 +3,8 @@ import {
   type PluginRegistry,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
-import { FrameworkCapability } from "@covel/shared";
-import type { PluginRelation, PluginRelations } from "@covel/shared";
+import { FrameworkCapability, getRuntimeSpec } from "@covel/shared";
+import type { PluginRelation, PluginRelations, Stage } from "@covel/shared";
 
 export function isRequiredCorePlugin(entry: PluginRegistryEntry): boolean {
   const trust = getPluginTrustInfo(entry.id, entry.source);
@@ -284,6 +284,7 @@ export function buildAvailablePluginList(
     const runtimes: Array<{
       id: string;
       runtimeType?: string;
+      stage?: Stage;
       model?: string;
       outputKind?: string;
       trigger?: { type: string; topic?: string };
@@ -291,8 +292,11 @@ export function buildAvailablePluginList(
       tags?: string[];
       relations?: unknown;
     }> = [];
+    let primaryStage: Stage | undefined;
     for (const [, loaded] of entry.loadedRuntimes) {
       const m = loaded.manifest;
+      const stage = getRuntimeSpec(m).stage;
+      if (primaryStage === undefined) primaryStage = stage;
       if (m.capabilities) {
         for (const c of m.capabilities) {
           if (!caps.includes(c)) caps.push(c);
@@ -304,6 +308,7 @@ export function buildAvailablePluginList(
       runtimes.push({
         id: m.name,
         ...(m.runtimeType ? { runtimeType: m.runtimeType } : {}),
+        ...(stage !== undefined ? { stage } : {}),
         ...(m.model ? { model: m.model } : {}),
         ...(m.outputKind ? { outputKind: m.outputKind } : {}),
         ...(m.trigger
@@ -333,6 +338,7 @@ export function buildAvailablePluginList(
       pluginType: entry.summary.pluginType,
       source: trust.source,
       active: active.includes(entry.id),
+      ...(primaryStage !== undefined ? { stage: primaryStage } : {}),
       ...(caps.length > 0 ? { capabilities: caps } : {}),
       ...(tags.length > 0 ? { tags } : {}),
       ...(entry.summary.relations
@@ -350,23 +356,27 @@ export function buildSnapshotPluginList(
   id: string;
   name: string;
   isActive: boolean;
+  stage?: Stage;
   priority: number;
 }> {
   const pluginList: Array<{
     id: string;
     name: string;
     isActive: boolean;
+    stage?: Stage;
     priority: number;
   }> = [];
   for (const [, entry] of pluginRegistry.getAll()) {
     const manifests =
       entry.manifests ?? (entry.manifest ? [entry.manifest] : []);
     const primary = manifests[0]?.manifest;
+    const stage = primary ? getRuntimeSpec(primary).stage : undefined;
     pluginList.push({
       id: entry.id,
       name:
         typeof entry.summary.name === "string" ? entry.summary.name : entry.id,
       isActive: activeIds.has(entry.id),
+      ...(stage !== undefined ? { stage } : {}),
       priority: primary?.priority ?? 500,
     });
   }

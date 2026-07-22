@@ -263,9 +263,12 @@ describe("TurnExecutor E2E", () => {
       maxSteps: 1,
     });
 
+    // Both are level-0 (no deps); the DAG tie-break orders by name, so
+    // "helper-runtime" resolves before "story-runtime". Order is incidental to
+    // this test — the assertion pins which runtime gets which override.
     expect(resolveCalls).toEqual([
-      { name: "story-runtime", override: undefined },
       { name: "helper-runtime", override: undefined },
+      { name: "story-runtime", override: undefined },
     ]);
 
     mockLLM.calls.length = 0;
@@ -279,8 +282,8 @@ describe("TurnExecutor E2E", () => {
     );
 
     expect(resolveCalls).toEqual([
-      { name: "story-runtime", override: "e2e3" },
       { name: "helper-runtime", override: undefined },
+      { name: "story-runtime", override: "e2e3" },
     ]);
   });
 

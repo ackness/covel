@@ -173,10 +173,11 @@ describe("scheduleByDag", () => {
     expect(error).toMatch(/cycle/i);
   });
 
-  it("orders same-level runtimes by priority ascending", () => {
-    const input = [mk("z", 900), mk("a", 100), mk("m", 500)];
+  it("orders same-level runtimes by name (priority ignored)", () => {
+    const input = [mk("z", 100), mk("a", 900), mk("m", 500)];
     const { groups } = scheduleByDag(input);
     expect(groups).toHaveLength(1);
+    // Name order a<m<z, even though priority order would be z(100)<m(500)<a(900).
     expect(groups[0]!.runtimes.map((r) => r.name)).toEqual(["a", "m", "z"]);
   });
 

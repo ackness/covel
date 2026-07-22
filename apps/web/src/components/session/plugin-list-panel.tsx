@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { stageRank } from "@covel/shared";
 import type { SessionPluginInfo } from "@/services/api.js";
 import { PluginErrorItem } from "./plugin-list-panel/plugin-error-item.js";
 import { PluginItem } from "./plugin-list-panel/plugin-item.js";
@@ -34,7 +35,8 @@ export function PluginListPanel({
   const useDetailView = packages.length === 0 && hasSessionPlugins;
   const sortedPlugins = useDetailView
     ? [...(sessionPlugins ?? [])].sort(
-        (a, b) => (a.priority ?? 500) - (b.priority ?? 500),
+        (a, b) =>
+          stageRank(a.stage) - stageRank(b.stage) || a.id.localeCompare(b.id),
       )
     : [];
 

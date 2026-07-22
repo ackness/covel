@@ -592,12 +592,14 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                   await trace.runtimeStarted({
                     runtimeId: info.runtimeId,
                     pluginId: info.pluginId,
+                    ...(info.stage !== undefined ? { stage: info.stage } : {}),
                     priority: info.priority,
                   });
                   const kind = outputKindResolver.getOutputKind(info.runtimeId);
                   await writeEvent("runtime.started", {
                     runtimeId: info.runtimeId,
                     pluginId: info.pluginId,
+                    ...(info.stage !== undefined ? { stage: info.stage } : {}),
                     kind,
                     label: info.pluginId + "/" + kind,
                   });

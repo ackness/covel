@@ -1,13 +1,14 @@
 import {
   COVEL_EVENT_META,
   PROPOSAL_TYPES,
+  getRuntimeSpec,
   outputKindSchema,
   triggerTypeSchema,
   worldDataEffectSchema,
   worldDataMergeModeSchema,
   worldDataSourceKindSchema,
 } from "@covel/shared";
-import type { RuntimeManifest } from "@covel/shared";
+import type { RuntimeManifest, Stage } from "@covel/shared";
 import type {
   ParsedPluginMd,
   PluginRegistry,
@@ -33,6 +34,8 @@ export interface RuntimePluginContract {
   capabilities: string[];
   tags: string[];
   relations?: unknown;
+  /** Named stage; absent for event/manual/UI-only runtimes. */
+  stage?: Stage;
   priority?: number;
   trigger?: unknown;
   execution?: unknown;
@@ -246,6 +249,9 @@ function buildRuntimeContract(
     capabilities: [...(manifest.capabilities ?? [])],
     tags: [...(manifest.tags ?? [])],
     ...(manifest.relations ? { relations: manifest.relations } : {}),
+    ...(getRuntimeSpec(manifest).stage !== undefined
+      ? { stage: getRuntimeSpec(manifest).stage }
+      : {}),
     ...(manifest.priority !== undefined ? { priority: manifest.priority } : {}),
     ...(manifest.trigger ? { trigger: manifest.trigger } : {}),
     ...(manifest.execution ? { execution: manifest.execution } : {}),

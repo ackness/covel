@@ -1,6 +1,9 @@
 import { request } from "./request.js";
-import type { I18nText } from "@covel/shared";
+import type { I18nText, Stage } from "@covel/shared";
 import type { PackageSummary, PresetSummary, RuntimeSummary } from "./types.js";
+
+/** Flow segment id: a named stage, or the stage-less event/manual bucket. */
+export type FlowSegmentId = Stage | "event-manual";
 
 // -- Config API -------------------------------------------------
 
@@ -55,6 +58,10 @@ export interface PluginFlowStep {
   pluginId: string;
   runtimeId: string;
   label: string;
+  /** Named stage; absent for event/manual runtimes. */
+  stage?: Stage;
+  /** Segment this step groups under (stage or "event-manual"). */
+  segmentId: FlowSegmentId;
   priority: number;
   trigger: { type: string };
   runtimeType?: string;
@@ -63,6 +70,7 @@ export interface PluginFlowStep {
 }
 
 export interface PluginFlowSegment {
+  id: FlowSegmentId;
   label: string;
   labelText?: I18nText;
   range: [number, number];
@@ -82,6 +90,8 @@ export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
     pluginId: string;
     runtimeId: string;
     runtimeName?: string;
+    stage?: Stage;
+    segmentId: FlowSegmentId;
     priority: number;
     trigger?: { type?: string };
     runtimeType?: string;
@@ -89,6 +99,7 @@ export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
     model?: string;
   };
   type RawSegment = {
+    id: FlowSegmentId;
     label: string;
     labelText?: I18nText;
     minPriority: number;
@@ -102,6 +113,8 @@ export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
       pluginId: s.pluginId,
       runtimeId: s.runtimeId,
       label: s.runtimeName ?? s.runtimeId,
+      ...(s.stage !== undefined ? { stage: s.stage } : {}),
+      segmentId: s.segmentId,
       priority: s.priority,
       trigger: { type: s.trigger?.type ?? "auto" },
       runtimeType: s.runtimeType,
@@ -109,6 +122,7 @@ export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
       model: s.model,
     })),
     segments: raw.segments.map((seg) => ({
+      id: seg.id,
       label: seg.label,
       labelText: seg.labelText,
       range: [seg.minPriority, seg.maxPriority],

@@ -38,6 +38,8 @@ export * from "./env/index.js";
 export {
   normalizeRuntimeManifest,
   stageForPriority,
+  stageRank,
+  stageMessageOrder,
   getRuntimeSpec,
   hasIllegalDetachedContract,
 } from "./scheduling/normalize.js";

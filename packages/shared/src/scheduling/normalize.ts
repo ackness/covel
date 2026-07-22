@@ -17,6 +17,7 @@ import type {
   Stage,
   TriggerSpec,
 } from "../types/runtime-scheduling.js";
+import { STAGE_ORDER } from "../types/runtime-scheduling.js";
 import type { RuntimeManifest } from "../types/plugin.js";
 
 /**
@@ -30,6 +31,26 @@ export function stageForPriority(priority: number): Stage {
   if (priority === 500) return "narrative";
   if (priority <= 999) return "post-turn";
   return "audit";
+}
+
+/**
+ * Sort rank for listing / serialization consumers that order by
+ * `(stage, name)` during the compat period, replacing the old
+ * `legacyOrder ?? Infinity` sort. Stage-less runtimes (event / manual /
+ * UI-only) rank last. Intra-stage order is broken by name at the call site.
+ */
+export function stageRank(stage: Stage | undefined): number {
+  return stage === undefined ? STAGE_ORDER.length : STAGE_ORDER.indexOf(stage);
+}
+
+/**
+ * Coarse `TurnMessageRecord.order` value. The field is written but never read
+ * for sorting — every store sorts turn messages by `createdAt` — so this is a
+ * stage ordinal kept only until Step 6 decides the field's fate. Stage-less
+ * runtimes write 99.
+ */
+export function stageMessageOrder(stage: Stage | undefined): number {
+  return stage === undefined ? 99 : STAGE_ORDER.indexOf(stage);
 }
 
 function foldTrigger(

@@ -205,8 +205,15 @@
     "retryFrom": "Retry from {{label}}",
     "executionSummary": "Execution · {{count}} runtimes",
     "executionFlow": "Execution Flow",
-    "executionFlowHint": "Turn order — lower priority runs first.",
-    "executionFlowTitle": "Plugins run in priority order every turn. Pre-Turn and After-Turn band the narrator on either side.",
+    "executionFlowHint": "Turn order — earlier stages run first.",
+    "executionFlowTitle": "Plugins run stage by stage each turn: setup, then pre-turn, narrative, and post-turn.",
+    "stage": {
+      "setup": "Setup",
+      "pre-turn": "Pre-Turn",
+      "narrative": "Narrative",
+      "post-turn": "Post-Turn",
+      "audit": "Audit"
+    },
     "retryAll": "Retry All",
     "retryAllTitle": "Re-execute all",
     "statusLlm": "Calling model",

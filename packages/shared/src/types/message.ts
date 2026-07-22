@@ -61,8 +61,10 @@ export interface TurnMessage {
   /** Player input form request (blocks turn completion until submitted). */
   readonly pendingInput?: PlayerInputForm;
   /**
-   * Ordering weight within a turn (lower = earlier).
-   * Typically matches the runtime's priority.
+   * Coarse ordering weight within a turn (lower = earlier). Write-only — every
+   * store sorts turn messages by `createdAt`, never by this field. Producers
+   * now write a stage ordinal (`stageMessageOrder`); Step 6 evaluates removing
+   * the field entirely.
    */
   readonly order: number;
   /** Append-only timestamp. */

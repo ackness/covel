@@ -4,6 +4,7 @@ import type {
   PluginRpcResponse,
   RuntimeResult,
   SessionEvent,
+  Stage,
 } from "@covel/shared";
 import { request } from "./request.js";
 import {
@@ -42,6 +43,8 @@ export interface SessionPluginInfo {
   status?: string;
   /** Error message when status is 'error'. */
   error?: string;
+  /** Named stage of the plugin's primary runtime; absent for event/manual/UI-only. */
+  stage?: Stage;
   priority?: number;
   runtimeType?: string;
   model?: string;
@@ -77,6 +80,7 @@ export interface SessionPluginInfo {
   runtimes?: Array<{
     id: string;
     runtimeType?: string;
+    stage?: Stage;
     model?: string;
     outputKind?: string;
     trigger?: { type: string; topic?: string };
