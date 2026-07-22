@@ -8,6 +8,9 @@ pluginType: plugin
 # of `npcContext` is populated. Leaves 100–499 free for future prep
 # runtimes (embeddings, lore retrieval, etc.) that could share this layer.
 priority: 400
+# Dual-declared (compat period): `stage` is the new authority; `priority`
+# stays as `legacyOrder` until Step 6.
+stage: pre-turn
 capabilities: [npc-graph, graph-rag]
 tags:
   - role:retrieval

@@ -133,45 +133,99 @@ describe("normalize golden (bundled plugin set)", () => {
     const manifests = await loadAllManifests();
     const specs = specById(manifests.map(normalizeRuntimeManifest));
 
+    // W5a double-declaration is now live: migrated runtimes carry an explicit
+    // `stage` (+ `needs` / `inputs`) while `priority` / `upstreamRequired`
+    // stay as compat aliases. pregame / schema-gen are the exception — the
+    // loader forbids `stage: setup` on a `scheduled`/`interval` trigger, so
+    // these two keep the legacy setup idiom and let normalize DERIVE the stage
+    // (hence `priority:stage` is still in their provenance). The idiom
+    // `scheduled + interval: 1 + maxTriggerCount: 1` folds to auto with the
+    // attempt budget preserved.
     const pregame = requireSpec(specs, "pregame");
     expect(pregame.stage).toBe("setup");
-    // Legacy setup idiom `scheduled + interval: 1 + maxTriggerCount: 1`
-    // folds to auto with the attempt budget preserved.
     expect(pregame.declaredTrigger.type).toBe("auto");
     expect(pregame.declaredTrigger.interval).toBeUndefined();
     expect(pregame.declaredTrigger.maxTriggerCount).toBe(1);
     expect(pregame.provenance.legacyFields).toContain(
       "trigger:scheduled-as-auto",
     );
+    expect(pregame.provenance.legacyFields).toContain("priority:stage");
 
     const schemaGen = requireSpec(specs, "world-init/schema-gen");
     expect(schemaGen.stage).toBe("setup");
     expect(schemaGen.declaredTrigger.type).toBe("auto");
+    expect(schemaGen.provenance.legacyFields).toContain("priority:stage");
 
+    // player-init IS double-declared (its trigger is already `auto`, so an
+    // explicit `stage: setup` is legal). Explicit stage means normalize does
+    // NOT re-derive it — `priority:stage` is absent from provenance. During
+    // the compat period both `needs` (new, scoped) and the `upstreamRequired`
+    // alias (old, string) are present, so deps.needs concatenates them; the
+    // alias entries collapse in Step 6 when `upstreamRequired` is removed.
     const playerInit = requireSpec(specs, "char-creator/player-init");
     expect(playerInit.stage).toBe("setup");
-    expect(playerInit.deps.needs).toEqual(["pregame", "world-init/schema-gen"]);
+    expect(playerInit.provenance.legacyFields).not.toContain("priority:stage");
     expect(playerInit.provenance.legacyFields).toContain("upstreamRequired");
+    expect(playerInit.deps.needs).toEqual([
+      { runtime: "pregame", scope: "session" },
+      { runtime: "world-init/schema-gen", scope: "session" },
+      "pregame",
+      "world-init/schema-gen",
+    ]);
 
+    // pre-turn band: rag-retriever + scene-cast, both scheduled. Explicit
+    // stage → no `priority:stage`; the scheduled trigger is left untouched.
     const retriever = requireSpec(specs, "npc-graph/rag-retriever");
     expect(retriever.stage).toBe("pre-turn");
-    // Non-setup scheduled runtimes keep their scheduled trigger unchanged.
     expect(retriever.declaredTrigger.type).toBe("scheduled");
+    expect(retriever.provenance.legacyFields).not.toContain("priority:stage");
+
+    const sceneCast = requireSpec(specs, "scene-cast");
+    expect(sceneCast.stage).toBe("pre-turn");
+    expect(sceneCast.declaredTrigger.type).toBe("scheduled");
+    expect(sceneCast.legacyOrder).toBe(450);
+    expect(sceneCast.provenance.legacyFields).not.toContain("priority:stage");
 
     const narrator = requireSpec(specs, "narrator");
     expect(narrator.stage).toBe("narrative");
+    expect(narrator.provenance.legacyFields).not.toContain("priority:stage");
     expect(requireSpec(specs, "chat-mode-narrator").stage).toBe("narrative");
 
+    // post-turn `needs: [{capability}]` runtimes. Same compat concat as
+    // player-init: explicit `needs` + `upstreamRequired` alias are both
+    // present, so deps.needs carries the capability entry twice until Step 6.
     for (const id of [
       "guide",
       "codex",
       "npc-graph/extractor",
       "char-creator/character-tracker",
+      "scene-prompts",
     ]) {
       const spec = requireSpec(specs, id);
       expect(spec.stage).toBe("post-turn");
-      expect(spec.deps.needs).toEqual([{ capability: "narrative-engine" }]);
+      expect(spec.provenance.legacyFields).not.toContain("priority:stage");
+      expect(spec.deps.needs).toEqual([
+        { capability: "narrative-engine" },
+        { capability: "narrative-engine" },
+      ]);
     }
+
+    // branch-reply: post-turn with a typed `inputs.narrative` binding (the
+    // implicit narrator dependency promoted, 04 §1). No `needs` /
+    // `upstreamRequired`, so it stays ungated (deps.needs empty); the binding
+    // surfaces as `spec.bindings`. `required: false` keeps today's behavior —
+    // branch-reply runs even when the narrative engine fails.
+    const branchReply = requireSpec(specs, "branch-reply");
+    expect(branchReply.stage).toBe("post-turn");
+    expect(branchReply.provenance.legacyFields).not.toContain("priority:stage");
+    expect(branchReply.deps.needs).toEqual([]);
+    expect(branchReply.bindings).toEqual({
+      narrative: {
+        from: { capability: "narrative-engine", cardinality: "one" },
+        select: "/narrativeOutput",
+        required: false,
+      },
+    });
   });
 
   it("keeps event and manual runtimes stage-less with legacyOrder preserved", async () => {
@@ -187,12 +241,15 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(backgroundGen.stage).toBeUndefined();
     expect(backgroundGen.legacyOrder).toBe(900);
 
+    // Manual runtimes (real actions + the legacy hook-only dummy story-guard)
+    // are never double-declared: no stage, no legacyOrder, trigger untouched.
     for (const id of [
       "character-blueprint",
       "character-presence",
       "player-identity",
       "living-world-rules",
       "memory",
+      "story-guard",
     ]) {
       const spec = requireSpec(specs, id);
       expect(spec.stage).toBeUndefined();
@@ -207,7 +264,10 @@ describe("normalize golden (bundled plugin set)", () => {
       const spec = normalizeRuntimeManifest(manifest);
       expect(spec.resultFormat).toBe("legacy");
       expect(spec.suspensionSafe).toBe(false);
-      expect(spec.bindings).toEqual({});
+      // `bindings` mirrors `manifest.inputs`; only branch-reply is
+      // double-declared with an `inputs` binding in the compat period, every
+      // other bundled manifest still defaults to none.
+      expect(spec.bindings).toEqual(manifest.inputs ?? {});
       expect(spec.exportBindings).toEqual({});
       expect(spec.httpPermissions).toEqual([]);
       expect(spec.legacyJobViews).toEqual([]);

@@ -10,12 +10,30 @@ pluginType: plugin
 runtimeType: function
 outputKind: system
 priority: 700
+# Dual-declared (compat period): `stage` is the new authority; `priority`
+# stays as `legacyOrder` until Step 6.
+stage: post-turn
 handler: ./handler.js
 trigger:
   type: auto
 capabilities:
   - branch-reply
   - prompt-history-rewriter
+# Promotes branch-reply's implicit narrator dependency into a declared
+# binding (04 §1). The handler today scans `completedResults` for the
+# longest non-empty `narrativeOutput`; `inputs.narrative` names that source
+# by capability. `select: /narrativeOutput` points into the narrative
+# engine's success value (`RuntimeResult.output.narrativeOutput`).
+# `required: false` preserves current behavior: branch-reply has no
+# `upstreamRequired` today and still runs when the narrator fails, so the
+# binding must not gate. Handler switch to `ctx.inputs` is a later step.
+inputs:
+  narrative:
+    from:
+      capability: narrative-engine
+      cardinality: one
+    select: "/narrativeOutput"
+    required: false
 tags:
   - role:branching
   - cost:function

@@ -9,6 +9,12 @@ pluginType: core-plugin
 # this runtime's set-world-schema tool. Pre-Game band is 0-99 and uses
 # priority-based serial ordering.
 priority: 40
+# Setup runtime: NOT double-declared with an explicit `stage`. The loader
+# forbids `stage: setup` alongside a `scheduled`/`interval` trigger, and
+# this runtime keeps its legacy `scheduled interval:1 max:1` idiom during
+# the compat period. The normalize layer derives `stage: setup` from the
+# pre-game band and folds the trigger to `auto max:1` (observe-only). Full
+# migration to `stage: setup` + `auto` lands in Step 6.
 model: plugin
 outputKind: system
 timeoutMs: 180000

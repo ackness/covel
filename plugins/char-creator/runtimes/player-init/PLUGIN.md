@@ -5,6 +5,9 @@ description:
   en: Guides you through creating your hero at the start and brings them into the story.
 pluginType: core-plugin
 priority: 50
+# Dual-declared (compat period): `stage` is the new authority; `priority`
+# stays as `legacyOrder` until Step 6.
+stage: setup
 outputKind: system
 model: plugin
 timeoutMs: 180000
@@ -27,6 +30,17 @@ upstreamRequired:
   # `{{ world.schema }}` via SessionContextSnapshot (audit P0-2).
   - pregame
   - world-init/schema-gen
+# New `needs` supersedes `upstreamRequired` (both kept during the compat
+# period). `scope: session` gates on the persistent snapshot frozen at
+# execution start: setup upstreams committed by an earlier execution
+# satisfy the gate cross-execution (01 §3.2 frozen-snapshot semantics),
+# which is exactly what player-init requires — pregame/schema-gen commit
+# in turn 0, player-init reads them in the next execution.
+needs:
+  - runtime: pregame
+    scope: session
+  - runtime: world-init/schema-gen
+    scope: session
 input:
   inject:
     # Pre-Game band: narrator is NOT scheduled in turn 0, so we inject

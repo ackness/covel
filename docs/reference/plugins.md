@@ -82,6 +82,8 @@
 
 Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.ts` 强制）仍走 priority 串行：`pregame(10) → world-init/schema-gen(40) → char-creator/player-init(50)`。Pre-Game 插件之间存在 world context 依赖（player-init 读取 schema-gen 写出的 `world.schema`）；目前在 DAG 里不表达，所以靠 priority 顺序确保 schema 先生成、再让 player-init 读到。
 
+**调度重设计双声明期（Step 4）**：可调度 runtime 的 manifest 已开始携带命名的 `stage`（`setup` / `pre-turn` / `narrative` / `post-turn` / `audit`，对应旧 priority 分带 `0-99` / `100-499` / `500` / `501-999` / `1000`），同时用 `needs`（取代 `upstreamRequired`）/ `inputs`（把隐式上游依赖转成有类型的绑定）声明依赖。旧的 `priority` / `upstreamRequired` 字段**在兼容期原样保留**（priority 归一成 `legacyOrder`，仍是事件扇出与同层排序的 tiebreaker），Step 6 才移除。生产调度目前仍读旧字段，`stage` 声明为观测层（golden 归一测试断言"显式 stage = 旧 priority 派生的 stage"）。例外：`pregame` / `world-init/schema-gen` 仍用 `scheduled interval:1 max:1` 的旧 setup 惯用法、不写显式 `stage`（loader 禁止 `stage: setup` 与 `scheduled`/`interval` 并存，其 stage 由归一层从 priority 分带派生）；`event` / `manual` runtime 不设 `stage`。下方概览表的 priority 列即兼容期 `legacyOrder`。
+
 ---
 
 ## 概览

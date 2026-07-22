@@ -23,13 +23,19 @@
  * own release step instead of forcing both mechanisms to ship together.
  */
 
+import path from "node:path";
 import { describe, it, expect } from "vitest";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import {
+  authoringTriggerConfigSchema,
   deriveLegacyClockFields,
+  getRuntimeSpec,
   isSetupSatisfied,
   mirrorSetupDone,
+  normalizeRuntimeManifest,
   retrySetup,
+  STAGE_ORDER,
+  triggerConfigSchema,
   waiveSetup,
   type ExecutionContext,
   type RanSetupRuntime,
@@ -42,6 +48,8 @@ import { buildContext } from "@covel/context";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type { LoadedRuntime } from "@covel/plugin-loader";
+import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
+import { scheduleByPriority } from "../src/schedule/scheduler.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { processRuntimeResult } from "../src/session/session-kernel.js";
 import { buildSnapshotPayload } from "../src/snapshot/snapshot-payload-builder.js";
@@ -1113,10 +1121,117 @@ describe("logical-turn counting & ledger", () => {
 });
 
 describe("dual declaration consistency (Step 4)", () => {
-  // needs: dual declaration (stage/needs coexisting with priority/upstreamRequired) + compat-input vs target-authoring schema split (release step 4, and step 0/6 for the schema split)
-  it.todo(
-    "scenario 15: Step 4 双声明期间，迁移后插件（含两家 event image runtime）在旧 priority 消费者与新调度器下执行序一致；兼容输入 schema 加载 conditional/error-retry 后只产 warn + disabled diagnostic，Step 6 目标 schema 才拒绝 — 断言双轨执行序等价且 schema 分层行为正确",
-  );
+  const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../plugins");
+  /** Narrator band priority — the compat default for a priority-less runtime. */
+  const NARRATOR_PRIORITY = 500;
+
+  async function loadAllManifests(): Promise<readonly RuntimeManifest[]> {
+    const discoveries = await discoverPlugins(PLUGINS_DIR);
+    const manifests: RuntimeManifest[] = [];
+    for (const discovery of discoveries) {
+      const plugins = await loadPluginManifest(discovery);
+      manifests.push(...plugins.map((plugin) => plugin.manifest));
+    }
+    return manifests;
+  }
+
+  const isStageSource = (m: RuntimeManifest): boolean => {
+    const type = m.trigger?.type ?? "auto";
+    return (
+      (type === "auto" || type === "scheduled") && m.priority !== undefined
+    );
+  };
+
+  it("scenario 15: Step 4 双声明期间，迁移后插件（含两家 event image runtime）在旧 priority 消费者与新调度器下执行序一致；兼容输入 schema 加载 conditional/error-retry 后只产 warn + disabled diagnostic，Step 6 目标 schema 才拒绝 — 断言双轨执行序等价且 schema 分层行为正确", async () => {
+    const manifests = await loadAllManifests();
+
+    // ── Part A: dual-track execution-order equivalence ────────────────
+    // W5a added explicit `stage` (+ `needs`/`inputs`) to the migrated runtimes
+    // while `priority` stays as `legacyOrder`. The new IR ordering (stage
+    // barrier + `legacyOrder` tiebreak) must reproduce, over the REAL bundled
+    // plugin set, what the live priority scheduler produces from raw
+    // `manifest.priority` — for both the pre-game band (turn 0, stage=setup)
+    // and the main loop (turn 1, every other stage). This is the acceptance
+    // gate that the explicit declarations did not perturb the schedule.
+    const stageSource = manifests.filter(isStageSource);
+
+    for (const { turn, setup } of [
+      { turn: 0, setup: true },
+      { turn: 1, setup: false },
+    ] as const) {
+      const liveOrder = scheduleByPriority(stageSource, turn).flatMap((group) =>
+        group.runtimes.map((runtime) => runtime.name),
+      );
+      const irOrder = stageSource
+        .map((manifest) => getRuntimeSpec(manifest))
+        .filter((spec) =>
+          setup
+            ? spec.stage === "setup"
+            : spec.stage !== undefined && spec.stage !== "setup",
+        )
+        .toSorted(
+          (a, b) =>
+            STAGE_ORDER.indexOf(a.stage!) - STAGE_ORDER.indexOf(b.stage!) ||
+            (a.legacyOrder ?? 0) - (b.legacyOrder ?? 0),
+        )
+        .map((spec) => spec.id);
+      expect(irOrder, `turn ${turn} order`).toEqual(liveOrder);
+    }
+
+    // Event fan-out ordering. The bundled event runtimes (scene-stage resolver
+    // + background-gen — the "two event image runtime" ordering case of 04 §1;
+    // the third-party dashscope/openai image-generators are not in the bundled
+    // set) carry no stage but keep `priority` as `legacyOrder`. Sorting by the
+    // IR's `legacyOrder` is byte-identical to the old fan-out consumer sorting
+    // by raw `priority`.
+    const eventRuntimes = manifests.filter((m) => m.trigger?.type === "event");
+    expect(eventRuntimes.length).toBeGreaterThanOrEqual(2);
+    const irEventOrder = [...eventRuntimes]
+      .sort(
+        (a, b) =>
+          (getRuntimeSpec(a).legacyOrder ?? NARRATOR_PRIORITY) -
+          (getRuntimeSpec(b).legacyOrder ?? NARRATOR_PRIORITY),
+      )
+      .map((m) => m.name);
+    const oracleEventOrder = [...eventRuntimes]
+      .sort(
+        (a, b) =>
+          (a.priority ?? NARRATOR_PRIORITY) - (b.priority ?? NARRATOR_PRIORITY),
+      )
+      .map((m) => m.name);
+    expect(irEventOrder).toEqual(oracleEventOrder);
+
+    // ── Part B: compat-input vs target-authoring schema split ─────────
+    // During the compat period the input schema keeps LOADING reserved
+    // triggers; normalize marks them disabled (the warn + disabled diagnostic)
+    // rather than rejecting — so an already-installed third-party manifest that
+    // still declares one does not break the loader. Only the Step 6 target
+    // authoring schema rejects them outright.
+    for (const type of ["conditional", "error-retry"] as const) {
+      // Compat-input trigger schema accepts the reserved type (still loads).
+      expect(triggerConfigSchema.safeParse({ type }).success).toBe(true);
+
+      // Normalize → disabled declaration: no stage, no executable node.
+      const reserved = {
+        name: `x/${type}`,
+        pluginId: "x",
+        description: type,
+        priority: 600,
+        runtimeType: "function",
+        handler: "./h.js",
+        trigger: { type },
+        outputKind: "plugin",
+      } as RuntimeManifest;
+      const spec = normalizeRuntimeManifest(reserved);
+      expect(spec.disabledReason).toBe("reserved-trigger");
+      expect(spec.stage).toBeUndefined();
+
+      // Step 6 target authoring schema rejects the reserved type.
+      expect(authoringTriggerConfigSchema.safeParse({ type }).success).toBe(
+        false,
+      );
+    }
+  });
 });
 
 describe("accepts validation (static decidable subset + runtime check)", () => {

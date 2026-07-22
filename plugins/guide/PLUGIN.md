@@ -12,6 +12,9 @@ pluginType: plugin
 # They depend only on the active narrative engine's output (see
 # upstreamRequired below); they do not read each other's writes.
 priority: 600
+# Dual-declared (compat period): `stage` is the new authority; `priority`
+# stays as `legacyOrder` until Step 6.
+stage: post-turn
 model: plugin
 outputKind: system
 timeoutMs: 120000
@@ -32,6 +35,11 @@ trigger:
 # inject lists both known engines; the absent one resolves to nothing, so
 # exactly the active engine's fresh prose fills <narrator-output>.
 upstreamRequired:
+  - capability: narrative-engine
+# New `needs` supersedes `upstreamRequired` (both kept during the compat
+# period; collapses in Step 6). Same strength: gate on the active
+# narrative engine's success, discovered by capability.
+needs:
   - capability: narrative-engine
 input:
   inject:

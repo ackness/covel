@@ -8,6 +8,9 @@ description:
   en: Makes the story feel more like character dialogue, suited for play focused on conversation and interaction.
 pluginType: plugin
 priority: 500
+# Dual-declared (compat period): `stage` is the new authority; `priority`
+# stays as `legacyOrder` until Step 6.
+stage: narrative
 model: story
 timeoutMs: 240000
 callTimeoutMs: 120000
