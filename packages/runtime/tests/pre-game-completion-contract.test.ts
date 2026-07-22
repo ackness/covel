@@ -341,19 +341,24 @@ describe("Pre-Game completion contract", () => {
     expect(result.setupCompletion?.allSetupDone).toBe(true);
   });
 
-  it("treats maxTriggerCount-exhausted runtimes as done (does not block advancement)", async () => {
-    // A runtime that already hit its trigger budget in a previous turn must
-    // not hold up Pre-Game forever. In practice `pregame` has
-    // `maxTriggerCount: 1`; after its first turn the kernel should accept
-    // exhaustion as "done".
+  it("no longer marks maxTriggerCount-exhausted runtimes done — setup runs by mirror, not message cadence (deliberate change)", async () => {
+    // Deliberate change (scheduling redesign): exhausting `maxTriggerCount`
+    // never counts a setup runtime as done. Setup scheduling is now governed
+    // by the persistent mirror (pending → run) and the ledger-based retry
+    // budget (blocked), NOT the message-based trigger count. A prior runtime
+    // message therefore no longer suppresses the run — the runtime IS invoked
+    // again, and until it reports done it stays pending (heading toward blocked
+    // once the ledger budget is exhausted via the finalize settle, which this
+    // executeTurn-only harness does not exercise). The old "band-exhausted ⇒
+    // advance anyway" (newlyDone=[pregame], allSetupDone=true) is gone.
     const pregame = pregameManifest("pregame", {
       priority: 10,
       trigger: { type: "scheduled", interval: 1, maxTriggerCount: 1 },
     });
 
     const store = await freshStore("sess-exh");
-    // Seed one prior runtime-sourced TurnMessage to set triggerCount >= 1 and
-    // simulate the runtime having already run last turn.
+    // A prior runtime-sourced message would have blocked re-scheduling under
+    // the old message-cadence gate; the mirror-driven gate ignores it.
     await store.appendTurnMessage({
       id: "prior",
       sessionId: "sess-exh",
@@ -367,12 +372,15 @@ describe("Pre-Game completion contract", () => {
       createdAt: new Date().toISOString(),
     });
 
+    let invoked = 0;
     const deps: TurnExecutorDeps = {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "",
+        // Runs but does not report done → stays pending, never marked done.
         handler: async () => {
-          throw new Error("exhausted runtime must not be invoked");
+          invoked += 1;
+          return {};
         },
       }),
       llm: new NoopLLM(),
@@ -384,8 +392,10 @@ describe("Pre-Game completion contract", () => {
       deps,
     );
 
-    // Budget-exhausted runtime is treated as done without re-running.
-    expect(newlyDone(result)).toEqual(["pregame"]);
-    expect(result.setupCompletion?.allSetupDone).toBe(true);
+    // The runtime IS re-invoked (mirror-driven scheduling ignores the message
+    // count), and it is NOT marked done — setup stays incomplete.
+    expect(invoked).toBe(1);
+    expect(newlyDone(result)).toEqual([]);
+    expect(result.setupCompletion?.allSetupDone).toBe(false);
   });
 });

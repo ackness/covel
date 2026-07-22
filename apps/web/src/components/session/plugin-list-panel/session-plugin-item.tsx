@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
 import { resolveI18n } from "@/lib/catalog/helpers.js";
 import { useRuntimeModelSlotOverride } from "./runtime-model-slot-override.js";
+import { SetupRecovery } from "./setup-recovery.js";
 import {
   RUNTIME_TYPE_ICONS,
   TRIGGER_TYPE_I18N,
@@ -24,6 +25,7 @@ export function SessionPluginItem({
   resolvedSlots,
   sessionId,
   runtimeModelOverrides,
+  setupRuntimes,
 }: SessionPluginItemProps) {
   const { t, i18n } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -191,6 +193,11 @@ export function SessionPluginItem({
             />
           </button>
         )}
+        <SetupRecovery
+          pluginId={plugin.id}
+          sessionId={sessionId}
+          setupRuntimes={setupRuntimes}
+        />
       </div>
 
       {expanded && (

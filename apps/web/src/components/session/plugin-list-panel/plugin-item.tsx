@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { formatSlotLabel } from "@/hooks/use-slot-config.js";
 import { useRuntimeModelSlotOverride } from "./runtime-model-slot-override.js";
+import { SetupRecovery } from "./setup-recovery.js";
 import { TRIGGER_LABELS, type PluginItemProps } from "./types.js";
 
 export function PluginItem({
@@ -23,6 +24,7 @@ export function PluginItem({
   resolvedSlots,
   sessionId,
   runtimeModelOverrides,
+  setupRuntimes,
 }: PluginItemProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -142,6 +144,12 @@ export function PluginItem({
           </button>
         )}
       </div>
+
+      <SetupRecovery
+        pluginId={pkg.name}
+        sessionId={sessionId}
+        setupRuntimes={setupRuntimes}
+      />
 
       {primaryRuntime && (
         <div className="px-2.5 pb-1 -mt-0.5 flex items-center gap-1 text-[9px] text-muted-foreground/80">

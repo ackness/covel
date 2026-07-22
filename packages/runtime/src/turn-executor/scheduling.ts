@@ -1,5 +1,9 @@
 import type { RuntimeManifest, SetupRuntimeState } from "@covel/shared";
-import { getRuntimeSpec, isSetupRuntime } from "@covel/shared";
+import {
+  getRuntimeSpec,
+  isSetupDoneForVersion,
+  isSetupRuntime,
+} from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
 import { scheduleByDag } from "../schedule/dag-scheduler.js";
 import {
@@ -40,8 +44,14 @@ function setupRuntimePending(
   setupRuntimes: Readonly<Record<string, SetupRuntimeState>>,
   preGameCompleted: readonly string[],
 ): boolean {
-  const state = setupRuntimes[rt.name]?.state;
-  if (state === "blocked" || state === "done") return false;
+  const mirror = setupRuntimes[rt.name];
+  if (mirror?.state === "blocked") return false;
+  if (mirror?.state === "done") {
+    // Re-run a `done` setup runtime when the plugin version changed — the old
+    // completion no longer satisfies the gate. Same version → stays done.
+    return !isSetupDoneForVersion(mirror, rt.version);
+  }
+  // No mirror: fall back to the legacy `preGameCompleted` signal.
   if (preGameCompleted.includes(rt.name)) return false;
   return true;
 }

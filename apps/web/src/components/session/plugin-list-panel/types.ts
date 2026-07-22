@@ -3,6 +3,7 @@ import type {
   PackageSummary,
   PluginLoadError,
   SessionPluginInfo,
+  SetupRuntimeState,
 } from "@/services/api.js";
 
 export interface PluginListPanelProps {
@@ -20,6 +21,8 @@ export interface PluginListPanelProps {
   sessionId?: string;
   /** Current `runtimeModelOverrides` map from SessionRecord. */
   runtimeModelOverrides?: Record<string, string>;
+  /** Current `setupRuntimes` lifecycle map from SessionRecord. */
+  setupRuntimes?: Record<string, SetupRuntimeState>;
 }
 
 export interface PluginItemProps {
@@ -30,6 +33,7 @@ export interface PluginItemProps {
   resolvedSlots?: ResolvedSlot[];
   sessionId?: string;
   runtimeModelOverrides?: Record<string, string>;
+  setupRuntimes?: Record<string, SetupRuntimeState>;
 }
 
 export interface PluginErrorItemProps {
@@ -43,6 +47,7 @@ export interface SessionPluginItemProps {
   resolvedSlots?: ResolvedSlot[];
   sessionId?: string;
   runtimeModelOverrides?: Record<string, string>;
+  setupRuntimes?: Record<string, SetupRuntimeState>;
 }
 
 export const TRIGGER_LABELS: Record<string, { key: string; fallback: string }> =

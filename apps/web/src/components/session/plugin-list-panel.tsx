@@ -14,6 +14,7 @@ export function PluginListPanel({
   resolvedSlots,
   sessionId,
   runtimeModelOverrides,
+  setupRuntimes,
 }: PluginListPanelProps) {
   const { t } = useTranslation();
 
@@ -56,6 +57,7 @@ export function PluginListPanel({
               resolvedSlots={resolvedSlots}
               sessionId={sessionId}
               runtimeModelOverrides={runtimeModelOverrides}
+              setupRuntimes={setupRuntimes}
             />
           ))
         : packages.map((pkg) => (
@@ -68,6 +70,7 @@ export function PluginListPanel({
               resolvedSlots={resolvedSlots}
               sessionId={sessionId}
               runtimeModelOverrides={runtimeModelOverrides}
+              setupRuntimes={setupRuntimes}
             />
           ))}
     </div>

@@ -18,6 +18,7 @@ import {
   deriveLegacyClockFields,
   isSetupRuntime,
   mirrorSetupDone,
+  resolveSetupGeneration,
 } from "@covel/shared";
 import { executeParallel } from "../schedule/parallel-executor.js";
 import { scheduleByPriority } from "../schedule/scheduler.js";
@@ -530,8 +531,10 @@ async function executeTurnImpl(
       pluginSetupReady,
       ...(isSetupRuntime(manifest)
         ? {
-            setupGeneration:
-              setupRuntimesSnapshot[manifest.name]?.generation ?? 1,
+            setupGeneration: resolveSetupGeneration(
+              manifest.version,
+              setupRuntimesSnapshot[manifest.name],
+            ),
           }
         : {}),
       collectNestedResults: (results) => {

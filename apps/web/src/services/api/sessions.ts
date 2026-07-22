@@ -14,6 +14,7 @@ import type {
   MessageRecord,
   SessionCreateResponse,
   SessionRecord,
+  SetupRuntimeState,
   StatePatchRecord,
 } from "./types.js";
 
@@ -151,6 +152,22 @@ export async function disableSessionPlugin(
   return request<{ ok: boolean; active: string[] }>(
     `/api/sessions/${encodeURIComponent(sessionId)}/plugins/disable`,
     { method: "POST", body: JSON.stringify({ pluginId }) },
+  );
+}
+
+/** Re-run a blocked setup runtime. Returns its updated lifecycle state. */
+export async function retrySetupRuntime(sessionId: string, runtimeId: string) {
+  return request<{ ok: boolean; runtimeId: string; state: SetupRuntimeState }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/setup/${encodeURIComponent(runtimeId)}/retry`,
+    { method: "POST" },
+  );
+}
+
+/** Waive a blocked setup runtime so its plugin resumes in degraded mode. */
+export async function waiveSetupRuntime(sessionId: string, runtimeId: string) {
+  return request<{ ok: boolean; runtimeId: string; state: SetupRuntimeState }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/setup/${encodeURIComponent(runtimeId)}/waive`,
+    { method: "POST", body: JSON.stringify({ confirm: true }) },
   );
 }
 

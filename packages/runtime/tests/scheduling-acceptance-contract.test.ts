@@ -27,9 +27,14 @@ import { describe, it, expect } from "vitest";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import {
   deriveLegacyClockFields,
+  isSetupSatisfied,
   mirrorSetupDone,
+  retrySetup,
+  waiveSetup,
   type ExecutionContext,
+  type RanSetupRuntime,
   type RuntimeManifest,
+  type SetupRuntimeState,
 } from "@covel/shared";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
@@ -175,9 +180,82 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
 
 describe("setup gating across trigger paths (setup-incomplete skip)", () => {
   // needs: setup DAG + session gate distinguishing pending/blocked from other plugins (release step 2)
-  it.todo(
-    "scenario 2: playing 会话启用带 setup 的插件，setup pending/blocked 期间该插件主 runtime 报 skipped: setup-incomplete，其他插件正常执行 — 断言 gate 只影响该插件，不阻塞会话其余调度",
-  );
+  it("scenario 2: playing 会话启用带 setup 的插件，setup pending/blocked 期间该插件主 runtime 报 skipped: setup-incomplete，其他插件正常执行 — 断言 gate 只影响该插件，不阻塞会话其余调度", async () => {
+    const store = createMemoryStore();
+    const now = new Date().toISOString();
+    // A playing session that just enabled plug-a (setup never ran → pending)
+    // alongside plug-b (no setup runtime).
+    await store.createSession({
+      id: "s2",
+      worldId: "w",
+      status: "active",
+      turnCount: 1,
+      preGameCompleted: [],
+      phase: "playing",
+      completedPlayerTurns: 1,
+      setupRuntimes: {},
+      activePlugins: ["plug-a", "plug-b"],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const fnRuntime = (
+      name: string,
+      pluginId: string,
+      priority: number,
+    ): RuntimeManifest =>
+      ({
+        name,
+        pluginId,
+        description: name,
+        priority,
+        runtimeType: "function",
+        handler: "./h.js",
+        trigger: { type: "auto" },
+        outputKind: "plugin",
+        capabilities: [],
+      }) as RuntimeManifest;
+
+    const aSetup = fnRuntime("plug-a/setup", "plug-a", 50); // setup band
+    const aMain = fnRuntime("plug-a/main", "plug-a", 500);
+    const bMain = fnRuntime("plug-b/main", "plug-b", 510);
+
+    const ran: string[] = [];
+    const deps: TurnExecutorDeps = {
+      // Every runtime runs but reports NO completion, so plug-a's setup stays
+      // pending across the turn.
+      loadRuntime: async (m) => ({
+        manifest: m,
+        promptTemplate: "",
+        handler: async () => {
+          ran.push(m.name);
+          return {};
+        },
+      }),
+      llm: new NoopLLM(),
+      store,
+    };
+
+    const result = await executeTurn(
+      { sessionId: "s2", turnId: "t", playerMessage: "go" },
+      [aSetup, aMain, bMain],
+      deps,
+    );
+
+    const byId = new Map(result.runtimeResults.map((r) => [r.runtimeId, r]));
+    // plug-a's main runtime is gated on its own plugin's incomplete setup.
+    expect(byId.get("plug-a/main")?.status).toBe("skipped");
+    expect(byId.get("plug-a/main")?.output).toMatchObject({
+      reason: "setup-incomplete",
+      skippedBy: "framework:setupGate",
+    });
+    // plug-b (no setup) is unaffected; plug-a's setup ran (late-setup) but did
+    // not complete, so plug-a/main was gated rather than blocking the session.
+    expect(byId.get("plug-b/main")?.status).toBe("success");
+    expect(ran).toContain("plug-a/setup");
+    expect(ran).toContain("plug-b/main");
+    expect(ran).not.toContain("plug-a/main");
+  });
   // needs: manual activation bypassing turn-binding requirement + input.schema activation validation (release step 2/3)
   it.todo(
     "scenario 4: manual 调用带 required 绑定的 auto runtime，不因缺 turn 绑定被跳过，input.schema 照常校验；setup 未完成插件的 manual 调用报 setup-incomplete — 断言两条路径分别正确放行与拦截",
@@ -277,9 +355,120 @@ describe("legacy backfill & dual-write formula", () => {
 
 describe("blocked control (maxTriggerCount / retry / waive)", () => {
   // needs: SetupRuntimeState v3 (pending attempts/lastError, blocked blockedAt) + retry/waive API (release step 2)
-  it.todo(
-    "scenario 8: setup 达 maxTriggerCount 未 done 进入 blocked（reason/attempts/blockedAt）；retry 重置后可再试；waive 后 needs(session) 满足且 trace 标注降级 — 断言三条状态迁移",
-  );
+  it("scenario 8: setup 达 maxTriggerCount 未 done 进入 blocked（reason/attempts/blockedAt）；retry 重置后可再试；waive 后 needs(session) 满足且 trace 标注降级 — 断言三条状态迁移", async () => {
+    const store = createMemoryStore();
+    const now = new Date().toISOString();
+    const runtimeId = "plug/setup";
+    await store.createSession({
+      id: "s8",
+      worldId: "w",
+      status: "active",
+      turnCount: 0,
+      preGameCompleted: [],
+      phase: "setup",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      activePlugins: ["plug"],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // A failed setup attempt for a runtime with retry budget 2. Each execution
+    // carries a unique executionId → a distinct ledger row.
+    const failedAttempt = (
+      executionId: string,
+      generation: number,
+    ): RanSetupRuntime => ({
+      runtimeId,
+      pluginVersion: "1.0.0",
+      generation,
+      executionId,
+      startedAt: new Date().toISOString(),
+      doneSignal: false,
+      ledgerState: "failed",
+      budget: 2,
+      error: "deterministic setup failure",
+    });
+
+    const settle = (setupRan: readonly RanSetupRuntime[]) =>
+      finalizeExecution({
+        store,
+        sessionId: "s8",
+        runtimes: [makeRuntime(runtimeId)],
+        results: [],
+        turnIds: [],
+        setupRan,
+        sessionClock: { now: new Date().toISOString() },
+      });
+
+    // Attempt 1 fails → still pending (1/2 budget).
+    await settle([failedAttempt("e1", 1)]);
+    let mirror = (await store.getSession("s8"))!.setupRuntimes![runtimeId];
+    expect(mirror).toMatchObject({
+      state: "pending",
+      attempts: 1,
+      generation: 1,
+    });
+
+    // Attempt 2 fails → budget exhausted → blocked with reason/attempts/blockedAt.
+    await settle([failedAttempt("e2", 1)]);
+    mirror = (await store.getSession("s8"))!.setupRuntimes![runtimeId];
+    expect(mirror.state).toBe("blocked");
+    if (mirror.state === "blocked") {
+      expect(mirror.attempts).toBe(2);
+      expect(mirror.generation).toBe(1);
+      expect(mirror.reason).toContain("budget");
+      expect(mirror.blockedAt).toBeTruthy();
+    }
+    // A blocked setup keeps the session in the setup band (phase never flips).
+    expect((await store.getSession("s8"))!.phase).toBe("setup");
+
+    // retry: blocked → pending, generation bumped, attempts reset.
+    const retried = retrySetup(mirror);
+    expect(retried.ok).toBe(true);
+    if (!retried.ok) throw new Error("retry rejected");
+    expect(retried.next).toMatchObject({
+      state: "pending",
+      generation: 2,
+      attempts: 0,
+    });
+    // Persist the retry (mirrors the retry endpoint) and re-attempt in gen 2.
+    await store.updateSession("s8", {
+      setupRuntimes: { [runtimeId]: retried.next },
+      updatedAt: new Date().toISOString(),
+    });
+    await settle([failedAttempt("e3", 2)]);
+    mirror = (await store.getSession("s8"))!.setupRuntimes![runtimeId];
+    // Fresh generation → attempts count from zero again (1/2), so still retryable.
+    expect(mirror).toMatchObject({
+      state: "pending",
+      generation: 2,
+      attempts: 1,
+    });
+
+    // waive: a blocked runtime → done{waived} with a degraded-mode warning; the
+    // plugin's session gate is now satisfied.
+    const blocked: SetupRuntimeState = {
+      state: "blocked",
+      pluginVersion: "1.0.0",
+      generation: 2,
+      attempts: 2,
+      reason: "setup exhausted its retry budget",
+      blockedAt: now,
+    };
+    const waived = waiveSetup(blocked, new Date().toISOString(), "degraded");
+    expect(waived.ok).toBe(true);
+    if (!waived.ok) throw new Error("waive rejected");
+    expect(waived.next).toMatchObject({
+      state: "done",
+      resolution: "waived",
+      warning: "degraded",
+    });
+    expect(isSetupSatisfied(waived.next)).toBe(true);
+
+    // Control transitions reject a non-blocked target (→ 409 at the route).
+    expect(retrySetup(waived.next).ok).toBe(false);
+  });
 });
 
 describe("media pipeline & job-status", () => {

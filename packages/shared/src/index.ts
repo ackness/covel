@@ -50,6 +50,8 @@ export {
   isBudgetedAttempt,
   resolvePendingOrBlocked,
   isSetupSatisfied,
+  isSetupDoneForVersion,
+  resolveSetupGeneration,
   retrySetup,
   waiveSetup,
 } from "./scheduling/setup-state.js";

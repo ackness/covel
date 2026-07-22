@@ -249,6 +249,20 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - 注册表为进程内实现——多 pod（PG）部署下 steer/abort 只能到达同 pod 上的回合。
 - 可控窗口与 session lock 对齐：注册发生在取得 session lock 之后、`executeTurn` 前，释放在 `executeTurn` 返回时——同 session 的并发 action 在锁上排队，steer/abort 永远命中真实在途的回合，不会指向排队中的下一回合；提案 commit / 后台 follower 调度等收尾阶段不再对外呈现为可控（此时 steer/abort 返回 `409`）。
 
+### Setup runtime 控制（重试 / 跳过）
+
+setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 `blocked`，会把会话钉在 setup 频段——该插件的其余 runtime 因隐式会话门被 `skipped: setup-incomplete`。以下两个端点是玩家把它解封的唯一手段（沿用 `resolveSessionParam` 的 owner-token 鉴权）：
+
+| 方法 | 路径                                       | 描述                                                                                                                                                                            |
+| ---- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST | `/api/sessions/:id/setup/:runtimeId/retry` | 把 `blocked` 的 setup runtime 复位为 `pending`：`generation+1`、`attempts=0`，下次执行重新跑一遍。返回 `{ ok, runtimeId, state }`                                               |
+| POST | `/api/sessions/:id/setup/:runtimeId/waive` | 把 `blocked` 的 setup runtime 标记为 `done{resolution:"waived"}` 并附降级 `warning`，令其所属插件的会话门满足。body 必须为 `{ confirm: true }`。返回 `{ ok, runtimeId, state }` |
+
+- `:runtimeId` 是完整 runtime id（`<pluginId>/<runtimeName>`，需 URL 编码）。
+- 幂等：`retry` 对已 `pending` 的目标、`waive` 对已 `waived` 的目标均为无副作用的 `200`。
+- 非 `blocked` 状态（如 `done{completed}` / `pending`）调用返回 `409`，并在 `error` 里说明只有 blocked 才能重试/跳过；`waive` 缺 `{ confirm: true }` 返回 `400 { code: "confirm_required" }`；未知会话返回 `404`。
+- 两个端点都会在写入 `setupRuntimes` 的同时按新镜像重新派生 `preGameCompleted`（waived 进入该集合、retried 退出），使旧内核读取保持一致；`phase` 的翻转仍由下一回合的 finalize 事务负责。
+
 ### 玩家交互
 
 | 方法   | 路径                                  | 描述                                                                                                        |
@@ -999,7 +1013,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 - `preGameCompleted`(string[]) — 已完成 Pre-Game 初始化的 runtime id 集合（现由 `setupRuntimes` 中 `state="done"` 的条目派生并排序）
 - `phase`(可选,`'setup' \| 'playing'`) — 调度重构新增的 setup/主循环频段真相字段（会话激活集含 setup runtime 时初始为 `setup`，否则 `playing`；全部 setup runtime 完成后翻转为 `playing`）。旧会话缺省，首次回合时惰性回填。前端暂未消费
 - `completedPlayerTurns`(可选,number) — 已提交的主循环玩家逻辑回合数（setup 交互不计入）。由 finalize 事务内的 logical-turn ledger 幂等推进
-- `setupRuntimes`(可选,`Record<runtimeId, SetupRuntimeState>`) — 每个 setup runtime 的解析状态镜像
+- `setupRuntimes`(可选,`Record<runtimeId, SetupRuntimeState>`) — 每个 setup runtime 的解析状态镜像。`SetupRuntimeState` 为三态联合：`pending{ generation, attempts, lastError? }`（尚未完成，`attempts` 为当代次终态非 suspended 的 attempt-ledger 计数）· `done{ resolution:"completed"|"waived", generation, attempts, completedAt, warning? }`（已完成，`waived` 为玩家跳过的降级完成）· `blocked{ generation, attempts, reason, blockedAt }`（耗尽 `maxTriggerCount` 预算仍未完成，把会话钉在 setup 频段，需经 `retry`/`waive` 端点解封）。各态均带 `pluginVersion`；插件版本变化会使旧 `done` 失效并以 `generation+1` 重跑
 
 > 三个新字段为**可选追加**，不破坏默认响应形状；`turnCount` / `preGameCompleted` 继续存在，仅改由上述三字段的公式派生。
 
