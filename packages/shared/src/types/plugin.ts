@@ -119,7 +119,29 @@ export interface PluginDataInjectDecl {
   readonly maxEntries?: number;
 }
 
-export type InputInjectDecl = RuntimeInjectDecl | PluginDataInjectDecl;
+/**
+ * Consume a producer runtime's persisted `recordAs` export from a previous
+ * execution. The consumer reads the latest revision committed before this
+ * execution started. Functions read `ctx.exports.<name>`; agents receive a
+ * same-named prompt segment. Declared but not yet consumed by the framework —
+ * consumption lands with the I/O-contract migration step.
+ */
+export interface RuntimeExportInjectDecl {
+  readonly kind: "runtime-export";
+  readonly name: string;
+  readonly from:
+    | { readonly runtime: string }
+    | {
+        readonly capability: string;
+        readonly cardinality?: import("./runtime-scheduling.js").DependencyCardinality;
+      };
+  readonly recordAs: string;
+  readonly accepts?: string;
+  readonly required?: boolean;
+}
+
+export type InputInjectDecl =
+  RuntimeInjectDecl | PluginDataInjectDecl | RuntimeExportInjectDecl;
 
 export interface InputToolDecl {
   readonly plugin: string;
@@ -127,6 +149,13 @@ export interface InputToolDecl {
 }
 
 export interface InputConfig {
+  /**
+   * Runtime-dir-relative JSON Schema path validating this runtime's
+   * activation payload (manual RPC payload / event payload). Function and
+   * agent runtimes consume the same validated canonical payload. Declared
+   * but not yet enforced — enforcement lands with the I/O-contract step.
+   */
+  readonly schema?: string;
   readonly inject?: readonly InputInjectDecl[];
   readonly tools?: readonly InputToolDecl[];
 }
@@ -585,6 +614,69 @@ export interface RuntimeManifest {
    * Implemented in packages/runtime/src/turn-executor.ts (executeOneRuntime).
    */
   readonly upstreamRequired?: readonly UpstreamRequirement[];
+  /**
+   * Named scheduling stage (replaces numeric priority bands). Required for
+   * `auto` / `scheduled` runtimes under the strict authoring schema;
+   * forbidden for `event` / `manual`. During the compat period legacy
+   * manifests keep using `priority` and the loader derives the stage from
+   * the band. Declared but not yet consumed by the production scheduler.
+   */
+  readonly stage?: import("./runtime-scheduling.js").Stage;
+  /**
+   * Weak ordering dependencies (pure ordering, no gate). Target failure or
+   * absence never blocks this runtime. Declared but not yet consumed.
+   */
+  readonly after?: readonly import("./runtime-scheduling.js").DependencyRef[];
+  /**
+   * Strong dependencies: ordering + gate. `scope: turn` (default) requires
+   * same-execution success; `scope: session` gates on the persistent
+   * snapshot frozen at execution start (setup runtimes only). Supersedes
+   * `upstreamRequired` (kept as a compat alias). Declared but not yet
+   * consumed by the production scheduler.
+   */
+  readonly needs?: readonly import("./runtime-scheduling.js").DependencyRef[];
+  /**
+   * Typed same-execution data bindings. `required: true` implies
+   * `needs(turn)`, `false` implies `after`. Declared but not yet consumed.
+   */
+  readonly inputs?: Readonly<
+    Record<string, import("./runtime-scheduling.js").RuntimeBinding>
+  >;
+  /**
+   * How the normalizer parses this runtime's handler return value.
+   * `legacy` (default): whole return object preserved as the value with
+   * known control keys copied to effects. `envelope-v1`: explicit
+   * HandlerResult discriminated union with value validation (observe-only
+   * for function runtimes until the I/O-contract step enforces it).
+   */
+  readonly resultFormat?: import("./runtime-scheduling.js").RuntimeResultFormat;
+  /**
+   * Function runtimes only: handler may be replayed from a frozen
+   * activation boundary to resume approval/HTTP asks. Default false.
+   */
+  readonly suspensionSafe?: boolean;
+  /**
+   * Explicit read/write-set override for parallel hazard detection.
+   * Defaults are derived from declared builtin tools + proposal types.
+   * Declared but not yet consumed.
+   */
+  readonly effects?: import("./runtime-scheduling.js").EffectsDecl;
+  /**
+   * Declared permission upper bounds. `http` lists canonical HTTPS origins
+   * (+ methods) this plugin may call through the Public Plugin API.
+   * Declared but not yet enforced.
+   */
+  readonly permissions?: {
+    readonly http?: readonly import("./runtime-scheduling.js").HttpPermissionDecl[];
+  };
+  /**
+   * Compat-period projection of kernel job-status records into this
+   * plugin's legacy plugin-data views. Rejected by the strict authoring
+   * schema. Declared but not yet consumed.
+   */
+  readonly jobStatus?: {
+    readonly legacyViews?: readonly import("./runtime-scheduling.js").LegacyJobViewDecl[];
+  };
   readonly trigger?: TriggerConfig;
   /**
    * Execution mode when this runtime is activated via a manual plugin-rpc call

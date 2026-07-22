@@ -48,11 +48,13 @@ export async function buildPluginFlowResponse() {
     };
     injects: Array<{
       kind: string;
-      as: string;
+      as?: string;
       from?: string;
       field?: string;
       namespace?: string;
       format?: string;
+      name?: string;
+      recordAs?: string;
     }>;
     tools: { builtin: string[]; local: string[] };
     uiSlots: string[];
@@ -159,9 +161,14 @@ export async function buildPluginFlowResponse() {
         injects: (manifest.input?.inject ?? []).map((inject) => ({
           kind: inject.kind,
           ...(inject.kind === "runtime"
-            ? { from: inject.from, field: inject.field }
-            : { namespace: inject.namespace, format: inject.format }),
-          as: inject.as,
+            ? { from: inject.from, field: inject.field, as: inject.as }
+            : inject.kind === "plugin-data"
+              ? {
+                  namespace: inject.namespace,
+                  format: inject.format,
+                  as: inject.as,
+                }
+              : { name: inject.name, recordAs: inject.recordAs }),
         })),
         tools: {
           builtin: [...(manifest.tools?.builtin ?? [])],
