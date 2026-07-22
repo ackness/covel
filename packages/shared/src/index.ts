@@ -50,6 +50,16 @@ export {
   pluginEventDeclSchema,
   pluginRelationsSchema,
   runtimeManifestSchema,
+  runtimeManifestInputSchema,
+  runtimeManifestAuthoringSchema,
+  authoringTriggerConfigSchema,
+  stageSchema,
+  afterRefSchema,
+  needsRefSchema,
+  runtimeBindingSchema,
+  effectsDeclSchema,
+  permissionsDeclSchema,
+  jobStatusDeclSchema,
   validateRuntimeManifestSemantics,
 } from "./schemas/plugin.js";
 

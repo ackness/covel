@@ -16,9 +16,11 @@
   "scripts": {
     "lint": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
+    "generate:schemas": "tsx scripts/generate-plugin-json-schemas.ts",
     "clean": "node ../../scripts/remove-paths.mjs dist"
   },
   "devDependencies": {
+    "ajv": "^8.20.0",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   },

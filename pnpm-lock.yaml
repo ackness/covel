@@ -525,6 +525,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
