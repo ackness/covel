@@ -225,9 +225,10 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 会话快照
 
-| 方法 | 路径                         | 描述                            |
-| ---- | ---------------------------- | ------------------------------- |
-| GET  | `/api/sessions/:id/snapshot` | 获取会话快照（客户端恢复/重连） |
+| 方法 | 路径                         | 描述                                                                                                                           |
+| ---- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| GET  | `/api/sessions/:id/snapshot` | 获取会话快照（客户端恢复/重连）                                                                                                |
+| GET  | `/api/sessions/:id/turns`    | 持久化 turn_results 执行工件列表（含 `commitStatus`/`origin`；`?limit=n` 上限 500）。为 e2e-plugin-verify harness 恢复的薄路由 |
 
 > 快照的 `messages` 与 `executionSteps` 只含**最近窗口**（默认最新 80 条消息 / 600 条 trace 事件），不再全量加载（长会话每次重连都全量读是原性能热点）。快照带 `messagesCursor`（`{createdAt,id} | null`）；前端聊天界面向上滚动时用它调 `GET /api/sessions/:id/messages/page` 增量补更旧消息。窗口外旧 Turn 的执行时间线优雅降级（不渲染）。
 

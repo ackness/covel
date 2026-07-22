@@ -48,6 +48,7 @@ import { messageRoutes } from "./messages.js";
 import { characterRoutes } from "./characters.js";
 import { actionRoutes, setMemorySystem } from "./actions.js";
 import { turnControlRoutes } from "./turn-control-routes.js";
+import { sessionTurnRoutes } from "./session-turns.js";
 import { setupRuntimeControlRoutes } from "./setup-runtime-control.js";
 import { subscribeRoutes } from "./subscribe.js";
 import { pluginDataRoutes } from "./plugin-data.js";
@@ -627,6 +628,7 @@ export async function bootstrapApi(
   app.route("/api/sessions", runtimeOutputRoutes); // translation-layer observability
   app.route("/api/sessions", pluginRpcRoutes); // plugin RPC channel
   app.route("/api/sessions", turnControlRoutes); // mid-turn steer / abort
+  app.route("/api/sessions", sessionTurnRoutes); // turn_results artifact listing
   app.route("/api/sessions", setupRuntimeControlRoutes); // setup retry / waive
   app.route("/api/sessions", sessionApprovalRoutes); // per-session approvals listing
   app.route("/api/approvals", approvalRoutes); // approval lookup + decision
