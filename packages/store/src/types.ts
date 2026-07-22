@@ -77,6 +77,7 @@ export type {
   LogicalTurnLedgerRecord,
   JobStatusState,
   JobStatusRecord,
+  RuntimeExportRecord,
 } from "@covel/shared";
 
 export type {
@@ -133,6 +134,7 @@ import type {
   SetupAttemptState,
   LogicalTurnLedgerRecord,
   JobStatusRecord,
+  RuntimeExportRecord,
 } from "@covel/shared";
 
 // ── Domain sub-interfaces ────────────────────────────────────────
@@ -635,6 +637,51 @@ export interface LifecycleStore {
   ): Promise<readonly JobStatusRecord[]>;
 }
 
+/**
+ * Runtime exports for the scheduling redesign (`sql-export-records`): the
+ * session-scoped, read-only, cross-plugin, versioned publications produced by
+ * `output.recordAs`. Every method is usable inside a
+ * {@link TransactionalStore.withTransaction} handler (the intended publish site
+ * is the finalizeExecution transaction).
+ */
+export interface ExportStore {
+  /**
+   * Publish a runtime export at its `revision`. Idempotent on
+   * `(sessionId, producerRuntimeId, recordAs, revision)`: returns `true` when
+   * this call inserted the row, `false` when that revision was already stored
+   * (no overwrite, no throw). The boolean lets the caller detect a lost race for
+   * a revision number.
+   */
+  appendRuntimeExport(record: RuntimeExportRecord): Promise<boolean>;
+  /**
+   * The latest committed export for `(sessionId, producerRuntimeId, recordAs)`,
+   * i.e. the row with the highest `revision`, or `null` when none exists.
+   *
+   * `opts.atOrBefore` is the frozen-read cutoff: only revisions with
+   * `committedAt <= atOrBefore` are considered, so a consumer sees exactly the
+   * revision that was live when its execution began — a revision published after
+   * that instant is invisible to it. Omitted ⇒ the absolute latest.
+   */
+  getLatestRuntimeExport(
+    sessionId: string,
+    producerRuntimeId: string,
+    recordAs: string,
+    opts?: { readonly atOrBefore?: string },
+  ): Promise<RuntimeExportRecord | null>;
+  /**
+   * List a session's exports, ordered by `(producerRuntimeId, recordAs,
+   * revision)` ascending — so within each export series revisions run oldest to
+   * newest. Optionally narrowed to one `producerRuntimeId` and/or `recordAs`.
+   */
+  listRuntimeExports(
+    sessionId: string,
+    filter?: {
+      readonly producerRuntimeId?: string;
+      readonly recordAs?: string;
+    },
+  ): Promise<readonly RuntimeExportRecord[]>;
+}
+
 /** Materialized state snapshots. Part of `sql-snapshot-records`. */
 export interface SnapshotStore {
   /**
@@ -734,6 +781,7 @@ export interface DataStore
     SuspensionStore,
     SnapshotStore,
     LifecycleStore,
+    ExportStore,
     TransactionalStore,
     StoreLifecycle {}
 

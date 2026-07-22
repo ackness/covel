@@ -24,6 +24,7 @@ import type {
   MessageRecord,
   PlayerInputRecord,
   PluginDataRecord,
+  RuntimeExportRecord,
   RuntimeOutputRecord,
   RuntimeResultRecord,
   SessionRecord,
@@ -134,6 +135,7 @@ export interface InsertValueBuilders {
   ): Record<string, unknown>;
   setupAttemptInsert(record: SetupAttemptRecord): Record<string, unknown>;
   jobStatusInsert(record: JobStatusRecord): Record<string, unknown>;
+  runtimeExportInsert(record: RuntimeExportRecord): Record<string, unknown>;
 }
 
 export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
@@ -685,6 +687,27 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         data: json.writeNullableJson(record.data),
         sequence: record.sequence,
         createdAt: record.createdAt,
+      };
+    },
+
+    // ── Runtime exports (scheduling redesign) ─────────────────────
+    // Insert-ignore ledger (the composite unique index is the identity; no
+    // upsert set builder). `value` is a required JsonValue stored in a nullable
+    // column → `writeJson` (PG `value ?? null`, SQLite `toJson`), so a top-level
+    // JSON `null` round-trips as `null` via the read-side `readRequired`.
+
+    runtimeExportInsert(record) {
+      return {
+        sessionId: record.sessionId,
+        producerPluginId: record.producerPluginId,
+        producerRuntimeId: record.producerRuntimeId,
+        recordAs: record.recordAs,
+        revision: record.revision,
+        pluginVersion: record.pluginVersion,
+        schemaDigest: record.schemaDigest,
+        resultId: record.resultId,
+        value: json.writeJson(record.value),
+        committedAt: record.committedAt,
       };
     },
   };

@@ -4,6 +4,7 @@
  */
 
 import { createLifecycleMethods } from "./lifecycle-methods.js";
+import { createExportMethods } from "./export-methods.js";
 import { createMemoryState } from "./memory-state.js";
 import { createPluginDataMethods } from "./plugin-data-methods.js";
 import { createRuntimeMethods } from "./runtime-methods.js";
@@ -41,6 +42,7 @@ export function createMemoryStore(): MemoryStore {
     ...createSuspensionMethods(state),
     ...createSnapshotMethods(state),
     ...createLifecycleMethods(state),
+    ...createExportMethods(state),
     ...createVectorMethods(state),
   };
 

@@ -71,6 +71,7 @@ export type SessionScopedMemoryKey = Extract<
   | "logicalTurnLedger"
   | "setupAttempts"
   | "jobStatus"
+  | "runtimeExports"
 >;
 
 export type MemoryCollectionKind = "map" | "array";
@@ -248,6 +249,12 @@ export const SESSION_SCOPED_TABLES: readonly SessionScopedTable[] = [
     memoryKey: "jobStatus",
     memoryKind: "map",
     idbStore: "job_status",
+  },
+  {
+    table: "runtime_exports",
+    memoryKey: "runtimeExports",
+    memoryKind: "map",
+    idbStore: "runtime_exports",
   },
 ];
 

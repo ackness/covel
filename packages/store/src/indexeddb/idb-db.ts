@@ -35,6 +35,7 @@ export const IDB_OBJECT_STORES = [
   "logical_turn_ledger",
   "setup_attempts",
   "job_status",
+  "runtime_exports",
 ] as const;
 
 export type IdbStoreName = (typeof IDB_OBJECT_STORES)[number];

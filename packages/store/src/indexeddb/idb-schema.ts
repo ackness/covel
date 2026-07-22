@@ -1,9 +1,10 @@
 // IndexedDB requires a monotonically increasing integer version for schema
 // upgrades. Keep all browser-local object stores on this single version.
 // v13: scheduling-redesign lifecycle stores (logical_turn_ledger /
-// setup_attempts / job_status). `ensureStore` is idempotent, so the bump
-// creates only the newly-added stores on an existing database.
-export const BROWSER_IDB_SCHEMA_VERSION = 13;
+// setup_attempts / job_status). v14: runtime_exports (output.recordAs
+// publications). `ensureStore` is idempotent, so a bump creates only the
+// newly-added stores on an existing database.
+export const BROWSER_IDB_SCHEMA_VERSION = 14;
 export const BROWSER_IDB_DATABASE_NAME = "covel-browser";
 export const APP_KV_STORE_STATE_SNAPSHOTS = "stateSnapshots";
 export const APP_KV_STORE_WORLD_OVERLAYS = "worldOverlays";
@@ -235,6 +236,14 @@ export function upgradeBrowserIdbSchema(
     ],
   });
   jobStatus?.createIndex("sessionId", "sessionId");
+
+  // ── Runtime exports (v14) ──────────────────────────────────────
+  // Composite array keyPath IS the primary key (same uniqueness as the SQL
+  // unique index); a `sessionId` index feeds getLatest / list and the cascade.
+  const runtimeExports = ensureStore(db, "runtime_exports", {
+    keyPath: ["sessionId", "producerRuntimeId", "recordAs", "revision"],
+  });
+  runtimeExports?.createIndex("sessionId", "sessionId");
 
   const mediaAssets = ensureStore(db, "media_assets", { keyPath: "id" });
   mediaAssets?.createIndex("owner", ["ownerSessionId", "ownerPluginId"]);

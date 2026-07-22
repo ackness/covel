@@ -8,6 +8,7 @@ import type {
   LorebookEntryRecord,
   MessageRecord,
   PlayerInputRecord,
+  RuntimeExportRecord,
   RuntimeOutputRecord,
   RuntimeResultRecord,
   SessionRecord,
@@ -521,6 +522,24 @@ export function makeJobStatus(
     state: "queued",
     sequence: 0,
     createdAt: ts(),
+    ...overrides,
+  };
+}
+
+export function makeRuntimeExport(
+  overrides?: Partial<RuntimeExportRecord>,
+): RuntimeExportRecord {
+  return {
+    sessionId: "sess-1",
+    producerPluginId: "world-init",
+    producerRuntimeId: "world-init/schema-gen",
+    recordAs: "worldSchema",
+    revision: 1,
+    pluginVersion: "1.0.0",
+    schemaDigest: "sha256:schema",
+    resultId: id(),
+    value: { ok: true },
+    committedAt: ts(),
     ...overrides,
   };
 }

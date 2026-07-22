@@ -17,6 +17,7 @@ import { createIdbMutationTracker } from "./idb-transaction.js";
 import { createIdbSessionStore } from "./idb-session-store.js";
 import { createIdbRuntimeStore } from "./idb-runtime-store.js";
 import { createIdbLifecycleStore } from "./idb-lifecycle-store.js";
+import { createIdbExportStore } from "./idb-export-store.js";
 import { createIdbPluginStore } from "./idb-plugin-store.js";
 import { createIdbWorldStore } from "./idb-world-store.js";
 import { createIdbPlayerStore } from "./idb-player-store.js";
@@ -53,6 +54,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
     ...createIdbWorldDataStore(ctx),
     ...createIdbPersistenceStore(ctx),
     ...createIdbLifecycleStore(ctx),
+    ...createIdbExportStore(ctx),
   };
   const scope = data as unknown as StoreTransaction;
 

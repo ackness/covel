@@ -685,6 +685,40 @@ export const jobStatus = pgTable(
   ],
 );
 
+// ── Runtime Exports (scheduling redesign) ──────────────────────
+//
+// `output.recordAs` publications: session-scoped, read-only, cross-plugin,
+// versioned. Unique on (session_id, producer_runtime_id, record_as, revision) —
+// insert-ignore on conflict, so a re-published revision is a no-op. `value` is a
+// required JsonValue but stored as a NULLABLE jsonb column (a top-level JSON
+// `null` serialises to SQL NULL and reads back as `null` via `readRequired`,
+// exactly like `state_entries.value`). The unique index's left prefix
+// (session_id, producer_runtime_id, record_as) also serves getLatest / list.
+
+export const runtimeExports = pgTable(
+  "runtime_exports",
+  {
+    sessionId: text("session_id").notNull(),
+    producerPluginId: text("producer_plugin_id").notNull(),
+    producerRuntimeId: text("producer_runtime_id").notNull(),
+    recordAs: text("record_as").notNull(),
+    revision: integer("revision").notNull(),
+    pluginVersion: text("plugin_version").notNull(),
+    schemaDigest: text("schema_digest").notNull(),
+    resultId: text("result_id").notNull(),
+    value: jsonb("value"), // JsonValue (required field; nullable column)
+    committedAt: text("committed_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("pg_runtime_exports_unique_idx").on(
+      table.sessionId,
+      table.producerRuntimeId,
+      table.recordAs,
+      table.revision,
+    ),
+  ],
+);
+
 // ── Vector Models (per-model embedding isolation) ──────────────
 
 export const vectorModels = pgTable(

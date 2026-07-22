@@ -10,6 +10,7 @@ import { registerCoreStoreSuites } from "./suites/core-suites.js";
 import { registerIntegrityStoreSuites } from "./suites/integrity-suites.js";
 import { registerPersistenceStoreSuites } from "./suites/persistence-suites.js";
 import { registerLifecycleStoreSuites } from "./suites/lifecycle-suites.js";
+import { registerExportStoreSuites } from "./suites/export-suites.js";
 import { registerPluginDataStoreSuite } from "./suites/plugin-data-suite.js";
 import { registerRuntimeRecordStoreSuites } from "./suites/runtime-record-suites.js";
 
@@ -46,5 +47,6 @@ export function runStoreContractTests(
     registerPersistenceStoreSuites(getStore);
     registerIntegrityStoreSuites(getStore);
     registerLifecycleStoreSuites(getStore);
+    registerExportStoreSuites(getStore);
   });
 }

@@ -33,5 +33,6 @@ export function createMemoryState(): MemoryState {
     logicalTurnLedger: new Map(),
     setupAttempts: new Map(),
     jobStatus: new Map(),
+    runtimeExports: new Map(),
   };
 }

@@ -360,3 +360,5 @@ export type {
   JobStatusState,
   JobStatusRecord,
 } from "./runtime-lifecycle.js";
+
+export type { RuntimeExportRecord } from "./runtime-exports.js";

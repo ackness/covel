@@ -10,6 +10,7 @@ import type {
   MessageRecord,
   PlayerInputRecord,
   PluginDataRecord,
+  RuntimeExportRecord,
   RuntimeOutputRecord,
   RuntimeResultRecord,
   SessionRecord,
@@ -80,6 +81,10 @@ export interface MemoryState {
   readonly logicalTurnLedger: Map<string, LogicalTurnLedgerRecord>;
   readonly setupAttempts: Map<string, SetupAttemptRecord>;
   readonly jobStatus: Map<string, JobStatusRecord>;
+  // Runtime exports (`output.recordAs` publications). Keyed by the record's
+  // composite unique key (see memory/export-methods.ts) so appends stay
+  // idempotent, mirroring the SQL unique index.
+  readonly runtimeExports: Map<string, RuntimeExportRecord>;
 }
 
 export type MemoryStore = DataStore & VectorStoreCapability & VectorModelOps;
