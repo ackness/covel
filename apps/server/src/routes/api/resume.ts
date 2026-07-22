@@ -33,7 +33,7 @@ import type { DataStore } from "@covel/store";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
 import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
 import {
-  processRuntimeResult,
+  finalizeExecution,
   resumeSuspendedRuntime,
   createTurnEmitter,
   runWithHookScope,
@@ -323,58 +323,17 @@ resumeRoutes.post("/:id/resume", async (c) => {
           );
         }
 
-        const outputKind = effectiveManifest.outputKind ?? "plugin";
-        // Post-commit fan-out barrier: proposals commit through the tx-bound
-        // store view below, which never exposes `withTransaction` — so the
-        // commit pipeline cannot buffer its externally-visible fan-out
-        // (emitter events + PostStateCommit hooks) behind a transaction of its
-        // own. This route owns the transaction, so it owns the barrier:
-        // buffer the thunks here, flush only after `withTransaction` resolves,
-        // and drop them on rollback — clients and hooks must never observe
-        // "committed" for writes the rollback then undoes. Without a
-        // transactional store the fallback runs unwrapped and fan-out stays
-        // inline (nothing later can roll the writes back atomically anyway).
-        const postCommit: Array<() => Promise<void>> = [];
-        const processOpts = {
-          ...(hookPipeline ? { hookPipeline } : {}),
-          ...(eventBus ? { eventBus } : {}),
-          emitter,
-          capabilities: effectiveManifest.capabilities ?? [],
-          ...(typeof store.withTransaction === "function"
-            ? {
-                deferPostCommit: (fn: () => Promise<void>) => {
-                  postCommit.push(fn);
-                },
-              }
-            : {}),
-        };
-
-        // Atomic finalize: proposal commit + assistant turn message +
-        // resolved marker land in ONE transaction (the runtime no longer
-        // writes them — see turn-resume.ts). Any proposal failure or store
-        // error throws, rolling back ALL of it; the claim is released so the
-        // suspension stays retryable. On stores without transactions the same
-        // sequence runs unwrapped (proposal failure still precedes the
-        // history/resolved writes, preserving retryability).
+        // Atomic finalize: proposal commit + assistant turn message + resolved
+        // marker land in ONE transaction via the shared finalize primitive (the
+        // runtime no longer writes them — see turn-resume.ts). Any proposal
+        // failure or store error rolls back ALL of it; the claim is released so
+        // the suspension stays retryable. On stores without transactions the
+        // same sequence runs unwrapped (proposal failure still precedes the
+        // history/resolved writes, preserving retryability). Resume persists no
+        // turn_results row of its own, so `turnIds` is empty (nothing to settle).
         const finalizeResume = async (
           s: import("@covel/store").StoreTransaction,
-        ) => {
-          const { events, failedProposals } = await processRuntimeResult(
-            result,
-            s,
-            sessionId,
-            outputKind,
-            processOpts,
-          );
-          if (failedProposals.length > 0) {
-            throw new Error(
-              `${failedProposals.length} proposal(s) failed to commit: ` +
-                failedProposals
-                  .map((fp) => `${fp.proposal.type}: ${fp.error}`)
-                  .join("; "),
-            );
-          }
-
+        ): Promise<void> => {
           const out = result.output as Record<string, unknown>;
           const narrativeContent =
             typeof out.narrativeOutput === "string"
@@ -404,39 +363,38 @@ resumeRoutes.post("/:id/resume", async (c) => {
             createdAt: new Date().toISOString(),
           });
           await s.markSuspensionResolved(suspension.id);
-          return events;
         };
 
-        let events;
-        try {
-          events =
-            typeof store.withTransaction === "function"
-              ? await store.withTransaction(finalizeResume)
-              : await finalizeResume(store);
-        } catch (err) {
+        // finalize owns the transaction, the commit barrier (buffered fan-out
+        // flushed only after commit, dropped on rollback), and the hook scope.
+        const outcome = await finalizeExecution({
+          store,
+          sessionId,
+          runtimes: [effectiveManifest!],
+          results: [result],
+          turnIds: [],
+          activePluginIds,
+          ...(hookPipeline ? { hookPipeline } : {}),
+          ...(eventBus ? { eventBus } : {}),
+          emitter,
+          extraInTx: finalizeResume,
+        });
+
+        if (outcome.status !== "committed") {
           await releaseClaim();
-          const message = err instanceof Error ? err.message : String(err);
+          const detail =
+            outcome.error ??
+            outcome.failedProposals
+              .map((fp) => `${fp.proposal.type}: ${fp.error}`)
+              .join("; ");
           return c.json(
             errorBody(
-              `Resume commit failed: ${message}. The suspension remains unresolved and can be retried.`,
+              `Resume commit failed: ${detail}. The suspension remains unresolved and can be retried.`,
             ),
             500,
           );
         }
-
-        // Transaction landed — flush the buffered proposal fan-out in commit
-        // order before announcing the resume. A failing emit/hook must not
-        // fail the resume (the data IS committed), so each thunk is isolated.
-        for (const fn of postCommit) {
-          try {
-            await fn();
-          } catch (flushErr) {
-            console.warn(
-              "[resume] post-commit fan-out failed:",
-              flushErr instanceof Error ? flushErr.message : String(flushErr),
-            );
-          }
-        }
+        const events = outcome.events;
 
         // Announce the resume only after the transaction landed — an event
         // for a rolled-back resume would desync clients.

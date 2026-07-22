@@ -119,6 +119,11 @@ export type {
   TraceRecorder,
   ProcessRuntimeResultOutput,
 } from "./session/session-kernel.js";
+export { finalizeExecution } from "./commit/finalize-execution.js";
+export type {
+  FinalizeExecutionArgs,
+  FinalizeExecutionOutcome,
+} from "./commit/finalize-execution.js";
 
 // ── Snapshot Builder ────────────────────────────────────────────
 export { buildSessionSnapshot } from "./snapshot/snapshot-builder.js";

@@ -15,6 +15,7 @@ import {
   executeTurn,
   createTraceRecorder,
   createTurnEmitter,
+  finalizeExecution,
   saveAutoSnapshot,
 } from "@covel/runtime";
 import type { CovelEventType, RuntimeManifest } from "@covel/shared";
@@ -628,86 +629,68 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               registeredTurn.release();
             }
 
-            // Process all runtime results through Session Kernel:
-            // normalize output → commit to Store → emit SessionEvents as SSE.
+            // Commit the whole execution — top-level plus nested recursiveCall
+            // results — in ONE transaction via the shared finalize primitive.
+            // Any proposal failure rolls the whole turn back (committed siblings
+            // included) and settles the turn_results row to `failed`; a clean
+            // run settles it `committed`, both inside that transaction. Nested
+            // rows reuse the top-level turnId, so `[turnId]` settles them all.
             //
             // hookPipeline / eventBus are forwarded so `PreStateCommit` and
-            // `PostStateCommit` hooks declared by plugins actually fire on the
-            // production write path (previously they only ran in tests).
+            // `PostStateCommit` hooks declared by plugins fire on the production
+            // write path (previously they only ran in tests).
             const hookPipeline = c.get("hookPipeline");
-            const resultProcessor = createRuntimeResultProcessor({
+            const outcome = await finalizeExecution({
               store,
               sessionId,
+              ...(result.executionContext
+                ? { executionContext: result.executionContext }
+                : {}),
               runtimes: activeRuntimes,
+              results: [
+                ...result.runtimeResults,
+                ...(result.nestedRuntimeResults ?? []),
+              ],
+              turnIds: [turnId],
               ...(hookPipeline ? { hookPipeline } : {}),
               eventBus,
               emitter,
             });
-            // Commit failures are no longer silently dropped — each one
-            // is surfaced as a `proposal.failed` SSE event, and any failure
-            // withholds the completion barrier below (turn.completed, memory
-            // ingestion, auto-snapshot success signal).
-            let commitFailureCount = 0;
-            // Nested recursiveCall results ride the same commit barrier —
-            // their proposals were previously dropped (only the top-level
-            // results were processed).
-            for (const rr of [
-              ...result.runtimeResults,
-              ...(result.nestedRuntimeResults ?? []),
-            ]) {
-              const { events, failedProposals } =
-                await resultProcessor.process(rr);
+            // finalize owns the commit_status settle (committed or failed).
+            commitStatusSettled = true;
 
-              for (const evt of events) {
-                // Emit using ProtocolEventType directly — no legacy mapping
-                const ssePayload: Record<string, unknown> = {
-                  ...evt.payload,
-                  runtimeId: evt.source.runtimeId,
-                  pluginId: evt.source.pluginId,
-                };
-
-                await writeEvent(evt.type, ssePayload);
-              }
-
-              for (const fp of failedProposals) {
-                commitFailureCount += 1;
-                await writeEvent("proposal.failed", {
-                  proposalId: fp.proposal.id,
-                  proposalType: fp.proposal.type,
-                  runtimeId: fp.proposal.source.runtimeId,
-                  pluginId: fp.proposal.source.pluginId,
-                  error: fp.error,
-                });
-              }
+            for (const evt of outcome.events) {
+              // Emit using ProtocolEventType directly — no legacy mapping.
+              await writeEvent(evt.type, {
+                ...evt.payload,
+                runtimeId: evt.source.runtimeId,
+                pluginId: evt.source.pluginId,
+              });
             }
+            // Commit failures are surfaced as `proposal.failed` SSE events; any
+            // failure withholds the completion barrier below (turn.completed,
+            // memory ingestion, auto-snapshot success signal).
+            for (const fp of outcome.failedProposals) {
+              await writeEvent("proposal.failed", {
+                proposalId: fp.proposal.id,
+                proposalType: fp.proposal.type,
+                runtimeId: fp.proposal.source.runtimeId,
+                pluginId: fp.proposal.source.pluginId,
+                error: fp.error,
+              });
+            }
+            const committed = outcome.status === "committed";
 
-            // Commit-derived lifecycle fields and the automatic snapshot belong
-            // to the same mutation boundary as execution.
+            // Turn accounting and the automatic snapshot share the execution's
+            // mutation boundary but stay OUTSIDE the finalize transaction for
+            // now (moving turn accounting in is a later wave).
             //
             // Order matters:
-            //  1. Settle the execution artifact's commitStatus — a row left
-            //     `pending` means the process died between persisting it and
-            //     getting here (a crash), which must stay distinguishable from a
-            //     turn whose commit failed.
-            //  2. Advance turnCount only for a fully committed player execution
+            //  1. Advance turnCount only for a fully committed player execution
             //     — the count drives the UI turn display, auto-snapshot cadence,
             //     and snapshot numbering, so a failed commit must not move it.
-            //  3. Capture the automatic snapshot last so it contains every
+            //  2. Capture the automatic snapshot last so it contains every
             //     committed proposal AND the turn number it belongs to.
-            try {
-              await store.setTurnResultCommitStatus(
-                sessionId,
-                turnId,
-                commitFailureCount === 0 ? "committed" : "failed",
-              );
-              commitStatusSettled = true;
-            } catch (err) {
-              console.warn(
-                `[actions] failed to settle commitStatus for turn ${turnId}:`,
-                err instanceof Error ? err.message : String(err),
-              );
-            }
-
             await advanceSessionTurnCount({
               store,
               sessionId,
@@ -716,10 +699,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               wasPreGamePending,
               // A scoped retry reruns one runtime over the same logical turn —
               // it must not advance the counter even when its proposals commit.
-              committed: commitFailureCount === 0 && !isScopedRetry,
+              committed: committed && !isScopedRetry,
             });
 
-            if (commitFailureCount === 0) {
+            if (committed) {
               try {
                 await saveAutoSnapshot({
                   store,
@@ -738,7 +721,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               }
             } else {
               console.error(
-                `[actions] ${commitFailureCount} proposal(s) failed to commit for session ${sessionId} turn ${turnId} — ` +
+                `[actions] proposal commit failed for session ${sessionId} turn ${turnId} — ` +
                   "withholding auto-snapshot and turn completion",
               );
             }
@@ -750,7 +733,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             // proposal-only condition), only the best-effort checkpoint is
             // missing and the next turn snapshots again. Gating completion on
             // the snapshot would strand a fully-committed turn as "incomplete".
-            const committed = commitFailureCount === 0;
             if (committed) {
               result.completeTurn?.();
             }
