@@ -27,6 +27,7 @@
  */
 
 import type { RuntimeManifest } from "@covel/shared";
+import { getRuntimeSpec } from "@covel/shared";
 import type { ScheduledGroup } from "../types.js";
 
 export interface DagScheduleResult {
@@ -110,8 +111,8 @@ export function scheduleByDag(
       }
     }
     ready.sort((a, b) => {
-      const pa = a.priority ?? 0;
-      const pb = b.priority ?? 0;
+      const pa = getRuntimeSpec(a).legacyOrder ?? 0;
+      const pb = getRuntimeSpec(b).legacyOrder ?? 0;
       if (pa !== pb) return pa - pb;
       return a.name.localeCompare(b.name);
     });
@@ -129,7 +130,7 @@ export function scheduleByDag(
       };
     }
 
-    const priority = ready[0]!.priority ?? 0;
+    const priority = getRuntimeSpec(ready[0]!).legacyOrder ?? 0;
     levels.push({ priority, runtimes: ready });
 
     for (const rt of ready) {

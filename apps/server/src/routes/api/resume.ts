@@ -40,6 +40,7 @@ import {
   saveAutoSnapshot,
 } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
+import { getRuntimeSpec } from "@covel/shared";
 import type { EventBus } from "@covel/events";
 import { errorBody } from "../../api-error.js";
 import { resolveSessionParam } from "./session/session-guard.js";
@@ -397,7 +398,7 @@ resumeRoutes.post("/:id/resume", async (c) => {
             role: "assistant",
             name: effectiveManifest!.name,
             content: narrativeContent,
-            order: effectiveManifest!.priority ?? 500,
+            order: getRuntimeSpec(effectiveManifest!).legacyOrder ?? 500,
             pendingInput,
             ui,
             createdAt: new Date().toISOString(),

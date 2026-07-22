@@ -12,6 +12,7 @@ import type {
   PostHistoryDecl,
   RuntimeManifest,
 } from "@covel/shared";
+import { getRuntimeSpec } from "@covel/shared";
 import { interpolateTemplate } from "./prompt-internals.js";
 import type {
   ContextBuildParams,
@@ -107,9 +108,12 @@ export function resolveActiveManifests(
     return [params.manifest];
   }
   // Stable sort by ascending priority — matches scheduler semantics
-  // (0 = highest, runs first → renders first).
+  // (0 = highest, runs first → renders first). Reads the normalized IR
+  // (`legacyOrder`), which carries the raw `priority` during the compat period.
   return [...fromCaller].sort(
-    (a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity),
+    (a, b) =>
+      (getRuntimeSpec(a).legacyOrder ?? Infinity) -
+      (getRuntimeSpec(b).legacyOrder ?? Infinity),
   );
 }
 

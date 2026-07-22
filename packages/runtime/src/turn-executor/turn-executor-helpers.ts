@@ -8,6 +8,7 @@ import type {
   RuntimeResult,
   TurnInput,
 } from "@covel/shared";
+import { getRuntimeSpec } from "@covel/shared";
 import type {
   ToolCallContext,
   ToolExecutor,
@@ -46,7 +47,8 @@ export function retainPreGameRuntimes(
   const present = new Set(scheduled.map((r) => r.name));
   // Same Pre-Game predicate as getPreGameRuntimeState — see JSDoc above.
   const droppedPreGame = triggered.filter(
-    (r) => isPreGamePriority(r.priority) && !present.has(r.name),
+    (r) =>
+      isPreGamePriority(getRuntimeSpec(r).legacyOrder) && !present.has(r.name),
   );
   if (droppedPreGame.length === 0) return scheduled;
   console.warn(

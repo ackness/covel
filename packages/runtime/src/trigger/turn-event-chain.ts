@@ -1,4 +1,5 @@
 import type { RuntimeManifest, RuntimeResult, TurnResult } from "@covel/shared";
+import { getRuntimeSpec } from "@covel/shared";
 import { executeParallel } from "../schedule/parallel-executor.js";
 import { NARRATOR_PRIORITY } from "../schedule/scheduler.js";
 import { shouldTrigger } from "./trigger.js";
@@ -144,6 +145,11 @@ export async function runEventChain({
       // trigger semantics. Without this guard, `shouldTrigger` would return
       // true for an `auto` runtime and wrongly re-execute it.
       if (rt.trigger?.type !== "event") return false;
+      // Reserved triggers (conditional / error-retry) never enter an execution
+      // plan. They can never be `event`, so this is behavior-equivalent today,
+      // but keeps fan-out on the same explicit "disabled declaration excluded"
+      // rule as the priority scheduler.
+      if (getRuntimeSpec(rt).disabledReason !== undefined) return false;
       // Single source of truth for the event topic-match (+ gates): delegate
       // to `shouldTrigger`, feeding it the freshly-emitted topics.
       return shouldTrigger(
@@ -163,7 +169,8 @@ export async function runEventChain({
 
     const ordered = [...nextBatch].sort(
       (a, b) =>
-        (a.priority ?? NARRATOR_PRIORITY) - (b.priority ?? NARRATOR_PRIORITY),
+        (getRuntimeSpec(a).legacyOrder ?? NARRATOR_PRIORITY) -
+        (getRuntimeSpec(b).legacyOrder ?? NARRATOR_PRIORITY),
     );
 
     const currentDepthEvents = new Map(emittedEvents);

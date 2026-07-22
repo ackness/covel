@@ -1,4 +1,5 @@
 import type { RuntimeManifest } from "@covel/shared";
+import { getRuntimeSpec } from "@covel/shared";
 import type { DataStore, TurnResultRecord } from "@covel/store";
 import { isPreGamePriority } from "@covel/runtime";
 
@@ -20,7 +21,8 @@ export function isPreGamePending(
   const done = preGameCompleted ?? [];
   return activeRuntimes.some(
     (runtime) =>
-      isPreGamePriority(runtime.priority) && !done.includes(runtime.name),
+      isPreGamePriority(getRuntimeSpec(runtime).legacyOrder) &&
+      !done.includes(runtime.name),
   );
 }
 
@@ -78,7 +80,7 @@ async function hasCompletedMainLoopTurnBefore(args: {
     args;
   const preGameRuntimeIds = new Set<string>(preGameCompleted ?? []);
   for (const runtime of activeRuntimes) {
-    if (isPreGamePriority(runtime.priority)) {
+    if (isPreGamePriority(getRuntimeSpec(runtime).legacyOrder)) {
       preGameRuntimeIds.add(runtime.name);
     }
   }

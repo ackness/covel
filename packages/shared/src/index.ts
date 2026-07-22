@@ -29,6 +29,13 @@ export {
 // ── Environment Registry ──────────────────────────────────────────
 export * from "./env/index.js";
 
+// ── Scheduling IR normalization ───────────────────────────────────
+export {
+  normalizeRuntimeManifest,
+  stageForPriority,
+  getRuntimeSpec,
+} from "./scheduling/normalize.js";
+
 // ── Plugin Schemas ───────────────────────────────────────────────
 export {
   triggerTypeSchema,

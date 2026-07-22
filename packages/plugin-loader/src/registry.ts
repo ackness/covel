@@ -3,6 +3,7 @@
  */
 
 import {
+  getRuntimeSpec,
   pluginDataSchemaMapSchema,
   type PluginDataSchemaDecl,
   type RuntimeManifest,
@@ -223,7 +224,9 @@ export function createPluginRegistry(
       // UI-only plugins (priority === undefined) sort to the end —
       // they are never scheduled but can appear in listings.
       return manifests.sort(
-        (a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity),
+        (a, b) =>
+          (getRuntimeSpec(a).legacyOrder ?? Infinity) -
+          (getRuntimeSpec(b).legacyOrder ?? Infinity),
       );
     },
   };

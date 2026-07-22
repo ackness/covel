@@ -1,4 +1,5 @@
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import { getRuntimeSpec } from "@covel/shared";
 import { applyBranchReplyAcceptedCandidates } from "@covel/context";
 import type { CoreMemoryBlockView } from "@covel/context";
 import type { TurnMessageRecord } from "@covel/store";
@@ -214,7 +215,7 @@ export function getPreGameRuntimeState(
   readonly isPreGamePending: boolean;
 } {
   const preGameRuntimes = activeRuntimes.filter((rt) =>
-    isPreGamePriority(rt.priority),
+    isPreGamePriority(getRuntimeSpec(rt).legacyOrder),
   );
   return {
     preGameRuntimes,

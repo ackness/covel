@@ -8,6 +8,7 @@
  */
 
 import type { RuntimeManifest } from "@covel/shared";
+import { getRuntimeSpec } from "@covel/shared";
 import type { ScheduledGroup } from "../types.js";
 
 const PRE_GAME_BAND_MIN = 0;
@@ -42,7 +43,10 @@ export function isMainLoopPriority(
   );
 }
 
-function isInBand(priority: number | undefined, turnNumber: number): boolean {
+function isInBand(
+  priority: number | undefined,
+  turnNumber: number,
+): priority is number {
   // UI-only runtimes (e.g. memory, trigger.type='manual' with no
   // priority) are never scheduled. This is the defence that keeps
   // manifest typos from accidentally enqueueing a pure-UI plugin and
@@ -56,6 +60,9 @@ function isInBand(priority: number | undefined, turnNumber: number): boolean {
  * Group runtimes by priority and sort groups ascending (0 = highest priority = first).
  * Runtimes out of the current turn's band are dropped silently.
  * Runtimes with `priority === undefined` (UI-only plugins) are never scheduled.
+ *
+ * Ordering reads the normalized IR (`getRuntimeSpec(rt).legacyOrder`), which
+ * carries the raw `priority` value unchanged during the compat period.
  */
 export function scheduleByPriority(
   runtimes: readonly RuntimeManifest[],
@@ -63,21 +70,24 @@ export function scheduleByPriority(
 ): readonly ScheduledGroup[] {
   if (runtimes.length === 0) return [];
 
-  const inBand = runtimes.filter(
-    (rt): rt is RuntimeManifest & { priority: number } =>
-      isInBand(rt.priority, turnNumber),
-  );
-  if (inBand.length === 0) return [];
-
   const grouped = new Map<number, RuntimeManifest[]>();
-  for (const rt of inBand) {
-    const existing = grouped.get(rt.priority);
+  for (const rt of runtimes) {
+    const spec = getRuntimeSpec(rt);
+    // Reserved triggers (conditional / error-retry) are excluded from
+    // execution plans. shouldTrigger already blocks them today; making the
+    // disabled declaration keep them out of the schedule structure too is the
+    // explicit form of the same guarantee (no production plugin declares one).
+    if (spec.disabledReason !== undefined) continue;
+    const order = spec.legacyOrder;
+    if (!isInBand(order, turnNumber)) continue;
+    const existing = grouped.get(order);
     if (existing !== undefined) {
       existing.push(rt);
     } else {
-      grouped.set(rt.priority, [rt]);
+      grouped.set(order, [rt]);
     }
   }
+  if (grouped.size === 0) return [];
 
   const sortedPriorities = [...grouped.keys()].sort((a, b) => a - b);
   return sortedPriorities.map((priority) => ({

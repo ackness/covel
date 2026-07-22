@@ -1,4 +1,5 @@
 import type { RuntimeManifest } from "@covel/shared";
+import { getRuntimeSpec } from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
 import { scheduleByDag } from "../schedule/dag-scheduler.js";
 import {
@@ -80,7 +81,7 @@ export function scheduleTriggeredRuntimes(args: {
   if (manualTarget) {
     return [
       {
-        priority: manualTarget.priority ?? NARRATOR_PRIORITY,
+        priority: getRuntimeSpec(manualTarget).legacyOrder ?? NARRATOR_PRIORITY,
         runtimes: [manualTarget],
       },
     ];
@@ -88,12 +89,14 @@ export function scheduleTriggeredRuntimes(args: {
 
   if (isPreGamePending) {
     const preGameTriggered = triggered.filter((rt) =>
-      isPreGamePriority(rt.priority),
+      isPreGamePriority(getRuntimeSpec(rt).legacyOrder),
     );
     return scheduleByPriority(preGameTriggered, 0);
   }
 
-  const mainLoop = triggered.filter((rt) => isMainLoopPriority(rt.priority));
+  const mainLoop = triggered.filter((rt) =>
+    isMainLoopPriority(getRuntimeSpec(rt).legacyOrder),
+  );
   const dag = scheduleByDag(mainLoop);
   if (dag.error) {
     console.warn(
@@ -111,7 +114,8 @@ export function scheduleMainLoopFollowups(args: {
 }): readonly ScheduledGroup[] {
   const mainLoop = args.triggered.filter(
     (rt) =>
-      isMainLoopPriority(rt.priority) && !args.completedRuntimeIds.has(rt.name),
+      isMainLoopPriority(getRuntimeSpec(rt).legacyOrder) &&
+      !args.completedRuntimeIds.has(rt.name),
   );
   const dag = scheduleByDag(mainLoop);
   return dag.error ? scheduleByPriority(mainLoop, args.turnNumber) : dag.groups;

@@ -1,4 +1,5 @@
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
+import { getRuntimeSpec } from "@covel/shared";
 import type { SessionContextSnapshot } from "@covel/context";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 import type { TurnSessionMeta } from "./session-state.js";
@@ -118,7 +119,7 @@ function collectNewlyDoneRuntimes(args: {
   }
 
   for (const rt of activeRuntimes) {
-    if (!isPreGamePriority(rt.priority)) continue;
+    if (!isPreGamePriority(getRuntimeSpec(rt).legacyOrder)) continue;
     if (preGameCompleted.includes(rt.name)) continue;
     if (newlyDone.includes(rt.name)) continue;
     const max = rt.trigger?.maxTriggerCount;
