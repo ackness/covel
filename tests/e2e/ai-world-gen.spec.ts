@@ -210,16 +210,15 @@ test.describe("AI World Generation", () => {
     expect(dims).toBeTruthy();
     console.log(`Dimensions keys: ${Object.keys(dims!).join(", ")}`);
 
-    const worldData = metadata?.worldData as
-      | {
-          sources?: Array<{ target?: string }>;
-        }
-      | undefined;
-    expect(
-      worldData?.sources?.some(
-        (source) => source.target === "world:metadata.dimensions",
-      ),
-    ).toBe(true);
+    // Server-store saves persist dimensions under `metadata.dimensions` (the
+    // durable, self-contained projection the web client maps to the top-level
+    // `dimensions` field). The generator's file-package provenance
+    // (`metadata.worldData.sources` targeting `world:metadata.dimensions`) is
+    // intentionally stripped by `recordForStoreOnly` in
+    // apps/server/src/routes/api/ai.ts — the temp world package those sources
+    // point at is deleted right after generation, so retaining them would leave
+    // dangling references.
+    expect(metadata?.dimensions).toBeTruthy();
 
     // At minimum, geography and tone should be generated
     const dimKeys = Object.keys(dims!);
