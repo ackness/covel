@@ -14,8 +14,6 @@ tags:
   - role:memory
   - cost:ui-only
   - ui:right-panel
-trigger:
-  type: manual
 ui:
   right:
     - ./ui/memory-panel.json

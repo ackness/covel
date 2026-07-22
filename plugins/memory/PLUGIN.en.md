@@ -10,8 +10,6 @@ pluginType: core-plugin
 outputKind: system
 capabilities:
   - memory-panel
-trigger:
-  type: manual
 ui:
   right:
     - ./ui/memory-panel.json

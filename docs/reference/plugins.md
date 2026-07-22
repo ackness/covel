@@ -440,7 +440,6 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | 字段         | 值                                                                                                   |
 | ------------ | ---------------------------------------------------------------------------------------------------- |
 | pluginType   | `plugin`（可禁用；前端 `low-cost` 组合包默认启用, 其它包 / 世界需手动启用）                          |
-| runtimeType  | `function`（无 LLM；`trigger: manual` 的 no-op handler，永不调度）                                   |
 | outputKind   | `system`                                                                                             |
 | capabilities | `cost-control`                                                                                       |
 | hooks        | `PostLLMResponse`(计量) · `PreSchedule`(软上限收窄) · `TurnStart`(硬上限 abort) · `SessionEnd`(清理) |
@@ -468,13 +467,12 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 
 **路径**: `plugins/director/`
 
-| 字段         | 值                                                       |
-| ------------ | -------------------------------------------------------- |
-| pluginType   | `plugin`（可禁用，默认不启用）                           |
-| runtimeType  | `function`（no-op handler，`trigger: manual`，永不调度） |
-| outputKind   | `system`                                                 |
-| capabilities | `narration-director`                                     |
-| hooks        | `PostContextAssembly`（turn 级、每 runtime 一次）        |
+| 字段         | 值                                                |
+| ------------ | ------------------------------------------------- |
+| pluginType   | `plugin`（可禁用，默认不启用）                    |
+| outputKind   | `system`                                          |
+| capabilities | `narration-director`                              |
+| hooks        | `PostContextAssembly`（turn 级、每 runtime 一次） |
 
 **职责**: 用 `PostContextAssembly` 在每个 story runtime 的系统提示末尾追加统一的「导演前言」。仅对 `payload.outputKind === "story"` 的 runtime 注入（按字段判定，不硬编码插件 ID）；非 story runtime 原样放行。前言文本为插件自带静态常量。
 
@@ -492,13 +490,12 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 
 **路径**: `plugins/story-guard/`
 
-| 字段         | 值                                                       |
-| ------------ | -------------------------------------------------------- |
-| pluginType   | `plugin`（可禁用，默认不启用）                           |
-| runtimeType  | `function`（no-op handler，`trigger: manual`，永不调度） |
-| outputKind   | `system`                                                 |
-| capabilities | `content-safety`                                         |
-| hooks        | `PostLLMResponse`（净化）· `PreToolUse`（拦高危工具）    |
+| 字段         | 值                                                    |
+| ------------ | ----------------------------------------------------- |
+| pluginType   | `plugin`（可禁用，默认不启用）                        |
+| outputKind   | `system`                                              |
+| capabilities | `content-safety`                                      |
+| hooks        | `PostLLMResponse`（净化）· `PreToolUse`（拦高危工具） |
 
 **职责**: 两道确定性、保守的守卫：
 

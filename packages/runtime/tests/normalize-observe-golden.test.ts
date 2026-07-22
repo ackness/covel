@@ -241,20 +241,52 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(backgroundGen.stage).toBeUndefined();
     expect(backgroundGen.legacyOrder).toBe(900);
 
-    // Manual runtimes (real actions + the legacy hook-only dummy story-guard)
-    // are never double-declared: no stage, no legacyOrder, trigger untouched.
+    // Manual runtimes (real plugin-rpc actions) are never double-declared: no
+    // stage, no legacyOrder, trigger untouched. The former hook-only / UI-only
+    // dummies (director / story-guard / cost-gate / memory) dropped their
+    // `trigger: manual` shell — they are asserted separately below.
     for (const id of [
       "character-blueprint",
       "character-presence",
       "player-identity",
       "living-world-rules",
-      "memory",
-      "story-guard",
     ]) {
       const spec = requireSpec(specs, id);
       expect(spec.stage).toBeUndefined();
       expect(spec.declaredTrigger.type).toBe("manual");
       expect(spec.legacyOrder).toBeUndefined();
+    }
+  });
+
+  it("treats hook-only / UI-only plugins as contribution-only (never scheduled)", async () => {
+    const manifests = await loadAllManifests();
+    const specs = specById(manifests.map(normalizeRuntimeManifest));
+
+    // director / story-guard / cost-gate are hook-only; memory is UI-only.
+    // None declares a runtime shape any more (no runtimeType / handler /
+    // trigger / priority), so normalize applies the default `auto` trigger but
+    // derives NO stage and NO legacyOrder — the UI-only idiom the scheduler
+    // drops (priority === undefined ⇒ never scheduled).
+    const contributionOnly = ["director", "story-guard", "cost-gate", "memory"];
+    for (const id of contributionOnly) {
+      const spec = requireSpec(specs, id);
+      expect(spec.stage, `${id}: stage`).toBeUndefined();
+      expect(spec.legacyOrder, `${id}: legacyOrder`).toBeUndefined();
+      expect(spec.declaredTrigger.type, `${id}: trigger`).toBe("auto");
+    }
+
+    // Priority-band scheduling excludes them in both the pre-game and main-loop
+    // bands — the invariant that keeps a handler-less contribution plugin off
+    // the LLM pipeline.
+    const scheduledIds = new Set(
+      [0, 1].flatMap((turn) =>
+        scheduleByPriority(manifests, turn).flatMap((group) =>
+          group.runtimes.map((runtime) => runtime.name),
+        ),
+      ),
+    );
+    for (const id of contributionOnly) {
+      expect(scheduledIds.has(id), `${id}: must not be scheduled`).toBe(false);
     }
   });
 

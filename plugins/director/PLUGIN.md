@@ -7,11 +7,7 @@ description:
   zh: 给主线叙事 runtime 注入一段“导演前言”：只塑形 story 类提示词，其它 runtime 完全不碰。
   en: Injects a "director's note" into the main narrative runtime — shapes only story-kind prompts and leaves every other runtime untouched.
 pluginType: plugin
-runtimeType: function
 outputKind: system
-handler: ./handler.js
-trigger:
-  type: manual
 capabilities:
   - narration-director
 tags:
@@ -23,9 +19,9 @@ entry: ./server/index.js
 # Director
 
 A cross-cutting, **opt-in** plugin that nudges the main narrative voice through a
-single lifecycle hook. It has no schedulable runtime of its own — the `function`
-runtime is `trigger: manual` and never runs; the no-op handler exists only so the
-`runtimeType: function` manifest is complete.
+single lifecycle hook. It carries no schedulable runtime — its behaviour lives
+entirely in the `PostContextAssembly` hook registered by its server entry
+(`server/index.js`).
 
 ## How it works
 

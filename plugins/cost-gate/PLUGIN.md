@@ -7,11 +7,7 @@ description:
   zh: 给每局设置 token 花费上限：接近上限时自动减少后台生成，达到上限时暂停本回合。
   en: Caps token spend per session — trims background generation near the cap and pauses the turn at the cap.
 pluginType: plugin
-runtimeType: function
 outputKind: system
-handler: ./handler.js
-trigger:
-  type: manual
 capabilities:
   - cost-control
 tags:
@@ -46,9 +42,8 @@ userSettings:
 # Cost Gate
 
 A cross-cutting, **opt-in** plugin that enforces a per-session token budget
-entirely through lifecycle hooks. It has no schedulable runtime of its own —
-the `function` runtime is `trigger: manual` and never runs; the no-op handler
-exists only so the manifest is complete.
+entirely through lifecycle hooks. It carries no schedulable runtime — its four
+hooks are registered by its server entry (`server/index.js`).
 
 ## How it works
 
