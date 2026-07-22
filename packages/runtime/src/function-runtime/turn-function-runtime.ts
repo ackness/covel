@@ -7,6 +7,7 @@ import type {
 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import type { SuspensionRecord } from "@covel/store";
+import { validateOutput } from "@covel/tools";
 import {
   createPluginDataWriter,
   createPluginLogger,
@@ -455,6 +456,34 @@ export async function executeFunctionRuntime({
       },
       suspendedResult,
     );
+  }
+
+  // Step 0 observe-only schema check for envelope-v1 function runtimes.
+  // A runtime that opted into `resultFormat: "envelope-v1"` and declared an
+  // `output.schema` promised a `{ outcome, value, ... }` envelope whose `value`
+  // matches the schema. Here we only OBSERVE — validate `value` and warn on a
+  // mismatch, leaving the result byte-identical. Enforcement lands in a later
+  // step. Legacy runtimes (the default), missing schemas, and non-object
+  // returns skip entirely, so their behaviour is unchanged. Reuses the same
+  // ajv-backed `validateOutput` as the agent schema gate.
+  if (
+    manifest.resultFormat === "envelope-v1" &&
+    loaded.outputSchema &&
+    output !== null &&
+    typeof output === "object"
+  ) {
+    const validation = validateOutput(
+      (output as Record<string, unknown>).value,
+      loaded.outputSchema,
+    );
+    if (!validation.valid) {
+      console.warn(
+        `[runtime] ${manifest.name} envelope-v1 output.value did not match output.schema: ` +
+          (validation.errors ?? ["unknown schema validation error"])
+            .slice(0, 5)
+            .join("; "),
+      );
+    }
   }
 
   const rawResult: RuntimeResult = {
