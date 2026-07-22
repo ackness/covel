@@ -102,6 +102,18 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 
 这组 API 回答“当前框架和插件声明支持什么”；具体字段含义仍以 `docs/reference/`、插件 JSON Schema 和插件自己的 `PLUGIN.md` 为准。
 
+## 调度声明（新）
+
+调度重设计用命名的**阶段 + 依赖**声明替代了裸数字 `priority`。现在写可调度 runtime（`auto` / `scheduled`）建议直接用下面的新字段；`event` / `manual` runtime 不写 `stage`。字段的完整语义与边界见 [plugins.md 调度层级](../reference/plugins.md#调度层级)。
+
+- **`stage`** — 五个命名阶段之一：`setup`（游戏初始化）· `pre-turn`（玩家操作前）· `narrative`（主叙事）· `post-turn`（叙事后处理）· `audit`（审计）。阶段之间是**严格屏障**（前一阶段全部结束才进下一阶段）；同阶段内部的先后**只由依赖决定**，无依赖的 runtime 并发执行。
+- **`after`** — 弱排序依赖（**只排序、不设门**）：目标失败或缺席都不会拦住本 runtime。
+- **`needs`** — 强依赖（**排序 + 门控**）：目标本次未成功则本 runtime 被 `skipped`。每项可以是 runtime id，或 `{ capability, cardinality }`（`cardinality: one` = 在场任一提供者成功即可，`all` = 全部成功）。`scope: turn`（默认）要求同一次执行内成功；`scope: session` 对准执行开始时冻结的持久快照判定（仅 setup 用）。`needs` 取代旧的 `upstreamRequired`。
+- **`inputs`** — 把某条隐式上游依赖升级为**有类型的同回合绑定**，解析进 function 的 `ctx.inputs.<name>`（agent 则注入一个保留 prompt 块）。每项：`from`（`{ runtime }` 或 `{ capability, cardinality }`）· `select`（RFC 6901 JSON Pointer，指进生产方成功 value）· `required`（`true` 蕴含 `needs(turn)` 门，`false` 蕴含 `after`）· `accepts`（runtime 目录相对的 JSON Schema 路径，校验最终注入值）。
+- **`input.schema`** — runtime 目录相对的 JSON Schema，校验本 runtime 的**激活载荷**（manual RPC / event payload），派发前强制执行。
+
+**双声明兼容期**：新字段与旧字段现在**并存**。生产调度目前仍读旧的 `priority` / `upstreamRequired`（`priority` 归一为 `legacyOrder`，仍是事件扇出与同层排序的 tiebreaker），Step 6 才移除旧字段。因此官方插件在兼容期**双声明**——同时写新旧两套。新写插件建议直接用上面的新字段；若你的 runtime 还需被读 `priority` 的旧消费者正确排序，兼容期结束前请一并保留 `priority`。
+
 ## 附录
 
 ### A. 内置 UI 工具快速参考

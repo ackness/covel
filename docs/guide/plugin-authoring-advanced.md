@@ -345,6 +345,84 @@ const response = await ctx.utils.fetchWithRetry(`${slot.baseUrl}/...`, {
 });
 ```
 
+### 调度 ctx API:`inputs` / `exports` / `activation` / `execution` / `progress`
+
+调度重设计给 function handler 的 `ctx` 增加了五个字段,取代此前靠 `ctx.completedResults` 手工翻找上游结果、靠 `ctx.pluginData` 写进度占位的旧写法。均为可选字段:未装配对应依赖(或活动集里没有匹配的声明)时为 `undefined`,handler 必须先判空。兼容期内官方 handler 走**双路径**——优先读新字段,读不到再回落旧写法(见文末迁移小节)。
+
+**`ctx.inputs` — 同回合有类型输入绑定。** 对应 manifest 的 `inputs.<name>` 声明。每个 slot 都裹了溯源信息(`InputSlot`):`cardinality: "one"` 读 `.value`,`cardinality: "all"` 读 `.items[].value`。只有通过绑定门的 `stage` / `event` 激活才会填充;`manual` 激活会把回合绑定投影掉,此时 `ctx.inputs` 为空。
+
+```ts
+// manifest:
+//   inputs:
+//     narrative:
+//       from: { capability: narrative-engine, cardinality: one }
+//       select: "/narrativeOutput"   # RFC 6901 JSON Pointer,指进生产方成功 value
+//       required: false              # false→只排序不 gate;true→needs(turn) gate
+const narrative = ctx.inputs?.narrative?.value as string | undefined;
+```
+
+**`ctx.exports` — 跨回合导出消费。** 对应 `input.inject` 里 `kind: runtime-export` 的声明,读生产方在**本次执行开始前**提交的最新版本 `recordAs` 导出。形状与 `ctx.inputs` 相同(`.value` / `.items[]`)。
+
+**`ctx.activation` — 本次激活的规范描述。** `{ source: "stage" | "event" | "manual", detached: boolean, payload: JsonValue }`。`payload` 是经 `input.schema` 校验后的 manual / event 载荷(`stage` 激活为 `null`)。`ctx.manualPayload` / `ctx.triggerEvent.data` 是同一份值的兼容别名。
+
+**`ctx.execution` — 本次调度运行的身份。** `{ executionId, origin, logicalTurnId?, countPolicy }`。`origin` 区分 `player` / `continuation` / `manual` / `background` / `recursive` / `resume`;`countPolicy` 决定本次执行的 finalizer 是否在成功终止时结算玩家逻辑回合。用于日志关联与幂等判断,handler 一般只读。
+
+**`ctx.progress.report` — 长任务的唯一实时通道。** `report(effect)` 向内核 job-status 流追加一条事件并立即发出 SSE,让前端在回合 finalizer 跑完前就看到媒体生成等长任务的进度。它**不写游戏状态、不随领域事务回滚**;持久的领域产出仍走 handler 返回值 / proposal。`effect` 只带业务字段(`jobId` / `state` / `progress` / `message` / `data` / `sequence`),身份(session/scope/plugin/runtime)与时间戳由内核注入——handler 无法伪造别的插件或 runtime 的 job。按 `sequence` 幂等:重复或更旧的序号会被静默丢弃。进度是纯观测,上报失败绝不应拖垮已计费的工作,因此惯例是**判空 + 吞异常**:
+
+```ts
+try {
+  await ctx.progress?.report?.({
+    jobId: "bg-scene-42",
+    state: "running", // queued | running | progress | waiting-input | succeeded | failed | cancelled
+    progress: 40, // 0–100,可选
+    message: "生成夜景变体…",
+    sequence: nextSeq(), // 单调递增,去重键
+  });
+} catch {
+  // 进度仅观测,不能让上报失败中断长任务本身
+}
+```
+
+### 返回信封:`resultFormat: envelope-v1`
+
+`resultFormat` 决定框架如何解析 handler 的返回值,默认 `legacy`:整个返回对象原样保留为 value,`narrativeOutput` / `events` / `statePatches` 等已知控制键照旧被 normalizeOutput 转成 proposal。声明 `resultFormat: envelope-v1` 后,handler 改为返回一个显式判别联合,按 `outcome` 分四支:
+
+| `outcome`   | 语义                | 可带字段                                                              |
+| ----------- | ------------------- | --------------------------------------------------------------------- |
+| `success`   | 正常完成            | `value?`、`effects?`(领域 + 观测)、`completion?: "done" \| "pending"` |
+| `suspended` | 挂起等待续跑 / 审批 | `reason`(必需)、`resumeSchema?`                                       |
+| `skipped`   | 本次不产出          | `skipReason`、`effects?`(**仅观测**)                                  |
+| `failed`    | 业务失败            | `error`、`effects?`(**仅观测**)                                       |
+
+```ts
+export default async function handler(ctx) {
+  if (!ctx.inputs?.narrative)
+    return { outcome: "skipped", skipReason: "no upstream narrative" };
+  return {
+    outcome: "success",
+    value: { entries: [] },
+    effects: { pluginData: [] },
+  };
+}
+```
+
+envelope-v1 下 value 是**强制校验**的:`success.value` 先过 JSON wire 边界检查(`undefined` / 函数 / 循环 / 非有限数 → 归一为 `failed`),若 manifest 还声明了 `output.schema` 则再按该 schema 校验,不匹配整个结果落成 `failed: output-schema-invalid`。非 success 分支(`skipped` / `failed`)只能带观测 effects(`jobStatus` / `diagnostics`)——任何领域写入会被 finalizer 剥离并记一条诊断。`legacy` 格式则只做观测式 warn,不强制。目前官方插件仍全部停在默认 `legacy`;新插件想要强类型 I/O 契约时再显式切 `envelope-v1`。
+
+### `suspensionSafe` 与 `permissions.http`
+
+**`suspensionSafe: boolean`(function runtime,默认 false)**:声明本 handler 可以从冻结的激活边界重放,以便在审批 / HTTP ask 处挂起后继续跑。只有幂等、可安全重入的 handler 才应打开——重放会从头再跑一遍 handler,非幂等副作用(外部下单、递增计数)会重复执行。
+
+**`permissions.http`(声明式网络上界)**:列出本插件可经 Public Plugin API 访问的规范 HTTPS origin(`origin` 不带 path/query/凭据)与方法(缺省仅 `GET`)。
+
+```yaml
+permissions:
+  http:
+    - origin: https://api.example.com
+      methods: [GET, POST]
+```
+
+对 **community(第三方)插件**这是 **fail-closed 强制**的:`ctx.utils.fetchWithRetry` 只放行声明过的 origin+method,未声明的目标在请求发出前就抛错。这是叠加在 SSRF 守卫之上的额外白名单,不是替代——放行的 origin 仍要过私网 IP / DNS-rebinding 检查。builtin / official 插件受信任、不做此项强制(其调用已由 `utils.fetch.*` trace 审计)。
+
 ### 图像生成:`ctx.images`(推荐路径)
 
 `ctx.images` 是框架统一的图像生成原语:选 wire、调 provider、落 `MediaStore`、按 `promptHash` 去重全部由框架完成 —— handler 只需要给 prompt 和业务 metadata,永远不接触字节流或供应商凭据。**新插件应该从这里开始,不要手写 HTTP 调用图像 provider。**
@@ -751,6 +829,40 @@ my-plugin/
 4. `PluginAPI` / `PluginToolkit` / `PluginEntryFactory` 类型从 `@covel/runtime` 导入（JS 用 JSDoc `@param {import('@covel/runtime').PluginAPI} covel`），保证和框架实现编译期对齐。
 
 信任门控、幂等性、community 插件的激活时机等运行语义见 [plugins.md #entry（统一服务端入口）](../reference/plugins.md#entry统一服务端入口)。
+
+---
+
+## 迁移到调度声明面（三方插件）
+
+调度重设计处于**双声明兼容期**:新字段(`stage` / `needs` / `inputs` / `output.recordAs` / `resultFormat` …)已可声明,旧字段(`priority` / `upstreamRequired` / `input.inject kind: runtime`)在兼容期原样保留、仍被生产消费者读取。dashscope / openai / mimo 这类自管 provider 的三方插件按下面四步逐步迁移,每一步都能独立发布、不必一次到位。
+
+**① manifest 双声明。** 保留原有 `priority` / `upstreamRequired`,并排加上新声明。`stage` 用命名阶段代替裸数字(映射见 [plugins.md 调度层级](../reference/plugins.md#调度层级));上游依赖用 `needs`(gate,取代 `upstreamRequired`)或 `inputs`(把某条隐式依赖转成有类型绑定);对 `event` / `manual` runtime 不写 `stage`。
+
+```yaml
+priority: 600 # 兼容期保留,归一为 legacyOrder
+stage: post-turn # 新权威阶段
+upstreamRequired: # 兼容期保留
+  - capability: narrative-engine
+needs: # 取代 upstreamRequired,强度相同
+  - capability: narrative-engine
+inputs: # 可选:把 completedResults 扫描升级为有类型绑定
+  narrative:
+    from: { capability: narrative-engine, cardinality: one }
+    select: "/narrativeOutput"
+    required: false
+```
+
+**② handler:`completedResults` → `ctx.inputs`(双路径)。** 先加读 `ctx.inputs`,读不到再回落原有 `completedResults` 扫描,这样在 manifest/内核接线未齐或 `manual` 激活时不回归。等新路径稳定、且 `inputs` 覆盖了全部同回合输入后,才删掉回落分支。
+
+```ts
+const narrative =
+  (ctx.inputs?.narrative?.value as string | undefined) ??
+  scanCompletedResults(ctx.completedResults); // 兼容期回落
+```
+
+**③ 进度:`ctx.pluginData` 占位 → `ctx.progress.report`。** 长任务(图像 / TTS 生成)的实时进度从"写 plugin-data 占位行"改为走 job-status 通道:`ctx.progress.report(...)` 判空 + 吞异常(见上文调度 ctx API 小节)。durable 产出仍走返回值 / proposal——进度只是观测,不落游戏状态。前端读取旧 plugin-data 面板的话,兼容期可继续同时写占位行,待 UI 切到 job-status 源后再撤。
+
+**④ envelope-v1 切换时机(可选,最后做)。** `resultFormat: envelope-v1` 是强类型 I/O 契约(强制 `output.schema` 校验 + 四分支 outcome),但**不是迁移必需项**。默认 `legacy` 已能用上前三步的全部收益。仅当你想要显式的 success/skipped/failed/suspended 语义、或想让框架强校验输出结构时再切;切换时同步补上 `output.schema`,并把 handler 返回值改成判别联合。
 
 ---
 

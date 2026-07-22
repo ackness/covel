@@ -84,6 +84,14 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 
 **调度重设计双声明期（Step 4）**：可调度 runtime 的 manifest 已开始携带命名的 `stage`（`setup` / `pre-turn` / `narrative` / `post-turn` / `audit`，对应旧 priority 分带 `0-99` / `100-499` / `500` / `501-999` / `1000`），同时用 `needs`（取代 `upstreamRequired`）/ `inputs`（把隐式上游依赖转成有类型的绑定）声明依赖。旧的 `priority` / `upstreamRequired` 字段**在兼容期原样保留**（priority 归一成 `legacyOrder`，仍是事件扇出与同层排序的 tiebreaker），Step 6 才移除。生产调度目前仍读旧字段，`stage` 声明为观测层（golden 归一测试断言"显式 stage = 旧 priority 派生的 stage"）。例外：`pregame` / `world-init/schema-gen` 仍用 `scheduled interval:1 max:1` 的旧 setup 惯用法、不写显式 `stage`（loader 禁止 `stage: setup` 与 `scheduled`/`interval` 并存，其 stage 由归一层从 priority 分带派生）；`event` / `manual` runtime 不设 `stage`。下方概览表的 priority 列即兼容期 `legacyOrder`。
 
+**Setup 状态机（插件视角）**：`setup` 阶段（旧 Pre-Game 分带）的每个 runtime，框架按 `(session, runtimeId)` 维护一个解析状态，插件作者需要知道三种落点：
+
+- **`pending`** — 本代（generation）尚未解析；若最近一次尝试失败会带上 `lastError`。
+- **`done`** — 已解析，`resolution` 分两种：`completed`（跑到成功、通常伴随 runtime 输出 `preGameDone: true`）或 `waived`（按策略跳过）；`warning` 携带非致命提示。
+- **`blocked`** — 无法推进（重试预算耗尽、或硬依赖失败），`reason` 说明原因；后续轮次不再自动调度。
+
+重试预算 = `maxTriggerCount`（不写=无限）。`generation` 在插件集合 / 插件版本变化时递增，因此上一代的 `done` 不会压住新一代的重跑。一次执行内产出的 `done` 对**下一次**执行可见——这正是 `needs(session)` 判定所依据的"执行开始时冻结的持久快照"。
+
 ---
 
 ## 概览
