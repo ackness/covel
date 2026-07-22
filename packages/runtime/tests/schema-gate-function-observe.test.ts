@@ -1,18 +1,22 @@
 /**
- * Observe-only envelope-v1 schema check for function runtimes (Step 0).
+ * envelope-v1 schema gate for function runtimes.
  *
  * Function runtimes historically had no output validation. The scheduling
  * redesign introduces `resultFormat: "envelope-v1"`, where the handler returns
  * a `{ outcome, value, ... }` envelope and `value` is validated against the
- * runtime's `output.schema`. Step 0 only OBSERVES: a mismatch logs a single
- * `console.warn` and the result is returned unchanged. Enforcement lands later.
+ * runtime's `output.schema`.
+ *
+ * Step 3 change (docs 02 §4.3): envelope-v1 now ENFORCES — a mismatch fails the
+ * runtime with `output-schema-invalid` and commits no domain effects. Legacy
+ * stays observe-only (a warn, result unchanged) for one more compat cycle.
  *
  * Pinned behaviours (via `executeTurn` → `executeFunctionRuntime`):
- *   1. envelope-v1 + value conforms → no warn, result unchanged.
- *   2. envelope-v1 + value violates schema → exactly one warn, result unchanged.
+ *   1. envelope-v1 + value conforms → no warn, success, result unchanged.
+ *   2. envelope-v1 + value violates schema → FAILED with output-schema-invalid,
+ *      no warn (deliberate change from Step 0's observe-only warn).
  *   3. legacy + violating return → observe-only warn on the WHOLE object
  *      (docs 02 §4.3), result unchanged.
- *   4. envelope-v1 + no output.schema declared → skipped, no warn.
+ *   4. envelope-v1 + no output.schema declared → skipped, no warn, success.
  */
 
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
@@ -85,7 +89,7 @@ describe("function envelope-v1 schema observe (Step 0)", () => {
     expect(result.runtimeResults[0]?.output).toEqual(returned);
   });
 
-  it("warns exactly once (result unchanged) when the envelope-v1 value violates the schema", async () => {
+  it("fails with output-schema-invalid (Step 3 enforce) when the envelope-v1 value violates the schema", async () => {
     const returned = { outcome: "success", value: { wrong: "shape" } };
     const loaded: LoadedRuntime = {
       manifest: manifest({
@@ -103,13 +107,10 @@ describe("function envelope-v1 schema observe (Step 0)", () => {
       makeDeps(loaded),
     );
 
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    const message = String(warnSpy.mock.calls[0]?.[0]);
-    expect(message).toContain("fn-plugin/observer");
-    expect(message).toContain("did not match output.schema");
-    // Observe-only: the returned output is passed through untouched.
-    expect(result.runtimeResults[0]?.status).toBe("success");
-    expect(result.runtimeResults[0]?.output).toEqual(returned);
+    // Deliberate change from Step 0: envelope-v1 no longer warns — it enforces.
+    const runtimeResult = result.runtimeResults[0];
+    expect(runtimeResult?.status).toBe("failed");
+    expect(runtimeResult?.error).toContain("output-schema-invalid");
   });
 
   it("observes (warns once, result unchanged) legacy runtimes with a violating return", async () => {

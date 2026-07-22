@@ -9,6 +9,20 @@ export {
 } from "./schedule/scheduler.js";
 export { scheduleByDag } from "./schedule/dag-scheduler.js";
 
+// ── Effects hazard (same-layer read/write policy) ────────────────
+export {
+  deriveEffects,
+  resourcesIntersect,
+  effectsHazard,
+  applyHazardPolicy,
+  resolveEffectsPolicy,
+} from "./schedule/effects.js";
+export type {
+  RuntimeEffects,
+  EffectsPolicy,
+  HazardPolicyResult,
+} from "./schedule/effects.js";
+
 // ── Parallel Executor ────────────────────────────────────────────
 export { executeParallel } from "./schedule/parallel-executor.js";
 export type { RuntimeExecuteFn } from "./schedule/parallel-executor.js";

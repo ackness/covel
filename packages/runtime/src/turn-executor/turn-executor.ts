@@ -23,6 +23,10 @@ import {
 import { executeParallel } from "../schedule/parallel-executor.js";
 import { scheduleByPriority } from "../schedule/scheduler.js";
 import {
+  applyHazardPolicy,
+  resolveEffectsPolicy,
+} from "../schedule/effects.js";
+import {
   runTurnStartHook,
   runTurnStopHook,
   runPreScheduleHook,
@@ -415,11 +419,35 @@ async function executeTurnImpl(
   // only if a cycle is detected (plugin authoring mistake).
   //
   // See packages/runtime/src/dag-scheduler.ts for the algorithm.
-  const { groups, cyclic } = scheduleTriggeredRuntimes({
+  const { groups: scheduledGroups, cyclic } = scheduleTriggeredRuntimes({
     manualTarget,
     triggered: scheduledRuntimes,
     isPreGamePending,
   });
+
+  // Same-layer effects hazard policy (01 §7): derive read/write sets for each
+  // parallel group and check pairs. Default `warn` keeps the groups parallel and
+  // only emits diagnostics (no behaviour change); `strict` splits conflicting
+  // pairs into serial sub-levels. Single-runtime groups (manual trigger) are a
+  // no-op.
+  const { groups, diagnostics: hazardDiagnostics } = applyHazardPolicy(
+    scheduledGroups,
+    resolveEffectsPolicy(),
+  );
+  for (const d of hazardDiagnostics) {
+    console.warn(`[turn-executor] ${d.message}`);
+    emitSubEvent(
+      deps.eventBus,
+      "runtime",
+      "scheduling.hazard",
+      input.sessionId,
+      {
+        code: d.code,
+        message: d.message,
+        ...(d.data !== undefined ? { data: d.data } : {}),
+      },
+    );
+  }
   const sessionSummaries = await loadSessionSummaries({ input, deps });
   // Single listWorkingMemory read per turn: the raw records are threaded into
   // the core-memory manager (initializeDefaults + loadBlocks) below (R-13).

@@ -38,6 +38,7 @@ import {
 } from "../turn-executor/turn-runtime-helpers.js";
 import { withGatewayTrace } from "./gateway-trace.js";
 import { withUtilsTrace } from "./utils-trace.js";
+import { enforceHttpPermissions } from "./http-permissions.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { NARRATOR_PRIORITY } from "../schedule/scheduler.js";
 
@@ -283,12 +284,24 @@ export async function executeFunctionRuntime({
       : createFunctionStoreView(deps.store, helperCtx)
     : undefined;
 
+  // Community HTTP fail-closed: a community plugin may only reach an
+  // origin+method declared under permissions.http; trusted plugins pass through
+  // unchanged (SSRF still enforced inside fetchWithRetry either way). Applied
+  // BEFORE the trace wrapper so a denied call never emits a spurious calling
+  // event, and independent of the emitter so enforcement is not trace-gated.
+  const permissionedUtils = deps.utils
+    ? enforceHttpPermissions(deps.utils, {
+        isCommunity: !isTrustedSource,
+        httpPermissions: manifest.permissions?.http ?? [],
+        runtimeId: manifest.name,
+      })
+    : undefined;
   // Trace plugin-owned provider HTTP calls (ctx.utils.fetchWithRetry — the wire
   // image plugins use) when an emitter is present; raw passthrough otherwise.
   const tracedUtils =
-    deps.utils && deps.emitter
-      ? withUtilsTrace(deps.utils, deps.emitter, helperCtx)
-      : deps.utils;
+    permissionedUtils && deps.emitter
+      ? withUtilsTrace(permissionedUtils, deps.emitter, helperCtx)
+      : permissionedUtils;
 
   await deps.emitter?.emit("function.executing", {
     ...helperCtx,
@@ -549,15 +562,15 @@ export async function executeFunctionRuntime({
     );
   }
 
-  // Observe-only `output.schema` check (compat window — neither format enforces
-  // here; a mismatch logs one warn and leaves the result unchanged). Reuses the
-  // same ajv-backed `validateOutput` as the agent schema gate.
-  //   - envelope-v1: validate the envelope `value` (Step 0).
-  //   - legacy: validate the whole preserved object (docs 02 §4.3 — a minor
-  //     observe-only cycle before Step 6 removes the legacy face).
-  // Missing schemas and non-object returns skip entirely, so behaviour is
-  // unchanged for runtimes without a declared schema.
+  // `output.schema` gate. Reuses the same ajv-backed `validateOutput` as the
+  // agent schema gate. Missing schemas and non-object returns skip entirely.
+  //   - envelope-v1: ENFORCE the envelope `value` (docs 02 §4.3, Step 3). A
+  //     mismatch fails the runtime with `output-schema-invalid` and commits no
+  //     domain effects (a failed status drops all buffered writes downstream).
+  //   - legacy: observe-only warn on the whole preserved object (a minor
+  //     compat cycle before Step 6 removes the legacy face).
   const resultFormat = manifest.resultFormat ?? "legacy";
+  let envelopeSchemaError: string | undefined;
   if (loaded.outputSchema && output !== null && typeof output === "object") {
     const validationTarget =
       resultFormat === "envelope-v1"
@@ -565,12 +578,16 @@ export async function executeFunctionRuntime({
         : output;
     const validation = validateOutput(validationTarget, loaded.outputSchema);
     if (!validation.valid) {
-      console.warn(
-        `[runtime] ${manifest.name} ${resultFormat} output did not match output.schema: ` +
-          (validation.errors ?? ["unknown schema validation error"])
-            .slice(0, 5)
-            .join("; "),
-      );
+      const detail = (validation.errors ?? ["unknown schema validation error"])
+        .slice(0, 5)
+        .join("; ");
+      if (resultFormat === "envelope-v1") {
+        envelopeSchemaError = `output-schema-invalid: ${detail}`;
+      } else {
+        console.warn(
+          `[runtime] ${manifest.name} ${resultFormat} output did not match output.schema: ${detail}`,
+        );
+      }
     }
   }
 
@@ -603,18 +620,26 @@ export async function executeFunctionRuntime({
     );
   }
 
+  // A failed envelope-v1 schema gate overrides the handler outcome: the runtime
+  // fails with `output-schema-invalid` and no domain effects are committed.
   const rawResult: RuntimeResult = {
     pluginId: manifest.pluginId,
     runtimeId: manifest.name,
     runId,
     turnId: input.turnId,
-    status: demote ? handlerOutcome.outcome : "success",
+    status: envelopeSchemaError
+      ? "failed"
+      : demote
+        ? handlerOutcome.outcome
+        : "success",
     output,
     toolCalls: [],
     durationMs: Date.now() - startTime,
-    ...(demote && handlerOutcome.outcome === "failed"
-      ? { error: handlerOutcome.error }
-      : {}),
+    ...(envelopeSchemaError
+      ? { error: envelopeSchemaError }
+      : demote && handlerOutcome.outcome === "failed"
+        ? { error: handlerOutcome.error }
+        : {}),
     timestamp: new Date().toISOString(),
   };
 
@@ -642,6 +667,7 @@ export async function executeFunctionRuntime({
   // direct-write path). Suspends return earlier and intentionally drop the
   // buffer too — a suspended runtime is not done.
   if (
+    !envelopeSchemaError &&
     writeBuffer.length > 0 &&
     result.output &&
     typeof result.output === "object"

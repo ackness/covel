@@ -50,6 +50,12 @@ import {
   hasIllegalDetachedContract,
   resolveInputBindings,
 } from "../src/schedule/input-bindings.js";
+import {
+  applyHazardPolicy,
+  effectsHazard,
+  deriveEffects,
+} from "../src/schedule/effects.js";
+import type { ScheduledGroup } from "../src/types.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 
 class NoopLLM implements LLMAdapter {
@@ -1672,10 +1678,97 @@ describe("recordAs export (persistent export revision)", () => {
 });
 
 describe("effects hazard (same-layer W/W, W/R, R/W detection)", () => {
-  // needs: effects read/write hazard derivation from tool whitelists + default/strict concurrency policy (release step 3)
-  it.todo(
-    "scenario 18b: 同层 effects 检查覆盖 W/W、W/R、R/W 且放行 R/R；双方 parallelSafe 只豁免不含 unknown:* 的纯 W/W；相同输入在 default/strict policy 下分别产出稳定的 warning/串行 level — 断言 hazard 矩阵与两种 policy 的稳定输出",
-  );
+  const rt = (
+    name: string,
+    fields: Partial<RuntimeManifest>,
+  ): RuntimeManifest =>
+    ({
+      name,
+      pluginId: name.split("/")[0],
+      pluginType: "community",
+      priority: 500,
+      trigger: { type: "auto" },
+      model: "m",
+      runtimeType: "agent",
+      ...fields,
+    }) as RuntimeManifest;
+
+  it("scenario 18b: 同层 effects 检查覆盖 W/W、W/R、R/W 且放行 R/R；双方 parallelSafe 只豁免不含 unknown:* 的纯 W/W；相同输入在 default/strict policy 下分别产出稳定的 warning/串行 level — 断言 hazard 矩阵与两种 policy 的稳定输出", () => {
+    const writer = deriveEffects(
+      rt("p/writer", { tools: { builtin: ["update-character"] } }),
+    );
+    const reader = deriveEffects(
+      rt("p/reader", { tools: { builtin: ["list-characters"] } }),
+    );
+    const otherReader = deriveEffects(
+      rt("p/reader2", { tools: { builtin: ["get-character"] } }),
+    );
+
+    // Hazard matrix: W/W, W/R, R/W all conflict; R/R is exempt.
+    expect(effectsHazard(writer, writer)).toBe(true); // W/W
+    expect(effectsHazard(writer, reader)).toBe(true); // W/R
+    expect(effectsHazard(reader, writer)).toBe(true); // R/W
+    expect(effectsHazard(reader, otherReader)).toBe(false); // R/R
+
+    // parallelSafe exempts pure W/W without unknown:*, but never a W/R hazard,
+    // and never a W/W overlap that involves unknown:*.
+    const safeWriterA = deriveEffects(
+      rt("p/sa", {
+        tools: { builtin: ["update-character"] },
+        effects: { parallelSafe: true },
+      }),
+    );
+    const safeWriterB = deriveEffects(
+      rt("q/sb", {
+        tools: { builtin: ["create-character"] },
+        effects: { parallelSafe: true },
+      }),
+    );
+    expect(effectsHazard(safeWriterA, safeWriterB)).toBe(false); // pure W/W exempt
+    expect(effectsHazard(safeWriterA, { ...reader, parallelSafe: true })).toBe(
+      true,
+    ); // W/R never exempt
+    const safeUnknown = deriveEffects(
+      rt("r/su", {
+        // undeclared plugin-data write → unknown:*, marked parallelSafe
+        tools: { builtin: ["plugin-data-set"] },
+        effects: { parallelSafe: true },
+      }),
+    );
+    expect(effectsHazard(safeUnknown, safeWriterA)).toBe(true); // unknown:* never exempt
+
+    // Same input → stable output under both policies. Group has two conflicting
+    // writers plus an independent narrator.
+    const group: ScheduledGroup = {
+      priority: 500,
+      runtimes: [
+        rt("p/narrator", { outputKind: "story" }),
+        rt("z/writer2", { tools: { builtin: ["create-character"] } }),
+        rt("a/writer1", { tools: { builtin: ["update-character"] } }),
+      ],
+    };
+
+    const warn1 = applyHazardPolicy([group], "warn");
+    const warn2 = applyHazardPolicy([group], "warn");
+    // warn: one parallel level, one diagnostic per conflicting pair, stable.
+    expect(warn1.groups).toHaveLength(1);
+    expect(warn1.diagnostics).toHaveLength(1);
+    expect(warn1.diagnostics[0]?.message).toContain("a/writer1");
+    expect(warn1.diagnostics[0]?.message).toContain("z/writer2");
+    expect(warn2.diagnostics).toEqual(warn1.diagnostics);
+
+    const strict1 = applyHazardPolicy([group], "strict");
+    const strict2 = applyHazardPolicy([group], "strict");
+    // strict: the two writers land in different levels (serialized in id order),
+    // the independent narrator stays parallel with the first.
+    const strictLevels = strict1.groups.map((g) =>
+      g.runtimes.map((r) => r.name).sort(),
+    );
+    expect(strictLevels).toEqual([["a/writer1", "p/narrator"], ["z/writer2"]]);
+    expect(strict2.groups.map((g) => g.runtimes.map((r) => r.name))).toEqual(
+      strict1.groups.map((g) => g.runtimes.map((r) => r.name)),
+    );
+  });
 });
 
 describe("enablement resolver & permission approval (scenarios 19-25)", () => {
