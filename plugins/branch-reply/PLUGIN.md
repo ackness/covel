@@ -8,6 +8,7 @@ description:
   en: Offers several reply options so you can choose the one that fits best.
 pluginType: plugin
 runtimeType: function
+resultFormat: envelope-v1
 outputKind: system
 priority: 700
 # Dual-declared (compat period): `stage` is the new authority; `priority`

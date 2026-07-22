@@ -60,6 +60,9 @@ function makeCtx({
   };
 }
 
+// Deliberate change: handler migrated to envelope-v1. On success the asset is
+// under `result.effects.assetGenerations`; a skip/failure is `result.outcome`
+// ("skipped"/"failed") with the failed error still top-level.
 describe("scene-stage background-gen handler", () => {
   it("1. generates the day variant, writes the generated index, and refreshes a pending stage", async () => {
     const stage = {
@@ -91,7 +94,7 @@ describe("scene-stage background-gen handler", () => {
       AbortSignal,
     );
 
-    const asset = expectAssetGenerated(result, { modality: "image" });
+    const asset = expectAssetGenerated(result.effects, { modality: "image" });
     expect(asset.meta).toEqual({
       kind: "scene-background",
       sceneId: "gen-abcd1234",
@@ -163,7 +166,7 @@ describe("scene-stage background-gen handler", () => {
 
     const result = await handler(ctx);
 
-    expect(result.status).toBe("failed");
+    expect(result.outcome).toBe("failed");
     expect(result.error).toMatch(/ctx\.images is unavailable/);
     expect(ctx.logger.error).toHaveBeenCalledWith(
       "scene-stage.background-gen.no-images-context",
@@ -226,7 +229,7 @@ describe("scene-stage background-gen handler", () => {
     const result = await handler(ctx);
 
     expect(ctx.images.generate).not.toHaveBeenCalled();
-    expect(result.status).toBe("skipped");
+    expect(result.outcome).toBe("skipped");
     expect(ctx.pluginData.set).not.toHaveBeenCalledWith(
       "generated",
       expect.anything(),
@@ -272,7 +275,7 @@ describe("scene-stage background-gen handler", () => {
 
     const result = await handler(ctx);
 
-    expect(result.status).toBe("failed");
+    expect(result.outcome).toBe("failed");
     expect(ctx.logger.error).toHaveBeenCalled();
   });
 });
@@ -309,7 +312,7 @@ describe("scene-stage background-gen progress reporting", () => {
 
     const result = await handler(ctx);
 
-    expect(result.status).toBe("failed");
+    expect(result.outcome).toBe("failed");
     expect(report).toHaveBeenCalledTimes(2);
     expect(report.mock.calls[0][0]).toMatchObject({
       state: "running",
@@ -345,12 +348,12 @@ describe("scene-stage background-gen progress reporting", () => {
   it("silently skips progress when ctx.progress is absent", async () => {
     // No job-status channel wired (test harness / host) — generation unaffected.
     const result = await handler(makeCtx());
-    expect(result.status).toBe("done");
+    expect(result.outcome).toBe("success");
   });
 
   it("swallows a progress.report error without failing generation", async () => {
     const report = vi.fn().mockRejectedValue(new Error("job store down"));
     const result = await handler(makeCtx({ progress: { report } }));
-    expect(result.status).toBe("done");
+    expect(result.outcome).toBe("success");
   });
 });

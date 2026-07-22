@@ -294,7 +294,9 @@ describe("normalize golden (bundled plugin set)", () => {
     const manifests = await loadAllManifests();
     for (const manifest of manifests) {
       const spec = normalizeRuntimeManifest(manifest);
-      expect(spec.resultFormat).toBe("legacy");
+      // Migrated official handlers declare envelope-v1; the rest default to
+      // legacy. Normalization must preserve whichever the manifest declares.
+      expect(spec.resultFormat).toBe(manifest.resultFormat ?? "legacy");
       expect(spec.suspensionSafe).toBe(false);
       // `bindings` mirrors `manifest.inputs`; only branch-reply is
       // double-declared with an `inputs` binding in the compat period, every

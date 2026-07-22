@@ -86,7 +86,9 @@ describe("function envelope-v1 schema observe (Step 0)", () => {
 
     expect(warnSpy).not.toHaveBeenCalled();
     expect(result.runtimeResults[0]?.status).toBe("success");
-    expect(result.runtimeResults[0]?.output).toEqual(returned);
+    // Deliberate change: a success envelope is now projected to the legacy
+    // top-level output (value flattened) so the kernel consumers read it.
+    expect(result.runtimeResults[0]?.output).toEqual({ prompt: "ok" });
   });
 
   it("fails with output-schema-invalid (Step 3 enforce) when the envelope-v1 value violates the schema", async () => {

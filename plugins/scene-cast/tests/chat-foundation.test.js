@@ -112,6 +112,9 @@ describe("chat foundation manifests", () => {
   });
 });
 
+// Deliberate change: handler migrated to envelope-v1, so the business value
+// (speakers / activeCastContext) is under `result.value`; pending proposals
+// stay on the envelope (result).
 describe("scene-cast handler", () => {
   it("selects mentioned NPCs and writes active cast plugin data", async () => {
     const store = {
@@ -170,9 +173,9 @@ describe("scene-cast handler", () => {
       userSettings: { activeSpeakerCount: 1 },
     });
 
-    expect(result.speakers).toHaveLength(1);
-    expect(result.speakers[0].name).toBe("Mira");
-    expect(result.activeCastContext).toContain("Mira");
+    expect(result.value.speakers).toHaveLength(1);
+    expect(result.value.speakers[0].name).toBe("Mira");
+    expect(result.value.activeCastContext).toContain("Mira");
 
     const [proposal] = getPendingProposals(result);
     expect(proposal).toMatchObject({
@@ -240,7 +243,7 @@ describe("scene-cast handler", () => {
       recursionDepth: 0,
     });
 
-    expect(result.speakers).toEqual([]);
-    expect(result.activeCastContext).toContain("No active NPC selected");
+    expect(result.value.speakers).toEqual([]);
+    expect(result.value.activeCastContext).toContain("No active NPC selected");
   });
 });

@@ -73,7 +73,10 @@ async function seedFromNarrative(ctx) {
   // Skip empty / system turns — nothing to seed, so the block stays hidden
   // rather than rendering an empty swipe widget.
   if (!narrative) {
-    return { action: "seed", turnId: targetTurnId, seeded: false };
+    return {
+      outcome: "success",
+      value: { action: "seed", turnId: targetTurnId, seeded: false },
+    };
   }
   const baseText = narrative.text;
   // The runtime that produced the narrative this turn. Stored on the turn
@@ -88,7 +91,10 @@ async function seedFromNarrative(ctx) {
   // a prior seed or a player regenerate/accept already owns this turn.
   const existing = await readTurnRecord(ctx, targetTurnId);
   if (existing) {
-    return { action: "seed", turnId: targetTurnId, seeded: false };
+    return {
+      outcome: "success",
+      value: { action: "seed", turnId: targetTurnId, seeded: false },
+    };
   }
 
   const candidates = toCandidates(
@@ -124,10 +130,13 @@ async function seedFromNarrative(ctx) {
   // because the turn record's `runtimeId` points at the narrator, not us.
   return withPendingProposals(
     {
-      action: "seed",
-      turnId: targetTurnId,
-      seeded: true,
-      candidateCount: candidates.length,
+      outcome: "success",
+      value: {
+        action: "seed",
+        turnId: targetTurnId,
+        seeded: true,
+        candidateCount: candidates.length,
+      },
     },
     [
       makePluginDataBatchProposal(ctx, now, [
@@ -207,10 +216,13 @@ async function createCandidates(ctx, payload) {
 
   return withPendingProposals(
     {
-      action: "createCandidates",
-      turnId: targetTurnId,
-      candidateCount: candidates.length,
-      selectedCandidateId: turnRecord.selectedCandidateId,
+      outcome: "success",
+      value: {
+        action: "createCandidates",
+        turnId: targetTurnId,
+        candidateCount: candidates.length,
+        selectedCandidateId: turnRecord.selectedCandidateId,
+      },
     },
     [
       makePluginDataBatchProposal(ctx, now, [
@@ -266,10 +278,13 @@ async function acceptCandidate(ctx, payload) {
 
   return withPendingProposals(
     {
-      action: "acceptCandidate",
-      turnId: targetTurnId,
-      acceptedCandidateId: candidateId,
-      acceptedText,
+      outcome: "success",
+      value: {
+        action: "acceptCandidate",
+        turnId: targetTurnId,
+        acceptedCandidateId: candidateId,
+        acceptedText,
+      },
     },
     [
       makePluginDataBatchProposal(ctx, now, [

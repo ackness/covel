@@ -53,8 +53,11 @@ export default async function handler(ctx) {
     };
     return withPendingProposals(
       {
-        activeCastContext: formatActiveCastContext(activeCast),
-        speakers: [],
+        outcome: "success",
+        value: {
+          activeCastContext: formatActiveCastContext(activeCast),
+          speakers: [],
+        },
       },
       [makeActiveCastProposal(ctx, activeCast)],
     );
@@ -80,8 +83,11 @@ export default async function handler(ctx) {
 
   return withPendingProposals(
     {
-      activeCastContext: formatActiveCastContext(activeCast),
-      speakers,
+      outcome: "success",
+      value: {
+        activeCastContext: formatActiveCastContext(activeCast),
+        speakers,
+      },
     },
     [makeActiveCastProposal(ctx, activeCast)],
   );

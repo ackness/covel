@@ -98,10 +98,13 @@ export default async function handler(ctx) {
 
   return withPendingProposals(
     {
-      saved: true,
-      profileId: profile.id,
-      activated: shouldActivate,
-      ...(shouldBindToPlayer ? { characterId } : {}),
+      outcome: "success",
+      value: {
+        saved: true,
+        profileId: profile.id,
+        activated: shouldActivate,
+        ...(shouldBindToPlayer ? { characterId } : {}),
+      },
     },
     proposals,
   );

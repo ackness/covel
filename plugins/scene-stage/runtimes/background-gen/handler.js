@@ -31,8 +31,8 @@ export default async function handler(ctx) {
   const variant = data.variant === "night" ? "night" : "day";
   if (!evt || !sceneId || !location) {
     return {
-      status: "skipped",
-      reason: "no usable generate-requested payload",
+      outcome: "skipped",
+      skipReason: "no usable generate-requested payload",
     };
   }
 
@@ -42,7 +42,7 @@ export default async function handler(ctx) {
       variant,
     });
     return {
-      status: "failed",
+      outcome: "failed",
       error: "ctx.images is unavailable",
     };
   }
@@ -62,7 +62,7 @@ export default async function handler(ctx) {
       existing.day ?? null,
       existing.night ?? null,
     );
-    return { status: "skipped", reason: "variant already generated" };
+    return { outcome: "skipped", skipReason: "variant already generated" };
   }
 
   const registry = ctx.pluginData
@@ -126,7 +126,7 @@ export default async function handler(ctx) {
       sequence: (progressSequence += 1),
       message,
     });
-    return { status: "failed", error: message };
+    return { outcome: "failed", error: message };
   }
 
   // Persist the visualHint so a later night backfill (which arrives on a
@@ -158,11 +158,20 @@ export default async function handler(ctx) {
     sequence: (progressSequence += 1),
   });
 
+  // assetGenerations is a domain effect; the kernel projects it back to the
+  // legacy top-level `assetGenerations` key that session-output-normalizer /
+  // collectAssetGenerations read.
   return {
-    status: "done",
-    assetGenerations: [
-      { ref, modality: "image", meta: { kind: SCENE_KIND, sceneId, variant } },
-    ],
+    outcome: "success",
+    effects: {
+      assetGenerations: [
+        {
+          ref,
+          modality: "image",
+          meta: { kind: SCENE_KIND, sceneId, variant },
+        },
+      ],
+    },
   };
 }
 

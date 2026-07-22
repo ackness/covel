@@ -21,6 +21,7 @@ import {
 } from "./plugin-handler-helpers.js";
 import { createExecutionWriteBuffer } from "./execution-write-buffer.js";
 import { normalizeHandlerResult } from "../commit/normalize-handler-result.js";
+import { projectEnvelopeSuccessToLegacyOutput } from "../commit/project-envelope-result.js";
 import { createRuntimeMediaContext } from "./runtime-media-context.js";
 import { createRuntimeImagesContext } from "./runtime-images-context.js";
 import { createRuntimeSpeechContext } from "./runtime-speech-context.js";
@@ -622,6 +623,18 @@ export async function executeFunctionRuntime({
     );
   }
 
+  // envelope-v1 → legacy output projection (compat-era; removed in Step 6). The
+  // kernel's consumers read business / domain / completion fields from the top
+  // level of RuntimeResult.output, so a SUCCESS envelope is flattened here at
+  // the single construction point. Non-success stores its raw return (effects
+  // already stripped in normalize), and legacy stays byte-identical.
+  const projectedOutput =
+    resultFormat === "envelope-v1" &&
+    !envelopeSchemaError &&
+    handlerOutcome.outcome === "success"
+      ? projectEnvelopeSuccessToLegacyOutput(handlerOutcome, output)
+      : output;
+
   // A failed envelope-v1 schema gate overrides the handler outcome: the runtime
   // fails with `output-schema-invalid` and no domain effects are committed.
   const rawResult: RuntimeResult = {
@@ -634,7 +647,7 @@ export async function executeFunctionRuntime({
       : demote
         ? handlerOutcome.outcome
         : "success",
-    output,
+    output: projectedOutput,
     toolCalls: [],
     durationMs: Date.now() - startTime,
     ...(envelopeSchemaError

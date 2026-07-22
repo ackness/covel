@@ -34,6 +34,9 @@ function narrativeResult(runtimeId, narrativeOutput, status = "success") {
   ];
 }
 
+// Deliberate change: handler migrated to envelope-v1, so the business return
+// (action / turnId / seeded / candidateCount / accepted*) is under
+// `result.value`; pending proposals stay on the envelope (result).
 describe("branch-reply seed path (auto, no manualPayload)", () => {
   it("seeds candidate[0] from the active engine narrative, engine-agnostically", async () => {
     // Two engines could be present; the inactive one is suppressed to "". The
@@ -48,7 +51,7 @@ describe("branch-reply seed path (auto, no manualPayload)", () => {
 
     const result = await handler(ctx({ completedResults }));
 
-    expect(result).toMatchObject({
+    expect(result.value).toMatchObject({
       action: "seed",
       turnId: "turn-branch",
       seeded: true,
@@ -91,7 +94,7 @@ describe("branch-reply seed path (auto, no manualPayload)", () => {
   it("no-ops on empty / system turns (no narrative output)", async () => {
     const completedResults = new Map([narrativeResult("scene-prompts", "")]);
     const result = await handler(ctx({ completedResults }));
-    expect(result).toMatchObject({ action: "seed", seeded: false });
+    expect(result.value).toMatchObject({ action: "seed", seeded: false });
     expect(getPendingProposals(result)).toHaveLength(0);
   });
 
@@ -119,7 +122,7 @@ describe("branch-reply seed path (auto, no manualPayload)", () => {
     };
 
     const result = await handler(ctx({ completedResults, pluginData }));
-    expect(result).toMatchObject({ action: "seed", seeded: false });
+    expect(result.value).toMatchObject({ action: "seed", seeded: false });
     expect(getPendingProposals(result)).toHaveLength(0);
   });
 });
@@ -152,7 +155,7 @@ describe("branch-reply createCandidates (regenerate)", () => {
       presetId: "fast",
     });
 
-    expect(result).toMatchObject({
+    expect(result.value).toMatchObject({
       action: "createCandidates",
       turnId: "turn-42",
       candidateCount: 3,
@@ -227,7 +230,7 @@ describe("branch-reply createCandidates (regenerate)", () => {
       }),
     );
 
-    expect(result).toMatchObject({
+    expect(result.value).toMatchObject({
       action: "createCandidates",
       turnId: "turn-42",
       candidateCount: 1,
@@ -353,7 +356,7 @@ describe("branch-reply acceptCandidate", () => {
       }),
     );
 
-    expect(result).toMatchObject({
+    expect(result.value).toMatchObject({
       action: "acceptCandidate",
       turnId: "turn-42",
       acceptedCandidateId: "turn-42-candidate-2",

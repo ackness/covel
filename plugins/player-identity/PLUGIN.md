@@ -8,6 +8,7 @@ description:
   en: Lets you adjust your hero's voice, goals, and boundaries during play.
 pluginType: plugin
 runtimeType: function
+resultFormat: envelope-v1
 outputKind: system
 handler: ./handler.js
 trigger:

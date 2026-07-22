@@ -44,7 +44,7 @@ export interface NormalizedHandlerResult {
 }
 
 /** Domain-effect control keys the runtime output normalizer understands. */
-const DOMAIN_EFFECT_KEYS = [
+export const DOMAIN_EFFECT_KEYS = [
   "statePatches",
   "events",
   "interactions",
@@ -54,7 +54,9 @@ const DOMAIN_EFFECT_KEYS = [
   "notifications",
 ] as const;
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+export function isPlainObject(
+  value: unknown,
+): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 

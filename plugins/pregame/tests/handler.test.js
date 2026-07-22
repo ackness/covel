@@ -13,6 +13,10 @@ function makeStore(overrides = {}) {
   };
 }
 
+// Deliberate change: handler migrated to envelope-v1. Business value (narrative
+// / initialized) is under `result.value`, notifications under `result.effects`,
+// and the pre-game completion signal is `result.completion === "done"` (the
+// kernel projects it to the legacy top-level preGameDone).
 describe("pregame handler", () => {
   it("builds a localized welcome from world data and reports preGameDone", async () => {
     const result = await handler({
@@ -21,12 +25,12 @@ describe("pregame handler", () => {
       store: makeStore(),
     });
 
-    expect(result.preGameDone).toBe(true);
-    expect(result.initialized).toBe(true);
-    expect(result.narrativeOutput).toContain("雾港");
-    expect(result.narrativeOutput).toContain("被海雾环绕的港口城市");
-    expect(result.notifications).toHaveLength(1);
-    expect(result.notifications[0].title).toContain("欢迎来到雾港");
+    expect(result.completion).toBe("done");
+    expect(result.value.initialized).toBe(true);
+    expect(result.value.narrativeOutput).toContain("雾港");
+    expect(result.value.narrativeOutput).toContain("被海雾环绕的港口城市");
+    expect(result.effects.notifications).toHaveLength(1);
+    expect(result.effects.notifications[0].title).toContain("欢迎来到雾港");
   });
 
   it("falls back to locale defaults when no store is available", async () => {
@@ -36,9 +40,11 @@ describe("pregame handler", () => {
       store: undefined,
     });
 
-    expect(result.preGameDone).toBe(true);
-    expect(result.notifications[0].title).toContain("Welcome to Unknown World");
-    expect(result.narrativeOutput).toContain("Game initialized");
+    expect(result.completion).toBe("done");
+    expect(result.effects.notifications[0].title).toContain(
+      "Welcome to Unknown World",
+    );
+    expect(result.value.narrativeOutput).toContain("Game initialized");
   });
 
   it("survives a throwing store instead of failing pre-game", async () => {
@@ -52,8 +58,8 @@ describe("pregame handler", () => {
       },
     });
 
-    expect(result.preGameDone).toBe(true);
-    expect(result.narrativeOutput).toContain("未知世界");
+    expect(result.completion).toBe("done");
+    expect(result.value.narrativeOutput).toContain("未知世界");
   });
 
   it("treats a session without worldId as an unknown world", async () => {
@@ -67,7 +73,7 @@ describe("pregame handler", () => {
       }),
     });
 
-    expect(result.preGameDone).toBe(true);
-    expect(result.notifications[0].title).toContain("Unknown World");
+    expect(result.completion).toBe("done");
+    expect(result.effects.notifications[0].title).toContain("Unknown World");
   });
 });

@@ -16,6 +16,7 @@ pluginType: core-plugin
 # + `auto` lands when the scheduled idiom is retired in Step 6.
 priority: 10
 runtimeType: function
+resultFormat: envelope-v1
 outputKind: system
 handler: ./handler.js
 tags:

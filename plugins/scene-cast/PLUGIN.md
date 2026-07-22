@@ -8,6 +8,7 @@ description:
   en: Tracks who is present in the scene and who is currently speaking.
 pluginType: plugin
 runtimeType: function
+resultFormat: envelope-v1
 handler: ./handler.js
 priority: 450
 # Dual-declared (compat period): `stage` is the new authority; `priority`

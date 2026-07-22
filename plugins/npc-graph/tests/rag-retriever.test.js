@@ -258,6 +258,8 @@ function makeCtx(store, playerMessage) {
   };
 }
 
+// Deliberate change: handler migrated to envelope-v1, so the business return
+// (npcContext / matchedNodes / edgeCount) is under `result.value`.
 describe("rag-retriever handler", () => {
   let store;
 
@@ -269,9 +271,9 @@ describe("rag-retriever handler", () => {
     const result = await handler(
       makeCtx(store, "Alice walked into the tavern."),
     );
-    expect(result.npcContext).toBe("");
-    expect(result.matchedNodes).toEqual([]);
-    expect(result.edgeCount).toBe(0);
+    expect(result.value.npcContext).toBe("");
+    expect(result.value.matchedNodes).toEqual([]);
+    expect(result.value.edgeCount).toBe(0);
   });
 
   it("returns empty context when no node name matches the player message", async () => {
@@ -279,8 +281,8 @@ describe("rag-retriever handler", () => {
     const result = await handler(
       makeCtx(store, "You wander through an empty courtyard."),
     );
-    expect(result.npcContext).toBe("");
-    expect(result.matchedNodes).toEqual([]);
+    expect(result.value.npcContext).toBe("");
+    expect(result.value.matchedNodes).toEqual([]);
   });
 
   it("retrieves 1-hop facts when a node name matches", async () => {
@@ -288,12 +290,12 @@ describe("rag-retriever handler", () => {
     const result = await handler(
       makeCtx(store, "You greet Alice at the market."),
     );
-    expect(result.npcContext).toContain("Alice");
-    expect(result.npcContext).toContain("Bob");
-    expect(result.npcContext).toContain("TRUSTS");
-    expect(result.matchedNodes).toContain("npc-alice");
+    expect(result.value.npcContext).toContain("Alice");
+    expect(result.value.npcContext).toContain("Bob");
+    expect(result.value.npcContext).toContain("TRUSTS");
+    expect(result.value.matchedNodes).toContain("npc-alice");
     // 1-hop expansion brings in Bob
-    expect(result.matchedNodes).toContain("npc-bob");
+    expect(result.value.matchedNodes).toContain("npc-bob");
   });
 
   it("expands 2 hops to surface neighbour-of-neighbour edges", async () => {
@@ -302,12 +304,12 @@ describe("rag-retriever handler", () => {
       makeCtx(store, "You greet Alice at the market."),
     );
     // Alice → Bob (1-hop) → Charlie (2-hop)
-    expect(result.npcContext).toContain("Charlie");
-    expect(result.npcContext).toContain("FEARS");
-    expect(result.matchedNodes).toContain("npc-charlie");
+    expect(result.value.npcContext).toContain("Charlie");
+    expect(result.value.npcContext).toContain("FEARS");
+    expect(result.value.matchedNodes).toContain("npc-charlie");
     // Dave is 3-hop, must NOT appear
-    expect(result.matchedNodes).not.toContain("npc-dave");
-    expect(result.npcContext).not.toContain("Dave");
+    expect(result.value.matchedNodes).not.toContain("npc-dave");
+    expect(result.value.npcContext).not.toContain("Dave");
   });
 
   it("marks positive strengths with [+] and negative with [-]", async () => {
@@ -315,20 +317,20 @@ describe("rag-retriever handler", () => {
     const result = await handler(
       makeCtx(store, "You greet Alice at the market."),
     );
-    expect(result.npcContext).toMatch(/\[\+\].*Alice.*Bob.*TRUSTS/);
-    expect(result.npcContext).toMatch(/\[-\].*Bob.*Charlie.*FEARS/);
+    expect(result.value.npcContext).toMatch(/\[\+\].*Alice.*Bob.*TRUSTS/);
+    expect(result.value.npcContext).toMatch(/\[-\].*Bob.*Charlie.*FEARS/);
   });
 
   it("matches aliases case-insensitively", async () => {
     await seedSmallChain(store);
     const result = await handler(makeCtx(store, "ali wandered off again"));
-    expect(result.matchedNodes).toContain("npc-alice");
-    expect(result.npcContext).toContain("Alice");
+    expect(result.value.matchedNodes).toContain("npc-alice");
+    expect(result.value.npcContext).toContain("Alice");
   });
 
   it("emits a header section when at least one fact is found", async () => {
     await seedSmallChain(store);
     const result = await handler(makeCtx(store, "Alice…"));
-    expect(result.npcContext).toMatch(/^## 已知 NPC 关系/);
+    expect(result.value.npcContext).toMatch(/^## 已知 NPC 关系/);
   });
 });

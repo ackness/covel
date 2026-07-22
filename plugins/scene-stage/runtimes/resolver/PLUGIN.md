@@ -5,6 +5,7 @@ description:
   en: Tracks the current scene and time of day for the visual stage.
 pluginType: plugin
 runtimeType: function
+resultFormat: envelope-v1
 handler: ./handler.js
 priority: 460
 outputKind: system

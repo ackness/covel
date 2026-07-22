@@ -35,9 +35,12 @@ export default async function handler(ctx) {
     // fresh sessions and for worlds that never trigger the extractor.
     if (nodeRows.length === 0 || edgeRows.length === 0) {
       return {
-        npcContext: "",
-        matchedNodes: [],
-        edgeCount: 0,
+        outcome: "success",
+        value: {
+          npcContext: "",
+          matchedNodes: [],
+          edgeCount: 0,
+        },
       };
     }
 
@@ -70,9 +73,12 @@ export default async function handler(ctx) {
 
     if (seedNodeIds.size === 0) {
       return {
-        npcContext: "",
-        matchedNodes: [],
-        edgeCount: edges.length,
+        outcome: "success",
+        value: {
+          npcContext: "",
+          matchedNodes: [],
+          edgeCount: edges.length,
+        },
       };
     }
 
@@ -166,19 +172,27 @@ export default async function handler(ctx) {
     }
 
     return {
-      npcContext: lines.join("\n"),
-      matchedNodes: Array.from(visitedNodeIds),
-      edgeCount: topEdges.length,
+      outcome: "success",
+      value: {
+        npcContext: lines.join("\n"),
+        matchedNodes: Array.from(visitedNodeIds),
+        edgeCount: topEdges.length,
+      },
     };
   } catch (err) {
     await ctx.logger?.warn?.("rag-retriever handler error", {
       error: err instanceof Error ? err.message : String(err),
     });
+    // Graceful degradation stays a success carrying an empty context + error
+    // marker — a retrieval miss must not fail the narration turn.
     return {
-      npcContext: "",
-      matchedNodes: [],
-      edgeCount: 0,
-      error: err instanceof Error ? err.message : String(err),
+      outcome: "success",
+      value: {
+        npcContext: "",
+        matchedNodes: [],
+        edgeCount: 0,
+        error: err instanceof Error ? err.message : String(err),
+      },
     };
   }
 }
