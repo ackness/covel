@@ -212,7 +212,7 @@ describe("start-game flow scenario at runtime level", () => {
     );
   });
 
-  it("form submission creates the player before main-loop runtimes run", async () => {
+  it("form submission creates the player on the setup turn; main-loop runtimes run on the next request", async () => {
     const store = await createScenarioStore("sess-start-flow");
     const { deps, calls } = makeRuntimeHarness(store);
 
@@ -243,18 +243,35 @@ describe("start-game flow scenario at runtime level", () => {
     );
     expect(mirrored?.value).toMatchObject({ name: "Aria", type: "player" });
 
+    // Deliberate change (Step 2): the form-submit turn runs ONLY the setup
+    // runtime that creates the player. The narrator (main loop) no longer runs
+    // as a same-batch follow-up — it is deferred to the next request.
     expect(calls["char-creator/player-init"]).toBeGreaterThanOrEqual(2);
-    expect(calls["narrator"]).toBe(1);
+    expect(calls["narrator"]).toBeUndefined();
     expect(
       (
         await store.listRuntimeResults("sess-start-flow", "turn-form-submit")
       ).map((result) => result.runtimeId),
-    ).toEqual(["char-creator/player-init", "narrator"]);
+    ).toEqual(["char-creator/player-init"]);
 
+    // Setup completed → the finalize session-clock write flipped the band to
+    // playing (turnCount 1) and recorded every Pre-Game runtime.
     const session = await store.getSession("sess-start-flow");
     expect(session?.turnCount).toBe(1);
     expect(session?.preGameCompleted?.sort()).toEqual(
       ["char-creator/player-init", "pregame", "world-init/schema-gen"].sort(),
     );
+
+    // Next request: now in the playing band, the narrator finally runs.
+    await runTurn(store, deps, {
+      turnId: "turn-first-main",
+      playerMessage: "Aria surveys the district.",
+    });
+    expect(calls["narrator"]).toBe(1);
+    expect(
+      (
+        await store.listRuntimeResults("sess-start-flow", "turn-first-main")
+      ).map((result) => result.runtimeId),
+    ).toEqual(["narrator"]);
   });
 });

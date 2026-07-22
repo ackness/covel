@@ -108,6 +108,12 @@ describe("E2E: Narrator game flow", () => {
   });
 
   async function markPreGameComplete(sessionId: string) {
+    // Put the session genuinely into the playing band. Setting only
+    // preGameCompleted / turnCount (the pre-redesign shortcut) left phase at
+    // `setup`, so the send_message turn scheduled nothing and the narrator only
+    // appeared via the same-batch main-loop follow-up — which was removed in the
+    // scheduling redesign (Step 2). The main-loop band flips on `phase`, so this
+    // helper must set it for the narrator to run on the send_message turn.
     await store.updateSession(sessionId, {
       preGameCompleted: [
         "pregame",
@@ -115,6 +121,8 @@ describe("E2E: Narrator game flow", () => {
         "char-creator/player-init",
       ],
       turnCount: 1,
+      phase: "playing",
+      completedPlayerTurns: 1,
       updatedAt: new Date().toISOString(),
     });
   }

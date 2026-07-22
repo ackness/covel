@@ -16,6 +16,7 @@ import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
+import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import type {
   LLMAdapter,
   LLMRequest,
@@ -230,7 +231,12 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
     warnSpy.mockRestore();
   });
 
-  it("refreshes snapshot before same-turn main-loop runtimes after player creation", async () => {
+  // Deliberate change (scheduling redesign, Step 2): the main-loop runtime no
+  // longer runs in the SAME turn as player creation (the same-batch follow-up
+  // was removed). The narrator now reads the player on the NEXT request, from a
+  // fresh context snapshot built after the setup execution committed and the
+  // band flipped to playing.
+  it("exposes a committed player to the next turn's main-loop context snapshot", async () => {
     const store = createMemoryStore();
     const sessionId = "sess-sc-refresh";
     const worldId = "w-sc-refresh";
@@ -311,23 +317,55 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
       store,
     };
 
-    const result = await executeTurn(
+    // ── Turn 1 (setup): player-init creates the player; narrator does NOT run.
+    const setupResult = await executeTurn(
       makeTurnInput(sessionId, {
         turnId: "turn-form",
         playerMessage: "Player Aria enters as cartographer.",
+        preGamePending: true,
       }),
       [playerInit, narrator],
       deps,
     );
 
-    expect(result.runtimeResults.map((runtime) => runtime.runtimeId)).toEqual([
-      "char-creator/player-init",
-      "narrator",
-    ]);
-    expect(llm.captured.systemPrompts[0]).toContain("Player: Aria.");
+    expect(
+      setupResult.runtimeResults.map((runtime) => runtime.runtimeId),
+    ).toEqual(["char-creator/player-init"]);
+    // The narrator never ran this turn, so no system prompt was captured.
+    expect(llm.captured.systemPrompts).toHaveLength(0);
     // Setup completed this turn (player created) → the finalize session-clock
-    // write would flip the band to playing (turnCount 1). The write itself now
-    // lives in finalizeExecution; here we pin the delta the executor produces.
-    expect(result.setupCompletion?.allSetupDone).toBe(true);
+    // write flips the band to playing.
+    expect(setupResult.setupCompletion?.allSetupDone).toBe(true);
+
+    // Commit the setup execution so the band flips to playing for turn 2.
+    await finalizeExecution({
+      store,
+      sessionId,
+      ...(setupResult.executionContext
+        ? { executionContext: setupResult.executionContext }
+        : {}),
+      runtimes: [playerInit, narrator],
+      results: setupResult.runtimeResults,
+      turnIds: ["turn-form"],
+      sessionClock: {
+        now: ts(3),
+        ...(setupResult.setupCompletion
+          ? { setupCompletion: setupResult.setupCompletion }
+          : {}),
+      },
+    });
+
+    // ── Turn 2 (main loop): the narrator runs and its context carries the player.
+    await executeTurn(
+      makeTurnInput(sessionId, {
+        turnId: "turn-main",
+        playerMessage: "Aria surveys the district.",
+      }),
+      [playerInit, narrator],
+      deps,
+    );
+
+    expect(llm.captured.systemPrompts).toHaveLength(1);
+    expect(llm.captured.systemPrompts[0]).toContain("Player: Aria.");
   });
 });

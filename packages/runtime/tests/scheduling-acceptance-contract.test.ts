@@ -173,9 +173,145 @@ async function seedPlaying(
 
 describe("setup frozen snapshot (cross-execution read of committed setup data)", () => {
   // needs: scope:session frozen-snapshot semantics + finalizeExecution single-transaction commit (release step 2)
-  it.todo(
-    "scenario 1: schema-gen 本执行产出 proposal 并 commit，player-init 下一执行经冻结快照 gate 通过并读到已提交 schema — 断言快照读到的是提交后状态，且该保证跨执行成立",
-  );
+  it("scenario 1: schema-gen 本执行产出 proposal 并 commit，player-init 下一执行经冻结快照 gate 通过并读到已提交 schema — 断言快照读到的是提交后状态，且该保证跨执行成立", async () => {
+    const store = createMemoryStore();
+    const sessionId = "s1";
+    const now = new Date().toISOString();
+    // A fresh session in the setup band. Plugin `p` carries a setup runtime
+    // (schema-gen, priority 40) and a main-loop runtime (player-init, 500)
+    // gated on it by the implicit per-plugin session gate.
+    await store.createSession({
+      id: sessionId,
+      worldId: "w",
+      status: "active",
+      turnCount: 0,
+      preGameCompleted: [],
+      phase: "setup",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      activePlugins: ["p"],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const SCHEMA = { attributes: ["str", "dex"], version: 3 };
+    const fnRuntime = (name: string, priority: number): RuntimeManifest =>
+      ({
+        name,
+        pluginId: "p",
+        description: name,
+        priority,
+        runtimeType: "function",
+        handler: "./h.js",
+        trigger: { type: "auto" },
+        outputKind: "plugin",
+        capabilities: [],
+      }) as RuntimeManifest;
+    const schemaGen = fnRuntime("p/schema-gen", 40);
+    const playerInit = fnRuntime("p/player-init", 500);
+
+    // What player-init read from its frozen snapshot in execution 2.
+    let playerInitRead: unknown;
+
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async (m) => ({
+        manifest: m,
+        promptTemplate: "",
+        handler: async (ctx: {
+          store: DataStore;
+        }): Promise<Record<string, unknown>> => {
+          if (m.name === "p/schema-gen") {
+            // Buffered domain write → flushed onto the result as a plugin.data
+            // proposal (NOT a direct store write), committed by finalize below.
+            await ctx.store.setPluginData({
+              id: `${sessionId}:p:world:schema`,
+              sessionId,
+              pluginId: "p",
+              namespace: "world",
+              key: "schema",
+              value: SCHEMA,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            });
+            return { preGameDone: true };
+          }
+          // player-init reads the committed schema from the frozen snapshot.
+          const row = await ctx.store.getPluginData(
+            sessionId,
+            "p",
+            "world",
+            "schema",
+          );
+          playerInitRead = row?.value;
+          return {};
+        },
+      }),
+      llm: new NoopLLM(),
+      store,
+      getPluginSource: () => "builtin",
+    };
+
+    // ── Execution 1 (setup band): only schema-gen runs; player-init (main loop)
+    //    is not yet scheduled. Its write BUFFERS — nothing hits the store yet.
+    const setupTurn = await executeTurn(
+      {
+        sessionId,
+        turnId: "t1",
+        playerMessage: "go",
+        preGamePending: true,
+      },
+      [schemaGen, playerInit],
+      deps,
+    );
+    expect(setupTurn.runtimeResults.map((r) => r.runtimeId)).toEqual([
+      "p/schema-gen",
+    ]);
+    // schema-gen produced a proposal, not a committed row: the store is empty
+    // until finalize commits.
+    expect(
+      (await store.getPluginData(sessionId, "p", "world", "schema"))?.value,
+    ).toBeUndefined();
+
+    // Commit execution 1 — the buffered proposal lands and the setup-completion
+    // delta flips the band to playing (frozen for the next execution).
+    const outcome = await finalizeExecution({
+      store,
+      sessionId,
+      ...(setupTurn.executionContext
+        ? { executionContext: setupTurn.executionContext }
+        : {}),
+      runtimes: [schemaGen, playerInit],
+      results: setupTurn.runtimeResults,
+      turnIds: ["t1"],
+      sessionClock: {
+        now: new Date().toISOString(),
+        ...(setupTurn.setupCompletion
+          ? { setupCompletion: setupTurn.setupCompletion }
+          : {}),
+      },
+    });
+    expect(outcome.status).toBe("committed");
+    // The proposal committed: the schema is now the persisted (post-commit) state.
+    expect(
+      (await store.getPluginData(sessionId, "p", "world", "schema"))?.value,
+    ).toEqual(SCHEMA);
+    expect((await store.getSession(sessionId))?.phase).toBe("playing");
+
+    // ── Execution 2 (playing band): player-init passes the frozen-snapshot gate
+    //    (schema-gen's mirror is done) and reads the COMMITTED schema.
+    const mainTurn = await executeTurn(
+      { sessionId, turnId: "t2", playerMessage: "again" },
+      [schemaGen, playerInit],
+      deps,
+    );
+    const playerInitResult = mainTurn.runtimeResults.find(
+      (r) => r.runtimeId === "p/player-init",
+    );
+    // Gate passed — success, not skipped: setup-incomplete.
+    expect(playerInitResult?.status).toBe("success");
+    // Cross-execution guarantee: player-init read execution 1's committed schema.
+    expect(playerInitRead).toEqual(SCHEMA);
+  });
 });
 
 describe("setup gating across trigger paths (setup-incomplete skip)", () => {

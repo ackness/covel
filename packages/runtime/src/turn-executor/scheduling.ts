@@ -159,19 +159,6 @@ export function scheduleTriggeredRuntimes(args: {
   return { groups: dag.groups, cyclic: dag.cyclic ?? [] };
 }
 
-export function scheduleMainLoopFollowups(args: {
-  readonly triggered: readonly RuntimeManifest[];
-  readonly completedRuntimeIds: ReadonlySet<string>;
-}): ScheduleResult {
-  const mainLoop = args.triggered.filter(
-    (rt) =>
-      isMainLoopPriority(getRuntimeSpec(rt).legacyOrder) &&
-      !args.completedRuntimeIds.has(rt.name),
-  );
-  const dag = scheduleByDag(mainLoop);
-  return { groups: dag.groups, cyclic: dag.cyclic ?? [] };
-}
-
 /**
  * `messageHistory` is the uncompacted suffix of the session timeline. If a
  * runtime's last trigger was compacted away, the backward scan misses it and

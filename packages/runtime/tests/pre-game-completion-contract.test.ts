@@ -250,9 +250,12 @@ describe("Pre-Game completion contract", () => {
       deps,
     );
 
+    // Deliberate change (Step 2): only the setup runtime runs this turn. The
+    // narrator (main loop) no longer runs as a same-batch follow-up when
+    // player-init completes Pre-Game — it runs on the next request, once the
+    // finalize transaction has flipped the band to `playing`.
     expect(result.runtimeResults.map((r) => r.runtimeId)).toEqual([
       "char-creator/player-init",
-      "narrator",
     ]);
     // pregame already recorded; player-init completes now → last one done.
     expect(newlyDone(result)).toEqual(["char-creator/player-init"]);

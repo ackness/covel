@@ -286,7 +286,7 @@ describe("start-game API lifecycle scenario", () => {
     expect(playerMessages).toEqual([]);
   });
 
-  it("submit follow-up creates the player before narrator runs", async () => {
+  it("submit follow-up creates the player on the setup turn; narrator runs on the next request", async () => {
     const start = await app.request("/api/actions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -353,6 +353,10 @@ describe("start-game API lifecycle scenario", () => {
     );
     expect(mirrored?.value).toMatchObject({ name: "Aria", type: "player" });
 
+    // Deliberate change (scheduling redesign, Step 2): the form-submit turn
+    // runs ONLY the setup runtime that creates the player. The narrator (main
+    // loop) no longer runs as a same-batch follow-up — it is deferred to the
+    // next request.
     const runtimeRows = await store.listRuntimeResults(
       "sess-start-flow-api",
       followupTurnId,
@@ -363,7 +367,7 @@ describe("start-game API lifecycle scenario", () => {
     );
     expect(
       runtimeIds.filter((runtimeId) => runtimeId === "narrator"),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
 
     const session = await store.getSession("sess-start-flow-api");
     expect(session?.turnCount).toBe(1);
@@ -382,7 +386,17 @@ describe("start-game API lifecycle scenario", () => {
       }),
     });
     expect(firstMainLoop.status).toBe(200);
-    await drainActionStream(firstMainLoop);
+    const firstMainLoopEvents = await drainActionStream(firstMainLoop);
+    const firstMainLoopTurnId =
+      firstMainLoopEvents[0]?.turnId ?? "turn-first-main";
+
+    // The narrator finally runs on this next request, now in the playing band.
+    const mainLoopRuntimeIds = (
+      await store.listRuntimeResults("sess-start-flow-api", firstMainLoopTurnId)
+    ).map((row) => row.runtimeId);
+    expect(
+      mainLoopRuntimeIds.filter((runtimeId) => runtimeId === "narrator"),
+    ).toHaveLength(1);
 
     const afterFirstMainLoop = await store.getSession("sess-start-flow-api");
     // Deliberate change (scheduling redesign): turnCount is now derived from

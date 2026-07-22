@@ -72,7 +72,6 @@ import {
 } from "./session-state.js";
 import {
   countPlayerMessagesSinceRuntime,
-  scheduleMainLoopFollowups,
   scheduleTriggeredRuntimes,
   selectTriggeredRuntimes,
 } from "./scheduling.js";
@@ -452,7 +451,8 @@ async function executeTurnImpl(
 
   // Add every setup runtime that reported done this turn to the live done-set,
   // so a plugin whose setup just completed unblocks its main runtimes within
-  // the same turn (pre-game followups / late-setup → main loop). Idempotent.
+  // the same turn (the late-setup → main-loop catch-up in the playing band).
+  // Idempotent.
   const syncLiveDoneSetup = (): void => {
     for (const rt of activeSetupRuntimes) {
       if (liveDoneSetup.has(rt.name)) continue;
@@ -617,30 +617,16 @@ async function executeTurnImpl(
   }
   emitCyclicSkips(cyclic);
 
-  const completedPreGameThisTurn = isPreGamePending
-    ? await recordPreGameCompletion()
-    : false;
-  if (completedPreGameThisTurn && !manualTarget && !playerAborted()) {
-    // A form-submission request can finish the last Pre-Game runtime. In that
-    // same request, immediately run any already-triggered main-loop runtimes so
-    // the player sees the first story beat after submitting setup inputs.
-    const followup = scheduleMainLoopFollowups({
-      triggered: scheduledRuntimes,
-      completedRuntimeIds: new Set(completedResults.keys()),
-    });
-    for (const group of followup.groups) {
-      const results = await executeParallel(
-        group.runtimes,
-        async (manifest) => {
-          return invoke(manifest, undefined);
-        },
-      );
-      for (const [name, result] of results) {
-        completedResults.set(name, result);
-      }
-    }
-    emitCyclicSkips(followup.cyclic);
-  }
+  // Record Pre-Game completion (updates preGameCompleted / sessionMeta /
+  // sessionContext and the setup-completion delta) before the event chain and
+  // finalize read them. Deliberate change (turn-wide transaction, Step 2): a
+  // request that finishes the last Pre-Game runtime no longer runs the main
+  // loop in the SAME request — the setup execution commits on its own and the
+  // narrator (and other main-loop runtimes) run on the NEXT player request,
+  // once the finalize transaction has flipped the band to `playing`. Same-batch
+  // followups read guard/setup writes that were not yet committed, which the
+  // whole-turn transaction no longer permits.
+  if (isPreGamePending) await recordPreGameCompletion();
 
   const deferredFollowers = playerAborted()
     ? []
@@ -705,9 +691,10 @@ async function executeTurnImpl(
   // turn — they report it only after the player submits the form. This
   // keeps the user interactable while Pre-Game is still progressing.
   //
-  // This final pass is intentionally idempotent. The earlier pass above is
-  // needed to decide whether to run same-request main-loop followups; this
-  // one captures completion signals produced by event-chain followers.
+  // This final pass is intentionally idempotent. The earlier pass above keeps
+  // the event chain and finalize reading a fresh Pre-Game / setup-completion
+  // state; this one captures completion signals produced by event-chain
+  // followers.
   await recordPreGameCompletion();
 
   // Ledger entries for every setup runtime that ran this execution (both bands
