@@ -3,7 +3,10 @@
  */
 
 import type { ExecutionContext } from "./runtime-scheduling.js";
-import type { SetupRuntimeState } from "./runtime-lifecycle.js";
+import type {
+  RanSetupRuntime,
+  SetupRuntimeState,
+} from "./runtime-lifecycle.js";
 
 // ── Runtime execution status ─────────────────────────────────────
 
@@ -186,6 +189,14 @@ export interface TurnResult {
     readonly newlyDone: Readonly<Record<string, SetupRuntimeState>>;
     readonly allSetupDone: boolean;
   };
+  /**
+   * Setup runtimes that ran (entered guard/handler) in this execution. The
+   * commit-owning caller passes them to `finalizeExecution`, which — AFTER the
+   * commit outcome is known and OUTSIDE the transaction — terminalises each
+   * attempt ledger entry and writes the pending/blocked mirror (a rolled-back
+   * commit still burns an attempt). Absent when no setup runtime ran.
+   */
+  readonly setupRan?: readonly RanSetupRuntime[];
   readonly conflicts?: readonly WriteConflict[];
   readonly auditResult?: RuntimeResult;
   /** Forms requiring player input before next turn (collected from runtime outputs). */

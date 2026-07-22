@@ -11,8 +11,9 @@ import type {
   CoreMemoryBlockView,
   SessionContextSnapshot,
 } from "@covel/context";
+import { isSetupRuntime } from "@covel/shared";
 import type { HookPipeline } from "../hooks/pipeline.js";
-import { makeFailedResult } from "./turn-executor-helpers.js";
+import { makeFailedResult, makeSkippedResult } from "./turn-executor-helpers.js";
 import { runPostRuntimeHook } from "../hooks/wire-helpers.js";
 import { emitSubEvent } from "./turn-runtime-helpers.js";
 import { isRequiredUpstreamSatisfied } from "./turn-output-helpers.js";
@@ -85,6 +86,17 @@ export interface RuntimeInvocation {
   readonly recursionDepth?: number;
   /** Execution identity — forwarded to the function-runtime `ctx.progress` scope. */
   readonly executionId?: string;
+  /**
+   * Generation of this setup runtime's mirror, for the attempt-ledger `started`
+   * insert. Present only for setup runtimes; absent means "not a setup run".
+   */
+  readonly setupGeneration?: number;
+  /**
+   * Implicit per-plugin session gate. A non-setup runtime is skipped
+   * (`setup-incomplete`) when its plugin's setup runtimes are not all done.
+   * Absent (direct callers / tests) means "no gate — always ready".
+   */
+  readonly pluginSetupReady?: (pluginId: string) => boolean;
   /**
    *  sink for runtime results produced by nested `ctx.recursiveCall`
    * executions. The top-level executeTurn wires this to a collector so the
@@ -225,6 +237,46 @@ export async function executeOneRuntime(
   };
 
   try {
+    // ── Implicit per-plugin session gate ──────────────────────────
+    // A non-setup runtime is skipped while any of its OWN plugin's active setup
+    // runtimes is not yet done (incl. waived). This holds for the manual RPC
+    // path too: manual bypasses the turn cadence gate but not the session gate.
+    // Setup runtimes are exempt (they ARE the setup being gated on).
+    if (!isSetupRuntime(manifest) && inv.pluginSetupReady) {
+      if (!inv.pluginSetupReady(manifest.pluginId)) {
+        const skipResult = makeSkippedResult(
+          manifest,
+          input,
+          "setup-incomplete",
+          "framework:setupGate",
+        );
+        try {
+          await deps.onRuntimeComplete?.({
+            runtimeId: manifest.name,
+            pluginId: manifest.pluginId,
+            status: "skipped",
+            durationMs: skipResult.durationMs,
+          });
+        } catch {
+          /* callback error must not kill runtime */
+        }
+        emitSubEvent(
+          deps.eventBus,
+          "runtime",
+          "runtime.completed",
+          input.sessionId,
+          {
+            runtimeId: manifest.name,
+            pluginId: manifest.pluginId,
+            status: "skipped",
+            durationMs: skipResult.durationMs,
+            reason: "setup-incomplete",
+          },
+        );
+        return skipResult;
+      }
+    }
+
     // ── Upstream gate (manifest.upstreamRequired) ─────────────────
     // Must run before loadRuntime so a failing upstream short-circuits
     // the whole pipeline: no prompt template read, no guard, no LLM call,
@@ -302,6 +354,36 @@ export async function executeOneRuntime(
           },
         );
         return skipResult;
+      }
+    }
+
+    // ── Setup attempt ledger: `started` ───────────────────────────
+    // Recorded once the gates pass and BEFORE the guard/handler runs, so a
+    // crash mid-execution leaves a `started` row (a spent-but-unresolved
+    // signature). Dependency skips above return earlier and spend no attempt.
+    // Idempotent on (session, runtime, generation, executionId); the finalize
+    // settle terminalises it.
+    if (
+      isSetupRuntime(manifest) &&
+      deps.store &&
+      inv.setupGeneration !== undefined &&
+      executionId !== undefined
+    ) {
+      try {
+        await deps.store.insertSetupAttempt({
+          sessionId: input.sessionId,
+          runtimeId: manifest.name,
+          pluginVersion: manifest.version ?? "0.0.0",
+          generation: inv.setupGeneration,
+          executionId,
+          state: "started",
+          startedAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.warn(
+          `[turn-executor] setup attempt 'started' insert failed for ${manifest.name}:`,
+          err instanceof Error ? err.message : String(err),
+        );
       }
     }
 

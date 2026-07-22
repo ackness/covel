@@ -85,6 +85,31 @@ export interface SetupAttemptRecord {
   readonly error?: string;
 }
 
+/**
+ * One setup runtime that entered its guard/handler during an execution — the
+ * unit the finalizer settles (terminalise the ledger attempt, then recompute
+ * `attempts` and write the pending/blocked mirror). Framework-gate skips
+ * (dependency / setup-incomplete) never reach the guard/handler and produce no
+ * entry.
+ */
+export interface RanSetupRuntime {
+  readonly runtimeId: string;
+  readonly pluginVersion: string;
+  readonly generation: number;
+  readonly executionId: string;
+  readonly startedAt: string;
+  /** Did the result signal completion (preGameDone / guard skip)? */
+  readonly doneSignal: boolean;
+  /** Ledger terminal state derived from the result status (pre commit-outcome). */
+  readonly ledgerState: Extract<
+    SetupAttemptState,
+    "success" | "failed" | "skipped"
+  >;
+  /** Retry budget = maxTriggerCount (undefined ⇒ unbounded). */
+  readonly budget: number | undefined;
+  readonly error?: string;
+}
+
 // ── Logical-turn completion ledger ───────────────────────────────
 
 /**

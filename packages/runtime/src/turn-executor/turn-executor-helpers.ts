@@ -158,6 +158,31 @@ export function makeFailedResult(
 }
 
 /**
+ * Build a framework `skipped` result (the shape the upstream gate emits). `by`
+ * names the framework gate (`framework:dependencyCycle`, `framework:setupGate`)
+ * and `detail` carries gate-specific diagnostics (e.g. the full cycle path).
+ */
+export function makeSkippedResult(
+  manifest: RuntimeManifest,
+  input: TurnInput,
+  reason: string,
+  by: string,
+  detail?: Record<string, unknown>,
+): RuntimeResult {
+  return {
+    pluginId: manifest.pluginId,
+    runtimeId: manifest.name,
+    runId: crypto.randomUUID(),
+    turnId: input.turnId,
+    status: "skipped",
+    output: { skipped: true, reason, skippedBy: by, ...(detail ?? {}) },
+    toolCalls: [],
+    durationMs: 0,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
  * Resolve the player-authored settings bucket for a runtime, merging the
  * per-key defaults declared in `manifest.userSettings` with the values the
  * player has saved (delivered by the caller via `TurnInput.userSettings`).

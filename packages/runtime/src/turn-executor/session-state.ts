@@ -1,4 +1,8 @@
-import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import type {
+  RuntimeManifest,
+  SetupRuntimeState,
+  TurnInput,
+} from "@covel/shared";
 import { getRuntimeSpec } from "@covel/shared";
 import { applyBranchReplyAcceptedCandidates } from "@covel/context";
 import type { CoreMemoryBlockView } from "@covel/context";
@@ -53,6 +57,8 @@ export interface LoadedTurnSessionState {
   readonly phase?: "setup" | "playing";
   /** Committed main-loop player turns; `logicalTurn = completedPlayerTurns + 1`. */
   readonly completedPlayerTurns: number;
+  /** Per-setup-runtime mirror frozen at execution start (setup gate + generation). */
+  readonly setupRuntimes: Readonly<Record<string, SetupRuntimeState>>;
 }
 
 export async function loadTurnSessionState(args: {
@@ -142,6 +148,7 @@ export async function loadTurnSessionState(args: {
   let preGameCompleted: readonly string[] = [];
   let phase: "setup" | "playing" | undefined;
   let completedPlayerTurns = 0;
+  let setupRuntimes: Readonly<Record<string, SetupRuntimeState>> = {};
   let sessionCharacters: TurnSessionCharacter[] = [];
   let lastFormValues: Record<string, unknown> | undefined;
 
@@ -152,6 +159,7 @@ export async function loadTurnSessionState(args: {
       preGameCompleted = session.preGameCompleted ?? [];
       phase = session.phase;
       completedPlayerTurns = session.completedPlayerTurns ?? 0;
+      setupRuntimes = session.setupRuntimes ?? {};
     }
 
     const charRecords = await deps.store.listCharacters(input.sessionId);
@@ -188,6 +196,7 @@ export async function loadTurnSessionState(args: {
     turnNumber,
     ...(phase !== undefined ? { phase } : {}),
     completedPlayerTurns,
+    setupRuntimes,
   };
 }
 

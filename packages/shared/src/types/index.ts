@@ -356,6 +356,7 @@ export type {
   SetupRuntimeState,
   SetupAttemptState,
   SetupAttemptRecord,
+  RanSetupRuntime,
   LogicalTurnLedgerRecord,
   JobStatusState,
   JobStatusRecord,

@@ -1,12 +1,21 @@
 /**
  * Tests for builtin character management tools.
  *
- * Verifies that create-character / update-character / list-characters / get-character
- * correctly read and write CharacterRecord via the injected store, and that writes
- * are mirrored to plugin_data[pluginId][characters][charId] for panel reactivity.
+ * DELIBERATE CHANGE (effects isolation / W3d): create-character and
+ * update-character no longer write to the store during execution. They return
+ * `character.upsert` proposals (via withPendingProposals); the Session Kernel
+ * commit chain performs the actual character write + plugin-data mirror at the
+ * end of the execution. Reads (list/get/dedup) overlay the proposals buffered
+ * earlier in the same tool loop, so a runtime reads its own uncommitted writes.
+ *
+ * These tests therefore thread pending proposals across calls (like the real
+ * agent tool loop) via the `Loop` harness, and only see store state after an
+ * explicit `commit()` that mimics the commit handler.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
+import type { Proposal } from "@covel/shared";
+import { getPendingProposals } from "../src/result.js";
 import {
   createCharacterTools,
   mirrorCharacterToPluginData,
@@ -40,22 +49,21 @@ interface PluginDataLike {
 function createMockStore() {
   const characters: CharacterLike[] = [];
   const pluginData: PluginDataLike[] = [];
-  const sessionPatches: Array<{ id: string; patch: Record<string, unknown> }> =
-    [];
 
   return {
     characters,
     pluginData,
-    sessionPatches,
-    upsertCharacter: vi.fn(async (record: CharacterLike) => {
+    upsertCharacter(record: CharacterLike) {
       const idx = characters.findIndex((c) => c.id === record.id);
       if (idx >= 0) characters[idx] = record;
       else characters.push(record);
-    }),
-    listCharacters: vi.fn(async (sessionId: string) =>
-      characters.filter((c) => c.sessionId === sessionId),
-    ),
-    setPluginData: vi.fn(async (record: PluginDataLike) => {
+    },
+    listCharacters(sessionId: string) {
+      return Promise.resolve(
+        characters.filter((c) => c.sessionId === sessionId),
+      );
+    },
+    setPluginData(record: PluginDataLike) {
       const idx = pluginData.findIndex(
         (r) =>
           r.sessionId === record.sessionId &&
@@ -65,55 +73,115 @@ function createMockStore() {
       );
       if (idx >= 0) pluginData[idx] = record;
       else pluginData.push(record);
-    }),
-    deletePluginData: vi.fn(
-      async (
-        sessionId: string,
-        pluginId: string,
-        namespace: string,
-        key: string,
-      ) => {
-        const idx = pluginData.findIndex(
-          (r) =>
-            r.sessionId === sessionId &&
-            r.pluginId === pluginId &&
-            r.namespace === namespace &&
-            r.key === key,
-        );
-        if (idx >= 0) pluginData.splice(idx, 1);
-      },
-    ),
-    updateSession: vi.fn(async (id: string, patch: Record<string, unknown>) => {
-      sessionPatches.push({ id, patch });
-    }),
+    },
   };
 }
 
-function ctx(
-  pluginId = "char-creator",
-  sessionId = "sess-1",
-): ToolExecutionContext {
-  return {
-    sessionId,
-    turnId: "turn-1",
-    pluginId,
-    runtimeId: `${pluginId}/runtime`,
-  };
+type MockStore = ReturnType<typeof createMockStore>;
+
+/**
+ * Apply buffered `character.upsert` proposals to the mock store exactly like
+ * the real commit handler (character write + mirror to each mirrorPluginId).
+ */
+function commitCharacterProposals(
+  store: MockStore,
+  pending: readonly Proposal[],
+): void {
+  for (const p of pending) {
+    if (p.type !== "character.upsert") continue;
+    const pl = p.payload;
+    // Use the proposal's logical timestamp for updatedAt so a sequence of
+    // buffered writes keeps a deterministic order in tests (the real commit
+    // handler stamps commit-time now; ordering among same-turn writes is a
+    // deliberate don't-care under the proposal model).
+    const ts = p.timestamp;
+    store.upsertCharacter({
+      id: pl.id,
+      sessionId: p.sessionId,
+      name: pl.name,
+      type: pl.type ?? "npc",
+      description: pl.description,
+      fields: pl.fields,
+      version: pl.version ?? 1,
+      createdAt: pl.createdAt ?? ts,
+      updatedAt: ts,
+    });
+    const mirrors = [
+      ...(pl.mirrorPluginId ? [pl.mirrorPluginId] : []),
+      ...(pl.mirrorPluginIds ?? []),
+    ].filter((id, i, all) => all.indexOf(id) === i);
+    for (const mid of mirrors) {
+      store.setPluginData({
+        id: crypto.randomUUID(),
+        sessionId: p.sessionId,
+        pluginId: mid,
+        namespace: "characters",
+        key: pl.id,
+        value: {
+          id: pl.id,
+          name: pl.name,
+          type: pl.type ?? "npc",
+          description: pl.description,
+          fields: pl.fields,
+          version: pl.version ?? 1,
+          createdAt: pl.createdAt ?? ts,
+          updatedAt: ts,
+        },
+        createdAt: ts,
+        updatedAt: ts,
+      });
+    }
+  }
 }
 
-function findByName(tools: readonly ToolModule[], name: string): ToolModule {
-  const t = tools.find((m) => m.name === name);
-  if (!t) throw new Error(`Tool not found: ${name}`);
-  return t;
+/** Threads pending proposals across tool calls, like the agent tool loop. */
+class Loop {
+  pending: Proposal[] = [];
+  constructor(
+    private readonly tools: readonly ToolModule[],
+    private readonly store: MockStore,
+    private readonly defaultPlugin = "char-creator",
+    private readonly sessionId = "sess-1",
+  ) {}
+
+  private ctx(pluginId: string): ToolExecutionContext {
+    return {
+      sessionId: this.sessionId,
+      turnId: "turn-1",
+      pluginId,
+      runtimeId: `${pluginId}/runtime`,
+      pendingProposals: this.pending,
+    };
+  }
+
+  async call(
+    name: string,
+    params: Record<string, unknown>,
+    pluginId = this.defaultPlugin,
+  ): Promise<Record<string, unknown>> {
+    const t = this.tools.find((m) => m.name === name);
+    if (!t) throw new Error(`Tool not found: ${name}`);
+    const result = await t.execute(params, this.ctx(pluginId));
+    this.pending.push(...getPendingProposals(result));
+    return result as Record<string, unknown>;
+  }
+
+  /** Simulate finalizeExecution committing the buffered proposals. */
+  commit(): void {
+    commitCharacterProposals(this.store, this.pending);
+    this.pending = [];
+  }
 }
 
 describe("builtin character tools", () => {
-  let store: ReturnType<typeof createMockStore>;
+  let store: MockStore;
   let tools: readonly ToolModule[];
+  let loop: Loop;
 
   beforeEach(() => {
     store = createMockStore();
     tools = createCharacterTools(store);
+    loop = new Loop(tools, store);
   });
 
   it("factory returns four named tools", () => {
@@ -169,17 +237,13 @@ describe("builtin character tools", () => {
   });
 
   describe("create-character", () => {
-    it("writes to characters table with provided fields", async () => {
-      const t = findByName(tools, "create-character");
-      const result = await t.execute(
-        {
-          name: "柳无痕",
-          type: "player",
-          description: "外门弟子，灵识敏锐",
-          fields: { hp: 100, level: 1, lingGen: "水灵根" },
-        },
-        ctx(),
-      );
+    it("emits a character.upsert proposal that persists on commit", async () => {
+      const result = await loop.call("create-character", {
+        name: "柳无痕",
+        type: "player",
+        description: "外门弟子，灵识敏锐",
+        fields: { hp: 100, level: 1, lingGen: "水灵根" },
+      });
 
       expect(result).toMatchObject({
         success: true,
@@ -187,7 +251,12 @@ describe("builtin character tools", () => {
         name: "柳无痕",
         type: "player",
       });
+      // DELIBERATE CHANGE: nothing written during execution.
+      expect(store.characters).toHaveLength(0);
+      expect(loop.pending).toHaveLength(1);
+      expect(loop.pending[0].type).toBe("character.upsert");
 
+      loop.commit();
       expect(store.characters).toHaveLength(1);
       const char = store.characters[0];
       expect(char.sessionId).toBe("sess-1");
@@ -196,18 +265,23 @@ describe("builtin character tools", () => {
       expect(char.description).toBe("外门弟子，灵识敏锐");
       expect(char.fields).toEqual({ hp: 100, level: 1, lingGen: "水灵根" });
       expect(char.version).toBe(1);
-      expect(char.createdAt).toBeDefined();
-      expect(char.updatedAt).toBeDefined();
     });
 
-    it("mirrors character to plugin-data for panel reactivity", async () => {
-      const t = findByName(tools, "create-character");
-      const result = await t.execute(
+    it("mirrors character to plugin-data for panel reactivity (on commit)", async () => {
+      const result = await loop.call(
+        "create-character",
         { name: "Alice", type: "npc" },
-        ctx("char-creator", "sess-1"),
+        "char-creator",
       );
       const charId = (result as { characterId: string }).characterId;
 
+      // Mirror rides on the proposal's mirrorPluginId — no direct write.
+      expect(store.pluginData).toHaveLength(0);
+      expect(
+        (loop.pending[0].payload as { mirrorPluginId?: string }).mirrorPluginId,
+      ).toBe("char-creator");
+
+      loop.commit();
       expect(store.pluginData).toHaveLength(1);
       const mirror = store.pluginData[0];
       expect(mirror.pluginId).toBe("char-creator");
@@ -218,84 +292,100 @@ describe("builtin character tools", () => {
     });
 
     it("validates type field and rejects invalid values", async () => {
-      const t = findByName(tools, "create-character");
+      const t = tools.find((m) => m.name === "create-character")!;
       await expect(
-        t.execute({ name: "X", type: "invalid" as never }, ctx()),
+        t.execute(
+          { name: "X", type: "invalid" as never },
+          {
+            sessionId: "sess-1",
+            turnId: "turn-1",
+            pluginId: "char-creator",
+            runtimeId: "char-creator/runtime",
+          },
+        ),
       ).rejects.toThrow();
     });
 
     it("requires a non-empty name", async () => {
-      const t = findByName(tools, "create-character");
+      const t = tools.find((m) => m.name === "create-character")!;
       await expect(
-        t.execute({ name: "", type: "player" }, ctx()),
+        t.execute(
+          { name: "", type: "player" },
+          {
+            sessionId: "sess-1",
+            turnId: "turn-1",
+            pluginId: "char-creator",
+            runtimeId: "char-creator/runtime",
+          },
+        ),
       ).rejects.toThrow();
     });
 
     it("generates a unique id per call", async () => {
-      const t = findByName(tools, "create-character");
-      const r1 = await t.execute({ name: "A", type: "npc" }, ctx());
-      const r2 = await t.execute({ name: "B", type: "npc" }, ctx());
+      const r1 = await loop.call("create-character", {
+        name: "A",
+        type: "npc",
+      });
+      const r2 = await loop.call("create-character", {
+        name: "B",
+        type: "npc",
+      });
       expect((r1 as { characterId: string }).characterId).not.toBe(
         (r2 as { characterId: string }).characterId,
       );
+      loop.commit();
       expect(store.characters).toHaveLength(2);
     });
 
-    it("does not touch session phase — that is the kernel scheduler's job now", async () => {
-      const t = findByName(tools, "create-character");
-      await t.execute({ name: "柳无痕", type: "player" }, ctx());
-      // create-character must not call updateSession with phase — phase
-      // transitions moved out of the tool layer in the turn-band refactor.
-      expect(store.updateSession).not.toHaveBeenCalled();
-      expect(store.sessionPatches).toEqual([]);
-    });
-
-    it("is idempotent for same (name, type) — returns existing id instead of creating duplicate", async () => {
-      const t = findByName(tools, "create-character");
-      const r1 = await t.execute(
-        {
-          name: "赵铁山",
-          type: "npc",
-          description: "师叔",
-          fields: { hp: 40 },
-        },
-        ctx(),
-      );
-      const r2 = await t.execute(
-        {
-          name: "赵铁山",
-          type: "npc",
-          description: "师叔 v2",
-          fields: { hp: 45 },
-        },
-        ctx(),
-      );
+    it("is idempotent for same (name, type) — sees buffered create, no duplicate", async () => {
+      const r1 = await loop.call("create-character", {
+        name: "赵铁山",
+        type: "npc",
+        description: "师叔",
+        fields: { hp: 40 },
+      });
+      // Dedup must see the FIRST create even though it is only buffered.
+      const r2 = await loop.call("create-character", {
+        name: "赵铁山",
+        type: "npc",
+        description: "师叔 v2",
+        fields: { hp: 45 },
+      });
       const id1 = (r1 as { characterId: string }).characterId;
       const id2 = (r2 as { characterId: string }).characterId;
       expect(id2).toBe(id1);
       expect((r2 as { existed: boolean }).existed).toBe(true);
-      // Only one character row in the store
+      // Only one upsert proposal was emitted (the dedup short-circuited).
+      expect(loop.pending).toHaveLength(1);
+
+      loop.commit();
       expect(store.characters.filter((c) => c.name === "赵铁山")).toHaveLength(
         1,
       );
     });
 
     it("allows different types with same name (player 与 npc 可以同名)", async () => {
-      const t = findByName(tools, "create-character");
-      const r1 = await t.execute({ name: "Echo", type: "player" }, ctx());
-      const r2 = await t.execute({ name: "Echo", type: "npc" }, ctx());
+      const r1 = await loop.call("create-character", {
+        name: "Echo",
+        type: "player",
+      });
+      const r2 = await loop.call("create-character", {
+        name: "Echo",
+        type: "npc",
+      });
       expect((r1 as { characterId: string }).characterId).not.toBe(
         (r2 as { characterId: string }).characterId,
       );
+      loop.commit();
       expect(store.characters).toHaveLength(2);
     });
 
     it("returns a human-readable _text summary (text-first convention)", async () => {
-      const t = findByName(tools, "create-character");
-      const result = (await t.execute(
-        { name: "柳无痕", type: "player", description: "外门弟子" },
-        ctx(),
-      )) as { _text: string; characterId: string };
+      const result = (await loop.call("create-character", {
+        name: "柳无痕",
+        type: "player",
+        description: "外门弟子",
+      })) as { _text: string; characterId: string };
       expect(typeof result._text).toBe("string");
       expect(result._text).toContain("柳无痕");
       expect(result._text).toContain("player");
@@ -303,33 +393,29 @@ describe("builtin character tools", () => {
     });
 
     it("_text reflects existed=true path when duplicate", async () => {
-      const t = findByName(tools, "create-character");
-      await t.execute({ name: "孙师叔", type: "npc" }, ctx());
-      const r2 = (await t.execute({ name: "孙师叔", type: "npc" }, ctx())) as {
-        _text: string;
-      };
+      await loop.call("create-character", { name: "孙师叔", type: "npc" });
+      const r2 = (await loop.call("create-character", {
+        name: "孙师叔",
+        type: "npc",
+      })) as { _text: string };
       expect(r2._text).toMatch(/already exists|已存在|existed/i);
     });
   });
 
   describe("update-character", () => {
-    it("merges fields into existing character and bumps version", async () => {
-      // Seed a character first
-      const create = findByName(tools, "create-character");
-      const created = await create.execute(
-        { name: "苏婉", type: "npc", fields: { hp: 100, status: "alive" } },
-        ctx(),
-      );
+    it("merges fields into buffered character and bumps version", async () => {
+      const created = await loop.call("create-character", {
+        name: "苏婉",
+        type: "npc",
+        fields: { hp: 100, status: "alive" },
+      });
       const charId = (created as { characterId: string }).characterId;
 
-      const update = findByName(tools, "update-character");
-      const result = await update.execute(
-        {
-          id: charId,
-          fields: { hp: 50, status: "wounded", injuries: ["arm"] },
-        },
-        ctx(),
-      );
+      // update reads its own buffered create via the overlay.
+      const result = await loop.call("update-character", {
+        id: charId,
+        fields: { hp: 50, status: "wounded", injuries: ["arm"] },
+      });
 
       expect(result).toMatchObject({
         success: true,
@@ -337,6 +423,7 @@ describe("builtin character tools", () => {
         version: 2,
       });
 
+      loop.commit();
       const char = store.characters.find((c) => c.id === charId)!;
       expect(char.fields).toEqual({
         hp: 50,
@@ -347,32 +434,33 @@ describe("builtin character tools", () => {
     });
 
     it("updates description when provided", async () => {
-      const create = findByName(tools, "create-character");
-      const created = await create.execute(
-        { name: "柳娘", type: "npc", description: "药王谷谷主" },
-        ctx(),
-      );
+      const created = await loop.call("create-character", {
+        name: "柳娘",
+        type: "npc",
+        description: "药王谷谷主",
+      });
       const charId = (created as { characterId: string }).characterId;
 
-      const update = findByName(tools, "update-character");
-      await update.execute(
-        { id: charId, description: "药王谷谷主，已故" },
-        ctx(),
-      );
+      await loop.call("update-character", {
+        id: charId,
+        description: "药王谷谷主，已故",
+      });
 
+      loop.commit();
       const char = store.characters.find((c) => c.id === charId)!;
       expect(char.description).toBe("药王谷谷主，已故");
     });
 
-    it("re-mirrors updated character to plugin-data", async () => {
-      const create = findByName(tools, "create-character");
-      const created = await create.execute({ name: "X", type: "npc" }, ctx());
+    it("re-mirrors updated character to plugin-data on commit", async () => {
+      const created = await loop.call("create-character", {
+        name: "X",
+        type: "npc",
+      });
       const charId = (created as { characterId: string }).characterId;
 
-      const update = findByName(tools, "update-character");
-      await update.execute({ id: charId, fields: { hp: 20 } }, ctx());
+      await loop.call("update-character", { id: charId, fields: { hp: 20 } });
 
-      // Latest mirror should reflect update
+      loop.commit();
       const mirror = store.pluginData.find(
         (r) => r.namespace === "characters" && r.key === charId,
       );
@@ -381,54 +469,53 @@ describe("builtin character tools", () => {
     });
 
     it("returns notFound when id does not exist", async () => {
-      const update = findByName(tools, "update-character");
-      const result = await update.execute(
-        { id: "nonexistent", fields: { hp: 1 } },
-        ctx(),
-      );
+      const result = await loop.call("update-character", {
+        id: "nonexistent",
+        fields: { hp: 1 },
+      });
       expect(result).toMatchObject({ success: false, notFound: true });
+      expect(loop.pending).toHaveLength(0);
     });
   });
 
   describe("list-characters", () => {
     beforeEach(async () => {
-      const create = findByName(tools, "create-character");
-      await create.execute(
-        { name: "柳无痕", type: "player", description: "外门弟子" },
-        ctx(),
-      );
-      await create.execute(
-        { name: "苏婉", type: "npc", description: "师姐" },
-        ctx(),
-      );
-      await create.execute(
-        { name: "柳娘", type: "npc", description: "药王谷谷主" },
-        ctx(),
-      );
+      // Seed via committed state so list has a store baseline to read.
+      await loop.call("create-character", {
+        name: "柳无痕",
+        type: "player",
+        description: "外门弟子",
+      });
+      await loop.call("create-character", {
+        name: "苏婉",
+        type: "npc",
+        description: "师姐",
+      });
+      await loop.call("create-character", {
+        name: "柳娘",
+        type: "npc",
+        description: "药王谷谷主",
+      });
+      loop.commit();
     });
 
     it("returns a text summary listing all session characters", async () => {
-      const t = findByName(tools, "list-characters");
-      const result = (await t.execute({}, ctx())) as {
+      const result = (await loop.call("list-characters", {})) as {
         _text: string;
         count: number;
       };
       expect(typeof result._text).toBe("string");
       expect(result.count).toBe(3);
-      // All three names should appear
       expect(result._text).toContain("柳无痕");
       expect(result._text).toContain("苏婉");
       expect(result._text).toContain("柳娘");
-      // Description appears for context
       expect(result._text).toContain("外门弟子");
-      // Type labels appear
       expect(result._text).toContain("player");
       expect(result._text).toContain("npc");
     });
 
     it("filters by type when provided", async () => {
-      const t = findByName(tools, "list-characters");
-      const result = (await t.execute({ type: "npc" }, ctx())) as {
+      const result = (await loop.call("list-characters", { type: "npc" })) as {
         _text: string;
         count: number;
       };
@@ -440,9 +527,8 @@ describe("builtin character tools", () => {
 
     it("handles empty session with a clear empty message", async () => {
       const emptyStore = createMockStore();
-      const emptyTools = createCharacterTools(emptyStore);
-      const t = findByName(emptyTools, "list-characters");
-      const result = (await t.execute({}, ctx())) as {
+      const emptyLoop = new Loop(createCharacterTools(emptyStore), emptyStore);
+      const result = (await emptyLoop.call("list-characters", {})) as {
         _text: string;
         count: number;
       };
@@ -453,11 +539,9 @@ describe("builtin character tools", () => {
     });
 
     it('treats "None" filter values as no filter', async () => {
-      const t = findByName(tools, "list-characters");
-      const result = (await t.execute({ type: "None" }, ctx())) as {
-        _text: string;
-        count: number;
-      };
+      const result = (await loop.call("list-characters", {
+        type: "None",
+      })) as { _text: string; count: number };
       expect(result.count).toBe(3);
       expect(result._text).toContain("柳无痕");
       expect(result._text).toContain("苏婉");
@@ -465,17 +549,11 @@ describe("builtin character tools", () => {
     });
 
     it("sorts by frequency (version) desc, then updatedAt desc", async () => {
-      // Update 苏婉 twice (version=3), update 柳娘 once (version=2).
-      // 柳无痕 stays at version=1.
-      // Expected order: 苏婉 (v3) → 柳娘 (v2) → 柳无痕 (v1)
-      const update = findByName(tools, "update-character");
-      const get = findByName(tools, "get-character");
-
-      const suwan = (await get.execute({ name: "苏婉" }, ctx())) as {
+      const suwan = (await loop.call("get-character", { name: "苏婉" })) as {
         _text: string;
       };
       const suwanId = /char-[a-f0-9-]+/.exec(suwan._text)?.[0];
-      const liuniang = (await get.execute({ name: "柳娘" }, ctx())) as {
+      const liuniang = (await loop.call("get-character", { name: "柳娘" })) as {
         _text: string;
       };
       const liuniangId = /char-[a-f0-9-]+/.exec(liuniang._text)?.[0];
@@ -483,12 +561,23 @@ describe("builtin character tools", () => {
       expect(suwanId).toBeDefined();
       expect(liuniangId).toBeDefined();
 
-      await update.execute({ id: suwanId!, fields: { hp: 90 } }, ctx());
-      await update.execute({ id: suwanId!, fields: { hp: 80 } }, ctx());
-      await update.execute({ id: liuniangId!, fields: { hp: 60 } }, ctx());
+      await loop.call("update-character", {
+        id: suwanId!,
+        fields: { hp: 90 },
+      });
+      await loop.call("update-character", {
+        id: suwanId!,
+        fields: { hp: 80 },
+      });
+      await loop.call("update-character", {
+        id: liuniangId!,
+        fields: { hp: 60 },
+      });
+      loop.commit();
 
-      const t = findByName(tools, "list-characters");
-      const list = (await t.execute({}, ctx())) as { _text: string };
+      const list = (await loop.call("list-characters", {})) as {
+        _text: string;
+      };
       const suwanPos = list._text.indexOf("苏婉");
       const liuniangPos = list._text.indexOf("柳娘");
       const liuwuhenPos = list._text.indexOf("柳无痕");
@@ -497,22 +586,21 @@ describe("builtin character tools", () => {
     });
 
     it("recency breaks frequency ties (same version → newer updatedAt first)", async () => {
-      // Need explicit time separation so updatedAt actually differs.
-      // The beforeEach creates all 3 in the same millisecond tick, so we
-      // rebuild state here with delays between creates.
       const freshStore = createMockStore();
-      const freshTools = createCharacterTools(freshStore);
-      const create = findByName(freshTools, "create-character");
-      await create.execute({ name: "柳无痕", type: "player" }, ctx());
+      const freshLoop = new Loop(createCharacterTools(freshStore), freshStore);
+      await freshLoop.call("create-character", {
+        name: "柳无痕",
+        type: "player",
+      });
       await new Promise((r) => setTimeout(r, 5));
-      await create.execute({ name: "苏婉", type: "npc" }, ctx());
+      await freshLoop.call("create-character", { name: "苏婉", type: "npc" });
       await new Promise((r) => setTimeout(r, 5));
-      await create.execute({ name: "柳娘", type: "npc" }, ctx());
+      await freshLoop.call("create-character", { name: "柳娘", type: "npc" });
+      freshLoop.commit();
 
-      // All three are at version=1, so ordering falls to updatedAt desc.
-      // Expected order: 柳娘 (newest) → 苏婉 → 柳无痕 (oldest)
-      const t = findByName(freshTools, "list-characters");
-      const list = (await t.execute({}, ctx())) as { _text: string };
+      const list = (await freshLoop.call("list-characters", {})) as {
+        _text: string;
+      };
       const liuniangPos = list._text.indexOf("柳娘");
       const suwanPos = list._text.indexOf("苏婉");
       const liuwuhenPos = list._text.indexOf("柳无痕");
@@ -521,14 +609,14 @@ describe("builtin character tools", () => {
     });
 
     it("includes cross-plugin characters (session-scoped)", async () => {
-      const create = findByName(tools, "create-character");
-      await create.execute(
+      await loop.call(
+        "create-character",
         { name: "NarratorGhost", type: "npc" },
-        ctx("narrator"),
+        "narrator",
       );
+      loop.commit();
 
-      const t = findByName(tools, "list-characters");
-      const result = (await t.execute({}, ctx("char-creator"))) as {
+      const result = (await loop.call("list-characters", {})) as {
         _text: string;
         count: number;
       };
@@ -541,17 +629,17 @@ describe("builtin character tools", () => {
     let charId: string;
 
     beforeEach(async () => {
-      const create = findByName(tools, "create-character");
-      const created = await create.execute(
-        { name: "柳无痕", type: "player", fields: { hp: 100 } },
-        ctx(),
-      );
+      const created = await loop.call("create-character", {
+        name: "柳无痕",
+        type: "player",
+        fields: { hp: 100 },
+      });
       charId = (created as { characterId: string }).characterId;
+      loop.commit();
     });
 
     it("returns full character detail as text when found by id", async () => {
-      const t = findByName(tools, "get-character");
-      const result = (await t.execute({ id: charId }, ctx())) as {
+      const result = (await loop.call("get-character", { id: charId })) as {
         _text: string;
         found: boolean;
       };
@@ -560,14 +648,12 @@ describe("builtin character tools", () => {
       expect(result._text).toContain("柳无痕");
       expect(result._text).toContain("player");
       expect(result._text).toContain(charId);
-      // Fields appear as key: value in the text
       expect(result._text).toContain("hp");
       expect(result._text).toContain("100");
     });
 
     it("looks up by name and returns full detail", async () => {
-      const t = findByName(tools, "get-character");
-      const result = (await t.execute({ name: "柳无痕" }, ctx())) as {
+      const result = (await loop.call("get-character", { name: "柳无痕" })) as {
         _text: string;
         found: boolean;
       };
@@ -577,8 +663,7 @@ describe("builtin character tools", () => {
     });
 
     it("returns text saying not found when id is missing", async () => {
-      const t = findByName(tools, "get-character");
-      const result = (await t.execute({ id: "nope" }, ctx())) as {
+      const result = (await loop.call("get-character", { id: "nope" })) as {
         _text: string;
         found: boolean;
       };
@@ -587,47 +672,125 @@ describe("builtin character tools", () => {
     });
 
     it("requires either id or name", async () => {
-      const t = findByName(tools, "get-character");
-      await expect(t.execute({}, ctx())).rejects.toThrow();
+      const t = tools.find((m) => m.name === "get-character")!;
+      await expect(
+        t.execute(
+          {},
+          {
+            sessionId: "sess-1",
+            turnId: "turn-1",
+            pluginId: "char-creator",
+            runtimeId: "char-creator/runtime",
+          },
+        ),
+      ).rejects.toThrow();
+    });
+
+    it("reads a character that is only buffered (not yet committed)", async () => {
+      const created = await loop.call("create-character", {
+        name: "未落库者",
+        type: "npc",
+      });
+      const bufferedId = (created as { characterId: string }).characterId;
+      // Deliberately NOT committed — the overlay must still surface it.
+      const result = (await loop.call("get-character", {
+        id: bufferedId,
+      })) as { _text: string; found: boolean };
+      expect(result.found).toBe(true);
+      expect(result._text).toContain("未落库者");
     });
   });
 
   describe("update-character _text output", () => {
     it("summarizes what changed in the returned _text", async () => {
-      const create = findByName(tools, "create-character");
-      const created = await create.execute(
-        { name: "赵铁山", type: "npc", fields: { hp: 100, status: "alive" } },
-        ctx(),
-      );
+      const created = await loop.call("create-character", {
+        name: "赵铁山",
+        type: "npc",
+        fields: { hp: 100, status: "alive" },
+      });
       const charId = (created as { characterId: string }).characterId;
 
-      const update = findByName(tools, "update-character");
-      const result = (await update.execute(
-        {
-          id: charId,
-          fields: { hp: 50, status: "wounded" },
-          description: "updated desc",
-        },
-        ctx(),
-      )) as { _text: string; version: number };
+      const result = (await loop.call("update-character", {
+        id: charId,
+        fields: { hp: 50, status: "wounded" },
+        description: "updated desc",
+      })) as { _text: string; version: number };
 
       expect(result.version).toBe(2);
       expect(typeof result._text).toBe("string");
       expect(result._text).toContain("赵铁山");
-      // Shows the change summary
       expect(result._text).toMatch(/hp/);
       expect(result._text).toMatch(/status/);
     });
 
     it("returns a not-found text when id does not exist", async () => {
-      const update = findByName(tools, "update-character");
-      const result = (await update.execute(
-        { id: "missing", fields: { hp: 1 } },
-        ctx(),
-      )) as { _text: string; success: boolean; notFound?: boolean };
+      const result = (await loop.call("update-character", {
+        id: "missing",
+        fields: { hp: 1 },
+      })) as { _text: string; success: boolean; notFound?: boolean };
       expect(result.success).toBe(false);
       expect(result.notFound).toBe(true);
       expect(result._text.toLowerCase()).toMatch(/not found|未找到|不存在/);
+    });
+  });
+
+  // ── character-tracker workflow simulation (effects isolation) ────
+  describe("effects isolation: buffered writes commit atomically", () => {
+    it("create A → list (sees A) → create B (dedup sees A) → update A, no store write until commit", async () => {
+      // create A
+      const a = await loop.call("create-character", {
+        name: "Aria",
+        type: "npc",
+        fields: { hp: 100 },
+      });
+      const aId = (a as { characterId: string }).characterId;
+
+      // list sees the buffered A
+      const list1 = (await loop.call("list-characters", {})) as {
+        count: number;
+        _text: string;
+      };
+      expect(list1.count).toBe(1);
+      expect(list1._text).toContain("Aria");
+
+      // create B — dedup does NOT match A (different name), new proposal
+      const b = await loop.call("create-character", {
+        name: "Borin",
+        type: "npc",
+      });
+      const bId = (b as { characterId: string }).characterId;
+      expect(bId).not.toBe(aId);
+
+      // update A — sees its own buffered create as the base
+      const upd = await loop.call("update-character", {
+        id: aId,
+        fields: { hp: 40 },
+      });
+      expect((upd as { version: number }).version).toBe(2);
+
+      // Throughout the loop the store stays untouched.
+      expect(store.characters).toHaveLength(0);
+      expect(store.pluginData).toHaveLength(0);
+
+      // finalize → everything lands.
+      loop.commit();
+      expect(store.characters).toHaveLength(2);
+      const aRow = store.characters.find((c) => c.id === aId)!;
+      expect(aRow.name).toBe("Aria");
+      expect(aRow.version).toBe(2);
+      expect((aRow.fields as { hp: number }).hp).toBe(40);
+      expect(store.characters.find((c) => c.id === bId)!.name).toBe("Borin");
+    });
+
+    it("rollback (never commit) leaves the store with zero changes", async () => {
+      await loop.call("create-character", { name: "Ghost", type: "npc" });
+      await loop.call("update-character", {
+        id: (loop.pending[0].payload as { id: string }).id,
+        fields: { hp: 1 },
+      });
+      // Execution rolls back → commit() is never called.
+      expect(store.characters).toHaveLength(0);
+      expect(store.pluginData).toHaveLength(0);
     });
   });
 });

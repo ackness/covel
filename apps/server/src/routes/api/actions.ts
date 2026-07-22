@@ -682,6 +682,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                   ? { setupCompletion: result.setupCompletion }
                   : {}),
               },
+              // Setup attempt ledger + pending/blocked mirror, settled outside
+              // the commit transaction (a rolled-back commit still burns an
+              // attempt, so deterministic failures reach `blocked`).
+              ...(result.setupRan ? { setupRan: result.setupRan } : {}),
             });
             // finalize owns the commit_status settle (committed or failed).
             commitStatusSettled = true;

@@ -7,7 +7,7 @@ import type {
 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import type { SuspensionRecord } from "@covel/store";
-import { validateOutput } from "@covel/tools";
+import { validateOutput, withPendingProposals } from "@covel/tools";
 import {
   createPluginDataWriter,
   createPluginLogger,
@@ -16,6 +16,7 @@ import {
   makeRevocableCapability,
   makeRevocableFn,
 } from "./plugin-handler-helpers.js";
+import { createExecutionWriteBuffer } from "./execution-write-buffer.js";
 import { createRuntimeMediaContext } from "./runtime-media-context.js";
 import { createRuntimeImagesContext } from "./runtime-images-context.js";
 import { createRuntimeSpeechContext } from "./runtime-speech-context.js";
@@ -109,6 +110,12 @@ export async function executeFunctionRuntime({
     runtimeId: manifest.name,
   };
 
+  // Execution write buffer: ctx.pluginData / ctx.store domain writes route
+  // through this instead of hitting the store directly, and flush onto the
+  // result output at execution end so they commit in finalizeExecution's
+  // single transaction (and roll back with it if the handler fails).
+  const writeBuffer = createExecutionWriteBuffer();
+
   if (!loaded.handler) {
     // A missing handler returns (never throws), so it would bypass the dispatch
     // catch and leave the runtime.started above with no terminal event. Emit a
@@ -161,7 +168,7 @@ export async function executeFunctionRuntime({
   );
   const assetProgress = createAssetProgressEmitter(deps.emitter, helperCtx);
   const pluginDataHandle = deps.store
-    ? createPluginDataWriter(deps.store, helperCtx)
+    ? createPluginDataWriter(deps.store, helperCtx, writeBuffer)
     : undefined;
   const loggerHandle = deps.store
     ? createPluginLogger(deps.store, helperCtx)
@@ -229,7 +236,7 @@ export async function executeFunctionRuntime({
   const isTrustedSource = isTrustedPluginSource(deps, manifest);
   const handlerStore = deps.store
     ? isTrustedSource
-      ? createTrustedHandlerStore(deps.store)
+      ? createTrustedHandlerStore(deps.store, helperCtx, writeBuffer)
       : createFunctionStoreView(deps.store, helperCtx)
     : undefined;
 
@@ -542,6 +549,22 @@ export async function executeFunctionRuntime({
     },
     rawResult,
   );
+
+  // Flush execution-buffered domain writes onto the result output so
+  // processRuntimeResult → finalizeExecution commits them in the same
+  // transaction. Non-enumerable symbol attachment — JSON.stringify (turn
+  // message, tracing) ignores it. A failed handler rethrows above and never
+  // reaches here, so its buffer is discarded (stricter atomicity than the old
+  // direct-write path). Suspends return earlier and intentionally drop the
+  // buffer too — a suspended runtime is not done.
+  if (
+    writeBuffer.length > 0 &&
+    result.output &&
+    typeof result.output === "object"
+  ) {
+    withPendingProposals(result.output as Record<string, unknown>, writeBuffer);
+  }
+
   const finalOutput = (result.output ?? output) as Record<string, unknown>;
 
   // Save function output as TurnMessage (same as agent runtimes).

@@ -9,7 +9,6 @@ import type { LoadedRuntime } from "@covel/plugin-loader";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import {
   createFunctionStoreView,
-  createPluginDataWriter,
   createPluginLogger,
   createTrustedHandlerStore,
 } from "../function-runtime/plugin-handler-helpers.js";
@@ -142,17 +141,24 @@ export async function executeAgentGuard({
         },
       });
 
+    // Trusted-guard domain writes (schema import, player-character upsert) stay
+    // DIRECT — NOT buffered. A pre-game guard writes then returns { skip: true },
+    // and the SAME turn's main-loop follow-up (e.g. the narrator reading the
+    // just-created player) runs before the caller commits, so a buffered write
+    // would be invisible to that same-turn downstream reader. Guard writes are
+    // deterministic setup that write-then-skip, so direct writes are safe here.
+    // Full guard-write atomicity (rollback with the execution) needs the
+    // pre-game/setup execution to COMMIT before the main-loop follow-up runs;
+    // when that lands, pass a write buffer here (createTrustedHandlerStore +
+    // createExecutionWriteBuffer) and flush it onto the skipped result — the
+    // commit path already handles pending proposals on skipped results.
     const guardStore = deps.store
       ? revocable(
           trustedGuard
-            ? createTrustedHandlerStore(deps.store)
+            ? createTrustedHandlerStore(deps.store, guardHelperCtx)
             : createFunctionStoreView(deps.store, guardHelperCtx),
         )
       : undefined;
-    const guardPluginDataHandle =
-      deps.store && trustedGuard
-        ? revocable(createPluginDataWriter(deps.store, guardHelperCtx))
-        : undefined;
     const guardLoggerHandle =
       deps.store && trustedGuard
         ? revocable(createPluginLogger(deps.store, guardHelperCtx))
@@ -232,7 +238,6 @@ export async function executeAgentGuard({
       ...(guardManualPayload ? { manualPayload: guardManualPayload } : {}),
       ...(triggerEvent ? { triggerEvent } : {}),
       ...(guardUserSettings ? { userSettings: guardUserSettings } : {}),
-      ...(guardPluginDataHandle ? { pluginData: guardPluginDataHandle } : {}),
       ...(guardLoggerHandle ? { logger: guardLoggerHandle } : {}),
       signal: guardSignal,
     });

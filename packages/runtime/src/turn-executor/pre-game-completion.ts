@@ -4,11 +4,10 @@ import type {
   SetupRuntimeState,
   TurnInput,
 } from "@covel/shared";
-import { getRuntimeSpec, mirrorSetupDone } from "@covel/shared";
+import { mirrorSetupDone } from "@covel/shared";
 import type { SessionContextSnapshot } from "@covel/context";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 import type { TurnSessionMeta } from "./session-state.js";
-import { isPreGamePriority } from "../schedule/scheduler.js";
 
 export interface MarkPreGameCompletionResult {
   readonly allDone: boolean;
@@ -33,7 +32,6 @@ export async function markPreGameCompletion(args: {
   readonly isPreGamePending: boolean;
   readonly preGameRuntimes: readonly RuntimeManifest[];
   readonly preGameCompleted: readonly string[];
-  readonly runtimeTriggerCounts: ReadonlyMap<string, number>;
   readonly sessionMeta: TurnSessionMeta;
   readonly sessionContext: SessionContextSnapshot | undefined;
   readonly refreshSessionContext: () => Promise<
@@ -47,7 +45,6 @@ export async function markPreGameCompletion(args: {
     input,
     isPreGamePending,
     preGameRuntimes,
-    runtimeTriggerCounts,
     refreshSessionContext,
   } = args;
   let preGameCompleted = args.preGameCompleted;
@@ -65,10 +62,8 @@ export async function markPreGameCompletion(args: {
   }
 
   const newlyDoneNames = collectNewlyDoneRuntimes({
-    activeRuntimes,
     completedResults,
     preGameCompleted,
-    runtimeTriggerCounts,
   });
   const updated =
     newlyDoneNames.length > 0
@@ -111,18 +106,20 @@ export async function markPreGameCompletion(args: {
   return { allDone, preGameCompleted, sessionMeta, sessionContext, newlyDone };
 }
 
+/**
+ * A setup runtime is marked done ONLY by an explicit completion signal:
+ * `preGameDone: true` or a guard that returned `{ skip: true }`. Deliberate
+ * change (scheduling redesign): exhausting `maxTriggerCount` no longer counts
+ * as done. A setup runtime that burns its retry budget without completing lands
+ * on `blocked` (via `settleSetupRuntimes`), which holds the session in the setup
+ * band until the player retries or waives it — the old "advance past a broken
+ * setup" behaviour is gone.
+ */
 function collectNewlyDoneRuntimes(args: {
-  readonly activeRuntimes: readonly RuntimeManifest[];
   readonly completedResults: ReadonlyMap<string, RuntimeResult>;
   readonly preGameCompleted: readonly string[];
-  readonly runtimeTriggerCounts: ReadonlyMap<string, number>;
 }): string[] {
-  const {
-    activeRuntimes,
-    completedResults,
-    preGameCompleted,
-    runtimeTriggerCounts,
-  } = args;
+  const { completedResults, preGameCompleted } = args;
   const newlyDone: string[] = [];
 
   for (const [name, result] of completedResults) {
@@ -132,16 +129,6 @@ function collectNewlyDoneRuntimes(args: {
     const guardSkipped = result.status === "skipped" && output?.skip === true;
     if (preGameDone || guardSkipped) {
       newlyDone.push(name);
-    }
-  }
-
-  for (const rt of activeRuntimes) {
-    if (!isPreGamePriority(getRuntimeSpec(rt).legacyOrder)) continue;
-    if (preGameCompleted.includes(rt.name)) continue;
-    if (newlyDone.includes(rt.name)) continue;
-    const max = rt.trigger?.maxTriggerCount;
-    if (max !== undefined && (runtimeTriggerCounts.get(rt.name) ?? 0) >= max) {
-      newlyDone.push(rt.name);
     }
   }
 

@@ -80,6 +80,9 @@ export function createPluginRpcRuntimeTurnRunner(
       ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
       eventBus: ctx.eventBus,
       emitter,
+      // Manual / late-setup runs settle their setup attempts too (a manual
+      // retrigger of a pending setup runtime burns an attempt).
+      ...(turnResult.setupRan ? { setupRan: turnResult.setupRan } : {}),
     });
 
     // Commit failures must not report success. Surface each one as a

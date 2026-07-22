@@ -8,9 +8,16 @@
  *   - core_memory_replace → memory-update-block (restricted)
  */
 
+import type { Proposal } from "@covel/shared";
 import { z } from "zod";
 import { tool } from "../tool.js";
+import { withPendingProposals } from "../result.js";
 import type { ToolModule } from "../types.js";
+
+// Core-memory blocks live in the "story" working-memory scope (mirrors
+// @covel/memory's SCOPE). memory-update-block writes there via a proposal so
+// the update commits (and rolls back) with the rest of the execution.
+const CORE_MEMORY_SCOPE = "story" as const;
 
 /** Minimal interface for recall search (avoids @covel/memory dependency). */
 interface RecallSearcher {
@@ -208,16 +215,37 @@ export function createMemoryTools(deps: MemoryToolDeps): ToolModule[] {
           .describe("完整的新内容（替换旧内容）"),
       }),
       execute: async (params, context) => {
-        await deps.blocks.updateBlock(
-          context.sessionId,
-          params.label,
-          params.content,
-        );
-        return {
-          updated: true,
-          label: params.label,
-          contentLength: params.content.length,
+        // Buffer the block write as a working_memory.set proposal. The commit
+        // handler upserts working memory in the execution's transaction; a
+        // rollback drops it. NOTE: the old direct path (deps.blocks.updateBlock)
+        // also mirrored the block into plugin-data for the memory UI panel and
+        // truncated to a per-label cap. The commit handler does neither — the
+        // zod `.max(2000)` still bounds the size, and this tool has no
+        // production callers, so the mirror gap is inert. If a plugin adopts
+        // this tool and needs the panel mirror, add mirrorPluginId support to
+        // the working_memory.set payload/handler rather than reinstating a
+        // direct write. ponytail: mirror dropped, wire it when a caller needs it.
+        const proposal: Proposal = {
+          id: crypto.randomUUID(),
+          type: "working_memory.set",
+          source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
+          turnId: context.turnId,
+          sessionId: context.sessionId,
+          payload: {
+            scope: CORE_MEMORY_SCOPE,
+            key: params.label,
+            value: { text: params.content },
+          },
+          timestamp: new Date().toISOString(),
         };
+        return withPendingProposals(
+          {
+            updated: true,
+            label: params.label,
+            contentLength: params.content.length,
+          },
+          [proposal],
+        );
       },
     }),
   );

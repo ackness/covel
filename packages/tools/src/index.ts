@@ -9,6 +9,13 @@ export {
 } from "./result.js";
 export type { ToolExecutionEnvelope, EmittedEvent } from "./result.js";
 
+// ── Proposal read-through overlays (buffered same-execution writes) ──
+export {
+  overlayPluginDataValue,
+  overlayPluginDataRows,
+  overlayCharacters,
+} from "./proposal-overlay.js";
+
 // ── Zod re-export (for plugin tool factory injection) ───────────
 export { z } from "zod";
 

@@ -1,5 +1,5 @@
-import type { RuntimeManifest } from "@covel/shared";
-import { getRuntimeSpec } from "@covel/shared";
+import type { RuntimeManifest, SetupRuntimeState } from "@covel/shared";
+import { getRuntimeSpec, isSetupRuntime } from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
 import { scheduleByDag } from "../schedule/dag-scheduler.js";
 import {
@@ -17,12 +17,42 @@ export interface TriggeredRuntimeSelection {
   readonly abortReason: string | undefined;
 }
 
+/**
+ * A schedule plus the runtimes that could not be placed because they sit in (or
+ * downstream of) a dependency cycle. Cyclic members are disabled for the turn
+ * (`skipped: dependency-cycle`) — the deliberate replacement for the old
+ * fall-back-to-priority-ordering behaviour, which silently ran cyclic runtimes
+ * in an arbitrary order.
+ */
+export interface ScheduleResult {
+  readonly groups: readonly ScheduledGroup[];
+  readonly cyclic: readonly RuntimeManifest[];
+}
+
+/**
+ * Whether a setup runtime should run this turn, from its persistent mirror:
+ * pending (or never-run, absent from the mirror and the legacy set) → yes;
+ * blocked or done → no. Setup scheduling is governed by the ledger-based retry
+ * budget (blocked), not turn cadence, so `shouldTrigger` is bypassed for them.
+ */
+function setupRuntimePending(
+  rt: RuntimeManifest,
+  setupRuntimes: Readonly<Record<string, SetupRuntimeState>>,
+  preGameCompleted: readonly string[],
+): boolean {
+  const state = setupRuntimes[rt.name]?.state;
+  if (state === "blocked" || state === "done") return false;
+  if (preGameCompleted.includes(rt.name)) return false;
+  return true;
+}
+
 export function selectTriggeredRuntimes(args: {
   readonly activeRuntimes: readonly RuntimeManifest[];
   readonly manualRuntimeId: string | undefined;
   readonly messageHistory: readonly TurnMessageRecord[];
   readonly preGameCompleted: readonly string[];
   readonly runtimeTriggerCounts: ReadonlyMap<string, number>;
+  readonly setupRuntimes: Readonly<Record<string, SetupRuntimeState>>;
   readonly sessionId: string;
   readonly turnNumber: number;
   /** Logical-turn number (completedPlayerTurns + 1), frozen for this execution. */
@@ -34,6 +64,7 @@ export function selectTriggeredRuntimes(args: {
     messageHistory,
     preGameCompleted,
     runtimeTriggerCounts,
+    setupRuntimes,
     sessionId,
     turnNumber,
     logicalTurn,
@@ -55,6 +86,10 @@ export function selectTriggeredRuntimes(args: {
   }
 
   const triggered = activeRuntimes.filter((rt) => {
+    // Setup runtimes: scheduled by mirror state (pending), not turn cadence.
+    if (isSetupRuntime(rt)) {
+      return setupRuntimePending(rt, setupRuntimes, preGameCompleted);
+    }
     const triggerContext: TriggerContext = {
       sessionId,
       turnNumber,
@@ -78,24 +113,27 @@ export function scheduleTriggeredRuntimes(args: {
   readonly manualTarget: RuntimeManifest | undefined;
   readonly triggered: readonly RuntimeManifest[];
   readonly isPreGamePending: boolean;
-  readonly turnNumber: number;
-}): readonly ScheduledGroup[] {
-  const { manualTarget, triggered, isPreGamePending, turnNumber } = args;
+}): ScheduleResult {
+  const { manualTarget, triggered, isPreGamePending } = args;
 
   if (manualTarget) {
-    return [
-      {
-        priority: getRuntimeSpec(manualTarget).legacyOrder ?? NARRATOR_PRIORITY,
-        runtimes: [manualTarget],
-      },
-    ];
+    return {
+      groups: [
+        {
+          priority:
+            getRuntimeSpec(manualTarget).legacyOrder ?? NARRATOR_PRIORITY,
+          runtimes: [manualTarget],
+        },
+      ],
+      cyclic: [],
+    };
   }
 
   if (isPreGamePending) {
     const preGameTriggered = triggered.filter((rt) =>
       isPreGamePriority(getRuntimeSpec(rt).legacyOrder),
     );
-    return scheduleByPriority(preGameTriggered, 0);
+    return { groups: scheduleByPriority(preGameTriggered, 0), cyclic: [] };
   }
 
   const mainLoop = triggered.filter((rt) =>
@@ -103,26 +141,25 @@ export function scheduleTriggeredRuntimes(args: {
   );
   const dag = scheduleByDag(mainLoop);
   if (dag.error) {
-    console.warn(
-      `[turn-executor] DAG scheduler: ${dag.error}; falling back to priority ordering`,
-    );
-    return scheduleByPriority(triggered, turnNumber);
+    // Deliberate change: no fall-back to priority ordering. Disable the SCC
+    // (and its downstream) — the executor skips them `dependency-cycle` with
+    // the full path diagnostic — and run the acyclic remainder as scheduled.
+    console.warn(`[turn-executor] DAG scheduler: ${dag.error}`);
   }
-  return dag.groups;
+  return { groups: dag.groups, cyclic: dag.cyclic ?? [] };
 }
 
 export function scheduleMainLoopFollowups(args: {
   readonly triggered: readonly RuntimeManifest[];
   readonly completedRuntimeIds: ReadonlySet<string>;
-  readonly turnNumber: number;
-}): readonly ScheduledGroup[] {
+}): ScheduleResult {
   const mainLoop = args.triggered.filter(
     (rt) =>
       isMainLoopPriority(getRuntimeSpec(rt).legacyOrder) &&
       !args.completedRuntimeIds.has(rt.name),
   );
   const dag = scheduleByDag(mainLoop);
-  return dag.error ? scheduleByPriority(mainLoop, args.turnNumber) : dag.groups;
+  return { groups: dag.groups, cyclic: dag.cyclic ?? [] };
 }
 
 /**

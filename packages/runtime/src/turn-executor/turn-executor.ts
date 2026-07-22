@@ -14,7 +14,13 @@ import type {
   TurnInput,
   TurnResult,
 } from "@covel/shared";
+import {
+  deriveLegacyClockFields,
+  isSetupRuntime,
+  mirrorSetupDone,
+} from "@covel/shared";
 import { executeParallel } from "../schedule/parallel-executor.js";
+import { scheduleByPriority } from "../schedule/scheduler.js";
 import {
   runTurnStartHook,
   runTurnStopHook,
@@ -28,9 +34,17 @@ import {
 import { executeOneRuntime } from "./turn-runtime-execution.js";
 import type { RuntimeInvocation } from "./turn-runtime-execution.js";
 import {
+  makeSkippedResult,
   retainPreGameRuntimes,
   resolveUserSettings,
 } from "./turn-executor-helpers.js";
+import {
+  classifySetupResult,
+  collectSetupRan,
+  detectSetupSessionCycles,
+  initialDoneSetup,
+  makePluginSetupReady,
+} from "./setup-run.js";
 import { runWithHookScope } from "../hooks/hook-scope.js";
 import { runEventChain } from "../trigger/turn-event-chain.js";
 import {
@@ -263,6 +277,66 @@ async function executeTurnImpl(
 
   let sessionMeta = sessionState.sessionMeta;
   let preGameCompleted = sessionMeta.preGameCompleted;
+  // Setup-band mirror frozen at execution start — drives setup scheduling (by
+  // pending/blocked, not turn cadence), the attempt-ledger generation, and the
+  // implicit per-plugin session gate below.
+  let setupRuntimesSnapshot = sessionState.setupRuntimes;
+  const activeSetupRuntimes = activeRuntimes.filter(isSetupRuntime);
+
+  // Setup session-gate SCC: a `needs(scope: session)` cycle among pending setup
+  // runtimes can never resolve (a session-scope need reads a PERSISTED done
+  // state), so block the members up front — no run, no attempt burned. Guarded
+  // so real plugins (none declare such an edge) pay nothing.
+  {
+    const pendingSetup = activeSetupRuntimes.filter((rt) => {
+      const st = setupRuntimesSnapshot[rt.name]?.state;
+      return st !== "done" && st !== "blocked";
+    });
+    const cycles = detectSetupSessionCycles(pendingSetup);
+    if (cycles.size > 0 && !input.manualTrigger) {
+      const now = new Date().toISOString();
+      const patched: Record<string, SetupRuntimeState> = {
+        ...setupRuntimesSnapshot,
+      };
+      for (const [name, path] of cycles) {
+        const manifest = activeSetupRuntimes.find((r) => r.name === name);
+        const prev = setupRuntimesSnapshot[name];
+        patched[name] = {
+          state: "blocked",
+          pluginVersion: manifest?.version ?? "0.0.0",
+          generation: prev?.generation ?? 1,
+          attempts: prev?.attempts ?? 0,
+          reason: `setup-session-cycle: ${path.join(" → ")}`,
+          blockedAt: now,
+        };
+      }
+      setupRuntimesSnapshot = patched;
+      if (deps.store) {
+        const legacy = deriveLegacyClockFields({
+          phase: sessionState.phase ?? "setup",
+          completedPlayerTurns: sessionState.completedPlayerTurns,
+          setupRuntimes: patched,
+        });
+        await deps.store.updateSession(input.sessionId, {
+          setupRuntimes: patched,
+          preGameCompleted: legacy.preGameCompleted,
+          updatedAt: now,
+        });
+      }
+    }
+  }
+  // Live done-set the session gate reads. Seeded from committed state; the
+  // late-setup pass adds runtimes that complete within THIS turn so their
+  // plugin's main runtimes unblock in the same turn.
+  const liveDoneSetup = initialDoneSetup(
+    activeSetupRuntimes,
+    setupRuntimesSnapshot,
+    preGameCompleted,
+  );
+  const pluginSetupReady = makePluginSetupReady(
+    activeSetupRuntimes,
+    liveDoneSetup,
+  );
   const projectedPromptHistory = await buildProjectedPromptHistory({
     input,
     deps,
@@ -279,6 +353,7 @@ async function executeTurnImpl(
     messageHistory,
     preGameCompleted,
     runtimeTriggerCounts,
+    setupRuntimes: setupRuntimesSnapshot,
     sessionId: input.sessionId,
     turnNumber,
     logicalTurn,
@@ -336,11 +411,10 @@ async function executeTurnImpl(
   // only if a cycle is detected (plugin authoring mistake).
   //
   // See packages/runtime/src/dag-scheduler.ts for the algorithm.
-  const groups = scheduleTriggeredRuntimes({
+  const { groups, cyclic } = scheduleTriggeredRuntimes({
     manualTarget,
     triggered: scheduledRuntimes,
     isPreGamePending,
-    turnNumber,
   });
   const sessionSummaries = await loadSessionSummaries({ input, deps });
   // Single listWorkingMemory read per turn: the raw records are threaded into
@@ -375,6 +449,19 @@ async function executeTurnImpl(
   let setupAllDone = false;
   let observedSetupCompletion = false;
 
+  // Add every setup runtime that reported done this turn to the live done-set,
+  // so a plugin whose setup just completed unblocks its main runtimes within
+  // the same turn (pre-game followups / late-setup → main loop). Idempotent.
+  const syncLiveDoneSetup = (): void => {
+    for (const rt of activeSetupRuntimes) {
+      if (liveDoneSetup.has(rt.name)) continue;
+      const result = completedResults.get(rt.name);
+      if (result && classifySetupResult(result).doneSignal) {
+        liveDoneSetup.add(rt.name);
+      }
+    }
+  };
+
   const recordPreGameCompletion = async (): Promise<boolean> => {
     const result = await markPreGameCompletion({
       activeRuntimes,
@@ -384,7 +471,6 @@ async function executeTurnImpl(
       isPreGamePending,
       preGameRuntimes,
       preGameCompleted,
-      runtimeTriggerCounts,
       sessionMeta,
       sessionContext,
       refreshSessionContext,
@@ -397,6 +483,7 @@ async function executeTurnImpl(
       Object.assign(setupNewlyDone, result.newlyDone);
       setupAllDone = result.allDone;
     }
+    syncLiveDoneSetup();
     return result.allDone;
   };
 
@@ -440,6 +527,13 @@ async function executeTurnImpl(
       executeTurnFn: executeTurn,
       recursionDepth,
       executionId: executionContext.executionId,
+      pluginSetupReady,
+      ...(isSetupRuntime(manifest)
+        ? {
+            setupGeneration:
+              setupRuntimesSnapshot[manifest.name]?.generation ?? 1,
+          }
+        : {}),
       collectNestedResults: (results) => {
         nestedRuntimeResults.push(...results);
       },
@@ -462,6 +556,45 @@ async function executeTurnImpl(
   const playerAborted = (): boolean =>
     deps.turnControl?.signal?.aborted === true;
 
+  // Disable a dependency-cycle SCC (and everything downstream of it): mark each
+  // member skipped rather than falling back to a plain priority sort. The rest
+  // of the schedule runs normally. `cyclePath` carries the full stuck set for
+  // diagnosis. Reused for the pre-game-followup DAG below.
+  const emitCyclicSkips = (members: readonly RuntimeManifest[]): void => {
+    if (members.length === 0) return;
+    const cyclePath = members.map((m) => m.name);
+    for (const m of members) {
+      if (completedResults.has(m.name)) continue;
+      completedResults.set(
+        m.name,
+        makeSkippedResult(
+          m,
+          input,
+          "dependency-cycle",
+          "framework:dependencyCycle",
+          { cyclePath },
+        ),
+      );
+    }
+  };
+
+  // Late-setup pass (playing band): a plugin enabled after the session left the
+  // setup band has pending setup runtimes the main-loop DAG excludes (priority
+  // ≤ 99). Run them BEFORE the main groups — as a pre-turn catch-up layer — so
+  // their plugin's main runtimes gate on this turn's fresh result. Blocked /
+  // done setup runtimes were already filtered out by selectTriggeredRuntimes.
+  if (!isPreGamePending && !manualTarget && !playerAborted()) {
+    const lateSetup = scheduledRuntimes.filter((rt) => isSetupRuntime(rt));
+    for (const group of scheduleByPriority(lateSetup, 0)) {
+      if (playerAborted()) break;
+      const results = await executeParallel(group.runtimes, (manifest) =>
+        invoke(manifest, undefined),
+      );
+      for (const [name, result] of results) completedResults.set(name, result);
+    }
+    syncLiveDoneSetup();
+  }
+
   for (const group of groups) {
     if (playerAborted()) break;
     const results = await executeParallel(group.runtimes, async (manifest) => {
@@ -479,6 +612,7 @@ async function executeTurnImpl(
       completedResults.set(name, result);
     }
   }
+  emitCyclicSkips(cyclic);
 
   const completedPreGameThisTurn = isPreGamePending
     ? await recordPreGameCompletion()
@@ -487,12 +621,11 @@ async function executeTurnImpl(
     // A form-submission request can finish the last Pre-Game runtime. In that
     // same request, immediately run any already-triggered main-loop runtimes so
     // the player sees the first story beat after submitting setup inputs.
-    const followupGroups = scheduleMainLoopFollowups({
+    const followup = scheduleMainLoopFollowups({
       triggered: scheduledRuntimes,
       completedRuntimeIds: new Set(completedResults.keys()),
-      turnNumber,
     });
-    for (const group of followupGroups) {
+    for (const group of followup.groups) {
       const results = await executeParallel(
         group.runtimes,
         async (manifest) => {
@@ -503,6 +636,7 @@ async function executeTurnImpl(
         completedResults.set(name, result);
       }
     }
+    emitCyclicSkips(followup.cyclic);
   }
 
   const deferredFollowers = playerAborted()
@@ -551,10 +685,11 @@ async function executeTurnImpl(
   //          session already holds the schema, or the world package declares
   //          character attributes / dimensions it can import directly).
   //
-  //   3. It ran out of trigger budget
-  //        - Runtimes with `trigger.maxTriggerCount` that have already
-  //          hit their cap in a previous turn aren't scheduled again;
-  //          they're still recorded as done so they don't block advancement.
+  // A setup runtime that instead exhausts its retry budget without ever
+  // signalling done is NOT marked done — it lands on `blocked` (via the
+  // finalize settle), which holds the session in the setup band until the
+  // player retries or waives it (deliberate change from the old "advance past a
+  // broken setup").
   //
   // The session's `preGameCompleted` array accumulates these runtime IDs
   // across turns (important — some plugins require multiple turns to hit
@@ -571,6 +706,26 @@ async function executeTurnImpl(
   // needed to decide whether to run same-request main-loop followups; this
   // one captures completion signals produced by event-chain followers.
   await recordPreGameCompletion();
+
+  // Ledger entries for every setup runtime that ran this execution (both bands
+  // + late-setup), handed to the finalizer for attempt terminalisation and the
+  // pending/blocked mirror. Also derive done mirrors for any late-setup
+  // completion that markPreGameCompletion did not observe (playing band).
+  const setupRan = collectSetupRan({
+    activeRuntimes,
+    completedResults,
+    setupRuntimes: setupRuntimesSnapshot,
+    executionId: executionContext.executionId,
+  });
+  for (const r of setupRan) {
+    if (r.doneSignal && !(r.runtimeId in setupNewlyDone)) {
+      setupNewlyDone[r.runtimeId] = mirrorSetupDone(
+        r.pluginVersion,
+        r.startedAt,
+      );
+    }
+  }
+  if (setupRan.length > 0) observedSetupCompletion = true;
 
   const baseResult = await finalizeTurnResult({
     input,
@@ -608,6 +763,10 @@ async function executeTurnImpl(
           },
         }
       : {}),
+    // Setup attempts to settle (ledger terminalise + pending/blocked mirror)
+    // outside the commit transaction. The commit-owning caller forwards this to
+    // finalizeExecution.
+    ...(setupRan.length > 0 ? { setupRan } : {}),
     completeTurn: () => {
       if (completionFired) return;
       completionFired = true;

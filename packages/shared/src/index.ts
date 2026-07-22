@@ -44,6 +44,16 @@ export type {
   SessionClock,
   LegacyClockFields,
 } from "./scheduling/session-clock.js";
+export {
+  isSetupRuntime,
+  setupRetryBudget,
+  isBudgetedAttempt,
+  resolvePendingOrBlocked,
+  isSetupSatisfied,
+  retrySetup,
+  waiveSetup,
+} from "./scheduling/setup-state.js";
+export type { SetupControlResult } from "./scheduling/setup-state.js";
 
 // ── Plugin Schemas ───────────────────────────────────────────────
 export {

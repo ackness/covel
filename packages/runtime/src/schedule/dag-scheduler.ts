@@ -33,6 +33,13 @@ import type { ScheduledGroup } from "../types.js";
 export interface DagScheduleResult {
   readonly groups: readonly ScheduledGroup[];
   readonly error?: string;
+  /**
+   * Runtimes the sort could not place — the strongly-connected component(s) it
+   * hit plus everything downstream of them. Present only when `error` is set.
+   * Callers disable exactly this set (`skipped: dependency-cycle`) and run the
+   * acyclic `groups` normally, rather than falling back to a plain priority sort.
+   */
+  readonly cyclic?: readonly RuntimeManifest[];
 }
 
 function collectDependencies(
@@ -122,11 +129,14 @@ export function scheduleByDag(
   while (inDegree.size > 0) {
     const ready = pickReady();
     if (ready.length === 0) {
-      // Cycle — return what we built so far with an error. Caller may fall
-      // back to the priority scheduler.
+      // Cycle — return the acyclic prefix plus the stuck nodes (the SCC and its
+      // downstream) so the caller can disable exactly those and still run the
+      // rest.
+      const stuck = [...inDegree.keys()];
       return {
         groups: levels,
-        error: `cycle detected among runtimes: ${[...inDegree.keys()].join(", ")}`,
+        error: `cycle detected among runtimes: ${stuck.join(", ")}`,
+        cyclic: stuck.map((name) => byName.get(name)!).filter(Boolean),
       };
     }
 
