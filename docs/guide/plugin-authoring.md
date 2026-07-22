@@ -194,6 +194,7 @@ export default async function validateTool(ctx, payload) {
 plugins/<plugin-id>/
 ├── README.md             # 必需：给人类 / 开发者看的插件说明
 ├── PLUGIN.md              # 必需：frontmatter + 提示词
+├── output.schema.json     # 可选：agent runtime 结构化输出的 JSON Schema（默认约定文件名）
 ├── package.json           # 必需：workspace 依赖
 ├── .npmrc                 # 必需：供应链防护（minimum-release-age=10080）
 ├── vitest.config.ts       # 可选：测试配置
@@ -213,6 +214,8 @@ plugins/<plugin-id>/
 `README.md` 写给人类和开发者，建议包含：插件用途、玩家能看到什么、运行时组成、数据读写位置、主要文件、测试方式和已知限制。`PLUGIN.md` 写给框架和模型；单 runtime 插件的正文是提示词，多 runtime 插件的子目录 `PLUGIN.md` 正文才是各 runtime 的提示词。
 
 > **多 runtime 插件的根 PLUGIN.md**：当 `runtimes/` 存在时，框架不再把根 `PLUGIN.md` 当成 runtime——但仍会读它的 frontmatter `name`/`description` 作为整个插件的展示信息。**没有**根 PLUGIN.md 时，UI 会回退显示 plugin id（如 `dashscope-image-gen`），不直观。详见 [plugins.md 多 runtime 插件](../reference/plugins.md#多-runtime-插件)。
+
+> **`output.schema`**：frontmatter 的 `output.schema` 接受一个相对该 runtime 目录的路径（如 `./schemas/out.schema.json`），loader 会按声明加载并做 realpath containment 校验（阻断 `../` 逃逸）。未声明时回落到同目录 `output.schema.json` 约定文件。声明了路径但文件缺失只会 `console.warn` 而不中断加载。
 
 ### E. 供应链防护（`.npmrc`）
 

@@ -274,6 +274,43 @@ async function loadUiSpecs(
 }
 
 /**
+ * Load a runtime's output JSON Schema.
+ *
+ * When `manifest.output.schema` declares a path, that exact file is loaded
+ * (resolved against the runtime dir, containment-checked against the plugin
+ * root); a declared-but-missing file warns instead of throwing so one bad
+ * reference does not abort the load. With no declaration, fall back to the
+ * `output.schema.json` convention — silently absent when the file is not there.
+ */
+async function loadOutputSchema(
+  runtimeDir: string,
+  pluginRoot: string,
+  declaredPath: string | undefined,
+): Promise<Readonly<Record<string, unknown>> | undefined> {
+  if (declaredPath) {
+    const fullPath = path.resolve(runtimeDir, declaredPath);
+    await assertInsideRoot(pluginRoot, fullPath, "Output schema");
+    if (!(await fileExists(fullPath))) {
+      console.warn(
+        `[plugin-loader] declared output schema not found: ${declaredPath}`,
+      );
+      return undefined;
+    }
+    return JSON.parse(await fs.readFile(fullPath, "utf-8")) as Record<
+      string,
+      unknown
+    >;
+  }
+
+  const conventionPath = path.join(runtimeDir, "output.schema.json");
+  if (!(await fileExists(conventionPath))) return undefined;
+  return JSON.parse(await fs.readFile(conventionPath, "utf-8")) as Record<
+    string,
+    unknown
+  >;
+}
+
+/**
  * Level 1.5: Load only a runtime's manifest + UI specs — no handler / guard
  * imports. UI specs are data (JSON files, or a recorded component path), so
  * this path never executes plugin JS and is safe for untrusted (community)
@@ -308,12 +345,11 @@ export async function loadRuntime(
   const runtimeDir = resolveRuntimeDir(discovery, runtimeName);
   const parsed = await parsePluginMdForLocale(runtimeDir, locale);
 
-  const schemaPath = path.join(runtimeDir, "output.schema.json");
-  let outputSchema: Readonly<Record<string, unknown>> | undefined;
-  if (await fileExists(schemaPath)) {
-    const schemaContent = await fs.readFile(schemaPath, "utf-8");
-    outputSchema = JSON.parse(schemaContent) as Record<string, unknown>;
-  }
+  const outputSchema = await loadOutputSchema(
+    runtimeDir,
+    discovery.rootPath,
+    parsed.manifest.output?.schema,
+  );
 
   // Load function handler for runtimeType: 'function'
   let handler: FunctionHandler | undefined;
