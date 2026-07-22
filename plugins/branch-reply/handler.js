@@ -18,9 +18,10 @@ const TURN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
  * Two execution paths, selected by the presence of `ctx.manualPayload`:
  *
  *   - SEED (auto trigger, `manualPayload` absent): runs after the narrative
- *     engines each story turn. Reads the active engine's narrative from
- *     `ctx.completedResults` (engine-agnostic — discovered by the non-empty
- *     `narrativeOutput` contract, never by plugin id) and seeds the message
+ *     engines each story turn. Reads the active engine's narrative from the
+ *     declared `inputs.narrative` binding (`ctx.inputs.narrative`), falling
+ *     back to an engine-agnostic `ctx.completedResults` scan during the
+ *     compatibility window (see `seedFromNarrative`), and seeds the message
  *     block with that reply as candidate[0]. Idempotent per turnId; no-ops on
  *     empty / system turns. This is what makes the block surface at all — a
  *     `ui.message` block only renders once its `message` namespace is
@@ -58,7 +59,16 @@ export default async function handler(ctx) {
 async function seedFromNarrative(ctx) {
   const now = new Date().toISOString();
   const targetTurnId = normalizeTurnId(ctx.turnId);
-  const narrative = extractNarrativeText(ctx.completedResults);
+  // Dual path. Prefer the explicit `inputs.narrative` binding: an InputSlot
+  // whose `value` is the active engine's post-`select` `/narrativeOutput` and
+  // whose `source.runtimeId` names the producing runtime. The slot is absent
+  // on manual activation, a binding miss, or before the manifest/kernel wiring
+  // lands, so fall back to the raw `completedResults` scan during the
+  // compatibility window. Remove the fallback (and `extractNarrativeText`) in
+  // Step 6, once `ctx.inputs` is the only same-execution input entry.
+  const narrative =
+    narrativeFromInputSlot(ctx.inputs?.narrative) ??
+    extractNarrativeText(ctx.completedResults);
 
   // Skip empty / system turns — nothing to seed, so the block stays hidden
   // rather than rendering an empty swipe widget.
@@ -490,6 +500,60 @@ function makeMessageState({
 
 function makePluginDataBatchProposal(ctx, now, items) {
   return makeProposal(ctx, now, "plugin.data.batch", { items });
+}
+
+/**
+ * Read the narrative from the `inputs.narrative` binding (InputSlot,
+ * `cardinality: "one"`). `value` is the producer's post-`select`
+ * `/narrativeOutput` — a string in the declared contract, normalized
+ * defensively in case a producer projects a `{ narrativeOutput }` object.
+ * `source.runtimeId` is the producing runtime, returned in the same
+ * `{ text, runtimeId? }` shape as the scan so accept/regenerate keep targeting
+ * the narrator's message, not branch-reply's own seed. Returns undefined when
+ * the slot is absent or carries no usable text, which routes the caller to the
+ * `completedResults` fallback. This whole path retires with the fallback in
+ * Step 6 (`ctx.inputs` becomes the only same-execution input entry).
+ *
+ * @param {unknown} slot
+ * @returns {{ text: string, runtimeId?: string } | undefined}
+ */
+function narrativeFromInputSlot(slot) {
+  if (!slot || typeof slot !== "object") return undefined;
+  const record = /** @type {Record<string, unknown>} */ (slot);
+  const text = normalizeNarrativeValue(record.value);
+  if (!text) return undefined;
+  const source = record.source;
+  const runtimeId =
+    source &&
+    typeof source === "object" &&
+    typeof (/** @type {Record<string, unknown>} */ (source).runtimeId) ===
+      "string"
+      ? /** @type {string} */ (
+          /** @type {Record<string, unknown>} */ (source).runtimeId
+        )
+      : undefined;
+  return {
+    text: text.slice(0, MAX_TEXT_LENGTH),
+    ...(runtimeId ? { runtimeId } : {}),
+  };
+}
+
+/**
+ * Normalize a bound narrative value to trimmed text. The contract projects a
+ * string via `select: /narrativeOutput`; tolerate a `{ narrativeOutput }`
+ * object too so a producer that binds the whole result still resolves.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+function normalizeNarrativeValue(value) {
+  if (typeof value === "string") return value.trim();
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const inner = /** @type {Record<string, unknown>} */ (value)
+      .narrativeOutput;
+    if (typeof inner === "string") return inner.trim();
+  }
+  return "";
 }
 
 /**

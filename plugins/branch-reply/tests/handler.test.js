@@ -471,3 +471,76 @@ describe("branch-reply malformed manual payloads", () => {
     ).rejects.toThrow("manualPayload.count must be an integer");
   });
 });
+
+describe("branch-reply seed path — inputs.narrative binding (dual path)", () => {
+  function narrativeSlot(value, runtimeId = "narrator") {
+    // InputSlot, cardinality "one" (02-io-contract §3.2): value is the
+    // producer's post-`select` /narrativeOutput; source carries provenance.
+    return {
+      narrative: {
+        cardinality: "one",
+        value,
+        source: { pluginId: runtimeId, runtimeId, resultId: "r-1" },
+      },
+    };
+  }
+
+  it("prefers the bound narrative slot over the completedResults scan", async () => {
+    // A longer scanned narrative must be ignored when the explicit binding
+    // resolves — the slot is the authoritative same-execution input.
+    const completedResults = new Map([
+      narrativeResult(
+        "chat-mode-narrator",
+        "A much longer scanned narrative that must not be picked.",
+      ),
+    ]);
+
+    const result = await handler(
+      ctx({
+        inputs: narrativeSlot("The bound narrator's line wins."),
+        completedResults,
+      }),
+    );
+
+    const [proposal] = getPendingProposals(result);
+    const turn = proposal.payload.items[0].value;
+    expect(turn.candidates[0].text).toBe("The bound narrator's line wins.");
+    // runtimeId is taken from InputSlot.source.runtimeId so accept/regenerate
+    // still target the narrator's message, not branch-reply's own seed.
+    expect(turn.runtimeId).toBe("narrator");
+  });
+
+  it("normalizes a { narrativeOutput } object slot value defensively", async () => {
+    const result = await handler(
+      ctx({
+        inputs: narrativeSlot({
+          narrativeOutput: "Object-shaped narrative value.",
+        }),
+      }),
+    );
+    const [proposal] = getPendingProposals(result);
+    expect(proposal.payload.items[0].value.candidates[0].text).toBe(
+      "Object-shaped narrative value.",
+    );
+  });
+
+  it("falls back to the completedResults scan when the slot carries no text", async () => {
+    // Slot present but empty (binding resolved to "") — the compat scan still
+    // seeds from the raw completed results during the migration window.
+    const completedResults = new Map([
+      narrativeResult("narrator", "Scanned fallback narrative."),
+    ]);
+
+    const result = await handler(
+      ctx({
+        inputs: { narrative: { cardinality: "one", value: "", source: {} } },
+        completedResults,
+      }),
+    );
+
+    const [proposal] = getPendingProposals(result);
+    const turn = proposal.payload.items[0].value;
+    expect(turn.candidates[0].text).toBe("Scanned fallback narrative.");
+    expect(turn.runtimeId).toBe("narrator");
+  });
+});
