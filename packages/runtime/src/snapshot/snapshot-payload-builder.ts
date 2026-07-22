@@ -110,7 +110,12 @@ export async function buildSnapshotPayload(
   );
 
   return {
-    schemaVersion: 2,
+    // V3 captures the scheduling-redesign lifecycle fields
+    // (`phase` / `completedPlayerTurns` / `setupRuntimes`) alongside the V2
+    // state so a fork resumes in the correct band with its setup mirror intact.
+    // All three are optional — a session written before the kernel populated
+    // them simply omits them, and fork upgrades legacy payloads on read.
+    schemaVersion: 3,
     turnId,
     session: {
       status: session.status,
@@ -120,6 +125,13 @@ export async function buildSnapshotPayload(
       activePlugins: session.activePlugins,
       presetId: session.presetId,
       runtimeModelOverrides: session.runtimeModelOverrides,
+      ...(session.phase !== undefined ? { phase: session.phase } : {}),
+      ...(session.completedPlayerTurns !== undefined
+        ? { completedPlayerTurns: session.completedPlayerTurns }
+        : {}),
+      ...(session.setupRuntimes !== undefined
+        ? { setupRuntimes: session.setupRuntimes }
+        : {}),
     },
     characters,
     stateEntries,

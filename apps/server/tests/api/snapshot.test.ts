@@ -174,7 +174,10 @@ describe("Snapshot routes", () => {
       expect(snapshot.id).toMatch(/./); // non-empty string
 
       const payload = snapshot.payload as Record<string, unknown>;
-      expect(payload.schemaVersion).toBe(2);
+      // Builder now emits V3 (adds the scheduling-redesign clock fields when the
+      // session carries them; omitted here as this legacy-seeded session has no
+      // phase, so `session` keeps the V2 base shape).
+      expect(payload.schemaVersion).toBe(3);
       expect(payload.session).toEqual({
         status: "active",
         turnCount: 1,
@@ -385,7 +388,7 @@ describe("Snapshot routes", () => {
       };
       expect(body.snapshot.id).toBe(created.snapshot.id);
       expect(body.snapshot.payload).toBeDefined();
-      expect(body.snapshot.payload.schemaVersion).toBe(2);
+      expect(body.snapshot.payload.schemaVersion).toBe(3);
     });
 
     it("returns 404 for an unknown snapshot or one from another session", async () => {
@@ -563,9 +566,9 @@ describe("Snapshot routes", () => {
       const app = createTestApp(store);
       const snapId = await createParentSnapshot(store, app);
       const stored = await store.getSnapshot(snapId);
-      expect(stored?.payload.schemaVersion).toBe(2);
+      expect(stored?.payload.schemaVersion).toBe(3);
       const { session: _session, ...legacyPayload } = stored!
-        .payload as Extract<typeof stored.payload, { schemaVersion: 2 }>;
+        .payload as Extract<typeof stored.payload, { schemaVersion: 3 }>;
       await store.saveSnapshot({
         ...stored!,
         payload: {
@@ -609,7 +612,7 @@ describe("Snapshot routes", () => {
       const snapId = await createParentSnapshot(store, app);
       const stored = await store.getSnapshot(snapId);
       expect(stored?.payload).toMatchObject({
-        schemaVersion: 2,
+        schemaVersion: 3,
         session: { status: "ended" },
       });
 

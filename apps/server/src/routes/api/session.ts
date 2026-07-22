@@ -19,7 +19,8 @@ import {
   COMMUNITY_SERVER_CODE_ACTION,
   type RpcApprovalGate,
 } from "@covel/approval";
-import { readRuntimeEnv } from "@covel/shared";
+import { getRuntimeSpec, readRuntimeEnv } from "@covel/shared";
+import { isPreGamePriority } from "@covel/runtime";
 import { getPluginTrustInfo, type PluginRegistry } from "@covel/plugin-loader";
 import type {
   DataStore,
@@ -83,6 +84,32 @@ type Env = {
 };
 
 export const sessionRoutes = new Hono<Env>();
+
+/**
+ * Whether any plugin in the set declares a setup-band (Pre-Game) runtime.
+ * Discovered by scheduling stage (`getRuntimeSpec(...).legacyOrder` in the
+ * setup band) — never by hardcoded plugin id. A session with a setup runtime
+ * starts in the `setup` phase; one without starts in `playing`.
+ */
+function sessionHasSetupRuntime(
+  pluginIds: readonly string[],
+  registry: PluginRegistry,
+): boolean {
+  for (const pluginId of pluginIds) {
+    const entry = registry.get(pluginId);
+    if (!entry) continue;
+    const manifests =
+      entry.manifests && entry.manifests.length > 0
+        ? entry.manifests.map((m) => m.manifest)
+        : entry.manifest
+          ? [entry.manifest.manifest]
+          : [];
+    for (const manifest of manifests) {
+      if (isPreGamePriority(getRuntimeSpec(manifest).legacyOrder)) return true;
+    }
+  }
+  return false;
+}
 
 /**
  * Strip the persisted owner-token hash before returning a session over the
@@ -254,6 +281,19 @@ sessionRoutes.post("/", async (c) => {
   // tier. Only the hash is persisted; the raw token is returned once below.
   const owner = mintSessionOwnerToken();
 
+  // Initialize the scheduling-redesign clock. A session whose active set
+  // declares a setup runtime starts in `setup`; otherwise it goes straight to
+  // `playing`. The legacy turnCount / preGameCompleted keep their initial
+  // values (0 / []) — which already match the formula for a `setup` session and
+  // are re-derived from the clock by the first finalize for a `playing` one, so
+  // the band reads correctly from `phase` in the meantime.
+  const phase: "setup" | "playing" = sessionHasSetupRuntime(
+    plugins.filter((p): p is string => typeof p === "string"),
+    pluginRegistry,
+  )
+    ? "setup"
+    : "playing";
+
   const now = new Date().toISOString();
   const session: SessionRecord = {
     id,
@@ -265,6 +305,9 @@ sessionRoutes.post("/", async (c) => {
     status: "active",
     turnCount: 0,
     preGameCompleted: [],
+    phase,
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
     activePlugins: plugins,
     createdAt: now,
     updatedAt: now,

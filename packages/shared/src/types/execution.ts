@@ -3,6 +3,7 @@
  */
 
 import type { ExecutionContext } from "./runtime-scheduling.js";
+import type { SetupRuntimeState } from "./runtime-lifecycle.js";
 
 // ── Runtime execution status ─────────────────────────────────────
 
@@ -104,6 +105,15 @@ export interface TurnInput {
    * once the persisted phase field lands and the kernel derives this itself.
    */
   readonly preGamePending?: boolean;
+  /**
+   * Identity of the player's logical turn, minted once at the player action
+   * entry (actions route) and carried into `ExecutionContext.logicalTurnId`.
+   * The finalizer keys the logical-turn completion ledger on it, so a retried
+   * or duplicated execution of the same logical turn counts at most once. Only
+   * the player path sets it; manual RPC / background follower / recursive
+   * executions leave it unset (they never complete a player turn).
+   */
+  readonly logicalTurnId?: string;
   /** Parent turnId when this execution is a nested recursiveCall. */
   readonly parentTurnId?: string;
   /**
@@ -163,6 +173,19 @@ export interface TurnResult {
    * results; previously their proposals were silently dropped.
    */
   readonly nestedRuntimeResults?: readonly RuntimeResult[];
+  /**
+   * Setup-band completion delta observed during this execution: the setup
+   * runtimes that reported done for the first time (with their mirrored
+   * `SetupRuntimeState`) and whether that leaves every active setup runtime
+   * resolved. The commit-owning caller folds this into the session-clock write
+   * inside the finalize transaction (phase flip + `setupRuntimes` mirror),
+   * atomically with the turn's proposals. Absent on manual / non-player
+   * executions, which skip setup-completion tracking.
+   */
+  readonly setupCompletion?: {
+    readonly newlyDone: Readonly<Record<string, SetupRuntimeState>>;
+    readonly allSetupDone: boolean;
+  };
   readonly conflicts?: readonly WriteConflict[];
   readonly auditResult?: RuntimeResult;
   /** Forms requiring player input before next turn (collected from runtime outputs). */

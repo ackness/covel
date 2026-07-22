@@ -25,6 +25,8 @@ export interface RunEventChainParams {
   readonly sessionId: string;
   /** Current main-loop turn number — same purpose as `sessionId`. */
   readonly turnNumber: number;
+  /** Logical-turn number (completedPlayerTurns + 1), frozen for this execution. */
+  readonly logicalTurn: number;
   /**
    * How many times each runtime has already produced output this session,
    * and how many turns since it last did.
@@ -69,6 +71,7 @@ export interface RunEventChainParams {
 function eventFanoutTriggerContext(
   sessionId: string,
   turnNumber: number,
+  logicalTurn: number,
   pendingEventTopics: readonly string[],
   runtimeName: string,
   triggerCounts: ReadonlyMap<string, number> | undefined,
@@ -78,6 +81,7 @@ function eventFanoutTriggerContext(
   return {
     sessionId,
     turnNumber,
+    logicalTurn,
     // Real per-runtime history so `maxTriggerCount` / `cooldownTurns` bite.
     // Absent maps fall back to "never triggered", which keeps direct callers
     // (tests) working and matches the previous behaviour.
@@ -117,6 +121,7 @@ export async function runEventChain({
   maxDepth = 8,
   sessionId,
   turnNumber,
+  logicalTurn,
   runtimeTriggerCounts,
   runtimeTurnsSinceLastTrigger,
   preGameCompleted = [],
@@ -157,6 +162,7 @@ export async function runEventChain({
         eventFanoutTriggerContext(
           sessionId,
           turnNumber,
+          logicalTurn,
           pendingEventTopics,
           rt.name,
           runtimeTriggerCounts,

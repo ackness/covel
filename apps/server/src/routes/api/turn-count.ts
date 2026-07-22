@@ -1,24 +1,27 @@
 import type { RuntimeManifest } from "@covel/shared";
-import { getRuntimeSpec } from "@covel/shared";
-import type { DataStore, TurnResultRecord } from "@covel/store";
+import { getRuntimeSpec, mirrorSetupCompleted } from "@covel/shared";
+import type { DataStore, SessionRecord, TurnResultRecord } from "@covel/store";
 import { isPreGamePriority } from "@covel/runtime";
 
 /**
- * Whether any Pre-Game runtime (priority band 0–99) has not yet reported done
- * for this session. While pending, the session is still in the Pre-Game band:
- * player requests iterate on setup and do NOT advance `turnCount` — the 0 → 1
- * transition is written atomically with the final `preGameCompleted` entry by
- * the turn executor (packages/runtime/src/turn-executor/pre-game-completion.ts).
+ * Whether the session is still in the setup (Pre-Game) band.
  *
- * The actions route captures this BEFORE executing the turn (from the session
- * read under the lock), because the execution itself may complete Pre-Game and
- * a post-hoc read could no longer tell a setup request from a main-loop turn.
+ * Reads the persisted `phase` — the scheduling-redesign source of truth.
+ * Sessions written before `phase` existed are backfilled at the turn entry
+ * (see {@link ensureSessionClockBackfilled}), so the legacy fallback below only
+ * serves the pre-backfill instant / stores that bypass the backfill: any active
+ * setup runtime not yet recorded in `preGameCompleted`.
+ *
+ * The actions route captures this BEFORE executing the turn, because the
+ * execution itself may complete setup and a post-hoc read could no longer tell
+ * a setup request from a main-loop turn.
  */
 export function isPreGamePending(
+  session: Pick<SessionRecord, "phase" | "preGameCompleted">,
   activeRuntimes: readonly RuntimeManifest[],
-  preGameCompleted: readonly string[] | undefined,
 ): boolean {
-  const done = preGameCompleted ?? [];
+  if (session.phase !== undefined) return session.phase === "setup";
+  const done = session.preGameCompleted ?? [];
   return activeRuntimes.some(
     (runtime) =>
       isPreGamePriority(getRuntimeSpec(runtime).legacyOrder) &&
@@ -55,29 +58,26 @@ function isPreGameRuntimeResult(
 /**
  * Whether a main-loop player turn already completed BEFORE the current one.
  *
- * Only consulted at the `turnCount === 1` boundary (see below), where "1" is
- * ambiguous: it is either the Pre-Game floor placeholder (setup finished, no
- * main-loop turn taken yet — the current turn IS turn 1 and must not
- * increment) or a genuinely completed first turn (the current turn is turn 2).
- * The rows that exist at that boundary are the handful of setup-phase
- * executions, so the scan is bounded; every later turn skips it entirely.
+ * Consulted ONLY at the `turnCount === 1` boundary during the one-time legacy
+ * backfill (see {@link ensureSessionClockBackfilled}), where "1" is ambiguous:
+ * it is either the Pre-Game floor placeholder (setup finished, no main-loop
+ * turn taken yet ⇒ `completedPlayerTurns` should backfill to 0) or a genuinely
+ * completed first turn (⇒ backfill to 1). The rows that exist at that boundary
+ * are the handful of setup-phase executions, so the scan is bounded and it runs
+ * at most once per legacy session.
  *
  * A prior row counts as a completed main-loop player turn when it is
- * player-origin (absent origin = legacy row = player), its commit did not
- * fail (absent commitStatus = legacy row = committed), and it either carries
- * at least one non-Pre-Game runtime result or is empty (a main-loop turn
- * where the player advanced but no runtime fired still counts — see the
- * "counts main-loop turns even when no runtime fires" pipeline test).
+ * player-origin (absent origin = legacy row = player), its commit did not fail
+ * (absent commitStatus = legacy row = committed), and it either carries at least
+ * one non-Pre-Game runtime result or is empty.
  */
-async function hasCompletedMainLoopTurnBefore(args: {
+export async function hasCompletedMainLoopTurnBefore(args: {
   readonly store: DataStore;
   readonly sessionId: string;
-  readonly currentTurnId: string;
   readonly activeRuntimes: readonly RuntimeManifest[];
   readonly preGameCompleted: readonly string[] | undefined;
 }): Promise<boolean> {
-  const { store, sessionId, currentTurnId, activeRuntimes, preGameCompleted } =
-    args;
+  const { store, sessionId, activeRuntimes, preGameCompleted } = args;
   const preGameRuntimeIds = new Set<string>(preGameCompleted ?? []);
   for (const runtime of activeRuntimes) {
     if (isPreGamePriority(getRuntimeSpec(runtime).legacyOrder)) {
@@ -87,7 +87,6 @@ async function hasCompletedMainLoopTurnBefore(args: {
 
   const turnResults = await store.listTurnResults(sessionId);
   return turnResults.some((turnResult) => {
-    if (turnResult.turnId === currentTurnId) return false;
     if (turnResult.origin && turnResult.origin !== "player") return false;
     if (
       turnResult.commitStatus === "failed" ||
@@ -106,74 +105,77 @@ async function hasCompletedMainLoopTurnBefore(args: {
 }
 
 /**
- * Advance `session.turnCount` by one completed player turn.
+ * Lazily backfill the scheduling-redesign clock fields on a legacy session.
  *
- * Called by the actions route under the session lock, after every proposal of
- * the turn has been committed and the execution artifact's `commitStatus` has
- * been settled. The counter is monotonic and incremental: it moves forward
- * from whatever the session already records (0 at creation, 1 from the
- * Pre-Game completion write, or an inherited value on a session forked from a
- * snapshot) instead of being recomputed from turn_results history. That makes
- * the steady-state update O(1) — the previous implementation re-listed and
- * re-deserialized every turn_results row of the session on every turn — and
- * it cannot clobber a forked session's restored count (forks copy `turnCount`
- * but not the parent's turn_results rows, so a full recount collapsed the
- * count back to 1).
+ * Sessions written before `phase` / `completedPlayerTurns` / `setupRuntimes`
+ * existed carry only `turnCount` / `preGameCompleted`. The first turn entry that
+ * touches such a session derives the new fields from the legacy ones — WITHOUT
+ * ever parsing turnIds or scanning child turn_results beyond the bounded
+ * `turnCount === 1` disambiguation — persists them, and stamps a migration note.
+ * Idempotent: a session that already has `phase` is returned untouched.
  *
- * The one boundary needing history is `turnCount === 1`: when Pre-Game
- * finished without running any main-loop runtime, the "1" is a floor
- * placeholder and the first real main-loop turn absorbs it (it IS turn 1);
- * when a main-loop turn already completed under that count, the current turn
- * is turn 2. See {@link hasCompletedMainLoopTurnBefore}.
- *
- * No-op when:
- *  - `committed` is false — a turn whose proposals failed to commit (or whose
- *    execution crashed) is not a completed player turn. Non-player executions
- *    (manual plugin-rpc triggers, deferred followers, nested recursiveCall)
- *    never reach this function: their routes do not call it.
- *  - Pre-Game was still pending when the turn started — setup requests do not
- *    count, and the request that finishes setup is already accounted for by
- *    the atomic `turnCount: 1` write in pre-game-completion.
- *  - The session is missing or no longer active.
+ * Mapping (see 04-migration.md §3):
+ *  - `turnCount === 0`  → `completedPlayerTurns = 0`; `phase = setup` when an
+ *    active setup runtime is still unresolved, else `playing`.
+ *  - `turnCount > 1`    → `phase = playing`; `completedPlayerTurns = turnCount`.
+ *  - `turnCount === 1`  → `phase = playing`; `completedPlayerTurns = 1` when a
+ *    main-loop turn already completed, else `0` (the Pre-Game floor).
  */
-export async function advanceSessionTurnCount(args: {
+export async function ensureSessionClockBackfilled(args: {
   readonly store: DataStore;
-  readonly sessionId: string;
-  readonly turnId: string;
+  readonly session: SessionRecord;
   readonly activeRuntimes: readonly RuntimeManifest[];
-  readonly wasPreGamePending: boolean;
-  readonly committed: boolean;
-}): Promise<void> {
-  const {
-    store,
-    sessionId,
-    turnId,
-    activeRuntimes,
-    wasPreGamePending,
-    committed,
-  } = args;
-  if (!committed || wasPreGamePending) return;
+}): Promise<SessionRecord> {
+  const { store, session, activeRuntimes } = args;
+  if (session.phase !== undefined) return session;
 
-  const session = await store.getSession(sessionId);
-  if (!session || session.status !== "active") return;
+  const legacyTurnCount = session.turnCount;
+  const preGameCompleted = session.preGameCompleted ?? [];
 
-  if (
-    session.turnCount === 1 &&
-    !(await hasCompletedMainLoopTurnBefore({
+  let phase: "setup" | "playing";
+  let completedPlayerTurns: number;
+  if (legacyTurnCount === 0) {
+    const setupPending = activeRuntimes.some(
+      (rt) =>
+        isPreGamePriority(getRuntimeSpec(rt).legacyOrder) &&
+        !preGameCompleted.includes(rt.name),
+    );
+    phase = setupPending ? "setup" : "playing";
+    completedPlayerTurns = 0;
+  } else if (legacyTurnCount > 1) {
+    phase = "playing";
+    completedPlayerTurns = legacyTurnCount;
+  } else {
+    phase = "playing";
+    completedPlayerTurns = (await hasCompletedMainLoopTurnBefore({
       store,
-      sessionId,
-      currentTurnId: turnId,
+      sessionId: session.id,
       activeRuntimes,
-      preGameCompleted: session.preGameCompleted,
+      preGameCompleted,
     }))
-  ) {
-    // Absorb the Pre-Game floor: this turn is turn 1 and the counter already
-    // says so.
-    return;
+      ? 1
+      : 0;
   }
 
-  await store.updateSession(sessionId, {
-    turnCount: session.turnCount + 1,
+  const setupRuntimes = mirrorSetupCompleted(
+    preGameCompleted,
+    session.updatedAt,
+  );
+
+  const patch = {
+    phase,
+    completedPlayerTurns,
+    setupRuntimes,
+    metadata: {
+      ...session.metadata,
+      runtimeMigration: {
+        ...(session.metadata?.runtimeMigration as
+          Record<string, unknown> | undefined),
+        clock: { source: "legacy-backfill", legacyTurnCount },
+      },
+    },
     updatedAt: new Date().toISOString(),
-  });
+  };
+  await store.updateSession(session.id, patch);
+  return { ...session, ...patch };
 }

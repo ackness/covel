@@ -25,6 +25,8 @@ export function selectTriggeredRuntimes(args: {
   readonly runtimeTriggerCounts: ReadonlyMap<string, number>;
   readonly sessionId: string;
   readonly turnNumber: number;
+  /** Logical-turn number (completedPlayerTurns + 1), frozen for this execution. */
+  readonly logicalTurn: number;
 }): TriggeredRuntimeSelection {
   const {
     activeRuntimes,
@@ -34,6 +36,7 @@ export function selectTriggeredRuntimes(args: {
     runtimeTriggerCounts,
     sessionId,
     turnNumber,
+    logicalTurn,
   } = args;
   const manualTarget = manualRuntimeId
     ? activeRuntimes.find((rt) => rt.name === manualRuntimeId)
@@ -55,6 +58,7 @@ export function selectTriggeredRuntimes(args: {
     const triggerContext: TriggerContext = {
       sessionId,
       turnNumber,
+      logicalTurn,
       triggerCount: runtimeTriggerCounts.get(rt.name) ?? 0,
       turnsSinceLastTrigger: countPlayerMessagesSinceRuntime(
         messageHistory,

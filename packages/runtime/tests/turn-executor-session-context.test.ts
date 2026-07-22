@@ -325,7 +325,9 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
       "narrator",
     ]);
     expect(llm.captured.systemPrompts[0]).toContain("Player: Aria.");
-    const session = await store.getSession(sessionId);
-    expect(session?.turnCount).toBe(1);
+    // Setup completed this turn (player created) → the finalize session-clock
+    // write would flip the band to playing (turnCount 1). The write itself now
+    // lives in finalizeExecution; here we pin the delta the executor produces.
+    expect(result.setupCompletion?.allSetupDone).toBe(true);
   });
 });

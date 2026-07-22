@@ -13,6 +13,10 @@ export function shouldTrigger(
 ): boolean {
   const trigger = manifest.trigger;
   const type = trigger?.type ?? "auto";
+  // Logical-turn number N (= completedPlayerTurns + 1). Production selection
+  // always supplies it; fall back to the raw player-message count when a caller
+  // omits it (legacy test builders) so behaviour degrades to the old reading.
+  const logicalTurn = context.logicalTurn ?? context.turnNumber;
 
   // Pre-Game completion gate: skip runtimes already marked done for the session.
   // Main-loop runtimes never enter preGameCompleted, so this is a no-op for them.
@@ -20,12 +24,10 @@ export function shouldTrigger(
     return false;
   }
 
-  // startTurn — "from the N-th main-loop turn". Turn 0 (Pre-Game) is filtered
-  // by the scheduler, so startTurn only meaningfully applies to turnNumber >= 1.
-  if (
-    trigger?.startTurn !== undefined &&
-    context.turnNumber < trigger.startTurn
-  ) {
+  // startTurn — "from the N-th main-loop logical turn". Gated on `logicalTurn`
+  // (completed player turns + 1), which counts only committed main-loop turns,
+  // so setup interactions no longer inflate the effective turn number.
+  if (trigger?.startTurn !== undefined && logicalTurn < trigger.startTurn) {
     return false;
   }
 
@@ -55,8 +57,11 @@ export function shouldTrigger(
       return context.isManualTrigger;
 
     case "scheduled": {
+      // Read the logical-turn number N (= completedPlayerTurns + 1), not the
+      // raw player-message count. `interval: 2` fires on logical turns 2, 4,
+      // 6 — setup interactions never shift the cadence (scenario 13).
       const interval = trigger?.interval ?? 1;
-      return context.turnNumber % interval === 0;
+      return logicalTurn % interval === 0;
     }
 
     case "event":

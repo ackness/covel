@@ -28,7 +28,10 @@ import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
 import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
 import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
-import { advanceSessionTurnCount, isPreGamePending } from "./turn-count.js";
+import {
+  ensureSessionClockBackfilled,
+  isPreGamePending,
+} from "./turn-count.js";
 import { decodePluginUserSettingsHeader } from "./plugin-rpc/body.js";
 import {
   mergePluginUserSettings,
@@ -387,12 +390,21 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               );
             }
 
-            // Captured BEFORE the turn runs: the execution may complete
-            // Pre-Game itself, and turn accounting must know whether this
-            // request started as a setup request (see advanceSessionTurnCount).
-            const wasPreGamePending = isPreGamePending(
+            // Lazily backfill the scheduling-redesign clock on legacy sessions
+            // before any band / count read, so `phase` is authoritative for the
+            // rest of the turn (and executeTurn's own session read).
+            const clockSession = await ensureSessionClockBackfilled({
+              store,
+              session: liveSession,
               activeRuntimes,
-              liveSession.preGameCompleted,
+            });
+
+            // Captured BEFORE the turn runs: the execution may complete setup
+            // itself, and the execution's countPolicy must be fixed from the
+            // pre-turn band (a setup request never counts a player turn).
+            const wasPreGamePending = isPreGamePending(
+              clockSession,
+              activeRuntimes,
             );
 
             // Persist player message to messages table (source of truth for refresh recovery)
@@ -515,9 +527,13 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               locale: effectiveLocale,
               modelOverride: model,
               // Feed the pre-turn Pre-Game snapshot so the executor can fix the
-              // execution's countPolicy at creation. Transition field — the
-              // kernel derives this itself once the persisted phase lands.
+              // execution's countPolicy at creation.
               preGamePending: wasPreGamePending,
+              // Identity of the player's logical turn — the finalizer keys the
+              // completion ledger on it so this turn is counted at most once.
+              // A scoped retry (origin: manual below) never counts, so a stray
+              // id there is inert.
+              logicalTurnId: crypto.randomUUID(),
               ...(userSettings ? { userSettings } : {}),
               // Snapshot session-level per-runtime slot overrides so the
               // turn executor can consult them when resolving each runtime's
@@ -655,6 +671,17 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               ...(hookPipeline ? { hookPipeline } : {}),
               eventBus,
               emitter,
+              // Session-clock write folded into the commit transaction:
+              // logical-turn counting (from executionContext.countPolicy) plus
+              // the setup mirror / phase flip (from setupCompletion). Replaces
+              // the old out-of-band advanceSessionTurnCount + the pre-game
+              // completion write, and rolls back atomically with the proposals.
+              sessionClock: {
+                now: new Date().toISOString(),
+                ...(result.setupCompletion
+                  ? { setupCompletion: result.setupCompletion }
+                  : {}),
+              },
             });
             // finalize owns the commit_status settle (committed or failed).
             commitStatusSettled = true;
@@ -681,27 +708,12 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             }
             const committed = outcome.status === "committed";
 
-            // Turn accounting and the automatic snapshot share the execution's
-            // mutation boundary but stay OUTSIDE the finalize transaction for
-            // now (moving turn accounting in is a later wave).
-            //
-            // Order matters:
-            //  1. Advance turnCount only for a fully committed player execution
-            //     — the count drives the UI turn display, auto-snapshot cadence,
-            //     and snapshot numbering, so a failed commit must not move it.
-            //  2. Capture the automatic snapshot last so it contains every
-            //     committed proposal AND the turn number it belongs to.
-            await advanceSessionTurnCount({
-              store,
-              sessionId,
-              turnId,
-              activeRuntimes,
-              wasPreGamePending,
-              // A scoped retry reruns one runtime over the same logical turn —
-              // it must not advance the counter even when its proposals commit.
-              committed: committed && !isScopedRetry,
-            });
-
+            // Turn accounting now happens INSIDE the finalize transaction (the
+            // session-clock write above): a committed player turn advances
+            // completedPlayerTurns via the logical-turn ledger, and the legacy
+            // turnCount / preGameCompleted are re-derived from the clock. The
+            // automatic snapshot stays outside, captured last so it contains
+            // every committed proposal AND the turn number it belongs to.
             if (committed) {
               try {
                 await saveAutoSnapshot({

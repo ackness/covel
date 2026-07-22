@@ -23,7 +23,148 @@
  * own release step instead of forcing both mechanisms to ship together.
  */
 
-import { describe, it } from "vitest";
+import { describe, it, expect } from "vitest";
+import { createMemoryStore, type DataStore } from "@covel/store";
+import {
+  deriveLegacyClockFields,
+  mirrorSetupDone,
+  type ExecutionContext,
+  type RuntimeManifest,
+} from "@covel/shared";
+import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
+import { finalizeExecution } from "../src/commit/finalize-execution.js";
+import { buildSnapshotPayload } from "../src/snapshot/snapshot-payload-builder.js";
+import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+
+class NoopLLM implements LLMAdapter {
+  async generate(): Promise<LLMResponse> {
+    return {
+      content: "{}",
+      toolCalls: [],
+      finishReason: "stop",
+      usage: { inputTokens: 0, outputTokens: 0 },
+    };
+  }
+}
+
+/**
+ * Run one main-loop turn against a `scheduled` runtime and report whether it
+ * triggered. The session is seeded straight into `playing` at the given
+ * `completedPlayerTurns`, so the runtime's cadence is evaluated on the logical
+ * turn `N = completedPlayerTurns + 1`.
+ */
+async function scheduledRuntimeTriggers(
+  completedPlayerTurns: number,
+  interval: number,
+): Promise<boolean> {
+  const store = createMemoryStore();
+  const legacy = deriveLegacyClockFields({
+    phase: "playing",
+    completedPlayerTurns,
+    setupRuntimes: {},
+  });
+  const now = new Date().toISOString();
+  await store.createSession({
+    id: "s",
+    worldId: "w",
+    status: "active",
+    turnCount: legacy.turnCount,
+    preGameCompleted: [],
+    phase: "playing",
+    completedPlayerTurns,
+    setupRuntimes: {},
+    activePlugins: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  const ticker = {
+    name: "ticker",
+    pluginId: "ticker",
+    description: "scheduled ticker",
+    priority: 500,
+    runtimeType: "function",
+    handler: "./h.js",
+    trigger: { type: "scheduled", interval },
+  } as RuntimeManifest;
+  let ran = false;
+  const deps: TurnExecutorDeps = {
+    loadRuntime: async () => ({
+      manifest: ticker,
+      promptTemplate: "",
+      handler: async () => {
+        ran = true;
+        return {};
+      },
+    }),
+    llm: new NoopLLM(),
+    store,
+  };
+  await executeTurn(
+    { sessionId: "s", turnId: "t", playerMessage: "go" },
+    [ticker],
+    deps,
+  );
+  return ran;
+}
+
+const PLAYER_CTX = (
+  logicalTurnId: string,
+  executionId: string,
+): ExecutionContext => ({
+  executionId,
+  origin: "player",
+  countPolicy: "complete-player-turn",
+  logicalTurnId,
+});
+
+function makeRuntime(name: string) {
+  return {
+    name,
+    pluginId: name,
+    outputKind: "plugin",
+    capabilities: [] as const,
+  };
+}
+
+function statePatchResult(field: string, value: unknown) {
+  return {
+    pluginId: "rt-a",
+    runtimeId: "rt-a",
+    runId: crypto.randomUUID(),
+    turnId: "t",
+    status: "success" as const,
+    output: { statePatches: [{ table: "stats", field, value }] },
+    toolCalls: [] as const,
+    durationMs: 1,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+async function seedPlaying(
+  store: DataStore,
+  completedPlayerTurns: number,
+): Promise<void> {
+  const legacy = deriveLegacyClockFields({
+    phase: "playing",
+    completedPlayerTurns,
+    setupRuntimes: {},
+  });
+  const now = new Date().toISOString();
+  await store.createSession({
+    id: "s",
+    worldId: "w",
+    status: "active",
+    turnCount: legacy.turnCount,
+    preGameCompleted: [],
+    phase: "playing",
+    completedPlayerTurns,
+    setupRuntimes: {},
+    activePlugins: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+}
 
 describe("setup frozen snapshot (cross-execution read of committed setup data)", () => {
   // needs: scope:session frozen-snapshot semantics + finalizeExecution single-transaction commit (release step 2)
@@ -66,9 +207,72 @@ describe("commit transaction & rollback", () => {
 
 describe("legacy backfill & dual-write formula", () => {
   // needs: SnapshotPayloadV3 completedPlayerTurns field + backfill formula + turnCount/preGameCompleted dual-write (release step 2)
-  it.todo(
-    "scenario 7: 非 fork 存量 turnCount=1 且无完成回合回填 0、已完成回填 1；新 snapshot/fork 原样恢复 completedPlayerTurns；旧 fork 的 turnCount=1 保守回填 1 并带 diagnostic；任何路径都不解析 turnId；双写公式在 0/floor/首回合/多回合边界均可回滚旧内核读取 — 断言全部边界值",
-  );
+  //
+  // This lights the two claims testable at the runtime layer: the dual-write
+  // formula boundaries and the V3 snapshot round-trip. The server-side halves —
+  // the lazy backfill three-branch (turnCount 0/1/>1) and the conservative fork
+  // completedPlayerTurns = turnCount === 0 ? 0 : turnCount + diagnostic — are
+  // pinned in apps/server/tests/api/turn-count.test.ts (ensureSessionClockBackfilled)
+  // and apps/server/tests/api/snapshot.test.ts (fork). None of these paths parse
+  // a turnId or scan child turn_results.
+  it("scenario 7: 双写公式在 0/floor/首回合/多回合边界均可回滚旧内核读取；新 snapshot 原样携带 completedPlayerTurns（backfill/fork 保守回填见 server 套件）", async () => {
+    // Dual-write formula boundaries — the legacy kernel keeps reading turnCount.
+    expect(
+      deriveLegacyClockFields({
+        phase: "setup",
+        completedPlayerTurns: 0,
+        setupRuntimes: {},
+      }),
+    ).toEqual({ turnCount: 0, preGameCompleted: [] }); // 0
+    expect(
+      deriveLegacyClockFields({
+        phase: "playing",
+        completedPlayerTurns: 0,
+        setupRuntimes: {},
+      }).turnCount,
+    ).toBe(1); // floor
+    expect(
+      deriveLegacyClockFields({
+        phase: "playing",
+        completedPlayerTurns: 1,
+        setupRuntimes: {},
+      }).turnCount,
+    ).toBe(1); // first main-loop turn
+    expect(
+      deriveLegacyClockFields({
+        phase: "playing",
+        completedPlayerTurns: 6,
+        setupRuntimes: {},
+      }).turnCount,
+    ).toBe(6); // many turns
+
+    // V3 snapshot round-trip: the builder carries the clock fields verbatim so a
+    // fork restores completedPlayerTurns / phase / setupRuntimes as-is.
+    const store = createMemoryStore();
+    const now = new Date().toISOString();
+    await store.createSession({
+      id: "s",
+      worldId: "w",
+      status: "active",
+      turnCount: 3,
+      preGameCompleted: ["pregame"],
+      phase: "playing",
+      completedPlayerTurns: 3,
+      setupRuntimes: { pregame: mirrorSetupDone("1.0.0", now) },
+      activePlugins: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const payload = await buildSnapshotPayload(store, "s", "turn-3");
+    expect(payload.schemaVersion).toBe(3);
+    if (payload.schemaVersion === 3) {
+      expect(payload.session.completedPlayerTurns).toBe(3);
+      expect(payload.session.phase).toBe("playing");
+      expect(payload.session.setupRuntimes).toMatchObject({
+        pregame: { state: "done" },
+      });
+    }
+  });
 });
 
 describe("blocked control (maxTriggerCount / retry / waive)", () => {
@@ -108,13 +312,75 @@ describe("suspension & resume", () => {
 
 describe("logical-turn counting & ledger", () => {
   // needs: ExecutionContext logicalTurn = completedPlayerTurns + 1 (off-by-one fix) (release step 2)
-  it.todo(
-    "scenario 13: scheduled interval: 2 在逻辑回合 2、4、6 触发（读 N 而非 completedPlayerTurns）— off-by-one 回归测试",
-  );
+  it("scenario 13: scheduled interval: 2 在逻辑回合 2、4、6 触发（读 N 而非 completedPlayerTurns）— off-by-one 回归测试", async () => {
+    // logicalTurn = completedPlayerTurns + 1. interval:2 fires on the EVEN
+    // logical turns 2/4/6, i.e. completedPlayerTurns 1/3/5.
+    for (const completed of [1, 3, 5]) {
+      expect(await scheduledRuntimeTriggers(completed, 2)).toBe(true);
+    }
+    // ...and stays quiet on the odd logical turns 1/3/5 (completedPlayerTurns
+    // 0/2/4). Under the old off-by-one (raw player-message count, 0 here) the
+    // runtime would have fired on every one of these, so a `false` here is the
+    // regression lock.
+    for (const completed of [0, 2, 4]) {
+      expect(await scheduledRuntimeTriggers(completed, 2)).toBe(false);
+    }
+  });
   // needs: logical-turn ledger idempotent single insert per logicalTurn across player/continuation/resume (release step 2)
-  it.todo(
-    "scenario 14: manual RPC / detached follower / recursive 执行 commit 后 completedPlayerTurns 不变；playing suspension 的 resume 继承计数责任；同一 logicalTurn 的 player/continuation/resume 多 execution 经独立 ledger 只推进一次 — 断言计数不被非玩家执行意外推进",
-  );
+  it("scenario 14: manual RPC / detached follower / recursive 执行 commit 后 completedPlayerTurns 不变；playing suspension 的 resume 继承计数责任；同一 logicalTurn 的 player/continuation/resume 多 execution 经独立 ledger 只推进一次 — 断言计数不被非玩家执行意外推进", async () => {
+    const store = createMemoryStore();
+    await seedPlaying(store, 0);
+
+    // A player logical turn advances the count exactly once.
+    await finalizeExecution({
+      store,
+      sessionId: "s",
+      executionContext: PLAYER_CTX("L1", "e1"),
+      runtimes: [makeRuntime("rt-a")],
+      results: [statePatchResult("hp", 1)],
+      turnIds: [],
+      sessionClock: { now: new Date().toISOString() },
+    });
+    expect((await store.getSession("s"))!.completedPlayerTurns).toBe(1);
+
+    // Non-player executions (manual RPC / background follower / recursive) carry
+    // countPolicy: none and never advance the count.
+    for (const origin of ["manual", "background", "recursive"] as const) {
+      await finalizeExecution({
+        store,
+        sessionId: "s",
+        executionContext: {
+          executionId: `x-${origin}`,
+          origin,
+          countPolicy: "none",
+        },
+        runtimes: [makeRuntime("rt-a")],
+        results: [statePatchResult("hp", 2)],
+        turnIds: [],
+        sessionClock: { now: new Date().toISOString() },
+      });
+    }
+    expect((await store.getSession("s"))!.completedPlayerTurns).toBe(1);
+
+    // Multiple executions of the SAME logicalTurn (a continuation / resume of
+    // the player turn L1) dedup through the ledger and advance the count only
+    // once total.
+    await finalizeExecution({
+      store,
+      sessionId: "s",
+      executionContext: {
+        executionId: "e-cont",
+        origin: "continuation",
+        countPolicy: "complete-player-turn",
+        logicalTurnId: "L1",
+      },
+      runtimes: [makeRuntime("rt-a")],
+      results: [statePatchResult("hp", 3)],
+      turnIds: [],
+      sessionClock: { now: new Date().toISOString() },
+    });
+    expect((await store.getSession("s"))!.completedPlayerTurns).toBe(1);
+  });
 });
 
 describe("dual declaration consistency (Step 4)", () => {

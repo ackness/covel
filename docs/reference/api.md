@@ -994,9 +994,14 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 **响应字段**:
 
 - `ownerToken`(string) — 会话 owner token，**仅此一次返回**（服务端只存哈希）。`DEPLOYMENT_TIER=demo|commercial` 下所有会话作用域端点都要求携带它（见「鉴权」章节）；`self` 层级可忽略
-- `status`(`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态（turn-band 重构后替代原先的 `phase` 字段）
-- `turnCount`(number) — 主循环轮数计数（从 0 开始，每次成功 turn +1）
-- `preGameCompleted`(string[]) — 已完成 Pre-Game 初始化的 runtime id 集合，框架据此跳过后续轮次的 Pre-Game 调度
+- `status`(`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态
+- `turnCount`(number) — 主循环轮数计数（从 0 开始）。调度重构后**由时钟派生**：`phase="setup"` 时为 0，`phase="playing"` 时为 `max(1, completedPlayerTurns)`
+- `preGameCompleted`(string[]) — 已完成 Pre-Game 初始化的 runtime id 集合（现由 `setupRuntimes` 中 `state="done"` 的条目派生并排序）
+- `phase`(可选,`'setup' \| 'playing'`) — 调度重构新增的 setup/主循环频段真相字段（会话激活集含 setup runtime 时初始为 `setup`，否则 `playing`；全部 setup runtime 完成后翻转为 `playing`）。旧会话缺省，首次回合时惰性回填。前端暂未消费
+- `completedPlayerTurns`(可选,number) — 已提交的主循环玩家逻辑回合数（setup 交互不计入）。由 finalize 事务内的 logical-turn ledger 幂等推进
+- `setupRuntimes`(可选,`Record<runtimeId, SetupRuntimeState>`) — 每个 setup runtime 的解析状态镜像
+
+> 三个新字段为**可选追加**，不破坏默认响应形状；`turnCount` / `preGameCompleted` 继续存在，仅改由上述三字段的公式派生。
 
 > **Session ID 格式**: 自动生成的 ID 格式为 `{worldId}-{uuid8}`（如 `mistport-a1b2c3d4`），使用 `crypto.randomUUID()` 后缀防止枚举。如未提供 worldId 则前缀为 `session`。
 
@@ -1063,7 +1068,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 **字段说明:**
 
-- `status`(可选,`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态。turn-band 重构后取代原先的 `phase` 字段——`phase` 已从 SessionRecord 中移除，运行进度改由 `turnCount` + `preGameCompleted` 集合描述。非合法枚举值返回 400。
+- `status`(可选,`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态。非合法枚举值返回 400。（注：运行频段真相由 `phase` / `completedPlayerTurns` / `setupRuntimes` 三字段承载，`turnCount` / `preGameCompleted` 由其派生——见 `POST /api/sessions` 响应字段说明；PATCH 不直接改写这些字段，它们只在 finalize 事务与惰性回填处写入。）
 - `runtimeModelOverrides`(可选,object) — PR-6 引入。Per-runtime 模型 slot 覆盖,key 为 runtime ID(`pluginId` 或 `pluginId/runtimeName`,必须匹配 `/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?$/`),value 为 `llm.toml` 中定义的 slot 名(如 `default` / `fast` / `balance`)。框架在每次 turn 执行前快照该字段,resolver 优先查找 session override → 然后 fallback 到 `manifest.model` → 最后 `default`。空对象 `{}` 清除所有覆盖。插件列表与 Session Prep 会暴露 runtime 的声明 slot；若声明 slot 未配置，UI 会提示补充 `[covel.<slot>]`，不会静默改绑到不相关的文本 slot。**Provider 与 API key 仍走前端 localStorage + `X-Provider-Keys` header,不入库,以保护隐私。**
 
 **校验规则(runtimeModelOverrides):**

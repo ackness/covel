@@ -385,6 +385,14 @@ describe("start-game API lifecycle scenario", () => {
     await drainActionStream(firstMainLoop);
 
     const afterFirstMainLoop = await store.getSession("sess-start-flow-api");
-    expect(afterFirstMainLoop?.turnCount).toBe(2);
+    // Deliberate change (scheduling redesign): turnCount is now derived from
+    // completedPlayerTurns via the logical-turn ledger. The setup-completing
+    // form-submit turn does NOT count as a main-loop player turn (it left the
+    // Pre-Game floor of 1), so the first real main-loop turn ("look around") is
+    // logical turn 1 → turnCount 1. The old floor-absorption heuristic reported
+    // 2 here by counting the form-submit's same-request narrator followup as a
+    // completed main-loop turn.
+    expect(afterFirstMainLoop?.turnCount).toBe(1);
+    expect(afterFirstMainLoop?.completedPlayerTurns).toBe(1);
   });
 });

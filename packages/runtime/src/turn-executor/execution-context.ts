@@ -68,5 +68,9 @@ export function createExecutionContext(input: TurnInput): ExecutionContext {
     executionId: crypto.randomUUID(),
     origin,
     countPolicy,
+    // Carried from the player action entry. Consumed by the finalizer only when
+    // `countPolicy === "complete-player-turn"`, so a stray id on a non-counting
+    // execution is inert.
+    ...(input.logicalTurnId ? { logicalTurnId: input.logicalTurnId } : {}),
   };
 }

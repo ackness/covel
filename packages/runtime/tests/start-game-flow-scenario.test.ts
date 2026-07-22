@@ -5,6 +5,7 @@ import type { DataStore } from "@covel/store";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
+import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 
 class NoopLLM implements LLMAdapter {
@@ -152,16 +153,38 @@ async function runTurn(
   deps: TurnExecutorDeps,
   input: Partial<TurnInput>,
 ) {
-  return executeTurn(
+  const turnId = input.turnId ?? crypto.randomUUID();
+  const result = await executeTurn(
     {
       sessionId: "sess-start-flow",
-      turnId: crypto.randomUUID(),
+      turnId,
       playerMessage: "",
       ...input,
     },
     manifests,
     deps,
   );
+  // The session-clock write (setup mirror + phase flip) now lives in the
+  // finalize transaction, and this flow depends on it persisting across turns
+  // (turn 2 must see turn 1's completed setup), so drive finalize like the
+  // real actions route does.
+  await finalizeExecution({
+    store,
+    sessionId: "sess-start-flow",
+    ...(result.executionContext
+      ? { executionContext: result.executionContext }
+      : {}),
+    runtimes: manifests,
+    results: [...result.runtimeResults, ...(result.nestedRuntimeResults ?? [])],
+    turnIds: [turnId],
+    sessionClock: {
+      now: new Date().toISOString(),
+      ...(result.setupCompletion
+        ? { setupCompletion: result.setupCompletion }
+        : {}),
+    },
+  });
+  return result;
 }
 
 describe("start-game flow scenario at runtime level", () => {

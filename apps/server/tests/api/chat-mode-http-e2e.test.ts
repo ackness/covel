@@ -269,9 +269,15 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
         (runtime) => runtime.priority !== undefined && runtime.priority <= 99,
       )
       .map((runtime) => runtime.name);
+    // Simulate a session that has finished setup and is ready to play. Under
+    // the scheduling redesign, "setup done" is expressed by phase:"playing" +
+    // completedPlayerTurns:0 (the Pre-Game floor) — the legacy turnCount:1 alone
+    // no longer flips the band, so we set the clock fields explicitly.
     await store.updateSession(sessionId, {
       preGameCompleted,
       turnCount: 1,
+      phase: "playing",
+      completedPlayerTurns: 0,
       updatedAt: now,
     });
 

@@ -27,15 +27,22 @@ function manifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
 }
 
 function ctx(overrides?: Partial<TriggerContext>): TriggerContext {
-  return {
+  const merged: TriggerContext = {
     sessionId: "sess-1",
     turnNumber: 5,
+    logicalTurn: 5,
     triggerCount: 0,
     turnsSinceLastTrigger: 999,
     pendingEventTopics: [],
     isManualTrigger: false,
     preGameCompleted: [],
     ...overrides,
+  };
+  // scheduled / startTurn gate on `logicalTurn`; these cases express the turn
+  // number via `turnNumber`, so mirror it unless a test sets logicalTurn.
+  return {
+    ...merged,
+    logicalTurn: overrides?.logicalTurn ?? merged.turnNumber,
   };
 }
 

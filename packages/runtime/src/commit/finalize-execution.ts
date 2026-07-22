@@ -33,6 +33,11 @@ import type { HookPipeline } from "../hooks/pipeline.js";
 import { runWithHookScope } from "../hooks/hook-scope.js";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
 import { processRuntimeResult } from "../session/session-runtime-result.js";
+import {
+  applySessionClockTx,
+  needsSessionClockWrite,
+  type SessionClockUpdate,
+} from "./session-clock.js";
 
 /** The subset of a manifest needed to resolve output kind, capabilities, and scope. */
 type FinalizeManifest = Pick<
@@ -82,6 +87,14 @@ export interface FinalizeExecutionArgs {
    * assistant turn message + resolved marker. A throw rolls the execution back.
    */
   readonly extraInTx?: (tx: StoreTransaction) => Promise<void>;
+  /**
+   * Session-clock write folded into the same transaction: logical-turn
+   * counting (from `executionContext`) plus the setup-band mirror / phase flip
+   * (from `setupCompletion`). Only the player action path supplies it; manual /
+   * background / resume finalizes omit it and leave the clock untouched. A
+   * proposal failure rolls the clock write back with the domain writes.
+   */
+  readonly sessionClock?: SessionClockUpdate;
 }
 
 export interface FinalizeExecutionOutcome {
@@ -138,7 +151,12 @@ export async function finalizeExecution(
     eventBus,
     emitter,
     extraInTx,
+    sessionClock,
   } = args;
+  const executionContext = args.executionContext;
+  const shouldWriteClock =
+    sessionClock !== undefined &&
+    needsSessionClockWrite(executionContext, sessionClock);
 
   const outputKindByRuntime = new Map<string, string>();
   const capabilitiesByRuntime = new Map<string, readonly string[]>();
@@ -190,6 +208,15 @@ export async function finalizeExecution(
             }
           }
           await extraInTx?.(tx);
+          // Advance the session clock in the same transaction as the domain
+          // writes, so a rollback undoes the counter / phase flip too.
+          if (shouldWriteClock) {
+            await applySessionClockTx(tx, {
+              sessionId,
+              ...(executionContext ? { executionContext } : {}),
+              update: sessionClock!,
+            });
+          }
           for (const turnId of turnIds) {
             await tx.setTurnResultCommitStatus(sessionId, turnId, "committed");
           }
@@ -274,6 +301,13 @@ export async function finalizeExecution(
     try {
       // DataStore satisfies StoreTransaction structurally (it has every member).
       await extraInTx?.(store as unknown as StoreTransaction);
+      if (shouldWriteClock) {
+        await applySessionClockTx(store as unknown as StoreTransaction, {
+          sessionId,
+          ...(executionContext ? { executionContext } : {}),
+          update: sessionClock!,
+        });
+      }
     } catch (err) {
       await settleTurnResults(store, sessionId, turnIds, "failed");
       return {

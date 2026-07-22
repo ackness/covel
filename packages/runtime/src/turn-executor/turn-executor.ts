@@ -10,6 +10,7 @@
 import type {
   RuntimeManifest,
   RuntimeResult,
+  SetupRuntimeState,
   TurnInput,
   TurnResult,
 } from "@covel/shared";
@@ -243,6 +244,10 @@ async function executeTurnImpl(
   });
   const { messageHistory, runtimeTriggerCounts, sessionStatus, turnNumber } =
     sessionState;
+  // Logical-turn number for this execution (frozen): the count of committed
+  // main-loop player turns plus one. Drives scheduled cadence / startTurn and
+  // is independent of the raw player-message count `turnNumber`.
+  const logicalTurn = sessionState.completedPlayerTurns + 1;
 
   // Abort early if session is paused or ended — no runtimes should execute.
   if (sessionStatus !== "active") {
@@ -266,6 +271,7 @@ async function executeTurnImpl(
   const { preGameRuntimes, isPreGamePending } = getPreGameRuntimeState(
     activeRuntimes,
     preGameCompleted,
+    sessionState.phase,
   );
   const { manualTarget, triggered, abortReason } = selectTriggeredRuntimes({
     activeRuntimes,
@@ -275,6 +281,7 @@ async function executeTurnImpl(
     runtimeTriggerCounts,
     sessionId: input.sessionId,
     turnNumber,
+    logicalTurn,
   });
   if (abortReason) {
     return {
@@ -360,6 +367,14 @@ async function executeTurnImpl(
   // 3. Execute each group
   const completedResults = new Map<string, RuntimeResult>();
 
+  // Setup-completion delta accumulated across the (idempotent) completion
+  // passes below, handed to the finalizer so the session-clock write (setup
+  // mirror + phase flip) lands in the commit transaction. `allSetupDone` tracks
+  // the last observed value — once every setup runtime is resolved it stays true.
+  const setupNewlyDone: Record<string, SetupRuntimeState> = {};
+  let setupAllDone = false;
+  let observedSetupCompletion = false;
+
   const recordPreGameCompletion = async (): Promise<boolean> => {
     const result = await markPreGameCompletion({
       activeRuntimes,
@@ -377,6 +392,11 @@ async function executeTurnImpl(
     preGameCompleted = result.preGameCompleted;
     sessionMeta = result.sessionMeta;
     sessionContext = result.sessionContext;
+    if (isPreGamePending && !input.manualTrigger) {
+      observedSetupCompletion = true;
+      Object.assign(setupNewlyDone, result.newlyDone);
+      setupAllDone = result.allDone;
+    }
     return result.allDone;
   };
 
@@ -494,6 +514,7 @@ async function executeTurnImpl(
           invoke(manifest, triggerEvent),
         sessionId: input.sessionId,
         turnNumber,
+        logicalTurn,
         // Fan-out is the only place an `event` runtime can trigger, so its
         // throttle gates only work if the real history reaches them. Same for
         // the Pre-Game set: without it a completed setup runtime re-fires
@@ -576,6 +597,17 @@ async function executeTurnImpl(
   let completionFired = false;
   const turnResult: TurnResult = {
     ...baseResult,
+    // Surface the setup delta so the commit-owning caller folds it into the
+    // session-clock write (phase flip + setup mirror) atomically with commit.
+    // Only present on the non-manual setup path that actually observed it.
+    ...(observedSetupCompletion
+      ? {
+          setupCompletion: {
+            newlyDone: setupNewlyDone,
+            allSetupDone: setupAllDone,
+          },
+        }
+      : {}),
     completeTurn: () => {
       if (completionFired) return;
       completionFired = true;

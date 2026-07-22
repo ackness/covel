@@ -1,5 +1,10 @@
-import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
-import { getRuntimeSpec } from "@covel/shared";
+import type {
+  RuntimeManifest,
+  RuntimeResult,
+  SetupRuntimeState,
+  TurnInput,
+} from "@covel/shared";
+import { getRuntimeSpec, mirrorSetupDone } from "@covel/shared";
 import type { SessionContextSnapshot } from "@covel/context";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 import type { TurnSessionMeta } from "./session-state.js";
@@ -10,6 +15,14 @@ export interface MarkPreGameCompletionResult {
   readonly preGameCompleted: readonly string[];
   readonly sessionMeta: TurnSessionMeta;
   readonly sessionContext: SessionContextSnapshot | undefined;
+  /**
+   * Setup runtimes that reported done for the FIRST time in this call, mirrored
+   * as `SetupRuntimeState`. The turn executor accumulates these across the
+   * pass(es) it makes and hands them to the finalizer, which folds them into
+   * the session-clock write (setup mirror + phase flip) inside the commit
+   * transaction. Empty when nothing newly completed.
+   */
+  readonly newlyDone: Readonly<Record<string, SetupRuntimeState>>;
 }
 
 export async function markPreGameCompletion(args: {
@@ -47,34 +60,38 @@ export async function markPreGameCompletion(args: {
       preGameCompleted,
       sessionMeta,
       sessionContext,
+      newlyDone: {},
     };
   }
 
-  const newlyDone = collectNewlyDoneRuntimes({
+  const newlyDoneNames = collectNewlyDoneRuntimes({
     activeRuntimes,
     completedResults,
     preGameCompleted,
     runtimeTriggerCounts,
   });
   const updated =
-    newlyDone.length > 0
-      ? [...preGameCompleted, ...newlyDone]
+    newlyDoneNames.length > 0
+      ? [...preGameCompleted, ...newlyDoneNames]
       : preGameCompleted;
   const allDone = preGameRuntimes.every((rt) => updated.includes(rt.name));
 
-  if (newlyDone.length > 0) {
+  let newlyDone: Record<string, SetupRuntimeState> = {};
+  if (newlyDoneNames.length > 0) {
     preGameCompleted = updated;
-    await deps.store.updateSession(input.sessionId, {
-      preGameCompleted: updated,
-      // The `turnCount:1` write is the atomic 0→1 band signal: setting it in the
-      // SAME updateSession as `preGameCompleted` avoids a transient state where
-      // setup is complete but the counter still reads 0. It is NOT the sole
-      // turnCount owner — `advanceSessionTurnCount` (apps/server/.../turn-count.ts)
-      // owns main-loop increments, and it deliberately skips the request that
-      // completes Pre-Game because this write already accounts for it.
-      ...(allDone ? { turnCount: 1 } : {}),
-      updatedAt: new Date().toISOString(),
-    });
+    // Mirror each newly-done setup runtime. The actual persist happens in the
+    // finalize transaction (session-clock write) so the phase flip and mirror
+    // roll back with a failed commit; here we only advance in-memory state so
+    // same-request main-loop follow-ups see setup as complete.
+    const now = new Date().toISOString();
+    const manifestById = new Map(activeRuntimes.map((rt) => [rt.name, rt]));
+    newlyDone = Object.fromEntries(
+      newlyDoneNames.map((name) => [
+        name,
+        mirrorSetupDone(manifestById.get(name)?.version ?? "0.0.0", now),
+      ]),
+    );
+
     const refreshedCharacters = await deps.store.listCharacters(
       input.sessionId,
     );
@@ -91,7 +108,7 @@ export async function markPreGameCompletion(args: {
     sessionContext = await refreshSessionContext();
   }
 
-  return { allDone, preGameCompleted, sessionMeta, sessionContext };
+  return { allDone, preGameCompleted, sessionMeta, sessionContext, newlyDone };
 }
 
 function collectNewlyDoneRuntimes(args: {

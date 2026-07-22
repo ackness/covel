@@ -35,6 +35,15 @@ export {
   stageForPriority,
   getRuntimeSpec,
 } from "./scheduling/normalize.js";
+export {
+  deriveLegacyClockFields,
+  mirrorSetupDone,
+  mirrorSetupCompleted,
+} from "./scheduling/session-clock.js";
+export type {
+  SessionClock,
+  LegacyClockFields,
+} from "./scheduling/session-clock.js";
 
 // ── Plugin Schemas ───────────────────────────────────────────────
 export {

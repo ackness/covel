@@ -140,11 +140,13 @@ describe("char-creator core plugin guard bridge", () => {
       preGameDone: true,
     });
 
-    const session = await store.getSession(sessionId);
-    expect(session?.turnCount).toBe(1);
-    expect(session?.preGameCompleted?.slice().sort()).toEqual(
-      ["char-creator/player-init", "pregame", "world-init/schema-gen"].sort(),
-    );
+    // player-init completes setup this turn (guard skip). The persisted
+    // turnCount / preGameCompleted are written by the finalize session-clock
+    // step; here we pin the completion delta the executor produces.
+    expect(Object.keys(result.setupCompletion?.newlyDone ?? {})).toEqual([
+      "char-creator/player-init",
+    ]);
+    expect(result.setupCompletion?.allSetupDone).toBe(true);
 
     const characters = await store.listCharacters(sessionId);
     expect(characters).toHaveLength(1);
