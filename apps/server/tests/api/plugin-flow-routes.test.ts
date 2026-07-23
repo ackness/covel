@@ -63,12 +63,13 @@ describe("plugin flow routes", () => {
     ).toBe(true);
     expect(
       body.steps.some(
-        (step) => step.priority === 500 && step.segmentId === "narrative",
+        (step) =>
+          step.runtimeId === "narrator" && step.segmentId === "narrative",
       ),
     ).toBe(true);
     expect(
       body.steps.some(
-        (step) => step.priority > 500 && step.segmentId === "post-turn",
+        (step) => step.runtimeId === "guide" && step.segmentId === "post-turn",
       ),
     ).toBe(true);
     // Event runtimes are stage-less → grouped under the event-manual bucket.

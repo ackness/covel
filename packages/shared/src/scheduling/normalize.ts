@@ -1,12 +1,22 @@
 /**
- * Manifest → NormalizedRuntimeSpec normalization (observe-only for now).
+ * Manifest → NormalizedRuntimeSpec normalization.
  *
  * This is the single place where legacy manifest surface (numeric
  * `priority` bands, `upstreamRequired`, `execution: background`, setup
  * runtimes declared as `scheduled interval: 1`) folds into the scheduling
- * IR. Production scheduling does not consume the IR yet — golden
- * characterization tests pin the mapping against current scheduler
- * behavior until the switch-over.
+ * IR. Production scheduling now consumes this IR: `stage` selects the band
+ * and the DAG orders within it (see packages/runtime/src/schedule).
+ *
+ * Two legacy folds survive here as the compat bridge for third-party
+ * manifests that have not migrated to the single-declaration surface:
+ *   - `priority` → `stage` (the `stageForPriority` band map). Retired once no
+ *     plugin declares `priority` without an explicit `stage`. Bundled
+ *     pregame / schema-gen still ride it (the loader forbids `stage: setup`
+ *     on their `scheduled` trigger).
+ *   - `upstreamRequired` → `deps.needs` (turn-scoped alias). Retired once no
+ *     plugin declares `upstreamRequired`; the IR-driven DAG + upstream gate
+ *     read `deps.needs`, so the alias is what keeps third-party
+ *     `upstreamRequired` gating/ordering under the new scheduler.
  */
 
 import type {
@@ -46,8 +56,8 @@ export function stageRank(stage: Stage | undefined): number {
 /**
  * Coarse `TurnMessageRecord.order` value. The field is written but never read
  * for sorting — every store sorts turn messages by `createdAt` — so this is a
- * stage ordinal kept only until Step 6 decides the field's fate. Stage-less
- * runtimes write 99.
+ * stage ordinal only. The column is retained (dropping it needs a four-backend
+ * migration for zero benefit). Stage-less runtimes write 99.
  */
 export function stageMessageOrder(stage: Stage | undefined): number {
   return stage === undefined ? 99 : STAGE_ORDER.indexOf(stage);
@@ -104,13 +114,11 @@ function collectExportBindings(
 /**
  * Normalize one runtime manifest into the loader-level IR node.
  *
- * Stage resolution: an explicit `stage` declaration wins (double-declared
- * manifests keep `priority` only as `legacyOrder`). Otherwise the stage is
- * derived from the priority band — but only for `auto` / `scheduled`
- * runtimes; `event` / `manual` runtimes never get a stage (their priority
- * is kept solely as `legacyOrder` for fan-out ordering), and a declared
- * `auto` / `scheduled` runtime without a priority is the legacy "UI-only"
- * idiom: no stage, not schedulable.
+ * Stage resolution: an explicit `stage` declaration wins. Otherwise the
+ * stage is derived from the priority band — but only for `auto` / `scheduled`
+ * runtimes; `event` / `manual` runtimes never get a stage (fan-out orders
+ * them by name, not priority), and a declared `auto` / `scheduled` runtime
+ * without a priority is the legacy "UI-only" idiom: no stage, not schedulable.
  */
 export function normalizeRuntimeManifest(
   manifest: RuntimeManifest,
@@ -179,9 +187,6 @@ export function normalizeRuntimeManifest(
       : {}),
     httpPermissions: manifest.permissions?.http ?? [],
     legacyJobViews: manifest.jobStatus?.legacyViews ?? [],
-    ...(manifest.priority !== undefined
-      ? { legacyOrder: manifest.priority }
-      : {}),
     provenance: { legacyFields },
   };
 }
@@ -190,8 +195,8 @@ export function normalizeRuntimeManifest(
  * Memoized `normalizeRuntimeManifest`. A manifest object is immutable for the
  * lifetime of the registry that owns it, so the derived spec is cached per
  * manifest identity in a `WeakMap` — computed once, released with the manifest.
- * Compat-period consumers that only need the ordering surface (`legacyOrder`,
- * `stage`) read through this instead of re-deriving the whole spec each turn.
+ * Consumers that only need the ordering surface (`stage`, `deps`) read through
+ * this instead of re-deriving the whole spec each turn.
  */
 const specCache = new WeakMap<RuntimeManifest, NormalizedRuntimeSpec>();
 

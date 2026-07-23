@@ -309,7 +309,6 @@ export interface PendingInputInfo {
 export interface WriteConflictEntry {
   readonly runtimeId: string;
   readonly pluginId: string;
-  readonly priority: number;
   readonly newValue: unknown;
   readonly reason?: string;
 }

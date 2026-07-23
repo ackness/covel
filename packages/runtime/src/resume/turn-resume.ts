@@ -15,7 +15,6 @@ import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { runAgentToolLoop } from "../agent-loop/turn-agent-tool-loop.js";
 import { finalizeAgentOutput } from "../agent-loop/finalize-agent-output.js";
-import { NARRATOR_PRIORITY } from "../schedule/scheduler.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 
 export interface ResumeSuspendedRuntimeOptions {

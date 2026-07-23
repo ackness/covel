@@ -553,9 +553,9 @@ describe("codex plugin manifest", () => {
   it("should be a non-core agent-runtime plugin", () => {
     expect(manifest.pluginType).toBe("plugin");
     expect(manifest.name).toBe("codex");
-    // Narrator-downstream layer — shares 600 with guide / extractor /
-    // character-tracker so the scheduler runs all four in parallel.
-    expect(manifest.priority).toBe(600);
+    // Narrator-downstream layer — post-turn stage, run in parallel with guide /
+    // extractor / character-tracker.
+    expect(manifest.stage).toBe("post-turn");
     // Agent runtime — no `runtimeType` field means default 'agent'
     expect(manifest.runtimeType).toBeUndefined();
     expect(manifest.handler).toBeUndefined();
@@ -614,9 +614,7 @@ describe("codex plugin manifest", () => {
     // character-tracker) schedule after the active engine completes; on that
     // layer the DAG scheduler executes them concurrently.
     expect(manifest.trigger?.type).toBe("auto");
-    expect(manifest.upstreamRequired).toEqual([
-      { capability: "narrative-engine" },
-    ]);
+    expect(manifest.needs).toEqual([{ capability: "narrative-engine" }]);
   });
 
   it("should declare right panel UI spec", () => {

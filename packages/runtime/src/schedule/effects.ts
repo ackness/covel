@@ -257,7 +257,7 @@ export function applyHazardPolicy(
     if (policy === "warn") {
       outGroups.push(group);
     } else {
-      for (const sub of strictSerialize(group, sorted, effectsByName)) {
+      for (const sub of strictSerialize(sorted, effectsByName)) {
         outGroups.push(sub);
       }
     }
@@ -274,7 +274,6 @@ export function applyHazardPolicy(
  * share a level and stay parallel. O(n²) over the (small) group, deterministic.
  */
 function strictSerialize(
-  group: ScheduledGroup,
   sorted: readonly RuntimeManifest[],
   effectsByName: ReadonlyMap<string, RuntimeEffects>,
 ): readonly ScheduledGroup[] {
@@ -302,5 +301,5 @@ function strictSerialize(
     () => [],
   );
   for (const rt of sorted) buckets[levelOf.get(rt.name)!]!.push(rt);
-  return buckets.map((runtimes) => ({ priority: group.priority, runtimes }));
+  return buckets.map((runtimes) => ({ runtimes }));
 }

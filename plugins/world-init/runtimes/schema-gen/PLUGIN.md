@@ -4,17 +4,17 @@ description:
   zh: 开局整理世界设定，让角色属性和背景资料更贴合这个世界。
   en: Organizes the setting at the start so character traits and background details fit the world.
 pluginType: core-plugin
-# audit P0-2: schema-gen must run BEFORE char-creator/player-init (50)
-# so the player-init agent can read `{{ world.schema }}` populated by
-# this runtime's set-world-schema tool. Pre-Game band is 0-99 and uses
-# priority-based serial ordering.
+# schema-gen must run BEFORE char-creator/player-init so the player-init agent
+# can read `{{ world.schema }}` populated by this runtime's set-world-schema
+# tool. player-init declares a turn-scoped `needs` on it; pregame → schema-gen
+# ordering comes from the conservative setup-order chain (legacy priority).
+# Setup runtime WITHOUT an explicit `stage`: the loader forbids `stage: setup`
+# alongside a `scheduled`/`interval` trigger, so this runtime keeps the legacy
+# `scheduled interval:1 max:1` idiom and lets normalize DERIVE `stage: setup`
+# from the pre-game band (`priority` is retained solely as that stage source +
+# the setup-chain sort key). Retire `priority` once the `scheduled → auto`
+# +`stage: setup` migration lands.
 priority: 40
-# Setup runtime: NOT double-declared with an explicit `stage`. The loader
-# forbids `stage: setup` alongside a `scheduled`/`interval` trigger, and
-# this runtime keeps its legacy `scheduled interval:1 max:1` idiom during
-# the compat period. The normalize layer derives `stage: setup` from the
-# pre-game band and folds the trigger to `auto max:1` (observe-only). Full
-# migration to `stage: setup` + `auto` lands in Step 6.
 model: plugin
 outputKind: system
 timeoutMs: 180000

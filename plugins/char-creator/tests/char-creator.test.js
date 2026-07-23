@@ -57,8 +57,8 @@ describe("char-creator plugin", () => {
       manifest = m.manifest;
     });
 
-    it("is a Pre-Game band core-plugin (priority < 100)", () => {
-      expect(manifest.priority).toBeLessThan(100);
+    it("is a setup-stage core-plugin", () => {
+      expect(manifest.stage).toBe("setup");
       expect(manifest.pluginType).toBe("core-plugin");
     });
 
@@ -78,11 +78,8 @@ describe("char-creator plugin", () => {
       expect(inject.as).toBe("<pregame-opening>");
     });
 
-    it("declares upstreamRequired so it waits for pregame and schema init", () => {
-      expect(manifest.upstreamRequired).toEqual([
-        "pregame",
-        "world-init/schema-gen",
-      ]);
+    it("declares turn-scoped needs so it waits for pregame and schema init", () => {
+      expect(manifest.needs).toEqual(["pregame", "world-init/schema-gen"]);
     });
 
     it("uses an auto trigger with a guard to gate re-runs", () => {
@@ -119,13 +116,12 @@ describe("char-creator plugin", () => {
       manifest = m.manifest;
     });
 
-    it("runs every turn in the main-loop band (priority >= 100)", () => {
+    it("runs every turn in the post-turn stage", () => {
       expect(manifest.trigger?.type).toBe("scheduled");
       expect(manifest.trigger?.interval).toBe(1);
-      // Band filtering (Pre-Game vs main loop) is enforced server-side by
-      // the priority scheduler based on `session.turnCount`. The manifest
-      // no longer carries a `trigger.phases` field.
-      expect(manifest.priority).toBeGreaterThanOrEqual(100);
+      // Band selection is stage-driven: post-turn runs in the main loop, after
+      // the narrative stage.
+      expect(manifest.stage).toBe("post-turn");
     });
 
     it("declares the full character management tool suite", () => {
@@ -154,9 +150,7 @@ describe("char-creator plugin", () => {
     });
 
     it("gates on the narrative-engine capability, not an exact runtime ", () => {
-      expect(manifest.upstreamRequired).toEqual([
-        { capability: "narrative-engine" },
-      ]);
+      expect(manifest.needs).toEqual([{ capability: "narrative-engine" }]);
     });
   });
 });

@@ -45,6 +45,7 @@ export {
 } from "./scheduling/normalize.js";
 export {
   deriveLegacyClockFields,
+  deriveLegacyClockForSession,
   mirrorSetupDone,
   mirrorSetupCompleted,
 } from "./scheduling/session-clock.js";
@@ -54,6 +55,7 @@ export type {
 } from "./scheduling/session-clock.js";
 export {
   isSetupRuntime,
+  isMainLoopRuntime,
   setupRetryBudget,
   isBudgetedAttempt,
   resolvePendingOrBlocked,

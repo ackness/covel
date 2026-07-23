@@ -17,12 +17,7 @@
 
 import { Hono } from "hono";
 import type { DataStore } from "@covel/store";
-import {
-  deriveLegacyClockFields,
-  retrySetup,
-  waiveSetup,
-  type SetupControlResult,
-} from "@covel/shared";
+import { retrySetup, waiveSetup, type SetupControlResult } from "@covel/shared";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import { resolveSessionParam } from "./session/session-guard.js";
@@ -39,17 +34,16 @@ const WAIVE_WARNING =
   "Setup was skipped by the player after repeated failures; this plugin is running in a degraded state.";
 
 /**
- * Apply a resolved control transition to `session.setupRuntimes[runtimeId]`,
- * re-deriving the legacy `preGameCompleted` set from the new mirror so the two
- * stay consistent (a waived runtime enters it; a retried one leaves it).
+ * Apply a resolved control transition to `session.setupRuntimes[runtimeId]`. The
+ * setup mirror is the sole write surface; the legacy `preGameCompleted` set is
+ * derived from it at read time, so a waived runtime enters it (and a retried one
+ * leaves it) without a separate column write.
  */
 async function applyTransition(args: {
   readonly store: DataStore;
   readonly sessionId: string;
   readonly runtimeId: string;
   readonly session: {
-    readonly phase?: "setup" | "playing";
-    readonly completedPlayerTurns?: number;
     readonly setupRuntimes?: Readonly<
       Record<string, import("@covel/shared").SetupRuntimeState>
     >;
@@ -63,14 +57,10 @@ async function applyTransition(args: {
     ...(session.setupRuntimes ?? {}),
     [runtimeId]: result.next,
   };
-  const legacy = deriveLegacyClockFields({
-    phase: session.phase ?? "setup",
-    completedPlayerTurns: session.completedPlayerTurns ?? 0,
-    setupRuntimes,
-  });
+  // Setup mirror is the sole write surface; `preGameCompleted` derives from it
+  // at read time.
   await store.updateSession(sessionId, {
     setupRuntimes,
-    preGameCompleted: legacy.preGameCompleted,
     updatedAt: now,
   });
 }

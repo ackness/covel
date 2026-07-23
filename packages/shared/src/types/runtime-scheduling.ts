@@ -242,13 +242,6 @@ export interface NormalizedRuntimeSpec {
   readonly httpPermissions: readonly HttpPermissionDecl[];
   /** Compat-period only; always empty under the strict authoring schema. */
   readonly legacyJobViews: readonly LegacyJobViewDecl[];
-  /**
-   * Original numeric `priority` value. During the compat period this is the
-   * ONLY read surface for consumers that still order by priority (event
-   * fan-out, prompt contribution, resume, registry). Deleted once every
-   * consumer has switched to its replacement ordering.
-   */
-  readonly legacyOrder?: number;
   /** Which spec fields were derived from legacy manifest fields (diagnostics). */
   readonly provenance: { readonly legacyFields: readonly string[] };
 }

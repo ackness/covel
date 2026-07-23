@@ -43,38 +43,10 @@ import { withUtilsTrace } from "./utils-trace.js";
 import { enforceHttpPermissions } from "./http-permissions.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 
-/** Runtimes already warned about bare `completedResults` access (once per process). */
-const warnedBareCompletedResults = new Set<string>();
-
-/**
- * Wrap `completedResults` so the first property access from a handler logs one
- * compat warning per runtime per process, then behaves exactly like the raw
- * map. Steers authors toward `ctx.inputs` bindings without changing behaviour.
- */
-function warnOnceCompletedResults<K, V>(
-  map: ReadonlyMap<K, V>,
-  runtimeId: string,
-): ReadonlyMap<K, V> {
-  return new Proxy(map, {
-    get(target, prop) {
-      if (!warnedBareCompletedResults.has(runtimeId)) {
-        warnedBareCompletedResults.add(runtimeId);
-        console.warn(
-          `[runtime] ${runtimeId}: ctx.completedResults is a compat shim — ` +
-            `migrate to declared \`inputs\` bindings (ctx.inputs).`,
-        );
-      }
-      const value = Reflect.get(target, prop, target);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  }) as ReadonlyMap<K, V>;
-}
-
 export interface ExecuteFunctionRuntimeOptions {
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   readonly loaded: LoadedRuntime;
-  readonly completedResults: ReadonlyMap<string, RuntimeResult>;
   readonly deps: TurnExecutorDeps;
   readonly hookPipeline: HookPipeline | undefined;
   readonly triggerEvent:
@@ -117,7 +89,6 @@ export async function executeFunctionRuntime({
   manifest,
   input,
   loaded,
-  completedResults,
   deps,
   hookPipeline,
   triggerEvent,
@@ -139,7 +110,6 @@ export async function executeFunctionRuntime({
       runtimeId: manifest.name,
       pluginId: manifest.pluginId,
       ...(stage !== undefined ? { stage } : {}),
-      priority: manifest.priority,
     });
   } catch {
     /* callback error must not kill runtime */
@@ -148,7 +118,6 @@ export async function executeFunctionRuntime({
     runtimeId: manifest.name,
     pluginId: manifest.pluginId,
     ...(stage !== undefined ? { stage } : {}),
-    priority: manifest.priority,
   });
 
   const helperCtx = {
@@ -403,13 +372,6 @@ export async function executeFunctionRuntime({
       playerMessage: input.playerMessage,
       locale: input.locale,
       store: revocable.store,
-      // Bare `completedResults` is a compat shim (docs 02 §3): the same-execution
-      // input surface is `ctx.inputs`. Wrap so first access warns once per
-      // runtime per process; behaviour is otherwise unchanged.
-      completedResults: warnOnceCompletedResults(
-        completedResults,
-        manifest.name,
-      ),
       ...(inputs && Object.keys(inputs).length > 0 ? { inputs } : {}),
       ...(exportSlots && Object.keys(exportSlots).length > 0
         ? { exports: exportSlots }

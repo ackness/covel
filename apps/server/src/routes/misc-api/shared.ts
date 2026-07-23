@@ -1,10 +1,5 @@
 import { resolve, relative } from "node:path";
-import {
-  FrameworkCapability,
-  readRuntimeEnv,
-  stageForPriority,
-  type Stage,
-} from "@covel/shared";
+import { FrameworkCapability, readRuntimeEnv, type Stage } from "@covel/shared";
 
 // Flow segments are the named stages plus one bucket for stage-less runtimes
 // (event / manual). The frontend groups steps by `step.segmentId === segment.id`
@@ -49,15 +44,6 @@ export function textValue(value: unknown, locale = "zh-CN"): string {
     return record[locale] ?? record["en-US"] ?? Object.values(record)[0] ?? "";
   }
   return "";
-}
-
-/**
- * Compat fallback for stage-less runtimes that still carry a numeric priority
- * (event runtimes): map the priority to its stage band. Staged runtimes read
- * `stage` directly; kept until Step 6 removes `priority`.
- */
-export function segmentForPriority(priority: number): FlowSegmentId {
-  return stageForPriority(priority);
 }
 
 export function docPathFromAbsolute(

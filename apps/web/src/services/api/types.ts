@@ -138,7 +138,6 @@ export interface RuntimeSummary {
   kind: string;
   /** Named stage; absent for event/manual/UI-only runtimes. */
   stage?: Stage;
-  priority: number;
   trigger: {
     type: string;
     onEvents?: string[];

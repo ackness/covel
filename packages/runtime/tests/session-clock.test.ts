@@ -16,6 +16,7 @@ import { describe, it, expect } from "vitest";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import {
   deriveLegacyClockFields,
+  deriveLegacyClockForSession,
   mirrorSetupDone,
   type ExecutionContext,
   type SetupRuntimeState,
@@ -116,12 +117,23 @@ describe("deriveLegacyClockFields (dual-write formula)", () => {
     ).toBe(0);
   });
 
-  it("playing phase → turnCount = max(1, completedPlayerTurns) (Pre-Game floor)", () => {
+  it("playing phase → turnCount = max(1, completedPlayerTurns) once progress is made", () => {
+    // Bare session that started directly in playing (no setup, no turns) → 0,
+    // matching the legacy create value (a lossless backfill round-trip).
     expect(
       deriveLegacyClockFields({
         phase: "playing",
         completedPlayerTurns: 0,
         setupRuntimes: {},
+      }).turnCount,
+    ).toBe(0);
+    // Setup just completed (a done mirror, still 0 counted turns) → Pre-Game
+    // floor of 1.
+    expect(
+      deriveLegacyClockFields({
+        phase: "playing",
+        completedPlayerTurns: 0,
+        setupRuntimes: { "p/setup": mirrorSetupDone("1.0.0", "t") },
       }).turnCount,
     ).toBe(1);
     expect(
@@ -179,7 +191,7 @@ describe("logical-turn counting via finalizeExecution", () => {
     expect(first.status).toBe("committed");
     let session = (await store.getSession(SID))!;
     expect(session.completedPlayerTurns).toBe(1);
-    expect(session.turnCount).toBe(1);
+    expect(deriveLegacyClockForSession(session).turnCount).toBe(1);
 
     // Same logicalTurnId, different execution (retry) → ledger dedups, no count.
     const dup = await finalizeExecution({
@@ -207,7 +219,8 @@ describe("logical-turn counting via finalizeExecution", () => {
     });
     session = (await store.getSession(SID))!;
     expect(session.completedPlayerTurns).toBe(2);
-    expect(session.turnCount).toBe(2);
+    // Legacy turnCount is no longer written — derived at read time from the clock.
+    expect(deriveLegacyClockForSession(session).turnCount).toBe(2);
   });
 
   it("does not advance for a non-player execution (countPolicy: none)", async () => {
@@ -229,7 +242,7 @@ describe("logical-turn counting via finalizeExecution", () => {
     });
     const session = (await store.getSession(SID))!;
     expect(session.completedPlayerTurns).toBe(2);
-    expect(session.turnCount).toBe(2);
+    expect(deriveLegacyClockForSession(session).turnCount).toBe(2);
   });
 });
 
@@ -266,9 +279,11 @@ describe("phase flip + atomicity", () => {
     const session = (await store.getSession(SID))!;
     expect(session.phase).toBe("playing");
     expect(session.completedPlayerTurns).toBe(0);
+    // Legacy fields derived at read time (no longer written by finalize).
+    const legacy = deriveLegacyClockForSession(session);
     // Floor after the flip.
-    expect(session.turnCount).toBe(1);
-    expect(session.preGameCompleted?.slice().sort()).toEqual([
+    expect(legacy.turnCount).toBe(1);
+    expect(legacy.preGameCompleted.slice().sort()).toEqual([
       "char/init",
       "pregame",
     ]);
@@ -304,8 +319,9 @@ describe("phase flip + atomicity", () => {
     // Untouched: still setup, count 0, ledger empty, preGameCompleted from seed.
     expect(session.phase).toBe("setup");
     expect(session.completedPlayerTurns).toBe(0);
-    expect(session.turnCount).toBe(0);
-    expect(session.preGameCompleted).toEqual(["pregame"]);
+    const legacy = deriveLegacyClockForSession(session);
+    expect(legacy.turnCount).toBe(0);
+    expect(legacy.preGameCompleted).toEqual(["pregame"]);
     expect(await store.getLogicalTurnCompletion(SID, "L1")).toBeNull();
   });
 });

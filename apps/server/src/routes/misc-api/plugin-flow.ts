@@ -35,7 +35,6 @@ export async function buildPluginFlowResponse() {
     description: string;
     pluginType: string;
     stage?: Stage;
-    priority: number;
     segmentId: FlowSegmentId;
     runtimeType: string;
     outputKind: string;
@@ -62,57 +61,42 @@ export async function buildPluginFlowResponse() {
     docPath: string;
     isStoryRuntime: boolean;
   }> = [];
-  // Stage-driven segments (player-facing plain-language labels). `minPriority` /
-  // `maxPriority` describe the legacy band each stage folds from — kept for
-  // reference; the frontend groups by `segmentId`, not the range.
+  // Stage-driven segments (player-facing plain-language labels). `rangeLabel` is
+  // a cosmetic legacy-band hint; the frontend groups by `segmentId`.
   const flowSegments: Array<{
     id: FlowSegmentId;
     labelText: I18nText;
     rangeLabel: string;
-    minPriority: number;
-    maxPriority: number;
   }> = [
     {
       id: "setup",
       labelText: { "zh-CN": "开场准备", "en-US": "Setup" },
       rangeLabel: "0-99",
-      minPriority: 0,
-      maxPriority: 99,
     },
     {
       id: "pre-turn",
       labelText: { "zh-CN": "叙事前", "en-US": "Pre-Turn" },
       rangeLabel: "100-499",
-      minPriority: 100,
-      maxPriority: 499,
     },
     {
       id: "narrative",
       labelText: { "zh-CN": "叙事", "en-US": "Narrative" },
       rangeLabel: "500",
-      minPriority: 500,
-      maxPriority: 500,
     },
     {
       id: "post-turn",
       labelText: { "zh-CN": "叙事后", "en-US": "Post-Turn" },
       rangeLabel: "501-999",
-      minPriority: 501,
-      maxPriority: 999,
     },
     {
       id: "audit",
       labelText: { "zh-CN": "审计", "en-US": "Audit" },
       rangeLabel: "1000",
-      minPriority: 1000,
-      maxPriority: 1000,
     },
     {
       id: "event-manual",
       labelText: { "zh-CN": "事件 / 手动", "en-US": "Event & Manual" },
       rangeLabel: "—",
-      minPriority: Number.MAX_SAFE_INTEGER,
-      maxPriority: Number.MAX_SAFE_INTEGER,
     },
   ];
 
@@ -143,7 +127,6 @@ export async function buildPluginFlowResponse() {
       const runtimeName = runtimeId.includes("/")
         ? (runtimeId.split("/").at(-1) ?? runtimeId)
         : runtimeId;
-      const priority = manifest.priority ?? 500;
       const stage = getRuntimeSpec(manifest).stage;
       // Staged runtimes map 1:1 to their stage segment; stage-less ones
       // (event / manual) group under the dedicated "event-manual" bucket.
@@ -162,7 +145,6 @@ export async function buildPluginFlowResponse() {
         description: textValue(manifest.description),
         pluginType: summary.pluginType,
         ...(stage !== undefined ? { stage } : {}),
-        priority,
         segmentId,
         runtimeType: manifest.runtimeType ?? "agent",
         outputKind: manifest.outputKind ?? "plugin",

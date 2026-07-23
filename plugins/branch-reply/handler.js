@@ -19,13 +19,12 @@ const TURN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
  *
  *   - SEED (auto trigger, `manualPayload` absent): runs after the narrative
  *     engines each story turn. Reads the active engine's narrative from the
- *     declared `inputs.narrative` binding (`ctx.inputs.narrative`), falling
- *     back to an engine-agnostic `ctx.completedResults` scan during the
- *     compatibility window (see `seedFromNarrative`), and seeds the message
- *     block with that reply as candidate[0]. Idempotent per turnId; no-ops on
- *     empty / system turns. This is what makes the block surface at all — a
- *     `ui.message` block only renders once its `message` namespace is
- *     populated, so a manual-only writer could never bootstrap itself.
+ *     declared `inputs.narrative` binding (`ctx.inputs.narrative`) and seeds
+ *     the message block with that reply as candidate[0]. Idempotent per
+ *     turnId; skips empty / system turns and unbound activations. This is what
+ *     makes the block surface at all — a `ui.message` block only renders once
+ *     its `message` namespace is populated, so a manual-only writer could
+ *     never bootstrap itself.
  *
  *   - MANUAL (plugin-rpc, `manualPayload` present): the existing
  *     createCandidates / acceptCandidate actions from the block UI.
@@ -51,32 +50,25 @@ export default async function handler(ctx) {
 
 /**
  * Seed candidate[0] from the narrative the active story engine produced this
- * turn. Engine-agnostic: scans `completedResults` for a non-empty
- * `narrativeOutput` (the framework's narrative contract) instead of matching a
- * concrete engine id, so it works for `narrator`, `chat-mode-narrator`, or any
- * future story engine.
+ * turn. Engine-agnostic: reads the declared `inputs.narrative` binding
+ * (`ctx.inputs.narrative`) — an InputSlot carrying the producer's post-`select`
+ * `/narrativeOutput` plus provenance — instead of matching a concrete engine
+ * id, so it works for `narrator`, `chat-mode-narrator`, or any future story
+ * engine.
  */
 async function seedFromNarrative(ctx) {
   const now = new Date().toISOString();
   const targetTurnId = normalizeTurnId(ctx.turnId);
-  // Dual path. Prefer the explicit `inputs.narrative` binding: an InputSlot
+  // The `inputs.narrative` binding is the only narrative path: an InputSlot
   // whose `value` is the active engine's post-`select` `/narrativeOutput` and
-  // whose `source.runtimeId` names the producing runtime. The slot is absent
-  // on manual activation, a binding miss, or before the manifest/kernel wiring
-  // lands, so fall back to the raw `completedResults` scan during the
-  // compatibility window. Remove the fallback (and `extractNarrativeText`) in
-  // Step 6, once `ctx.inputs` is the only same-execution input entry.
-  const narrative =
-    narrativeFromInputSlot(ctx.inputs?.narrative) ??
-    extractNarrativeText(ctx.completedResults);
+  // whose `source.runtimeId` names the producing runtime. Absent on manual
+  // activation or a binding miss.
+  const narrative = narrativeFromInputSlot(ctx.inputs?.narrative);
 
-  // Skip empty / system turns — nothing to seed, so the block stays hidden
-  // rather than rendering an empty swipe widget.
+  // Skip empty / system turns and unbound activations — nothing to seed, so the
+  // block stays hidden rather than rendering an empty swipe widget.
   if (!narrative) {
-    return {
-      outcome: "success",
-      value: { action: "seed", turnId: targetTurnId, seeded: false },
-    };
+    return { outcome: "skipped", skipReason: "no narrative input bound" };
   }
   const baseText = narrative.text;
   // The runtime that produced the narrative this turn. Stored on the turn
@@ -522,12 +514,10 @@ function makePluginDataBatchProposal(ctx, now, items) {
  * `cardinality: "one"`). `value` is the producer's post-`select`
  * `/narrativeOutput` — a string in the declared contract, normalized
  * defensively in case a producer projects a `{ narrativeOutput }` object.
- * `source.runtimeId` is the producing runtime, returned in the same
- * `{ text, runtimeId? }` shape as the scan so accept/regenerate keep targeting
- * the narrator's message, not branch-reply's own seed. Returns undefined when
- * the slot is absent or carries no usable text, which routes the caller to the
- * `completedResults` fallback. This whole path retires with the fallback in
- * Step 6 (`ctx.inputs` becomes the only same-execution input entry).
+ * `source.runtimeId` is the producing runtime, returned as
+ * `{ text, runtimeId? }` so accept/regenerate keep targeting the narrator's
+ * message, not branch-reply's own seed. Returns undefined when the slot is
+ * absent or carries no usable text, which makes the seed skip the turn.
  *
  * @param {unknown} slot
  * @returns {{ text: string, runtimeId?: string } | undefined}
@@ -569,60 +559,6 @@ function normalizeNarrativeValue(value) {
     if (typeof inner === "string") return inner.trim();
   }
   return "";
-}
-
-/**
- * Find the active story engine's narrative for this turn, engine-agnostically,
- * together with the runtime id that produced it.
- *
- * `completedResults` is keyed by runtime name and accumulates across priority
- * groups, so by the time branch-reply (priority ~700) runs, the narrative
- * engine (priority 500) is present. We pick the longest non-empty
- * `narrativeOutput` among successful results — no plugin id, no capability
- * lookup (the active narrator is discovered, not hardcoded).
- *
- * Limitation (stated honestly): non-story `narrativeOutput` is suppressed at
- * the PROPOSAL layer (session-output-normalizer), NOT in `completedResults`,
- * which exposes raw `RuntimeResult.output`. `RuntimeResult` carries no
- * `outputKind`, so a function handler cannot filter the scan to
- * `outputKind === "story"`. In practice every bundled non-story downstream is
- * tool-driven (its narrative finalizes to `""`), so only the real story engine
- * has non-empty `narrativeOutput`; a hypothetical schema-less prose plugin that
- * emits longer text without tool calls could be mispicked. The returned
- * `runtimeId` bounds that risk — accept/regenerate rewrite exactly the runtime
- * we seeded from, so seed and accept always agree on a single message.
- *
- * @returns {{ text: string, runtimeId?: string } | undefined}
- */
-function extractNarrativeText(completedResults) {
-  if (!completedResults || typeof completedResults.values !== "function") {
-    return undefined;
-  }
-  let best;
-  for (const result of completedResults.values()) {
-    if (!result || typeof result !== "object") continue;
-    if (typeof result.status === "string" && result.status !== "success")
-      continue;
-    const output = result.output;
-    if (!output || typeof output !== "object") continue;
-    const narrative =
-      typeof output.narrativeOutput === "string"
-        ? output.narrativeOutput.trim()
-        : "";
-    if (!narrative) continue;
-    if (!best || narrative.length > best.text.length) {
-      best = {
-        text: narrative,
-        runtimeId:
-          typeof result.runtimeId === "string" ? result.runtimeId : undefined,
-      };
-    }
-  }
-  if (!best) return undefined;
-  return {
-    text: best.text.slice(0, MAX_TEXT_LENGTH),
-    ...(best.runtimeId ? { runtimeId: best.runtimeId } : {}),
-  };
 }
 
 async function readTurnRecord(ctx, turnId) {

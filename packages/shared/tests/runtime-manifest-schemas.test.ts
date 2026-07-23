@@ -142,10 +142,6 @@ const compatCurrentPositives: readonly Fixture[] = [
       trigger: { type: "scheduled", interval: 1, maxTriggerCount: 1 },
     },
   },
-  {
-    name: "reserved conditional trigger (accepted, never fires)",
-    manifest: { ...base, priority: 500, trigger: { type: "conditional" } },
-  },
 ];
 
 const compatNewPositive: Fixture = {
@@ -288,6 +284,16 @@ const compatMalformedRejections: readonly Fixture[] = [
   {
     name: "unknown top-level field",
     manifest: { ...base, priority: 500, bogusField: true },
+  },
+  {
+    // Step 6: reserved triggers are now rejected by the compat input schema too
+    // (the enum narrowed to the four production types).
+    name: "reserved conditional trigger (rejected)",
+    manifest: { ...base, priority: 500, trigger: { type: "conditional" } },
+  },
+  {
+    name: "reserved error-retry trigger (rejected)",
+    manifest: { ...base, priority: 500, trigger: { type: "error-retry" } },
   },
 ];
 

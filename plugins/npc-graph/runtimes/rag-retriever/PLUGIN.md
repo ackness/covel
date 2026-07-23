@@ -4,12 +4,8 @@ description:
   zh: 当你提到某个人时，帮助故事想起相关人物和关系。
   en: When you mention someone, helps the story remember related people and relationships.
 pluginType: plugin
-# Narrator-prep layer — runs before narrator (500) so narrator's inject
-# of `npcContext` is populated. Leaves 100–499 free for future prep
-# runtimes (embeddings, lore retrieval, etc.) that could share this layer.
-priority: 400
-# Dual-declared (compat period): `stage` is the new authority; `priority`
-# stays as `legacyOrder` until Step 6.
+# Narrator-prep layer — the `pre-turn` stage runs before the `narrative` stage,
+# so narrator's inject of `npcContext` is populated by the time it runs.
 stage: pre-turn
 capabilities: [npc-graph, graph-rag]
 tags:

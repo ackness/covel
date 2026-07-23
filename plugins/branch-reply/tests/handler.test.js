@@ -4,10 +4,10 @@ import handler from "../handler.js";
 
 /**
  * Build a handler ctx. Pass `manualPayload` for the manual (plugin-rpc) path,
- * or leave it undefined and pass `completedResults` to exercise the auto seed
- * path. `extra` overrides any field (gateway, locale, logger, …).
+ * or leave it undefined and pass `inputs` to exercise the auto seed path.
+ * `extra` overrides any field (gateway, locale, logger, pluginData, …).
  */
-function ctx({ manualPayload, store = {}, completedResults, ...extra } = {}) {
+function ctx({ manualPayload, store = {}, inputs, ...extra } = {}) {
   return {
     sessionId: "sess-branch",
     turnId: "turn-branch",
@@ -15,41 +15,41 @@ function ctx({ manualPayload, store = {}, completedResults, ...extra } = {}) {
     runtimeId: "branch-reply",
     playerMessage: "I ask the guard to explain the sealed door.",
     store,
-    completedResults: completedResults ?? new Map(),
     config: {},
+    ...(inputs !== undefined ? { inputs } : {}),
     ...(manualPayload !== undefined ? { manualPayload } : {}),
     ...extra,
   };
 }
 
-function narrativeResult(runtimeId, narrativeOutput, status = "success") {
-  return [
-    runtimeId,
-    {
-      pluginId: runtimeId,
-      runtimeId,
-      status,
-      output: { narrativeOutput },
+/**
+ * An `inputs.narrative` binding (InputSlot, cardinality "one"): `value` is the
+ * producer's post-`select` /narrativeOutput; `source` carries provenance so
+ * accept/regenerate target the producing runtime's message.
+ */
+function narrativeSlot(value, runtimeId = "narrator") {
+  return {
+    narrative: {
+      cardinality: "one",
+      value,
+      source: { pluginId: runtimeId, runtimeId, resultId: "r-1" },
     },
-  ];
+  };
 }
 
 // Deliberate change: handler migrated to envelope-v1, so the business return
 // (action / turnId / seeded / candidateCount / accepted*) is under
 // `result.value`; pending proposals stay on the envelope (result).
 describe("branch-reply seed path (auto, no manualPayload)", () => {
-  it("seeds candidate[0] from the active engine narrative, engine-agnostically", async () => {
-    // Two engines could be present; the inactive one is suppressed to "". The
-    // seed must pick the real narrative without keying on any plugin id.
-    const completedResults = new Map([
-      narrativeResult("scene-prompts", ""),
-      narrativeResult(
-        "chat-mode-narrator",
-        "The guard exhales and finally meets your eyes.",
-      ),
-    ]);
-
-    const result = await handler(ctx({ completedResults }));
+  it("seeds candidate[0] from the bound narrative slot with its provenance runtimeId", async () => {
+    const result = await handler(
+      ctx({
+        inputs: narrativeSlot(
+          "The guard exhales and finally meets your eyes.",
+          "chat-mode-narrator",
+        ),
+      }),
+    );
 
     expect(result.value).toMatchObject({
       action: "seed",
@@ -71,8 +71,9 @@ describe("branch-reply seed path (auto, no manualPayload)", () => {
         schemaVersion: 1,
         turnId: "turn-branch",
         status: "ready",
-        // Stores WHICH runtime produced the narrative so the prompt-history
-        // rewriter targets the narrator's message, not branch-reply's own seed.
+        // Stores WHICH runtime produced the narrative (from the slot's
+        // source.runtimeId) so the prompt-history rewriter targets the
+        // narrator's message, not branch-reply's own seed.
         runtimeId: "chat-mode-narrator",
         candidates: [
           {
@@ -91,17 +92,16 @@ describe("branch-reply seed path (auto, no manualPayload)", () => {
     });
   });
 
-  it("no-ops on empty / system turns (no narrative output)", async () => {
-    const completedResults = new Map([narrativeResult("scene-prompts", "")]);
-    const result = await handler(ctx({ completedResults }));
-    expect(result.value).toMatchObject({ action: "seed", seeded: false });
+  it("skips when no narrative input is bound", async () => {
+    const result = await handler(ctx());
+    expect(result).toEqual({
+      outcome: "skipped",
+      skipReason: "no narrative input bound",
+    });
     expect(getPendingProposals(result)).toHaveLength(0);
   });
 
   it("is idempotent per turnId — never double-seeds", async () => {
-    const completedResults = new Map([
-      narrativeResult("narrator", "A door opens onto a cold corridor."),
-    ]);
     const pluginData = {
       // ctx.pluginData already holds a record for this turn.
       async get(namespace, key) {
@@ -121,7 +121,12 @@ describe("branch-reply seed path (auto, no manualPayload)", () => {
       },
     };
 
-    const result = await handler(ctx({ completedResults, pluginData }));
+    const result = await handler(
+      ctx({
+        inputs: narrativeSlot("A door opens onto a cold corridor."),
+        pluginData,
+      }),
+    );
     expect(result.value).toMatchObject({ action: "seed", seeded: false });
     expect(getPendingProposals(result)).toHaveLength(0);
   });
@@ -475,34 +480,10 @@ describe("branch-reply malformed manual payloads", () => {
   });
 });
 
-describe("branch-reply seed path — inputs.narrative binding (dual path)", () => {
-  function narrativeSlot(value, runtimeId = "narrator") {
-    // InputSlot, cardinality "one" (02-io-contract §3.2): value is the
-    // producer's post-`select` /narrativeOutput; source carries provenance.
-    return {
-      narrative: {
-        cardinality: "one",
-        value,
-        source: { pluginId: runtimeId, runtimeId, resultId: "r-1" },
-      },
-    };
-  }
-
-  it("prefers the bound narrative slot over the completedResults scan", async () => {
-    // A longer scanned narrative must be ignored when the explicit binding
-    // resolves — the slot is the authoritative same-execution input.
-    const completedResults = new Map([
-      narrativeResult(
-        "chat-mode-narrator",
-        "A much longer scanned narrative that must not be picked.",
-      ),
-    ]);
-
+describe("branch-reply seed path — inputs.narrative binding", () => {
+  it("takes the runtimeId from InputSlot.source so accept/regenerate target the narrator", async () => {
     const result = await handler(
-      ctx({
-        inputs: narrativeSlot("The bound narrator's line wins."),
-        completedResults,
-      }),
+      ctx({ inputs: narrativeSlot("The bound narrator's line wins.") }),
     );
 
     const [proposal] = getPendingProposals(result);
@@ -527,23 +508,16 @@ describe("branch-reply seed path — inputs.narrative binding (dual path)", () =
     );
   });
 
-  it("falls back to the completedResults scan when the slot carries no text", async () => {
-    // Slot present but empty (binding resolved to "") — the compat scan still
-    // seeds from the raw completed results during the migration window.
-    const completedResults = new Map([
-      narrativeResult("narrator", "Scanned fallback narrative."),
-    ]);
-
+  it("skips when the bound slot carries no text", async () => {
     const result = await handler(
       ctx({
         inputs: { narrative: { cardinality: "one", value: "", source: {} } },
-        completedResults,
       }),
     );
-
-    const [proposal] = getPendingProposals(result);
-    const turn = proposal.payload.items[0].value;
-    expect(turn.candidates[0].text).toBe("Scanned fallback narrative.");
-    expect(turn.runtimeId).toBe("narrator");
+    expect(result).toEqual({
+      outcome: "skipped",
+      skipReason: "no narrative input bound",
+    });
+    expect(getPendingProposals(result)).toHaveLength(0);
   });
 });

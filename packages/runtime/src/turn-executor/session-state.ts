@@ -3,12 +3,11 @@ import type {
   SetupRuntimeState,
   TurnInput,
 } from "@covel/shared";
-import { getRuntimeSpec } from "@covel/shared";
+import { deriveLegacyClockForSession, isSetupRuntime } from "@covel/shared";
 import { applyBranchReplyAcceptedCandidates } from "@covel/context";
 import type { CoreMemoryBlockView } from "@covel/context";
 import type { TurnMessageRecord } from "@covel/store";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
-import { isPreGamePriority } from "../schedule/scheduler.js";
 import {
   runPreCompactionHook,
   runPostCompactionHook,
@@ -156,10 +155,13 @@ export async function loadTurnSessionState(args: {
     const session = await deps.store.getSession(input.sessionId);
     if (session) {
       sessionStatus = session.status;
-      preGameCompleted = session.preGameCompleted ?? [];
       phase = session.phase;
       completedPlayerTurns = session.completedPlayerTurns ?? 0;
       setupRuntimes = session.setupRuntimes ?? {};
+      // The kernel no longer writes `preGameCompleted` — derive it from the
+      // setup mirror so the late-setup upstream fallback (turn-runtime-execution)
+      // and initialDoneSetup see the current done-set, not a frozen column.
+      preGameCompleted = deriveLegacyClockForSession(session).preGameCompleted;
     }
 
     const charRecords = await deps.store.listCharacters(input.sessionId);
@@ -248,9 +250,7 @@ export function getPreGameRuntimeState(
   readonly preGameRuntimes: readonly RuntimeManifest[];
   readonly isPreGamePending: boolean;
 } {
-  const preGameRuntimes = activeRuntimes.filter((rt) =>
-    isPreGamePriority(getRuntimeSpec(rt).legacyOrder),
-  );
+  const preGameRuntimes = activeRuntimes.filter(isSetupRuntime);
   const isPreGamePending =
     phase !== undefined
       ? phase === "setup"

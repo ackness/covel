@@ -10,9 +10,6 @@ pluginType: plugin
 runtimeType: function
 resultFormat: envelope-v1
 outputKind: system
-priority: 700
-# Dual-declared (compat period): `stage` is the new authority; `priority`
-# stays as `legacyOrder` until Step 6.
 stage: post-turn
 handler: ./handler.js
 trigger:

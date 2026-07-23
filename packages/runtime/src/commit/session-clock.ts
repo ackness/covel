@@ -16,17 +16,14 @@
  *     `setupRuntimes` and, when that resolves the last one, the band flips
  *     `setup → playing`.
  *
- * The legacy `turnCount` / `preGameCompleted` fields are re-derived from the
- * resulting clock via the shared formula and written in the same patch.
+ * The legacy `turnCount` / `preGameCompleted` columns are NO LONGER written —
+ * they are derived at read time from this clock (see
+ * `deriveLegacyClockForSession`). The columns stay frozen at their last written
+ * value for old-kernel / rollback reads only.
  */
 
 import type { StoreTransaction } from "@covel/store";
-import type {
-  ExecutionContext,
-  SetupRuntimeState,
-  SessionClock,
-} from "@covel/shared";
-import { deriveLegacyClockFields } from "@covel/shared";
+import type { ExecutionContext, SetupRuntimeState } from "@covel/shared";
 
 export interface SetupCompletionDelta {
   readonly newlyDone: Readonly<Record<string, SetupRuntimeState>>;
@@ -95,15 +92,10 @@ export async function applySessionClockTx(
       ? "playing"
       : currentPhase;
 
-  const clock: SessionClock = { phase, completedPlayerTurns, setupRuntimes };
-  const legacy = deriveLegacyClockFields(clock);
-
   await tx.updateSession(sessionId, {
     phase,
     completedPlayerTurns,
     setupRuntimes,
-    turnCount: legacy.turnCount,
-    preGameCompleted: legacy.preGameCompleted,
     updatedAt: update.now,
   });
 }

@@ -174,9 +174,9 @@ export async function runEventChain({
 
     // Event subscribers have no dependency-edge mechanism between them (and no
     // stage — event runtimes are stage-less), so name is the stable tie-break.
-    // Replaces the old `legacyOrder ?? 500` priority sort. Bundled plugins have
-    // a single subscriber per topic, so no fan-out batch ever contains two
-    // runtimes whose relative order is observable.
+    // Replaces the old numeric-priority sort. Bundled plugins have a single
+    // subscriber per topic, so no fan-out batch ever contains two runtimes whose
+    // relative order is observable.
     const ordered = [...nextBatch].sort((a, b) => a.name.localeCompare(b.name));
 
     const currentDepthEvents = new Map(emittedEvents);

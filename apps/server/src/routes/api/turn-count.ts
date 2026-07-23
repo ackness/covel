@@ -1,7 +1,6 @@
 import type { RuntimeManifest } from "@covel/shared";
-import { getRuntimeSpec, mirrorSetupCompleted } from "@covel/shared";
+import { isSetupRuntime, mirrorSetupCompleted } from "@covel/shared";
 import type { DataStore, SessionRecord, TurnResultRecord } from "@covel/store";
-import { isPreGamePriority } from "@covel/runtime";
 
 /**
  * Whether the session is still in the setup (Pre-Game) band.
@@ -23,9 +22,7 @@ export function isPreGamePending(
   if (session.phase !== undefined) return session.phase === "setup";
   const done = session.preGameCompleted ?? [];
   return activeRuntimes.some(
-    (runtime) =>
-      isPreGamePriority(getRuntimeSpec(runtime).legacyOrder) &&
-      !done.includes(runtime.name),
+    (runtime) => isSetupRuntime(runtime) && !done.includes(runtime.name),
   );
 }
 
@@ -80,7 +77,7 @@ export async function hasCompletedMainLoopTurnBefore(args: {
   const { store, sessionId, activeRuntimes, preGameCompleted } = args;
   const preGameRuntimeIds = new Set<string>(preGameCompleted ?? []);
   for (const runtime of activeRuntimes) {
-    if (isPreGamePriority(getRuntimeSpec(runtime).legacyOrder)) {
+    if (isSetupRuntime(runtime)) {
       preGameRuntimeIds.add(runtime.name);
     }
   }
@@ -136,9 +133,7 @@ export async function ensureSessionClockBackfilled(args: {
   let completedPlayerTurns: number;
   if (legacyTurnCount === 0) {
     const setupPending = activeRuntimes.some(
-      (rt) =>
-        isPreGamePriority(getRuntimeSpec(rt).legacyOrder) &&
-        !preGameCompleted.includes(rt.name),
+      (rt) => isSetupRuntime(rt) && !preGameCompleted.includes(rt.name),
     );
     phase = setupPending ? "setup" : "playing";
     completedPlayerTurns = 0;

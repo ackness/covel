@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
 import type { SetupRuntimeState } from "@covel/shared";
+import { deriveLegacyClockForSession } from "@covel/shared";
 import { setupRuntimeControlRoutes } from "../../src/routes/api/setup-runtime-control.js";
 
 const BLOCKED: SetupRuntimeState = {
@@ -110,10 +111,11 @@ describe("POST /setup/:runtimeId/waive", () => {
     expect(res.status).toBe(200);
     const json = (await res.json()) as { state: SetupRuntimeState };
     expect(json.state).toMatchObject({ state: "done", resolution: "waived" });
-    const mirror = (await store.getSession("s"))!.setupRuntimes!["plug/setup"];
+    const session = (await store.getSession("s"))!;
+    const mirror = session.setupRuntimes!["plug/setup"];
     expect(mirror.state).toBe("done");
-    // The waived runtime enters the legacy preGameCompleted set (gate satisfied).
-    expect((await store.getSession("s"))!.preGameCompleted).toContain(
+    // The waived runtime enters the derived preGameCompleted set (gate satisfied).
+    expect(deriveLegacyClockForSession(session).preGameCompleted).toContain(
       "plug/setup",
     );
   });

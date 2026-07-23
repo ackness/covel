@@ -8,6 +8,7 @@ import type {
   LLMToolDefinition,
 } from "@covel/runtime";
 import type { LLMMessage } from "@covel/shared";
+import { deriveLegacyClockForSession } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";
@@ -371,6 +372,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     expect(promptText?.value).toContain("神代澪");
 
     const finalSession = await store.getSession(sessionId);
-    expect(finalSession?.turnCount).toBe(3);
+    // Legacy turnCount is derived from the clock (no longer a written column).
+    expect(deriveLegacyClockForSession(finalSession!).turnCount).toBe(3);
   });
 });

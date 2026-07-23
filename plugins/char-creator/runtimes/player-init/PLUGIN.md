@@ -4,9 +4,6 @@ description:
   zh: 开局引导你填写主角信息，并把主角加入故事。
   en: Guides you through creating your hero at the start and brings them into the story.
 pluginType: core-plugin
-priority: 50
-# Dual-declared (compat period): `stage` is the new authority; `priority`
-# stays as `legacyOrder` until Step 6.
 stage: setup
 outputKind: system
 model: plugin
@@ -21,26 +18,15 @@ tags:
 guard: ./guard.js
 trigger:
   type: auto
-upstreamRequired:
-  # Pre-Game band: without a successful pregame run there is no world
-  # summary to seed the opening form on. Skip rather than ask the LLM
-  # to invent a form without context. world-init/schema-gen (priority 40)
-  # is also a hard upstream — its set-world-schema tool populates
-  # `plugin_data.schema`, which this runtime's prompt reads as
-  # `{{ world.schema }}` via SessionContextSnapshot (audit P0-2).
+# Turn-scoped needs order player-init AFTER pregame and world-init/schema-gen in
+# the same setup pass (the DAG edge) and gate it same-turn (the upstream gate):
+# without a successful pregame there is no world summary to seed the opening form
+# on, and schema-gen's set-world-schema tool populates `plugin_data.schema`, read
+# here as `{{ world.schema }}`. A late-enabled setup plugin reuses the done-set
+# fallback, so the gate is satisfied cross-execution too.
+needs:
   - pregame
   - world-init/schema-gen
-# New `needs` supersedes `upstreamRequired` (both kept during the compat
-# period). `scope: session` gates on the persistent snapshot frozen at
-# execution start: setup upstreams committed by an earlier execution
-# satisfy the gate cross-execution (01 §3.2 frozen-snapshot semantics),
-# which is exactly what player-init requires — pregame/schema-gen commit
-# in turn 0, player-init reads them in the next execution.
-needs:
-  - runtime: pregame
-    scope: session
-  - runtime: world-init/schema-gen
-    scope: session
 input:
   inject:
     # Pre-Game band: narrator is NOT scheduled in turn 0, so we inject

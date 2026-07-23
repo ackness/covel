@@ -124,8 +124,6 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
     pluginId: string;
     /** Named stage; absent for event/manual/UI-only runtimes. */
     stage?: Stage;
-    /** Kept until Step 6; `stage` supersedes it as the readable order axis. */
-    priority: number | undefined;
   }) => Promise<void>;
 
   /**

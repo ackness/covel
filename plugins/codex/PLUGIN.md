@@ -10,9 +10,6 @@ pluginType: plugin
 # Narrator-downstream layer (see guide for the rationale). Every
 # plugin in this layer shares priority 600 so priority-based fallback
 # scheduling still runs them in parallel.
-priority: 600
-# Dual-declared (compat period): `stage` is the new authority; `priority`
-# stays as `legacyOrder` until Step 6.
 stage: post-turn
 outputKind: system
 model: plugin
@@ -30,11 +27,7 @@ trigger:
 # capability (narrative-engine → narrator in traditional, chat-mode-narrator
 # in dialogue) instead of naming one; the inject lists both known engines and
 # the absent one resolves to nothing.
-upstreamRequired:
-  - capability: narrative-engine
-# New `needs` supersedes `upstreamRequired` (both kept during the compat
-# period; collapses in Step 6). Same strength: gate on the active
-# narrative engine's success, discovered by capability.
+# Gate on the active narrative engine's success, discovered by capability.
 needs:
   - capability: narrative-engine
 input:

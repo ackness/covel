@@ -41,9 +41,12 @@ function editDistance(a: string, b: string): number {
 }
 
 export function validateRuntimeManifestSemantics(
-  // `capabilities` is widened to readonly so both the zod input shape
-  // (mutable) and the parsed RuntimeManifest (readonly) are accepted.
-  manifest: Pick<RuntimeManifestInput, "name" | "priority" | "trigger"> & {
+  // `capabilities` / `trigger.type` are widened so both the zod input shape
+  // (mutable, narrowed trigger enum) and the parsed RuntimeManifest (readonly,
+  // wider `TriggerType` that still carries the reserved values for normalize's
+  // defensive path) are accepted.
+  manifest: Pick<RuntimeManifestInput, "name" | "priority"> & {
+    readonly trigger?: { readonly type?: string };
     readonly capabilities?: readonly string[];
   },
 ): readonly RuntimeManifestSemanticDiagnostic[] {

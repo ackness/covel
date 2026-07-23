@@ -336,31 +336,34 @@ export async function executeOneRuntime(
       }
     }
 
-    // ── Upstream gate (manifest.upstreamRequired) ─────────────────
-    // Must run before loadRuntime so a failing upstream short-circuits
-    // the whole pipeline: no prompt template read, no guard, no LLM call,
-    // no runtime.started event. Emits a single runtime.completed{skipped}
-    // so the frontend shows the runtime as skipped rather than hanging.
-    const required = manifest.upstreamRequired ?? [];
+    // ── Upstream gate (turn-scoped `deps.needs`) ─────────────────
+    // Reads the IR `deps.needs` (the loader aliases `upstreamRequired` into it,
+    // so third-party `upstreamRequired` still gates). Only turn-scoped entries
+    // gate here — `needs(scope: session)` gate against the frozen snapshot,
+    // handled by the setup pipeline, not this same-turn gate. Runs before
+    // loadRuntime so a failing upstream short-circuits the whole pipeline (no
+    // prompt read, no guard, no LLM call, no runtime.started event) and emits a
+    // single runtime.completed{skipped} so the frontend shows it as skipped.
+    const required = getRuntimeSpec(manifest).deps.needs.filter(
+      (n) => typeof n === "string" || n.scope !== "session",
+    );
     if (required.length > 0) {
-      // Two upstream-entry shapes (see UpstreamRequirement):
-      //  • string        — that exact runtime must have produced a successful
-      //                     result. An absent (disabled) upstream stays a skip,
-      //                     never treated as success.
-      //  • {capability}   — at least one in-scope runtime providing that
-      //                     capability must have succeeded. Lets a guidance
-      //                     plugin depend on "the active narrative engine"
-      //                     without naming narrator / chat-mode-narrator; the
-      //                     gate resolves whichever engine the current mode
-      //                     loaded. Zero in-scope providers ⇒ unsatisfied (a
-      //                     guidance runtime with no narrative engine to act on
-      //                     should skip, not run blind).
+      // Two entry shapes:
+      //  • runtime (string / {runtime}) — that exact runtime must have produced
+      //    a successful result this turn (or be done from an earlier setup
+      //    execution, via the preGameCompleted fallback). An absent (disabled)
+      //    upstream stays a skip, never treated as success.
+      //  • {capability} — at least one in-scope runtime providing that
+      //    capability must have succeeded. Lets a guidance plugin depend on "the
+      //    active narrative engine" without naming narrator / chat-mode-narrator;
+      //    zero in-scope providers ⇒ unsatisfied (skip, not run blind).
       const missing: string[] = [];
       for (const entry of required) {
-        if (typeof entry === "string") {
-          const up = completedResults.get(entry);
-          if (!up && sessionMeta?.preGameCompleted?.includes(entry)) continue;
-          if (!isRequiredUpstreamSatisfied(up)) missing.push(entry);
+        if (typeof entry === "string" || "runtime" in entry) {
+          const name = typeof entry === "string" ? entry : entry.runtime;
+          const up = completedResults.get(name);
+          if (!up && sessionMeta?.preGameCompleted?.includes(name)) continue;
+          if (!isRequiredUpstreamSatisfied(up)) missing.push(name);
           continue;
         }
         const providers = activeRuntimes
@@ -608,7 +611,6 @@ export async function executeOneRuntime(
         manifest,
         input,
         loaded,
-        completedResults,
         deps,
         hookPipeline,
         triggerEvent,
@@ -629,7 +631,6 @@ export async function executeOneRuntime(
       manifest,
       input,
       loaded,
-      completedResults,
       deps,
       hookPipeline,
       triggerEvent,

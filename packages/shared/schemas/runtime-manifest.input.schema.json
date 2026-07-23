@@ -1381,14 +1381,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": [
-            "auto",
-            "manual",
-            "scheduled",
-            "conditional",
-            "event",
-            "error-retry"
-          ]
+          "enum": ["auto", "manual", "scheduled", "event"]
         },
         "interval": {
           "type": "integer",

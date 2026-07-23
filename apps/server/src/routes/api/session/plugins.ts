@@ -357,14 +357,12 @@ export function buildSnapshotPluginList(
   name: string;
   isActive: boolean;
   stage?: Stage;
-  priority: number;
 }> {
   const pluginList: Array<{
     id: string;
     name: string;
     isActive: boolean;
     stage?: Stage;
-    priority: number;
   }> = [];
   for (const [, entry] of pluginRegistry.getAll()) {
     const manifests =
@@ -377,7 +375,6 @@ export function buildSnapshotPluginList(
         typeof entry.summary.name === "string" ? entry.summary.name : entry.id,
       isActive: activeIds.has(entry.id),
       ...(stage !== undefined ? { stage } : {}),
-      priority: primary?.priority ?? 500,
     });
   }
   return pluginList;

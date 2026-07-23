@@ -1,17 +1,16 @@
-import type { RuntimeManifest, SetupRuntimeState } from "@covel/shared";
+import type { RuntimeManifest, SetupRuntimeState, Stage } from "@covel/shared";
 import {
   getRuntimeSpec,
+  isMainLoopRuntime,
   isSetupDoneForVersion,
   isSetupRuntime,
+  STAGE_ORDER,
 } from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
-import { scheduleByDag } from "../schedule/dag-scheduler.js";
 import {
-  isMainLoopPriority,
-  isPreGamePriority,
-  NARRATOR_PRIORITY,
-  scheduleByPriority,
-} from "../schedule/scheduler.js";
+  deriveConservativeSetupEdges,
+  scheduleByDag,
+} from "../schedule/dag-scheduler.js";
 import { shouldTrigger } from "../trigger/trigger.js";
 import type { ScheduledGroup, TriggerContext } from "../types.js";
 
@@ -127,33 +126,63 @@ export function scheduleTriggeredRuntimes(args: {
   const { manualTarget, triggered, isPreGamePending } = args;
 
   if (manualTarget) {
-    return {
-      groups: [
-        {
-          priority:
-            getRuntimeSpec(manualTarget).legacyOrder ?? NARRATOR_PRIORITY,
-          runtimes: [manualTarget],
-        },
-      ],
-      cyclic: [],
-    };
+    return { groups: [{ runtimes: [manualTarget] }], cyclic: [] };
   }
 
+  // Setup band (`phase: setup`): the `stage === "setup"` runtimes, ordered by
+  // their declared edges plus the conservative legacy-order chain that keeps
+  // pregame → schema-gen serial (see deriveConservativeSetupEdges).
   if (isPreGamePending) {
-    const preGameTriggered = triggered.filter((rt) =>
-      isPreGamePriority(getRuntimeSpec(rt).legacyOrder),
-    );
-    return { groups: scheduleByPriority(preGameTriggered, 0), cyclic: [] };
+    const setup = triggered.filter(isSetupRuntime);
+    return runDag(setup, deriveConservativeSetupEdges(setup));
   }
 
-  const mainLoop = triggered.filter((rt) =>
-    isMainLoopPriority(getRuntimeSpec(rt).legacyOrder),
-  );
-  const dag = scheduleByDag(mainLoop);
+  // Main loop: run each stage (pre-turn → narrative → post-turn → audit) as an
+  // independent DAG, concatenating the level-groups in stage order. The executor
+  // runs groups sequentially, so ordering the groups by stage IS the strict
+  // barrier — a later stage never starts until the earlier one drains. Within a
+  // stage, the DAG parallelizes independent branches (name breaks ties). A
+  // cross-stage `needs` (e.g. post-turn → narrative-engine) resolves out of the
+  // per-stage DAG's scope and is satisfied by the barrier + the upstream gate.
+  const mainLoop = triggered.filter(isMainLoopRuntime);
+  return scheduleMainLoopByStage(mainLoop);
+}
+
+const MAIN_LOOP_STAGES: readonly Stage[] = STAGE_ORDER.filter(
+  (s) => s !== "setup",
+);
+
+function scheduleMainLoopByStage(
+  runtimes: readonly RuntimeManifest[],
+): ScheduleResult {
+  const byStage = new Map<Stage, RuntimeManifest[]>();
+  for (const rt of runtimes) {
+    const stage = getRuntimeSpec(rt).stage;
+    if (stage === undefined) continue;
+    (byStage.get(stage) ?? byStage.set(stage, []).get(stage)!).push(rt);
+  }
+
+  const groups: ScheduledGroup[] = [];
+  const cyclic: RuntimeManifest[] = [];
+  for (const stage of MAIN_LOOP_STAGES) {
+    const stageRuntimes = byStage.get(stage);
+    if (!stageRuntimes || stageRuntimes.length === 0) continue;
+    const result = runDag(stageRuntimes);
+    groups.push(...result.groups);
+    cyclic.push(...result.cyclic);
+  }
+  return { groups, cyclic };
+}
+
+function runDag(
+  runtimes: readonly RuntimeManifest[],
+  extraDeps?: ReadonlyMap<string, readonly string[]>,
+): ScheduleResult {
+  const dag = scheduleByDag(runtimes, extraDeps);
   if (dag.error) {
-    // Deliberate change: no fall-back to priority ordering. Disable the SCC
-    // (and its downstream) — the executor skips them `dependency-cycle` with
-    // the full path diagnostic — and run the acyclic remainder as scheduled.
+    // No fall-back to a plain sort: disable the SCC (and its downstream) — the
+    // executor skips them `dependency-cycle` with the full path diagnostic —
+    // and run the acyclic remainder as scheduled.
     console.warn(`[turn-executor] DAG scheduler: ${dag.error}`);
   }
   return { groups: dag.groups, cyclic: dag.cyclic ?? [] };

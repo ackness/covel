@@ -45,7 +45,6 @@ export interface SessionPluginInfo {
   error?: string;
   /** Named stage of the plugin's primary runtime; absent for event/manual/UI-only. */
   stage?: Stage;
-  priority?: number;
   runtimeType?: string;
   model?: string;
   /** How the framework treats this plugin's output in the UI ('story' | 'plugin' | 'system'). */

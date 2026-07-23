@@ -14,6 +14,7 @@ import type {
   SnapshotTraceEvent,
   TimeCursor,
 } from "@covel/shared";
+import { deriveLegacyClockForSession } from "@covel/shared";
 
 /**
  * Restore windows: the snapshot ships the most-recent slice, not the whole
@@ -170,7 +171,7 @@ export async function buildSessionSnapshot(
     session: {
       id: session.id,
       worldId: session.worldId,
-      turnCount: session.turnCount,
+      turnCount: deriveLegacyClockForSession(session).turnCount,
       locale: session.locale,
     },
     messages,

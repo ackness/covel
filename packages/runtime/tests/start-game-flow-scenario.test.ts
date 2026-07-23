@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import { deriveLegacyClockForSession } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
 import type { LoadedRuntime } from "@covel/plugin-loader";
@@ -206,8 +207,9 @@ describe("start-game flow scenario at runtime level", () => {
     expect(playerMessages).toEqual([]);
 
     const session = await store.getSession("sess-start-flow");
-    expect(session?.turnCount).toBe(0);
-    expect(session?.preGameCompleted?.sort()).toEqual(
+    const legacy = deriveLegacyClockForSession(session!);
+    expect(legacy.turnCount).toBe(0);
+    expect(legacy.preGameCompleted.sort()).toEqual(
       ["pregame", "world-init/schema-gen"].sort(),
     );
   });
@@ -257,8 +259,9 @@ describe("start-game flow scenario at runtime level", () => {
     // Setup completed → the finalize session-clock write flipped the band to
     // playing (turnCount 1) and recorded every Pre-Game runtime.
     const session = await store.getSession("sess-start-flow");
-    expect(session?.turnCount).toBe(1);
-    expect(session?.preGameCompleted?.sort()).toEqual(
+    const legacy = deriveLegacyClockForSession(session!);
+    expect(legacy.turnCount).toBe(1);
+    expect(legacy.preGameCompleted.sort()).toEqual(
       ["char-creator/player-init", "pregame", "world-init/schema-gen"].sort(),
     );
 

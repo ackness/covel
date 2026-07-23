@@ -66,13 +66,18 @@ const hasUniqueItems = <T>(items: readonly T[]): boolean =>
 
 // ── Trigger ──────────────────────────────────────────────────────
 
+/**
+ * Production trigger types — the reserved `conditional` / `error-retry` (which
+ * never fire; no condition engine, the scheduler never surfaces upstream
+ * failures) are now REJECTED at load, not just disabled downstream. A
+ * third-party manifest declaring one was already non-functional (its runtime
+ * never triggered); failing the load surfaces that instead of silently dropping.
+ */
 export const triggerTypeSchema = z.enum([
   "auto",
   "manual",
   "scheduled",
-  "conditional",
   "event",
-  "error-retry",
 ]);
 
 /** Trigger fields shared by the compat and authoring trigger schemas. */
@@ -91,20 +96,14 @@ export const triggerConfigSchema = z
   .strict();
 
 /**
- * Authoring target: reserved trigger types (`conditional` / `error-retry`,
- * which never fire in production) are removed. Shares `triggerConfigShape` with
- * the compat schema so the two never drift.
+ * Authoring schema — identical to the compat schema now that reserved triggers
+ * are rejected on both. Kept as distinct exports so the authoring / compat call
+ * sites stay explicit (and can diverge again if the authoring surface tightens
+ * further, e.g. dropping `priority` / `upstreamRequired`).
  */
-export const authoringTriggerTypeSchema = z.enum([
-  "auto",
-  "manual",
-  "scheduled",
-  "event",
-]);
+export const authoringTriggerTypeSchema = triggerTypeSchema;
 
-export const authoringTriggerConfigSchema = z
-  .object({ type: authoringTriggerTypeSchema, ...triggerConfigShape })
-  .strict();
+export const authoringTriggerConfigSchema = triggerConfigSchema;
 
 // ── Input ────────────────────────────────────────────────────────
 

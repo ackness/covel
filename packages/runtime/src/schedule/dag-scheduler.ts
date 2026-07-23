@@ -1,34 +1,39 @@
 /**
- * DAG scheduler — topological-level scheduling for the main-loop band.
+ * DAG scheduler — topological-level scheduling within a single stage.
  *
- * Priority scheduling treats every same-priority bucket as parallel and
- * everything else as strictly serial by number, which forces independent
+ * Priority scheduling treated every same-priority bucket as parallel and
+ * everything else as strictly serial by number, which forced independent
  * branches to wait on each other (e.g. `codex` blocking on
- * `npc-graph/extractor` just because 620 < 650, even though they
- * both only depend on `narrator`).
+ * `npc-graph/extractor` just because 620 < 650, even though they both only
+ * depend on `narrator`).
  *
- * The DAG scheduler derives dependencies from each manifest's declared
- * injects (`input.inject[].from` where `kind === 'runtime'`) and explicit
- * `upstreamRequired[]`, performs a Kahn-style topological sort, and returns
- * "levels" — each level is a set of runtimes whose dependencies have all
- * completed and may therefore run concurrently. Within a level, runtimes are
- * ordered by name so traces stay readable and ties break deterministically.
- * A level runs via `executeParallel` (Promise.allSettled), so the intra-level
- * order is cosmetic — it does not drive the committed narrative order, which
- * follows real completion time (`createdAt`).
+ * The DAG scheduler derives ordering edges from the normalized IR — turn-scoped
+ * `deps.needs`, `deps.after`, typed `inputs` bindings — plus the legacy
+ * `input.inject[].from` (kind `runtime`) injects. `upstreamRequired` reaches it
+ * through the `deps.needs` alias the loader adds, so third-party
+ * `upstreamRequired` still orders correctly. It performs a Kahn-style
+ * topological sort and returns "levels": each level is a set of runtimes whose
+ * dependencies have all completed and may therefore run concurrently. Within a
+ * level, runtimes are ordered by name so traces stay readable and ties break
+ * deterministically. A level runs via `executeParallel` (Promise.allSettled),
+ * so the intra-level order is cosmetic — it does not drive the committed
+ * narrative order, which follows real completion time (`createdAt`).
  *
- * Dependencies that point to runtimes outside `activeRuntimes` are ignored
- * (the scheduler only knows about runtimes in scope). Cycles are reported via
- * the returned `error` field; callers should fall back to `scheduleByPriority`
- * when a cycle is present.
+ * `needs(scope: session)` entries are NOT execution edges: they gate against the
+ * frozen persistent snapshot, evaluated separately from the intra-execution DAG.
  *
- * Pre-Game band (priority ≤ 99) intentionally keeps strict priority ordering
- * — Pre-Game plugins have implicit write-ordering (pregame → player-init →
- * world-init) that is not captured in `input.inject`. Callers should only
- * route the main-loop band through this scheduler.
+ * Dependencies that point outside `runtimes` are ignored (the scheduler only
+ * knows about runtimes in scope). Cycles are reported via `error`; callers
+ * disable the strongly-connected component (and its downstream) rather than
+ * running it in an arbitrary order.
+ *
+ * Setup ordering: setup runtimes with implicit legacy write-ordering but no
+ * declared edge (pregame → schema-gen) get a conservative `after` chain derived
+ * from their original priority — see {@link deriveConservativeSetupEdges}. Pass
+ * those as `extraDeps` so they enter the same Kahn sort.
  */
 
-import type { RuntimeManifest } from "@covel/shared";
+import type { DependencyRef, RuntimeManifest } from "@covel/shared";
 import { getRuntimeSpec } from "@covel/shared";
 import type { ScheduledGroup } from "../types.js";
 
@@ -44,32 +49,54 @@ export interface DagScheduleResult {
   readonly cyclic?: readonly RuntimeManifest[];
 }
 
+/**
+ * Resolve one `deps.needs` / `deps.after` entry into in-scope dependency names.
+ * `session`-scoped `needs` entries are skipped (they gate against the frozen
+ * snapshot, not the execution DAG); `after` entries carry no scope and always
+ * order.
+ */
+function refToNames(
+  ref: DependencyRef,
+  kind: "needs" | "after",
+  capabilityProviders: ReadonlyMap<string, readonly string[]>,
+): readonly string[] {
+  if (typeof ref === "string") return ref.length > 0 ? [ref] : [];
+  if ("runtime" in ref) {
+    if (kind === "needs" && ref.scope === "session") return [];
+    return ref.runtime.length > 0 ? [ref.runtime] : [];
+  }
+  if (kind === "needs" && ref.scope === "session") return [];
+  return capabilityProviders.get(ref.capability) ?? [];
+}
+
+/**
+ * All ordering-dependency names a runtime declares, from the IR (`deps.needs`
+ * turn-scoped + `deps.after` + `inputs` bindings) plus legacy runtime injects.
+ * Not yet filtered to the in-scope set.
+ */
 function collectDependencies(
   manifest: RuntimeManifest,
   capabilityProviders: ReadonlyMap<string, readonly string[]>,
 ): readonly string[] {
   const deps = new Set<string>();
-  const injects = manifest.input?.inject ?? [];
-  for (const decl of injects) {
-    if (decl.kind === "runtime") {
-      if (decl.from.length > 0) deps.add(decl.from);
+  const spec = getRuntimeSpec(manifest);
+
+  for (const decl of manifest.input?.inject ?? []) {
+    if (decl.kind === "runtime" && decl.from.length > 0) deps.add(decl.from);
+  }
+  for (const need of spec.deps.needs) {
+    for (const name of refToNames(need, "needs", capabilityProviders)) {
+      deps.add(name);
     }
   }
-  for (const up of manifest.upstreamRequired ?? []) {
-    if (typeof up === "string") {
-      if (up.length > 0) deps.add(up);
-    } else {
-      // Capability upstream — depend on every in-scope provider of it so the
-      // level ordering waits for whichever provider the current mode loaded.
-      for (const name of capabilityProviders.get(up.capability) ?? []) {
-        deps.add(name);
-      }
+  for (const after of spec.deps.after) {
+    for (const name of refToNames(after, "after", capabilityProviders)) {
+      deps.add(name);
     }
   }
-  // `inputs` bindings imply ordering edges too: `required: true` → needs(turn),
-  // `false` → after — both need the producer scheduled first. Runtime/capability
-  // resolution mirrors upstreamRequired above.
-  for (const binding of Object.values(getRuntimeSpec(manifest).bindings)) {
+  // Typed `inputs` bindings imply the same ordering edge: `required: true` →
+  // needs(turn), `false` → after — both need the producer scheduled first.
+  for (const binding of Object.values(spec.bindings)) {
     if ("runtime" in binding.from) {
       if (binding.from.runtime.length > 0) deps.add(binding.from.runtime);
     } else {
@@ -82,40 +109,89 @@ function collectDependencies(
   return [...deps];
 }
 
-/**
- * Topologically sort `runtimes` into levels. Returns one group per level;
- * each group carries its level index in the synthetic `priority` field
- * (telemetry only — nothing schedules on it; kept as a number until Step 6
- * removes the field).
- */
-export function scheduleByDag(
+function buildCapabilityProviders(
   runtimes: readonly RuntimeManifest[],
-): DagScheduleResult {
-  if (runtimes.length === 0) return { groups: [] };
-
-  // Build the in-scope set first so out-of-scope deps are ignored cleanly.
-  const inScope = new Set(runtimes.map((r) => r.name));
-  const inDegree = new Map<string, number>();
-  const dependents = new Map<string, string[]>();
-  const byName = new Map<string, RuntimeManifest>();
-
-  // capability → in-scope runtime names that declare it, for resolving
-  // `{ capability }` upstream entries into concrete dependency edges.
+): Map<string, string[]> {
   const capabilityProviders = new Map<string, string[]>();
   for (const rt of runtimes) {
-    byName.set(rt.name, rt);
-    inDegree.set(rt.name, 0);
     for (const cap of rt.capabilities ?? []) {
       const list = capabilityProviders.get(cap) ?? [];
       list.push(rt.name);
       capabilityProviders.set(cap, list);
     }
   }
+  return capabilityProviders;
+}
+
+/**
+ * Conservative `after` edges preserving the legacy priority order for setup
+ * runtimes that carry no declared dependency between them.
+ *
+ * The old priority scheduler ran the setup band strictly serially by number
+ * (pregame 10 → schema-gen 40 → player-init 50). The DAG only knows declared
+ * edges, and pregame → schema-gen has none — they would land in the same
+ * parallel level. To keep the switch byte-identical, sort the setup runtimes by
+ * their original `priority` (name breaks ties; priority-less runtimes sort
+ * last) and chain each adjacent pair `prev → cur` with an `after` edge — but
+ * ONLY when `cur` declares no dependency of its own (an authored edge already
+ * orders it; a legacy chain edge must not over-constrain it). Provenance:
+ * `legacy-order-edge`.
+ */
+export function deriveConservativeSetupEdges(
+  setupRuntimes: readonly RuntimeManifest[],
+): Map<string, readonly string[]> {
+  const extra = new Map<string, readonly string[]>();
+  if (setupRuntimes.length < 2) return extra;
+
+  const capabilityProviders = buildCapabilityProviders(setupRuntimes);
+  const inScope = new Set(setupRuntimes.map((r) => r.name));
+  const priorityOf = (m: RuntimeManifest): number =>
+    m.priority ?? Number.POSITIVE_INFINITY;
+
+  const sorted = [...setupRuntimes].sort(
+    (a, b) => priorityOf(a) - priorityOf(b) || a.name.localeCompare(b.name),
+  );
+
+  for (let i = 1; i < sorted.length; i++) {
+    const cur = sorted[i]!;
+    const declared = collectDependencies(cur, capabilityProviders).some((d) =>
+      inScope.has(d),
+    );
+    if (declared) continue; // author already ordered it — do not chain
+    extra.set(cur.name, [sorted[i - 1]!.name]);
+  }
+  return extra;
+}
+
+/**
+ * Topologically sort `runtimes` into levels. `extraDeps` maps a runtime name to
+ * additional in-scope dependency names (the conservative setup chain); they are
+ * merged with the runtime's declared dependencies before the Kahn sort.
+ */
+export function scheduleByDag(
+  runtimes: readonly RuntimeManifest[],
+  extraDeps?: ReadonlyMap<string, readonly string[]>,
+): DagScheduleResult {
+  if (runtimes.length === 0) return { groups: [] };
+
+  const inScope = new Set(runtimes.map((r) => r.name));
+  const inDegree = new Map<string, number>();
+  const dependents = new Map<string, string[]>();
+  const byName = new Map<string, RuntimeManifest>();
+  const capabilityProviders = buildCapabilityProviders(runtimes);
 
   for (const rt of runtimes) {
-    const deps = collectDependencies(rt, capabilityProviders);
+    byName.set(rt.name, rt);
+    inDegree.set(rt.name, 0);
+  }
+
+  for (const rt of runtimes) {
+    const deps = new Set(collectDependencies(rt, capabilityProviders));
+    for (const extra of extraDeps?.get(rt.name) ?? []) deps.add(extra);
     for (const dep of deps) {
-      if (!inScope.has(dep)) continue; // out-of-scope — treat as satisfied
+      // A self-edge is left in place: it makes the node unreachable in the Kahn
+      // sort, so it (a plugin authoring mistake) surfaces as a cycle.
+      if (!inScope.has(dep)) continue;
       inDegree.set(rt.name, (inDegree.get(rt.name) ?? 0) + 1);
       const list = dependents.get(dep) ?? [];
       list.push(rt.name);
@@ -152,14 +228,12 @@ export function scheduleByDag(
       };
     }
 
-    // Synthetic telemetry value = level index (no priority read).
-    levels.push({ priority: levels.length, runtimes: ready });
+    levels.push({ runtimes: ready });
 
     for (const rt of ready) {
       inDegree.delete(rt.name);
       for (const down of dependents.get(rt.name) ?? []) {
-        const next = (inDegree.get(down) ?? 0) - 1;
-        inDegree.set(down, next);
+        inDegree.set(down, (inDegree.get(down) ?? 0) - 1);
       }
     }
   }

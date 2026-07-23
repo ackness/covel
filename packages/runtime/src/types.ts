@@ -34,7 +34,12 @@ export interface TriggerContext {
 
 // ── Scheduling ───────────────────────────────────────────────────
 
+/**
+ * One DAG level: a set of runtimes whose dependencies have all completed and
+ * which therefore run concurrently. Intra-level order is cosmetic (a level runs
+ * via `Promise.allSettled`); the committed narrative order follows real
+ * completion time (`createdAt`).
+ */
 export interface ScheduledGroup {
-  readonly priority: number;
   readonly runtimes: readonly RuntimeManifest[];
 }

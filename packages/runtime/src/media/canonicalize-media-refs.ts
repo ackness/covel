@@ -87,9 +87,7 @@ const MEDIA_REF_KEYS: ReadonlySet<string> = new Set([
  * dropped by the transform. Requiring the key set to be a subset of the wire
  * keys closes that false-positive without depending on zod strict semantics.
  */
-function asMediaRefWire(
-  node: Record<string, unknown>,
-): {
+function asMediaRefWire(node: Record<string, unknown>): {
   id: string;
   mime: string;
   size: number;

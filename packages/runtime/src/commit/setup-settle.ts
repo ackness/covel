@@ -22,11 +22,7 @@ import type {
   SetupAttemptState,
   SetupRuntimeState,
 } from "@covel/shared";
-import {
-  deriveLegacyClockFields,
-  isBudgetedAttempt,
-  resolvePendingOrBlocked,
-} from "@covel/shared";
+import { isBudgetedAttempt, resolvePendingOrBlocked } from "@covel/shared";
 
 export type { RanSetupRuntime } from "@covel/shared";
 
@@ -99,18 +95,11 @@ export async function settleSetupRuntimes(args: {
   }
   if (!changed) return;
 
-  // Re-derive the legacy band fields so `preGameCompleted` stays consistent
-  // with the mirror (pending/blocked are excluded from it, so a runtime that
-  // just left `done` — a rolled-back completion — drops out of the legacy set
-  // and gets re-scheduled).
-  const legacy = deriveLegacyClockFields({
-    phase: session.phase ?? "setup",
-    completedPlayerTurns: session.completedPlayerTurns ?? 0,
-    setupRuntimes: mirror,
-  });
+  // The setup mirror is the sole write surface; `preGameCompleted` is derived
+  // from it at read time (a runtime that just left `done` — a rolled-back
+  // completion — drops out of the derived set and gets re-scheduled).
   await store.updateSession(sessionId, {
     setupRuntimes: mirror,
-    preGameCompleted: legacy.preGameCompleted,
     updatedAt: now,
   });
 }

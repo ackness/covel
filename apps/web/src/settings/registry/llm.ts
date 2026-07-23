@@ -86,18 +86,6 @@ export function registerLlmSettings(store: SettingsStoreApi): void {
     label: { "zh-CN": "能力覆盖", "en-US": "Capability overrides" },
   });
 
-  store.register({
-    key: "llm.runtimePriority",
-    schema: z.record(z.string(), z.number()),
-    default: {},
-    group: "llm",
-    widget: "custom",
-    label: {
-      "zh-CN": "Runtime 优先级覆盖",
-      "en-US": "Runtime priority overrides",
-    },
-  });
-
   // Prep-phase runtime bindings. Keyed by worldId; transient — the real
   // session's `runtimeModelOverrides` is authoritative once created.
   store.register({

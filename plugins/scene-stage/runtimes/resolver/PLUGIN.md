@@ -7,7 +7,6 @@ pluginType: plugin
 runtimeType: function
 resultFormat: envelope-v1
 handler: ./handler.js
-priority: 460
 outputKind: system
 capabilities: [scene-stage]
 tags:

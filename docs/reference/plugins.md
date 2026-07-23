@@ -4,33 +4,33 @@
 
 ## 目录
 
-按 **Turn Band**（见 [优先级分带](#优先级分带turn-bands)）分组，点击直达。
+按 **Stage**（见 [调度阶段](#调度阶段stage-bands)）分组，点击直达。
 
-### Pre-Game（priority 0–99）
+### setup 阶段
 
-- [`pregame`](#pregame) — 游戏初始化 function runtime
-- [`char-creator/player-init`](#char-creatorplayer-init) — 玩家建角 agent runtime
-- [`world-init/schema-gen`](#world-initschema-gen) — 世界维度 agent runtime（guard 门控）
+- [`pregame`](#pregame) — 游戏初始化 function runtime（legacy `priority: 10`，见下方 stage 派生说明）
+- [`char-creator/player-init`](#char-creatorplayer-init) — 玩家建角 agent runtime（`stage: setup`）
+- [`world-init/schema-gen`](#world-initschema-gen) — 世界维度 agent runtime（guard 门控，legacy `priority: 40`）
 
-### Narrator-prep（priority 400–450）
+### pre-turn 阶段
 
 - [`npc-graph/rag-retriever`](#npc-graphrag-retriever) — NPC 图谱结构化检索
 - [`scene-cast`](#scene-cast) — 对话模式当前场景演员（function）
-- [`scene-stage/resolver`](#scene-stageresolver) — 场景/昼夜解析（event 触发，消费 `scene.set`，priority 460）
+- [`scene-stage/resolver`](#scene-stageresolver) — 场景/昼夜解析（event 触发，消费 `scene.set`，无 stage）
 
-### Narrator（priority 500）
+### narrative 阶段
 
 - [`narrator`](#narrator) — 主叙事生成器
 - [`chat-mode-narrator`](#chat-mode-narrator) — 对话 / GalGame 模式叙事器（与 narrator 互斥）
 
-### After-Turn / Narrator-downstream（priority 600）
+### post-turn 阶段
 
 - [`codex`](#codex) — 知识图鉴 agent
 - [`guide`](#guide) — 行动引导 agent
 - [`npc-graph/extractor`](#npc-graphextractor) — NPC 关系图抽取 agent
 - [`char-creator/character-tracker`](#char-creatorcharacter-tracker) — NPC 发现与状态跟踪 agent
 - [`scene-prompts`](#scene-prompts) — 对话模式玩家口吻短回复 agent
-- [`scene-stage/background-gen`](#scene-stagebackground-gen) — 场景背景后台增量生成（event 触发，priority 900，`execution: background`）
+- [`scene-stage/background-gen`](#scene-stagebackground-gen) — 场景背景后台增量生成（event 触发，无 stage，`execution: background`）
 
 ### 角色 / 世界 / 分支子系统（manual function，按需触发 / world-data 导入）
 
@@ -46,7 +46,7 @@
 
 ### 参考章节
 
-- [概览表](#概览) · [调度层级说明](#调度层级) · [插件结构规范](#插件结构规范) · [超时与智能重试](#超时与智能重试) · [优先级分带](#优先级分带turn-bands) · [框架–插件隔离规则](#框架插件隔离规则)
+- [概览表](#概览) · [调度层级说明](#调度层级) · [插件结构规范](#插件结构规范) · [超时与智能重试](#超时与智能重试) · [调度阶段](#调度阶段stage-bands) · [框架–插件隔离规则](#框架插件隔离规则)
 
 ### 世界插件推荐字段
 
@@ -70,19 +70,19 @@
 
 ## 调度层级
 
-主循环每一轮的调度图由 **DAG 调度器** 依据每个 runtime 的 `input.inject[].from` 和 `upstreamRequired` 推导 —— 无环依赖的 runtime 自动归入同一层并发执行。下面的 priority 仅作同层内部的稳定排序 tiebreaker，调度的真正依据是依赖声明：
+调度以**命名 stage**（`setup` / `pre-turn` / `narrative` / `post-turn` / `audit`）为一级分组，stage 之间是**严格屏障**——上一 stage 全部 runtime 结束（成功/失败/skip 均计入）才进入下一 stage。同一 stage 内部由 **DAG 调度器** 依据每个 runtime 的 `needs` / `after` / `inputs` 绑定（以及历史遗留的 `input.inject[].from`）推导——无环依赖的 runtime 自动归入同一层并发执行，独立 runtime 之间**同层并行**，`name` 只做并列时的稳定排序 tiebreaker。旧的数字 `priority` 调度器（`scheduleByPriority`）已删除，不再是任何生产路径的调度依据。
 
-`upstreamRequired` 的每一项可以是 **runtime id 字符串**（该 runtime 必须本回合成功，缺席=skip，绝不当作成功），或 **`{ capability: <name> }`**（本回合在场的某个声明该 capability 的 runtime 成功即满足；零个在场提供者=不满足→skip）。capability 形态让一个下游插件按 capability 发现"当前模式的提供者"，无需写死具体插件名 —— 例如 `guide`/`scene-prompts` 用 `{ capability: narrative-engine }` 同时适配 `narrator`（传统模式）与 `chat-mode-narrator`（对话模式）。两个叙事引擎都在 `capabilities` 里声明了 `narrative-engine`。
+`needs` 取代了旧的 `upstreamRequired`：每一项可以是 **runtime id 字符串**（该 runtime 必须本回合成功，缺席=skip，绝不当作成功），或 **`{ capability: <name> }`**（本回合在场的某个声明该 capability 的 runtime 成功即满足；零个在场提供者=不满足→skip）。capability 形态让一个下游插件按 capability 发现"当前模式的提供者"，无需写死具体插件名 —— 例如 `guide`/`scene-prompts` 用 `{ capability: narrative-engine }` 同时适配 `narrator`（传统模式）与 `chat-mode-narrator`（对话模式）。两个叙事引擎都在 `capabilities` 里声明了 `narrative-engine`。
 
-| 层                  | priority | Runtime                                                                      | 说明                                                                                                    |
-| ------------------- | -------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Narrator-prep       | 400      | `npc-graph/rag-retriever`                                                    | narrator 的依赖上游（function runtime，无 LLM）                                                         |
-| Narrator            | 500      | `narrator`                                                                   | 主叙事生成器                                                                                            |
-| Narrator-downstream | 600      | `guide` · `codex` · `npc-graph/extractor` · `char-creator/character-tracker` | 四者都以 `{ capability: narrative-engine }` 依赖当前模式的叙事引擎（H-04），彼此独立 → **同层并行执行** |
+| Stage       | Runtime                                                                      | 说明                                                                                                           |
+| ----------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `pre-turn`  | `npc-graph/rag-retriever` · `scene-cast`                                     | narrator 的依赖上游（function runtime，无 LLM）                                                                |
+| `narrative` | `narrator` · `chat-mode-narrator`                                            | 主叙事生成器（互斥，二选一激活）                                                                               |
+| `post-turn` | `guide` · `codex` · `npc-graph/extractor` · `char-creator/character-tracker` | 四者都以 `{ capability: narrative-engine }` 依赖当前模式的叙事引擎（H-04），彼此独立 → **同 stage 内并行执行** |
 
-Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.ts` 强制）仍走 priority 串行：`pregame(10) → world-init/schema-gen(40) → char-creator/player-init(50)`。Pre-Game 插件之间存在 world context 依赖（player-init 读取 schema-gen 写出的 `world.schema`）；目前在 DAG 里不表达，所以靠 priority 顺序确保 schema 先生成、再让 player-init 读到。
+`setup` stage（会话 `phase === "setup"` 时运行，取代旧的 Pre-Game priority band `0-99`）走：`pregame → world-init/schema-gen → char-creator/player-init`。`char-creator/player-init` 单声明 `stage: setup` + turn-scoped `needs: [pregame, world-init/schema-gen]`（player-init 读取 schema-gen 写出的 `world.schema`，`needs` 既是同一 pass 内的 DAG 边、也是同回合门控）。`pregame` 与 `world-init/schema-gen` 是仅有的两个仍声明 `priority`（10 / 40）的 bundled runtime：loader 禁止 `stage: setup` 与它们所用的 `scheduled interval:1` 触发器并存，因此归一层从这两者的 priority 分带**派生** `stage: setup`；这两个 runtime 之间没有显式依赖边时，归一层还会按原 priority 升序追加一条保守的 `after` 排序边，使 setup 顺序与历史上的串行 `pregame → schema-gen` 保持字节级一致。
 
-**调度重设计双声明期（Step 4）**：可调度 runtime 的 manifest 已开始携带命名的 `stage`（`setup` / `pre-turn` / `narrative` / `post-turn` / `audit`，对应旧 priority 分带 `0-99` / `100-499` / `500` / `501-999` / `1000`），同时用 `needs`（取代 `upstreamRequired`）/ `inputs`（把隐式上游依赖转成有类型的绑定）声明依赖。旧的 `priority` / `upstreamRequired` 字段**在兼容期原样保留**（priority 归一成 `legacyOrder`，仍是事件扇出与同层排序的 tiebreaker），Step 6 才移除。生产调度目前仍读旧字段，`stage` 声明为观测层（golden 归一测试断言"显式 stage = 旧 priority 派生的 stage"）。例外：`pregame` / `world-init/schema-gen` 仍用 `scheduled interval:1 max:1` 的旧 setup 惯用法、不写显式 `stage`（loader 禁止 `stage: setup` 与 `scheduled`/`interval` 并存，其 stage 由归一层从 priority 分带派生）；`event` / `manual` runtime 不设 `stage`。下方概览表的 priority 列即兼容期 `legacyOrder`。
+**兼容面（仅第三方）**：manifest 输入 schema 仍**接受**第三方插件声明的 `priority` / `upstreamRequired`——归一层把 `priority` 折算进 `stage`（缺失 `stage` 时用它派生）、把 `upstreamRequired` 别名为 `needs`。Bundled 插件已全部单声明 `stage` + `needs`（上面两个 setup 例外仅为 loader 约束保留 `priority`），第三方插件迁移前可继续沿用旧字段。`event` / `manual` runtime 不设 `stage`。
 
 **Setup 状态机（插件视角）**：`setup` 阶段（旧 Pre-Game 分带）的每个 runtime，框架按 `(session, runtimeId)` 维护一个解析状态，插件作者需要知道三种落点：
 
@@ -96,31 +96,31 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 
 ## 概览
 
-| ID                             | 类型        | 优先级 | 触发方式                                                                  | 模型 slot | 描述                                                                                           |
-| ------------------------------ | ----------- | ------ | ------------------------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------- |
-| pregame                        | core-plugin | 10     | scheduled（仅首轮）                                                       | —         | 游戏初始化（function runtime）                                                                 |
-| world-init/schema-gen          | core-plugin | 40     | scheduled（仅首轮）                                                       | `plugin`  | 世界维度初始化（guard + agent，Pre-Game 第二步）                                               |
-| char-creator/player-init       | core-plugin | 50     | auto（guard 门控）                                                        | `plugin`  | 玩家角色创建（agent runtime；依赖 schema-gen 写出的 worldSchema）                              |
-| npc-graph/rag-retriever        | plugin      | 400    | scheduled（interval=1，function runtime）                                 | —         | Narrator-prep 层：NPC 图谱结构化检索器，向 narrator 注入相关关系事实                           |
-| scene-cast                     | plugin      | 450    | scheduled（interval=1，function）                                         | —         | Narrator-prep 层：对话模式当前场景演员，注入 `activeCastContext`                               |
-| scene-stage/resolver           | plugin      | 460    | event（topic: `scene.set`）                                               | —         | 场景/昼夜解析，写 `stage/current`；未命中注册表时向 background-gen 发内部信令                  |
-| narrator                       | core-plugin | 500    | auto                                                                      | `story`   | Narrator 层：主叙事生成器                                                                      |
-| chat-mode-narrator             | plugin      | 500    | auto                                                                      | `story`   | Narrator 层：对话 / GalGame 模式叙事器（`conflicts: narrator`，`requires` 场景/角色子系统）    |
-| guide                          | plugin      | 600    | scheduled（interval=1, cooldown=1）                                       | `plugin`  | Narrator-downstream 层：行动引导 + 聊天内建议面                                                |
-| codex                          | plugin      | 600    | auto（每轮，紧跟 narrator 之后）                                          | `plugin`  | Narrator-downstream 层：知识图鉴系统（agent runtime）                                          |
-| npc-graph/extractor            | plugin      | 600    | scheduled（interval=1, cooldown=1）                                       | `plugin`  | Narrator-downstream 层：NPC 关系图抽取器                                                       |
-| char-creator/character-tracker | core-plugin | 600    | scheduled（interval=1, cooldown=1）                                       | `plugin`  | Narrator-downstream 层：NPC 发现 + 角色状态跟踪                                                |
-| scene-prompts                  | plugin      | 600    | scheduled（interval=1, cooldown=1）                                       | `plugin`  | Narrator-downstream 层：对话模式玩家口吻短回复                                                 |
-| character-blueprint            | plugin      | —      | manual（按需 / world-data 导入）                                          | —         | 可复用角色蓝图；`dataSchemas` blueprints/characters 接收世界导入                               |
-| character-presence             | plugin      | —      | manual（按需 / world-data 导入）                                          | —         | 角色头像 / 立绘 / 语音媒体；`dataSchemas` presence/assets                                      |
-| player-identity                | plugin      | —      | manual（按需）                                                            | —         | 玩家人设（`persona-provider`，注入 activePersona）                                             |
-| living-world-rules             | plugin      | —      | manual（按需 / world-data 导入）                                          | —         | 长期世界规则 → `lorebook.upsert` 注入叙事；`dataSchemas` rules                                 |
-| branch-reply                   | plugin      | 700    | auto（每回合播种）+ manual（重生成/采纳）                                 | —         | 回复候选 + `prompt-history-rewriter`（自动播种叙事原文，重生成走 LLM；投影历史折叠已采纳回合） |
-| scene-stage/background-gen     | plugin      | 900    | event（topic: `scene-stage.generate.requested`，`execution: background`） | —         | 后台增量生成缺失的场景背景图（`ctx.images`），产出 `asset.generate`                            |
-| memory                         | core-plugin | —      | UI-only（无 runtime）                                                     | —         | 长期记忆摘要面板 + 通过 `memoryBlocks` 声明默认核心记忆块（剧情/角色关系/场景/玩家状态）       |
-| cost-gate                      | plugin      | —      | hook-only（opt-in，默认禁用）                                             | —         | 跨切面：每会话 token 预算门控（hooks：PostLLMResponse/PreSchedule/TurnStart/SessionEnd）       |
-| director                       | plugin      | —      | hook-only（opt-in，默认禁用）                                             | —         | 跨切面：用 PostContextAssembly 给本局所有 story runtime 统一注入导演前言                       |
-| story-guard                    | plugin      | —      | hook-only（opt-in，默认禁用）                                             | —         | 跨切面：故事文本红线净化（PostLLMResponse）+ 高危工具拦截（PreToolUse）                        |
+| ID                             | 类型        | Stage                               | 触发方式                                                                  | 模型 slot | 描述                                                                                           |
+| ------------------------------ | ----------- | ----------------------------------- | ------------------------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------- |
+| pregame                        | core-plugin | `setup`（legacy priority 10，派生） | scheduled（仅首轮）                                                       | —         | 游戏初始化（function runtime）                                                                 |
+| world-init/schema-gen          | core-plugin | `setup`（legacy priority 40，派生） | scheduled（仅首轮）                                                       | `plugin`  | 世界维度初始化（guard + agent，setup 第二步）                                                  |
+| char-creator/player-init       | core-plugin | `setup`                             | auto（guard 门控）                                                        | `plugin`  | 玩家角色创建（agent runtime；turn-scoped `needs` 依赖 pregame + schema-gen）                   |
+| npc-graph/rag-retriever        | plugin      | `pre-turn`                          | scheduled（interval=1，function runtime）                                 | —         | NPC 图谱结构化检索器，向 narrator 注入相关关系事实                                             |
+| scene-cast                     | plugin      | `pre-turn`                          | scheduled（interval=1，function）                                         | —         | 对话模式当前场景演员，注入 `activeCastContext`                                                 |
+| scene-stage/resolver           | plugin      | 无（event，不设 stage）             | event（topic: `scene.set`）                                               | —         | 场景/昼夜解析，写 `stage/current`；未命中注册表时向 background-gen 发内部信令                  |
+| narrator                       | core-plugin | `narrative`                         | auto                                                                      | `story`   | 主叙事生成器                                                                                   |
+| chat-mode-narrator             | plugin      | `narrative`                         | auto                                                                      | `story`   | 对话 / GalGame 模式叙事器（`conflicts: narrator`，`requires` 场景/角色子系统）                 |
+| guide                          | plugin      | `post-turn`                         | scheduled（interval=1, cooldown=1）                                       | `plugin`  | 行动引导 + 聊天内建议面                                                                        |
+| codex                          | plugin      | `post-turn`                         | auto（每轮，紧跟 narrator 之后）                                          | `plugin`  | 知识图鉴系统（agent runtime）                                                                  |
+| npc-graph/extractor            | plugin      | `post-turn`                         | scheduled（interval=1, cooldown=1）                                       | `plugin`  | NPC 关系图抽取器                                                                               |
+| char-creator/character-tracker | core-plugin | `post-turn`                         | scheduled（interval=1, cooldown=1）                                       | `plugin`  | NPC 发现 + 角色状态跟踪                                                                        |
+| scene-prompts                  | plugin      | `post-turn`                         | scheduled（interval=1, cooldown=1）                                       | `plugin`  | 对话模式玩家口吻短回复                                                                         |
+| character-blueprint            | plugin      | —                                   | manual（按需 / world-data 导入）                                          | —         | 可复用角色蓝图；`dataSchemas` blueprints/characters 接收世界导入                               |
+| character-presence             | plugin      | —                                   | manual（按需 / world-data 导入）                                          | —         | 角色头像 / 立绘 / 语音媒体；`dataSchemas` presence/assets                                      |
+| player-identity                | plugin      | —                                   | manual（按需）                                                            | —         | 玩家人设（`persona-provider`，注入 activePersona）                                             |
+| living-world-rules             | plugin      | —                                   | manual（按需 / world-data 导入）                                          | —         | 长期世界规则 → `lorebook.upsert` 注入叙事；`dataSchemas` rules                                 |
+| branch-reply                   | plugin      | `post-turn`                         | auto（每回合播种）+ manual（重生成/采纳）                                 | —         | 回复候选 + `prompt-history-rewriter`（自动播种叙事原文，重生成走 LLM；投影历史折叠已采纳回合） |
+| scene-stage/background-gen     | plugin      | 无（event，不设 stage）             | event（topic: `scene-stage.generate.requested`，`execution: background`） | —         | 后台增量生成缺失的场景背景图（`ctx.images`），产出 `asset.generate`                            |
+| memory                         | core-plugin | —                                   | UI-only（无 runtime）                                                     | —         | 长期记忆摘要面板 + 通过 `memoryBlocks` 声明默认核心记忆块（剧情/角色关系/场景/玩家状态）       |
+| cost-gate                      | plugin      | —                                   | hook-only（opt-in，默认禁用）                                             | —         | 跨切面：每会话 token 预算门控（hooks：PostLLMResponse/PreSchedule/TurnStart/SessionEnd）       |
+| director                       | plugin      | —                                   | hook-only（opt-in，默认禁用）                                             | —         | 跨切面：用 PostContextAssembly 给本局所有 story runtime 统一注入导演前言                       |
+| story-guard                    | plugin      | —                                   | hook-only（opt-in，默认禁用）                                             | —         | 跨切面：故事文本红线净化（PostLLMResponse）+ 高危工具拦截（PreToolUse）                        |
 
 ---
 
@@ -132,18 +132,18 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 
 **路径**: `plugins/pregame/`
 
-| 字段         | 值                                                            |
-| ------------ | ------------------------------------------------------------- |
-| pluginType   | `core-plugin`（不可禁用）                                     |
-| priority     | 10（Pre-Game 阶段，最先执行）                                 |
-| trigger      | `scheduled`，`interval: 1`，`maxTriggerCount: 1` — 仅首轮触发 |
-| runtimeType  | `function`（纯函数执行，不调用 LLM）                          |
-| handler      | `./handler.js`                                                |
-| input.inject | 无                                                            |
+| 字段         | 值                                                                                                                                                               |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pluginType   | `core-plugin`（不可禁用）                                                                                                                                        |
+| priority     | 10 — **legacy**：不写显式 `stage`（loader 禁止 `stage: setup` 与 `scheduled`/`interval` 并存），归一层据此派生 `stage: setup` 并作为 setup 保守排序链的 sort key |
+| trigger      | `scheduled`，`interval: 1`，`maxTriggerCount: 1` — 仅首轮触发                                                                                                    |
+| runtimeType  | `function`（纯函数执行，不调用 LLM）                                                                                                                             |
+| handler      | `./handler.js`                                                                                                                                                   |
+| input.inject | 无                                                                                                                                                               |
 
 **职责**: 游戏开始时第一个执行的插件。读取世界观设定，发送欢迎通知，输出世界观摘要供后续叙事插件（narrator、codex、char-creator）作为上下文引导。
 
-**Pre-Game 契约**: 位于 Pre-Game 区段（priority `0-99`），`maxTriggerCount: 1` 保证仅在 session 首轮执行。完成后可在 `RuntimeOutput` 中声明 `preGameDone: true`，框架据此在 `session.preGameCompleted` 集合中记录本 runtime 已完成 Pre-Game 初始化。
+**setup 契约**: 位于 `setup` stage（`phase === "setup"` 期间运行），`maxTriggerCount: 1` 保证仅在 session 首轮执行。完成后可在 `RuntimeOutput` 中声明 `preGameDone: true`，框架据此在 `session.setupRuntimes` 集合中记录本 runtime 已完成 setup 初始化（API 响应仍会派生出兼容字段 `preGameCompleted`）。
 
 ---
 
@@ -159,17 +159,17 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 
 ### world-init/schema-gen
 
-| 字段          | 值                                                            |
-| ------------- | ------------------------------------------------------------- |
-| pluginType    | `core-plugin`（不可禁用）                                     |
-| priority      | 40（Pre-Game 阶段，先于 player-init）                         |
-| trigger       | `scheduled`，`interval: 1`，`maxTriggerCount: 1` — 仅首轮触发 |
-| model         | `plugin`                                                      |
-| guard         | `../../guard.js`                                              |
-| capabilities  | `[world-data-provider]`                                       |
-| tools.plugin  | `set-world-schema`, `set-world-entries-batch`                 |
-| tools.builtin | `plugin-data-get`, `plugin-data-list`                         |
-| ui.right      | `./ui/world-overview.json`, `./ui/world-schema.json`          |
+| 字段          | 值                                                                                                                                                                                       |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pluginType    | `core-plugin`（不可禁用）                                                                                                                                                                |
+| priority      | 40 — **legacy**：先于 player-init；同 pregame 一样不写显式 `stage`，归一层据此派生 `stage: setup`（player-init 通过 turn-scoped `needs` 依赖本 runtime，先后顺序不再依赖 priority 本身） |
+| trigger       | `scheduled`，`interval: 1`，`maxTriggerCount: 1` — 仅首轮触发                                                                                                                            |
+| model         | `plugin`                                                                                                                                                                                 |
+| guard         | `../../guard.js`                                                                                                                                                                         |
+| capabilities  | `[world-data-provider]`                                                                                                                                                                  |
+| tools.plugin  | `set-world-schema`, `set-world-entries-batch`                                                                                                                                            |
+| tools.builtin | `plugin-data-get`, `plugin-data-list`                                                                                                                                                    |
+| ui.right      | `./ui/world-overview.json`, `./ui/world-schema.json`                                                                                                                                     |
 
 **Guard 门控**: `guard.js` 在 LLM 调用前执行（纯函数，零 LLM 开销），按优先级决定角色属性 schema，命中任一即返回 `{ skip: true }` 跳过 LLM：
 
@@ -204,8 +204,8 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 | 字段            | 值                                                               |
 | --------------- | ---------------------------------------------------------------- |
 | pluginType      | `core-plugin`（不可禁用）                                        |
-| priority        | 500（Narrator 带，每轮执行）                                     |
-| trigger         | `auto` — 每轮 Narrator 带执行                                    |
+| stage           | `narrative`（每个主循环轮次都执行）                              |
+| trigger         | `auto` — 每轮 `narrative` stage 执行                             |
 | outputKind      | `story`（输出显示在主聊天区）                                    |
 | model           | `story`                                                          |
 | capabilities    | `[narrative]`                                                    |
@@ -228,7 +228,7 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 - `{{ session.turnNumber }}` — 当前回合数（全局 turnCount）
 - `{{ session.status }}` — 会话状态（`active` / `paused` / `ended`）
 
-**调度说明**: Narrator 位于 Narrator 带（priority 500），每个非 Pre-Game 轮都会执行。是否在首轮发声由 Pre-Game 段落的插件流水线决定（例如 char-creator/player-init 在 priority 50 处理玩家建角），Narrator 不再通过 `phases` 自我门控。
+**调度说明**: Narrator 位于 `narrative` stage，每个主循环轮次（`phase !== "setup"`）都会执行。是否在首轮发声由 `setup` stage 的插件流水线决定（例如 char-creator/player-init 处理玩家建角），Narrator 不再通过 `phases` 自我门控。
 
 ---
 
@@ -244,34 +244,34 @@ Pre-Game band（priority `0-99`，由 `packages/runtime/src/schedule/scheduler.t
 
 ### npc-graph/rag-retriever
 
-| 字段         | 值                                                  |
-| ------------ | --------------------------------------------------- |
-| pluginType   | `plugin`                                            |
-| runtimeType  | `function`（无 LLM 调用，纯结构化检索）             |
-| handler      | `./runtimes/rag-retriever/handler.js`               |
-| priority     | 400（Narrator-prep 层，在 `narrator=500` **之前**） |
-| capabilities | `[npc-graph, graph-rag]`                            |
-| trigger      | `scheduled`，`interval: 1`                          |
+| 字段         | 值                                          |
+| ------------ | ------------------------------------------- |
+| pluginType   | `plugin`                                    |
+| runtimeType  | `function`（无 LLM 调用，纯结构化检索）     |
+| handler      | `./runtimes/rag-retriever/handler.js`       |
+| stage        | `pre-turn`（在 `narrative` stage **之前**） |
+| capabilities | `[npc-graph, graph-rag]`                    |
+| trigger      | `scheduled`，`interval: 1`                  |
 
-每个非 Pre-Game 回合开始时自动运行：从 `playerMessage` 中匹配 NPC 节点名（含别名，case-insensitive），沿邻接索引做 2-hop BFS，只保留**有效区间仍开放**的边（`invalidAt === undefined`；被新版本取代的旧边保留在库里做溯源，但不进 prompt，否则同一对人物会出现两条互相矛盾的事实），按 `(validAt, |strength|)` 排序后取 top-20，输出 markdown 列表到 `npcContext` 字段。`narrator` 通过 `input.inject` 把这段文本作为 `<npc-relationships>` 块注入 prompt 末尾。
+每个主循环回合开始时自动运行：从 `playerMessage` 中匹配 NPC 节点名（含别名，case-insensitive），沿邻接索引做 2-hop BFS，只保留**有效区间仍开放**的边（`invalidAt === undefined`；被新版本取代的旧边保留在库里做溯源，但不进 prompt，否则同一对人物会出现两条互相矛盾的事实），按 `(validAt, |strength|)` 排序后取 top-20，输出 markdown 列表到 `npcContext` 字段。`narrator` 通过 `input.inject` 把这段文本作为 `<npc-relationships>` 块注入 prompt 末尾。
 
 **Phase 3.5 升级路径**：当 framework 层向 function handler 暴露 gateway 后，将升级为"先 embed 查询 → vector search → 子图扩展"的混合检索。当前为纯结构化版本。
 
 ### npc-graph/extractor
 
-| 字段             | 值                                                                                                        |
-| ---------------- | --------------------------------------------------------------------------------------------------------- |
-| pluginType       | `plugin`                                                                                                  |
-| runtimeType      | `agent`（LLM 驱动）                                                                                       |
-| priority         | 600（Narrator-downstream 层，与 guide / codex / character-tracker 并行执行）                              |
-| capabilities     | `[npc-graph, relationship-tracking]`                                                                      |
-| trigger          | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                            |
-| upstreamRequired | `[{ capability: narrative-engine }]` — 引擎无关（H-04），当前模式的叙事引擎失败时 skip                    |
-| input.inject     | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空） |
-| model slot       | `plugin`                                                                                                  |
-| tools.plugin     | `upsert-npc-graph`（批量写节点+边）、`list-npc-graph`（列出现有图）                                       |
-| tools.builtin    | `plugin-data-list`、`plugin-data-get`                                                                     |
-| ui.right         | `./ui/npc-graph-panel.json`                                                                               |
+| 字段          | 值                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------- |
+| pluginType    | `plugin`                                                                                                            |
+| runtimeType   | `agent`（LLM 驱动）                                                                                                 |
+| stage         | `post-turn`（与 guide / codex / character-tracker 同 stage 并行执行）                                               |
+| capabilities  | `[npc-graph, relationship-tracking]`                                                                                |
+| trigger       | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                      |
+| needs         | `[{ capability: narrative-engine }]` — 引擎无关（H-04），当前模式的叙事引擎失败时 skip（取代旧 `upstreamRequired`） |
+| input.inject  | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空）           |
+| model slot    | `plugin`                                                                                                            |
+| tools.plugin  | `upsert-npc-graph`（批量写节点+边）、`list-npc-graph`（列出现有图）                                                 |
+| tools.builtin | `plugin-data-list`、`plugin-data-get`                                                                               |
+| ui.right      | `./ui/npc-graph-panel.json`                                                                                         |
 
 **职责**: 维护一张会话级的人物-关系图。从叙事文本中抽取 NPC 节点（individual / group / faction）、它们的关系（信任、结盟、欠债、背叛等）以及每条关系的自然语言事实，持久化到 `plugin_data` 的 `nodes`、`edges`、`index`、`meta` 四个 namespace。
 
@@ -325,9 +325,9 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | 字段         | 值                                                                                                                                                                                                 |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | pluginType   | `plugin`（可禁用）                                                                                                                                                                                 |
-| priority     | 600（Narrator-downstream 层）                                                                                                                                                                      |
+| stage        | `post-turn`                                                                                                                                                                                        |
 | runtimeType  | `agent`（默认，LLM 驱动）                                                                                                                                                                          |
-| trigger      | `auto`（每轮触发；`upstreamRequired: [{ capability: narrative-engine }]` 保证在当前模式的叙事引擎失败时 skip，不会用空 `<narrator-output>` 幻觉）                                                  |
+| trigger      | `auto`（每轮触发；`needs: [{ capability: narrative-engine }]` 保证在当前模式的叙事引擎失败时 skip，不会用空 `<narrator-output>` 幻觉）                                                             |
 | model        | `plugin`                                                                                                                                                                                           |
 | tools.plugin | `unlock-codex-entries`, `update-codex-entry`                                                                                                                                                       |
 | ui.right     | `./ui/codex-panel.json`                                                                                                                                                                            |
@@ -356,16 +356,16 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 ### char-creator/player-init
 
-| 字段             | 值                                                         |
-| ---------------- | ---------------------------------------------------------- |
-| pluginType       | `core-plugin`（不可禁用）                                  |
-| priority         | 50（Pre-Game 带）                                          |
-| runtimeType      | `agent`（默认，LLM 生成开场表单；guard 命中时跳过）        |
-| trigger          | `auto`（`guard` 门控）                                     |
-| upstreamRequired | `[pregame, world-init/schema-gen]`                         |
-| guard            | `./guard.js` — 若 player 已存在或已收到表单提交则 skip LLM |
-| model            | `plugin`                                                   |
-| ui.right         | `../../ui/character-panel.json`                            |
+| 字段        | 值                                                                                                                      |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------- |
+| pluginType  | `core-plugin`（不可禁用）                                                                                               |
+| stage       | `setup`                                                                                                                 |
+| runtimeType | `agent`（默认，LLM 生成开场表单；guard 命中时跳过）                                                                     |
+| trigger     | `auto`（`guard` 门控）                                                                                                  |
+| needs       | `[pregame, world-init/schema-gen]`（turn-scoped：既是同 pass 的 DAG 边，也是同回合上游门控；取代旧 `upstreamRequired`） |
+| guard       | `./guard.js` — 若 player 已存在或已收到表单提交则 skip LLM                                                              |
+| model       | `plugin`                                                                                                                |
+| ui.right    | `../../ui/character-panel.json`                                                                                         |
 
 **两步流程**（第 1 步由 LLM agent 完成，第 2 步由 `guard.js` 确定性完成）：
 
@@ -378,21 +378,21 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
    - 读取最近一次 player input submission
    - 合并 schema `defaultValue`
    - 直接写入 `characters` 表与 `plugin_data[characters]`
-   - 输出 `preGameDone: true`，标记本 runtime 已完成 Pre-Game 初始化（框架将其累加到 `session.preGameCompleted`）
+   - 输出 `preGameDone: true`，标记本 runtime 已完成 setup 初始化（框架将其累加到 `session.setupRuntimes`）
 
 **当前代码状态**: 这一条路径保持在插件包内部，实现位于 `runtimes/player-init/guard.js`（deterministic 提交分支）。schema `defaultValue` 在写入边界合并进存库 `fields`（与 builtin `create-character` 一致），使右栏显示、模型 `get-character` 与 prompt 注入读到同一份字段，schema 通过 well-known namespace/key 发现而非硬编码 world-data 插件 id。如果后续希望统一 deterministic runtime 的 trace 与工具链，可以把这条流程收敛到 builtin character tools。
 
 ### char-creator/character-tracker
 
-| 字段             | 值                                                                                                        |
-| ---------------- | --------------------------------------------------------------------------------------------------------- |
-| pluginType       | `core-plugin`                                                                                             |
-| priority         | 600（Narrator-downstream 层，与 guide / codex / extractor 并行）                                          |
-| trigger          | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                            |
-| model            | `plugin`                                                                                                  |
-| tools.builtin    | `create-character`, `update-character`, `list-characters`, `get-character`                                |
-| input.inject     | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空） |
-| upstreamRequired | `[{ capability: narrative-engine }]` — 引擎无关（H-04），当前模式的叙事引擎失败时 skip                    |
+| 字段          | 值                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------- |
+| pluginType    | `core-plugin`                                                                                                       |
+| stage         | `post-turn`（与 guide / codex / extractor 同 stage 并行）                                                           |
+| trigger       | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                      |
+| model         | `plugin`                                                                                                            |
+| tools.builtin | `create-character`, `update-character`, `list-characters`, `get-character`                                          |
+| input.inject  | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空）           |
+| needs         | `[{ capability: narrative-engine }]` — 引擎无关（H-04），当前模式的叙事引擎失败时 skip（取代旧 `upstreamRequired`） |
 
 **职责**: 每轮扫描 narrator 输出，发现新的有名字 NPC → `create-character(type="npc")`；检测叙事中的角色状态变化（受伤、死亡、装备、关系）→ `update-character(fields: {...})`。工作流：
 
@@ -412,16 +412,16 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 **路径**: `plugins/guide/`
 
-| 字段             | 值                                                                                                                                                                                                                |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| pluginType       | `plugin`（可禁用）                                                                                                                                                                                                |
-| priority         | 600（Narrator-downstream 层，与 codex / extractor / character-tracker 并行）                                                                                                                                      |
-| trigger          | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                                                                                                                    |
-| model            | `plugin`                                                                                                                                                                                                          |
-| tools.plugin     | `generate-guide`                                                                                                                                                                                                  |
-| ui.message       | `./ui/action-guide-block.json`                                                                                                                                                                                    |
-| input.inject     | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（列出两个已知叙事引擎，缺席的解析为空，由在场的那个填充）                                                                             |
-| upstreamRequired | `[{ capability: narrative-engine }]` — 按 capability 发现当前模式的叙事引擎，传统模式下解析为 `narrator`、对话模式下解析为 `chat-mode-narrator`；该引擎失败时仍 skip。**引擎无关**，因此 guide 在两种模式下都可用 |
+| 字段         | 值                                                                                                                                                                                                                                             |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pluginType   | `plugin`（可禁用）                                                                                                                                                                                                                             |
+| stage        | `post-turn`（与 codex / extractor / character-tracker 同 stage 并行）                                                                                                                                                                          |
+| trigger      | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                                                                                                                                                 |
+| model        | `plugin`                                                                                                                                                                                                                                       |
+| tools.plugin | `generate-guide`                                                                                                                                                                                                                               |
+| ui.message   | `./ui/action-guide-block.json`                                                                                                                                                                                                                 |
+| input.inject | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（列出两个已知叙事引擎，缺席的解析为空，由在场的那个填充）                                                                                                          |
+| needs        | `[{ capability: narrative-engine }]` — 按 capability 发现当前模式的叙事引擎，传统模式下解析为 `narrator`、对话模式下解析为 `chat-mode-narrator`；该引擎失败时仍 skip。**引擎无关**，因此 guide 在两种模式下都可用（取代旧 `upstreamRequired`） |
 
 **职责**: 在叙事推进后，分析当前情境，为玩家生成分风格的行动建议。让 narrator 专注叙事，选择引导交由本插件。引导按 capability 发现叙事引擎，因此在传统模式与对话模式下都能工作（默认仅传统模式启用，玩家可在对话模式手动开启）。
 
@@ -431,7 +431,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 - **aggressive（激进）** — 直接、对抗性的选择
 - **creative（创意）** — 非常规、巧妙的选择
 
-**触发逻辑**: `cooldownTurns: 1` 确保首轮不触发（避免与角色创建冲突）。位于 After-Turn 带，每轮 narrator 之后执行。如果叙事中没有明显决策点，LLM 不会调用工具。
+**触发逻辑**: `cooldownTurns: 1` 确保首轮不触发（避免与角色创建冲突）。位于 `post-turn` stage，每轮 narrator 之后执行。如果叙事中没有明显决策点，LLM 不会调用工具。
 
 **UI 渲染**: 当前 `generate-guide` 会把 `topic` 与三组建议写入 `plugin_data[message]`。`ui/action-guide-block.json` 读取这些字段，渲染三组策略卡和自定义输入；玩家点击建议后进入待发送区，由底部输入栏统一发送。
 
@@ -459,7 +459,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 - `TurnStart`（`enforce: pre`）在硬上限 abort 整回合，`abortReason` 透传前端；
 - `SessionEnd` 清理该会话的计数桶，防止进程内 Map 泄漏。
 
-Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收窄只影响主循环。
+`setup` stage runtime（`phase === "setup"` 期间）由框架强制保护，`PreSchedule` 收窄只影响主循环。
 
 **配置（per-session userSettings，env 兜底）**: 两个阈值现已 per-session 可配——hook 经 `HookContext.getOwnSettings()` 读取本插件解析后的 `userSettings`（manifest 默认值与玩家保存值合并的冻结快照），玩家可在 `设置 > Plugins > cost-gate` 按局调整。`softTokens`（默认 150000）软上限 · `hardTokens`（默认 200000）硬上限。每次 hook 调用按三级回退链解析：**per-session `userSettings` → env（`COST_GATE_SOFT_TOKENS` / `COST_GATE_HARD_TOKENS`）→ 硬编码默认**，故只设 env 的旧部署照常工作。软上限须低于硬上限，否则收窄无窗口（cost-gate 一次性告警）。
 
@@ -529,7 +529,7 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 | 字段            | 值                                                                                                                                                   |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | pluginType      | `plugin`                                                                                                                                             |
-| priority        | 500（Narrator 带，每轮）                                                                                                                             |
+| stage           | `narrative`（每个主循环轮次）                                                                                                                        |
 | trigger         | `auto`                                                                                                                                               |
 | outputKind      | `story`                                                                                                                                              |
 | model           | `story`                                                                                                                                              |
@@ -564,7 +564,7 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 | 字段         | 值                                                      |
 | ------------ | ------------------------------------------------------- |
 | pluginType   | `plugin`                                                |
-| priority     | 450（Narrator-prep 层，narrator 之前）                  |
+| stage        | `pre-turn`（narrator 之前）                             |
 | runtimeType  | `function`（无 LLM）                                    |
 | trigger      | `scheduled`，`interval: 1`                              |
 | outputKind   | `system`                                                |
@@ -600,7 +600,7 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 | pluginType   | `plugin`                                                                                                          |
 | runtimeType  | `function`（无 LLM）                                                                                              |
 | handler      | `./runtimes/resolver/handler.js`                                                                                  |
-| priority     | 460（Narrator-prep 层，narrator 之前）                                                                            |
+| stage        | 无（`event` 触发不设 `stage`，由回合内事件扇出唤起，不受 stage 屏障约束）                                         |
 | trigger      | `event`，topic `scene.set`                                                                                        |
 | outputKind   | `system`                                                                                                          |
 | capabilities | `[scene-stage]`                                                                                                   |
@@ -625,7 +625,7 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 | pluginType   | `plugin`                                                                 |
 | runtimeType  | `function`（无 LLM，调用 `ctx.images`）                                  |
 | handler      | `./runtimes/background-gen/handler.js`                                   |
-| priority     | 900                                                                      |
+| stage        | 无（`event` 触发不设 `stage`）                                           |
 | execution    | `background`（不阻塞回合关键路径）                                       |
 | timeoutMs    | 360000                                                                   |
 | trigger      | `event`，topic `scene-stage.generate.requested`                          |
@@ -645,19 +645,19 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 
 **路径**: `plugins/scene-prompts/`
 
-| 字段             | 值                                                                                                      |
-| ---------------- | ------------------------------------------------------------------------------------------------------- |
-| pluginType       | `plugin`                                                                                                |
-| priority         | 600（Narrator-downstream）                                                                              |
-| runtimeType      | `agent`（model `plugin`）                                                                               |
-| trigger          | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                          |
-| outputKind       | `system`                                                                                                |
-| capabilities     | `[scene-prompts]`（舞台 choices 层按此能力发现，非硬编码插件 id）                                       |
-| tags             | `mode:dialogue` · `role:quick-reply`                                                                    |
-| input.inject     | `chat-mode-narrator` + `narrator` → `narrativeOutput` → `<narrator-output>`                             |
-| upstreamRequired | `[{ capability: narrative-engine }]` — 引擎无关，按 capability 发现当前模式的叙事引擎；两种模式下都可用 |
-| tools.plugin     | `generate-scene-prompts`                                                                                |
-| ui.message       | `scene-prompts-block.json`                                                                              |
+| 字段         | 值                                                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| pluginType   | `plugin`                                                                                                                             |
+| stage        | `post-turn`                                                                                                                          |
+| runtimeType  | `agent`（model `plugin`）                                                                                                            |
+| trigger      | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                                       |
+| outputKind   | `system`                                                                                                                             |
+| capabilities | `[scene-prompts]`（舞台 choices 层按此能力发现，非硬编码插件 id）                                                                    |
+| tags         | `mode:dialogue` · `role:quick-reply`                                                                                                 |
+| input.inject | `chat-mode-narrator` + `narrator` → `narrativeOutput` → `<narrator-output>`                                                          |
+| needs        | `[{ capability: narrative-engine }]` — 引擎无关，按 capability 发现当前模式的叙事引擎；两种模式下都可用（取代旧 `upstreamRequired`） |
+| tools.plugin | `generate-scene-prompts`                                                                                                             |
+| ui.message   | `scene-prompts-block.json`                                                                                                           |
 
 ---
 
@@ -754,17 +754,17 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 
 **路径**: `plugins/branch-reply/`
 
-| 字段         | 值                                           |
-| ------------ | -------------------------------------------- |
-| pluginType   | `plugin`                                     |
-| runtimeType  | `function`，`trigger: auto`，`priority: 700` |
-| outputKind   | `system`                                     |
-| capabilities | `[branch-reply, prompt-history-rewriter]`    |
-| ui.message   | `branch-reply-block.json`                    |
+| 字段         | 值                                              |
+| ------------ | ----------------------------------------------- |
+| pluginType   | `plugin`                                        |
+| runtimeType  | `function`，`trigger: auto`，`stage: post-turn` |
+| outputKind   | `system`                                        |
+| capabilities | `[branch-reply, prompt-history-rewriter]`       |
+| ui.message   | `branch-reply-block.json`                       |
 
 **生命周期（两条路径，按 `manualPayload` 是否存在区分）**：
 
-1. **自动播种（seed，无 `manualPayload`）**：作为 `trigger: auto`、`priority: 700` 的 runtime，每个故事回合在叙事引擎（priority 500）之后运行，从 `ctx.completedResults` 读取**当前激活叙事引擎**的 `narrativeOutput`，把它作为 candidate[0]（"原文"）写入 `message`/`turns` namespace，并把产出该叙事的 `runtimeId` 一并记入 `turns` 记录。发现方式**与引擎无关**：按 `narrativeOutput` 非空这一叙事契约识别，**不硬编码任何叙事插件 id**，因此 `narrator` 与 `chat-mode-narrator` 通用。播种**按 `turnId` 幂等**（不会重复播种），空回合 / 系统回合不播种。这是该 block 能出现的前提——`ui.message` block 只有在其 `message` namespace 被写入后才渲染，纯手动写入者无法自举（这是它此前完全不显示的根因）。
+1. **自动播种（seed，无 `manualPayload`）**：作为 `trigger: auto`、`stage: post-turn` 的 runtime，每个故事回合在叙事引擎（`narrative` stage）之后运行，从 `ctx.completedResults` 读取**当前激活叙事引擎**的 `narrativeOutput`，把它作为 candidate[0]（"原文"）写入 `message`/`turns` namespace，并把产出该叙事的 `runtimeId` 一并记入 `turns` 记录。发现方式**与引擎无关**：按 `narrativeOutput` 非空这一叙事契约识别，**不硬编码任何叙事插件 id**，因此 `narrator` 与 `chat-mode-narrator` 通用。播种**按 `turnId` 幂等**（不会重复播种），空回合 / 系统回合不播种。这是该 block 能出现的前提——`ui.message` block 只有在其 `message` namespace 被写入后才渲染，纯手动写入者无法自举（这是它此前完全不显示的根因）。
 2. **手动动作（`manualPayload` 存在，经 plugin-rpc）**：`createCandidates` / `acceptCandidate`。其中 `createCandidates`（前端"重生成"按钮）通过 `ctx.gateway` 调用**快速文本 slot** 生成 1-2 条同一剧情节拍的真实改写（语言跟随 `ctx.locale` 与原文）；当宿主无 gateway / 无 slot 或调用失败时，仅返回原文，**绝不编造英文填充近似句**。`createCandidates` / `acceptCandidate` 都会把播种时记录的叙事 `runtimeId` 透传到 `turns` 记录。
 
 **职责**：`buildProjectedPromptHistory` 读其 `turns` namespace，把采纳的备选回合折叠进投影历史；未发现时历史原样透传。由于自动播种本身也会在历史里追加一条 `sourceRuntimeId="branch-reply"` 的 assistant 消息，改写器用 `turns` 记录里的 `runtimeId` 精确命中**叙事引擎**那条消息，而非 branch-reply 自己的播种消息（`runtimeId` 由播种时发现得到，非硬编码）。
@@ -773,12 +773,12 @@ Pre-Game runtime（priority ≤ 99）由框架强制保护，`PreSchedule` 收�
 
 ## 规划中插件（待开发）
 
-| 插件       | 预期优先级 | 描述          |
-| ---------- | ---------- | ------------- |
-| combat     | 420        | 回合制战斗    |
-| inventory  | 600        | 物品/装备管理 |
-| core-quest | 650        | 任务追踪      |
-| image      | 800        | 故事配图生成  |
+| 插件       | 预期 stage  | 描述          |
+| ---------- | ----------- | ------------- |
+| combat     | `pre-turn`  | 回合制战斗    |
+| inventory  | `post-turn` | 物品/装备管理 |
+| core-quest | `post-turn` | 任务追踪      |
+| image      | `post-turn` | 故事配图生成  |
 
 当前世界包推荐使用 `pluginPolicy` 表达插件组合意图。内置前端组合包包括：`traditional-story`（传统叙事主线 + 行动建议/图鉴/关系图，玩家口吻设置为可选项）、`dialogue-mode`（对话优先叙事 + 场景演员/短句回复 + 玩家口吻设置）、`low-cost`（保留核心流程并减少下游 LLM 调用，玩家口吻设置为可选项）。世界可以通过 `preset` 引用这些组合包，也可以在 `packs` 中提供自定义组合。
 
@@ -1088,24 +1088,24 @@ hooks:
 
 同一事件内先按 `enforce` 分组排序；同组内全局 hook 先执行，插件 hook 保持注册顺序。
 
-| Event                 | Semantic     | 行为                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| --------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SessionStart`        | `parallel`   | 会话级（无回合）：会话创建 + 插件激活后触发，payload `{sessionId, worldId}`。观察型,不能否决创建（对齐 pi 的 `session_start`）                                                                                                                                                                                                                                                                                                                        |
-| `TurnStart`           | `sequential` | 回合开始的否决门：任一 handler `abort` 则整回合中止(无 runtime 运行,返回带 `abortReason` 的 TurnResult),用于访问控制 / 限流                                                                                                                                                                                                                                                                                                                           |
-| `PreCompaction`       | `sequential` | 历史压缩前的否决门：任一 handler `abort` 则本回合跳过压缩、保留完整历史（对齐 pi 的 `session_before_compact` 取消路径）                                                                                                                                                                                                                                                                                                                               |
-| `PostCompaction`      | `parallel`   | 并发观察压缩结果（`compacted` / `summaryId`）；返回值只用于日志和 trace（对齐 pi 的 `session_compact`）                                                                                                                                                                                                                                                                                                                                               |
-| `PreSchedule`         | `sequential` | 触发选择之后、调度之前观察 / 收窄本回合要跑的 runtime 集；`replace.triggered` 链式改写（如条件门控 / 成本控制）。**严格 filter-only（2026-07-20 审计 H-03）**：返回列表按稳定 runtime 身份（`manifest.name`）与原集合对账，框架复用原 manifest 对象——不在原集合的注入项被丢弃并 warn，变造副本无法替换原 manifest。**仅能影响主循环 runtime**：Pre-Game 未完成时，框架强制保留被 hook 删掉的 Pre-Game（priority ≤ 99）runtime，避免静默中断会话初始化 |
-| `PreRuntime`          | `sequential` | 链式改写 runtime 输入；`replace` 会传给下一个 handler；`abort` 会停止执行                                                                                                                                                                                                                                                                                                                                                                             |
-| `PostContextAssembly` | `sequential` | turn 级（每 runtime 一次，`buildContext` 之后、进 loop 之前）改写已装配的 `systemPrompt` / 投影历史；`replace.{systemPrompt,messages}` 链式累积（对齐 pi 的 `before_agent_start`）                                                                                                                                                                                                                                                                    |
-| `PreLLMCall`          | `sequential` | 每次 LLM 调用前非破坏性改写发往模型的请求；`replace.{messages,model,tools}` 链式累积。不改写底层 transcript（对齐 pi 的 `context`）。`abort` 无意义、视为不变                                                                                                                                                                                                                                                                                         |
-| `PostLLMResponse`     | `sequential` | LLM 响应返回后、工具派发前；`replace.response` 链式改写 `content`/`toolCalls`（对齐 pi 的 `after_provider_response`）                                                                                                                                                                                                                                                                                                                                 |
-| `PostRuntime`         | `sequential` | 链式改写 runtime 输出：`replace.result` 重写该 runtime 的 `RuntimeResult`(链式累积),不改则原样。**执行身份不可改写**：`pluginId` / `runtimeId` / `runId` / `turnId` 始终被还原为框架实际选中并加载的 manifest 身份——提交阶段按这些字段重绑 proposal,否则已批准的 hook 能把写入重定向到别的插件名下                                                                                                                                                    |
-| `PreToolUse`          | `sequential` | 链式改写 tool call；`replace` 会传给下一个 handler；`abort` 会跳过该 tool（不中止回合）                                                                                                                                                                                                                                                                                                                                                               |
-| `PostToolUse`         | `sequential` | 链式 patch tool result：`replace.result` 改写结果、`replace.terminate: true` 在记录该结果后结束工具循环（对齐 pi 的 `tool_result.terminate`）。**结束循环用 `replace.terminate`，不要用 `abort`**（PostToolUse 的 `abort` 不生效，结果原样、循环继续）                                                                                                                                                                                                |
-| `PreStateCommit`      | `sequential` | 链式改写 commit payload；任一 handler 可用 `abort` 拒绝 commit                                                                                                                                                                                                                                                                                                                                                                                        |
-| `PostStateCommit`     | `parallel`   | 并发观察 commit 结果；返回值只用于日志和 trace                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `TurnStop`            | `parallel`   | 并发观察回合结束；返回值只用于日志和 trace                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `SessionEnd`          | `parallel`   | 会话级（无回合）：会话 PATCH 状态→`ended` 或 DELETE 时触发,payload `{sessionId, reason: "ended"｜"deleted"}`。仅在进入 `ended` 的那次触发(不重复),适合清理（对齐 pi 的 `session_shutdown`）                                                                                                                                                                                                                                                           |
+| Event                 | Semantic     | 行为                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SessionStart`        | `parallel`   | 会话级（无回合）：会话创建 + 插件激活后触发，payload `{sessionId, worldId}`。观察型,不能否决创建（对齐 pi 的 `session_start`）                                                                                                                                                                                                                                                                                                                  |
+| `TurnStart`           | `sequential` | 回合开始的否决门：任一 handler `abort` 则整回合中止(无 runtime 运行,返回带 `abortReason` 的 TurnResult),用于访问控制 / 限流                                                                                                                                                                                                                                                                                                                     |
+| `PreCompaction`       | `sequential` | 历史压缩前的否决门：任一 handler `abort` 则本回合跳过压缩、保留完整历史（对齐 pi 的 `session_before_compact` 取消路径）                                                                                                                                                                                                                                                                                                                         |
+| `PostCompaction`      | `parallel`   | 并发观察压缩结果（`compacted` / `summaryId`）；返回值只用于日志和 trace（对齐 pi 的 `session_compact`）                                                                                                                                                                                                                                                                                                                                         |
+| `PreSchedule`         | `sequential` | 触发选择之后、调度之前观察 / 收窄本回合要跑的 runtime 集；`replace.triggered` 链式改写（如条件门控 / 成本控制）。**严格 filter-only（2026-07-20 审计 H-03）**：返回列表按稳定 runtime 身份（`manifest.name`）与原集合对账，框架复用原 manifest 对象——不在原集合的注入项被丢弃并 warn，变造副本无法替换原 manifest。**仅能影响主循环 runtime**：`phase === "setup"` 时，框架强制保留被 hook 删掉的 `setup` stage runtime，避免静默中断会话初始化 |
+| `PreRuntime`          | `sequential` | 链式改写 runtime 输入；`replace` 会传给下一个 handler；`abort` 会停止执行                                                                                                                                                                                                                                                                                                                                                                       |
+| `PostContextAssembly` | `sequential` | turn 级（每 runtime 一次，`buildContext` 之后、进 loop 之前）改写已装配的 `systemPrompt` / 投影历史；`replace.{systemPrompt,messages}` 链式累积（对齐 pi 的 `before_agent_start`）                                                                                                                                                                                                                                                              |
+| `PreLLMCall`          | `sequential` | 每次 LLM 调用前非破坏性改写发往模型的请求；`replace.{messages,model,tools}` 链式累积。不改写底层 transcript（对齐 pi 的 `context`）。`abort` 无意义、视为不变                                                                                                                                                                                                                                                                                   |
+| `PostLLMResponse`     | `sequential` | LLM 响应返回后、工具派发前；`replace.response` 链式改写 `content`/`toolCalls`（对齐 pi 的 `after_provider_response`）                                                                                                                                                                                                                                                                                                                           |
+| `PostRuntime`         | `sequential` | 链式改写 runtime 输出：`replace.result` 重写该 runtime 的 `RuntimeResult`(链式累积),不改则原样。**执行身份不可改写**：`pluginId` / `runtimeId` / `runId` / `turnId` 始终被还原为框架实际选中并加载的 manifest 身份——提交阶段按这些字段重绑 proposal,否则已批准的 hook 能把写入重定向到别的插件名下                                                                                                                                              |
+| `PreToolUse`          | `sequential` | 链式改写 tool call；`replace` 会传给下一个 handler；`abort` 会跳过该 tool（不中止回合）                                                                                                                                                                                                                                                                                                                                                         |
+| `PostToolUse`         | `sequential` | 链式 patch tool result：`replace.result` 改写结果、`replace.terminate: true` 在记录该结果后结束工具循环（对齐 pi 的 `tool_result.terminate`）。**结束循环用 `replace.terminate`，不要用 `abort`**（PostToolUse 的 `abort` 不生效，结果原样、循环继续）                                                                                                                                                                                          |
+| `PreStateCommit`      | `sequential` | 链式改写 commit payload；任一 handler 可用 `abort` 拒绝 commit                                                                                                                                                                                                                                                                                                                                                                                  |
+| `PostStateCommit`     | `parallel`   | 并发观察 commit 结果；返回值只用于日志和 trace                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `TurnStop`            | `parallel`   | 并发观察回合结束；返回值只用于日志和 trace                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `SessionEnd`          | `parallel`   | 会话级（无回合）：会话 PATCH 状态→`ended` 或 DELETE 时触发,payload `{sessionId, reason: "ended"｜"deleted"}`。仅在进入 `ended` 的那次触发(不重复),适合清理（对齐 pi 的 `session_shutdown`）                                                                                                                                                                                                                                                     |
 
 > `PostToolUse` 为 `sequential`：`parallel` 语义会丢弃 `replace`，因此结果 patch 与 `terminate` 必须在顺序链中累积。
 > `SessionStart` / `SessionEnd` 是会话级 hook（`turnId` 为空）：在 server 的 session 路由触发,不属于 turn pipeline。
@@ -1141,7 +1141,7 @@ outputKind: story
 **使用规则:**
 
 - `_jobs` 是框架保留命名空间,插件**禁止**直接写入;框架自动维护 row 生命周期
-- background 模式下,事件链 chain 仍然生效 —— 手动触发的 runtime emit 的 `event.emit` proposals 会在同一后台任务里按 priority 执行下游 runtime
+- background 模式下,事件链 chain 仍然生效 —— 手动触发的 runtime emit 的 `event.emit` proposals 会在同一后台任务里按 stage/DAG 顺序执行下游 runtime
 - 如果 runtime 通过 `input.inject` 向下游传递结构化数据,background 模式下下游 runtime 会看到最终态(不是增量),就像在 sync 模式下一样
 
 示例:
@@ -1400,23 +1400,24 @@ input:
       maxEntries: 100
 ```
 
-### 优先级分带（Turn Bands）
+### 调度阶段（Stage Bands）
 
 ```
-0 ──────────── 100 ───────────────── 500 ───────────────── 1000
-    Pre-Game         Pre-Turn          Narrator              After-Turn
-   （游戏初始化）     （玩家操作前）     （主叙事输出）         （操作后处理）
+setup ──▶ pre-turn ──▶ narrative ──▶ post-turn ──▶ audit
+（游戏初始化）（玩家操作前）（主叙事输出）（操作后处理）（审计，保留位）
 ```
 
-| 区间    | 阶段       | 执行时机   | 说明                                                                                                                                                                                                                    |
-| ------- | ---------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0-99    | Pre-Game   | 首次进入时 | 游戏初始化：世界状态、角色属性、动态表单。按 runtime 粒度跟踪——每个 runtime 首次完成后将自身 id 写入 `session.preGameCompleted`，后续轮次框架不会再调度它。单个 runtime 通过 `maxTriggerCount` 控制首次阶段内的多步流程 |
-| 100-499 | Pre-Turn   | 每轮       | 玩家操作后、叙事前的处理                                                                                                                                                                                                |
-| 500     | Narrator   | 每轮       | 主叙事模型输出，Turn 的核心产出                                                                                                                                                                                         |
-| 501-999 | After-Turn | 每轮       | 叙事后处理：状态更新、图像生成、日志                                                                                                                                                                                    |
-| 1000    | Audit      | 每轮       | 冲突审计（保留位）                                                                                                                                                                                                      |
+会话处于 `phase === "setup"` 时只运行 `setup` stage；`phase` 转为主循环（`playing`）后，每轮依次跑 `pre-turn → narrative → post-turn → audit`，stage 之间是**严格屏障**——上一 stage 全部结束才进入下一 stage。这条 stage 序列取代了旧的数字 priority band（`0-99` / `100-499` / `500` / `501-999` / `1000`）。
 
-主循环每轮执行 **100-1000** 区间的插件；Pre-Game（0-99）由 `preGameCompleted` 集合控制，默认单次完成后不再触发，无需 `phases: [...]` 自我门控。
+| Stage       | 执行时机   | 说明                                                                                                                                                                                                                 |
+| ----------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `setup`     | 首次进入时 | 游戏初始化：世界状态、角色属性、动态表单。按 runtime 粒度跟踪——每个 runtime 首次完成后将自身 id 写入 `session.setupRuntimes`，后续轮次框架不会再调度它。单个 runtime 通过 `maxTriggerCount` 控制首次阶段内的多步流程 |
+| `pre-turn`  | 每轮主循环 | 玩家操作后、叙事前的处理                                                                                                                                                                                             |
+| `narrative` | 每轮主循环 | 主叙事模型输出，Turn 的核心产出                                                                                                                                                                                      |
+| `post-turn` | 每轮主循环 | 叙事后处理：状态更新、图像生成、日志                                                                                                                                                                                 |
+| `audit`     | 每轮主循环 | 冲突审计（保留位）                                                                                                                                                                                                   |
+
+主循环每轮依次跑完 `pre-turn → narrative → post-turn → audit` 四个 stage；`setup` 由 `phase` 控制，默认单次完成后不再触发，无需 `phases: [...]` 自我门控。同一 stage 内部由 DAG（`needs` / `after` / `inputs`）排序，独立 runtime 并行执行，见 [调度层级](#调度层级)。
 
 ### trigger 类型
 
@@ -1426,18 +1427,18 @@ input:
 | `manual`      | ✅ 生产可用 | 仅玩家手动触发；启用插件只表示该能力可用，不会自动进入每轮调度                                                                                                                                                                                                                                                                          |
 | `scheduled`   | ✅ 生产可用 | 每 N 条**玩家消息**触发一次（配合 `interval` + `maxTriggerCount`）。基数是 `turnNumber` = `getTurnMessageStats().playerMessageCount`（`turn_messages` 里 `sourceType: player` 的条数），**不是** `session.turnCount`；两者通常同步，但 manual / follower / recursive 执行不写玩家消息，因此不推进 interval（2026-07-20 审计 M-02 澄清） |
 | `event`       | ✅ 生产可用 | 监听特定事件触发（在 Turn 内的事件 fan-out 中由 `shouldTrigger` 判定）                                                                                                                                                                                                                                                                  |
-| `conditional` | ⚠️ reserved | **当前永不触发**：schema 接受该值，但没有条件表达式引擎，`shouldTrigger` 直接返回 false 并打印一次性 warning。条件引擎落地前请勿使用                                                                                                                                                                                                    |
-| `error-retry` | ⚠️ reserved | **当前永不触发**：调度器不会上报上游失败信号，`shouldTrigger` 直接返回 false 并打印一次性 warning。对应能力落地前请勿使用                                                                                                                                                                                                               |
+| `conditional` | ❌ 已拒绝   | **manifest 输入 schema 已把 trigger 枚举收窄为生产四种类型**（`auto` / `manual` / `scheduled` / `event`），声明 `conditional` 的 manifest 在**加载时**就被拒绝，不会进入运行时。历史上曾是"schema 接受、`shouldTrigger` 打印一次性 warning 后跳过"的软 reserved 状态，现已在入口硬拒绝                                                  |
+| `error-retry` | ❌ 已拒绝   | 同上，随 `conditional` 一并从 trigger 枚举移除；声明它的 manifest 在加载时被拒绝                                                                                                                                                                                                                                                        |
 
-> **可用 vs reserved**：生产实际可用的只有 `auto` / `manual` / `scheduled` / `event` 四种。`conditional` 与 `error-retry` 是为未来能力预留的占位类型，声明它们的 Runtime 会被静默跳过（并在 console 提示一次）。在对应能力落地前请使用上面四种之一。
+> **可用 vs 已拒绝**：生产实际可用的只有 `auto` / `manual` / `scheduled` / `event` 四种。`conditional` 与 `error-retry` 曾是为未来能力预留的占位类型，现已从 trigger 枚举中彻底移除——声明它们的 manifest 无法通过 loader 校验，不会被加载。
 
-#### `event` 的调度例外：fan-out 不受优先级分带约束
+#### `event` 的调度例外：fan-out 不受 stage 屏障约束
 
-`event` runtime 唯一的触发点是回合内的事件扇出（`packages/runtime/src/trigger/turn-event-chain.ts`）：主调度器用空 topic 列表评估它，topic 匹配必然失败。扇出的语义是「因果反应」而不是「排班的时隙」，因此它**故意不套用当前回合的优先级分带**——Pre-Game 回合里某个 setup runtime 发出的 topic，同样能唤起主循环分带（100–1000）的订阅者，反之亦然。若按分带过滤，发射方与订阅方分处两带时订阅者会被静默丢弃且没有任何诊断信息。
+`event` runtime 唯一的触发点是回合内的事件扇出（`packages/runtime/src/trigger/turn-event-chain.ts`）：主调度器用空 topic 列表评估它，topic 匹配必然失败。扇出的语义是「因果反应」而不是「排班的时隙」，因此它**故意不套用当前的 stage 屏障**——`setup` stage 里某个 runtime 发出的 topic，同样能唤起主循环 stage 的订阅者，反之亦然。若按 stage 过滤，发射方与订阅方分处两个 stage 时订阅者会被静默丢弃且没有任何诊断信息。
 
 扇出仍然受这些约束：
 
-- **`session.preGameCompleted`**：已经报告完成的 Pre-Game runtime 不会被后续同名 topic 复活——这是「一次性 setup」契约真正的守卫，也是扇出唯一继承的分带相关语义。
+- **`session.setupRuntimes`**：已经报告完成的 `setup` stage runtime 不会被后续同名 topic 复活——这是「一次性 setup」契约真正的守卫，也是扇出唯一继承的 stage 相关语义（API 响应仍会派生出兼容字段 `session.preGameCompleted`）。
 - **`maxDepth`**（默认 8）：限制事件链在单回合内的递归深度。
 - **回合内去重**：本回合已产出结果的 runtime 不会被再次执行；`execution: background` 的订阅者每回合最多被 defer 一次。
 
@@ -1445,12 +1446,12 @@ input:
 
 ### trigger 字段速查
 
-| 字段              | 默认 | 含义                                                                                                                                      |
-| ----------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `interval`        | 1    | `scheduled` 类型每隔 N 轮触发一次                                                                                                         |
-| `cooldownTurns`   | —    | 上一次触发后多少轮内不可再次触发                                                                                                          |
-| `maxTriggerCount` | —    | 整个 session 内最多触发次数（达到后不再触发）                                                                                             |
-| `startTurn`       | —    | **PR-2**：从第几个主循环轮次起开始介入。基于 `turnCount`（0-based），与 Pre-Game 首轮自动跳过互不冲突。适合"让玩家先熟悉环境再介入"的场景 |
+| 字段              | 默认 | 含义                                                                                                                                                                             |
+| ----------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `interval`        | 1    | `scheduled` 类型每隔 N 轮触发一次                                                                                                                                                |
+| `cooldownTurns`   | —    | 上一次触发后多少轮内不可再次触发                                                                                                                                                 |
+| `maxTriggerCount` | —    | 整个 session 内最多触发次数（达到后不再触发）                                                                                                                                    |
+| `startTurn`       | —    | **PR-2**：从第几个主循环轮次起开始介入。基于 `completedPlayerTurns`（0-based，legacy `turnCount` 的派生源），与 `setup` 首轮自动跳过互不冲突。适合"让玩家先熟悉环境再介入"的场景 |
 
 **`startTurn` 用例**：
 
@@ -1461,7 +1462,7 @@ trigger:
   startTurn: 3 # 前三轮让玩家适应，第四轮起开始检查
 ```
 
-这条配置表达"前三轮玩家先熟悉环境，从第四轮起插件才开始介入"。Pre-Game 段落（priority `0-99`）由框架按 `session.preGameCompleted` 集合决定是否再次触发，与 `startTurn` 解耦。
+这条配置表达"前三轮玩家先熟悉环境，从第四轮起插件才开始介入"。`setup` stage 由框架按 `session.setupRuntimes` 集合（经 `phase` 门控）决定是否再次触发，与 `startTurn` 解耦。
 
 ---
 
@@ -1505,10 +1506,10 @@ tools:
 
 ### Runtime 输出字段：`preGameDone`
 
-Pre-Game 段 runtime（priority `0-99`）可在 `RuntimeOutput` 中声明：
+`setup` stage runtime 可在 `RuntimeOutput` 中声明：
 
 ```json
 { "preGameDone": true }
 ```
 
-框架在 commit 链上看到该字段为 `true` 时，会将该 `runtimeId` 追加到 `session.preGameCompleted`；后续轮次的调度器会跳过已完成的 Pre-Game runtime。这是替代历史上 `session.phase` 状态机的 runtime 粒度闸门，避免"全局 phase 状态 → 单插件职责被迫搬进 trigger.phases"的反模式。
+框架在 commit 链上看到该字段为 `true` 时，会将该 `runtimeId` 追加到 `session.setupRuntimes`（API 响应仍会派生出兼容字段 `session.preGameCompleted`，响应形状不变）；后续轮次的调度器会跳过已完成的 `setup` stage runtime。这是替代历史上"全局 phase 状态 → 单插件职责被迫搬进 trigger.phases"反模式的 runtime 粒度闸门——今天调度层重新引入的顶层 `session.phase`（`setup` / `playing`）只是粗粒度的 stage-band 选择器，不下放到单插件的触发条件里，两者互不冲突。

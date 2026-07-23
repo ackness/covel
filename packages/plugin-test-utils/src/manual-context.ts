@@ -20,7 +20,6 @@ export interface ManualFunctionContextOptions {
   readonly playerMessage?: string;
   readonly locale?: string;
   readonly store?: unknown;
-  readonly completedResults?: ReadonlyMap<string, unknown>;
   readonly manualPayload?: Readonly<Record<string, unknown>>;
   /** Provenance-wrapped input bindings exposed as `ctx.inputs`. */
   readonly inputs?: Readonly<Record<string, InputSlot>>;
@@ -40,7 +39,6 @@ export function makeManualFunctionContext({
   playerMessage = "",
   locale,
   store = {},
-  completedResults = new Map(),
   manualPayload = {},
   inputs,
   activation,
@@ -55,7 +53,6 @@ export function makeManualFunctionContext({
     playerMessage,
     ...(locale ? { locale } : {}),
     store,
-    completedResults,
     recursiveCall: async () => {
       throw new Error("recursiveCall is not configured for this test context");
     },

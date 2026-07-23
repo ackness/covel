@@ -44,7 +44,7 @@ describe("chat foundation manifests", () => {
       pluginType: "plugin",
       runtimeType: "function",
       handler: "./handler.js",
-      priority: 450,
+      stage: "pre-turn",
       outputKind: "system",
     });
     expect(sceneCast.capabilities).toContain("scene-cast");
@@ -57,7 +57,7 @@ describe("chat foundation manifests", () => {
     expect(chatNarrator).toMatchObject({
       name: "chat-mode-narrator",
       pluginType: "plugin",
-      priority: 500,
+      stage: "narrative",
       outputKind: "story",
       model: "story",
     });

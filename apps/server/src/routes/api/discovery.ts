@@ -36,7 +36,6 @@ export interface RuntimePluginContract {
   relations?: unknown;
   /** Named stage; absent for event/manual/UI-only runtimes. */
   stage?: Stage;
-  priority?: number;
   trigger?: unknown;
   execution?: unknown;
   model?: unknown;
@@ -252,7 +251,6 @@ function buildRuntimeContract(
     ...(getRuntimeSpec(manifest).stage !== undefined
       ? { stage: getRuntimeSpec(manifest).stage }
       : {}),
-    ...(manifest.priority !== undefined ? { priority: manifest.priority } : {}),
     ...(manifest.trigger ? { trigger: manifest.trigger } : {}),
     ...(manifest.execution ? { execution: manifest.execution } : {}),
     ...(manifest.model ? { model: manifest.model } : {}),

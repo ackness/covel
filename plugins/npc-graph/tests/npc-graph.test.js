@@ -120,17 +120,14 @@ describe("npc-graph manifests", () => {
     const extractor = manifests.find((m) => m.name === "npc-graph/extractor");
     expect(extractor).toBeDefined();
     expect(extractor.pluginType).toBe("plugin");
-    // Narrator-downstream layer — shares priority 600 with guide, codex,
-    // and character-tracker. The scheduler runs all four in parallel.
-    expect(extractor.priority).toBe(600);
+    // Narrator-downstream layer — post-turn stage, run in parallel with guide,
+    // codex, and character-tracker.
+    expect(extractor.stage).toBe("post-turn");
     expect(extractor.capabilities).toContain("npc-graph");
     expect(extractor.tools?.plugin).toContain("upsert-npc-graph");
     expect(extractor.tools?.plugin).toContain("list-npc-graph");
     expect(extractor.trigger?.type).toBe("scheduled");
     expect(extractor.trigger?.interval).toBe(1);
-    // Main-loop band membership is enforced by priority >= 100 server-side;
-    // manifest no longer carries a `trigger.phases` field.
-    expect(extractor.priority).toBeGreaterThanOrEqual(100);
   });
 
   it("rag-retriever is a function runtime that runs before narrator", () => {
@@ -140,11 +137,9 @@ describe("npc-graph manifests", () => {
     expect(retriever).toBeDefined();
     expect(retriever.runtimeType).toBe("function");
     expect(retriever.handler).toBe("./handler.js");
-    // Narrator-prep layer — runs before narrator (500).
-    expect(retriever.priority).toBe(400);
+    // Narrator-prep layer — pre-turn stage runs before the narrative stage.
+    expect(retriever.stage).toBe("pre-turn");
     expect(retriever.capabilities).toContain("graph-rag");
-    // Main-loop band membership enforced by priority >= 100 server-side.
-    expect(retriever.priority).toBeGreaterThanOrEqual(100);
   });
 });
 

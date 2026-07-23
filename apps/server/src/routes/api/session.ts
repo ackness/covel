@@ -19,8 +19,12 @@ import {
   COMMUNITY_SERVER_CODE_ACTION,
   type RpcApprovalGate,
 } from "@covel/approval";
-import { getRuntimeSpec, readRuntimeEnv } from "@covel/shared";
-import { isPreGamePriority } from "@covel/runtime";
+import {
+  deriveLegacyClockForSession,
+  isSetupRuntime,
+  readRuntimeEnv,
+  type SetupRuntimeState,
+} from "@covel/shared";
 import { getPluginTrustInfo, type PluginRegistry } from "@covel/plugin-loader";
 import type {
   DataStore,
@@ -86,10 +90,10 @@ type Env = {
 export const sessionRoutes = new Hono<Env>();
 
 /**
- * Whether any plugin in the set declares a setup-band (Pre-Game) runtime.
- * Discovered by scheduling stage (`getRuntimeSpec(...).legacyOrder` in the
- * setup band) — never by hardcoded plugin id. A session with a setup runtime
- * starts in the `setup` phase; one without starts in `playing`.
+ * Whether any plugin in the set declares a setup-stage runtime. Discovered by
+ * the normalized `stage === "setup"` (via `isSetupRuntime`) — never by hardcoded
+ * plugin id. A session with a setup runtime starts in the `setup` phase; one
+ * without starts in `playing`.
  */
 function sessionHasSetupRuntime(
   pluginIds: readonly string[],
@@ -105,24 +109,36 @@ function sessionHasSetupRuntime(
           ? [entry.manifest.manifest]
           : [];
     for (const manifest of manifests) {
-      if (isPreGamePriority(getRuntimeSpec(manifest).legacyOrder)) return true;
+      if (isSetupRuntime(manifest)) return true;
     }
   }
   return false;
 }
 
 /**
- * Strip the persisted owner-token hash before returning a session over the
- * wire (audit 2026-07-16 L-2). It is an internal credential check; a caller
- * has no use for its own hash and it should not travel in responses.
+ * Prepare a session for the wire: (1) strip the persisted owner-token hash — an
+ * internal credential check a caller has no use for — and (2) refresh the legacy
+ * `turnCount` / `preGameCompleted` fields from the clock. The kernel no longer
+ * writes those columns; deriving them here keeps the response shape identical
+ * while the persisted columns stay frozen for old-kernel / rollback reads.
  */
 function sanitizeSessionForResponse<
-  T extends { readonly metadata?: Record<string, unknown> | null },
+  T extends {
+    readonly metadata?: Record<string, unknown> | null;
+    readonly phase?: "setup" | "playing";
+    readonly completedPlayerTurns?: number;
+    readonly setupRuntimes?: Readonly<Record<string, SetupRuntimeState>>;
+    readonly turnCount?: number;
+    readonly preGameCompleted?: readonly string[];
+  },
 >(session: T): T {
-  const metadata = session.metadata;
-  if (!metadata || !(SESSION_OWNER_TOKEN_HASH_KEY in metadata)) return session;
+  const { turnCount, preGameCompleted } = deriveLegacyClockForSession(session);
+  const withClock = { ...session, turnCount, preGameCompleted };
+  const metadata = withClock.metadata;
+  if (!metadata || !(SESSION_OWNER_TOKEN_HASH_KEY in metadata))
+    return withClock;
   const { [SESSION_OWNER_TOKEN_HASH_KEY]: _omit, ...rest } = metadata;
-  return { ...session, metadata: rest };
+  return { ...withClock, metadata: rest };
 }
 
 /**

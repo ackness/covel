@@ -15,13 +15,15 @@ import type {
   TurnResult,
 } from "@covel/shared";
 import {
-  deriveLegacyClockFields,
   isSetupRuntime,
   mirrorSetupDone,
   resolveSetupGeneration,
 } from "@covel/shared";
 import { executeParallel } from "../schedule/parallel-executor.js";
-import { scheduleByPriority } from "../schedule/scheduler.js";
+import {
+  deriveConservativeSetupEdges,
+  scheduleByDag,
+} from "../schedule/dag-scheduler.js";
 import {
   applyHazardPolicy,
   resolveEffectsPolicy,
@@ -320,14 +322,10 @@ async function executeTurnImpl(
       }
       setupRuntimesSnapshot = patched;
       if (deps.store) {
-        const legacy = deriveLegacyClockFields({
-          phase: sessionState.phase ?? "setup",
-          completedPlayerTurns: sessionState.completedPlayerTurns,
-          setupRuntimes: patched,
-        });
+        // Setup mirror is the sole write surface; `preGameCompleted` derives
+        // from it at read time.
         await deps.store.updateSession(input.sessionId, {
           setupRuntimes: patched,
-          preGameCompleted: legacy.preGameCompleted,
           updatedAt: now,
         });
       }
@@ -402,23 +400,20 @@ async function executeTurnImpl(
       ? retainPreGameRuntimes(preScheduleResult, triggered)
       : preScheduleResult;
 
-  // 2. Schedule runtimes.
+  // 2. Schedule runtimes (stage-driven).
   //
-  // Pre-Game band uses strict priority ordering while setup runtimes are
-  // pending: pregame plugins
-  // have implicit write-ordering (pregame → world-init/schema-gen →
-  // player-init) that is NOT captured in manifest inject declarations, so
-  // falling back to priority is the right semantic. player-init's prompt reads
-  // `{{ world.schema }}`, so schema-gen MUST land first in the same setup pass.
+  // Setup stage (`phase: setup`): the `stage === "setup"` runtimes, ordered by
+  // their declared edges plus a conservative legacy-order chain that keeps
+  // pregame → schema-gen serial (they have implicit write-ordering with no
+  // declared edge). player-init's `needs` order it after both in the same pass.
   //
-  // Main-loop band uses the DAG scheduler after setup completes: it parallelises any
-  // runtimes whose declared upstreams (input.inject + upstreamRequired) have
-  // already completed. Independent branches (narrator's four downstream
-  // plugins — guide/codex/extractor/char-tracker) run concurrently instead
-  // of being serialised by numeric priority. Falls back to priority ordering
-  // only if a cycle is detected (plugin authoring mistake).
+  // Main loop: one DAG per stage (pre-turn → narrative → post-turn → audit),
+  // concatenated in stage order so the executor's sequential group loop is the
+  // strict barrier. Within a stage the DAG parallelises independent branches
+  // (narrator's downstreams run concurrently instead of serialised by number).
+  // A cycle disables its SCC + downstream rather than falling back to a sort.
   //
-  // See packages/runtime/src/dag-scheduler.ts for the algorithm.
+  // See packages/runtime/src/schedule/dag-scheduler.ts for the algorithm.
   const { groups: scheduledGroups, cyclic } = scheduleTriggeredRuntimes({
     manualTarget,
     triggered: scheduledRuntimes,
@@ -615,20 +610,26 @@ async function executeTurnImpl(
     }
   };
 
-  // Late-setup pass (playing band): a plugin enabled after the session left the
-  // setup band has pending setup runtimes the main-loop DAG excludes (priority
-  // ≤ 99). Run them BEFORE the main groups — as a pre-turn catch-up layer — so
-  // their plugin's main runtimes gate on this turn's fresh result. Blocked /
-  // done setup runtimes were already filtered out by selectTriggeredRuntimes.
+  // Late-setup pass (playing phase): a plugin enabled after the session left the
+  // setup phase has pending setup runtimes the main-loop stages exclude. Run them
+  // BEFORE the main groups — as a pre-turn catch-up layer — so their plugin's
+  // main runtimes gate on this turn's fresh result. Same setup DAG (declared
+  // edges + conservative legacy-order chain) as the setup phase. Blocked / done
+  // setup runtimes were already filtered out by selectTriggeredRuntimes.
   if (!isPreGamePending && !manualTarget && !playerAborted()) {
     const lateSetup = scheduledRuntimes.filter((rt) => isSetupRuntime(rt));
-    for (const group of scheduleByPriority(lateSetup, 0)) {
+    const lateSetupPlan = scheduleByDag(
+      lateSetup,
+      deriveConservativeSetupEdges(lateSetup),
+    );
+    for (const group of lateSetupPlan.groups) {
       if (playerAborted()) break;
       const results = await executeParallel(group.runtimes, (manifest) =>
         invoke(manifest, undefined),
       );
       for (const [name, result] of results) completedResults.set(name, result);
     }
+    emitCyclicSkips(lateSetupPlan.cyclic ?? []);
     syncLiveDoneSetup();
   }
 

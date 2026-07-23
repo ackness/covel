@@ -231,6 +231,8 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | GET  | `/api/sessions/:id/turns`    | 持久化 turn_results 执行工件列表（含 `commitStatus`/`origin`；`?limit=n` 上限 500）。为 e2e-plugin-verify harness 恢复的薄路由 |
 
 > 快照的 `messages` 与 `executionSteps` 只含**最近窗口**（默认最新 80 条消息 / 600 条 trace 事件），不再全量加载（长会话每次重连都全量读是原性能热点）。快照带 `messagesCursor`（`{createdAt,id} | null`）；前端聊天界面向上滚动时用它调 `GET /api/sessions/:id/messages/page` 增量补更旧消息。窗口外旧 Turn 的执行时间线优雅降级（不渲染）。
+>
+> 快照内嵌的 session 对象里，`turnCount` / `preGameCompleted` 同 `GET`/`POST /api/sessions` 一样，是由调度时钟（`phase` / `completedPlayerTurns` / `setupRuntimes`）在读取时派生的兼容字段，不是内核直接写入的持久列——响应形状不变，见「会话管理」章节 `POST /api/sessions` 的响应字段说明。
 
 ### Turn 执行
 
@@ -1126,7 +1128,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 ### Turn 执行
 
-Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服务器调度所有活跃的 Runtime 按优先级执行，收集 LLM 输出并返回。
+Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服务器按 stage（`setup` / `pre-turn` / `narrative` / `post-turn` / `audit`，stage 间严格屏障，stage 内按 DAG 依赖并行）调度所有活跃的 Runtime，收集 LLM 输出并返回。
 
 #### `POST /api/sessions/:id/turn`
 
@@ -1187,7 +1189,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 **使用说明:**
 
 - Turn 执行是同步的，响应时间取决于 LLM 调用耗时
-- 每个活跃 Runtime 按优先级依次执行（同优先级并行）
+- 每个活跃 Runtime 按 stage 依次执行，stage 内独立 runtime 并行（依赖 `needs` / `after` / `inputs` 排序）
 - `runtimeResults` 包含每个 Runtime 的输出，可能包含叙事文本、工具调用结果等
 - `session.turnCount` 表示主循环进度：setup-only Pre-Game 执行会保存 `turn_results`，但不会计入主循环轮数；完成 Pre-Game 后最低推进到 `1`
 - 服务端会对每个 runtimeResult 运行 `processRuntimeResult` 提交管道（与 `/api/actions` 一致）：normalize → state.commit → 触发后续 SessionEvent
@@ -2313,7 +2315,7 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 #### `POST /api/sessions/:id/snapshot`
 
-从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 session 生命周期/运行配置（status、turnCount、preGameCompleted、locale、activePlugins、presetId、runtimeModelOverrides）、characters、stateEntries、pluginData、workingMemory、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。读取和保存全程持有该 session 的执行锁，因此不会捕获正在提交回合的混合状态。PG 部署下若锁被一个执行中的回合持有超过获取超时（30s），返回 `503 { code: 'session_busy' }`，应稍后重试。
+从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 session 生命周期/运行配置（status、turnCount、preGameCompleted、locale、activePlugins、presetId、runtimeModelOverrides）、characters、stateEntries、pluginData、workingMemory、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。读取和保存全程持有该 session 的执行锁，因此不会捕获正在提交回合的混合状态。PG 部署下若锁被一个执行中的回合持有超过获取超时（30s），返回 `503 { code: 'session_busy' }`，应稍后重试。payload 里的 `turnCount` / `preGameCompleted` 同样是物化时由 `phase` / `completedPlayerTurns` / `setupRuntimes` 派生写入，不是内核维护的独立持久列。
 
 **响应:**
 

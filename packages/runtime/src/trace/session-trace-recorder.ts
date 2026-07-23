@@ -19,8 +19,6 @@ export interface TraceRecorder {
     pluginId: string;
     /** Named stage (setup/pre-turn/…); absent for event/manual/UI-only. */
     stage?: Stage;
-    /** Kept until Step 6; `stage` supersedes it as the readable order axis. */
-    priority: number | undefined;
   }): Promise<void>;
   runtimeCompleted(info: {
     runtimeId: string;

@@ -18,6 +18,7 @@ import {
   type LLMResponse,
 } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
+import { deriveLegacyClockForSession } from "@covel/shared";
 import { actionRoutes } from "../../src/routes/api/actions.js";
 import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
@@ -278,7 +279,7 @@ describe("start-game API lifecycle scenario", () => {
     );
 
     const session = await store.getSession("sess-start-flow-api");
-    expect(session?.turnCount).toBe(0);
+    expect(deriveLegacyClockForSession(session!).turnCount).toBe(0);
 
     const playerMessages = (await store.listTurnMessages("sess-start-flow-api"))
       .filter((message) => message.sourceType === "player")
@@ -370,7 +371,7 @@ describe("start-game API lifecycle scenario", () => {
     ).toHaveLength(0);
 
     const session = await store.getSession("sess-start-flow-api");
-    expect(session?.turnCount).toBe(1);
+    expect(deriveLegacyClockForSession(session!).turnCount).toBe(1);
 
     const turnResults = await store.listTurnResults("sess-start-flow-api");
     expect(turnResults).toHaveLength(2);
@@ -406,7 +407,7 @@ describe("start-game API lifecycle scenario", () => {
     // logical turn 1 → turnCount 1. The old floor-absorption heuristic reported
     // 2 here by counting the form-submit's same-request narrator followup as a
     // completed main-loop turn.
-    expect(afterFirstMainLoop?.turnCount).toBe(1);
+    expect(deriveLegacyClockForSession(afterFirstMainLoop!).turnCount).toBe(1);
     expect(afterFirstMainLoop?.completedPlayerTurns).toBe(1);
   });
 });

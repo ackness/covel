@@ -272,10 +272,12 @@ describe("main-loop dependency-cycle SCC", () => {
         ...extra,
       }) as RuntimeManifest;
 
-    // a ⇄ b cycle; c independent.
-    const a = main("a", 500, inject("b"));
-    const b = main("b", 510, inject("a"));
-    const c = main("c", 520);
+    // a ⇄ b cycle; c independent. All post-turn (same stage) so the cycle sits
+    // inside one stage's DAG — a cross-stage cycle is not a cycle, since the
+    // stage barrier already orders the two runtimes.
+    const a = main("a", 600, inject("b"));
+    const b = main("b", 600, inject("a"));
+    const c = main("c", 600);
 
     const deps: TurnExecutorDeps = {
       loadRuntime: async (m) => ({

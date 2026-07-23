@@ -28,6 +28,7 @@ import type {
   LorebookEntryRecord,
   SuspensionRecord,
 } from "@covel/store";
+import { deriveLegacyClockForSession } from "@covel/shared";
 
 /**
  * Build a full snapshot payload for a session at a given turn.
@@ -119,8 +120,9 @@ export async function buildSnapshotPayload(
     turnId,
     session: {
       status: session.status,
-      turnCount: session.turnCount,
-      preGameCompleted: session.preGameCompleted,
+      // Legacy clock fields derived from the phase/setup mirror (the kernel no
+      // longer writes the columns) so a fork restores consistent values.
+      ...deriveLegacyClockForSession(session),
       locale: session.locale,
       activePlugins: session.activePlugins,
       presetId: session.presetId,

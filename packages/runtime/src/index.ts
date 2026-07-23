@@ -3,11 +3,9 @@ export { shouldTrigger } from "./trigger/trigger.js";
 
 // ── Scheduler ────────────────────────────────────────────────────
 export {
-  scheduleByPriority,
-  isPreGamePriority,
-  isMainLoopPriority,
-} from "./schedule/scheduler.js";
-export { scheduleByDag } from "./schedule/dag-scheduler.js";
+  scheduleByDag,
+  deriveConservativeSetupEdges,
+} from "./schedule/dag-scheduler.js";
 
 // ── Effects hazard (same-layer read/write policy) ────────────────
 export {

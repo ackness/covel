@@ -58,8 +58,15 @@ export interface RuntimeOutputPromptMessage {
 export interface RuntimeOutputMetaData {
   /** Global 0-based turnNumber (counts all player messages). */
   readonly turn: number;
-  /** Set by Pre-Game band runtimes (priority 0-99) when they have finished
-   *  their session-level work. Ignored on main-loop runtimes. */
+  /**
+   * Set by Pre-Game band runtimes (priority 0-99) when they have finished
+   * their session-level work. Ignored on main-loop runtimes.
+   *
+   * @deprecated Superseded by the envelope-v1 `completion: "done"` signal, the
+   * canonical source of Pre-Game completion. Kept only for the legacy
+   * resultFormat path and the compat projection in `project-envelope-result.ts`,
+   * which derives this flag from `completion: "done"` for older readers.
+   */
   readonly preGameDone?: boolean;
   /**
    * Prompt delta relative to the previous call of the same runtime in

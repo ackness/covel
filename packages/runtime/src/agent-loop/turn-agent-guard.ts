@@ -30,7 +30,6 @@ export interface ExecuteAgentGuardOptions {
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   readonly loaded: LoadedRuntime;
-  readonly completedResults: ReadonlyMap<string, RuntimeResult>;
   readonly deps: TurnExecutorDeps;
   readonly hookPipeline: HookPipeline | undefined;
   readonly triggerEvent:
@@ -58,7 +57,6 @@ export async function executeAgentGuard({
   manifest,
   input,
   loaded,
-  completedResults,
   deps,
   hookPipeline,
   triggerEvent,
@@ -215,7 +213,6 @@ export async function executeAgentGuard({
       playerMessage: input.playerMessage,
       locale: input.locale,
       store: guardStore,
-      completedResults,
       recursiveCall: guardRecursiveCall,
       recursionDepth,
       ...(deps.gateway && trustedGuard

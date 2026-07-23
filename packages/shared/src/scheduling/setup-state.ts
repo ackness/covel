@@ -26,6 +26,17 @@ export function isSetupRuntime(manifest: RuntimeManifest): boolean {
 }
 
 /**
+ * A runtime belongs to the main loop iff it has a stage other than `setup`
+ * (pre-turn / narrative / post-turn / audit). Stage-less runtimes (event /
+ * manual / UI-only) are neither setup nor main-loop — they are never
+ * band-scheduled. Replaces the old `isMainLoopPriority` (priority 100–1000).
+ */
+export function isMainLoopRuntime(manifest: RuntimeManifest): boolean {
+  const stage = getRuntimeSpec(manifest).stage;
+  return stage !== undefined && stage !== "setup";
+}
+
+/**
  * Retry budget for a setup runtime = its `maxTriggerCount` (undefined ⇒
  * unbounded, never blocks). Read from the normalized trigger so the legacy
  * `scheduled interval:1 maxTriggerCount:1` idiom (folded to `auto`) resolves

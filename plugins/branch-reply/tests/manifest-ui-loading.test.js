@@ -25,7 +25,7 @@ describe("branch-reply manifest and UI loading", () => {
       pluginType: "plugin",
       runtimeType: "function",
       outputKind: "system",
-      priority: 700,
+      stage: "post-turn",
       handler: "./handler.js",
       // auto so the seed path runs after the narrative engines each turn;
       // the manual createCandidates / acceptCandidate actions still arrive via

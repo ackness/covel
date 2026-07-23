@@ -243,7 +243,6 @@ describe("listPackages", () => {
             {
               id: "narrator",
               kind: "agent",
-              priority: 500,
               trigger: { type: "event", topic: "story.ready" },
               tags: ["mode:traditional-story", "role:narrator"],
               relations: { provides: ["narrative-engine"] },

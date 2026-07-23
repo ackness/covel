@@ -404,7 +404,6 @@ export interface FunctionHandlerContext {
    * The runtime decides which to inject based on discovery-source trust.
    */
   readonly store: FunctionStoreView | unknown;
-  readonly completedResults: ReadonlyMap<string, unknown>;
   /**
    * Optional gateway facade for function runtimes that need LLM / image /
    * structured-object generation. Absent when the executor was constructed

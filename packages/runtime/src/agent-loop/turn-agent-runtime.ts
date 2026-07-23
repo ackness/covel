@@ -110,7 +110,6 @@ export async function executeAgentRuntime({
       runtimeId: manifest.name,
       pluginId: manifest.pluginId,
       ...(stage !== undefined ? { stage } : {}),
-      priority: manifest.priority,
     });
   } catch {
     /* callback error must not kill runtime */
@@ -119,7 +118,6 @@ export async function executeAgentRuntime({
     runtimeId: manifest.name,
     pluginId: manifest.pluginId,
     ...(stage !== undefined ? { stage } : {}),
-    priority: manifest.priority,
   });
 
   // ── PreRuntime hook ──────────────────────────────────

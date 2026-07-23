@@ -43,7 +43,6 @@ export async function buildPackagesResponse(registry: PluginRegistry): Promise<{
       ...(getRuntimeSpec(m.manifest).stage !== undefined
         ? { stage: getRuntimeSpec(m.manifest).stage }
         : {}),
-      priority: m.manifest.priority ?? 500,
       trigger: normalizeRuntimeTrigger(m.manifest.trigger),
       ...(m.manifest.model ? { model: m.manifest.model } : {}),
       ...(m.manifest.outputKind ? { outputKind: m.manifest.outputKind } : {}),
