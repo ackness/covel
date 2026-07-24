@@ -28,7 +28,7 @@ import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { finalizeAgentOutput } from "./finalize-agent-output.js";
 import { normalizeHandlerResult } from "../commit/normalize-handler-result.js";
-import { filterHistoryForStory } from "./message-filter.js";
+import { filterRuntimeHistory } from "./message-filter.js";
 import {
   checkSchemaProseFailure,
   checkSchemaValidation,
@@ -159,19 +159,17 @@ export async function executeAgentRuntime({
   // declares any `input.inject` entries of kind `plugin-data`. The async
   // path resolves those against the store; the sync path is unchanged
   // and handles all legacy runtime-output injects.
-  // Filter message history based on runtime's outputKind.
-  // Story runtimes (narrator) should only see player messages + their own
-  // previous story outputs. This prevents context pollution where guide JSON,
-  // codex JSON, character-tracker JSON etc. leak into the narrator prompt,
-  // causing the LLM to mimic those formats.
-  //
-  // Filtering uses sourceRuntimeId to look up the runtime's outputKind
-  // from the active manifests. Messages from runtimes not in the active set
-  // are kept (conservative — don't drop unknown messages).
-  const filteredHistory =
-    manifest.outputKind === "story"
-      ? filterHistoryForStory(messageHistory, manifest.name)
-      : messageHistory;
+  // Filter message history for every agent runtime: drop OTHER plugins'
+  // structured tool-output JSON while keeping player/system messages,
+  // narrative-like text, and the runtime's own previous outputs. Story
+  // runtimes need this so they don't mimic JSON formats; post-turn extraction
+  // runtimes (character-tracker / codex / npc-graph / scene-prompts) need it so
+  // other plugins' JSON doesn't accumulate in their prompt turn after turn —
+  // they already get the current narrative via `<narrator-output>` and their
+  // own state via plugin-data injects, and never read another plugin's output
+  // from history. Conservative: player/system messages and prose from any
+  // runtime are kept — only structured-looking output is dropped.
+  const filteredHistory = filterRuntimeHistory(messageHistory, manifest.name);
 
   // Surface player-authored plugin settings to agent prompts as
   // `{{ userSettings.<key> }}`. Merge with manifest defaults so templates
