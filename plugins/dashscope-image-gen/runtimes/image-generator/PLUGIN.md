@@ -38,13 +38,13 @@ userSettings:
     type: number
     default: 1
     min: 1
-    max: 4
+    max: 6
     label:
       zh: 一次生成几张
       en: Images per click
     description:
-      zh: 每次点击生成几张图。新款模型（wan2.6 / wan2.7 系列）一次最多 4 张；更早的模型一次一张。
-      en: How many images to create per click. Newer models (wan2.6 / wan2.7 series) create up to 4 at a time; older models create one.
+      zh: 每次点击生成几张图。qwen-image-3 系列一次最多 6 张，wan2.6 / wan2.7 系列最多 4 张；更早的模型一次一张。
+      en: How many images to create per click. The qwen-image-3 series creates up to 6 at a time, wan2.6 / wan2.7 up to 4; older models create one.
   - key: requestTimeoutMs
     type: number
     default: 300000

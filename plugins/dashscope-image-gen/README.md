@@ -12,7 +12,7 @@
   - **promptMode**：`text`（自然语言段落）/ `image-json`（结构化 JSON）
 - 漫画模式下支持「严格网格 / 动态跨格 / 大跨页主导」三种排版风格，可选 2-6 格
 - 所有模式默认带上 4K / ultra detailed / masterpiece 等画质关键词，让模型按最高品质渲染
-- 想在 `wan2.6-t2i` / `wan2.6-image` / `wan2.7-image` / `wan2.7-image-pro` 等模型间切换，加一个新 `llm.toml` slot 再改 `modelPresetId`（见「废弃字段」）。选型速记：`wan2.6-t2i` 纯文生图且**支持 `negative_prompt`**；`wan2.7-image` 快、`wan2.7-image-pro` 支持 4K 文生图，但两者都**不支持 `negative_prompt`**（wire 自动剥离）；这四个模型都支持一次 1–4 张（`n`）
+- 想在 `qwen-image-3.0-pro` / `wan2.6-t2i` / `wan2.6-image` / `wan2.7-image` / `wan2.7-image-pro` 等模型间切换，加一个新 `llm.toml` slot 再改 `modelPresetId`（见「废弃字段」）。选型速记：**`qwen-image-3.0-pro` 是当前旗舰**——同步接口（无异步轮询、出图等待最短）、支持 `negative_prompt`、一次最多 6 张；`wan2.6-t2i` 纯文生图且支持 `negative_prompt`；`wan2.7-image` 快、`wan2.7-image-pro` 支持 4K 文生图，但两者都**不支持 `negative_prompt`**（wire 自动剥离）；wan2.6/wan2.7 一次最多 4 张（`n`）
 
 ## 组成
 
@@ -42,7 +42,7 @@ image-generator：
 | ------------------ | -------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `modelPresetId`    | text     | `image`                                                                  | `llm.toml` 中的 slot/preset id，决定 provider/baseUrl/apiKey/model。换模型 = 加一个新 slot 然后改这个值                                                                      |
 | `imageSize`        | text     | `1024x1024`                                                              | 写 `x` 分隔像素形式（`1024x1024` / `1440x720` 等），wire 内部转成 DashScope 的 `*` 分隔；wan2.6/wan2.7 也接受 `1K` / `2K`（`4K` 仅 `wan2.7-image-pro` 文生图）档位，原样透传 |
-| `n`                | number   | `1`                                                                      | 一次生成几张图；`wan2.6-image` / `wan2.6-t2i` / `wan2.7-image*` 支持 1–4（超出 clamp 到 4），更早的 wan2.x 仍为单图任务（clamp 到 1），均附 warning                          |
+| `n`                | number   | `1`                                                                      | 一次生成几张图；`qwen-image-3.*` 支持 1–6、`wan2.6-image` / `wan2.6-t2i` / `wan2.7-image*` 支持 1–4，更早的模型单图任务；超出各自上限由 wire clamp 并附 warning              |
 | `requestTimeoutMs` | number   | `300000`                                                                 | 单次生成最多等待多久（含轮询），避免图片任务一直停住                                                                                                                         |
 | `quality`          | text     | `low`                                                                    | 画质提示；wan2.x 原生接口没有对应参数，wire 会忽略，仅作为记录里的展示字段保留                                                                                               |
 | `negativePrompt`   | textarea | `low quality, blurry, watermark, text, extra fingers, distorted anatomy` | 透传给 wire；`wan2.7-image` 系列模型不支持，wire 自动剥离并返回 warning（记进 `_logs` + 记录的 `warnings` 字段）                                                             |
@@ -60,7 +60,7 @@ image-generator：
 ```toml
 [covel.image]
 provider = "dashscope"
-model    = "wan2.6-t2i"   # 文生图推荐：支持 negative_prompt + n 1–4；老部署可继续用 wan2.2-t2i-turbo
+model    = "qwen-image-3.0-pro"   # 推荐：同步出图 + negative_prompt + n 1–6；也可用 wan2.6-t2i / wan2.2-t2i-turbo
 baseUrl  = "https://dashscope.aliyuncs.com"
 apiKey   = "${env:DASHSCOPE_API_KEY}"
 protocol = "openai-chat-v1"
