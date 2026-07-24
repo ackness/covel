@@ -2,6 +2,7 @@ import {
   COVEL_EVENT_META,
   PROPOSAL_TYPES,
   getRuntimeSpec,
+  inputInjectDeclSchema,
   outputKindSchema,
   triggerTypeSchema,
   worldDataEffectSchema,
@@ -368,7 +369,11 @@ export function buildFrameworkCapabilities(
         outputKinds: enumValues(outputKindSchema),
         runtimeTypes: ["agent", "function"],
         executionModes: ["sync", "background"],
-        inputInjectKinds: ["runtime", "plugin-data"],
+        // Derived from the inject discriminated union so a new kind
+        // (e.g. runtime-export) can never go missing from the advert.
+        inputInjectKinds: inputInjectDeclSchema.options.map(
+          (option) => option.shape.kind.value,
+        ),
         uiSlots: ["right", "message", "left"],
       },
       pluginData: {
