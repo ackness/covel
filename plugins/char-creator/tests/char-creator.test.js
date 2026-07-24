@@ -138,7 +138,6 @@ describe("char-creator plugin", () => {
     it("injects narrativeOutput from both narrative engines ", () => {
       // Engine-agnostic: one inject per known narrative engine; the absent
       // engine resolves to nothing so exactly the active one fills the block.
-      expect(manifest.input?.inject).toHaveLength(2);
       for (const engine of ["narrator", "chat-mode-narrator"]) {
         expect(manifest.input.inject).toContainEqual({
           kind: "runtime",
@@ -147,6 +146,23 @@ describe("char-creator plugin", () => {
           as: "<narrator-output>",
         });
       }
+    });
+
+    it("injects the existing-characters roster as plugin-data (no list round-trip)", () => {
+      // The tracker's own characters are mirrored to plugin_data[characters];
+      // injecting them at prompt-build time removes the mandatory per-turn
+      // list-characters tool round-trip (same pattern codex uses for entries).
+      const pluginDataInjects = (manifest.input?.inject ?? []).filter(
+        (i) => i.kind === "plugin-data",
+      );
+      expect(pluginDataInjects).toContainEqual(
+        expect.objectContaining({
+          kind: "plugin-data",
+          namespace: "characters",
+          as: "<existing-characters>",
+          format: "summary",
+        }),
+      );
     });
 
     it("gates on the narrative-engine capability, not an exact runtime ", () => {

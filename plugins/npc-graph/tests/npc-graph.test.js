@@ -130,6 +130,28 @@ describe("npc-graph manifests", () => {
     expect(extractor.trigger?.interval).toBe(1);
   });
 
+  it("extractor drops the never-used generic plugin-data builtin tools", () => {
+    // These were scaffold residue — the prompt never referenced them; the
+    // dedicated list-npc-graph tool + plugin-data injects cover the same need.
+    const builtin = manifests.find((m) => m.name === "npc-graph/extractor")
+      .tools?.builtin;
+    expect(builtin ?? []).not.toContain("plugin-data-list");
+    expect(builtin ?? []).not.toContain("plugin-data-get");
+  });
+
+  it("extractor injects the existing graph as plugin-data (no list round-trip)", () => {
+    // Nodes/edges are the extractor's own plugin_data; injecting them at
+    // prompt-build time removes the mandatory per-turn list-npc-graph round-trip
+    // (same pattern codex/character-tracker use). Nodes keyed by id, edges keyed
+    // by edge id — the tool works name-first so the LLM only needs to SEE them.
+    const injects = manifests.find((m) => m.name === "npc-graph/extractor")
+      .input?.inject;
+    const pluginData = (injects ?? []).filter((i) => i.kind === "plugin-data");
+    const namespaces = pluginData.map((i) => i.namespace);
+    expect(namespaces).toContain("nodes");
+    expect(namespaces).toContain("edges");
+  });
+
   it("rag-retriever is a function runtime that runs before narrator", () => {
     const retriever = manifests.find(
       (m) => m.name === "npc-graph/rag-retriever",

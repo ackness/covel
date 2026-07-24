@@ -259,19 +259,18 @@
 
 ### npc-graph/extractor
 
-| 字段          | 值                                                                                                                  |
-| ------------- | ------------------------------------------------------------------------------------------------------------------- |
-| pluginType    | `plugin`                                                                                                            |
-| runtimeType   | `agent`（LLM 驱动）                                                                                                 |
-| stage         | `post-turn`（与 guide / codex / character-tracker 同 stage 并行执行）                                               |
-| capabilities  | `[npc-graph, relationship-tracking]`                                                                                |
-| trigger       | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                      |
-| needs         | `[{ capability: narrative-engine }]` — 引擎无关（H-04），当前模式的叙事引擎失败时 skip（取代旧 `upstreamRequired`） |
-| input.inject  | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空）           |
-| model slot    | `plugin`                                                                                                            |
-| tools.plugin  | `upsert-npc-graph`（批量写节点+边）、`list-npc-graph`（列出现有图）                                                 |
-| tools.builtin | `plugin-data-list`、`plugin-data-get`                                                                               |
-| ui.right      | `./ui/npc-graph-panel.json`                                                                                         |
+| 字段         | 值                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pluginType   | `plugin`                                                                                                                                                                                                                                                                                                                                                                |
+| runtimeType  | `agent`（LLM 驱动）                                                                                                                                                                                                                                                                                                                                                     |
+| stage        | `post-turn`（与 guide / codex / character-tracker 同 stage 并行执行）                                                                                                                                                                                                                                                                                                   |
+| capabilities | `[npc-graph, relationship-tracking]`                                                                                                                                                                                                                                                                                                                                    |
+| trigger      | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                                                                                                                                                                                                                                                                          |
+| needs        | `[{ capability: narrative-engine }]` — 引擎无关（H-04），当前模式的叙事引擎失败时 skip（取代旧 `upstreamRequired`）                                                                                                                                                                                                                                                     |
+| input.inject | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空）；`plugin-data[nodes]` → `<existing-npcs>`、`plugin-data[edges]` → `<existing-relations>`（`format: summary`，现有图在构建 prompt 时注入，免去每轮 `list-npc-graph` 往返 —— 同 codex `<existing-entries>` 模式；工具 name-first，LLM 只需看见图，不需携带 id） |
+| model slot   | `plugin`                                                                                                                                                                                                                                                                                                                                                                |
+| tools.plugin | `upsert-npc-graph`（批量写节点+边）、`list-npc-graph`（现有图已注入，仅在需要某关系完整 fact 时按需调用）                                                                                                                                                                                                                                                               |
+| ui.right     | `./ui/npc-graph-panel.json`                                                                                                                                                                                                                                                                                                                                             |
 
 **职责**: 维护一张会话级的人物-关系图。从叙事文本中抽取 NPC 节点（individual / group / faction）、它们的关系（信任、结盟、欠债、背叛等）以及每条关系的自然语言事实，持久化到 `plugin_data` 的 `nodes`、`edges`、`index`、`meta` 四个 namespace。
 
@@ -384,21 +383,21 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 ### char-creator/character-tracker
 
-| 字段          | 值                                                                                                                  |
-| ------------- | ------------------------------------------------------------------------------------------------------------------- |
-| pluginType    | `core-plugin`                                                                                                       |
-| stage         | `post-turn`（与 guide / codex / extractor 同 stage 并行）                                                           |
-| trigger       | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                      |
-| model         | `plugin`                                                                                                            |
-| tools.builtin | `create-character`, `update-character`, `list-characters`, `get-character`                                          |
-| input.inject  | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空）           |
-| needs         | `[{ capability: narrative-engine }]` — 引擎无关（H-04），当前模式的叙事引擎失败时 skip（取代旧 `upstreamRequired`） |
+| 字段          | 值                                                                                                                                                                                                                                                                                           |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pluginType    | `core-plugin`                                                                                                                                                                                                                                                                                |
+| stage         | `post-turn`（与 guide / codex / extractor 同 stage 并行）                                                                                                                                                                                                                                    |
+| trigger       | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                                                                                                                                                                                               |
+| model         | `plugin`                                                                                                                                                                                                                                                                                     |
+| tools.builtin | `create-character`, `update-character`, `list-characters`, `get-character`（后两者仅按需，非每轮必调）                                                                                                                                                                                       |
+| input.inject  | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空）；`plugin-data[characters]` → `<existing-characters>`（`format: summary`，现有角色名册在构建 prompt 时注入，免去每轮 `list-characters` 往返 —— 同 codex `<existing-entries>` 模式） |
+| needs         | `[{ capability: narrative-engine }]` — 引擎无关（H-04），当前模式的叙事引擎失败时 skip（取代旧 `upstreamRequired`）                                                                                                                                                                          |
 
 **职责**: 每轮扫描 narrator 输出，发现新的有名字 NPC → `create-character(type="npc")`；检测叙事中的角色状态变化（受伤、死亡、装备、关系）→ `update-character(fields: {...})`。工作流：
 
-1. `list-characters` 获取现有角色（避免重复）
+1. 查看 `<existing-characters>`（框架自动注入的现有角色名册，行首即角色 id）避免重复；不再每轮强制 `list-characters`
 2. 阅读叙事识别新 NPC + 状态变化
-3. 仅对明确出现的变化调用 create/update 工具
+3. 仅对明确出现的变化调用 create/update 工具（update 用注入名册里的 id；摘要不足以决策时才按需 `get-character`）
 4. 每次最多创建 5 个 NPC（防止 runaway）
 5. 不修改玩家角色属性（除非叙事明确描述）
 
@@ -461,7 +460,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 `setup` stage runtime（`phase === "setup"` 期间）由框架强制保护，`PreSchedule` 收窄只影响主循环。
 
-**配置（per-session userSettings，env 兜底）**: 两个阈值现已 per-session 可配——hook 经 `HookContext.getOwnSettings()` 读取本插件解析后的 `userSettings`（manifest 默认值与玩家保存值合并的冻结快照），玩家可在 `设置 > Plugins > cost-gate` 按局调整。`softTokens`（默认 150000）软上限 · `hardTokens`（默认 200000）硬上限。每次 hook 调用按三级回退链解析：**per-session `userSettings` → env（`COST_GATE_SOFT_TOKENS` / `COST_GATE_HARD_TOKENS`）→ 硬编码默认**，故只设 env 的旧部署照常工作。软上限须低于硬上限，否则收窄无窗口（cost-gate 一次性告警）。
+**配置（per-session userSettings，env 兜底）**: 两个阈值现已 per-session 可配——hook 经 `HookContext.getOwnSettings()` 读取本插件解析后的 `userSettings`（manifest 默认值与玩家保存值合并的冻结快照），玩家可在 `设置 > Plugins > cost-gate` 按局调整。`softTokens`（默认 400000）软上限 · `hardTokens`（默认 600000）硬上限。每次 hook 调用按三级回退链解析：**per-session `userSettings` → env（`COST_GATE_SOFT_TOKENS` / `COST_GATE_HARD_TOKENS`）→ 硬编码默认**，故只设 env 的旧部署照常工作。软上限须低于硬上限，否则收窄无窗口（cost-gate 一次性告警）。
 
 **限制**: 计数为进程内、非持久——重启清零，多进程（PG / T3）不共享（单进程 T1/T2 是硬上限，T3 为每进程软信号）。详见 `plugins/cost-gate/README.md`。
 

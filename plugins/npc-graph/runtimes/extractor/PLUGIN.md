@@ -39,13 +39,26 @@ input:
       from: chat-mode-narrator
       field: narrativeOutput
       as: "<narrator-output>"
+    # Existing graph injected at prompt-build time (own plugin_data), removing
+    # the mandatory per-turn list-npc-graph round-trip — same pattern codex /
+    # character-tracker use. The upsert tool works name-first (it maps names →
+    # ids internally), so the LLM only needs to SEE the current graph, not carry
+    # ids: nodes give name/type/summary; relations give the current facts so the
+    # LLM avoids re-recording unchanged ones.
+    - kind: plugin-data
+      namespace: nodes
+      as: "<existing-npcs>"
+      format: summary
+      maxEntries: 60
+    - kind: plugin-data
+      namespace: edges
+      as: "<existing-relations>"
+      format: summary
+      maxEntries: 60
 tools:
   plugin:
     - upsert-npc-graph
     - list-npc-graph
-  builtin:
-    - plugin-data-list
-    - plugin-data-get
 ui:
   right:
     - ./ui/npc-graph-panel.json
@@ -53,8 +66,8 @@ postHistory:
   role: system
   content: |
     本 runtime 工作流：
-    - 先调用一次 `list-npc-graph` 查看已有节点/关系
-    - 有新节点或新关系时，调用一次 `upsert-npc-graph`
+    - 已有节点见 `<existing-npcs>`、已有关系见 `<existing-relations>`（框架构建 prompt 时自动注入，无需调用 list-npc-graph）
+    - 有新节点或新关系时，调用一次 `upsert-npc-graph`（按 name 提交，工具内部映射 id）
     - 没有显著人物互动时，不调用 `upsert-npc-graph`
     - 完成（或决定不更新）后，立即调用 `runtime-done` 结束
 ---
@@ -65,9 +78,14 @@ postHistory:
 
 本轮叙事在 prompt 末尾的 `<narrator-output>` 块中（由框架 `input.inject` 自动注入，正文不再重复内联）。
 
-## 已有图谱
+## 已有图谱（已自动注入，无需工具）
 
-先调用 `list-npc-graph` 查看本会话已登记的节点与边，避免重复创建。
+本会话已登记的节点与关系在 prompt 末尾自动注入，**无需**调用 `list-npc-graph`：
+
+- `<existing-npcs>`：已有节点，每行 `- <节点id> | <更新时间> | {name, type, summary, ...}`。按 **name** 比对避免重复创建（工具也按 name 去重）。
+- `<existing-relations>`：已有关系，每行 `- <边id> | <更新时间> | {source, target, relation, strength, fact, validAt, invalidAt?}`。`source`/`target` 是节点 id；带 `invalidAt` 的是已失效的旧版本，忽略。摘要里的 `fact` 可能被截断——只用来判断"这条关系是否已登记过"，据此避免重复记录未变化的关系。
+
+极少数需要某关系完整 fact 才能判断是否变化时，才按需调用 `list-npc-graph`。
 
 ## 本体约束
 
@@ -83,7 +101,7 @@ postHistory:
 
 ## 工作流
 
-1. **读取**：调用 `list-npc-graph`，拿到当前会话所有节点和边的摘要
+1. **读取**：查看已注入的 `<existing-npcs>` 与 `<existing-relations>`（无需工具调用）
 2. **比对**：对照 `<narrator-output>` 中出现的人物和互动
 3. **抽取**：
    - 对**新出现**的人物/群体/势力 → 登记为新节点

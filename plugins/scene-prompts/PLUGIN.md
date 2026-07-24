@@ -67,12 +67,7 @@ postHistory:
 
 ## 当前叙事结果
 
-最新一轮叙事见上方 `<narrator-output>` 区块（由当前模式的叙事引擎注入）。
-
-## 你的任务
-
-1. 调用一次 `generate-scene-prompts`
-2. 工具返回后，立即调用 `runtime-done`
+最新一轮叙事见上方 `<narrator-output>` 区块（由当前模式的叙事引擎注入）。工具调用流程见结尾的强制两步说明。
 
 ## 提示类型
 
@@ -88,5 +83,3 @@ postHistory:
 - 每条提示都必须是玩家可以直接发送的第一人称或祈使行动文本
 - 优先覆盖当前叙事里的关键对象、地点、角色、危险、线索
 - 使用具体动作和目标
-- 固定只调用一次 `generate-scene-prompts`
-- 调用成功后立即调用 `runtime-done`

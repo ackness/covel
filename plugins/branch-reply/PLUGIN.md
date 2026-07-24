@@ -46,7 +46,7 @@ ui:
 
 Function runtime for Covel-native swipe + regenerate storage. Runs two ways:
 
-- **Auto seed** (`trigger: auto`, priority 700 — after the narrative engines):
+- **Auto seed** (`trigger: auto`, `stage: post-turn` — after the narrative engines):
   with no `manualPayload`, it reads the active story engine's `narrativeOutput`
   from `completedResults` (engine-agnostic — discovered by the non-empty
   `narrativeOutput` contract, never by plugin id, so it works under `narrator`
