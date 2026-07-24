@@ -170,6 +170,19 @@ const authoringPositive: Fixture = {
   },
 };
 
+// The bundled plugins declare `description` as an I18nText map (preferred);
+// the schema must accept it so editor tooling doesn't flag every manifest.
+// The loader still folds it to a single string after parse.
+const authoringI18nDescriptionPositive: Fixture = {
+  name: "I18nText description map",
+  manifest: {
+    ...base,
+    description: { zh: "样例运行时。", en: "A sample runtime." },
+    stage: "post-turn",
+    trigger: { type: "auto" },
+  },
+};
+
 // ── Authoring rejections ────────────────────────────────────────────
 
 const authoringStructuralRejections: readonly Fixture[] = [
@@ -228,6 +241,16 @@ const authoringCrossFieldRejections: readonly Fixture[] = [
     name: "event trigger without topic",
     zodOnly: true,
     manifest: { ...base, trigger: { type: "event" } },
+  },
+  {
+    name: "needs scope 'session' on a non-setup stage",
+    zodOnly: true,
+    manifest: {
+      ...base,
+      stage: "post-turn",
+      trigger: { type: "auto" },
+      needs: [{ runtime: "world-seed/setup", scope: "session" }],
+    },
   },
   {
     name: "manual trigger with a stage",
@@ -320,6 +343,23 @@ describe("runtimeManifestInputSchema (compat superset)", () => {
 describe("runtimeManifestAuthoringSchema (strict authoring)", () => {
   it(`accepts ${authoringPositive.name}`, () => {
     assertAccepted("authoring", authoringPositive);
+  });
+
+  it(`accepts ${authoringI18nDescriptionPositive.name}`, () => {
+    assertAccepted("authoring", authoringI18nDescriptionPositive);
+  });
+
+  it("rejects an empty i18n description map (Zod refine only)", () => {
+    assertRejected("authoring", {
+      name: "empty i18n description map",
+      zodOnly: true,
+      manifest: {
+        ...base,
+        description: {},
+        stage: "post-turn",
+        trigger: { type: "auto" },
+      },
+    });
   });
 
   for (const fixture of authoringStructuralRejections) {

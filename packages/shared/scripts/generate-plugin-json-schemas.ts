@@ -37,7 +37,9 @@ const SHARED_UNREPRESENTABLE_CONSTRAINTS = [
   "trigger.topic is required when trigger.type is 'event'.",
   "a runtime declaring `stage` cannot use trigger.type 'event' or 'manual'.",
   "stage 'setup' runtimes must use trigger.type 'auto' with no interval/startTurn/cooldownTurns.",
+  "needs entries with scope 'session' are only valid on stage 'setup' runtimes.",
   "effects.reads, effects.writes and permissions.http[].methods must contain unique entries.",
+  "an i18n description map must have at least one locale entry.",
 ] as const;
 
 interface ManifestSchemaDoc {
@@ -51,7 +53,7 @@ const INPUT_DOC: ManifestSchemaDoc = {
   id: "https://covel.local/schemas/runtime-manifest.input.schema.json",
   title: "Covel runtime manifest (compat input)",
   summary:
-    "Backward-compatible superset accepted by the plugin loader. Retains legacy priority / upstreamRequired / jobStatus and the reserved trigger types.",
+    "Backward-compatible superset accepted by the plugin loader. Retains legacy priority / upstreamRequired / jobStatus; the trigger enum is the four production types.",
   constraints: SHARED_UNREPRESENTABLE_CONSTRAINTS,
 };
 

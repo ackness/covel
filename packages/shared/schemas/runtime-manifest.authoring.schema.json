@@ -1,7 +1,7 @@
 {
   "$id": "https://covel.local/schemas/runtime-manifest.authoring.schema.json",
   "title": "Covel runtime manifest (strict authoring)",
-  "description": "Strict target for newly authored plugins. Rejects priority / upstreamRequired / jobStatus and the reserved trigger types.\n\nEnforced by Zod but not representable in this JSON Schema (validate with the Zod schema for these):\n- output.schema is required when output.recordAs is set.\n- trigger.topic is required when trigger.type is 'event'.\n- a runtime declaring `stage` cannot use trigger.type 'event' or 'manual'.\n- stage 'setup' runtimes must use trigger.type 'auto' with no interval/startTurn/cooldownTurns.\n- effects.reads, effects.writes and permissions.http[].methods must contain unique entries.\n- auto / scheduled runtimes must declare a stage.",
+  "description": "Strict target for newly authored plugins. Rejects priority / upstreamRequired / jobStatus and the reserved trigger types.\n\nEnforced by Zod but not representable in this JSON Schema (validate with the Zod schema for these):\n- output.schema is required when output.recordAs is set.\n- trigger.topic is required when trigger.type is 'event'.\n- a runtime declaring `stage` cannot use trigger.type 'event' or 'manual'.\n- stage 'setup' runtimes must use trigger.type 'auto' with no interval/startTurn/cooldownTurns.\n- needs entries with scope 'session' are only valid on stage 'setup' runtimes.\n- effects.reads, effects.writes and permissions.http[].methods must contain unique entries.\n- an i18n description map must have at least one locale entry.\n- auto / scheduled runtimes must declare a stage.",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
@@ -11,8 +11,22 @@
       "pattern": "^[a-z][a-z0-9-]*(?:\\/[a-z][a-z0-9-]*)*$"
     },
     "description": {
-      "type": "string",
-      "minLength": 1
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
     },
     "displayName": {
       "anyOf": [
@@ -1361,20 +1375,12 @@
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991
         },
-        "condition": {
-          "type": "string"
-        },
         "topic": {
           "type": "string"
         },
         "maxTriggerCount": {
           "type": "integer",
           "exclusiveMinimum": 0,
-          "maximum": 9007199254740991
-        },
-        "maxRetryCount": {
-          "type": "integer",
-          "minimum": 0,
           "maximum": 9007199254740991
         },
         "cooldownTurns": {

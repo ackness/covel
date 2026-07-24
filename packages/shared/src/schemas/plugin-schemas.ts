@@ -83,10 +83,8 @@ export const triggerTypeSchema = z.enum([
 /** Trigger fields shared by the compat and authoring trigger schemas. */
 const triggerConfigShape = {
   interval: z.number().int().positive().optional(),
-  condition: z.string().optional(),
   topic: z.string().optional(),
   maxTriggerCount: z.number().int().positive().optional(),
-  maxRetryCount: z.number().int().nonnegative().optional(),
   cooldownTurns: z.number().int().nonnegative().optional(),
   startTurn: z.number().int().positive().optional(),
 };
@@ -715,6 +713,7 @@ interface ManifestCrossFieldView {
     readonly startTurn?: number;
     readonly cooldownTurns?: number;
   };
+  readonly needs?: readonly (string | { readonly scope?: string })[];
   readonly output?: { readonly schema?: string; readonly recordAs?: string };
 }
 
@@ -759,6 +758,23 @@ function sharedManifestCrossFieldIssues(
       path: ["stage"],
       message: "a staged runtime cannot use trigger.type 'event' or 'manual'",
     });
+  }
+
+  // `needs(scope: session)` gates on the persistent setup snapshot — the
+  // positive gate lives in the setup selection path only, so on any other
+  // stage the declaration would be accepted-but-inert. Reject it instead of
+  // letting a dead gate ship (a legacy-priority setup runtime that wants this
+  // must declare `stage: setup` explicitly).
+  if (m.stage !== "setup") {
+    for (const [i, need] of (m.needs ?? []).entries()) {
+      if (typeof need !== "string" && need.scope === "session") {
+        issues.push({
+          path: ["needs", i, "scope"],
+          message:
+            "needs scope 'session' is only valid on stage 'setup' runtimes (it gates on the persistent setup snapshot)",
+        });
+      }
+    }
   }
 
   // Setup runs before the turn loop: fixed auto trigger, no cadence fields.
@@ -815,7 +831,21 @@ const runtimeManifestCommonShape = {
       message:
         'name must be lowercase with hyphens, optional slash separators (e.g. "my-runtime" or "my-plugin/sub-runtime")',
     }),
-  description: z.string().min(1),
+  /**
+   * Author-facing description: a plain string or an I18nText map (the
+   * preferred form in bundled plugins). The loader folds a map to a single
+   * string after parse (`RuntimeManifest.description` stays `string`); the
+   * union here keeps editor tooling (generated JSON Schema) from flagging
+   * every I18nText manifest.
+   */
+  description: z.union([
+    z.string().min(1),
+    z
+      .record(z.string(), z.string().min(1))
+      .refine((m) => Object.keys(m).length > 0, {
+        message: "i18n description map must have at least one locale entry",
+      }),
+  ]),
   // Friendly, player-facing name (I18nText). Distinct from `name`, which is
   // the runtime id. Surfaced via PluginSummary.displayName for plugin lists.
   displayName: i18nTextLoose.optional(),
@@ -916,12 +946,12 @@ const runtimeManifestCommonShape = {
 } as const;
 
 /**
- * Compat input schema — a pure SUPERSET of the historical manifest schema:
- * every currently-shipping PLUGIN.md still parses. Keeps the legacy fields
- * (`priority` / `upstreamRequired` / `jobStatus`) and the full trigger enum
- * (including the reserved `conditional` / `error-retry`). The cross-field
- * checks it adds all have zero current violations (grepped against the bundled
- * plugins), so they never reject a shipping manifest.
+ * Compat input schema — a superset of the strict authoring schema that keeps
+ * the legacy fields (`priority` / `upstreamRequired` / `jobStatus`) so every
+ * currently-shipping PLUGIN.md still parses. The trigger enum is the same
+ * four production types on both schemas. The cross-field checks it adds all
+ * have zero current violations (grepped against the bundled plugins), so they
+ * never reject a shipping manifest.
  */
 export const runtimeManifestInputSchema = z
   .object({
