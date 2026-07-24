@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import { HOOK_EVENTS } from "../types/hooks.js";
+import { STAGE_ORDER } from "../types/runtime-scheduling.js";
 import type { EffectResource } from "../types/runtime-scheduling.js";
 
 // ── Shared path & scheduling primitives ──────────────────────────
@@ -545,14 +546,9 @@ export const pluginUserSettingSpecSchema = z
 
 // ── Scheduling: stage / dependencies / bindings ──────────────────
 
-/** Coarse scheduling stage (replaces numeric priority bands). */
-export const stageSchema = z.enum([
-  "setup",
-  "pre-turn",
-  "narrative",
-  "post-turn",
-  "audit",
-]);
+/** Coarse scheduling stage (replaces numeric priority bands). Derived from
+ * the canonical STAGE_ORDER tuple so the enum can never drift from it. */
+export const stageSchema = z.enum(STAGE_ORDER);
 
 /**
  * `after` entry — weak ordering, no gate. A bare string is shorthand for

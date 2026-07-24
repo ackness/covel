@@ -32,16 +32,20 @@ export type JsonValue =
  * setup (0–99), pre-turn (100–499), narrative (500), post-turn (501–999),
  * audit (1000). Strict barrier between stages; intra-stage order comes
  * exclusively from dependencies.
+ *
+ * Single source of truth: `Stage` derives from this tuple, and so do the
+ * zod `stageSchema` and the plugin-flow segment table — adding a sixth
+ * stage here is a compile error everywhere a copy would otherwise drift.
  */
-export type Stage = "setup" | "pre-turn" | "narrative" | "post-turn" | "audit";
-
-export const STAGE_ORDER: readonly Stage[] = [
+export const STAGE_ORDER = [
   "setup",
   "pre-turn",
   "narrative",
   "post-turn",
   "audit",
-];
+] as const;
+
+export type Stage = (typeof STAGE_ORDER)[number];
 
 // ── Dependency axis ──────────────────────────────────────────────
 
