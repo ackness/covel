@@ -279,6 +279,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   return streamSSE(c, async (stream) => {
     let seq = 0;
     const traceId = crypto.randomUUID();
+    // The turn currently writing to this stream. The opening-continuation
+    // turn (below) reuses the stream under its own fresh turnId.
+    let currentTurnId: string = turnId;
     // Released in the finally below so a crashed stream never leaves a
     // stale steer/abort target behind.
     let releaseTurnControl: (() => void) | undefined;
@@ -297,7 +300,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         requestId,
         traceId,
         sessionId,
-        turnId,
+        turnId: currentTurnId,
         flowId: traceId,
         seq: seq++,
         timestamp: new Date().toISOString(),
@@ -366,8 +369,17 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       });
     };
 
-    try {
-      const { result, trace, userSettings, committed } =
+    // One complete turn: lock → execute → finalize → snapshot → followers.
+    // Extracted so the opening continuation below can chain a second turn on
+    // the same SSE stream (each turn is its own transaction + lock tenure).
+    const runTurnOnce = async (turnArgs: {
+      readonly turnId: string;
+      readonly playerMessage: string;
+      readonly suppressPlayerMessage: boolean;
+    }) => {
+      currentTurnId = turnArgs.turnId;
+      commitStatusSettled = false;
+      const { result, trace, userSettings, committed, wasPreGamePending } =
         await sessionLock.withLock(sessionId, async () => {
           // This execution now owns the session — events on the bus
           // from here on belong to this turn.
@@ -408,14 +420,14 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             );
 
             // Persist player message to messages table (source of truth for refresh recovery)
-            if (playerMessage) {
+            if (turnArgs.playerMessage) {
               const now = new Date().toISOString();
               await store.addMessage({
                 id: crypto.randomUUID(),
                 sessionId,
                 role: "user",
-                content: playerMessage,
-                metadata: { turnId },
+                content: turnArgs.playerMessage,
+                metadata: { turnId: turnArgs.turnId },
                 createdAt: now,
               });
 
@@ -427,12 +439,15 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 await store.saveInteractionRecord({
                   id: crypto.randomUUID(),
                   sessionId,
-                  turnId,
+                  turnId: turnArgs.turnId,
                   timestamp: now,
                   source: "player",
                   channel: "web",
                   type: type === "send_message" ? "message" : "rpc-call",
-                  payload: { content: playerMessage, actionType: type },
+                  payload: {
+                    content: turnArgs.playerMessage,
+                    actionType: type,
+                  },
                   createdAt: now,
                 });
               } catch (err) {
@@ -449,7 +464,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             const trace = createTraceRecorder(
               store,
               sessionId,
-              turnId,
+              turnArgs.turnId,
               traceId,
             );
 
@@ -462,7 +477,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               store,
               eventBus,
               sessionId,
-              turnId,
+              turnId: turnArgs.turnId,
               traceId,
             });
 
@@ -522,8 +537,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
 
             const turnInput = {
               sessionId,
-              turnId,
-              playerMessage,
+              turnId: turnArgs.turnId,
+              playerMessage: turnArgs.playerMessage,
               locale: effectiveLocale,
               modelOverride: model,
               // Feed the pre-turn Pre-Game snapshot so the executor can fix the
@@ -541,7 +556,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               ...(session?.runtimeModelOverrides
                 ? { runtimeModelOverrides: session.runtimeModelOverrides }
                 : {}),
-              ...(type === "start_session"
+              ...(turnArgs.suppressPlayerMessage
                 ? { suppressPlayerMessage: true }
                 : {}),
               // retry_runtime honors payload.runtimeId: scope the rerun to
@@ -558,7 +573,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             // Register the in-flight turn only after this action owns the
             // session lock. Release control after execution while retaining the
             // lock through proposal commit, lifecycle sync, and snapshot capture.
-            const registeredTurn = registerActiveTurn(sessionId, turnId);
+            const registeredTurn = registerActiveTurn(
+              sessionId,
+              turnArgs.turnId,
+            );
             releaseTurnControl = registeredTurn.release;
             let result;
             try {
@@ -668,7 +686,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 ...result.runtimeResults,
                 ...(result.nestedRuntimeResults ?? []),
               ],
-              turnIds: [turnId],
+              turnIds: [turnArgs.turnId],
               ...(hookPipeline ? { hookPipeline } : {}),
               eventBus,
               emitter,
@@ -734,7 +752,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 await saveAutoSnapshot({
                   store,
                   sessionId,
-                  turnId,
+                  turnId: turnArgs.turnId,
                   createdAt: result.timestamp,
                   eventBus,
                 });
@@ -742,13 +760,13 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 // Best-effort checkpoint: a failed snapshot is logged but does
                 // not fail the turn — the proposals are already durable.
                 console.warn(
-                  `[actions] auto snapshot failed for session ${sessionId} turn ${turnId}:`,
+                  `[actions] auto snapshot failed for session ${sessionId} turn ${turnArgs.turnId}:`,
                   err instanceof Error ? err.message : String(err),
                 );
               }
             } else {
               console.error(
-                `[actions] proposal commit failed for session ${sessionId} turn ${turnId} — ` +
+                `[actions] proposal commit failed for session ${sessionId} turn ${turnArgs.turnId} — ` +
                   "withholding auto-snapshot and turn completion",
               );
             }
@@ -764,7 +782,13 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               result.completeTurn?.();
             }
 
-            return { result, trace, userSettings, committed };
+            return {
+              result,
+              trace,
+              userSettings,
+              committed,
+              wasPreGamePending,
+            };
           } finally {
             // Torn down while the lock is still held: after release the next
             // action owns the session, and its events must not be wrapped in
@@ -774,7 +798,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           }
         });
 
-      // ——— Post-lock tail ———
+      // ——— Post-lock tail (per turn) ———
       // Deferred-follower scheduling and the final SSE writes deliberately run
       // AFTER the session lock releases: followers acquire the lock themselves
       // (scheduling them under it would start their PG acquire budget while
@@ -841,14 +865,56 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         durationMs: result.durationMs,
         resultCount: result.runtimeResults.length,
       });
+
+      return { result, committed, wasPreGamePending };
+    };
+
+    try {
+      const first = await runTurnOnce({
+        turnId,
+        playerMessage,
+        suppressPlayerMessage: type === "start_session",
+      });
+      let finalRun = first;
+
+      // Opening continuation: a request that completes the LAST setup runtime
+      // commits on its own (turn-wide transaction discipline), so the narrator
+      // never ran for this request. Chain exactly one main-loop turn — a
+      // second transaction reading the just-committed setup state — so the
+      // player gets the opening narrative without having to send another
+      // message. Guarded to player actions (retry_runtime keeps its rerun-only
+      // semantics) and skipped when the turn aborted or setup is still pending
+      // (more setup interactions to come).
+      if (
+        first.committed &&
+        first.wasPreGamePending &&
+        !first.result.abortReason &&
+        type !== "retry_runtime"
+      ) {
+        const settled = await store.getSession(sessionId);
+        if (
+          settled &&
+          (!settled.status || settled.status === "active") &&
+          !isPreGamePending(settled, activeRuntimes)
+        ) {
+          finalRun = await runTurnOnce({
+            turnId: crypto.randomUUID(),
+            playerMessage: "",
+            suppressPlayerMessage: true,
+          });
+        }
+      }
+
       await writeEvent("execution.completed", {
         runtimeCount: activeRuntimes.length,
-        resultCount: result.runtimeResults.length,
-        durationMs: result.durationMs,
+        resultCount: finalRun.result.runtimeResults.length,
+        durationMs: finalRun.result.durationMs,
         // Surface a turn that was aborted before producing output (e.g.
         // cost-gate's hard budget cap) so the player gets a visible reason
         // instead of a silent empty turn.
-        ...(result.abortReason ? { abortReason: result.abortReason } : {}),
+        ...(finalRun.result.abortReason
+          ? { abortReason: finalRun.result.abortReason }
+          : {}),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -859,7 +925,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       if (!commitStatusSettled) {
         commitStatusSettled = true;
         await store
-          .setTurnResultCommitStatus(sessionId, turnId, "failed")
+          .setTurnResultCommitStatus(sessionId, currentTurnId, "failed")
           .catch(() => {});
       }
       await writeEvent("error.occurred", { message }).catch(() => {});

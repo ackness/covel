@@ -656,11 +656,14 @@ async function executeTurnImpl(
   // sessionContext and the setup-completion delta) before the event chain and
   // finalize read them. Deliberate change (turn-wide transaction, Step 2): a
   // request that finishes the last Pre-Game runtime no longer runs the main
-  // loop in the SAME request — the setup execution commits on its own and the
-  // narrator (and other main-loop runtimes) run on the NEXT player request,
+  // loop in the SAME execution — the setup execution commits on its own and
+  // the narrator (and other main-loop runtimes) run in a SEPARATE execution
   // once the finalize transaction has flipped the band to `playing`. Same-batch
   // followups read guard/setup writes that were not yet committed, which the
-  // whole-turn transaction no longer permits.
+  // whole-turn transaction no longer permits. The actions route bridges the
+  // player-visible gap: after this execution commits it chains one main-loop
+  // turn on the same request (opening continuation), so the opening narrative
+  // still arrives without an extra player message.
   if (isPreGamePending) await recordPreGameCompletion();
 
   const deferredFollowers = playerAborted()

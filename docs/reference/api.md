@@ -2629,6 +2629,8 @@ id: evt-002
 
 **`start_session` 的前置条件**：会话必须已有非空 `activePlugins`。插件集合由会话创建时决定（显式 `plugins` 数组，或世界 manifest 播种的推荐集），`start_session` 只负责在注册表里激活它们。空集合会被 **400** 拒绝（`Session has no active plugins. …`），而不是回退到"激活全部已注册插件"——那个回退会把玩家从未选择的社区插件、以及互斥的两个叙事引擎同时拉进会话，并持久化到会话生命周期结束。
 
+**开场接力（opening continuation）**：当一次玩家动作（`send_message` / `execute_command` / `start_session`）完成了**最后一个** setup runtime（setup 执行独立提交，phase 翻转到 `playing`），同一个请求会在同一条 SSE 流上**自动接力一个主循环回合**（全新的 `turnId`、独立事务，读取刚提交的 setup 状态），让叙事 runtime 直接产出开场叙事——玩家提交完开局表单后无需再手动发一条消息。接力回合是第一个计数的玩家回合（`completedPlayerTurns` 0 → 1）。整条流仍只发**一个** `execution.completed`（取接力回合的数据）。守卫：`retry_runtime` 不接力；执行被中止（`abortReason`）、提交失败、或 setup 仍有未完成项（还有后续开局交互）时不接力。
+
 > 旧版示例曾使用 `payload.message`，但服务端从未读取该字段，已统一为 `content` / `command`。
 >
 > **移除（2026-07-20 审计 M-07）**：`type: "trigger_event"` 已删除——其 payload 从未被服务端读取、UI 无调用方。插件侧发事件请用 builtin `emit-event` 工具；再发送会得到 400。
@@ -2648,7 +2650,7 @@ interface SseEnvelope {
   requestId: string; // 请求关联 ID（来自请求体）
   traceId: string; // 本回合的 trace ID
   sessionId: string;
-  turnId?: string;
+  turnId?: string; // 开场接力时同一条流会先后出现两个 turnId（setup 回合 + 接力回合）
   flowId: string; // 等于 traceId
   seq: number; // 该流内自增
   timestamp: string;

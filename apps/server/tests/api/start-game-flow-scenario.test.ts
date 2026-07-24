@@ -287,7 +287,7 @@ describe("start-game API lifecycle scenario", () => {
     expect(playerMessages).toEqual([]);
   });
 
-  it("submit follow-up creates the player on the setup turn; narrator runs on the next request", async () => {
+  it("submit follow-up creates the player on the setup turn; the same request chains the opening narrative turn", async () => {
     const start = await app.request("/api/actions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -354,10 +354,8 @@ describe("start-game API lifecycle scenario", () => {
     );
     expect(mirrored?.value).toMatchObject({ name: "Aria", type: "player" });
 
-    // Deliberate change (scheduling redesign, Step 2): the form-submit turn
-    // runs ONLY the setup runtime that creates the player. The narrator (main
-    // loop) no longer runs as a same-batch follow-up — it is deferred to the
-    // next request.
+    // The form-submit turn itself runs ONLY the setup runtime that creates the
+    // player (Step 2 transaction discipline: its execution commits on its own).
     const runtimeRows = await store.listRuntimeResults(
       "sess-start-flow-api",
       followupTurnId,
@@ -370,11 +368,36 @@ describe("start-game API lifecycle scenario", () => {
       runtimeIds.filter((runtimeId) => runtimeId === "narrator"),
     ).toHaveLength(0);
 
+    // Opening continuation: the SAME request then chains one main-loop turn
+    // (a second transaction reading the just-committed setup state), so the
+    // narrator produces the opening narrative without the player having to
+    // send another message. The chained turn rides the same SSE stream under
+    // a fresh turnId.
+    const turnIds = [
+      ...new Set(followupEvents.map((event) => event.turnId)),
+    ].filter(Boolean);
+    expect(turnIds).toHaveLength(2);
+    const openingTurnId = turnIds.find((id) => id !== followupTurnId)!;
+    const openingRuntimeIds = (
+      await store.listRuntimeResults("sess-start-flow-api", openingTurnId)
+    ).map((row) => row.runtimeId);
+    expect(
+      openingRuntimeIds.filter((runtimeId) => runtimeId === "narrator"),
+    ).toHaveLength(1);
+
+    // Exactly one execution.completed closes the stream (the continuation is
+    // part of the same execution from the client's point of view).
+    expect(
+      followupEvents.filter((event) => event.type === "execution.completed"),
+    ).toHaveLength(1);
+
+    // The chained opening turn is the first counted player turn.
     const session = await store.getSession("sess-start-flow-api");
     expect(deriveLegacyClockForSession(session!).turnCount).toBe(1);
+    expect(session?.completedPlayerTurns).toBe(1);
 
     const turnResults = await store.listTurnResults("sess-start-flow-api");
-    expect(turnResults).toHaveLength(2);
+    expect(turnResults).toHaveLength(3);
 
     const firstMainLoop = await app.request("/api/actions", {
       method: "POST",
@@ -391,23 +414,21 @@ describe("start-game API lifecycle scenario", () => {
     const firstMainLoopTurnId =
       firstMainLoopEvents[0]?.turnId ?? "turn-first-main";
 
-    // The narrator finally runs on this next request, now in the playing band.
+    // A regular playing-band request runs the narrator once and does NOT chain
+    // a continuation turn.
     const mainLoopRuntimeIds = (
       await store.listRuntimeResults("sess-start-flow-api", firstMainLoopTurnId)
     ).map((row) => row.runtimeId);
     expect(
       mainLoopRuntimeIds.filter((runtimeId) => runtimeId === "narrator"),
     ).toHaveLength(1);
+    expect(
+      new Set(firstMainLoopEvents.map((event) => event.turnId).filter(Boolean))
+        .size,
+    ).toBe(1);
 
     const afterFirstMainLoop = await store.getSession("sess-start-flow-api");
-    // Deliberate change (scheduling redesign): turnCount is now derived from
-    // completedPlayerTurns via the logical-turn ledger. The setup-completing
-    // form-submit turn does NOT count as a main-loop player turn (it left the
-    // Pre-Game floor of 1), so the first real main-loop turn ("look around") is
-    // logical turn 1 → turnCount 1. The old floor-absorption heuristic reported
-    // 2 here by counting the form-submit's same-request narrator followup as a
-    // completed main-loop turn.
-    expect(deriveLegacyClockForSession(afterFirstMainLoop!).turnCount).toBe(1);
-    expect(afterFirstMainLoop?.completedPlayerTurns).toBe(1);
+    expect(deriveLegacyClockForSession(afterFirstMainLoop!).turnCount).toBe(2);
+    expect(afterFirstMainLoop?.completedPlayerTurns).toBe(2);
   });
 });

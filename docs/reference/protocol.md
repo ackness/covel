@@ -72,6 +72,8 @@
 | `runtime.failed`      | S→C  | 单个 runtime 失败 | `{ runtimeId, pluginId, error }`                                                                                                                                                                |
 | `execution.completed` | S→C  | 回合执行完成      | `{ runtimeCount, resultCount, durationMs, abortReason? }`（`abortReason` 仅在回合被中止时出现：cost-gate 硬预算上限、玩家 abort（值 `"aborted-by-player"`）等——前端据此提示玩家而非静默空回合） |
 
+> **开场接力**：当一次玩家动作完成了最后一个 setup runtime，`POST /api/actions` 的同一条 SSE 流会自动接力一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。此时流内会出现**两轮** `execution.started` / runtime 生命周期事件（信封 `turnId` 不同——setup 回合 + 接力回合），但只有**一个** `execution.completed` 收尾（前端以它复位 executing 状态）。
+
 ### 回合中控制（W4：steer / abort）
 
 回合中控制走 HTTP 端点而非 SSE 事件（见 [api.md § 回合中控制](./api.md#回合中控制w4)）：
