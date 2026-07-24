@@ -84,8 +84,6 @@ export function normalizeRuntimeTrigger(trigger?: {
   maxTriggerCount?: number;
   startTurn?: number;
   topic?: string;
-  condition?: string;
-  maxRetryCount?: number;
 }): {
   type: string;
   interval?: number;
@@ -93,8 +91,6 @@ export function normalizeRuntimeTrigger(trigger?: {
   maxTriggerCount?: number;
   startTurn?: number;
   topic?: string;
-  condition?: string;
-  maxRetryCount?: number;
 } {
   return {
     type: trigger?.type ?? "auto",
@@ -109,11 +105,5 @@ export function normalizeRuntimeTrigger(trigger?: {
       ? { startTurn: trigger.startTurn }
       : {}),
     ...(trigger?.topic !== undefined ? { topic: trigger.topic } : {}),
-    ...(trigger?.condition !== undefined
-      ? { condition: trigger.condition }
-      : {}),
-    ...(trigger?.maxRetryCount !== undefined
-      ? { maxRetryCount: trigger.maxRetryCount }
-      : {}),
   };
 }

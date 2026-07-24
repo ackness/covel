@@ -126,24 +126,15 @@ export function normalizeRuntimeManifest(
   const legacyFields: string[] = [];
 
   const declaredType = manifest.trigger?.type ?? "auto";
-  const isReserved =
-    declaredType === "conditional" || declaredType === "error-retry";
   const isStageSource = declaredType === "auto" || declaredType === "scheduled";
 
   let stage: Stage | undefined = manifest.stage;
-  if (
-    stage === undefined &&
-    isStageSource &&
-    !isReserved &&
-    manifest.priority !== undefined
-  ) {
+  if (stage === undefined && isStageSource && manifest.priority !== undefined) {
     stage = stageForPriority(manifest.priority);
     legacyFields.push("priority:stage");
   }
 
-  const declaredTrigger = isReserved
-    ? (manifest.trigger ?? { type: declaredType })
-    : foldTrigger(manifest, stage, legacyFields);
+  const declaredTrigger = foldTrigger(manifest, stage, legacyFields);
 
   if (manifest.priority !== undefined) legacyFields.push("priority");
   if (manifest.execution === "background") legacyFields.push("execution");
@@ -160,7 +151,6 @@ export function normalizeRuntimeManifest(
     id: manifest.name,
     pluginId: manifest.pluginId,
     declaredTrigger,
-    ...(isReserved ? { disabledReason: "reserved-trigger" as const } : {}),
     backgroundWhenDetached: manifest.execution === "background",
     suspensionSafe: manifest.suspensionSafe ?? false,
     resultFormat: manifest.resultFormat ?? "legacy",

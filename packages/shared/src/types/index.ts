@@ -345,11 +345,7 @@ export type {
   CountPolicy,
   ExecutionContext,
   RuntimeActivation,
-  SessionGate,
   SchedulingDiagnostic,
-  ExecutionEdge,
-  ResolvedRuntime,
-  SessionExecutionPlan,
 } from "./runtime-scheduling.js";
 
 export { STAGE_ORDER } from "./runtime-scheduling.js";

@@ -8,10 +8,6 @@
  * consume only this IR; all legacy-compat mapping (priority band folding,
  * `upstreamRequired` aliasing, scheduled→auto folding for setup) is
  * centralized at the loader exit.
- *
- * Observe-only for now: production scheduling still reads the raw manifest.
- * The normalize step is exercised by golden characterization tests until the
- * scheduler switches over.
  */
 
 import type { TriggerConfig } from "./plugin.js";
@@ -213,10 +209,7 @@ export type RuntimeResultFormat = "legacy" | "envelope-v1";
 export interface NormalizedRuntimeSpec {
   readonly id: string;
   readonly pluginId: string;
-  /** Includes compat-period reserved triggers; see `disabledReason`. */
   readonly declaredTrigger: TriggerSpec;
-  /** Reserved triggers (`conditional` / `error-retry`): warn + excluded from execution plans. */
-  readonly disabledReason?: "reserved-trigger";
   /** Normalized from the legacy `execution: background` manifest field. */
   readonly backgroundWhenDetached: boolean;
   /** Handler may be replayed from a frozen activation boundary on approval-resume. */
@@ -287,22 +280,7 @@ export interface RuntimeActivation {
   readonly payload: JsonValue;
 }
 
-// ── Session gate ─────────────────────────────────────────────────
-
-/**
- * Resolved `needs(session)` gate. Judged against the persistent snapshot
- * frozen at execution start; never enters the execution DAG's Kahn edges.
- * Cycle detection over pending setup providers runs on this graph
- * separately from the execution-DAG SCC check.
- */
-export interface SessionGate {
-  readonly consumerId: string;
-  readonly providerIds: readonly string[];
-  readonly cardinality: DependencyCardinality;
-  readonly source: "declared" | "plugin-setup-readiness";
-}
-
-// ── Session execution plan (session-level IR) ────────────────────
+// ── Scheduling diagnostics ───────────────────────────────────────
 
 export interface SchedulingDiagnostic {
   readonly code: string;
@@ -310,33 +288,4 @@ export interface SchedulingDiagnostic {
   readonly message: string;
   readonly runtimeId?: string;
   readonly data?: JsonValue;
-}
-
-/** Intra-execution ordering edge (explicit deps + binding-implied edges). */
-export interface ExecutionEdge {
-  readonly from: string;
-  readonly to: string;
-  readonly kind: "after" | "needs" | "binding";
-}
-
-/** A spec admitted to the plan with its activation for this execution. */
-export interface ResolvedRuntime {
-  readonly spec: NormalizedRuntimeSpec;
-  readonly activation: RuntimeActivation;
-}
-
-/**
- * Session scheduling product: the executable graph resolved against the
- * active plugin set (providers resolved, cardinality checked, Kahn-layered).
- */
-export interface SessionExecutionPlan {
-  readonly context: ExecutionContext;
-  readonly nodes: readonly ResolvedRuntime[];
-  readonly edges: readonly ExecutionEdge[];
-  /** Frozen-snapshot gates; excluded from Kahn ordering. */
-  readonly sessionGates: readonly SessionGate[];
-  readonly levels: readonly (readonly string[])[];
-  /** Persisted for resume ordering. */
-  readonly ordinals: Readonly<Record<string, { stage: number; level: number }>>;
-  readonly diagnostics: readonly SchedulingDiagnostic[];
 }

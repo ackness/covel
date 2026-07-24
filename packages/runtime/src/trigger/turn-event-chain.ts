@@ -149,11 +149,6 @@ export async function runEventChain({
       // trigger semantics. Without this guard, `shouldTrigger` would return
       // true for an `auto` runtime and wrongly re-execute it.
       if (rt.trigger?.type !== "event") return false;
-      // Reserved triggers (conditional / error-retry) never enter an execution
-      // plan. They can never be `event`, so this is behavior-equivalent today,
-      // but keeps fan-out on the same explicit "disabled declaration excluded"
-      // rule as the priority scheduler.
-      if (getRuntimeSpec(rt).disabledReason !== undefined) return false;
       // Single source of truth for the event topic-match (+ gates): delegate
       // to `shouldTrigger`, feeding it the freshly-emitted topics.
       return shouldTrigger(

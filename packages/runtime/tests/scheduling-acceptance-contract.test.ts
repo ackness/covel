@@ -1135,11 +1135,11 @@ describe("logical-turn counting & ledger", () => {
 });
 
 describe("reserved trigger rejection (Step 6)", () => {
-  it("scenario 15: 兼容输入 schema 与 authoring schema 均拒绝 conditional/error-retry（枚举收窄到四值）；直接构造的保留触发器仍被 normalize 标 disabled（防御）", () => {
-    // Step 6 narrowed the compat input trigger enum to the four production types
-    // — a manifest declaring a reserved `conditional` / `error-retry` now FAILS
-    // to load on BOTH the compat and authoring schemas (they never fired, so a
-    // load failure surfaces the dead declaration instead of silently dropping).
+  it("scenario 15: 兼容输入 schema 与 authoring schema 均拒绝 conditional/error-retry（枚举收窄到四值）", () => {
+    // The trigger enum carries only the four production types — a manifest
+    // declaring the historical `conditional` / `error-retry` FAILS to load on
+    // BOTH the compat and authoring schemas (they never fired, so a load
+    // failure surfaces the dead declaration instead of silently dropping).
     for (const type of ["conditional", "error-retry"] as const) {
       expect(
         triggerConfigSchema.safeParse({ type }).success,
@@ -1149,23 +1149,6 @@ describe("reserved trigger rejection (Step 6)", () => {
         authoringTriggerConfigSchema.safeParse({ type }).success,
         `authoring rejects ${type}`,
       ).toBe(false);
-
-      // Defensive: a manifest constructed programmatically (bypassing the
-      // schema) still normalizes to a disabled declaration — no stage, no
-      // executable node — so it can never enter an execution plan.
-      const reserved = {
-        name: `x/${type}`,
-        pluginId: "x",
-        description: type,
-        priority: 600,
-        runtimeType: "function",
-        handler: "./h.js",
-        trigger: { type },
-        outputKind: "plugin",
-      } as RuntimeManifest;
-      const spec = normalizeRuntimeManifest(reserved);
-      expect(spec.disabledReason).toBe("reserved-trigger");
-      expect(spec.stage).toBeUndefined();
     }
   });
 });

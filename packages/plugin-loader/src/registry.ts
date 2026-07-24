@@ -72,7 +72,7 @@ export interface PluginRegistry {
   /** Get a plugin by ID. */
   get(id: string): PluginRegistryEntry | undefined;
 
-  /** Get active runtimes sorted by priority (ascending). */
+  /** Get active runtimes sorted by (stage, name). */
   getActiveRuntimes(sessionId: string): readonly RuntimeManifest[];
 
   /** Activate a plugin for a session. Returns false if pluginId is not registered. */

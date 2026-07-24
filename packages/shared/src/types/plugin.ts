@@ -22,47 +22,25 @@ export type RuntimeType = "agent" | "function";
 /**
  * Runtime trigger modes.
  *
- * Production-active modes (the scheduler actually fires them):
+ * The four production modes (the historical `conditional` / `error-retry`
+ * values were removed from the enum — manifests declaring them are rejected
+ * at load):
  * - `auto`      — every turn.
  * - `manual`    — only on an explicit `POST /plugin-rpc` request.
  * - `scheduled` — every N turns (`interval`), bounded by `maxTriggerCount`.
  * - `event`     — when a subscribed `topic` is emitted within the turn's
  *                 event fan-out (see `turn-event-chain.ts`).
- *
- * RESERVED modes (schema-accepted for forward-compat, but **never fire** —
- * `shouldTrigger` / the scheduler do not implement them yet; a runtime that
- * declares one stays permanently inactive):
- * - `conditional` — no condition-expression engine is wired.
- *                   `shouldTrigger` returns false and warns once.
- * - `error-retry` — the scheduler never surfaces upstream failures.
- *                   `shouldTrigger` returns false and warns once.
- *
- * Prefer `auto` / `manual` / `scheduled` / `event` until the reserved modes
- * are implemented.
  */
-export type TriggerType =
-  | "auto"
-  | "manual"
-  | "scheduled"
-  | "event"
-  // ── reserved (never fires in production) ──
-  | "conditional"
-  | "error-retry";
+export type TriggerType = "auto" | "manual" | "scheduled" | "event";
 
 export interface TriggerConfig {
   readonly type: TriggerType;
   /** Interval in turns for `scheduled` mode. */
   readonly interval?: number;
-  /** RESERVED — condition expression for `conditional` mode. No engine
-   *  evaluates this yet, so a `conditional` runtime never triggers. */
-  readonly condition?: string;
   /** Event topic for `event` mode. */
   readonly topic?: string;
   /** Max trigger count within a session. */
   readonly maxTriggerCount?: number;
-  /** RESERVED — max retry count for `error-retry` mode. The scheduler never
-   *  surfaces upstream failures, so `error-retry` does not fire in production. */
-  readonly maxRetryCount?: number;
   /** Min turns between two triggers. */
   readonly cooldownTurns?: number;
   /**

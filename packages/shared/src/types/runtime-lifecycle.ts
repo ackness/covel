@@ -2,8 +2,8 @@
  * Session-lifecycle contract types for the runtime-scheduling redesign.
  *
  * These are pure persistence-facing shapes shared by the store layer and the
- * (future) kernel wiring. This file only declares the contract; no kernel logic
- * reads or writes these yet. Three concerns live here:
+ * kernel (setup finalizer, logical-turn ledger, job-status reporter). Three
+ * concerns live here:
  *
  *  - Setup-band progress: per-runtime `SetupRuntimeState` (mirrored onto the
  *    session row) plus an append-mostly `SetupAttemptRecord` audit log.
