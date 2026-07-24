@@ -37,12 +37,14 @@ userSettings:
   - key: "n"
     type: number
     default: 1
+    min: 1
+    max: 4
     label:
       zh: 一次生成几张
       en: Images per click
     description:
-      zh: 每次点击生成几张图。当前服务通常一次生成一张。
-      en: How many images to create per click. This service usually creates one image at a time.
+      zh: 每次点击生成几张图。新款模型（wan2.6 / wan2.7 系列）一次最多 4 张；更早的模型一次一张。
+      en: How many images to create per click. Newer models (wan2.6 / wan2.7 series) create up to 4 at a time; older models create one.
   - key: requestTimeoutMs
     type: number
     default: 300000

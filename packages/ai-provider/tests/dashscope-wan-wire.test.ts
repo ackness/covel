@@ -202,6 +202,62 @@ describe("dashscope-wan wire", () => {
     expect(result.warnings.join(" ")).toMatch(/clamped to 1/i);
   });
 
+  it("passes n through (capped at 4) for wan2.6/wan2.7 image models", async () => {
+    const calls = stubFetchSequence([
+      { json: { output: { task_id: "t1" } } },
+      {
+        json: {
+          output: {
+            task_status: "SUCCEEDED",
+            choices: [
+              {
+                message: {
+                  content: [
+                    { image: "https://oss.test/a.png" },
+                    { image: "https://oss.test/b.png" },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      },
+    ]);
+    const result = await dashscopeWanWire.generate(
+      { baseUrl: "https://d.test", apiKey: "k" },
+      { model: "wan2.6-t2i", prompt: "p", n: 2 },
+      undefined,
+      { pollIntervalMs: 1, timeoutMs: 5_000 },
+    );
+    const body = JSON.parse(calls[0]!.init!.body as string);
+    expect(body.parameters.n).toBe(2);
+    expect(result.warnings).toEqual([]);
+    expect(result.images).toHaveLength(2);
+  });
+
+  it("clamps n above the wan2.6/2.7 per-task cap of 4 with a warning", async () => {
+    const calls = stubFetchSequence([
+      { json: { output: { task_id: "t1" } } },
+      {
+        json: {
+          output: {
+            task_status: "SUCCEEDED",
+            results: [{ url: "https://oss.test/a.png" }],
+          },
+        },
+      },
+    ]);
+    const result = await dashscopeWanWire.generate(
+      { baseUrl: "https://d.test", apiKey: "k" },
+      { model: "wan2.7-image-pro", prompt: "p", n: 9 },
+      undefined,
+      { pollIntervalMs: 1, timeoutMs: 5_000 },
+    );
+    const body = JSON.parse(calls[0]!.init!.body as string);
+    expect(body.parameters.n).toBe(4);
+    expect(result.warnings.join(" ")).toMatch(/n clamped to 4/);
+  });
+
   it("writes negative_prompt for models that accept it", async () => {
     const calls = stubFetchSequence([
       { json: { output: { task_id: "t1" } } },

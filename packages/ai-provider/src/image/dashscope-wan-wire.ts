@@ -33,6 +33,21 @@ function modelRejectsNegativePrompt(model: string): boolean {
   return model.startsWith("wan2.7-image");
 }
 
+/**
+ * wan2.6-image / wan2.6-t2i / wan2.7-image* accept `n` 1–4 per task (the
+ * wan2.7 group mode raises it to 12 behind `enable_sequential`, which this
+ * wire does not drive). Earlier wan2.x models are single-image tasks.
+ */
+function modelSupportsMultiImage(model: string): boolean {
+  return (
+    model.startsWith("wan2.6-image") ||
+    model.startsWith("wan2.6-t2i") ||
+    model.startsWith("wan2.7-image")
+  );
+}
+
+const MULTI_IMAGE_MAX_N = 4;
+
 function asRecord(v: unknown): Record<string, unknown> | null {
   return v && typeof v === "object" && !Array.isArray(v)
     ? (v as Record<string, unknown>)
@@ -93,9 +108,12 @@ async function generate(
 ): Promise<ImageGenerationResult> {
   const warnings: string[] = [];
 
+  const requestedN = Math.max(1, Math.floor(params.n ?? 1));
+  const maxN = modelSupportsMultiImage(params.model) ? MULTI_IMAGE_MAX_N : 1;
+  const n = Math.min(requestedN, maxN);
   const parameters: Record<string, unknown> = {
     ...(params.size ? { size: toStarSize(params.size) } : {}),
-    n: 1, // wan2.x supports single-image tasks only
+    n,
     watermark: false,
   };
   if (params.negativePrompt) {
@@ -110,9 +128,11 @@ async function generate(
       "dashscope-wan has no transparent-background parameter; prompt-only",
     );
   }
-  if ((params.n ?? 1) > 1) {
+  if (requestedN > n) {
     warnings.push(
-      "dashscope-wan generates a single image per task; n clamped to 1",
+      maxN === 1
+        ? "dashscope-wan generates a single image per task on this model; n clamped to 1"
+        : `dashscope-wan caps n at ${maxN} for ${params.model}; n clamped to ${maxN}`,
     );
   }
 

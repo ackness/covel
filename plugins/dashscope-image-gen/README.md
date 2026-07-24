@@ -2,7 +2,7 @@
 
 基于阿里云 DashScope（通义万相 wan2.x）的 Covel 文生图插件。两段式流水线：LLM 撰写提示词 → 框架统一的 `ctx.images.generate()` 管线出图 → 写入 MediaStore → `images` 命名空间保存 `MediaRef` 画廊索引，右侧画廊面板自动刷新。
 
-生成不再由插件自己发 HTTP 请求：DashScope wan2.x 的异步任务提交/轮询、`x`→`*` 尺寸分隔符转换、`wan2.7-image*` 系列剥离 `negative_prompt`（改为返回一条 warning）、单图 `n` clamp、`X-DashScope-Async` header、SSRF/重定向守卫、OSS URL 落 MediaStore，全部由框架的 `dashscope-wan` image wire（`@covel/ai-provider`）处理。插件本身没有任何 HTTP / SDK 依赖，只负责拼 prompt 和把返回的 `MediaRef[]` 落进画廊。
+生成不再由插件自己发 HTTP 请求：DashScope wan2.x 的异步任务提交/轮询、`x`→`*` 尺寸分隔符转换、`wan2.7-image*` 系列剥离 `negative_prompt`（改为返回一条 warning）、按模型的 `n` 上限 clamp（wan2.6/wan2.7 image 系列 1–4，旧 wan2.x 单图）、`X-DashScope-Async` header、SSRF/重定向守卫、OSS URL 落 MediaStore，全部由框架的 `dashscope-wan` image wire（`@covel/ai-provider`）处理。插件本身没有任何 HTTP / SDK 依赖，只负责拼 prompt 和把返回的 `MediaRef[]` 落进画廊。
 
 ## 用途
 
@@ -12,7 +12,7 @@
   - **promptMode**：`text`（自然语言段落）/ `image-json`（结构化 JSON）
 - 漫画模式下支持「严格网格 / 动态跨格 / 大跨页主导」三种排版风格，可选 2-6 格
 - 所有模式默认带上 4K / ultra detailed / masterpiece 等画质关键词，让模型按最高品质渲染
-- 想在 `wan2.7-image` / `wan2.7-image-pro` 等模型间切换，加一个新 `llm.toml` slot 再改 `modelPresetId`（见「废弃字段」）
+- 想在 `wan2.6-t2i` / `wan2.6-image` / `wan2.7-image` / `wan2.7-image-pro` 等模型间切换，加一个新 `llm.toml` slot 再改 `modelPresetId`（见「废弃字段」）。选型速记：`wan2.6-t2i` 纯文生图且**支持 `negative_prompt`**；`wan2.7-image` 快、`wan2.7-image-pro` 支持 4K 文生图，但两者都**不支持 `negative_prompt`**（wire 自动剥离）；这四个模型都支持一次 1–4 张（`n`）
 
 ## 组成
 
@@ -38,14 +38,14 @@ prompt-generator：
 
 image-generator：
 
-| Key                | 类型     | 默认                                                                     | 说明                                                                                                             |
-| ------------------ | -------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `modelPresetId`    | text     | `image`                                                                  | `llm.toml` 中的 slot/preset id，决定 provider/baseUrl/apiKey/model。换模型 = 加一个新 slot 然后改这个值          |
-| `imageSize`        | text     | `1024x1024`                                                              | 直接写 `x` 分隔形式（`1024x1024` / `1440x720` / `720x1440` 等），wire 内部会转成 DashScope 要的 `*` 分隔         |
-| `n`                | number   | `1`                                                                      | 一次生成几张图；wan2.x 只支持单图任务，`n > 1` 会被 wire clamp 到 1 并返回 warning                               |
-| `requestTimeoutMs` | number   | `300000`                                                                 | 单次生成最多等待多久（含轮询），避免图片任务一直停住                                                             |
-| `quality`          | text     | `low`                                                                    | 画质提示；wan2.x 原生接口没有对应参数，wire 会忽略，仅作为记录里的展示字段保留                                   |
-| `negativePrompt`   | textarea | `low quality, blurry, watermark, text, extra fingers, distorted anatomy` | 透传给 wire；`wan2.7-image` 系列模型不支持，wire 自动剥离并返回 warning（记进 `_logs` + 记录的 `warnings` 字段） |
+| Key                | 类型     | 默认                                                                     | 说明                                                                                                                                                                         |
+| ------------------ | -------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `modelPresetId`    | text     | `image`                                                                  | `llm.toml` 中的 slot/preset id，决定 provider/baseUrl/apiKey/model。换模型 = 加一个新 slot 然后改这个值                                                                      |
+| `imageSize`        | text     | `1024x1024`                                                              | 写 `x` 分隔像素形式（`1024x1024` / `1440x720` 等），wire 内部转成 DashScope 的 `*` 分隔；wan2.6/wan2.7 也接受 `1K` / `2K`（`4K` 仅 `wan2.7-image-pro` 文生图）档位，原样透传 |
+| `n`                | number   | `1`                                                                      | 一次生成几张图；`wan2.6-image` / `wan2.6-t2i` / `wan2.7-image*` 支持 1–4（超出 clamp 到 4），更早的 wan2.x 仍为单图任务（clamp 到 1），均附 warning                          |
+| `requestTimeoutMs` | number   | `300000`                                                                 | 单次生成最多等待多久（含轮询），避免图片任务一直停住                                                                                                                         |
+| `quality`          | text     | `low`                                                                    | 画质提示；wan2.x 原生接口没有对应参数，wire 会忽略，仅作为记录里的展示字段保留                                                                                               |
+| `negativePrompt`   | textarea | `low quality, blurry, watermark, text, extra fingers, distorted anatomy` | 透传给 wire；`wan2.7-image` 系列模型不支持，wire 自动剥离并返回 warning（记进 `_logs` + 记录的 `warnings` 字段）                                                             |
 
 ### 废弃字段
 
@@ -60,7 +60,7 @@ image-generator：
 ```toml
 [covel.image]
 provider = "dashscope"
-model    = "wan2.2-t2i-turbo"
+model    = "wan2.6-t2i"   # 文生图推荐：支持 negative_prompt + n 1–4；老部署可继续用 wan2.2-t2i-turbo
 baseUrl  = "https://dashscope.aliyuncs.com"
 apiKey   = "${env:DASHSCOPE_API_KEY}"
 protocol = "openai-chat-v1"
@@ -69,7 +69,7 @@ output   = ["image"]
 providerRequestMetadata = { imageWire = "dashscope-wan" }   # wan2.x 原生异步端点必须显式声明；不配则默认走 openai-images wire
 ```
 
-想同时提供 `wan2.7-image-pro` 作为可选模型？再加一个 slot，切 `modelPresetId` 即可：
+想同时提供 `wan2.7-image-pro`（4K 文生图）作为可选模型？再加一个 slot，切 `modelPresetId` 即可：
 
 ```toml
 [covel.image-pro]
@@ -101,14 +101,9 @@ DASHSCOPE_API_KEY=sk-xxx
 pnpm test:runtime -- dashscope-image-gen --plugins-dir plugins --pretty
 ```
 
-预期：
+预期：全部 `mock-*` case passed（正向 envelope 触发 + 负路径可见失败，具体清单见 runtime-cases.json）。
 
-```text
-mock-prompt-text         passed   (3 assertions)
-mock-prompt-image-json   passed   (3 assertions)
-```
-
-两条 case 都模拟 `prompt-generator` 输出包含 `events[image.generate.requested]` 的 envelope，框架自动唤醒 `image-generator` follower。mock harness 不装配 `ctx.images`（没有真实 gateway/MediaStore），follower 在拿到 `ctx.images` 之前直接返回可见失败（`status: "failed"`），这是预期行为、不是回归。断言验证：事件触发、follower 失败被正确记录。
+正向 case 模拟 `prompt-generator` 输出包含 `events[image.generate.requested]` 的 envelope，框架自动唤醒 `image-generator` follower。mock harness 不装配 `ctx.images`（没有真实 gateway/MediaStore），follower 在拿到 `ctx.images` 之前直接返回可见失败（`status: "failed"`），这是预期行为、不是回归。断言验证：事件触发、follower 失败被正确记录。
 
 ### 单元测试（handler 入参断言）
 
