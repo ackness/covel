@@ -14,7 +14,7 @@ import type { runtimeManifestSchema } from "./plugin-schemas.js";
 export type RuntimeManifestInput = z.input<typeof runtimeManifestSchema>;
 
 export type RuntimeManifestSemanticDiagnosticCode =
-  "manual-trigger-priority" | "capability-typo";
+  "manual-trigger-priority" | "capability-typo" | "schedulable-missing-stage";
 
 export interface RuntimeManifestSemanticDiagnostic {
   readonly code: RuntimeManifestSemanticDiagnosticCode;
@@ -42,15 +42,57 @@ function editDistance(a: string, b: string): number {
 
 export function validateRuntimeManifestSemantics(
   // `capabilities` / `trigger.type` are widened so both the zod input shape
-  // (mutable, narrowed trigger enum) and the parsed RuntimeManifest (readonly,
-  // wider `TriggerType` that still carries the reserved values for normalize's
-  // defensive path) are accepted.
+  // (mutable) and the parsed RuntimeManifest (readonly) are accepted.
   manifest: Pick<RuntimeManifestInput, "name" | "priority"> & {
     readonly trigger?: { readonly type?: string };
     readonly capabilities?: readonly string[];
+    readonly stage?: string;
+    readonly runtimeType?: string;
+    readonly handler?: string;
+    readonly model?: string;
+    readonly ui?: unknown;
+    readonly hooks?: unknown;
+    readonly entry?: string;
+    readonly wires?: string;
   },
 ): readonly RuntimeManifestSemanticDiagnostic[] {
   const diagnostics: RuntimeManifestSemanticDiagnostic[] = [];
+
+  // A schedulable runtime (auto / scheduled — auto is the default when no
+  // trigger is declared) with neither `stage` nor a legacy `priority` to
+  // derive one from normalizes to the stage-less "UI-only" idiom: it is
+  // NEVER selected by the scheduler and produces no diagnostic at run time.
+  // That is correct for pure registration-surface declarations (UI panels,
+  // hook carriers, `entry` server modules, `wires` modules — cost-gate,
+  // memory), but for a runtime that clearly wants to execute (a function
+  // handler, or an agent with a model) it means "installed but silently
+  // never runs" — warn at load so the author finds out here.
+  {
+    const triggerType = manifest.trigger?.type ?? "auto";
+    const isSchedulable = triggerType === "auto" || triggerType === "scheduled";
+    const hasStageSignal =
+      manifest.stage !== undefined || typeof manifest.priority === "number";
+    const isRegistrationOnlyIdiom =
+      (manifest.ui !== undefined ||
+        manifest.hooks !== undefined ||
+        manifest.entry !== undefined ||
+        manifest.wires !== undefined) &&
+      manifest.handler === undefined &&
+      manifest.runtimeType !== "function" &&
+      manifest.model === undefined;
+    if (isSchedulable && !hasStageSignal && !isRegistrationOnlyIdiom) {
+      diagnostics.push({
+        code: "schedulable-missing-stage",
+        severity: "warning",
+        path: ["stage"],
+        message:
+          `Runtime "${manifest.name}" has trigger.type='${triggerType}' but declares no stage — ` +
+          "it will NEVER be scheduled (stage-less runtimes are treated as UI-only declarations). " +
+          "Declare a stage (setup / pre-turn / narrative / post-turn / audit) to run it, " +
+          "or add a ui/hooks declaration if it is intentionally UI-only.",
+      });
+    }
+  }
 
   if (
     manifest.trigger?.type === "manual" &&
