@@ -61,7 +61,7 @@ const AUTHORING_DOC: ManifestSchemaDoc = {
   id: "https://covel.local/schemas/runtime-manifest.authoring.schema.json",
   title: "Covel runtime manifest (strict authoring)",
   summary:
-    "Strict target for newly authored plugins. Rejects priority / upstreamRequired / jobStatus and the reserved trigger types.",
+    "Strict target for newly authored plugins. Rejects the legacy priority / upstreamRequired / jobStatus fields and requires a stage on auto / scheduled runtimes.",
   constraints: [
     ...SHARED_UNREPRESENTABLE_CONSTRAINTS,
     "auto / scheduled runtimes must declare a stage.",

@@ -8,6 +8,7 @@ import {
   authorsNoteDeclSchema,
   HOOK_EVENTS,
   postHistoryDeclSchema,
+  resolveI18nText,
   rpcDeclMapSchema,
   runtimeManifestSchema,
 } from "@covel/shared";
@@ -217,19 +218,6 @@ const LENIENT_FIELDS: readonly LenientFieldSpec[] = [
 // loader's accept-list can never drift from the framework's hook contract.
 const VALID_HOOK_EVENTS = new Set<string>(HOOK_EVENTS);
 
-/** Fold a schema-validated description (string | non-empty i18n map) to one string. */
-function foldI18nDescription(raw: string | Record<string, string>): string {
-  if (typeof raw === "string") return raw;
-  return (
-    raw["en"] ??
-    raw["en-US"] ??
-    raw["zh"] ??
-    raw["zh-CN"] ??
-    Object.values(raw)[0] ??
-    ""
-  );
-}
-
 /**
  * Lenient hook schema that accepts any string for `event`, used to
  * pre-validate hooks before filtering out unknown event names with a warning.
@@ -360,7 +348,7 @@ export function parsePluginMd(
     // back to Chinese or any other available locale.
     manifest = {
       ...parsed,
-      description: foldI18nDescription(parsed.description),
+      description: resolveI18nText(parsed.description, "en") ?? "",
       pluginId,
     };
   } catch (error: unknown) {
