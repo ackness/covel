@@ -51,17 +51,18 @@ describe("core plugin manifest contract", () => {
 
     expect(pregame).toMatchObject({
       pluginType: "core-plugin",
-      priority: 10,
+      stage: "setup",
       runtimeType: "function",
       handler: "./handler.js",
-      trigger: { type: "scheduled", interval: 1, maxTriggerCount: 1 },
+      trigger: { type: "auto", maxTriggerCount: 1 },
     });
     expect(schemaGen).toMatchObject({
       pluginType: "core-plugin",
-      priority: 40,
+      stage: "setup",
+      after: ["pregame"],
       model: "plugin",
       guard: "../../guard.js",
-      trigger: { type: "scheduled", interval: 1, maxTriggerCount: 1 },
+      trigger: { type: "auto", maxTriggerCount: 1 },
     });
     expect(schemaGen.tools?.plugin).toEqual([
       "set-world-schema",

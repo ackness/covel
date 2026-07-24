@@ -4,19 +4,18 @@ description:
   zh: 开局整理世界设定，让角色属性和背景资料更贴合这个世界。
   en: Organizes the setting at the start so character traits and background details fit the world.
 pluginType: core-plugin
-# audit P0-2: schema-gen must run BEFORE char-creator/player-init (50)
-# so the player-init agent can read `{{ world.schema }}` populated by
-# this runtime's set-world-schema tool. Pre-Game band is 0-99 and uses
-# priority-based serial ordering.
-priority: 40
+stage: setup
+# Weak ordering after pregame (historical serial order); player-init declares
+# the hard turn-scoped `needs` on both of us so it can read `{{ world.schema }}`.
+after:
+  - pregame
 model: plugin
 outputKind: system
 timeoutMs: 180000
 capabilities: [world-data-provider]
 guard: ../../guard.js
 trigger:
-  type: scheduled
-  interval: 1
+  type: auto
   maxTriggerCount: 1
 tools:
   plugin:

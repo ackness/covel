@@ -26,11 +26,6 @@
  * knows about runtimes in scope). Cycles are reported via `error`; callers
  * disable the strongly-connected component (and its downstream) rather than
  * running it in an arbitrary order.
- *
- * Setup ordering: setup runtimes with implicit legacy write-ordering but no
- * declared edge (pregame → schema-gen) get a conservative `after` chain derived
- * from their original priority — see {@link deriveConservativeSetupEdges}. Pass
- * those as `extraDeps` so they enter the same Kahn sort.
  */
 
 import type { DependencyRef, RuntimeManifest } from "@covel/shared";
@@ -123,54 +118,9 @@ function buildCapabilityProviders(
   return capabilityProviders;
 }
 
-/**
- * Conservative `after` edges preserving the legacy priority order for setup
- * runtimes that carry no declared dependency between them.
- *
- * The old priority scheduler ran the setup band strictly serially by number
- * (pregame 10 → schema-gen 40 → player-init 50). The DAG only knows declared
- * edges, and pregame → schema-gen has none — they would land in the same
- * parallel level. To keep the switch byte-identical, sort the setup runtimes by
- * their original `priority` (name breaks ties; priority-less runtimes sort
- * last) and chain each adjacent pair `prev → cur` with an `after` edge — but
- * ONLY when `cur` declares no dependency of its own (an authored edge already
- * orders it; a legacy chain edge must not over-constrain it). Provenance:
- * `legacy-order-edge`.
- */
-export function deriveConservativeSetupEdges(
-  setupRuntimes: readonly RuntimeManifest[],
-): Map<string, readonly string[]> {
-  const extra = new Map<string, readonly string[]>();
-  if (setupRuntimes.length < 2) return extra;
-
-  const capabilityProviders = buildCapabilityProviders(setupRuntimes);
-  const inScope = new Set(setupRuntimes.map((r) => r.name));
-  const priorityOf = (m: RuntimeManifest): number =>
-    m.priority ?? Number.POSITIVE_INFINITY;
-
-  const sorted = [...setupRuntimes].sort(
-    (a, b) => priorityOf(a) - priorityOf(b) || a.name.localeCompare(b.name),
-  );
-
-  for (let i = 1; i < sorted.length; i++) {
-    const cur = sorted[i]!;
-    const declared = collectDependencies(cur, capabilityProviders).some((d) =>
-      inScope.has(d),
-    );
-    if (declared) continue; // author already ordered it — do not chain
-    extra.set(cur.name, [sorted[i - 1]!.name]);
-  }
-  return extra;
-}
-
-/**
- * Topologically sort `runtimes` into levels. `extraDeps` maps a runtime name to
- * additional in-scope dependency names (the conservative setup chain); they are
- * merged with the runtime's declared dependencies before the Kahn sort.
- */
+/** Topologically sort `runtimes` into levels via a Kahn sort over declared edges. */
 export function scheduleByDag(
   runtimes: readonly RuntimeManifest[],
-  extraDeps?: ReadonlyMap<string, readonly string[]>,
 ): DagScheduleResult {
   if (runtimes.length === 0) return { groups: [] };
 
@@ -187,7 +137,6 @@ export function scheduleByDag(
 
   for (const rt of runtimes) {
     const deps = new Set(collectDependencies(rt, capabilityProviders));
-    for (const extra of extraDeps?.get(rt.name) ?? []) deps.add(extra);
     for (const dep of deps) {
       // A self-edge is left in place: it makes the node unreachable in the Kahn
       // sort, so it (a plugin authoring mistake) surfaces as a cycle.

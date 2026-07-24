@@ -290,6 +290,9 @@ describe("Pre-Game completion contract", () => {
     const pregame = pregameManifest("pregame", { priority: 10 });
     const playerInit = pregameManifest("char-creator/player-init", {
       priority: 50,
+      // Order comes from declared edges (the conservative legacy chain is
+      // gone) — mirror the real plugin, which `needs` pregame.
+      needs: ["pregame"],
     });
     const utility = pregameManifest("character-blueprint", {
       priority: undefined,

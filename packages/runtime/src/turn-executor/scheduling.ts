@@ -7,10 +7,7 @@ import {
   STAGE_ORDER,
 } from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
-import {
-  deriveConservativeSetupEdges,
-  scheduleByDag,
-} from "../schedule/dag-scheduler.js";
+import { scheduleByDag } from "../schedule/dag-scheduler.js";
 import { shouldTrigger } from "../trigger/trigger.js";
 import type { ScheduledGroup, TriggerContext } from "../types.js";
 
@@ -220,12 +217,11 @@ export function scheduleTriggeredRuntimes(args: {
     return { groups: [{ runtimes: [manualTarget] }], cyclic: [] };
   }
 
-  // Setup band (`phase: setup`): the `stage === "setup"` runtimes, ordered by
-  // their declared edges plus the conservative legacy-order chain that keeps
-  // pregame → schema-gen serial (see deriveConservativeSetupEdges).
+  // Setup band (`phase: setup`): the `stage === "setup"` runtimes, ordered
+  // purely by their declared edges (pregame → schema-gen is an authored
+  // `after` edge; player-init gates on both via turn-scoped `needs`).
   if (isPreGamePending) {
-    const setup = triggered.filter(isSetupRuntime);
-    return runDag(setup, deriveConservativeSetupEdges(setup));
+    return runDag(triggered.filter(isSetupRuntime));
   }
 
   // Main loop: run each stage (pre-turn → narrative → post-turn → audit) as an
@@ -265,11 +261,8 @@ function scheduleMainLoopByStage(
   return { groups, cyclic };
 }
 
-function runDag(
-  runtimes: readonly RuntimeManifest[],
-  extraDeps?: ReadonlyMap<string, readonly string[]>,
-): ScheduleResult {
-  const dag = scheduleByDag(runtimes, extraDeps);
+function runDag(runtimes: readonly RuntimeManifest[]): ScheduleResult {
+  const dag = scheduleByDag(runtimes);
   if (dag.error) {
     // No fall-back to a plain sort: disable the SCC (and its downstream) — the
     // executor skips them `dependency-cycle` with the full path diagnostic —

@@ -575,8 +575,8 @@ tag      = "speech"
 
 | Runtime                              | stage / 依赖                                       | 触发            | 类型                  | 说明                                                              |
 | ------------------------------------ | -------------------------------------------------- | --------------- | --------------------- | ----------------------------------------------------------------- |
-| pregame                              | setup（legacy priority 10 派生,loader-gated 例外） | scheduled(首轮) | function              | 游戏初始化                                                        |
-| world-init/schema-gen                | setup（legacy priority 40 派生,loader-gated 例外） | scheduled(首轮) | agent + guard         | 世界维度生成,guard 已存在则跳过                                   |
+| pregame                              | setup                                              | auto            | function              | 游戏初始化                                                        |
+| world-init/schema-gen                | setup · after: [pregame]                           | auto            | agent + guard         | 世界维度生成,guard 已存在则跳过                                   |
 | char-creator/player-init             | setup · needs: [pregame, world-init/schema-gen]    | auto            | agent + guard         | 玩家建角表单                                                      |
 | npc-graph/rag-retriever              | pre-turn                                           | scheduled       | function              | 给 narrator 拉 NPC 结构化检索                                     |
 | scene-cast                           | pre-turn                                           | auto            | agent                 | 场景角色编排                                                      |

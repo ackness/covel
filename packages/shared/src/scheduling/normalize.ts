@@ -8,11 +8,10 @@
  * and the DAG orders within it (see packages/runtime/src/schedule).
  *
  * Two legacy folds survive here as the compat bridge for third-party
- * manifests that have not migrated to the single-declaration surface:
+ * manifests that have not migrated to the single-declaration surface
+ * (every bundled plugin single-declares `stage` + `needs`/`after` now):
  *   - `priority` → `stage` (the `stageForPriority` band map). Retired once no
- *     plugin declares `priority` without an explicit `stage`. Bundled
- *     pregame / schema-gen still ride it (the loader forbids `stage: setup`
- *     on their `scheduled` trigger).
+ *     third-party plugin declares `priority` without an explicit `stage`.
  *   - `upstreamRequired` → `deps.needs` (turn-scoped alias). Retired once no
  *     plugin declares `upstreamRequired`; the IR-driven DAG + upstream gate
  *     read `deps.needs`, so the alias is what keeps third-party

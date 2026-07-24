@@ -8,9 +8,9 @@
 
 ### setup 阶段
 
-- [`pregame`](#pregame) — 游戏初始化 function runtime（legacy `priority: 10`，见下方 stage 派生说明）
+- [`pregame`](#pregame) — 游戏初始化 function runtime（`stage: setup`）
 - [`char-creator/player-init`](#char-creatorplayer-init) — 玩家建角 agent runtime（`stage: setup`）
-- [`world-init/schema-gen`](#world-initschema-gen) — 世界维度 agent runtime（guard 门控，legacy `priority: 40`）
+- [`world-init/schema-gen`](#world-initschema-gen) — 世界维度 agent runtime（guard 门控，`stage: setup` + `after: [pregame]`）
 
 ### pre-turn 阶段
 
@@ -87,9 +87,9 @@
 | `narrative` | `narrator` · `chat-mode-narrator`                                            | 主叙事生成器（互斥，二选一激活）                                                                               |
 | `post-turn` | `guide` · `codex` · `npc-graph/extractor` · `char-creator/character-tracker` | 四者都以 `{ capability: narrative-engine }` 依赖当前模式的叙事引擎（H-04），彼此独立 → **同 stage 内并行执行** |
 
-`setup` stage（会话 `phase === "setup"` 时运行，取代旧的 Pre-Game priority band `0-99`）走：`pregame → world-init/schema-gen → char-creator/player-init`。`char-creator/player-init` 单声明 `stage: setup` + turn-scoped `needs: [pregame, world-init/schema-gen]`（player-init 读取 schema-gen 写出的 `world.schema`，`needs` 既是同一 pass 内的 DAG 边、也是同回合门控）。`pregame` 与 `world-init/schema-gen` 是仅有的两个仍声明 `priority`（10 / 40）的 bundled runtime：loader 禁止 `stage: setup` 与它们所用的 `scheduled interval:1` 触发器并存，因此归一层从这两者的 priority 分带**派生** `stage: setup`；这两个 runtime 之间没有显式依赖边时，归一层还会按原 priority 升序追加一条保守的 `after` 排序边，使 setup 顺序与历史上的串行 `pregame → schema-gen` 保持字节级一致。
+`setup` stage（会话 `phase === "setup"` 时运行，取代旧的 Pre-Game priority band `0-99`）走：`pregame → world-init/schema-gen → char-creator/player-init`，顺序完全由声明边决定：`world-init/schema-gen` 声明弱排序 `after: [pregame]`（pregame 失败不拦 schema 生成）；`char-creator/player-init` 声明 turn-scoped `needs: [pregame, world-init/schema-gen]`（player-init 读取 schema-gen 写出的 `world.schema`，`needs` 既是同一 pass 内的 DAG 边、也是同回合门控）。三者均为 `stage: setup` + `trigger: auto`（`maxTriggerCount` 为重试预算）——旧的保守 setup 排序链已删除。
 
-**兼容面（仅第三方）**：manifest 输入 schema 仍**接受**第三方插件声明的 `priority` / `upstreamRequired`——归一层把 `priority` 折算进 `stage`（缺失 `stage` 时用它派生）、把 `upstreamRequired` 别名为 `needs`。Bundled 插件已全部单声明 `stage` + `needs`（上面两个 setup 例外仅为 loader 约束保留 `priority`），第三方插件迁移前可继续沿用旧字段。`event` / `manual` runtime 不设 `stage`。
+**兼容面（仅第三方）**：manifest 输入 schema 仍**接受**第三方插件声明的 `priority` / `upstreamRequired`——归一层把 `priority` 折算进 `stage`（缺失 `stage` 时用它派生）、把 `upstreamRequired` 别名为 `needs`。Bundled 插件已全部单声明 `stage` + `needs`/`after`（无例外——pregame / world-init/schema-gen 已迁移为 `stage: setup` + `trigger: auto`），第三方插件迁移前可继续沿用旧字段。`event` / `manual` runtime 不设 `stage`。
 
 **Setup 状态机（插件视角）**：`setup` 阶段（旧 Pre-Game 分带）的每个 runtime，框架按 `(session, runtimeId)` 维护一个解析状态，插件作者需要知道三种落点：
 
@@ -103,37 +103,37 @@
 
 ## 概览
 
-| ID                                   | 类型        | Stage                               | 触发方式                                                                   | 模型 slot | 描述                                                                                           |
-| ------------------------------------ | ----------- | ----------------------------------- | -------------------------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------- |
-| pregame                              | core-plugin | `setup`（legacy priority 10，派生） | scheduled（仅首轮）                                                        | —         | 游戏初始化（function runtime）                                                                 |
-| world-init/schema-gen                | core-plugin | `setup`（legacy priority 40，派生） | scheduled（仅首轮）                                                        | `plugin`  | 世界维度初始化（guard + agent，setup 第二步）                                                  |
-| char-creator/player-init             | core-plugin | `setup`                             | auto（guard 门控）                                                         | `plugin`  | 玩家角色创建（agent runtime；turn-scoped `needs` 依赖 pregame + schema-gen）                   |
-| npc-graph/rag-retriever              | plugin      | `pre-turn`                          | scheduled（interval=1，function runtime）                                  | —         | NPC 图谱结构化检索器，向 narrator 注入相关关系事实                                             |
-| scene-cast                           | plugin      | `pre-turn`                          | scheduled（interval=1，function）                                          | —         | 对话模式当前场景演员，注入 `activeCastContext`                                                 |
-| scene-stage/resolver                 | plugin      | 无（event，不设 stage）             | event（topic: `scene.set`）                                                | —         | 场景/昼夜解析，写 `stage/current`；未命中注册表时向 background-gen 发内部信令                  |
-| narrator                             | core-plugin | `narrative`                         | auto                                                                       | `story`   | 主叙事生成器                                                                                   |
-| chat-mode-narrator                   | plugin      | `narrative`                         | auto                                                                       | `story`   | 对话 / 舞台模式叙事器（`conflicts: narrator`，`requires` 场景/角色子系统）                     |
-| guide                                | plugin      | `post-turn`                         | scheduled（interval=1, cooldown=1）                                        | `plugin`  | 行动引导 + 聊天内建议面                                                                        |
-| codex                                | plugin      | `post-turn`                         | auto（每轮，紧跟 narrator 之后）                                           | `plugin`  | 知识图鉴系统（agent runtime）                                                                  |
-| npc-graph/extractor                  | plugin      | `post-turn`                         | scheduled（interval=1, cooldown=1）                                        | `plugin`  | NPC 关系图抽取器                                                                               |
-| char-creator/character-tracker       | core-plugin | `post-turn`                         | scheduled（interval=1, cooldown=1）                                        | `plugin`  | NPC 发现 + 角色状态跟踪                                                                        |
-| scene-prompts                        | plugin      | `post-turn`                         | scheduled（interval=1, cooldown=1）                                        | `plugin`  | 对话模式玩家口吻短回复                                                                         |
-| character-blueprint                  | plugin      | —                                   | manual（按需 / world-data 导入）                                           | —         | 可复用角色蓝图；`dataSchemas` blueprints/characters 接收世界导入                               |
-| character-presence                   | plugin      | —                                   | manual（按需 / world-data 导入）                                           | —         | 角色头像 / 立绘 / 语音媒体；`dataSchemas` presence/assets                                      |
-| player-identity                      | plugin      | —                                   | manual（按需）                                                             | —         | 玩家人设（`persona-provider`，注入 activePersona）                                             |
-| living-world-rules                   | plugin      | —                                   | manual（按需 / world-data 导入）                                           | —         | 长期世界规则 → `lorebook.upsert` 注入叙事；`dataSchemas` rules                                 |
-| branch-reply                         | plugin      | `post-turn`                         | auto（每回合播种）+ manual（重生成/采纳）                                  | —         | 回复候选 + `prompt-history-rewriter`（自动播种叙事原文，重生成走 LLM；投影历史折叠已采纳回合） |
-| scene-stage/background-gen           | plugin      | 无（event，不设 stage）             | event（topic: `scene-stage.generate.requested`，`execution: background`）  | —         | 后台增量生成缺失的场景背景图（`ctx.images`），产出 `asset.generate`                            |
-| dashscope-image-gen/prompt-generator | plugin      | —                                   | manual（右侧「生成图片」按钮）                                             | `default` | 剧情插图提示词 agent，发 `image.generate.requested` 唤醒生成 follower                          |
-| dashscope-image-gen/image-generator  | plugin      | 无（event，不设 stage）             | event（topic: `image.generate.requested`，`execution: background`）        | —         | DashScope wan2.x 生成插图（`ctx.images`），产出 `asset.generate` + 画廊记录                    |
-| openai-image-gen/prompt-generator    | plugin      | —                                   | manual（右侧「生成图片」按钮）                                             | `default` | 剧情插图提示词 agent，发 `openai-image.generate.requested`                                     |
-| openai-image-gen/image-generator     | plugin      | 无（event，不设 stage）             | event（topic: `openai-image.generate.requested`，`execution: background`） | —         | OpenAI 兼容生成插图（`ctx.images`），产出 `asset.generate` + 画廊记录                          |
-| mimo-tts/auto-narrate                | plugin      | `post-turn`                         | auto（`needs: capability narrative-engine`）                               | —         | 叙事旁白自动 TTS（`ctx.speech`，MiMo wire）；每回合写「朗读」按钮的消息层锚点                  |
-| mimo-tts/manual-narrate              | plugin      | —                                   | manual（消息内「朗读」按钮，`execution: background`）                      | —         | 按钮 payload 指定段落的手动 TTS（`ctx.speech`）                                                |
-| memory                               | core-plugin | —                                   | UI-only（无 runtime）                                                      | —         | 长期记忆摘要面板 + 通过 `memoryBlocks` 声明默认核心记忆块（剧情/角色关系/场景/玩家状态）       |
-| cost-gate                            | plugin      | —                                   | hook-only（opt-in，默认禁用）                                              | —         | 跨切面：每会话 token 预算门控（hooks：PostLLMResponse/PreSchedule/TurnStart/SessionEnd）       |
-| director                             | plugin      | —                                   | hook-only（opt-in，默认禁用）                                              | —         | 跨切面：用 PostContextAssembly 给本局所有 story runtime 统一注入导演前言                       |
-| story-guard                          | plugin      | —                                   | hook-only（opt-in，默认禁用）                                              | —         | 跨切面：故事文本红线净化（PostLLMResponse）+ 高危工具拦截（PreToolUse）                        |
+| ID                                   | 类型        | Stage                      | 触发方式                                                                   | 模型 slot | 描述                                                                                           |
+| ------------------------------------ | ----------- | -------------------------- | -------------------------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------- |
+| pregame                              | core-plugin | `setup`                    | auto（setup 段一次性，重试预算 1）                                         | —         | 游戏初始化（function runtime）                                                                 |
+| world-init/schema-gen                | core-plugin | `setup` · after: [pregame] | auto（setup 段一次性，重试预算 1）                                         | `plugin`  | 世界维度初始化（guard + agent，setup 第二步）                                                  |
+| char-creator/player-init             | core-plugin | `setup`                    | auto（guard 门控）                                                         | `plugin`  | 玩家角色创建（agent runtime；turn-scoped `needs` 依赖 pregame + schema-gen）                   |
+| npc-graph/rag-retriever              | plugin      | `pre-turn`                 | scheduled（interval=1，function runtime）                                  | —         | NPC 图谱结构化检索器，向 narrator 注入相关关系事实                                             |
+| scene-cast                           | plugin      | `pre-turn`                 | scheduled（interval=1，function）                                          | —         | 对话模式当前场景演员，注入 `activeCastContext`                                                 |
+| scene-stage/resolver                 | plugin      | 无（event，不设 stage）    | event（topic: `scene.set`）                                                | —         | 场景/昼夜解析，写 `stage/current`；未命中注册表时向 background-gen 发内部信令                  |
+| narrator                             | core-plugin | `narrative`                | auto                                                                       | `story`   | 主叙事生成器                                                                                   |
+| chat-mode-narrator                   | plugin      | `narrative`                | auto                                                                       | `story`   | 对话 / 舞台模式叙事器（`conflicts: narrator`，`requires` 场景/角色子系统）                     |
+| guide                                | plugin      | `post-turn`                | scheduled（interval=1, cooldown=1）                                        | `plugin`  | 行动引导 + 聊天内建议面                                                                        |
+| codex                                | plugin      | `post-turn`                | auto（每轮，紧跟 narrator 之后）                                           | `plugin`  | 知识图鉴系统（agent runtime）                                                                  |
+| npc-graph/extractor                  | plugin      | `post-turn`                | scheduled（interval=1, cooldown=1）                                        | `plugin`  | NPC 关系图抽取器                                                                               |
+| char-creator/character-tracker       | core-plugin | `post-turn`                | scheduled（interval=1, cooldown=1）                                        | `plugin`  | NPC 发现 + 角色状态跟踪                                                                        |
+| scene-prompts                        | plugin      | `post-turn`                | scheduled（interval=1, cooldown=1）                                        | `plugin`  | 对话模式玩家口吻短回复                                                                         |
+| character-blueprint                  | plugin      | —                          | manual（按需 / world-data 导入）                                           | —         | 可复用角色蓝图；`dataSchemas` blueprints/characters 接收世界导入                               |
+| character-presence                   | plugin      | —                          | manual（按需 / world-data 导入）                                           | —         | 角色头像 / 立绘 / 语音媒体；`dataSchemas` presence/assets                                      |
+| player-identity                      | plugin      | —                          | manual（按需）                                                             | —         | 玩家人设（`persona-provider`，注入 activePersona）                                             |
+| living-world-rules                   | plugin      | —                          | manual（按需 / world-data 导入）                                           | —         | 长期世界规则 → `lorebook.upsert` 注入叙事；`dataSchemas` rules                                 |
+| branch-reply                         | plugin      | `post-turn`                | auto（每回合播种）+ manual（重生成/采纳）                                  | —         | 回复候选 + `prompt-history-rewriter`（自动播种叙事原文，重生成走 LLM；投影历史折叠已采纳回合） |
+| scene-stage/background-gen           | plugin      | 无（event，不设 stage）    | event（topic: `scene-stage.generate.requested`，`execution: background`）  | —         | 后台增量生成缺失的场景背景图（`ctx.images`），产出 `asset.generate`                            |
+| dashscope-image-gen/prompt-generator | plugin      | —                          | manual（右侧「生成图片」按钮）                                             | `default` | 剧情插图提示词 agent，发 `image.generate.requested` 唤醒生成 follower                          |
+| dashscope-image-gen/image-generator  | plugin      | 无（event，不设 stage）    | event（topic: `image.generate.requested`，`execution: background`）        | —         | DashScope wan2.x 生成插图（`ctx.images`），产出 `asset.generate` + 画廊记录                    |
+| openai-image-gen/prompt-generator    | plugin      | —                          | manual（右侧「生成图片」按钮）                                             | `default` | 剧情插图提示词 agent，发 `openai-image.generate.requested`                                     |
+| openai-image-gen/image-generator     | plugin      | 无（event，不设 stage）    | event（topic: `openai-image.generate.requested`，`execution: background`） | —         | OpenAI 兼容生成插图（`ctx.images`），产出 `asset.generate` + 画廊记录                          |
+| mimo-tts/auto-narrate                | plugin      | `post-turn`                | auto（`needs: capability narrative-engine`）                               | —         | 叙事旁白自动 TTS（`ctx.speech`，MiMo wire）；每回合写「朗读」按钮的消息层锚点                  |
+| mimo-tts/manual-narrate              | plugin      | —                          | manual（消息内「朗读」按钮，`execution: background`）                      | —         | 按钮 payload 指定段落的手动 TTS（`ctx.speech`）                                                |
+| memory                               | core-plugin | —                          | UI-only（无 runtime）                                                      | —         | 长期记忆摘要面板 + 通过 `memoryBlocks` 声明默认核心记忆块（剧情/角色关系/场景/玩家状态）       |
+| cost-gate                            | plugin      | —                          | hook-only（opt-in，默认禁用）                                              | —         | 跨切面：每会话 token 预算门控（hooks：PostLLMResponse/PreSchedule/TurnStart/SessionEnd）       |
+| director                             | plugin      | —                          | hook-only（opt-in，默认禁用）                                              | —         | 跨切面：用 PostContextAssembly 给本局所有 story runtime 统一注入导演前言                       |
+| story-guard                          | plugin      | —                          | hook-only（opt-in，默认禁用）                                              | —         | 跨切面：故事文本红线净化（PostLLMResponse）+ 高危工具拦截（PreToolUse）                        |
 
 ---
 
@@ -145,14 +145,14 @@
 
 **路径**: `plugins/pregame/`
 
-| 字段         | 值                                                                                                                                                               |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| pluginType   | `core-plugin`（不可禁用）                                                                                                                                        |
-| priority     | 10 — **legacy**：不写显式 `stage`（loader 禁止 `stage: setup` 与 `scheduled`/`interval` 并存），归一层据此派生 `stage: setup` 并作为 setup 保守排序链的 sort key |
-| trigger      | `scheduled`，`interval: 1`，`maxTriggerCount: 1` — 仅首轮触发                                                                                                    |
-| runtimeType  | `function`（纯函数执行，不调用 LLM）                                                                                                                             |
-| handler      | `./handler.js`                                                                                                                                                   |
-| input.inject | 无                                                                                                                                                               |
+| 字段         | 值                                                            |
+| ------------ | ------------------------------------------------------------- |
+| pluginType   | `core-plugin`（不可禁用）                                     |
+| stage        | `setup` — 仅在 `phase === "setup"` 时调度，报告完成后不再运行 |
+| trigger      | `auto`，`maxTriggerCount: 1`（重试预算）                      |
+| runtimeType  | `function`（纯函数执行，不调用 LLM）                          |
+| handler      | `./handler.js`                                                |
+| input.inject | 无                                                            |
 
 **职责**: 游戏开始时第一个执行的插件。读取世界观设定，发送欢迎通知，输出世界观摘要供后续叙事插件（narrator、codex、char-creator）作为上下文引导。
 
@@ -172,17 +172,17 @@
 
 ### world-init/schema-gen
 
-| 字段          | 值                                                                                                                                                                                       |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| pluginType    | `core-plugin`（不可禁用）                                                                                                                                                                |
-| priority      | 40 — **legacy**：先于 player-init；同 pregame 一样不写显式 `stage`，归一层据此派生 `stage: setup`（player-init 通过 turn-scoped `needs` 依赖本 runtime，先后顺序不再依赖 priority 本身） |
-| trigger       | `scheduled`，`interval: 1`，`maxTriggerCount: 1` — 仅首轮触发                                                                                                                            |
-| model         | `plugin`                                                                                                                                                                                 |
-| guard         | `../../guard.js`                                                                                                                                                                         |
-| capabilities  | `[world-data-provider]`                                                                                                                                                                  |
-| tools.plugin  | `set-world-schema`, `set-world-entries-batch`                                                                                                                                            |
-| tools.builtin | `plugin-data-get`, `plugin-data-list`                                                                                                                                                    |
-| ui.right      | `./ui/world-overview.json`, `./ui/world-schema.json`                                                                                                                                     |
+| 字段          | 值                                                                                                                                      |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| pluginType    | `core-plugin`（不可禁用）                                                                                                               |
+| stage         | `setup` · `after: [pregame]`（弱排序：沿用历史串行，pregame 失败不拦本 runtime；player-init 通过 turn-scoped `needs` 硬依赖本 runtime） |
+| trigger       | `auto`，`maxTriggerCount: 1`（重试预算）                                                                                                |
+| model         | `plugin`                                                                                                                                |
+| guard         | `../../guard.js`                                                                                                                        |
+| capabilities  | `[world-data-provider]`                                                                                                                 |
+| tools.plugin  | `set-world-schema`, `set-world-entries-batch`                                                                                           |
+| tools.builtin | `plugin-data-get`, `plugin-data-list`                                                                                                   |
+| ui.right      | `./ui/world-overview.json`, `./ui/world-schema.json`                                                                                    |
 
 **Guard 门控**: `guard.js` 在 LLM 调用前执行（纯函数，零 LLM 开销），按优先级决定角色属性 schema，命中任一即返回 `{ skip: true }` 跳过 LLM：
 
@@ -1378,7 +1378,7 @@ Agent runtime 默认使用 segment-based prompt assembler。插件正文进入 `
 | `depth`   | `number`（可选，默认 `4`）                                 | 距离消息数组尾部的偏移。`4` 表示插入到 `messages[length - 4]` 之前。`0` 或 `<= 0` 等价于追加到末尾 |
 | `role`    | `'system' \| 'user' \| 'assistant'`（可选，默认 `system`） | 注入消息的角色                                                                                     |
 
-多个插件的 authorsNote 会按 `priority` 升序聚合，落在同一 `(role, depth)` 桶内的内容会被合并为一条消息（用空行分隔）。
+多个插件的 authorsNote 会按 `(stage, name)` 顺序聚合，落在同一 `(role, depth)` 桶内的内容会被合并为一条消息（用空行分隔）。
 
 该字段对所有 agent runtime 生效。
 
@@ -1402,7 +1402,7 @@ authorsNote:
 | `content` | `string`（必填）                            | 注入文本，支持 `{{ template }}` 插值 |
 | `role`    | `'system' \| 'user'`（可选，默认 `system`） | 注入消息的角色                       |
 
-多个插件的 postHistory 会按 `priority` 升序聚合；相同 role 的声明会被合并为一条消息。
+多个插件的 postHistory 会按 `(stage, name)` 顺序聚合；相同 role 的声明会被合并为一条消息。
 
 该字段对所有 agent runtime 生效。
 

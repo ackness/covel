@@ -112,7 +112,7 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 - **`inputs`** — 把某条隐式上游依赖升级为**有类型的同回合绑定**，解析进 function 的 `ctx.inputs.<name>`（agent 则注入一个保留 prompt 块）。每项：`from`（`{ runtime }` 或 `{ capability, cardinality }`）· `select`（RFC 6901 JSON Pointer，指进生产方成功 value）· `required`（`true` 蕴含 `needs(turn)` 门，`false` 蕴含 `after`）· `accepts`（runtime 目录相对的 JSON Schema 路径，校验最终注入值）。
 - **`input.schema`** — runtime 目录相对的 JSON Schema，校验本 runtime 的**激活载荷**（manual RPC / event payload），派发前强制执行。
 
-**legacy 字段（仅第三方兼容）**：manifest 输入 schema 仍**接受**第三方插件声明的 `priority` / `upstreamRequired`——归一层把 `upstreamRequired` 别名为 `needs`，并在 `stage` 缺失时用 `priority` 派生 `stage`（`priority` 数值本身不再是调度依据，只作派生来源 + setup 保守排序链的 sort key）。所有 bundled 插件已迁移为单声明 `stage` + `needs`：**唯二例外**是 `pregame` 与 `world-init/schema-gen`——两者用 `scheduled interval:1 maxTriggerCount:1` 的旧 setup 惯用法，loader 禁止这类 trigger 与显式 `stage: setup` 并存，因此仍声明 `priority`（10 / 40）让归一层派生 `stage: setup`；这两者之间没有显式依赖边，归一层还会按原 `priority` 升序追加一条保守的 `after` 排序边，使 setup 顺序与历史上的串行 `pregame → schema-gen` 保持一致。新写插件请直接用 `stage` + `needs`；只有当 setup runtime 必须沿用上述 `scheduled interval:1` 惯用法时才需要声明 `priority`。
+**legacy 字段（仅第三方兼容）**：manifest 输入 schema 仍**接受**第三方插件声明的 `priority` / `upstreamRequired`——归一层把 `upstreamRequired` 别名为 `needs`，并在 `stage` 缺失时用 `priority` 派生 `stage`（`priority` 数值本身不再是调度依据，只作派生来源）。**所有 bundled 插件均已单声明 `stage` + `needs`/`after`，无任何例外**（历史上的 pregame / world-init/schema-gen 例外已迁移：`stage: setup` + `trigger: auto`，schema-gen 用显式 `after: [pregame]` 保持串行；旧的保守 setup 排序链已删除——同阶段内先后完全由声明边决定）。新写插件请直接用 `stage` + `needs`，不要写 `priority`。
 
 **保留 trigger**：`conditional` / `error-retry` 已从 trigger 枚举中移除，声明它们的 manifest 在**加载时被拒绝**（不再是"接受但永不触发"的 reserved 状态）——生产可用的只有 `auto` / `manual` / `scheduled` / `event` 四种。
 

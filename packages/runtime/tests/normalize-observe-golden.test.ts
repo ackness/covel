@@ -17,10 +17,7 @@ import {
   loadPluginManifest,
   normalizeRuntimeManifest,
 } from "@covel/plugin-loader";
-import {
-  deriveConservativeSetupEdges,
-  scheduleByDag,
-} from "../src/schedule/dag-scheduler.js";
+import { scheduleByDag } from "../src/schedule/dag-scheduler.js";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../plugins");
 
@@ -54,20 +51,9 @@ function requireSpec(
   return spec;
 }
 
-/**
- * Flatten a DAG plan into level-groups of runtime names. The conservative
- * legacy-order chain applies to the setup stage only (mirrors the real
- * scheduler: setup passes `deriveConservativeSetupEdges`, main-loop stages do
- * not).
- */
-function levelsOf(
-  runtimes: readonly RuntimeManifest[],
-  conservative = false,
-): readonly string[][] {
-  const plan = scheduleByDag(
-    runtimes,
-    conservative ? deriveConservativeSetupEdges(runtimes) : undefined,
-  );
+/** Flatten a DAG plan into level-groups of runtime names. */
+function levelsOf(runtimes: readonly RuntimeManifest[]): readonly string[][] {
+  const plan = scheduleByDag(runtimes);
   return plan.groups.map((g) => g.runtimes.map((r) => r.name));
 }
 
@@ -76,14 +62,12 @@ describe("normalize golden (bundled plugin set)", () => {
     const manifests = await loadAllManifests();
     for (const manifest of manifests) {
       const spec = normalizeRuntimeManifest(manifest);
-      // undefined priority is the UI-only idiom (never scheduled), and only
-      // auto/scheduled runtimes with a stage (explicit or priority-derived)
-      // enter the pipeline. Reserved triggers are disabled outright.
+      // Stage-less declarations are the UI-only idiom (never scheduled); only
+      // auto/scheduled runtimes with a stage (explicit, or priority-derived
+      // for legacy third-party manifests) enter the pipeline.
       const expectStage =
-        (manifest.stage !== undefined ||
-          (manifest.priority !== undefined &&
-            isStageSourceManifest(manifest))) &&
-        spec.disabledReason === undefined;
+        manifest.stage !== undefined ||
+        (manifest.priority !== undefined && isStageSourceManifest(manifest));
       expect(
         spec.stage !== undefined,
         `${manifest.name}: stage presence mismatch`,
@@ -91,13 +75,13 @@ describe("normalize golden (bundled plugin set)", () => {
     }
   });
 
-  it("orders the setup stage byte-identically (pregame → schema-gen → player-init)", async () => {
+  it("orders the setup stage by declared edges (pregame → schema-gen → player-init)", async () => {
     const manifests = await loadAllManifests();
     const setup = manifests.filter(isSetupRuntime);
-    // The conservative legacy-order chain keeps pregame → schema-gen serial
-    // (no declared edge between them); player-init's turn-scoped `needs` order
-    // it after both. This is the old priority order (10 → 40 → 50).
-    expect(levelsOf(setup, true)).toEqual([
+    // Declared edges carry the whole order now: schema-gen declares
+    // `after: [pregame]` and player-init's turn-scoped `needs` orders it
+    // after both. Same serial order the legacy priority chain produced.
+    expect(levelsOf(setup)).toEqual([
       ["pregame"],
       ["world-init/schema-gen"],
       ["char-creator/player-init"],
@@ -131,25 +115,22 @@ describe("normalize golden (bundled plugin set)", () => {
     const manifests = await loadAllManifests();
     const specs = specById(manifests.map(normalizeRuntimeManifest));
 
-    // pregame / schema-gen are the retained exception: the loader forbids
-    // `stage: setup` on their `scheduled`/`interval` trigger, so they keep the
-    // legacy setup idiom and let normalize DERIVE the stage (hence
-    // `priority:stage` in provenance). The idiom folds to auto with the attempt
-    // budget preserved.
+    // pregame / schema-gen are single-declared now: explicit `stage: setup` +
+    // `trigger: auto` (maxTriggerCount = retry budget); schema-gen carries the
+    // authored `after: [pregame]` ordering edge. No legacy provenance left in
+    // any bundled manifest.
     const pregame = requireSpec(specs, "pregame");
     expect(pregame.stage).toBe("setup");
     expect(pregame.declaredTrigger.type).toBe("auto");
     expect(pregame.declaredTrigger.interval).toBeUndefined();
     expect(pregame.declaredTrigger.maxTriggerCount).toBe(1);
-    expect(pregame.provenance.legacyFields).toContain(
-      "trigger:scheduled-as-auto",
-    );
-    expect(pregame.provenance.legacyFields).toContain("priority:stage");
+    expect(pregame.provenance.legacyFields).toEqual([]);
 
     const schemaGen = requireSpec(specs, "world-init/schema-gen");
     expect(schemaGen.stage).toBe("setup");
     expect(schemaGen.declaredTrigger.type).toBe("auto");
-    expect(schemaGen.provenance.legacyFields).toContain("priority:stage");
+    expect(schemaGen.deps.after).toEqual(["pregame"]);
+    expect(schemaGen.provenance.legacyFields).toEqual([]);
 
     // player-init: single-declared now — explicit `stage: setup` and turn-scoped
     // `needs` (priority + upstreamRequired removed). The turn-scoped needs are
@@ -254,7 +235,6 @@ describe("normalize golden (bundled plugin set)", () => {
       expect(spec.exportBindings).toEqual({});
       expect(spec.httpPermissions).toEqual([]);
       expect(spec.legacyJobViews).toEqual([]);
-      expect(spec.disabledReason).toBeUndefined();
       expect(spec.backgroundWhenDetached).toBe(
         manifest.execution === "background",
       );

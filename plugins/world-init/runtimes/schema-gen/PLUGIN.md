@@ -4,17 +4,13 @@ description:
   zh: 开局整理世界设定，让角色属性和背景资料更贴合这个世界。
   en: Organizes the setting at the start so character traits and background details fit the world.
 pluginType: core-plugin
-# schema-gen must run BEFORE char-creator/player-init so the player-init agent
-# can read `{{ world.schema }}` populated by this runtime's set-world-schema
-# tool. player-init declares a turn-scoped `needs` on it; pregame → schema-gen
-# ordering comes from the conservative setup-order chain (legacy priority).
-# Setup runtime WITHOUT an explicit `stage`: the loader forbids `stage: setup`
-# alongside a `scheduled`/`interval` trigger, so this runtime keeps the legacy
-# `scheduled interval:1 max:1` idiom and lets normalize DERIVE `stage: setup`
-# from the pre-game band (`priority` is retained solely as that stage source +
-# the setup-chain sort key). Retire `priority` once the `scheduled → auto`
-# +`stage: setup` migration lands.
-priority: 40
+stage: setup
+# Historical setup order was pregame → schema-gen (serial). Keep it as a weak
+# ordering edge: pregame's deterministic world summary lands first, but a
+# failed pregame does not gate schema generation. player-init declares the
+# hard turn-scoped `needs` on both of us.
+after:
+  - pregame
 model: plugin
 outputKind: system
 timeoutMs: 180000
@@ -27,8 +23,7 @@ tags:
   - ui:right-panel
 guard: ../../guard.js
 trigger:
-  type: scheduled
-  interval: 1
+  type: auto # setup runtimes are auto-only; maxTriggerCount is the retry budget
   maxTriggerCount: 1
 tools:
   plugin:

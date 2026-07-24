@@ -7,14 +7,7 @@ description:
   zh: 在开局时读取世界资料，准备好第一段冒险。
   en: Reads the world details at the start and prepares the first step of the adventure.
 pluginType: core-plugin
-# Setup runtime WITHOUT an explicit `stage`: the loader forbids `stage: setup`
-# alongside a `scheduled`/`interval` trigger (setup must be `auto`), so this
-# runtime keeps the legacy `scheduled interval:1 max:1` idiom and lets normalize
-# DERIVE `stage: setup` from the pre-game priority band (`priority` is retained
-# solely as that stage source + the conservative setup-order chain's sort key).
-# Retire `priority` here once the `scheduled → auto`+`stage: setup` migration
-# lands (needs the loader to accept `stage: setup` on this trigger).
-priority: 10
+stage: setup
 runtimeType: function
 resultFormat: envelope-v1
 outputKind: system
@@ -23,8 +16,7 @@ tags:
   - role:pre-game
   - cost:function
 trigger:
-  type: scheduled
-  interval: 1
+  type: auto # setup runtimes are auto-only; maxTriggerCount is the retry budget
   maxTriggerCount: 1
 ---
 
@@ -34,13 +26,13 @@ trigger:
 
 ## 执行时机
 
-Priority 10，属于 Pre-Game band (0-99)，仅在 session 首轮（turnCount=0）执行。maxTriggerCount: 1 保证一次性运行。完成后内核把该 runtime 加入 session.preGameCompleted。
+`stage: setup`——仅在 `session.phase === "setup"` 时调度，报告完成后不再运行（maxTriggerCount: 1 是重试预算）。完成状态记录在 `session.setupRuntimes` 镜像（API 仍派生兼容的 preGameCompleted 字段）。
 
 ## 职责
 
 1. 读取世界信息构建欢迎通知
 2. 返回 narrativeOutput 给后续插件作为上下文
-3. 报告 preGameDone: true 以允许内核推进 turnCount 到 1
+3. 报告 preGameDone: true（envelope-v1 下即 `completion: "done"`），全部 setup 完成后内核把 `phase` 翻到 playing
 
 ## 输出
 
