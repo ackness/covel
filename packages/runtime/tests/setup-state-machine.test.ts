@@ -22,6 +22,7 @@ import {
 } from "@covel/shared";
 import { settleSetupRuntimes } from "../src/commit/setup-settle.js";
 import { detectSetupSessionCycles } from "../src/turn-executor/setup-run.js";
+import { selectTriggeredRuntimes } from "../src/turn-executor/scheduling.js";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
@@ -370,5 +371,118 @@ describe("plugin version mismatch", () => {
       generation: 2,
       pluginVersion: "2.0.0",
     });
+  });
+});
+
+describe("needs(scope: session) positive gate (setup selection)", () => {
+  const setupRt = (
+    name: string,
+    extra: Record<string, unknown> = {},
+  ): RuntimeManifest =>
+    ({
+      name,
+      pluginId: name.split("/")[0],
+      description: name,
+      stage: "setup",
+      runtimeType: "function",
+      handler: "./h.js",
+      trigger: { type: "auto" },
+      outputKind: "plugin",
+      version: "1.0.0",
+      ...extra,
+    }) as unknown as RuntimeManifest;
+
+  const select = (
+    runtimes: readonly RuntimeManifest[],
+    setupRuntimes: Record<string, SetupRuntimeState> = {},
+  ) =>
+    selectTriggeredRuntimes({
+      activeRuntimes: runtimes,
+      manualRuntimeId: undefined,
+      messageHistory: [],
+      preGameCompleted: [],
+      runtimeTriggerCounts: new Map(),
+      setupRuntimes,
+      sessionId: "s-gate",
+      turnNumber: 0,
+      logicalTurn: 1,
+    }).triggered.map((rt) => rt.name);
+
+  it("holds the consumer back while the producer is not done in the frozen snapshot", () => {
+    const producer = setupRt("prod/setup");
+    const consumer = setupRt("cons/setup", {
+      needs: [{ runtime: "prod/setup", scope: "session" }],
+    });
+
+    // Producer pending → consumer NOT selected this execution.
+    expect(select([producer, consumer])).toEqual(["prod/setup"]);
+  });
+
+  it("selects the consumer once the producer is done in the snapshot", () => {
+    const producer = setupRt("prod/setup");
+    const consumer = setupRt("cons/setup", {
+      needs: [{ runtime: "prod/setup", scope: "session" }],
+    });
+    const now = new Date().toISOString();
+
+    // Producer done (and therefore itself no longer pending) → consumer runs.
+    expect(
+      select([producer, consumer], {
+        "prod/setup": mirrorSetupDone("1.0.0", now),
+      }),
+    ).toEqual(["cons/setup"]);
+  });
+
+  it("capability gate with cardinality 'all' waits for every provider", () => {
+    const p1 = setupRt("p1/setup", { capabilities: ["world-seed"] });
+    const p2 = setupRt("p2/setup", { capabilities: ["world-seed"] });
+    const consumer = setupRt("cons/setup", {
+      needs: [
+        { capability: "world-seed", cardinality: "all", scope: "session" },
+      ],
+    });
+    const now = new Date().toISOString();
+
+    // One of two providers done → 'all' gate still closed.
+    expect(
+      select([p1, p2, consumer], { "p1/setup": mirrorSetupDone("1.0.0", now) }),
+    ).toEqual(["p2/setup"]);
+    // Both done → gate opens.
+    expect(
+      select([p1, p2, consumer], {
+        "p1/setup": mirrorSetupDone("1.0.0", now),
+        "p2/setup": mirrorSetupDone("1.0.0", now),
+      }),
+    ).toEqual(["cons/setup"]);
+  });
+
+  it("capability gate with default cardinality 'one' opens on any done provider", () => {
+    const p1 = setupRt("p1/setup", { capabilities: ["world-seed"] });
+    const p2 = setupRt("p2/setup", { capabilities: ["world-seed"] });
+    const consumer = setupRt("cons/setup", {
+      needs: [{ capability: "world-seed", scope: "session" }],
+    });
+    const now = new Date().toISOString();
+
+    expect(
+      select([p1, p2, consumer], { "p1/setup": mirrorSetupDone("1.0.0", now) }),
+    ).toEqual(expect.arrayContaining(["p2/setup", "cons/setup"]));
+  });
+
+  it("an absent target never satisfies the gate (consumer held back, warned once)", () => {
+    const consumer = setupRt("cons/setup", {
+      needs: [{ runtime: "ghost/setup", scope: "session" }],
+    });
+    expect(select([consumer])).toEqual([]);
+  });
+
+  it("turn-scope needs do not participate in the session gate", () => {
+    const producer = setupRt("prod/setup");
+    const consumer = setupRt("cons/setup", {
+      needs: ["prod/setup", { runtime: "prod/setup", scope: "turn" }],
+    });
+
+    // Same-execution gates are the upstream gate's job — both stay selected.
+    expect(select([producer, consumer])).toEqual(["prod/setup", "cons/setup"]);
   });
 });

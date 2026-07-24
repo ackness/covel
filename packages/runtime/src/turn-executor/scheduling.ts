@@ -55,6 +55,85 @@ function setupRuntimePending(
   return true;
 }
 
+/** A setup target counts as done from the frozen snapshot (mirror or legacy signal). */
+function isSetupTargetDone(
+  target: RuntimeManifest,
+  setupRuntimes: Readonly<Record<string, SetupRuntimeState>>,
+  preGameCompleted: readonly string[],
+): boolean {
+  const mirror = setupRuntimes[target.name];
+  if (mirror?.state === "done") {
+    return isSetupDoneForVersion(mirror, target.version);
+  }
+  return preGameCompleted.includes(target.name);
+}
+
+/** One-shot diagnostics for unsatisfiable session gates (per session+runtime+target). */
+const _sessionGateWarned = new Set<string>();
+
+/**
+ * Positive `needs(scope: session)` gate for setup runtimes: every session-scope
+ * need must resolve to a target that is `done` in the persistent snapshot
+ * frozen at execution start. Unsatisfied → the consumer is NOT selected this
+ * execution (it stays pending; a done produced by this execution becomes
+ * visible to the NEXT one). A target that is absent from the active setup set
+ * can never satisfy the gate — warn once so the author sees why the runtime
+ * never runs (the session stays in setup until the plugin set changes, the
+ * same standing as a `blocked` producer).
+ */
+function setupSessionGateSatisfied(
+  rt: RuntimeManifest,
+  activeSetupRuntimes: readonly RuntimeManifest[],
+  setupRuntimes: Readonly<Record<string, SetupRuntimeState>>,
+  preGameCompleted: readonly string[],
+  sessionId: string,
+): boolean {
+  const warnUnsatisfiable = (targetLabel: string): void => {
+    const key = `${sessionId}:${rt.name}:${targetLabel}`;
+    if (_sessionGateWarned.has(key)) return;
+    if (_sessionGateWarned.size > 256) _sessionGateWarned.clear();
+    _sessionGateWarned.add(key);
+    console.warn(
+      `[scheduling] setup runtime "${rt.name}" declares needs(scope: session) on ` +
+        `${targetLabel}, which has no provider in the active setup set — the gate can ` +
+        `never be satisfied and the runtime will not run until the plugin set changes.`,
+    );
+  };
+
+  for (const need of getRuntimeSpec(rt).deps.needs) {
+    // Bare-string / turn-scope entries are same-execution gates (handled by
+    // the upstream gate in turn-runtime-execution), not session ones.
+    if (typeof need === "string" || need.scope !== "session") continue;
+    if ("runtime" in need) {
+      const target = activeSetupRuntimes.find((r) => r.name === need.runtime);
+      if (!target) {
+        warnUnsatisfiable(`runtime "${need.runtime}"`);
+        return false;
+      }
+      if (!isSetupTargetDone(target, setupRuntimes, preGameCompleted)) {
+        return false;
+      }
+    } else {
+      const providers = activeSetupRuntimes.filter((r) =>
+        r.capabilities?.includes(need.capability),
+      );
+      if (providers.length === 0) {
+        warnUnsatisfiable(`capability "${need.capability}"`);
+        return false;
+      }
+      const doneCount = providers.filter((p) =>
+        isSetupTargetDone(p, setupRuntimes, preGameCompleted),
+      ).length;
+      const satisfied =
+        (need.cardinality ?? "one") === "all"
+          ? doneCount === providers.length
+          : doneCount > 0;
+      if (!satisfied) return false;
+    }
+  }
+  return true;
+}
+
 export function selectTriggeredRuntimes(args: {
   readonly activeRuntimes: readonly RuntimeManifest[];
   readonly manualRuntimeId: string | undefined;
@@ -94,10 +173,22 @@ export function selectTriggeredRuntimes(args: {
     return { manualTarget, triggered: [manualTarget], abortReason: undefined };
   }
 
+  const activeSetupRuntimes = activeRuntimes.filter(isSetupRuntime);
   const triggered = activeRuntimes.filter((rt) => {
-    // Setup runtimes: scheduled by mirror state (pending), not turn cadence.
+    // Setup runtimes: scheduled by mirror state (pending), not turn cadence,
+    // then gated on their `needs(scope: session)` targets being done in the
+    // frozen snapshot.
     if (isSetupRuntime(rt)) {
-      return setupRuntimePending(rt, setupRuntimes, preGameCompleted);
+      return (
+        setupRuntimePending(rt, setupRuntimes, preGameCompleted) &&
+        setupSessionGateSatisfied(
+          rt,
+          activeSetupRuntimes,
+          setupRuntimes,
+          preGameCompleted,
+          sessionId,
+        )
+      );
     }
     const triggerContext: TriggerContext = {
       sessionId,
