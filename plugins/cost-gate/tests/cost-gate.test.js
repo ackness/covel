@@ -219,8 +219,8 @@ describe("cost-gate hooks", () => {
   it("falls back to hardcoded defaults when neither userSettings nor env are set", async () => {
     delete process.env.COST_GATE_SOFT_TOKENS;
     delete process.env.COST_GATE_HARD_TOKENS;
-    expect(resolveLimits(undefined)).toEqual({ soft: 150000, hard: 200000 });
-    expect(resolveLimits({})).toEqual({ soft: 150000, hard: 200000 });
+    expect(resolveLimits(undefined)).toEqual({ soft: 400000, hard: 600000 });
+    expect(resolveLimits({})).toEqual({ soft: 400000, hard: 600000 });
   });
 
   it("degrades gracefully when misconfigured (soft >= hard): hard cap still enforced", async () => {

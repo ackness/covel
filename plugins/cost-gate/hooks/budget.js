@@ -18,7 +18,7 @@
  *      per-player.
  *   2. env var — `COST_GATE_SOFT_TOKENS` / `COST_GATE_HARD_TOKENS`. Kept as a
  *      deployment-wide fallback so installs that set only the env keep working.
- *   3. hardcoded default — 150000 / 200000.
+ *   3. hardcoded default — 400000 / 600000.
  * The env and defaults are read lazily (per call) so a deployment can change
  * them without restarting and tests can override per-case.
  */
@@ -34,9 +34,21 @@ const buckets = new Map();
  */
 const MAX_TRACKED_SESSIONS = 10_000;
 
-/** Last-resort thresholds when neither userSettings nor env supply a value. */
-const DEFAULT_SOFT_TOKENS = 150_000;
-const DEFAULT_HARD_TOKENS = 200_000;
+/**
+ * Last-resort thresholds when neither userSettings nor env supply a value.
+ * Calibrated to be GENEROUS: `total()` tracks CUMULATIVE session tokens, and a
+ * multi-runtime turn spends tens of thousands, so the old 150k/200k aborted a
+ * normal session after only ~5 turns (mistport already overrode them to
+ * 400k/600k for exactly this reason). These match that tested-generous band so
+ * cost-gate catches runaway loops without trimming ordinary play.
+ *
+ * ponytail: cumulative-total model, fixed default; a very long legit session
+ * still eventually hits any fixed cap. A per-turn / sliding-window spike model
+ * would separate "long session" from "runaway" — upgrade there if long
+ * playthroughs start hitting the cap.
+ */
+const DEFAULT_SOFT_TOKENS = 400_000;
+const DEFAULT_HARD_TOKENS = 600_000;
 
 let warnedMisconfig = false;
 
