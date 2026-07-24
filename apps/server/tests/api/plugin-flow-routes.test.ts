@@ -32,10 +32,9 @@ describe("plugin flow routes", () => {
     expect(res.status).toBe(200);
 
     const body = (await res.json()) as {
-      segments: Array<{ id: string; rangeLabel: string }>;
+      segments: Array<{ id: string }>;
       steps: Array<{
         runtimeId: string;
-        priority: number;
         segmentId: string;
         isStoryRuntime: boolean;
       }>;
@@ -49,8 +48,6 @@ describe("plugin flow routes", () => {
       "audit",
       "event-manual",
     ]);
-    // Setup stage folds the old 0-99 band.
-    expect(body.segments[0]?.rangeLabel).toBe("0-99");
     expect(
       body.steps.some(
         (step) => step.runtimeId === "narrator" && step.isStoryRuntime,

@@ -61,39 +61,20 @@ export async function buildPluginFlowResponse() {
     docPath: string;
     isStoryRuntime: boolean;
   }> = [];
-  // Stage-driven segments (player-facing plain-language labels). `rangeLabel`
-  // is a cosmetic legacy-band hint; the frontend groups by `segmentId`. The
-  // per-stage meta is a Record<Stage, …> so adding a stage to STAGE_ORDER is a
-  // compile error here instead of a silently missing segment.
-  const STAGE_SEGMENT_META: Record<
-    Stage,
-    { labelText: I18nText; rangeLabel: string }
-  > = {
-    setup: {
-      labelText: { "zh-CN": "开场准备", "en-US": "Setup" },
-      rangeLabel: "0-99",
-    },
-    "pre-turn": {
-      labelText: { "zh-CN": "叙事前", "en-US": "Pre-Turn" },
-      rangeLabel: "100-499",
-    },
-    narrative: {
-      labelText: { "zh-CN": "叙事", "en-US": "Narrative" },
-      rangeLabel: "500",
-    },
-    "post-turn": {
-      labelText: { "zh-CN": "叙事后", "en-US": "Post-Turn" },
-      rangeLabel: "501-999",
-    },
-    audit: {
-      labelText: { "zh-CN": "审计", "en-US": "Audit" },
-      rangeLabel: "1000",
-    },
+  // Stage-driven segments (player-facing plain-language labels); the frontend
+  // groups by `segmentId`. The per-stage meta is a Record<Stage, …> so adding
+  // a stage to STAGE_ORDER is a compile error here instead of a silently
+  // missing segment.
+  const STAGE_SEGMENT_META: Record<Stage, { labelText: I18nText }> = {
+    setup: { labelText: { "zh-CN": "开场准备", "en-US": "Setup" } },
+    "pre-turn": { labelText: { "zh-CN": "叙事前", "en-US": "Pre-Turn" } },
+    narrative: { labelText: { "zh-CN": "叙事", "en-US": "Narrative" } },
+    "post-turn": { labelText: { "zh-CN": "叙事后", "en-US": "Post-Turn" } },
+    audit: { labelText: { "zh-CN": "审计", "en-US": "Audit" } },
   };
   const flowSegments: Array<{
     id: FlowSegmentId;
     labelText: I18nText;
-    rangeLabel: string;
   }> = [
     ...STAGE_ORDER.map((stage) => ({
       id: stage,
@@ -102,7 +83,6 @@ export async function buildPluginFlowResponse() {
     {
       id: "event-manual" as const,
       labelText: { "zh-CN": "事件 / 手动", "en-US": "Event & Manual" },
-      rangeLabel: "—",
     },
   ];
 
