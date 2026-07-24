@@ -121,6 +121,7 @@ describe("normalize golden (bundled plugin set)", () => {
       "char-creator/character-tracker",
       "codex",
       "guide",
+      "mimo-tts/auto-narrate",
       "npc-graph/extractor",
       "scene-prompts",
     ]);

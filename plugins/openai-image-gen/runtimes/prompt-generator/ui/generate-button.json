@@ -1,0 +1,66 @@
+{
+  "id": "openai-image-gen-trigger",
+  "group": "image-studio",
+  "groupLabel": { "zh": "图像", "en": "Images" },
+  "groupOrder": 450,
+  "label": { "zh": "生成", "en": "Generate" },
+  "icon": "wand",
+  "alwaysRender": true,
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "sm" },
+    "children": [
+      {
+        "component": "Card",
+        "props": { "variant": "subtle" },
+        "children": [
+          {
+            "component": "Stack",
+            "props": { "gap": "xs" },
+            "children": [
+              {
+                "component": "Text",
+                "props": {
+                  "content": {
+                    "zh": "剧情插图",
+                    "en": "Story illustration"
+                  },
+                  "weight": "bold",
+                  "size": "sm"
+                }
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": {
+                    "zh": "点击下方按钮，会根据当前剧情生成一张图片。生成结果会出现在画廊。",
+                    "en": "Click the button below to generate an image from the current story. Results appear in the gallery."
+                  },
+                  "variant": "muted",
+                  "size": "xs"
+                }
+              },
+              {
+                "component": "Button",
+                "props": {
+                  "label": { "zh": "生成图片", "en": "Generate image" },
+                  "variant": "primary",
+                  "size": "md"
+                },
+                "on": {
+                  "click": {
+                    "action": "invokeRuntime",
+                    "params": {
+                      "runtimeId": "openai-image-gen/prompt-generator",
+                      "expectsBackgroundFollower": true
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

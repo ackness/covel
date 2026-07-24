@@ -19,7 +19,7 @@ Covel is an AI RPG where the world keeps running between your turns: NPCs track 
 
 - 🎭 **Stage mode** — a full-screen visual novel: scene backdrops, character sprites, typewriter dialog, and choice overlays. Backdrops for brand-new locations are generated on demand, mid-session.
 - 🤖 **Multi-agent turns** — while the narrator writes the scene, other agents extract NPC relationships, grow the world codex, pick the on-stage cast, and maintain long-range memory — in parallel, every turn.
-- 🧩 **Everything is a plugin** — 20 bundled agents. A plugin is a `PLUGIN.md`: YAML frontmatter for triggers/tools/events, markdown body as the agent's prompt.
+- 🧩 **Everything is a plugin** — 23 bundled agents. A plugin is a `PLUGIN.md`: YAML frontmatter for triggers/tools/events, markdown body as the agent's prompt.
 - 🌍 **Two flagship worlds** — a dark-fantasy mystery and a GalGame-style school romance, both hand-built and ready to fork.
 - 🔌 **Bring your own model** — OpenAI / Anthropic / DeepSeek / Qwen model slots. Local-first: SQLite on disk, API keys never persisted server-side.
 

@@ -1,0 +1,288 @@
+{
+  "cases": [
+    {
+      "name": "mock-prompt-text",
+      "mode": "mock",
+      "runtimeId": "dashscope-image-gen/prompt-generator",
+      "message": "测试场景：黄昏的城堡塔楼，飞鸟掠过霞光",
+      "userSettings": {
+        "promptMode": "text",
+        "modelPresetId": "image",
+        "imageSize": "1440x720",
+        "negativePrompt": "low quality, blurry, watermark, text, extra fingers"
+      },
+      "llmObject": {
+        "prompt": "黄昏时分的城堡塔楼，金色阳光洒落在斑驳石墙上，飞鸟群剪影掠过霞光，电影感构图，暖色调",
+        "promptMode": "text",
+        "events": [
+          {
+            "topic": "image.generate.requested",
+            "data": {
+              "prompt": "黄昏时分的城堡塔楼，金色阳光洒落在斑驳石墙上，飞鸟群剪影掠过霞光，电影感构图，暖色调",
+              "promptMode": "text"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "events": ["image.generate.requested"],
+        "runtimeResults": [
+          {
+            "runtimeId": "dashscope-image-gen/prompt-generator",
+            "status": "success"
+          },
+          {
+            "runtimeId": "dashscope-image-gen/image-generator",
+            "status": "failed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "mock-prompt-image-json",
+      "mode": "mock",
+      "runtimeId": "dashscope-image-gen/prompt-generator",
+      "message": "测试场景：雨夜霓虹街口，披风旅人站在湿润石板上",
+      "userSettings": {
+        "promptMode": "image-json",
+        "modelPresetId": "image",
+        "imageSize": "1440x720",
+        "negativePrompt": "low quality, blurry, watermark, text, extra fingers"
+      },
+      "llmObject": {
+        "prompt": "{\"subject\":{\"who\":\"披风旅人\",\"pose\":\"驻足凝视\",\"expression\":\"沉思\",\"costume\":\"深色斗篷\"},\"scene\":{\"location\":\"霓虹街口\",\"time\":\"night\",\"weather\":\"rainy\"},\"camera\":{\"angle\":\"低角度\",\"framing\":\"medium\",\"lens_mm\":35},\"lighting\":{\"key\":\"霓虹招牌\",\"rim\":\"湿地反光\",\"color_temp\":\"cool\",\"mood\":\"赛博朋克\"},\"palette\":{\"primary\":\"青蓝\",\"accent\":\"品红\",\"style\":\"neon noir\"},\"style\":{\"reference\":\"Blade Runner 2049\",\"medium\":\"concept art\",\"aesthetic\":\"cinematic\"},\"details\":[\"湿石板反射霓虹\",\"细雨在灯光中飘落\",\"远处招牌闪烁\",\"水洼倒影模糊\"],\"negative\":[\"blurry\",\"watermark\",\"extra fingers\"]}",
+        "promptMode": "image-json",
+        "events": [
+          {
+            "topic": "image.generate.requested",
+            "data": {
+              "prompt": "{\"subject\":{\"who\":\"披风旅人\"},\"scene\":{\"location\":\"霓虹街口\",\"time\":\"night\",\"weather\":\"rainy\"}}",
+              "promptMode": "image-json"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "events": ["image.generate.requested"],
+        "runtimeResults": [
+          {
+            "runtimeId": "dashscope-image-gen/prompt-generator",
+            "status": "success"
+          },
+          {
+            "runtimeId": "dashscope-image-gen/image-generator",
+            "status": "failed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "mock-prompt-tool-chain-recovers-before-maxsteps",
+      "mode": "mock",
+      "runtimeId": "dashscope-image-gen/prompt-generator",
+      "message": "测试场景：雾港暗梯入口，潮石灯照亮湿木板",
+      "expectsBackgroundFollower": true,
+      "userSettings": {
+        "promptMode": "text",
+        "modelPresetId": "image",
+        "imageSize": "1440x720",
+        "negativePrompt": "low quality, blurry, watermark, text, extra fingers"
+      },
+      "llmResponses": [
+        {
+          "content": null,
+          "finishReason": "tool_calls",
+          "toolCalls": [
+            {
+              "id": "call-list-prompts",
+              "name": "plugin-data-list",
+              "arguments": "{\"namespace\":\"prompts\"}"
+            }
+          ]
+        },
+        {
+          "content": null,
+          "finishReason": "tool_calls",
+          "toolCalls": [
+            {
+              "id": "call-set-prompt",
+              "name": "plugin-data-set",
+              "arguments": "{\"namespace\":\"prompts\",\"key\":\"tool-chain-recovered\",\"value\":{\"prompt\":\"雾港暗梯入口，潮石灯照亮湿木板，冷青色雾气从礁石缝隙升起，电影感构图\",\"promptMode\":\"text\"}}"
+            }
+          ]
+        },
+        {
+          "content": "{\"prompt\":\"雾港暗梯入口，潮石灯照亮湿木板，冷青色雾气从礁石缝隙升起，画面中央的旅人手握铜表站在阴影边缘，电影感构图，湿润材质细节清晰。\",\"promptMode\":\"text\",\"events\":[{\"topic\":\"image.generate.requested\",\"data\":{\"prompt\":\"雾港暗梯入口，潮石灯照亮湿木板，冷青色雾气从礁石缝隙升起，画面中央的旅人手握铜表站在阴影边缘，电影感构图，湿润材质细节清晰。\",\"promptMode\":\"text\"}}]}",
+          "finishReason": "stop",
+          "toolCalls": []
+        }
+      ],
+      "expect": {
+        "runtimeResults": [
+          {
+            "runtimeId": "dashscope-image-gen/prompt-generator",
+            "status": "success"
+          },
+          {
+            "runtimeId": "dashscope-image-gen/image-generator",
+            "status": "failed"
+          }
+        ],
+        "events": ["image.generate.requested"]
+      }
+    },
+    {
+      "name": "mock-prompt-tool-chain-prose-fails-visible",
+      "mode": "mock",
+      "runtimeId": "dashscope-image-gen/prompt-generator",
+      "message": "测试场景：雾港暗梯入口，模型工具后输出了解释文本",
+      "expectsBackgroundFollower": true,
+      "userSettings": {
+        "promptMode": "text",
+        "modelPresetId": "image",
+        "imageSize": "1440x720",
+        "negativePrompt": "low quality, blurry, watermark, text, extra fingers"
+      },
+      "llmResponses": [
+        {
+          "content": null,
+          "finishReason": "tool_calls",
+          "toolCalls": [
+            {
+              "id": "call-list-prompts",
+              "name": "plugin-data-list",
+              "arguments": "{\"namespace\":\"prompts\"}"
+            }
+          ]
+        },
+        {
+          "content": null,
+          "finishReason": "tool_calls",
+          "toolCalls": [
+            {
+              "id": "call-set-prompt",
+              "name": "plugin-data-set",
+              "arguments": "{\"namespace\":\"prompts\",\"key\":\"prose-after-tool\",\"value\":{\"prompt\":\"特写潮向仪与手部动作\",\"promptMode\":\"text\"}}"
+            }
+          ]
+        },
+        {
+          "content": "好的，我已经查看了前两次生成的画面提示词，这次我选择聚焦于一个更微观的瞬间。",
+          "finishReason": "stop",
+          "toolCalls": []
+        }
+      ],
+      "expect": {
+        "runtimeResults": [
+          {
+            "runtimeId": "dashscope-image-gen/prompt-generator",
+            "status": "failed",
+            "errorIncludes": "expected a JSON envelope"
+          }
+        ],
+        "pluginData": [
+          {
+            "namespace": "_jobs",
+            "status": "failed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "mock-prompt-json-without-events-fails-visible",
+      "mode": "mock",
+      "runtimeId": "dashscope-image-gen/prompt-generator",
+      "message": "测试场景：模型返回 JSON 但漏掉 events 包络",
+      "expectsBackgroundFollower": true,
+      "userSettings": {
+        "promptMode": "text",
+        "modelPresetId": "image",
+        "imageSize": "1440x720",
+        "negativePrompt": "low quality, blurry, watermark, text, extra fingers"
+      },
+      "llmObject": {
+        "prompt": "雾港暗梯入口，潮石灯照亮湿木板，冷青色雾气从礁石缝隙升起。",
+        "promptMode": "text"
+      },
+      "expect": {
+        "runtimeResults": [
+          {
+            "runtimeId": "dashscope-image-gen/prompt-generator",
+            "status": "failed",
+            "errorIncludes": "output.schema"
+          }
+        ],
+        "pluginData": [
+          {
+            "namespace": "_jobs",
+            "status": "failed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "live-text-cyberpunk-shrine",
+      "mode": "live",
+      "runtimeId": "dashscope-image-gen/image-generator",
+      "ignoreUpstreams": true,
+      "payload": {
+        "prompt": "雨夜，被霓虹笼罩的赛博朋克和风神社入口，朱红鸟居被青蓝色与品红色的招牌灯光交叉反射在湿润石板上。一位披着深色防水斗篷的旅人站在鸟居正中央，背对镜头，手握发光智能伞，伞面投出柔和环境光。两侧石灯笼喷出薄雾，雾中飘着全息符纸。背景是层叠的塔楼广告牌、悬浮投影、雨幕中模糊的霓虹光斑。低角度三分构图，35mm 镜头，电影感色调，主色青蓝、辅色品红、点缀朱红。风格参考 Blade Runner 2049 与新海诚《天气之子》混合，concept art 质感，高细节，雨丝清晰可辨，地面水洼倒映完整光影。",
+        "promptMode": "text"
+      },
+      "userSettings": {
+        "modelPresetId": "image",
+        "imageSize": "1440x720",
+        "negativePrompt": "low quality, blurry, watermark, text, extra fingers, distorted anatomy, extra limbs, jpeg artifacts"
+      },
+      "expect": {
+        "pluginData": [
+          {
+            "namespace": "images",
+            "status": "done",
+            "field": "ref"
+          }
+        ],
+        "logs": ["image.generate.started", "image.generate.completed"]
+      },
+      "artifacts": {
+        "saveImages": {
+          "namespace": "images",
+          "field": "ref",
+          "dir": "tests/tmp"
+        }
+      }
+    },
+    {
+      "name": "live-image-json-cyberpunk-shrine",
+      "mode": "live",
+      "runtimeId": "dashscope-image-gen/image-generator",
+      "ignoreUpstreams": true,
+      "payload": {
+        "prompt": "{\"subject\":{\"who\":\"披着深色防水斗篷的旅人\",\"pose\":\"背对镜头站在鸟居正中央\",\"expression\":\"凝视前方\",\"costume\":\"深色斗篷+发光智能伞\"},\"scene\":{\"location\":\"赛博朋克和风神社入口\",\"time\":\"night\",\"weather\":\"细雨\"},\"camera\":{\"angle\":\"低角度仰拍\",\"framing\":\"medium\",\"lens_mm\":35},\"lighting\":{\"key\":\"霓虹招牌冷光\",\"rim\":\"伞面发光\",\"color_temp\":\"cool\",\"mood\":\"赛博朋克电影感\"},\"palette\":{\"primary\":\"青蓝\",\"accent\":\"品红\",\"style\":\"neon noir + 朱红鸟居点缀\"},\"style\":{\"reference\":\"Blade Runner 2049 + 新海诚 天气之子\",\"medium\":\"concept art\",\"aesthetic\":\"cinematic high detail\"},\"details\":[\"朱红鸟居被青蓝霓虹反射在湿石板上\",\"两侧石灯笼喷出薄雾\",\"雾中飘着全息符纸\",\"层叠塔楼广告牌\",\"悬浮投影\",\"雨幕中模糊的光斑\",\"地面水洼倒映完整光影\",\"35mm 镜头 三分构图\"],\"negative\":[\"low quality\",\"blurry\",\"watermark\",\"text\",\"extra fingers\",\"distorted anatomy\",\"extra limbs\",\"jpeg artifacts\"]}",
+        "promptMode": "image-json"
+      },
+      "userSettings": {
+        "modelPresetId": "image",
+        "imageSize": "1440x720",
+        "negativePrompt": "low quality, blurry, watermark, text, extra fingers, distorted anatomy, extra limbs, jpeg artifacts"
+      },
+      "expect": {
+        "pluginData": [
+          {
+            "namespace": "images",
+            "status": "done",
+            "field": "ref"
+          }
+        ],
+        "logs": ["image.generate.started", "image.generate.completed"]
+      },
+      "artifacts": {
+        "saveImages": {
+          "namespace": "images",
+          "field": "ref",
+          "dir": "tests/tmp"
+        }
+      }
+    }
+  ]
+}

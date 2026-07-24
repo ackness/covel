@@ -1,0 +1,145 @@
+{
+  "cases": [
+    {
+      "name": "mock-prompt-singlescene-text",
+      "mode": "mock",
+      "runtimeId": "openai-image-gen/prompt-generator",
+      "message": "测试场景：黄昏的城堡塔楼，飞鸟掠过霞光",
+      "userSettings": {
+        "composition": "single-scene",
+        "promptMode": "text",
+        "modelPresetId": "openai-image",
+        "imageSize": "1024x1024",
+        "n": 1
+      },
+      "llmObject": {
+        "prompt": "黄昏时分的城堡塔楼，金色阳光洒落在斑驳石墙上，飞鸟群剪影掠过霞光，电影感构图，暖色调，4K, ultra detailed, highly detailed, masterpiece, best quality, sharp focus, intricate details, cinematic lighting",
+        "promptMode": "text",
+        "composition": "single-scene",
+        "events": [
+          {
+            "topic": "openai-image.generate.requested",
+            "data": {
+              "prompt": "黄昏时分的城堡塔楼，金色阳光洒落在斑驳石墙上，飞鸟群剪影掠过霞光，电影感构图，暖色调，4K, ultra detailed, highly detailed, masterpiece, best quality, sharp focus, intricate details, cinematic lighting",
+              "promptMode": "text",
+              "composition": "single-scene"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "events": ["openai-image.generate.requested"],
+        "runtimeResults": [
+          {
+            "runtimeId": "openai-image-gen/prompt-generator",
+            "status": "success"
+          },
+          {
+            "runtimeId": "openai-image-gen/image-generator",
+            "status": "failed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "mock-prompt-comicstrip-text",
+      "mode": "mock",
+      "runtimeId": "openai-image-gen/prompt-generator",
+      "message": "测试场景：旅人推开城门遇到守卫对峙后被放行的三个瞬间",
+      "userSettings": {
+        "composition": "comic-strip",
+        "comicPanels": "3",
+        "comicLayoutStyle": "dynamic",
+        "promptMode": "text",
+        "modelPresetId": "openai-image",
+        "imageSize": "1792x1024",
+        "n": 1
+      },
+      "llmObject": {
+        "prompt": "comic page layout, sequential storytelling, 3-panel manga / comic page, dynamic asymmetric panels, action breaking out of gutters, motion lines crossing borders. Panel 1 全景：黄昏城门下，披风旅人远景登场，剪影偏暗，城门石纹清晰。Panel 2 中近景：守卫横戟拦下旅人，铁甲反光，旅人侧脸表情平静。Panel 3 特写仰拍：守卫长戟收回，旅人迈步穿过城门光影，披风从 panel 2 延伸跨过 gutter 进入 panel 3。统一色调：金黄夕阳 + 冷青阴影，墨线扎实。crisp ink lines, clean panel borders, professional manga / comic page composition, 4K, 8K, ultra HD, ultra detailed, highly detailed, masterpiece, best quality, sharp focus, intricate details, cinematic lighting, fine texture",
+        "promptMode": "text",
+        "composition": "comic-strip",
+        "events": [
+          {
+            "topic": "openai-image.generate.requested",
+            "data": {
+              "prompt": "comic page layout, sequential storytelling, 3-panel manga / comic page, dynamic asymmetric panels, action breaking out of gutters, motion lines crossing borders. Panel 1 全景：黄昏城门下，披风旅人远景登场。Panel 2 中近景：守卫横戟拦下旅人。Panel 3 特写仰拍：守卫长戟收回，旅人迈步穿过城门光影。crisp ink lines, clean panel borders, 4K, ultra detailed, masterpiece, best quality, sharp focus, intricate details",
+              "promptMode": "text",
+              "composition": "comic-strip"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "events": ["openai-image.generate.requested"],
+        "runtimeResults": [
+          {
+            "runtimeId": "openai-image-gen/prompt-generator",
+            "status": "success"
+          },
+          {
+            "runtimeId": "openai-image-gen/image-generator",
+            "status": "failed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "mock-prompt-json-without-events-fails-visible",
+      "mode": "mock",
+      "runtimeId": "openai-image-gen/prompt-generator",
+      "message": "测试场景：模型返回 JSON 但漏掉 events 包络",
+      "userSettings": {
+        "composition": "single-scene",
+        "promptMode": "text",
+        "modelPresetId": "openai-image",
+        "imageSize": "1024x1024",
+        "n": 1
+      },
+      "expectsBackgroundFollower": true,
+      "llmObject": {
+        "prompt": "雾港暗梯入口，潮石灯照亮湿木板，冷青色雾气从礁石缝隙升起。",
+        "promptMode": "text"
+      },
+      "expect": {
+        "runtimeResults": [
+          {
+            "runtimeId": "openai-image-gen/prompt-generator",
+            "status": "failed",
+            "errorIncludes": "output.schema"
+          }
+        ],
+        "pluginData": [{ "namespace": "_jobs", "status": "failed" }]
+      }
+    },
+    {
+      "name": "live-text-default-singlescene",
+      "mode": "live",
+      "runtimeId": "openai-image-gen/image-generator",
+      "ignoreUpstreams": true,
+      "payload": {
+        "prompt": "Quiet harbour at dawn, mist rising from cold stone steps, a lone lantern bearer in a long indigo coat steps onto a wet wooden plank, silhouette against lavender-grey sky. Soft volumetric morning light, subtle gold rim light on the lantern, cinematic 35mm composition. 4K, 8K, ultra HD, ultra detailed, highly detailed, masterpiece, best quality, sharp focus, intricate details, cinematic lighting, professional photography, award-winning, fine texture",
+        "promptMode": "text",
+        "composition": "single-scene"
+      },
+      "userSettings": {
+        "modelPresetId": "openai-image",
+        "imageSize": "1024x1024",
+        "n": 1
+      },
+      "expect": {
+        "pluginData": [
+          { "namespace": "images", "status": "done", "field": "ref" }
+        ],
+        "logs": ["image.generate.started", "image.generate.completed"]
+      },
+      "artifacts": {
+        "saveImages": {
+          "namespace": "images",
+          "field": "ref",
+          "dir": "tests/tmp"
+        }
+      }
+    }
+  ]
+}

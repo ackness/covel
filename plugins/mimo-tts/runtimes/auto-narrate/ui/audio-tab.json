@@ -1,0 +1,85 @@
+{
+  "id": "mimo-tts-audio-tab",
+  "group": "tts-studio",
+  "groupLabel": { "zh": "旁白", "en": "Narration" },
+  "groupOrder": 470,
+  "label": { "zh": "旁白", "en": "Narration" },
+  "icon": "headphones",
+  "alwaysRender": true,
+  "dataSource": { "namespace": "tracks" },
+  "emptyState": {
+    "message": {
+      "zh": "还没有旁白音频。继续推进故事，或在剧情区点「朗读」按钮。",
+      "en": "No narration yet. Continue the story, or use the Speak button in the story area."
+    }
+  },
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "lg" },
+    "children": [
+      {
+        "component": "Stack",
+        "repeat": { "statePath": "/entries", "key": "key" },
+        "props": { "gap": "xs" },
+        "children": [
+          {
+            "component": "Row",
+            "props": { "gap": "sm", "align": "center" },
+            "children": [
+              {
+                "component": "Icon",
+                "props": { "name": "headphones", "size": "sm" }
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "$item": "value/turnLabel" },
+                  "weight": "bold",
+                  "size": "sm"
+                }
+              },
+              {
+                "component": "Badge",
+                "props": {
+                  "label": { "$item": "value/triggerLabel" },
+                  "color": "blue"
+                }
+              },
+              {
+                "component": "Badge",
+                "props": {
+                  "label": { "$item": "value/voice" },
+                  "color": "purple"
+                }
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "$item": "value/sizeLabel" },
+                  "size": "xs",
+                  "variant": "muted"
+                }
+              }
+            ]
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": { "$item": "value/textPreview" },
+              "size": "xs",
+              "variant": "muted"
+            }
+          },
+          {
+            "component": "AudioPlayer",
+            "props": {
+              "ref": { "$item": "value/ref" },
+              "alt": { "$item": "value/textPreview" }
+            }
+          },
+          { "component": "Separator" }
+        ]
+      }
+    ]
+  }
+}

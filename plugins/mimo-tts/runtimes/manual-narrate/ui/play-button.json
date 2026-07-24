@@ -1,0 +1,45 @@
+{
+  "id": "mimo-tts-speak-button",
+  "group": "tts-studio",
+  "groupLabel": { "zh": "旁白", "en": "Narration" },
+  "groupOrder": 470,
+  "label": { "zh": "朗读", "en": "Speak" },
+  "icon": "mic",
+  "view": {
+    "component": "Card",
+    "props": { "variant": "subtle" },
+    "children": [
+      {
+        "component": "Row",
+        "props": { "gap": "sm", "align": "center" },
+        "children": [
+          {
+            "component": "Icon",
+            "props": { "name": "volume-2", "size": "sm" }
+          },
+          {
+            "component": "Button",
+            "props": {
+              "label": { "zh": "朗读这一段", "en": "Speak this paragraph" },
+              "variant": "primary",
+              "size": "compact"
+            },
+            "on": {
+              "click": {
+                "action": "invokeRuntime",
+                "params": {
+                  "runtimeId": "mimo-tts/manual-narrate",
+                  "expectsBackgroundFollower": true,
+                  "payload": {
+                    "turnId": { "$state": "/turnId" },
+                    "text": { "$state": "/text" }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

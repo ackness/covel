@@ -1,0 +1,54 @@
+{
+  "cases": [
+    {
+      "name": "mock-manual-text-records-failed-track",
+      "mode": "mock",
+      "runtimeId": "mimo-tts/manual-narrate",
+      "payload": {
+        "text": "测试朗读文本。"
+      },
+      "expect": {
+        "runtimeResults": [
+          {
+            "runtimeId": "mimo-tts/manual-narrate",
+            "status": "failed",
+            "errorIncludes": "ctx.speech is unavailable"
+          }
+        ]
+      }
+    },
+    {
+      "name": "mock-auto-skips-without-narrator-output",
+      "mode": "mock",
+      "runtimeId": "mimo-tts/auto-narrate",
+      "ignoreUpstreams": true,
+      "message": "测试自动朗读。",
+      "expect": {
+        "runtimeResults": [
+          {
+            "runtimeId": "mimo-tts/auto-narrate",
+            "status": "skipped"
+          }
+        ]
+      }
+    },
+    {
+      "name": "mock-auto-skips-when-disabled",
+      "mode": "mock",
+      "runtimeId": "mimo-tts/auto-narrate",
+      "ignoreUpstreams": true,
+      "message": "测试自动禁用。",
+      "userSettings": {
+        "enabled": false
+      },
+      "expect": {
+        "runtimeResults": [
+          {
+            "runtimeId": "mimo-tts/auto-narrate",
+            "status": "skipped"
+          }
+        ]
+      }
+    }
+  ]
+}

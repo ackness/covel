@@ -30,6 +30,7 @@
 - [`npc-graph/extractor`](#npc-graphextractor) — NPC 关系图抽取 agent
 - [`char-creator/character-tracker`](#char-creatorcharacter-tracker) — NPC 发现与状态跟踪 agent
 - [`scene-prompts`](#scene-prompts) — 对话模式玩家口吻短回复 agent
+- [`mimo-tts/auto-narrate`](#mimo-tts) — 叙事旁白自动 TTS（function，`ctx.speech`）
 - [`scene-stage/background-gen`](#scene-stagebackground-gen) — 场景背景后台增量生成（event 触发，无 stage，`execution: background`）
 
 ### 角色 / 世界 / 分支子系统（manual function，按需触发 / world-data 导入）
@@ -39,6 +40,12 @@
 - [`player-identity`](#player-identity) — 玩家人设（`persona-provider`）
 - [`living-world-rules`](#living-world-rules) — 长期世界规则 → lorebook 注入
 - [`branch-reply`](#branch-reply) — 回复候选 + 投影历史改写
+
+### 媒体生成（图像 / 语音）
+
+- [`dashscope-image-gen`](#dashscope-image-gen) — DashScope（万相）剧情插图：manual prompt agent + event 生成 follower
+- [`openai-image-gen`](#openai-image-gen) — OpenAI 兼容剧情插图：同样的两段式管线（gpt-image 系）
+- [`mimo-tts`](#mimo-tts) — 小米 MiMo TTS 旁白语音：auto 逐回合朗读 + 消息内「朗读」按钮
 
 ### UI-only（无 runtime，仅出现在[概览表](#概览)）
 
@@ -96,31 +103,37 @@
 
 ## 概览
 
-| ID                             | 类型        | Stage                               | 触发方式                                                                  | 模型 slot | 描述                                                                                           |
-| ------------------------------ | ----------- | ----------------------------------- | ------------------------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------- |
-| pregame                        | core-plugin | `setup`（legacy priority 10，派生） | scheduled（仅首轮）                                                       | —         | 游戏初始化（function runtime）                                                                 |
-| world-init/schema-gen          | core-plugin | `setup`（legacy priority 40，派生） | scheduled（仅首轮）                                                       | `plugin`  | 世界维度初始化（guard + agent，setup 第二步）                                                  |
-| char-creator/player-init       | core-plugin | `setup`                             | auto（guard 门控）                                                        | `plugin`  | 玩家角色创建（agent runtime；turn-scoped `needs` 依赖 pregame + schema-gen）                   |
-| npc-graph/rag-retriever        | plugin      | `pre-turn`                          | scheduled（interval=1，function runtime）                                 | —         | NPC 图谱结构化检索器，向 narrator 注入相关关系事实                                             |
-| scene-cast                     | plugin      | `pre-turn`                          | scheduled（interval=1，function）                                         | —         | 对话模式当前场景演员，注入 `activeCastContext`                                                 |
-| scene-stage/resolver           | plugin      | 无（event，不设 stage）             | event（topic: `scene.set`）                                               | —         | 场景/昼夜解析，写 `stage/current`；未命中注册表时向 background-gen 发内部信令                  |
-| narrator                       | core-plugin | `narrative`                         | auto                                                                      | `story`   | 主叙事生成器                                                                                   |
-| chat-mode-narrator             | plugin      | `narrative`                         | auto                                                                      | `story`   | 对话 / GalGame 模式叙事器（`conflicts: narrator`，`requires` 场景/角色子系统）                 |
-| guide                          | plugin      | `post-turn`                         | scheduled（interval=1, cooldown=1）                                       | `plugin`  | 行动引导 + 聊天内建议面                                                                        |
-| codex                          | plugin      | `post-turn`                         | auto（每轮，紧跟 narrator 之后）                                          | `plugin`  | 知识图鉴系统（agent runtime）                                                                  |
-| npc-graph/extractor            | plugin      | `post-turn`                         | scheduled（interval=1, cooldown=1）                                       | `plugin`  | NPC 关系图抽取器                                                                               |
-| char-creator/character-tracker | core-plugin | `post-turn`                         | scheduled（interval=1, cooldown=1）                                       | `plugin`  | NPC 发现 + 角色状态跟踪                                                                        |
-| scene-prompts                  | plugin      | `post-turn`                         | scheduled（interval=1, cooldown=1）                                       | `plugin`  | 对话模式玩家口吻短回复                                                                         |
-| character-blueprint            | plugin      | —                                   | manual（按需 / world-data 导入）                                          | —         | 可复用角色蓝图；`dataSchemas` blueprints/characters 接收世界导入                               |
-| character-presence             | plugin      | —                                   | manual（按需 / world-data 导入）                                          | —         | 角色头像 / 立绘 / 语音媒体；`dataSchemas` presence/assets                                      |
-| player-identity                | plugin      | —                                   | manual（按需）                                                            | —         | 玩家人设（`persona-provider`，注入 activePersona）                                             |
-| living-world-rules             | plugin      | —                                   | manual（按需 / world-data 导入）                                          | —         | 长期世界规则 → `lorebook.upsert` 注入叙事；`dataSchemas` rules                                 |
-| branch-reply                   | plugin      | `post-turn`                         | auto（每回合播种）+ manual（重生成/采纳）                                 | —         | 回复候选 + `prompt-history-rewriter`（自动播种叙事原文，重生成走 LLM；投影历史折叠已采纳回合） |
-| scene-stage/background-gen     | plugin      | 无（event，不设 stage）             | event（topic: `scene-stage.generate.requested`，`execution: background`） | —         | 后台增量生成缺失的场景背景图（`ctx.images`），产出 `asset.generate`                            |
-| memory                         | core-plugin | —                                   | UI-only（无 runtime）                                                     | —         | 长期记忆摘要面板 + 通过 `memoryBlocks` 声明默认核心记忆块（剧情/角色关系/场景/玩家状态）       |
-| cost-gate                      | plugin      | —                                   | hook-only（opt-in，默认禁用）                                             | —         | 跨切面：每会话 token 预算门控（hooks：PostLLMResponse/PreSchedule/TurnStart/SessionEnd）       |
-| director                       | plugin      | —                                   | hook-only（opt-in，默认禁用）                                             | —         | 跨切面：用 PostContextAssembly 给本局所有 story runtime 统一注入导演前言                       |
-| story-guard                    | plugin      | —                                   | hook-only（opt-in，默认禁用）                                             | —         | 跨切面：故事文本红线净化（PostLLMResponse）+ 高危工具拦截（PreToolUse）                        |
+| ID                                   | 类型        | Stage                               | 触发方式                                                                   | 模型 slot | 描述                                                                                           |
+| ------------------------------------ | ----------- | ----------------------------------- | -------------------------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------- |
+| pregame                              | core-plugin | `setup`（legacy priority 10，派生） | scheduled（仅首轮）                                                        | —         | 游戏初始化（function runtime）                                                                 |
+| world-init/schema-gen                | core-plugin | `setup`（legacy priority 40，派生） | scheduled（仅首轮）                                                        | `plugin`  | 世界维度初始化（guard + agent，setup 第二步）                                                  |
+| char-creator/player-init             | core-plugin | `setup`                             | auto（guard 门控）                                                         | `plugin`  | 玩家角色创建（agent runtime；turn-scoped `needs` 依赖 pregame + schema-gen）                   |
+| npc-graph/rag-retriever              | plugin      | `pre-turn`                          | scheduled（interval=1，function runtime）                                  | —         | NPC 图谱结构化检索器，向 narrator 注入相关关系事实                                             |
+| scene-cast                           | plugin      | `pre-turn`                          | scheduled（interval=1，function）                                          | —         | 对话模式当前场景演员，注入 `activeCastContext`                                                 |
+| scene-stage/resolver                 | plugin      | 无（event，不设 stage）             | event（topic: `scene.set`）                                                | —         | 场景/昼夜解析，写 `stage/current`；未命中注册表时向 background-gen 发内部信令                  |
+| narrator                             | core-plugin | `narrative`                         | auto                                                                       | `story`   | 主叙事生成器                                                                                   |
+| chat-mode-narrator                   | plugin      | `narrative`                         | auto                                                                       | `story`   | 对话 / GalGame 模式叙事器（`conflicts: narrator`，`requires` 场景/角色子系统）                 |
+| guide                                | plugin      | `post-turn`                         | scheduled（interval=1, cooldown=1）                                        | `plugin`  | 行动引导 + 聊天内建议面                                                                        |
+| codex                                | plugin      | `post-turn`                         | auto（每轮，紧跟 narrator 之后）                                           | `plugin`  | 知识图鉴系统（agent runtime）                                                                  |
+| npc-graph/extractor                  | plugin      | `post-turn`                         | scheduled（interval=1, cooldown=1）                                        | `plugin`  | NPC 关系图抽取器                                                                               |
+| char-creator/character-tracker       | core-plugin | `post-turn`                         | scheduled（interval=1, cooldown=1）                                        | `plugin`  | NPC 发现 + 角色状态跟踪                                                                        |
+| scene-prompts                        | plugin      | `post-turn`                         | scheduled（interval=1, cooldown=1）                                        | `plugin`  | 对话模式玩家口吻短回复                                                                         |
+| character-blueprint                  | plugin      | —                                   | manual（按需 / world-data 导入）                                           | —         | 可复用角色蓝图；`dataSchemas` blueprints/characters 接收世界导入                               |
+| character-presence                   | plugin      | —                                   | manual（按需 / world-data 导入）                                           | —         | 角色头像 / 立绘 / 语音媒体；`dataSchemas` presence/assets                                      |
+| player-identity                      | plugin      | —                                   | manual（按需）                                                             | —         | 玩家人设（`persona-provider`，注入 activePersona）                                             |
+| living-world-rules                   | plugin      | —                                   | manual（按需 / world-data 导入）                                           | —         | 长期世界规则 → `lorebook.upsert` 注入叙事；`dataSchemas` rules                                 |
+| branch-reply                         | plugin      | `post-turn`                         | auto（每回合播种）+ manual（重生成/采纳）                                  | —         | 回复候选 + `prompt-history-rewriter`（自动播种叙事原文，重生成走 LLM；投影历史折叠已采纳回合） |
+| scene-stage/background-gen           | plugin      | 无（event，不设 stage）             | event（topic: `scene-stage.generate.requested`，`execution: background`）  | —         | 后台增量生成缺失的场景背景图（`ctx.images`），产出 `asset.generate`                            |
+| dashscope-image-gen/prompt-generator | plugin      | —                                   | manual（右侧「生成图片」按钮）                                             | `default` | 剧情插图提示词 agent，发 `image.generate.requested` 唤醒生成 follower                          |
+| dashscope-image-gen/image-generator  | plugin      | 无（event，不设 stage）             | event（topic: `image.generate.requested`，`execution: background`）        | —         | DashScope wan2.x 生成插图（`ctx.images`），产出 `asset.generate` + 画廊记录                    |
+| openai-image-gen/prompt-generator    | plugin      | —                                   | manual（右侧「生成图片」按钮）                                             | `default` | 剧情插图提示词 agent，发 `openai-image.generate.requested`                                     |
+| openai-image-gen/image-generator     | plugin      | 无（event，不设 stage）             | event（topic: `openai-image.generate.requested`，`execution: background`） | —         | OpenAI 兼容生成插图（`ctx.images`），产出 `asset.generate` + 画廊记录                          |
+| mimo-tts/auto-narrate                | plugin      | `post-turn`                         | auto（`needs: capability narrative-engine`）                               | —         | 叙事旁白自动 TTS（`ctx.speech`，MiMo wire）；每回合写「朗读」按钮的消息层锚点                  |
+| mimo-tts/manual-narrate              | plugin      | —                                   | manual（消息内「朗读」按钮，`execution: background`）                      | —         | 按钮 payload 指定段落的手动 TTS（`ctx.speech`）                                                |
+| memory                               | core-plugin | —                                   | UI-only（无 runtime）                                                      | —         | 长期记忆摘要面板 + 通过 `memoryBlocks` 声明默认核心记忆块（剧情/角色关系/场景/玩家状态）       |
+| cost-gate                            | plugin      | —                                   | hook-only（opt-in，默认禁用）                                              | —         | 跨切面：每会话 token 预算门控（hooks：PostLLMResponse/PreSchedule/TurnStart/SessionEnd）       |
+| director                             | plugin      | —                                   | hook-only（opt-in，默认禁用）                                              | —         | 跨切面：用 PostContextAssembly 给本局所有 story runtime 统一注入导演前言                       |
+| story-guard                          | plugin      | —                                   | hook-only（opt-in，默认禁用）                                              | —         | 跨切面：故事文本红线净化（PostLLMResponse）+ 高危工具拦截（PreToolUse）                        |
 
 ---
 
@@ -770,6 +783,104 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 ---
 
+## dashscope-image-gen
+
+⚪ optional · 🎨 媒体生成
+
+**Quick use**：右侧「生成图片」按钮 → prompt agent 整理当前剧情为画面需求（单场景或多格漫画）→ 经 `image.generate.requested` 事件唤醒后台 follower 调 DashScope 万相（wan2.x）出图，落画廊 + `asset.generate`。
+
+**路径**: `plugins/dashscope-image-gen/`
+
+多 runtime 插件（结构同 [scene-stage](#scene-stage)）：
+
+### dashscope-image-gen/prompt-generator
+
+| 字段         | 值                                                                                                   |
+| ------------ | ---------------------------------------------------------------------------------------------------- |
+| pluginType   | `plugin`                                                                                             |
+| runtimeType  | `agent`                                                                                              |
+| model        | `default`                                                                                            |
+| trigger      | `manual`（右侧 `ui/generate-button.json`，`expectsBackgroundFollower`）                              |
+| output       | `schema: ./output.schema.json` — JSON envelope，必须携带 `events[].topic = image.generate.requested` |
+| capabilities | `[image-prompt, manual-invoke]`                                                                      |
+| input.inject | `plugin-data[prompts]` → `<previous-image-prompts>`（`ids-only`，避免复述旧图）                      |
+| userSettings | `composition`（single-scene / comic-strip）· `comicPanels` 等构图选项                                |
+
+### dashscope-image-gen/image-generator
+
+| 字段         | 值                                                                            |
+| ------------ | ----------------------------------------------------------------------------- |
+| pluginType   | `plugin`                                                                      |
+| runtimeType  | `function`（无 LLM，调用 `ctx.images`）                                       |
+| stage        | 无（`event` 触发不设 `stage`）                                                |
+| execution    | `background` · `timeoutMs: 360000`                                            |
+| trigger      | `event`，topic `image.generate.requested`                                     |
+| capabilities | `[image-generation]`                                                          |
+| userSettings | `modelPresetId`（默认 `image` slot）· `imageSize` · `n` · `negativePrompt` 等 |
+| ui.right     | `gallery.json`（ImageGallery）· `jobs.json`（ImageJobs）                      |
+
+**职责**：从事件载荷取 prompt，映射 userSettings 后整体交给框架统一图像管线 `ctx.images.generate()`（DashScope 异步任务提交/轮询、`x`→`*` 尺寸转换、OSS URL 摄取进 MediaStore、promptHash 去重都在框架侧的 `dashscope-wan` wire）。产出逐图 `images` namespace 记录 + `assetGenerations[]`；失败路径写可见的 `failed` 卡片。
+
+---
+
+## openai-image-gen
+
+⚪ optional · 🎨 媒体生成
+
+**Quick use**：与 [dashscope-image-gen](#dashscope-image-gen) 同构的两段式插图管线，走 OpenAI 兼容 Images API（gpt-image 系或任何 OpenAI 兼容第三方）；事件 topic 为 `openai-image.generate.requested`，两插件可并存不串线。
+
+**路径**: `plugins/openai-image-gen/`
+
+结构与 dashscope-image-gen 一致（manual prompt agent + event follower），差异点：
+
+| 差异        | 值                                                                         |
+| ----------- | -------------------------------------------------------------------------- |
+| 事件 topic  | `openai-image.generate.requested`                                          |
+| 默认 preset | `openai-image`                                                             |
+| 尺寸归一化  | handler 把 `1024*1536` 这类 `*` 分隔写法归一为小写 `x` 形式（OpenAI 约定） |
+| style       | 无专用 wire 参数，折叠进 prompt 文本（`…, style: watercolor`）             |
+
+---
+
+## mimo-tts
+
+⚪ optional · 🔊 媒体生成
+
+**Quick use**：把叙事引擎的输出用小米 MiMo TTS 朗读出来——每回合自动产出音轨（可关），右侧 Tab 是 playlist；每条剧情消息下有「朗读」按钮手动重读。
+
+**路径**: `plugins/mimo-tts/`
+
+多 runtime 插件；根 `PLUGIN.md` 声明 `entry: ./server/index.js`，entry 经 `covel.registerWires()` 注册 MiMo speech wire（`mimo-tts/mimo`，`api-key` header + OpenAI 风格 `chat/completions`；slot 侧 `providerRequestMetadata.speechWire = "mimo-tts/mimo"` 启用）。
+
+### mimo-tts/auto-narrate
+
+| 字段         | 值                                                                                  |
+| ------------ | ----------------------------------------------------------------------------------- |
+| pluginType   | `plugin`                                                                            |
+| runtimeType  | `function`（无 LLM，调用 `ctx.speech.generate`）                                    |
+| stage        | `post-turn`                                                                         |
+| trigger      | `auto`；`needs: [{ capability: narrative-engine }]`                                 |
+| inputs       | `narrative` ← capability `narrative-engine` 的 `/narrativeOutput`（引擎无关）       |
+| capabilities | `[tts, narrative-audio]`                                                            |
+| userSettings | `enabled`（关掉只停自动合成）· `modelPresetId` · `voice` · `format` · `maxChars` 等 |
+| ui.right     | `audio-tab.json`（AudioPlayer playlist）                                            |
+
+**职责**：读本轮叙事 → `ctx.speech.generate()`（wire 分发、MediaStore 持久化、promptHash 去重在框架侧）→ 写 `tracks` 记录 + `assetGenerations[]`。**每回合（含 `enabled: false` 时）**写 `message` namespace 的 `{ turnId, text }` 记录——这是「朗读」按钮的消息层锚点与 payload 来源（消息层 spec 依赖该 namespace 才渲染）。
+
+### mimo-tts/manual-narrate
+
+| 字段         | 值                                                                                                      |
+| ------------ | ------------------------------------------------------------------------------------------------------- |
+| pluginType   | `plugin`                                                                                                |
+| runtimeType  | `function` · `execution: background`                                                                    |
+| trigger      | `manual`（消息内 `ui/play-button.json`）                                                                |
+| capabilities | `[tts, narrative-audio, manual-invoke]`                                                                 |
+| ui.message   | `play-button.json` — `$state` 绑定从 `message` namespace 记录读 `/turnId` + `/text` 作为 invoke payload |
+
+**职责**：朗读按钮 payload 里的段落文本（**manual 激活不解析 turn inputs，`payload.text` 必需**——无 inputs 兜底），走同一条 `ctx.speech.generate()` 管线，`tracks` 记录标 `triggeredBy: manual`。
+
+---
+
 ## 规划中插件（待开发）
 
 | 插件       | 预期 stage  | 描述          |
@@ -777,7 +888,6 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | combat     | `pre-turn`  | 回合制战斗    |
 | inventory  | `post-turn` | 物品/装备管理 |
 | core-quest | `post-turn` | 任务追踪      |
-| image      | `post-turn` | 故事配图生成  |
 
 当前世界包推荐使用 `pluginPolicy` 表达插件组合意图。内置前端组合包包括：`traditional-story`（传统叙事主线 + 行动建议/图鉴/关系图，玩家口吻设置为可选项）、`dialogue-mode`（对话优先叙事 + 场景演员/短句回复 + 玩家口吻设置）、`low-cost`（保留核心流程并减少下游 LLM 调用，玩家口吻设置为可选项）。世界可以通过 `preset` 引用这些组合包，也可以在 `packs` 中提供自定义组合。
 
@@ -852,7 +962,7 @@ description: # I18nText：一句话简介
 ---
 ```
 
-**没有** `displayName` 时，UI 退回显示 plugin id（如 `dashscope-image-gen`），冗长且不直观。所有插件（含内置与第三方）都**建议**声明 `displayName`；20 个内置插件均已声明中英文名。
+**没有** `displayName` 时，UI 退回显示 plugin id（如 `dashscope-image-gen`），冗长且不直观。所有插件（含内置与第三方）都**建议**声明 `displayName`；23 个内置插件均已声明中英文名。
 
 > 兼容：多 runtime 插件的**包级 PLUGIN.md**（根目录仅含摘要 frontmatter、不作为 runtime 加载）若把 `name` 写成 I18nText 对象，仍会作为展示名的回落来源；但新代码应优先用 `displayName`，不要重载 `name`。
 

@@ -118,7 +118,7 @@ packages/           16 internal packages: shared, settings, context, ai-provider
                     SettingsStore + localStorage/json-file backends, split out of
                     `shared` so pure-type consumers avoid browser/Electron code.
 
-plugins/            20 bundled plugin packages (see docs/reference/plugins.md)
+plugins/            23 bundled plugin packages (see docs/reference/plugins.md)
 prompts/            Externalised prompt templates (locale-aware markdown)
 worlds/             2 curated sample world packages (mistport / haruka-academy);
                     archived worlds in worlds/_archive/ are not loaded
