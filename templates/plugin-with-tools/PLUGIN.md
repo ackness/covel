@@ -4,12 +4,13 @@ description:
   zh: "{{pluginDescriptionZh}}"
   en: "{{pluginDescriptionEn}}"
 pluginType: plugin
-priority: 600
+stage: post-turn
+needs:
+  - capability: narrative-engine
 model: plugin
 outputKind: system
 trigger:
-  type: scheduled
-  interval: 1
+  type: auto
 entry: ./server/index.js
 tools:
   plugin:
