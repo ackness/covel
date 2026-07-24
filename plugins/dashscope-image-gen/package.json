@@ -8,6 +8,9 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "dependencies": {
+    "@covel/plugin-handlers-utils": "workspace:*"
+  },
   "devDependencies": {
     "vitest": "^4.1.10"
   }
