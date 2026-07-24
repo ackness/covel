@@ -69,6 +69,8 @@ pnpm db:up / db:down / db:generate / db:migrate / db:studio
 pnpm e2e              # Playwright headless (e2e:ui for the runner UI)
 pnpm e2e:verify       # API-driven, real-LLM plugin harness (needs .env.llm); pass --slot e2e_local --turns 3
 pnpm test:runtime     # standalone runtime harness CLI (packages/test-runtime)
+pnpm validate:plugin  # validate PLUGIN.md manifests (loader compat parse + strict authoring schema); pass file or plugin dir, --compat for legacy
+
 
 # Docker (full stack)
 pnpm docker:build / docker:up / docker:down / docker:logs
