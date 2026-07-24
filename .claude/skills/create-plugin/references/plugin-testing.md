@@ -257,7 +257,7 @@ pnpm test:runtime -- my-plugin \
 | `--llm-responses <json>`         | 多次 LLM 调用脚本，按顺序消费                                           |
 | `--mock-preset-id <id>`          | mock `resolveSlot()` 暴露的 synthetic preset id                         |
 | `--show-prompts`                 | 输出捕获的 LLM messages                                                 |
-| `--ignore-upstreams`             | 临时清空 `upstreamRequired`                                             |
+| `--ignore-upstreams`             | 临时清空 `needs`（含 legacy `upstreamRequired` 别名）声明               |
 | `--expects-background-follower`  | 没有 deferred follower 时写一个 failed `_jobs` 行，便于 UI 可见失败断言 |
 | `--pretty`                       | 格式化 JSON 输出                                                        |
 

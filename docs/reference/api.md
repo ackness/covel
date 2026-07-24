@@ -1191,7 +1191,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 - Turn 执行是同步的，响应时间取决于 LLM 调用耗时
 - 每个活跃 Runtime 按 stage 依次执行，stage 内独立 runtime 并行（依赖 `needs` / `after` / `inputs` 排序）
 - `runtimeResults` 包含每个 Runtime 的输出，可能包含叙事文本、工具调用结果等
-- `session.turnCount` 表示主循环进度：setup-only Pre-Game 执行会保存 `turn_results`，但不会计入主循环轮数；完成 Pre-Game 后最低推进到 `1`
+- `session.turnCount`（由 `phase` / `completedPlayerTurns` 读时派生的 legacy 字段）表示主循环进度：setup 阶段的执行会保存 `turn_results`，但不会计入主循环轮数；`phase` 翻到 `playing` 后最低读出 `1`
 - 服务端会对每个 runtimeResult 运行 `processRuntimeResult` 提交管道（与 `/api/actions` 一致）：normalize → state.commit → 触发后续 SessionEvent
 - 如果某个 Runtime 的输出包含 `pendingInputs`，需要通过 `plugin-rpc` 的 `framework.submit-form` action 提交玩家响应
 
@@ -1324,7 +1324,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 统一的"结构化插件指令"通道。同时支持:
 
 1. **Action 级**: `{ pluginId, action, payload }` — 调用插件在 PLUGIN.md `rpc` 字段中声明的 RPC handler,或框架默认 handler(如 `submit-form`)。返回单次 JSON。
-2. **Runtime 级**: `{ pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行。通过完整 Turn pipeline(prompt 组装、工具循环、proposal 提交)跑一次目标 runtime,事件触发的下游 runtime 会按 priority 自动 chain。执行子模式由 `manifest.execution` 决定:
+2. **Runtime 级**: `{ pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行。通过完整 Turn pipeline(prompt 组装、工具循环、proposal 提交)跑一次目标 runtime,事件触发的下游 runtime 会在回合内自动 chain(同一事件的多个订阅者按 `name` 定序)。执行子模式由 `manifest.execution` 决定:
    - `'sync'`(默认): 同步等待 runtime 完成,commit proposals 后返回汇总 JSON。
    - `'background'`: 立即返回 202 + `jobId`,后台通过 `setImmediate` 继续执行。进度/结果通过 `plugin_data` 表 `_jobs` 保留命名空间写回,前端经 `plugin-data.changed` SSE 感知变化。
 
@@ -1699,18 +1699,11 @@ rpc:
   "schemaVersion": 1,
   "framework": {
     "pluginManifest": {
-      "triggerTypes": [
-        "auto",
-        "manual",
-        "scheduled",
-        "conditional",
-        "event",
-        "error-retry"
-      ],
+      "triggerTypes": ["auto", "manual", "scheduled", "event"],
       "outputKinds": ["story", "plugin", "system"],
       "runtimeTypes": ["agent", "function"],
       "executionModes": ["sync", "background"],
-      "inputInjectKinds": ["runtime", "plugin-data"],
+      "inputInjectKinds": ["runtime", "plugin-data", "runtime-export"],
       "uiSlots": ["right", "message", "left"]
     },
     "pluginData": {

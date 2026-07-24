@@ -28,7 +28,7 @@ import type {
   RuntimeManifest, // 运行时清单（PLUGIN.md frontmatter 的解析结果）
 
   // 触发系统
-  TriggerType, // 'auto' | 'manual' | 'scheduled' | 'event' | 'error-retry'（conditional 为 reserved）
+  TriggerType, // 'auto' | 'manual' | 'scheduled' | 'event'（conditional / error-retry 已移除,声明即加载失败）
   TriggerConfig, // { type, interval?, condition?, topic?, maxTriggerCount?, cooldownTurns? }
 
   // 输入/输出
@@ -640,16 +640,15 @@ handler: ./handler.js
 1. 插件**禁止**直接写 `_jobs` 命名空间 —— 框架独占。业务状态请写到自己的命名空间(如 `images/{jobId}` `{status: 'pending'}` → `{status: 'ready', ref: ...}`)。
 2. `setImmediate` 中抛出的异常**不会**映射为 5xx —— 响应已发。失败信息会被框架写入 `_jobs/<jobId>.value.error`,前端通过 SSE 感知。
 
-**事件链 chain:** 无论 sync 还是 background,runtime emit 的 `event.emit` proposal 都会按 priority 触发同一 turn 内的下游 runtime,不需要额外协调。这让"按钮 → prompt-generator (agent) → image-generator (function, background)"这种多步 pipeline 完全声明式。
+**事件链 chain:** 无论 sync 还是 background,runtime emit 的 `event.emit` proposal 都会触发同一 turn 内订阅该 topic 的下游 runtime(同一事件的多个订阅者按 `name` 定序),不需要额外协调。这让"按钮 → prompt-generator (agent) → image-generator (function, background)"这种多步 pipeline 完全声明式。
 
 ### 完整示例: 两段式图像生成插件
 
 ```yaml
 # runtimes/prompt-generator/PLUGIN.md
 name: my-image-gen/prompt-generator
-priority: 600
 runtimeType: agent # 用 LLM 生成 prompt
-trigger: { type: manual }
+trigger: { type: manual } # manual 不进阶段 DAG,不声明 stage
 # frontmatter 的 output 只接受 { schema, recordAs }(outputConfigSchema 是 strict)。
 # 事件由 agent 在 runtime output JSON 里输出 events[] 数组,normalizeOutput
 # 会转成 event.emit proposal。在 prompt 正文里要求模型输出:
@@ -659,8 +658,7 @@ trigger: { type: manual }
 ```yaml
 # runtimes/image-generator/PLUGIN.md
 name: my-image-gen/image-generator
-priority: 610
-runtimeType: function # 纯 JS,直接调 provider
+runtimeType: function # 纯 JS,直接调 provider;event follower 不声明 stage
 execution: background # 不阻塞 turn
 trigger:
   type: event
@@ -834,30 +832,25 @@ my-plugin/
 
 ## 迁移到调度声明面（三方插件）
 
-调度重设计处于**双声明兼容期**:新字段(`stage` / `needs` / `inputs` / `output.recordAs` / `resultFormat` …)已可声明,旧字段(`priority` / `upstreamRequired` / `input.inject kind: runtime`)在兼容期原样保留、仍被生产消费者读取。dashscope / openai / mimo 这类自管 provider 的三方插件按下面四步逐步迁移,每一步都能独立发布、不必一次到位。
+调度重设计已完成切换:`stage` + `needs` / `after` / `inputs` 是唯一的调度权威。旧字段(`priority` / `upstreamRequired`)仅由 manifest **compat 输入 schema** 为存量三方插件保留——归一层把 `upstreamRequired` 别名为 `needs`、在 `stage` 缺失时用 `priority` 派生 `stage`,数字本身不再参与调度(与显式 `stage` 并存时完全无作用)。存量三方插件按下面几步迁移,每一步都能独立发布。
 
-**① manifest 双声明。** 保留原有 `priority` / `upstreamRequired`,并排加上新声明。`stage` 用命名阶段代替裸数字(映射见 [plugins.md 调度层级](../reference/plugins.md#调度层级));上游依赖用 `needs`(gate,取代 `upstreamRequired`)或 `inputs`(把某条隐式依赖转成有类型绑定);对 `event` / `manual` runtime 不写 `stage`。
+**① manifest 单声明。** 删掉 `priority` / `upstreamRequired`,直接写新声明。`stage` 用命名阶段(语义见 [plugins.md 调度层级](../reference/plugins.md#调度层级));上游依赖用 `needs`(gate,取代 `upstreamRequired`)或 `inputs`(把某条隐式依赖转成有类型绑定);对 `event` / `manual` runtime 不写 `stage`。改完跑 `pnpm validate:plugin <插件目录>`——strict authoring schema 会拒绝残留的 legacy 字段。
 
 ```yaml
-priority: 600 # 兼容期保留,归一为 legacyOrder
-stage: post-turn # 新权威阶段
-upstreamRequired: # 兼容期保留
-  - capability: narrative-engine
+stage: post-turn # 命名阶段(取代 priority)
 needs: # 取代 upstreamRequired,强度相同
   - capability: narrative-engine
-inputs: # 可选:把 completedResults 扫描升级为有类型绑定
+inputs: # 读同回合上游数据的唯一通道
   narrative:
     from: { capability: narrative-engine, cardinality: one }
     select: "/narrativeOutput"
     required: false
 ```
 
-**② handler:`completedResults` → `ctx.inputs`(双路径)。** 先加读 `ctx.inputs`,读不到再回落原有 `completedResults` 扫描,这样在 manifest/内核接线未齐或 `manual` 激活时不回归。等新路径稳定、且 `inputs` 覆盖了全部同回合输入后,才删掉回落分支。
+**② handler:改读 `ctx.inputs`。** `ctx.completedResults` 已从 function handler context 移除——同回合上游数据只能通过 `inputs` 绑定进来(`manual` 激活不解析 turn 绑定,`ctx.inputs` 为空,手动场景把数据放 `manualPayload`)。
 
 ```ts
-const narrative =
-  (ctx.inputs?.narrative?.value as string | undefined) ??
-  scanCompletedResults(ctx.completedResults); // 兼容期回落
+const narrative = ctx.inputs?.narrative?.value as string | undefined;
 ```
 
 **③ 进度:`ctx.pluginData` 占位 → `ctx.progress.report`。** 长任务(图像 / TTS 生成)的实时进度从"写 plugin-data 占位行"改为走 job-status 通道:`ctx.progress.report(...)` 判空 + 吞异常(见上文调度 ctx API 小节)。durable 产出仍走返回值 / proposal——进度只是观测,不落游戏状态。前端读取旧 plugin-data 面板的话,兼容期可继续同时写占位行,待 UI 切到 job-status 源后再撤。

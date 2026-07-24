@@ -15,32 +15,41 @@ export default async function handler(ctx: FunctionHandlerContext) {
 
 ## 必有字段（每次调用都存在）
 
-| 字段               | 类型                                    | 用途                                                                                                           |
-| ------------------ | --------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `sessionId`        | `string`                                | 当前 session id（写 plugin-data / media 时不用关心，框架已绑定）                                               |
-| `turnId`           | `string`                                | 当前 turn id；常用作 plugin-data key                                                                           |
-| `pluginId`         | `string`                                | 本 runtime 所属 plugin id（不是 runtime name）                                                                 |
-| `playerMessage`    | `string`                                | 玩家本轮的输入                                                                                                 |
-| `completedResults` | `ReadonlyMap<string, unknown>`          | runtimeId → 该 runtime 本 turn 的 output。读上游用 `completedResults.get('narrator')?.output?.narrativeOutput` |
-| `config`           | `Readonly<Record<string, unknown>>`     | manifest `config:` 字段定义的插件级配置                                                                        |
-| `recursiveCall`    | `(delta, opts?) => Promise<TurnResult>` | 递归调一次 nested turn（受 governance 深度限制；插件**几乎用不到**，慎用）                                     |
-| `recursionDepth`   | `number`                                | 当前递归深度，顶层 = 0                                                                                         |
-| `store`            | `FunctionStoreView \| DataStore`        | **第三方插件**收到 `FunctionStoreView`（仅 4 个只读方法）；`pluginType: core-plugin` 才拿全 `DataStore`        |
+| 字段             | 类型                                    | 用途                                                                                                    |
+| ---------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `sessionId`      | `string`                                | 当前 session id（写 plugin-data / media 时不用关心，框架已绑定）                                         |
+| `turnId`         | `string`                                | 当前 turn id；常用作 plugin-data key                                                                     |
+| `pluginId`       | `string`                                | 本 runtime 所属 plugin id（不是 runtime name）                                                           |
+| `runtimeId`      | `string`                                | 本 runtime 的全名（多 runtime 时 = `plugin/sub`）                                                        |
+| `playerMessage`  | `string`                                | 玩家本轮的输入                                                                                           |
+| `recursiveCall`  | `(delta, opts?) => Promise<TurnResult>` | 递归调一次 nested turn（受 governance 深度限制；插件**几乎用不到**，慎用）                               |
+| `recursionDepth` | `number`                                | 当前递归深度，顶层 = 0                                                                                   |
+| `store`          | `FunctionStoreView \| DataStore`        | **第三方插件**收到 `FunctionStoreView`（仅 4 个只读方法）；`pluginType: core-plugin` 才拿全 `DataStore`  |
+
+> **`ctx.completedResults` / `ctx.config` 已移除**——读同回合上游输出的唯一通道是 frontmatter `inputs` 绑定 → `ctx.inputs`（见下）。
 
 ## 可选字段（依宿主和触发方式存在）
 
-| 字段            | 何时存在                                      | 内容                                                      |
-| --------------- | --------------------------------------------- | --------------------------------------------------------- |
-| `locale`        | 客户端传 `locale` 时                          | `'zh-CN' \| 'en-US' \| ...`                               |
-| `gateway`       | 生产环境总在；测试 harness 可能为 `undefined` | LLM/图像 gateway facade，见 [§gateway](#ctxgateway)       |
-| `utils`         | 生产环境总在                                  | SSRF + retry 工具，见 [§utils](#ctxutils)                 |
-| `media`         | 生产环境总在                                  | MediaStore 接口，见 [§media](#ctxmedia)                   |
-| `assetProgress` | 媒体生成插件用                                | `(progress) => Promise<void>` 发 `asset.progress` SSE     |
-| `manualPayload` | **仅** `trigger.type: manual` 触发时          | 来自 `POST /plugin-rpc` 的 `payload` 字段                 |
-| `triggerEvent`  | **仅** `trigger.type: event` 触发时           | `{ topic, data }`，上游 runtime emit 的 event             |
-| `userSettings`  | 声明了 `userSettings:` 时                     | manifest 默认值已与玩家覆盖合并；**所有声明键都保证存在** |
-| `pluginData`    | 接了 store 时（生产总在）                     | scoped writer，见 [§pluginData](#ctxplugindata)           |
-| `logger`        | 接了 store 时（生产总在）                     | 写入插件 `_logs` 命名空间，见 [§logger](#ctxlogger)       |
+| 字段            | 何时存在                                      | 内容                                                                                                        |
+| --------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `locale`        | 客户端传 `locale` 时                          | `'zh-CN' \| 'en-US' \| ...`                                                                                 |
+| `gateway`       | 生产环境总在；测试 harness 可能为 `undefined` | LLM gateway facade，见 [§gateway](#ctxgateway)                                                              |
+| `utils`         | 生产环境总在                                  | SSRF + retry 工具，见 [§utils](#ctxutils)                                                                   |
+| `media`         | 生产环境总在                                  | MediaStore 接口，见 [§media](#ctxmedia)                                                                     |
+| `images`        | gateway + MediaStore 都接线时（生产总在）     | 统一图像生成管线 `images.generate(...)`，见 [§gateway](#ctxgateway)                                         |
+| `speech`        | 同 `images`                                   | 统一语音管线 `speech.generate(...)`（TTS）/ `speech.transcribe(...)`（STT）                                 |
+| `inputs`        | 声明了 frontmatter `inputs:` 绑定且门通过时   | `Record<name, InputSlot>`——读同回合上游数据的唯一通道，见 [§inputs](#ctxinputs--ctxexports读上游数据)      |
+| `exports`       | 声明了 `input.inject kind: runtime-export` 时 | 同 InputSlot 形状——跨执行读生产方持久化 `recordAs` 导出                                                    |
+| `activation`    | 生产总在                                      | `{ source: 'stage'\|'event'\|'manual', detached, payload }`——本次激活的规范描述                            |
+| `execution`     | 生产总在                                      | `{ executionId, origin, logicalTurnId?, countPolicy }`——本次调度运行的身份                                 |
+| `progress`      | 接了 store 时（生产总在）                     | `progress.report({jobId, state, progress?, message?, data?, sequence})`——长任务实时进度（kernel job-status 流 + SSE） |
+| `assetProgress` | 媒体生成插件用                                | `(progress) => Promise<void>` 发 `asset.progress` SSE                                                       |
+| `manualPayload` | **仅** `trigger.type: manual` 触发时          | 来自 `POST /plugin-rpc` 的 `payload` 字段（= `activation.payload` 的 compat 别名）                          |
+| `triggerEvent`  | **仅** `trigger.type: event` 触发时           | `{ topic, data }`，上游 runtime emit 的 event（`data` = `activation.payload` 的 compat 别名）               |
+| `userSettings`  | 声明了 `userSettings:` 时                     | manifest 默认值已与玩家覆盖合并；**所有声明键都保证存在**                                                   |
+| `pluginData`    | 接了 store 时（生产总在）                     | scoped writer，见 [§pluginData](#ctxplugindata)                                                             |
+| `logger`        | 接了 store 时（生产总在）                     | 写入插件 `_logs` 命名空间，见 [§logger](#ctxlogger)                                                         |
+| `signal`        | turn 可中止时（生产总在）                     | `AbortSignal`——玩家中止本 turn 时触发；长 provider 调用应把它穿进去                                        |
 
 > **核心原则**：handler 只能用 `ctx` 提供的接口。**禁止** `import` 任何 `@covel/*` 内部模块（上层包的 export 可能变；插件靠 ctx 这个稳定 API 解耦）。
 
@@ -252,20 +261,36 @@ await ctx.logger.error("synthesis.failed", { error: err.message });
 
 ---
 
-## `ctx.completedResults` 怎么用
+## `ctx.inputs` / `ctx.exports`（读上游数据）
 
-来源：本 turn 已跑完的 runtime 们的 output。**严格按 priority + DAG 顺序**，所以你声明 `upstreamRequired:[narrator]` + `priority: 700`（narrator 是 500）就保证 narrator 已经在 map 里了。
+**同回合读上游 = frontmatter `inputs` 绑定**（`ctx.completedResults` 已移除）。先在 frontmatter 声明：
 
-```ts
-// 取 narrator 本轮 narrativeOutput
-const narrator = ctx.completedResults.get("narrator"); // 注意是 runtimeId（多 runtime 时 = 'plugin/sub'）
-if (!narrator) return { status: "skipped", reason: "narrator missing" };
-const text = narrator.output?.narrativeOutput; // string | undefined
-
-// 如果上游已经 emit 过 event，框架会传给 ctx.triggerEvent — 不用从 completedResults 里挖
+```yaml
+stage: post-turn
+needs:
+  - capability: narrative-engine # 门控:上游本轮成功才跑
+inputs:
+  narrative:
+    from: { capability: narrative-engine, cardinality: one }
+    select: "/narrativeOutput" # JSON Pointer,指进生产方 output
+    required: false
 ```
 
-**坑**：`runtimeId` 不是 `pluginId`！多 runtime 插件取 `narrator/main`、`char-creator/player-init` 这种全名。单 runtime 插件 runtimeId = pluginId。
+handler 里读 provenance 包装的 `InputSlot`：
+
+```ts
+const slot = ctx.inputs?.narrative;
+// cardinality: one → { cardinality: 'one', value, source: {pluginId, runtimeId, resultId} }
+// cardinality: all → { cardinality: 'all', items: [{ value, source }, ...] }
+const text = slot?.value; // select 之后的值,这里是 string
+if (!text) return { status: "skipped", reason: "no narrative this turn" };
+```
+
+参考实现：`plugins/mimo-tts/runtimes/auto-narrate/`（capability 绑定在 narrator 与 chat-mode-narrator 两种模式下都命中）。
+
+**注意**：`manual` 激活不解析 turn 绑定（`ctx.inputs` 为空）——手动按钮场景把数据放进 `manualPayload`。上游 emit 过 event 时框架传 `ctx.triggerEvent`，不用绑定挖。
+
+**跨执行读**（读"本次执行开始前"生产方最后 commit 的导出）用 `input.inject kind: runtime-export` → `ctx.exports.<name>`，同 InputSlot 形状。生产方需声明 `output.recordAs` + `output.schema`。
 
 ---
 
@@ -283,7 +308,7 @@ const text = narrator.output?.narrativeOutput; // string | undefined
 | `pluginData: [{namespace, key, value}]`      | `plugin.data`（1 条）/ `plugin.data.batch`（≥2 条） | 框架自动选                                                                                                           |
 | `notifications: [{title, message}]`          | `narrative.append`（kind=system）                   | 走 chat feed                                                                                                         |
 
-**其它字段**：原样存为 `RuntimeResult.output`，下游 runtime 通过 `ctx.completedResults.get(myId)?.output?.<field>` 读。
+**其它字段**：原样存为 `RuntimeResult.output`，下游 runtime 通过 `inputs` 绑定（`select: "/<field>"`）读取。
 
 ⚠️ **不要返回顶层 `proposals: [...]`**——这是 tools 层的内部 Symbol channel，handler 输出里的 `proposals` 字段会被 normalizeOutput **完全忽略**。
 

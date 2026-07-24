@@ -26,7 +26,12 @@ description: 创建 Covel 插件。通过对话了解需求，直接生成 PLUGI
 - **Runtime 类型**
   - `agent`（默认）：LLM 驱动，正文就是 system prompt。支持 `model` slot。
   - `function`：纯 JS handler，不跑 LLM，由 `handler: ./handler.js` 指向入口。可访问 `ctx`（详见 [`runtime-context.md`](references/runtime-context.md)）。
-- **触发**：生产可用 `auto`（每轮）/ `manual`（仅 `POST /plugin-rpc`）/ `scheduled` / `event`。`conditional` 与 `error-retry` 为 **reserved，当前永不触发**（无条件引擎；调度器恒置 `hasUpstreamFailure: false`），声明后会被静默跳过并打印一次性 warning。
+- **触发**：仅 `auto`（每轮）/ `manual`（仅 `POST /plugin-rpc`）/ `scheduled` / `event` 四种。`conditional` 与 `error-retry` **已从枚举移除，声明即加载失败**。
+- **调度声明**（`auto` / `scheduled` runtime 必写；`event` / `manual` 不写 `stage`）：
+  - `stage`: `setup`（游戏初始化）/ `pre-turn` / `narrative` / `post-turn` / `audit`——五段主循环严格按序，阶段间有屏障；同阶段内**只由依赖决定先后**，无依赖并发跑。数字 `priority` 已废除，不要写。
+  - `needs`: 强依赖（排序 + 门控，上游本轮未成功 → 本 runtime skipped）。优先用 capability 形式（如 `- capability: narrative-engine`）避免硬编码上游插件 id。取代旧 `upstreamRequired`。
+  - `after`: 弱依赖（只排序，不设门）。
+  - `inputs`: 类型化上游数据绑定 → function 的 `ctx.inputs.<name>.value` / agent 的保留 prompt 块。**这是 function runtime 读同回合上游输出的唯一通道**（旧 `ctx.completedResults` 已从 handler ctx 移除）。字段详见 [`plugin-schema.md`](references/plugin-schema.md) 调度声明节。
 - **手动触发按钮**：UI JSON 里设 `on.click.action: "invokeRuntime"` + `params.runtimeId`，框架默认 handler 会自动 POST `/plugin-rpc`，插件**不需要**写 React 代码。所有 `on.click.action` 见 [`ui-components-quickref.md`](references/ui-components-quickref.md)。
 - **同步 / 后台执行**（仅手动触发）：`execution: sync`（默认，阻塞 turn）/ `background`（202 + `jobId`，框架在 `_jobs/<jobId>` 写状态，前端通过 `plugin-data.changed` SSE 感知）。
   - 插件**禁止**主动写 `_jobs/*` / `_logs/*`，框架会覆盖。
@@ -133,8 +138,9 @@ export default async function handler(ctx) {
   // ctx.images.generate({prompt, metadata}) // 图像生成首选:框架选 wire/落库/去重
   //   音频/视频/embed/转录才用 resolveSlot 取配置后自管 fetch wire。
   // ctx.media                         // 生成媒体必须落 MediaStore,不要把 bytes/base64 直接塞 pluginData。
-  // ctx.config                        // 会话/世界级配置
-  // ctx.completedResults              // 本 turn 前序 runtime 的 output (Map)
+  // ctx.inputs.<name>.value           // frontmatter inputs 绑定的解析值(读同回合上游的唯一通道)
+  // ctx.exports.<name>.value          // input.inject kind: runtime-export 的跨执行导出
+  // ctx.progress.report({jobId, state, progress, message, sequence}) // 长任务实时进度(job-status 流)
 
   // 返回普通 JSON。框架识别这些字段并走 commit pipeline:
   //   narrativeOutput | content      → narrative.append
@@ -157,38 +163,14 @@ export default async function handler(ctx) {
 
 ### 4. 验证 schema(必做)
 
-写完后必须跑 schema 校验（校验失败即修复重写）：
-
-**仓库内插件（`plugins/<id>/`）：**
+写完后必须跑 schema 校验（校验失败即修复重写）。在仓库根目录：
 
 ```bash
-node --input-type=module -e "
-import matter from 'gray-matter';
-import { readFileSync } from 'fs';
-import { validatePluginManifest, formatValidationErrors } from '@covel/shared';
-const { data } = matter(readFileSync('plugins/<id>/PLUGIN.md','utf-8'));
-const r = validatePluginManifest(data);
-if(!r.valid){console.error(formatValidationErrors(r.errors));process.exit(1)}
-console.log('OK');
-"
+pnpm validate:plugin plugins/<id>            # 目录:自动含根 PLUGIN.md + runtimes/*/PLUGIN.md
+pnpm validate:plugin ~/.covel/plugins/<id>   # 仓库外插件同样支持
 ```
 
-**仓库外插件（`~/.covel/plugins/<id>/`）：** 同样脚本，但要在 `packages/plugin-loader/` 子目录执行（依赖 `gray-matter` + `@covel/shared`）：
-
-```bash
-cd packages/plugin-loader && node --input-type=module -e "
-import matter from 'gray-matter';
-import { readFileSync } from 'fs';
-import { validatePluginManifest, formatValidationErrors } from '@covel/shared';
-const HOME = process.env.HOME;
-const { data } = matter(readFileSync(\`\${HOME}/.covel/plugins/<id>/PLUGIN.md\`,'utf-8'));
-const r = validatePluginManifest(data);
-if(!r.valid){console.error(formatValidationErrors(r.errors));process.exit(1)}
-console.log('OK');
-"
-```
-
-**多 runtime**：对每个 `runtimes/<sub>/PLUGIN.md` 分别跑一次。
+两道校验一次跑完：loader compat 解析（决定插件能不能加载，报错带行号）+ **strict authoring schema**（强制「auto/scheduled 必须声明 stage」、拒绝 legacy 字段 `priority` / `upstreamRequired`）。新插件必须干净通过；`--compat` 仅用于校验存量第三方 legacy manifest。
 
 ### 5. 测试（按复杂度分层选）
 
@@ -211,7 +193,7 @@ pnpm --filter @covel/plugin-<id> test
 
 ### 6. 展示结果
 
-给用户摘要：插件名 / runtime 列表（及各自优先级、触发方式、类型）/ 使用的工具 / UI 入口 / 玩家可调设置 / slot 依赖（如 `covel.image`）。问是否需要调整。
+给用户摘要：插件名 / runtime 列表（及各自 stage、依赖、触发方式、类型）/ 使用的工具 / UI 入口 / 玩家可调设置 / slot 依赖（如 `covel.image`）。问是否需要调整。
 
 ## Key Recipes
 
@@ -241,20 +223,36 @@ input:
       maxEntries: 50
 ```
 
-### 首轮门控
+### 游戏初始化（setup 段，跑一次直到报告完成）
 
 ```yaml
+stage: setup
+trigger:
+  type: auto # setup 段强制 auto,不可带 interval/startTurn/cooldownTurns
+  maxTriggerCount: 3 # 可选:重试预算
+```
+
+setup runtime 输出 `preGameDone: true`（legacy）或 `completion: "done"`（envelope-v1）报告完成；全部 setup 报告完成后 kernel 才把 `phase` 切进主循环。
+
+### 主循环内只跑一次
+
+```yaml
+stage: post-turn # 按语义选 pre-turn / post-turn
 trigger:
   type: scheduled
   interval: 1
   maxTriggerCount: 1
 ```
 
-### 硬门控 upstream
+### 硬门控 upstream（取代旧 `upstreamRequired`）
 
 ```yaml
-upstreamRequired: [narrator] # 上游本 turn 非 success → 本 runtime 直接 skipped
+needs:
+  - capability: narrative-engine # 推荐:按能力门控,narrator 和 chat-mode-narrator 都能命中
+  # - some-plugin/some-runtime   # 也可按 runtime id
 ```
+
+要同时读上游数据时升级为 `inputs` 绑定（`ctx.inputs.<name>.value`，见 [`plugin-schema.md`](references/plugin-schema.md) 调度声明节；参考 `plugins/mimo-tts/runtimes/auto-narrate/`）。
 
 ### 多媒体 / 音频 / 视频（mimo-tts、dashscope-image-gen 范式）
 

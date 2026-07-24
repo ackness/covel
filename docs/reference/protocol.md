@@ -83,7 +83,7 @@
 
 ### 会话生命周期事件
 
-（turn-band 重构后 `phase.changed` 已废弃：`SessionRecord.phase` 字段移除，运行进度改由 `turnCount` + `preGameCompleted` 描述。未来若需要推送 `status` 变化，将以 `status.changed` 形式重新引入，届时在此补记。）
+（没有 `phase.changed` 事件：`SessionRecord.phase`（`'setup' | 'playing'`）与 `completedPlayerTurns` / `setupRuntimes` 是会话进度的业务真值，但 phase 翻转不单独推送 SSE——客户端从会话响应里读 `phase`（以及由它派生的 legacy `turnCount` / `preGameCompleted`）。未来若需要推送 `status` 变化，将以 `status.changed` 形式引入，届时在此补记。）
 
 ### 系统事件
 

@@ -62,7 +62,7 @@ See: [docs/guide/plugin-authoring.md](./guide/plugin-authoring.md), [docs/refere
 
 ## Runtime manifest
 
-The parsed YAML frontmatter of a `PLUGIN.md`, plus derived fields. Carries the `pluginId`, `name` (runtimeId), `trigger`, `priority`, `outputKind`, `capabilities`, `model`, `permissions`, and UI spec references.
+The parsed YAML frontmatter of a `PLUGIN.md`, plus derived fields. Carries the `pluginId`, `name` (runtimeId), `trigger`, the scheduling surface (`stage`, `needs`, `after`, `inputs` — legacy `priority` / `upstreamRequired` are compat-folded into it at load), `outputKind`, `capabilities`, `model`, `permissions`, and UI spec references.
 
 See: [docs/reference/plugins.md](./reference/plugins.md), [docs/guide/plugin-authoring.md](./guide/plugin-authoring.md).
 
@@ -86,13 +86,13 @@ See: [docs/reference/plugins.md](./reference/plugins.md), `llm.toml.example`.
 
 ## Trigger mode
 
-How a runtime decides it should run on a given turn: `auto`, `scheduled`, `manual`, or `event` (`conditional` / `error-retry` are reserved and never fire in production). Combined with `priority` (which band the runtime belongs to) and the `scheduled` sub-fields (`interval` / `cooldownTurns` / `maxTriggerCount` / `startTurn`).
+How a runtime decides it should run on a given turn: `auto`, `scheduled`, `manual`, or `event` (`conditional` / `error-retry` were removed from the trigger enum — manifests declaring them are rejected at load). Combined with `stage` (which band an `auto` / `scheduled` runtime belongs to; `event` / `manual` runtimes declare no stage) and the `scheduled` sub-fields (`interval` / `cooldownTurns` / `maxTriggerCount` / `startTurn`).
 
 See: [docs/reference/plugins.md](./reference/plugins.md).
 
 ## Turn
 
-One tick of the session loop: player input → trigger routing → per-priority runtime execution → proposal validation → commit → SSE broadcast. Each turn is assigned a monotonically increasing `turnId` and a band (pre-game = 0, active = ≥1).
+One tick of the session loop: player input → trigger routing → per-stage DAG execution (strict barrier between stages, dependency-ordered within a stage) → proposal validation → commit → SSE broadcast. Each turn is assigned a monotonically increasing `turnId`; the band is selected by `session.phase` (`setup` runs the setup stage, `playing` runs `pre-turn → narrative → post-turn → audit`).
 
 See: [docs/architecture/flow.md](./architecture/flow.md), [docs/reference/protocol.md](./reference/protocol.md).
 

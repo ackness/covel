@@ -7,13 +7,13 @@ description: "Static Covel audit for start-game, plugin activation, runtime sche
 
 ## Overview
 
-Perform a code-only Covel gameplay-flow audit from the first start-game click through plugin selection, session creation, Pre-Game, prompt/runtime orchestration, and at least three main-loop turns. Produce repository audit artifacts with evidence-backed expected-vs-actual findings.
+Perform a code-only Covel gameplay-flow audit from the first start-game click through plugin selection, session creation, the setup stage (`phase === "setup"`, historically "Pre-Game"), prompt/runtime orchestration, and at least three main-loop turns. Produce repository audit artifacts with evidence-backed expected-vs-actual findings.
 
 ## Operating Rules
 
-- Follow repository-local `AGENTS.md`, `CLAUDE.md`, `RTK.md`, and closer instruction files before this skill.
+- Follow repository-local `AGENTS.md`, `CLAUDE.md`, `RTK.md` (when present), and closer instruction files before this skill.
 - If the user requests a static audit or says not to run the program, do not start dev servers, browsers, tests, builds, or model calls. Use read-only shell inspection plus Markdown file writes.
-- Use `rtk` for shell commands in Covel when local rules require it.
+- Use `rtk` for shell commands only when a repository-local rule file requires it; otherwise plain shell commands are fine.
 - Use `rg`/`fd` or local equivalents for discovery, and `nl -ba ... | sed -n` for line-backed evidence.
 - Use `apply_patch` for audit file creation and edits.
 - Preserve unrelated worktree changes. Check `git status --short` before edits and before final reporting.
@@ -64,8 +64,8 @@ Trace `/api/actions` and executor orchestration:
 2. `start_session` empty `playerMessage` and `suppressPlayerMessage`.
 3. Active runtime lookup and plugin activation after restart.
 4. SSE forwarded subtypes and frontend SSE handling.
-5. `executeTurn` session lock, hooks, session state load, trigger selection, scheduling, runtime execution, event-chain followers, pre-game completion, finalization, commit processing.
-6. Turn count updates in both `markPreGameCompletion` and the `/api/actions` wrapper.
+5. `executeTurn` session lock, hooks, session state load (frozen `logicalTurn = completedPlayerTurns + 1`), trigger selection (`selectTriggeredRuntimes`: manual name-match bypass / setup mirror-pending + `needs(scope: session)` gate / main-loop `shouldTrigger`), per-stage DAG scheduling (`setup` single DAG; main loop `pre-turn → narrative → post-turn → audit` with strict barriers), runtime execution (turn-scope upstream gate + `inputs` bindings), event-chain followers (fan-out is name-ordered and not stage-barriered), setup completion mirroring, finalization, commit processing.
+6. Turn counting is single-writer: the finalize transaction writes the session clock (`phase` / `completedPlayerTurns` / `setupRuntimes`) and the logical-turn ledger guarantees at-most-once counting; `markPreGameCompletion` only collects newly-done setup mirrors (it does not write counts), and the legacy `turnCount` / `preGameCompleted` are derived at read time. Also check the opening continuation in `/api/actions`: the request that completes the LAST setup runtime chains exactly one main-loop turn on the same SSE stream.
 
 ### 5. Map Prompt And Commit Semantics
 
@@ -83,18 +83,19 @@ Use an expected/actual/delta/effect/evidence structure. At minimum simulate:
 
 | Phase | Meaning |
 | --- | --- |
-| Prep Start Game | Session creation, plugin selection, worldData import; no turn execution. |
-| Turn0 / start_session | Pre-Game band only, normally `pregame`, `world-init/schema-gen`, `char-creator/player-init`. |
-| Turn0b / form submission | `framework.submit-form` writes `player_inputs`, then filled narrative triggers `send_message`; guard may create player and complete Pre-Game. |
-| Turn1 | First normal main-loop player message. |
-| Turn2 | Second normal main-loop message, using state written by Turn1. |
-| Turn3 | Third normal main-loop message, verifying Pre-Game stays complete and main-loop repeats. |
+| Prep Start Game | Session creation, plugin selection, worldData import; `phase` initialized from whether the active set declares a setup runtime; no turn execution. |
+| Turn0 / start_session | Setup stage only (`phase === "setup"`), normally `pregame`, `world-init/schema-gen`, `char-creator/player-init` — DAG-ordered by `needs` plus the conservative legacy chain; narrator never runs. |
+| Turn0b / form submission | `framework/submit-form` (plugin-rpc) writes `player_inputs`, then filled narrative triggers `send_message`; the guard synthesizes the player deterministically and reports done. When the LAST setup runtime completes, the finalize transaction flips `phase` to `playing` and the **opening continuation** chains exactly one main-loop turn in the same request (narrator opening without another player message). |
+| Turn1 | First normal main-loop player message: `pre-turn → narrative → post-turn → audit` with strict barriers; downstream gates use `needs: [capability: narrative-engine]`. |
+| Turn2 | Second normal main-loop message, using state written by Turn1 (plugin-data injects, extractor increments). |
+| Turn3 | Third normal main-loop message, verifying `phase` stays `playing` and the per-stage schedule repeats identically. |
 
 For each phase, check whether traditional-story and dialogue-mode branch differently:
 
 - Traditional path: retrieval -> narrator -> guide/codex/npc graph extractor/character tracker.
 - Dialogue path: retrieval + scene-cast -> chat-mode-narrator -> scene-prompts and enabled trackers.
-- Manual plugins such as identity/profile or branch reply require plugin-rpc/manual triggers; active does not mean auto-scheduled.
+- The two narrators are mutually exclusive via `relations.conflicts`; downstream plugins gate on `capability: narrative-engine` so both modes share one declaration.
+- Manual plugins such as identity/profile or branch reply require plugin-rpc/manual triggers; active does not mean auto-scheduled (manual/event runtimes declare no `stage`).
 
 ### 7. Identify Dead Or Redundant Code
 
@@ -102,7 +103,7 @@ Search for candidates across app, server, packages, plugins, docs, and audits:
 
 - Duplicate turn entrypoints.
 - Frontend action types unsupported by server.
-- Trigger types accepted by schema but skipped by runtime.
+- Manifest fields accepted by schema but consumed by no execution surface (the historical trap was reserved trigger types; the modern shape is scheduling fields like `scope` / `cardinality` on paths that don't read them).
 - Exported APIs with no production callers.
 - Hardcoded plugin IDs in framework code.
 - Runtime completion or turn-count code called in multiple places.

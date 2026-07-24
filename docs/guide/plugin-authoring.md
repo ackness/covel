@@ -116,6 +116,8 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 
 **保留 trigger**：`conditional` / `error-retry` 已从 trigger 枚举中移除，声明它们的 manifest 在**加载时被拒绝**（不再是"接受但永不触发"的 reserved 状态）——生产可用的只有 `auto` / `manual` / `scheduled` / `event` 四种。
 
+**校验**：写完 manifest 跑 `pnpm validate:plugin <PLUGIN.md | 插件目录>`——一次执行 loader compat 解析（能否加载，报错带行号）+ strict authoring schema（`auto` / `scheduled` 缺 `stage`、误写 legacy 字段直接报错）；`--compat` 仅用于存量 legacy manifest。另外 server 启动装载插件时会对「`auto` / `scheduled` 却既无 `stage` 也无 legacy `priority`、又不是纯 UI / hook / entry / wires 注册面」的 runtime 打 `schedulable-missing-stage` warning——这类声明会被当作 UI-only 习语永不调度。
+
 ## 附录
 
 ### A. 内置 UI 工具快速参考

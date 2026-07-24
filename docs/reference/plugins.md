@@ -1530,14 +1530,14 @@ setup ──▶ pre-turn ──▶ narrative ──▶ post-turn ──▶ audit
 
 ### trigger 类型
 
-| 类型          | 状态        | 说明                                                                                                                                                                                                                                                                                                                                    |
-| ------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `auto`        | ✅ 生产可用 | 每个 Turn 自动触发                                                                                                                                                                                                                                                                                                                      |
-| `manual`      | ✅ 生产可用 | 仅玩家手动触发；启用插件只表示该能力可用，不会自动进入每轮调度                                                                                                                                                                                                                                                                          |
-| `scheduled`   | ✅ 生产可用 | 每 N 条**玩家消息**触发一次（配合 `interval` + `maxTriggerCount`）。基数是 `turnNumber` = `getTurnMessageStats().playerMessageCount`（`turn_messages` 里 `sourceType: player` 的条数），**不是** `session.turnCount`；两者通常同步，但 manual / follower / recursive 执行不写玩家消息，因此不推进 interval（2026-07-20 审计 M-02 澄清） |
-| `event`       | ✅ 生产可用 | 监听特定事件触发（在 Turn 内的事件 fan-out 中由 `shouldTrigger` 判定）                                                                                                                                                                                                                                                                  |
-| `conditional` | ❌ 已拒绝   | **manifest 输入 schema 已把 trigger 枚举收窄为生产四种类型**（`auto` / `manual` / `scheduled` / `event`），声明 `conditional` 的 manifest 在**加载时**就被拒绝，不会进入运行时。历史上曾是"schema 接受、`shouldTrigger` 打印一次性 warning 后跳过"的软 reserved 状态，现已在入口硬拒绝                                                  |
-| `error-retry` | ❌ 已拒绝   | 同上，随 `conditional` 一并从 trigger 枚举移除；声明它的 manifest 在加载时被拒绝                                                                                                                                                                                                                                                        |
+| 类型          | 状态        | 说明                                                                                                                                                                                                                                                                                   |
+| ------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auto`        | ✅ 生产可用 | 每个 Turn 自动触发                                                                                                                                                                                                                                                                     |
+| `manual`      | ✅ 生产可用 | 仅玩家手动触发；启用插件只表示该能力可用，不会自动进入每轮调度                                                                                                                                                                                                                         |
+| `scheduled`   | ✅ 生产可用 | 每 N 个**逻辑玩家回合**触发一次（配合 `interval` + `maxTriggerCount`）。基数是逻辑回合号 `completedPlayerTurns + 1`（`interval: 2` 在第 2、4、6 个玩家回合触发）；manual / follower / recursive 执行不推进 `completedPlayerTurns`，因此不影响 cadence，setup 阶段的交互轮次同样不占号  |
+| `event`       | ✅ 生产可用 | 监听特定事件触发（在 Turn 内的事件 fan-out 中由 `shouldTrigger` 判定）                                                                                                                                                                                                                 |
+| `conditional` | ❌ 已拒绝   | **manifest 输入 schema 已把 trigger 枚举收窄为生产四种类型**（`auto` / `manual` / `scheduled` / `event`），声明 `conditional` 的 manifest 在**加载时**就被拒绝，不会进入运行时。历史上曾是"schema 接受、`shouldTrigger` 打印一次性 warning 后跳过"的软 reserved 状态，现已在入口硬拒绝 |
+| `error-retry` | ❌ 已拒绝   | 同上，随 `conditional` 一并从 trigger 枚举移除；声明它的 manifest 在加载时被拒绝                                                                                                                                                                                                       |
 
 > **可用 vs 已拒绝**：生产实际可用的只有 `auto` / `manual` / `scheduled` / `event` 四种。`conditional` 与 `error-retry` 曾是为未来能力预留的占位类型，现已从 trigger 枚举中彻底移除——声明它们的 manifest 无法通过 loader 校验，不会被加载。
 
@@ -1555,12 +1555,12 @@ setup ──▶ pre-turn ──▶ narrative ──▶ post-turn ──▶ audit
 
 ### trigger 字段速查
 
-| 字段              | 默认 | 含义                                                                                                                                                                             |
-| ----------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `interval`        | 1    | `scheduled` 类型每隔 N 轮触发一次                                                                                                                                                |
-| `cooldownTurns`   | —    | 上一次触发后多少轮内不可再次触发                                                                                                                                                 |
-| `maxTriggerCount` | —    | 整个 session 内最多触发次数（达到后不再触发）                                                                                                                                    |
-| `startTurn`       | —    | **PR-2**：从第几个主循环轮次起开始介入。基于 `completedPlayerTurns`（0-based，legacy `turnCount` 的派生源），与 `setup` 首轮自动跳过互不冲突。适合"让玩家先熟悉环境再介入"的场景 |
+| 字段              | 默认 | 含义                                                                                                                                                                   |
+| ----------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `interval`        | 1    | `scheduled` 类型每隔 N 轮触发一次                                                                                                                                      |
+| `cooldownTurns`   | —    | 上一次触发后多少轮内不可再次触发                                                                                                                                       |
+| `maxTriggerCount` | —    | 整个 session 内最多触发次数（达到后不再触发）                                                                                                                          |
+| `startTurn`       | —    | 从第几个主循环轮次起开始介入。基于 `completedPlayerTurns`（0-based，legacy `turnCount` 的派生源），与 `setup` 首轮自动跳过互不冲突。适合"让玩家先熟悉环境再介入"的场景 |
 
 **`startTurn` 用例**：
 
