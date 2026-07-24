@@ -27,7 +27,6 @@ Covel 是一个插件驱动的 AI 交互式叙事引擎。根目录 [`README.md`
 | [`guide/`](./guide/)               | 插件作者、主题作者、贡献者         | 面向任务的教程和操作步骤。先讲如何做，再链接参考页。                                        |
 | [`reference/`](./reference/)       | 框架开发者、第三方开发者、AI Agent | 权威契约：API、协议、frontmatter、工具、URI、schema、数据形状。字段枚举必须来自代码或测试。 |
 | [`architecture/`](./architecture/) | 框架维护者、深入贡献者             | 运行机制、模块边界、历史决策和慢变设计。                                                    |
-| [`docs/design/`](./design/)        | UI 设计与组件观感维护者            | 静态设计资产和视觉规范。                                                                    |
 
 ## Search Map
 
