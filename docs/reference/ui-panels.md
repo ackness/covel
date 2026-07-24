@@ -336,7 +336,7 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 ## 舞台模式（Stage View）
 
-`viewMode: "stage"` 是消息区之外的第四个呈现档（与 `parsed` / `detailed` / `raw` 并列，头部 `GameViewHeader` 的 Toggle 切换）。它把消息区三件（`ChatMessages` + `PendingDraftsBar` + `MessageComposer`）整体替换成全屏 GalGame 舞台，`GameViewHeader` 保留。
+`viewMode: "stage"` 是消息区之外的第四个呈现档（与 `parsed` / `detailed` / `raw` 并列，头部 `GameViewHeader` 的 Toggle 切换）。它把消息区三件（`ChatMessages` + `PendingDraftsBar` + `MessageComposer`）整体替换成全屏舞台（视觉小说式：场景背景 + 立绘 + 打字机对话框），`GameViewHeader` 保留。
 
 - **渲染条件**：`viewMode === "stage" && session.turnCount >= 1`。Pre-Game（`turnCount === 0`）即使处于 stage 档也走原有消息流（角色创建 / begin-adventure 不受影响）。
 - **初值**：世界包 `world.yaml` 顶层 `defaultViewMode: stage`（→ `WorldRecord.metadata.defaultViewMode`）让会话**首挂载**即进舞台；玩家在头部切换后以玩家选择为准（无持久化）。见 [world-data.md](./world-data.md#world-package)。

@@ -21,7 +21,7 @@
 ### narrative 阶段
 
 - [`narrator`](#narrator) — 主叙事生成器
-- [`chat-mode-narrator`](#chat-mode-narrator) — 对话 / GalGame 模式叙事器（与 narrator 互斥）
+- [`chat-mode-narrator`](#chat-mode-narrator) — 对话 / 舞台模式叙事器（与 narrator 互斥）
 
 ### post-turn 阶段
 
@@ -112,7 +112,7 @@
 | scene-cast                           | plugin      | `pre-turn`                          | scheduled（interval=1，function）                                          | —         | 对话模式当前场景演员，注入 `activeCastContext`                                                 |
 | scene-stage/resolver                 | plugin      | 无（event，不设 stage）             | event（topic: `scene.set`）                                                | —         | 场景/昼夜解析，写 `stage/current`；未命中注册表时向 background-gen 发内部信令                  |
 | narrator                             | core-plugin | `narrative`                         | auto                                                                       | `story`   | 主叙事生成器                                                                                   |
-| chat-mode-narrator                   | plugin      | `narrative`                         | auto                                                                       | `story`   | 对话 / GalGame 模式叙事器（`conflicts: narrator`，`requires` 场景/角色子系统）                 |
+| chat-mode-narrator                   | plugin      | `narrative`                         | auto                                                                       | `story`   | 对话 / 舞台模式叙事器（`conflicts: narrator`，`requires` 场景/角色子系统）                     |
 | guide                                | plugin      | `post-turn`                         | scheduled（interval=1, cooldown=1）                                        | `plugin`  | 行动引导 + 聊天内建议面                                                                        |
 | codex                                | plugin      | `post-turn`                         | auto（每轮，紧跟 narrator 之后）                                           | `plugin`  | 知识图鉴系统（agent runtime）                                                                  |
 | npc-graph/extractor                  | plugin      | `post-turn`                         | scheduled（interval=1, cooldown=1）                                        | `plugin`  | NPC 关系图抽取器                                                                               |
@@ -534,7 +534,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 ⚪ optional · 🧠 uses LLM
 
-**Quick use**：对话 / GalGame 模式的主叙事器，**替代** `narrator`。读 `{{ player.message }}` + 世界观 + 当前场景演员 + NPC 关系，输出对话密度可调的 `outputKind: story` 叙事。
+**Quick use**：对话 / 舞台模式的主叙事器，**替代** `narrator`。读 `{{ player.message }}` + 世界观 + 当前场景演员 + NPC 关系，输出对话密度可调的 `outputKind: story` 叙事。
 
 **路径**: `plugins/chat-mode-narrator/`
 
@@ -762,7 +762,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 ⚪ optional · ⚙ pure function
 
-**Quick use**：为同一回合生成多个回复候选并记录已采纳版本；作为 `prompt-history-rewriter`，把已采纳的备选回合折叠进投影历史。GalGame 的"换个说法重试"靠它。
+**Quick use**：为同一回合生成多个回复候选并记录已采纳版本；作为 `prompt-history-rewriter`，把已采纳的备选回合折叠进投影历史。舞台模式的"换个说法重试"靠它。
 
 **路径**: `plugins/branch-reply/`
 

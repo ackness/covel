@@ -44,7 +44,7 @@ defaultViewMode: stage
 
 `worldData` path 相对 world root。
 
-`defaultViewMode`（可选）：会话首次进入 Playing 时的默认呈现模式。目前仅 `stage`（全屏 GalGame 舞台，见 [ui-panels.md](./ui-panels.md#舞台模式stage-view)）有效，其他值按 `parsed` 处理。它经 `world-seed-loader` 拼进 `WorldRecord.metadata.defaultViewMode`，前端仅在会话首挂载时用作初值——玩家在头部切换视图后即以玩家选择为准。
+`defaultViewMode`（可选）：会话首次进入 Playing 时的默认呈现模式。目前仅 `stage`（全屏舞台模式，见 [ui-panels.md](./ui-panels.md#舞台模式stage-view)）有效，其他值按 `parsed` 处理。它经 `world-seed-loader` 拼进 `WorldRecord.metadata.defaultViewMode`，前端仅在会话首挂载时用作初值——玩家在头部切换视图后即以玩家选择为准。
 
 > **@deprecated 顶层 `requiredPlugins` / `recommendedPlugins` / `excludedPlugins`**：仍可用（向后兼容），但**请改用 `pluginPolicy` 下的同名字段**。加载时框架会把顶层这三个字段**折叠进 `pluginPolicy`（去重合并）**，`WorldRecord.metadata` 只保留 `pluginPolicy` 作为插件选择的唯一来源。`pluginPolicy` 还能表达 `preset` / `packs` / `preferTags` 等场景意图，顶层字段无法表达。
 

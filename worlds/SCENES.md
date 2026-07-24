@@ -1,6 +1,6 @@
 # 场景背景 — 提示词文档（Scene Prompt Spec）
 
-为世界生成 GalGame 场景背景（教室、社团楼、海堤这类地点插画），日/夜各一张，接入未来的场景插件，存入各世界的 `media/`，**生成一次、长期复用**。
+为世界生成舞台模式（stage mode）场景背景（教室、社团楼、海堤这类地点插画），日/夜各一张，接入 `scene-stage` 插件，存入各世界的 `media/`，**生成一次、长期复用**。
 
 - 机器清单（脚本直接读）：`worlds/haruka-academy/media/scenes.json`
 - 每张图的最终提示词 = `style.prefix` + 该场景 `subject`（夜图优先用 `subjectNight`，缺省回退 `subject`）+ `style.suffix`（+ 夜图追加 `style.nightSuffix`），`negative` 作为负向提示。

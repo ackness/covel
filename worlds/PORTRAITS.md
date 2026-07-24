@@ -43,7 +43,7 @@ npx tsx scripts/generate-portraits.mjs haruka-academy --limit 1 --dry-run
 
 ## 接入 character-presence（已接线）
 
-展示立绘的插件就是 **`character-presence`**：右侧角色面板显示头像，对话模式下作为 GalGame 立绘。两个世界的 `data/world.data.yaml` 已加好两条 source：
+展示立绘的插件就是 **`character-presence`**：右侧角色面板显示头像，舞台模式（stage mode）下作为立绘。两个世界的 `data/world.data.yaml` 已加好两条 source：
 
 - `media` source：导入 `media/portraits/` 下的图，按 **sha256 内容寻址**存入媒体库，`to: media` + `indexTo: plugin:character-presence/assets`；
 - `presence` source（`media/presence.json`）：把 `characterId: npc-<id>` 的 `avatar` / `sprite` 指向上面导入的媒体（`mediaRef.id` = 该图的 sha256）。

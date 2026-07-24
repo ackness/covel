@@ -57,8 +57,8 @@ pluginSettings:
     activeSpeakerCount: 2
 # World-authored core-memory blocks for a dialogue / slice-of-life romance.
 # Merged on top of plugin/framework blocks for this world's sessions only, so a
-# GalGame-style world tracks relationships, promises, rumors and the festival
-# countdown without forking a plugin.
+# stage-mode (visual-novel) world tracks relationships, promises, rumors and
+# the festival countdown without forking a plugin.
 memoryBlocks:
   - label: relationships
     displayName:
