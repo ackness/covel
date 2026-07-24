@@ -7,8 +7,16 @@ description:
   zh: 在开局时读取世界资料，准备好第一段冒险。
   en: Reads the world details at the start and prepares the first step of the adventure.
 pluginType: core-plugin
+# Setup runtime WITHOUT an explicit `stage`: the loader forbids `stage: setup`
+# alongside a `scheduled`/`interval` trigger (setup must be `auto`), so this
+# runtime keeps the legacy `scheduled interval:1 max:1` idiom and lets normalize
+# DERIVE `stage: setup` from the pre-game priority band (`priority` is retained
+# solely as that stage source + the conservative setup-order chain's sort key).
+# Retire `priority` here once the `scheduled → auto`+`stage: setup` migration
+# lands (needs the loader to accept `stage: setup` on this trigger).
 priority: 10
 runtimeType: function
+resultFormat: envelope-v1
 outputKind: system
 handler: ./handler.js
 tags:

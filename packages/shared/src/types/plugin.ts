@@ -22,47 +22,25 @@ export type RuntimeType = "agent" | "function";
 /**
  * Runtime trigger modes.
  *
- * Production-active modes (the scheduler actually fires them):
+ * The four production modes (the historical `conditional` / `error-retry`
+ * values were removed from the enum — manifests declaring them are rejected
+ * at load):
  * - `auto`      — every turn.
  * - `manual`    — only on an explicit `POST /plugin-rpc` request.
  * - `scheduled` — every N turns (`interval`), bounded by `maxTriggerCount`.
  * - `event`     — when a subscribed `topic` is emitted within the turn's
  *                 event fan-out (see `turn-event-chain.ts`).
- *
- * RESERVED modes (schema-accepted for forward-compat, but **never fire** —
- * `shouldTrigger` / the scheduler do not implement them yet; a runtime that
- * declares one stays permanently inactive):
- * - `conditional` — no condition-expression engine is wired.
- *                   `shouldTrigger` returns false and warns once.
- * - `error-retry` — the scheduler never surfaces upstream failures.
- *                   `shouldTrigger` returns false and warns once.
- *
- * Prefer `auto` / `manual` / `scheduled` / `event` until the reserved modes
- * are implemented.
  */
-export type TriggerType =
-  | "auto"
-  | "manual"
-  | "scheduled"
-  | "event"
-  // ── reserved (never fires in production) ──
-  | "conditional"
-  | "error-retry";
+export type TriggerType = "auto" | "manual" | "scheduled" | "event";
 
 export interface TriggerConfig {
   readonly type: TriggerType;
   /** Interval in turns for `scheduled` mode. */
   readonly interval?: number;
-  /** RESERVED — condition expression for `conditional` mode. No engine
-   *  evaluates this yet, so a `conditional` runtime never triggers. */
-  readonly condition?: string;
   /** Event topic for `event` mode. */
   readonly topic?: string;
   /** Max trigger count within a session. */
   readonly maxTriggerCount?: number;
-  /** RESERVED — max retry count for `error-retry` mode. The scheduler never
-   *  surfaces upstream failures, so `error-retry` does not fire in production. */
-  readonly maxRetryCount?: number;
   /** Min turns between two triggers. */
   readonly cooldownTurns?: number;
   /**
@@ -119,7 +97,29 @@ export interface PluginDataInjectDecl {
   readonly maxEntries?: number;
 }
 
-export type InputInjectDecl = RuntimeInjectDecl | PluginDataInjectDecl;
+/**
+ * Consume a producer runtime's persisted `recordAs` export from a previous
+ * execution. The consumer reads the latest revision committed before this
+ * execution started. Functions read `ctx.exports.<name>`; agents receive a
+ * same-named prompt segment. Declared but not yet consumed by the framework —
+ * consumption lands with the I/O-contract migration step.
+ */
+export interface RuntimeExportInjectDecl {
+  readonly kind: "runtime-export";
+  readonly name: string;
+  readonly from:
+    | { readonly runtime: string }
+    | {
+        readonly capability: string;
+        readonly cardinality?: import("./runtime-scheduling.js").DependencyCardinality;
+      };
+  readonly recordAs: string;
+  readonly accepts?: string;
+  readonly required?: boolean;
+}
+
+export type InputInjectDecl =
+  RuntimeInjectDecl | PluginDataInjectDecl | RuntimeExportInjectDecl;
 
 export interface InputToolDecl {
   readonly plugin: string;
@@ -127,6 +127,13 @@ export interface InputToolDecl {
 }
 
 export interface InputConfig {
+  /**
+   * Runtime-dir-relative JSON Schema path validating this runtime's
+   * activation payload (manual RPC payload / event payload). Function and
+   * agent runtimes consume the same validated canonical payload; enforced
+   * on `RuntimeActivation.payload` before dispatch.
+   */
+  readonly schema?: string;
   readonly inject?: readonly InputInjectDecl[];
   readonly tools?: readonly InputToolDecl[];
 }
@@ -585,6 +592,71 @@ export interface RuntimeManifest {
    * Implemented in packages/runtime/src/turn-executor.ts (executeOneRuntime).
    */
   readonly upstreamRequired?: readonly UpstreamRequirement[];
+  /**
+   * Named scheduling stage (replaces numeric priority bands). Required for
+   * `auto` / `scheduled` runtimes under the strict authoring schema;
+   * forbidden for `event` / `manual`. During the compat period legacy
+   * manifests keep using `priority` and the loader derives the stage from
+   * the band. Declared but not yet consumed by the production scheduler.
+   */
+  readonly stage?: import("./runtime-scheduling.js").Stage;
+  /**
+   * Weak ordering dependencies (pure ordering, no gate). Target failure or
+   * absence never blocks this runtime. Declared but not yet consumed.
+   */
+  readonly after?: readonly import("./runtime-scheduling.js").DependencyRef[];
+  /**
+   * Strong dependencies: ordering + gate. `scope: turn` (default) requires
+   * same-execution success; `scope: session` gates on the persistent
+   * snapshot frozen at execution start (setup runtimes only). Supersedes
+   * `upstreamRequired` (kept as a compat alias). Declared but not yet
+   * consumed by the production scheduler.
+   */
+  readonly needs?: readonly import("./runtime-scheduling.js").DependencyRef[];
+  /**
+   * Typed same-execution data bindings. `required: true` implies
+   * `needs(turn)`, `false` implies `after`. Resolved into provenance-wrapped
+   * `ctx.inputs` slots (function) / a reserved prompt block (agent), with a
+   * turn gate on required bindings.
+   */
+  readonly inputs?: Readonly<
+    Record<string, import("./runtime-scheduling.js").RuntimeBinding>
+  >;
+  /**
+   * How the normalizer parses this runtime's handler return value.
+   * `legacy` (default): whole return object preserved as the value with
+   * known control keys copied to effects. `envelope-v1`: explicit
+   * HandlerResult discriminated union with value validation (observe-only
+   * for function runtimes until the I/O-contract step enforces it).
+   */
+  readonly resultFormat?: import("./runtime-scheduling.js").RuntimeResultFormat;
+  /**
+   * Function runtimes only: handler may be replayed from a frozen
+   * activation boundary to resume approval/HTTP asks. Default false.
+   */
+  readonly suspensionSafe?: boolean;
+  /**
+   * Explicit read/write-set override for parallel hazard detection.
+   * Defaults are derived from declared builtin tools + proposal types.
+   * Declared but not yet consumed.
+   */
+  readonly effects?: import("./runtime-scheduling.js").EffectsDecl;
+  /**
+   * Declared permission upper bounds. `http` lists canonical HTTPS origins
+   * (+ methods) this plugin may call through the Public Plugin API.
+   * Declared but not yet enforced.
+   */
+  readonly permissions?: {
+    readonly http?: readonly import("./runtime-scheduling.js").HttpPermissionDecl[];
+  };
+  /**
+   * Compat-period projection of kernel job-status records into this
+   * plugin's legacy plugin-data views. Rejected by the strict authoring
+   * schema. Declared but not yet consumed.
+   */
+  readonly jobStatus?: {
+    readonly legacyViews?: readonly import("./runtime-scheduling.js").LegacyJobViewDecl[];
+  };
   readonly trigger?: TriggerConfig;
   /**
    * Execution mode when this runtime is activated via a manual plugin-rpc call
@@ -645,7 +717,7 @@ export interface RuntimeManifest {
    *
    * The content supports template interpolation (`{{ player.xxx }}`, etc.)
    * identical to the plugin body. Multiple active plugins' notes are merged
-   * in priority order.
+   * in (stage, name) order.
    */
   readonly authorsNote?: AuthorsNoteDecl;
   /**

@@ -2,6 +2,12 @@
  * Execution types for turns, runtime results, and tool calls.
  */
 
+import type { ExecutionContext, JsonValue } from "./runtime-scheduling.js";
+import type {
+  RanSetupRuntime,
+  SetupRuntimeState,
+} from "./runtime-lifecycle.js";
+
 // ── Runtime execution status ─────────────────────────────────────
 
 export type RuntimeStatus =
@@ -23,8 +29,14 @@ export interface ToolCallRecord {
   readonly pluginId: string;
   readonly runtimeId: string;
   readonly turnId: string;
-  readonly input: Readonly<Record<string, unknown>>;
-  readonly output: unknown;
+  /**
+   * JSON wire value only (docs 02 §2). Callers pass tool arguments / results
+   * through the serialization boundary (`toJsonValueOrDiagnostic`) before
+   * constructing the record, so a non-serialisable value collapses to a bounded
+   * diagnostic string rather than an arbitrary object.
+   */
+  readonly input: JsonValue;
+  readonly output: JsonValue;
   readonly durationMs: number;
   readonly approvalStatus: ApprovalStatus;
   readonly timestamp: string;
@@ -94,6 +106,23 @@ export interface TurnInput {
    * recursiveCall. Defaults to `player` when omitted.
    */
   readonly origin?: "player" | "manual" | "follower" | "recursive";
+  /**
+   * Transition field: whether the session was still in the Pre-Game band when
+   * the caller snapshotted it (before this execution ran). Only the player
+   * actions route feeds it; other entries omit it (treated as `false`). Read
+   * once at execution creation to fix `ExecutionContext.countPolicy`. Removed
+   * once the persisted phase field lands and the kernel derives this itself.
+   */
+  readonly preGamePending?: boolean;
+  /**
+   * Identity of the player's logical turn, minted once at the player action
+   * entry (actions route) and carried into `ExecutionContext.logicalTurnId`.
+   * The finalizer keys the logical-turn completion ledger on it, so a retried
+   * or duplicated execution of the same logical turn counts at most once. Only
+   * the player path sets it; manual RPC / background follower / recursive
+   * executions leave it unset (they never complete a player turn).
+   */
+  readonly logicalTurnId?: string;
   /** Parent turnId when this execution is a nested recursiveCall. */
   readonly parentTurnId?: string;
   /**
@@ -137,6 +166,14 @@ export interface TurnResult {
   readonly sessionId: string;
   readonly runtimeResults: readonly RuntimeResult[];
   /**
+   * Immutable identity of the scheduling run that produced this result,
+   * created once at `executeTurn` entry. Carries the normalized
+   * `ExecutionOrigin` and counting responsibility for the commit-owning caller
+   * and later scheduling waves. Optional: entries not yet threaded through it
+   * (e.g. approval-resume) omit it during the redesign.
+   */
+  readonly executionContext?: ExecutionContext;
+  /**
    * Runtime results produced by nested `ctx.recursiveCall` executions,
    * flattened across depths. They are NOT part of
    * `runtimeResults` (which persistTurnResult snapshots — nested turns
@@ -145,6 +182,27 @@ export interface TurnResult {
    * results; previously their proposals were silently dropped.
    */
   readonly nestedRuntimeResults?: readonly RuntimeResult[];
+  /**
+   * Setup-band completion delta observed during this execution: the setup
+   * runtimes that reported done for the first time (with their mirrored
+   * `SetupRuntimeState`) and whether that leaves every active setup runtime
+   * resolved. The commit-owning caller folds this into the session-clock write
+   * inside the finalize transaction (phase flip + `setupRuntimes` mirror),
+   * atomically with the turn's proposals. Absent on manual / non-player
+   * executions, which skip setup-completion tracking.
+   */
+  readonly setupCompletion?: {
+    readonly newlyDone: Readonly<Record<string, SetupRuntimeState>>;
+    readonly allSetupDone: boolean;
+  };
+  /**
+   * Setup runtimes that ran (entered guard/handler) in this execution. The
+   * commit-owning caller passes them to `finalizeExecution`, which — AFTER the
+   * commit outcome is known and OUTSIDE the transaction — terminalises each
+   * attempt ledger entry and writes the pending/blocked mirror (a rolled-back
+   * commit still burns an attempt). Absent when no setup runtime ran.
+   */
+  readonly setupRan?: readonly RanSetupRuntime[];
   readonly conflicts?: readonly WriteConflict[];
   readonly auditResult?: RuntimeResult;
   /** Forms requiring player input before next turn (collected from runtime outputs). */
@@ -251,7 +309,6 @@ export interface PendingInputInfo {
 export interface WriteConflictEntry {
   readonly runtimeId: string;
   readonly pluginId: string;
-  readonly priority: number;
   readonly newValue: unknown;
   readonly reason?: string;
 }

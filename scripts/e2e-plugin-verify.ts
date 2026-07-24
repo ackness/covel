@@ -202,15 +202,21 @@ interface PluginFlowTrigger {
   startTurn?: number;
 }
 
+// Named scheduling stages replaced the old numeric priority bands. A staged
+// runtime maps 1:1 to its stage segment; stage-less runtimes (event / manual /
+// contribution-only) carry no `stage` and group under "event-manual" — they
+// are NOT scheduled into a turn regardless of their trigger.type.
+type FlowStage = "setup" | "pre-turn" | "narrative" | "post-turn" | "audit";
+type FlowSegmentId = FlowStage | "event-manual";
+
 interface PluginFlowStep {
   id: string;
   pluginId: string;
   pluginName: string;
   runtimeId: string;
   runtimeName: string;
-  priority: number;
-  segmentId:
-    "start" | "pre-game" | "pre-narrator" | "narrator" | "post-narrator";
+  stage?: FlowStage;
+  segmentId: FlowSegmentId;
   runtimeType: string;
   outputKind: string;
   trigger: PluginFlowTrigger;
@@ -221,11 +227,9 @@ interface PluginFlowStep {
 interface PluginFlowResponse {
   version: string;
   segments: Array<{
-    id: string;
+    id: FlowSegmentId;
     label: string;
     rangeLabel: string;
-    minPriority: number;
-    maxPriority: number;
   }>;
   plugins: Array<{
     id: string;
@@ -241,6 +245,7 @@ interface SessionRecord {
   worldId?: string;
   status: string;
   turnCount: number;
+  phase?: string;
   preGameCompleted?: readonly string[];
   locale?: string;
   activePlugins?: readonly string[];
@@ -655,84 +660,100 @@ function previewJson(value: unknown, max = 80): string {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Trigger expectation computation (mirrors packages/runtime/src/trigger.ts)
+// Trigger expectation — derived from the stage scheduler, not priority bands
 // ──────────────────────────────────────────────────────────────────
 
-interface TriggerState {
-  triggerCount: number;
-  lastTriggerTurnNumber: number | null;
+// Segment display / sort order. Stage-less runtimes ("event-manual") rank
+// last, mirroring server-side stageRank (packages/shared scheduling).
+const SEGMENT_ORDER: readonly FlowSegmentId[] = [
+  "setup",
+  "pre-turn",
+  "narrative",
+  "post-turn",
+  "audit",
+  "event-manual",
+];
+
+function segmentRank(id: string): number {
+  const i = SEGMENT_ORDER.indexOf(id as FlowSegmentId);
+  return i === -1 ? SEGMENT_ORDER.length : i;
 }
 
-interface TriggerExpectation {
-  expected: boolean;
+/** Which lifecycle band a turn runs in, mirroring `session.phase`. */
+type TurnBand = "setup" | "playing";
+
+/**
+ * How a runtime relates to the current turn under the stage scheduler.
+ *   inactive  — plugin not in the session's activePlugins (never scheduled).
+ *   unstaged  — no stage: event / manual / contribution-only. Fires only on
+ *               its own event/manual trigger, never as part of a staged turn.
+ *   off-band  — staged, active, but its stage does not run in this band.
+ *   setup     — a setup-stage runtime in the setup band. Completion is judged
+ *               authoritatively from `session.preGameCompleted`, not per turn
+ *               (setup work can settle inside the form-submit sub-execution
+ *               the turn loop does not read back).
+ *   auto      — staged, active, in-band, trigger auto → expected every turn.
+ *   scheduled — staged, active, in-band, trigger scheduled → asserted to fire
+ *               ≥1 time across the window (interval/cooldown/startTurn are NOT
+ *               re-simulated; the run-level check lives in Phase 7).
+ */
+type ExpectClass =
+  "inactive" | "unstaged" | "off-band" | "setup" | "auto" | "scheduled";
+
+interface StepExpectation {
+  cls: ExpectClass;
   reason: string;
 }
 
 /**
- * Compute whether a runtime should have triggered given the framework's
- * trigger rules. This mirrors packages/runtime/src/trigger.ts. The plugin
- * flow metadata from /api/plugin-flows drives this check, so it adapts
- * automatically when plugins are added or modified.
+ * Derive a runtime's turn expectation from the modern stage scheduler.
  *
- * Band filtering (priority 0-99 Pre-Game vs 100-1000 main loop) is handled
- * server-side by the scheduler based on `session.turnCount`. The script
- * does not re-validate the band — it only checks trigger rules that remain
- * in the manifest (interval, cooldown, maxTriggerCount, startTurn).
+ * The single source of truth is the session's active-plugin set intersected
+ * with each runtime's `stage`/`trigger` — NOT the retired numeric priority
+ * bands and NOT a re-simulation of interval/cooldown. Three gates in order:
+ *   1. active set — mutually-exclusive providers (narrator vs
+ *      chat-mode-narrator) resolve here: only the active one is expected.
+ *   2. stage — a stage-less runtime (memory / director / cost-gate: `auto`
+ *      but no stage) is never stage-scheduled.
+ *   3. band — setup-stage runs only in the setup phase; all other stages run
+ *      only in playing turns.
  */
-function computeExpectation(
+function classifyStep(
   step: PluginFlowStep,
-  turnNumber: number,
-  playingTurnNumber: number,
-  state: TriggerState,
-): TriggerExpectation {
-  const t = step.trigger;
-
-  // startTurn is compared against playingTurnNumber, not turnNumber.
-  if (t.startTurn !== undefined && playingTurnNumber < t.startTurn) {
+  band: TurnBand,
+  active: ReadonlySet<string>,
+): StepExpectation {
+  if (!active.has(step.pluginId)) {
+    return { cls: "inactive", reason: "plugin not in session active set" };
+  }
+  if (step.stage === undefined) {
     return {
-      expected: false,
-      reason: `startTurn(${t.startTurn}) not reached (playingTurn=${playingTurnNumber})`,
+      cls: "unstaged",
+      reason: `${step.trigger.type}/no-stage (event·manual·contribution)`,
     };
   }
-
-  if (
-    t.maxTriggerCount !== undefined &&
-    state.triggerCount >= t.maxTriggerCount
-  ) {
+  if (step.stage === "setup") {
+    return band === "setup"
+      ? { cls: "setup", reason: "setup stage — via preGameCompleted" }
+      : { cls: "off-band", reason: "setup stage — idle in playing band" };
+  }
+  // Non-setup stages (pre-turn / narrative / post-turn / audit) run in playing
+  // turns only.
+  if (band !== "playing") {
     return {
-      expected: false,
-      reason: `maxTriggerCount(${t.maxTriggerCount}) reached`,
+      cls: "off-band",
+      reason: `${step.stage} stage — idle in setup band`,
     };
   }
-
-  const turnsSince =
-    state.lastTriggerTurnNumber !== null
-      ? turnNumber - state.lastTriggerTurnNumber
-      : Number.POSITIVE_INFINITY;
-
-  if (t.cooldownTurns !== undefined && turnsSince < t.cooldownTurns) {
-    return {
-      expected: false,
-      reason: `cooldown: turnsSince=${turnsSince}<cd=${t.cooldownTurns}`,
-    };
+  if (step.trigger.type === "auto") {
+    return { cls: "auto", reason: "auto — every in-band turn" };
   }
-
-  if (t.type === "auto") {
-    return { expected: true, reason: "auto" };
+  if (step.trigger.type === "scheduled") {
+    return { cls: "scheduled", reason: "scheduled — ≥1 across window" };
   }
-
-  if (t.type === "scheduled") {
-    const interval = t.interval ?? 1;
-    const hits = turnNumber % interval === 0;
-    return {
-      expected: hits,
-      reason: hits
-        ? `scheduled interval=${interval}`
-        : `turnNumber(${turnNumber})%${interval}≠0`,
-    };
-  }
-
-  return { expected: false, reason: `unknown trigger type: ${t.type}` };
+  // Defensive: a staged runtime with an event/manual trigger is not expected
+  // by the stage scheduler.
+  return { cls: "unstaged", reason: `trigger ${step.trigger.type}` };
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -953,19 +974,17 @@ async function runTurn(
 
 interface PerTurnContext {
   turnNumber: number;
-  /**
-   * Playing-phase turn counter. Mirrors server-side semantics:
-   * 0-based from the first turn that runs after the Pre-Game band ends
-   * (i.e. once `session.turnCount >= 1`). Reset back to 0 if session
-   * rewinds to Pre-Game (turnCount === 0).
-   */
-  playingTurnNumber: number;
-  /** Mirrors `session.turnCount` — 0 for Pre-Game band, >=1 for main loop. */
+  /** Mirrors `session.turnCount` — 0 for the setup band, >=1 for playing. */
   turnCount: number;
   /** Mirrors `session.status` — 'active' | 'paused' | 'ended'. */
   status: string;
   flow: PluginFlowResponse;
-  triggerStates: Map<string, TriggerState>;
+  /** Session's live active-plugin set (pluginIds); refreshed each turn. */
+  active: Set<string>;
+  /** Runtimes classified `scheduled` (in-band) in ≥1 turn — the opportunity set. */
+  scheduledOpportunity: Set<string>;
+  /** Runtimes that fired OK while classified `scheduled`. */
+  scheduledFired: Set<string>;
   assertions: Assertions;
   runtimeFilter?: string;
   pluginFilter?: string;
@@ -993,8 +1012,12 @@ function reportTurn(ctx: PerTurnContext, exec: TurnExecution): void {
   console.log(`  Elapsed: ${(elapsedMs / 1000).toFixed(1)}s`);
 
   const timelineRows: string[][] = [];
+  // Order by (stage, name) — the priority-band ordinal is gone; the stage
+  // scheduler orders within a stage by dependencies only.
   const orderedSteps = [...ctx.flow.steps].sort(
-    (a, b) => a.priority - b.priority,
+    (a, b) =>
+      segmentRank(a.segmentId) - segmentRank(b.segmentId) ||
+      a.runtimeId.localeCompare(b.runtimeId),
   );
 
   for (const step of orderedSteps) {
@@ -1002,7 +1025,7 @@ function reportTurn(ctx: PerTurnContext, exec: TurnExecution): void {
     const rt = ran.get(step.runtimeId);
     if (!rt) continue;
     timelineRows.push([
-      String(step.priority),
+      step.stage ?? "-",
       step.runtimeId,
       rt.status,
       `${(rt.durationMs / 1000).toFixed(1)}s`,
@@ -1017,7 +1040,7 @@ function reportTurn(ctx: PerTurnContext, exec: TurnExecution): void {
     if (ctx.runtimeFilter && rt.runtimeId !== ctx.runtimeFilter) continue;
     if (ctx.pluginFilter && rt.pluginId !== ctx.pluginFilter) continue;
     timelineRows.push([
-      "?",
+      "-",
       rt.runtimeId,
       rt.status,
       `${(rt.durationMs / 1000).toFixed(1)}s`,
@@ -1027,7 +1050,7 @@ function reportTurn(ctx: PerTurnContext, exec: TurnExecution): void {
 
   console.log("");
   console.log("  Runtime Timeline:");
-  printTable(["pri", "runtime", "status", "dur", "output"], timelineRows);
+  printTable(["stage", "runtime", "status", "dur", "output"], timelineRows);
 
   // ── Tool calls ─────────────────────────────────────────────────
   const toolCallRows: string[][] = [];
@@ -1060,72 +1083,115 @@ function reportTurn(ctx: PerTurnContext, exec: TurnExecution): void {
   );
 
   // ── Trigger verification ──────────────────────────────────────
+  // Verdicts derive from `classifyStep` (stage scheduler), not priority bands:
+  //   PASS  — expected (auto/setup) and ran OK.
+  //   FAIL  — an in-band `auto` runtime did not run, or any expected runtime
+  //           ran with a non-success status. Scheduled misses are NOT failed
+  //           here; the run-level ≥1 check in Phase 7 owns them.
+  //   WAIT  — scheduled runtime idle this turn (interval/cooldown may gate),
+  //           or a setup runtime not yet in preGameCompleted (Phase 6 owns it).
+  //   FIRE  — a stage-less event/manual runtime fired (informational).
+  //   WARN  — an inactive / off-band runtime ran unexpectedly (soft anomaly).
+  //   SKIP  — not expected this turn (inactive / unstaged / off-band / gated).
   console.log("");
   console.log("  Trigger Verification:");
+  const band: TurnBand = ctx.turnCount === 0 ? "setup" : "playing";
   const triggerRows: string[][] = [];
   for (const step of orderedSteps) {
     if (!runtimePasses(step, ctx.runtimeFilter, ctx.pluginFilter)) continue;
-    const state = ctx.triggerStates.get(step.runtimeId) ?? {
-      triggerCount: 0,
-      lastTriggerTurnNumber: null,
-    };
-    const expectation = computeExpectation(
-      step,
-      ctx.turnNumber,
-      ctx.playingTurnNumber,
-      state,
-    );
-    const ranIt = ran.has(step.runtimeId);
+    const { cls, reason } = classifyStep(step, band, ctx.active);
+    const rt = ran.get(step.runtimeId);
+    const ranIt = rt !== undefined;
+    // A runtime that appears in the results was reached by the scheduler.
+    // `skipped` means reached-but-declined (guard/no-op / already done) — it is
+    // NOT a failure and counts as "triggered". Only `failed` is an error.
+    const ranActed = rt?.status === "success" || rt?.status === "completed";
+    const ranFailed = rt?.status === "failed";
+    const ranSkipped = ranIt && !ranActed && !ranFailed;
 
     let verdict: string;
-    if (expectation.expected && ranIt) {
-      const rt = ran.get(step.runtimeId)!;
-      if (rt.status === "success" || rt.status === "completed") {
-        verdict = "PASS";
-        ctx.assertions.pass(`${step.runtimeId} triggered`);
-      } else {
-        verdict = "FAIL";
-        ctx.assertions.fail(`${step.runtimeId} ran with status=${rt.status}`);
-      }
-    } else if (!expectation.expected && !ranIt) {
-      verdict = "SKIP";
-    } else if (expectation.expected && !ranIt) {
-      verdict = "FAIL";
-      ctx.assertions.fail(
-        `${step.runtimeId} should have triggered (${expectation.reason})`,
-      );
-    } else {
-      verdict = "FAIL";
-      ctx.assertions.fail(
-        `${step.runtimeId} ran but was not expected (${expectation.reason})`,
-      );
+    let expectedCol: string;
+    switch (cls) {
+      case "inactive":
+      case "off-band":
+        expectedCol = "no";
+        if (ranIt) {
+          verdict = "WARN";
+          ctx.assertions.warn(`${step.runtimeId} ran but ${reason}`);
+        } else {
+          verdict = "SKIP";
+        }
+        break;
+      case "unstaged":
+        expectedCol = "-";
+        verdict = ranIt ? "FIRE" : "SKIP";
+        break;
+      case "setup":
+        // Completion is asserted in Phase 6 from preGameCompleted; per turn we
+        // only surface progress (and flag a hard failure). No per-turn pass
+        // assertion — that would double-count Phase 6.
+        expectedCol = "setup";
+        if (ranFailed) {
+          verdict = "FAIL";
+          ctx.assertions.fail(
+            `${step.runtimeId} ran with status=${rt!.status}`,
+          );
+        } else {
+          verdict = ranActed ? "PASS" : ranSkipped ? "SKIP" : "WAIT";
+        }
+        break;
+      case "auto":
+        expectedCol = "yes";
+        if (ranActed) {
+          verdict = "PASS";
+          ctx.assertions.pass(`${step.runtimeId} triggered`);
+        } else if (ranFailed) {
+          verdict = "FAIL";
+          ctx.assertions.fail(
+            `${step.runtimeId} ran with status=${rt!.status}`,
+          );
+        } else if (ranSkipped) {
+          // Reached but no-op'd this turn — not a failure.
+          verdict = "SKIP";
+        } else {
+          verdict = "FAIL";
+          ctx.assertions.fail(`${step.runtimeId} (auto) did not trigger`);
+        }
+        break;
+      case "scheduled":
+        expectedCol = "≥1";
+        ctx.scheduledOpportunity.add(step.runtimeId);
+        if (ranActed) {
+          verdict = "PASS";
+          ctx.scheduledFired.add(step.runtimeId);
+          ctx.assertions.pass(`${step.runtimeId} triggered`);
+        } else if (ranFailed) {
+          verdict = "FAIL";
+          ctx.assertions.fail(
+            `${step.runtimeId} ran with status=${rt!.status}`,
+          );
+        } else if (ranSkipped) {
+          // Reached (scheduler selected it) but declined — satisfies ≥1.
+          verdict = "SKIP";
+          ctx.scheduledFired.add(step.runtimeId);
+        } else {
+          verdict = "WAIT";
+        }
+        break;
     }
 
     triggerRows.push([
       verdict,
       step.runtimeId,
-      expectation.expected ? "yes" : "no",
+      expectedCol,
       ranIt ? "yes" : "no",
-      expectation.reason,
+      reason,
     ]);
   }
   printTable(
     ["result", "runtime", "expected", "actual", "reason"],
     triggerRows,
   );
-
-  // ── Update trigger state for next turn ─────────────────────────
-  for (const rt of turnRecord.runtimeResults) {
-    if (rt.status !== "success" && rt.status !== "completed") continue;
-    const s = ctx.triggerStates.get(rt.runtimeId) ?? {
-      triggerCount: 0,
-      lastTriggerTurnNumber: null,
-    };
-    ctx.triggerStates.set(rt.runtimeId, {
-      triggerCount: s.triggerCount + 1,
-      lastTriggerTurnNumber: ctx.turnNumber,
-    });
-  }
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -1289,22 +1355,20 @@ async function runMain(
   kv("Runtimes", flow.steps.length);
 
   for (const seg of flow.segments) {
-    const segSteps = flow.steps.filter(
-      (s) => s.priority >= seg.minPriority && s.priority <= seg.maxPriority,
-    );
+    const segSteps = flow.steps.filter((s) => s.segmentId === seg.id);
     if (segSteps.length === 0) continue;
     console.log("");
-    console.log(`  ${seg.label} [priority ${seg.rangeLabel}]`);
+    console.log(`  ${seg.label} [${seg.rangeLabel}]`);
     const rows = segSteps
-      .sort((a, b) => a.priority - b.priority)
+      .sort((a, b) => a.runtimeId.localeCompare(b.runtimeId))
       .map((s) => [
-        String(s.priority),
+        s.stage ?? "-",
         s.runtimeId,
         s.runtimeType,
         s.outputKind,
         formatTrigger(s.trigger),
       ]);
-    printTable(["pri", "runtime", "type", "output", "trigger"], rows);
+    printTable(["stage", "runtime", "type", "output", "trigger"], rows);
   }
 
   if (args.runtimeFilter) {
@@ -1359,47 +1423,36 @@ async function runMain(
   // ── Phase 5: Turn execution ────────────────────────────────────
   section("Phase 5: Turn Execution");
 
-  const triggerStates = new Map<string, TriggerState>();
-  for (const step of flow.steps) {
-    triggerStates.set(step.runtimeId, {
-      triggerCount: 0,
-      lastTriggerTurnNumber: null,
-    });
-  }
-
-  // Mirrors server semantics: once the session first leaves the Pre-Game
-  // band (turnCount advances from 0 → 1), remember the script's own
-  // turnNumber at that moment and use it as the origin for
-  // playingTurnNumber from then on.
-  let playingTurnOrigin: number | null = null;
-
   const ctx: PerTurnContext = {
     turnNumber: 0,
-    playingTurnNumber: 0,
     turnCount: session.turnCount,
     status: session.status,
     flow,
-    triggerStates,
+    // Expectations are derived against the session's REAL active set (seeded
+    // by the world manifest at create), not the global plugin pool. Read it
+    // back from the create response, then refresh from each session re-fetch.
+    active: new Set(session.activePlugins ?? []),
+    scheduledOpportunity: new Set(),
+    scheduledFired: new Set(),
     assertions,
     runtimeFilter: args.runtimeFilter,
     pluginFilter: args.pluginFilter,
   };
+  kv("Active plugins", [...ctx.active].join(", ") || "(none)");
 
-  function refreshPlayingTurn(): void {
-    if (ctx.turnCount >= 1) {
-      if (playingTurnOrigin === null) playingTurnOrigin = ctx.turnNumber;
-      ctx.playingTurnNumber = Math.max(0, ctx.turnNumber - playingTurnOrigin);
-    } else {
-      ctx.playingTurnNumber = 0;
-    }
+  // Fold a fresh SessionRecord into the context: lifecycle band + live active
+  // set (enable/disable mid-session applies next turn, so re-read every turn).
+  function refreshSession(rec: SessionRecord): void {
+    ctx.turnCount = rec.turnCount;
+    ctx.status = rec.status;
+    if (rec.activePlugins) ctx.active = new Set(rec.activePlugins);
   }
 
   function bandLabel(): string {
-    return ctx.turnCount === 0 ? "pre-game" : "playing";
+    return ctx.turnCount === 0 ? "setup" : "playing";
   }
 
   // Turn 1: start_session
-  refreshPlayingTurn();
   console.log("");
   console.log(
     `  Turn ${ctx.turnNumber + 1}: start_session (band=${bandLabel()}, turnCount=${ctx.turnCount})`,
@@ -1463,9 +1516,7 @@ async function runMain(
       args.server,
       `/sessions/${session.id}`,
     );
-    ctx.turnCount = sessAfterSubmit.turnCount;
-    ctx.status = sessAfterSubmit.status;
-    refreshPlayingTurn();
+    refreshSession(sessAfterSubmit);
 
     console.log("");
     console.log(
@@ -1485,9 +1536,7 @@ async function runMain(
     args.server,
     `/sessions/${session.id}`,
   );
-  ctx.turnCount = sess.turnCount;
-  ctx.status = sess.status;
-  refreshPlayingTurn();
+  refreshSession(sess);
 
   const defaultPlayerMessages = [
     "探索周围环境，寻找任何可以利用的线索。",
@@ -1515,66 +1564,116 @@ async function runMain(
     reportTurn(ctx, exec);
     ctx.turnNumber += 1;
 
-    // Refresh band for next turn's trigger check
+    // Refresh band + active set for next turn's expectation check
     const fresh = await httpGet<SessionRecord>(
       args.server,
       `/sessions/${session.id}`,
     );
-    ctx.turnCount = fresh.turnCount;
-    ctx.status = fresh.status;
-    refreshPlayingTurn();
+    refreshSession(fresh);
   }
 
   // ── Phase 6: Final snapshot ────────────────────────────────────
   section("Phase 6: Final Session Snapshot");
   const snapshot = await httpGet<{
-    session: SessionRecord;
+    session: { id: string; turnCount?: number };
     messages?: unknown[];
     characters?: unknown[];
     plugins?: Array<{ id: string; isActive: boolean }>;
   }>(args.server, `/sessions/${session.id}/snapshot`);
   state.snapshot = snapshot;
+  // The snapshot's `session` is the client-restore projection (id / worldId /
+  // turnCount / locale) — it omits `status`. Read the live SessionRecord for
+  // the authoritative lifecycle status + the final active set.
+  const finalSession = await httpGet<SessionRecord>(
+    args.server,
+    `/sessions/${session.id}`,
+  );
+  refreshSession(finalSession);
   kv("Session ID", snapshot.session.id);
-  kv("Status", snapshot.session.status);
-  kv("Turn count", snapshot.session.turnCount);
+  kv("Status", finalSession.status);
+  kv("Turn count", finalSession.turnCount);
   kv("Messages", snapshot.messages?.length ?? 0);
   kv("Characters", snapshot.characters?.length ?? 0);
   kv("Active plugins", snapshot.plugins?.filter((p) => p.isActive).length ?? 0);
 
-  // Trace coverage assertion: confirm the core trace types expected to fire
-  // on every happy-path turn are being emitted. Negative / conditional
-  // signals (`tool.failed`, `hook.aborted`, `hook.rewrote`) intentionally
-  // stay out of REQUIRED_TYPES — they are only emitted on specific branches.
-  // `args.server` already contains the `/api` prefix (default
-  // http://localhost:3001/api), so we use the relative `/traces/...` path.
+  // Setup completion: setup-stage runtimes settle during the setup phase
+  // (possibly inside the form-submit sub-execution the turn loop cannot read
+  // back), so their authoritative "done" signal is `session.preGameCompleted`
+  // — a list of runtimeIds, derived from the setupRuntimes mirror — NOT the
+  // per-turn timeline. Assert every active setup-stage runtime reached it.
+  const completedSetup = new Set(finalSession.preGameCompleted ?? []);
+  console.log("");
+  console.log("  Setup Completion (preGameCompleted):");
+  const setupRows: string[][] = [];
+  for (const step of flow.steps) {
+    if (step.stage !== "setup") continue;
+    if (!runtimePasses(step, args.runtimeFilter, args.pluginFilter)) continue;
+    if (!ctx.active.has(step.pluginId)) continue;
+    const done = completedSetup.has(step.runtimeId);
+    setupRows.push([
+      done ? "PASS" : "FAIL",
+      step.runtimeId,
+      done ? "done" : "-",
+    ]);
+    if (done) assertions.pass(`${step.runtimeId} setup complete`);
+    else
+      assertions.fail(
+        `setup runtime ${step.runtimeId} did not complete during setup phase`,
+      );
+  }
+  printTable(["result", "runtime", "state"], setupRows);
+
+  // Trace coverage: split guaranteed structural types from feature-conditional
+  // ones. The LLM/message/proposal trio is required only when the active set
+  // holds a story runtime (always true for real worlds; the guard keeps a
+  // story-less config from failing). Conditional types (tool.*, block.emitted,
+  // hook.fired) are reported, not required — hook.fired in particular fires
+  // only when an active plugin declares a hook, which the default active set
+  // does not. `args.server` already carries the `/api` prefix.
   const tracesBody = await httpGet<{ events: Array<{ type: string }> }>(
     args.server,
     `/traces/${encodeURIComponent(session.id)}`,
   );
   const seenTypes = new Set(tracesBody.events.map((e) => e.type));
+  const hasActiveStory = flow.steps.some(
+    (s) => ctx.active.has(s.pluginId) && s.isStoryRuntime,
+  );
   const REQUIRED_TYPES = [
     "turn.started",
     "runtime.started",
     "runtime.completed",
-    "proposal.committed",
+    ...(hasActiveStory
+      ? [
+          "llm.calling",
+          "llm.responded",
+          "message.completed",
+          "proposal.committed",
+        ]
+      : []),
+  ];
+  const INFORMATIONAL_TYPES = [
     "tool.calling",
     "tool.completed",
-    "llm.calling",
-    "llm.responded",
-    "message.completed",
     "block.emitted",
     "hook.fired",
+    "hook.rewrote",
+    "hook.aborted",
   ];
   const missing = REQUIRED_TYPES.filter((t) => !seenTypes.has(t));
+  for (const t of missing) {
+    assertions.fail(`required trace type missing: ${t}`);
+  }
   if (missing.length > 0) {
-    console.error(`[e2e] missing expected trace types: ${missing.join(", ")}`);
+    console.error(`[e2e] missing required trace types: ${missing.join(", ")}`);
     console.error(
       `[e2e] seen types: ${Array.from(seenTypes).sort().join(", ")}`,
     );
-    process.exit(1);
   }
+  const seenInfo = INFORMATIONAL_TYPES.filter((t) => seenTypes.has(t));
   console.log(
-    `[e2e] trace type coverage OK (${seenTypes.size} distinct types)`,
+    `[e2e] trace coverage: ${seenTypes.size} distinct types; required ${
+      missing.length === 0 ? "OK" : "MISSING"
+    }; optional observed: ${seenInfo.join(", ") || "(none)"}`,
   );
 
   // ── Phase 7: Summary ───────────────────────────────────────────
@@ -1608,10 +1707,33 @@ async function runMain(
     }
   }
 
+  // Run-level loose assertion for scheduled runtimes. Rather than re-simulate
+  // interval/cooldown per turn, require each staged+active scheduled runtime
+  // that had ≥1 in-band opportunity to have fired at least once across the
+  // window. One that never fired is a real regression the per-turn checker
+  // deliberately stays silent about.
+  const scheduledNeverFired: string[] = [];
+  for (const step of flow.steps) {
+    if (!runtimePasses(step, args.runtimeFilter, args.pluginFilter)) continue;
+    if (!ctx.scheduledOpportunity.has(step.runtimeId)) continue;
+    if (ctx.scheduledFired.has(step.runtimeId)) continue;
+    scheduledNeverFired.push(step.runtimeId);
+    assertions.fail(
+      `scheduled runtime ${step.runtimeId} never triggered across the run`,
+    );
+  }
+
   kv("Total turns", allTurns.length);
   kv(
     "Runtime runs",
     `${totalRunRuns} (ok=${successRuns} fail=${failRuns} skip=${skippedRuns})`,
+  );
+  kv(
+    "Scheduled ≥1",
+    `${ctx.scheduledFired.size}/${ctx.scheduledOpportunity.size} fired` +
+      (scheduledNeverFired.length > 0
+        ? ` (never: ${scheduledNeverFired.join(", ")})`
+        : ""),
   );
   kv(
     "Tool calls",

@@ -31,6 +31,7 @@ function makeCtx({
       .fn()
       .mockResolvedValue({ refs: [makeRef()], warnings: [], cached: false }),
   },
+  progress = undefined,
 } = {}) {
   const get = vi.fn(async (namespace, key) => {
     if (namespace === "scenes" && key === "scene-registry") return registry;
@@ -55,9 +56,13 @@ function makeCtx({
     pluginData: { get, set: vi.fn(), list: vi.fn(), delete: vi.fn() },
     logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     images,
+    ...(progress ? { progress } : {}),
   };
 }
 
+// Deliberate change: handler migrated to envelope-v1. On success the asset is
+// under `result.effects.assetGenerations`; a skip/failure is `result.outcome`
+// ("skipped"/"failed") with the failed error still top-level.
 describe("scene-stage background-gen handler", () => {
   it("1. generates the day variant, writes the generated index, and refreshes a pending stage", async () => {
     const stage = {
@@ -89,7 +94,7 @@ describe("scene-stage background-gen handler", () => {
       AbortSignal,
     );
 
-    const asset = expectAssetGenerated(result, { modality: "image" });
+    const asset = expectAssetGenerated(result.effects, { modality: "image" });
     expect(asset.meta).toEqual({
       kind: "scene-background",
       sceneId: "gen-abcd1234",
@@ -161,7 +166,7 @@ describe("scene-stage background-gen handler", () => {
 
     const result = await handler(ctx);
 
-    expect(result.status).toBe("failed");
+    expect(result.outcome).toBe("failed");
     expect(result.error).toMatch(/ctx\.images is unavailable/);
     expect(ctx.logger.error).toHaveBeenCalledWith(
       "scene-stage.background-gen.no-images-context",
@@ -224,7 +229,7 @@ describe("scene-stage background-gen handler", () => {
     const result = await handler(ctx);
 
     expect(ctx.images.generate).not.toHaveBeenCalled();
-    expect(result.status).toBe("skipped");
+    expect(result.outcome).toBe("skipped");
     expect(ctx.pluginData.set).not.toHaveBeenCalledWith(
       "generated",
       expect.anything(),
@@ -270,7 +275,85 @@ describe("scene-stage background-gen handler", () => {
 
     const result = await handler(ctx);
 
-    expect(result.status).toBe("failed");
+    expect(result.outcome).toBe("failed");
     expect(ctx.logger.error).toHaveBeenCalled();
+  });
+});
+
+describe("scene-stage background-gen progress reporting", () => {
+  it("reports running then succeeded with a monotonic sequence on success", async () => {
+    const report = vi.fn();
+    const ctx = makeCtx({ progress: { report } });
+
+    await handler(ctx);
+
+    expect(report).toHaveBeenCalledTimes(2);
+    expect(report.mock.calls[0][0]).toMatchObject({
+      jobId: "scene-background:gen-abcd1234:day",
+      state: "running",
+      sequence: 1,
+    });
+    expect(report.mock.calls[1][0]).toMatchObject({
+      jobId: "scene-background:gen-abcd1234:day",
+      state: "succeeded",
+      progress: 1,
+      sequence: 2,
+    });
+  });
+
+  it("reports running then failed when image generation throws", async () => {
+    const report = vi.fn();
+    const ctx = makeCtx({
+      progress: { report },
+      images: {
+        generate: vi.fn().mockRejectedValue(new Error("provider exploded")),
+      },
+    });
+
+    const result = await handler(ctx);
+
+    expect(result.outcome).toBe("failed");
+    expect(report).toHaveBeenCalledTimes(2);
+    expect(report.mock.calls[0][0]).toMatchObject({
+      state: "running",
+      sequence: 1,
+    });
+    expect(report.mock.calls[1][0]).toMatchObject({
+      state: "failed",
+      sequence: 2,
+      message: "provider exploded",
+    });
+  });
+
+  it("does not start a job (no report) when the requested variant is already cached", async () => {
+    // The cached skip returns before any billed generation — reporting here
+    // would create a phantom job the kernel never sees terminate.
+    const report = vi.fn();
+    const ctx = makeCtx({
+      progress: { report },
+      variant: "day",
+      existingGenerated: {
+        sceneId: "gen-abcd1234",
+        location: "废弃天文台",
+        day: makeRef("e"),
+        night: null,
+      },
+    });
+
+    await handler(ctx);
+
+    expect(report).not.toHaveBeenCalled();
+  });
+
+  it("silently skips progress when ctx.progress is absent", async () => {
+    // No job-status channel wired (test harness / host) — generation unaffected.
+    const result = await handler(makeCtx());
+    expect(result.outcome).toBe("success");
+  });
+
+  it("swallows a progress.report error without failing generation", async () => {
+    const report = vi.fn().mockRejectedValue(new Error("job store down"));
+    const result = await handler(makeCtx({ progress: { report } }));
+    expect(result.outcome).toBe("success");
   });
 });

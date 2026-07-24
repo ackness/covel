@@ -31,8 +31,8 @@ export default async function handler(ctx) {
   const variant = data.variant === "night" ? "night" : "day";
   if (!evt || !sceneId || !location) {
     return {
-      status: "skipped",
-      reason: "no usable generate-requested payload",
+      outcome: "skipped",
+      skipReason: "no usable generate-requested payload",
     };
   }
 
@@ -42,7 +42,7 @@ export default async function handler(ctx) {
       variant,
     });
     return {
-      status: "failed",
+      outcome: "failed",
       error: "ctx.images is unavailable",
     };
   }
@@ -62,7 +62,7 @@ export default async function handler(ctx) {
       existing.day ?? null,
       existing.night ?? null,
     );
-    return { status: "skipped", reason: "variant already generated" };
+    return { outcome: "skipped", skipReason: "variant already generated" };
   }
 
   const registry = ctx.pluginData
@@ -85,7 +85,22 @@ export default async function handler(ctx) {
       : "";
   const prompt = `${prefix}${subject}${suffix}${nightSuffix}`;
 
+  // Real-time progress for this generation, keyed per scene+variant so day and
+  // a later night backfill are distinct jobs. Sequence is monotonic within the
+  // job (kernel drops stale/out-of-order reports). `ctx.progress` is absent in
+  // test harnesses / hosts that don't wire the job-status channel, so
+  // `reportProgress` silently skips when it's missing. The durable output is
+  // still `assetGenerations[]`; this only drives the live spinner.
+  const jobId = `scene-background:${sceneId}:${variant}`;
+  let progressSequence = 0;
+
   let ref;
+  await reportProgress(ctx, {
+    jobId,
+    state: "running",
+    sequence: (progressSequence += 1),
+    message: `Generating ${variant} background`,
+  });
   try {
     const { refs } = await ctx.images.generate({
       prompt,
@@ -105,7 +120,13 @@ export default async function handler(ctx) {
       variant,
       error: message,
     });
-    return { status: "failed", error: message };
+    await reportProgress(ctx, {
+      jobId,
+      state: "failed",
+      sequence: (progressSequence += 1),
+      message,
+    });
+    return { outcome: "failed", error: message };
   }
 
   // Persist the visualHint so a later night backfill (which arrives on a
@@ -130,12 +151,47 @@ export default async function handler(ctx) {
     generatedEntry.night,
   );
 
+  await reportProgress(ctx, {
+    jobId,
+    state: "succeeded",
+    progress: 1,
+    sequence: (progressSequence += 1),
+  });
+
+  // assetGenerations is a domain effect; the kernel projects it back to the
+  // legacy top-level `assetGenerations` key that session-output-normalizer /
+  // collectAssetGenerations read.
   return {
-    status: "done",
-    assetGenerations: [
-      { ref, modality: "image", meta: { kind: SCENE_KIND, sceneId, variant } },
-    ],
+    outcome: "success",
+    effects: {
+      assetGenerations: [
+        {
+          ref,
+          modality: "image",
+          meta: { kind: SCENE_KIND, sceneId, variant },
+        },
+      ],
+    },
   };
+}
+
+/**
+ * Best-effort real-time progress through the kernel job-status channel
+ * (`ctx.progress.report` → append-only job-status store + SSE). `ctx.progress`
+ * is absent in test harnesses and hosts that don't wire it, and a reporting
+ * error must never fail the already-billed image generation, so presence is
+ * guarded and failures are swallowed. Observability only — the durable output
+ * remains `assetGenerations[]`.
+ *
+ * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @param {{ jobId: string, state: string, sequence: number, progress?: number, message?: string }} report
+ */
+async function reportProgress(ctx, report) {
+  try {
+    await ctx.progress?.report?.(report);
+  } catch {
+    // Progress is observability-only; never let it break image generation.
+  }
 }
 
 /**

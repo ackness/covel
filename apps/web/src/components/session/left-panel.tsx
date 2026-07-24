@@ -185,6 +185,7 @@ export function LeftPanel({
               resolvedSlots={resolvedSlots}
               sessionId={session.id}
               runtimeModelOverrides={session.runtimeModelOverrides}
+              setupRuntimes={session.setupRuntimes}
             />
           </div>
         </div>

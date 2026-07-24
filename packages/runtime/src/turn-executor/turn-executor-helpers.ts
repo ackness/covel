@@ -8,6 +8,7 @@ import type {
   RuntimeResult,
   TurnInput,
 } from "@covel/shared";
+import { isSetupRuntime } from "@covel/shared";
 import type {
   ToolCallContext,
   ToolExecutor,
@@ -18,35 +19,32 @@ import {
   declaredToolNames,
   resolveDeferredToolNames,
 } from "../agent-loop/tool-search.js";
-import { isPreGamePriority } from "../schedule/scheduler.js";
 
 /**
  * Force-retain Pre-Game runtimes a PreSchedule hook tried to drop.
  *
  * A `PreSchedule` handler may narrow the per-turn runtime set, but it must not
- * be able to remove Pre-Game runtimes (priority ≤ 99) while Pre-Game is still
- * pending — dropping `pregame` / `schema-gen` / `player-init` would silently
- * break session initialization. Any triggered Pre-Game runtime missing from
- * `scheduled` is appended back (scheduling re-sorts the Pre-Game band by
- * priority, so append order is irrelevant). Emits a dev warning naming the
- * runtimes it rescued. Pure; safe to unit-test directly.
+ * be able to remove setup-stage runtimes while setup is still pending —
+ * dropping `pregame` / `schema-gen` / `player-init` would silently break
+ * session initialization. Any triggered setup runtime missing from `scheduled`
+ * is appended back (scheduling re-orders the setup stage by its declared edges,
+ * so append order is irrelevant). Emits a dev warning naming the runtimes it
+ * rescued. Pure; safe to unit-test directly.
  *
- * The Pre-Game band test (`isPreGamePriority`) is shared with
+ * The setup-stage test (`isSetupRuntime`) is shared with
  * `getPreGameRuntimeState` in session-state.ts — the single source of truth
- * for what counts as Pre-Game. A runtime that omits `priority`
- * is, by that definition, NOT a Pre-Game runtime: it never gates Pre-Game
- * completion (`isPreGamePending` ignores it too), so it is intentionally not
- * rescued here. Rescuing it would diverge from the gate and could pin a
- * non-Pre-Game runtime a hook deliberately dropped.
+ * for what counts as a setup runtime. A stage-less runtime is, by that
+ * definition, NOT a setup runtime: it never gates setup completion, so it is
+ * intentionally not rescued here.
  */
 export function retainPreGameRuntimes(
   scheduled: readonly RuntimeManifest[],
   triggered: readonly RuntimeManifest[],
 ): readonly RuntimeManifest[] {
   const present = new Set(scheduled.map((r) => r.name));
-  // Same Pre-Game predicate as getPreGameRuntimeState — see JSDoc above.
+  // Same setup predicate as getPreGameRuntimeState — see JSDoc above.
   const droppedPreGame = triggered.filter(
-    (r) => isPreGamePriority(r.priority) && !present.has(r.name),
+    (r) => isSetupRuntime(r) && !present.has(r.name),
   );
   if (droppedPreGame.length === 0) return scheduled;
   console.warn(
@@ -151,6 +149,31 @@ export function makeFailedResult(
     toolCalls: overrides?.toolCalls ?? [],
     durationMs: Date.now() - startTime,
     error,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * Build a framework `skipped` result (the shape the upstream gate emits). `by`
+ * names the framework gate (`framework:dependencyCycle`, `framework:setupGate`)
+ * and `detail` carries gate-specific diagnostics (e.g. the full cycle path).
+ */
+export function makeSkippedResult(
+  manifest: RuntimeManifest,
+  input: TurnInput,
+  reason: string,
+  by: string,
+  detail?: Record<string, unknown>,
+): RuntimeResult {
+  return {
+    pluginId: manifest.pluginId,
+    runtimeId: manifest.name,
+    runId: crypto.randomUUID(),
+    turnId: input.turnId,
+    status: "skipped",
+    output: { skipped: true, reason, skippedBy: by, ...(detail ?? {}) },
+    toolCalls: [],
+    durationMs: 0,
     timestamp: new Date().toISOString(),
   };
 }

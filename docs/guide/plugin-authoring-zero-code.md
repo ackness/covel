@@ -37,10 +37,10 @@ plugins/my-narrator/
 name: narrator
 description: 主叙事生成器，负责根据玩家输入和世界观设定生成故事内容。每个 Turn 自动执行。
 pluginType: core-plugin
-priority: 500
+stage: narrative
 model: ds
 outputKind: story
-capabilities: [narrative]
+capabilities: [narrative, narrative-engine]
 trigger:
   type: auto
 ---
@@ -69,27 +69,30 @@ trigger:
 
 ## 2. Frontmatter 字段详解
 
-| 字段                     | 必需 | 类型                          | 说明                                                                                                   |
-| ------------------------ | ---- | ----------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `name`                   | 是   | string                        | 插件唯一标识（建议与目录名一致）                                                                       |
-| `description`            | 是   | string                        | 插件功能描述（展示给玩家）                                                                             |
-| `pluginType`             | 否   | `core-plugin` / `plugin`      | `core-plugin` 不可禁用，`plugin` 可按需启用/禁用。默认 `plugin`                                        |
-| `priority`               | 是   | number (0-1000)               | 执行优先级，数字越小越先执行                                                                           |
-| `model`                  | 否   | string                        | 使用的模型 slot（如 `ds`、`fast`、`balance`）。不填则用 `default`                                      |
-| `outputKind`             | 否   | `story` / `plugin` / `system` | 输出在 UI 中的展示方式。`story` 显示在主聊天流，`plugin`（默认）可能被隐藏，`system` 不展示            |
-| `capabilities`           | 否   | string[]                      | 能力标签，框架通过能力发现插件而非 ID。如 `[narrative]`、`[world-data-provider]`、`[image-generation]` |
-| `tags`                   | 否   | string[]                      | 玩家/作者筛选标签，用于准备页搜索、分组和世界 `pluginPolicy` 匹配。如 `[mode:dialogue, role:narrator]` |
-| `relations`              | 否   | object                        | 插件目录关系，可含 `provides`、`requires`、`conflicts`、`recommends`                                   |
-| `trigger`                | 否   | object                        | 触发配置（见下方详解）                                                                                 |
-| `tools`                  | 否   | object                        | 工具声明（见[进阶指南](./plugin-authoring-agent.md)）                                                  |
-| `input`                  | 否   | object                        | 输入注入声明（见[进阶指南](./plugin-authoring-agent.md)）                                              |
-| `userSettings`           | 否   | array                         | 玩家可调设置数组（见第 7 节）                                                                          |
-| `timeoutMs`              | 否   | number                        | Runtime 总时长硬上限，默认 60000                                                                       |
-| `maxSteps`               | 否   | number                        | 单次 attempt 内的 tool-call 步数上限，默认 10                                                          |
-| `maxRetries`             | 否   | number                        | LLM 调用失败/超时/工具循环时的重试次数，默认 1                                                         |
-| `callTimeoutMs`          | 否   | number                        | 单次 LLM 调用时长（ms），默认从 `timeoutMs` + `maxRetries` 推算                                        |
-| `firstTokenTimeoutMs`    | 否   | number                        | 流式首 token 超时（ms），默认 30000                                                                    |
-| `loopDetectionThreshold` | 否   | number                        | 连续相同 tool call 的判定阈值，默认 3；0 关闭                                                          |
+| 字段                     | 必需 | 类型                          | 说明                                                                                                                                   |
+| ------------------------ | ---- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                   | 是   | string                        | 插件唯一标识（建议与目录名一致）                                                                                                       |
+| `description`            | 是   | string                        | 插件功能描述（展示给玩家）                                                                                                             |
+| `pluginType`             | 否   | `core-plugin` / `plugin`      | `core-plugin` 不可禁用，`plugin` 可按需启用/禁用。默认 `plugin`                                                                        |
+| `stage`                  | 是\* | enum                          | 调度阶段：`setup` / `pre-turn` / `narrative` / `post-turn` / `audit`。\*`auto` / `scheduled` runtime 必需；`event` / `manual` 不可声明 |
+| `needs`                  | 否   | array                         | 强依赖（排序 + 门控）：上游本轮未成功则本 runtime 被 skipped。支持 runtime id 或 `{ capability }`                                      |
+| `after`                  | 否   | array                         | 弱依赖（只排序不设门）                                                                                                                 |
+| `inputs`                 | 否   | object                        | 类型化上游数据绑定（见[进阶指南](./plugin-authoring.md#调度声明)）                                                                     |
+| `model`                  | 否   | string                        | 使用的模型 slot（如 `ds`、`fast`、`balance`）。不填则用 `default`                                                                      |
+| `outputKind`             | 否   | `story` / `plugin` / `system` | 输出在 UI 中的展示方式。`story` 显示在主聊天流，`plugin`（默认）可能被隐藏，`system` 不展示                                            |
+| `capabilities`           | 否   | string[]                      | 能力标签，框架通过能力发现插件而非 ID。如 `[narrative]`、`[world-data-provider]`、`[image-generation]`                                 |
+| `tags`                   | 否   | string[]                      | 玩家/作者筛选标签，用于准备页搜索、分组和世界 `pluginPolicy` 匹配。如 `[mode:dialogue, role:narrator]`                                 |
+| `relations`              | 否   | object                        | 插件目录关系，可含 `provides`、`requires`、`conflicts`、`recommends`                                                                   |
+| `trigger`                | 否   | object                        | 触发配置（见下方详解）                                                                                                                 |
+| `tools`                  | 否   | object                        | 工具声明（见[进阶指南](./plugin-authoring-agent.md)）                                                                                  |
+| `input`                  | 否   | object                        | 输入注入声明（见[进阶指南](./plugin-authoring-agent.md)）                                                                              |
+| `userSettings`           | 否   | array                         | 玩家可调设置数组（见第 7 节）                                                                                                          |
+| `timeoutMs`              | 否   | number                        | Runtime 总时长硬上限，默认 60000                                                                                                       |
+| `maxSteps`               | 否   | number                        | 单次 attempt 内的 tool-call 步数上限，默认 10                                                                                          |
+| `maxRetries`             | 否   | number                        | LLM 调用失败/超时/工具循环时的重试次数，默认 1                                                                                         |
+| `callTimeoutMs`          | 否   | number                        | 单次 LLM 调用时长（ms），默认从 `timeoutMs` + `maxRetries` 推算                                                                        |
+| `firstTokenTimeoutMs`    | 否   | number                        | 流式首 token 超时（ms），默认 30000                                                                                                    |
+| `loopDetectionThreshold` | 否   | number                        | 连续相同 tool call 的判定阈值，默认 3；0 关闭                                                                                          |
 
 **智能重试说明（默认已启用）：**
 
@@ -101,16 +104,17 @@ trigger:
 - 重试总数不会让整个 runtime 超过 `timeoutMs`。
 - `llm.toml` 中的 `fallback = "story"` 仍然生效：同 preset 重试完再沿 gateway fallback chain 尝试。
 
-**优先级参考区间（与 `packages/runtime/src/schedule/scheduler.ts` 实际边界一致）：**
+**调度阶段（stage，kernel 强制）：**
 
-| 区间     | 用途                                            | 示例                                                                    |
-| -------- | ----------------------------------------------- | ----------------------------------------------------------------------- |
-| 0-99     | Pre-Game 初始化（首轮 turnNumber=0 才会被调度） | pregame (10), world-init/schema-gen (40), char-creator/player-init (50) |
-| 100-499  | pre-narrator / 本轮只读准备                     | persona (100), codex (450)                                              |
-| 500      | narrator                                        | narrator (500)                                                          |
-| 501-1000 | post-narrator / 状态写入与后台任务              | codex/post (650), image (800), memory (900)                             |
+| stage       | 何时运行                       | 用途                             | 示例                                                     |
+| ----------- | ------------------------------ | -------------------------------- | -------------------------------------------------------- |
+| `setup`     | `session.phase === "setup"` 时 | 游戏初始化（报告完成后进主循环） | pregame, world-init/schema-gen, char-creator/player-init |
+| `pre-turn`  | 主循环第 1 段                  | 玩家输入前置处理 / 只读准备      | npc-graph/rag-retriever, scene-cast                      |
+| `narrative` | 主循环第 2 段                  | 主叙事输出                       | narrator, chat-mode-narrator                             |
+| `post-turn` | 主循环第 3 段                  | 叙事后记账 / 状态写入 / 后台任务 | codex, guide, npc-graph/extractor                        |
+| `audit`     | 主循环第 4 段                  | 冲突/一致性审计（预留）          | —                                                        |
 
-> **band 边界由 scheduler 强制**：`turnNumber === 0` 只调度 priority `<= 99`，`turnNumber >= 1` 只调度 priority `> 99`。把初始化插件放到 100-199 会让它们在主循环里运行，而不是 Pre-Game。500 前后只读/写入是推荐的语义约定，由插件作者遵守，框架不做强制检查。
+> **阶段间是严格屏障**（前一阶段全部结束才进下一阶段），由 `session.phase` 而不是回合数选带。**同阶段内部的先后只由依赖决定**：声明 `needs`（强依赖，上游失败则本 runtime skipped）或 `after`（弱排序），无依赖的 runtime 并发执行，同名时按 `name` 定序。旧的数字 `priority` 调度器已删除——不要在新插件里写 `priority`。
 
 ## 3. 提示词编写技巧
 
@@ -142,7 +146,9 @@ PLUGIN.md 的 Markdown 正文就是发给 LLM 的 system prompt。框架会在�
 name: my-event-tracker
 description: 追踪故事中发生的重要事件
 pluginType: plugin
-priority: 650
+stage: post-turn
+needs:
+  - capability: narrative-engine
 model: plugin
 trigger:
   type: auto
@@ -217,17 +223,11 @@ trigger:
   type: manual
 ```
 
-适用于：玩家主动点击按钮触发的功能（如查看角色面板）。启用 manual 插件只表示该能力在 session 中可用；没有 `priority` 的 manual runtime 不会进入每轮自动调度，必须由 UI 或 `plugin-rpc` 显式触发。
+适用于：玩家主动点击按钮触发的功能（如查看角色面板）。manual runtime **永远不会**被每轮自动调度选中（也不可声明 `stage`），必须由 UI 或 `plugin-rpc` 显式按名触发；启用 manual 插件只表示该能力在 session 中可用。
 
-### conditional — reserved
+### conditional / error-retry — 已移除
 
-```yaml
-trigger:
-  type: conditional
-  condition: "turnNumber > 10"
-```
-
-当前框架把 `conditional` 保留为未来能力。已声明的 conditional runtime 会被调度器跳过，并在控制台输出一次 warning。插件作者应使用 `auto` + guard、`scheduled`、`event` 或 `manual` 表达当前运行条件。
+`conditional` 与 `error-retry` 已从 trigger 枚举中移除：声明它们的 manifest 在**加载时被直接拒绝**（插件不会加载）。表达运行条件请使用 `auto` + guard、`scheduled`、`event` 或 `manual`。
 
 ### 冷却和重试
 
@@ -245,13 +245,13 @@ trigger:
 
 ### 段职责约定（软约束）
 
-Covel 的 turn pipeline 把每一轮拆成三段：
+Covel 的主循环把每一轮拆成 `pre-turn → narrative → post-turn → audit` 四个 stage：
 
-| 段                | 优先级   | 推荐职责                            | 对 store 的权限                       |
-| ----------------- | -------- | ----------------------------------- | ------------------------------------- |
-| **pre-narrator**  | 101–499  | 检索、加载、向本轮 context 注入信息 | **建议只读**（不改持久状态）          |
-| **narrator**      | 500      | 生成本轮叙事                        | 只写 narrativeOutput                  |
-| **post-narrator** | 501–1000 | 状态变更、抽取、结算、为下一轮准备  | 可写（state.patch / plugin-data-set） |
+| stage         | 推荐职责                            | 对 store 的权限                       |
+| ------------- | ----------------------------------- | ------------------------------------- |
+| **pre-turn**  | 检索、加载、向本轮 context 注入信息 | **建议只读**（不改持久状态）          |
+| **narrative** | 生成本轮叙事                        | 只写 narrativeOutput                  |
+| **post-turn** | 状态变更、抽取、结算、为下一轮准备  | 可写（state.patch / plugin-data-set） |
 
 #### 为什么需要这个约定
 
@@ -265,16 +265,16 @@ Covel 的 turn pipeline 把每一轮拆成三段：
 
 **首选模式**：把"既读又写"的插件拆成两个 runtime：
 
-| 插件        | pre runtime（只读）                           | post runtime（写）                           |
-| ----------- | --------------------------------------------- | -------------------------------------------- |
-| `npc-graph` | `rag-retriever` (490) — 查图谱注入 npcContext | `extractor` (620) — 基于叙事 upsert 节点和边 |
+| 插件        | pre runtime（只读）                                | post runtime（写）                                 |
+| ----------- | -------------------------------------------------- | -------------------------------------------------- |
+| `npc-graph` | `rag-retriever`（pre-turn）— 查图谱注入 npcContext | `extractor`（post-turn）— 基于叙事 upsert 节点和边 |
 
 **例外是 OK 的**：
 
 如果一个 runtime 内部的"读"只是**自身去重**而非"为别的 runtime 注入 context"，单 runtime 既读又写没问题：
 
-- `codex` (650) 是 agent runtime，通过 `input.inject: plugin-data` 让框架在 prompt 构建时把已有条目自动塞进 `<existing-entries>` 块，LLM 一次调用就决定 unlock 或 update。读没有跨 runtime 消费方，不需要拆。
-- `char-creator/character-tracker` (750) 是 agent runtime，先 `list-characters` 给自己看现有角色 id 列表，再决定 create/update。同理不需要拆。
+- `codex`（post-turn）是 agent runtime，通过 `input.inject: plugin-data` 让框架在 prompt 构建时把已有条目自动塞进 `<existing-entries>` 块，LLM 一次调用就决定 unlock 或 update。读没有跨 runtime 消费方，不需要拆。
+- `char-creator/character-tracker`（post-turn）是 agent runtime，先 `list-characters` 给自己看现有角色 id 列表，再决定 create/update。同理不需要拆。
 
 判断标准：**这次"读"的结果有没有被别的 runtime 消费？**
 
@@ -642,7 +642,9 @@ plugins/my-guide/
 name: my-guide
 description: 故事引导插件，在叙事后为玩家提供 2-4 个行动选项。
 pluginType: plugin
-priority: 600
+stage: post-turn
+needs:
+  - capability: narrative-engine
 model: plugin
 capabilities:
   - guide

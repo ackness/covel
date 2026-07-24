@@ -275,7 +275,8 @@ describe("PluginRegistry", () => {
   });
 
   describe("getActiveRuntimes", () => {
-    it("should return runtime manifests from active plugins sorted by priority ascending", () => {
+    it("should return runtime manifests from active plugins sorted by stage ascending", () => {
+      // Distinct stages: high(100)=pre-turn, mid(500)=narrative, low(800)=post-turn.
       const entryLow = makeEntry("low", {
         manifest: makeParsedPluginMd("low-runtime", 800),
       });
@@ -298,11 +299,27 @@ describe("PluginRegistry", () => {
 
       expect(runtimes).toHaveLength(3);
       expect(runtimes[0].name).toBe("high-runtime");
-      expect(runtimes[0].priority).toBe(100);
       expect(runtimes[1].name).toBe("mid-runtime");
-      expect(runtimes[1].priority).toBe(500);
       expect(runtimes[2].name).toBe("low-runtime");
-      expect(runtimes[2].priority).toBe(800);
+    });
+
+    it("breaks intra-stage ties by name, not priority", () => {
+      // Both post-turn (501-999); priority order would be zeta(600) < alpha(800),
+      // but the (stage, name) sort orders alpha before zeta.
+      registry.register(
+        makeEntry("z", { manifest: makeParsedPluginMd("zeta-runtime", 600) }),
+      );
+      registry.register(
+        makeEntry("a", { manifest: makeParsedPluginMd("alpha-runtime", 800) }),
+      );
+      registry.activate("z", "session-2");
+      registry.activate("a", "session-2");
+
+      const runtimes = registry.getActiveRuntimes("session-2");
+      expect(runtimes.map((r) => r.name)).toEqual([
+        "alpha-runtime",
+        "zeta-runtime",
+      ]);
     });
 
     it("should return empty array for session with no active plugins", () => {

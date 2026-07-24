@@ -17,6 +17,8 @@ function ctx(manualPayload, store = {}, pluginData) {
   };
 }
 
+// Deliberate change: handler migrated to envelope-v1, so the business return
+// is under `result.value`; pending proposals stay on the envelope (result).
 describe("player-identity handler", () => {
   it("saves and activates a profile", async () => {
     const result = await handler(
@@ -30,7 +32,7 @@ describe("player-identity handler", () => {
       }),
     );
 
-    expect(result).toEqual({
+    expect(result.value).toEqual({
       saved: true,
       profileId: "wanderer",
       activated: true,
@@ -166,7 +168,7 @@ describe("player-identity handler", () => {
       ),
     );
 
-    expect(result.characterId).toBe("player-1");
+    expect(result.value.characterId).toBe("player-1");
     const proposals = getPendingProposals(result);
     expect(proposals[2]).toMatchObject({
       type: "character.upsert",
@@ -200,7 +202,7 @@ describe("player-identity handler", () => {
       }),
     );
 
-    expect(result).toEqual({
+    expect(result.value).toEqual({
       saved: true,
       profileId: "observer",
       activated: false,
@@ -228,7 +230,7 @@ describe("player-identity handler", () => {
       }),
     );
 
-    expect(result).toMatchObject({
+    expect(result.value).toMatchObject({
       saved: true,
       profileId: "transfer-student",
       activated: true,
@@ -279,7 +281,7 @@ describe("player-identity handler", () => {
       }),
     );
 
-    expect(result).toMatchObject({
+    expect(result.value).toMatchObject({
       saved: true,
       profileId: "player-transfer-student",
       activated: true,
@@ -305,7 +307,7 @@ describe("player-identity handler", () => {
       }),
     );
 
-    expect(result).toEqual({
+    expect(result.value).toEqual({
       saved: true,
       profileId: "player-transfer-student",
       activated: false,

@@ -358,16 +358,6 @@ export function setParamOverrides(
   void getSettings().set("llm.paramOverrides", overrides);
 }
 
-export function getRuntimePriorityOverrides(): Record<string, number> {
-  return getSettings().get<Record<string, number>>("llm.runtimePriority") ?? {};
-}
-
-export function setRuntimePriorityOverrides(
-  overrides: Record<string, number>,
-): void {
-  void getSettings().set("llm.runtimePriority", overrides);
-}
-
 /**
  * Prep-phase runtime bindings (pre-session), keyed by worldId. Wiped by the
  * caller once the real session is created and the bindings are copied onto

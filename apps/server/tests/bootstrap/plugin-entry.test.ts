@@ -134,6 +134,59 @@ describe("createBootstrapPluginEntries", () => {
     expect(getSpeechWire("entry-tts")).toBeNull();
   });
 
+  it("runs a MULTI-runtime plugin's entry declared on the metadata-only root PLUGIN.md", async () => {
+    // Regression: discover.ts lists only runtime PLUGIN.mds for a multi-runtime
+    // plugin, so an `entry` on the metadata-only root PLUGIN.md is absent from
+    // manifestCache — the entry must be read from the root directly, otherwise
+    // the plugin's local tools never register (npc-graph's graph tools case).
+    const pluginId = "multi-root-entry";
+    const rootPath = path.join(tmpRoot, pluginId);
+    fs.mkdirSync(path.join(rootPath, "server"), { recursive: true });
+    fs.writeFileSync(
+      path.join(rootPath, "server", "index.mjs"),
+      `export default function (covel) {
+        covel.registerTool(
+          covel.toolkit.tool({
+            name: "root-entry-tool",
+            description: "registered via root entry",
+            parameters: covel.toolkit.z.object({}),
+            async execute() { return { _text: "ok" }; },
+          }),
+        );
+      }`,
+    );
+    // Real root PLUGIN.md on disk carries the entry; the manifestCache holds
+    // only the sub-runtime manifest (no entry) — exactly the multi-runtime shape.
+    fs.writeFileSync(
+      path.join(rootPath, "PLUGIN.md"),
+      `---\nname: ${pluginId}\ndescription: multi-runtime root\npluginType: plugin\nentry: ./server/index.mjs\n---\n\n# Multi\n`,
+    );
+    const subManifest = {
+      name: `${pluginId}/worker`,
+      pluginId,
+      description: "worker",
+      tools: { plugin: ["root-entry-tool"] },
+    } as unknown as RuntimeManifest;
+    const params = makeParams([]);
+    params.discoveryMap.set(pluginId, {
+      id: pluginId,
+      rootPath,
+      isMultiRuntime: true,
+      pluginMdPaths: [path.join(rootPath, "runtimes", "worker", "PLUGIN.md")],
+      source: "builtin",
+    } as PluginDiscoveryResult);
+    params.manifestCache.set(pluginId, [
+      { manifest: subManifest, promptTemplate: "", rawFrontmatter: {} },
+    ]);
+
+    await createBootstrapPluginEntries(params);
+
+    expect(params.toolMap.has("root-entry-tool")).toBe(true);
+    expect(params.pluginToolAccess.get(pluginId)?.has("root-entry-tool")).toBe(
+      true,
+    );
+  });
+
   it("defers community entries until ensurePluginEntry (memoized)", async () => {
     const p = writePlugin(
       "entry-community-a",

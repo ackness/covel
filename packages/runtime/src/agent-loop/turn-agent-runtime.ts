@@ -1,4 +1,11 @@
-import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
+import type {
+  RuntimeManifest,
+  RuntimeResult,
+  TurnInput,
+  RuntimeActivation,
+  InputSlot,
+} from "@covel/shared";
+import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import {
   buildContext,
@@ -20,7 +27,8 @@ import {
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { finalizeAgentOutput } from "./finalize-agent-output.js";
-import { filterHistoryForStory } from "./message-filter.js";
+import { normalizeHandlerResult } from "../commit/normalize-handler-result.js";
+import { filterRuntimeHistory } from "./message-filter.js";
 import {
   checkSchemaProseFailure,
   checkSchemaValidation,
@@ -32,7 +40,6 @@ import {
 } from "../trace/runtime-telemetry.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { runAgentToolLoop } from "./turn-agent-tool-loop.js";
-import { NARRATOR_PRIORITY } from "../schedule/scheduler.js";
 
 export interface ExecuteAgentRuntimeOptions {
   readonly manifest: RuntimeManifest;
@@ -63,6 +70,12 @@ export interface ExecuteAgentRuntimeOptions {
     readonly import("@covel/context").WorkingMemoryEntry[] | undefined;
   readonly coreMemoryBlocks: readonly CoreMemoryBlockView[] | undefined;
   readonly sessionContext: SessionContextSnapshot | undefined;
+  /** Canonical activation — rendered into the reserved prompt segment. */
+  readonly activation?: RuntimeActivation;
+  /** Resolved input bindings — rendered into the reserved inputs prompt block. */
+  readonly inputs?: Readonly<Record<string, InputSlot>>;
+  /** Frozen cross-execution `recordAs` exports — rendered into the reserved exports block. */
+  readonly exports?: Readonly<Record<string, InputSlot>>;
   readonly startTime: number;
   readonly runId: string;
 }
@@ -82,17 +95,21 @@ export async function executeAgentRuntime({
   workingMemory,
   coreMemoryBlocks,
   sessionContext,
+  activation,
+  inputs,
+  exports: exportSlots,
   startTime,
   runId,
 }: ExecuteAgentRuntimeOptions): Promise<RuntimeResult> {
   // ── Agent runtime: LLM pipeline ─────────────────────────────
   // Emit start AFTER guard passes (or no guard exists) — prevents
   // frontend showing an infinite spinner for guard-skipped runtimes.
+  const stage = getRuntimeSpec(manifest).stage;
   try {
     await deps.onRuntimeStart?.({
       runtimeId: manifest.name,
       pluginId: manifest.pluginId,
-      priority: manifest.priority,
+      ...(stage !== undefined ? { stage } : {}),
     });
   } catch {
     /* callback error must not kill runtime */
@@ -100,7 +117,7 @@ export async function executeAgentRuntime({
   emitSubEvent(deps.eventBus, "runtime", "runtime.started", input.sessionId, {
     runtimeId: manifest.name,
     pluginId: manifest.pluginId,
-    priority: manifest.priority,
+    ...(stage !== undefined ? { stage } : {}),
   });
 
   // ── PreRuntime hook ──────────────────────────────────
@@ -142,19 +159,17 @@ export async function executeAgentRuntime({
   // declares any `input.inject` entries of kind `plugin-data`. The async
   // path resolves those against the store; the sync path is unchanged
   // and handles all legacy runtime-output injects.
-  // Filter message history based on runtime's outputKind.
-  // Story runtimes (narrator) should only see player messages + their own
-  // previous story outputs. This prevents context pollution where guide JSON,
-  // codex JSON, character-tracker JSON etc. leak into the narrator prompt,
-  // causing the LLM to mimic those formats.
-  //
-  // Filtering uses sourceRuntimeId to look up the runtime's outputKind
-  // from the active manifests. Messages from runtimes not in the active set
-  // are kept (conservative — don't drop unknown messages).
-  const filteredHistory =
-    manifest.outputKind === "story"
-      ? filterHistoryForStory(messageHistory, manifest.name)
-      : messageHistory;
+  // Filter message history for every agent runtime: drop OTHER plugins'
+  // structured tool-output JSON while keeping player/system messages,
+  // narrative-like text, and the runtime's own previous outputs. Story
+  // runtimes need this so they don't mimic JSON formats; post-turn extraction
+  // runtimes (character-tracker / codex / npc-graph / scene-prompts) need it so
+  // other plugins' JSON doesn't accumulate in their prompt turn after turn —
+  // they already get the current narrative via `<narrator-output>` and their
+  // own state via plugin-data injects, and never read another plugin's output
+  // from history. Conservative: player/system messages and prose from any
+  // runtime are kept — only structured-looking output is dropped.
+  const filteredHistory = filterRuntimeHistory(messageHistory, manifest.name);
 
   // Surface player-authored plugin settings to agent prompts as
   // `{{ userSettings.<key> }}`. Merge with manifest defaults so templates
@@ -195,6 +210,11 @@ export async function executeAgentRuntime({
     ...(sessionContext ? { sessionContext } : {}),
     ...(agentUserSettings ? { userSettings: agentUserSettings } : {}),
     ...(eventCatalogText ? { eventCatalogText } : {}),
+    ...(activation ? { activation } : {}),
+    ...(inputs && Object.keys(inputs).length > 0 ? { inputSlots: inputs } : {}),
+    ...(exportSlots && Object.keys(exportSlots).length > 0
+      ? { exportSlots }
+      : {}),
     ...(budgetEligible
       ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
       : {}),
@@ -374,6 +394,28 @@ export async function executeAgentRuntime({
   }
   const output = finalized.output;
 
+  // Observe-only normalization cross-check (docs 02 §4). The agent path keeps
+  // producing its result unchanged; here we run the same unified normalizer and
+  // surface any divergence as diagnostics (e.g. a legacy agent output carrying
+  // a business `status: failed/skipped`, or domain effects on a non-success
+  // shape). The full agent switch to the normalizer lands in a later wave.
+  {
+    const { outcome, diagnostics } = normalizeHandlerResult(output, {
+      resultFormat: manifest.resultFormat ?? "legacy",
+      runtimeType: "agent",
+    });
+    for (const d of diagnostics) {
+      console.warn(
+        `[runtime] ${manifest.name} (observe): ${d.code} — ${d.message}`,
+      );
+    }
+    if (outcome.outcome !== "success") {
+      console.warn(
+        `[runtime] ${manifest.name} (observe): normalizer classified agent output as "${outcome.outcome}" but the agent path keeps status: success`,
+      );
+    }
+  }
+
   const rawResult: RuntimeResult = {
     pluginId: manifest.pluginId,
     runtimeId: manifest.name,
@@ -429,7 +471,7 @@ export async function executeAgentRuntime({
       role: "assistant",
       name: manifest.name,
       content: narrativeContent,
-      order: manifest.priority ?? NARRATOR_PRIORITY,
+      order: stageMessageOrder(getRuntimeSpec(manifest).stage),
       pendingInput,
       ui,
       createdAt: new Date().toISOString(),

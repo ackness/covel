@@ -6,30 +6,102 @@
 
 import { z } from "zod";
 import { HOOK_EVENTS } from "../types/hooks.js";
+import type { EffectResource } from "../types/runtime-scheduling.js";
+
+// ── Shared path & scheduling primitives ──────────────────────────
+// Hoisted so the Input section (runtime-export inject, data bindings) and the
+// scheduling sub-schemas below can all reuse them. `pluginRelativeJsonSchemaPath`
+// also validates dataSchemas / output / event schema paths further down.
+
+/**
+ * A plugin-relative `.json` schema path. Blocks path traversal at the schema
+ * level (no leading `/`, no `..` segments); the loader adds a defence-in-depth
+ * containment check on the resolved absolute path.
+ */
+const pluginRelativeJsonSchemaPath = z
+  .string()
+  .min(1)
+  .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[a-z0-9_./-]+\.json$/i, {
+    message:
+      "schema must be a plugin-relative .json path (no leading `/`, no `..` segments)",
+  });
+
+/** capability cardinality — `one` (any single provider) or `all` (every provider). */
+export const dependencyCardinalitySchema = z.enum(["one", "all"]);
+
+/** `needs` gate scope — same-execution (`turn`) or persistent snapshot (`session`). */
+export const dependencyScopeSchema = z.enum(["turn", "session"]);
+
+/**
+ * A dependency/binding source: exactly one of `runtime` (an id) or `capability`
+ * (a tag, with optional `cardinality`). Both object shapes are `.strict()`, so
+ * `{ runtime, capability }` — or a stray `cardinality` on a runtime ref — is
+ * rejected: cardinality is capability-only by construction.
+ */
+export const bindingSourceSchema = z.union([
+  z.object({ runtime: z.string().min(1) }).strict(),
+  z
+    .object({
+      capability: z.string().min(1),
+      cardinality: dependencyCardinalitySchema.optional(),
+    })
+    .strict(),
+]);
+
+/** Binding / export local name — letter-led identifier. */
+const bindingNameSchema = z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]*$/, {
+  message:
+    "name must start with a letter and contain only letters/digits/underscore/hyphen",
+});
+
+/** RFC 6901 JSON Pointer (empty string = whole document). */
+const jsonPointerSchema = z.string().regex(/^(\/([^/~]|~0|~1)*)*$/, {
+  message:
+    "must be an RFC 6901 JSON Pointer (empty string, or /-separated tokens with ~0/~1 escapes)",
+});
+
+/** Reject duplicate entries in set-like string arrays (effects, http methods). */
+const hasUniqueItems = <T>(items: readonly T[]): boolean =>
+  new Set(items).size === items.length;
 
 // ── Trigger ──────────────────────────────────────────────────────
 
+/**
+ * Production trigger types — the reserved `conditional` / `error-retry` (which
+ * never fire; no condition engine, the scheduler never surfaces upstream
+ * failures) are now REJECTED at load, not just disabled downstream. A
+ * third-party manifest declaring one was already non-functional (its runtime
+ * never triggered); failing the load surfaces that instead of silently dropping.
+ */
 export const triggerTypeSchema = z.enum([
   "auto",
   "manual",
   "scheduled",
-  "conditional",
   "event",
-  "error-retry",
 ]);
 
+/** Trigger fields shared by the compat and authoring trigger schemas. */
+const triggerConfigShape = {
+  interval: z.number().int().positive().optional(),
+  topic: z.string().optional(),
+  maxTriggerCount: z.number().int().positive().optional(),
+  cooldownTurns: z.number().int().nonnegative().optional(),
+  startTurn: z.number().int().positive().optional(),
+};
+
 export const triggerConfigSchema = z
-  .object({
-    type: triggerTypeSchema,
-    interval: z.number().int().positive().optional(),
-    condition: z.string().optional(),
-    topic: z.string().optional(),
-    maxTriggerCount: z.number().int().positive().optional(),
-    maxRetryCount: z.number().int().nonnegative().optional(),
-    cooldownTurns: z.number().int().nonnegative().optional(),
-    startTurn: z.number().int().positive().optional(),
-  })
+  .object({ type: triggerTypeSchema, ...triggerConfigShape })
   .strict();
+
+/**
+ * Authoring schema — identical to the compat schema now that reserved triggers
+ * are rejected on both. Kept as distinct exports so the authoring / compat call
+ * sites stay explicit (and can diverge again if the authoring surface tightens
+ * further, e.g. dropping `priority` / `upstreamRequired`).
+ */
+export const authoringTriggerTypeSchema = triggerTypeSchema;
+
+export const authoringTriggerConfigSchema = triggerConfigSchema;
 
 // ── Input ────────────────────────────────────────────────────────
 
@@ -85,12 +157,31 @@ export const pluginDataInjectDeclSchema = z
   .strict();
 
 /**
+ * Runtime-export inject — consume a producer runtime's persisted `recordAs`
+ * export (the latest revision committed before this execution started). `from`
+ * selects the producer by runtime id or capability; `recordAs` names the
+ * export key. Cross-execution counterpart to the same-execution `inputs`
+ * bindings.
+ */
+export const runtimeExportInjectDeclSchema = z
+  .object({
+    kind: z.literal("runtime-export"),
+    name: bindingNameSchema,
+    from: bindingSourceSchema,
+    recordAs: z.string().min(1),
+    accepts: pluginRelativeJsonSchemaPath.optional(),
+    required: z.boolean().optional(),
+  })
+  .strict();
+
+/**
  * Discriminated union of inject declarations. Every entry declares its source
  * with `kind` so manifest semantics stay explicit.
  */
 export const inputInjectDeclSchema = z.discriminatedUnion("kind", [
   runtimeInjectDeclSchema,
   pluginDataInjectDeclSchema,
+  runtimeExportInjectDeclSchema,
 ]);
 
 export const inputToolDeclSchema = z
@@ -102,6 +193,8 @@ export const inputToolDeclSchema = z
 
 export const inputConfigSchema = z
   .object({
+    /** Runtime-dir-relative JSON Schema path validating the activation payload. */
+    schema: pluginRelativeJsonSchemaPath.optional(),
     inject: z.array(inputInjectDeclSchema).optional(),
     tools: z.array(inputToolDeclSchema).optional(),
   })
@@ -127,14 +220,6 @@ const pluginDataNamespaceSchema = z
   .regex(/^[a-z][a-z0-9_-]*$/i, {
     message:
       "namespace must be a short identifier (letters, digits, underscore, hyphen)",
-  });
-
-const pluginRelativeJsonSchemaPath = z
-  .string()
-  .min(1)
-  .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[a-z0-9_./-]+\.json$/i, {
-    message:
-      "schema must be a plugin-relative .json path (no leading `/`, no `..` segments)",
   });
 
 export const pluginDataSchemaDeclSchema = z
@@ -458,81 +543,422 @@ export const pluginUserSettingSpecSchema = z
   })
   .strict();
 
+// ── Scheduling: stage / dependencies / bindings ──────────────────
+
+/** Coarse scheduling stage (replaces numeric priority bands). */
+export const stageSchema = z.enum([
+  "setup",
+  "pre-turn",
+  "narrative",
+  "post-turn",
+  "audit",
+]);
+
+/**
+ * `after` entry — weak ordering, no gate. A bare string is shorthand for
+ * `{ runtime }`; the object form is a {@link bindingSourceSchema} (runtime XOR
+ * capability). `scope` is intentionally NOT accepted on `after` entries.
+ */
+export const afterRefSchema = z.union([z.string().min(1), bindingSourceSchema]);
+
+/**
+ * `needs` entry — ordering + gate. Adds an optional `scope` (turn/session) to
+ * either a runtime or capability ref; `cardinality` stays capability-only.
+ */
+export const needsRefSchema = z.union([
+  z.string().min(1),
+  z
+    .object({
+      runtime: z.string().min(1),
+      scope: dependencyScopeSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      capability: z.string().min(1),
+      cardinality: dependencyCardinalitySchema.optional(),
+      scope: dependencyScopeSchema.optional(),
+    })
+    .strict(),
+]);
+
+/** Typed same-execution data binding (`inputs.<name>`). */
+export const runtimeBindingSchema = z
+  .object({
+    from: bindingSourceSchema,
+    select: jsonPointerSchema.optional(),
+    required: z.boolean().optional(),
+    accepts: pluginRelativeJsonSchemaPath.optional(),
+  })
+  .strict();
+
+export const inputsBindingMapSchema = z.record(
+  bindingNameSchema,
+  runtimeBindingSchema,
+);
+
+// ── Result format ────────────────────────────────────────────────
+
+export const resultFormatSchema = z.enum(["legacy", "envelope-v1"]);
+
+// ── Effects declaration ──────────────────────────────────────────
+
+/**
+ * Namespaced resource key for read/write-set hazard detection. Fixed builtin
+ * namespaces, or a scoped `plugin-data:self:<ns>` / `event:<topic>` /
+ * `http:https://<host>` key.
+ */
+// The templated members (`plugin-data:self:` / `event:` / `http:`) are regex
+// strings so the pattern survives into the generated JSON Schema, but Zod infers
+// them as `string`. Narrow the static type to `EffectResource` to match the
+// manifest interface — runtime validation and JSON Schema output are unchanged.
+export const effectResourceSchema = z.union([
+  z.enum([
+    "state:*",
+    "narrative:*",
+    "characters:*",
+    "assets:*",
+    "media:*",
+    "working-memory:*",
+    "lorebook:*",
+    "ui:*",
+    "interaction:*",
+    "unknown:*",
+  ]),
+  z.string().regex(/^plugin-data:self:[a-zA-Z][a-zA-Z0-9_-]*$/, {
+    message: "plugin-data effect must be `plugin-data:self:<namespace>`",
+  }),
+  z.string().regex(/^event:[^\s]+$/, {
+    message: "event effect must be `event:<topic>`",
+  }),
+  z.string().regex(/^http:https:\/\/[^/?#@]+$/, {
+    message: "http effect must be `http:https://<host>`",
+  }),
+]) as unknown as z.ZodType<EffectResource>;
+
+export const effectsDeclSchema = z
+  .object({
+    // Uniqueness is enforced here but is NOT representable in JSON Schema via
+    // z.toJSONSchema (the refine is dropped) — the generated schemas note it.
+    reads: z
+      .array(effectResourceSchema)
+      .refine(hasUniqueItems, "reads entries must be unique")
+      .optional(),
+    writes: z
+      .array(effectResourceSchema)
+      .refine(hasUniqueItems, "writes entries must be unique")
+      .optional(),
+    parallelSafe: z.boolean().optional(),
+  })
+  .strict();
+
+// ── HTTP permission declaration ──────────────────────────────────
+
+export const httpMethodSchema = z.enum([
+  "GET",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+  "HEAD",
+]);
+
+export const httpPermissionDeclSchema = z
+  .object({
+    origin: z.string().regex(/^https:\/\/[^/?#@]+$/, {
+      message:
+        "origin must be a canonical https origin (no path, query, or credentials)",
+    }),
+    methods: z
+      .array(httpMethodSchema)
+      .min(1)
+      .refine(hasUniqueItems, "methods must be unique")
+      .optional(),
+  })
+  .strict();
+
+export const permissionsDeclSchema = z
+  .object({ http: z.array(httpPermissionDeclSchema).optional() })
+  .strict();
+
+// ── Legacy job-status view projection (compat only) ──────────────
+
+export const legacyJobViewDeclSchema = z
+  .object({
+    jobIdPrefix: z.string().optional(),
+    namespace: z.string().min(1),
+    keyFrom: jsonPointerSchema.optional(),
+    valueFrom: jsonPointerSchema.optional(),
+  })
+  .strict();
+
+export const jobStatusDeclSchema = z
+  .object({ legacyViews: z.array(legacyJobViewDeclSchema).optional() })
+  .strict();
+
+// ── Cross-field constraints ──────────────────────────────────────
+
+/**
+ * Structural view of the manifest fields the cross-field checks read. Kept
+ * loose so both the compat (priority present) and authoring parsed shapes are
+ * accepted; the checks work off plain data and return issues, so neither
+ * superRefine has to name Zod's refinement-ctx type.
+ */
+interface ManifestCrossFieldView {
+  readonly stage?: string;
+  readonly trigger?: {
+    readonly type?: string;
+    readonly topic?: string;
+    readonly interval?: number;
+    readonly startTurn?: number;
+    readonly cooldownTurns?: number;
+  };
+  readonly needs?: readonly (string | { readonly scope?: string })[];
+  readonly output?: { readonly schema?: string; readonly recordAs?: string };
+}
+
+interface CrossFieldIssue {
+  readonly path: readonly (string | number)[];
+  readonly message: string;
+}
+
+/**
+ * Cross-field constraints applied by BOTH manifest schemas. Every constraint
+ * here was grepped against the bundled plugins and has zero current violations,
+ * so it is safe on the compat superset. JSON Schema cannot express these, so
+ * the generated schemas record them in their `description`.
+ */
+function sharedManifestCrossFieldIssues(
+  m: ManifestCrossFieldView,
+): CrossFieldIssue[] {
+  const issues: CrossFieldIssue[] = [];
+
+  // recordAs is only meaningful with a schema validating the recorded value.
+  if (m.output?.recordAs !== undefined && m.output.schema === undefined) {
+    issues.push({
+      path: ["output", "schema"],
+      message: "output.schema is required when output.recordAs is declared",
+    });
+  }
+
+  // An event trigger without a topic never subscribes to anything.
+  if (m.trigger?.type === "event" && !m.trigger.topic) {
+    issues.push({
+      path: ["trigger", "topic"],
+      message: "trigger.topic is required for trigger.type 'event'",
+    });
+  }
+
+  // A stage places a runtime in the per-turn DAG; event/manual are detached.
+  if (
+    m.stage !== undefined &&
+    (m.trigger?.type === "event" || m.trigger?.type === "manual")
+  ) {
+    issues.push({
+      path: ["stage"],
+      message: "a staged runtime cannot use trigger.type 'event' or 'manual'",
+    });
+  }
+
+  // `needs(scope: session)` gates on the persistent setup snapshot — the
+  // positive gate lives in the setup selection path only, so on any other
+  // stage the declaration would be accepted-but-inert. Reject it instead of
+  // letting a dead gate ship (a legacy-priority setup runtime that wants this
+  // must declare `stage: setup` explicitly).
+  if (m.stage !== "setup") {
+    for (const [i, need] of (m.needs ?? []).entries()) {
+      if (typeof need !== "string" && need.scope === "session") {
+        issues.push({
+          path: ["needs", i, "scope"],
+          message:
+            "needs scope 'session' is only valid on stage 'setup' runtimes (it gates on the persistent setup snapshot)",
+        });
+      }
+    }
+  }
+
+  // Setup runs before the turn loop: fixed auto trigger, no cadence fields.
+  if (m.stage === "setup" && m.trigger) {
+    if (m.trigger.type !== "auto") {
+      issues.push({
+        path: ["trigger", "type"],
+        message: "stage 'setup' runtimes must use trigger.type 'auto'",
+      });
+    }
+    for (const field of ["interval", "startTurn", "cooldownTurns"] as const) {
+      if (m.trigger[field] !== undefined) {
+        issues.push({
+          path: ["trigger", field],
+          message: `stage 'setup' runtimes cannot set trigger.${field}`,
+        });
+      }
+    }
+  }
+
+  return issues;
+}
+
+/** Authoring-only additions: every scheduler-driven runtime declares a stage. */
+function authoringManifestCrossFieldIssues(
+  m: ManifestCrossFieldView,
+): CrossFieldIssue[] {
+  const issues = sharedManifestCrossFieldIssues(m);
+  if (
+    (m.trigger?.type === "auto" || m.trigger?.type === "scheduled") &&
+    m.stage === undefined
+  ) {
+    issues.push({
+      path: ["stage"],
+      message: "stage is required for auto / scheduled runtimes",
+    });
+  }
+  return issues;
+}
+
 // ── Runtime manifest ─────────────────────────────────────────────
 
-export const runtimeManifestSchema = z
-  .object({
-    name: z
-      .string()
-      .min(1)
-      .regex(/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)*$/, {
-        message:
-          'name must be lowercase with hyphens, optional slash separators (e.g. "my-runtime" or "my-plugin/sub-runtime")',
+/**
+ * Field definitions shared by the compat (`runtimeManifestInputSchema`) and
+ * strict authoring (`runtimeManifestAuthoringSchema`) manifest schemas. The
+ * legacy-only fields (`priority`, `upstreamRequired`, `jobStatus`) and the
+ * schema-specific `trigger` are added per schema below, so the two never drift.
+ */
+const runtimeManifestCommonShape = {
+  name: z
+    .string()
+    .min(1)
+    .regex(/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)*$/, {
+      message:
+        'name must be lowercase with hyphens, optional slash separators (e.g. "my-runtime" or "my-plugin/sub-runtime")',
+    }),
+  /**
+   * Author-facing description: a plain string or an I18nText map (the
+   * preferred form in bundled plugins). The loader folds a map to a single
+   * string after parse (`RuntimeManifest.description` stays `string`); the
+   * union here keeps editor tooling (generated JSON Schema) from flagging
+   * every I18nText manifest.
+   */
+  description: z.union([
+    z.string().min(1),
+    z
+      .record(z.string(), z.string().min(1))
+      .refine((m) => Object.keys(m).length > 0, {
+        message: "i18n description map must have at least one locale entry",
       }),
-    description: z.string().min(1),
-    // Friendly, player-facing name (I18nText). Distinct from `name`, which is
-    // the runtime id. Surfaced via PluginSummary.displayName for plugin lists.
-    displayName: i18nTextLoose.optional(),
+  ]),
+  // Friendly, player-facing name (I18nText). Distinct from `name`, which is
+  // the runtime id. Surfaced via PluginSummary.displayName for plugin lists.
+  displayName: i18nTextLoose.optional(),
+  version: z.string().optional(),
+  runtimeType: z.enum(["agent", "function"]).optional(),
+  handler: z.string().optional(),
+  guard: z.string().optional(),
+  /**
+   * Plugin-root-relative path to a media-wires module (image / speech /
+   * transcription vendor wires). Declare on ONE runtime per plugin.
+   * Constrained like rpc handlers to block path traversal at schema level.
+   */
+  wires: pluginRelativeJsPath.optional(),
+  /**
+   * Plugin-root-relative path to a unified server entry module
+   * (`export default function (covel) { ... }`). Declare on ONE runtime
+   * per plugin. Same traversal constraint as `wires` / rpc handlers.
+   */
+  entry: pluginRelativeJsPath.optional(),
+  model: z.string().optional(),
+  timeoutMs: z.number().int().positive().optional(),
+  /**
+   * Per-runtime cap on the agent tool-call loop. Overrides the framework
+   * default (10). Lower values prevent runaway LLMs that keep calling the
+   * same tool indefinitely after a successful result. Set to 1 or 2 for
+   * single-shot plugins that should call one tool and stop.
+   */
+  maxSteps: z.number().int().positive().optional(),
+  /** Smart retry count on transient LLM failures. Default 1. Set 0 to disable. */
+  maxRetries: z.number().int().min(0).max(5).optional(),
+  /** Per-LLM-call total timeout (ms). Caps a single provider call. */
+  callTimeoutMs: z.number().int().positive().optional(),
+  /** Streaming first-token (TTFB) timeout (ms). Default 30000. */
+  firstTokenTimeoutMs: z.number().int().positive().optional(),
+  /** Tool-call loop detection threshold. Default 3. Set 0 to disable. */
+  loopDetectionThreshold: z.number().int().min(0).max(20).optional(),
+  /** Retry a bare (no-tool-call) finish once before releasing. Default false. */
+  requireToolUse: z.boolean().optional(),
+  /** Maximum nested ctx.recursiveCall() depth. Default 10. */
+  maxRecursionDepth: z.number().int().min(0).max(50).optional(),
+  pluginType: z.enum(["core-plugin", "plugin"]).optional(),
+  outputKind: outputKindSchema.optional(),
+  /**
+   * Capability tags for framework discovery. Free-form by design: plugins
+   * may declare arbitrary custom tags. The framework only acts on the tags in
+   * `FRAMEWORK_KNOWN_CAPABILITIES` (plugin-level `FrameworkCapability` +
+   * runtime-level `FrameworkRuntimeCapability`); at server bootstrap,
+   * `validateRuntimeManifestSemantics` warns when a declared tag looks like
+   * a misspelled framework-known one.
+   */
+  capabilities: z.array(z.string().min(1)).optional(),
+  tags: z.array(pluginTagSchema).optional(),
+  relations: pluginRelationsSchema.optional(),
+  /** Coarse scheduling stage (replaces numeric priority bands). */
+  stage: stageSchema.optional(),
+  /** Weak ordering dependencies (no gate). */
+  after: z.array(afterRefSchema).optional(),
+  /** Strong dependencies: ordering + gate (supersedes `upstreamRequired`). */
+  needs: z.array(needsRefSchema).optional(),
+  /** Typed same-execution data bindings, keyed by local binding name. */
+  inputs: inputsBindingMapSchema.optional(),
+  /** How the normalizer parses this runtime's handler return value. */
+  resultFormat: resultFormatSchema.optional(),
+  /** Handler may be replayed from a frozen activation boundary on resume. */
+  suspensionSafe: z.boolean().optional(),
+  /** Explicit read/write-set override for parallel hazard detection. */
+  effects: effectsDeclSchema.optional(),
+  /** Declared permission upper bounds (currently HTTP origins + methods). */
+  permissions: permissionsDeclSchema.optional(),
+  /**
+   * Execution mode when activated via manual plugin-rpc (`sync` awaits,
+   * `background` returns a jobId and streams progress via `_jobs`
+   * plugin-data). Ignored for scheduler-driven runtimes.
+   */
+  execution: z.enum(["sync", "background"]).optional(),
+  /**
+   * When true, the session-level event directory (aggregated across all
+   * active runtimes' `events` declarations) is rendered into this
+   * runtime's segment 5 prompt so the LLM knows which topics it may emit
+   * via the builtin `emit-event` tool.
+   */
+  advertiseEvents: z.boolean().optional(),
+  tools: toolsConfigSchema.optional(),
+  input: inputConfigSchema.optional(),
+  output: outputConfigSchema.optional(),
+  dataSchemas: pluginDataSchemaMapSchema.optional(),
+  /** Domain events this plugin's runtime may emit via `emit-event`. */
+  events: z.array(pluginEventDeclSchema).optional(),
+  i18n: z.record(z.string(), z.string()).optional(),
+  ui: uiSpecSchema.optional(),
+  userSettings: z.array(pluginUserSettingSpecSchema).optional(),
+  hooks: z.array(hookDeclarationSchema).optional(),
+  summaryFocus: z.array(z.string()).optional(),
+  authorsNote: authorsNoteDeclSchema.optional(),
+  postHistory: postHistoryDeclSchema.optional(),
+  rpc: rpcDeclMapSchema.optional(),
+  memoryBlocks: z.array(memoryBlockDeclSchema).optional(),
+} as const;
+
+/**
+ * Compat input schema — a superset of the strict authoring schema that keeps
+ * the legacy fields (`priority` / `upstreamRequired` / `jobStatus`) so every
+ * currently-shipping PLUGIN.md still parses. The trigger enum is the same
+ * four production types on both schemas. The cross-field checks it adds all
+ * have zero current violations (grepped against the bundled plugins), so they
+ * never reject a shipping manifest.
+ */
+export const runtimeManifestInputSchema = z
+  .object({
+    ...runtimeManifestCommonShape,
+    /** Legacy numeric priority band. Superseded by `stage` + `after`/`needs`. */
     priority: z.number().int().min(0).max(1000).optional(),
-    version: z.string().optional(),
-    runtimeType: z.enum(["agent", "function"]).optional(),
-    handler: z.string().optional(),
-    guard: z.string().optional(),
-    /**
-     * Plugin-root-relative path to a media-wires module (image / speech /
-     * transcription vendor wires). Declare on ONE runtime per plugin.
-     * Constrained like rpc handlers to block path traversal at schema level.
-     */
-    wires: pluginRelativeJsPath.optional(),
-    /**
-     * Plugin-root-relative path to a unified server entry module
-     * (`export default function (covel) { ... }`). Declare on ONE runtime
-     * per plugin. Same traversal constraint as `wires` / rpc handlers.
-     */
-    entry: pluginRelativeJsPath.optional(),
-    model: z.string().optional(),
-    timeoutMs: z.number().int().positive().optional(),
-    /**
-     * Per-runtime cap on the agent tool-call loop. Overrides the framework
-     * default (10). Lower values prevent runaway LLMs that keep calling the
-     * same tool indefinitely after a successful result. Set to 1 or 2 for
-     * single-shot plugins that should call one tool and stop.
-     */
-    maxSteps: z.number().int().positive().optional(),
-    /** Smart retry count on transient LLM failures. Default 1. Set 0 to disable. */
-    maxRetries: z.number().int().min(0).max(5).optional(),
-    /** Per-LLM-call total timeout (ms). Caps a single provider call. */
-    callTimeoutMs: z.number().int().positive().optional(),
-    /** Streaming first-token (TTFB) timeout (ms). Default 30000. */
-    firstTokenTimeoutMs: z.number().int().positive().optional(),
-    /** Tool-call loop detection threshold. Default 3. Set 0 to disable. */
-    loopDetectionThreshold: z.number().int().min(0).max(20).optional(),
-    /** Retry a bare (no-tool-call) finish once before releasing. Default false. */
-    requireToolUse: z.boolean().optional(),
-    /** Maximum nested ctx.recursiveCall() depth. Default 10. */
-    maxRecursionDepth: z.number().int().min(0).max(50).optional(),
-    pluginType: z.enum(["core-plugin", "plugin"]).optional(),
-    outputKind: outputKindSchema.optional(),
-    /**
-     * Capability tags for framework discovery. Free-form by design: plugins
-     * may declare arbitrary custom tags. The framework only acts on the tags in
-     * `FRAMEWORK_KNOWN_CAPABILITIES` (plugin-level `FrameworkCapability` +
-     * runtime-level `FrameworkRuntimeCapability`); at server bootstrap,
-     * `validateRuntimeManifestSemantics` warns when a declared tag looks like
-     * a misspelled framework-known one.
-     */
-    capabilities: z.array(z.string().min(1)).optional(),
-    tags: z.array(pluginTagSchema).optional(),
-    relations: pluginRelationsSchema.optional(),
-    /**
-     * Runtime IDs this runtime depends on for a successful upstream output.
-     * When any listed upstream ran with `status !== 'success'` in the same
-     * turn, the framework short-circuits this runtime and reports
-     * `status: 'skipped'` before the guard / LLM pipeline. Use this for
-     * plugins whose prompt is meaningless without fresh narrative context
-     * (guide, codex, char-creator/character-tracker, npc-graph/extractor
-     * all depend on narrator succeeding).
-     */
+    /** Legacy strong-dependency alias. Superseded by `needs`. */
     upstreamRequired: z
       .array(
         z.union([
@@ -542,33 +968,47 @@ export const runtimeManifestSchema = z
       )
       .optional(),
     trigger: triggerConfigSchema.optional(),
-    /**
-     * Execution mode when activated via manual plugin-rpc (`sync` awaits,
-     * `background` returns a jobId and streams progress via `_jobs`
-     * plugin-data). Ignored for scheduler-driven runtimes.
-     */
-    execution: z.enum(["sync", "background"]).optional(),
-    /**
-     * When true, the session-level event directory (aggregated across all
-     * active runtimes' `events` declarations) is rendered into this
-     * runtime's segment 5 prompt so the LLM knows which topics it may emit
-     * via the builtin `emit-event` tool.
-     */
-    advertiseEvents: z.boolean().optional(),
-    tools: toolsConfigSchema.optional(),
-    input: inputConfigSchema.optional(),
-    output: outputConfigSchema.optional(),
-    dataSchemas: pluginDataSchemaMapSchema.optional(),
-    /** Domain events this plugin's runtime may emit via `emit-event`. */
-    events: z.array(pluginEventDeclSchema).optional(),
-    i18n: z.record(z.string(), z.string()).optional(),
-    ui: uiSpecSchema.optional(),
-    userSettings: z.array(pluginUserSettingSpecSchema).optional(),
-    hooks: z.array(hookDeclarationSchema).optional(),
-    summaryFocus: z.array(z.string()).optional(),
-    authorsNote: authorsNoteDeclSchema.optional(),
-    postHistory: postHistoryDeclSchema.optional(),
-    rpc: rpcDeclMapSchema.optional(),
-    memoryBlocks: z.array(memoryBlockDeclSchema).optional(),
+    /** Compat-period projection of kernel job-status into legacy plugin-data views. */
+    jobStatus: jobStatusDeclSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((m, ctx) => {
+    for (const issue of sharedManifestCrossFieldIssues(m)) {
+      ctx.addIssue({
+        code: "custom",
+        path: [...issue.path],
+        message: issue.message,
+      });
+    }
+  });
+
+/**
+ * Compat alias. The plugin loader and `validate.ts` import this name; it is the
+ * exact same schema object as {@link runtimeManifestInputSchema}, so the loader
+ * needs no change.
+ */
+export const runtimeManifestSchema = runtimeManifestInputSchema;
+
+/**
+ * Strict authoring target — the shape new plugins should be written against.
+ * Shares {@link runtimeManifestCommonShape}, but: the trigger enum drops the
+ * reserved types; `priority` / `upstreamRequired` / `jobStatus` are rejected
+ * (omitted under `.strict()`); and every cross-field constraint is enforced,
+ * including "auto / scheduled runtimes must declare a stage". Background
+ * `execution` stays legal (it is a live mechanism, not a legacy field).
+ */
+export const runtimeManifestAuthoringSchema = z
+  .object({
+    ...runtimeManifestCommonShape,
+    trigger: authoringTriggerConfigSchema.optional(),
+  })
+  .strict()
+  .superRefine((m, ctx) => {
+    for (const issue of authoringManifestCrossFieldIssues(m)) {
+      ctx.addIssue({
+        code: "custom",
+        path: [...issue.path],
+        message: issue.message,
+      });
+    }
+  });

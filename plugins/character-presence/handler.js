@@ -39,8 +39,11 @@ export default async function handler(ctx) {
 
   return withPendingProposals(
     {
-      saved: true,
-      characterId: presence.characterId,
+      outcome: "success",
+      value: {
+        saved: true,
+        characterId: presence.characterId,
+      },
     },
     [proposal],
   );

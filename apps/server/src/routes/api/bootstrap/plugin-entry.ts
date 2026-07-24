@@ -28,6 +28,7 @@ import { pathToFileURL } from "node:url";
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
 import {
   getPluginTrustInfo,
+  parsePluginMd,
   type ParsedPluginMd,
   type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
@@ -294,6 +295,30 @@ export async function createBootstrapPluginEntries({
     const entryPaths = new Set<string>();
     for (const parsed of manifests) {
       if (parsed.manifest.entry) entryPaths.add(parsed.manifest.entry);
+    }
+    // For a MULTI-runtime plugin, the metadata-only root PLUGIN.md is excluded
+    // from `manifests` (discover.ts lists only runtime PLUGIN.mds), so an
+    // `entry` declared there — the documented convention — is otherwise dropped
+    // and the plugin's local tools never register (found: npc-graph's graph
+    // tools were silently absent from the extractor's LLM tool list). Read the
+    // root directly; the Set dedupes the single-runtime overlap.
+    const rootMdPath = path.join(discovery.rootPath, "PLUGIN.md");
+    if (fsSync.existsSync(rootMdPath)) {
+      try {
+        const rootEntry = parsePluginMd(
+          fsSync.readFileSync(rootMdPath, "utf8"),
+          rootMdPath,
+        ).manifest.entry;
+        if (rootEntry) entryPaths.add(rootEntry);
+      } catch (err) {
+        // Non-fatal — the runtime manifests still drive entry resolution —
+        // but a broken root PLUGIN.md would silently drop a declared entry
+        // (the exact failure mode this read exists to prevent), so log it.
+        console.warn(
+          `[plugin-entry] ${pluginId}: failed to parse root PLUGIN.md for entry —`,
+          err instanceof Error ? err.message : err,
+        );
+      }
     }
     if (entryPaths.size === 0) return;
 

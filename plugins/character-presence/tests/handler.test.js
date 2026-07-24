@@ -18,6 +18,8 @@ const avatar = {
   size: 1234,
 };
 
+// Deliberate change: handler migrated to envelope-v1, so the business return
+// is under `result.value`; pending proposals stay on the envelope (result).
 describe("character-presence handler", () => {
   it("saves presence refs by character id", async () => {
     const result = await handler(
@@ -36,7 +38,7 @@ describe("character-presence handler", () => {
       }),
     );
 
-    expect(result).toEqual({
+    expect(result.value).toEqual({
       saved: true,
       characterId: "mentor-lin",
     });
@@ -76,7 +78,7 @@ describe("character-presence handler", () => {
       }),
     );
 
-    expect(result.characterId).toBe("npc:archivist-1");
+    expect(result.value.characterId).toBe("npc:archivist-1");
     const proposals = getPendingProposals(result);
     expect(proposals[0].payload.key).toBe("npc:archivist-1");
   });
@@ -98,7 +100,7 @@ describe("character-presence handler", () => {
       }),
     );
 
-    expect(result).toEqual({
+    expect(result.value).toEqual({
       saved: true,
       characterId: "mentor-lin",
     });
@@ -137,7 +139,7 @@ describe("character-presence handler", () => {
       }),
     );
 
-    expect(result).toEqual({
+    expect(result.value).toEqual({
       saved: true,
       characterId: "npc-transfer-student",
     });

@@ -320,3 +320,56 @@ export type {
   WorldPluginPolicy,
   WorldPluginSettings,
 } from "./world.js";
+
+export type {
+  JsonPrimitive,
+  JsonValue,
+  Stage,
+  DependencyCardinality,
+  NeedsScope,
+  DependencyRef,
+  BindingSource,
+  RuntimeBinding,
+  InputSource,
+  InputSlot,
+  RuntimeExportBinding,
+  EffectResource,
+  EffectsDecl,
+  HttpMethod,
+  HttpPermissionDecl,
+  LegacyJobViewDecl,
+  TriggerSpec,
+  RuntimeResultFormat,
+  NormalizedRuntimeSpec,
+  ExecutionOrigin,
+  CountPolicy,
+  ExecutionContext,
+  RuntimeActivation,
+  SchedulingDiagnostic,
+} from "./runtime-scheduling.js";
+
+export { STAGE_ORDER } from "./runtime-scheduling.js";
+
+export type {
+  SetupRuntimeState,
+  SetupAttemptState,
+  SetupAttemptRecord,
+  RanSetupRuntime,
+  LogicalTurnLedgerRecord,
+  JobStatusState,
+  JobStatusRecord,
+} from "./runtime-lifecycle.js";
+
+export type {
+  JsonSchema,
+  JobStatusEffect,
+  RuntimeDiagnostic,
+  ObservabilityEffects,
+  RuntimeEffects,
+  HandlerResult,
+  RuntimeResultBase,
+  RuntimeOutcome,
+  RuntimeResultV2,
+} from "./runtime-result-v2.js";
+
+export type { RuntimeExportRecord } from "./runtime-exports.js";

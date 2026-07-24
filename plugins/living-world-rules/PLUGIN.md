@@ -8,6 +8,7 @@ description:
   en: Lets you add lasting world rules, such as taboos, customs, and special setting details.
 pluginType: plugin
 runtimeType: function
+resultFormat: envelope-v1
 outputKind: system
 handler: ./handler.js
 trigger:

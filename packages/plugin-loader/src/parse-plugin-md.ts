@@ -8,6 +8,7 @@ import {
   authorsNoteDeclSchema,
   HOOK_EVENTS,
   postHistoryDeclSchema,
+  resolveI18nText,
   rpcDeclMapSchema,
   runtimeManifestSchema,
 } from "@covel/shared";
@@ -94,7 +95,7 @@ function deriveFixHint(error: unknown): string {
     return 'Add a `description:` field — either a single string or an i18n map like `description: { en-US: "...", zh-CN: "..." }`.';
   }
   if (path === "priority") {
-    return "Set `priority` to an integer between 0 and 1000 (e.g. `priority: 500`).";
+    return "`priority` is legacy — declare a named `stage` instead (e.g. `stage: post-turn`); if kept for compat it must be an integer between 0 and 1000.";
   }
   if (code === "unrecognized_keys") {
     return `Remove or rename the unknown field at "${path}" — refer to docs/reference/plugins.md for the full frontmatter schema.`;
@@ -251,38 +252,6 @@ export function parsePluginMd(
     // strictly validated. Non-hook fields are validated by runtimeManifestSchema.
     let dataToValidate = data;
 
-    // Normalize I18nText `description` for schema validation.
-    // The public manifest schema requires `description: string` (it is used
-    // inline in LLM traces/tool registries and doesn't need locale routing).
-    // The user-facing UI reads I18nText from `PluginSummary.description`
-    // which is loaded separately via `loadPluginSummary` from the raw YAML.
-    // Authors can declare description as either:
-    //   description: single string               (legacy, single-locale)
-    //   description: { zh: "...", en: "..." }    (I18nText, preferred)
-    // When an object is given, collapse to a single string for the manifest
-    // (prefer English so runtime traces stay ASCII-friendly, fall back to
-    // Chinese or any other available locale).
-    if (
-      dataToValidate &&
-      typeof dataToValidate === "object" &&
-      "description" in dataToValidate
-    ) {
-      const raw = (dataToValidate as Record<string, unknown>).description;
-      if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-        const entries = raw as Record<string, unknown>;
-        const fallback =
-          (typeof entries["en"] === "string" && entries["en"]) ||
-          (typeof entries["en-US"] === "string" && entries["en-US"]) ||
-          (typeof entries["zh"] === "string" && entries["zh"]) ||
-          (typeof entries["zh-CN"] === "string" && entries["zh-CN"]) ||
-          Object.values(entries).find((v) => typeof v === "string") ||
-          "";
-        dataToValidate = {
-          ...(dataToValidate as Record<string, unknown>),
-          description: fallback,
-        };
-      }
-    }
     const rawHooks: Array<{
       event: string;
       handler: string;
@@ -324,12 +293,9 @@ export function parsePluginMd(
         );
       }
       // Replace hooks with the filtered valid ones for strict schema
-      // validation. Spread from `dataToValidate` (not the raw `data`) so the
-      // i18n `description` normalization above is preserved — otherwise a
-      // plugin that declares BOTH an object `description` and `hooks` would
-      // have its normalized description clobbered back to an object here and
-      // fail schema validation. (authorsNote/postHistory/rpc below already
-      // chain off `dataToValidate`; this site was the lone exception.)
+      // validation. Spread from `dataToValidate` (not the raw `data`) so any
+      // earlier normalization stays applied (authorsNote/postHistory/rpc
+      // below already chain off `dataToValidate`).
       const { hooks: _omitted, ...dataWithoutHooks } = dataToValidate as Record<
         string,
         unknown
@@ -374,7 +340,17 @@ export function parsePluginMd(
     const slashIdx = parsed.name.indexOf("/");
     const pluginId =
       slashIdx >= 0 ? parsed.name.slice(0, slashIdx) : parsed.name;
-    manifest = { ...parsed, pluginId };
+    // Fold an I18nText `description` map to a single string:
+    // `RuntimeManifest.description` is used inline in LLM traces / tool
+    // registries and doesn't need locale routing (the user-facing UI reads
+    // I18nText from `PluginSummary.description`, loaded separately from the
+    // raw YAML). Prefer English so runtime traces stay ASCII-friendly, fall
+    // back to Chinese or any other available locale.
+    manifest = {
+      ...parsed,
+      description: resolveI18nText(parsed.description, "en") ?? "",
+      pluginId,
+    };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     // Best-effort: attach the source line for the first failing key so the

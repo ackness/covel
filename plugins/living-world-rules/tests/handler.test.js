@@ -16,6 +16,8 @@ function ctx(manualPayload) {
   };
 }
 
+// Deliberate change: handler migrated to envelope-v1, so the business return
+// is under `result.value`; pending proposals stay on the envelope (result).
 describe("living-world-rules handler", () => {
   it("saves a constant rule and emits lorebook.upsert", async () => {
     const result = await handler(
@@ -33,7 +35,7 @@ describe("living-world-rules handler", () => {
       }),
     );
 
-    expect(result).toEqual({
+    expect(result.value).toEqual({
       saved: true,
       ruleId: "rain-market",
       lorebookEntryId: "lwr-rain-market",
@@ -174,7 +176,7 @@ describe("living-world-rules handler", () => {
       }),
     );
 
-    expect(result).toEqual({
+    expect(result.value).toEqual({
       saved: true,
       ruleId: "club-room",
       lorebookEntryId: "lwr-club-room",
@@ -242,7 +244,7 @@ describe("living-world-rules handler", () => {
       }),
     );
 
-    expect(result).toEqual({
+    expect(result.value).toEqual({
       saved: true,
       ruleId: "rule-club-room-rule",
       lorebookEntryId: "lwr-rule-club-room-rule",

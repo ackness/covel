@@ -30,7 +30,10 @@ export default async function handler(ctx) {
   const location =
     typeof evt?.data?.location === "string" ? evt.data.location.trim() : "";
   if (!evt || evt.topic !== "scene.set" || !location) {
-    return { skipped: true, reason: "no usable scene.set payload" };
+    return {
+      outcome: "success",
+      value: { skipped: true, reason: "no usable scene.set payload" },
+    };
   }
   const variant = evt.data.timeOfDay === "night" ? "night" : "day";
   const visualHint =
@@ -103,7 +106,10 @@ export default async function handler(ctx) {
     previous.sceneId === stage.sceneId &&
     previous.variant === stage.variant;
   if (isNoOp) {
-    return { skipped: true, reason: "no-op: scene/variant unchanged", stage };
+    return {
+      outcome: "success",
+      value: { skipped: true, reason: "no-op: scene/variant unchanged", stage },
+    };
   }
 
   // Night lazy-gen steady-state gap: a session-generated scene (source
@@ -122,25 +128,31 @@ export default async function handler(ctx) {
   // this keeps the night art aligned with the day subject).
   const effectiveHint = visualHint ?? candidate.visualHint;
   const proposal = makeStageProposal(ctx, stage);
-  const output =
+  // Mixing split: `stage` is the business value, the generate-requested event
+  // is a domain effect. The kernel projects effects.events back to the legacy
+  // top-level `events` key that turn-event-chain / normalizeOutput read.
+  const envelope =
     candidate.source === "pending" || needsVariantBackfill
       ? {
-          stage,
-          events: [
-            {
-              topic: GENERATE_REQUESTED_TOPIC,
-              data: {
-                sceneId: candidate.sceneId,
-                location,
-                ...(effectiveHint ? { visualHint: effectiveHint } : {}),
-                variant,
+          outcome: "success",
+          value: { stage },
+          effects: {
+            events: [
+              {
+                topic: GENERATE_REQUESTED_TOPIC,
+                data: {
+                  sceneId: candidate.sceneId,
+                  location,
+                  ...(effectiveHint ? { visualHint: effectiveHint } : {}),
+                  variant,
+                },
               },
-            },
-          ],
+            ],
+          },
         }
-      : { stage };
+      : { outcome: "success", value: { stage } };
 
-  return withPendingProposals(output, [proposal]);
+  return withPendingProposals(envelope, [proposal]);
 }
 
 /**

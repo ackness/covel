@@ -8,14 +8,30 @@ description:
   en: Offers several reply options so you can choose the one that fits best.
 pluginType: plugin
 runtimeType: function
+resultFormat: envelope-v1
 outputKind: system
-priority: 700
+stage: post-turn
 handler: ./handler.js
 trigger:
   type: auto
 capabilities:
   - branch-reply
   - prompt-history-rewriter
+# Promotes branch-reply's implicit narrator dependency into a declared
+# binding (04 §1). The handler today scans `completedResults` for the
+# longest non-empty `narrativeOutput`; `inputs.narrative` names that source
+# by capability. `select: /narrativeOutput` points into the narrative
+# engine's success value (`RuntimeResult.output.narrativeOutput`).
+# `required: false` preserves current behavior: branch-reply has no
+# `upstreamRequired` today and still runs when the narrator fails, so the
+# binding must not gate. Handler switch to `ctx.inputs` is a later step.
+inputs:
+  narrative:
+    from:
+      capability: narrative-engine
+      cardinality: one
+    select: "/narrativeOutput"
+    required: false
 tags:
   - role:branching
   - cost:function
@@ -30,7 +46,7 @@ ui:
 
 Function runtime for Covel-native swipe + regenerate storage. Runs two ways:
 
-- **Auto seed** (`trigger: auto`, priority 700 — after the narrative engines):
+- **Auto seed** (`trigger: auto`, `stage: post-turn` — after the narrative engines):
   with no `manualPayload`, it reads the active story engine's `narrativeOutput`
   from `completedResults` (engine-agnostic — discovered by the non-empty
   `narrativeOutput` contract, never by plugin id, so it works under `narrator`

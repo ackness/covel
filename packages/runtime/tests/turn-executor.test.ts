@@ -102,7 +102,7 @@ describe("TurnExecutor E2E", () => {
 
   it("should discover narrator from plugins/", () => {
     expect(narratorManifest.name).toBe("narrator");
-    expect(narratorManifest.priority).toBe(500);
+    expect(narratorManifest.stage).toBe("narrative");
     expect(narratorManifest.pluginType).toBe("core-plugin");
   });
 
@@ -263,6 +263,9 @@ describe("TurnExecutor E2E", () => {
       maxSteps: 1,
     });
 
+    // Stage barrier: story-runtime (priority 500 → narrative stage) runs before
+    // helper-runtime (priority 550 → post-turn stage). Order is incidental to
+    // this test — the assertion pins which runtime gets which override.
     expect(resolveCalls).toEqual([
       { name: "story-runtime", override: undefined },
       { name: "helper-runtime", override: undefined },
@@ -909,11 +912,15 @@ describe("TurnExecutor _interaction protocol", () => {
       }),
     };
 
-    // Strip upstreamRequired for this unit test — the real player-init
-    // declares `upstreamRequired: [pregame]` so the framework skips
-    // it when pregame isn't scheduled. This test focuses on the interaction
-    // protocol in isolation and doesn't need to wire in pregame.
-    const isolatedManifest = { ...charManifest, upstreamRequired: undefined };
+    // Strip the upstream gate for this unit test — the real player-init
+    // declares turn-scoped `needs: [pregame, world-init/schema-gen]` so the
+    // framework skips it when those aren't scheduled. This test focuses on the
+    // interaction protocol in isolation and doesn't wire in the setup chain.
+    const isolatedManifest = {
+      ...charManifest,
+      needs: undefined,
+      upstreamRequired: undefined,
+    };
     const result = await executeTurn(makeTurnInput(), [isolatedManifest], deps);
 
     // Should have pendingInputs with the interaction protocol

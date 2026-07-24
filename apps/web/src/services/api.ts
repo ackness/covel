@@ -29,7 +29,6 @@ export {
   getParamOverrides,
   getPrepRuntimeBindings,
   getProviderKeys,
-  getRuntimePriorityOverrides,
   getSlotConfig,
   loadProviderKeysFromStorage,
   removeCustomPreset,
@@ -38,7 +37,6 @@ export {
   setPrepRuntimeBindings,
   setProviderKeys,
   setProviderKeysAsync,
-  setRuntimePriorityOverrides,
   setSlotConfig,
 } from "./api/model-settings.js";
 export type {

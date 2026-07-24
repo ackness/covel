@@ -60,11 +60,25 @@ export type {
   SnapshotPayload,
   SnapshotPayloadV1,
   SnapshotPayloadV2,
+  SnapshotPayloadV3,
   SnapshotSessionState,
+  SnapshotSessionStateV3,
   SnapshotRecord,
   SnapshotMetadata,
   SuspensionRecord,
 } from "./records/snapshot-records.js";
+
+// Session-lifecycle records live in @covel/shared (the cross-layer contract);
+// re-exported here so store consumers import them alongside the store records.
+export type {
+  SetupRuntimeState,
+  SetupAttemptState,
+  SetupAttemptRecord,
+  LogicalTurnLedgerRecord,
+  JobStatusState,
+  JobStatusRecord,
+  RuntimeExportRecord,
+} from "@covel/shared";
 
 export type {
   PaginationOpts,
@@ -115,6 +129,13 @@ import type {
   PaginationOpts,
   CursorPageOpts,
 } from "./records/pagination-records.js";
+import type {
+  SetupAttemptRecord,
+  SetupAttemptState,
+  LogicalTurnLedgerRecord,
+  JobStatusRecord,
+  RuntimeExportRecord,
+} from "@covel/shared";
 
 // ── Domain sub-interfaces ────────────────────────────────────────
 //
@@ -150,6 +171,9 @@ export interface SessionStore {
         | "embeddingModelId"
         | "embeddingLockedAt"
         | "runtimeModelOverrides"
+        | "phase"
+        | "completedPlayerTurns"
+        | "setupRuntimes"
       >
     >,
   ): Promise<void>;
@@ -549,6 +573,115 @@ export interface SuspensionStore {
   deleteExpiredSuspensions(olderThanIso: string): Promise<number>;
 }
 
+/**
+ * Session-lifecycle records for the scheduling redesign (`sql-lifecycle-records`):
+ * the logical-turn completion ledger, the setup-runtime attempt log, and the
+ * append-only job-status stream. Every method is usable inside a
+ * {@link TransactionalStore.withTransaction} handler.
+ */
+export interface LifecycleStore {
+  /**
+   * Record that a logical turn completed. Idempotent on
+   * `(sessionId, logicalTurnId)`: returns `true` when this call inserted the
+   * ledger row, `false` when the turn was already recorded (no overwrite, no
+   * throw). This boolean is the "count this turn at most once" guarantee.
+   */
+  insertLogicalTurnCompletion(
+    record: LogicalTurnLedgerRecord,
+  ): Promise<boolean>;
+  getLogicalTurnCompletion(
+    sessionId: string,
+    logicalTurnId: string,
+  ): Promise<LogicalTurnLedgerRecord | null>;
+
+  /**
+   * Insert a setup-runtime attempt. Idempotent on
+   * `(sessionId, runtimeId, generation, executionId)`: returns `true` when this
+   * call inserted the row, `false` when the attempt already existed (no
+   * overwrite, no throw).
+   */
+  insertSetupAttempt(record: SetupAttemptRecord): Promise<boolean>;
+  /**
+   * Terminalise an existing setup attempt (identified by its full unique key)
+   * with a new `state` and optional `finishedAt` / `error`. No-op when the
+   * attempt does not exist.
+   */
+  updateSetupAttempt(
+    sessionId: string,
+    runtimeId: string,
+    generation: number,
+    executionId: string,
+    patch: {
+      readonly state: SetupAttemptState;
+      readonly finishedAt?: string;
+      readonly error?: string;
+    },
+  ): Promise<void>;
+  listSetupAttempts(
+    sessionId: string,
+    filter?: { readonly runtimeId?: string; readonly generation?: number },
+  ): Promise<readonly SetupAttemptRecord[]>;
+
+  /**
+   * Append a job-status event. Append-only and idempotent on
+   * `(sessionId, progressScopeId, pluginId, runtimeId, jobId, sequence)`:
+   * returns `true` when this call inserted the event, `false` when a duplicate
+   * `sequence` for the same job was already stored (the earlier event wins; no
+   * overwrite, no throw).
+   */
+  appendJobStatus(record: JobStatusRecord): Promise<boolean>;
+  /** List job-status events for a session, ordered by `(jobId, sequence)` asc. */
+  listJobStatus(
+    sessionId: string,
+    filter?: { readonly progressScopeId?: string; readonly jobId?: string },
+  ): Promise<readonly JobStatusRecord[]>;
+}
+
+/**
+ * Runtime exports for the scheduling redesign (`sql-export-records`): the
+ * session-scoped, read-only, cross-plugin, versioned publications produced by
+ * `output.recordAs`. Every method is usable inside a
+ * {@link TransactionalStore.withTransaction} handler (the intended publish site
+ * is the finalizeExecution transaction).
+ */
+export interface ExportStore {
+  /**
+   * Publish a runtime export at its `revision`. Idempotent on
+   * `(sessionId, producerRuntimeId, recordAs, revision)`: returns `true` when
+   * this call inserted the row, `false` when that revision was already stored
+   * (no overwrite, no throw). The boolean lets the caller detect a lost race for
+   * a revision number.
+   */
+  appendRuntimeExport(record: RuntimeExportRecord): Promise<boolean>;
+  /**
+   * The latest committed export for `(sessionId, producerRuntimeId, recordAs)`,
+   * i.e. the row with the highest `revision`, or `null` when none exists.
+   *
+   * `opts.atOrBefore` is the frozen-read cutoff: only revisions with
+   * `committedAt <= atOrBefore` are considered, so a consumer sees exactly the
+   * revision that was live when its execution began — a revision published after
+   * that instant is invisible to it. Omitted ⇒ the absolute latest.
+   */
+  getLatestRuntimeExport(
+    sessionId: string,
+    producerRuntimeId: string,
+    recordAs: string,
+    opts?: { readonly atOrBefore?: string },
+  ): Promise<RuntimeExportRecord | null>;
+  /**
+   * List a session's exports, ordered by `(producerRuntimeId, recordAs,
+   * revision)` ascending — so within each export series revisions run oldest to
+   * newest. Optionally narrowed to one `producerRuntimeId` and/or `recordAs`.
+   */
+  listRuntimeExports(
+    sessionId: string,
+    filter?: {
+      readonly producerRuntimeId?: string;
+      readonly recordAs?: string;
+    },
+  ): Promise<readonly RuntimeExportRecord[]>;
+}
+
 /** Materialized state snapshots. Part of `sql-snapshot-records`. */
 export interface SnapshotStore {
   /**
@@ -647,6 +780,8 @@ export interface DataStore
     SessionSummaryStore,
     SuspensionStore,
     SnapshotStore,
+    LifecycleStore,
+    ExportStore,
     TransactionalStore,
     StoreLifecycle {}
 

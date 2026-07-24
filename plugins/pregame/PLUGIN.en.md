@@ -9,6 +9,7 @@ description:
 pluginType: core-plugin
 priority: 10
 runtimeType: function
+resultFormat: envelope-v1
 outputKind: system
 handler: ./handler.js
 trigger:

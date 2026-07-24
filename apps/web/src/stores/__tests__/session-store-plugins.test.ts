@@ -35,7 +35,6 @@ vi.mock("../../services/api.js", () => ({
   disableSessionPlugin: vi.fn(),
   getCustomPresets: vi.fn(() => []),
   getSlotConfig: vi.fn(() => ({})),
-  getRuntimePriorityOverrides: vi.fn(() => ({})),
   getPrepRuntimeBindings: vi.fn(() => ({})),
   getProviderKeys: vi.fn(() => ({})),
   getCapabilityOverrides: vi.fn(() => ({})),

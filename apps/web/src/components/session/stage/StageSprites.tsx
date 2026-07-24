@@ -44,7 +44,7 @@ export function StageSprites({
   stationsRef.current = stations;
 
   const fresh = computeSpriteSlots(speakers, presence, stations);
-  // GalGame sticky sprites: transitional narration turns often have no active
+  // Visual-novel sticky sprites: transitional narration turns often have no active
   // cast — keep the previous line-up on stage (dimmed) instead of blinking
   // everyone out, until a turn with a real cast replaces it.
   const lastSlotsRef = useRef(fresh);

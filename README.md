@@ -19,8 +19,8 @@ Covel is an AI RPG where the world keeps running between your turns: NPCs track 
 
 - 🎭 **Stage mode** — a full-screen visual novel: scene backdrops, character sprites, typewriter dialog, and choice overlays. Backdrops for brand-new locations are generated on demand, mid-session.
 - 🤖 **Multi-agent turns** — while the narrator writes the scene, other agents extract NPC relationships, grow the world codex, pick the on-stage cast, and maintain long-range memory — in parallel, every turn.
-- 🧩 **Everything is a plugin** — 20 bundled agents. A plugin is a `PLUGIN.md`: YAML frontmatter for triggers/tools/events, markdown body as the agent's prompt.
-- 🌍 **Two flagship worlds** — a dark-fantasy mystery and a GalGame-style school romance, both hand-built and ready to fork.
+- 🧩 **Everything is a plugin** — 23 bundled agents. A plugin is a `PLUGIN.md`: YAML frontmatter for triggers/tools/events, markdown body as the agent's prompt.
+- 🌍 **Two flagship worlds** — a dark-fantasy mystery and a visual-novel school romance, both hand-built and ready to fork.
 - 🔌 **Bring your own model** — OpenAI / Anthropic / DeepSeek / Qwen model slots. Local-first: SQLite on disk, API keys never persisted server-side.
 
 ## Two ways to play
@@ -56,7 +56,7 @@ Open <http://localhost:5173> — debug tooling lives at `/debug`. PostgreSQL, in
 ![World select](./.assets/images/readme/select-world.png)
 
 - **Mistport Chronicles** (雾港·裂潮纪) — dark-fantasy mystery in traditional-story mode. A fog-shrouded port where every ebb bares different ruins; a guildmaster vanishes and four powers race for a key to what sleeps in the deep. Bilingual, with a seed cast and investigation-flavored memory.
-- **Haruka Academy** (遥风学园) — school romance in GalGame stage mode. Clubs, exams, rumors, and quiet crushes at a seaside high school, told through a cast of eight — portraits and scene art included.
+- **Haruka Academy** (遥风学园) — school romance in stage mode. Clubs, exams, rumors, and quiet crushes at a seaside high school, told through a cast of eight — portraits and scene art included.
 
 ## Create your own
 

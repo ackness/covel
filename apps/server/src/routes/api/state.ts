@@ -10,6 +10,7 @@
  */
 
 import { Hono } from "hono";
+import { deriveLegacyClockForSession } from "@covel/shared";
 import type { StateManager } from "@covel/state";
 import type { DataStore } from "@covel/store";
 import { errorBody } from "../../api-error.js";
@@ -64,7 +65,12 @@ stateRoutes.get("/:id/state", async (c) => {
   );
 
   // ── session record ────────────────────────────────────────────────
-  const sessionData = { ...session } as Record<string, unknown>;
+  // Refresh the legacy clock columns from the phase/setup mirror — the kernel
+  // no longer writes them, so the raw columns are frozen.
+  const sessionData = {
+    ...session,
+    ...deriveLegacyClockForSession(session),
+  } as Record<string, unknown>;
   tables.session = {
     schema: {
       name: "session",

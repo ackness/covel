@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import path from "node:path";
 import type { RuntimeManifest } from "@covel/shared";
+import { getRuntimeSpec } from "@covel/shared";
 import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../plugins");
@@ -73,12 +74,16 @@ describe("core plugin manifest contract", () => {
 
     expect(playerInit).toMatchObject({
       pluginType: "core-plugin",
-      priority: 50,
+      stage: "setup",
       model: "plugin",
       guard: "./guard.js",
       trigger: { type: "auto" },
-      upstreamRequired: ["pregame", "world-init/schema-gen"],
+      // Single-declared now: turn-scoped needs replace upstreamRequired (order +
+      // same-turn gate). priority removed (explicit stage).
+      needs: ["pregame", "world-init/schema-gen"],
     });
+    expect(playerInit.priority).toBeUndefined();
+    expect(playerInit.upstreamRequired).toBeUndefined();
     expect(playerInit.input?.inject).toEqual([
       {
         kind: "runtime",
@@ -88,13 +93,12 @@ describe("core plugin manifest contract", () => {
       },
     ]);
 
-    const pregamePriorities = [pregame, schemaGen, playerInit].map(
-      (manifest) => manifest.priority,
-    );
-    expect(pregamePriorities).toEqual([10, 40, 50]);
-    expect(
-      pregamePriorities.every((priority) => priority >= 0 && priority <= 99),
-    ).toBe(true);
+    // All three resolve to the setup stage. pregame / schema-gen still ride the
+    // priority-band derivation (the loader forbids `stage: setup` on their
+    // scheduled trigger); player-init declares `stage` explicitly.
+    for (const manifest of [pregame, schemaGen, playerInit]) {
+      expect(getRuntimeSpec(manifest).stage).toBe("setup");
+    }
   });
 
   it("keeps the main-loop DAG around narrator and downstream plugins", async () => {
@@ -113,7 +117,7 @@ describe("core plugin manifest contract", () => {
 
     expect(retriever).toMatchObject({
       pluginType: "plugin",
-      priority: 400,
+      stage: "pre-turn",
       runtimeType: "function",
       handler: "./handler.js",
       trigger: { type: "scheduled", interval: 1 },
@@ -121,7 +125,7 @@ describe("core plugin manifest contract", () => {
 
     expect(narrator).toMatchObject({
       pluginType: "core-plugin",
-      priority: 500,
+      stage: "narrative",
       model: "story",
       outputKind: "story",
       trigger: { type: "auto" },
@@ -140,7 +144,7 @@ describe("core plugin manifest contract", () => {
     ]);
 
     for (const downstream of downstreams) {
-      expect(downstream.priority).toBe(600);
+      expect(getRuntimeSpec(downstream).stage).toBe("post-turn");
     }
 
     // Every narrator-downstream runtime is engine-agnostic : it gates
@@ -148,10 +152,11 @@ describe("core plugin manifest contract", () => {
     // engine the current mode loaded) and injects from both known engines so
     // it works under narrator OR chat-mode-narrator. An exact `narrator`
     // upstream would permanently skip these runtimes in dialogue mode.
+    // Single-declared now: the turn-scoped `needs` capability entry (no
+    // upstreamRequired alias).
     for (const downstream of downstreams) {
-      expect(downstream.upstreamRequired).toEqual([
-        { capability: "narrative-engine" },
-      ]);
+      expect(downstream.needs).toEqual([{ capability: "narrative-engine" }]);
+      expect(downstream.upstreamRequired).toBeUndefined();
       for (const engine of ["narrator", "chat-mode-narrator"]) {
         expect(downstream.input?.inject).toContainEqual({
           kind: "runtime",

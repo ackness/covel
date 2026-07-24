@@ -36,11 +36,11 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 
 图像 / TTS / STT 的请求体格式由 **wire** 决定（一个 wire = 一家厂商的请求/响应形态），slot 通过 `providerRequestMetadata` 里的路由键选 wire：
 
-| 路由键              | 适用 tag        | 内置 wire（缺省值加粗）                               |
-| ------------------- | --------------- | ----------------------------------------------------- |
-| `imageWire`         | `image`         | **`openai-images`**、`dashscope-wan`                  |
-| `speechWire`        | `speech`        | **`openai-speech`**（`POST /audio/speech`）           |
-| `transcriptionWire` | `transcription` | **`openai-transcription`**（`/audio/transcriptions`） |
+| 路由键              | 适用 tag        | 内置 wire（缺省值加粗）                                                                                                                                    |
+| ------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `imageWire`         | `image`         | **`openai-images`**、`dashscope-wan`（DashScope 原生图像面：wan2.x 走异步任务轮询；`qwen-image*` 系列——含 qwen-image-3.0-pro——自动切同步 multimodal 端点） |
+| `speechWire`        | `speech`        | **`openai-speech`**（`POST /audio/speech`）                                                                                                                |
+| `transcriptionWire` | `transcription` | **`openai-transcription`**（`/audio/transcriptions`）                                                                                                      |
 
 ```toml
 [covel.image]

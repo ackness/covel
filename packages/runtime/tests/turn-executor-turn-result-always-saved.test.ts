@@ -104,8 +104,8 @@ describe("executeTurn: saveTurnResult invariant", () => {
   });
 
   it("persists a turn_result when zero runtimes are scheduled", async () => {
-    // No runtimes in the active list → scheduleByPriority returns empty;
-    // but executeTurn still must record the turn so turnCount increments.
+    // No runtimes in the active list → the stage schedule is empty; but
+    // executeTurn still must record the turn so the player-turn count increments.
     const store = await freshActiveStore("sess-empty");
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => ({

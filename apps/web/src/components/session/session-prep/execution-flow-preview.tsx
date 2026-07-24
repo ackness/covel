@@ -31,27 +31,24 @@ export function ExecutionFlowPreview({
           className="text-[10px] text-muted-foreground/70 leading-snug"
           title={t(
             "session.executionFlowTitle",
-            "Plugins run in priority order every turn. Pre-Turn and After-Turn band the narrator on either side.",
+            "Plugins run stage by stage each turn: setup, then pre-turn, narrative, and post-turn.",
           )}
         >
           {t(
             "session.executionFlowHint",
-            "Turn order — lower priority runs first.",
+            "Turn order — earlier stages run first.",
           )}
         </p>
       </div>
       <div className="space-y-1">
         {(flowData?.segments ?? []).map((segment) => {
+          // Group by stage segment (segmentId), not priority range.
           const stepsInSegment = selectedFlowSteps
-            .filter(
-              (step) =>
-                step.priority >= segment.range[0] &&
-                step.priority <= segment.range[1],
-            )
-            .sort((a, b) => a.priority - b.priority);
+            .filter((step) => step.segmentId === segment.id)
+            .sort((a, b) => a.runtimeId.localeCompare(b.runtimeId));
           if (stepsInSegment.length === 0) return null;
           return (
-            <div key={segment.label}>
+            <div key={segment.id}>
               <div className="text-[9px] text-muted-foreground/70 uppercase tracking-widest mb-0.5">
                 {resolveI18n(segment.labelText, i18n.language) || segment.label}
               </div>
@@ -66,11 +63,8 @@ export function ExecutionFlowPreview({
                     <div
                       key={step.runtimeId}
                       className="inline-flex items-center gap-1.5 bg-muted/40 border border-border px-2 py-1 text-[10px]"
-                      title={`${step.runtimeId} — P${step.priority} — ${step.trigger.type}`}
+                      title={`${step.runtimeId} — ${step.trigger.type}`}
                     >
-                      <span className="text-[8px] text-muted-foreground font-mono">
-                        P{step.priority}
-                      </span>
                       <span className="font-medium truncate max-w-[120px]">
                         {step.label}
                       </span>

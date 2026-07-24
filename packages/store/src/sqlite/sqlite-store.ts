@@ -25,6 +25,8 @@ import * as schema from "./schema.js";
 import { createSqliteDataCrud } from "./sqlite-data-crud.js";
 import { createSqliteRuntimeRecords } from "./sqlite-runtime-records.js";
 import { createSqliteSessionRecords } from "./sqlite-session-records.js";
+import { createSqliteLifecycleRecords } from "./sqlite-lifecycle-records.js";
+import { createSqliteExportRecords } from "./sqlite-export-records.js";
 import { createSqliteSessions } from "./sqlite-sessions.js";
 import { createSqliteSnapshotRecords } from "./sqlite-snapshot-records.js";
 import { createTables } from "./sqlite-store-mappers.js";
@@ -76,6 +78,8 @@ export function createSqliteStore(
     ...createSqliteDataCrud(db),
     ...createSqliteWorlds(db),
     ...createSqliteSnapshotRecords(db),
+    ...createSqliteLifecycleRecords(db),
+    ...createSqliteExportRecords(db),
   };
 
   // One connection means a transaction cannot isolate: a write issued

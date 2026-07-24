@@ -5,6 +5,11 @@ export * from "./types/index.js";
 export { deepMerge } from "./utils/deep-merge.js";
 export { resolveI18nText, resolveI18nDeep } from "./utils/i18n.js";
 export { collectMediaRefIds } from "./utils/media-ref-scan.js";
+export {
+  assertJsonValue,
+  isJsonValue,
+  toJsonValueOrDiagnostic,
+} from "./utils/json-value.js";
 export { reservedPluginDataNamespaceError } from "./utils/plugin-data-namespace.js";
 export {
   MAX_WORKING_MEMORY_ENTRIES,
@@ -29,6 +34,39 @@ export {
 // ── Environment Registry ──────────────────────────────────────────
 export * from "./env/index.js";
 
+// ── Scheduling IR normalization ───────────────────────────────────
+export {
+  normalizeRuntimeManifest,
+  stageForPriority,
+  stageRank,
+  stageMessageOrder,
+  getRuntimeSpec,
+  hasIllegalDetachedContract,
+} from "./scheduling/normalize.js";
+export {
+  deriveLegacyClockFields,
+  deriveLegacyClockForSession,
+  mirrorSetupDone,
+  mirrorSetupCompleted,
+} from "./scheduling/session-clock.js";
+export type {
+  SessionClock,
+  LegacyClockFields,
+} from "./scheduling/session-clock.js";
+export {
+  isSetupRuntime,
+  isMainLoopRuntime,
+  setupRetryBudget,
+  isBudgetedAttempt,
+  resolvePendingOrBlocked,
+  isSetupSatisfied,
+  isSetupDoneForVersion,
+  resolveSetupGeneration,
+  retrySetup,
+  waiveSetup,
+} from "./scheduling/setup-state.js";
+export type { SetupControlResult } from "./scheduling/setup-state.js";
+
 // ── Plugin Schemas ───────────────────────────────────────────────
 export {
   triggerTypeSchema,
@@ -50,6 +88,16 @@ export {
   pluginEventDeclSchema,
   pluginRelationsSchema,
   runtimeManifestSchema,
+  runtimeManifestInputSchema,
+  runtimeManifestAuthoringSchema,
+  authoringTriggerConfigSchema,
+  stageSchema,
+  afterRefSchema,
+  needsRefSchema,
+  runtimeBindingSchema,
+  effectsDeclSchema,
+  permissionsDeclSchema,
+  jobStatusDeclSchema,
   validateRuntimeManifestSemantics,
 } from "./schemas/plugin.js";
 

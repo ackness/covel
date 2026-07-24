@@ -69,6 +69,8 @@ pnpm db:up / db:down / db:generate / db:migrate / db:studio
 pnpm e2e              # Playwright headless (e2e:ui for the runner UI)
 pnpm e2e:verify       # API-driven, real-LLM plugin harness (needs .env.llm); pass --slot e2e_local --turns 3
 pnpm test:runtime     # standalone runtime harness CLI (packages/test-runtime)
+pnpm validate:plugin  # validate PLUGIN.md manifests (loader compat parse + strict authoring schema); pass file or plugin dir, --compat for legacy
+
 
 # Docker (full stack)
 pnpm docker:build / docker:up / docker:down / docker:logs
@@ -118,7 +120,7 @@ packages/           16 internal packages: shared, settings, context, ai-provider
                     SettingsStore + localStorage/json-file backends, split out of
                     `shared` so pure-type consumers avoid browser/Electron code.
 
-plugins/            20 bundled plugin packages (see docs/reference/plugins.md)
+plugins/            23 bundled plugin packages (see docs/reference/plugins.md)
 prompts/            Externalised prompt templates (locale-aware markdown)
 worlds/             2 curated sample world packages (mistport / haruka-academy);
                     archived worlds in worlds/_archive/ are not loaded
@@ -141,30 +143,39 @@ First-class execution primitives are **Runtime, Tool, Hook, Context, Proposal** 
 ### Turn pipeline (packages/runtime)
 
 ```
-Input/Event → Trigger Router → Priority Scheduler → [per priority group:]
+Input/Event → Trigger Router → Stage Scheduler → [per stage:]
   → TurnContextStore.init → PromptAssembler.build → Runtime Runner
   → Tool/Hook Loop → Proposal Collector → TurnContextStore.ingest
 → Validation/Policy → Commit Service → Render/Side Effects
 → Follow-up Events (may re-enter Router)
 ```
 
-- **Trigger modes**: production-active are `auto`, `manual`, `scheduled`, `event` (see `TriggerType` in `packages/shared/src/types/plugin.ts`). `scheduled` carries `interval` / `maxTriggerCount` / `cooldownTurns` / `startTurn`. `conditional` and `error-retry` are **reserved — they never fire in production** (no condition engine; the scheduler never surfaces upstream failures); `shouldTrigger` skips them and warns once. The single authority for `auto` / `scheduled` / `event` trigger decisions is `shouldTrigger` (`packages/runtime/src/trigger/trigger.ts`) — the in-turn event fan-out in `turn-event-chain.ts` re-uses it too. **`manual` is the exception**: a `manual` runtime is selected by name match in `scheduling.ts` (`selectTriggeredRuntimes`) and runs **without** calling `shouldTrigger` — an explicit plugin-rpc call _is_ the trigger decision, so it bypasses the `preGameCompleted` / `startTurn` / `maxTriggerCount` / `cooldownTurns` gates (the `case "manual"` branch in `shouldTrigger` is consequently dead in the production selection path).
+- **Trigger modes**: production-active are `auto`, `manual`, `scheduled`, `event` (see `TriggerType` in `packages/shared/src/types/plugin.ts`). `scheduled` carries `interval` / `maxTriggerCount` / `cooldownTurns` / `startTurn`. `conditional` and `error-retry` are **retired — the trigger enum is narrowed to the four production types and manifests declaring them are rejected at load** (no condition engine ever existed; the scheduler never surfaced upstream failures). The single authority for `auto` / `scheduled` / `event` trigger decisions is `shouldTrigger` (`packages/runtime/src/trigger/trigger.ts`) — the in-turn event fan-out in `turn-event-chain.ts` re-uses it too. **`manual` is the exception**: a `manual` runtime is selected by name match in `scheduling.ts` (`selectTriggeredRuntimes`) and runs **without** calling `shouldTrigger` — an explicit plugin-rpc call _is_ the trigger decision, so it bypasses the `phase` / `startTurn` / `maxTriggerCount` / `cooldownTurns` gates (the `case "manual"` branch in `shouldTrigger` is consequently dead in the production selection path).
+- **Scheduling declaration surface**: manifests declare a named `stage` (`setup` / `pre-turn` / `narrative` / `post-turn` / `audit`) plus typed dependency edges — `needs` (turn-scoped upstream gate + same-pass DAG edge), `after` (same-pass ordering only, no gate), and `inputs` bindings (plus legacy `input.inject` runtime injects) — and for function runtimes, `ctx.inputs` / `ctx.exports` / `ctx.activation` / `ctx.execution` / `ctx.progress.report`. This is the sole scheduling authority; the old numeric priority scheduler (`scheduleByPriority`) is deleted. `priority` / `upstreamRequired` are still **accepted from third-party manifests** for backward compat — normalize folds `priority` into `stage` when `stage` is omitted and aliases `upstreamRequired` into `needs` — but bundled plugins single-declare `stage` + `needs` directly. Two loader-gated exceptions keep `priority` (10 / 40): `pregame` and `world-init/schema-gen` use the legacy `scheduled interval:1` setup idiom, which the loader forbids pairing with an explicit `stage: setup`, so normalize derives `stage: setup` from their priority band and reuses the priority value as the sort key for the conservative setup-order chain (see Stage bands below). Author-facing reference: [docs/guide/plugin-authoring.md](./docs/guide/plugin-authoring.md#调度声明).
 - **Runtime types**: `agent` (default, loads PLUGIN.md and drives LLM tool-calls) or `function` (pure JS handler, no LLM).
 - **Proposal envelopes** (registered `ProposalType`s, derived from the single source of truth `ProposalPayloadMap` in `packages/shared/src/types/proposal.ts`; commit-handler registry and discovery advert are compile-time aligned to it): `narrative.append`, `state.patch`, `event.emit`, `interaction.request`, `ui.render`, `asset.generate`, `plugin.data`, `plugin.data.batch`, `character.upsert`, `working_memory.set`, `lorebook.upsert`. Full reference in [docs/reference/tools.md](./docs/reference/tools.md#proposal-类型). **All writes flow through validate → commit — plugins never touch the DB directly.**
 - **Hook lifecycle** (16 events; full table in [docs/reference/plugins.md](./docs/reference/plugins.md)): `SessionStart` · `TurnStart` · `PreCompaction` / `PostCompaction` · `PreSchedule` · `PreRuntime` / `PostRuntime` · `PostContextAssembly` · `PreLLMCall` / `PostLLMResponse` · `PreToolUse` / `PostToolUse` · `PreStateCommit` / `PostStateCommit` · `TurnStop` · `SessionEnd`. Registered hooks are session-scoped (a plugin's hooks fire only for sessions where it is active, via `AsyncLocalStorage`); `HookContext.getOwnSettings()` exposes the plugin's own per-session `userSettings`.
 
-### Priority bands (kernel-enforced)
+### Stage bands (kernel-enforced)
 
-| Turn | Scheduled priority | Phase                                                             |
-| ---- | ------------------ | ----------------------------------------------------------------- |
-| 0    | 0–99               | Pre-Game (Pre-Game runtimes report `preGameDone: true`)           |
-| ≥ 1  | 100–1000           | Pre-Turn 100–499 · Narrator 500 · After-Turn 501–999 · Audit 1000 |
+| Stage       | Runs when                            | Role                                                                |
+| ----------- | ------------------------------------ | ------------------------------------------------------------------- |
+| `setup`     | `phase === "setup"`                  | Pre-game setup (setup runtimes report `preGameDone: true`)          |
+| `pre-turn`  | main loop (`phase !== "setup"`), 1st | Input intake / plugin-data prep ahead of the narrator               |
+| `narrative` | main loop, 2nd                       | The narrator runtime — main story output                            |
+| `post-turn` | main loop, 3rd                       | Post-narrative bookkeeping, state updates, follow-up event emission |
+| `audit`     | main loop, 4th                       | Conflict/consistency audit (reserved slot)                          |
 
-Session lifecycle tracked by three fields on `SessionRecord`:
+Band selection is by **`phase`**, not `turnCount`: the session runs the `setup` stage while `phase === "setup"`; once `phase` flips to the main loop it runs `pre-turn → narrative → post-turn → audit` in strict order with a **barrier between stages** (a stage fully drains — every runtime settles success/failure/skip — before the next stage starts). Within a stage, a **DAG** derived from `needs` / `after` / typed `inputs` bindings (plus legacy `input.inject`) orders runtimes; independent runtimes in the same stage run in parallel, `name` breaks ties. There is no more numeric priority scheduler.
+
+Session lifecycle tracked on `SessionRecord`:
 
 - `status: 'active' | 'paused' | 'ended'` — `paused`/`ended` halts scheduling.
-- `turnCount: number` — count of completed **player** turns. Kernel auto-advances 0 → 1 once all Pre-Game runtimes report done. Drives the UI turn display, auto-snapshot cadence, and snapshot numbering. It is NOT the band selector — `preGameCompleted` is (band = Pre-Game while any Pre-Game runtime is unreported, main-loop after). Non-player executions (manual plugin-rpc trigger, deferred background follower, nested `recursiveCall`) each persist their own `turn_results` row stamped with `origin` and are excluded from the count; several executions sharing one `turnId` count once.
-- `preGameCompleted: string[]` — runtimeIds that reported done.
+- `phase: 'setup' | 'playing'` — the stage-band selector (business truth; replaces the old `preGameCompleted`-derived band check).
+- `completedPlayerTurns: number` — business-truth count of completed **player** turns. Kernel auto-advances 0 → 1 once all setup runtimes report done. Non-player executions (manual plugin-rpc trigger, deferred background follower, nested `recursiveCall`) each persist their own `turn_results` row stamped with `origin` and are excluded from the count; several executions sharing one `turnId` count once.
+- `setupRuntimes: string[]` — business-truth runtimeIds that reported done during the `setup` stage.
+
+`turnCount` and `preGameCompleted` are **legacy fields the kernel no longer writes** — API responses and snapshots derive them at read time from `phase` / `completedPlayerTurns` / `setupRuntimes` via a shared `deriveLegacyClockForSession` helper (response shape is unchanged). `turnCount` (now a derived value) still drives the UI turn display, auto-snapshot cadence, and snapshot numbering downstream of that derivation. The DB columns are retained (frozen) for old-kernel/rollback reads, and the one-time lazy backfill for pre-`phase` sessions is retained.
 
 ### Plugin system
 

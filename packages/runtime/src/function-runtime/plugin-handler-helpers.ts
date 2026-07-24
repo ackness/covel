@@ -17,6 +17,15 @@ import {
   reservedPluginDataNamespaceError,
   type RpcHandlerStore,
 } from "@covel/shared";
+import { overlayPluginDataValue } from "@covel/tools";
+import {
+  bufferCharacterUpsert,
+  bufferPluginData,
+  bufferPluginDataBatch,
+  mergeCharacterRecords,
+  mergePluginDataRows,
+  type ExecutionWriteBuffer,
+} from "./execution-write-buffer.js";
 
 export interface HandlerHelperContext {
   readonly sessionId: string;
@@ -92,9 +101,24 @@ function assertWritableNamespace(namespace: string): void {
  * reserved namespaces) and every other store method pass through unchanged.
  * Framework writers (the job runner, the runtime logger, asset output) call
  * the raw store directly and never receive this wrapper.
+ *
+ * When `buffer` is supplied (the function-runtime / agent-guard execution
+ * path), the domain write methods route into the buffer as proposals instead
+ * of hitting the store, and the matching read methods overlay the buffer so a
+ * handler/guard reads its own not-yet-committed writes. Every OTHER method
+ * still passes through to the raw store — full isolation of the remaining
+ * surface waits on plugin sandboxing; this closes the four domain-write faces
+ * the effects-isolation work targets.
  */
-export function createTrustedHandlerStore(store: DataStore): DataStore {
-  const guarded: Pick<
+export function createTrustedHandlerStore(
+  store: DataStore,
+  ctx?: HandlerHelperContext,
+  buffer?: ExecutionWriteBuffer,
+): DataStore {
+  // Namespace-guarded direct writes (the pre-buffer behaviour). Used when no
+  // buffer is threaded — bare test harnesses and callers that construct the
+  // trusted store without an execution context.
+  const directGuarded: Pick<
     DataStore,
     "setPluginData" | "setPluginDataBatch" | "deletePluginData"
   > = {
@@ -111,9 +135,88 @@ export function createTrustedHandlerStore(store: DataStore): DataStore {
       return store.deletePluginData(sessionId, pluginId, namespace, key);
     },
   };
+
+  const bufferedOverrides: Partial<DataStore> =
+    buffer && ctx
+      ? {
+          setPluginData(record) {
+            assertWritableNamespace(record.namespace);
+            bufferPluginData(
+              buffer,
+              ctx,
+              record.namespace,
+              record.key,
+              record.value,
+            );
+            return Promise.resolve();
+          },
+          setPluginDataBatch(records) {
+            for (const record of records)
+              assertWritableNamespace(record.namespace);
+            bufferPluginDataBatch(buffer, ctx, records);
+            return Promise.resolve();
+          },
+          upsertCharacter(record) {
+            bufferCharacterUpsert(buffer, ctx, record);
+            return Promise.resolve();
+          },
+          // No proposal type expresses plugin-data deletion, so a delete stays
+          // a direct (non-rolled-back) write. No production guard deletes via
+          // the trusted store. ponytail: direct delete, add a delete proposal
+          // when a buffered caller needs rollback-safe clears.
+          deletePluginData(sessionId, pluginId, namespace, key) {
+            assertWritableNamespace(namespace);
+            return store.deletePluginData(sessionId, pluginId, namespace, key);
+          },
+          async getPluginData(sessionId, pluginId, namespace, key) {
+            const hit = overlayPluginDataValue(
+              buffer,
+              pluginId,
+              namespace,
+              key,
+            );
+            if (hit.hit) {
+              const now = new Date().toISOString();
+              return {
+                id: `${sessionId}:${pluginId}:${namespace}:${key}`,
+                sessionId,
+                pluginId,
+                namespace,
+                key,
+                value: hit.value,
+                createdAt: now,
+                updatedAt: now,
+              };
+            }
+            return store.getPluginData(sessionId, pluginId, namespace, key);
+          },
+          async listPluginData(sessionId, pluginId, namespace, pagination) {
+            const stored = await store.listPluginData(
+              sessionId,
+              pluginId,
+              namespace,
+              pagination,
+            );
+            return mergePluginDataRows(
+              stored,
+              buffer,
+              sessionId,
+              pluginId,
+              namespace,
+            );
+          },
+          async listCharacters(sessionId) {
+            const stored = await store.listCharacters(sessionId);
+            return mergeCharacterRecords(stored, buffer, sessionId);
+          },
+        }
+      : directGuarded;
+
   return new Proxy(store, {
     get(target, prop, receiver) {
-      if (prop in guarded) return guarded[prop as keyof typeof guarded];
+      if (prop in bufferedOverrides) {
+        return bufferedOverrides[prop as keyof DataStore];
+      }
       const value = Reflect.get(target, prop, receiver);
       // Bind pass-through methods to the raw store so implementations that
       // rely on `this` never see the proxy as their receiver.
@@ -123,21 +226,36 @@ export function createTrustedHandlerStore(store: DataStore): DataStore {
 }
 
 /**
- * Build a scoped plugin-data writer. Writes bypass the proposal system
- * and land directly on the store — intended for pre-commit placeholders
- * (e.g. "pending" frames) and post-commit patches that should not be
- * rolled back if the turn aborts.
+ * Build a scoped plugin-data writer.
+ *
+ * When `buffer` is supplied (the function-runtime execution path), `set`
+ * routes through a `plugin.data` proposal so the write commits — and rolls
+ * back — with the rest of the execution, and `get`/`list` overlay the buffer
+ * so the handler reads its own not-yet-committed writes. `delete` (and the
+ * `set(null)` clear) stay direct: no proposal type expresses plugin-data
+ * deletion, and the only production caller (scene-stage/background-gen) never
+ * clears through this writer.
+ *
+ * Without a buffer the writer keeps its legacy direct-to-store behaviour, used
+ * by bare test harnesses.
  */
 export function createPluginDataWriter(
   store: DataStore,
   ctx: HandlerHelperContext,
+  buffer?: ExecutionWriteBuffer,
 ): PluginDataWriter {
   const { sessionId, pluginId } = ctx;
   return {
     async set(namespace: string, key: string, value: unknown) {
       assertWritableNamespace(namespace);
       if (value === null) {
+        // ponytail: direct delete, add a delete proposal if a buffered caller
+        // needs rollback-safe clears (none does today).
         await store.deletePluginData(sessionId, pluginId, namespace, key);
+        return;
+      }
+      if (buffer) {
+        bufferPluginData(buffer, ctx, namespace, key, value);
         return;
       }
       const now = new Date().toISOString();
@@ -153,6 +271,10 @@ export function createPluginDataWriter(
       });
     },
     async get(namespace: string, key: string) {
+      if (buffer) {
+        const hit = overlayPluginDataValue(buffer, pluginId, namespace, key);
+        if (hit.hit) return hit.value;
+      }
       const row = await store.getPluginData(
         sessionId,
         pluginId,
@@ -163,7 +285,10 @@ export function createPluginDataWriter(
     },
     async list(namespace: string) {
       const rows = await store.listPluginData(sessionId, pluginId, namespace);
-      return rows.map((r) => ({ key: r.key, value: r.value }));
+      const merged = buffer
+        ? mergePluginDataRows(rows, buffer, sessionId, pluginId, namespace)
+        : rows;
+      return merged.map((r) => ({ key: r.key, value: r.value }));
     },
     async delete(namespace: string, key: string) {
       assertWritableNamespace(namespace);

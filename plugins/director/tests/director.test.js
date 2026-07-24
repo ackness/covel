@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import injectPreamble from "../hooks/inject-preamble.js";
 import { PREAMBLE_EN, PREAMBLE_ZH } from "../hooks/_preamble.js";
-import handler from "../handler.js";
 
 const CTX = { sessionId: "sess-director-1" };
 
@@ -60,11 +59,5 @@ describe("director / inject-preamble (PostContextAssembly)", () => {
   it("does not throw when the payload is absent", async () => {
     const r = await injectPreamble(CTX, undefined);
     expect(r).toEqual({ action: "continue" });
-  });
-});
-
-describe("director / handler (manual function runtime is a no-op)", () => {
-  it("returns an empty object and never schedules", async () => {
-    expect(await handler()).toEqual({});
   });
 });

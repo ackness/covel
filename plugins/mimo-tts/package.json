@@ -1,0 +1,14 @@
+{
+  "name": "@covel/plugin-mimo-tts",
+  "version": "0.0.18",
+  "private": true,
+  "type": "module",
+  "description": "Xiaomi MiMo TTS — speak narrator output as voice (auto + manual), persisted as MediaRef, replayable from a per-turn audio tab.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}

@@ -174,7 +174,10 @@ describe("Snapshot routes", () => {
       expect(snapshot.id).toMatch(/./); // non-empty string
 
       const payload = snapshot.payload as Record<string, unknown>;
-      expect(payload.schemaVersion).toBe(2);
+      // Builder now emits V3 (adds the scheduling-redesign clock fields when the
+      // session carries them; omitted here as this legacy-seeded session has no
+      // phase, so `session` keeps the V2 base shape).
+      expect(payload.schemaVersion).toBe(3);
       expect(payload.session).toEqual({
         status: "active",
         turnCount: 1,
@@ -385,7 +388,7 @@ describe("Snapshot routes", () => {
       };
       expect(body.snapshot.id).toBe(created.snapshot.id);
       expect(body.snapshot.payload).toBeDefined();
-      expect(body.snapshot.payload.schemaVersion).toBe(2);
+      expect(body.snapshot.payload.schemaVersion).toBe(3);
     });
 
     it("returns 404 for an unknown snapshot or one from another session", async () => {
@@ -563,9 +566,9 @@ describe("Snapshot routes", () => {
       const app = createTestApp(store);
       const snapId = await createParentSnapshot(store, app);
       const stored = await store.getSnapshot(snapId);
-      expect(stored?.payload.schemaVersion).toBe(2);
+      expect(stored?.payload.schemaVersion).toBe(3);
       const { session: _session, ...legacyPayload } = stored!
-        .payload as Extract<typeof stored.payload, { schemaVersion: 2 }>;
+        .payload as Extract<typeof stored.payload, { schemaVersion: 3 }>;
       await store.saveSnapshot({
         ...stored!,
         payload: {
@@ -609,7 +612,7 @@ describe("Snapshot routes", () => {
       const snapId = await createParentSnapshot(store, app);
       const stored = await store.getSnapshot(snapId);
       expect(stored?.payload).toMatchObject({
-        schemaVersion: 2,
+        schemaVersion: 3,
         session: { status: "ended" },
       });
 
@@ -709,6 +712,53 @@ describe("Snapshot routes", () => {
       expect(childLore[0]!.sessionId).toBe(childId);
     });
 
+    it("copies the recordAs export revision visible at the snapshot instant, dropping later ones", async () => {
+      // rev 1 is committed in the past (visible at the snapshot instant); rev 2
+      // carries a future committedAt so it post-dates the snapshot and must NOT
+      // fork. The child inherits the frozen rev 1, revision preserved.
+      const exp = (
+        revision: number,
+        threshold: number,
+        committedAt: string,
+      ) => ({
+        sessionId: "sess-1",
+        producerPluginId: "p",
+        producerRuntimeId: "p/gen",
+        recordAs: "cfg",
+        revision,
+        pluginVersion: "1.0.0",
+        schemaDigest: "digest",
+        resultId: `r-${revision}`,
+        value: { threshold },
+        committedAt,
+      });
+      await store.appendRuntimeExport(exp(1, 3, "2020-01-01T00:00:00.000Z"));
+      await store.appendRuntimeExport(exp(2, 4, "2099-01-01T00:00:00.000Z"));
+
+      const app = createTestApp(store);
+      const snapId = await createParentSnapshot(store, app);
+      const res = await app.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      const childId = ((await res.json()) as { sessionId: string }).sessionId;
+
+      const childLatest = await store.getLatestRuntimeExport(
+        childId,
+        "p/gen",
+        "cfg",
+      );
+      expect(childLatest?.revision).toBe(1);
+      expect(childLatest?.value).toEqual({ threshold: 3 });
+      expect(childLatest?.sessionId).toBe(childId);
+      // The parent keeps its own later revision — the two diverge post-fork.
+      expect(
+        (await store.getLatestRuntimeExport("sess-1", "p/gen", "cfg"))
+          ?.revision,
+      ).toBe(2);
+    });
+
     it("remaps character-mirror plugin-data to the child's re-minted character ids", async () => {
       // The mirror namespace keys a row by the character id and stores
       // value.id = same id; characters are re-minted on fork, so both must move.
@@ -773,6 +823,73 @@ describe("Snapshot routes", () => {
       const body = (await res.json()) as Record<string, unknown>;
       const childId = body.sessionId as string;
       expect(await mediaStore.isReferencedBy(ref.id, childId)).toBe(true);
+    });
+
+    it("references media embedded in a copied export atomically on fork (docs 02 §2.1.5)", async () => {
+      // A MediaRef that lives ONLY inside a recordAs export value (never in the
+      // snapshot payload). The fork scan must reach it too, so the child ends up
+      // referencing it.
+      const mediaStore = createMemoryMediaStore();
+      const ref = await mediaStore.put(new Uint8Array([9, 9]), "audio/wav", {
+        prompt: "track",
+      });
+      await mediaStore.recordOwnership(ref.id, "sess-1", "p");
+      await store.appendRuntimeExport({
+        sessionId: "sess-1",
+        producerPluginId: "p",
+        producerRuntimeId: "p/gen",
+        recordAs: "latest-track",
+        revision: 1,
+        pluginVersion: "1.0.0",
+        schemaDigest: "digest",
+        resultId: "r-1",
+        value: { audio: ref },
+        committedAt: "2020-01-01T00:00:00.000Z",
+      });
+
+      const app = createTestApp(store, undefined, mediaStore);
+      const snapId = await createParentSnapshot(store, app);
+      const res = await app.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      expect(res.status).toBe(201);
+      const childId = ((await res.json()) as { sessionId: string }).sessionId;
+      expect(await mediaStore.isReferencedBy(ref.id, childId)).toBe(true);
+    });
+
+    it("fails the whole fork (409) when a referenced media asset is missing", async () => {
+      // A MediaRef pointing at an asset that does not exist in the MediaStore.
+      // The fork gate must reject the entire operation — no child session is
+      // created (docs 02 §2.1.5).
+      const mediaStore = createMemoryMediaStore();
+      const missingId = "d".repeat(64);
+      await store.setPluginData({
+        id: "sess-1-pd-missing-media",
+        sessionId: "sess-1",
+        pluginId: "test-plugin",
+        namespace: "images",
+        key: "ghost",
+        value: { ref: { id: missingId, mime: "image/png", size: 3 } },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      const app = createTestApp(store, undefined, mediaStore);
+      const snapId = await createParentSnapshot(store, app);
+      const before = (await store.listSessions()).length;
+      const res = await app.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      expect(res.status).toBe(409);
+      expect(((await res.json()) as { code?: string }).code).toBe(
+        "media_reference_missing",
+      );
+      // The transaction rolled back — no orphan child persisted.
+      expect(await store.listSessions()).toHaveLength(before);
     });
 
     it("copies turn messages up to the snapshot cursor", async () => {

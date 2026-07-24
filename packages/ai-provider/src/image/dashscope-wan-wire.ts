@@ -33,6 +33,35 @@ function modelRejectsNegativePrompt(model: string): boolean {
   return model.startsWith("wan2.7-image");
 }
 
+/**
+ * Qwen-Image models (qwen-image-3.0-pro & the earlier qwen-image line) ride
+ * DashScope's SYNCHRONOUS multimodal endpoint — same messages input and
+ * choices[] output shape as wan2.6+, but no async header and no task
+ * polling: the submit response carries the images directly.
+ */
+function isQwenImageModel(model: string): boolean {
+  return model.startsWith("qwen-image");
+}
+
+/**
+ * Per-task image-count caps: qwen-image-3.* accepts `n` 1–6;
+ * wan2.6-image / wan2.6-t2i / wan2.7-image* accept 1–4 (the wan2.7 group
+ * mode raises it to 12 behind `enable_sequential`, which this wire does not
+ * drive). Everything else — earlier wan2.x and the pre-3.0 qwen-image line,
+ * whose docs state no multi-image support — is a single-image task.
+ */
+function modelMaxImages(model: string): number {
+  if (model.startsWith("qwen-image-3")) return 6;
+  if (
+    model.startsWith("wan2.6-image") ||
+    model.startsWith("wan2.6-t2i") ||
+    model.startsWith("wan2.7-image")
+  ) {
+    return 4;
+  }
+  return 1;
+}
+
 function asRecord(v: unknown): Record<string, unknown> | null {
   return v && typeof v === "object" && !Array.isArray(v)
     ? (v as Record<string, unknown>)
@@ -93,9 +122,12 @@ async function generate(
 ): Promise<ImageGenerationResult> {
   const warnings: string[] = [];
 
+  const requestedN = Math.max(1, Math.floor(params.n ?? 1));
+  const maxN = modelMaxImages(params.model);
+  const n = Math.min(requestedN, maxN);
   const parameters: Record<string, unknown> = {
     ...(params.size ? { size: toStarSize(params.size) } : {}),
-    n: 1, // wan2.x supports single-image tasks only
+    n,
     watermark: false,
   };
   if (params.negativePrompt) {
@@ -110,22 +142,47 @@ async function generate(
       "dashscope-wan has no transparent-background parameter; prompt-only",
     );
   }
-  if ((params.n ?? 1) > 1) {
+  if (requestedN > n) {
     warnings.push(
-      "dashscope-wan generates a single image per task; n clamped to 1",
+      maxN === 1
+        ? "dashscope-wan generates a single image per task on this model; n clamped to 1"
+        : `dashscope-wan caps n at ${maxN} for ${params.model}; n clamped to ${maxN}`,
     );
+  }
+
+  const body = {
+    model: params.model,
+    input: {
+      messages: [{ role: "user", content: [{ text: params.prompt }] }],
+    },
+    parameters,
+  };
+
+  // Qwen-Image path: synchronous multimodal endpoint — the response carries
+  // the images directly, no async header, no task polling. `prompt_extend`
+  // defaults to true on this endpoint; disabled explicitly because the
+  // plugin's prompt agent already writes a full art brief (composition /
+  // panel layout instructions) that a platform-side rewrite would mangle.
+  if (isQwenImageModel(params.model)) {
+    parameters.prompt_extend = false;
+    const response = await postJson(
+      config,
+      "/api/v1/services/aigc/multimodal-generation/generation",
+      body,
+    );
+    const payload = await parseJson(response);
+    assertSuccess(response, payload, "dashscope-wan");
+    const images = collectResults(asRecord(payload.output) ?? {});
+    if (images.length === 0) {
+      throw new Error("DashScope qwen-image: no images in response");
+    }
+    return { images, usage: null, warnings };
   }
 
   const submitResponse = await postJson(
     config,
     "/api/v1/services/aigc/image-generation/generation",
-    {
-      model: params.model,
-      input: {
-        messages: [{ role: "user", content: [{ text: params.prompt }] }],
-      },
-      parameters,
-    },
+    body,
     undefined,
     { "X-DashScope-Async": "enable" },
   );

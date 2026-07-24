@@ -86,6 +86,20 @@ export interface SqlRunner {
   ): Promise<void>;
 
   /**
+   * INSERT a single row with `ON CONFLICT DO NOTHING`, returning the number of
+   * rows actually inserted (`1` on insert, `0` when the conflict target already
+   * held a row). This is the atomic "insert-if-absent, tell me which happened"
+   * primitive behind the idempotent lifecycle ledgers — PG reports the count via
+   * `RETURNING`, better-sqlite3 via the `changes` field. `target` scopes the
+   * conflict to a specific unique index/constraint (omit to catch any).
+   */
+  insertIgnoreReturningCount(
+    table: Table,
+    values: Record<string, unknown>,
+    target?: ConflictTarget,
+  ): Promise<number>;
+
+  /**
    * Upsert many rows atomically inside one transaction. A no-op on an empty
    * batch. Each row carries its own `set`, so per-record update payloads are
    * preserved (matching the legacy per-backend batch loops).

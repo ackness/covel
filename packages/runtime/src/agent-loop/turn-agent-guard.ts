@@ -5,14 +5,16 @@ import type {
   NestedTurnResult,
   RecursiveCallDelta,
 } from "@covel/shared";
+import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
+import { withPendingProposals } from "@covel/tools";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import {
   createFunctionStoreView,
-  createPluginDataWriter,
   createPluginLogger,
   createTrustedHandlerStore,
 } from "../function-runtime/plugin-handler-helpers.js";
+import { createExecutionWriteBuffer } from "../function-runtime/execution-write-buffer.js";
 import { createRuntimeMediaContext } from "../function-runtime/runtime-media-context.js";
 import { withUtilsTrace } from "../function-runtime/utils-trace.js";
 import { runPostRuntimeHook } from "../hooks/wire-helpers.js";
@@ -23,13 +25,11 @@ import {
   isTrustedPluginSource,
 } from "../turn-executor/turn-runtime-helpers.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
-import { NARRATOR_PRIORITY } from "../schedule/scheduler.js";
 
 export interface ExecuteAgentGuardOptions {
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   readonly loaded: LoadedRuntime;
-  readonly completedResults: ReadonlyMap<string, RuntimeResult>;
   readonly deps: TurnExecutorDeps;
   readonly hookPipeline: HookPipeline | undefined;
   readonly triggerEvent:
@@ -57,7 +57,6 @@ export async function executeAgentGuard({
   manifest,
   input,
   loaded,
-  completedResults,
   deps,
   hookPipeline,
   triggerEvent,
@@ -142,17 +141,22 @@ export async function executeAgentGuard({
         },
       });
 
+    // Trusted-guard domain writes (schema import, player-character upsert) route
+    // through this execution write buffer instead of hitting the store directly:
+    // they are collected as proposals and flushed onto the skipped result below,
+    // so they commit — and roll back — with the rest of the finalize
+    // transaction. The same-turn main-loop follow-up that used to read a guard's
+    // uncommitted direct write is gone (removed with the whole-turn transaction),
+    // so nothing needs to see the write before commit. Reads overlay the buffer,
+    // so a guard still observes its own not-yet-committed writes.
+    const writeBuffer = createExecutionWriteBuffer();
     const guardStore = deps.store
       ? revocable(
           trustedGuard
-            ? createTrustedHandlerStore(deps.store)
+            ? createTrustedHandlerStore(deps.store, guardHelperCtx, writeBuffer)
             : createFunctionStoreView(deps.store, guardHelperCtx),
         )
       : undefined;
-    const guardPluginDataHandle =
-      deps.store && trustedGuard
-        ? revocable(createPluginDataWriter(deps.store, guardHelperCtx))
-        : undefined;
     const guardLoggerHandle =
       deps.store && trustedGuard
         ? revocable(createPluginLogger(deps.store, guardHelperCtx))
@@ -209,7 +213,6 @@ export async function executeAgentGuard({
       playerMessage: input.playerMessage,
       locale: input.locale,
       store: guardStore,
-      completedResults,
       recursiveCall: guardRecursiveCall,
       recursionDepth,
       ...(deps.gateway && trustedGuard
@@ -232,7 +235,6 @@ export async function executeAgentGuard({
       ...(guardManualPayload ? { manualPayload: guardManualPayload } : {}),
       ...(triggerEvent ? { triggerEvent } : {}),
       ...(guardUserSettings ? { userSettings: guardUserSettings } : {}),
-      ...(guardPluginDataHandle ? { pluginData: guardPluginDataHandle } : {}),
       ...(guardLoggerHandle ? { logger: guardLoggerHandle } : {}),
       signal: guardSignal,
     });
@@ -273,6 +275,24 @@ export async function executeAgentGuard({
     }
 
     if (guardOutput.skip === true) {
+      // Flush execution-buffered domain writes onto the skipped output so the
+      // commit path (processRuntimeResult) commits them for a `skipped` result
+      // through the same finalize transaction as everything else — a rolled-back
+      // execution discards them. Non-enumerable symbol attachment; JSON.stringify
+      // (turn message, tracing) ignores it. Only the skip:true path flushes:
+      // production guards write-then-skip, so a guard that instead proceeds
+      // (skip:false → the agent runtime runs) has an empty buffer here anyway.
+      if (
+        writeBuffer.length > 0 &&
+        guardOutput &&
+        typeof guardOutput === "object"
+      ) {
+        withPendingProposals(
+          guardOutput as unknown as Record<string, unknown>,
+          writeBuffer,
+        );
+      }
+
       // Record `skipped` in the internal RuntimeResult so downstream
       // consumers (Pre-Game completion tracker, session-kernel's
       // `result.status !== 'success'` gate, SSE payload) all see the same
@@ -306,7 +326,7 @@ export async function executeAgentGuard({
           role: "assistant",
           name: manifest.name,
           content: guardOutput.narrativeOutput as string,
-          order: manifest.priority ?? NARRATOR_PRIORITY,
+          order: stageMessageOrder(getRuntimeSpec(manifest).stage),
           createdAt: new Date().toISOString(),
         });
       }

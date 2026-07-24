@@ -3,11 +3,23 @@ export { shouldTrigger } from "./trigger/trigger.js";
 
 // ── Scheduler ────────────────────────────────────────────────────
 export {
-  scheduleByPriority,
-  isPreGamePriority,
-  isMainLoopPriority,
-} from "./schedule/scheduler.js";
-export { scheduleByDag } from "./schedule/dag-scheduler.js";
+  scheduleByDag,
+  deriveConservativeSetupEdges,
+} from "./schedule/dag-scheduler.js";
+
+// ── Effects hazard (same-layer read/write policy) ────────────────
+export {
+  deriveEffects,
+  resourcesIntersect,
+  effectsHazard,
+  applyHazardPolicy,
+  resolveEffectsPolicy,
+} from "./schedule/effects.js";
+export type {
+  RuntimeEffects,
+  EffectsPolicy,
+  HazardPolicyResult,
+} from "./schedule/effects.js";
 
 // ── Parallel Executor ────────────────────────────────────────────
 export { executeParallel } from "./schedule/parallel-executor.js";
@@ -32,6 +44,26 @@ export {
 export type { TurnControl } from "./turn-executor/turn-control.js";
 export { createRuntimeMediaContext } from "./function-runtime/runtime-media-context.js";
 export type { MediaStoreLike } from "./function-runtime/runtime-media-context.js";
+
+// ── MediaRef canonicalization (shared boundary scanner) ─────────
+export { canonicalizeMediaRefs } from "./media/canonicalize-media-refs.js";
+export type {
+  MediaOwnershipStore,
+  MediaCanonicalization,
+  MediaRejection,
+  MediaRejectionReason,
+  MediaDiagnostic,
+} from "./media/canonicalize-media-refs.js";
+
+// ── Job status (kernel-owned, append-only progress channel) ─────
+export {
+  createProgressReporter,
+  finalizeJobStatuses,
+} from "./job-status/job-status.js";
+export type {
+  ProgressReporterDeps,
+  ExecutionJobOutcome,
+} from "./job-status/job-status.js";
 
 // ── LLM Adapter ─────────────────────────────────────────────────
 export type {
@@ -119,6 +151,11 @@ export type {
   TraceRecorder,
   ProcessRuntimeResultOutput,
 } from "./session/session-kernel.js";
+export { finalizeExecution } from "./commit/finalize-execution.js";
+export type {
+  FinalizeExecutionArgs,
+  FinalizeExecutionOutcome,
+} from "./commit/finalize-execution.js";
 
 // ── Snapshot Builder ────────────────────────────────────────────
 export { buildSessionSnapshot } from "./snapshot/snapshot-builder.js";

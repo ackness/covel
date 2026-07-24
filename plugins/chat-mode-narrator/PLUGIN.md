@@ -7,7 +7,7 @@ description:
   zh: 让故事更像角色对话，适合重视聊天和人物互动的玩法。
   en: Makes the story feel more like character dialogue, suited for play focused on conversation and interaction.
 pluginType: plugin
-priority: 500
+stage: narrative
 model: story
 timeoutMs: 240000
 callTimeoutMs: 120000

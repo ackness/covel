@@ -4,14 +4,18 @@ import type {
   CharacterRecord,
   EventRecord,
   InteractionRecordRow,
+  JobStatusRecord,
+  LogicalTurnLedgerRecord,
   LorebookEntryRecord,
   MessageRecord,
   PlayerInputRecord,
   PluginDataRecord,
+  RuntimeExportRecord,
   RuntimeOutputRecord,
   RuntimeResultRecord,
   SessionRecord,
   SessionSummaryRecord,
+  SetupAttemptRecord,
   SnapshotRecord,
   StateChangeRecord,
   StateEntryRecord,
@@ -71,6 +75,16 @@ export interface MemoryState {
   readonly worldDataImportLedger: Map<string, WorldDataImportLedgerRecord>;
   readonly lorebookEntries: Map<string, LorebookEntryRecord>;
   readonly sessionSummaries: SessionSummaryRecord[];
+  // Scheduling-redesign lifecycle collections. Each is a Map keyed by the
+  // record's composite unique key (see memory/lifecycle-methods.ts) so inserts
+  // stay idempotent, mirroring the SQL unique indexes.
+  readonly logicalTurnLedger: Map<string, LogicalTurnLedgerRecord>;
+  readonly setupAttempts: Map<string, SetupAttemptRecord>;
+  readonly jobStatus: Map<string, JobStatusRecord>;
+  // Runtime exports (`output.recordAs` publications). Keyed by the record's
+  // composite unique key (see memory/export-methods.ts) so appends stay
+  // idempotent, mirroring the SQL unique index.
+  readonly runtimeExports: Map<string, RuntimeExportRecord>;
 }
 
 export type MemoryStore = DataStore & VectorStoreCapability & VectorModelOps;

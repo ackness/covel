@@ -8,8 +8,9 @@ description:
   en: Tracks who is present in the scene and who is currently speaking.
 pluginType: plugin
 runtimeType: function
+resultFormat: envelope-v1
 handler: ./handler.js
-priority: 450
+stage: pre-turn
 timeoutMs: 30000
 outputKind: system
 capabilities: [scene-cast]

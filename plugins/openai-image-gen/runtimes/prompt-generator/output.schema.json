@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "openai-image-gen/prompt-generator output",
+  "description": "Contract for the JSON envelope the prompt-generator agent must emit. The framework's event-chain wakes the sibling image-generator runtime when `events[0].topic === 'openai-image.generate.requested'` and `events[0].data.prompt` is non-empty. When the LLM drops the events array (or drops `data.prompt`), the image-generator never fires and the gallery silently shows nothing — this schema documents the required shape so plugin authors can wire structured-output enforcement once the executor surfaces `output.schema` to provider request bodies.",
+  "type": "object",
+  "required": ["prompt", "promptMode", "events"],
+  "additionalProperties": true,
+  "properties": {
+    "prompt": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Final image prompt — the same string that appears in events[0].data.prompt."
+    },
+    "promptMode": {
+      "type": "string",
+      "enum": ["text", "image-json"],
+      "description": "Output style. text=natural-language prompt; image-json=structured JSON-as-string."
+    },
+    "composition": {
+      "type": "string",
+      "enum": ["single-scene", "comic-strip"],
+      "description": "Optional. Picture composition mode. single-scene=one moment as a single frame; comic-strip=one comic page rendered as a single image with multiple sequential panels along a timeline."
+    },
+    "events": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Must contain exactly one event with topic 'openai-image.generate.requested' and a non-empty data.prompt — that wakes the image-generator follower.",
+      "items": {
+        "type": "object",
+        "required": ["topic", "data"],
+        "properties": {
+          "topic": {
+            "type": "string",
+            "const": "openai-image.generate.requested"
+          },
+          "data": {
+            "type": "object",
+            "required": ["prompt", "promptMode"],
+            "properties": {
+              "prompt": {
+                "type": "string",
+                "minLength": 1
+              },
+              "promptMode": {
+                "type": "string",
+                "enum": ["text", "image-json"]
+              },
+              "composition": {
+                "type": "string",
+                "enum": ["single-scene", "comic-strip"]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

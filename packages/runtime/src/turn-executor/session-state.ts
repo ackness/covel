@@ -1,9 +1,13 @@
-import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import type {
+  RuntimeManifest,
+  SetupRuntimeState,
+  TurnInput,
+} from "@covel/shared";
+import { deriveLegacyClockForSession, isSetupRuntime } from "@covel/shared";
 import { applyBranchReplyAcceptedCandidates } from "@covel/context";
 import type { CoreMemoryBlockView } from "@covel/context";
 import type { TurnMessageRecord } from "@covel/store";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
-import { isPreGamePriority } from "../schedule/scheduler.js";
 import {
   runPreCompactionHook,
   runPostCompactionHook,
@@ -44,6 +48,16 @@ export interface LoadedTurnSessionState {
   readonly sessionMeta: TurnSessionMeta;
   readonly sessionStatus: "active" | "paused" | "ended";
   readonly turnNumber: number;
+  /**
+   * Persisted setup/main band, or undefined on a session written before the
+   * scheduling redesign (the caller falls back to the legacy `preGameCompleted`
+   * signal). Drives band selection and, via `logicalTurn`, scheduled cadence.
+   */
+  readonly phase?: "setup" | "playing";
+  /** Committed main-loop player turns; `logicalTurn = completedPlayerTurns + 1`. */
+  readonly completedPlayerTurns: number;
+  /** Per-setup-runtime mirror frozen at execution start (setup gate + generation). */
+  readonly setupRuntimes: Readonly<Record<string, SetupRuntimeState>>;
 }
 
 export async function loadTurnSessionState(args: {
@@ -131,6 +145,9 @@ export async function loadTurnSessionState(args: {
   // message appended this turn is a "player" row, so no runtime count moved.
   let sessionStatus: "active" | "paused" | "ended" = "active";
   let preGameCompleted: readonly string[] = [];
+  let phase: "setup" | "playing" | undefined;
+  let completedPlayerTurns = 0;
+  let setupRuntimes: Readonly<Record<string, SetupRuntimeState>> = {};
   let sessionCharacters: TurnSessionCharacter[] = [];
   let lastFormValues: Record<string, unknown> | undefined;
 
@@ -138,7 +155,13 @@ export async function loadTurnSessionState(args: {
     const session = await deps.store.getSession(input.sessionId);
     if (session) {
       sessionStatus = session.status;
-      preGameCompleted = session.preGameCompleted ?? [];
+      phase = session.phase;
+      completedPlayerTurns = session.completedPlayerTurns ?? 0;
+      setupRuntimes = session.setupRuntimes ?? {};
+      // The kernel no longer writes `preGameCompleted` — derive it from the
+      // setup mirror so the late-setup upstream fallback (turn-runtime-execution)
+      // and initialDoneSetup see the current done-set, not a frozen column.
+      preGameCompleted = deriveLegacyClockForSession(session).preGameCompleted;
     }
 
     const charRecords = await deps.store.listCharacters(input.sessionId);
@@ -173,6 +196,9 @@ export async function loadTurnSessionState(args: {
     },
     sessionStatus,
     turnNumber,
+    ...(phase !== undefined ? { phase } : {}),
+    completedPlayerTurns,
+    setupRuntimes,
   };
 }
 
@@ -206,20 +232,28 @@ export async function buildProjectedPromptHistory(args: {
   }
 }
 
+/**
+ * Resolve the setup-band runtimes and whether the session is still in the setup
+ * band.
+ *
+ * The band decision reads the persisted `phase` when present (`setup` ⇒
+ * pending, `playing` ⇒ not) — the scheduling-redesign source of truth. Sessions
+ * written before `phase` existed (undefined) fall back to the legacy signal: any
+ * setup runtime not yet in `preGameCompleted`. Turn entries backfill `phase`, so
+ * the fallback only serves direct `executeTurn` callers (tests, programmatic).
+ */
 export function getPreGameRuntimeState(
   activeRuntimes: readonly RuntimeManifest[],
   preGameCompleted: readonly string[],
+  phase?: "setup" | "playing",
 ): {
   readonly preGameRuntimes: readonly RuntimeManifest[];
   readonly isPreGamePending: boolean;
 } {
-  const preGameRuntimes = activeRuntimes.filter((rt) =>
-    isPreGamePriority(rt.priority),
-  );
-  return {
-    preGameRuntimes,
-    isPreGamePending: preGameRuntimes.some(
-      (rt) => !preGameCompleted.includes(rt.name),
-    ),
-  };
+  const preGameRuntimes = activeRuntimes.filter(isSetupRuntime);
+  const isPreGamePending =
+    phase !== undefined
+      ? phase === "setup"
+      : preGameRuntimes.some((rt) => !preGameCompleted.includes(rt.name));
+  return { preGameRuntimes, isPreGamePending };
 }

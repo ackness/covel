@@ -5,6 +5,7 @@ import type {
   ToolCallRecord,
   TurnInput,
 } from "@covel/shared";
+import { toJsonValueOrDiagnostic } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import {
   isSuspendSentinel,
@@ -335,8 +336,13 @@ export async function runAgentToolLoop({
               pluginId: manifest.pluginId,
               runtimeId: manifest.name,
               turnId: input.turnId,
-              input: { query: search.parsedResult.query },
-              output: search.parsedResult,
+              input: {
+                query: toJsonValueOrDiagnostic(
+                  search.parsedResult.query,
+                  "input.query",
+                ),
+              },
+              output: toJsonValueOrDiagnostic(search.parsedResult, "output"),
               durationMs: Date.now() - tcStart,
               approvalStatus: "auto-allowed",
               timestamp: new Date().toISOString(),
@@ -458,8 +464,8 @@ export async function runAgentToolLoop({
             pluginId: manifest.pluginId,
             runtimeId: manifest.name,
             turnId: input.turnId,
-            input: parsedInput,
-            output: toolResult.parsedResult,
+            input: toJsonValueOrDiagnostic(parsedInput, "input"),
+            output: toJsonValueOrDiagnostic(toolResult.parsedResult, "output"),
             durationMs: Date.now() - tcStart,
             approvalStatus: toolResult.approvalStatus ?? "auto-allowed",
             timestamp: new Date().toISOString(),

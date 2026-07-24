@@ -132,7 +132,19 @@ describe("agent guard deadline (R-12)", () => {
         await new Promise((resolve) => setTimeout(resolve, 90));
         observed.signalAborted = ctx.signal?.aborted;
         try {
-          await ctx.pluginData?.set("ns", "late", { v: 1 });
+          // Probe revocation through ctx.store (the revocable trusted-store
+          // write surface). ctx.pluginData was removed — it had no plugin
+          // callers — so the trusted store is the guard's write capability now.
+          await ctx.store?.setPluginData({
+            id: "late",
+            sessionId: ctx.sessionId,
+            pluginId: ctx.pluginId,
+            namespace: "ns",
+            key: "late",
+            value: { v: 1 },
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
         } catch (err) {
           observed.writeError =
             err instanceof Error ? err.message : String(err);

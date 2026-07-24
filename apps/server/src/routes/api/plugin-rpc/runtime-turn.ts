@@ -1,6 +1,7 @@
 import {
   createTurnEmitter,
   executeTurn,
+  finalizeExecution,
   saveAutoSnapshot,
   type TurnExecutorDeps,
 } from "@covel/runtime";
@@ -9,7 +10,6 @@ import type { EventBus } from "@covel/events";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 
 import type { SessionLock } from "../../../lib/session-lock.js";
-import { createRuntimeResultProcessor } from "../runtime-result-processor.js";
 import type {
   ManualTurnSummary,
   TurnCommitOutcome,
@@ -60,26 +60,46 @@ export function createPluginRpcRuntimeTurnRunner(
     turnResult: Awaited<ReturnType<typeof executeTurn>>,
     emitter: ReturnType<typeof createTurnEmitter>,
   ): Promise<TurnCommitOutcome> {
-    const resultProcessor = createRuntimeResultProcessor({
+    // Commit the whole execution (top-level + nested recursiveCall results) in
+    // ONE transaction via the shared finalize primitive. Any proposal failure
+    // rolls the turn back (committed siblings included) and settles the
+    // turn_results row to `failed`; a clean run settles it `committed`, both
+    // inside that transaction.
+    const outcome = await finalizeExecution({
       store: ctx.store,
       sessionId: ctx.sessionId,
+      ...(turnResult.executionContext
+        ? { executionContext: turnResult.executionContext }
+        : {}),
       runtimes: ctx.activeRuntimes,
+      results: [
+        ...turnResult.runtimeResults,
+        ...(turnResult.nestedRuntimeResults ?? []),
+      ],
+      turnIds: [turnResult.turnId],
       ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
       eventBus: ctx.eventBus,
       emitter,
+      // Manual / late-setup runs settle their setup attempts too (a manual
+      // retrigger of a pending setup runtime burns an attempt).
+      ...(turnResult.setupRan ? { setupRan: turnResult.setupRan } : {}),
+      // Publishes recordAs exports inside the commit transaction — a manual /
+      // background execution can publish just like a player turn.
+      loadOutputSchema: async (runtimeId) => {
+        const rt = ctx.activeRuntimes.find((r) => r.name === runtimeId);
+        return rt
+          ? (await ctx.deps.loadRuntime(rt, ctx.session.locale ?? undefined))
+              ?.outputSchema
+          : undefined;
+      },
+      // MediaRef canonicalization / ownership for published export values.
+      ...(ctx.deps.mediaStore ? { mediaStore: ctx.deps.mediaStore } : {}),
     });
-    // Nested recursiveCall results ride the same commit barrier.
-    const outputs = await resultProcessor.processAll([
-      ...turnResult.runtimeResults,
-      ...(turnResult.nestedRuntimeResults ?? []),
-    ]);
 
     // Commit failures must not report success. Surface each one as a
     // `proposal.failed` trace event (manual/background turns have no live
-    // action stream; the /debug timeline and subscription channel carry it)
-    // and withhold the snapshot + completion barrier.
-    const failedProposals = outputs.flatMap((o) => o.failedProposals);
-    for (const fp of failedProposals) {
+    // action stream; the /debug timeline and subscription channel carry it).
+    for (const fp of outcome.failedProposals) {
       await emitter.emit("proposal.failed", {
         proposalId: fp.proposal.id,
         proposalType: fp.proposal.type,
@@ -89,8 +109,9 @@ export function createPluginRpcRuntimeTurnRunner(
       });
     }
 
+    const committed = outcome.status === "committed";
     let snapshotFailed = false;
-    if (failedProposals.length === 0) {
+    if (committed) {
       try {
         await saveAutoSnapshot({
           store: ctx.store,
@@ -108,40 +129,25 @@ export function createPluginRpcRuntimeTurnRunner(
       }
     } else {
       console.error(
-        `[plugin-rpc] ${failedProposals.length} proposal(s) failed to commit for session ${ctx.sessionId} turn ${turnResult.turnId} — ` +
+        `[plugin-rpc] proposal commit failed for session ${ctx.sessionId} turn ${turnResult.turnId} — ` +
           "withholding auto-snapshot and turn completion",
       );
     }
-    // Commit barrier: fire the authoritative turn.completed event and memory
-    // ingestion only when every proposal committed. A failed auto-snapshot
-    // does not withhold completion (see below).
-    try {
-      await ctx.store.setTurnResultCommitStatus(
-        ctx.sessionId,
-        turnResult.turnId,
-        failedProposals.length === 0 ? "committed" : "failed",
-      );
-    } catch (err) {
-      console.warn(
-        `[plugin-rpc] failed to settle commitStatus for turn ${turnResult.turnId}:`,
-        err instanceof Error ? err.message : String(err),
-      );
-    }
 
-    // A failed auto-snapshot does NOT fail the turn. The proposals already
-    // committed (commit_status was set to "committed" above), so business state
-    // is consistent — only the best-effort checkpoint is missing, and the next
-    // turn snapshots again. Counting it as a failure made the sync RPC return
-    // 500 and the client retry, replaying already-committed proposals. So
-    // `committed` tracks proposal commit alone, matching commit_status;
+    // Commit barrier: fire the authoritative turn.completed event and memory
+    // ingestion only when every proposal committed. A failed auto-snapshot does
+    // NOT withhold completion — the proposals already committed (commit_status
+    // was settled inside finalize), so business state is consistent and only
+    // the best-effort checkpoint is missing; counting it as a failure made the
+    // sync RPC return 500 and the client retry, replaying committed proposals.
+    // So `committed` tracks proposal commit alone, matching commit_status;
     // `snapshotFailed` stays on the outcome for observability.
-    const committed = failedProposals.length === 0;
     if (committed) {
       turnResult.completeTurn?.();
     }
     return {
       committed,
-      failedProposalCount: failedProposals.length,
+      failedProposalCount: outcome.failedProposals.length,
       snapshotFailed,
     };
   }

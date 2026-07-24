@@ -1,24 +1,33 @@
 /**
  * History message filtering for agent runtimes.
  *
- * Story runtimes (e.g. the narrator) should only see player/system messages
- * plus their own previous story outputs. Without this filter, structured
- * tool-output JSON from other plugins (guide, codex, character-tracker, …)
- * leaks into the story prompt and the LLM mimics those formats. Extracted from
- * `turn-agent-runtime.ts` so the runtime body stays focused on orchestration.
+ * Every agent runtime should see player/system messages, narrative-like text,
+ * and its own previous outputs — but NOT the structured tool-output JSON of
+ * OTHER plugins (guide, codex, character-tracker, npc-graph, …). Two distinct
+ * problems, one filter:
+ *   - Story runtimes (narrator) would otherwise mimic that JSON in their prose.
+ *   - Post-turn extraction runtimes (character-tracker / codex / extractor /
+ *     scene-prompts) would otherwise carry every other plugin's JSON output
+ *     forward turn after turn — an unbounded, compounding token cost, since
+ *     these agents already receive the current narrative via `<narrator-output>`
+ *     and their own state via plugin-data injects, and never read another
+ *     plugin's output from history.
+ * Extracted from `turn-agent-runtime.ts` so the runtime body stays focused on
+ * orchestration.
  */
 
 import type { TurnMessageRecord } from "@covel/store";
 import { looksLikeStructuredRuntimeOutput } from "../turn-executor/turn-output-helpers.js";
 
 /**
- * Filter message history for a story-output runtime.
+ * Filter message history for an agent runtime. Applied to every agent runtime
+ * (story and non-story alike).
  *
- * Kept conservative: messages from runtimes not in the active set are kept
- * (we never drop unknown messages). Returns the input array unchanged for
- * non-story runtimes — call this only when `outputKind === "story"`.
+ * Kept conservative: player/system messages and narrative-like prose from any
+ * runtime are always kept — only messages that look like another runtime's
+ * structured tool output are dropped.
  */
-export function filterHistoryForStory(
+export function filterRuntimeHistory(
   messageHistory: readonly TurnMessageRecord[],
   runtimeName: string,
 ): readonly TurnMessageRecord[] {
@@ -27,8 +36,8 @@ export function filterHistoryForStory(
     if (m.sourceType === "runtime") {
       // Keep own previous outputs.
       if (m.sourceRuntimeId === runtimeName) return true;
-      // Filter out messages that look like structured tool output so the
-      // narrator doesn't mimic JSON / block / category-list formats.
+      // Drop messages that look like another runtime's structured tool
+      // output (JSON / fenced block / tool-tag formats).
       if (looksLikeStructuredRuntimeOutput(m.content)) return false;
       // Keep narrative-like text from other runtimes.
       return true;

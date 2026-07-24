@@ -109,7 +109,7 @@ export function createEventDirectory(deps: EventDirectoryDeps): EventDirectory {
               );
             }
           }
-          continue; // first-wins (getActiveRuntimes is priority-sorted)
+          continue; // first-wins (getActiveRuntimes is (stage, name)-sorted)
         }
         byTopic.set(decl.topic, {
           pluginId: manifest.pluginId,

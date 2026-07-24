@@ -28,8 +28,8 @@ each session / player can set its own budget from the Settings UI under
 
 | Setting (`userSettings`) | Default  | Meaning                                          |
 | ------------------------ | -------- | ------------------------------------------------ |
-| `softTokens`             | `150000` | Soft cap — start trimming background generation. |
-| `hardTokens`             | `200000` | Hard cap — pause the turn.                       |
+| `softTokens`             | `400000` | Soft cap — start trimming background generation. |
+| `hardTokens`             | `600000` | Hard cap — pause the turn.                       |
 
 Each threshold is resolved per hook invocation through a three-tier fallback
 chain — **per-session `userSettings` → env var → hardcoded default**. The env
@@ -38,8 +38,8 @@ keep working unchanged:
 
 | Env (fallback)          | Default  | Falls back for |
 | ----------------------- | -------- | -------------- |
-| `COST_GATE_SOFT_TOKENS` | `150000` | `softTokens`   |
-| `COST_GATE_HARD_TOKENS` | `200000` | `hardTokens`   |
+| `COST_GATE_SOFT_TOKENS` | `400000` | `softTokens`   |
+| `COST_GATE_HARD_TOKENS` | `600000` | `hardTokens`   |
 
 Settings and env are read lazily (per call), so a deployment can change either
 without a restart. Keep the soft cap **below** the hard cap: if the resolved

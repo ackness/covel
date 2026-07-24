@@ -1,6 +1,6 @@
 import type { RuntimeManifest, RuntimeResult, TurnResult } from "@covel/shared";
+import { getRuntimeSpec } from "@covel/shared";
 import { executeParallel } from "../schedule/parallel-executor.js";
-import { NARRATOR_PRIORITY } from "../schedule/scheduler.js";
 import { shouldTrigger } from "./trigger.js";
 import type { TriggerContext } from "../types.js";
 
@@ -24,6 +24,8 @@ export interface RunEventChainParams {
   readonly sessionId: string;
   /** Current main-loop turn number — same purpose as `sessionId`. */
   readonly turnNumber: number;
+  /** Logical-turn number (completedPlayerTurns + 1), frozen for this execution. */
+  readonly logicalTurn: number;
   /**
    * How many times each runtime has already produced output this session,
    * and how many turns since it last did.
@@ -68,6 +70,7 @@ export interface RunEventChainParams {
 function eventFanoutTriggerContext(
   sessionId: string,
   turnNumber: number,
+  logicalTurn: number,
   pendingEventTopics: readonly string[],
   runtimeName: string,
   triggerCounts: ReadonlyMap<string, number> | undefined,
@@ -77,6 +80,7 @@ function eventFanoutTriggerContext(
   return {
     sessionId,
     turnNumber,
+    logicalTurn,
     // Real per-runtime history so `maxTriggerCount` / `cooldownTurns` bite.
     // Absent maps fall back to "never triggered", which keeps direct callers
     // (tests) working and matches the previous behaviour.
@@ -116,6 +120,7 @@ export async function runEventChain({
   maxDepth = 8,
   sessionId,
   turnNumber,
+  logicalTurn,
   runtimeTriggerCounts,
   runtimeTurnsSinceLastTrigger,
   preGameCompleted = [],
@@ -151,6 +156,7 @@ export async function runEventChain({
         eventFanoutTriggerContext(
           sessionId,
           turnNumber,
+          logicalTurn,
           pendingEventTopics,
           rt.name,
           runtimeTriggerCounts,
@@ -161,10 +167,12 @@ export async function runEventChain({
     });
     if (nextBatch.length === 0) break;
 
-    const ordered = [...nextBatch].sort(
-      (a, b) =>
-        (a.priority ?? NARRATOR_PRIORITY) - (b.priority ?? NARRATOR_PRIORITY),
-    );
+    // Event subscribers have no dependency-edge mechanism between them (and no
+    // stage — event runtimes are stage-less), so name is the stable tie-break.
+    // Replaces the old numeric-priority sort. Bundled plugins have a single
+    // subscriber per topic, so no fan-out batch ever contains two runtimes whose
+    // relative order is observable.
+    const ordered = [...nextBatch].sort((a, b) => a.name.localeCompare(b.name));
 
     const currentDepthEvents = new Map(emittedEvents);
     const newEvents = new Map<string, Record<string, unknown>>();

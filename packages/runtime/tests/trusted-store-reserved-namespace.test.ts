@@ -10,11 +10,12 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
 import type { FunctionHandler } from "@covel/plugin-loader";
 import { executeFunctionRuntime } from "../src/function-runtime/turn-function-runtime.js";
+import { processRuntimeResult } from "../src/session/session-runtime-result.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 
 const SESSION_ID = "sess-trusted-ns";
@@ -33,14 +34,14 @@ function makeManifest(): RuntimeManifest {
 async function runTrustedHandler(
   store: DataStore,
   handler: FunctionHandler,
-): Promise<void> {
+): Promise<RuntimeResult> {
   const manifest = makeManifest();
   const input: TurnInput = {
     sessionId: SESSION_ID,
     turnId: "turn-1",
     playerMessage: "hello",
   };
-  await executeFunctionRuntime({
+  return executeFunctionRuntime({
     manifest,
     input,
     loaded: { manifest, promptTemplate: "", handler },
@@ -109,7 +110,7 @@ describe("trusted function-runtime store handle", () => {
     });
 
     let observedJob: unknown;
-    await runTrustedHandler(store, async (ctx) => {
+    const result = await runTrustedHandler(store, async (ctx) => {
       const handlerStore = ctx.store as DataStore;
       const row = await handlerStore.getPluginData(
         SESSION_ID,
@@ -131,7 +132,34 @@ describe("trusted function-runtime store handle", () => {
       return { proposals: [] };
     });
 
+    // Reserved-namespace read passes through to the store unchanged.
     expect(observedJob).toEqual({ status: "pending" });
+
+    // DELIBERATE CHANGE (effects isolation): the normal-namespace write is now
+    // buffered, not written during execution — the store is untouched until
+    // the result's pending proposals commit through the pipeline.
+    expect(
+      await store.getPluginData(
+        SESSION_ID,
+        "official-plugin",
+        "state",
+        "progress",
+      ),
+    ).toBeNull();
+
+    await processRuntimeResult(
+      {
+        pluginId: "official-plugin",
+        runtimeId: "official-plugin/worker",
+        turnId: "turn-1",
+        status: result.status,
+        output: result.output,
+      },
+      store,
+      SESSION_ID,
+      "plugin",
+    );
+
     const row = await store.getPluginData(
       SESSION_ID,
       "official-plugin",

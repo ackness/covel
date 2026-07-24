@@ -11,6 +11,10 @@ import type {
   RuntimeManifest,
   NestedTurnResult,
   RecursiveCallDelta,
+  JobStatusRecord,
+  InputSlot,
+  RuntimeActivation,
+  ExecutionContext,
 } from "@covel/shared";
 
 // ── Parsed PLUGIN.md ─────────────────────────────────────────────
@@ -400,7 +404,6 @@ export interface FunctionHandlerContext {
    * The runtime decides which to inject based on discovery-source trust.
    */
   readonly store: FunctionStoreView | unknown;
-  readonly completedResults: ReadonlyMap<string, unknown>;
   /**
    * Optional gateway facade for function runtimes that need LLM / image /
    * structured-object generation. Absent when the executor was constructed
@@ -466,6 +469,30 @@ export interface FunctionHandlerContext {
     readonly data: Readonly<Record<string, unknown>>;
   };
   /**
+   * Resolved same-execution input bindings (`inputs.<name>`), each wrapped in
+   * provenance (`InputSlot`). Populated for `stage` / `event` activations that
+   * pass the binding gate; a `manual` activation projects turn bindings away,
+   * leaving this empty (docs 02 §3.2, 01 §4). Read `ctx.inputs.<name>.value`
+   * (`one`) or `ctx.inputs.<name>.items[]` (`all`).
+   */
+  readonly inputs?: Readonly<Record<string, InputSlot>>;
+  /**
+   * Resolved cross-execution `recordAs` exports (`input.inject` runtime-export),
+   * each provenance-wrapped. Reads the producer's latest revision committed
+   * before this execution started (docs 02 §3.4). Same shape as `ctx.inputs`:
+   * `ctx.exports.<name>.value` (`one`) or `.items[]` (`all`).
+   */
+  readonly exports?: Readonly<Record<string, InputSlot>>;
+  /**
+   * Canonical activation for this run (docs 02 §3.3). `payload` is the
+   * `input.schema`-validated manual/event payload (`null` for a stage run).
+   * `ctx.manualPayload` / `ctx.triggerEvent.data` are compat aliases of the
+   * same value.
+   */
+  readonly activation?: RuntimeActivation;
+  /** Execution identity of this scheduling run (docs 01 §4). */
+  readonly execution?: ExecutionContext;
+  /**
    * Resolved player-authored plugin settings for THIS plugin, with
    * `manifest.userSettings[].default` applied for any key the player
    * hasn't overridden. Every key declared in the manifest is
@@ -492,6 +519,14 @@ export interface FunctionHandlerContext {
    * Absent in test harnesses without a store.
    */
   readonly logger?: PluginLogger;
+  /**
+   * Real-time progress channel for long-running work (media generation, etc.).
+   * Reports append to the kernel job-status stream and emit an SSE event before
+   * the turn's finalizer runs — the ONE effect a handler may surface live. The
+   * durable domain output still flows through the return value / proposals.
+   * Absent when the executor was constructed without a `store` dep.
+   */
+  readonly progress?: ProgressReporter;
   /**
    * Player abort signal for THIS turn. Fires when the player stops the turn
    * mid-flight. Handlers running long provider work (image generation, TTS,
@@ -571,6 +606,33 @@ export interface PluginLogger {
   error(message: string, meta?: Record<string, unknown>): Promise<void>;
 }
 
+/**
+ * Job business fields a handler supplies to `ctx.progress.report`. The kernel
+ * injects the identity (session / scope / plugin / runtime) and timestamp, so a
+ * handler cannot forge another plugin's or runtime's job.
+ */
+export type ProgressEffect = Omit<
+  JobStatusRecord,
+  "sessionId" | "progressScopeId" | "pluginId" | "runtimeId" | "createdAt"
+>;
+
+/**
+ * The sole real-time channel exposed to a long-running function runtime.
+ * Progress reports append to the kernel job-status store and emit an SSE event
+ * immediately — they do NOT write gameplay state and do NOT roll back with the
+ * domain transaction. All domain writes still flow through the handler's return
+ * value / proposals.
+ */
+export interface ProgressReporter {
+  /**
+   * Append one progress event. Append-only + idempotent on `sequence`: a
+   * duplicate/older sequence for the same job is silently dropped. `data` is
+   * validated against the JSON wire boundary and rejected with a throw on
+   * non-serialisable values (undefined / function / circular / non-finite).
+   */
+  report(effect: ProgressEffect): Promise<void>;
+}
+
 /** Function handler signature for `runtimeType: 'function'` runtimes. */
 export type FunctionHandler = (
   ctx: FunctionHandlerContext,
@@ -581,6 +643,27 @@ export interface LoadedRuntime {
   readonly manifest: RuntimeManifest;
   readonly promptTemplate: string;
   readonly outputSchema?: Readonly<Record<string, unknown>>;
+  /**
+   * Activation-payload JSON Schema loaded from `input.schema` — enforced on
+   * `RuntimeActivation.payload` before dispatch for both function and agent
+   * runtimes (docs 02 §3.3).
+   */
+  readonly inputSchema?: Readonly<Record<string, unknown>>;
+  /**
+   * Per-binding `accepts` JSON Schemas, keyed by `inputs.<name>`. Validates the
+   * injected same-execution binding value (docs 02 §3.1).
+   */
+  readonly bindingAcceptsSchemas?: Readonly<
+    Record<string, Readonly<Record<string, unknown>>>
+  >;
+  /**
+   * Per-export-binding `accepts` JSON Schemas, keyed by the `input.inject`
+   * runtime-export `name`. Validates the frozen cross-execution export value at
+   * consume time (docs 02 §3.4.4).
+   */
+  readonly exportAcceptsSchemas?: Readonly<
+    Record<string, Readonly<Record<string, unknown>>>
+  >;
   /** Handler function for `runtimeType: 'function'` runtimes. */
   readonly handler?: FunctionHandler;
   /** Guard function — runs before agent execution, returns `{ skip: true }` to bypass LLM. */

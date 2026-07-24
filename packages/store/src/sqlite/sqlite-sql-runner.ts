@@ -23,6 +23,7 @@ import type {
 
 import type {
   ConflictClause,
+  ConflictTarget,
   SelectOpts,
   SqlRunner,
   UpsertRow,
@@ -91,6 +92,22 @@ export function createSqliteSqlRunner(db: SqliteDb): SqlRunner {
         stmt.run();
       }
       return Promise.resolve();
+    },
+
+    insertIgnoreReturningCount(
+      table: Table,
+      values: Record<string, unknown>,
+      target?: ConflictTarget,
+    ): Promise<number> {
+      const stmt = db.insert(table as SQLiteTable).values(values);
+      const result = (
+        target
+          ? stmt.onConflictDoNothing({
+              target: target as IndexColumn | IndexColumn[],
+            })
+          : stmt.onConflictDoNothing()
+      ).run();
+      return Promise.resolve(result.changes);
     },
 
     insertManyAtomic(table: Table, rows: readonly UpsertRow[]): Promise<void> {

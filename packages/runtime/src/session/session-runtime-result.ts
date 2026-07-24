@@ -69,12 +69,37 @@ export async function processRuntimeResult(
 ): Promise<ProcessRuntimeResultOutput> {
   const empty: ProcessRuntimeResultOutput = { events: [], failedProposals: [] };
 
-  // Skip failed/skipped runtimes — nothing to commit
+  const source = { pluginId: result.pluginId, runtimeId: result.runtimeId };
+
+  // Buffered domain writes attached to the output — by the agent tool loop
+  // (success results) or a function-runtime / agent-guard write buffer. A
+  // pre-game guard that wrote then returned `{ skip: true }` carries them on a
+  // SKIPPED result. Tool/handler code could forge session/turn/source, so
+  // rebind identity to the executing runtime before commit.
+  const pendingProposals = result.output
+    ? getPendingProposals(result.output).map(
+        (p) =>
+          ({
+            ...p,
+            sessionId,
+            turnId: result.turnId,
+            source,
+          }) as Proposal,
+      )
+    : [];
+
+  // Non-success results are not normalized — their output is not a committable
+  // story/state output. Only a SKIPPED runtime (a pre-game guard that wrote
+  // then returned skip:true) commits its buffered writes; a FAILED runtime
+  // drops everything (its writes must not land), and a SUSPENDED runtime
+  // stashes proposals in the suspension record instead.
   if (result.status !== "success" || !result.output) {
+    if (result.status === "skipped" && pendingProposals.length > 0) {
+      return commitProposals(pendingProposals, store, sessionId, result, opts);
+    }
     return empty;
   }
 
-  const source = { pluginId: result.pluginId, runtimeId: result.runtimeId };
   const proposals = normalizeOutput(
     result.output,
     source,
@@ -83,22 +108,7 @@ export async function processRuntimeResult(
     outputKind,
     result.toolCalls,
   );
-  // Tool-carried proposals are authored by tool code and could claim
-  // any sessionId/turnId/source. The framework is the only identity
-  // authority — rebind the envelope to the executing runtime before commit
-  // so a tool cannot write into another session or impersonate another
-  // plugin's namespace / builtin source.
-  proposals.push(
-    ...getPendingProposals(result.output).map(
-      (p) =>
-        ({
-          ...p,
-          sessionId,
-          turnId: result.turnId,
-          source,
-        }) as Proposal,
-    ),
-  );
+  proposals.push(...pendingProposals);
 
   const imageGenerationFailures: Array<{ proposal: Proposal; error: string }> =
     [];
@@ -131,6 +141,36 @@ export async function processRuntimeResult(
     };
   }
 
+  const committed = await commitProposals(
+    proposals,
+    store,
+    sessionId,
+    result,
+    opts,
+  );
+  return {
+    events: committed.events,
+    failedProposals: [...imageGenerationFailures, ...committed.failedProposals],
+  };
+}
+
+/**
+ * Commit a proposal list through the Kernel pipeline and collect the resulting
+ * events / failures. Shared by the normalized success path and the
+ * pending-only path (a skipped pre-game guard that carries buffered writes).
+ */
+async function commitProposals(
+  proposals: readonly Proposal[],
+  store: KernelStore,
+  sessionId: string,
+  result: { readonly runtimeId: string; readonly turnId: string },
+  opts?: {
+    readonly hookPipeline?: HookPipeline;
+    readonly eventBus?: EventBus;
+    readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
+    readonly deferPostCommit?: (fn: () => Promise<void>) => void;
+  },
+): Promise<ProcessRuntimeResultOutput> {
   // Thread the hook pipeline + eventBus through so PreStateCommit /
   // PostStateCommit actually run on real turn commits (previously these
   // hooks only fired in tests because callers didn't pass them).
@@ -179,8 +219,5 @@ export async function processRuntimeResult(
     }
   }
 
-  return {
-    events,
-    failedProposals: [...imageGenerationFailures, ...failedProposals],
-  };
+  return { events, failedProposals };
 }

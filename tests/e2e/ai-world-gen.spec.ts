@@ -210,16 +210,15 @@ test.describe("AI World Generation", () => {
     expect(dims).toBeTruthy();
     console.log(`Dimensions keys: ${Object.keys(dims!).join(", ")}`);
 
-    const worldData = metadata?.worldData as
-      | {
-          sources?: Array<{ target?: string }>;
-        }
-      | undefined;
-    expect(
-      worldData?.sources?.some(
-        (source) => source.target === "world:metadata.dimensions",
-      ),
-    ).toBe(true);
+    // Server-store saves persist dimensions under `metadata.dimensions` (the
+    // durable, self-contained projection the web client maps to the top-level
+    // `dimensions` field). The generator's file-package provenance
+    // (`metadata.worldData.sources` targeting `world:metadata.dimensions`) is
+    // intentionally stripped by `recordForStoreOnly` in
+    // apps/server/src/routes/api/ai.ts — the temp world package those sources
+    // point at is deleted right after generation, so retaining them would leave
+    // dangling references.
+    expect(metadata?.dimensions).toBeTruthy();
 
     // At minimum, geography and tone should be generated
     const dimKeys = Object.keys(dims!);
@@ -358,8 +357,11 @@ test.describe("AI World Generation", () => {
       );
     }
 
-    // The character_creation block should have a submit button
-    const submitBtn = formArea.locator("button").last();
+    // The character_creation block should have a submit button. Target it by its
+    // stable data-testid — the label is LLM-generated (e.g. "觉醒·踏入云海"), so
+    // neither text-matching nor position (`.last()` grabs the execution-timeline
+    // indicator) reliably finds it.
+    const submitBtn = page.getByTestId("interaction-submit");
     await expect(submitBtn.first()).toBeVisible({ timeout: 5_000 });
 
     // ── Fill the form and submit ──

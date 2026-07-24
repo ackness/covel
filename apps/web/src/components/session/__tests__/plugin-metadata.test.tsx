@@ -180,7 +180,6 @@ describe("session plugin metadata UI", () => {
           {
             id: "auto-plugin",
             kind: "agent",
-            priority: 100,
             trigger: { type: "auto" },
           },
         ],
@@ -193,7 +192,6 @@ describe("session plugin metadata UI", () => {
           {
             id: "manual-plugin",
             kind: "agent",
-            priority: 200,
             trigger: { type: "manual" },
           },
         ],
@@ -206,7 +204,6 @@ describe("session plugin metadata UI", () => {
           {
             id: "event-plugin",
             kind: "function",
-            priority: 300,
             trigger: { type: "event" },
           },
         ],

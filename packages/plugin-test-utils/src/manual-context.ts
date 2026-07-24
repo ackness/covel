@@ -2,7 +2,15 @@
  * Function handler context factory for direct handler unit tests.
  */
 
-import type { FunctionHandlerContext } from "@covel/plugin-loader";
+import type {
+  FunctionHandlerContext,
+  ProgressReporter,
+} from "@covel/plugin-loader";
+import type {
+  InputSlot,
+  RuntimeActivation,
+  ExecutionContext,
+} from "@covel/shared";
 
 export interface ManualFunctionContextOptions {
   readonly pluginId: string;
@@ -12,8 +20,15 @@ export interface ManualFunctionContextOptions {
   readonly playerMessage?: string;
   readonly locale?: string;
   readonly store?: unknown;
-  readonly completedResults?: ReadonlyMap<string, unknown>;
   readonly manualPayload?: Readonly<Record<string, unknown>>;
+  /** Provenance-wrapped input bindings exposed as `ctx.inputs`. */
+  readonly inputs?: Readonly<Record<string, InputSlot>>;
+  /** Canonical activation exposed as `ctx.activation`. */
+  readonly activation?: RuntimeActivation;
+  /** Execution identity exposed as `ctx.execution`. */
+  readonly execution?: ExecutionContext;
+  /** Wire the real-time progress channel for tests exercising `ctx.progress`. */
+  readonly progress?: ProgressReporter;
 }
 
 export function makeManualFunctionContext({
@@ -24,8 +39,11 @@ export function makeManualFunctionContext({
   playerMessage = "",
   locale,
   store = {},
-  completedResults = new Map(),
   manualPayload = {},
+  inputs,
+  activation,
+  execution,
+  progress,
 }: ManualFunctionContextOptions): FunctionHandlerContext {
   return {
     sessionId,
@@ -35,11 +53,14 @@ export function makeManualFunctionContext({
     playerMessage,
     ...(locale ? { locale } : {}),
     store,
-    completedResults,
     recursiveCall: async () => {
       throw new Error("recursiveCall is not configured for this test context");
     },
     recursionDepth: 0,
     manualPayload,
+    ...(inputs ? { inputs } : {}),
+    ...(activation ? { activation } : {}),
+    ...(execution ? { execution } : {}),
+    ...(progress ? { progress } : {}),
   };
 }

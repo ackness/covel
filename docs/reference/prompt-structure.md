@@ -76,7 +76,7 @@ summaryFocus:
 合并规则：
 
 - **作用域是「当前执行的 runtime 自己」**，不聚合 session 内其他插件。`postHistory` 是 runtime 的私有工作指令（它的工具流程、终止契约），跨插件聚合会把一个插件的内部指令塞进另一个插件的 system prompt——既是插件隔离泄露，也让无关插件能操纵一个作者从未选择接受它的 runtime。`ContextBuildParams.activeManifests` 参数保留复数形态是因为 builder 本身通用，调用方若确实需要可以自行传入一组；框架的回合路径只传当前 runtime 的（locale 解析后的）manifest。
-- 传入多个 manifest 时按 `RuntimeManifest.priority` 升序合并。
+- 传入多个 manifest 时按 `(stage, name)` 排序合并（早 stage 在前，同 stage 按 `name` 定序）。
 - 相同 `(role, depth)` 的 `authorsNote` 用空行合并成一条消息。
 - 不同 depth 的 `authorsNote` 分别插入到对应历史位置。
 - `postHistory` 按 role 分组，相同 role 合并后追加到消息末尾。

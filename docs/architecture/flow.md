@@ -3,7 +3,7 @@
 > 从设置、游玩前、游玩中、游玩后到状态存储，完整描述框架运行机制。
 > 包含玩家 ↔ LLM Agent 之间的翻译层、消息流动、插件设计和前端交互。
 >
-> **状态模型（唯一真相源）**：会话的权威状态由三个字段组成——`status` (`active` / `paused` / `ended`) + `turnCount` + `preGameCompleted: string[]`。`turnCount === 0` 表示仍在 Pre-Game 段落；当所有声明 `preGameDone: true` 的 runtime 都登记完成后，Kernel 将 `turnCount` 推进到 1 进入主循环。历史上的 `SessionRecord.phase` 字段、`phase.transition` proposal 与 `phase.changed` SSE 事件均已移除；snapshot 与前端空态也直接读取 `status + turnCount`。
+> **状态模型（业务真值）**：会话的权威状态由 `status`（`active` / `paused` / `ended`）加上会话时钟三字段组成——`phase`（`'setup' | 'playing'`，stage 分带选择器）、`completedPlayerTurns`（已完成的玩家回合数）、`setupRuntimes`（setup 阶段各 runtime 的解析状态镜像）。`phase === 'setup'` 时只运行 `setup` stage；所有 setup runtime 报告完成后，Kernel 把 `phase` 翻到 `'playing'` 进入主循环。`turnCount` / `preGameCompleted` 是内核不再写入的 legacy 字段：DB 列冻结保留（供旧内核 / 回滚读取），API 响应与 snapshot 在读取时经 `deriveLegacyClockForSession`（`packages/shared/src/scheduling/session-clock.ts`）从会话时钟派生，响应形状不变。
 
 ## 一、系统全景
 
@@ -17,10 +17,10 @@
 │  │              │                │  ┌────────────────────────────────┐   │  │
 │  │ json-render  │                │  │       Turn Executor            │   │  │
 │  │ catalog      │                │  │  ┌──────────────────────────┐  │   │  │
-│  │ pluginData   │                │  │  │   Priority Scheduler     │  │   │  │
-│  │ SSE client   │                │  │  │  ┌────┐┌────┐┌────┐     │  │   │  │
-│  └──────────────┘                │  │  │  │ P10││ P85││P500│ ... │  │   │  │
-│                                  │  │  │  └────┘└────┘└────┘     │  │   │  │
+│  │ pluginData   │                │  │  │    Stage Scheduler       │  │   │  │
+│  │ SSE client   │                │  │  │ setup→pre-turn→narrative │  │   │  │
+│  └──────────────┘                │  │  │ →post-turn→audit + DAG   │  │   │  │
+│                                  │  │  │                         │  │   │  │
 │  ┌──────────────┐                │  │  └──────────────────────────┘  │   │  │
 │  │   Plugins     │                │  │           │                    │   │  │
 │  │  PLUGIN.md    │────加载────────►│  │     ┌─────▼──────┐            │   │  │
@@ -53,17 +53,17 @@
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PreGame: createSession()
+    [*] --> Setup: createSession()\n phase='setup'
 
-    state PreGame {
+    state Setup {
         direction LR
-        [*] --> RunningPreGameBand
-        RunningPreGameBand --> RunningPreGameBand: 玩家多次提交 /\n preGameCompleted 累积
-        RunningPreGameBand --> AllPreGameDone: 所有 Pre-Game runtime\n 输出 preGameDone: true
-        AllPreGameDone --> [*]
+        [*] --> RunningSetupStage
+        RunningSetupStage --> RunningSetupStage: 玩家多次提交 /\n setupRuntimes 镜像逐个记 done
+        RunningSetupStage --> AllSetupDone: 所有 setup runtime\n 输出 preGameDone: true
+        AllSetupDone --> [*]
     }
 
-    PreGame --> Playing: Kernel 推进 turnCount 0 → 1
+    Setup --> Playing: Kernel 翻转 phase setup → playing\n completedPlayerTurns 0 → 1
 
     state Playing {
         direction LR
@@ -79,16 +79,16 @@ stateDiagram-v2
     Ended --> [*]
 ```
 
-**权威状态模型** = `(status, turnCount, preGameCompleted)`：
+**业务真值** = `(status, phase, completedPlayerTurns, setupRuntimes)`：
 
-- **Pre-Game**：`status === 'active' && turnCount === 0`。调度器只会挑选 priority `0–99` 的 Pre-Game band runtime；每个声明 `preGameDone: true` 的 runtime 完成后会被追加进 `preGameCompleted`，玩家可以多次提交表单/消息迭代（例如 `char-creator` 的 `framework.submit-form`）。
-- **Turn 0 → 1**：所有 Pre-Game band runtime 的 id 都已出现在 `preGameCompleted` 时，Kernel 把 `turnCount` 从 0 推到 1，进入主循环。
-- **Pre-Game completion followup**：角色表单这类最后一个 setup 输入提交后，`/api/actions` 的同一个请求会先完成 Pre-Game，再立即补跑本次已触发的主循环 runtime。这样玩家提交表单后能直接看到第一段正式叙事；审计、trace 和 snapshot 里该请求同时包含 setup completion 与 main-loop followup。
-- **会话提交原子边界**：同一 session 的玩家输入、runtime 执行、proposal commit、`turnCount` 同步和自动 snapshot 由同一 session lock 串行化。自动 snapshot 在全部 proposal 提交后捕获，确保对话 cursor、角色、state 与 plugin data 属于同一个已提交回合。
-- **Playing**：`status === 'active' && turnCount >= 1`。每次 `POST /api/actions` 触发一轮完整 Turn pipeline，只调度 priority `100–1000` 的 runtime。
+- **Setup**：`status === 'active' && phase === 'setup'`。调度器只运行 `stage: setup` 的 runtime；每个 runtime 以显式完成信号（输出 `preGameDone: true`，或 guard 返回 `{ skip: true }`）记入 `setupRuntimes` 状态镜像（`pending` / `done` / `blocked`），玩家可以多次提交表单/消息迭代（例如 `char-creator` 的 `framework.submit-form`）。耗尽重试预算（`maxTriggerCount`）不算完成——该 runtime 落到 `blocked`，会话停留在 setup 阶段等待玩家重试或豁免，不再"跳过坏掉的 setup 继续推进"。
+- **phase 翻转**：所有 setup runtime 都报告完成后，Kernel 在提交事务内把 `phase` 从 `'setup'` 翻到 `'playing'`、把 `completedPlayerTurns` 推进到 1，进入主循环；提交失败则计数、phase 翻转和 setup 镜像一并回滚。
+- **Setup completion followup**：角色表单这类最后一个 setup 输入提交后，`/api/actions` 的同一个请求会先完成 setup，再立即补跑本次已触发的主循环 runtime。这样玩家提交表单后能直接看到第一段正式叙事；审计、trace 和 snapshot 里该请求同时包含 setup completion 与 main-loop followup。
+- **会话提交原子边界**：同一 session 的玩家输入、runtime 执行、proposal commit、会话时钟写入（`phase` / `completedPlayerTurns` / `setupRuntimes`）和自动 snapshot 由同一 session lock 串行化。自动 snapshot 在全部 proposal 提交后捕获，确保对话 cursor、角色、state 与 plugin data 属于同一个已提交回合。
+- **Playing**：`status === 'active' && phase === 'playing'`。每次 `POST /api/actions` 触发一轮完整 Turn pipeline，按 `pre-turn → narrative → post-turn → audit` 四个 stage 依次运行（stage 间严格屏障）。`completedPlayerTurns` 只统计已提交的玩家回合——manual plugin-rpc、后台 follower、嵌套 `recursiveCall` 等非玩家执行各自落 `turn_results` 行（带 `origin` 标记）但不计数；多个执行共享同一 `turnId` 时只计一次。
 - **Paused / Ended**：`status === 'paused' | 'ended'`。调度器直接返回空，`/api/actions` 被服务端拒绝。Paused 可 `resumeSession()` 恢复，Ended 是终态。
 
-历史上的 `SessionRecord.phase`、`phase.transition` proposal、`phase.changed` SSE 事件已全部移除；`SessionSnapshot.session` 只暴露 `id`、`worldId`、`turnCount`、`locale` 等当前字段。
+`turnCount` / `preGameCompleted` 是内核不再写入的 legacy 字段：API 响应与 `SessionSnapshot.session` 仍暴露 `turnCount` 等字段，但其值在读取时经 `deriveLegacyClockForSession` 从会话时钟派生（`phase === 'setup'` → `turnCount = 0`；`'playing'` 且有进展 → `max(1, completedPlayerTurns)`），DB 列冻结保留供旧内核 / 回滚读取，pre-`phase` 老会话在下次执行时做一次性懒回填。历史上的 `phase.transition` proposal 与 `phase.changed` SSE 事件仍然不存在——phase 翻转不单独推送事件。
 
 ### 2.2 单轮 Turn Pipeline
 
@@ -97,16 +97,16 @@ flowchart TB
     In(["POST /api/actions<br/>玩家输入 / 开始游戏"]) --> Exec[executeTurn]
     Exec --> StartEvt["SSE: execution.started"]
     StartEvt --> Hook1[TurnStart hook]
-    Hook1 --> Filter["shouldTrigger 过滤<br/>auto / scheduled / manual / event（生产可用）<br/>conditional / error-retry = reserved（永不触发）<br/>+ maxTriggerCount / cooldownTurns / startTurn"]
+    Hook1 --> Filter["selectTriggeredRuntimes<br/>manual: 按名字匹配（绕过 shouldTrigger）<br/>setup runtime: 按 setupRuntimes 镜像取 pending<br/>其余: shouldTrigger（auto / scheduled / event<br/>+ startTurn / maxTriggerCount / cooldownTurns）"]
     Filter --> PreSched["PreSchedule hook<br/>(可收窄本回合 runtime 集)"]
-    PreSched --> Band{"turnCount?"}
-    Band -->|== 0| PreBand["Pre-Game band<br/>scheduleByPriority<br/>priority 0–99"]
-    Band -->|>= 1| MainBand["主循环 band<br/>scheduleByDag → priority 回退<br/>priority 100–1000"]
+    PreSched --> Band{"phase?"}
+    Band -->|setup| SetupBand["setup stage<br/>DAG（needs / after<br/>+ 保守 legacy 顺序链）"]
+    Band -->|playing| MainBand["主循环<br/>pre-turn → narrative → post-turn → audit<br/>stage 间严格屏障，stage 内 DAG"]
 
-    PreBand --> Group
+    SetupBand --> Group
     MainBand --> Group
 
-    subgraph Group["每个优先级 / DAG 组（同组并行，跨组串行）"]
+    subgraph Group["每个 DAG 层级组（同组并行，跨组串行；name 做并列 tiebreak）"]
       direction TB
       G1["guard? (agent runtime)"] --> G2["SSE: runtime.started"]
       G2 --> G3["PreRuntime hook"]
@@ -119,21 +119,21 @@ flowchart TB
 
     Group --> Commit["CommitPipeline.commitAll<br/>PreStateCommit → handler → PostStateCommit"]
     Commit --> SSE["发 SessionEvent<br/>narrative.delta / narrative.completed<br/>interaction.requested / state.changed<br/>plugin-data.changed / event.emitted / record.updated"]
-    SSE --> PreGameTick{"turnCount == 0 且<br/>所有 Pre-Game runtime<br/>都在 preGameCompleted?"}
-    PreGameTick -->|是| Advance["Kernel: turnCount 0 → 1"]
-    PreGameTick -->|否| Keep["保持 turnCount 不变"]
+    SSE --> PreGameTick{"phase === 'setup' 且<br/>所有 setup runtime<br/>都已报告完成?"}
+    PreGameTick -->|是| Advance["Kernel: phase setup → playing<br/>completedPlayerTurns 0 → 1"]
+    PreGameTick -->|否| Keep["保持 phase 不变"]
     Advance --> End["SSE: execution.completed"]
     Keep --> End
 ```
 
-**优先级 band**（`packages/runtime/src/schedule/scheduler.ts` 硬性约束）：
+**Stage 分带**（`packages/runtime/src/turn-executor/scheduling.ts` + `packages/runtime/src/schedule/` 硬性约束）：
 
-| turnCount | 可调度 priority 区间 | 语义                                                                                                                                                                                           |
-| --------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `0`       | `0–99`               | Pre-Game band（如 `pregame`、`world-init`、`char-creator`）                                                                                                                                    |
-| `>= 1`    | `100–1000`           | 主循环（narrator `500` / guide / codex / npc-graph extractor / character-tracker 同 `600` …）。同优先级的下游 runtime 通过 `upstreamRequired` + `input.inject` 声明依赖，由 DAG 调度器并发执行 |
+| phase       | 可调度 stage                               | 语义                                                                                                                                                                                                                                                                                                  |
+| ----------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'setup'`   | `setup`                                    | 游戏初始化（如 `pregame`、`world-init/schema-gen`、`char-creator/player-init`）；按声明依赖 + 保守 legacy 顺序链（`pregame → schema-gen` 保持串行）排序                                                                                                                                               |
+| `'playing'` | `pre-turn → narrative → post-turn → audit` | 每轮依次跑四个 stage，stage 间严格屏障（上一 stage 全部 settle——成功/失败/skip——才进下一个）。同一 stage 内由 `needs` / `after` / `inputs` 绑定推导的 DAG 排序，独立 runtime 并行，`name` 做稳定 tiebreak。依赖成环的 runtime（及其下游）本回合被 `skipped: dependency-cycle`，不会回退成任意顺序执行 |
 
-**Proposal 类型**（全部过 commit chain，源自 `ProposalPayloadMap`）：`narrative.append`、`interaction.request`、`state.patch`、`event.emit`、`ui.render`、`asset.generate`、`plugin.data` / `plugin.data.batch`、`character.upsert`、`working_memory.set`、`lorebook.upsert`。runtime 输出若带 legacy `phase` 字段会被 `normalizeOutput` 静默忽略（兼容老插件，不报错、不产生 proposal）。
+**Proposal 类型**（全部过 commit chain，源自 `ProposalPayloadMap`）：`narrative.append`、`interaction.request`、`state.patch`、`event.emit`、`ui.render`、`asset.generate`、`plugin.data` / `plugin.data.batch`、`character.upsert`、`working_memory.set`、`lorebook.upsert`。
 
 ## 三、消息翻译层（玩家 ↔ LLM Agent）
 
@@ -228,7 +228,8 @@ plugins/my-plugin/
 │   │
 │   │  frontmatter 定义：
 │   │  ┌─────────────────────────────────┐
-│   │  │ name, description, priority     │ ← 身份
+│   │  │ name, description               │ ← 身份
+│   │  │ stage, needs, after, inputs     │ ← 调度声明（阶段 + 依赖）
 │   │  │ trigger: { type, interval, ... } │ ← 何时触发
 │   │  │ model: "fast"                   │ ← 用哪个 LLM slot
 │   │  │ tools: { local: [...], builtin: [...] } │ ← 可用工具
@@ -275,10 +276,12 @@ plugins/my-plugin/
 ```
 插件不直接通信。通过框架中介：
 
-  narrator (P500)                  guide / codex / extractor / char-tracker (P600)
+  narrator（stage: narrative）           guide / codex / extractor / char-tracker（stage: post-turn）
   ────────────────────                  ──────────────────────────────────
-  输出: { narrativeOutput: "..." }       PLUGIN.md 声明:
-          │                              upstreamRequired: [narrator]
+  capabilities: [narrative-engine]       PLUGIN.md 声明:
+  输出: { narrativeOutput: "..." }         stage: post-turn
+          │                              needs:
+          │                                - capability: narrative-engine
           │                              input.inject:
           │                                - from: narrator
           │                                  field: narrativeOutput
@@ -292,35 +295,61 @@ plugins/my-plugin/
   │    : "沼泽的雾气"}  │                  </narrator-output>
   └────────────────────┘
 
-  关键点：framework 的执行顺序不是靠数字优先级（P500 < P550）保证的，
-  而是靠 DAG 调度器读 `upstreamRequired` + `input.inject.from` 计算前驱。
-  同 priority 600 的 guide / codex / extractor / character-tracker 互相
-  独立，会并发执行；它们都 wait narrator 完成后才能开始。
-  → completedResults 里已有 narrator 的输出
+  关键点：
+  · stage 屏障保证 narrative stage 全部结束后 post-turn stage 才开始；
+    同 post-turn stage 的 guide / codex / extractor / character-tracker
+    互相独立，并行执行。
+  · `needs`（强依赖：排序 + 门控）优先写 capability 形式——上面四个
+    下游都声明 `needs: [{ capability: narrative-engine }]`，同时适配
+    narrator（传统模式）与 chat-mode-narrator（对话模式）；叙事引擎
+    本轮失败时下游被 skipped。`after` 是弱排序（只排序、不设门）。
+  · `inputs` 绑定把上游输出升级为有类型的同回合绑定——例如
+    mimo-tts/auto-narrate 声明
+      inputs:
+        narrative:
+          from: { capability: narrative-engine, cardinality: one }
+          select: "/narrativeOutput"
+    function runtime 从 ctx.inputs.narrative.value 读取，不需要按
+    名字翻 completedResults（agent runtime 则注入保留 prompt 块）。
+  · 旧字段 `upstreamRequired` 仅作为第三方兼容别名保留，归一层把它
+    折算为 needs（turn 作用域）；bundled 插件已全部直接声明 needs。
 ```
 
 ### 4.3 插件触发决策树
 
 ```
-                    shouldTrigger(manifest, context)
+        selectTriggeredRuntimes（packages/runtime/src/turn-executor/scheduling.ts）
                               │
                     ┌─────────┴──────────┐
-                    │ maxTriggerCount?    │ ← 超过 session 最大次数？
+                    │ manual 触发？       │ ← plugin-rpc 显式点名 = 触发决策本身，
+                    │ → 按 name 匹配入选  │    绕过 shouldTrigger 及其全部门控
+                    └─────────┬──────────┘
+                              │ 非 manual
+                    ┌─────────┴──────────┐
+                    │ setup runtime？     │ ← 按 setupRuntimes 镜像取 pending，
+                    │ → done/blocked 不跑 │    同样绕过 shouldTrigger
+                    └─────────┬──────────┘
+                              │ 主循环 runtime
+                shouldTrigger(manifest, context)
+              （packages/runtime/src/trigger/trigger.ts，
+                回合内事件 fan-out 复用同一函数）
+                              │
+                    ┌─────────┴──────────┐
+                    │ startTurn?         │ ← 逻辑回合数 < startTurn？
+                    │ maxTriggerCount?   │ ← 超过 session 最大次数？
                     │ cooldownTurns?     │ ← 冷却中？
-                    │ phases?            │ ← 当前阶段允许？
                     └─────────┬──────────┘
                               │ 通过
                     ┌─────────┴──────────┐
                     │   trigger.type     │
                     ├────────────────────┤
                     │ auto    → true     │
-                    │ manual  → isManual │
-                    │ scheduled → turn % interval == 0 │
+                    │ scheduled → 逻辑回合 % interval == 0 │
                     │ event   → topic in pendingEvents  │
-                    │ ── reserved（永不触发）──         │
-                    │ conditional → false（无引擎，warn）│
-                    │ error-retry → false（无信号，warn）│
                     └────────────────────┘
+
+  `conditional` / `error-retry` 已从 trigger 枚举移除：声明它们的
+  manifest 在加载时就被 loader 拒绝，根本不会进入触发决策。
 ```
 
 ## 五、前端交互设计
@@ -363,8 +392,8 @@ plugins/my-plugin/
 │                                                                  │
 │  execution.started  ──►  executionSteps[]  ──►  进度条           │
 │  runtime.completed  ──►                                          │
-│  (phase.changed 已移除) ── 状态标签改由前端基于 status + turnCount │
-│                            派生，无服务端推送                     │
+│  (无 phase.changed 事件) ── 状态标签由前端基于会话字段            │
+│           (status + phase / 派生 turnCount) 计算，无服务端推送    │
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -428,17 +457,19 @@ plugins/my-plugin/
   ┌─────────────────────────────────────────────────────────────────┐
   │                    角色创建表单流程                               │
   │                                                                 │
-  │  Turn 1 (turnCount === 0, Pre-Game band, priority 0–99):        │
+  │  首次执行 (phase === 'setup'，只运行 setup stage):              │
   │  ┌────────────────────────────────────────────────────────────┐ │
-  │  │ P10  pregame      → 初始化会话级元数据                │ │
-  │  │ P85  world-init   → 生成/复用世界维度 schema          │ │
-  │  │      (P500/P700 在 turnCount === 0 不会被调度——下一段    │ │
-  │  │       Pre-Game 循环内继续派发剩余 runtime)                 │ │
+  │  │ pregame               → 初始化会话级元数据             │ │
+  │  │ world-init/schema-gen → 生成/复用世界维度 schema        │ │
+  │  │   (保守 legacy 顺序链保证 pregame → schema-gen 串行；      │ │
+  │  │    narrative / post-turn stage 的 runtime 在 setup 阶段    │ │
+  │  │    不会被调度——后续 setup 子轮继续派发剩余 runtime)         │ │
   │  └────────────────────────────────────────────────────────────┘ │
   │  ┌────────────────────────────────────────────────────────────┐ │
-  │  │ 随后几个 Pre-Game 子轮：narrator → 开场叙事            │ │
-  │  │                         char-creator → create-form    │ │
-  │  │                         (它们的 priority 也在 0–99 段)     │ │
+  │  │ 随后的 setup 子轮：char-creator/player-init →          │ │
+  │  │   开场引导 + create-form 表单                          │ │
+  │  │   (同为 stage: setup，turn-scoped needs 依赖            │ │
+  │  │    pregame + world-init/schema-gen)                    │ │
   │  └────────────────────────────────────────────────────────────┘ │
   │                          │                                      │
   │                          ▼ SSE: interaction.requested           │
@@ -464,11 +495,12 @@ plugins/my-plugin/
   │  │                                                            │ │
   │  │   下一次 /api/actions 由 char-creator 运行：                │ │
   │  │   create-character() → upsertCharacter                     │ │
-  │  │   （Pre-Game runtime 用 `preGameDone: true` 登记完成，     │ │
-  │  │    不再写 session.phase，也不再推 phase.changed）          │ │
+  │  │   （setup runtime 用 `preGameDone: true` 登记完成；集齐后   │ │
+  │  │    Kernel 在提交事务内把 phase 翻到 'playing'，             │ │
+  │  │    无 phase.changed SSE 推送）                             │ │
   │  │                                                            │ │
   │  │   2. POST /api/actions (player_action)                     │ │
-  │  │      → 同请求完成 Pre-Game 并补跑 main-loop followup        │ │
+  │  │      → 同请求完成 setup 并补跑 main-loop followup           │ │
   │  │      → narrator + guide + codex                            │ │
   │  └────────────────────────────────────────────────────────────┘ │
   └─────────────────────────────────────────────────────────────────┘
@@ -483,8 +515,11 @@ plugins/my-plugin/
 │                        DataStore 接口                            │
 │                                                                 │
 │  会话级                                                         │
-│  ├── sessions          会话记录 (id, worldId, status, turnCount, │
-│  │                                 preGameCompleted, plugins)    │
+│  ├── sessions          会话记录 (id, worldId, status, phase,    │
+│  │                                 completedPlayerTurns,        │
+│  │                                 setupRuntimes, plugins；     │
+│  │                                 legacy 列 turnCount /        │
+│  │                                 preGameCompleted 冻结保留)    │
 │  ├── turn_results      每轮聚合结果                              │
 │  ├── runtime_results   每个 runtime 的执行结果                   │
 │  ├── tool_calls        工具调用审计日志                          │
@@ -615,13 +650,13 @@ sequenceDiagram
     Web->>Server: GET /api/worlds / /api/packages / /api/ui-specs
     Server-->>Web: 世界列表 + 包清单 + UI 面板声明
     Player->>Web: 选择世界 + 点击"开始冒险"
-    Web->>Server: POST /api/sessions (新 session, turnCount=0)
+    Web->>Server: POST /api/sessions (新 session, phase='setup')
     Web->>Server: POST /api/actions { type: 'start_session' }
     Server-->>Web: SSE: execution.started
 
     rect rgb(240, 248, 255)
-    Note over Server,Plugin: Turn 1 · Pre-Game band (turnCount === 0, priority 0–99)
-    loop 每个 Pre-Game runtime (priority 升序)
+    Note over Server,Plugin: 首次执行 · setup stage (phase === 'setup')
+    loop 每个 setup runtime (DAG + 保守 legacy 顺序链)
         Server-->>Web: SSE: runtime.started
         Kernel->>Plugin: guard / buildContext
         Plugin->>LLM: generate() + tool loop
@@ -632,7 +667,7 @@ sequenceDiagram
         Kernel-->>Web: SSE: interaction.requested (若有表单/按钮)
         Server-->>Web: SSE: runtime.completed { status }
     end
-    Kernel->>Server: 追加 preGameCompleted；未集齐则 turnCount 保持 0
+    Kernel->>Server: 登记 setupRuntimes 完成镜像；未集齐则 phase 保持 'setup'
     end
     Server-->>Web: SSE: execution.completed
     Note over Web: 渲染叙事 (Prose) + 表单 (Form)<br/>pluginData 更新 → 右侧面板 + 消息面板
@@ -641,13 +676,13 @@ sequenceDiagram
     Web->>Server: POST /api/sessions/:id/plugin-rpc submit-form
     Server-->>Web: 返回 filledNarrative (仅模板填充，不写 turn_messages)
 
-    Note over Server,Plugin: Pre-Game 可能多次迭代；<br/>最后一个 Pre-Game runtime 报 preGameDone: true 后<br/>Kernel 将 turnCount 从 0 推到 1
+    Note over Server,Plugin: setup 可能多次迭代；<br/>最后一个 setup runtime 报 preGameDone: true 后<br/>Kernel 把 phase 翻到 'playing'（completedPlayerTurns 0 → 1）
     Web->>Server: POST /api/actions { type: 'send_message', content: filledNarrative }
     Server-->>Web: SSE: execution.started
 
     rect rgb(245, 255, 240)
-    Note over Server,Plugin: Turn 2+ · 主循环 (turnCount >= 1, priority 100–1000)
-    loop 每个主循环 runtime (DAG 并行 / 优先级串行)
+    Note over Server,Plugin: Turn 2+ · 主循环 (phase === 'playing'，pre-turn → narrative → post-turn → audit)
+    loop 每个主循环 runtime (stage 间屏障串行 / stage 内 DAG 并行)
         Server-->>Web: SSE: runtime.started
         Plugin->>LLM: buildContext + generate + tool loop
         Plugin-->>Kernel: RuntimeOutput → normalizeOutput → Proposal[]
@@ -670,7 +705,7 @@ sequenceDiagram
     Note over Web: 渲染叙事 + 图鉴/引导面板更新；pluginData 增量合并
     Player->>Web: 点击引导建议 / 输入下一条消息 → 重复 Turn 2+ 流程
 
-    Note over Server,Web: 已退役事件：phase.changed / phase.transition (F1 清理，不再发出)
+    Note over Server,Web: 已退役事件：phase.changed / phase.transition（不再发出；phase 翻转不单独推送）
 ```
 
 ## 八、Package 职责与依赖
@@ -706,8 +741,11 @@ sequenceDiagram
 
 Turn 执行                    @covel/runtime                   核心执行引擎
                              ├── executeTurn()                完整 Turn 管线
-                             ├── shouldTrigger()              触发路由
-                             ├── scheduleByPriority()         优先级调度
+                             ├── shouldTrigger()              触发路由 (auto/scheduled/event)
+                             ├── selectTriggeredRuntimes()    触发选择 (manual 名字匹配 /
+                             │                                  setup 镜像 / shouldTrigger)
+                             ├── scheduleTriggeredRuntimes()  stage 分带 + scheduleByDag()
+                             │                                  同 stage 内 DAG 分层
                              ├── executeOneRuntime()          单 runtime 执行
                              ├── createToolExecutor()         工具执行器 + 访问控制
                              └── normalizeOutput()            输出 → Proposal 标准化

@@ -3,6 +3,7 @@ import type {
   PackageSummary,
   PluginLoadError,
   SessionPluginInfo,
+  SetupRuntimeState,
 } from "@/services/api.js";
 
 export interface PluginListPanelProps {
@@ -20,6 +21,8 @@ export interface PluginListPanelProps {
   sessionId?: string;
   /** Current `runtimeModelOverrides` map from SessionRecord. */
   runtimeModelOverrides?: Record<string, string>;
+  /** Current `setupRuntimes` lifecycle map from SessionRecord. */
+  setupRuntimes?: Record<string, SetupRuntimeState>;
 }
 
 export interface PluginItemProps {
@@ -30,6 +33,7 @@ export interface PluginItemProps {
   resolvedSlots?: ResolvedSlot[];
   sessionId?: string;
   runtimeModelOverrides?: Record<string, string>;
+  setupRuntimes?: Record<string, SetupRuntimeState>;
 }
 
 export interface PluginErrorItemProps {
@@ -43,6 +47,7 @@ export interface SessionPluginItemProps {
   resolvedSlots?: ResolvedSlot[];
   sessionId?: string;
   runtimeModelOverrides?: Record<string, string>;
+  setupRuntimes?: Record<string, SetupRuntimeState>;
 }
 
 export const TRIGGER_LABELS: Record<string, { key: string; fallback: string }> =
@@ -53,8 +58,6 @@ export const TRIGGER_LABELS: Record<string, { key: string; fallback: string }> =
     interval: { key: "plugin.triggerInterval", fallback: "Interval" },
     manual: { key: "plugin.triggerManual", fallback: "Manual" },
     event: { key: "plugin.triggerEvent", fallback: "Event" },
-    conditional: { key: "plugin.triggerConditional", fallback: "Conditional" },
-    "error-retry": { key: "plugin.triggerErrorRetry", fallback: "Error retry" },
   };
 
 export const TRIGGER_TYPE_I18N: Record<
@@ -65,8 +68,6 @@ export const TRIGGER_TYPE_I18N: Record<
   scheduled: { key: "plugin.triggerScheduled", fallback: "Scheduled" },
   manual: { key: "plugin.triggerManual", fallback: "Manual" },
   event: { key: "plugin.triggerEvent", fallback: "Event" },
-  conditional: { key: "plugin.triggerConditional", fallback: "Conditional" },
-  "error-retry": { key: "plugin.triggerErrorRetry", fallback: "Error retry" },
 };
 
 export const RUNTIME_TYPE_ICONS: Record<string, string> = {

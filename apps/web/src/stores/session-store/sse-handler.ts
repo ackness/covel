@@ -621,6 +621,10 @@ export function createSseEventHandler(
       case "utils.fetch.failed":
       // Prompt-budget prune trace: /debug reads it from trace_events.
       case "context.pruned":
+      // Kernel job-status progress: forwarded live for future media-progress UI;
+      // the action renderer does not consume it yet (compat with plugin-data
+      // `_jobs`), so ignore for exhaustiveness like the other trace events.
+      case "job-status.updated":
         break;
       default:
         assertNeverEvent(eventType);

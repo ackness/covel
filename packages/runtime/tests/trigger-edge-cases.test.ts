@@ -27,15 +27,22 @@ function manifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
 }
 
 function ctx(overrides?: Partial<TriggerContext>): TriggerContext {
-  return {
+  const merged: TriggerContext = {
     sessionId: "sess-1",
     turnNumber: 5,
+    logicalTurn: 5,
     triggerCount: 0,
     turnsSinceLastTrigger: 999,
     pendingEventTopics: [],
     isManualTrigger: false,
     preGameCompleted: [],
     ...overrides,
+  };
+  // scheduled / startTurn gate on `logicalTurn`; these cases express the turn
+  // number via `turnNumber`, so mirror it unless a test sets logicalTurn.
+  return {
+    ...merged,
+    logicalTurn: overrides?.logicalTurn ?? merged.turnNumber,
   };
 }
 
@@ -135,48 +142,14 @@ describe("shouldTrigger — error-retry (reserved)", () => {
   });
 });
 
-describe("shouldTrigger — conditional reservation", () => {
-  let warnSpy: ReturnType<typeof vi.spyOn>;
-  afterEach(() => {
-    warnSpy?.mockRestore();
-  });
-
-  it("emits exactly one console.warn per (sessionId, runtimeId), no matter how often it is consulted", () => {
-    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    // The schema accepts conditional but no engine evaluates it yet — the
-    // runtime must stay quiescent and the framework must warn the author
-    // once. Re-warning every turn would flood logs in long sessions.
+describe("shouldTrigger — unknown trigger type", () => {
+  it("returns false for a trigger type outside the production enum", () => {
+    // The enum is narrowed to the four production types at the schema layer;
+    // a programmatically constructed manifest with an unknown type must stay
+    // quiescent rather than throw.
     const m = manifest({
-      trigger: { type: "conditional", condition: "has-x" },
-    } as Partial<RuntimeManifest>);
-    const c = ctx({ sessionId: "sess-warn-1" });
-
-    expect(shouldTrigger(m, c)).toBe(false);
-    expect(shouldTrigger(m, c)).toBe(false);
-    expect(shouldTrigger(m, c)).toBe(false);
-
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(String(warnSpy.mock.calls[0]?.[0] ?? "")).toMatch(/conditional/);
-  });
-
-  it("still warns separately for a different session/runtime pair", () => {
-    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    const m1 = manifest({
-      name: "rt-A",
-      trigger: { type: "conditional", condition: "x" },
-    } as Partial<RuntimeManifest>);
-    const m2 = manifest({
-      name: "rt-B",
-      trigger: { type: "conditional", condition: "x" },
-    } as Partial<RuntimeManifest>);
-
-    shouldTrigger(m1, ctx({ sessionId: "sess-distinct" }));
-    shouldTrigger(m2, ctx({ sessionId: "sess-distinct" }));
-    shouldTrigger(m1, ctx({ sessionId: "sess-distinct-2" }));
-
-    // (sess-distinct, rt-A), (sess-distinct, rt-B), (sess-distinct-2, rt-A) → 3 warns
-    expect(warnSpy).toHaveBeenCalledTimes(3);
+      trigger: { type: "conditional" },
+    } as unknown as Partial<RuntimeManifest>);
+    expect(shouldTrigger(m, ctx({ sessionId: "sess-unknown" }))).toBe(false);
   });
 });

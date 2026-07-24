@@ -1,17 +1,11 @@
 import { resolve, relative } from "node:path";
-import { FrameworkCapability, readRuntimeEnv } from "@covel/shared";
+import { FrameworkCapability, readRuntimeEnv, type Stage } from "@covel/shared";
 
-// audit A5: segment ids are neutral priority-band labels. The framework must
-// not assume "priority 500 == narrator" — narrator is a plugin whose priority
-// is manifest-configured, not framework knowledge. The frontend groups steps
-// by the segment's priority range (minPriority/maxPriority) and renders its
-// `labelText`/`label`; it never reads the segment `id`, so neutral ids are safe.
-export type FlowSegmentId =
-  | "start"
-  | "pre-game"
-  | "priority-band-pre-narrator"
-  | "priority-band-narrator"
-  | "priority-band-post-narrator";
+// Flow segments are the named stages plus one bucket for stage-less runtimes
+// (event / manual). The frontend groups steps by `step.segmentId === segment.id`
+// and renders each segment's `labelText`. Segment ids ARE the stage names so a
+// staged step maps 1:1; the framework never assumes "priority 500 == narrator".
+export type FlowSegmentId = Stage | "event-manual";
 
 export type UiSlotName = "right" | "message" | "left";
 
@@ -52,18 +46,6 @@ export function textValue(value: unknown, locale = "zh-CN"): string {
   return "";
 }
 
-export function segmentForPriority(priority: number): FlowSegmentId {
-  // Align with packages/runtime/src/scheduler.ts band edges.
-  // Pre-Game is `0-99` (turn 0 only), main loop is `100-1000`. Treating
-  // `priority === 100` as Pre-Game would put it in the wrong band on the
-  // flow viz — same drift the audit calls out.
-  if (priority <= 0) return "start";
-  if (priority <= 99) return "pre-game";
-  if (priority < 500) return "priority-band-pre-narrator";
-  if (priority === 500) return "priority-band-narrator";
-  return "priority-band-post-narrator";
-}
-
 export function docPathFromAbsolute(
   pluginsDir: string,
   absolutePath: string,
@@ -102,8 +84,6 @@ export function normalizeRuntimeTrigger(trigger?: {
   maxTriggerCount?: number;
   startTurn?: number;
   topic?: string;
-  condition?: string;
-  maxRetryCount?: number;
 }): {
   type: string;
   interval?: number;
@@ -111,8 +91,6 @@ export function normalizeRuntimeTrigger(trigger?: {
   maxTriggerCount?: number;
   startTurn?: number;
   topic?: string;
-  condition?: string;
-  maxRetryCount?: number;
 } {
   return {
     type: trigger?.type ?? "auto",
@@ -127,11 +105,5 @@ export function normalizeRuntimeTrigger(trigger?: {
       ? { startTurn: trigger.startTurn }
       : {}),
     ...(trigger?.topic !== undefined ? { topic: trigger.topic } : {}),
-    ...(trigger?.condition !== undefined
-      ? { condition: trigger.condition }
-      : {}),
-    ...(trigger?.maxRetryCount !== undefined
-      ? { maxRetryCount: trigger.maxRetryCount }
-      : {}),
   };
 }

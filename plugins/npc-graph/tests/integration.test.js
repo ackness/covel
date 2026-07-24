@@ -192,16 +192,16 @@ describe("npc-graph end-to-end (extractor → retriever)", () => {
     };
     const retrieved = await retrieverHandler(retrieverCtx);
 
-    expect(retrieved.npcContext).toBeTruthy();
-    expect(retrieved.npcContext).toContain("萧衍笙");
-    expect(retrieved.npcContext).toContain("碧波宗");
-    expect(retrieved.npcContext).toContain("WORKS_FOR");
-    expect(retrieved.npcContext).toContain("COMPETES_WITH");
-    expect(retrieved.npcContext).toContain("灵脉盟约");
+    expect(retrieved.value.npcContext).toBeTruthy();
+    expect(retrieved.value.npcContext).toContain("萧衍笙");
+    expect(retrieved.value.npcContext).toContain("碧波宗");
+    expect(retrieved.value.npcContext).toContain("WORKS_FOR");
+    expect(retrieved.value.npcContext).toContain("COMPETES_WITH");
+    expect(retrieved.value.npcContext).toContain("灵脉盟约");
 
     // 1-hop neighbours of 萧衍笙
-    expect(retrieved.matchedNodes).toHaveLength(3); // seed + 碧波宗 + 陆沉渊
-    expect(retrieved.edgeCount).toBe(2);
+    expect(retrieved.value.matchedNodes).toHaveLength(3); // seed + 碧波宗 + 陆沉渊
+    expect(retrieved.value.edgeCount).toBe(2);
   });
 
   it("retriever returns empty when player mentions no known NPC", async () => {
@@ -234,8 +234,8 @@ describe("npc-graph end-to-end (extractor → retriever)", () => {
       config: {},
     });
 
-    expect(retrieved.npcContext).toBe("");
-    expect(retrieved.matchedNodes).toEqual([]);
+    expect(retrieved.value.npcContext).toBe("");
+    expect(retrieved.value.matchedNodes).toEqual([]);
   });
 
   it("preserves prior turn state across two extractor calls", async () => {
@@ -315,11 +315,11 @@ describe("npc-graph end-to-end (extractor → retriever)", () => {
       config: {},
     });
 
-    expect(retrieved.npcContext).toContain("Alice");
-    expect(retrieved.npcContext).toContain("Bob");
-    expect(retrieved.npcContext).toContain("Charlie");
-    expect(retrieved.npcContext).toContain("TRUSTS");
-    expect(retrieved.npcContext).toContain("FEARS");
-    expect(retrieved.edgeCount).toBe(2);
+    expect(retrieved.value.npcContext).toContain("Alice");
+    expect(retrieved.value.npcContext).toContain("Bob");
+    expect(retrieved.value.npcContext).toContain("Charlie");
+    expect(retrieved.value.npcContext).toContain("TRUSTS");
+    expect(retrieved.value.npcContext).toContain("FEARS");
+    expect(retrieved.value.edgeCount).toBe(2);
   });
 });

@@ -27,3 +27,5 @@ export * from "./mappers/state-mappers.js";
 export * from "./mappers/plugin-mappers.js";
 export * from "./mappers/memory-mappers.js";
 export * from "./mappers/snapshot-mappers.js";
+export * from "./mappers/lifecycle-mappers.js";
+export * from "./mappers/export-mappers.js";

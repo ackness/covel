@@ -6,8 +6,16 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import matter from "gray-matter";
-import { pluginRelationsSchema } from "@covel/shared";
-import type { PluginRelations, PluginTag, PluginType } from "@covel/shared";
+import {
+  pluginRelationsSchema,
+  hasIllegalDetachedContract,
+} from "@covel/shared";
+import type {
+  PluginRelations,
+  PluginTag,
+  PluginType,
+  RuntimeManifest,
+} from "@covel/shared";
 import type {
   PluginDiscoveryResult,
   PluginSummary,
@@ -274,6 +282,120 @@ async function loadUiSpecs(
 }
 
 /**
+ * Load a runtime's output JSON Schema.
+ *
+ * When `manifest.output.schema` declares a path, that exact file is loaded
+ * (resolved against the runtime dir, containment-checked against the plugin
+ * root); a declared-but-missing file warns instead of throwing so one bad
+ * reference does not abort the load. With no declaration, fall back to the
+ * `output.schema.json` convention — silently absent when the file is not there.
+ */
+async function loadOutputSchema(
+  runtimeDir: string,
+  pluginRoot: string,
+  declaredPath: string | undefined,
+): Promise<Readonly<Record<string, unknown>> | undefined> {
+  if (declaredPath) {
+    const fullPath = path.resolve(runtimeDir, declaredPath);
+    await assertInsideRoot(pluginRoot, fullPath, "Output schema");
+    if (!(await fileExists(fullPath))) {
+      console.warn(
+        `[plugin-loader] declared output schema not found: ${declaredPath}`,
+      );
+      return undefined;
+    }
+    return JSON.parse(await fs.readFile(fullPath, "utf-8")) as Record<
+      string,
+      unknown
+    >;
+  }
+
+  const conventionPath = path.join(runtimeDir, "output.schema.json");
+  if (!(await fileExists(conventionPath))) return undefined;
+  return JSON.parse(await fs.readFile(conventionPath, "utf-8")) as Record<
+    string,
+    unknown
+  >;
+}
+
+/**
+ * Load a declared runtime-dir-relative JSON Schema (no convention fallback).
+ * Used for `input.schema` (activation payload) and `inputs.<name>.accepts`
+ * (binding value). Same containment + warn-on-missing contract as
+ * {@link loadOutputSchema} — a bad reference degrades to `undefined`, never
+ * aborts the load.
+ */
+async function loadDeclaredSchema(
+  runtimeDir: string,
+  pluginRoot: string,
+  declaredPath: string,
+  label: string,
+): Promise<Readonly<Record<string, unknown>> | undefined> {
+  const fullPath = path.resolve(runtimeDir, declaredPath);
+  await assertInsideRoot(pluginRoot, fullPath, label);
+  if (!(await fileExists(fullPath))) {
+    console.warn(
+      `[plugin-loader] declared ${label} not found: ${declaredPath}`,
+    );
+    return undefined;
+  }
+  return JSON.parse(await fs.readFile(fullPath, "utf-8")) as Record<
+    string,
+    unknown
+  >;
+}
+
+/**
+ * Load every `inputs.<name>.accepts` schema declared on the manifest, keyed by
+ * binding name. Absent / missing files are simply omitted (the runtime Ajv
+ * check only runs where a schema resolved).
+ */
+async function loadBindingAcceptsSchemas(
+  runtimeDir: string,
+  pluginRoot: string,
+  inputs: RuntimeManifest["inputs"],
+): Promise<Record<string, Readonly<Record<string, unknown>>> | undefined> {
+  if (!inputs) return undefined;
+  const out: Record<string, Readonly<Record<string, unknown>>> = {};
+  for (const [name, binding] of Object.entries(inputs)) {
+    if (!binding.accepts) continue;
+    const schema = await loadDeclaredSchema(
+      runtimeDir,
+      pluginRoot,
+      binding.accepts,
+      `binding accepts schema (${name})`,
+    );
+    if (schema) out[name] = schema;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * Load every `input.inject` runtime-export `accepts` schema, keyed by the
+ * binding `name`. Same containment / omit-on-missing rules as the same-execution
+ * `inputs.<name>.accepts` loader (docs 02 §3.4.4).
+ */
+async function loadExportAcceptsSchemas(
+  runtimeDir: string,
+  pluginRoot: string,
+  inject: NonNullable<RuntimeManifest["input"]>["inject"],
+): Promise<Record<string, Readonly<Record<string, unknown>>> | undefined> {
+  if (!inject) return undefined;
+  const out: Record<string, Readonly<Record<string, unknown>>> = {};
+  for (const decl of inject) {
+    if (decl.kind !== "runtime-export" || !decl.accepts) continue;
+    const schema = await loadDeclaredSchema(
+      runtimeDir,
+      pluginRoot,
+      decl.accepts,
+      `export accepts schema (${decl.name})`,
+    );
+    if (schema) out[decl.name] = schema;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
  * Level 1.5: Load only a runtime's manifest + UI specs — no handler / guard
  * imports. UI specs are data (JSON files, or a recorded component path), so
  * this path never executes plugin JS and is safe for untrusted (community)
@@ -308,12 +430,41 @@ export async function loadRuntime(
   const runtimeDir = resolveRuntimeDir(discovery, runtimeName);
   const parsed = await parsePluginMdForLocale(runtimeDir, locale);
 
-  const schemaPath = path.join(runtimeDir, "output.schema.json");
-  let outputSchema: Readonly<Record<string, unknown>> | undefined;
-  if (await fileExists(schemaPath)) {
-    const schemaContent = await fs.readFile(schemaPath, "utf-8");
-    outputSchema = JSON.parse(schemaContent) as Record<string, unknown>;
+  // Deterministic loader rejection (01 §4): a recurrently-detached spec that
+  // still declares turn bindings can never satisfy them.
+  if (hasIllegalDetachedContract(parsed.manifest)) {
+    throw new Error(
+      `Runtime "${parsed.manifest.name}" is always-detached (event/manual + background) ` +
+        `but declares turn bindings (inputs) — no activation can satisfy them.`,
+    );
   }
+
+  const outputSchema = await loadOutputSchema(
+    runtimeDir,
+    discovery.rootPath,
+    parsed.manifest.output?.schema,
+  );
+
+  const inputSchema = parsed.manifest.input?.schema
+    ? await loadDeclaredSchema(
+        runtimeDir,
+        discovery.rootPath,
+        parsed.manifest.input.schema,
+        "input schema",
+      )
+    : undefined;
+
+  const bindingAcceptsSchemas = await loadBindingAcceptsSchemas(
+    runtimeDir,
+    discovery.rootPath,
+    parsed.manifest.inputs,
+  );
+
+  const exportAcceptsSchemas = await loadExportAcceptsSchemas(
+    runtimeDir,
+    discovery.rootPath,
+    parsed.manifest.input?.inject,
+  );
 
   // Load function handler for runtimeType: 'function'
   let handler: FunctionHandler | undefined;
@@ -338,6 +489,23 @@ export async function loadRuntime(
     guard = mod.default as FunctionHandler;
   }
 
+  // suspensionSafe pre-check (groundwork for approval-gated resumable asks): a
+  // non-builtin function runtime that can make HTTP calls (permissions.http) but
+  // is not replay-safe will not be resumable once those asks land. Warn now — no
+  // runtime gate. builtin plugins are shipped by us and exempt.
+  if (
+    parsed.manifest.runtimeType === "function" &&
+    discovery.source !== "builtin" &&
+    (parsed.manifest.permissions?.http?.length ?? 0) > 0 &&
+    parsed.manifest.suspensionSafe !== true
+  ) {
+    console.warn(
+      `[plugin-loader] ${parsed.manifest.name}: declares permissions.http but not ` +
+        `suspensionSafe — it will not be resumable once approval-gated HTTP asks land. ` +
+        `Declare suspensionSafe: true when the handler is replay-safe.`,
+    );
+  }
+
   // Load UI spec files from ui/ directory
   const uiSpecs = await loadUiSpecs(
     runtimeDir,
@@ -349,6 +517,9 @@ export async function loadRuntime(
     manifest: parsed.manifest,
     promptTemplate: parsed.promptTemplate,
     outputSchema,
+    ...(inputSchema ? { inputSchema } : {}),
+    ...(bindingAcceptsSchemas ? { bindingAcceptsSchemas } : {}),
+    ...(exportAcceptsSchemas ? { exportAcceptsSchemas } : {}),
     handler,
     guard,
     uiSpecs,

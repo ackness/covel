@@ -1,8 +1,16 @@
 /**
  * Pre-Game completion contract — locks the three signals that can mark a
  * Pre-Game runtime as done: `preGameDone: true`, guard-skipped, and
- * maxTriggerCount exhaustion. Also verifies `turnCount` only advances
- * to 1 when *all* Pre-Game runtimes in the active set are accounted for.
+ * maxTriggerCount exhaustion. Also verifies the band only flips to `playing`
+ * (`allSetupDone`) when *all* Pre-Game runtimes in the active set are accounted
+ * for.
+ *
+ * Scheduling redesign: the completion write moved out of `executeTurn` and into
+ * the finalize transaction (session-clock write), so the observable contract at
+ * the executeTurn boundary is now `TurnResult.setupCompletion` — the delta the
+ * executor hands the finalizer — rather than the persisted `turnCount` /
+ * `preGameCompleted`. The derivation of those legacy fields from the delta is
+ * pinned by the session-clock / acceptance tests instead.
  *
  * This is subtle enough that drift here silently breaks opening flows
  * (player stuck on character form, main-loop never starts), so we pin
@@ -89,20 +97,24 @@ async function runPregameTurn(
   return { store, result };
 }
 
+/** RuntimeIds newly marked done in this execution's setup-completion delta. */
+function newlyDone(result: Awaited<ReturnType<typeof executeTurn>>): string[] {
+  return Object.keys(result.setupCompletion?.newlyDone ?? {}).sort();
+}
+
 describe("Pre-Game completion contract", () => {
   it("marks a runtime done when output.preGameDone === true", async () => {
     const m = pregameManifest("pregame", { priority: 10 });
-    const { store } = await runPregameTurn("sess-done", [m], {
+    const { result } = await runPregameTurn("sess-done", [m], {
       pregame: async () => ({
         narrativeOutput: "welcome",
         preGameDone: true,
       }),
     });
 
-    const session = await store.getSession("sess-done");
-    expect(session?.preGameCompleted).toEqual(["pregame"]);
-    // Only Pre-Game runtime present, so everyone's done → advance to turn 1.
-    expect(session?.turnCount).toBe(1);
+    expect(newlyDone(result)).toEqual(["pregame"]);
+    // Only Pre-Game runtime present, so everyone's done → band flips to playing.
+    expect(result.setupCompletion?.allSetupDone).toBe(true);
   });
 
   it("marks an AGENT runtime done when its guard returns skip:true", async () => {
@@ -112,7 +124,7 @@ describe("Pre-Game completion contract", () => {
       priority: 85,
       runtimeType: "agent",
     });
-    const { store } = await runPregameTurn(
+    const { result } = await runPregameTurn(
       "sess-guard",
       [m],
       {}, // no handler — guard must short-circuit before execution.
@@ -126,9 +138,8 @@ describe("Pre-Game completion contract", () => {
       },
     );
 
-    const session = await store.getSession("sess-guard");
-    expect(session?.preGameCompleted).toEqual(["world-init/schema-gen"]);
-    expect(session?.turnCount).toBe(1);
+    expect(newlyDone(result)).toEqual(["world-init/schema-gen"]);
+    expect(result.setupCompletion?.allSetupDone).toBe(true);
   });
 
   it("does NOT advance turnCount when any Pre-Game runtime is unfinished", async () => {
@@ -139,19 +150,21 @@ describe("Pre-Game completion contract", () => {
       priority: 50,
     });
 
-    const { store } = await runPregameTurn("sess-open", [pregame, playerInit], {
-      pregame: async () => ({ preGameDone: true }),
-      "char-creator/player-init": async () => ({
-        ui: [{ type: "form", interactionId: "char" }],
-        // preGameDone intentionally absent — form not yet submitted.
-      }),
-    });
+    const { result } = await runPregameTurn(
+      "sess-open",
+      [pregame, playerInit],
+      {
+        pregame: async () => ({ preGameDone: true }),
+        "char-creator/player-init": async () => ({
+          ui: [{ type: "form", interactionId: "char" }],
+          // preGameDone intentionally absent — form not yet submitted.
+        }),
+      },
+    );
 
-    const session = await store.getSession("sess-open");
-    // Pregame recorded; player-init NOT recorded.
-    expect(session?.preGameCompleted).toEqual(["pregame"]);
-    // Pre-Game still in progress → turnCount stays at 0.
-    expect(session?.turnCount).toBe(0);
+    // Pregame newly done; player-init NOT — so setup stays incomplete.
+    expect(newlyDone(result)).toEqual(["pregame"]);
+    expect(result.setupCompletion?.allSetupDone).toBe(false);
   });
 
   it("keeps bootstrap outside player history while setup is unfinished", async () => {
@@ -179,15 +192,15 @@ describe("Pre-Game completion contract", () => {
       store,
     };
 
-    await executeTurn(input, [pregame, playerInit], deps);
+    const result = await executeTurn(input, [pregame, playerInit], deps);
 
     const playerMessages = (
       await store.listTurnMessages("sess-bootstrap")
     ).filter((msg) => msg.sourceType === "player");
-    const session = await store.getSession("sess-bootstrap");
     expect(playerMessages).toHaveLength(0);
-    expect(session?.preGameCompleted).toEqual(["pregame"]);
-    expect(session?.turnCount).toBe(0);
+    // Pregame newly done; player-init still awaiting its form → setup pending.
+    expect(newlyDone(result)).toEqual(["pregame"]);
+    expect(result.setupCompletion?.allSetupDone).toBe(false);
   });
 
   it("continues pending setup scheduling after player history exists", async () => {
@@ -237,15 +250,16 @@ describe("Pre-Game completion contract", () => {
       deps,
     );
 
-    const session = await store.getSession("sess-resume");
+    // Deliberate change (Step 2): only the setup runtime runs this turn. The
+    // narrator (main loop) no longer runs as a same-batch follow-up when
+    // player-init completes Pre-Game — it runs on the next request, once the
+    // finalize transaction has flipped the band to `playing`.
     expect(result.runtimeResults.map((r) => r.runtimeId)).toEqual([
       "char-creator/player-init",
-      "narrator",
     ]);
-    expect(session?.preGameCompleted?.slice().sort()).toEqual(
-      ["pregame", "char-creator/player-init"].sort(),
-    );
-    expect(session?.turnCount).toBe(1);
+    // pregame already recorded; player-init completes now → last one done.
+    expect(newlyDone(result)).toEqual(["char-creator/player-init"]);
+    expect(result.setupCompletion?.allSetupDone).toBe(true);
   });
 
   it("does not mark framework upstream skips as Pre-Game completion", async () => {
@@ -254,7 +268,7 @@ describe("Pre-Game completion contract", () => {
       upstreamRequired: ["pregame"],
     });
 
-    const { store, result } = await runPregameTurn(
+    const { result } = await runPregameTurn(
       "sess-upstream-skip",
       [playerInit],
       {
@@ -266,9 +280,10 @@ describe("Pre-Game completion contract", () => {
     expect(result.runtimeResults[0]?.output).toMatchObject({
       skippedBy: "framework:upstreamRequired",
     });
-    const session = await store.getSession("sess-upstream-skip");
-    expect(session?.preGameCompleted).toEqual([]);
-    expect(session?.turnCount).toBe(0);
+    // A framework upstream skip is NOT a Pre-Game completion signal, so nothing
+    // is marked done and setup stays incomplete.
+    expect(newlyDone(result)).toEqual([]);
+    expect(result.setupCompletion?.allSetupDone).toBe(false);
   });
 
   it("ignores main-loop manual utilities while deciding Pre-Game completion", async () => {
@@ -281,7 +296,7 @@ describe("Pre-Game completion contract", () => {
       trigger: { type: "manual" },
     });
 
-    const { store, result } = await runPregameTurn(
+    const { result } = await runPregameTurn(
       "sess-manual-mainloop",
       [pregame, playerInit, utility],
       {
@@ -293,15 +308,15 @@ describe("Pre-Game completion contract", () => {
       },
     );
 
-    const session = await store.getSession("sess-manual-mainloop");
     expect(result.runtimeResults.map((r) => r.runtimeId)).toEqual([
       "pregame",
       "char-creator/player-init",
     ]);
-    expect(session?.preGameCompleted?.slice().sort()).toEqual(
-      ["pregame", "char-creator/player-init"].sort(),
+    // The manual utility is ignored; both Pre-Game runtimes are newly done.
+    expect(newlyDone(result)).toEqual(
+      ["char-creator/player-init", "pregame"].sort(),
     );
-    expect(session?.turnCount).toBe(1);
+    expect(result.setupCompletion?.allSetupDone).toBe(true);
   });
 
   it("advances turnCount when EVERY Pre-Game runtime reports done in the same turn", async () => {
@@ -313,31 +328,40 @@ describe("Pre-Game completion contract", () => {
       priority: 50,
     });
 
-    const { store } = await runPregameTurn("sess-both", [pregame, playerInit], {
-      pregame: async () => ({ preGameDone: true }),
-      "char-creator/player-init": async () => ({ preGameDone: true }),
-    });
+    const { result } = await runPregameTurn(
+      "sess-both",
+      [pregame, playerInit],
+      {
+        pregame: async () => ({ preGameDone: true }),
+        "char-creator/player-init": async () => ({ preGameDone: true }),
+      },
+    );
 
-    const session = await store.getSession("sess-both");
-    expect(session?.preGameCompleted?.slice().sort()).toEqual(
+    expect(newlyDone(result)).toEqual(
       ["char-creator/player-init", "pregame"].sort(),
     );
-    expect(session?.turnCount).toBe(1);
+    // Both complete in the same turn → band flips to playing.
+    expect(result.setupCompletion?.allSetupDone).toBe(true);
   });
 
-  it("treats maxTriggerCount-exhausted runtimes as done (does not block advancement)", async () => {
-    // A runtime that already hit its trigger budget in a previous turn must
-    // not hold up Pre-Game forever. In practice `pregame` has
-    // `maxTriggerCount: 1`; after its first turn the kernel should accept
-    // exhaustion as "done".
+  it("no longer marks maxTriggerCount-exhausted runtimes done — setup runs by mirror, not message cadence (deliberate change)", async () => {
+    // Deliberate change (scheduling redesign): exhausting `maxTriggerCount`
+    // never counts a setup runtime as done. Setup scheduling is now governed
+    // by the persistent mirror (pending → run) and the ledger-based retry
+    // budget (blocked), NOT the message-based trigger count. A prior runtime
+    // message therefore no longer suppresses the run — the runtime IS invoked
+    // again, and until it reports done it stays pending (heading toward blocked
+    // once the ledger budget is exhausted via the finalize settle, which this
+    // executeTurn-only harness does not exercise). The old "band-exhausted ⇒
+    // advance anyway" (newlyDone=[pregame], allSetupDone=true) is gone.
     const pregame = pregameManifest("pregame", {
       priority: 10,
       trigger: { type: "scheduled", interval: 1, maxTriggerCount: 1 },
     });
 
     const store = await freshStore("sess-exh");
-    // Seed one prior runtime-sourced TurnMessage to set triggerCount >= 1 and
-    // simulate the runtime having already run last turn.
+    // A prior runtime-sourced message would have blocked re-scheduling under
+    // the old message-cadence gate; the mirror-driven gate ignores it.
     await store.appendTurnMessage({
       id: "prior",
       sessionId: "sess-exh",
@@ -351,25 +375,30 @@ describe("Pre-Game completion contract", () => {
       createdAt: new Date().toISOString(),
     });
 
+    let invoked = 0;
     const deps: TurnExecutorDeps = {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "",
+        // Runs but does not report done → stays pending, never marked done.
         handler: async () => {
-          throw new Error("exhausted runtime must not be invoked");
+          invoked += 1;
+          return {};
         },
       }),
       llm: new NoopLLM(),
       store,
     };
-    await executeTurn(
+    const result = await executeTurn(
       { sessionId: "sess-exh", turnId: "turn-0", playerMessage: "" },
       [pregame],
       deps,
     );
 
-    const session = await store.getSession("sess-exh");
-    expect(session?.preGameCompleted).toEqual(["pregame"]);
-    expect(session?.turnCount).toBe(1);
+    // The runtime IS re-invoked (mirror-driven scheduling ignores the message
+    // count), and it is NOT marked done — setup stays incomplete.
+    expect(invoked).toBe(1);
+    expect(newlyDone(result)).toEqual([]);
+    expect(result.setupCompletion?.allSetupDone).toBe(false);
   });
 });

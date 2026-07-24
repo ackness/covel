@@ -1,0 +1,8 @@
+.DS_Store
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+tests/tmp/*
+!tests/tmp/.gitkeep

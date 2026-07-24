@@ -4,23 +4,23 @@
 
 ## Pages
 
-| Page                                                         | Use it for                                                                      |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| [`design-principles.md`](./design-principles.md)             | 设计理念：内核提供原语 / 插件承载玩法、插头 vs 电器裁决、三种写法、可表达边界。 |
-| [`flow.md`](./flow.md)                                       | 端到端 turn pipeline、状态模型、插件执行、前后端数据流。                        |
-| [`npc-graph.md`](./npc-graph.md)                             | `npc-graph` 插件、Graph-RAG、embedding、图数据与 UI 面板。                      |
-| [`changelog-session-state.md`](./changelog-session-state.md) | session state 和 narrative flow 的历史变更记录。                                |
+| Page                                             | Use it for                                                                      |
+| ------------------------------------------------ | ------------------------------------------------------------------------------- |
+| [`design-principles.md`](./design-principles.md) | 设计理念：内核提供原语 / 插件承载玩法、插头 vs 电器裁决、三种写法、可表达边界。 |
+| [`flow.md`](./flow.md)                           | 端到端 turn pipeline、状态模型、插件执行、前后端数据流。                        |
+| [`npc-graph.md`](./npc-graph.md)                 | `npc-graph` 插件、Graph-RAG、embedding、图数据与 UI 面板。                      |
+| [`storage.md`](./storage.md)                     | DataStore 后端、事务与持久化边界。                                              |
 
 ## Search Anchors
 
-| Topic               | Code paths                                                                                                                                                          |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Turn execution      | `packages/runtime/src/turn-executor.ts`, `packages/runtime/src/turn-runtime-execution.ts`, `packages/runtime/src/turn-executor/`, `packages/runtime/src/trigger.ts` |
-| Prompt assembly     | `packages/context/src/`, `docs/reference/prompt-structure.md`                                                                                                       |
-| Plugin loading      | `packages/plugin-loader/src/`, `plugins/**/PLUGIN.md`                                                                                                               |
-| Server API          | `apps/server/src/routes/api/`                                                                                                                                       |
-| Frontend session UI | `apps/web/src/components/session/`, `apps/web/src/services/`                                                                                                        |
-| Store backends      | `packages/store/src/`                                                                                                                                               |
+| Topic               | Code paths                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Turn execution      | `packages/runtime/src/turn-executor/`, `packages/runtime/src/schedule/`, `packages/runtime/src/trigger/trigger.ts` |
+| Prompt assembly     | `packages/context/src/`, `docs/reference/prompt-structure.md`                                                      |
+| Plugin loading      | `packages/plugin-loader/src/`, `plugins/**/PLUGIN.md`                                                              |
+| Server API          | `apps/server/src/routes/api/`                                                                                      |
+| Frontend session UI | `apps/web/src/components/session/`, `apps/web/src/services/`                                                       |
+| Store backends      | `packages/store/src/`                                                                                              |
 
 ## Writing Rules
 

@@ -4,7 +4,7 @@
  * Split out of `../types.ts` by domain; re-exported there for compatibility.
  */
 
-import type { SessionStatus } from "@covel/shared";
+import type { SessionStatus, SetupRuntimeState } from "@covel/shared";
 
 export interface SessionRecord {
   readonly id: string;
@@ -35,6 +35,25 @@ export interface SessionRecord {
    * `manifest.model` then `"default"`.
    */
   readonly runtimeModelOverrides?: Readonly<Record<string, string>>;
+  /**
+   * Setup/main-loop band selector for the scheduling redesign. `setup` while
+   * any setup-band runtime is unresolved, `playing` once the barrier is
+   * crossed. Optional — absent on rows written before this field existed.
+   */
+  readonly phase?: "setup" | "playing";
+  /**
+   * Count of completed player turns in the main loop. Distinct from
+   * {@link turnCount} (the legacy band selector); populated by the kernel
+   * wiring wave. Optional — absent on legacy rows.
+   */
+  readonly completedPlayerTurns?: number;
+  /**
+   * Per-runtime setup-band resolution state, keyed by runtimeId. Mirrors the
+   * `SetupAttemptRecord` log into a compact map the scheduler can read without
+   * scanning attempts. Replaced wholesale on write (no deep merge). Optional —
+   * absent on legacy rows.
+   */
+  readonly setupRuntimes?: Readonly<Record<string, SetupRuntimeState>>;
 }
 
 export function normalizeSessionRecord(session: SessionRecord): SessionRecord {
@@ -69,6 +88,9 @@ export function mergeSessionPatch(
       | "embeddingModelId"
       | "embeddingLockedAt"
       | "runtimeModelOverrides"
+      | "phase"
+      | "completedPlayerTurns"
+      | "setupRuntimes"
     >
   >,
 ): SessionRecord {

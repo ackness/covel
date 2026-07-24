@@ -2,6 +2,7 @@ import type {
   I18nText,
   PluginUserSettingSpec,
   SessionStatus,
+  Stage,
   WorldDimensions,
 } from "@covel/shared";
 
@@ -35,6 +36,38 @@ export interface WorldRecord {
 export type GeneratedWorldSaveTarget =
   "server-file" | "server-store" | "return-only";
 
+/**
+ * Lifecycle state of a single one-time "setup" runtime, as tracked on the
+ * session record (keyed by runtimeId, e.g. `"char-creator/player-init"`).
+ * A setup runtime that fails repeatedly becomes `blocked`, halting its plugin
+ * until the player retries or waives it.
+ */
+export type SetupRuntimeState =
+  | {
+      state: "pending";
+      pluginVersion: string;
+      generation: number;
+      attempts: number;
+      lastError?: string;
+    }
+  | {
+      state: "done";
+      resolution: "completed" | "waived";
+      generation: number;
+      attempts: number;
+      completedAt: string;
+      pluginVersion: string;
+      warning?: string;
+    }
+  | {
+      state: "blocked";
+      pluginVersion: string;
+      generation: number;
+      attempts: number;
+      reason: string;
+      blockedAt: string;
+    };
+
 export interface SessionRecord {
   id: string;
   worldId: string;
@@ -46,6 +79,8 @@ export interface SessionRecord {
   presetId?: string;
   taskBindings?: Record<string, string>;
   runtimeModelOverrides?: Record<string, string>;
+  /** Per-setup-runtime lifecycle state, keyed by runtimeId. */
+  setupRuntimes?: Record<string, SetupRuntimeState>;
   createdAt: string;
 }
 
@@ -101,7 +136,8 @@ export interface PresetSummary {
 export interface RuntimeSummary {
   id: string;
   kind: string;
-  priority: number;
+  /** Named stage; absent for event/manual/UI-only runtimes. */
+  stage?: Stage;
   trigger: {
     type: string;
     onEvents?: string[];

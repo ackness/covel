@@ -225,11 +225,14 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 会话快照
 
-| 方法 | 路径                         | 描述                            |
-| ---- | ---------------------------- | ------------------------------- |
-| GET  | `/api/sessions/:id/snapshot` | 获取会话快照（客户端恢复/重连） |
+| 方法 | 路径                         | 描述                                                                                                                           |
+| ---- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| GET  | `/api/sessions/:id/snapshot` | 获取会话快照（客户端恢复/重连）                                                                                                |
+| GET  | `/api/sessions/:id/turns`    | 持久化 turn_results 执行工件列表（含 `commitStatus`/`origin`；`?limit=n` 上限 500）。为 e2e-plugin-verify harness 恢复的薄路由 |
 
 > 快照的 `messages` 与 `executionSteps` 只含**最近窗口**（默认最新 80 条消息 / 600 条 trace 事件），不再全量加载（长会话每次重连都全量读是原性能热点）。快照带 `messagesCursor`（`{createdAt,id} | null`）；前端聊天界面向上滚动时用它调 `GET /api/sessions/:id/messages/page` 增量补更旧消息。窗口外旧 Turn 的执行时间线优雅降级（不渲染）。
+>
+> 快照内嵌的 session 对象里，`turnCount` / `preGameCompleted` 同 `GET`/`POST /api/sessions` 一样，是由调度时钟（`phase` / `completedPlayerTurns` / `setupRuntimes`）在读取时派生的兼容字段，不是内核直接写入的持久列——响应形状不变，见「会话管理」章节 `POST /api/sessions` 的响应字段说明。
 
 ### Turn 执行
 
@@ -248,6 +251,20 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - steer 仅对 `outputKind: story` 的 runtime 生效（plugin runtime 执行结构化任务，不接受插话）。插话在最终响应流式期间到达时，story runtime 收尾前会追加一步 LLM 调用消化它（受 maxSteps 约束）；持久化失败则撤回队列项并返回 `500`。
 - 注册表为进程内实现——多 pod（PG）部署下 steer/abort 只能到达同 pod 上的回合。
 - 可控窗口与 session lock 对齐：注册发生在取得 session lock 之后、`executeTurn` 前，释放在 `executeTurn` 返回时——同 session 的并发 action 在锁上排队，steer/abort 永远命中真实在途的回合，不会指向排队中的下一回合；提案 commit / 后台 follower 调度等收尾阶段不再对外呈现为可控（此时 steer/abort 返回 `409`）。
+
+### Setup runtime 控制（重试 / 跳过）
+
+setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 `blocked`，会把会话钉在 setup 频段——该插件的其余 runtime 因隐式会话门被 `skipped: setup-incomplete`。以下两个端点是玩家把它解封的唯一手段（沿用 `resolveSessionParam` 的 owner-token 鉴权）：
+
+| 方法 | 路径                                       | 描述                                                                                                                                                                            |
+| ---- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST | `/api/sessions/:id/setup/:runtimeId/retry` | 把 `blocked` 的 setup runtime 复位为 `pending`：`generation+1`、`attempts=0`，下次执行重新跑一遍。返回 `{ ok, runtimeId, state }`                                               |
+| POST | `/api/sessions/:id/setup/:runtimeId/waive` | 把 `blocked` 的 setup runtime 标记为 `done{resolution:"waived"}` 并附降级 `warning`，令其所属插件的会话门满足。body 必须为 `{ confirm: true }`。返回 `{ ok, runtimeId, state }` |
+
+- `:runtimeId` 是完整 runtime id（`<pluginId>/<runtimeName>`，需 URL 编码）。
+- 幂等：`retry` 对已 `pending` 的目标、`waive` 对已 `waived` 的目标均为无副作用的 `200`。
+- 非 `blocked` 状态（如 `done{completed}` / `pending`）调用返回 `409`，并在 `error` 里说明只有 blocked 才能重试/跳过；`waive` 缺 `{ confirm: true }` 返回 `400 { code: "confirm_required" }`；未知会话返回 `404`。
+- 两个端点都会在写入 `setupRuntimes` 的同时按新镜像重新派生 `preGameCompleted`（waived 进入该集合、retried 退出），使旧内核读取保持一致；`phase` 的翻转仍由下一回合的 finalize 事务负责。
 
 ### 玩家交互
 
@@ -994,9 +1011,14 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 **响应字段**:
 
 - `ownerToken`(string) — 会话 owner token，**仅此一次返回**（服务端只存哈希）。`DEPLOYMENT_TIER=demo|commercial` 下所有会话作用域端点都要求携带它（见「鉴权」章节）；`self` 层级可忽略
-- `status`(`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态（turn-band 重构后替代原先的 `phase` 字段）
-- `turnCount`(number) — 主循环轮数计数（从 0 开始，每次成功 turn +1）
-- `preGameCompleted`(string[]) — 已完成 Pre-Game 初始化的 runtime id 集合，框架据此跳过后续轮次的 Pre-Game 调度
+- `status`(`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态
+- `turnCount`(number) — 主循环轮数计数（从 0 开始）。调度重构后**由时钟派生**：`phase="setup"` 时为 0，`phase="playing"` 时为 `max(1, completedPlayerTurns)`
+- `preGameCompleted`(string[]) — 已完成 Pre-Game 初始化的 runtime id 集合（现由 `setupRuntimes` 中 `state="done"` 的条目派生并排序）
+- `phase`(可选,`'setup' \| 'playing'`) — 调度重构新增的 setup/主循环频段真相字段（会话激活集含 setup runtime 时初始为 `setup`，否则 `playing`；全部 setup runtime 完成后翻转为 `playing`）。旧会话缺省，首次回合时惰性回填。前端暂未消费
+- `completedPlayerTurns`(可选,number) — 已提交的主循环玩家逻辑回合数（setup 交互不计入）。由 finalize 事务内的 logical-turn ledger 幂等推进
+- `setupRuntimes`(可选,`Record<runtimeId, SetupRuntimeState>`) — 每个 setup runtime 的解析状态镜像。`SetupRuntimeState` 为三态联合：`pending{ generation, attempts, lastError? }`（尚未完成，`attempts` 为当代次终态非 suspended 的 attempt-ledger 计数）· `done{ resolution:"completed"|"waived", generation, attempts, completedAt, warning? }`（已完成，`waived` 为玩家跳过的降级完成）· `blocked{ generation, attempts, reason, blockedAt }`（耗尽 `maxTriggerCount` 预算仍未完成，把会话钉在 setup 频段，需经 `retry`/`waive` 端点解封）。各态均带 `pluginVersion`；插件版本变化会使旧 `done` 失效并以 `generation+1` 重跑
+
+> 三个新字段为**可选追加**，不破坏默认响应形状；`turnCount` / `preGameCompleted` 继续存在，仅改由上述三字段的公式派生。
 
 > **Session ID 格式**: 自动生成的 ID 格式为 `{worldId}-{uuid8}`（如 `mistport-a1b2c3d4`），使用 `crypto.randomUUID()` 后缀防止枚举。如未提供 worldId 则前缀为 `session`。
 
@@ -1063,7 +1085,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 **字段说明:**
 
-- `status`(可选,`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态。turn-band 重构后取代原先的 `phase` 字段——`phase` 已从 SessionRecord 中移除，运行进度改由 `turnCount` + `preGameCompleted` 集合描述。非合法枚举值返回 400。
+- `status`(可选,`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态。非合法枚举值返回 400。（注：运行频段真相由 `phase` / `completedPlayerTurns` / `setupRuntimes` 三字段承载，`turnCount` / `preGameCompleted` 由其派生——见 `POST /api/sessions` 响应字段说明；PATCH 不直接改写这些字段，它们只在 finalize 事务与惰性回填处写入。）
 - `runtimeModelOverrides`(可选,object) — PR-6 引入。Per-runtime 模型 slot 覆盖,key 为 runtime ID(`pluginId` 或 `pluginId/runtimeName`,必须匹配 `/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?$/`),value 为 `llm.toml` 中定义的 slot 名(如 `default` / `fast` / `balance`)。框架在每次 turn 执行前快照该字段,resolver 优先查找 session override → 然后 fallback 到 `manifest.model` → 最后 `default`。空对象 `{}` 清除所有覆盖。插件列表与 Session Prep 会暴露 runtime 的声明 slot；若声明 slot 未配置，UI 会提示补充 `[covel.<slot>]`，不会静默改绑到不相关的文本 slot。**Provider 与 API key 仍走前端 localStorage + `X-Provider-Keys` header,不入库,以保护隐私。**
 
 **校验规则(runtimeModelOverrides):**
@@ -1106,7 +1128,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 ### Turn 执行
 
-Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服务器调度所有活跃的 Runtime 按优先级执行，收集 LLM 输出并返回。
+Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服务器按 stage（`setup` / `pre-turn` / `narrative` / `post-turn` / `audit`，stage 间严格屏障，stage 内按 DAG 依赖并行）调度所有活跃的 Runtime，收集 LLM 输出并返回。
 
 #### `POST /api/sessions/:id/turn`
 
@@ -1167,9 +1189,9 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 **使用说明:**
 
 - Turn 执行是同步的，响应时间取决于 LLM 调用耗时
-- 每个活跃 Runtime 按优先级依次执行（同优先级并行）
+- 每个活跃 Runtime 按 stage 依次执行，stage 内独立 runtime 并行（依赖 `needs` / `after` / `inputs` 排序）
 - `runtimeResults` 包含每个 Runtime 的输出，可能包含叙事文本、工具调用结果等
-- `session.turnCount` 表示主循环进度：setup-only Pre-Game 执行会保存 `turn_results`，但不会计入主循环轮数；完成 Pre-Game 后最低推进到 `1`
+- `session.turnCount`（由 `phase` / `completedPlayerTurns` 读时派生的 legacy 字段）表示主循环进度：setup 阶段的执行会保存 `turn_results`，但不会计入主循环轮数；`phase` 翻到 `playing` 后最低读出 `1`
 - 服务端会对每个 runtimeResult 运行 `processRuntimeResult` 提交管道（与 `/api/actions` 一致）：normalize → state.commit → 触发后续 SessionEvent
 - 如果某个 Runtime 的输出包含 `pendingInputs`，需要通过 `plugin-rpc` 的 `framework.submit-form` action 提交玩家响应
 
@@ -1302,7 +1324,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 统一的"结构化插件指令"通道。同时支持:
 
 1. **Action 级**: `{ pluginId, action, payload }` — 调用插件在 PLUGIN.md `rpc` 字段中声明的 RPC handler,或框架默认 handler(如 `submit-form`)。返回单次 JSON。
-2. **Runtime 级**: `{ pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行。通过完整 Turn pipeline(prompt 组装、工具循环、proposal 提交)跑一次目标 runtime,事件触发的下游 runtime 会按 priority 自动 chain。执行子模式由 `manifest.execution` 决定:
+2. **Runtime 级**: `{ pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行。通过完整 Turn pipeline(prompt 组装、工具循环、proposal 提交)跑一次目标 runtime,事件触发的下游 runtime 会在回合内自动 chain(同一事件的多个订阅者按 `name` 定序)。执行子模式由 `manifest.execution` 决定:
    - `'sync'`(默认): 同步等待 runtime 完成,commit proposals 后返回汇总 JSON。
    - `'background'`: 立即返回 202 + `jobId`,后台通过 `setImmediate` 继续执行。进度/结果通过 `plugin_data` 表 `_jobs` 保留命名空间写回,前端经 `plugin-data.changed` SSE 感知变化。
 
@@ -1677,18 +1699,11 @@ rpc:
   "schemaVersion": 1,
   "framework": {
     "pluginManifest": {
-      "triggerTypes": [
-        "auto",
-        "manual",
-        "scheduled",
-        "conditional",
-        "event",
-        "error-retry"
-      ],
+      "triggerTypes": ["auto", "manual", "scheduled", "event"],
       "outputKinds": ["story", "plugin", "system"],
       "runtimeTypes": ["agent", "function"],
       "executionModes": ["sync", "background"],
-      "inputInjectKinds": ["runtime", "plugin-data"],
+      "inputInjectKinds": ["runtime", "plugin-data", "runtime-export"],
       "uiSlots": ["right", "message", "left"]
     },
     "pluginData": {
@@ -2293,7 +2308,7 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 #### `POST /api/sessions/:id/snapshot`
 
-从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 session 生命周期/运行配置（status、turnCount、preGameCompleted、locale、activePlugins、presetId、runtimeModelOverrides）、characters、stateEntries、pluginData、workingMemory、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。读取和保存全程持有该 session 的执行锁，因此不会捕获正在提交回合的混合状态。PG 部署下若锁被一个执行中的回合持有超过获取超时（30s），返回 `503 { code: 'session_busy' }`，应稍后重试。
+从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 session 生命周期/运行配置（status、turnCount、preGameCompleted、locale、activePlugins、presetId、runtimeModelOverrides）、characters、stateEntries、pluginData、workingMemory、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。读取和保存全程持有该 session 的执行锁，因此不会捕获正在提交回合的混合状态。PG 部署下若锁被一个执行中的回合持有超过获取超时（30s），返回 `503 { code: 'session_busy' }`，应稍后重试。payload 里的 `turnCount` / `preGameCompleted` 同样是物化时由 `phase` / `completedPlayerTurns` / `setupRuntimes` 派生写入，不是内核维护的独立持久列。
 
 **响应:**
 
@@ -2607,6 +2622,8 @@ id: evt-002
 
 **`start_session` 的前置条件**：会话必须已有非空 `activePlugins`。插件集合由会话创建时决定（显式 `plugins` 数组，或世界 manifest 播种的推荐集），`start_session` 只负责在注册表里激活它们。空集合会被 **400** 拒绝（`Session has no active plugins. …`），而不是回退到"激活全部已注册插件"——那个回退会把玩家从未选择的社区插件、以及互斥的两个叙事引擎同时拉进会话，并持久化到会话生命周期结束。
 
+**开场接力（opening continuation）**：当一次玩家动作（`send_message` / `execute_command` / `start_session`）完成了**最后一个** setup runtime（setup 执行独立提交，phase 翻转到 `playing`），同一个请求会在同一条 SSE 流上**自动接力一个主循环回合**（全新的 `turnId`、独立事务，读取刚提交的 setup 状态），让叙事 runtime 直接产出开场叙事——玩家提交完开局表单后无需再手动发一条消息。接力回合是第一个计数的玩家回合（`completedPlayerTurns` 0 → 1）。整条流仍只发**一个** `execution.completed`（取接力回合的数据）。守卫：`retry_runtime` 不接力；执行被中止（`abortReason`）、提交失败、或 setup 仍有未完成项（还有后续开局交互）时不接力。
+
 > 旧版示例曾使用 `payload.message`，但服务端从未读取该字段，已统一为 `content` / `command`。
 >
 > **移除（2026-07-20 审计 M-07）**：`type: "trigger_event"` 已删除——其 payload 从未被服务端读取、UI 无调用方。插件侧发事件请用 builtin `emit-event` 工具；再发送会得到 400。
@@ -2626,7 +2643,7 @@ interface SseEnvelope {
   requestId: string; // 请求关联 ID（来自请求体）
   traceId: string; // 本回合的 trace ID
   sessionId: string;
-  turnId?: string;
+  turnId?: string; // 开场接力时同一条流会先后出现两个 turnId（setup 回合 + 接力回合）
   flowId: string; // 等于 traceId
   seq: number; // 该流内自增
   timestamp: string;

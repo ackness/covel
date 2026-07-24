@@ -74,25 +74,21 @@ describe("makeManualFunctionContext", () => {
     expect(ctx.pluginId).toBe("character-blueprint");
     expect(ctx.runtimeId).toBe("character-blueprint/import");
     expect(ctx.playerMessage).toBe("");
-    expect(ctx.completedResults).toBeInstanceOf(Map);
     expect(ctx.manualPayload).toEqual({ blueprint: { id: "mentor-lin" } });
   });
 
   it("keeps explicit store and ids", () => {
     const store = { listPluginData: async () => [] };
-    const completedResults = new Map([["narrator", { status: "success" }]]);
     const ctx = makeManualFunctionContext({
       pluginId: "player-identity",
       sessionId: "sess-custom",
       turnId: "turn-custom",
       store,
-      completedResults,
     });
 
     expect(ctx.sessionId).toBe("sess-custom");
     expect(ctx.turnId).toBe("turn-custom");
     expect(ctx.store).toBe(store);
-    expect(ctx.completedResults).toBe(completedResults);
   });
 });
 

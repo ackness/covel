@@ -12,6 +12,7 @@ import type {
   PostHistoryDecl,
   RuntimeManifest,
 } from "@covel/shared";
+import { getRuntimeSpec, stageRank } from "@covel/shared";
 import { interpolateTemplate } from "./prompt-internals.js";
 import type {
   ContextBuildParams,
@@ -95,7 +96,7 @@ export function collectDepthContributions(
 }
 
 /**
- * Resolve the priority-ordered list of manifests used for segment 9/10
+ * Resolve the stage-ordered list of manifests used for segment 9/10
  * aggregation. Defaults to the single current manifest when the caller
  * does not pass `activeManifests`.
  */
@@ -106,11 +107,15 @@ export function resolveActiveManifests(
   if (!fromCaller || fromCaller.length === 0) {
     return [params.manifest];
   }
-  // Stable sort by ascending priority — matches scheduler semantics
-  // (0 = highest, runs first → renders first).
-  return [...fromCaller].sort(
-    (a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity),
-  );
+  // Sort by (stage, name) — earlier stages render first, name breaks intra-stage
+  // ties deterministically. Replaces the old `legacyOrder ?? Infinity` priority
+  // sort. The production caller (turn-agent-runtime) always passes exactly one
+  // manifest, so this ordering is observable only to multi-manifest callers.
+  return [...fromCaller].sort((a, b) => {
+    const ra = stageRank(getRuntimeSpec(a).stage);
+    const rb = stageRank(getRuntimeSpec(b).stage);
+    return ra - rb || a.name.localeCompare(b.name);
+  });
 }
 
 /**

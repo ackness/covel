@@ -8,6 +8,7 @@ priority: 490
 capabilities: [npc-graph, graph-rag]
 outputKind: plugin
 runtimeType: function
+resultFormat: envelope-v1
 handler: ./handler.js
 trigger:
   type: scheduled

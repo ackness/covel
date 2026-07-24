@@ -1,5 +1,5 @@
 /**
- * Full-screen GalGame stage (viewMode: "stage"). Composes the five stage
+ * Full-screen visual-novel stage (viewMode: "stage"). Composes the five stage
  * layers over a shared plugin-data feed and owns the small amount of
  * cross-layer state the pieces can't hold themselves: which turn's text is
  * fully read (gates the choice overlay), whether the dialog is in free-text

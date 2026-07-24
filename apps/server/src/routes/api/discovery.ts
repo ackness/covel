@@ -1,13 +1,15 @@
 import {
   COVEL_EVENT_META,
   PROPOSAL_TYPES,
+  getRuntimeSpec,
+  inputInjectDeclSchema,
   outputKindSchema,
   triggerTypeSchema,
   worldDataEffectSchema,
   worldDataMergeModeSchema,
   worldDataSourceKindSchema,
 } from "@covel/shared";
-import type { RuntimeManifest } from "@covel/shared";
+import type { RuntimeManifest, Stage } from "@covel/shared";
 import type {
   ParsedPluginMd,
   PluginRegistry,
@@ -33,7 +35,8 @@ export interface RuntimePluginContract {
   capabilities: string[];
   tags: string[];
   relations?: unknown;
-  priority?: number;
+  /** Named stage; absent for event/manual/UI-only runtimes. */
+  stage?: Stage;
   trigger?: unknown;
   execution?: unknown;
   model?: unknown;
@@ -246,7 +249,9 @@ function buildRuntimeContract(
     capabilities: [...(manifest.capabilities ?? [])],
     tags: [...(manifest.tags ?? [])],
     ...(manifest.relations ? { relations: manifest.relations } : {}),
-    ...(manifest.priority !== undefined ? { priority: manifest.priority } : {}),
+    ...(getRuntimeSpec(manifest).stage !== undefined
+      ? { stage: getRuntimeSpec(manifest).stage }
+      : {}),
     ...(manifest.trigger ? { trigger: manifest.trigger } : {}),
     ...(manifest.execution ? { execution: manifest.execution } : {}),
     ...(manifest.model ? { model: manifest.model } : {}),
@@ -364,7 +369,11 @@ export function buildFrameworkCapabilities(
         outputKinds: enumValues(outputKindSchema),
         runtimeTypes: ["agent", "function"],
         executionModes: ["sync", "background"],
-        inputInjectKinds: ["runtime", "plugin-data"],
+        // Derived from the inject discriminated union so a new kind
+        // (e.g. runtime-export) can never go missing from the advert.
+        inputInjectKinds: inputInjectDeclSchema.options.map(
+          (option) => option.shape.kind.value,
+        ),
         uiSlots: ["right", "message", "left"],
       },
       pluginData: {

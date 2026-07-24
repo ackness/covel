@@ -75,10 +75,13 @@ export default async function handler(ctx) {
 
   return withPendingProposals(
     {
-      imported: true,
-      blueprintId: blueprint.id,
-      instantiated: shouldInstantiate,
-      ...(characterId ? { characterId } : {}),
+      outcome: "success",
+      value: {
+        imported: true,
+        blueprintId: blueprint.id,
+        instantiated: shouldInstantiate,
+        ...(characterId ? { characterId } : {}),
+      },
     },
     proposals,
   );

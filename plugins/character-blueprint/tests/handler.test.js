@@ -15,6 +15,8 @@ function ctx(manualPayload) {
   };
 }
 
+// Deliberate change: handler migrated to envelope-v1, so the business return
+// is under `result.value`; pending proposals stay on the envelope (result).
 describe("character-blueprint handler", () => {
   it("imports a blueprint into plugin data", async () => {
     const result = await handler(
@@ -29,7 +31,7 @@ describe("character-blueprint handler", () => {
       }),
     );
 
-    expect(result).toEqual({
+    expect(result.value).toEqual({
       imported: true,
       blueprintId: "mentor-lin",
       instantiated: false,
@@ -88,7 +90,7 @@ describe("character-blueprint handler", () => {
       }),
     );
 
-    expect(result).toEqual({
+    expect(result.value).toEqual({
       imported: true,
       blueprintId: "mentor-lin",
       instantiated: true,
@@ -144,7 +146,7 @@ describe("character-blueprint handler", () => {
       }),
     );
 
-    expect(result).toEqual({
+    expect(result.value).toEqual({
       imported: true,
       blueprintId: "json-mentor",
       instantiated: true,
@@ -180,7 +182,7 @@ describe("character-blueprint handler", () => {
       }),
     );
 
-    expect(result).toMatchObject({
+    expect(result.value).toMatchObject({
       imported: true,
       blueprintId: "kamishiro-mio",
       instantiated: true,
@@ -242,7 +244,7 @@ describe("character-blueprint handler", () => {
       }),
     );
 
-    expect(result).toEqual({
+    expect(result.value).toEqual({
       imported: true,
       blueprintId: "kamishiro-mio",
       instantiated: false,
@@ -268,7 +270,7 @@ describe("character-blueprint handler", () => {
       }),
     );
 
-    expect(result).toEqual({
+    expect(result.value).toEqual({
       imported: true,
       blueprintId: "kamishiro-mio",
       instantiated: false,
@@ -305,7 +307,7 @@ describe("character-blueprint handler", () => {
       }),
     );
 
-    expect(result).toMatchObject({
+    expect(result.value).toMatchObject({
       imported: true,
       blueprintId: "npc-transfer-student",
       instantiated: true,
@@ -328,7 +330,7 @@ describe("character-blueprint handler", () => {
       }),
     );
 
-    expect(result).toMatchObject({
+    expect(result.value).toMatchObject({
       imported: true,
       blueprintId: "npc-transfer-student",
       instantiated: false,

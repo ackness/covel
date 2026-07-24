@@ -360,8 +360,9 @@ describe("event directory", () => {
       resolvePluginDir: (pluginId) => rootPaths.get(pluginId),
     });
 
-    // plugin-a (priority 100, sorted first by getActiveRuntimes) must win —
-    // its schema requires "location", not plugin-e's "sceneId".
+    // plugin-a wins first-wins: getActiveRuntimes now sorts by (stage, name), and
+    // both runtimes are pre-turn (auto trigger), so "plugin-a/main" < "plugin-e/main"
+    // by name → plugin-a first. Its schema requires "location", not "sceneId".
     const winnerResult = await directory.validate("sess-2", "scene.set", {
       location: "教室",
     });

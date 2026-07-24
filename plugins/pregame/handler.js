@@ -59,10 +59,18 @@ export default async function pregameHandler(ctx) {
         `Game initialized. Welcome to ${worldName}.`,
       );
 
+  // completion:"done" is the pre-game completion signal (kernel projects it to
+  // the legacy top-level preGameDone). narrativeOutput stays a business value
+  // (drives the turn message); notifications are a domain effect.
   return {
-    narrativeOutput,
-    notifications,
-    initialized: true,
-    preGameDone: true,
+    outcome: "success",
+    value: {
+      narrativeOutput,
+      initialized: true,
+    },
+    effects: {
+      notifications,
+    },
+    completion: "done",
   };
 }

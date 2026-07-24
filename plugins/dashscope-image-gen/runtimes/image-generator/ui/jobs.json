@@ -1,0 +1,14 @@
+{
+  "id": "dashscope-image-gen-jobs",
+  "group": "image-studio",
+  "groupLabel": { "zh": "图像", "en": "Images" },
+  "groupOrder": 450,
+  "label": { "zh": "任务", "en": "Jobs" },
+  "icon": "loader",
+  "dataSource": { "namespace": "_jobs" },
+  "alwaysRender": true,
+  "view": {
+    "component": "ImageJobs",
+    "props": { "pluginId": "dashscope-image-gen" }
+  }
+}

@@ -120,17 +120,36 @@ describe("npc-graph manifests", () => {
     const extractor = manifests.find((m) => m.name === "npc-graph/extractor");
     expect(extractor).toBeDefined();
     expect(extractor.pluginType).toBe("plugin");
-    // Narrator-downstream layer — shares priority 600 with guide, codex,
-    // and character-tracker. The scheduler runs all four in parallel.
-    expect(extractor.priority).toBe(600);
+    // Narrator-downstream layer — post-turn stage, run in parallel with guide,
+    // codex, and character-tracker.
+    expect(extractor.stage).toBe("post-turn");
     expect(extractor.capabilities).toContain("npc-graph");
     expect(extractor.tools?.plugin).toContain("upsert-npc-graph");
     expect(extractor.tools?.plugin).toContain("list-npc-graph");
     expect(extractor.trigger?.type).toBe("scheduled");
     expect(extractor.trigger?.interval).toBe(1);
-    // Main-loop band membership is enforced by priority >= 100 server-side;
-    // manifest no longer carries a `trigger.phases` field.
-    expect(extractor.priority).toBeGreaterThanOrEqual(100);
+  });
+
+  it("extractor drops the never-used generic plugin-data builtin tools", () => {
+    // These were scaffold residue — the prompt never referenced them; the
+    // dedicated list-npc-graph tool + plugin-data injects cover the same need.
+    const builtin = manifests.find((m) => m.name === "npc-graph/extractor")
+      .tools?.builtin;
+    expect(builtin ?? []).not.toContain("plugin-data-list");
+    expect(builtin ?? []).not.toContain("plugin-data-get");
+  });
+
+  it("extractor injects the existing graph as plugin-data (no list round-trip)", () => {
+    // Nodes/edges are the extractor's own plugin_data; injecting them at
+    // prompt-build time removes the mandatory per-turn list-npc-graph round-trip
+    // (same pattern codex/character-tracker use). Nodes keyed by id, edges keyed
+    // by edge id — the tool works name-first so the LLM only needs to SEE them.
+    const injects = manifests.find((m) => m.name === "npc-graph/extractor")
+      .input?.inject;
+    const pluginData = (injects ?? []).filter((i) => i.kind === "plugin-data");
+    const namespaces = pluginData.map((i) => i.namespace);
+    expect(namespaces).toContain("nodes");
+    expect(namespaces).toContain("edges");
   });
 
   it("rag-retriever is a function runtime that runs before narrator", () => {
@@ -140,11 +159,9 @@ describe("npc-graph manifests", () => {
     expect(retriever).toBeDefined();
     expect(retriever.runtimeType).toBe("function");
     expect(retriever.handler).toBe("./handler.js");
-    // Narrator-prep layer — runs before narrator (500).
-    expect(retriever.priority).toBe(400);
+    // Narrator-prep layer — pre-turn stage runs before the narrative stage.
+    expect(retriever.stage).toBe("pre-turn");
     expect(retriever.capabilities).toContain("graph-rag");
-    // Main-loop band membership enforced by priority >= 100 server-side.
-    expect(retriever.priority).toBeGreaterThanOrEqual(100);
   });
 });
 

@@ -56,9 +56,12 @@ export default async function handler(ctx) {
 
   return withPendingProposals(
     {
-      saved: true,
-      ruleId: rule.id,
-      lorebookEntryId,
+      outcome: "success",
+      value: {
+        saved: true,
+        ruleId: rule.id,
+        lorebookEntryId,
+      },
     },
     proposals,
   );

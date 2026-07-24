@@ -18,6 +18,7 @@ import {
   type LLMResponse,
 } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
+import { deriveLegacyClockForSession } from "@covel/shared";
 import { actionRoutes } from "../../src/routes/api/actions.js";
 import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
@@ -278,7 +279,7 @@ describe("start-game API lifecycle scenario", () => {
     );
 
     const session = await store.getSession("sess-start-flow-api");
-    expect(session?.turnCount).toBe(0);
+    expect(deriveLegacyClockForSession(session!).turnCount).toBe(0);
 
     const playerMessages = (await store.listTurnMessages("sess-start-flow-api"))
       .filter((message) => message.sourceType === "player")
@@ -286,7 +287,7 @@ describe("start-game API lifecycle scenario", () => {
     expect(playerMessages).toEqual([]);
   });
 
-  it("submit follow-up creates the player before narrator runs", async () => {
+  it("submit follow-up creates the player on the setup turn; the same request chains the opening narrative turn", async () => {
     const start = await app.request("/api/actions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -353,6 +354,8 @@ describe("start-game API lifecycle scenario", () => {
     );
     expect(mirrored?.value).toMatchObject({ name: "Aria", type: "player" });
 
+    // The form-submit turn itself runs ONLY the setup runtime that creates the
+    // player (Step 2 transaction discipline: its execution commits on its own).
     const runtimeRows = await store.listRuntimeResults(
       "sess-start-flow-api",
       followupTurnId,
@@ -363,13 +366,38 @@ describe("start-game API lifecycle scenario", () => {
     );
     expect(
       runtimeIds.filter((runtimeId) => runtimeId === "narrator"),
+    ).toHaveLength(0);
+
+    // Opening continuation: the SAME request then chains one main-loop turn
+    // (a second transaction reading the just-committed setup state), so the
+    // narrator produces the opening narrative without the player having to
+    // send another message. The chained turn rides the same SSE stream under
+    // a fresh turnId.
+    const turnIds = [
+      ...new Set(followupEvents.map((event) => event.turnId)),
+    ].filter(Boolean);
+    expect(turnIds).toHaveLength(2);
+    const openingTurnId = turnIds.find((id) => id !== followupTurnId)!;
+    const openingRuntimeIds = (
+      await store.listRuntimeResults("sess-start-flow-api", openingTurnId)
+    ).map((row) => row.runtimeId);
+    expect(
+      openingRuntimeIds.filter((runtimeId) => runtimeId === "narrator"),
     ).toHaveLength(1);
 
+    // Exactly one execution.completed closes the stream (the continuation is
+    // part of the same execution from the client's point of view).
+    expect(
+      followupEvents.filter((event) => event.type === "execution.completed"),
+    ).toHaveLength(1);
+
+    // The chained opening turn is the first counted player turn.
     const session = await store.getSession("sess-start-flow-api");
-    expect(session?.turnCount).toBe(1);
+    expect(deriveLegacyClockForSession(session!).turnCount).toBe(1);
+    expect(session?.completedPlayerTurns).toBe(1);
 
     const turnResults = await store.listTurnResults("sess-start-flow-api");
-    expect(turnResults).toHaveLength(2);
+    expect(turnResults).toHaveLength(3);
 
     const firstMainLoop = await app.request("/api/actions", {
       method: "POST",
@@ -382,9 +410,25 @@ describe("start-game API lifecycle scenario", () => {
       }),
     });
     expect(firstMainLoop.status).toBe(200);
-    await drainActionStream(firstMainLoop);
+    const firstMainLoopEvents = await drainActionStream(firstMainLoop);
+    const firstMainLoopTurnId =
+      firstMainLoopEvents[0]?.turnId ?? "turn-first-main";
+
+    // A regular playing-band request runs the narrator once and does NOT chain
+    // a continuation turn.
+    const mainLoopRuntimeIds = (
+      await store.listRuntimeResults("sess-start-flow-api", firstMainLoopTurnId)
+    ).map((row) => row.runtimeId);
+    expect(
+      mainLoopRuntimeIds.filter((runtimeId) => runtimeId === "narrator"),
+    ).toHaveLength(1);
+    expect(
+      new Set(firstMainLoopEvents.map((event) => event.turnId).filter(Boolean))
+        .size,
+    ).toBe(1);
 
     const afterFirstMainLoop = await store.getSession("sess-start-flow-api");
-    expect(afterFirstMainLoop?.turnCount).toBe(2);
+    expect(deriveLegacyClockForSession(afterFirstMainLoop!).turnCount).toBe(2);
+    expect(afterFirstMainLoop?.completedPlayerTurns).toBe(2);
   });
 });

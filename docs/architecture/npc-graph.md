@@ -27,7 +27,7 @@ self-contained **session-scoped knowledge graph** that:
         │
         ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  priority 490 — npc-graph/rag-retriever (function runtime)      │
+│  stage: pre-turn — npc-graph/rag-retriever (function runtime)   │
 │                                                                      │
 │  • reads playerMessage                                               │
 │  • loads nodes/edges/index from plugin_data                          │
@@ -40,7 +40,7 @@ self-contained **session-scoped knowledge graph** that:
         │
         ▼ injected via input.inject as <npc-relationships>
 ┌──────────────────────────────────────────────────────────────────────┐
-│  priority 500 — narrator (agent runtime)                        │
+│  stage: narrative — narrator (agent runtime)                    │
 │                                                                      │
 │  • sees prior facts in <npc-relationships> tag                       │
 │  • generates narrative consistent with established trust/enmity      │
@@ -48,7 +48,7 @@ self-contained **session-scoped knowledge graph** that:
         │
         ▼ narrative output
 ┌──────────────────────────────────────────────────────────────────────┐
-│  priority 620 — npc-graph/extractor (agent runtime)             │
+│  stage: post-turn — npc-graph/extractor (agent runtime)         │
 │                                                                      │
 │  • LLM reads <narrator-output> + existing graph snapshot             │
 │  • calls list-npc-graph to inspect, then upsert-npc-graph to write   │

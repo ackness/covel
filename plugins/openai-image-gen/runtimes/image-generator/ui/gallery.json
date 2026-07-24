@@ -1,0 +1,14 @@
+{
+  "id": "openai-image-gen-gallery",
+  "group": "image-studio",
+  "groupLabel": { "zh": "图像", "en": "Images" },
+  "groupOrder": 450,
+  "label": { "zh": "画廊", "en": "Gallery" },
+  "icon": "image",
+  "dataSource": { "namespace": "images" },
+  "alwaysRender": true,
+  "view": {
+    "component": "ImageGallery",
+    "props": { "pluginId": "openai-image-gen" }
+  }
+}

@@ -202,6 +202,146 @@ describe("dashscope-wan wire", () => {
     expect(result.warnings.join(" ")).toMatch(/clamped to 1/i);
   });
 
+  it("passes n through (capped at 4) for wan2.6/wan2.7 image models", async () => {
+    const calls = stubFetchSequence([
+      { json: { output: { task_id: "t1" } } },
+      {
+        json: {
+          output: {
+            task_status: "SUCCEEDED",
+            choices: [
+              {
+                message: {
+                  content: [
+                    { image: "https://oss.test/a.png" },
+                    { image: "https://oss.test/b.png" },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      },
+    ]);
+    const result = await dashscopeWanWire.generate(
+      { baseUrl: "https://d.test", apiKey: "k" },
+      { model: "wan2.6-t2i", prompt: "p", n: 2 },
+      undefined,
+      { pollIntervalMs: 1, timeoutMs: 5_000 },
+    );
+    const body = JSON.parse(calls[0]!.init!.body as string);
+    expect(body.parameters.n).toBe(2);
+    expect(result.warnings).toEqual([]);
+    expect(result.images).toHaveLength(2);
+  });
+
+  it("clamps n above the wan2.6/2.7 per-task cap of 4 with a warning", async () => {
+    const calls = stubFetchSequence([
+      { json: { output: { task_id: "t1" } } },
+      {
+        json: {
+          output: {
+            task_status: "SUCCEEDED",
+            results: [{ url: "https://oss.test/a.png" }],
+          },
+        },
+      },
+    ]);
+    const result = await dashscopeWanWire.generate(
+      { baseUrl: "https://d.test", apiKey: "k" },
+      { model: "wan2.7-image-pro", prompt: "p", n: 9 },
+      undefined,
+      { pollIntervalMs: 1, timeoutMs: 5_000 },
+    );
+    const body = JSON.parse(calls[0]!.init!.body as string);
+    expect(body.parameters.n).toBe(4);
+    expect(result.warnings.join(" ")).toMatch(/n clamped to 4/);
+  });
+
+  it("qwen-image-3 goes through the synchronous multimodal endpoint (no polling)", async () => {
+    const calls = stubFetchSequence([
+      {
+        json: {
+          output: {
+            choices: [
+              {
+                message: {
+                  content: [
+                    { image: "https://oss.test/q1.png" },
+                    { image: "https://oss.test/q2.png" },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      },
+    ]);
+    const result = await dashscopeWanWire.generate(
+      { baseUrl: "https://d.test", apiKey: "k" },
+      {
+        model: "qwen-image-3.0-pro",
+        prompt: "p",
+        negativePrompt: "ugly",
+        size: "1024x1024",
+        n: 2,
+      },
+      undefined,
+      { pollIntervalMs: 1, timeoutMs: 5_000 },
+    );
+    // Single synchronous call — no /api/v1/tasks poll follows.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe(
+      "https://d.test/api/v1/services/aigc/multimodal-generation/generation",
+    );
+    const headers = calls[0]!.init!.headers as Record<string, string>;
+    expect(headers["X-DashScope-Async"]).toBeUndefined();
+    const body = JSON.parse(calls[0]!.init!.body as string);
+    expect(body.parameters.n).toBe(2);
+    expect(body.parameters.size).toBe("1024*1024");
+    expect(body.parameters.negative_prompt).toBe("ugly");
+    // The plugin's prompt agent writes the full art brief — platform-side
+    // rewriting is disabled.
+    expect(body.parameters.prompt_extend).toBe(false);
+    expect(result.images).toHaveLength(2);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it("caps n at 6 for qwen-image-3 with a warning", async () => {
+    const calls = stubFetchSequence([
+      {
+        json: {
+          output: {
+            choices: [
+              { message: { content: [{ image: "https://oss.test/q.png" }] } },
+            ],
+          },
+        },
+      },
+    ]);
+    const result = await dashscopeWanWire.generate(
+      { baseUrl: "https://d.test", apiKey: "k" },
+      { model: "qwen-image-3.0-pro", prompt: "p", n: 9 },
+      undefined,
+      { pollIntervalMs: 1, timeoutMs: 5_000 },
+    );
+    const body = JSON.parse(calls[0]!.init!.body as string);
+    expect(body.parameters.n).toBe(6);
+    expect(result.warnings.join(" ")).toMatch(/n clamped to 6/);
+  });
+
+  it("throws a visible error when the qwen sync response has no images", async () => {
+    stubFetchSequence([{ json: { output: { choices: [] } } }]);
+    await expect(
+      dashscopeWanWire.generate(
+        { baseUrl: "https://d.test", apiKey: "k" },
+        { model: "qwen-image-3.0-pro", prompt: "p" },
+        undefined,
+        { pollIntervalMs: 1, timeoutMs: 5_000 },
+      ),
+    ).rejects.toThrow(/qwen-image: no images/);
+  });
+
   it("writes negative_prompt for models that accept it", async () => {
     const calls = stubFetchSequence([
       { json: { output: { task_id: "t1" } } },

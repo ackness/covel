@@ -28,6 +28,7 @@ import type {
   LorebookEntryRecord,
   SuspensionRecord,
 } from "@covel/store";
+import { deriveLegacyClockForSession } from "@covel/shared";
 
 /**
  * Build a full snapshot payload for a session at a given turn.
@@ -110,16 +111,29 @@ export async function buildSnapshotPayload(
   );
 
   return {
-    schemaVersion: 2,
+    // V3 captures the scheduling-redesign lifecycle fields
+    // (`phase` / `completedPlayerTurns` / `setupRuntimes`) alongside the V2
+    // state so a fork resumes in the correct band with its setup mirror intact.
+    // All three are optional — a session written before the kernel populated
+    // them simply omits them, and fork upgrades legacy payloads on read.
+    schemaVersion: 3,
     turnId,
     session: {
       status: session.status,
-      turnCount: session.turnCount,
-      preGameCompleted: session.preGameCompleted,
+      // Legacy clock fields derived from the phase/setup mirror (the kernel no
+      // longer writes the columns) so a fork restores consistent values.
+      ...deriveLegacyClockForSession(session),
       locale: session.locale,
       activePlugins: session.activePlugins,
       presetId: session.presetId,
       runtimeModelOverrides: session.runtimeModelOverrides,
+      ...(session.phase !== undefined ? { phase: session.phase } : {}),
+      ...(session.completedPlayerTurns !== undefined
+        ? { completedPlayerTurns: session.completedPlayerTurns }
+        : {}),
+      ...(session.setupRuntimes !== undefined
+        ? { setupRuntimes: session.setupRuntimes }
+        : {}),
     },
     characters,
     stateEntries,

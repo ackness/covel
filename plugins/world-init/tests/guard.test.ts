@@ -65,7 +65,6 @@ describe("world-init guard", () => {
       playerMessage: "",
       locale: "zh-CN",
       store,
-      completedResults: new Map(),
     });
 
     expect(result.skip).toBe(true);
@@ -166,7 +165,6 @@ describe("world-init guard", () => {
       playerMessage: "",
       locale: "zh-CN",
       store,
-      completedResults: new Map(),
     });
 
     expect(result.skip).toBe(true);

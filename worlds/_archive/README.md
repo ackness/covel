@@ -7,7 +7,7 @@
 Covel 现在只精心维护**两个**互补的旗舰样例世界：
 
 - **`mistport`**（雾港·裂潮纪）—— 传统叙事 / 悬疑探索模式，展示 narrator·codex·npc-graph·memory·living-world-rules。
-- **`haruka-academy`**（遥风学园）—— 对话 / GalGame 模式，展示 chat-mode-narrator·scene-cast·scene-prompts·character-blueprint·character-presence。
+- **`haruka-academy`**（遥风学园）—— 对话 / 舞台模式（stage mode），展示 chat-mode-narrator·scene-cast·scene-prompts·character-blueprint·character-presence。
 
 多个题材相近的故事世界对"展示不同插件能力"没有增量收益，反而增加维护成本与设定漂移风险。因此把下面的世界移到这里：
 

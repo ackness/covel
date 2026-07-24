@@ -7,11 +7,7 @@ description:
   zh: 可选的故事输出守卫：确定性净化红线短语与选项菜单，并拦截高危工具调用。
   en: Opt-in story-output guard — deterministically sanitises red-line phrases and choice menus, and blocks high-risk tool calls.
 pluginType: plugin
-runtimeType: function
 outputKind: system
-handler: ./handler.js
-trigger:
-  type: manual
 capabilities:
   - content-safety
 tags:
@@ -23,10 +19,9 @@ entry: ./server/index.js
 # Story Guard
 
 A cross-cutting, **opt-in** plugin that guards story output entirely through
-lifecycle hooks. It has no schedulable runtime of its own — the `function`
-runtime is `trigger: manual` and never runs; the no-op handler exists only so
-the manifest is complete. It writes nothing to the store and emits no events;
-hooks only **rewrite** and **veto**.
+lifecycle hooks. It carries no schedulable runtime — its two hooks are
+registered by its server entry (`server/index.js`). It writes nothing to the
+store and emits no events; hooks only **rewrite** and **veto**.
 
 ## How it works
 

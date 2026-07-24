@@ -8,6 +8,8 @@ import type {
   RuntimeManifest,
   RuntimeResult,
   TurnInput,
+  InputSlot,
+  RuntimeActivation,
 } from "@covel/shared";
 import type { SessionContextStore } from "./session-context-store.js";
 import type { BudgetOptions, TokenEstimator } from "./budget.js";
@@ -159,9 +161,9 @@ export interface ContextBuildParams {
   /**
    * Manifests whose `authorsNote` / `postHistory` feed segments 9 and 10.
    *
-   * The builder merges every declaration it finds here in `priority` order
-   * (ascending, so earlier priorities render first). When omitted it falls
-   * back to `[params.manifest]`.
+   * The builder merges every declaration it finds here in `(stage, name)` order
+   * (earlier stages render first). When omitted it falls back to
+   * `[params.manifest]`.
    *
    * The turn executor deliberately passes ONLY the executing runtime's own
    * (locale-resolved) manifest, not the session's whole active set.
@@ -225,6 +227,27 @@ export interface ContextBuildParams {
    * `<available-events>` block is rendered.
    */
   readonly eventCatalogText?: string;
+  /**
+   * Resolved same-execution input bindings (`inputs.<name>`), provenance-
+   * wrapped. Rendered into segment 5 as a framework-only `<runtime-inputs>`
+   * block (JSON shape identical to function `ctx.inputs`) so an agent runtime
+   * sees the same bound values a function handler would. Absent → no block.
+   */
+  readonly inputSlots?: Readonly<Record<string, InputSlot>>;
+  /**
+   * Resolved cross-execution `recordAs` exports (`input.inject` runtime-export),
+   * provenance-wrapped. Rendered into segment 5 as a framework-only
+   * `<runtime-exports>` block (same JSON shape as function `ctx.exports`) so an
+   * agent runtime reads the same frozen export values a function handler would
+   * (docs 02 §3.4.3). Absent → no block.
+   */
+  readonly exportSlots?: Readonly<Record<string, InputSlot>>;
+  /**
+   * Canonical activation for this run. Rendered into segment 5 as the reserved
+   * `<runtime-activation>` block (`{ source, detached, payload }` JSON) that a
+   * plugin template cannot override or omit (docs 02 §3.3). Absent → no block.
+   */
+  readonly activation?: RuntimeActivation;
 }
 
 // ── Session Context Snapshot ─────────────────────────────────────

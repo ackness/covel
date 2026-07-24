@@ -19,7 +19,12 @@ import {
   COMMUNITY_SERVER_CODE_ACTION,
   type RpcApprovalGate,
 } from "@covel/approval";
-import { readRuntimeEnv } from "@covel/shared";
+import {
+  deriveLegacyClockForSession,
+  isSetupRuntime,
+  readRuntimeEnv,
+  type SetupRuntimeState,
+} from "@covel/shared";
 import { getPluginTrustInfo, type PluginRegistry } from "@covel/plugin-loader";
 import type {
   DataStore,
@@ -85,17 +90,55 @@ type Env = {
 export const sessionRoutes = new Hono<Env>();
 
 /**
- * Strip the persisted owner-token hash before returning a session over the
- * wire (audit 2026-07-16 L-2). It is an internal credential check; a caller
- * has no use for its own hash and it should not travel in responses.
+ * Whether any plugin in the set declares a setup-stage runtime. Discovered by
+ * the normalized `stage === "setup"` (via `isSetupRuntime`) — never by hardcoded
+ * plugin id. A session with a setup runtime starts in the `setup` phase; one
+ * without starts in `playing`.
+ */
+function sessionHasSetupRuntime(
+  pluginIds: readonly string[],
+  registry: PluginRegistry,
+): boolean {
+  for (const pluginId of pluginIds) {
+    const entry = registry.get(pluginId);
+    if (!entry) continue;
+    const manifests =
+      entry.manifests && entry.manifests.length > 0
+        ? entry.manifests.map((m) => m.manifest)
+        : entry.manifest
+          ? [entry.manifest.manifest]
+          : [];
+    for (const manifest of manifests) {
+      if (isSetupRuntime(manifest)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Prepare a session for the wire: (1) strip the persisted owner-token hash — an
+ * internal credential check a caller has no use for — and (2) refresh the legacy
+ * `turnCount` / `preGameCompleted` fields from the clock. The kernel no longer
+ * writes those columns; deriving them here keeps the response shape identical
+ * while the persisted columns stay frozen for old-kernel / rollback reads.
  */
 function sanitizeSessionForResponse<
-  T extends { readonly metadata?: Record<string, unknown> | null },
+  T extends {
+    readonly metadata?: Record<string, unknown> | null;
+    readonly phase?: "setup" | "playing";
+    readonly completedPlayerTurns?: number;
+    readonly setupRuntimes?: Readonly<Record<string, SetupRuntimeState>>;
+    readonly turnCount?: number;
+    readonly preGameCompleted?: readonly string[];
+  },
 >(session: T): T {
-  const metadata = session.metadata;
-  if (!metadata || !(SESSION_OWNER_TOKEN_HASH_KEY in metadata)) return session;
+  const { turnCount, preGameCompleted } = deriveLegacyClockForSession(session);
+  const withClock = { ...session, turnCount, preGameCompleted };
+  const metadata = withClock.metadata;
+  if (!metadata || !(SESSION_OWNER_TOKEN_HASH_KEY in metadata))
+    return withClock;
   const { [SESSION_OWNER_TOKEN_HASH_KEY]: _omit, ...rest } = metadata;
-  return { ...session, metadata: rest };
+  return { ...withClock, metadata: rest };
 }
 
 /**
@@ -254,6 +297,19 @@ sessionRoutes.post("/", async (c) => {
   // tier. Only the hash is persisted; the raw token is returned once below.
   const owner = mintSessionOwnerToken();
 
+  // Initialize the scheduling-redesign clock. A session whose active set
+  // declares a setup runtime starts in `setup`; otherwise it goes straight to
+  // `playing`. The legacy turnCount / preGameCompleted keep their initial
+  // values (0 / []) — which already match the formula for a `setup` session and
+  // are re-derived from the clock by the first finalize for a `playing` one, so
+  // the band reads correctly from `phase` in the meantime.
+  const phase: "setup" | "playing" = sessionHasSetupRuntime(
+    plugins.filter((p): p is string => typeof p === "string"),
+    pluginRegistry,
+  )
+    ? "setup"
+    : "playing";
+
   const now = new Date().toISOString();
   const session: SessionRecord = {
     id,
@@ -265,6 +321,9 @@ sessionRoutes.post("/", async (c) => {
     status: "active",
     turnCount: 0,
     preGameCompleted: [],
+    phase,
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
     activePlugins: plugins,
     createdAt: now,
     updatedAt: now,

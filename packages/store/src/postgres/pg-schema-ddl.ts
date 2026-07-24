@@ -64,10 +64,15 @@ const CREATE_CORE_TABLES_SQL = buildCreateTablesSql(coreTables, "pg");
 const SESSIONS_MIGRATIONS_SQL = `
   ALTER TABLE sessions ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
   ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pre_game_completed JSONB NOT NULL DEFAULT '[]'::jsonb;
-  ALTER TABLE sessions DROP COLUMN IF EXISTS phase;
   ALTER TABLE sessions DROP COLUMN IF EXISTS playing_turn_offset;
   ALTER TABLE sessions ADD COLUMN IF NOT EXISTS runtime_model_overrides JSONB DEFAULT '{}'::jsonb;
   ALTER TABLE sessions ADD COLUMN IF NOT EXISTS metadata JSONB;
+  -- Scheduling-redesign lifecycle fields (nullable; safe on legacy rows). NOTE:
+  -- an earlier iteration dropped 'phase'; it is re-added here (ADD, not DROP —
+  -- a DROP would wipe live phase data on every boot).
+  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS phase TEXT;
+  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS completed_player_turns INTEGER;
+  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS setup_runtimes JSONB;
   ALTER TABLE turn_results ADD COLUMN IF NOT EXISTS origin TEXT;
   ALTER TABLE turn_results ADD COLUMN IF NOT EXISTS parent_turn_id TEXT;
   ALTER TABLE turn_results ADD COLUMN IF NOT EXISTS commit_status TEXT;

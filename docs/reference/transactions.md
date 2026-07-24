@@ -189,34 +189,67 @@ Node-only and is never pulled into the IdbStore browser bundle.
 
 ## Kernel integration
 
-`commitAll` (`packages/runtime/src/commit/session-commit-pipeline.ts`) runs
-**one runtime's** proposal chain inside a single `withTransaction` callback
-whenever the underlying store implements it. `packages/runtime/src/session/session-kernel.ts`
-remains the public facade for processing runtime results. Store adapters that do
-not expose `withTransaction` execute proposals sequentially and warn on partial
-commit failure.
+两层事务边界：
 
-> **事务边界的真实粒度（2026-07-20 审计 H-07 勘误）**：本节此前描述为"整条 turn
-> proposal chain 进入单一事务"，与实现不符。实际边界是 **per-runtime**：调用方
-> （`actions.ts` / `plugin-rpc/runtime-turn.ts`）对每个 runtimeResult 依次调用
-> `processRuntimeResult` → `commitAll`，因此第二个 runtime 的提交失败**不会**回滚
-> 第一个 runtime 已提交的写入。此外，即便在事务模式内，handler 的**校验**失败返回
-> `{ committed: false }` 而不抛出——事务照常提交，同批已成功的兄弟 proposal 保留
-> （两种模式语义刻意一致）。只有抛出的 store 错误才会中止并回滚该 runtime 的这一批。
+- `commitAll`（`packages/runtime/src/commit/session-commit-pipeline.ts`）把
+  **单个 runtime** 的 proposal chain 提交进一个 `withTransaction` 回调。它仍是
+  最底层的提交原语。
+- `finalizeExecution`（`packages/runtime/src/commit/finalize-execution.ts`）把
+  **整个 execution**——顶层结果加上拍平后的嵌套 `recursiveCall` 结果——的所有
+  runtime 一起包进 **一个** `withTransaction`。三个提交拥有方
+  （`actions.ts` / `plugin-rpc/runtime-turn.ts` / `resume.ts`）现在都经它收口，
+  不再手写逐 runtime 的提交循环。
+
+> **回合级单事务（2026-07-22 已实施）**：此前的边界是 **per-runtime**——调用方对
+> 每个 runtimeResult 依次调用 `processRuntimeResult` → `commitAll`，第二个 runtime
+> 的失败**不会**回滚第一个已提交的写入。现在 `finalizeExecution` 把整回合所有
+> runtime（含嵌套 recursiveCall 结果）聚合进单一事务：
 >
-> 失败不再被静默吞掉：每个失败 proposal 发出 `proposal.failed` 事件，且任一失败都会
-> **扣留完成屏障**——`turn.completed`、回合后记忆摄入、auto-snapshot 都不触发，回合对
-> 客户端呈现为可见的未完成态而非"成功但状态缺失"。回合级单事务（把整回合所有
-> runtime 的 proposal 聚合进一个 `withTransaction`）是已确认可行的下一步，尚未实施。
+> - **任一 proposal 失败即整回合回滚**——无论是抛出的 store 错误，还是 handler 校验
+>   失败返回的 `{ committed: false }`（如 PreStateCommit veto、缺字段的 state.patch）。
+>   已提交的兄弟 runtime 一并回滚，事务外不留痕迹。这是相对旧行为的**刻意变更**
+>   （旧行为保留已提交兄弟）。
+> - `turn_results.commit_status` 在同一事务内于成功时结算为 `committed`；回滚时在
+>   事务外幂等结算为 `failed`。嵌套 recursiveCall 复用顶层 `turnId`，因此顶层的
+>   `[turnId]` 一次结算即覆盖所有嵌套行。
+> - **完成屏障仍被扣留**：任一失败时 `turn.completed`、回合后记忆摄入、auto-snapshot
+>   都不触发，每个失败 proposal 发出 `proposal.failed` 事件，回合对客户端呈现为可见
+>   的未完成态而非"成功但状态缺失"。
+> - **外部可见的 fan-out**（emitter 事件 + PostStateCommit hook）在事务开启期间缓冲，
+>   仅在 COMMIT 之后按序 flush；回滚连缓冲一并丢弃，客户端绝不会看到已回滚写入的
+>   "committed" 事件。
+> - resume 通过 `extraInTx` 把助手回合消息与 suspension resolved 标记折叠进同一事务，
+>   任一失败连同 proposal 一起回滚，claim 释放后可重试。
+> - **会话时钟写入进同一事务（调度重构 W3b，2026-07-22）**：玩家路径（`actions.ts`）
+>   通过 `sessionClock` 参数把逻辑回合计数（`completedPlayerTurns` 的 logical-turn
+>   ledger 幂等推进）与 setup 频段翻转（`phase: setup → playing` + `setupRuntimes`
+>   镜像）折叠进 proposal 提交后、`commit_status` 结算前的同一事务（
+>   `commit/session-clock.ts` 的 `applySessionClockTx`）。旧字段 `turnCount` /
+>   `preGameCompleted` 由三字段公式派生并同事务写入。任一 proposal 失败即整体回滚——
+>   计数、phase、派生旧字段都不推进，ledger 不写入。manual / background / resume
+>   finalize 不传 `sessionClock`，时钟不动。
+>
+> **降级**：不暴露 `withTransaction` 的 store（薄测试 mock / 旧后端）退回逐条提交，
+> 不承诺跨 runtime 回滚——与这些 store 一贯的尽力而为语义一致，并 warn 一次。
+>
+> 注意 fork（`snapshots.ts`）仍是独立的会话重建事务：它重放快照、**不提交任何
+> proposal**，因此不经 `finalizeExecution`——两者共享"一个 `withTransaction` 包住整个
+> 写入序列"的模式，但属于不同关注点。
 
 ```ts
+// finalizeExecution: 整个 execution 的所有 runtime 结果进入单一事务。
 if (typeof store.withTransaction === "function") {
-  return store.withTransaction(async (tx) => {
-    // apply every proposal in order through `tx`
-    return applyProposals(tx, proposals);
+  await store.withTransaction(async (tx) => {
+    for (const result of results) {
+      const out = await processRuntimeResult(result, tx, ...);
+      if (out.failedProposals.length > 0) throw new ProposalCommitFailure(...); // → 整回合回滚
+    }
+    await extraInTx?.(tx); // caller 专属的事务内追加写（resume）
+    for (const turnId of turnIds) await tx.setTurnResultCommitStatus(sessionId, turnId, "committed");
   });
+  // COMMIT 之后才 flush 缓冲的 fan-out；回滚则丢弃。
 }
-// Non-transactional fallback for stores that lack withTransaction.
+// 无 withTransaction 时降级为逐条提交，不承诺跨 runtime 回滚。
 ```
 
 ## World Data import

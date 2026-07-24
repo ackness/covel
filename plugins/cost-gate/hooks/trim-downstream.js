@@ -5,11 +5,11 @@ import { total, resolveLimits } from "./budget.js";
  * runtime from this turn's schedule so only the main narrative keeps running.
  *
  * Story runtimes are identified by `manifest.outputKind === "story"` — never by
- * hardcoded plugin ids (framework / plugin isolation rule). Pre-Game runtimes
- * (priority <= 99) are force-retained by the framework regardless, so this only
- * ever trims the main loop. Returns plain `continue` (same `triggered`
- * reference) when there is nothing to drop, so the no-change fast path stays
- * byte-identical and the Pre-Game retain guard is not engaged needlessly.
+ * hardcoded plugin ids (framework / plugin isolation rule). Setup-stage runtimes
+ * are force-retained by the framework regardless, so this only ever trims the
+ * main loop. Returns plain `continue` (same `triggered` reference) when there is
+ * nothing to drop, so the no-change fast path stays byte-identical and the
+ * setup retain guard is not engaged needlessly.
  *
  * The soft cap is resolved per-invocation through the fallback chain
  * per-session `userSettings` → env → default (see budget.js `resolveLimits`).

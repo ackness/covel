@@ -143,7 +143,6 @@ export async function runDeferredFollower(args: {
       playerMessage: "",
       locale: args.locale,
       store: createFunctionStoreView(args.store, helperCtx),
-      completedResults: new Map(),
       recursiveCall: async () => {
         throw new Error(
           "recursiveCall is unavailable for test-runtime deferred followers",

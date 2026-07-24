@@ -2,17 +2,17 @@
 
 ---
 
-## narrator（主叙事，优先级 500，auto 触发）
+## narrator（主叙事，stage: narrative，auto 触发）
 
 ```markdown
 ---
 name: narrator
 description: 主叙事生成器，负责根据玩家输入和世界观设定生成故事内容。每个 Turn 自动执行。
 pluginType: core-plugin
-priority: 500
+stage: narrative
 model: story
 outputKind: story
-capabilities: [narrative]
+capabilities: [narrative, narrative-engine]
 trigger:
   type: auto
 ---
@@ -22,18 +22,21 @@ trigger:
 
 ---
 
-## codex（知识图鉴，优先级 650，auto 触发，含本地工具）
+## codex（知识图鉴，stage: post-turn + needs 门控，auto 触发，含本地工具）
 
 ```markdown
 ---
 name: codex
 description: 知识图鉴系统。分析叙事文本，记录玩家发现的怪物、道具、地点、传说和人物。
 pluginType: plugin
-priority: 650
+stage: post-turn
 model: plugin
-upstreamRequired: [narrator]
 trigger:
   type: auto
+# 按能力门控:叙事引擎(narrator 或 chat-mode-narrator)本轮成功才跑,
+# 避免 LLM 对着空的 <narrator-output> 幻觉条目。
+needs:
+  - capability: narrative-engine
 tools:
   local:
     - ./tools/unlock-codex-entries.js
@@ -42,7 +45,8 @@ tools:
     - create-notification
 input:
   inject:
-    - from: narrator
+    - kind: runtime
+      from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
     - kind: plugin-data
@@ -57,27 +61,32 @@ input:
 
 ---
 
-## char-creator（角色创建，优先级 700，仅首轮，含 builtin 工具）
+## char-creator/player-init（角色创建，stage: setup + needs 排序，游戏初始化段）
 
 ```markdown
 ---
-name: char-creator
-description: 角色创建引导。在游戏首轮生成角色创建表单，玩家填写后生成个性化角色引入叙事。
+name: char-creator/player-init
+description: 角色创建引导。开局生成角色创建表单，玩家填写后把主角引入故事。
 pluginType: core-plugin
-priority: 700
-model: story
+stage: setup # setup 段:phase === "setup" 时运行,报告完成后才进主循环
+model: plugin
+guard: ./guard.js # 前置门控:玩家已提交则跳过 LLM
 trigger:
-  type: scheduled
-  interval: 1
-  maxTriggerCount: 1
+  type: auto # setup 段强制 auto,不可带 interval/startTurn/cooldownTurns
+# 同一 setup pass 内排在 pregame 与 world-init/schema-gen 之后并做成功门控:
+needs:
+  - pregame
+  - world-init/schema-gen
 tools:
   builtin:
     - create-form
 input:
   inject:
-    - from: narrator
+    # setup 段 narrator 还没上线,注入 pregame 的确定性开场文本
+    - kind: runtime
+      from: pregame
       field: narrativeOutput
-      as: "<narrator-opening>"
+      as: "<pregame-opening>"
 ---
 
 你是角色创建引导师...
@@ -133,7 +142,7 @@ plugins/dashscope-image-gen/
 ---
 name: dashscope-image-gen/prompt-generator
 description: 依据当前剧情场景生成图像 prompt。按钮手动触发,生成后 emit event 把 prompt 传给 image-generator。
-priority: 600
+# manual runtime 不进阶段 DAG,不声明 stage
 model: fast
 outputKind: plugin
 trigger:
@@ -141,7 +150,8 @@ trigger:
 execution: sync # 生成 prompt 很快,不需要后台
 input:
   inject:
-    - from: narrator
+    - kind: runtime
+      from: narrator
       field: narrativeOutput
       as: "<current-scene>"
 # 事件链由 agent 在 runtime output 里声明,框架 normalizeOutput 会把
@@ -209,7 +219,7 @@ ui:
 ---
 name: dashscope-image-gen/image-generator
 description: 消费 image.generate.requested 事件,调 DashScope wan2.x 生成图片。
-priority: 610
+# event 触发的 follower 不进阶段 DAG,不声明 stage
 runtimeType: function
 handler: ./handler.js
 execution: background # wan2.x 异步任务,不阻塞 UI
@@ -499,11 +509,11 @@ tag = "image"
 │   └── mimo-tts.js                    # 共享 wire(api-key 头 + base64 解码) + persistTrack
 ├── runtimes/
 │   ├── auto-narrate/
-│   │   ├── PLUGIN.md                  # function · auto · upstreamRequired:[narrator] · priority 700
+│   │   ├── PLUGIN.md                  # function · auto · stage: post-turn · needs: capability narrative-engine
 │   │   ├── handler.js
 │   │   └── ui/audio-tab.json          # 右侧 Tab,Media as=audio,纯原生控件
 │   └── manual-narrate/
-│       ├── PLUGIN.md                  # function · manual · execution: background · priority 750
+│       ├── PLUGIN.md                  # function · manual · execution: background(无 stage)
 │       ├── handler.js
 │       └── ui/play-button.json        # ui.message 嵌入消息流(像「插入图像」)
 └── tests/                             # vitest L2,mock fetch + ctx.media
@@ -513,7 +523,7 @@ tag = "image"
 
 ### 关键决策点
 
-1. **自动 + 手动 = 两个 runtime 共享 lib**。auto runtime `trigger.type: auto` + `upstreamRequired:[narrator]` + `priority: 700` 让它跑在 narrator 之后；manual runtime `trigger.type: manual` + `execution: background`，按钮点击 → POST /plugin-rpc → 框架立即返回 jobId，handler 后台跑。两边都写到同一个 `tracks` namespace,所以右侧 Tab 是统一时间轴。
+1. **自动 + 手动 = 两个 runtime 共享 lib**。auto runtime `stage: post-turn` + `needs: [capability: narrative-engine]` 让它跑在叙事引擎之后且引擎失败时跳过，并用 `inputs.narrative` 绑定（`select: "/narrativeOutput"`）读引擎输出；manual runtime `trigger.type: manual` + `execution: background`，按钮点击 → POST /plugin-rpc → 框架立即返回 jobId，handler 后台跑。两边都写到同一个 `tracks` namespace,所以右侧 Tab 是统一时间轴。
 2. **Provider 自管 wire**。MiMo 用 `api-key: <KEY>` 头(不是 `Authorization: Bearer`),且文本要塞在 `messages: [{role: 'assistant', content}]`(违反 OpenAI 习惯)。所以 handler 里直接 `await fetch(slot.baseUrl + '/v1/chat/completions', { headers: { 'api-key': slot.apiKey } ... })`,不调 `gateway.generateText`。`ctx.gateway.resolveSlot({presetId, fallbackTag: 'speech'})` 只用来取配置,**不**触发框架的统一 wire。
 3. **音频字节 → MediaStore**。
 
@@ -559,23 +569,25 @@ tag      = "speech"
 
 ---
 
-## 现有插件一览（截至 v0.0.3）
+## 现有插件一览
 
-来源:`plugins/**/PLUGIN.md` 真实 frontmatter。priority 数字若与本表对不上,以仓库实际为准。
+来源:`plugins/**/PLUGIN.md` 真实 frontmatter。若与本表对不上,以仓库实际为准。
 
-| Runtime                              | 优先级 | 触发                       | 类型                  | 说明                                                              |
-| ------------------------------------ | ------ | -------------------------- | --------------------- | ----------------------------------------------------------------- |
-| pregame                              | 10     | scheduled(首轮)            | function              | 游戏初始化                                                        |
-| world-init/schema-gen                | 40     | scheduled(首轮)            | agent + guard         | 世界维度生成,guard 已存在则跳过                                   |
-| char-creator/player-init             | 50     | scheduled(首轮)            | agent                 | 玩家建角表单                                                      |
-| npc-graph/rag-retriever              | 400    | auto                       | function              | 给 narrator 拉 NPC 结构化检索                                     |
-| narrator                             | 500    | auto                       | agent                 | 主叙事                                                            |
-| codex                                | 600    | auto                       | agent                 | 知识图鉴                                                          |
-| guide                                | 600    | auto                       | agent                 | 行动引导                                                          |
-| npc-graph/extractor                  | 600    | auto                       | agent                 | NPC 关系抽取                                                      |
-| char-creator/character-tracker       | 600    | auto                       | agent                 | 角色状态跟踪                                                      |
-| memory                               | —      | UI only                    | UI                    | 仅前端面板                                                        |
-| dashscope-image-gen/prompt-generator | 600    | manual                     | agent                 | 手动触发 prompt 生成(`~/.covel/plugins/`,样例)                    |
-| dashscope-image-gen/image-generator  | 610    | event                      | function (background) | 调 DashScope wan2.x 生图(`~/.covel/plugins/`,样例)                |
-| mimo-tts/auto-narrate                | 700    | auto + upstream:[narrator] | function              | narrator 后自动 TTS,写 tracks namespace(`~/.covel/plugins/`,样例) |
+| Runtime                              | stage / 依赖                                       | 触发            | 类型                  | 说明                                                              |
+| ------------------------------------ | -------------------------------------------------- | --------------- | --------------------- | ----------------------------------------------------------------- |
+| pregame                              | setup（legacy priority 10 派生,loader-gated 例外） | scheduled(首轮) | function              | 游戏初始化                                                        |
+| world-init/schema-gen                | setup（legacy priority 40 派生,loader-gated 例外） | scheduled(首轮) | agent + guard         | 世界维度生成,guard 已存在则跳过                                   |
+| char-creator/player-init             | setup · needs: [pregame, world-init/schema-gen]    | auto            | agent + guard         | 玩家建角表单                                                      |
+| npc-graph/rag-retriever              | pre-turn                                           | scheduled       | function              | 给 narrator 拉 NPC 结构化检索                                     |
+| scene-cast                           | pre-turn                                           | auto            | agent                 | 场景角色编排                                                      |
+| narrator                             | narrative                                          | auto            | agent                 | 主叙事（capability: narrative-engine）                            |
+| chat-mode-narrator                   | narrative                                          | auto            | agent                 | 对话模式叙事（与 narrator conflicts,二选一）                      |
+| codex                                | post-turn · needs: capability narrative-engine     | auto            | agent                 | 知识图鉴                                                          |
+| guide                                | post-turn · needs: capability narrative-engine     | auto            | agent                 | 行动引导                                                          |
+| npc-graph/extractor                  | post-turn                                          | auto            | agent                 | NPC 关系抽取                                                      |
+| char-creator/character-tracker       | post-turn                                          | auto            | agent                 | 角色状态跟踪                                                      |
+| memory                               | —（UI only,无 stage）                              | UI only         | UI                    | 仅前端面板                                                        |
+| dashscope-image-gen/prompt-generator | —（manual 无 stage）                               | manual          | agent                 | 手动触发 prompt 生成                                              |
+| dashscope-image-gen/image-generator  | —（event 无 stage）                                | event           | function (background) | 调 DashScope wan2.x 生图                                          |
+| mimo-tts/auto-narrate                | post-turn · needs + inputs: capability narrative-engine | auto       | function              | 叙事引擎后自动 TTS,写 tracks namespace                            |
 | mimo-tts/manual-narrate              | 750    | manual                     | function (background) | 手动「朗读」按钮,ui.message 嵌入消息流(`~/.covel/plugins/`,样例)  |

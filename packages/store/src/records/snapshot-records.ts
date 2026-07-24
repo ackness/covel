@@ -88,17 +88,38 @@ export type SnapshotSessionState = Readonly<
   >
 >;
 
-/** Current snapshot payload, including lifecycle and runtime configuration. */
+/** V2 snapshot payload, including lifecycle and runtime configuration. */
 export interface SnapshotPayloadV2 extends SnapshotPayloadBase {
   readonly schemaVersion: 2;
   readonly session: SnapshotSessionState;
 }
 
 /**
- * Persisted snapshots are a versioned union. V1 remains readable for listing
- * and inspection; safe fork requires V2 lifecycle state.
+ * V3 session projection — the V2 fields plus the scheduling-redesign lifecycle
+ * fields (`phase` / `completedPlayerTurns` / `setupRuntimes`). Restored from the
+ * same point in time as the materialized rows so a fork resumes in the correct
+ * band with its setup-runtime state intact. All three are optional (a snapshot
+ * taken before the kernel populates them simply omits them).
  */
-export type SnapshotPayload = SnapshotPayloadV1 | SnapshotPayloadV2;
+export type SnapshotSessionStateV3 = SnapshotSessionState &
+  Readonly<
+    Pick<SessionRecord, "phase" | "completedPlayerTurns" | "setupRuntimes">
+  >;
+
+/** Current snapshot payload — V2 lifecycle state plus setup-band state. */
+export interface SnapshotPayloadV3 extends SnapshotPayloadBase {
+  readonly schemaVersion: 3;
+  readonly session: SnapshotSessionStateV3;
+}
+
+/**
+ * Persisted snapshots are a versioned union. V1 remains readable for listing
+ * and inspection; safe fork requires V2 lifecycle state; V3 additionally
+ * carries setup-band state. Upgrade-on-read (V1/V2 → V3) is the kernel wave's
+ * concern — the store round-trips whichever version it is handed verbatim.
+ */
+export type SnapshotPayload =
+  SnapshotPayloadV1 | SnapshotPayloadV2 | SnapshotPayloadV3;
 
 export interface SnapshotRecord {
   readonly id: string;

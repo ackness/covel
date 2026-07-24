@@ -7,11 +7,12 @@ description:
   zh: 在每轮故事后给出几种行动建议，帮你更快决定下一步。
   en: Suggests a few possible actions after each story beat so you can choose your next move faster.
 pluginType: plugin
-# Narrator-downstream layer — shares priority 600 with codex, npc-graph
-# extractor, and character-tracker so the scheduler runs them in parallel.
-# They depend only on the active narrative engine's output (see
-# upstreamRequired below); they do not read each other's writes.
-priority: 600
+# Narrator-downstream layer — runs in the post-turn stage alongside codex,
+# npc-graph extractor, and character-tracker; independent runtimes in the same
+# stage run in parallel. They depend only on the active narrative engine's
+# output (gated via needs: capability narrative-engine below); they do not read
+# each other's writes.
+stage: post-turn
 model: plugin
 outputKind: system
 timeoutMs: 120000
@@ -31,7 +32,8 @@ trigger:
 # gates correctly in either mode and still skips when that engine failed. The
 # inject lists both known engines; the absent one resolves to nothing, so
 # exactly the active engine's fresh prose fills <narrator-output>.
-upstreamRequired:
+# Gate on the active narrative engine's success, discovered by capability.
+needs:
   - capability: narrative-engine
 input:
   inject:
@@ -63,12 +65,7 @@ postHistory:
 
 ## 当前叙事结果
 
-最新一轮叙事见上方 `<narrator-output>` 区块（由当前模式的叙事引擎注入）。
-
-## 你的任务（严格两步）
-
-1. 调用一次 `generate-guide`：分析叙事的决策点，提供 3 个风格分类的建议
-2. 工具返回后，立即调用 `runtime-done` 结束
+最新一轮叙事见上方 `<narrator-output>` 区块（由当前模式的叙事引擎注入）。你的任务是分析叙事的决策点，用 `generate-guide` 提供 3 个风格分类的建议（工具调用流程见结尾的强制两步说明）。
 
 ## 风格分类
 
@@ -83,5 +80,3 @@ postHistory:
 - 固定提供 3 个分类：safe / aggressive / creative
 - **每轮都必须调用 `generate-guide`，没有例外**。"平静"/"已结束"/"没有悬念"都不是理由——即使玩家只是在散步或整理物品，也给出"继续前进 / 留在原地观察 / 换一条路试试"这类低烈度建议
 - 如果 narrator 内部写了 "你要：" / "你可以：" / "1. 2. 3." 等菜单，视为 narrator 违规。你必须用 generate-guide 生成一套更清晰的建议**覆盖**它
-- 调用 `generate-guide` 成功后立刻调用 `runtime-done`，不要再输出任何文本或重复调用 `generate-guide`
-- 禁止跳过 `generate-guide` 直接调用 `runtime-done`

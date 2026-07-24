@@ -5,8 +5,8 @@ description:
   en: Generates missing scene backgrounds in the background
 pluginType: plugin
 runtimeType: function
+resultFormat: envelope-v1
 handler: ./handler.js
-priority: 900
 outputKind: plugin
 capabilities: [image-generation]
 tags:

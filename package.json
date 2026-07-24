@@ -1,6 +1,6 @@
 {
   "name": "covel",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "private": true,
   "type": "module",
   "scripts": {
@@ -40,6 +40,7 @@
     "build:desktop": "pnpm run build:electron",
     "e2e:verify": "tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts",
     "test:runtime": "tsx packages/test-runtime/src/cli.ts",
+    "validate:plugin": "tsx packages/plugin-loader/scripts/validate-manifest.ts",
     "create-plugin": "node scripts/create-plugin.js",
     "release:preflight": "node ./scripts/release-preflight.mjs",
     "preinstall": "npx only-allow@1.2.2 pnpm"

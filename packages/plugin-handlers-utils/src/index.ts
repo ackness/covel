@@ -260,3 +260,12 @@ export function makeProposal(
     timestamp: now,
   } as unknown as Proposal;
 }
+
+export {
+  extractImagePrompt,
+  runImageGeneration,
+  type ExtractedImagePrompt,
+  type ImageGenerationHandlerContext,
+  type ImageGenerationPluginConfig,
+  type ImageGenerationRequestPlan,
+} from "./image-generation.js";

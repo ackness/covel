@@ -4,6 +4,7 @@ import type {
   PluginRpcResponse,
   RuntimeResult,
   SessionEvent,
+  Stage,
 } from "@covel/shared";
 import { request } from "./request.js";
 import {
@@ -14,6 +15,7 @@ import type {
   MessageRecord,
   SessionCreateResponse,
   SessionRecord,
+  SetupRuntimeState,
   StatePatchRecord,
 } from "./types.js";
 
@@ -41,7 +43,8 @@ export interface SessionPluginInfo {
   status?: string;
   /** Error message when status is 'error'. */
   error?: string;
-  priority?: number;
+  /** Named stage of the plugin's primary runtime; absent for event/manual/UI-only. */
+  stage?: Stage;
   runtimeType?: string;
   model?: string;
   /** How the framework treats this plugin's output in the UI ('story' | 'plugin' | 'system'). */
@@ -76,6 +79,7 @@ export interface SessionPluginInfo {
   runtimes?: Array<{
     id: string;
     runtimeType?: string;
+    stage?: Stage;
     model?: string;
     outputKind?: string;
     trigger?: { type: string; topic?: string };
@@ -151,6 +155,22 @@ export async function disableSessionPlugin(
   return request<{ ok: boolean; active: string[] }>(
     `/api/sessions/${encodeURIComponent(sessionId)}/plugins/disable`,
     { method: "POST", body: JSON.stringify({ pluginId }) },
+  );
+}
+
+/** Re-run a blocked setup runtime. Returns its updated lifecycle state. */
+export async function retrySetupRuntime(sessionId: string, runtimeId: string) {
+  return request<{ ok: boolean; runtimeId: string; state: SetupRuntimeState }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/setup/${encodeURIComponent(runtimeId)}/retry`,
+    { method: "POST" },
+  );
+}
+
+/** Waive a blocked setup runtime so its plugin resumes in degraded mode. */
+export async function waiveSetupRuntime(sessionId: string, runtimeId: string) {
+  return request<{ ok: boolean; runtimeId: string; state: SetupRuntimeState }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/setup/${encodeURIComponent(runtimeId)}/waive`,
+    { method: "POST", body: JSON.stringify({ confirm: true }) },
   );
 }
 

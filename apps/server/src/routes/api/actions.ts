@@ -15,6 +15,7 @@ import {
   executeTurn,
   createTraceRecorder,
   createTurnEmitter,
+  finalizeExecution,
   saveAutoSnapshot,
 } from "@covel/runtime";
 import type { CovelEventType, RuntimeManifest } from "@covel/shared";
@@ -27,7 +28,10 @@ import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
 import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
 import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
-import { advanceSessionTurnCount, isPreGamePending } from "./turn-count.js";
+import {
+  ensureSessionClockBackfilled,
+  isPreGamePending,
+} from "./turn-count.js";
 import { decodePluginUserSettingsHeader } from "./plugin-rpc/body.js";
 import {
   mergePluginUserSettings,
@@ -275,6 +279,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   return streamSSE(c, async (stream) => {
     let seq = 0;
     const traceId = crypto.randomUUID();
+    // The turn currently writing to this stream. The opening-continuation
+    // turn (below) reuses the stream under its own fresh turnId.
+    let currentTurnId: string = turnId;
     // Released in the finally below so a crashed stream never leaves a
     // stale steer/abort target behind.
     let releaseTurnControl: (() => void) | undefined;
@@ -293,7 +300,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         requestId,
         traceId,
         sessionId,
-        turnId,
+        turnId: currentTurnId,
         flowId: traceId,
         seq: seq++,
         timestamp: new Date().toISOString(),
@@ -362,8 +369,17 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       });
     };
 
-    try {
-      const { result, trace, userSettings, committed } =
+    // One complete turn: lock → execute → finalize → snapshot → followers.
+    // Extracted so the opening continuation below can chain a second turn on
+    // the same SSE stream (each turn is its own transaction + lock tenure).
+    const runTurnOnce = async (turnArgs: {
+      readonly turnId: string;
+      readonly playerMessage: string;
+      readonly suppressPlayerMessage: boolean;
+    }) => {
+      currentTurnId = turnArgs.turnId;
+      commitStatusSettled = false;
+      const { result, trace, userSettings, committed, wasPreGamePending } =
         await sessionLock.withLock(sessionId, async () => {
           // This execution now owns the session — events on the bus
           // from here on belong to this turn.
@@ -386,23 +402,32 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               );
             }
 
-            // Captured BEFORE the turn runs: the execution may complete
-            // Pre-Game itself, and turn accounting must know whether this
-            // request started as a setup request (see advanceSessionTurnCount).
-            const wasPreGamePending = isPreGamePending(
+            // Lazily backfill the scheduling-redesign clock on legacy sessions
+            // before any band / count read, so `phase` is authoritative for the
+            // rest of the turn (and executeTurn's own session read).
+            const clockSession = await ensureSessionClockBackfilled({
+              store,
+              session: liveSession,
               activeRuntimes,
-              liveSession.preGameCompleted,
+            });
+
+            // Captured BEFORE the turn runs: the execution may complete setup
+            // itself, and the execution's countPolicy must be fixed from the
+            // pre-turn band (a setup request never counts a player turn).
+            const wasPreGamePending = isPreGamePending(
+              clockSession,
+              activeRuntimes,
             );
 
             // Persist player message to messages table (source of truth for refresh recovery)
-            if (playerMessage) {
+            if (turnArgs.playerMessage) {
               const now = new Date().toISOString();
               await store.addMessage({
                 id: crypto.randomUUID(),
                 sessionId,
                 role: "user",
-                content: playerMessage,
-                metadata: { turnId },
+                content: turnArgs.playerMessage,
+                metadata: { turnId: turnArgs.turnId },
                 createdAt: now,
               });
 
@@ -414,12 +439,15 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 await store.saveInteractionRecord({
                   id: crypto.randomUUID(),
                   sessionId,
-                  turnId,
+                  turnId: turnArgs.turnId,
                   timestamp: now,
                   source: "player",
                   channel: "web",
                   type: type === "send_message" ? "message" : "rpc-call",
-                  payload: { content: playerMessage, actionType: type },
+                  payload: {
+                    content: turnArgs.playerMessage,
+                    actionType: type,
+                  },
                   createdAt: now,
                 });
               } catch (err) {
@@ -436,7 +464,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             const trace = createTraceRecorder(
               store,
               sessionId,
-              turnId,
+              turnArgs.turnId,
               traceId,
             );
 
@@ -449,7 +477,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               store,
               eventBus,
               sessionId,
-              turnId,
+              turnId: turnArgs.turnId,
               traceId,
             });
 
@@ -509,10 +537,18 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
 
             const turnInput = {
               sessionId,
-              turnId,
-              playerMessage,
+              turnId: turnArgs.turnId,
+              playerMessage: turnArgs.playerMessage,
               locale: effectiveLocale,
               modelOverride: model,
+              // Feed the pre-turn Pre-Game snapshot so the executor can fix the
+              // execution's countPolicy at creation.
+              preGamePending: wasPreGamePending,
+              // Identity of the player's logical turn — the finalizer keys the
+              // completion ledger on it so this turn is counted at most once.
+              // A scoped retry (origin: manual below) never counts, so a stray
+              // id there is inert.
+              logicalTurnId: crypto.randomUUID(),
               ...(userSettings ? { userSettings } : {}),
               // Snapshot session-level per-runtime slot overrides so the
               // turn executor can consult them when resolving each runtime's
@@ -520,7 +556,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               ...(session?.runtimeModelOverrides
                 ? { runtimeModelOverrides: session.runtimeModelOverrides }
                 : {}),
-              ...(type === "start_session"
+              ...(turnArgs.suppressPlayerMessage
                 ? { suppressPlayerMessage: true }
                 : {}),
               // retry_runtime honors payload.runtimeId: scope the rerun to
@@ -537,7 +573,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             // Register the in-flight turn only after this action owns the
             // session lock. Release control after execution while retaining the
             // lock through proposal commit, lifecycle sync, and snapshot capture.
-            const registeredTurn = registerActiveTurn(sessionId, turnId);
+            const registeredTurn = registerActiveTurn(
+              sessionId,
+              turnArgs.turnId,
+            );
             releaseTurnControl = registeredTurn.release;
             let result;
             try {
@@ -571,12 +610,13 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                   await trace.runtimeStarted({
                     runtimeId: info.runtimeId,
                     pluginId: info.pluginId,
-                    priority: info.priority,
+                    ...(info.stage !== undefined ? { stage: info.stage } : {}),
                   });
                   const kind = outputKindResolver.getOutputKind(info.runtimeId);
                   await writeEvent("runtime.started", {
                     runtimeId: info.runtimeId,
                     pluginId: info.pluginId,
+                    ...(info.stage !== undefined ? { stage: info.stage } : {}),
                     kind,
                     label: info.pluginId + "/" + kind,
                   });
@@ -624,103 +664,95 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               registeredTurn.release();
             }
 
-            // Process all runtime results through Session Kernel:
-            // normalize output → commit to Store → emit SessionEvents as SSE.
+            // Commit the whole execution — top-level plus nested recursiveCall
+            // results — in ONE transaction via the shared finalize primitive.
+            // Any proposal failure rolls the whole turn back (committed siblings
+            // included) and settles the turn_results row to `failed`; a clean
+            // run settles it `committed`, both inside that transaction. Nested
+            // rows reuse the top-level turnId, so `[turnId]` settles them all.
             //
             // hookPipeline / eventBus are forwarded so `PreStateCommit` and
-            // `PostStateCommit` hooks declared by plugins actually fire on the
-            // production write path (previously they only ran in tests).
+            // `PostStateCommit` hooks declared by plugins fire on the production
+            // write path (previously they only ran in tests).
             const hookPipeline = c.get("hookPipeline");
-            const resultProcessor = createRuntimeResultProcessor({
+            const outcome = await finalizeExecution({
               store,
               sessionId,
+              ...(result.executionContext
+                ? { executionContext: result.executionContext }
+                : {}),
               runtimes: activeRuntimes,
+              results: [
+                ...result.runtimeResults,
+                ...(result.nestedRuntimeResults ?? []),
+              ],
+              turnIds: [turnArgs.turnId],
               ...(hookPipeline ? { hookPipeline } : {}),
               eventBus,
               emitter,
+              // Session-clock write folded into the commit transaction:
+              // logical-turn counting (from executionContext.countPolicy) plus
+              // the setup mirror / phase flip (from setupCompletion). Replaces
+              // the old out-of-band advanceSessionTurnCount + the pre-game
+              // completion write, and rolls back atomically with the proposals.
+              sessionClock: {
+                now: new Date().toISOString(),
+                ...(result.setupCompletion
+                  ? { setupCompletion: result.setupCompletion }
+                  : {}),
+              },
+              // Setup attempt ledger + pending/blocked mirror, settled outside
+              // the commit transaction (a rolled-back commit still burns an
+              // attempt, so deterministic failures reach `blocked`).
+              ...(result.setupRan ? { setupRan: result.setupRan } : {}),
+              // Publishes recordAs exports inside the commit transaction —
+              // loaded lazily, only for a success result that declares one.
+              loadOutputSchema: async (runtimeId) => {
+                const rt = activeRuntimes.find((r) => r.name === runtimeId);
+                return rt
+                  ? (await loadRuntimeFn(rt, effectiveLocale))?.outputSchema
+                  : undefined;
+              },
+              // MediaRef canonicalization / ownership for published export values.
+              ...(mediaStore ? { mediaStore } : {}),
             });
-            // Commit failures are no longer silently dropped — each one
-            // is surfaced as a `proposal.failed` SSE event, and any failure
-            // withholds the completion barrier below (turn.completed, memory
-            // ingestion, auto-snapshot success signal).
-            let commitFailureCount = 0;
-            // Nested recursiveCall results ride the same commit barrier —
-            // their proposals were previously dropped (only the top-level
-            // results were processed).
-            for (const rr of [
-              ...result.runtimeResults,
-              ...(result.nestedRuntimeResults ?? []),
-            ]) {
-              const { events, failedProposals } =
-                await resultProcessor.process(rr);
+            // finalize owns the commit_status settle (committed or failed).
+            commitStatusSettled = true;
 
-              for (const evt of events) {
-                // Emit using ProtocolEventType directly — no legacy mapping
-                const ssePayload: Record<string, unknown> = {
-                  ...evt.payload,
-                  runtimeId: evt.source.runtimeId,
-                  pluginId: evt.source.pluginId,
-                };
-
-                await writeEvent(evt.type, ssePayload);
-              }
-
-              for (const fp of failedProposals) {
-                commitFailureCount += 1;
-                await writeEvent("proposal.failed", {
-                  proposalId: fp.proposal.id,
-                  proposalType: fp.proposal.type,
-                  runtimeId: fp.proposal.source.runtimeId,
-                  pluginId: fp.proposal.source.pluginId,
-                  error: fp.error,
-                });
-              }
+            for (const evt of outcome.events) {
+              // Emit using ProtocolEventType directly — no legacy mapping.
+              await writeEvent(evt.type, {
+                ...evt.payload,
+                runtimeId: evt.source.runtimeId,
+                pluginId: evt.source.pluginId,
+              });
             }
-
-            // Commit-derived lifecycle fields and the automatic snapshot belong
-            // to the same mutation boundary as execution.
-            //
-            // Order matters:
-            //  1. Settle the execution artifact's commitStatus — a row left
-            //     `pending` means the process died between persisting it and
-            //     getting here (a crash), which must stay distinguishable from a
-            //     turn whose commit failed.
-            //  2. Advance turnCount only for a fully committed player execution
-            //     — the count drives the UI turn display, auto-snapshot cadence,
-            //     and snapshot numbering, so a failed commit must not move it.
-            //  3. Capture the automatic snapshot last so it contains every
-            //     committed proposal AND the turn number it belongs to.
-            try {
-              await store.setTurnResultCommitStatus(
-                sessionId,
-                turnId,
-                commitFailureCount === 0 ? "committed" : "failed",
-              );
-              commitStatusSettled = true;
-            } catch (err) {
-              console.warn(
-                `[actions] failed to settle commitStatus for turn ${turnId}:`,
-                err instanceof Error ? err.message : String(err),
-              );
+            // Commit failures are surfaced as `proposal.failed` SSE events; any
+            // failure withholds the completion barrier below (turn.completed,
+            // memory ingestion, auto-snapshot success signal).
+            for (const fp of outcome.failedProposals) {
+              await writeEvent("proposal.failed", {
+                proposalId: fp.proposal.id,
+                proposalType: fp.proposal.type,
+                runtimeId: fp.proposal.source.runtimeId,
+                pluginId: fp.proposal.source.pluginId,
+                error: fp.error,
+              });
             }
+            const committed = outcome.status === "committed";
 
-            await advanceSessionTurnCount({
-              store,
-              sessionId,
-              turnId,
-              activeRuntimes,
-              wasPreGamePending,
-              // A scoped retry reruns one runtime over the same logical turn —
-              // it must not advance the counter even when its proposals commit.
-              committed: commitFailureCount === 0 && !isScopedRetry,
-            });
-
-            if (commitFailureCount === 0) {
+            // Turn accounting now happens INSIDE the finalize transaction (the
+            // session-clock write above): a committed player turn advances
+            // completedPlayerTurns via the logical-turn ledger, and the legacy
+            // turnCount / preGameCompleted are re-derived from the clock. The
+            // automatic snapshot stays outside, captured last so it contains
+            // every committed proposal AND the turn number it belongs to.
+            if (committed) {
               try {
                 await saveAutoSnapshot({
                   store,
                   sessionId,
-                  turnId,
+                  turnId: turnArgs.turnId,
                   createdAt: result.timestamp,
                   eventBus,
                 });
@@ -728,13 +760,13 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 // Best-effort checkpoint: a failed snapshot is logged but does
                 // not fail the turn — the proposals are already durable.
                 console.warn(
-                  `[actions] auto snapshot failed for session ${sessionId} turn ${turnId}:`,
+                  `[actions] auto snapshot failed for session ${sessionId} turn ${turnArgs.turnId}:`,
                   err instanceof Error ? err.message : String(err),
                 );
               }
             } else {
               console.error(
-                `[actions] ${commitFailureCount} proposal(s) failed to commit for session ${sessionId} turn ${turnId} — ` +
+                `[actions] proposal commit failed for session ${sessionId} turn ${turnArgs.turnId} — ` +
                   "withholding auto-snapshot and turn completion",
               );
             }
@@ -746,12 +778,17 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             // proposal-only condition), only the best-effort checkpoint is
             // missing and the next turn snapshots again. Gating completion on
             // the snapshot would strand a fully-committed turn as "incomplete".
-            const committed = commitFailureCount === 0;
             if (committed) {
               result.completeTurn?.();
             }
 
-            return { result, trace, userSettings, committed };
+            return {
+              result,
+              trace,
+              userSettings,
+              committed,
+              wasPreGamePending,
+            };
           } finally {
             // Torn down while the lock is still held: after release the next
             // action owns the session, and its events must not be wrapped in
@@ -761,7 +798,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           }
         });
 
-      // ——— Post-lock tail ———
+      // ——— Post-lock tail (per turn) ———
       // Deferred-follower scheduling and the final SSE writes deliberately run
       // AFTER the session lock releases: followers acquire the lock themselves
       // (scheduling them under it would start their PG acquire budget while
@@ -828,14 +865,56 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         durationMs: result.durationMs,
         resultCount: result.runtimeResults.length,
       });
+
+      return { result, committed, wasPreGamePending };
+    };
+
+    try {
+      const first = await runTurnOnce({
+        turnId,
+        playerMessage,
+        suppressPlayerMessage: type === "start_session",
+      });
+      let finalRun = first;
+
+      // Opening continuation: a request that completes the LAST setup runtime
+      // commits on its own (turn-wide transaction discipline), so the narrator
+      // never ran for this request. Chain exactly one main-loop turn — a
+      // second transaction reading the just-committed setup state — so the
+      // player gets the opening narrative without having to send another
+      // message. Guarded to player actions (retry_runtime keeps its rerun-only
+      // semantics) and skipped when the turn aborted or setup is still pending
+      // (more setup interactions to come).
+      if (
+        first.committed &&
+        first.wasPreGamePending &&
+        !first.result.abortReason &&
+        type !== "retry_runtime"
+      ) {
+        const settled = await store.getSession(sessionId);
+        if (
+          settled &&
+          (!settled.status || settled.status === "active") &&
+          !isPreGamePending(settled, activeRuntimes)
+        ) {
+          finalRun = await runTurnOnce({
+            turnId: crypto.randomUUID(),
+            playerMessage: "",
+            suppressPlayerMessage: true,
+          });
+        }
+      }
+
       await writeEvent("execution.completed", {
         runtimeCount: activeRuntimes.length,
-        resultCount: result.runtimeResults.length,
-        durationMs: result.durationMs,
+        resultCount: finalRun.result.runtimeResults.length,
+        durationMs: finalRun.result.durationMs,
         // Surface a turn that was aborted before producing output (e.g.
         // cost-gate's hard budget cap) so the player gets a visible reason
         // instead of a silent empty turn.
-        ...(result.abortReason ? { abortReason: result.abortReason } : {}),
+        ...(finalRun.result.abortReason
+          ? { abortReason: finalRun.result.abortReason }
+          : {}),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -846,7 +925,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       if (!commitStatusSettled) {
         commitStatusSettled = true;
         await store
-          .setTurnResultCommitStatus(sessionId, turnId, "failed")
+          .setTurnResultCommitStatus(sessionId, currentTurnId, "failed")
           .catch(() => {});
       }
       await writeEvent("error.occurred", { message }).catch(() => {});

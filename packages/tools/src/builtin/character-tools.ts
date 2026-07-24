@@ -23,10 +23,16 @@
  *     see NPCs created by a character tracker plugin.
  */
 
-import type { CharacterAttributeSchema } from "@covel/shared";
+import type {
+  CharacterAttributeSchema,
+  CharacterUpsertPayload,
+  Proposal,
+} from "@covel/shared";
 import { z } from "zod";
 import { tool } from "../tool.js";
-import type { ToolModule } from "../types.js";
+import type { ToolExecutionContext, ToolModule } from "../types.js";
+import { withPendingProposals } from "../result.js";
+import { overlayCharacters } from "../proposal-overlay.js";
 import { validateFieldsAgainstSchema } from "../schema-validator.js";
 import {
   buildFieldsZod,
@@ -35,11 +41,9 @@ import {
   formatFieldValue,
   loadCharacterSchema,
   mergeSchemaDefaults,
-  mirrorCharacterToPluginData,
   sortByFrequencyThenRecency,
   toSnapshot,
   truncate,
-  type CharacterSnapshot,
   type CharacterStore,
   type CharacterToolDeps,
 } from "./character-tool-helpers.js";
@@ -53,6 +57,80 @@ export type {
   CharacterStore,
   CharacterToolDeps,
 } from "./character-tool-helpers.js";
+
+// ── Buffered write plumbing ──────────────────────────────────────
+
+/** Store-record view of a character, merging committed rows with buffered writes. */
+interface CharacterView {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly name: string;
+  readonly type: string;
+  readonly description?: string;
+  readonly fields?: unknown;
+  readonly version: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+/**
+ * Session characters as seen by THIS execution: committed rows overlaid with
+ * `character.upsert` proposals buffered earlier in the same tool loop. Writes
+ * commit only at turn end, so without this a create→list→create dedup, or an
+ * update reading its own prior create, would miss the buffered state.
+ *
+ * Buffered entries win (they are the newer write) and stamp `updatedAt = now`
+ * so recency sorting keeps them ahead of committed rows.
+ */
+async function mergeCharacterViews(
+  store: CharacterStore,
+  context: ToolExecutionContext,
+): Promise<CharacterView[]> {
+  const stored = await store.listCharacters(context.sessionId);
+  const overlay = overlayCharacters(context.pendingProposals ?? []);
+  if (overlay.size === 0) return stored.map((c) => ({ ...c }));
+
+  const now = new Date().toISOString();
+  const byId = new Map<string, CharacterView>();
+  for (const c of stored) byId.set(c.id, { ...c });
+  for (const [id, payload] of overlay) {
+    const base = byId.get(id);
+    byId.set(id, {
+      id,
+      sessionId: context.sessionId,
+      name: payload.name,
+      type: payload.type ?? base?.type ?? "npc",
+      description: payload.description ?? base?.description,
+      fields: payload.fields ?? base?.fields,
+      version: payload.version ?? base?.version ?? 1,
+      createdAt: base?.createdAt ?? payload.createdAt ?? now,
+      updatedAt: now,
+    });
+  }
+  return [...byId.values()];
+}
+
+/**
+ * Build the `character.upsert` proposal that replaces the old direct
+ * `upsertCharacter` + `mirrorCharacterToPluginData` writes. `mirrorPluginId`
+ * makes the commit handler mirror the snapshot into the caller plugin's
+ * `characters` namespace, preserving panel reactivity.
+ */
+function makeCharacterUpsertProposal(
+  context: ToolExecutionContext,
+  payload: CharacterUpsertPayload,
+  timestamp: string,
+): Proposal {
+  return {
+    id: crypto.randomUUID(),
+    type: "character.upsert",
+    source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
+    turnId: context.turnId,
+    sessionId: context.sessionId,
+    payload,
+    timestamp,
+  };
+}
 
 // ── create-character ─────────────────────────────────────────────
 
@@ -87,8 +165,9 @@ function createCreateCharacterTool(
       const now = new Date().toISOString();
 
       // Idempotent: if a character with the same (name, type) already exists in
-      // this session, return it instead of creating a duplicate.
-      const existing = await store.listCharacters(context.sessionId);
+      // this session — committed OR buffered earlier in this loop — return it
+      // instead of creating a duplicate.
+      const existing = await mergeCharacterViews(store, context);
       const match = existing.find(
         (c) => c.name === params.name && c.type === params.type,
       );
@@ -111,33 +190,24 @@ function createCreateCharacterTool(
       const fields = mergeSchemaDefaults(params.fields, schema);
 
       const id = `char-${crypto.randomUUID()}`;
-      await store.upsertCharacter({
-        id,
-        sessionId: context.sessionId,
-        name: params.name,
-        type: params.type,
-        description: params.description,
-        fields,
-        version: 1,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      const snapshot: CharacterSnapshot = {
-        id,
-        name: params.name,
-        type: params.type,
-        description: params.description,
-        fields,
-        version: 1,
-        createdAt: now,
-        updatedAt: now,
-      };
-      await mirrorCharacterToPluginData(
-        store,
-        context.sessionId,
-        context.pluginId,
-        snapshot,
+      // Write buffers into a character.upsert proposal — the commit handler
+      // performs the character write AND the plugin-data mirror (mirrorPluginId)
+      // inside the execution's single transaction, so a rollback undoes both.
+      const proposal = makeCharacterUpsertProposal(
+        context,
+        {
+          id,
+          name: params.name,
+          type: params.type,
+          ...(params.description !== undefined
+            ? { description: params.description }
+            : {}),
+          fields,
+          version: 1,
+          createdAt: now,
+          mirrorPluginId: context.pluginId,
+        },
+        now,
       );
 
       // Soft schema validation on the stored (default-merged) fields — surfaces
@@ -148,14 +218,17 @@ function createCreateCharacterTool(
         ? ` — ${truncate(params.description, 60)}`
         : "";
       const warning = warningText ? `\n\n${warningText}` : "";
-      return {
-        _text: `Created ${params.type} "${params.name}" as ${id}.${summary}${warning}`,
-        success: true,
-        existed: false,
-        characterId: id,
-        name: params.name,
-        type: params.type,
-      };
+      return withPendingProposals(
+        {
+          _text: `Created ${params.type} "${params.name}" as ${id}.${summary}${warning}`,
+          success: true,
+          existed: false,
+          characterId: id,
+          name: params.name,
+          type: params.type,
+        },
+        [proposal],
+      );
     },
   });
 }
@@ -193,7 +266,7 @@ function createUpdateCharacterTool(
         ),
     }),
     execute: async (params, context) => {
-      const all = await store.listCharacters(context.sessionId);
+      const all = await mergeCharacterViews(store, context);
       const existing = all.find((c) => c.id === params.id);
       if (!existing) {
         return {
@@ -212,34 +285,27 @@ function createUpdateCharacterTool(
           ? { ...prevFields, ...params.fields }
           : existing.fields;
       const newVersion = existing.version + 1;
+      const nextDescription = params.description ?? existing.description;
 
-      await store.upsertCharacter({
-        id: existing.id,
-        sessionId: existing.sessionId,
-        name: existing.name,
-        type: existing.type,
-        description: params.description ?? existing.description,
-        fields: mergedFields,
-        version: newVersion,
-        createdAt: existing.createdAt,
-        updatedAt: now,
-      });
-
-      const snapshot: CharacterSnapshot = {
-        id: existing.id,
-        name: existing.name,
-        type: existing.type,
-        description: params.description ?? existing.description,
-        fields: mergedFields,
-        version: newVersion,
-        createdAt: existing.createdAt,
-        updatedAt: now,
-      };
-      await mirrorCharacterToPluginData(
-        store,
-        context.sessionId,
-        context.pluginId,
-        snapshot,
+      // Buffer the upsert as a proposal (commit handler does the write +
+      // mirror). `existing` may itself be a buffered create from earlier in
+      // this loop, so the merged view above is what makes chained
+      // create→update land the right base state.
+      const proposal = makeCharacterUpsertProposal(
+        context,
+        {
+          id: existing.id,
+          name: existing.name,
+          type: existing.type,
+          ...(nextDescription !== undefined
+            ? { description: nextDescription }
+            : {}),
+          fields: mergedFields,
+          version: newVersion,
+          createdAt: existing.createdAt,
+          mirrorPluginId: context.pluginId,
+        },
+        now,
       );
 
       // Build a short human-readable diff summary.
@@ -272,12 +338,15 @@ function createUpdateCharacterTool(
       const { warningText } = validateFieldsAgainstSchema(mergedFields, schema);
       const warning = warningText ? `\n\n${warningText}` : "";
 
-      return {
-        _text: `Updated ${existing.type} "${existing.name}" (${existing.id}) → v${newVersion}.${changeBlock}${warning}`,
-        success: true,
-        characterId: existing.id,
-        version: newVersion,
-      };
+      return withPendingProposals(
+        {
+          _text: `Updated ${existing.type} "${existing.name}" (${existing.id}) → v${newVersion}.${changeBlock}${warning}`,
+          success: true,
+          characterId: existing.id,
+          version: newVersion,
+        },
+        [proposal],
+      );
     },
   });
 }
@@ -308,7 +377,7 @@ function createListCharactersTool(store: CharacterStore): ToolModule {
         .describe("按类型过滤（可选）"),
     }),
     execute: async (params, context) => {
-      const all = await store.listCharacters(context.sessionId);
+      const all = await mergeCharacterViews(store, context);
       const filtered =
         params.type != null ? all.filter((c) => c.type === params.type) : all;
       const sorted = sortByFrequencyThenRecency(filtered);
@@ -355,7 +424,7 @@ function createGetCharacterTool(store: CharacterStore): ToolModule {
         message: "either id or name is required",
       }),
     execute: async (params, context) => {
-      const all = await store.listCharacters(context.sessionId);
+      const all = await mergeCharacterViews(store, context);
       const match = all.find((c) =>
         params.id ? c.id === params.id : c.name === params.name,
       );

@@ -1,6 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3001";
+// `pnpm dev` serves the web SPA from Vite (5173) and proxies `/api/*` to the
+// runtime server (3001). The server itself only serves the built SPA when
+// SERVE_STATIC is set (production/Docker), so in dev every page route on 3001
+// is a bare 404 — point page navigation at Vite. API-only tests use relative
+// `/api/*` paths, which Vite proxies to 3001. Override via E2E_BASE_URL when
+// running against a served-static build (e.g. the Docker stack).
+const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 
 export default defineConfig({
   testDir: "./tests/e2e",

@@ -27,7 +27,7 @@ describe("scene-prompts manifest and UI loading", () => {
       name: "scene-prompts",
       pluginId: "scene-prompts",
       pluginType: "plugin",
-      priority: 600,
+      stage: "post-turn",
       model: "plugin",
       outputKind: "system",
       trigger: {
@@ -56,7 +56,7 @@ describe("scene-prompts manifest and UI loading", () => {
     expect(manifests[0].manifest).toMatchObject({
       name: "scene-prompts",
       pluginType: "plugin",
-      priority: 600,
+      stage: "post-turn",
       model: "plugin",
       outputKind: "system",
       trigger: {
@@ -65,7 +65,7 @@ describe("scene-prompts manifest and UI loading", () => {
       },
       // Engine-agnostic: gates on the narrative-engine capability and injects
       // from both known engines so it works under either narrator.
-      upstreamRequired: [{ capability: "narrative-engine" }],
+      needs: [{ capability: "narrative-engine" }],
       input: {
         inject: [
           {

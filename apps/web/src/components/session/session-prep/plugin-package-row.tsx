@@ -3,6 +3,7 @@ import { Cpu, KeyRound, Lock, Wrench } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
 import { text } from "@/components/world/editor-helpers.js";
+import { stageLabel } from "@/lib/stage-label.js";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 import { formatSlotLabel } from "@/hooks/use-slot-config.js";
 import type { UseRuntimeBindingsResult } from "@/hooks/use-runtime-bindings.js";
@@ -165,9 +166,9 @@ export function PluginPackageRow({
             <span className="hidden sm:inline">{t("plugin.core", "core")}</span>
           </span>
         )}
-        {runtimes[0] && (
+        {runtimes[0] && stageLabel(runtimes[0].stage, t) && (
           <Badge variant="outline" className="text-[9px] shrink-0">
-            P{runtimes[0].priority}
+            {stageLabel(runtimes[0].stage, t)}
           </Badge>
         )}
         {runtimes[0]?.kind && (

@@ -4,9 +4,14 @@ import type {
   TurnInput,
   NestedTurnResult,
   RecursiveCallDelta,
+  RuntimeActivation,
+  ExecutionContext,
+  InputSlot,
 } from "@covel/shared";
+import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import type { SuspensionRecord } from "@covel/store";
+import { validateOutput, withPendingProposals } from "@covel/tools";
 import {
   createPluginDataWriter,
   createPluginLogger,
@@ -15,9 +20,13 @@ import {
   makeRevocableCapability,
   makeRevocableFn,
 } from "./plugin-handler-helpers.js";
+import { createExecutionWriteBuffer } from "./execution-write-buffer.js";
+import { normalizeHandlerResult } from "../commit/normalize-handler-result.js";
+import { projectEnvelopeSuccessToLegacyOutput } from "../commit/project-envelope-result.js";
 import { createRuntimeMediaContext } from "./runtime-media-context.js";
 import { createRuntimeImagesContext } from "./runtime-images-context.js";
 import { createRuntimeSpeechContext } from "./runtime-speech-context.js";
+import { createProgressReporter } from "../job-status/job-status.js";
 import { runPostRuntimeHook } from "../hooks/wire-helpers.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import {
@@ -31,14 +40,13 @@ import {
 } from "../turn-executor/turn-runtime-helpers.js";
 import { withGatewayTrace } from "./gateway-trace.js";
 import { withUtilsTrace } from "./utils-trace.js";
+import { enforceHttpPermissions } from "./http-permissions.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
-import { NARRATOR_PRIORITY } from "../schedule/scheduler.js";
 
 export interface ExecuteFunctionRuntimeOptions {
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   readonly loaded: LoadedRuntime;
-  readonly completedResults: ReadonlyMap<string, RuntimeResult>;
   readonly deps: TurnExecutorDeps;
   readonly hookPipeline: HookPipeline | undefined;
   readonly triggerEvent:
@@ -47,6 +55,14 @@ export interface ExecuteFunctionRuntimeOptions {
         readonly data: Readonly<Record<string, unknown>>;
       }
     | undefined;
+  /** Canonical activation for this run — exposed as `ctx.activation`. */
+  readonly activation?: RuntimeActivation;
+  /** Resolved provenance-wrapped input bindings — exposed as `ctx.inputs`. */
+  readonly inputs?: Readonly<Record<string, InputSlot>>;
+  /** Frozen cross-execution `recordAs` exports — exposed as `ctx.exports`. */
+  readonly exports?: Readonly<Record<string, InputSlot>>;
+  /** Full execution identity — exposed as `ctx.execution`. */
+  readonly executionContext?: ExecutionContext;
   readonly createRecursiveCall: () => (
     delta: RecursiveCallDelta,
     opts?: { readonly reason?: string },
@@ -60,28 +76,40 @@ export interface ExecuteFunctionRuntimeOptions {
    * runtimes have no retry loop, so this is a plain deadline.
    */
   readonly timeoutMs: number;
+  /**
+   * Execution identity of this scheduling run — the default `progressScopeId`
+   * for `ctx.progress`. Absent for entry points that don't thread an
+   * `ExecutionContext` (thin test harnesses); the reporter falls back to the
+   * turnId scope in that case.
+   */
+  readonly executionId?: string;
 }
 
 export async function executeFunctionRuntime({
   manifest,
   input,
   loaded,
-  completedResults,
   deps,
   hookPipeline,
   triggerEvent,
+  activation,
+  inputs,
+  exports: exportSlots,
+  executionContext,
   createRecursiveCall,
   recursionDepth,
   startTime,
   runId,
   timeoutMs,
+  executionId,
 }: ExecuteFunctionRuntimeOptions): Promise<RuntimeResult> {
   // Emit start for function runtimes (no guard to check)
+  const stage = getRuntimeSpec(manifest).stage;
   try {
     await deps.onRuntimeStart?.({
       runtimeId: manifest.name,
       pluginId: manifest.pluginId,
-      priority: manifest.priority,
+      ...(stage !== undefined ? { stage } : {}),
     });
   } catch {
     /* callback error must not kill runtime */
@@ -89,7 +117,7 @@ export async function executeFunctionRuntime({
   emitSubEvent(deps.eventBus, "runtime", "runtime.started", input.sessionId, {
     runtimeId: manifest.name,
     pluginId: manifest.pluginId,
-    priority: manifest.priority,
+    ...(stage !== undefined ? { stage } : {}),
   });
 
   const helperCtx = {
@@ -98,6 +126,12 @@ export async function executeFunctionRuntime({
     pluginId: manifest.pluginId,
     runtimeId: manifest.name,
   };
+
+  // Execution write buffer: ctx.pluginData / ctx.store domain writes route
+  // through this instead of hitting the store directly, and flush onto the
+  // result output at execution end so they commit in finalizeExecution's
+  // single transaction (and roll back with it if the handler fails).
+  const writeBuffer = createExecutionWriteBuffer();
 
   if (!loaded.handler) {
     // A missing handler returns (never throws), so it would bypass the dispatch
@@ -151,10 +185,25 @@ export async function executeFunctionRuntime({
   );
   const assetProgress = createAssetProgressEmitter(deps.emitter, helperCtx);
   const pluginDataHandle = deps.store
-    ? createPluginDataWriter(deps.store, helperCtx)
+    ? createPluginDataWriter(deps.store, helperCtx, writeBuffer)
     : undefined;
   const loggerHandle = deps.store
     ? createPluginLogger(deps.store, helperCtx)
+    : undefined;
+  // Real-time job-status channel. Scoped to this execution (progressScopeId =
+  // executionId) so a job cannot be spoofed across executions; falls back to
+  // the turnId scope when no ExecutionContext was threaded (test harnesses).
+  const progressHandle = deps.store
+    ? createProgressReporter({
+        store: deps.store,
+        eventBus: deps.eventBus,
+        sessionId: input.sessionId,
+        progressScopeId: executionId ?? input.turnId,
+        pluginId: manifest.pluginId,
+        runtimeId: manifest.name,
+        // Canonicalize + ownership-check MediaRefs in job `data` reports.
+        ...(deps.mediaStore ? { mediaStore: deps.mediaStore } : {}),
+      })
     : undefined;
   const mediaHandle = deps.mediaStore
     ? createRuntimeMediaContext(deps.mediaStore, deps.utils, {
@@ -206,16 +255,28 @@ export async function executeFunctionRuntime({
   const isTrustedSource = isTrustedPluginSource(deps, manifest);
   const handlerStore = deps.store
     ? isTrustedSource
-      ? createTrustedHandlerStore(deps.store)
+      ? createTrustedHandlerStore(deps.store, helperCtx, writeBuffer)
       : createFunctionStoreView(deps.store, helperCtx)
     : undefined;
 
+  // Community HTTP fail-closed: a community plugin may only reach an
+  // origin+method declared under permissions.http; trusted plugins pass through
+  // unchanged (SSRF still enforced inside fetchWithRetry either way). Applied
+  // BEFORE the trace wrapper so a denied call never emits a spurious calling
+  // event, and independent of the emitter so enforcement is not trace-gated.
+  const permissionedUtils = deps.utils
+    ? enforceHttpPermissions(deps.utils, {
+        isCommunity: !isTrustedSource,
+        httpPermissions: manifest.permissions?.http ?? [],
+        runtimeId: manifest.name,
+      })
+    : undefined;
   // Trace plugin-owned provider HTTP calls (ctx.utils.fetchWithRetry — the wire
   // image plugins use) when an emitter is present; raw passthrough otherwise.
   const tracedUtils =
-    deps.utils && deps.emitter
-      ? withUtilsTrace(deps.utils, deps.emitter, helperCtx)
-      : deps.utils;
+    permissionedUtils && deps.emitter
+      ? withUtilsTrace(permissionedUtils, deps.emitter, helperCtx)
+      : permissionedUtils;
 
   await deps.emitter?.emit("function.executing", {
     ...helperCtx,
@@ -280,6 +341,12 @@ export async function executeFunctionRuntime({
     assetProgress: assetProgress
       ? makeRevocableFn(assetProgress, isRevoked, "assetProgress")
       : undefined,
+    // Progress reports append to the store and emit SSE — side-effecting, so
+    // revoked with the rest once the deadline race settles. The finalizer uses
+    // the raw (un-revoked) reporter, not this handle.
+    progress: progressHandle
+      ? makeRevocableCapability(progressHandle, isRevoked, "progress")
+      : undefined,
   };
   // ponytail: revocation is checked at call entry, so an effect already
   // in flight when the deadline fires still lands. Closing that needs the
@@ -305,7 +372,12 @@ export async function executeFunctionRuntime({
       playerMessage: input.playerMessage,
       locale: input.locale,
       store: revocable.store,
-      completedResults,
+      ...(inputs && Object.keys(inputs).length > 0 ? { inputs } : {}),
+      ...(exportSlots && Object.keys(exportSlots).length > 0
+        ? { exports: exportSlots }
+        : {}),
+      ...(activation ? { activation } : {}),
+      ...(executionContext ? { execution: executionContext } : {}),
       recursiveCall: revocable.recursiveCall,
       recursionDepth,
       ...(revocable.gateway ? { gateway: revocable.gateway } : {}),
@@ -325,6 +397,7 @@ export async function executeFunctionRuntime({
         : {}),
       ...(revocable.pluginData ? { pluginData: revocable.pluginData } : {}),
       ...(revocable.logger ? { logger: revocable.logger } : {}),
+      ...(revocable.progress ? { progress: revocable.progress } : {}),
       signal: handlerAbort.signal,
     });
     output = await Promise.race([
@@ -457,15 +530,96 @@ export async function executeFunctionRuntime({
     );
   }
 
+  // `output.schema` gate. Reuses the same ajv-backed `validateOutput` as the
+  // agent schema gate. Missing schemas and non-object returns skip entirely.
+  //   - envelope-v1: ENFORCE the envelope `value` (docs 02 §4.3, Step 3). A
+  //     mismatch fails the runtime with `output-schema-invalid` and commits no
+  //     domain effects (a failed status drops all buffered writes downstream).
+  //   - legacy: observe-only warn on the whole preserved object (a minor
+  //     compat cycle before Step 6 removes the legacy face).
+  const resultFormat = manifest.resultFormat ?? "legacy";
+  let envelopeSchemaError: string | undefined;
+  if (loaded.outputSchema && output !== null && typeof output === "object") {
+    const validationTarget =
+      resultFormat === "envelope-v1"
+        ? (output as Record<string, unknown>).value
+        : output;
+    const validation = validateOutput(validationTarget, loaded.outputSchema);
+    if (!validation.valid) {
+      const detail = (validation.errors ?? ["unknown schema validation error"])
+        .slice(0, 5)
+        .join("; ");
+      if (resultFormat === "envelope-v1") {
+        envelopeSchemaError = `output-schema-invalid: ${detail}`;
+      } else {
+        console.warn(
+          `[runtime] ${manifest.name} ${resultFormat} output did not match output.schema: ${detail}`,
+        );
+      }
+    }
+  }
+
+  // Classify the handler return through the unified normalizer and map its
+  // outcome onto the persisted RuntimeResult.status. Legacy success keeps the
+  // whole object as `output`, so the commit path's proposals/effects stay
+  // byte-identical; a business failed / skipped demotes the status so the
+  // commit path skips it (no domain writes on a non-success outcome).
+  const { outcome: handlerOutcome, diagnostics } = normalizeHandlerResult(
+    output,
+    { resultFormat, runtimeType: "function" },
+  );
+  for (const d of diagnostics) {
+    console.warn(`[runtime] ${manifest.name}: ${d.code} — ${d.message}`);
+  }
+  // Compat guard: a legacy handler that buffered domain writes before returning
+  // a non-success status is relying on the pre-redesign commit-on-non-success
+  // behaviour. Keep it as `success` during the compat window so those writes
+  // still commit byte-identically; a pure non-success (empty buffer) demotes.
+  // ponytail: writeBuffer-only check — the sole legacy non-success producer
+  // buffers via ctx.pluginData, never inline control keys. Upgrade to also scan
+  // output control keys if a producer emits them on a non-success return.
+  const demote =
+    (handlerOutcome.outcome === "failed" ||
+      handlerOutcome.outcome === "skipped") &&
+    writeBuffer.length === 0;
+  if (!demote && handlerOutcome.outcome !== "success") {
+    console.warn(
+      `[runtime] ${manifest.name}: legacy ${handlerOutcome.outcome} return with buffered writes kept as success (compat)`,
+    );
+  }
+
+  // envelope-v1 → legacy output projection (compat-era; removed in Step 6). The
+  // kernel's consumers read business / domain / completion fields from the top
+  // level of RuntimeResult.output, so a SUCCESS envelope is flattened here at
+  // the single construction point. Non-success stores its raw return (effects
+  // already stripped in normalize), and legacy stays byte-identical.
+  const projectedOutput =
+    resultFormat === "envelope-v1" &&
+    !envelopeSchemaError &&
+    handlerOutcome.outcome === "success"
+      ? projectEnvelopeSuccessToLegacyOutput(handlerOutcome, output)
+      : output;
+
+  // A failed envelope-v1 schema gate overrides the handler outcome: the runtime
+  // fails with `output-schema-invalid` and no domain effects are committed.
   const rawResult: RuntimeResult = {
     pluginId: manifest.pluginId,
     runtimeId: manifest.name,
     runId,
     turnId: input.turnId,
-    status: "success",
-    output,
+    status: envelopeSchemaError
+      ? "failed"
+      : demote
+        ? handlerOutcome.outcome
+        : "success",
+    output: projectedOutput,
     toolCalls: [],
     durationMs: Date.now() - startTime,
+    ...(envelopeSchemaError
+      ? { error: envelopeSchemaError }
+      : demote && handlerOutcome.outcome === "failed"
+        ? { error: handlerOutcome.error }
+        : {}),
     timestamp: new Date().toISOString(),
   };
 
@@ -484,6 +638,23 @@ export async function executeFunctionRuntime({
     },
     rawResult,
   );
+
+  // Flush execution-buffered domain writes onto the result output so
+  // processRuntimeResult → finalizeExecution commits them in the same
+  // transaction. Non-enumerable symbol attachment — JSON.stringify (turn
+  // message, tracing) ignores it. A failed handler rethrows above and never
+  // reaches here, so its buffer is discarded (stricter atomicity than the old
+  // direct-write path). Suspends return earlier and intentionally drop the
+  // buffer too — a suspended runtime is not done.
+  if (
+    !envelopeSchemaError &&
+    writeBuffer.length > 0 &&
+    result.output &&
+    typeof result.output === "object"
+  ) {
+    withPendingProposals(result.output as Record<string, unknown>, writeBuffer);
+  }
+
   const finalOutput = (result.output ?? output) as Record<string, unknown>;
 
   // Save function output as TurnMessage (same as agent runtimes).
@@ -508,7 +679,7 @@ export async function executeFunctionRuntime({
       role: "assistant",
       name: manifest.name,
       content: narrativeContent,
-      order: manifest.priority ?? NARRATOR_PRIORITY,
+      order: stageMessageOrder(getRuntimeSpec(manifest).stage),
       createdAt: new Date().toISOString(),
     });
   }

@@ -5,6 +5,7 @@ import {
   FRAMEWORK_KNOWN_CAPABILITIES,
 } from "@covel/shared";
 import { parsePluginMd } from "../src/parse-plugin-md.js";
+import { normalizeRuntimeManifest } from "../src/normalize.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -40,6 +41,59 @@ describe("parsePluginMd", () => {
       expect(
         (result.manifest as Record<string, unknown>).config,
       ).toBeUndefined();
+    });
+  });
+
+  describe("contribution-only manifest (hook / UI plugin, no runtime shape)", () => {
+    it("parses a manifest with no runtimeType / handler / trigger / priority", () => {
+      // A hook-only (director / cost-gate) or UI-only (memory) plugin carries
+      // no schedulable runtime — its behaviour lives in an `entry` module or a
+      // `ui` spec. The manifest must load cleanly without any runtime shape.
+      const content = md(
+        [
+          "name: hook-only-plugin",
+          "description: A cross-cutting hook plugin",
+          "pluginType: plugin",
+          "outputKind: system",
+          "capabilities:",
+          "  - content-safety",
+          "entry: ./server/index.js",
+        ].join("\n"),
+        "\nBody.\n",
+      );
+
+      const result = parsePluginMd(content, "plugins/hook-only/PLUGIN.md");
+      expect(result.manifest.name).toBe("hook-only-plugin");
+      expect(result.manifest.runtimeType).toBeUndefined();
+      expect(result.manifest.handler).toBeUndefined();
+      expect(result.manifest.trigger).toBeUndefined();
+      expect(result.manifest.priority).toBeUndefined();
+      expect(result.manifest.entry).toBe("./server/index.js");
+    });
+
+    it("normalizes to a non-schedulable spec (default auto, no stage, no legacyOrder)", () => {
+      const content = md(
+        [
+          "name: ui-only-plugin",
+          "description: A pure UI panel plugin",
+          "pluginType: core-plugin",
+          "outputKind: system",
+          "ui:",
+          "  right:",
+          "    - ./ui/panel.json",
+        ].join("\n"),
+        "\nBody.\n",
+      );
+
+      const { manifest } = parsePluginMd(content, "plugins/ui-only/PLUGIN.md");
+      const spec = normalizeRuntimeManifest(manifest);
+      // Omitted trigger folds to the default `auto`, but with no priority the
+      // spec gets no stage and no legacyOrder — the scheduler keys on
+      // legacyOrder (priority) and drops a priority-less runtime, so this
+      // manifest is never enqueued despite the auto default.
+      expect(spec.declaredTrigger.type).toBe("auto");
+      expect(spec.stage).toBeUndefined();
+      expect(spec.legacyOrder).toBeUndefined();
     });
   });
 

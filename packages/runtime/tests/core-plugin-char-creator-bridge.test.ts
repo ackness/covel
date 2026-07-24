@@ -4,6 +4,7 @@ import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
+import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import type {
   LLMAdapter,
   LLMRequest,
@@ -80,7 +81,16 @@ async function createPregameStore(sessionId: string): Promise<DataStore> {
 }
 
 describe("char-creator core plugin guard bridge", () => {
-  it("creates the submitted player, mirrors plugin data, advances Pre-Game, and refreshes same-turn narrator context", async () => {
+  // Deliberate change (scheduling redesign, Step 2 — turn-wide transaction):
+  // the guard's player-creation writes now BUFFER instead of hitting the store
+  // directly, and the same-batch main-loop follow-up that used to run the
+  // narrator in the SAME turn was removed. So this is now a two-stage flow:
+  //   Turn 1 (setup): player-init's guard buffers the character + mirror and
+  //     returns skip:true; only finalize commits them. The narrator does NOT
+  //     run this turn.
+  //   Turn 2 (main loop): the narrator runs on the next request and reads the
+  //     COMMITTED player from context.
+  it("buffers the submitted player on the setup turn (committed by finalize) and the narrator reads it on the next turn", async () => {
     const sessionId = "sess-char-bridge";
     const store = await createPregameStore(sessionId);
     const playerInit = manifest("char-creator/player-init", {
@@ -97,12 +107,6 @@ describe("char-creator core plugin guard bridge", () => {
       outputKind: "story",
     });
     const llm = new CapturingLLM();
-    const input: TurnInput = {
-      sessionId,
-      turnId: "turn-form",
-      playerMessage: "柳无痕完成登记。",
-      locale: "zh-CN",
-    };
     const deps: TurnExecutorDeps = {
       loadRuntime: async (runtime) => {
         if (runtime.name === "char-creator/player-init") {
@@ -126,26 +130,66 @@ describe("char-creator core plugin guard bridge", () => {
       store,
     };
 
-    const result = await executeTurn(input, [playerInit, narrator], deps);
+    // ── Turn 1 (setup): guard creates the player; only player-init runs. ──
+    const setupInput: TurnInput = {
+      sessionId,
+      turnId: "turn-form",
+      playerMessage: "柳无痕完成登记。",
+      locale: "zh-CN",
+      preGamePending: true,
+    };
+    const setupResult = await executeTurn(
+      setupInput,
+      [playerInit, narrator],
+      deps,
+    );
 
-    expect(result.runtimeResults.map((runtime) => runtime.runtimeId)).toEqual([
-      "char-creator/player-init",
-      "narrator",
-    ]);
-    expect(result.runtimeResults[0]!.status).toBe("skipped");
-    expect(result.runtimeResults[0]!.output).toMatchObject({
+    // The narrator (main loop) is deferred to the next request — no same-batch
+    // follow-up runs it after the setup runtime completes.
+    expect(
+      setupResult.runtimeResults.map((runtime) => runtime.runtimeId),
+    ).toEqual(["char-creator/player-init"]);
+    expect(setupResult.runtimeResults[0]!.status).toBe("skipped");
+    expect(setupResult.runtimeResults[0]!.output).toMatchObject({
       skip: true,
       playerExists: true,
       playerName: "柳无痕",
       preGameDone: true,
     });
+    // player-init completes setup this turn (guard skip). The persisted
+    // turnCount / preGameCompleted are written by the finalize session-clock
+    // step; here we pin the completion delta the executor produces.
+    expect(Object.keys(setupResult.setupCompletion?.newlyDone ?? {})).toEqual([
+      "char-creator/player-init",
+    ]);
+    expect(setupResult.setupCompletion?.allSetupDone).toBe(true);
+    // The narrator never ran, so no system prompt was captured yet.
+    expect(llm.systemPrompts).toHaveLength(0);
 
-    const session = await store.getSession(sessionId);
-    expect(session?.turnCount).toBe(1);
-    expect(session?.preGameCompleted?.slice().sort()).toEqual(
-      ["char-creator/player-init", "pregame", "world-init/schema-gen"].sort(),
-    );
+    // Guard writes buffer now: nothing is in the store until finalize commits.
+    expect(await store.listCharacters(sessionId)).toHaveLength(0);
 
+    // Commit the setup execution, as the actions route does. The buffered
+    // character.upsert + plugin-data mirror commit in ONE transaction (and the
+    // session-clock write flips the band to playing).
+    await finalizeExecution({
+      store,
+      sessionId,
+      ...(setupResult.executionContext
+        ? { executionContext: setupResult.executionContext }
+        : {}),
+      runtimes: [playerInit, narrator],
+      results: setupResult.runtimeResults,
+      turnIds: ["turn-form"],
+      sessionClock: {
+        now: new Date().toISOString(),
+        ...(setupResult.setupCompletion
+          ? { setupCompletion: setupResult.setupCompletion }
+          : {}),
+      },
+    });
+
+    // After commit: character + mirror landed atomically.
     const characters = await store.listCharacters(sessionId);
     expect(characters).toHaveLength(1);
     expect(characters[0]).toMatchObject({
@@ -169,6 +213,15 @@ describe("char-creator core plugin guard bridge", () => {
       type: "player",
       description: "外门弟子，擅长追踪灵脉异动",
     });
+
+    // ── Turn 2 (main loop): the narrator runs and reads the committed player. ──
+    const mainInput: TurnInput = {
+      sessionId,
+      turnId: "turn-main",
+      playerMessage: "柳无痕环顾四周。",
+      locale: "zh-CN",
+    };
+    await executeTurn(mainInput, [playerInit, narrator], deps);
 
     expect(llm.systemPrompts).toHaveLength(1);
     expect(llm.systemPrompts[0]).toContain("Player=柳无痕");

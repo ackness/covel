@@ -72,6 +72,8 @@
 | `runtime.failed`      | S→C  | 单个 runtime 失败 | `{ runtimeId, pluginId, error }`                                                                                                                                                                |
 | `execution.completed` | S→C  | 回合执行完成      | `{ runtimeCount, resultCount, durationMs, abortReason? }`（`abortReason` 仅在回合被中止时出现：cost-gate 硬预算上限、玩家 abort（值 `"aborted-by-player"`）等——前端据此提示玩家而非静默空回合） |
 
+> **开场接力**：当一次玩家动作完成了最后一个 setup runtime，`POST /api/actions` 的同一条 SSE 流会自动接力一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。此时流内会出现**两轮** `execution.started` / runtime 生命周期事件（信封 `turnId` 不同——setup 回合 + 接力回合），但只有**一个** `execution.completed` 收尾（前端以它复位 executing 状态）。
+
 ### 回合中控制（W4：steer / abort）
 
 回合中控制走 HTTP 端点而非 SSE 事件（见 [api.md § 回合中控制](./api.md#回合中控制w4)）：
@@ -81,7 +83,7 @@
 
 ### 会话生命周期事件
 
-（turn-band 重构后 `phase.changed` 已废弃：`SessionRecord.phase` 字段移除，运行进度改由 `turnCount` + `preGameCompleted` 描述。未来若需要推送 `status` 变化，将以 `status.changed` 形式重新引入，届时在此补记。）
+（没有 `phase.changed` 事件：`SessionRecord.phase`（`'setup' | 'playing'`）与 `completedPlayerTurns` / `setupRuntimes` 是会话进度的业务真值，但 phase 翻转不单独推送 SSE——客户端从会话响应里读 `phase`（以及由它派生的 legacy `turnCount` / `preGameCompleted`）。未来若需要推送 `status` 变化，将以 `status.changed` 形式引入，届时在此补记。）
 
 ### 系统事件
 
@@ -102,6 +104,16 @@
 | `plugin-data.changed` | S→C  | 插件持久化数据变更 | `{ pluginId, runtimeId, changes: [{ namespace, key, value, operation }] }` |
 
 `plugin-data-set` / `plugin-data-set-batch` / DELETE `/plugin-data/...` 等所有写路径均会触发此事件。`operation` 字段为 `'set'` 或 `'delete'`（删除时 `value` 为 `null`），由 `wrapStoreWithPluginDataEvents` 在 store 层统一拦截，前端可实时响应插件状态变更。
+
+### 作业进度事件（job-status，实验性）
+
+| 事件类型             | 方向 | 描述                     | 负载（完整 `JobStatusRecord`）                                                                                       |
+| -------------------- | ---- | ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `job-status.updated` | S→C  | 长任务作业进度（追加式） | `{ sessionId, progressScopeId, pluginId, runtimeId, jobId, state, progress?, message?, data?, sequence, createdAt }` |
+
+长耗时的 function runtime（媒体生成等）在 finalizer 提交之前，通过 `ctx.progress.report({ jobId, state, progress?, message?, data?, sequence })` 实时上报进度。这是 effects 隔离的**唯一实时例外**：上报写入内核 job-status 存储（追加式、按 `(sessionId, progressScopeId, pluginId, runtimeId, jobId, sequence)` 幂等），成功后立即发出本事件并经 `/actions` SSE 转发；它不写游戏态、不满足 binding/gate、不随领域事务回滚。`state` 取值为 `queued | running | progress | waiting-input | succeeded | failed | cancelled`；身份字段全部由内核注入，插件只提供作业业务字段。
+
+> 兼容期说明：本通道与旧的 `plugin-data` `_jobs` 占位路径并存，待后者退役后统一。
 
 ### 媒体资产事件
 

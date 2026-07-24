@@ -396,7 +396,7 @@ export const worldManifestSchema = z
       .optional(),
     /**
      * Preferred `GameViewMode` for new sessions of this world ("stage" =
-     * fullscreen GalGame stage). Player's own choice still wins once made;
+     * fullscreen visual-novel stage). Player's own choice still wins once made;
      * this only seeds the initial value. Unrecognised values fall back to
      * "parsed".
      */

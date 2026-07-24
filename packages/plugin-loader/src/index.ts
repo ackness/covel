@@ -11,6 +11,12 @@ export {
 } from "./load.js";
 
 // ── Registry ─────────────────────────────────────────────────────
+export {
+  normalizeRuntimeManifest,
+  stageForPriority,
+  getRuntimeSpec,
+} from "./normalize.js";
+
 export { createPluginRegistry } from "./registry.js";
 export type { PluginRegistry, PluginRegistryOptions } from "./registry.js";
 
@@ -43,6 +49,8 @@ export type {
   ResolvedSlotForPlugin,
   PluginDataWriter,
   PluginLogger,
+  ProgressReporter,
+  ProgressEffect,
   FunctionStoreView,
   ImagesContext,
   ImageGenerateInput,

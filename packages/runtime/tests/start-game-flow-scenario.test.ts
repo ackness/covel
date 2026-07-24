@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import { deriveLegacyClockForSession } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
+import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 
 class NoopLLM implements LLMAdapter {
@@ -152,16 +154,38 @@ async function runTurn(
   deps: TurnExecutorDeps,
   input: Partial<TurnInput>,
 ) {
-  return executeTurn(
+  const turnId = input.turnId ?? crypto.randomUUID();
+  const result = await executeTurn(
     {
       sessionId: "sess-start-flow",
-      turnId: crypto.randomUUID(),
+      turnId,
       playerMessage: "",
       ...input,
     },
     manifests,
     deps,
   );
+  // The session-clock write (setup mirror + phase flip) now lives in the
+  // finalize transaction, and this flow depends on it persisting across turns
+  // (turn 2 must see turn 1's completed setup), so drive finalize like the
+  // real actions route does.
+  await finalizeExecution({
+    store,
+    sessionId: "sess-start-flow",
+    ...(result.executionContext
+      ? { executionContext: result.executionContext }
+      : {}),
+    runtimes: manifests,
+    results: [...result.runtimeResults, ...(result.nestedRuntimeResults ?? [])],
+    turnIds: [turnId],
+    sessionClock: {
+      now: new Date().toISOString(),
+      ...(result.setupCompletion
+        ? { setupCompletion: result.setupCompletion }
+        : {}),
+    },
+  });
+  return result;
 }
 
 describe("start-game flow scenario at runtime level", () => {
@@ -183,13 +207,14 @@ describe("start-game flow scenario at runtime level", () => {
     expect(playerMessages).toEqual([]);
 
     const session = await store.getSession("sess-start-flow");
-    expect(session?.turnCount).toBe(0);
-    expect(session?.preGameCompleted?.sort()).toEqual(
+    const legacy = deriveLegacyClockForSession(session!);
+    expect(legacy.turnCount).toBe(0);
+    expect(legacy.preGameCompleted.sort()).toEqual(
       ["pregame", "world-init/schema-gen"].sort(),
     );
   });
 
-  it("form submission creates the player before main-loop runtimes run", async () => {
+  it("form submission creates the player on the setup turn; main-loop runtimes run on the next request", async () => {
     const store = await createScenarioStore("sess-start-flow");
     const { deps, calls } = makeRuntimeHarness(store);
 
@@ -220,18 +245,36 @@ describe("start-game flow scenario at runtime level", () => {
     );
     expect(mirrored?.value).toMatchObject({ name: "Aria", type: "player" });
 
+    // Deliberate change (Step 2): the form-submit turn runs ONLY the setup
+    // runtime that creates the player. The narrator (main loop) no longer runs
+    // as a same-batch follow-up — it is deferred to the next request.
     expect(calls["char-creator/player-init"]).toBeGreaterThanOrEqual(2);
-    expect(calls["narrator"]).toBe(1);
+    expect(calls["narrator"]).toBeUndefined();
     expect(
       (
         await store.listRuntimeResults("sess-start-flow", "turn-form-submit")
       ).map((result) => result.runtimeId),
-    ).toEqual(["char-creator/player-init", "narrator"]);
+    ).toEqual(["char-creator/player-init"]);
 
+    // Setup completed → the finalize session-clock write flipped the band to
+    // playing (turnCount 1) and recorded every Pre-Game runtime.
     const session = await store.getSession("sess-start-flow");
-    expect(session?.turnCount).toBe(1);
-    expect(session?.preGameCompleted?.sort()).toEqual(
+    const legacy = deriveLegacyClockForSession(session!);
+    expect(legacy.turnCount).toBe(1);
+    expect(legacy.preGameCompleted.sort()).toEqual(
       ["char-creator/player-init", "pregame", "world-init/schema-gen"].sort(),
     );
+
+    // Next request: now in the playing band, the narrator finally runs.
+    await runTurn(store, deps, {
+      turnId: "turn-first-main",
+      playerMessage: "Aria surveys the district.",
+    });
+    expect(calls["narrator"]).toBe(1);
+    expect(
+      (
+        await store.listRuntimeResults("sess-start-flow", "turn-first-main")
+      ).map((result) => result.runtimeId),
+    ).toEqual(["narrator"]);
   });
 });

@@ -1,4 +1,6 @@
 import type {
+  ExecutionContext,
+  InputSlot,
   NestedTurnResult,
   RecursiveCallDelta,
   RuntimeManifest,
@@ -11,8 +13,19 @@ import type {
   CoreMemoryBlockView,
   SessionContextSnapshot,
 } from "@covel/context";
+import { getRuntimeSpec, isSetupRuntime } from "@covel/shared";
+import { validateOutput } from "@covel/tools";
+import {
+  deriveActivation,
+  resolveExportBindings,
+  resolveInputBindings,
+} from "../schedule/input-bindings.js";
+import { canonicalizeMediaRefs } from "../media/canonicalize-media-refs.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
-import { makeFailedResult } from "./turn-executor-helpers.js";
+import {
+  makeFailedResult,
+  makeSkippedResult,
+} from "./turn-executor-helpers.js";
 import { runPostRuntimeHook } from "../hooks/wire-helpers.js";
 import { emitSubEvent } from "./turn-runtime-helpers.js";
 import { isRequiredUpstreamSatisfied } from "./turn-output-helpers.js";
@@ -83,6 +96,31 @@ export interface RuntimeInvocation {
   readonly executeTurnFn: ExecuteTurnFn;
   /** Internal current recursion depth. Top-level callers omit it (defaults 0). */
   readonly recursionDepth?: number;
+  /** Execution identity — forwarded to the function-runtime `ctx.progress` scope. */
+  readonly executionId?: string;
+  /**
+   * Full execution identity for this scheduling run — exposed to function
+   * handlers as `ctx.execution` and to the agent activation segment. Absent
+   * for thin direct callers / tests.
+   */
+  readonly executionContext?: ExecutionContext;
+  /**
+   * Execution-start instant (ISO), frozen once per turn. Pins `atOrBefore` on
+   * every `recordAs` export read so a consumer sees the revision that was live
+   * when its execution began, never one published mid-plan (docs 02 §3.4.2).
+   */
+  readonly executionStartedAt?: string;
+  /**
+   * Generation of this setup runtime's mirror, for the attempt-ledger `started`
+   * insert. Present only for setup runtimes; absent means "not a setup run".
+   */
+  readonly setupGeneration?: number;
+  /**
+   * Implicit per-plugin session gate. A non-setup runtime is skipped
+   * (`setup-incomplete`) when its plugin's setup runtimes are not all done.
+   * Absent (direct callers / tests) means "no gate — always ready".
+   */
+  readonly pluginSetupReady?: (pluginId: string) => boolean;
   /**
    *  sink for runtime results produced by nested `ctx.recursiveCall`
    * executions. The top-level executeTurn wires this to a collector so the
@@ -114,6 +152,8 @@ export async function executeOneRuntime(
     turnOptions,
     executeTurnFn,
     recursionDepth = 0,
+    executionId,
+    executionContext,
   } = inv;
   const startTime = Date.now();
   const runId = crypto.randomUUID();
@@ -221,32 +261,109 @@ export async function executeOneRuntime(
     };
   };
 
+  // Emit a terminal `runtime.completed` for a pre-dispatch gate result
+  // (input.schema failure, binding gate skip) — no `runtime.started` fired yet,
+  // mirroring the upstream/session gates above.
+  const emitGateTerminal = async (
+    result: RuntimeResult,
+    reason?: string,
+  ): Promise<RuntimeResult> => {
+    try {
+      await deps.onRuntimeComplete?.({
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        status: result.status,
+        durationMs: result.durationMs,
+        ...(result.error ? { error: result.error } : {}),
+      });
+    } catch {
+      /* callback error must not kill runtime */
+    }
+    emitSubEvent(
+      deps.eventBus,
+      "runtime",
+      "runtime.completed",
+      input.sessionId,
+      {
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        status: result.status,
+        durationMs: result.durationMs,
+        ...(reason ? { reason } : {}),
+      },
+    );
+    return result;
+  };
+
   try {
-    // ── Upstream gate (manifest.upstreamRequired) ─────────────────
-    // Must run before loadRuntime so a failing upstream short-circuits
-    // the whole pipeline: no prompt template read, no guard, no LLM call,
-    // no runtime.started event. Emits a single runtime.completed{skipped}
-    // so the frontend shows the runtime as skipped rather than hanging.
-    const required = manifest.upstreamRequired ?? [];
+    // ── Implicit per-plugin session gate ──────────────────────────
+    // A non-setup runtime is skipped while any of its OWN plugin's active setup
+    // runtimes is not yet done (incl. waived). This holds for the manual RPC
+    // path too: manual bypasses the turn cadence gate but not the session gate.
+    // Setup runtimes are exempt (they ARE the setup being gated on).
+    if (!isSetupRuntime(manifest) && inv.pluginSetupReady) {
+      if (!inv.pluginSetupReady(manifest.pluginId)) {
+        const skipResult = makeSkippedResult(
+          manifest,
+          input,
+          "setup-incomplete",
+          "framework:setupGate",
+        );
+        try {
+          await deps.onRuntimeComplete?.({
+            runtimeId: manifest.name,
+            pluginId: manifest.pluginId,
+            status: "skipped",
+            durationMs: skipResult.durationMs,
+          });
+        } catch {
+          /* callback error must not kill runtime */
+        }
+        emitSubEvent(
+          deps.eventBus,
+          "runtime",
+          "runtime.completed",
+          input.sessionId,
+          {
+            runtimeId: manifest.name,
+            pluginId: manifest.pluginId,
+            status: "skipped",
+            durationMs: skipResult.durationMs,
+            reason: "setup-incomplete",
+          },
+        );
+        return skipResult;
+      }
+    }
+
+    // ── Upstream gate (turn-scoped `deps.needs`) ─────────────────
+    // Reads the IR `deps.needs` (the loader aliases `upstreamRequired` into it,
+    // so third-party `upstreamRequired` still gates). Only turn-scoped entries
+    // gate here — `needs(scope: session)` gate against the frozen snapshot,
+    // handled by the setup pipeline, not this same-turn gate. Runs before
+    // loadRuntime so a failing upstream short-circuits the whole pipeline (no
+    // prompt read, no guard, no LLM call, no runtime.started event) and emits a
+    // single runtime.completed{skipped} so the frontend shows it as skipped.
+    const required = getRuntimeSpec(manifest).deps.needs.filter(
+      (n) => typeof n === "string" || n.scope !== "session",
+    );
     if (required.length > 0) {
-      // Two upstream-entry shapes (see UpstreamRequirement):
-      //  • string        — that exact runtime must have produced a successful
-      //                     result. An absent (disabled) upstream stays a skip,
-      //                     never treated as success.
-      //  • {capability}   — at least one in-scope runtime providing that
-      //                     capability must have succeeded. Lets a guidance
-      //                     plugin depend on "the active narrative engine"
-      //                     without naming narrator / chat-mode-narrator; the
-      //                     gate resolves whichever engine the current mode
-      //                     loaded. Zero in-scope providers ⇒ unsatisfied (a
-      //                     guidance runtime with no narrative engine to act on
-      //                     should skip, not run blind).
+      // Two entry shapes:
+      //  • runtime (string / {runtime}) — that exact runtime must have produced
+      //    a successful result this turn (or be done from an earlier setup
+      //    execution, via the preGameCompleted fallback). An absent (disabled)
+      //    upstream stays a skip, never treated as success.
+      //  • {capability} — at least one in-scope runtime providing that
+      //    capability must have succeeded. Lets a guidance plugin depend on "the
+      //    active narrative engine" without naming narrator / chat-mode-narrator;
+      //    zero in-scope providers ⇒ unsatisfied (skip, not run blind).
       const missing: string[] = [];
       for (const entry of required) {
-        if (typeof entry === "string") {
-          const up = completedResults.get(entry);
-          if (!up && sessionMeta?.preGameCompleted?.includes(entry)) continue;
-          if (!isRequiredUpstreamSatisfied(up)) missing.push(entry);
+        if (typeof entry === "string" || "runtime" in entry) {
+          const name = typeof entry === "string" ? entry : entry.runtime;
+          const up = completedResults.get(name);
+          if (!up && sessionMeta?.preGameCompleted?.includes(name)) continue;
+          if (!isRequiredUpstreamSatisfied(up)) missing.push(name);
           continue;
         }
         const providers = activeRuntimes
@@ -302,6 +419,36 @@ export async function executeOneRuntime(
       }
     }
 
+    // ── Setup attempt ledger: `started` ───────────────────────────
+    // Recorded once the gates pass and BEFORE the guard/handler runs, so a
+    // crash mid-execution leaves a `started` row (a spent-but-unresolved
+    // signature). Dependency skips above return earlier and spend no attempt.
+    // Idempotent on (session, runtime, generation, executionId); the finalize
+    // settle terminalises it.
+    if (
+      isSetupRuntime(manifest) &&
+      deps.store &&
+      inv.setupGeneration !== undefined &&
+      executionId !== undefined
+    ) {
+      try {
+        await deps.store.insertSetupAttempt({
+          sessionId: input.sessionId,
+          runtimeId: manifest.name,
+          pluginVersion: manifest.version ?? "0.0.0",
+          generation: inv.setupGeneration,
+          executionId,
+          state: "started",
+          startedAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.warn(
+          `[turn-executor] setup attempt 'started' insert failed for ${manifest.name}:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+
     // Load the runtime (prompt template, references, handler, etc.)
     const loaded = await deps.loadRuntime(
       manifest,
@@ -318,20 +465,165 @@ export async function executeOneRuntime(
       );
     }
 
+    // ── Activation, input.schema enforce, input bindings ──────────
+    // Derive this activation (stage / event / manual), enforce the activation
+    // payload against `input.schema`, then resolve `inputs` bindings into
+    // provenance slots (or a gate skip). Manual activations project turn
+    // bindings away; detached activations that still carry them are rejected.
+    let activation = deriveActivation(manifest, input, triggerEvent);
+
+    // Boundary: canonicalize + ownership-check every MediaRef in the activation
+    // payload BEFORE input.schema and dispatch (docs 02 §3.3 order). A ref the
+    // session cannot prove it holds fails the activation with an explainable
+    // reason; both function (`ctx.activation.payload`) and agent (activation
+    // segment) then see the same canonical payload. Skipped without a
+    // mediaStore (test harnesses) — a media-free payload is unchanged either way.
+    if (deps.mediaStore) {
+      const canon = await canonicalizeMediaRefs(activation.payload, {
+        store: deps.mediaStore,
+        sessionId: input.sessionId,
+      });
+      if (canon.rejections.length > 0) {
+        const detail = canon.rejections
+          .map((r) => `${r.id}: ${r.reason}`)
+          .join("; ");
+        return emitGateTerminal(
+          makeFailedResult(
+            manifest,
+            input,
+            runId,
+            startTime,
+            `activation payload media rejected: ${detail}`,
+          ),
+          canon.rejections[0]!.reason,
+        );
+      }
+      activation = { ...activation, payload: canon.value };
+    }
+
+    if (loaded.inputSchema) {
+      const validation = validateOutput(activation.payload, loaded.inputSchema);
+      if (!validation.valid) {
+        const error = `activation payload failed input.schema: ${(
+          validation.errors ?? ["unknown schema validation error"]
+        )
+          .slice(0, 3)
+          .join("; ")}`;
+        return emitGateTerminal(
+          makeFailedResult(manifest, input, runId, startTime, error),
+          "input-schema-invalid",
+        );
+      }
+    }
+
+    const binding = await resolveInputBindings({
+      manifest,
+      activation,
+      activeRuntimes,
+      completedResults,
+      acceptsSchemas: loaded.bindingAcceptsSchemas ?? {},
+      // Same shared canonicalizer as the activation boundary: an injected
+      // same-execution value carries the producer's raw MediaRefs (they have
+      // not passed an output boundary), so ownership is checked here before
+      // `accepts` validates the canonical value (docs 02 §2.1.4 / §3.1).
+      ...(deps.mediaStore
+        ? {
+            canonicalizeValue: (value) =>
+              canonicalizeMediaRefs(value, {
+                store: deps.mediaStore!,
+                sessionId: input.sessionId,
+              }),
+          }
+        : {}),
+      // ponytail: re-loads the producer only for its declared output.schema, and
+      // only when the consumer declares `accepts`. ES import is cached, so this
+      // is a cheap re-parse; add a per-turn schema cache if it ever shows up.
+      loadProducerSchema: async (producer) =>
+        (await deps.loadRuntime(producer, input.locale, input.sessionId))
+          ?.outputSchema,
+    });
+    for (const d of binding.diagnostics) {
+      if (d.severity === "error") {
+        console.warn(
+          `[turn-executor] ${manifest.name}: ${d.code} — ${d.message}`,
+        );
+      }
+    }
+    if (!binding.ok) {
+      return emitGateTerminal(
+        makeSkippedResult(
+          manifest,
+          input,
+          binding.skipReason,
+          "framework:inputBinding",
+        ),
+        binding.skipReason,
+      );
+    }
+    const inputSlots = binding.slots;
+
+    // ── Persistent export bindings (input.inject: runtime-export) ─
+    // Cross-execution consumption of a producer's `recordAs` export, read at
+    // the execution's frozen start instant. Not turn bindings, so they resolve
+    // for every activation source (a manual/detached target still reads them).
+    const exportSpec = getRuntimeSpec(manifest).exportBindings;
+    let exportSlots: Readonly<Record<string, InputSlot>> = {};
+    if (Object.keys(exportSpec).length > 0) {
+      const atOrBefore = inv.executionStartedAt;
+      const exportRes = await resolveExportBindings({
+        consumerRuntimeId: manifest.name,
+        exportBindings: exportSpec,
+        activeRuntimes,
+        acceptsSchemas: loaded.exportAcceptsSchemas ?? {},
+        getFrozenExport: (producerRuntimeId, recordAs) =>
+          deps.store
+            ? deps.store.getLatestRuntimeExport(
+                input.sessionId,
+                producerRuntimeId,
+                recordAs,
+                atOrBefore ? { atOrBefore } : undefined,
+              )
+            : Promise.resolve(null),
+      });
+      for (const d of exportRes.diagnostics) {
+        if (d.severity === "error") {
+          console.warn(
+            `[turn-executor] ${manifest.name}: ${d.code} — ${d.message}`,
+          );
+        }
+      }
+      if (!exportRes.ok) {
+        return emitGateTerminal(
+          makeSkippedResult(
+            manifest,
+            input,
+            exportRes.skipReason,
+            "framework:exportBinding",
+          ),
+          exportRes.skipReason,
+        );
+      }
+      exportSlots = exportRes.slots;
+    }
+
     if (manifest.runtimeType === "function") {
       return await executeFunctionRuntime({
         manifest,
         input,
         loaded,
-        completedResults,
         deps,
         hookPipeline,
         triggerEvent,
+        activation,
+        inputs: inputSlots,
+        exports: exportSlots,
+        ...(executionContext ? { executionContext } : {}),
         createRecursiveCall,
         recursionDepth,
         startTime,
         runId,
         timeoutMs,
+        executionId,
       });
     }
 
@@ -339,7 +631,6 @@ export async function executeOneRuntime(
       manifest,
       input,
       loaded,
-      completedResults,
       deps,
       hookPipeline,
       triggerEvent,
@@ -366,6 +657,9 @@ export async function executeOneRuntime(
       workingMemory,
       coreMemoryBlocks,
       sessionContext,
+      activation,
+      inputs: inputSlots,
+      exports: exportSlots,
       startTime,
       runId,
     });

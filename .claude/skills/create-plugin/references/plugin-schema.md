@@ -1,6 +1,11 @@
 # PLUGIN.md Frontmatter Schema Reference
 
-Schema 使用 Zod **strict** 模式（`runtimeManifestSchema`）— 不允许未定义字段，拼错会直接报错。
+Schema 使用 Zod **strict** 模式 — 不允许未定义字段，拼错会直接报错。有两套 schema（`packages/shared/src/schemas/plugin-schemas.ts`）：
+
+- **`runtimeManifestAuthoringSchema`（新插件按这个写）** — strict 目标：`auto` / `scheduled` runtime **必须声明 `stage`**；legacy 字段（`priority` / `upstreamRequired` / `jobStatus`）被拒绝。
+- **`runtimeManifestSchema`（loader 实际用的 compat 超集）** — 额外接受 legacy 字段做第三方兼容（`priority` 折叠出 `stage`、`upstreamRequired` 别名为 `needs`）。新插件不要用这些字段。
+
+两套 schema 都**拒绝** `trigger.type: conditional / error-retry`（已从枚举移除，声明即加载失败）。
 
 > 如果插件有多个 runtime，把 **每个** runtime 放到 `runtimes/<sub>/PLUGIN.md`，每个 PLUGIN.md 独立按本 schema 校验。框架自动扫描 `runtimes/*/PLUGIN.md`；不需要根目录合并列表。
 >
@@ -11,8 +16,11 @@ Schema 使用 Zod **strict** 模式（`runtimeManifestSchema`）— 不允许未
 | 字段 | 类型 | 必需 | 约束 / 默认 |
 |------|------|------|------|
 | `name` | string | ✓ | 正则 `^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)*$`。格式 `plugin-id` 或 `plugin-id/runtime-id` |
-| `description` | string | ✓ | 至少 1 字符 |
-| `priority` | int | | 0–1000（0–99 Pre-Game / 100–499 Pre-Turn / 500 Narrator / 501–999 After-Turn / 1000 Audit） |
+| `description` | string \| I18nText | ✓ | 单 string 或 `{ zh: "...", en: "..." }` map（**推荐 I18nText**，map 至少一个 locale 条目）。loader 会折叠成单 string 供 trace/工具注册使用，UI 仍读原始 I18nText |
+| `stage` | enum | auto/scheduled 必需 | `setup` / `pre-turn` / `narrative` / `post-turn` / `audit`。见下「调度声明」 |
+| `after` | array | | 弱排序依赖（只排序不设门）。见下「调度声明」 |
+| `needs` | array | | 强依赖（排序 + 门控）。见下「调度声明」 |
+| `inputs` | map | | 类型化同回合数据绑定 → `ctx.inputs.<name>`。见下「调度声明」 |
 | `version` | string | | 语义版本，可选 |
 | `runtimeType` | enum | | `agent`（默认） / `function` |
 | `handler` | string | | `runtimeType: function` 必需;也可用作 `agent` guard 的入口。必须是相对路径、`.js`/`.mjs`/`.cjs` 结尾 |
@@ -20,10 +28,43 @@ Schema 使用 Zod **strict** 模式（`runtimeManifestSchema`）— 不允许未
 | `model` | string | | `runtimeType: agent` 用的 slot 名（`default` / `fast` / `balance` / `image` / 自定义） |
 | `pluginType` | enum | | `core-plugin` / `plugin`（默认） |
 | `outputKind` | enum | | `story` / `plugin`（默认） / `system` — 决定前端展示 |
-| `capabilities` | string[] | | 能力标签数组，框架按标签发现插件。常用:`narrative`、`world-data-provider`、`image-generation`、`memory-panel` |
-| `upstreamRequired` | string[] | | runtime ID 数组;任一 upstream 本 turn 不是 `success`,本 runtime 直接 `skipped`（不跑 guard/LLM） |
-| `execution` | enum | | **仅对手动触发(`POST /plugin-rpc`)的 runtime 生效。** `sync`（默认） / `background`。background 返回 202 + `jobId`,框架写 `_jobs/<jobId>`,前端通过 `plugin-data.changed` SSE 感知 |
-| `promptVersion` | `1` \| `2` | | V2 prompt assembler 闸门(需 `COVEL_PROMPT_V2=1`) |
+| `capabilities` | string[] | | 能力标签数组，框架按标签发现插件。常用:`narrative-engine`、`world-data-provider`、`image-generation`、`memory-panel`。自由标签合法，但拼错框架已知标签会在 bootstrap 时 warn |
+| `execution` | enum | | **仅对手动触发(`POST /plugin-rpc`)的 runtime 生效。** `sync`（默认） / `background`。background 返回 202 + `jobId`,框架走 kernel job-status 流,前端通过 `plugin-data.changed` SSE 感知 |
+| `resultFormat` | enum | | `legacy`（默认）/ `envelope-v1`。envelope-v1 时 handler 返回 `{outcome: success\|suspended\|skipped\|failed, ...}` 判别联合；setup 完成信号用 `completion: "done"` |
+| `suspensionSafe` | boolean | | handler 可从冻结的激活边界重放（审批 / 表单 resume）。默认 false |
+| `effects` | object | | `{reads?, writes?, parallelSafe?}` 显式读写集声明，用于同层并行冒险检测。资源键如 `state:*`、`plugin-data:self:<ns>`、`event:<topic>`、`http:https://<host>` |
+| `permissions` | object | | `{http: [{origin, methods?}]}` — 插件 `ctx.http` 出网上限声明。`origin` 必须是规范 https origin（无路径/查询），`methods` 默认仅 GET |
+
+## 调度声明（stage / after / needs / inputs）
+
+调度用**命名阶段 + 依赖**声明（数字 `priority` 调度器已删除）。语义详版见 `docs/guide/plugin-authoring.md#调度声明`。
+
+- **`stage`** — `setup`（游戏初始化，`phase === "setup"` 时运行）· `pre-turn` · `narrative` · `post-turn` · `audit`（主循环按此顺序，阶段间严格屏障）。同阶段内先后**只由依赖决定**，无依赖并发跑。
+- **`after`** — 弱排序：目标失败/缺席不拦本 runtime。每项：`"runtime-id"` 或 `{ runtime }` 或 `{ capability, cardinality? }`。
+- **`needs`** — 排序 + 门控：目标本次未成功 → 本 runtime `skipped`。每项额外可带 `scope`：`turn`（默认，同回合成功）/ `session`（对执行开始时冻结的持久快照判定，仅 setup 用）。`cardinality: one`（默认，任一提供者成功即可）/ `all`。
+- **`inputs`** — 把上游依赖升级为类型化绑定，function 解析进 `ctx.inputs.<name>`（provenance 包装的 InputSlot），agent 注入保留 prompt 块：
+
+```yaml
+needs:
+  - capability: narrative-engine   # 门控:叙事引擎本轮成功才跑
+inputs:
+  narrative:
+    from: { capability: narrative-engine, cardinality: one }
+    select: "/narrativeOutput"     # RFC 6901 JSON Pointer,指进生产方成功 value
+    required: false                # true 蕴含 needs(turn) 门;false 蕴含 after
+    # accepts: ./schemas/x.json    # 可选:runtime 目录相对 JSON Schema 校验注入值
+```
+
+handler 里读：`ctx.inputs.narrative?.value`（`cardinality: all` 时是 `.items[].value`）。参考 `plugins/mimo-tts/runtimes/auto-narrate/`。
+
+**跨字段硬约束**（违反即校验失败）：
+
+- `auto` / `scheduled` runtime **必须**声明 `stage`（authoring schema）；`event` / `manual` runtime **不可**声明 `stage`（它们由事件/RPC 拉起，不进阶段 DAG）。
+- `stage: setup` 的 trigger 必须是 `auto`，且不可带 `interval` / `startTurn` / `cooldownTurns`（`maxTriggerCount` 可作重试预算）。setup runtime 通过输出 `preGameDone: true`（legacy）或 `completion: "done"`（envelope-v1）报告完成。
+- `needs` 的 `scope: session` **只在 `stage: setup` 上合法**（它对准持久 setup 快照判定；其它 stage 声明会被两套 schema 直接拒绝）。
+- `event` / `manual` + `execution: background` 的 runtime 不可声明 `inputs` 绑定（永远 detached，绑定无法满足）。
+
+> 另有一条 server 装载期 warning：`auto` / `scheduled` 却既无 `stage` 也无 legacy `priority`、又不是纯 ui / hooks / entry / wires 注册面的 runtime，会收到 `schedulable-missing-stage` 警告（这类声明被当作 UI-only 习语，永不调度）。按本文档生成的插件不会触发它。
 
 ## 超时与重试（agent only）
 
@@ -40,17 +81,13 @@ Schema 使用 Zod **strict** 模式（`runtimeManifestSchema`）— 不允许未
 
 ```yaml
 trigger:
-  type: auto|manual|scheduled|event   # 必需（生产可用的四种）
-                                       # conditional / error-retry = reserved，见下
+  type: auto|manual|scheduled|event   # 仅这四种；conditional / error-retry 已从枚举移除,声明即加载失败
   interval: <int>              # scheduled 时每隔 N 轮(正整数)
-  maxTriggerCount: <int>       # 整个 session 最多触发次数
+  maxTriggerCount: <int>       # 整个 session 最多触发次数(setup runtime 时 = 重试预算)
   startTurn: <int>             # 从第 N 主循环 turn 起介入(0-based)
-  topic: <string>              # event 时订阅的事件 topic
-  maxRetryCount: <int>         # error-retry 时(reserved)
+  topic: <string>              # event 时必需:订阅的事件 topic(跨字段强制)
   cooldownTurns: <int>         # 上次触发后多少轮内不再触发
 ```
-
-> **`conditional` / `error-retry` are reserved（当前永不触发）**：schema 仍接受这两个值，但 `packages/runtime/src/trigger.ts` 既没有条件表达式引擎，调度路径（`turn-executor/scheduling.ts`）又把 `hasUpstreamFailure` 硬编码为 `false`——声明它们的 runtime 永远不会被触发，并会在 console 打印一次性 warning（audit P2-9）。落地前请使用 `auto`/`manual`/`scheduled`/`event`。
 
 **手动触发常用组合:**
 
@@ -117,13 +154,15 @@ tools:
 
 ## `input.inject`（prompt 上下文注入）
 
-两种注入源,**discriminated** by `kind`:
+三种注入源,**discriminated** by `kind`（`kind` 必填,不可省略）:
 
 ```yaml
 input:
+  schema: ./schemas/activation.json  # 可选:校验激活载荷(manual RPC / event payload),派发前强制
   inject:
-    # (1) runtime kind — 读前序 runtime 的 output 字段
-    - from: narrator             # kind 省略即 runtime
+    # (1) runtime kind — 读前序 runtime 的 output 字段(同回合)
+    - kind: runtime
+      from: narrator
       field: narrativeOutput
       as: "<narrator-output>"
 
@@ -133,20 +172,31 @@ input:
       as: "<existing-entries>"
       format: summary                 # summary(默认) / ids-only / full
       maxEntries: 50                  # 1–500,默认 50
+
+    # (3) runtime-export kind — 跨执行读生产方持久化的 recordAs 导出
+    #     (读"本次执行开始前最后一次 commit"的版本;生产方需声明 output.recordAs + output.schema)
+    - kind: runtime-export
+      name: worldSchema               # 绑定名 → ctx.exports.worldSchema
+      from: { capability: world-data-provider }
+      recordAs: world-schema          # 生产方 output.recordAs 的名字
+      required: false
   tools:
     - plugin: world-init
       runtime: schema-gen
 ```
 
 > 使用 `plugin-data` kind 时,框架自动切到异步 context 装配路径。
+> 同回合读上游优先用顶层 `inputs` 绑定(见「调度声明」),`kind: runtime` 是它的 legacy 前身。
 
 ## `output`
 
 ```yaml
 output:
   schema: ./schemas/out.json    # JSON Schema 路径
-  recordAs: my-card             # 作为 record 落库的名字
+  recordAs: my-card             # 作为持久化导出落库的名字(供下游 kind: runtime-export 消费)
 ```
+
+> 跨字段约束:声明 `recordAs` 必须同时声明 `schema`(导出值必须可校验)。
 
 Agent runtime 产出 `{ output: { events: [{topic, data}] } }` 时,这些事件会在同 turn 的事件总线上发布,触发 `trigger.type: event` 的下游 runtime。
 
@@ -196,7 +246,7 @@ userSettings:
    - **agent runtime prompt**: 作为 `{{ userSettings.<key> }}` 模板变量——PLUGIN.md 直接插值;
    - **agent runtime `guard`**(仅限声明了 `guard`/`authModule` 的 runtime): 作为 `ctx.userSettings`——`guard` 可决定 `skip` / `preGameDone`。
 
-Agent runtime 的 **LLM 工具调用** 不会自动看到 userSettings——如果 agent 需要把用户设置传给工具,要么在 PLUGIN.md 里用 `{{ userSettings.* }}` 把值塞进 prompt,要么用 `guard` 把值塞进 `completedResults.output`。
+Agent runtime 的 **LLM 工具调用** 不会自动看到 userSettings——如果 agent 需要把用户设置传给工具,在 PLUGIN.md 里用 `{{ userSettings.* }}` 把值塞进 prompt,让 LLM 把值填进工具参数。
 
 ## `hooks`
 
@@ -235,19 +285,9 @@ postHistory:
   role: system           # system/user
 ```
 
-## `config`（插件级配置)
+## ~~`config`~~（已废弃）
 
-```yaml
-config:
-  <field>:
-    type: string|integer|number|boolean|enum  # 必需
-    default: <value>
-    min: <number>
-    max: <number>
-    options: [<string>]     # enum 必需
-    label: <string>
-    description: <string>
-```
+`config` 字段已移除——loader 会剥离它并打 deprecation warning。玩家可调配置一律用 `userSettings`（见上）。
 
 ## `i18n`
 
@@ -298,7 +338,7 @@ export default async function handler(ctx) {
   // ctx.manualPayload 来自 POST /plugin-rpc 的 payload(仅 manual 触发)
   // ctx.triggerEvent = { topic, data } (仅 event 触发)
   // ctx.gateway 是 PluginRuntimeGateway — 调 LLM/图像的唯一入口
-  // ctx.completedResults: Map<runtimeId, output>,读取前序 runtime 输出
+  // ctx.inputs.<name> — frontmatter inputs 绑定的解析结果(读同回合上游的唯一通道,见「调度声明」)
   return {
     // 任意 JSON 字段作为 runtime output 持久化给下游。以下字段会被框架
     // normalizeOutput 提取为 Proposal,走标准 commit pipeline:
@@ -325,18 +365,10 @@ export default async function handler(payload, { sessionId, pluginId, action, st
 
 ## 校验
 
-在生成完 PLUGIN.md 后 **必须** 跑:
+在生成完 PLUGIN.md 后 **必须** 跑（仓库根目录）:
 
 ```bash
-node --input-type=module -e "
-import matter from 'gray-matter';
-import { readFileSync } from 'fs';
-import { validatePluginManifest, formatValidationErrors } from '@covel/shared';
-const { data } = matter(readFileSync('plugins/<id>/PLUGIN.md','utf-8'));
-const r = validatePluginManifest(data);
-if(!r.valid){console.error(formatValidationErrors(r.errors));process.exit(1)}
-console.log('OK');
-"
+pnpm validate:plugin plugins/<id>            # 或 ~/.covel/plugins/<id>;目录自动含 runtimes/*/PLUGIN.md
 ```
 
-如果插件不在本仓库（比如放在 `~/.covel/plugins/`），需要到 `packages/plugin-loader/` 子目录执行上面脚本（它依赖 `gray-matter` 和 `@covel/shared`）。
+一次跑两道：loader compat 解析（能否加载，报错带行号；自动折叠 I18nText `description`）+ strict authoring schema（缺 stage / 误写 legacy 字段直接报错）。`--compat` 只用于存量 legacy manifest。脚本源码：`packages/plugin-loader/scripts/validate-manifest.ts`。

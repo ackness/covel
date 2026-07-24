@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.18] - 2026-07-24
+
+The scheduling release. The numeric priority scheduler is gone: runtimes now declare a named **stage** (`setup / pre-turn / narrative / post-turn / audit`, strict barriers between stages) plus typed dependency edges — `needs` (gate + DAG edge, by runtime id or capability), `after` (ordering only), and typed `inputs` bindings resolved into provenance-wrapped `ctx.inputs`. Session lifecycle truth moved to a dedicated clock (`phase` / `completedPlayerTurns` / `setupRuntimes`) with `turnCount` / `preGameCompleted` derived at read time, and turn counting became single-writer (turn-wide finalize transaction + an idempotent logical-turn ledger). A same-day extensibility audit closed every "declared but silently ignored" manifest surface it found.
+
+### Added
+
+- **Stage-driven scheduler** — per-stage DAGs with strict barriers; independent runtimes in a stage run in parallel (name breaks ties); dependency cycles are diagnosed and disabled for the turn instead of silently run in arbitrary order. Band selection is by `session.phase`, not turn number.
+- **Session clock + setup state machine** — per-runtime setup mirrors with retry budgets, generations (a plugin version bump invalidates a stale `done`), and a `blocked` terminal; `needs(scope: session)` cycles are blocked up front with a full path diagnostic, and the positive gate holds a consumer back until its producer is `done` in the frozen snapshot.
+- **Opening continuation** — the request that completes the last setup runtime chains exactly one main-loop turn on the same SSE stream, so the narrator's opening arrives without a second player message.
+- **envelope-v1 handler results** — discriminated `success / suspended / skipped / failed` outcomes with unified normalization; non-success envelopes carry observation channels only. All bundled function handlers migrated.
+- **`recordAs` exports and `runtime-export` injects** — versioned cross-execution publications with frozen-at-execution-start reads.
+- **Kernel job-status channel** — `ctx.progress.report()` streams append-only, idempotent progress events (SSE + store) for long-running work; reported jobs are terminalised from the execution outcome.
+- **Effects declarations** — derived read/write sets with a same-layer hazard policy (`effects.reads/writes/parallelSafe`), plus declared HTTP permission upper bounds (`permissions.http`).
+- **`pnpm validate:plugin`** — one command runs the loader compat parse (line-numbered errors, I18nText folding) and the strict authoring schema (missing `stage` / legacy fields rejected); `--compat` covers legacy third-party manifests.
+- **`schedulable-missing-stage` diagnostic** — an `auto`/`scheduled` runtime with neither `stage` nor legacy `priority` now warns at load instead of silently never running; pure registration surfaces (ui / hooks / entry / wires) are exempt.
+- **Media plugins and wires** — bundled `dashscope-image-gen` / `openai-image-gen` / `mimo-tts` plugins; wan2.6/wan2.7 multi-image support and qwen-image-3 on the DashScope wire; shared image-generation trunk extracted into `plugin-handlers-utils`.
+
+### Changed
+
+- **Legacy scheduling fields are compat-only** — `priority` folds to a derived `stage` and `upstreamRequired` aliases into `needs` at a single normalize point; all bundled plugins single-declare `stage` + `needs` (two documented loader-gated `priority` exceptions remain). Event fan-out orders subscribers by `name`, not priority.
+- **`turnCount` / `preGameCompleted` are frozen legacy columns** — API responses derive them from the session clock at read time; response shapes are unchanged.
+- **Manifest `description` accepts I18nText** — the preferred locale-map form now validates on both schemas (the loader folds to a single string post-parse), so editor tooling no longer flags every bundled manifest.
+- **Docs and skills realigned** — flow.md's state model rewritten around the session clock; the zero-code/advanced guides, plugin registry, glossary, and protocol pages purged of priority-era wording; the create-plugin and static-audit skills rewritten against current contracts; non-project drafts pruned from `docs/` per DOCS_STRATEGY; scaffolding templates modernized; "GalGame" naming unified to **stage mode**.
+
+### Removed
+
+- **`scheduleByPriority` and the numeric priority scheduler** — stage + DAG is the only scheduling authority.
+- **Reserved trigger types** — `conditional` / `error-retry` are gone from the trigger enum (manifests declaring them fail to load), together with their five dead code remnants and the orphan `condition` / `maxRetryCount` fields.
+- **Dead session-plan types** — the never-consumed `SessionExecutionPlan` / `ExecutionEdge` / `SessionGate` / `ResolvedRuntime` family.
+
+### Fixed
+
+- **`needs(scope: session)` is real now** — enforced as a positive gate in setup selection and rejected on any non-`setup` stage, closing the accepted-but-inert declaration trap.
+- **Discovery advert completeness** — `inputInjectKinds` derives from the inject union (it had silently omitted `runtime-export`); trigger types were already schema-derived.
+- **Scaffolding correctness** — `create-plugin.js` emitted an `input.inject` entry without the required `kind` discriminator (generated plugins failed validation); the plugin-with-tools template still taught `priority` + `scheduled interval: 1`.
+- **`test-runtime --ignore-upstreams`** also strips the `needs` declaration, not just the legacy alias.
+
 ## [0.0.17] - 2026-07-21
 
 Trust-boundary and commit-integrity release, plus a smoother story-mode opening. A consolidated full-repository audit (2026-07-20) drove three remediation batches: plugin identity and community-code approval are now enforced end to end, a turn's commit outcome is authoritative everywhere, and single-connection stores serialize writes against open transactions. The GalGame stage now pre-warms its art during pre-game and appears as soon as the player submits the opening form. Toolchain moved to pnpm 11 / TypeScript 7 / Vite 8 / Electron 43, and the runtime baseline is Node 26.
