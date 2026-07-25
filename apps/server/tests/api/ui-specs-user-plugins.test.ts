@@ -27,7 +27,7 @@ const BUNDLED_PLUGIN_MANIFEST = `---
 name: bundled-greeter
 description: Bundled plugin
 pluginType: plugin
-priority: 600
+stage: post-turn
 runtimeType: function
 handler: ./handler.js
 outputKind: plugin

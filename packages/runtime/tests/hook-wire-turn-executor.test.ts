@@ -44,7 +44,7 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     name: "test-plugin",
     pluginId: "test-plugin",
     description: "Test plugin",
-    priority: 500,
+    stage: "narrative",
     runtimeType: "agent",
     ...overrides,
   };

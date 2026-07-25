@@ -25,7 +25,7 @@ function makeManifest(): RuntimeManifest {
     name: "official-plugin/worker",
     pluginId: "official-plugin",
     description: "trusted function runtime",
-    priority: 500,
+    stage: "narrative",
     trigger: { type: "auto" },
     runtimeType: "function",
   } as RuntimeManifest;

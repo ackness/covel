@@ -80,7 +80,7 @@ const emitterManifest: RuntimeManifest = {
   name: "narrator-stub/emitter",
   pluginId: "narrator-stub",
   description: "Test stand-in for a narrator that emits scene.set",
-  priority: 500,
+  stage: "narrative",
   outputKind: "story",
   tools: { builtin: ["emit-event"] },
   trigger: { type: "auto" },

@@ -35,7 +35,7 @@ const guardRuntime = {
   name: "p/setup",
   pluginId: "p",
   description: "p/setup",
-  priority: 40, // setup band
+  stage: "setup", // setup band
   runtimeType: "agent",
   guard: "./guard.js",
   trigger: { type: "auto" },

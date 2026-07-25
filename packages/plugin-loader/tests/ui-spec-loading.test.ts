@@ -24,7 +24,7 @@ describe("UI spec loading", () => {
       `---
 name: test-ui-plugin
 description: Plugin with UI specs
-priority: 500
+stage: narrative
 ui:
   right:
     - ./ui/panel.json
@@ -64,7 +64,7 @@ Test prompt.
       `---
 name: no-ui-plugin
 description: No UI
-priority: 500
+stage: narrative
 ---
 
 Prompt.
@@ -80,7 +80,7 @@ Prompt.
       `---
 name: ui-handler-plugin
 description: UI plus handler
-priority: 500
+stage: narrative
 runtimeType: function
 handler: ./handler.mjs
 ui:
@@ -110,7 +110,7 @@ export default async function handler() { return { proposals: [] }; }
       `---
 name: evil-plugin
 description: Evil
-priority: 500
+stage: narrative
 ui:
   right:
     - ../../etc/passwd

@@ -45,7 +45,6 @@ function writeUiPlugin(
     `---
 name: ${pluginId}
 description: boot trust fixture
-priority: 500
 runtimeType: function
 handler: ./server/handler.mjs
 ${importFlags.wires ? "wires: ./server/wires.mjs" : ""}

@@ -23,7 +23,7 @@ function fnManifest(
     name,
     pluginId: name.split("/")[0]!,
     description: name,
-    priority: 500,
+    stage: "narrative",
     runtimeType: "function",
     handler: "./h.js",
     trigger: { type: "manual" },

@@ -132,15 +132,10 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(schemaGen.deps.after).toEqual(["pregame"]);
     expect(schemaGen.provenance.legacyFields).toEqual([]);
 
-    // player-init: single-declared now — explicit `stage: setup` and turn-scoped
-    // `needs` (priority + upstreamRequired removed). The turn-scoped needs are
-    // the DAG edge + same-turn gate.
+    // player-init: explicit `stage: setup` plus turn-scoped `needs`, which are
+    // the DAG edge and the same-turn gate.
     const playerInit = requireSpec(specs, "char-creator/player-init");
     expect(playerInit.stage).toBe("setup");
-    expect(playerInit.provenance.legacyFields).not.toContain("priority:stage");
-    expect(playerInit.provenance.legacyFields).not.toContain(
-      "upstreamRequired",
-    );
     expect(playerInit.deps.needs).toEqual(["pregame", "world-init/schema-gen"]);
 
     // pre-turn band: rag-retriever + scene-cast, both scheduled.
@@ -233,7 +228,6 @@ describe("normalize golden (bundled plugin set)", () => {
       expect(spec.bindings).toEqual(manifest.inputs ?? {});
       expect(spec.exportBindings).toEqual({});
       expect(spec.httpPermissions).toEqual([]);
-      expect(spec.legacyJobViews).toEqual([]);
       expect(spec.backgroundWhenDetached).toBe(
         manifest.execution === "background",
       );

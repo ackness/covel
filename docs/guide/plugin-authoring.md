@@ -88,7 +88,7 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 - **写给模型 / 通知的纯文本**（如 prompt 前言、欢迎通知）：用 `ctx.locale`（function runtime）或 hook payload 的 `locale` 在写入时解析成单一语言。例：`director` 的导演前言、`pregame` 的欢迎语。
 - **agent runtime 的 `PLUGIN.md` 正文**（agent skill prompt）按 locale 解析 `PLUGIN.<locale>.md` → `PLUGIN.md`。正文含 CJK 的 agent 插件应配套提供 `PLUGIN.en.md`（如 `narrator` / `chat-mode-narrator`），否则 en 会话喂给模型的是中文指令。
 
-> **`PLUGIN.<locale>.md` 只能翻译，不能改契约。** 语言变体的正文和自然语言字段（`description` / `displayName` / `label` / `authorsNote.content` / `postHistory.content` / `i18n` 等）取自变体文件；`stage`、`needs`、`priority`（legacy）、`trigger`、`capabilities`、`tags`、`tools`、`input.inject`、`dataSchemas`、超时参数等**结构字段一律取自 canonical `PLUGIN.md`**。loader 每次加载语言变体时都会比对，逐字段报告差异并用 canonical 值覆盖（`[plugin-loader] … locale variant diverges from PLUGIN.md on non-translatable field(s) …`）。
+> **`PLUGIN.<locale>.md` 只能翻译，不能改契约。** 语言变体的正文和自然语言字段（`description` / `displayName` / `label` / `authorsNote.content` / `postHistory.content` / `i18n` 等）取自变体文件；`stage`、`needs`、`trigger`、`capabilities`、`tags`、`tools`、`input.inject`、`dataSchemas`、超时参数等**结构字段一律取自 canonical `PLUGIN.md`**。loader 每次加载语言变体时都会比对，逐字段报告差异并用 canonical 值覆盖（`[plugin-loader] … locale variant diverges from PLUGIN.md on non-translatable field(s) …`）。
 >
 > 这条规则的原因很直接：如果变体能改结构字段，同一个 runtime 会因为玩家界面语言不同而被排进不同 stage、拿到不同的工具白名单。看到这条 warning 就把改动挪回 `PLUGIN.md`。
 >
@@ -116,11 +116,11 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 - **`inputs`** — 把某条隐式上游依赖升级为**有类型的同回合绑定**，解析进 function 的 `ctx.inputs.<name>`（agent 则注入一个保留 prompt 块）。每项：`from`（`{ runtime }` 或 `{ capability, cardinality }`）· `select`（RFC 6901 JSON Pointer，指进生产方成功 value）· `required`（`true` 蕴含 `needs(turn)` 门，`false` 蕴含 `after`）· `accepts`（runtime 目录相对的 JSON Schema 路径，校验最终注入值）。
 - **`input.schema`** — runtime 目录相对的 JSON Schema，校验本 runtime 的**激活载荷**（manual RPC / event payload），派发前强制执行。
 
-**legacy 字段（仅第三方兼容）**：manifest 输入 schema 仍**接受**第三方插件声明的 `priority` / `upstreamRequired`——归一层把 `upstreamRequired` 别名为 `needs`，并在 `stage` 缺失时用 `priority` 派生 `stage`（`priority` 数值本身不再是调度依据，只作派生来源）。**所有 bundled 插件均已单声明 `stage` + `needs`/`after`，无任何例外**（历史上的 pregame / world-init/schema-gen 例外已迁移：`stage: setup` + `trigger: auto`，schema-gen 用显式 `after: [pregame]` 保持串行；旧的保守 setup 排序链已删除——同阶段内先后完全由声明边决定）。新写插件请直接用 `stage` + `needs`，不要写 `priority`。
+**已移除的字段**：`priority` / `upstreamRequired` / `jobStatus` 不再被任何 schema 接受——声明即加载失败（`priority` / `upstreamRequired` 有专门的报错提示指向 `stage` / `needs`）。所有 bundled 插件均单声明 `stage` + `needs`/`after`，无任何例外（历史上的 pregame / world-init/schema-gen 例外已迁移：`stage: setup` + `trigger: auto`，schema-gen 用显式 `after: [pregame]` 保持串行；旧的保守 setup 排序链已删除——同阶段内先后完全由声明边决定）。
 
 **保留 trigger**：`conditional` / `error-retry` 已从 trigger 枚举中移除，声明它们的 manifest 在**加载时被拒绝**（不再是"接受但永不触发"的 reserved 状态）——生产可用的只有 `auto` / `manual` / `scheduled` / `event` 四种。
 
-**校验**：写完 manifest 跑 `pnpm validate:plugin <PLUGIN.md | 插件目录>`——一次执行 loader compat 解析（能否加载，报错带行号）+ strict authoring schema（`auto` / `scheduled` 缺 `stage`、误写 legacy 字段直接报错）；`--compat` 仅用于存量 legacy manifest。另外 server 启动装载插件时会对「`auto` / `scheduled` 却既无 `stage` 也无 legacy `priority`、又不是纯 UI / hook / entry / wires 注册面」的 runtime 打 `schedulable-missing-stage` warning——这类声明会被当作 UI-only 习语永不调度。
+**校验**：写完 manifest 跑 `pnpm validate:plugin <PLUGIN.md | 插件目录>`——一次执行 loader compat 解析（能否加载，报错带行号）+ strict authoring schema（`auto` / `scheduled` 缺 `stage` 直接报错）。另外 server 启动装载插件时会对「`auto` / `scheduled` 却没有 `stage`、又不是纯 UI / hook / entry / wires 注册面」的 runtime 打 `schedulable-missing-stage` warning——这类声明会被当作 UI-only 习语永不调度。
 
 ## 附录
 
@@ -138,18 +138,18 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 
 来源：`plugins/**/PLUGIN.md` 的 frontmatter（截至 v0.0.4）。
 
-| Runtime                          | Stage                         | 触发            | 类型          | 工具 / 关键能力       | 学习价值                        |
-| -------------------------------- | ----------------------------- | --------------- | ------------- | --------------------- | ------------------------------- |
-| `pregame`                        | `setup`（legacy priority 10） | scheduled(首轮) | function      | 无                    | 最简 function runtime,纯初始化  |
-| `world-init/schema-gen`          | `setup`（legacy priority 40） | scheduled(首轮) | agent + guard | local 工具            | guard 在 LLM 前跳过门控,零开销  |
-| `char-creator/player-init`       | `setup`                       | scheduled(首轮) | agent         | builtin (create-form) | 首轮表单 + setup 闸门           |
-| `npc-graph/rag-retriever`        | `pre-turn`                    | auto            | function      | —                     | 给 narrator 预拉结构化检索      |
-| `narrator`                       | `narrative`                   | auto            | agent         | 无                    | 零代码主叙事                    |
-| `codex`                          | `post-turn`                   | auto            | agent         | local + builtin       | JS 工具 + plugin-data inject    |
-| `guide`                          | `post-turn`                   | auto            | agent         | builtin               | inject narrator output 生成选项 |
-| `npc-graph/extractor`            | `post-turn`                   | auto            | agent         | local                 | NPC 关系抽取 + 写入图谱         |
-| `char-creator/character-tracker` | `post-turn`                   | auto            | agent         | local                 | 跟踪 NPC 状态变化               |
-| `memory`                         | —                             | UI only         | UI            | —                     | 纯前端面板,不占调度槽           |
+| Runtime                          | Stage       | 触发            | 类型          | 工具 / 关键能力       | 学习价值                        |
+| -------------------------------- | ----------- | --------------- | ------------- | --------------------- | ------------------------------- |
+| `pregame`                        | `setup`     | scheduled(首轮) | function      | 无                    | 最简 function runtime,纯初始化  |
+| `world-init/schema-gen`          | `setup`     | scheduled(首轮) | agent + guard | local 工具            | guard 在 LLM 前跳过门控,零开销  |
+| `char-creator/player-init`       | `setup`     | scheduled(首轮) | agent         | builtin (create-form) | 首轮表单 + setup 闸门           |
+| `npc-graph/rag-retriever`        | `pre-turn`  | auto            | function      | —                     | 给 narrator 预拉结构化检索      |
+| `narrator`                       | `narrative` | auto            | agent         | 无                    | 零代码主叙事                    |
+| `codex`                          | `post-turn` | auto            | agent         | local + builtin       | JS 工具 + plugin-data inject    |
+| `guide`                          | `post-turn` | auto            | agent         | builtin               | inject narrator output 生成选项 |
+| `npc-graph/extractor`            | `post-turn` | auto            | agent         | local                 | NPC 关系抽取 + 写入图谱         |
+| `char-creator/character-tracker` | `post-turn` | auto            | agent         | local                 | 跟踪 NPC 状态变化               |
+| `memory`                         | —           | UI only         | UI            | —                     | 纯前端面板,不占调度槽           |
 
 完整注册表（含 stage 分带、capabilities、frontmatter 全字段）见 [docs/reference/plugins.md](../reference/plugins.md)。
 

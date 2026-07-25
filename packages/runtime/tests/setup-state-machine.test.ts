@@ -155,19 +155,19 @@ describe("setup session-gate SCC", () => {
     const x = {
       name: "x/setup",
       pluginId: "x",
-      priority: 50,
+      stage: "setup",
       needs: [{ runtime: "y/setup", scope: "session" }],
     } as unknown as RuntimeManifest;
     const y = {
       name: "y/setup",
       pluginId: "y",
-      priority: 50,
+      stage: "setup",
       needs: [{ runtime: "x/setup", scope: "session" }],
     } as unknown as RuntimeManifest;
     const z = {
       name: "z/setup",
       pluginId: "z",
-      priority: 50,
+      stage: "setup",
     } as RuntimeManifest;
 
     const cycles = detectSetupSessionCycles([x, y, z]);
@@ -183,7 +183,7 @@ describe("setup session-gate SCC", () => {
       name: "x/setup",
       pluginId: "x",
       description: "x",
-      priority: 50,
+      stage: "setup",
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
@@ -193,7 +193,7 @@ describe("setup session-gate SCC", () => {
       name: "y/setup",
       pluginId: "y",
       description: "y",
-      priority: 50,
+      stage: "setup",
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
@@ -264,7 +264,16 @@ describe("main-loop dependency-cycle SCC", () => {
         name,
         pluginId: name,
         description: name,
-        priority,
+        stage:
+          priority <= 99
+            ? "setup"
+            : priority <= 499
+              ? "pre-turn"
+              : priority === 500
+                ? "narrative"
+                : priority <= 999
+                  ? "post-turn"
+                  : "audit",
         runtimeType: "function",
         handler: "./h.js",
         trigger: { type: "auto" },
@@ -340,7 +349,7 @@ describe("plugin version mismatch", () => {
       pluginId: "plug",
       description: "setup",
       version: "2.0.0",
-      priority: 50,
+      stage: "setup",
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },

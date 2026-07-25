@@ -41,7 +41,7 @@ function makeLoadedRuntime(args: {
     manifest: {
       name: args.name,
       pluginId: args.pluginId,
-      priority: 500,
+      stage: "narrative",
       trigger: { type: "auto" },
     },
     promptTemplate: "",

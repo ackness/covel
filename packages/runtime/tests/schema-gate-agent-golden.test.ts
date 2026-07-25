@@ -47,7 +47,7 @@ function manifest(overrides: Partial<RuntimeManifest> = {}): RuntimeManifest {
     name: "test-plugin/schema-runtime",
     pluginId: "test-plugin",
     description: "schema runtime",
-    priority: 10,
+    stage: "setup",
     runtimeType: "agent",
     trigger: { type: "auto" },
     outputKind: "plugin",

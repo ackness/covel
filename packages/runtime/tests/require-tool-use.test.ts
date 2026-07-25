@@ -51,7 +51,7 @@ function manifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     name: "plug/gated",
     pluginId: "plug",
     description: "Must call emit-event",
-    priority: 500,
+    stage: "narrative",
     outputKind: "plugin",
     tools: { builtin: ["emit-event"] },
     trigger: { type: "auto" },

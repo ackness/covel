@@ -337,8 +337,7 @@ export async function executeOneRuntime(
     }
 
     // ── Upstream gate (turn-scoped `deps.needs`) ─────────────────
-    // Reads the IR `deps.needs` (the loader aliases `upstreamRequired` into it,
-    // so third-party `upstreamRequired` still gates). Only turn-scoped entries
+    // Reads the IR `deps.needs`. Only turn-scoped entries
     // gate here — `needs(scope: session)` gate against the frozen snapshot,
     // handled by the setup pipeline, not this same-turn gate. Runs before
     // loadRuntime so a failing upstream short-circuits the whole pipeline (no
@@ -385,7 +384,7 @@ export async function executeOneRuntime(
           output: {
             skipped: true,
             reason,
-            skippedBy: "framework:upstreamRequired",
+            skippedBy: "framework:needs",
             missingUpstreams: missing,
           },
           toolCalls: [],

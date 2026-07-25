@@ -24,7 +24,7 @@ function manifest(overrides: Partial<RuntimeManifest> = {}): RuntimeManifest {
     name: "p/rt",
     pluginId: "p",
     pluginType: "community",
-    priority: 500,
+    stage: "narrative",
     trigger: { type: "auto" },
     model: "gpt-4o-mini",
     runtimeType: "agent",
@@ -273,7 +273,7 @@ describe("applyHazardPolicy — stable warn / strict output", () => {
   });
   const narrator = manifest({ name: "p/narrator", outputKind: "story" });
   const group: ScheduledGroup = {
-    priority: 500,
+    stage: "narrative",
     runtimes: [narrator, writerB, writerA], // deliberately unsorted
   };
 
@@ -317,9 +317,9 @@ describe("applyHazardPolicy — stable warn / strict output", () => {
   });
 
   it("single-runtime and hazard-free groups pass through untouched", () => {
-    const solo: ScheduledGroup = { priority: 500, runtimes: [writerA] };
+    const solo: ScheduledGroup = { runtimes: [writerA] };
     const clean: ScheduledGroup = {
-      priority: 500,
+      stage: "narrative",
       runtimes: [narrator, writerA],
     };
     const out = applyHazardPolicy([solo, clean], "strict");

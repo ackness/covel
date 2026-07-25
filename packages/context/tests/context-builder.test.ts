@@ -15,7 +15,12 @@ import {
 // ── Helpers ─────────────────────────────────────────────────────
 
 function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
-  return { name: "test-rt", description: "test", priority: 500, ...overrides };
+  return {
+    name: "test-rt",
+    description: "test",
+    stage: "narrative",
+    ...overrides,
+  };
 }
 
 function makeRuntimeResult(overrides?: Partial<RuntimeResult>): RuntimeResult {

@@ -185,19 +185,6 @@ export interface HttpPermissionDecl {
 
 // ── Legacy job view projection (compat only) ─────────────────────
 
-/**
- * Compat-period projection of kernel job-status records into a plugin's
- * legacy plugin-data view (e.g. the old `tracks` / `images` panels).
- * `keyFrom` / `valueFrom` are JSON Pointers into the full JobStatusEffect;
- * defaults are `jobId` and `/data`. Rejected by the strict authoring schema.
- */
-export interface LegacyJobViewDecl {
-  readonly jobIdPrefix?: string;
-  readonly namespace: string;
-  readonly keyFrom?: string;
-  readonly valueFrom?: string;
-}
-
 // ── Normalized runtime spec (loader-level IR) ────────────────────
 
 /** Declared trigger after normalization (e.g. setup scheduled→auto folding). */
@@ -235,8 +222,6 @@ export interface NormalizedRuntimeSpec {
   readonly outputRecordAs?: string;
   readonly effectsDecl?: EffectsDecl;
   readonly httpPermissions: readonly HttpPermissionDecl[];
-  /** Compat-period only; always empty under the strict authoring schema. */
-  readonly legacyJobViews: readonly LegacyJobViewDecl[];
   /** Which spec fields were derived from legacy manifest fields (diagnostics). */
   readonly provenance: { readonly legacyFields: readonly string[] };
 }

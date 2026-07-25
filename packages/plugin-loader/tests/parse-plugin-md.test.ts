@@ -22,7 +22,7 @@ describe("parsePluginMd", () => {
         [
           "name: legacy-config-plugin",
           "description: A plugin written against the old docs",
-          "priority: 500",
+          "stage: narrative",
           "trigger:",
           "  type: auto",
           "config:",
@@ -103,7 +103,7 @@ describe("parsePluginMd", () => {
         [
           "name: narrator",
           "description: Main narrative generation",
-          "priority: 400",
+          "stage: pre-turn",
         ].join("\n"),
         "\nYou are the narrator of an RPG story.\n",
       );
@@ -112,14 +112,14 @@ describe("parsePluginMd", () => {
 
       expect(result.manifest.name).toBe("narrator");
       expect(result.manifest.description).toBe("Main narrative generation");
-      expect(result.manifest.priority).toBe(400);
+      expect(result.manifest.stage).toBe("pre-turn");
       expect(result.promptTemplate).toBe(
         "\nYou are the narrator of an RPG story.\n",
       );
       expect(result.rawFrontmatter).toEqual({
         name: "narrator",
         description: "Main narrative generation",
-        priority: 400,
+        stage: "pre-turn",
       });
     });
   });
@@ -166,7 +166,6 @@ describe("parsePluginMd", () => {
         [
           "name: combat",
           "description: Structured turn-based combat",
-          "priority: 420",
           'version: "1.0.0"',
           "model: balance",
           "trigger:",
@@ -296,7 +295,7 @@ describe("parsePluginMd", () => {
         [
           "name: codex",
           "description: Knowledge codex",
-          "priority: 650",
+          "stage: post-turn",
           "input:",
           "  inject:",
           "    - kind: plugin-data",
@@ -328,7 +327,7 @@ describe("parsePluginMd", () => {
         [
           "name: codex",
           "description: Knowledge codex",
-          "priority: 650",
+          "stage: post-turn",
           "input:",
           "  inject:",
           "    - kind: plugin-data",
@@ -354,7 +353,7 @@ describe("parsePluginMd", () => {
         [
           "name: codex",
           "description: Knowledge codex",
-          "priority: 650",
+          "stage: post-turn",
           "input:",
           "  inject:",
           "    - kind: runtime",
@@ -391,7 +390,7 @@ describe("parsePluginMd", () => {
         [
           "name: codex",
           "description: Knowledge codex",
-          "priority: 650",
+          "stage: post-turn",
           "input:",
           "  inject:",
           "    - kind: plugin-data",
@@ -409,7 +408,7 @@ describe("parsePluginMd", () => {
         [
           "name: codex",
           "description: Knowledge codex",
-          "priority: 650",
+          "stage: post-turn",
           "input:",
           "  inject:",
           "    - kind: plugin-data",
@@ -435,7 +434,7 @@ describe("parsePluginMd", () => {
       ].join("\n");
 
       const content = md(
-        ["name: guide", "description: Story guidance", "priority: 600"].join(
+        ["name: guide", "description: Story guidance", "stage: post-turn"].join(
           "\n",
         ),
         body,
@@ -472,7 +471,7 @@ describe("parsePluginMd", () => {
     it("error contains [plugin-loader] prefix, plugin path and a Fix: hint", () => {
       // Missing `description` — a required field.
       const content = md(
-        ["name: core-needs-desc", "priority: 400"].join("\n"),
+        ["name: core-needs-desc", "stage: pre-turn"].join("\n"),
         "\nBody.\n",
       );
 
@@ -496,7 +495,7 @@ describe("parsePluginMd", () => {
         [
           "name: BadName",
           "description: Invalid name shape",
-          "priority: 400",
+          "stage: pre-turn",
         ].join("\n"),
         "\nBody.\n",
       );
@@ -522,8 +521,8 @@ describe("parsePluginMd", () => {
         [
           "name: core-line",
           "description: Line test",
-          // priority must be an integer — pass a string to force a Zod error.
-          'priority: "not-a-number"',
+          // stage must be one of the five band names — force a Zod error.
+          "stage: not-a-stage",
         ].join("\n"),
         "\nBody.\n",
       );
@@ -536,7 +535,7 @@ describe("parsePluginMd", () => {
       }
 
       expect(caught).toBeDefined();
-      // `priority:` is the 4th line of the document (1: ---, 2: name, 3: description, 4: priority).
+      // `stage:` is the 4th line of the document (1: ---, 2: name, 3: description, 4: stage).
       expect(caught!.message).toMatch(/plugins\/core-line\/PLUGIN\.md:4:/);
       expect(caught!.message).toContain("Fix:");
     });
@@ -548,7 +547,7 @@ describe("parsePluginMd", () => {
         [
           "name: core-empty",
           "description: Empty body plugin",
-          "priority: 500",
+          "stage: narrative",
         ].join("\n"),
         "",
       );
@@ -566,7 +565,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-slow-runtime",
           "description: Runtime with custom timeout",
-          "priority: 500",
+          "stage: narrative",
           "timeoutMs: 180000",
         ].join("\n"),
         "\nBody text.\n",
@@ -587,7 +586,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-guard-plugin",
           "description: Plugin with hooks",
-          "priority: 500",
+          "stage: narrative",
           "hooks:",
           "  - event: PreToolUse",
           "    handler: ./hooks/validate.ts",
@@ -645,7 +644,7 @@ describe("parsePluginMd", () => {
           [
             "name: test-hook-plugin",
             "description: Hook event test",
-            "priority: 500",
+            "stage: narrative",
             "hooks:",
             `  - event: ${event}`,
             "    handler: ./hooks/handler.ts",
@@ -668,7 +667,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-bad-hook",
           "description: Bad hook event",
-          "priority: 500",
+          "stage: narrative",
           "hooks:",
           "  - event: InvalidEvent",
           "    handler: ./hooks/bad.ts",
@@ -701,7 +700,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-all-bad-hooks",
           "description: All bad hook events",
-          "priority: 500",
+          "stage: narrative",
           "hooks:",
           "  - event: Bogus",
           "    handler: ./hooks/bad.ts",
@@ -727,7 +726,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-malformed-hook",
           "description: Mix of valid + malformed entries",
-          "priority: 500",
+          "stage: narrative",
           "hooks:",
           "  - event: PreToolUse",
           "    handler: ./hooks/ok.ts",
@@ -756,7 +755,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-hooks",
           "description: Hooks declaration",
-          "priority: 500",
+          "stage: narrative",
           "hooks:",
           "  - event: PreToolUse",
           "    handler: ./hooks/ok.ts",
@@ -779,7 +778,7 @@ describe("parsePluginMd", () => {
         [
           "name: no-hooks-plugin",
           "description: Plugin without hooks",
-          "priority: 500",
+          "stage: narrative",
         ].join("\n"),
         "\nBody.\n",
       );
@@ -798,7 +797,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-note",
           "description: Author note plugin",
-          "priority: 500",
+          "stage: narrative",
           "authorsNote:",
           "  content: Stay in character and keep pacing tight.",
         ].join("\n"),
@@ -816,7 +815,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-note",
           "description: Full note",
-          "priority: 500",
+          "stage: narrative",
           "authorsNote:",
           "  content: Director note body",
           "  depth: 2",
@@ -840,7 +839,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-bad-note",
           "description: Bad note shape",
-          "priority: 500",
+          "stage: narrative",
           "authorsNote:",
           '  content: "valid"',
           "  depth: not-a-number",
@@ -857,7 +856,7 @@ describe("parsePluginMd", () => {
       expect(result.manifest.authorsNote).toBeUndefined();
       // Other fields still parsed correctly
       expect(result.manifest.name).toBe("test-bad-note");
-      expect(result.manifest.priority).toBe(500);
+      expect(result.manifest.stage).toBe("narrative");
 
       warnSpy.mockRestore();
     });
@@ -869,7 +868,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-bad-role",
           "description: Unknown role",
-          "priority: 500",
+          "stage: narrative",
           "authorsNote:",
           '  content: "valid content"',
           "  role: tool",
@@ -890,7 +889,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-post",
           "description: Post history plugin",
-          "priority: 500",
+          "stage: narrative",
           "postHistory:",
           "  content: Always respond in markdown.",
         ].join("\n"),
@@ -908,7 +907,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-post",
           "description: Full post",
-          "priority: 500",
+          "stage: narrative",
           "postHistory:",
           "  content: Final instructions",
           "  role: user",
@@ -930,7 +929,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-bad-post",
           "description: Bad shape",
-          "priority: 500",
+          "stage: narrative",
           "postHistory:",
           "  content: 42",
         ].join("\n"),
@@ -954,7 +953,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-both",
           "description: Both fields",
-          "priority: 500",
+          "stage: narrative",
           "authorsNote:",
           "  content: Director",
           "  depth: 3",
@@ -975,7 +974,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-none",
           "description: No note fields",
-          "priority: 500",
+          "stage: narrative",
         ].join("\n"),
         "\nBody.\n",
       );
@@ -992,7 +991,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-rpc",
           "description: RPC plugin",
-          "priority: 500",
+          "stage: narrative",
           "rpc:",
           "  regenerate:",
           "    handler: ./rpc/regenerate.js",
@@ -1010,7 +1009,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-rpc-full",
           "description: Full RPC plugin",
-          "priority: 500",
+          "stage: narrative",
           "rpc:",
           "  regenerate:",
           "    handler: ./rpc/regenerate.js",
@@ -1038,7 +1037,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-bad-rpc",
           "description: Bad RPC",
-          "priority: 500",
+          "stage: narrative",
           "rpc:",
           "  Bad-Name:", // uppercase rejected by schema
           "    handler: ./h.js",
@@ -1061,7 +1060,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-reserved",
           "description: Reserved namespace",
-          "priority: 500",
+          "stage: narrative",
           "rpc:",
           "  framework-cancel:",
           "    handler: ./h.js",
@@ -1080,7 +1079,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-abs-handler",
           "description: Absolute path attempt",
-          "priority: 500",
+          "stage: narrative",
           "rpc:",
           "  do-thing:",
           "    handler: /etc/evil.js",
@@ -1102,7 +1101,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-traversal",
           "description: Traversal attempt",
-          "priority: 500",
+          "stage: narrative",
           "rpc:",
           "  do-thing:",
           "    handler: ../../../etc/evil.js",
@@ -1121,7 +1120,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-mid-traversal",
           "description: Mid traversal",
-          "priority: 500",
+          "stage: narrative",
           "rpc:",
           "  do-thing:",
           "    handler: ./rpc/../../etc/evil.js",
@@ -1143,7 +1142,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-bad-ext",
           "description: Bad extension",
-          "priority: 500",
+          "stage: narrative",
           "rpc:",
           "  do-thing:",
           "    handler: ./rpc/do-thing.ts",
@@ -1161,7 +1160,7 @@ describe("parsePluginMd", () => {
         [
           "name: test-ext-ok",
           "description: All extensions",
-          "priority: 500",
+          "stage: narrative",
           "rpc:",
           "  esm:",
           "    handler: ./rpc/esm.mjs",
@@ -1177,7 +1176,7 @@ describe("parsePluginMd", () => {
 
     it("omitting rpc field yields undefined", () => {
       const content = md(
-        ["name: test-no-rpc", "description: No RPC", "priority: 500"].join(
+        ["name: test-no-rpc", "description: No RPC", "stage: narrative"].join(
           "\n",
         ),
         "\nBody.\n",
@@ -1190,7 +1189,7 @@ describe("parsePluginMd", () => {
   describe("invalid name format", () => {
     it("should reject uppercase characters in name", () => {
       const content = md(
-        ["name: CoreNarrator", "description: Bad name", "priority: 400"].join(
+        ["name: CoreNarrator", "description: Bad name", "stage: pre-turn"].join(
           "\n",
         ),
         "\nBody.\n",
@@ -1204,7 +1203,7 @@ describe("parsePluginMd", () => {
         [
           "name: core_narrator",
           "description: Underscore name",
-          "priority: 400",
+          "stage: pre-turn",
         ].join("\n"),
         "\nBody.\n",
       );
@@ -1219,7 +1218,7 @@ describe("parsePluginMd", () => {
         [
           "name: narrator",
           "description: Main narrative",
-          "priority: 500",
+          "stage: narrative",
           "summaryFocus:",
           "  - narrative",
           "  - character-state",
@@ -1238,9 +1237,11 @@ describe("parsePluginMd", () => {
 
     it("summaryFocus is optional — omitting it yields undefined", () => {
       const content = md(
-        ["name: narrator", "description: Main narrative", "priority: 500"].join(
-          "\n",
-        ),
+        [
+          "name: narrator",
+          "description: Main narrative",
+          "stage: narrative",
+        ].join("\n"),
         "\nBody.\n",
       );
 
@@ -1253,7 +1254,7 @@ describe("parsePluginMd", () => {
         [
           "name: narrator",
           "description: Main narrative",
-          "priority: 500",
+          "stage: narrative",
           "summaryFocus: []",
         ].join("\n"),
         "\nBody.\n",
@@ -1296,7 +1297,7 @@ describe("parsePluginMd", () => {
         [
           "name: scene-consumer",
           "description: Reacts to scene events",
-          "priority: 500",
+          "stage: narrative",
           "events:",
           "  - topic: scene.set",
           "    schema: ./schemas/scene-set.event.json",
@@ -1324,7 +1325,7 @@ describe("parsePluginMd", () => {
         [
           "name: scene-consumer",
           "description: Reacts to scene events",
-          "priority: 500",
+          "stage: narrative",
           "events:",
           "  - topic: SceneSet",
           "    schema: ./schemas/scene-set.event.json",
@@ -1343,7 +1344,7 @@ describe("parsePluginMd", () => {
         [
           "name: scene-consumer",
           "description: Reacts to scene events",
-          "priority: 500",
+          "stage: narrative",
           "events:",
           "  - topic: scene.set",
           "    schema: ../outside.json",
@@ -1362,7 +1363,7 @@ describe("parsePluginMd", () => {
         [
           "name: narrator",
           "description: Main narrative generation",
-          "priority: 500",
+          "stage: narrative",
           "advertiseEvents: true",
         ].join("\n"),
         "\nBody.\n",
@@ -1377,7 +1378,7 @@ describe("parsePluginMd", () => {
         [
           "name: narrator",
           "description: Main narrative generation",
-          "priority: 500",
+          "stage: narrative",
         ].join("\n"),
         "\nBody.\n",
       );

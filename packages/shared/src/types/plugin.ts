@@ -644,14 +644,6 @@ export interface RuntimeManifest {
   readonly permissions?: {
     readonly http?: readonly import("./runtime-scheduling.js").HttpPermissionDecl[];
   };
-  /**
-   * Compat-period projection of kernel job-status records into this
-   * plugin's legacy plugin-data views. Rejected by the strict authoring
-   * schema. Declared but not yet consumed.
-   */
-  readonly jobStatus?: {
-    readonly legacyViews?: readonly import("./runtime-scheduling.js").LegacyJobViewDecl[];
-  };
   readonly trigger?: TriggerConfig;
   /**
    * Execution mode when this runtime is activated via a manual plugin-rpc call

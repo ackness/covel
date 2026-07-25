@@ -20,7 +20,7 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   return {
     name: "test-rt",
     description: "test",
-    priority: 500,
+    stage: "narrative",
     ...overrides,
   };
 }

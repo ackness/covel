@@ -55,7 +55,7 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     name: "test-narrator",
     pluginId: "test-narrator",
     description: "Synthetic narrator for budget-wiring tests.",
-    priority: 500,
+    stage: "narrative",
     runtimeType: "agent",
     outputKind: "story",
     ...overrides,

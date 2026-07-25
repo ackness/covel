@@ -84,7 +84,7 @@ describe("plugin flow routes", () => {
       name: "test-package",
       description: "Test runtime",
       runtimeType: "agent",
-      priority: 123,
+      stage: "pre-turn",
       trigger: { type: "scheduled", interval: 3 },
       capabilities: ["narrative"],
       tags: ["mode:dialogue", "role:narrator"],

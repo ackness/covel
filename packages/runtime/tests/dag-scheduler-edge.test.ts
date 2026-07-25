@@ -5,7 +5,7 @@
  *  - self-loops (cycle of length 1)
  *  - same-priority alphabetical tiebreaker
  *  - silently dropping malformed `from` declarations instead of crashing
- *  - `upstreamRequired + input.inject` merge (no double-counting, no clash)
+ *  - `needs + input.inject` merge (no double-counting, no clash)
  *  - multi-runtime plugin name keying (`pluginId/runtimeName`)
  */
 
@@ -22,7 +22,16 @@ function rt(
     name,
     pluginId: name.split("/")[0]!,
     description: name,
-    priority,
+    stage:
+      priority <= 99
+        ? "setup"
+        : priority <= 499
+          ? "pre-turn"
+          : priority === 500
+            ? "narrative"
+            : priority <= 999
+              ? "post-turn"
+              : "audit",
     ...overrides,
   } as RuntimeManifest;
 }
@@ -96,9 +105,9 @@ describe("scheduleByDag — malformed inject declarations", () => {
     expect(groups[0].runtimes.map((r) => r.name).sort()).toEqual(["a", "b"]);
   });
 
-  it("silently drops empty-string entries from upstreamRequired", () => {
+  it("silently drops empty-string entries from needs", () => {
     const a = rt("a", 100);
-    const b = rt("b", 200, { upstreamRequired: ["", "a"] });
+    const b = rt("b", 200, { needs: ["", "a"] });
     const { groups, error } = scheduleByDag([a, b]);
     expect(error).toBeUndefined();
     expect(groups).toHaveLength(2);
@@ -107,15 +116,15 @@ describe("scheduleByDag — malformed inject declarations", () => {
   });
 });
 
-describe("scheduleByDag — upstreamRequired + inject merge", () => {
-  it("does not double-count a dependency declared via both inject and upstreamRequired", () => {
+describe("scheduleByDag — needs + inject merge", () => {
+  it("does not double-count a dependency declared via both inject and needs", () => {
     // If the algorithm naively summed inject + upstream edges without dedup,
     // `b` would have inDegree=2 and need TWO completions of `a` to clear,
     // which is impossible — the level would never form.
     const a = rt("a", 100);
     const b = rt("b", 200, {
       ...injectRuntime("a"),
-      upstreamRequired: ["a"],
+      needs: ["a"],
     });
     const { groups, error } = scheduleByDag([a, b]);
     expect(error).toBeUndefined();
@@ -123,13 +132,13 @@ describe("scheduleByDag — upstreamRequired + inject merge", () => {
     expect(groups[1].runtimes.map((r) => r.name)).toEqual(["b"]);
   });
 
-  it("upstreamRequired adds an edge even when the same runtime is not injected", () => {
+  it("needs adds an edge even when the same runtime is not injected", () => {
     const root = rt("root", 100);
     const sibling = rt("sibling", 110);
     // `child` does not need `sibling`'s output, but execution order must wait.
     const child = rt("child", 200, {
       ...injectRuntime("root"),
-      upstreamRequired: ["sibling"],
+      needs: ["sibling"],
     });
     const { groups } = scheduleByDag([root, sibling, child]);
     expect(groups[0].runtimes.map((r) => r.name).sort()).toEqual([

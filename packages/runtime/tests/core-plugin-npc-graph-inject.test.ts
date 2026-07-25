@@ -39,7 +39,7 @@ function manifest(
     name,
     pluginId: name.split("/")[0]!,
     description: name,
-    priority: 500,
+    stage: "narrative",
     trigger: { type: "auto" },
     ...overrides,
   } as RuntimeManifest;
@@ -126,7 +126,7 @@ describe("npc-graph core plugin write-read-inject path", () => {
 
     const retriever = manifest("npc-graph/rag-retriever", {
       pluginId: "npc-graph",
-      priority: 400,
+      stage: "pre-turn",
       runtimeType: "function",
       // Matches the real PLUGIN.md so the envelope→legacy projection fires and
       // the injected `npcContext` field resolves from the flattened output.
@@ -136,7 +136,7 @@ describe("npc-graph core plugin write-read-inject path", () => {
     });
     const narrator = manifest("narrator", {
       pluginId: "narrator",
-      priority: 500,
+      stage: "narrative",
       runtimeType: "agent",
       outputKind: "story",
       input: {

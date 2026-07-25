@@ -110,7 +110,7 @@ async function scheduledRuntimeTriggers(
     name: "ticker",
     pluginId: "ticker",
     description: "scheduled ticker",
-    priority: 500,
+    stage: "narrative",
     runtimeType: "function",
     handler: "./h.js",
     trigger: { type: "scheduled", interval },
@@ -223,7 +223,16 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
         name,
         pluginId: "p",
         description: name,
-        priority,
+        stage:
+          priority <= 99
+            ? "setup"
+            : priority <= 499
+              ? "pre-turn"
+              : priority === 500
+                ? "narrative"
+                : priority <= 999
+                  ? "post-turn"
+                  : "audit",
         runtimeType: "function",
         handler: "./h.js",
         trigger: { type: "auto" },
@@ -367,7 +376,16 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
         name,
         pluginId,
         description: name,
-        priority,
+        stage:
+          priority <= 99
+            ? "setup"
+            : priority <= 499
+              ? "pre-turn"
+              : priority === 500
+                ? "narrative"
+                : priority <= 999
+                  ? "post-turn"
+                  : "audit",
         runtimeType: "function",
         handler: "./h.js",
         trigger: { type: "auto" },
@@ -428,7 +446,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
       name: "a/main",
       pluginId: "a",
       description: "auto+binding",
-      priority: 500,
+      stage: "narrative",
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
@@ -526,7 +544,16 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
           name,
           pluginId: "plug-a",
           description: name,
-          priority,
+          stage:
+            priority <= 99
+              ? "setup"
+              : priority <= 499
+                ? "pre-turn"
+                : priority === 500
+                  ? "narrative"
+                  : priority <= 999
+                    ? "post-turn"
+                    : "audit",
           runtimeType: "function",
           handler: "./h.js",
           trigger: { type: "auto" },
@@ -572,7 +599,7 @@ describe("detached activation model (source × detached)", () => {
         name,
         pluginId: name.split("/")[0],
         description: name,
-        priority: 500,
+        stage: "narrative",
         runtimeType: "function",
         handler: "./h.js",
         trigger: { type: "auto" },
@@ -654,7 +681,7 @@ describe("capability cardinality (provider 0 / 1 / N / all)", () => {
       name,
       pluginId: name.split("/")[0],
       description: name,
-      priority: 500,
+      stage: "narrative",
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
@@ -666,7 +693,7 @@ describe("capability cardinality (provider 0 / 1 / N / all)", () => {
       name: "c/main",
       pluginId: "c",
       description: "consumer",
-      priority: 600,
+      stage: "post-turn",
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
@@ -985,7 +1012,7 @@ describe("legacy handler compat (mixed return shape)", () => {
       name,
       pluginId: name.split("/")[0],
       description: "legacy mixed-shape function runtime",
-      priority: 500,
+      stage: "narrative",
       outputKind: "plugin",
       runtimeType: "function",
       trigger: { type: "auto" },
@@ -1160,7 +1187,7 @@ describe("accepts validation (static decidable subset + runtime check)", () => {
       name,
       pluginId: name.split("/")[0],
       description: name,
-      priority: 500,
+      stage: "narrative",
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
@@ -1175,7 +1202,7 @@ describe("accepts validation (static decidable subset + runtime check)", () => {
       name: "c/main",
       pluginId: "c",
       description: "c",
-      priority: 600,
+      stage: "post-turn",
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
@@ -1297,7 +1324,7 @@ describe("activation payload (canonical payload shared by function/agent)", () =
       name: "d/roller",
       pluginId: "d",
       description: "roller",
-      priority: 500,
+      stage: "narrative",
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "manual" },
@@ -1342,7 +1369,7 @@ describe("activation payload (canonical payload shared by function/agent)", () =
       name: "d/roller",
       pluginId: "d",
       description: "roller",
-      priority: 500,
+      stage: "narrative",
       runtimeType: "agent",
       trigger: { type: "manual" },
       outputKind: "plugin",
@@ -1398,7 +1425,7 @@ describe("recordAs export (persistent export revision)", () => {
       name: "p/gen",
       pluginId: "p",
       description: "export producer",
-      priority: 500,
+      stage: "narrative",
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
@@ -1416,7 +1443,7 @@ describe("recordAs export (persistent export revision)", () => {
       name: "c/main",
       pluginId: "c",
       description: "export consumer",
-      priority: 600,
+      stage: "post-turn",
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
@@ -1720,7 +1747,7 @@ describe("effects hazard (same-layer W/W, W/R, R/W detection)", () => {
       name,
       pluginId: name.split("/")[0],
       pluginType: "community",
-      priority: 500,
+      stage: "narrative",
       trigger: { type: "auto" },
       model: "m",
       runtimeType: "agent",

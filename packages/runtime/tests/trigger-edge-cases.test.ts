@@ -21,7 +21,7 @@ function manifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     name: "rt",
     pluginId: "rt",
     description: "test",
-    priority: 500,
+    stage: "narrative",
     ...overrides,
   } as RuntimeManifest;
 }

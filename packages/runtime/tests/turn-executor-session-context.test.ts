@@ -36,7 +36,7 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     name: "sc-test-narrator",
     pluginId: "sc-test-narrator",
     description: "Synthetic narrator for session-context wiring tests.",
-    priority: 500,
+    stage: "narrative",
     runtimeType: "agent",
     outputKind: "story",
     ...overrides,
@@ -271,16 +271,16 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
       name: "char-creator/player-init",
       pluginId: "char-creator",
       description: "create player",
-      priority: 90,
+      stage: "setup",
       runtimeType: "function",
       handler: "./handler.js",
       trigger: { type: "auto" },
-      upstreamRequired: ["pregame", "world-init/schema-gen"],
+      needs: ["pregame", "world-init/schema-gen"],
     } as RuntimeManifest;
     const narrator = makeManifest({
       name: "narrator",
       pluginId: "narrator",
-      priority: 500,
+      stage: "narrative",
       trigger: { type: "auto" },
     });
 

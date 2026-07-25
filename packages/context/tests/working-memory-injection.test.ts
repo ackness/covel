@@ -22,7 +22,7 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     runtimeType: "agent",
     trigger: { type: "auto" },
     tools: { builtin: [], local: [] },
-    priority: 500,
+    stage: "narrative",
     ...overrides,
   };
 }

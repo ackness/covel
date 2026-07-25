@@ -51,7 +51,7 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     name: "test-plugin",
     pluginId: "test-plugin",
     pluginType: "community",
-    priority: 500,
+    stage: "narrative",
     trigger: { type: "auto" },
     model: "gpt-4o-mini",
     ...overrides,

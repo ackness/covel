@@ -1357,33 +1357,6 @@
         "additionalProperties": false
       }
     },
-    "priority": {
-      "type": "integer",
-      "minimum": 0,
-      "maximum": 1000
-    },
-    "upstreamRequired": {
-      "type": "array",
-      "items": {
-        "anyOf": [
-          {
-            "type": "string",
-            "minLength": 1
-          },
-          {
-            "type": "object",
-            "properties": {
-              "capability": {
-                "type": "string",
-                "minLength": 1
-              }
-            },
-            "required": ["capability"],
-            "additionalProperties": false
-          }
-        ]
-      }
-    },
     "trigger": {
       "type": "object",
       "properties": {
@@ -1416,37 +1389,6 @@
         }
       },
       "required": ["type"],
-      "additionalProperties": false
-    },
-    "jobStatus": {
-      "type": "object",
-      "properties": {
-        "legacyViews": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "jobIdPrefix": {
-                "type": "string"
-              },
-              "namespace": {
-                "type": "string",
-                "minLength": 1
-              },
-              "keyFrom": {
-                "type": "string",
-                "pattern": "^(\\/([^/~]|~0|~1)*)*$"
-              },
-              "valueFrom": {
-                "type": "string",
-                "pattern": "^(\\/([^/~]|~0|~1)*)*$"
-              }
-            },
-            "required": ["namespace"],
-            "additionalProperties": false
-          }
-        }
-      },
       "additionalProperties": false
     }
   },

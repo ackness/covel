@@ -23,7 +23,7 @@ function manifest(
     pluginId: name.split("/")[0] ?? name,
     description: name,
     runtimeType: "function",
-    priority: 500,
+    stage: "narrative",
     trigger: { type: "auto" },
     ...extra,
   };

@@ -7,8 +7,4 @@
  * loader's public surface and existing import sites stable.
  */
 
-export {
-  normalizeRuntimeManifest,
-  stageForPriority,
-  getRuntimeSpec,
-} from "@covel/shared";
+export { normalizeRuntimeManifest, getRuntimeSpec } from "@covel/shared";

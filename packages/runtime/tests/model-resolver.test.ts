@@ -4,7 +4,12 @@ import type { PluginLlmConfig } from "@covel/plugin-loader";
 import { createModelResolver } from "../src/llm/model-resolver.js";
 
 function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
-  return { name: "test-rt", description: "test", priority: 500, ...overrides };
+  return {
+    name: "test-rt",
+    description: "test",
+    stage: "narrative",
+    ...overrides,
+  };
 }
 
 describe("createModelResolver", () => {

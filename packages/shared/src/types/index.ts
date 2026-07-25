@@ -337,7 +337,6 @@ export type {
   EffectsDecl,
   HttpMethod,
   HttpPermissionDecl,
-  LegacyJobViewDecl,
   TriggerSpec,
   RuntimeResultFormat,
   NormalizedRuntimeSpec,

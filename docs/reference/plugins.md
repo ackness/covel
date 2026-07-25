@@ -89,7 +89,7 @@
 
 `setup` stage（会话 `phase === "setup"` 时运行，取代旧的 Pre-Game priority band `0-99`）走：`pregame → world-init/schema-gen → char-creator/player-init`，顺序完全由声明边决定：`world-init/schema-gen` 声明弱排序 `after: [pregame]`（pregame 失败不拦 schema 生成）；`char-creator/player-init` 声明 turn-scoped `needs: [pregame, world-init/schema-gen]`（player-init 读取 schema-gen 写出的 `world.schema`，`needs` 既是同一 pass 内的 DAG 边、也是同回合门控）。三者均为 `stage: setup` + `trigger: auto`（`maxTriggerCount` 为重试预算）——旧的保守 setup 排序链已删除。
 
-**兼容面（仅第三方）**：manifest 输入 schema 仍**接受**第三方插件声明的 `priority` / `upstreamRequired`——归一层把 `priority` 折算进 `stage`（缺失 `stage` 时用它派生）、把 `upstreamRequired` 别名为 `needs`。Bundled 插件已全部单声明 `stage` + `needs`/`after`（无例外——pregame / world-init/schema-gen 已迁移为 `stage: setup` + `trigger: auto`），第三方插件迁移前可继续沿用旧字段。`event` / `manual` runtime 不设 `stage`。
+**已移除的字段**：`priority` / `upstreamRequired` / `jobStatus` 不再被任何 schema 接受，声明即加载失败（前两者有专门的报错提示指向 `stage` / `needs`）。所有插件单声明 `stage` + `needs`/`after`，无例外——pregame / world-init/schema-gen 已迁移为 `stage: setup` + `trigger: auto`。`event` / `manual` runtime 不设 `stage`。
 
 **Setup 状态机（插件视角）**：`setup` 阶段（旧 Pre-Game 分带）的每个 runtime，框架按 `(session, runtimeId)` 维护一个解析状态，插件作者需要知道三种落点：
 

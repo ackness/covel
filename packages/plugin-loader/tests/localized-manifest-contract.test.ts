@@ -17,7 +17,7 @@ describe("localized manifest / canonical manifest consistency", () => {
   const CANONICAL = `---
 name: demo
 description: 中文描述
-priority: 500
+stage: narrative
 capabilities:
   - narrative
 tools:
@@ -31,7 +31,7 @@ tools:
   const LOCALIZED = `---
 name: demo
 description: English description
-priority: 100
+stage: pre-turn
 capabilities:
   - narrative
   - image-generation
@@ -65,7 +65,7 @@ English prompt body.
 
     const loaded = await loadRuntime(discovery, "demo", "en-US");
 
-    expect(loaded.manifest.priority).toBe(500);
+    expect(loaded.manifest.stage).toBe("narrative");
     expect(loaded.manifest.capabilities).toEqual(["narrative"]);
     expect(loaded.manifest.tools?.builtin).toEqual(["plugin-data-set"]);
     // Prose and prompt body still come from the translation.

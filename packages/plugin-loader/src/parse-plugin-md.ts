@@ -94,8 +94,12 @@ function deriveFixHint(error: unknown): string {
   if (path === "description") {
     return 'Add a `description:` field — either a single string or an i18n map like `description: { en-US: "...", zh-CN: "..." }`.';
   }
-  if (path === "priority") {
-    return "`priority` is legacy — declare a named `stage` instead (e.g. `stage: post-turn`); if kept for compat it must be an integer between 0 and 1000.";
+  if (path === "priority" || path === "upstreamRequired") {
+    // Removed fields still worth a tailored hint: the generic
+    // "unknown field" message would not name the replacement.
+    return path === "priority"
+      ? "`priority` was removed — declare a named `stage` instead (e.g. `stage: post-turn`)."
+      : "`upstreamRequired` was removed — declare `needs` instead (same entries, turn-scoped by default).";
   }
   if (code === "unrecognized_keys") {
     return `Remove or rename the unknown field at "${path}" — refer to docs/reference/plugins.md for the full frontmatter schema.`;

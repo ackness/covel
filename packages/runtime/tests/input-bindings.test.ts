@@ -32,14 +32,14 @@ function rt(
     inputs?: RuntimeManifest["inputs"];
     execution?: "sync" | "background";
     trigger?: RuntimeManifest["trigger"];
-    priority?: number;
+    stage?: RuntimeManifest["stage"];
   } = {},
 ): RuntimeManifest {
   return {
     name,
     pluginId: name.split("/")[0],
     description: name,
-    priority: opts.priority ?? 500,
+    stage: opts.stage ?? "narrative",
     runtimeType: "function",
     handler: "./h.js",
     trigger: opts.trigger ?? { type: "auto" },
@@ -500,10 +500,13 @@ describe("resolveInputBindings — accepts double layer", () => {
 
 describe("bindings imply DAG ordering edges", () => {
   it("a capability binding places the consumer after its provider", () => {
-    const provider = rt("p/gen", { capabilities: ["prov"], priority: 600 });
+    const provider = rt("p/gen", {
+      capabilities: ["prov"],
+      stage: "post-turn",
+    });
     const consumer = rt("c/main", {
       inputs: { data: { from: { capability: "prov" } } },
-      priority: 500, // lower priority, but the binding edge must still order it last
+      stage: "narrative", // same stage as the provider — the binding edge must still order it last
     });
     const { groups, error } = scheduleByDag([consumer, provider]);
     expect(error).toBeUndefined();

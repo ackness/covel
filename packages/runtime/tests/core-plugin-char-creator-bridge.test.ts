@@ -37,7 +37,7 @@ function manifest(
     name,
     pluginId: name.split("/")[0]!,
     description: name,
-    priority: 500,
+    stage: "narrative",
     trigger: { type: "auto" },
     ...overrides,
   } as RuntimeManifest;
@@ -95,14 +95,14 @@ describe("char-creator core plugin guard bridge", () => {
     const store = await createPregameStore(sessionId);
     const playerInit = manifest("char-creator/player-init", {
       pluginId: "char-creator",
-      priority: 50,
+      stage: "setup",
       runtimeType: "agent",
       guard: "./guard.js",
-      upstreamRequired: ["pregame", "world-init/schema-gen"],
+      needs: ["pregame", "world-init/schema-gen"],
     });
     const narrator = manifest("narrator", {
       pluginId: "narrator",
-      priority: 500,
+      stage: "narrative",
       runtimeType: "agent",
       outputKind: "story",
     });

@@ -607,7 +607,7 @@ function makeFunctionEntry(args: {
   runtimeId: string;
   handler: FunctionHandler;
   execution?: "sync" | "background";
-  priority?: number;
+  stage?: RuntimeManifest["stage"];
   /** Semantic capability tags for framework discovery (findPluginByCapability). */
   capabilities?: readonly string[];
   /** Plugin discovery source — drives trust-gate verdict. Defaults to 'builtin'
@@ -633,7 +633,7 @@ function makeFunctionEntry(args: {
     name: args.runtimeId,
     pluginId: args.pluginId,
     description: "test function runtime",
-    priority: args.priority ?? 600,
+    stage: args.stage ?? "post-turn",
     runtimeType: "function",
     outputKind: "plugin",
     pluginType: "plugin",
@@ -673,7 +673,7 @@ function makeAgentEntry(args: {
   pluginId: string;
   runtimeId: string;
   outputKind?: "story" | "plugin" | "system";
-  priority?: number;
+  stage?: RuntimeManifest["stage"];
   source?: PluginSource;
   trigger?: RuntimeManifest["trigger"];
   relations?: RuntimeManifest["relations"];
@@ -682,7 +682,7 @@ function makeAgentEntry(args: {
     name: args.runtimeId,
     pluginId: args.pluginId,
     description: "test agent runtime",
-    priority: args.priority ?? 500,
+    stage: args.stage ?? "narrative",
     runtimeType: "agent",
     outputKind: args.outputKind ?? "story",
     pluginType: "plugin",
@@ -910,7 +910,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       runtimeId: "branch-reply",
       execution: "sync",
       handler: branchReplyHandler as FunctionHandler,
-      priority: undefined,
+      stage: undefined,
       // Declares the prompt-history-rewriter capability so the framework
       // discovers it (instead of hardcoding "branch-reply" in the executor).
       capabilities: ["branch-reply", "prompt-history-rewriter"],
@@ -1060,7 +1060,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     });
 
     // Advance out of the Pre-Game band so a send_message schedules the
-    // main-loop narrator (priority 500). /api/actions enforces band gating;
+    // main-loop narrator (stage narrative). /api/actions enforces band gating;
     // without this the narrator would not run and no LLM call would be made.
     await store.updateSession(session.id, {
       turnCount: 1,
@@ -1779,7 +1779,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     const { loaded: targetLoaded } = makeFunctionEntry({
       pluginId: PLUGIN_ID,
       runtimeId: TARGET,
-      priority: 600,
+      stage: "post-turn",
       execution: "sync",
       handler: async () => ({
         ok: true,
@@ -1795,7 +1795,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     const { loaded: followerLoaded } = makeFunctionEntry({
       pluginId: PLUGIN_ID,
       runtimeId: FOLLOWER,
-      priority: 610,
+      stage: "post-turn",
       execution: "background",
       handler: async (ctx) => {
         followerStarted = true;
@@ -1998,7 +1998,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     const { loaded: targetLoaded } = makeFunctionEntry({
       pluginId: PLUGIN_ID,
       runtimeId: TARGET,
-      priority: 600,
+      stage: "post-turn",
       execution: "sync",
       handler: targetHandler,
     });
@@ -2006,7 +2006,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     const { loaded: followerLoaded } = makeFunctionEntry({
       pluginId: PLUGIN_ID,
       runtimeId: FOLLOWER,
-      priority: 610,
+      stage: "post-turn",
       execution: "background",
       handler: args.followerHandler,
       ...(args.followerSource ? { source: args.followerSource } : {}),

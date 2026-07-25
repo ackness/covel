@@ -44,7 +44,7 @@ function pregameManifest(
     name,
     pluginId: name.split("/")[0]!,
     description: name,
-    priority: 50, // Pre-Game band
+    stage: "setup", // Pre-Game band
     runtimeType: "function",
     handler: "./h.js",
     trigger: { type: "scheduled", interval: 1 },
@@ -104,7 +104,7 @@ function newlyDone(result: Awaited<ReturnType<typeof executeTurn>>): string[] {
 
 describe("Pre-Game completion contract", () => {
   it("marks a runtime done when output.preGameDone === true", async () => {
-    const m = pregameManifest("pregame", { priority: 10 });
+    const m = pregameManifest("pregame", { stage: "setup" });
     const { result } = await runPregameTurn("sess-done", [m], {
       pregame: async () => ({
         narrativeOutput: "welcome",
@@ -121,7 +121,7 @@ describe("Pre-Game completion contract", () => {
     // Guard is only consulted on the agent-runtime code path (function
     // runtimes use a plain handler). schema-gen is agent by default.
     const m = pregameManifest("world-init/schema-gen", {
-      priority: 85,
+      stage: "setup",
       runtimeType: "agent",
     });
     const { result } = await runPregameTurn(
@@ -143,11 +143,11 @@ describe("Pre-Game completion contract", () => {
   });
 
   it("does NOT advance turnCount when any Pre-Game runtime is unfinished", async () => {
-    const pregame = pregameManifest("pregame", { priority: 10 });
+    const pregame = pregameManifest("pregame", { stage: "setup" });
     // player-init simulates "form shown, waiting for submission": handler
     // returns without preGameDone so the framework keeps it open across turns.
     const playerInit = pregameManifest("char-creator/player-init", {
-      priority: 50,
+      stage: "setup",
     });
 
     const { result } = await runPregameTurn(
@@ -168,9 +168,9 @@ describe("Pre-Game completion contract", () => {
   });
 
   it("keeps bootstrap outside player history while setup is unfinished", async () => {
-    const pregame = pregameManifest("pregame", { priority: 10 });
+    const pregame = pregameManifest("pregame", { stage: "setup" });
     const playerInit = pregameManifest("char-creator/player-init", {
-      priority: 50,
+      stage: "setup",
     });
     const store = await freshStore("sess-bootstrap");
     const input = {
@@ -204,11 +204,11 @@ describe("Pre-Game completion contract", () => {
   });
 
   it("continues pending setup scheduling after player history exists", async () => {
-    const pregame = pregameManifest("pregame", { priority: 10 });
+    const pregame = pregameManifest("pregame", { stage: "setup" });
     const playerInit = pregameManifest("char-creator/player-init", {
-      priority: 50,
+      stage: "setup",
     });
-    const narrator = pregameManifest("narrator", { priority: 500 });
+    const narrator = pregameManifest("narrator", { stage: "narrative" });
     const store = await freshStore("sess-resume");
     await store.updateSession("sess-resume", {
       preGameCompleted: ["pregame"],
@@ -264,8 +264,8 @@ describe("Pre-Game completion contract", () => {
 
   it("does not mark framework upstream skips as Pre-Game completion", async () => {
     const playerInit = pregameManifest("char-creator/player-init", {
-      priority: 50,
-      upstreamRequired: ["pregame"],
+      stage: "setup",
+      needs: ["pregame"],
     });
 
     const { result } = await runPregameTurn(
@@ -278,7 +278,7 @@ describe("Pre-Game completion contract", () => {
 
     expect(result.runtimeResults[0]?.status).toBe("skipped");
     expect(result.runtimeResults[0]?.output).toMatchObject({
-      skippedBy: "framework:upstreamRequired",
+      skippedBy: "framework:needs",
     });
     // A framework upstream skip is NOT a Pre-Game completion signal, so nothing
     // is marked done and setup stays incomplete.
@@ -287,15 +287,15 @@ describe("Pre-Game completion contract", () => {
   });
 
   it("ignores main-loop manual utilities while deciding Pre-Game completion", async () => {
-    const pregame = pregameManifest("pregame", { priority: 10 });
+    const pregame = pregameManifest("pregame", { stage: "setup" });
     const playerInit = pregameManifest("char-creator/player-init", {
-      priority: 50,
+      stage: "setup",
       // Order comes from declared edges (the conservative legacy chain is
       // gone) — mirror the real plugin, which `needs` pregame.
       needs: ["pregame"],
     });
     const utility = pregameManifest("character-blueprint", {
-      priority: undefined,
+      stage: undefined,
       trigger: { type: "manual" },
     });
 
@@ -326,9 +326,9 @@ describe("Pre-Game completion contract", () => {
     // When both plugins complete in turn 0 (e.g. pregame completes on first
     // hit, schema-gen guard skips because schema already exists), the kernel
     // must atomically record both in preGameCompleted AND bump turnCount to 1.
-    const pregame = pregameManifest("pregame", { priority: 10 });
+    const pregame = pregameManifest("pregame", { stage: "setup" });
     const playerInit = pregameManifest("char-creator/player-init", {
-      priority: 50,
+      stage: "setup",
     });
 
     const { result } = await runPregameTurn(
@@ -358,7 +358,7 @@ describe("Pre-Game completion contract", () => {
     // executeTurn-only harness does not exercise). The old "band-exhausted ⇒
     // advance anyway" (newlyDone=[pregame], allSetupDone=true) is gone.
     const pregame = pregameManifest("pregame", {
-      priority: 10,
+      stage: "setup",
       trigger: { type: "scheduled", interval: 1, maxTriggerCount: 1 },
     });
 

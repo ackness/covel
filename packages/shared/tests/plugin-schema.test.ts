@@ -9,7 +9,7 @@ describe("plugin manifest dataSchemas", () => {
     const manifest = runtimeManifestSchema.parse({
       name: "world-data-runtime",
       description: "World data runtime",
-      priority: 500,
+      stage: "narrative",
       dataSchemas: {
         relationships: {
           schemaVersion: 1,
@@ -36,7 +36,7 @@ describe("plugin manifest dataSchemas", () => {
       runtimeManifestSchema.parse({
         name: "world-data-runtime",
         description: "World data runtime",
-        priority: 500,
+        stage: "narrative",
         dataSchemas: {
           relationships: {
             namespace: "characters",
@@ -54,7 +54,7 @@ describe("plugin manifest dataSchemas", () => {
       runtimeManifestSchema.parse({
         name: "world-data-runtime",
         description: "World data runtime",
-        priority: 500,
+        stage: "narrative",
         dataSchemas: {
           relationships: {
             schemaVersion: 1,
@@ -70,7 +70,7 @@ describe("plugin manifest dataSchemas", () => {
     const manifest = runtimeManifestSchema.parse({
       name: "tts-runtime",
       description: "TTS runtime",
-      priority: 700,
+      stage: "post-turn",
       wires: "lib/wires.js",
     });
     expect(manifest.wires).toBe("lib/wires.js");
@@ -88,7 +88,7 @@ describe("plugin manifest dataSchemas", () => {
     const manifest = runtimeManifestSchema.parse({
       name: "dialogue-narrator",
       description: "Dialogue narrator",
-      priority: 500,
+      stage: "narrative",
       capabilities: ["narrative"],
       tags: ["mode:dialogue", "role:narrator", "cost:llm"],
       relations: {
@@ -108,27 +108,6 @@ describe("plugin manifest dataSchemas", () => {
 });
 
 describe("plugin manifest semantic diagnostics", () => {
-  it("warns when manual runtimes also declare priority", () => {
-    const manifest = runtimeManifestSchema.parse({
-      name: "manual-tool",
-      description: "Manual tool",
-      priority: 700,
-      trigger: { type: "manual" },
-    });
-
-    expect(validateRuntimeManifestSemantics(manifest)).toEqual([
-      {
-        code: "manual-trigger-priority",
-        severity: "warning",
-        path: ["priority"],
-        message:
-          "Runtime \"manual-tool\" declares trigger.type='manual' but also sets priority=700. " +
-          "Manual runtimes are UI-only and should omit priority entirely. " +
-          "Remove one of the two to keep the scheduler intent clear.",
-      },
-    ]);
-  });
-
   it("does not warn for manual runtimes without priority", () => {
     const manifest = runtimeManifestSchema.parse({
       name: "manual-tool",
@@ -143,7 +122,7 @@ describe("plugin manifest semantic diagnostics", () => {
     const manifest = runtimeManifestSchema.parse({
       name: "typo-plugin",
       description: "Typo plugin",
-      priority: 500,
+      stage: "narrative",
       capabilities: ["narrativee"],
     });
 
@@ -158,7 +137,7 @@ describe("plugin manifest semantic diagnostics", () => {
     const manifest = runtimeManifestSchema.parse({
       name: "ok-plugin",
       description: "OK plugin",
-      priority: 500,
+      stage: "narrative",
       capabilities: ["narrative", "world-data-provider", "battle-simulator"],
     });
 

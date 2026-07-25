@@ -35,7 +35,7 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     name: "codex",
     pluginId: "codex",
     description: "test codex",
-    priority: 650,
+    stage: "post-turn",
     ...overrides,
   };
 }

@@ -63,7 +63,7 @@ export function makeFakeLoadedRuntime(args: {
     name: args.name,
     pluginId: args.pluginId ?? args.name,
     description: "fake runtime for tests",
-    priority: 500,
+    stage: "narrative",
     runtimeType: "agent",
     outputKind: args.outputKind ?? "story",
     pluginType: args.pluginType ?? "plugin",

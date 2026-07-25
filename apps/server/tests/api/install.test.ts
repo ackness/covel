@@ -151,7 +151,6 @@ async function dirExists(p: string): Promise<boolean> {
 const VALID_PLUGIN_MD = `---
 name: test-plugin
 pluginType: plugin
-priority: 500
 description: A test plugin
 trigger:
   type: manual
@@ -409,7 +408,7 @@ describe("POST /api/install/plugin", () => {
   it("rejects invalid frontmatter", async () => {
     const app = createTestApp();
     const zip = await buildZip({
-      "PLUGIN.md": "---\nname: bad\n---\nno pluginType no priority\n",
+      "PLUGIN.md": "---\nname: bad\n---\nno pluginType no stage\n",
       "package.json": VALID_PACKAGE_JSON,
     });
     const res = await postZip(app, "/api/install/plugin", zip);

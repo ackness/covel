@@ -9,9 +9,7 @@
  *
  * The DAG scheduler derives ordering edges from the normalized IR — turn-scoped
  * `deps.needs`, `deps.after`, typed `inputs` bindings — plus the legacy
- * `input.inject[].from` (kind `runtime`) injects. `upstreamRequired` reaches it
- * through the `deps.needs` alias the loader adds, so third-party
- * `upstreamRequired` still orders correctly. It performs a Kahn-style
+ * `input.inject[].from` (kind `runtime`) injects. It performs a Kahn-style
  * topological sort and returns "levels": each level is a set of runtimes whose
  * dependencies have all completed and may therefore run concurrently. Within a
  * level, runtimes are ordered by name so traces stay readable and ties break

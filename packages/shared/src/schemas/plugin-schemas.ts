@@ -676,21 +676,6 @@ export const permissionsDeclSchema = z
   .object({ http: z.array(httpPermissionDeclSchema).optional() })
   .strict();
 
-// ── Legacy job-status view projection (compat only) ──────────────
-
-export const legacyJobViewDeclSchema = z
-  .object({
-    jobIdPrefix: z.string().optional(),
-    namespace: z.string().min(1),
-    keyFrom: jsonPointerSchema.optional(),
-    valueFrom: jsonPointerSchema.optional(),
-  })
-  .strict();
-
-export const jobStatusDeclSchema = z
-  .object({ legacyViews: z.array(legacyJobViewDeclSchema).optional() })
-  .strict();
-
 // ── Cross-field constraints ──────────────────────────────────────
 
 /**
@@ -949,20 +934,7 @@ const runtimeManifestCommonShape = {
 export const runtimeManifestInputSchema = z
   .object({
     ...runtimeManifestCommonShape,
-    /** Legacy numeric priority band. Superseded by `stage` + `after`/`needs`. */
-    priority: z.number().int().min(0).max(1000).optional(),
-    /** Legacy strong-dependency alias. Superseded by `needs`. */
-    upstreamRequired: z
-      .array(
-        z.union([
-          z.string().min(1),
-          z.object({ capability: z.string().min(1) }).strict(),
-        ]),
-      )
-      .optional(),
     trigger: triggerConfigSchema.optional(),
-    /** Compat-period projection of kernel job-status into legacy plugin-data views. */
-    jobStatus: jobStatusDeclSchema.optional(),
   })
   .strict()
   .superRefine((m, ctx) => {

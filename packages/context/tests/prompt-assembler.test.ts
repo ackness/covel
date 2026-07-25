@@ -19,7 +19,7 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   return {
     name: "test-rt",
     description: "test",
-    priority: 500,
+    stage: "narrative",
     ...overrides,
   };
 }
@@ -478,13 +478,13 @@ describe("prompt-assembler", () => {
       const lowPriority: RuntimeManifest = {
         name: "plug-low",
         description: "low",
-        priority: 100,
+        stage: "pre-turn",
         authorsNote: { content: "LOW priority note" },
       };
       const highPriority: RuntimeManifest = {
         name: "plug-high",
         description: "high",
-        priority: 800,
+        stage: "post-turn",
         authorsNote: { content: "HIGH priority note" },
       };
 
@@ -508,13 +508,13 @@ describe("prompt-assembler", () => {
       const a: RuntimeManifest = {
         name: "a",
         description: "a",
-        priority: 100,
+        stage: "pre-turn",
         authorsNote: { content: "note-a", depth: 4, role: "system" },
       };
       const b: RuntimeManifest = {
         name: "b",
         description: "b",
-        priority: 200,
+        stage: "pre-turn",
         authorsNote: { content: "note-b", depth: 2, role: "system" },
       };
 
@@ -609,13 +609,13 @@ describe("prompt-assembler", () => {
       const a: RuntimeManifest = {
         name: "a",
         description: "a",
-        priority: 100,
+        stage: "pre-turn",
         postHistory: { content: "Rule A" },
       };
       const b: RuntimeManifest = {
         name: "b",
         description: "b",
-        priority: 200,
+        stage: "pre-turn",
         postHistory: { content: "Rule B" },
       };
 
@@ -636,7 +636,7 @@ describe("prompt-assembler", () => {
       const m: RuntimeManifest = {
         name: "x",
         description: "x",
-        priority: 100,
+        stage: "pre-turn",
         authorsNote: { content: "author-note" },
         postHistory: { content: "post-rule" },
       };

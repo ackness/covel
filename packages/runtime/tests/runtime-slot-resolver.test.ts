@@ -7,7 +7,7 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     name: "narrator",
     pluginId: "narrator",
     description: "test",
-    priority: 500,
+    stage: "narrative",
     ...overrides,
   };
 }

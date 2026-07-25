@@ -122,7 +122,7 @@ describe("deriveSseEventName", () => {
         _subType: "runtime.started",
         runtimeId: "narrator",
         pluginId: "narrator",
-        priority: 500,
+        stage: "narrative",
       },
     });
 

@@ -57,7 +57,7 @@ describe("turn-executor message.completed trace emission", () => {
       name: "story-narrator",
       pluginId: "story-narrator",
       description: "Story runtime for message.completed trace test.",
-      priority: 500,
+      stage: "narrative",
       outputKind: "story",
     };
     const loaded: LoadedRuntime = {
@@ -106,7 +106,7 @@ describe("turn-executor message.completed trace emission", () => {
       name: "plugin-worker",
       pluginId: "plugin-worker",
       description: "Plugin runtime for message.completed negative test.",
-      priority: 200,
+      stage: "pre-turn",
       outputKind: "plugin",
     };
     const loaded: LoadedRuntime = {
@@ -155,7 +155,7 @@ describe("turn-executor direct-generate error trace pairing (Q1)", () => {
       name: "trace-fallback",
       pluginId: "trace-fallback",
       description: "Runtime exercising the malformed-args fallback error path.",
-      priority: 550,
+      stage: "post-turn",
       tools: { local: ["./tools/fallback-tool.js"] },
     };
     const loaded: LoadedRuntime = {
